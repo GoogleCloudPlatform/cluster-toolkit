@@ -71,7 +71,6 @@ class CredentialCreateView(SuperUserRequiredMixin, CreateView):
     def form_valid(self, form):
         self.object = form.save(commit=False)
         self.object.owner = self.request.user
-        self.object.save()
 
         try:
             grafana.add_gcp_datasource(self.object.name, self.object.detail)
@@ -84,7 +83,8 @@ class CredentialCreateView(SuperUserRequiredMixin, CreateView):
                 # Handle other GrafanaClientError cases
                 messages.error(self.request, f"Grafana Error: {e}")
                 raise e  # Raise the error to handle it at a higher level
-
+            
+        self.object.save()
         messages.success(self.request, f"Credential {self.object.name} validated and saved.")
         return HttpResponseRedirect(self.get_success_url())
 
