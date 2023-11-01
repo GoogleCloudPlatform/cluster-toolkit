@@ -27,7 +27,7 @@ function setLimits() {
             "name": "{{ partition.name }}",
             "instance_type": "{{ partition.machine_type }}",
             "vcpu": {{ partition.vCPU_per_node }},
-            "nodes": {{ partition.max_node_count }},
+            "nodes": {{ partition.dynamic_node_count }} + {{ partition.static_node_count }},
             },
         {% endfor %}
     };
@@ -175,7 +175,7 @@ window.onload=initPage;
       {{ form.partition.label_tag }}
       <select name="partition" class="form-control" required id="id_partition" onchange="change_partition();">
       {% for partition in cluster.partitions.all %}
-        <option value="{{partition.id}}">{{partition.name}} - {{partition.max_node_count}} of {{ partition.machine_type }}</option>
+        <option value="{{partition.id}}">{{partition.name}} - dynamic {{partition.dynamic_node_count}} and {{partition.static_node_count}} of {{ partition.machine_type }}</option>
       {% endfor %}
       </select>
       {% if form.partition.help_text %}
