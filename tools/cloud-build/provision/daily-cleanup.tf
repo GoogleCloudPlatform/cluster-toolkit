@@ -15,6 +15,7 @@
 resource "google_cloudbuild_trigger" "daily_project_cleanup" {
   name        = "DAILY-project-cleanup"
   description = "A cleanup script to run periodically"
+  tags        = [local.notify_chat_tag]
 
   git_file_source {
     path      = "tools/cloud-build/project-cleanup.yaml"
