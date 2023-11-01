@@ -124,6 +124,7 @@ limitations under the License.
 
 | Name | Source | Version |
 |------|--------|---------|
+| <a name="module_bucket"></a> [bucket](#module\_bucket) | terraform-google-modules/cloud-storage/google | ~> 3.0 |
 | <a name="module_slurm_cluster"></a> [slurm\_cluster](#module\_slurm\_cluster) | github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster | 6.1.2 |
 
 ## Resources
