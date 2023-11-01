@@ -130,7 +130,7 @@ locals { # controller_instance_config
 }
 
 module "slurm_cluster" {
-  source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster?ref=6.1.2"
+  source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster?ref=6.2.0"
 
   project_id         = var.project_id
   slurm_cluster_name = local.slurm_cluster_name
