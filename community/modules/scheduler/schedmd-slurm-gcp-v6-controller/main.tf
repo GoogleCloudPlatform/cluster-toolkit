@@ -40,6 +40,31 @@ locals {
 
 }
 
+locals {
+  synt_suffix       = substr(md5("${var.project_id}${var.deployment_name}"), 0, 5)
+  synth_bucket_name = "${local.slurm_cluster_name}${local.synt_suffix}"
+}
+
+module "bucket" {
+  source  = "terraform-google-modules/cloud-storage/google"
+  version = "~> 3.0"
+
+  count = var.create_bucket ? 1 : 0
+
+  location   = var.region
+  names      = [local.synth_bucket_name]
+  prefix     = "slurm"
+  project_id = var.project_id
+
+  force_destroy = {
+    (local.synth_bucket_name) = true
+  }
+
+  labels = {
+    slurm_cluster_name = local.slurm_cluster_name
+  }
+}
+
 data "google_compute_default_service_account" "default" {
   project = var.project_id
 }
@@ -111,8 +136,8 @@ module "slurm_cluster" {
   slurm_cluster_name = local.slurm_cluster_name
   region             = var.region
 
-  create_bucket = var.create_bucket
-  bucket_name   = var.bucket_name
+  create_bucket = false
+  bucket_name   = var.create_bucket ? module.bucket[0].name : var.bucket_name
   bucket_dir    = var.bucket_dir
 
   controller_instance_config = local.controller_instance_config
@@ -150,4 +175,6 @@ module "slurm_cluster" {
   prolog_scripts = var.prolog_scripts
   epilog_scripts = var.epilog_scripts
   cloudsql       = var.cloudsql
+
+  depends_on = [module.bucket]
 }
