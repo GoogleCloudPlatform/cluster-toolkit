@@ -19,7 +19,7 @@ via a [PubSub BigQuery subscription](https://cloud.google.com/pubsub/docs/bigque
 * The data is visualized via a [Vertex AI Workbench](https://cloud.google.com/vertex-ai-workbench) 
 [Jupyter Notebook](https://jupyter.org/) 
 
-<img src="./architecture.png" width="800" />
+<img src="./images/architecture.png" width="800" />
 
 ## Basic getting started
 
@@ -74,7 +74,7 @@ https://console.cloud.google.com/vertex-ai/workbench/user-managed
 ```
 2. Open JupyterLab on the Notebook instance listed.
 
-<img src="./workbench.png" width="500" />
+<img src="./images/workbench.png" width="500" />
 
 ```
 Click on `OPEN JUPYTERLAB` link
@@ -86,11 +86,11 @@ Select `fsi`
 ```
 Under `fsi` all the files required to run the demo have been pepared.
 
-<img src="./files.png" width="300" />
+<img src="./images/files.png" width="300" />
 
 4. Open a terminal window by clicking on the terminal icon.
 
-<img src="./terminal.png" width="200" />
+<img src="./images/terminal.png" width="200" />
 
 4. Update the local Python requirements:
 ```
@@ -127,15 +127,15 @@ https://console.cloud.google.com/bigquery
 
 > Navigate to the `fsi_table`.
 
-<img src="./bq.png" width="300" />
+<img src="./images/bq.png" width="300" />
 
 > There you can see the schema.
 
-<img src="./schema.png" width="600" />
+<img src="./images/schema.png" width="600" />
 
 > To see the data, click on `PREVIEW`
 
-<img src="./preview.png" width="600" />
+<img src="./images/preview.png" width="600" />
 
 For an advanced user, you can run queries directly in the BigQuery UI.
 
@@ -143,21 +143,21 @@ For an advanced user, you can run queries directly in the BigQuery UI.
 
 Finally, you can select the `FSI_MonteCarlo.ipynb` from the left navigation in the JupyterLab window.
 
-<img src="./ipynb.png" width="300" />
+<img src="./images/ipynb.png" width="300" />
 
 To run the cells in the notebook, select the cell, then click the play button, or `Alt-Enter`. 
 
 > Run the cells in the order they appear.
 
-<img src="./notebook.png" width="600" />
+<img src="./images/notebook.png" width="600" />
 
 > After running the second cell, you should see output.
 
-<img src="./output.png" width="500" />
+<img src="./images/output.png" width="500" />
 
 > Finally, when you run Cell #5, you will see graphs and table summaries.
 
-<img src="./graphs.png" width="600" />
+<img src="./images/graphs.png" width="600" />
 
 
 ## Summary
