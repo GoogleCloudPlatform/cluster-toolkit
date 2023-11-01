@@ -23,7 +23,7 @@ locals {
   profile_script = <<-EOF
     SPACK_PYTHON=${var.spack_virtualenv_path}/bin/python3
     if [ -f ${var.install_dir}/share/spack/setup-env.sh ]; then
-          echo "Running Spack setup, this may take a moment on first login."
+          tty -s && echo "Running Spack setup, this may take a moment on first login."
           . ${var.install_dir}/share/spack/setup-env.sh
     fi
   EOF
