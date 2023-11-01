@@ -284,7 +284,7 @@ class ClusterUpdateView(LoginRequiredMixin, UpdateView):
                 "GCP", self.get_object().cloud_credential.detail
             )
         return self.region_info
-    
+
     def get_context_data(self, **kwargs):
         """Perform extra query to populate instance types data"""
         context = super().get_context_data(**kwargs)
@@ -302,6 +302,7 @@ class ClusterUpdateView(LoginRequiredMixin, UpdateView):
             .filter(Q(cloud_state="i") | Q(cloud_state="m"))
             .all()
         }
+        
         context["subnet_regions"] = json.dumps(subnet_regions)
         context["object"] = self.object
         context["region_info"] = json.dumps(self._get_region_info())
@@ -311,7 +312,9 @@ class ClusterUpdateView(LoginRequiredMixin, UpdateView):
         context["title"] = "Create cluster" if self.object.status == "n" else "Update cluster"
         return context
 
+
     def form_valid(self, form):
+        logger.info("In form_valid")
         context = self.get_context_data()
         mountpoints = context["mountpoints_formset"]
         partitions = context["cluster_partitions_formset"]
@@ -430,7 +433,6 @@ class ClusterUpdateView(LoginRequiredMixin, UpdateView):
             with transaction.atomic():
                 # Save the modified Cluster object
                 self.object.save()
-
                 self.object = form.save()
                 mountpoints.instance = self.object
                 mountpoints.save()
@@ -440,33 +442,36 @@ class ClusterUpdateView(LoginRequiredMixin, UpdateView):
                 
                 try:
                     for part in parts:
-                        part.vCPU_per_node = machine_info[part.machine_type][
-                            "vCPU"
-                        ] // (1 if part.enable_hyperthreads else 2)
+                        part.vCPU_per_node = machine_info[part.machine_type]["vCPU"] // (1 if part.enable_hyperthreads else 2)
                         # Validate GPU choice
                         if part.GPU_type:
                             try:
-                                accel_info = machine_info[part.machine_type][
-                                    "accelerators"
-                                ][part.GPU_type]
+                                accel_info = machine_info[part.machine_type]["accelerators"][part.GPU_type]
                                 if (
                                     part.GPU_per_node < accel_info["min_count"]
-                                    or part.GPU_per_node
-                                    > accel_info["max_count"]
+                                    or part.GPU_per_node > accel_info["max_count"]
                                 ):
                                     raise ValidationError(
-                                        "Invalid number of GPUs of type "
-                                        f"{part.GPU_type}"
+                                        "Invalid number of GPUs of type " f"{part.GPU_type}"
                                     )
                             except KeyError as err:
+                                raise ValidationError(f"Invalid GPU type {part.GPU_type}") from err
+                        # Add validation for machine_type and disk_type combinations here
+                        invalid_combinations = [
+                            ("c3-", "pd-standard"),
+                            ("h3-", "pd-standard"),
+                            ("h3-", "pd-ssd"),
+                        ]
+                        for machine_prefix, disk_type in invalid_combinations:
+                            if part.machine_type.startswith(machine_prefix) and part.boot_disk_type == disk_type:
+                                logger.info("invalid disk")
                                 raise ValidationError(
-                                    f"Invalid GPU type {part.GPU_type}"
-                                ) from err
+                                    f"Invalid combination: machine_type {part.machine_type} cannot be used with disk_type {disk_type}."
+                                )
                 except KeyError as err:
-                    raise ValidationError(
-                        "Error in Partition - invalid machine type: "
-                        f"{part.machine_type}"
-                    ) from err
+                    raise ValidationError("Error in Partition - invalid machine type: " f"{part.machine_type}") from err
+
+                # Continue with saving the 'parts' if no validation errors were raised
                 parts = partitions.save()
 
         except ValidationError as ve:

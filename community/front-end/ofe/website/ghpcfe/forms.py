@@ -141,6 +141,16 @@ class ClusterForm(forms.ModelForm):
             self.instance.login_node_disk_type
         )
 
+        # If cluster is running make some of form field ready only.
+        if self.instance.status == "r":
+            logger.info("Cluster is running making some fields ready only")
+            # Define a list of field names you want to set as readonly
+            fields_to_make_readonly = ['cloud_credential', 'name', 'subnet', 'cloud_region', 'cloud_zone']
+
+            # Loop through the fields and set the 'readonly' attribute
+            for field_name in fields_to_make_readonly:
+                self.fields[field_name].widget = forms.TextInput(attrs={'class': 'form-control'})
+                self.fields[field_name].widget.attrs['readonly'] = True
 
     class Meta:
         model = Cluster

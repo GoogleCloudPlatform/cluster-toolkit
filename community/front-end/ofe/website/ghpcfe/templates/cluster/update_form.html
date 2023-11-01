@@ -43,31 +43,31 @@
 
 <form action="" method="post" id="clusterForm">
   {% csrf_token %}
-  <div class="form-group">
+  <div class="form-group displayed">
     {{ form.cloud_credential.errors }}
     {{ form.cloud_credential.label_tag }}
     {{ form.cloud_credential }}
     <small class="form-text text-muted">{{ form.cloud_credential.help_text }}</small>
   </div>
-  <div class="form-group">
+  <div class="form-group displayed">
     {{ form.name.errors }}
     {{ form.name.label_tag }}
     {{ form.name }}
     <small class="form-text text-muted">{{ form.name.help_text }}</small>
   </div>
-  <div class="form-group">
+  <div class="form-group displayed">
     {{ form.subnet.errors }}
     {{ form.subnet.label_tag }}
     {{ form.subnet }}
     <small class="form-text text-muted">{{ form.subnet.help_text }}</small>
   </div>
-  <div class="form-group" style="display: none;">
+  <div class="form-group displayed">
     {{ form.cloud_region.errors }}
     {{ form.cloud_region.label_tag }}
     {{ form.cloud_region }}
-    <small class="form-text text-muted">{{ form.cloud_zone.help_text }}</small>
+    <small class="form-text text-muted">{{ form.cloud_region.help_text }}</small>
   </div>
-  <div class="form-group">
+  <div class="form-group displayed">
     {{ form.cloud_zone.errors }}
     {{ form.cloud_zone.label_tag }}
     {{ form.cloud_zone }}
@@ -198,99 +198,9 @@
     </table>
   </div>
   <hr>
-
-  <style>
-    table {
-      width: 100%;
-      border-collapse: collapse;
-    }
-
-    th,
-    td,
-    th {
-      background-color: #f2f2f2;
-      border: 1px solid #ddd;
-      padding: 20px;
-    }
-
-    .part_formset_row td {
-      vertical-align: top;
-    }
-
-    /* Style the select fields to fit within the table cells */
-    select {
-      width: 100%;
-      box-sizing: border-box;
-      /* Include padding and borders in the width */
-    }
-
-    /* Hide the default checkbox input */
-    .slider-switch input {
-      display: none;
-    }
-
-    /* Style the slider container */
-    .slider-switch {
-      position: relative;
-      display: inline-block;
-      width: 60px;
-      height: 34px;
-    }
-
-    /* Style the slider itself */
-    .slider {
-      position: absolute;
-      cursor: pointer;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background-color: #ccc;
-      -webkit-transition: .4s;
-      transition: .4s;
-      border-radius: 34px;
-    }
-
-    /* Style the slider's "on" state */
-    .slider:before {
-      position: absolute;
-      content: "";
-      height: 26px;
-      width: 26px;
-      left: 4px;
-      bottom: 4px;
-      background-color: white;
-      -webkit-transition: .4s;
-      transition: .4s;
-      border-radius: 50%;
-    }
-
-    /* When the checkbox is checked, change the background color of the slider */
-    .slider-switch input:checked+.slider {
-      background-color: #2196F3;
-    }
-
-    /* When the checkbox is checked, move the slider to the right */
-    .slider-switch input:checked+.slider:before {
-      -webkit-transform: translateX(26px);
-      -ms-transform: translateX(26px);
-      transform: translateX(26px);
-    }
-
-    .grid-container {
-      display: grid;
-      grid-template-columns: 1fr auto;
-      /* Adjust column widths as needed */
-      align-items: left;
-      gap: 10px;
-      /* Adjust the gap as needed */
-      width: 100%;
-    }
-  </style>
-
   <p style="text-decoration: underline; font-size: large;">Partitions</p>
   <div class="table-responsive">
-    <table class="table align-middle">
+    <table class="table align-middle" id="partitions_table">
       {% for form in cluster_partitions_formset.forms %}
       {% if form.instance %}
       {% if forloop.first %}
@@ -372,27 +282,6 @@
 {% block tailscript %}
 <script src="{% static 'js/jquery.formset.js' %}"></script>
 <script>
-  {% autoescape off %}
-  var subnet_map = {{ subnet_regions }};
-  var region_info = {{ region_info }};
-  {% endautoescape %}
-
-  function subnetSelected() {
-    subnet_element = document.getElementById("id_subnet");
-    zone_element = document.getElementById("id_cloud_zone");
-    old_zone = zone_element.value;
-    $(zone_element).find('option').remove().end();
-    region_info[subnet_map[subnet_element.value]].forEach(function (item) {
-      var el = document.createElement("option");
-      el.text = item;
-      el.setAttribute("value", item)
-      if (old_zone == item) {
-        el.setAttribute("selected", true);
-      }
-      zone_element.appendChild(el);
-    });
-  }
-
   function updateMachineAvailability() {
     // Get machine Info
     // For each select of class 'machine_type_select'...
@@ -400,11 +289,19 @@
     //     Clear the options
     //     Replace options
     //     Restore it's value
+    var cloudZoneInput = document.getElementById('id_cloud_zone');
+    var cloudRegionInput = document.getElementById('id_cloud_region');
 
-    var subnet_element = document.getElementById("id_subnet");
-    var zone_element = document.getElementById("id_cloud_zone");
-    var region = subnet_map[subnet_element.value];
-    var zone = zone_element.value;
+    if (!cloudZoneInput.readOnly) {
+      // If the field is not read-only, use select options
+      zone = cloudZoneInput.options[cloudZoneInput.selectedIndex].text;
+      region = cloudRegionInput.options[cloudRegionInput.selectedIndex].text;
+    } else {
+      // If the field is read-only, use the input values
+      zone = cloudZoneInput.value;
+      region = cloudRegionInput.value;
+    }
+
     machine_info = $.ajax({
       url: "{% url 'api-instancetype-list' %}" + "?cluster={{ object.id }}&region=" + region + "&zone=" + zone,
       type: "GET",
@@ -492,15 +389,22 @@
 
       });
     });
-
-
   }
 
   function updateDiskAvailability() {
-    var subnet_element = document.getElementById("id_subnet");
-    var zone_element = document.getElementById("id_cloud_zone");
-    var region = subnet_map[subnet_element.value];
-    var zone = zone_element.value;
+    var cloudZoneInput = document.getElementById('id_cloud_zone');
+    var cloudRegionInput = document.getElementById('id_cloud_region');
+
+    if (!cloudZoneInput.readOnly) {
+      // If the field is not read-only, use select options
+      zone = cloudZoneInput.options[cloudZoneInput.selectedIndex].text;
+      region = cloudRegionInput.options[cloudRegionInput.selectedIndex].text;
+    } else {
+      // If the field is read-only, use the input values
+      zone = cloudZoneInput.value;
+      region = cloudRegionInput.value;
+    }
+
     disk_info = $.ajax({
       url: "{% url 'api-disktype-list' %}" + "?cluster={{ object.id }}&region=" + region + "&zone=" + zone,
       type: "GET",
@@ -535,27 +439,14 @@
       });
     });
   }
-
-  function updateZoneAvailability() {
-    console.log("Updating zone availability.")
-    updateMachineAvailability();
-    updateDiskAvailability();
-  }
-
-  $(document).ready(function () {
-    document.getElementById("id_subnet").onchange = subnetSelected;
-    subnetSelected();
-    updateZoneAvailability()
-  });
-
-  // Attach the function to the "change" event of the cloud zone select element
-  var cloudZoneSelect = document.getElementById('id_cloud_zone');
-  cloudZoneSelect.addEventListener('change', updateZoneAvailability);
-
   // Function to populate regions and zones based on the selected credential
   function populateRegionsAndZones() {
     // Get the selected credential value
     var selectedCredential = document.getElementById('id_cloud_credential').value;
+    var subnetSelect = document.getElementById('id_subnet');
+    var subnetSelectText = subnetSelect.options[subnetSelect.selectedIndex].text;
+    // Extract the region from the selected subnet
+    var regionSubnet = subnetSelectText.split(' - ')[2]; // Assumes the region is always the third part after splitting
 
     // Make the request to the backend
     var xhr = new XMLHttpRequest();
@@ -571,16 +462,18 @@
 
         // Clear the existing options
         regionSelect.innerHTML = '';
-        zoneSelect.innerHTML = '';
 
-        // Add new options based on the response
-        for (var region in response) {
-          if (response.hasOwnProperty(region)) {
-            // Create a new option for the region
-            var regionOption = document.createElement('option');
-            regionOption.value = region;
-            regionOption.text = region;
-            regionSelect.appendChild(regionOption);
+        // Create a new option for the region
+        var regionOption = document.createElement('option');
+        regionOption.value = regionSubnet;
+        regionOption.text = regionSubnet;
+        regionSelect.appendChild(regionOption);
+
+        // Automatically select the corresponding region from the list
+        for (var i = 0; i < regionSelect.options.length; i++) {
+          if (regionSelect.options[i].value === regionSubnet) {
+            regionSelect.options[i].selected = true;
+            break;
           }
         }
 
@@ -600,6 +493,11 @@
             zoneOption.text = zone;
             zoneSelect.appendChild(zoneOption);
           }
+
+          //Update node types and disk based on zone
+          updateMachineAvailability();
+          updateDiskAvailability();
+
         });
 
         // Trigger the "change" event to populate the initial "Cloud zone" options
@@ -609,38 +507,10 @@
     xhr.send();
   }
 
-  // Function to handle subnet changes and update the selected region
-  function handleSubnetChange() {
-    var selectedSubnet = subnetSelect.options[subnetSelect.selectedIndex].text;
-
-    // Extract the region from the selected subnet
-    var region = selectedSubnet.split(' - ')[2]; // Assumes the region is always the third part after splitting
-
-    // Automatically select the corresponding region from the list
-    for (var i = 0; i < regionSelect.options.length; i++) {
-      if (regionSelect.options[i].value === region) {
-        regionSelect.options[i].selected = true;
-        break;
-      }
-    }
-
-    // Trigger the "change" event on the regionSelect to update the zones
-    regionSelect.dispatchEvent(new Event('change'));
-    updateZoneAvailability()
-  }
-
-  // Attach the function to the "change" event of the credential select element
-  var credentialSelect = document.getElementById('id_cloud_credential');
-  credentialSelect.addEventListener('change', populateRegionsAndZones);
-
-  // Trigger the "change" event on page load to populate the initial "Cloud region" and "Cloud zone" options
-  credentialSelect.dispatchEvent(new Event('change'));
-
-  // Attach the function to the "change" event of the subnet select element
-  var regionSelect = document.getElementById('id_cloud_region');
   var subnetSelect = document.getElementById('id_subnet');
-  subnetSelect.addEventListener('change', handleSubnetChange);
-  
+  subnetSelect.addEventListener('change', populateRegionsAndZones);
+
+
   $('.mp_formset_row').formset({
     addText: 'add mount point',
     /*addCssClass: 'add-row btn btn-info',*/
@@ -654,7 +524,118 @@
     deleteText: 'remove',
     prefix: 'partitions',
     formCssClass: 'dynamic-part',
-    added: updateMachineAvailability, // Called each time a new form is added
+    added: function () {
+      updateMachineAvailability();
+      updateDiskAvailability();
+    }, // Called each time a new form is added
   });
 </script>
+
+{% if object.status == "r" %}
+<script>
+  // Wait for the document to be fully loaded before running the script
+  document.addEventListener('DOMContentLoaded', function () {
+    // Get all elements with the class "displayed"
+    var elements = document.getElementsByClassName('displayed');
+
+    // Loop through the elements and set their display property to "none"
+    for (var i = 0; i < elements.length; i++) {
+      elements[i].style.display = 'none';
+    }
+
+    updateDiskAvailability()
+    updateMachineAvailability()
+
+  });
+</script>
+{% endif %}
+
+<style>
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  th,
+  td,
+  th {
+    background-color: #f2f2f2;
+    border: 1px solid #ddd;
+    padding: 20px;
+  }
+
+  .part_formset_row td {
+    vertical-align: top;
+  }
+
+  /* Style the select fields to fit within the table cells */
+  select {
+    width: 100%;
+    box-sizing: border-box;
+    /* Include padding and borders in the width */
+  }
+
+  /* Hide the default checkbox input */
+  .slider-switch input {
+    display: none;
+  }
+
+  /* Style the slider container */
+  .slider-switch {
+    position: relative;
+    display: inline-block;
+    width: 60px;
+    height: 34px;
+  }
+
+  /* Style the slider itself */
+  .slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    -webkit-transition: .4s;
+    transition: .4s;
+    border-radius: 34px;
+  }
+
+  /* Style the slider's "on" state */
+  .slider:before {
+    position: absolute;
+    content: "";
+    height: 26px;
+    width: 26px;
+    left: 4px;
+    bottom: 4px;
+    background-color: white;
+    -webkit-transition: .4s;
+    transition: .4s;
+    border-radius: 50%;
+  }
+
+  /* When the checkbox is checked, change the background color of the slider */
+  .slider-switch input:checked+.slider {
+    background-color: #2196F3;
+  }
+
+  /* When the checkbox is checked, move the slider to the right */
+  .slider-switch input:checked+.slider:before {
+    -webkit-transform: translateX(26px);
+    -ms-transform: translateX(26px);
+    transform: translateX(26px);
+  }
+
+  .grid-container {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    /* Adjust column widths as needed */
+    align-items: left;
+    gap: 10px;
+    /* Adjust the gap as needed */
+    width: 100%;
+  }
+</style>
 {% endblock %}
