@@ -16,7 +16,7 @@
 blueprint_name: fsi-montecarlo-on-batch
 
 vars:
-  project_id:  nextflow-2023
+  project_id: <my_project>
   deployment_name: fsimontecarlo
   region: us-central1
   zone: us-central1-a

@@ -34,7 +34,14 @@ make
 ./ghpc --version
 ./ghpc --help
 ```
-2. Run `ghpc` on the blueprint `fsi-montecarlo-on-batch.yaml`
+
+2\. Enable Google Cloud Resource Manager:
+
+```
+gcloud services enable cloudresourcemanager.googleapis.com
+```
+
+3\. Run `ghpc` on the blueprint `fsi-montecarlo-on-batch.yaml`
 
 ```
 ./ghpc create community/examples/fsi-montecarlo-on-batch.yaml
@@ -46,7 +53,13 @@ To deploy your infrastructure please run:
 
 ./ghpc deploy fsimontecarlo
 ```
-3. Deploy the blueprint as instructed:
+4\. Edit the file to update `<my_project>` with your project_id:
+
+```
+  project_id: <my_project>
+```
+
+5\. Deploy the blueprint as instructed:
 
 ```
 ./ghpc deploy fsimontecarlo
