@@ -123,7 +123,7 @@ data "http" "batch_py" {
 resource "google_storage_bucket_object" "run_batch_py" {
   count = local.create_fsi_tutorial
   name   = "batch.py"
-  content = data.http.batch_py.body
+  content = data.http.batch_py.response_body
   bucket = local.bucket
 }
 
@@ -131,9 +131,16 @@ data "http" "batch_requirements" {
   url = "https://raw.githubusercontent.com/GoogleCloudPlatform/scientific-computing-examples/main/python-batch/requirements.txt"
 }
 
+resource "google_storage_bucket_object" "get_requirements" {
+  count = local.create_fsi_tutorial
+  name   = "requirements.txt"
+  content = data.http.batch_requirements.response_body
+  bucket = local.bucket
+}
+
+
 resource "google_storage_bucket_object" "get_iteration_sh" {
   count = local.create_fsi_tutorial
-
   name   = "iteration.sh"
   content = file("${path.module}/files/iteration.sh")
   bucket = local.bucket

@@ -266,6 +266,14 @@ to 256
 
 ## [fsi-montecarlo-on-batch.yaml](../community/examples/fsi-montecarlo-on-batch.yaml) ![community-badge]
 ## Monte Carlo Simulations for Value at Risk
+This blueprint will take you through a tutorial on an FSI Value at Risk calculation using Cloud tools:
+* Batch
+* Pub/Sub
+  * BigQuery pubsub subscription
+* BigQuery
+* Vertex AI Notebooks
+
+See the [full tutorial here](../docs/tutorials/fsi-montecarlo-on-batch/README.md).
 
 ## Basic getting started
 
@@ -318,16 +326,14 @@ When the job is complete it will indicate `Succeeded`. You can then proceed to t
 1. Go to the Vertex AI Workbench Notebooks instances in the Google Cloud Console:
   > https://console.cloud.google.com/vertex-ai/workbench/user-managed
 2. Open JupyterLab 
+
   > Click on `OPEN JUPYTERLAB` link
-3. Clone the repository discussed in the previous steps
-  > Click on the Git icon
 
-  > Select `Clone a Repository`
+3. In the JupyterLab UI, you will see a list of directories:
+ > Select `fsi`
+4. Under `fsi` all the files required to run the demo have been pepared.
+5. 
 
-  > Enter `https://github.com/GoogleCloudPlatform/scientific-computing-examples.git`
-
-4. Navigate to the directory with the notebook
-  > `scientific-computing -> hpc-monte-carlo`
 
 
 

@@ -32,6 +32,7 @@ deployment_groups:
         "container.googleapis.com",
         "logging.googleapis.com",
         "notebooks.googleapis.com",
+        "batch.googleapis.com",
         "pubsub.googleapis.com",
         "compute.googleapis.com"
       ]
