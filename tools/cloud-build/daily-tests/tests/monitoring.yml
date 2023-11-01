@@ -22,4 +22,4 @@ blueprint_yaml: "{{ workspace }}/tools/cloud-build/daily-tests/blueprints/monito
 network: "{{ deployment_name }}-net"
 remote_node: "{{ deployment_name }}-0"
 post_deploy_tests:
-- test-monitoring.yml
+- test-validation/test-monitoring.yml
