@@ -111,11 +111,25 @@ variable "subnetwork_self_link" {
 }
 
 variable "instance_image" {
-  description = "Custom VM image with HTCondor installed using the htcondor-install module."
-  type = object({
-    family  = string,
-    project = string
-  })
+  description = <<-EOD
+    Custom VM image with HTCondor installed using the htcondor-install module."
+
+    Expected Fields:
+    name: The name of the image. Mutually exclusive with family.
+    family: The image family to use. Mutually exclusive with name.
+    project: The project where the image is hosted.
+    EOD
+  type        = map(string)
+
+  validation {
+    condition     = can(coalesce(var.instance_image.project))
+    error_message = "In var.instance_image, the \"project\" field must be a string set to the Cloud project ID."
+  }
+
+  validation {
+    condition     = can(coalesce(var.instance_image.name)) != can(coalesce(var.instance_image.family))
+    error_message = "In var.instance_image, exactly one of \"family\" or \"name\" fields must be set to desired image family or name."
+  }
 }
 
 variable "machine_type" {

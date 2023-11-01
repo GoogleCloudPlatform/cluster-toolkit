@@ -166,6 +166,8 @@ variable "native_batch_mounting" {
   default     = true
 }
 
+# Deprecated, replaced by instance_image
+# tflint-ignore: terraform_unused_declarations
 variable "image" {
   description = "Google Cloud Batch compute node image. Ignored if `instance_template` is provided."
   type = object({
@@ -173,8 +175,39 @@ variable "image" {
     project = string
   })
   default = {
-    family  = "batch-hpc-centos-7-official"
+    family  = null
+    project = null
+  }
+
+  validation {
+    condition     = var.image.family == null && var.image.project == null
+    error_message = "The 'image' setting is deprecated, please use 'instance-image' with the sub-settings 'project' and 'family' or 'name'."
+  }
+}
+
+variable "instance_image" {
+  description = <<-EOD
+    Google Cloud Batch compute node image. Ignored if `instance_template` is provided.
+
+    Expected Fields:
+    name: The name of the image. Mutually exclusive with family.
+    family: The image family to use. Mutually exclusive with name.
+    project: The project where the image is hosted.
+    EOD
+  type        = map(string)
+  default = {
     project = "batch-custom-image"
+    family  = "batch-hpc-centos-7-official"
+  }
+
+  validation {
+    condition     = can(coalesce(var.instance_image.project))
+    error_message = "In var.instance_image, the \"project\" field must be a string set to the Cloud project ID."
+  }
+
+  validation {
+    condition     = can(coalesce(var.instance_image.name)) != can(coalesce(var.instance_image.family))
+    error_message = "In var.instance_image, exactly one of \"family\" or \"name\" fields must be set to desired image family or name."
   }
 }
 
