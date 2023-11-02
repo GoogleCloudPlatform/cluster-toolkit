@@ -251,6 +251,20 @@
       </div>
     </div>
   </div>
+  <div class="form-group">
+    {{ form.use_bigquery.errors }}
+    <div class="grid-container">
+      <label class="slider-switch-container">
+        <div class="slider-switch">
+          {{ form.use_bigquery }}
+          <span class="slider"></span>
+        </div>
+      </label>
+      <div class="help-text">
+        {{ form.use_bigquery.help_text }}
+      </div>
+    </div>
+  </div>
   <hr>
 
   <br />

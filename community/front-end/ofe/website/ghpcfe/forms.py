@@ -173,6 +173,7 @@ class ClusterForm(forms.ModelForm):
             "login_node_image",
             "controller_node_image",
             "use_cloudsql",
+            "use_bigquery",
         )
 
         widgets = {
@@ -215,6 +216,7 @@ class ClusterForm(forms.ModelForm):
                                                        "name": "controller_node_image",
                                                        "value": "",}),
             "use_cloudsql": forms.CheckboxInput(attrs={"class": "required checkbox"}),
+            "use_bigquery": forms.CheckboxInput(attrs={"class": "required checkbox"}),
         }
 
 

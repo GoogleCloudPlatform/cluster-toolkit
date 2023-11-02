@@ -796,6 +796,12 @@ class Cluster(CloudResource):
             "Would you like to use Cloud SQL for Slurm accounting database?"
         ),
     )
+    use_bigquery = models.BooleanField(
+        default=False,
+        help_text=(
+            "Would you like to send Slurm accounting data to BigQuery?"
+        ),
+    )
 
     def get_access_key(self):
         return Token.objects.get(user=self.owner)
