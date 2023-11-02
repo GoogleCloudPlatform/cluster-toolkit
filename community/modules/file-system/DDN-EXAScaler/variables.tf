@@ -210,14 +210,11 @@ variable "image" {
   #   project = string
   #   family  = string
   # })
-  default = {
-    project = null
-    family  = null
-  }
+  default = null
 
   validation {
-    condition     = var.image.project == null && var.image.family == null
-    error_message = "The 'image' setting is deprecated, please use 'instance-image' with the sub-settings 'project' and 'family' or 'name'."
+    condition     = var.image == null
+    error_message = "The 'var.image' setting is deprecated, please use 'var.instance_image' with the fields 'project' and 'family' or 'name'."
   }
 }
 

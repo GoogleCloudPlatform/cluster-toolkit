@@ -169,19 +169,13 @@ variable "native_batch_mounting" {
 # Deprecated, replaced by instance_image
 # tflint-ignore: terraform_unused_declarations
 variable "image" {
-  description = "Google Cloud Batch compute node image. Ignored if `instance_template` is provided."
-  type = object({
-    family  = string
-    project = string
-  })
-  default = {
-    family  = null
-    project = null
-  }
+  description = "DEPRECATED: Google Cloud Batch compute node image. Ignored if `instance_template` is provided."
+  type        = any
+  default     = null
 
   validation {
-    condition     = var.image.family == null && var.image.project == null
-    error_message = "The 'image' setting is deprecated, please use 'instance-image' with the sub-settings 'project' and 'family' or 'name'."
+    condition     = var.image == null
+    error_message = "The 'var.image' setting is deprecated, please use 'var.instance_image' with the fields 'project' and 'family' or 'name'."
   }
 }
 

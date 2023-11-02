@@ -50,13 +50,13 @@ variable "type" {
 # Deprecated, replaced by instance_image
 # tflint-ignore: terraform_unused_declarations
 variable "image" {
-  description = "the VM image used by the nfs server"
+  description = "DEPRECATED: The VM image used by the nfs server"
   type        = string
   default     = null
 
   validation {
     condition     = var.image == null
-    error_message = "The 'image' setting is deprecated, please use 'instance-image' with the sub-settings 'project' and 'family' or 'name'."
+    error_message = "The 'var.image' setting is deprecated, please use 'var.instance_image' with the fields 'project' and 'family' or 'name'."
   }
 }
 

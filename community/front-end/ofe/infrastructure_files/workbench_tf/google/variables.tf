@@ -59,26 +59,26 @@ variable "folder_id" {
 # Deprecated, replaced by instance_image
 # tflint-ignore: terraform_unused_declarations
 variable "image_family" {
-  description = "Image of the AI notebook."
+  description = "DEPRECATED: Image of the AI notebook."
   type        = string
-  default     = "tf-latest-cpu"
+  default     = null
 
   validation {
     condition     = var.image_family == null
-    error_message = "The 'image_family' setting is deprecated, please use 'instance-image' with the sub-settings 'project' and 'family' or 'name'."
+    error_message = "The 'image_family' setting is deprecated, please use 'var.instance_image' with the fields 'project' and 'family' or 'name'."
   }
 }
 
 # Deprecated, replaced by instance_image
 # tflint-ignore: terraform_unused_declarations
 variable "image_project" {
-  description = "Google Cloud project where the image is hosted."
+  description = "DEPRECATED: Google Cloud project where the image is hosted."
   type        = string
-  default     = "deeplearning-platform-release"
+  default     = null
 
   validation {
     condition     = var.image_project == null
-    error_message = "The 'image_project' setting is deprecated, please use 'instance-image' with the sub-settings 'project' and 'family' or 'name'."
+    error_message = "The 'image_project' setting is deprecated, please use 'var.instance_image' with the fields 'project' and 'family' or 'name'."
   }
 }
 
