@@ -662,8 +662,13 @@ deployment_groups:
                 state = json.load(statefp)
 
                 # Apply Perms to the service accounts
-                service_accounts = self._get_service_accounts(state)
-                self._apply_service_account_permissions(service_accounts)
+                try:
+                    service_accounts = self._get_service_accounts(state)
+                    self._apply_service_account_permissions(service_accounts)
+                except Exception as e:
+                    # Be nicer to the user and continue creating cluster
+                    logger.warning(f"An error occurred while applying permissions to service accounts: {e}")
+
 
                 # Cluster is now being initialized
                 self.cluster.internal_name = self.cluster.name
