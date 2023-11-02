@@ -1,0 +1,30 @@
+Bootstrap: docker
+From: continuumio/miniconda3
+Stage: install
+
+%post
+    . /opt/conda/etc/profile.d/conda.sh
+    conda create -y -n simpy python=3.11
+    conda activate simpy
+    conda install -y -c conda-forge simpy
+    conda env export > /usr/local/share/environment.yaml
+    conda deactivate
+
+Bootstrap: docker
+From: continuumio/miniconda3
+Stage: runtime
+
+%files from install
+    /usr/local/share/environment.yaml /usr/local/share/environment.yaml
+
+%post
+    ENV_NAME=$(head -1 /usr/local/share/environment.yaml | cut -d' ' -f2)
+    echo ". /opt/conda/etc/profile.d/conda.sh" >> $APPTAINER_ENVIRONMENT
+    echo "source activate $ENV_NAME" >> $APPTAINER_ENVIRONMENT
+
+    . /opt/conda/etc/profile.d/conda.sh
+    conda env create -f /usr/local/share/environment.yaml -p /opt/conda/envs/$ENV_NAME
+    conda clean --all
+
+%runscript
+    exec "$@"
