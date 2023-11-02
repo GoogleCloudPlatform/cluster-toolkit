@@ -94,8 +94,7 @@ data "google_compute_image" "compute_image" {
 
 resource "null_resource" "image" {
   triggers = {
-    name    = var.instance_image.name,
-    family  = var.instance_image.family,
+    image   = var.instance_image.family,
     project = var.instance_image.project
   }
 }
