@@ -209,15 +209,6 @@
       loop_control:
         loop_var: test
 
-    rescue:
-    - name: Set stockout check variable
-      ansible.builtin.set_fact:
-        stockout_test: true
-
-    - name: Trigger failure (rescue blocks otherwise revert failures)
-      ansible.builtin.fail:
-        msg: "Failed during the integration tests (see above)"
-
     ## Always cleanup, even on failure
     always:
     - name: Ensure all nodes are powered down
@@ -292,4 +283,3 @@
       vars:
         deployment_name: "{{ deployment_name }}"
         project: "{{ project }}"
-      when: stockout_test is defined

@@ -22,9 +22,6 @@
 - name: Check logs for stockout on compute nodes
   changed_when: false
   register: stockout
-  until: stockout.stdout != ""
-  retries: 2
-  delay: 5
   failed_when: false
   ansible.builtin.command: >-
     gcloud logging --project {{ project }} read
