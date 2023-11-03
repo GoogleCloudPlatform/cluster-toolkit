@@ -67,6 +67,10 @@ duplicates = [
         "community/modules/scripts/spack-setup/templates/spack_setup.yml.tftpl",
         "community/modules/scripts/ramble-setup/templates/ramble_setup.yml.tftpl",
     ],
+    [
+        "community/modules/scripts/spack-setup/templates/install_spack_deps.yml.tftpl",
+        "community/modules/scripts/ramble-setup/templates/install_ramble_deps.yml.tftpl",
+    ]
 ]
 
 for group in duplicates:

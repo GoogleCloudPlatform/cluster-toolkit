@@ -1,4 +1,4 @@
-# Copyright 2022 Google LLC
+# Copyright 2023 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,13 +14,13 @@
 
 ---
 
-- name: Install dependencies for Spack installation
+- name: Create python virtual env for a tool
   become: yes
   hosts: localhost
   vars:
-    spack_virtualenv_path: "/usr/local/spack-python"
+    virtualenv_path: ${virtualenv_path}
   tasks:
-  - name: Install pip3 and git
+  - name: Install dependencies through system package manager
     ansible.builtin.package:
       name:
       - python3
@@ -32,7 +32,7 @@
     delay: 10
     until: package is success
 
-  - name: Create virtualenv for Spack
+  - name: Create virtualenv for tool
     # Python 3.6 is minimum we wish to support due to ease of installation on
     # CentOS 7 and Rocky Linux 8. pip 21.3.1 is the *maximum* version of pip
     # supported by 3.6. Additionally, recent versions of pip are necessary for
@@ -40,11 +40,11 @@
     # (and third-party) Python packages (20.3+ probably effective minimum).
     ansible.builtin.pip:
       name: pip>=21.3.1
-      virtualenv: "{{ spack_virtualenv_path }}"
+      virtualenv: "{{ virtualenv_path }}"
       virtualenv_command: /usr/bin/python3 -m venv
 
-  - name: Add google-cloud-storage to Spack virtualenv
+  - name: Add google-cloud-storage to virtualenv
     ansible.builtin.pip:
       name: google-cloud-storage
-      virtualenv: "{{ spack_virtualenv_path }}"
+      virtualenv: "{{ virtualenv_path }}"
       virtualenv_command: /usr/bin/python3 -m venv

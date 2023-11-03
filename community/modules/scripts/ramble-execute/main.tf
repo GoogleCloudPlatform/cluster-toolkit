@@ -49,7 +49,7 @@ locals {
   combined_runner = {
     type        = "shell"
     content     = module.startup_script.startup_script
-    destination = "combined_install_spack_${local.combined_md5}.sh"
+    destination = "combined_install_ramble_${local.combined_md5}.sh"
   }
 }
 

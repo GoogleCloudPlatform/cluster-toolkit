@@ -23,7 +23,7 @@ locals {
   profile_script = <<-EOF
     if [ -f ${var.install_dir}/share/ramble/setup-env.sh ]; then
           test -t 1 && echo "** Ramble's python virtualenv (/usr/local/ramble-python) is activated. Call 'deactivate' to deactivate."
-          . /usr/local/ramble-python/bin/activate
+          . ${var.ramble_virtualenv_path}/bin/activate
           . ${var.install_dir}/share/ramble/setup-env.sh
     fi
   EOF
@@ -45,9 +45,9 @@ locals {
   )
 
   deps_content = templatefile(
-    "${path.module}/templates/install_ramble_deps.yml.tpl",
+    "${path.module}/templates/install_ramble_deps.yml.tftpl",
     {
-      ramble_ref = var.ramble_ref
+      virtualenv_path = var.ramble_virtualenv_path
     }
   )
 
@@ -55,6 +55,21 @@ locals {
     "type"        = "ansible-local"
     "content"     = local.deps_content
     "destination" = "install_ramble_deps.yml"
+    "args"        = "-e virtualenv_path=${var.ramble_virtualenv_path}"
+  }
+
+  python_reqs_content = templatefile(
+    "${path.module}/templates/install_ramble_python_deps.yml.tftpl",
+    {
+      install_dir     = var.install_dir
+      virtualenv_path = var.ramble_virtualenv_path
+    }
+  )
+
+  python_reqs_runner = {
+    "type"        = "ansible-local"
+    "content"     = local.python_reqs_content
+    "destination" = "install_ramble_reqs.yml"
     "args"        = "-e ramble_virtualenv_path=${var.ramble_virtualenv_path}"
   }
 
@@ -66,7 +81,7 @@ locals {
 
   bucket_md5  = substr(md5("${var.project_id}.${var.deployment_name}"), 0, 4)
   bucket_name = "ramble-scripts-${local.bucket_md5}"
-  runners     = [local.install_ramble_deps_runner, local.install_ramble_runner]
+  runners     = [local.install_ramble_deps_runner, local.install_ramble_runner, local.python_reqs_runner]
 
   combined_runner = {
     "type"        = "shell"
