@@ -24,35 +24,29 @@ module "network" {
 module "first-fs" {
   source          = "./modules/embedded/modules/file-system/filestore"
   deployment_name = var.deployment_name
-  labels = merge(var.labels, {
-    ghpc_role = "file-system"
-  })
-  local_mount = "/first"
-  network_id  = module.network.network_id
-  project_id  = var.project_id
-  region      = var.region
-  zone        = var.zone
+  labels          = var.labels
+  local_mount     = "/first"
+  network_id      = module.network.network_id
+  project_id      = var.project_id
+  region          = var.region
+  zone            = var.zone
 }
 
 module "second-fs" {
   source          = "./modules/embedded/modules/file-system/filestore"
   deployment_name = var.deployment_name
-  labels = merge(var.labels, {
-    ghpc_role = "file-system"
-  })
-  local_mount = "/first"
-  network_id  = module.network.network_id
-  project_id  = var.project_id
-  region      = var.region
-  zone        = var.zone
+  labels          = var.labels
+  local_mount     = "/first"
+  network_id      = module.network.network_id
+  project_id      = var.project_id
+  region          = var.region
+  zone            = var.zone
 }
 
 module "first-vm" {
   source          = "./modules/embedded/modules/compute/vm-instance"
   deployment_name = var.deployment_name
   labels = merge(var.labels, {
-    ghpc_role = "compute"
-    }, {
     green = "sleeves"
   })
   network_storage = flatten([module.first-fs.network_storage])
@@ -64,9 +58,7 @@ module "first-vm" {
 module "second-vm" {
   source          = "./modules/embedded/modules/compute/vm-instance"
   deployment_name = var.deployment_name
-  labels = merge(var.labels, {
-    ghpc_role = "compute"
-  })
+  labels          = var.labels
   network_storage = flatten([module.second-fs.network_storage, flatten([module.first-fs.network_storage])])
   project_id      = var.project_id
   region          = var.region

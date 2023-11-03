@@ -268,8 +268,7 @@ func (s *MySuite) TestCombineLabels(c *C) {
 		ID:     "coral",
 		Settings: NewDict(map[string]cty.Value{
 			"labels": cty.ObjectVal(map[string]cty.Value{
-				"magenta":   cty.StringVal("orchid"),
-				"ghpc_role": cty.StringVal("maroon"),
+				"magenta": cty.StringVal("orchid"),
 			}),
 		}),
 	}
@@ -305,25 +304,18 @@ func (s *MySuite) TestCombineLabels(c *C) {
 	labelsRef := GlobalRef("labels").AsExpression().AsValue()
 
 	lime := dc.Config.DeploymentGroups[0]
-	// Labels are set and override role
+	// Labels are set
 	coral = lime.Modules[0]
 	c.Check(coral.Settings.Get("labels"), DeepEquals, FunctionCallExpression(
 		"merge",
 		labelsRef,
-		cty.ObjectVal(map[string]cty.Value{
-			"ghpc_role": cty.StringVal("blue")}),
-		cty.ObjectVal(map[string]cty.Value{
-			"ghpc_role": cty.StringVal("maroon"),
-			"magenta":   cty.StringVal("orchid")}),
+		cty.ObjectVal(map[string]cty.Value{"magenta": cty.StringVal("orchid")}),
 	).AsValue())
 
-	// Labels are not set, infer role from module.source
+	// Labels are not set
 	khaki = lime.Modules[1]
-	c.Check(khaki.Settings.Get("labels"), DeepEquals, FunctionCallExpression(
-		"merge",
-		labelsRef,
-		cty.ObjectVal(map[string]cty.Value{"ghpc_role": cty.StringVal("brown")}),
-	).AsValue())
+	c.Check(khaki.Settings.Get("labels"), DeepEquals, labelsRef)
+
 	// No labels input
 	silver = lime.Modules[2]
 	c.Check(silver.Settings.Get("labels"), DeepEquals, cty.NilVal)
