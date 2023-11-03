@@ -89,13 +89,14 @@ locals {
 data "google_compute_image" "compute_image" {
   family  = try(var.instance_image.family, null)
   name    = try(var.instance_image.name, null)
-  project = var.instance_image.project
+  project = try(var.instance_image.project, null)
 }
 
 resource "null_resource" "image" {
   triggers = {
-    image   = var.instance_image.family,
-    project = var.instance_image.project
+    name    = try(var.instance_image.name, null),
+    family  = try(var.instance_image.family, null),
+    project = try(var.instance_image.project, null)
   }
 }
 
