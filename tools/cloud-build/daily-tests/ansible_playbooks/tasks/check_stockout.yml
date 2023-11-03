@@ -23,8 +23,8 @@
   changed_when: false
   register: stockout
   until: stockout.stdout != ""
-  retries: 5
-  delay: 10
+  retries: 2
+  delay: 5
   failed_when: false
   ansible.builtin.command: >-
     gcloud logging --project {{ project }} read

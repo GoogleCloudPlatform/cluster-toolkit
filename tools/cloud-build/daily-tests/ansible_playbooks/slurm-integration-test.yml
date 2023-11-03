@@ -210,14 +210,9 @@
         loop_var: test
 
     rescue:
-    - name: Check for stockout errors
-      ansible.builtin.include_tasks:
-        file: tasks/check_stockout.yml
-        apply:
-          delegate_to: localhost
-      vars:
-        deployment_name: "{{ deployment_name }}"
-        project: "{{ project }}"
+    - name: Set stockout check variable
+      ansible.builtin.set_fact:
+        stockout_test: true
 
     - name: Trigger failure (rescue blocks otherwise revert failures)
       ansible.builtin.fail:
@@ -288,3 +283,13 @@
       vars:
         deployment_name: "{{ deployment_name }}"
         workspace: "{{ workspace }}"
+
+    - name: Check for stockout errors
+      ansible.builtin.include_tasks:
+        file: tasks/check_stockout.yml
+        apply:
+          delegate_to: localhost
+      vars:
+        deployment_name: "{{ deployment_name }}"
+        project: "{{ project }}"
+      when: stockout_test is defined
