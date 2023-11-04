@@ -22,12 +22,6 @@ if [ -z "$PROJECT_ID" ]; then
 	exit 1
 fi
 
-ACTIVE_BUILDS=$(gcloud builds list --project "${PROJECT_ID}" --filter="id!=\"${BUILD_ID}\"" --ongoing 2>/dev/null)
-if [[ -n "$ACTIVE_BUILDS" ]]; then
-	echo "There are active Cloud Build jobs. Skip clean up, may require re-run."
-	exit 1
-fi
-
 ACTIVE_FILESTORE=$(gcloud filestore instances list --project "${PROJECT_ID}" | tail -n +2 2>/dev/null)
 if [[ -n "$ACTIVE_FILESTORE" ]]; then
 	echo "Deleting filestore instances"
