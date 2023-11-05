@@ -16,10 +16,10 @@
 module "slurm_login_template" {
   source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=6.2.0"
 
-  for_each = var.enable_login ? {
+  for_each = {
     for x in var.login_nodes : x.group_name => x
     if(x.instance_template == null || x.instance_template == "")
-  } : {}
+  }
 
   project_id          = var.project_id
   slurm_cluster_name  = local.slurm_cluster_name
@@ -61,7 +61,7 @@ module "slurm_login_template" {
 # INSTANCE
 module "slurm_login_instance" {
   source   = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_login_instance?ref=6.2.0"
-  for_each = var.enable_login ? { for x in var.login_nodes : x.group_name => x } : {}
+  for_each = { for x in var.login_nodes : x.group_name => x }
 
   project_id         = var.project_id
   slurm_cluster_name = local.slurm_cluster_name

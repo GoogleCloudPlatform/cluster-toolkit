@@ -91,14 +91,6 @@ variable "bucket_dir" {
 # LOGIN #
 #########
 
-variable "enable_login" {
-  description = <<EOD
-Enables the creation of login nodes and instance templates.
-EOD
-  type        = bool
-  default     = true
-}
-
 variable "login_nodes" {
   description = "List of slurm login instance definitions."
   type = list(object({
