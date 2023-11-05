@@ -38,4 +38,5 @@ custom_vars:
    partitions:
    - compute
    - debug
-   mounts: []
+   mounts:
+   - /home
