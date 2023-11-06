@@ -62,16 +62,9 @@ locals {
     }
   )
 
-  deps_content = templatefile(
-    "${path.module}/templates/install_spack_deps.yml.tftpl",
-    {
-      virtualenv_path = var.spack_virtualenv_path
-    }
-  )
-
   install_spack_deps_runner = {
     "type"        = "ansible-local"
-    "content"     = local.deps_content
+    "source"      = "${path.module}/scripts/install_spack_deps.yml"
     "destination" = "install_spack_deps.yml"
     "args"        = "-e virtualenv_path=${var.spack_virtualenv_path}"
   }

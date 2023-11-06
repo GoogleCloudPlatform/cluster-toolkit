@@ -68,8 +68,8 @@ duplicates = [
         "community/modules/scripts/ramble-setup/templates/ramble_setup.yml.tftpl",
     ],
     [
-        "community/modules/scripts/spack-setup/templates/install_spack_deps.yml.tftpl",
-        "community/modules/scripts/ramble-setup/templates/install_ramble_deps.yml.tftpl",
+        "community/modules/scripts/spack-setup/scripts/install_spack_deps.yml",
+        "community/modules/scripts/ramble-setup/scripts/install_ramble_deps.yml",
     ]
 ]
 

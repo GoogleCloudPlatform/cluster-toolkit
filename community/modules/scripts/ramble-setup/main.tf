@@ -44,16 +44,9 @@ locals {
     }
   )
 
-  deps_content = templatefile(
-    "${path.module}/templates/install_ramble_deps.yml.tftpl",
-    {
-      virtualenv_path = var.ramble_virtualenv_path
-    }
-  )
-
   install_ramble_deps_runner = {
     "type"        = "ansible-local"
-    "content"     = local.deps_content
+    "source"      = "${path.module}/scripts/install_ramble_deps.yml"
     "destination" = "install_ramble_deps.yml"
     "args"        = "-e virtualenv_path=${var.ramble_virtualenv_path}"
   }
@@ -70,7 +63,6 @@ locals {
     "type"        = "ansible-local"
     "content"     = local.python_reqs_content
     "destination" = "install_ramble_reqs.yml"
-    "args"        = "-e ramble_virtualenv_path=${var.ramble_virtualenv_path}"
   }
 
   install_ramble_runner = {
