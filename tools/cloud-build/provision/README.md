@@ -56,6 +56,8 @@ When prompted for project, use integration test project.
 | [google_cloudbuild_trigger.weekly_builder_image](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/cloudbuild_trigger) | resource |
 | [google_cloudbuild_trigger.zebug_fast_build_failure](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/cloudbuild_trigger) | resource |
 | [google_cloudbuild_trigger.zebug_fast_build_success](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/cloudbuild_trigger) | resource |
+| [google_compute_reservation.c2standard60_us_west4_c](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_reservation) | resource |
+| [google_compute_reservation.n1standard8_with_tesla_t4_europe_west1_d](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_reservation) | resource |
 | [external_external.list_tests_midnight](https://registry.terraform.io/providers/hashicorp/external/latest/docs/data-sources/external) | data source |
 | [external_external.list_tests_morning](https://registry.terraform.io/providers/hashicorp/external/latest/docs/data-sources/external) | data source |
 
