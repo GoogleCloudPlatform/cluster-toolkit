@@ -209,20 +209,6 @@
       loop_control:
         loop_var: test
 
-    rescue:
-    - name: Check for stockout errors
-      ansible.builtin.include_tasks:
-        file: tasks/check_stockout.yml
-        apply:
-          delegate_to: localhost
-      vars:
-        deployment_name: "{{ deployment_name }}"
-        project: "{{ project }}"
-
-    - name: Trigger failure (rescue blocks otherwise revert failures)
-      ansible.builtin.fail:
-        msg: "Failed during the integration tests (see above)"
-
     ## Always cleanup, even on failure
     always:
     - name: Ensure all nodes are powered down
@@ -288,3 +274,12 @@
       vars:
         deployment_name: "{{ deployment_name }}"
         workspace: "{{ workspace }}"
+
+    - name: Check for stockout errors
+      ansible.builtin.include_tasks:
+        file: tasks/check_stockout.yml
+        apply:
+          delegate_to: localhost
+      vars:
+        deployment_name: "{{ deployment_name }}"
+        project: "{{ project }}"
