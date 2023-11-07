@@ -44,7 +44,7 @@
     retries: 10
     delay: 60
     until: key_install is success
-  - name: Enable HTCondor Feature Release repository
+  - name: Enable HTCondor LTS Release repository
     ansible.builtin.yum_repository:
       name: htcondor-feature
       description: HTCondor LTS Release (23.0)
