@@ -25,7 +25,7 @@ tools/cloud-build/quota-check/check.py --project=<MY_PROJECT>
 
 LOCATIONS = {
     "us-central1": ["a", "c"],
-    "us-central2": ["a", "b"],
+    "us-west4": ["c"]
 }
 
 
