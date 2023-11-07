@@ -65,6 +65,7 @@ def print_physical_hosts(instances: List[Instance]):
     print("Physical hosts: VM Name")
     prev_cluster, prev_rack, prev_host = None, None, None
     for vm_name, physical_host in sorted(physical_hosts.items(), key=lambda item: item[1]):
+        if not physical_host: continue
         current_cluster, current_rack, current_host = physical_host.split("/")[1:]
         temp = current_cluster, current_rack, current_host
         current_cluster = _dotify(current_cluster, prev_cluster)
