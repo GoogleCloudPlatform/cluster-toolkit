@@ -93,6 +93,7 @@ deployment_groups:
     settings:
       partition_name: compute
       max_node_count: 20
+      bandwidth_tier: gvnic_enabled
 
   - id: slurm_controller
     source: community/modules/scheduler/SchedMD-slurm-on-gcp-controller
