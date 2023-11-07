@@ -1,23 +1,44 @@
 # Monte Carlo Simulations for Value at Risk
-This tutorial demonstrates how to run Monte Carlo simulations on Google Cloud's Batch and how to analyze the data using Vertex AI Notebooks.
+This tutorial demonstrates how to run Monte Carlo simulations on Google Cloud's
+Batch and how to analyze the data using Vertex AI Notebooks.
 
-Monte Carlo simulation is a mathematical technique that can be used to estimate the [value at risk (VaR) of a financial portfolio](https://en.wikipedia.org/wiki/Value_at_risk). The basic idea is to generate a large number of random price paths for the assets in the portfolio, and then calculate the VaR as the minimum loss that would be expected to occur with a certain probability.
+Monte Carlo simulation is a mathematical technique that can be used to estimate
+the
+[value at risk (VaR) of a financial portfolio](https://en.wikipedia.org/wiki/Value_at_risk).
+The basic idea is to generate a large number of random price paths for the
+assets in the portfolio, and then calculate the VaR as the minimum loss that
+would be expected to occur with a certain probability.
 
 1. Choose a time horizon and a confidence level.
-1. Generate a large number of random price paths (random walks) for the assets in the portfolio.
+1. Generate a large number of random price paths (random walks) for the assets
+   in the portfolio.
 1. Calculate the portfolio value at the end of each price path.
-1. Determine the VaR as the minimum portfolio value that occurs with the specified confidence level.
+1. Determine the VaR as the minimum portfolio value that occurs with the
+   specified confidence level.
+
+## Cost to run
+The following elements of this tutorial will result in charges to your billing
+account. Please validate with the
+[Google Cloud Pricing Calculator](https://cloud.google.com/products/calculator)
+
+* Batch
+* Pub/Sub
+* BigQuery
+* Vertex AI Notebooks
 
 
 ## Tutorial architecture
 The overall structure of this tutorial is as follows:
 
-* The Monte Carlo simulation is managed with [Batch](https://cloud.google.com/batch/docs/get-started). 
-* The output of the Monte Carlo simulation is published to a [PubSub](https://cloud.google.com/pubsub/docs/overview) topic.
+* The Monte Carlo simulation is managed with
+  [Batch](https://cloud.google.com/batch/docs/get-started).
+* The output of the Monte Carlo simulation is published to a
+  [PubSub](https://cloud.google.com/pubsub/docs/overview) topic.
 * The PubSub data is entered into [BigQuery](https://cloud.google.com/bigquery) 
 via a [PubSub BigQuery subscription](https://cloud.google.com/pubsub/docs/bigquery)
-* The data is visualized via a [Vertex AI Workbench](https://cloud.google.com/vertex-ai-workbench) 
-[Jupyter Notebook](https://jupyter.org/) 
+* The data is visualized via a
+  [Vertex AI Workbench](https://cloud.google.com/vertex-ai-workbench)
+  [Jupyter Notebook](https://jupyter.org/)
 
 <img src="./images/architecture.png" width="800" />
 
@@ -41,10 +62,16 @@ make
 gcloud services enable cloudresourcemanager.googleapis.com
 ```
 
-3\. Run `ghpc` on the blueprint `fsi-montecarlo-on-batch.yaml`
+3\. Run `ghpc` on the blueprint `fsi-montecarlo-on-batch.yaml` 
 
 ```
-./ghpc create community/examples/fsi-montecarlo-on-batch.yaml
+./ghpc create community/examples/fsi-montecarlo-on-batch.yaml \
+   --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
+```
+Where `GOOGLE_CLOUD_PROJECT` has been set via an export command
+
+```
+export GOOGLE_CLOUD_PROJECT=my_project_id
 ```
 
 If successful, you will see output similar to:
@@ -53,13 +80,8 @@ To deploy your infrastructure please run:
 
 ./ghpc deploy fsimontecarlo
 ```
-4\. Edit the file to update `<my_project>` with your project_id:
 
-```
-  project_id: <my_project>
-```
-
-5\. Deploy the blueprint as instructed:
+4\. Deploy the blueprint as instructed:
 
 ```
 ./ghpc deploy fsimontecarlo
@@ -75,7 +97,8 @@ Please select an option [d,a,s,c]:
 ```
 Respond with `apply`, "a". You may be asked to respond twice. 
 
-When the job is complete it will indicate `Succeeded`. You can then proceed to the next section.
+When the job is complete it will indicate `Succeeded`. You can then proceed to
+the next section.
 
 At this point, all the required infrastructure has been deployed.
 
@@ -85,6 +108,7 @@ At this point, all the required infrastructure has been deployed.
 ```
 https://console.cloud.google.com/vertex-ai/workbench/user-managed
 ```
+
 2. Open JupyterLab on the Notebook instance listed.
 
 <img src="./images/workbench.png" width="500" />
@@ -117,7 +141,8 @@ python3 batch.py --help
 ``` 
 You will see a listing of the help messages
 
-6. To start the VaR simulation, run `batch.py` with the config file and `--create_job`
+6. To start the VaR simulation, run `batch.py` with the config file and
+   `--create_job`
 ```
 python3 batch.py --config_file mc_run.yaml --create_job
 ```
@@ -133,8 +158,9 @@ If you want to see the jobs listed in the Cloud Console, you can click:
 https://console.cloud.google.com/batch/jobs
 
 ## View the data in BigQuery
-The batch job runs Monte Carlo simulation for the VaR calculation. The output from each run is stored in BigQuery. 
-To view this data in it's raw form, you can view BigQuery in the Cloud Console:
+The batch job runs Monte Carlo simulation for the VaR calculation. The output
+from each run is stored in BigQuery. To view this data in it's raw form, you can
+view BigQuery in the Cloud Console:
 
 https://console.cloud.google.com/bigquery
 
@@ -154,11 +180,13 @@ For an advanced user, you can run queries directly in the BigQuery UI.
 
 ## Visualization in the Notebook
 
-Finally, you can select the `FSI_MonteCarlo.ipynb` from the left navigation in the JupyterLab window.
+Finally, you can select the `FSI_MonteCarlo.ipynb` from the left navigation in
+the JupyterLab window.
 
 <img src="./images/ipynb.png" width="300" />
 
-To run the cells in the notebook, select the cell, then click the play button, or `Alt-Enter`. 
+To run the cells in the notebook, select the cell, then click the play button,
+or `Alt-Enter`.
 
 > Run the cells in the order they appear.
 
@@ -188,7 +216,8 @@ In this tutorial, you accomplished the following:
 
 ## Shutting down
 
-The best way to clean up your workspace is to delete the project. This will ensure you are not billed for any of the Cloud usage.
+The best way to clean up your workspace is to delete the project. This will
+ensure you are not billed for any of the Cloud usage.
 
 ### Alternatively
 

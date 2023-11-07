@@ -275,67 +275,6 @@ This blueprint will take you through a tutorial on an FSI Value at Risk calculat
 
 See the [full tutorial here](../docs/tutorials/fsi-montecarlo-on-batch/README.md).
 
-## Basic getting started
-
-1. Clone the repo
-1. Change to the directory: 
- ```
- cd hpc-toolkit
- ```
-3. Make `ghpc` if you have not already
- ```
- make
- ```
-4. Run `ghpc` on the blueprint `fsi-montecarlo-on-batch.yaml`
-
-```
-./ghpc create community/examples/fsi-montecarlo-on-batch.yaml
-```
-
-If successful, you will see output similar to:
-```
-To deploy your infrastructure please run:
-
-./ghpc deploy fsimontecarlo
-```
-
-This will create a directory called `fsimontecarlo`
-
-
-5. Deploy the blueprint
-
-```
-./ghpc deploy fsimontecarlo
-```
-If successful, this will prompt you:
-```
-Summary of proposed changes: Plan: 20 to add, 0 to change, 0 to destroy.
-(D)isplay full proposed changes,
-(A)pply proposed changes,
-(S)top and exit,
-(C)ontinue without applying
-Please select an option [d,a,s,c]:
-```
-Respond with `apply`, "a".
-
-
-When the job is complete it will indicate `Succeeded`. You can then proceed to the next section.
-
-## Open Vertex AI Workbench
-
-1. Go to the Vertex AI Workbench Notebooks instances in the Google Cloud Console:
-  > https://console.cloud.google.com/vertex-ai/workbench/user-managed
-2. Open JupyterLab 
-
-  > Click on `OPEN JUPYTERLAB` link
-
-3. In the JupyterLab UI, you will see a list of directories:
- > Select `fsi`
-4. Under `fsi` all the files required to run the demo have been pepared.
-5. 
-
-
-
 
 ### [ml-slurm.yaml] ![core-badge]
 

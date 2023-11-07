@@ -1,6 +1,9 @@
 ## Description
 
-This module creates the Vertex AI Notebook, to be used in tutorials. If `create_tutorial` is set to a known value, the module will attempt to copy key files required for the tutorial to a GCS bucket (`gcs_bucket_path`), which is then mounted on the Jupyterlab instance. The known values are:
+This module creates the Vertex AI Notebook, to be used in tutorials. If
+`create_tutorial` is set to a known value, the module will attempt to copy key
+files required for the tutorial to a GCS bucket (`gcs_bucket_path`), which is
+then mounted on the Jupyterlab instance. The known values are:
 * fsi
 
 ## Requirements
