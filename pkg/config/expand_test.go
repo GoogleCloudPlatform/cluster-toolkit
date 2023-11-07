@@ -345,11 +345,6 @@ func (s *MySuite) TestApplyGlobalVariables(c *C) {
 		}},
 	})
 
-	err := dc.applyGlobalVariables()
-	expectedErrorStr := fmt.Sprintf("%s: Module ID: %s Setting: gold",
-		errorMessages["missingSetting"], mod.ID)
-	c.Check(err, ErrorMatches, expectedErrorStr)
-
 	// Test no input, one required, exists in globals
 	dc.Config.Vars.Set("gold", cty.StringVal("val"))
 	c.Check(dc.applyGlobalVariables(), IsNil)
@@ -360,8 +355,7 @@ func (s *MySuite) TestApplyGlobalVariables(c *C) {
 
 	// Test one input, one required
 	mod.Settings.Set(requiredVar.Name, cty.StringVal("val"))
-	err = dc.applyGlobalVariables()
-	c.Assert(err, IsNil)
+	c.Assert(dc.applyGlobalVariables(), IsNil)
 
 	// Test one input, none required, exists in globals
 	setTestModuleInfo(*mod, modulereader.ModuleInfo{
@@ -371,8 +365,7 @@ func (s *MySuite) TestApplyGlobalVariables(c *C) {
 			Required: false,
 		}},
 	})
-	err = dc.applyGlobalVariables()
-	c.Assert(err, IsNil)
+	c.Assert(dc.applyGlobalVariables(), IsNil)
 }
 
 func (s *MySuite) TestIsSimpleVariable(c *C) {

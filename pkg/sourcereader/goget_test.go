@@ -28,10 +28,11 @@ func (s *MySuite) TestCopyGitModules(c *C) {
 	if err := os.Mkdir(destDir, 0755); err != nil {
 		log.Fatal(err)
 	}
+	reader := GoGetterSourceReader{}
 
 	// Success via HTTPS
 	destDirForHTTPS := filepath.Join(destDir, "https")
-	err := copyGitModules("github.com/terraform-google-modules/terraform-google-project-factory//helpers", destDirForHTTPS)
+	err := reader.GetModule("github.com/terraform-google-modules/terraform-google-project-factory//helpers", destDirForHTTPS)
 	c.Assert(err, IsNil)
 	fInfo, err := os.Stat(filepath.Join(destDirForHTTPS, "terraform_validate"))
 	c.Assert(err, IsNil)
@@ -41,7 +42,7 @@ func (s *MySuite) TestCopyGitModules(c *C) {
 
 	// Success via HTTPS (Root directory)
 	destDirForHTTPSRootDir := filepath.Join(destDir, "https-rootdir")
-	err = copyGitModules("github.com/terraform-google-modules/terraform-google-service-accounts.git?ref=v4.1.1", destDirForHTTPSRootDir)
+	err = reader.GetModule("github.com/terraform-google-modules/terraform-google-service-accounts.git?ref=v4.1.1", destDirForHTTPSRootDir)
 	c.Assert(err, IsNil)
 	fInfo, err = os.Stat(filepath.Join(destDirForHTTPSRootDir, "main.tf"))
 	c.Assert(err, IsNil)
@@ -51,17 +52,15 @@ func (s *MySuite) TestCopyGitModules(c *C) {
 }
 
 func (s *MySuite) TestGetModule_Git(c *C) {
-	reader := GitSourceReader{}
+	reader := GoGetterSourceReader{}
 
 	// Invalid git repository - path does not exists
 	badGitRepo := "github.com:not/exist.git"
 	err := reader.GetModule(badGitRepo, tfKindString)
-	expectedErr := "failed to clone git module at .*"
-	c.Assert(err, ErrorMatches, expectedErr)
+	c.Assert(err, NotNil)
 
 	// Invalid: Unsupported Module Source
-	badSource := "gcs::https://www.googleapis.com/storage/v1/GoogleCloudPlatform/hpc-toolkit/modules"
+	badSource := "wut::https://www.googleapis.com/storage/v1/GoogleCloudPlatform/hpc-toolkit/modules"
 	err = reader.GetModule(badSource, tfKindString)
-	expectedErr = "source is not valid: .*"
-	c.Assert(err, ErrorMatches, expectedErr)
+	c.Assert(err, NotNil)
 }

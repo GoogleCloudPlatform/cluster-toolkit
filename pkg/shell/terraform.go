@@ -52,7 +52,7 @@ type TfError struct {
 }
 
 func (se *TfError) Error() string {
-	return fmt.Sprintf("%s (detailed error below)\n%s", se.help, se.err)
+	return fmt.Sprintf("%s\n%s", se.help, se.err)
 }
 
 type outputValue struct {
@@ -67,7 +67,7 @@ func ConfigureTerraform(workingDir string) (*tfexec.Terraform, error) {
 	path, err := exec.LookPath("terraform")
 	if err != nil {
 		return nil, &TfError{
-			help: "must have a copy of terraform installed in PATH",
+			help: "must have a copy of terraform installed in PATH (obtain at https://terraform.io)",
 			err:  err,
 		}
 	}

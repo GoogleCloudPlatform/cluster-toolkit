@@ -27,7 +27,7 @@
 
 - name: Create cli flag for extra deployment variables
   ansible.builtin.set_fact:
-    deployment_vars_str: "--vars \\\"{{ cli_deployment_vars.items() | map('join', '=') | join('\\\" --vars \\\"') }}\\\""
+    deployment_vars_str: "--vars \"\\\"{{ cli_deployment_vars.items() | map('join', '=') | join('\\\"\" --vars \"\\\"') }}\\\"\""
   when: cli_deployment_vars is defined and cli_deployment_vars is mapping
 
 - name: Create Blueprint

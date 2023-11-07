@@ -100,7 +100,7 @@ func printAdvancedInstructionsMessage(deplDir string) {
 func expandOrDie(path string) config.DeploymentConfig {
 	dc, ctx, err := config.NewDeploymentConfig(path)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(renderError(err, ctx))
 	}
 	// Set properties from CLI
 	if err := setCLIVariables(&dc.Config, cliVariables); err != nil {
@@ -193,11 +193,23 @@ func renderError(err error, ctx config.YamlCtx) string {
 }
 
 func renderRichError(err error, pos config.Pos, ctx config.YamlCtx) string {
+	line := pos.Line - 1
+	if line < 0 {
+		line = 0
+	}
+	if line >= len(ctx.Lines) {
+		line = len(ctx.Lines) - 1
+	}
+
 	pref := fmt.Sprintf("%d: ", pos.Line)
-	arrow := strings.Repeat(" ", len(pref)+pos.Column-1) + "^"
+	arrow := " "
+	if pos.Column > 0 {
+		spaces := strings.Repeat(" ", len(pref)+pos.Column-1)
+		arrow = spaces + "^"
+	}
 	return fmt.Sprintf(`Error: %s
 %s%s
-%s`, err, pref, ctx.Lines[pos.Line-1], arrow)
+%s`, err, pref, ctx.Lines[line], arrow)
 }
 
 func setCLIVariables(bp *config.Blueprint, s []string) error {

@@ -41,8 +41,10 @@
     ansible.builtin.pip:
       name: pip>=21.3.1
       virtualenv: "{{ spack_virtualenv_path }}"
+      virtualenv_command: /usr/bin/python3 -m venv
 
   - name: Add google-cloud-storage to Spack virtualenv
     ansible.builtin.pip:
       name: google-cloud-storage
       virtualenv: "{{ spack_virtualenv_path }}"
+      virtualenv_command: /usr/bin/python3 -m venv

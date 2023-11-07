@@ -21,7 +21,17 @@ variable "enable_docker" {
 }
 
 variable "condor_version" {
-  description = "Yum/DNF-compatible version string; leave unset to default to 10.x series (examples: \"10.5.1\",\"10.*\"))"
+  description = "Yum/DNF-compatible version string; leave unset to use latest 23.0 LTS release (examples: \"23.0.0\",\"23.*\"))"
   type        = string
-  default     = "10.*"
+  default     = "23.*"
+
+  validation {
+    error_message = "var.condor_version must be set to \"23.*\" for latest 23.0 release or to a specific \"23.0.y\" release."
+    condition = var.condor_version == "23.*" || (
+      length(split(".", var.condor_version)) == 3 && alltrue([
+        for v in split(".", var.condor_version) : can(tonumber(v))
+      ]) && split(".", var.condor_version)[0] == "23"
+      && split(".", var.condor_version)[1] == "0"
+    )
+  }
 }

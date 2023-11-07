@@ -16,9 +16,9 @@ Remove-Item "$runtime_installer"
 # download HTCondor installer
 $htcondor_installer = 'C:\htcondor.msi'
 %{ if condor_version == "10.*" }
-Invoke-WebRequest https://research.cs.wisc.edu/htcondor/tarball/current/current/condor-Windows-x64.msi -OutFile "$htcondor_installer"
+Invoke-WebRequest https://research.cs.wisc.edu/htcondor/tarball/23.0/current/condor-Windows-x64.msi -OutFile "$htcondor_installer"
 %{ else ~}
-Invoke-WebRequest https://research.cs.wisc.edu/htcondor/tarball/current/${condor_version}/release/condor-${condor_version}-Windows-x64.msi -OutFile "$htcondor_installer"
+Invoke-WebRequest https://research.cs.wisc.edu/htcondor/tarball/23.0/${condor_version}/release/condor-${condor_version}-Windows-x64.msi -OutFile "$htcondor_installer"
 %{ endif ~}
 $args='/qn /l* condor-install-log.txt /i'
 $args=$args + " $htcondor_installer"

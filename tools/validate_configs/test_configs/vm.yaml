@@ -31,10 +31,10 @@ deployment_groups:
     source: modules/network/pre-existing-vpc
 
   - source: ./modules/compute/vm-instance
-    id: compute_instances
+    id: compute_instances_family
     use: [network1]
     settings:
-      name_prefix: client-vm
+      name_prefix: client-vm-family
       instance_count: 1
       machine_type: n2-standard-2
       instance_image:
@@ -46,3 +46,14 @@ deployment_groups:
         #        --source-image-project=ubuntu-os-cloud --family myubuntu --project <project_id>
         # project: $(vars.project_id)
         # family: myubuntu
+
+  - source: ./modules/compute/vm-instance
+    id: compute_instances_name
+    use: [network1]
+    settings:
+      name_prefix: client-vm-name
+      instance_count: 1
+      machine_type: n2-standard-2
+      instance_image:
+        project: ubuntu-os-cloud
+        name: ubuntu-2004-focal-v20231101

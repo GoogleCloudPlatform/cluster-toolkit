@@ -15,12 +15,12 @@
  */
 
 output "startup_script" {
-  description = "Path to the Spack installation script."
+  description = "Spack startup script."
   value       = module.startup_script.startup_script
 }
 
 output "controller_startup_script" {
-  description = "Path to the Spack installation script, duplicate for SLURM controller."
+  description = "Spack startup script, duplicate for SLURM controller."
   value       = module.startup_script.startup_script
 }
 
@@ -32,4 +32,9 @@ output "spack_runner" {
 output "gcs_bucket_path" {
   description = "Bucket containing the startup scripts for spack, to be reused by spack-execute module."
   value       = var.gcs_bucket_path
+}
+
+output "spack_profile_script_path" {
+  description = "Path to the Spack profile.d script."
+  value       = var.spack_profile_script_path
 }

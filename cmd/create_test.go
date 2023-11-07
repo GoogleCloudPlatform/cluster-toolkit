@@ -137,14 +137,14 @@ func (s *MySuite) TestRenderError(c *C) {
 		c.Check(got, Equals, "arbuz")
 	}
 	{ // has pos, but context doesn't contain it
-		ctx := config.NewYamlCtx([]byte(``))
+		ctx, _ := config.NewYamlCtx([]byte(``))
 		pth := config.Root.Vars.Dot("kale")
 		err := config.BpError{Path: pth, Err: errors.New("arbuz")}
 		got := renderError(err, ctx)
 		c.Check(got, Equals, "arbuz")
 	}
 	{ // has pos, has context
-		ctx := config.NewYamlCtx([]byte(`
+		ctx, _ := config.NewYamlCtx([]byte(`
 vars:
   kale: dos`))
 		pth := config.Root.Vars.Dot("kale")
@@ -152,7 +152,7 @@ vars:
 		got := renderError(err, ctx)
 		c.Check(got, Equals, `Error: arbuz
 3:   kale: dos
-           ^`)
+     ^`)
 	}
 }
 
@@ -161,5 +161,6 @@ func (s *MySuite) TestValidateMaybeDie(c *C) {
 		Validators:      []config.Validator{{Validator: "invalid"}},
 		ValidationLevel: config.ValidationWarning,
 	}
-	validateMaybeDie(bp, config.NewYamlCtx([]byte{})) // smoke test
+	ctx, _ := config.NewYamlCtx([]byte{})
+	validateMaybeDie(bp, ctx) // smoke test
 }
