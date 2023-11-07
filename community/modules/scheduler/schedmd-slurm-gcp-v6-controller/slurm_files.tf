@@ -98,9 +98,9 @@ module "slurm_files" {
   slurm_conf_tpl    = var.slurm_conf_tpl
   cgroup_conf_tpl   = var.cgroup_conf_tpl
   cloud_parameters  = var.cloud_parameters
-  # TODO: resolve cyclic dependency and use 
-  # try(module.slurm_controller_instance.cloudsql_secret, null)
-  cloudsql_secret = null
+  cloudsql_secret = try(
+    one(google_secret_manager_secret_version.cloudsql_version[*].id),
+  null)
 
   controller_startup_scripts         = local.ghpc_startup_script_controller
   controller_startup_scripts_timeout = var.controller_startup_scripts_timeout

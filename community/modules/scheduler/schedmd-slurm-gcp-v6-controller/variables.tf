@@ -515,9 +515,4 @@ EOD
   })
   default   = null
   sensitive = true
-
-  validation {
-    condition     = var.cloudsql == null
-    error_message = "cloudsql is not supported yet."
-  }
 }
