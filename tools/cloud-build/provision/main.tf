@@ -19,8 +19,7 @@ terraform {
 }
 
 locals {
-  ref_main             = "refs/heads/main"
-  ref_develop          = "refs/heads/develop"
-  ref_release_canidate = "refs/heads/release-candidate"
-  notify_chat_tag      = "notify_chat_on_failure"
+  ref_main        = "refs/heads/main"
+  ref_develop     = "refs/heads/develop"
+  notify_chat_tag = "notify_chat_on_failure"
 }
