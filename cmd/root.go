@@ -60,6 +60,7 @@ func Execute() error {
 	// Don't prefix messages with data & time to improve readability.
 	// See https://pkg.go.dev/log#pkg-constants
 	log.SetFlags(0)
+	initColor()
 
 	mismatch, branch, hash, dir := checkGitHashMismatch()
 	if mismatch {
