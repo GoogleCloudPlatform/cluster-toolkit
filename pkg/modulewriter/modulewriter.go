@@ -412,7 +412,7 @@ func writeDestroyInstructions(w io.Writer, dc config.DeploymentConfig, deploymen
 	fmt.Fprintln(w, "Automated")
 	fmt.Fprintln(w, "---------")
 	fmt.Fprintln(w)
-	fmt.Fprintf(w, "./ghpc destroy %s\n", deploymentDir)
+	fmt.Fprintf(w, "ghpc destroy %s\n", deploymentDir)
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Advanced / Manual")
 	fmt.Fprintln(w, "-----------------")

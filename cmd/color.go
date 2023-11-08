@@ -32,7 +32,6 @@ func initColor() {
 	colorlessStdout := !isatty.IsTerminal(os.Stdout.Fd()) && !isatty.IsCygwinTerminal(os.Stdout.Fd())
 	colorlessStderr := !isatty.IsTerminal(os.Stderr.Fd()) && !isatty.IsCygwinTerminal(os.Stderr.Fd())
 	color.NoColor = noColorFlag || os.Getenv("TERM") == "dumb" || colorlessStdout || colorlessStderr
-
 }
 
 var boldRed = color.New(color.FgRed, color.Bold).SprintFunc()

@@ -86,7 +86,7 @@ func runCreateCmd(cmd *cobra.Command, args []string) {
 
 	fmt.Println("To deploy your infrastructure please run:")
 	fmt.Println()
-	fmt.Printf(boldGreen("./ghpc deploy %s\n"), deplDir)
+	fmt.Printf(boldGreen("%s deploy %s\n"), execPath(), deplDir)
 	fmt.Println()
 	printAdvancedInstructionsMessage(deplDir)
 }
