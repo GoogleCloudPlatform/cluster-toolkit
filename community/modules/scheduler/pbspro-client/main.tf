@@ -57,7 +57,7 @@ module "client_startup_script" {
 }
 
 module "pbs_client" {
-  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/compute/vm-instance?ref=v1.22.1"
+  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/compute/vm-instance?ref=bb47067"
 
   instance_count = var.instance_count
   spot           = var.spot
