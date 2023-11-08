@@ -226,6 +226,21 @@ class ClusterInfo:
         project: {self.cluster.project_id}"""
             else:
                 instance_image_yaml = ""
+
+            if part.additional_disk_count > 0 and part.additional_disk_count is not None:
+                additional_disks_yaml = f"""additional_disks:
+"""
+                for disk in range(part.additional_disk_count):
+                    additional_disks_yaml += f"""      - device_name: disk{disk}
+        disk_name: null
+        disk_size_gb: {part.additional_disk_size}
+        disk_type: {part.additional_disk_type}
+        disk_labels: {{}}
+        auto_delete: {part.additional_disk_auto_delete}
+        boot: false\n"""
+            else:
+                additional_disks_yaml = ""
+
             yaml.append(
                 f"""
   - source: community/modules/compute/schedmd-slurm-gcp-v5-partition
@@ -251,6 +266,7 @@ class ClusterInfo:
       disk_size_gb: {part.boot_disk_size}
       disk_type: {part.boot_disk_type}
       {instance_image_yaml}
+      {additional_disks_yaml}
 """
             )
 

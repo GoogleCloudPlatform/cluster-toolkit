@@ -252,8 +252,12 @@ class ClusterPartitionForm(forms.ModelForm):
             "enable_node_reuse",
             "GPU_type",
             "GPU_per_node",
-            "boot_disk_size",
             "boot_disk_type",
+            "boot_disk_size",
+            "additional_disk_type",
+            "additional_disk_count",
+            "additional_disk_size",
+            "additional_disk_auto_delete"
         )
 
     def __init__(self, *args, **kwargs):
@@ -266,8 +270,8 @@ class ClusterPartitionForm(forms.ModelForm):
                     {"title": self.fields[field].help_text}
                 )
         
-        if self.fields["boot_disk_type"]:
-            self.fields[field].widget = forms.Select(attrs={"class": "form-control disk_type_select"})  # Set the widget to forms.Select
+        self.fields["boot_disk_type"].widget = forms.Select(attrs={"class": "form-control disk_type_select"})
+        self.fields["additional_disk_type"].widget = forms.Select(attrs={"class": "form-control disk_type_select"})
 
         self.fields["machine_type"].widget.attrs[
             "class"
@@ -278,10 +282,15 @@ class ClusterPartitionForm(forms.ModelForm):
                 ( value, value )
             ]
             self.fields[field].clean = lambda value: value
-
+        
         prep_dynamic_select(
             "boot_disk_type",
             self.instance.boot_disk_type
+        )
+
+        prep_dynamic_select(
+            "additional_disk_type",
+            self.instance.additional_disk_type
         )
 
         prep_dynamic_select(
