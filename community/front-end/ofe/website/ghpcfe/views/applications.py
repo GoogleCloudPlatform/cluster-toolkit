@@ -359,7 +359,7 @@ class ApplicationViewSet(viewsets.ModelViewSet):
     serializer_class = ApplicationSerializer
 
 
-class SpackPackageViewSet(viewsets.ViewSet):
+class SpackPackageViewSet(LoginRequiredMixin, viewsets.ViewSet):
     """Download a list of Spack packages available"""
 
     def list(self, request):
