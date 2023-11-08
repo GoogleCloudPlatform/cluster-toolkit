@@ -35,4 +35,5 @@ func initColor() {
 }
 
 var boldRed = color.New(color.FgRed, color.Bold).SprintFunc()
+var boldYellow = color.New(color.FgYellow, color.Bold).SprintFunc()
 var boldGreen = color.New(color.FgGreen, color.Bold).SprintFunc()
