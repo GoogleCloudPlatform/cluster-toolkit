@@ -51,7 +51,6 @@ func init() {
 			"Note: Terraform state IS preserved. \n"+
 			"Note: Terraform workspaces are NOT supported (behavior undefined). \n"+
 			"Note: Packer is NOT supported.")
-	addColorFlag(createCmd)
 	rootCmd.AddCommand(createCmd)
 }
 

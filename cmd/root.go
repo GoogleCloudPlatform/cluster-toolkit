@@ -55,13 +55,18 @@ HPC deployments on the Google Cloud Platform.`,
 	}
 )
 
+func init() {
+	addColorFlag(rootCmd.PersistentFlags())
+	rootCmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
+		initColor()
+	}
+}
+
 // Execute the root command
 func Execute() error {
 	// Don't prefix messages with data & time to improve readability.
 	// See https://pkg.go.dev/log#pkg-constants
 	log.SetFlags(0)
-	initColor()
-
 	mismatch, branch, hash, dir := checkGitHashMismatch()
 	if mismatch {
 		fmt.Fprintf(os.Stderr, "WARNING: ghpc binary was built from a different commit (%s/%s) than the current git branch in %s (%s/%s). You can rebuild the binary by running 'make'\n",
@@ -83,10 +88,9 @@ Built from '{{index .Annotations "branch"}}' branch.
 Commit info: {{index .Annotations "commitInfo"}}
 `)
 	}
+
 	return rootCmd.Execute()
 }
-
-func init() {}
 
 // checkGitHashMismatch will compare the hash of the git repository vs the git
 // hash the ghpc binary was compiled against, if the git repository if found and
