@@ -2,6 +2,11 @@
 
 Creates a Pub/Sub topic 
 
+Primarily used for FSI - MonteCarlo Tutorial: **[fsi-montecarlo-on-batch-tutorial]**.
+
+[fsi-montecarlo-on-batch-tutorial]: ../docs/tutorials/fsi-montecarlo-on-batch/README.md
+
+
 ## Requirements
 
 | Name | Version |

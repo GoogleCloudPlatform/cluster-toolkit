@@ -2,6 +2,10 @@
 
 Creates a BigQuery table with a specified schema.
 
+Primarily used for FSI - MonteCarlo Tutorial: **[fsi-montecarlo-on-batch-tutorial]**.
+
+[fsi-montecarlo-on-batch-tutorial]: ../docs/tutorials/fsi-montecarlo-on-batch/README.md
+
 ## Requirements
 
 | Name | Version |

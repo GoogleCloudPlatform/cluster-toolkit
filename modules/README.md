@@ -50,6 +50,9 @@ Modules that are still in development and less stable are labeled with the
   Creates execution hosts for use in a PBS Professional cluster.
 * **[SchedMD-slurm-on-gcp-partition]** ![community-badge] ![deprecated-badge] : Creates a partition
   to be used by a [slurm-controller][schedmd-slurm-on-gcp-controller].
+* **[notebook]** ![community-badge] ![experimental-badge] : Creates a
+Vertex AI Notebook. Primarily used for FSI - MonteCarlo Tutorial:
+  [fsi-montecarlo-on-batch-tutorial].
 
 [vm-instance]: compute/vm-instance/README.md
 [gke-node-pool]: ../community/modules/compute/gke-node-pool/README.md
@@ -59,6 +62,8 @@ Modules that are still in development and less stable are labeled with the
 [schedmd-slurm-gcp-v5-node-group]: ../community/modules/compute/schedmd-slurm-gcp-v5-node-group/README.md
 [htcondor-execute-point]: ../community/modules/compute/htcondor-execute-point/README.md
 [pbspro-execution]: ../community/modules/compute/pbspro-execution/README.md
+[notebook]: ../community/modules/compute/notebook/README.md
+[fsi-montecarlo-on-batch-tutorial]: ../docs/tutorials/fsi-montecarlo-on-batch/README.md
 
 ### Database
 
@@ -66,7 +71,17 @@ Modules that are still in development and less stable are labeled with the
   Creates a [Google SQL Instance](https://cloud.google.com/sql/) meant to be
   integrated with a [slurm-controller][schedmd-slurm-on-gcp-controller].
 
+* **[bigquery-dataset]** ![community-badge] ![experimental-badge] : Creates a BQ
+  dataset. Primarily used for FSI - MonteCarlo Tutorial:
+  [fsi-montecarlo-on-batch-tutorial].
+* **[bigquery-table]** ![community-badge] ![experimental-badge] : Creates a BQ
+  table. Primarily used for FSI - MonteCarlo Tutorial:
+  [fsi-montecarlo-on-batch-tutorial].
+
 [slurm-cloudsql-federation]: ../community/modules/database/slurm-cloudsql-federation/README.md
+[bigquery-dataset]: ../community/modules/database/bigquery_dataset/README.md
+[bigquery-table]: ../community/modules/database/bigquery_table/README.md
+[fsi-montecarlo-on-batch]: ../community/modules/files/fsi-montecarlo-on-batch/README.md
 
 ### File System
 
@@ -91,6 +106,12 @@ Modules that are still in development and less stable are labeled with the
 [nfs-server]: ../community/modules/file-system/nfs-server/README.md
 [cloud-storage-bucket]: ../community/modules/file-system/cloud-storage-bucket/README.md
 [gke-persistent-volume]: ../community/modules/file-system/gke-persistent-volume/README.md
+
+### Files
+These modules are custom for copying files from the repo to a destination, primarily a GCS bucket.
+
+* **[fsi-montecarlo-on-batch]** ![community-badge] ![experimental-badge] : Creates a BQ
+  dataset. Primarily used for FSI - MonteCarlo Tutorial:
 
 ### Monitoring
 
@@ -131,6 +152,18 @@ Modules that are still in development and less stable are labeled with the
 [new-project]: ../community/modules/project/new-project/README.md
 [service-account]: ../community/modules/project/service-account/README.md
 [service-enablement]: ../community/modules/project/service-enablement/README.md
+
+### Pub/Sub
+
+* **[pubsub-topic]** ![community-badge] ![experimental-badge] : Creates a
+Pub/Sub topic. Primarily used for FSI - MonteCarlo Tutorial:
+[fsi-montecarlo-on-batch-tutorial].
+* **[pubsub-subscription]** ![community-badge] ![experimental-badge] : Creates a
+Pub/Sub subscription. Primarily used for FSI - MonteCarlo Tutorial:
+[fsi-montecarlo-on-batch-tutorial].
+
+[pubsub-topic]: ../community/modules/pubsub/subscription/README.md
+[pubsub-subscription]: ../community/modules/pubsub/topic/README.md
 
 ### Remote Desktop
 
