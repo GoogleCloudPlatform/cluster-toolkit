@@ -51,6 +51,7 @@ func init() {
 			"Note: Terraform state IS preserved. \n"+
 			"Note: Terraform workspaces are NOT supported (behavior undefined). \n"+
 			"Note: Packer is NOT supported.")
+	addColorFlag(createCmd)
 	rootCmd.AddCommand(createCmd)
 }
 
@@ -85,7 +86,7 @@ func runCreateCmd(cmd *cobra.Command, args []string) {
 
 	fmt.Println("To deploy your infrastructure please run:")
 	fmt.Println()
-	fmt.Printf("./ghpc deploy %s\n", deplDir)
+	fmt.Printf(boldGreen("./ghpc deploy %s\n"), deplDir)
 	fmt.Println()
 	printAdvancedInstructionsMessage(deplDir)
 }
@@ -207,9 +208,10 @@ func renderRichError(err error, pos config.Pos, ctx config.YamlCtx) string {
 		spaces := strings.Repeat(" ", len(pref)+pos.Column-1)
 		arrow = spaces + "^"
 	}
-	return fmt.Sprintf(`Error: %s
+
+	return fmt.Sprintf(`%s: %s
 %s%s
-%s`, err, pref, ctx.Lines[line], arrow)
+%s`, boldRed("Error"), err, pref, ctx.Lines[line], arrow)
 }
 
 func setCLIVariables(bp *config.Blueprint, s []string) error {
