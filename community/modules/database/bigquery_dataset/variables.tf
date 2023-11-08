@@ -32,6 +32,7 @@ variable "region" {
 variable "dataset_id" {
   description = "The name of the dataset to be created"
   type        = string
+  default = null
 }
 
 variable "labels" {

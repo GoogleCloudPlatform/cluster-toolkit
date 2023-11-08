@@ -40,31 +40,5 @@ resource "google_pubsub_schema" "example" {
   project = var.project_id
   type = "AVRO"
 
-  definition = <<CCE
-{  
-  "name" : "Avro",  
-  "type" : "record", 
-  "fields" : 
-      [
-       {"name" : "ticker", "type" : "string"},
-       {"name" : "epoch_time", "type" : "int"},
-       {"name" : "iteration", "type" : "int"},
-       {"name" : "start_date", "type" : "string"},
-       {"name" : "end_date", "type" : "string"},
-       {
-           "name":"simulation_results",
-           "type":{
-               "type": "array",  
-               "items":{
-                   "name":"Child",
-                   "type":"record",
-                   "fields":[
-                       {"name":"price", "type":"double"}
-                   ]
-               }
-           }
-       }
-      ]
- }
-CCE
+  definition = var.schema_json
 }

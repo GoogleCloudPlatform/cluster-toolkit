@@ -1,5 +1,5 @@
 /**
- * Copyright 2022 Google LLC
+ * Copyright 2023 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,40 +12,50 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
-*/
+ */
 
-variable "deployment_name" {
-  description = "The name of the current deployment"
+variable "project_id" {
+  description = "ID of project in which GCS bucket will be created."
   type        = string
 }
 
-variable "project_id" {
-  description = "Project in which the HPC deployment will be created"
+variable "deployment_name" {
+  description = "Name of the HPC deployment; used as part of name of the GCS bucket."
+  type        = string
+}
+
+variable "zone" {
+  description = "The zone to deploy to"
+  type        = string
+}
+
+variable "gcs_bucket_path" {
+  description = "Bucket name"
+  type        = string
+  default     = null
+}
+
+variable "topic_id" {
+  description = "Pubsub Topic Name"
+  type        = string
+}
+
+variable "topic_schema" {
+  description = "Pubsub Topic schema"
+  type        = string
+}
+
+variable "dataset_id" {
+  description = "Bigquery dataset id"
+  type        = string
+}
+
+variable "table_id" {
+  description = "Bigquery table id"
   type        = string
 }
 
 variable "region" {
-  description = "The region where SQL instance will be configured"
-  type        = string
-}
-
-variable "labels" {
-  description = "Labels to add to the instances. Key-value pairs."
-  type        = map(string)
-}
-
-variable "table_id" {
-  description = "Table name to be used to create the new BQ Table"
-  type        = string
-  default = null
-}
-
-variable "dataset_id" {
-  description = "Table name to be used to create the new BQ Table"
-  type        = string
-}
-
-variable "table_schema" {
-  description = "Schema used to create the new BQ Table"
+  description = "Region to run project"
   type        = string
 }

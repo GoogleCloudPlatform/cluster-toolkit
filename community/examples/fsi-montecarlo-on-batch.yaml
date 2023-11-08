@@ -58,11 +58,15 @@ deployment_groups:
       force_destroy: true
       local_mount: /home/jupyter/fsi
 
+  - id: fsi_tutorial_files
+    source: ./community/modules/files/fsi-montecarlo-on-batch
+    use: [bq-dataset, bq-table, fsi_bucket, pubsub_topic]
+    settings:
 
   - id: pubsub_topic
     source: community/modules/pubsub/topic
     settings:
-      topic_id: fsi_output
+      topic_id: null
 
   - id: bq_subscription
     source: community/modules/pubsub/subscription
@@ -71,13 +75,13 @@ deployment_groups:
   - id: bq-dataset
     source: community/modules/database/bigquery_dataset
     settings:
-      dataset_id: fsi_dataset
+      dataset_id: null
 
   - id: bq-table
     source: community/modules/database/bigquery_table
     use: [bq-dataset]
     settings:
-      table_id: fsi_table
+      table_id: null
       table_schema: 
         '
         [
