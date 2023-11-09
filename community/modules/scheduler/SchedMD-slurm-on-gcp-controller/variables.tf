@@ -36,6 +36,7 @@ variable "boot_disk_type" {
 variable "instance_image" {
   description = <<-EOD
     Slurm image to use for the controller instance.
+    
     Expected Fields:
     name: The name of the image. Mutually exclusive with family.
     family: The image family to use. Mutually exclusive with name.
@@ -44,8 +45,8 @@ variable "instance_image" {
     EOD
   type        = map(string)
   default = {
-    family  = "schedmd-slurm-21-08-8-hpc-centos-7"
     project = "schedmd-slurm-public"
+    family  = "schedmd-slurm-21-08-8-hpc-centos-7"
   }
 
   validation {

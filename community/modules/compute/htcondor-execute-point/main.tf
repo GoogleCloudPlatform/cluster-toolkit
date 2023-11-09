@@ -101,7 +101,8 @@ locals {
 }
 
 data "google_compute_image" "htcondor" {
-  family  = var.instance_image.family
+  family  = try(var.instance_image.family, null)
+  name    = try(var.instance_image.name, null)
   project = var.instance_image.project
 
   lifecycle {

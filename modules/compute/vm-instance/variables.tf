@@ -31,7 +31,6 @@ variable "instance_image" {
   default = {
     project = "cloud-hpc-image-public"
     family  = "hpc-centos-7"
-    name    = null
   }
 
   validation {
