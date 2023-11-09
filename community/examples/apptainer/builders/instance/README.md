@@ -157,7 +157,7 @@ In either case you should see output similar to
 
 Containers package software and dependencies so that they can be easily shared and deployed. One of the most effective ways to share containers is through _repositories_. Google Cloud provides [Artifact Registry](https://cloud.google.com/artifact-registry) which stores, manages, and secures build artifacts - including containers. SIF images can be stored in Artifact Registry using the [OCI Registry As Storage](https://oras.land/) (oras) scheme. Slurm jobs running in an HPC Toolkit deployed cluster can pull the SIF images they need from Artifact Registry as they need them.
 
-If you don't have an Artifact Registry repository available follow the steps [here](https://cloud.google.com/artifact-registry/docs/repositories/create-repos#description) to create one. The create an environment variable for your repository URL
+If you don't have an Artifact Registry repository available follow the steps [here](https://cloud.google.com/artifact-registry/docs/repositories/create-repos#description) to create one. Then create an environment variable for your repository URL
 
 ```bash
 export REPOSITORY_URL=<ARTIFACT REGISTRY REPOSITORY URL> # e.g. oras://us-docker.pkg.dev/myproject/sifs
@@ -169,7 +169,7 @@ Apptainer needs to authenticate to your repository before it can push or pull im
 apptainer remote login \
 --username=oauth2accesstoken \
 --password=$(gcloud auth print-access-token) \ 
-oras://${REPOSITORY_URL}
+${REPOSITORY_URL}
 ```
 
 You should see output like
