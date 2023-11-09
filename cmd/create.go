@@ -151,12 +151,12 @@ func validateMaybeDie(bp config.Blueprint, ctx config.YamlCtx) {
 	switch bp.ValidationLevel {
 	case config.ValidationWarning:
 		{
-			log.Println("Validation failures were treated as a warning, continuing to create blueprint.")
+			log.Println(boldYellow("Validation failures were treated as a warning, continuing to create blueprint."))
 			log.Println("")
 		}
 	case config.ValidationError:
 		{
-			log.Fatal("validation failed due to the issues listed above")
+			log.Fatal(boldRed("validation failed due to the issues listed above"))
 		}
 	}
 
@@ -181,7 +181,8 @@ func renderError(err error, ctx config.YamlCtx) string {
 		}
 		return sb.String()
 	case validators.ValidatorError:
-		return fmt.Sprintf("validator %q failed:\n%v\n", te.Validator, renderError(te.Err, ctx))
+		title := boldRed(fmt.Sprintf("validator %q failed:", te.Validator))
+		return fmt.Sprintf("%s\n%v\n", title, renderError(te.Err, ctx))
 	case config.BpError:
 		if pos, ok := findPos(te.Path, ctx); ok {
 			return renderRichError(te.Err, pos, ctx)
