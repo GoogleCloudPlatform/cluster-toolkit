@@ -6,6 +6,10 @@ This example illustrates the use of the [Apptainer](https://apptainer.org/) cont
 
 While you can easily use existing [Docker](https://hub.docker.com/) with Apptainer it is more efficient to package your code in the [Singularity Image Format](https://apptainer.org/docs/user/latest/definition_files.html) (SIF) using the `apptainer build` command. We demonstrate using the HPC Toolkit to create a _build instance_ that you can use to create SIF images. We also provide a _custom build step_ that will allow you to use [Google Cloud Build](https://cloud.google.com/build?hl=en) to create SIF images on our serverless CI/CD platform.
 
+## Clusters
+
+The most effective way to incorporate Apptainer into you cloud-based HPC systems is to use the HPC Toolkit to create [custom VM images](https://cloud.google.com/compute/docs/images/create-custom) with Apptainer installed that are then used as part of your HPC system. We provide two blueprints that illustrate this process.
+
 ## Examples
 
 ### Dev
