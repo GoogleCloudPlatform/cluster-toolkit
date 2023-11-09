@@ -218,12 +218,13 @@ variable "nodeset" {
     source_image_project = optional(string)
     source_image         = optional(string)
     subnetwork_project   = optional(string)
-    subnetwork           = optional(string)
-    spot                 = optional(bool, false)
-    tags                 = optional(list(string), [])
-    termination_action   = optional(string)
-    zones                = optional(list(string), [])
-    zone_target_shape    = optional(string, "ANY_SINGLE_ZONE")
+    # TODO: rename to subnetwork_self_link 
+    subnetwork         = optional(string)
+    spot               = optional(bool, false)
+    tags               = optional(list(string), [])
+    termination_action = optional(string)
+    zones              = optional(list(string), [])
+    zone_target_shape  = optional(string, "ANY_SINGLE_ZONE")
   }))
   default = []
 
@@ -489,6 +490,7 @@ EOD
 
 variable "cloudsql" {
   description = <<EOD
+NOT SUPPORTED YET.
 Use this database instead of the one on the controller.
   server_ip : Address of the database server.
   user      : The user to access the database as.
@@ -503,4 +505,9 @@ EOD
   })
   default   = null
   sensitive = true
+
+  validation {
+    condition     = var.cloudsql == null
+    error_message = "cloudsql is not supported yet."
+  }
 }
