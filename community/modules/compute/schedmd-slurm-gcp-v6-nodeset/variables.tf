@@ -15,11 +15,10 @@
 variable "name" {
   description = "Name of the nodeset."
   type        = string
-  default     = "ghpc"
 
   validation {
     condition     = can(regex("^[a-z](?:[a-z0-9]{0,5})$", var.name))
-    error_message = "Nodeset name (var.name) must begin with a letter, be fully alphanumeric and be 6 characters or less. Regexp: '^[a-z](?:[a-z0-9]{0,5})$'."
+    error_message = "Nodeset name must begin with a letter, be fully alphanumeric and be 6 characters or less. Regexp: '^[a-z](?:[a-z0-9]{0,5})$'."
   }
 }
 
