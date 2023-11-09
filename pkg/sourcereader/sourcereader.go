@@ -16,7 +16,6 @@ package sourcereader
 
 import (
 	"hpc-toolkit/pkg/deploymentio"
-	"log"
 	"strings"
 )
 
@@ -38,34 +37,21 @@ func IsEmbeddedPath(source string) bool {
 	return strings.HasPrefix(source, "modules/") || strings.HasPrefix(source, "community/modules/")
 }
 
-// IsGitPath checks if a source path points to GitHub or has the git:: prefix
-func IsGitPath(source string) bool {
-	return strings.HasPrefix(source, "github.com") ||
-		strings.HasPrefix(source, "git@github.com") ||
-		strings.HasPrefix(source, "git::")
+// IsRemotePath checks if path neither Local nor Embedded
+func IsRemotePath(source string) bool {
+	return !IsLocalPath(source) && !IsEmbeddedPath(source)
 }
 
 // Factory returns a SourceReader of module path
 func Factory(modPath string) SourceReader {
-	validPrefixes := []string{
-		"/", "./", "../",
-		"modules/", "community/modules/",
-		"git@", "github.com",
-	}
 	switch {
 	case IsLocalPath(modPath):
 		return LocalSourceReader{}
 	case IsEmbeddedPath(modPath):
 		return EmbeddedSourceReader{}
-	case IsGitPath(modPath):
-		return GitSourceReader{}
 	default:
-		log.Fatalf(
-			"Source (%s) not valid, must begin with one of: %s",
-			modPath, strings.Join(validPrefixes, ", "))
+		return GoGetterSourceReader{}
 	}
-
-	return nil
 }
 
 func copyFromPath(modPath string, copyPath string) error {

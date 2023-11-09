@@ -28,7 +28,7 @@ if [ ! "$(which mount.nfs)" ]; then
 		fi
 		yum install --disablerepo="*" --enablerepo=${enable_repo} -y nfs-utils
 	elif [ -f /etc/debian_version ] || grep -qi ubuntu /etc/lsb-release || grep -qi ubuntu /etc/os-release; then
-		apt-get -y update
+		apt-get update --allow-releaseinfo-change-origin --allow-releaseinfo-change-label
 		apt-get -y install nfs-common
 	else
 		echo 'Unsuported distribution'

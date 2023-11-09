@@ -116,7 +116,7 @@ func (s *MySuite) TestGetModule_Local(c *C) {
 	// Invalid: No local module
 	badLocalMod := "./modules/does/not/exist"
 	err = reader.GetModule(badLocalMod, dest)
-	expectedErr = "Local module doesn't exist at .*"
+	expectedErr = "local module doesn't exist at .*"
 	c.Assert(err, ErrorMatches, expectedErr)
 
 	// Invalid: Unsupported Module Source by LocalSourceReader

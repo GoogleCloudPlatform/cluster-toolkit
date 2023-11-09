@@ -12,19 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-resource "google_cloudbuild_trigger" "pr_go_1_18_build_test" {
-  name        = "PR-Go-1-18-build-test"
-  description = "Test that the PR builds with Go 1.18"
+locals {
 
-  filename = "tools/cloud-build/build-test-go1-18.yaml"
+  use_placement = [for ns in var.partition_conf : ns.nodeset_name if ns.enable_placement]
 
-  github {
-    owner = "GoogleCloudPlatform"
-    name  = "hpc-toolkit"
-    pull_request {
-      branch          = ".*"
-      comment_control = "COMMENTS_ENABLED_FOR_EXTERNAL_CONTRIBUTORS_ONLY"
-    }
+  partition = {
+    default               = var.is_default
+    enable_job_exclusive  = var.exclusive
+    network_storage       = var.network_storage
+    partition_conf        = var.partition_conf
+    partition_name        = var.partition_name
+    partition_nodeset     = [for ns in var.nodeset : ns.nodeset_name]
+    partition_nodeset_tpu = [for ns in var.nodeset_tpu : ns.nodeset_name]
   }
-  include_build_logs = "INCLUDE_BUILD_LOGS_WITH_STATUS"
 }

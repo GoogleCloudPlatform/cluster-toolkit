@@ -77,9 +77,11 @@ func runDeployCmd(cmd *cobra.Command, args []string) {
 	expandedBlueprintFile := filepath.Join(artifactsDir, expandedBlueprintFilename)
 	dc, _, err := config.NewDeploymentConfig(expandedBlueprintFile)
 	cobra.CheckErr(err)
-	cobra.CheckErr(shell.ValidateDeploymentDirectory(dc.Config.DeploymentGroups, deploymentRoot))
+	groups := dc.Config.DeploymentGroups
+	cobra.CheckErr(validateRuntimeDependencies(groups))
+	cobra.CheckErr(shell.ValidateDeploymentDirectory(groups, deploymentRoot))
 
-	for _, group := range dc.Config.DeploymentGroups {
+	for _, group := range groups {
 		groupDir := filepath.Join(deploymentRoot, string(group.Name))
 		cobra.CheckErr(shell.ImportInputs(groupDir, artifactsDir, expandedBlueprintFile))
 
@@ -100,6 +102,25 @@ func runDeployCmd(cmd *cobra.Command, args []string) {
 	}
 	fmt.Println("\n###############################")
 	printAdvancedInstructionsMessage(deploymentRoot)
+}
+
+func validateRuntimeDependencies(groups []config.DeploymentGroup) error {
+	for _, group := range groups {
+		var err error
+		switch group.Kind() {
+		case config.PackerKind:
+			err = shell.ConfigurePacker()
+		case config.TerraformKind:
+			groupDir := filepath.Join(deploymentRoot, string(group.Name))
+			_, err = shell.ConfigureTerraform(groupDir)
+		default:
+			err = fmt.Errorf("group %s is an unsupported kind %q", group.Name, group.Kind().String())
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func deployPackerGroup(moduleDir string) error {
@@ -133,9 +154,5 @@ func deployTerraformGroup(groupDir string) error {
 	if err != nil {
 		return err
 	}
-
-	if err = shell.ExportOutputs(tf, artifactsDir, applyBehavior); err != nil {
-		return err
-	}
-	return nil
+	return shell.ExportOutputs(tf, artifactsDir, applyBehavior)
 }

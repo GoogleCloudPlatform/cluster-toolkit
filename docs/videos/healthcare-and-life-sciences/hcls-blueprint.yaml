@@ -281,11 +281,10 @@ deployment_groups:
     - bucket-output
     - bucket-software
     settings:
+      add_deployment_name_before_prefix: true
       name_prefix: chrome-remote-desktop
       install_nvidia_driver: true
       startup_script: |
-        sudo apt-get update
-        sudo apt-get -y upgrade
         find /user_provided_software -name vmd-1.9.*.bin.LINUXAMD64*.tar.gz -exec tar xvzf '{}' -C . \;
         cd vmd-1.9.*/
         ./configure

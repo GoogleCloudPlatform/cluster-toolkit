@@ -49,19 +49,20 @@ func validateGlobalLabels(vars Dict) error {
 		errs.At(p, errors.New("vars.labels cannot have more than 64 labels"))
 	}
 	for k, v := range labels.AsValueMap() {
-		// TODO: Use cty.Path to point to the specific label that is invalid
+		vp := p.Cty(cty.Path{}.IndexString(k))
 		if v.Type() != cty.String {
-			errs.At(p, errors.New("vars.labels must be a map of strings"))
+			errs.At(vp, errors.New("vars.labels must be a map of strings"))
+			continue
 		}
 		s := v.AsString()
 
 		// Check that label names are valid
 		if !isValidLabelName(k) {
-			errs.At(p, errors.Errorf("%s: '%s: %s'", errorMessages["labelNameReqs"], k, s))
+			errs.At(vp, errors.Errorf("%s: '%s: %s'", errorMessages["labelNameReqs"], k, s))
 		}
 		// Check that label values are valid
 		if !isValidLabelValue(s) {
-			errs.At(p, errors.Errorf("%s: '%s: %s'", errorMessages["labelValueReqs"], k, s))
+			errs.At(vp, errors.Errorf("%s: '%s: %s'", errorMessages["labelValueReqs"], k, s))
 		}
 	}
 	return errs.OrNil()
