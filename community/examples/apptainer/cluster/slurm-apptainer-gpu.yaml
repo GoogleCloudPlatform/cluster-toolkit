@@ -18,14 +18,15 @@ blueprint_name: slurm-apptainer-gpu
 
 vars:
   project_id: wkh-as-vpc-fluxfw
-  deployment_name: hpc-apptainer-gpu
+  deployment_name: gputainer
   region: us-central1
   zone: us-central1-a
   custom_image_family: apptainer-enabled
   disk_size: 64
   instance_image:
-    family: slurm-gcp-5-7-hpc-rocky-linux-8
+    family: slurm-gcp-5-9-hpc-rocky-linux-8
     project: schedmd-slurm-public
+  instance_image_custom: true
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
@@ -60,7 +61,7 @@ deployment_groups:
     - apptainer_installation
     settings:
       source_image_project_id: [schedmd-slurm-public]
-      source_image_family: slurm-gcp-5-7-hpc-rocky-linux-8 
+      source_image_family: slurm-gcp-5-9-hpc-rocky-linux-8 
       disk_size: $(vars.disk_size)
       image_family: $(vars.custom_image_family)
       state_timeout: 20m
@@ -72,43 +73,36 @@ deployment_groups:
     use: [hpc_apptainer_net]
     settings:
       local_mount: /home
-  - id: datafs
-    source: community/modules/file-system/nfs-server
-    use: [hpc_apptainer_net]
-    settings:
-      auto_delete_disk: true
 
 - group: cluster
   modules:
-  - id: n1_std_4_v100_node_group
+  - id: gpu_node_group
     source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
     settings:
       node_count_dynamic_max: 4
       node_count_static: 1
-      machine_type: n1-standard-4
+      machine_type: n1-standard-8
       disk_size_gb: $(vars.disk_size)
-      guest_accelerator: [
-        "nvidia-tesla-v100",
-        1
-      ]
+      guest_accelerator:
+      - type: "nvidia-tesla-v100"
+        count: 1
       instance_image:
         family: $(vars.custom_image_family)
         project: $(vars.project_id)
 
-  - id: c2_std_30_partition
+  - id: gpu_partition
     source: community/modules/compute/schedmd-slurm-gcp-v5-partition
     use:
     - hpc_apptainer_net
-    - n1_std_4_v100_node_group
+    - gpu_node_group
     - homefs
-    - datafs
     settings:
-      partition_name: compute
+      partition_name: v100 
       exclusive: false # allows nodes to stay up after jobs are done
       enable_placement: false # the default is: true
       is_default: false
 
-  - id: c2_std_30_node_group
+  - id: compute_node_group
     source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
     settings:
       node_count_dynamic_max: 16
@@ -118,13 +112,12 @@ deployment_groups:
         family: $(vars.custom_image_family)
         project: $(vars.project_id)
 
-  - id: c2_std_30_partition
+  - id: compute_partition
     source: community/modules/compute/schedmd-slurm-gcp-v5-partition
     use:
     - hpc_apptainer_net
-    - c2_std_30_node_group
+    - compute_node_group
     - homefs
-    - datafs
     settings:
       partition_name: compute
       exclusive: false # allows nodes to stay up after jobs are done
@@ -135,9 +128,9 @@ deployment_groups:
     source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
     use:
     - hpc_apptainer_net
-    - c2_std_30_partition 
+    - compute_partition 
+    - gpu_partition
     - homefs
-    - datafs
     settings:
       disable_controller_public_ips: false
       disk_size_gb: $(vars.disk_size)
@@ -147,7 +140,9 @@ deployment_groups:
     use:
     - hpc_apptainer_net
     - slurm_controller
-    - apptainer_installation
     settings:
       machine_type: n2-standard-8
       disk_size_gb: $(vars.disk_size)
+      instance_image:
+        family: $(vars.custom_image_family)
+        project: $(vars.project_id)

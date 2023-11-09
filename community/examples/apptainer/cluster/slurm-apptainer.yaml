@@ -18,13 +18,13 @@ blueprint_name: slurm-apptainer
 
 vars:
   project_id: wkh-as-vpc-fluxfw
-  deployment_name: hpc-apptainer
+  deployment_name: hpctainer
   region: us-central1
   zone: us-central1-a
   custom_image_family: apptainer-enabled
   disk_size: 64
   instance_image:
-    family: slurm-gcp-5-7-hpc-rocky-linux-8
+    family: slurm-gcp-5-9-hpc-rocky-linux-8
     project: schedmd-slurm-public
 
 # Documentation for each of the modules used below can be found at
@@ -47,7 +47,7 @@ deployment_groups:
 
 - group: network
   modules:
-  - id: hpc_apptainer_net
+  - id: hpctainer_net
     source: modules/network/vpc
 
 - group: apptainer-enabled-build
@@ -56,11 +56,11 @@ deployment_groups:
     source: modules/packer/custom-image
     kind: packer
     use:
-    - hpc_apptainer_net
+    - hpctainer_net
     - apptainer_installation
     settings:
       source_image_project_id: [schedmd-slurm-public]
-      source_image_family: slurm-gcp-5-7-hpc-rocky-linux-8 
+      source_image_family: slurm-gcp-5-9-hpc-rocky-linux-8 
       disk_size: $(vars.disk_size)
       image_family: $(vars.custom_image_family)
       state_timeout: 20m
@@ -69,18 +69,18 @@ deployment_groups:
   modules:
   - id: homefs
     source: modules/file-system/filestore
-    use: [hpc_apptainer_net]
+    use: [hpctainer_net]
     settings:
       local_mount: /home
   - id: datafs
     source: community/modules/file-system/nfs-server
-    use: [hpc_apptainer_net]
+    use: [hpctainer_net]
     settings:
       auto_delete_disk: true
 
 - group: cluster
   modules:
-  - id: c2_std_30_node_group
+  - id: compute_node_group
     source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
     settings:
       node_count_dynamic_max: 16
@@ -90,11 +90,11 @@ deployment_groups:
         family: $(vars.custom_image_family)
         project: $(vars.project_id)
 
-  - id: c2_std_30_partition
+  - id: compute_partition
     source: community/modules/compute/schedmd-slurm-gcp-v5-partition
     use:
-    - hpc_apptainer_net
-    - c2_std_30_node_group
+    - hpctainer_net
+    - compute_node_group
     - homefs
     - datafs
     settings:
@@ -106,8 +106,8 @@ deployment_groups:
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
     use:
-    - hpc_apptainer_net
-    - c2_std_30_partition 
+    - hpctainer_net
+    - compute_partition 
     - homefs
     - datafs
     settings:
@@ -117,7 +117,7 @@ deployment_groups:
   - id: slurm_login
     source: community/modules/scheduler/schedmd-slurm-gcp-v5-login
     use:
-    - hpc_apptainer_net
+    - hpctainer_net
     - slurm_controller
     - apptainer_installation
     settings:

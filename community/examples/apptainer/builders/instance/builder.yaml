@@ -15,10 +15,11 @@
 blueprint_name: apptainer-builder
 
 vars:
-  deployment_name: apptr-bldr
-  project_id: wkh-as-vpc-fluxfw
+  deployment_name: bldtainer
+  project_id: ## Set GCP Project ID Here ##
   region: us-central1
   zone: us-central1-a
+  machine_type: e2-standard-8
   disk_size: 32
   instance_image:
     family: rocky-linux-8-optimized-gcp 
@@ -37,24 +38,24 @@ deployment_groups:
           #!/usr/bin/env bash
           dnf install -y epel-release
           dnf install -y apptainer
-        destination: /tmp/install-apptainer.sh
+        destination: /var/tmp/install-apptainer.sh
 
 - group: network
   modules:
   - source: modules/network/vpc
     kind: terraform
-    id: builder-network
+    id: bldtainer-network
 
 - group: builder
   modules:
   - source: modules/compute/vm-instance
     kind: terraform
-    id: builder-vm
+    id: bldtainer-vm
     use:
-    - builder-network
+    - bldtainer-network
     - apptainer-installation
     settings:
-      machine_type: e2-standard-8
+      machine_type: $(vars.machine_type)
       disk_size_gb: $(vars.disk_size)
       instance_count: 1
       disable_public_ips: true
