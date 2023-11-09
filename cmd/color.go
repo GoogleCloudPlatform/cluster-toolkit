@@ -19,20 +19,19 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/mattn/go-isatty"
-	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 var noColorFlag bool = true
 
-func addColorFlag(cmd *cobra.Command) {
-	cmd.Flags().BoolVar(&noColorFlag, "no-color", true, "Disable colorized output.")
+func addColorFlag(flagset *pflag.FlagSet) {
+	flagset.BoolVar(&noColorFlag, "no-color", true, "Disable colorized output.")
 }
 
 func initColor() {
 	colorlessStdout := !isatty.IsTerminal(os.Stdout.Fd()) && !isatty.IsCygwinTerminal(os.Stdout.Fd())
 	colorlessStderr := !isatty.IsTerminal(os.Stderr.Fd()) && !isatty.IsCygwinTerminal(os.Stderr.Fd())
 	color.NoColor = noColorFlag || os.Getenv("TERM") == "dumb" || colorlessStdout || colorlessStderr
-
 }
 
 var boldRed = color.New(color.FgRed, color.Bold).SprintFunc()
