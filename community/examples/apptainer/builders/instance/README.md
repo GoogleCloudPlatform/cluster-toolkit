@@ -155,4 +155,70 @@ In either case you should see output similar to
 
 ## Publish
 
+Containers package software and dependencies so that they can be easily shared and deployed. One of the most effective ways to share containers is through _repositories_. Google Cloud provides [Artifact Registry](https://cloud.google.com/artifact-registry) which stores, manages, and secures build artifacts - including containers. SIF images can be stored in Artifact Registry using the [OCI Registry As Storage](https://oras.land/) (oras) scheme. Slurm jobs running in an HPC Toolkit deployed cluster can pull the SIF images they need from Artifact Registry as they need them.
+
+If you don't have an Artifact Registry repository available follow the steps [here](https://cloud.google.com/artifact-registry/docs/repositories/create-repos#description) to create one. The create an environment variable for your repository URL
+
+```bash
+export REPOSITORY_URL=<ARTIFACT REGISTRY REPOSITORY URL> # e.g. oras://us-docker.pkg.dev/myproject/sifs
+```
+
+Apptainer needs to authenticate to your repository before it can push or pull images. Use this command to authenticate
+
+```bash
+apptainer remote login \
+--username=oauth2accesstoken \
+--password=$(gcloud auth print-access-token) \ 
+oras://${REPOSITORY_URL}
+```
+
+You should see output like
+
+```
+INFO:    Token stored in /home/joeuser/.apptainer/remote.yaml
+```
+
+Push the `lolcow.sif` container image to Artifact Registry using the command
+
+```bash
+apptainer push lolcow.sif ${REPOSITORY_URL}/lolcow:1.0
+```
+
+Which will generate out put like
+
+```
+82.6MiB / 82.6MiB [================================================================================] 100 % 141.8 MiB/s 0s
+82.6MiB / 82.6MiB [================================================================================] 100 % 141.8 MiB/s 0s
+INFO:    Upload complete
+```
+
+Now you can delete the SIF image you built with
+
+```bash
+rm lolcow.sif
+```
+
+and then retrieve it using the command
+
+```bash
+apptainer pull ${REPOSITORY_URL}/lolcow:1.0
+```
+
+with output similar to
+
+```
+INFO:    Downloading oras image
+403.0b / 403.0b [===============================================================================================] 100 %0s
+82.6MiB / 82.6MiB [================================================================================] 100 % 105.0 MiB/s 0s
+```
+
+The image you pulled with be named `lolcow_1.0.sif`
+
 ## Cleanup
+
+When you have finished defining and building containers log out of the `bldtainer-0` instance and destroy it using with
+
+```bash
+./ghpc destroy bldtainer
+```
+
