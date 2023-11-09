@@ -17,12 +17,16 @@
 blueprint_name: slurm-apptainer-gpu
 
 vars:
-  project_id: wkh-as-vpc-fluxfw
+  project_id: ## Set GCP Project ID Here ##
   deployment_name: gputainer
   region: us-central1
   zone: us-central1-a
-  custom_image_family: apptainer-enabled
   disk_size: 64
+  compute_machine_type: c2-standard-30
+  controller_machine_type: n2-standard-8
+  gpu_machine_type: n1-standard-8
+  login_machine_type: e2-standard-4
+  custom_image_family: apptainer-enabled
   instance_image:
     family: slurm-gcp-5-9-hpc-rocky-linux-8
     project: schedmd-slurm-public
@@ -81,11 +85,11 @@ deployment_groups:
     settings:
       node_count_dynamic_max: 4
       node_count_static: 1
-      machine_type: n1-standard-8
+      machine_type: $(vars.gpu_machine_type)
       disk_size_gb: $(vars.disk_size)
       guest_accelerator:
-      - type: "nvidia-tesla-v100"
-        count: 1
+      - type: $(vars.guest_accelerator_type)
+        count: $(vars.guest_accelerator_count)
       instance_image:
         family: $(vars.custom_image_family)
         project: $(vars.project_id)
@@ -97,7 +101,7 @@ deployment_groups:
     - gpu_node_group
     - homefs
     settings:
-      partition_name: v100 
+      partition_name: gpu
       exclusive: false # allows nodes to stay up after jobs are done
       enable_placement: false # the default is: true
       is_default: false
@@ -106,7 +110,7 @@ deployment_groups:
     source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
     settings:
       node_count_dynamic_max: 16
-      machine_type: c2-standard-30
+      machine_type: $(vars.compute_machine_type)
       disk_size_gb: $(vars.disk_size)
       instance_image:
         family: $(vars.custom_image_family)
@@ -132,6 +136,7 @@ deployment_groups:
     - gpu_partition
     - homefs
     settings:
+      machine_type: $(vars.controller_machine_type)
       disable_controller_public_ips: false
       disk_size_gb: $(vars.disk_size)
 
@@ -141,7 +146,7 @@ deployment_groups:
     - hpc_apptainer_net
     - slurm_controller
     settings:
-      machine_type: n2-standard-8
+      machine_type: $(vars.login_machine_type)
       disk_size_gb: $(vars.disk_size)
       instance_image:
         family: $(vars.custom_image_family)

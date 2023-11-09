@@ -17,12 +17,15 @@
 blueprint_name: slurm-apptainer
 
 vars:
-  project_id: wkh-as-vpc-fluxfw
+  project_id: ## Set GCP Project ID Here ##
   deployment_name: hpctainer
   region: us-central1
   zone: us-central1-a
-  custom_image_family: apptainer-enabled
   disk_size: 64
+  compute_machine_type: c2-standard-30
+  controller_machine_type: n2-standard-8
+  login_machine_type: e2-standard-4
+  custom_image_family: apptainer-enabled
   instance_image:
     family: slurm-gcp-5-9-hpc-rocky-linux-8
     project: schedmd-slurm-public
@@ -84,7 +87,7 @@ deployment_groups:
     source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
     settings:
       node_count_dynamic_max: 16
-      machine_type: c2-standard-30
+      machine_type: $(vars.compute_machine_type)
       disk_size_gb: $(vars.disk_size)
       instance_image:
         family: $(vars.custom_image_family)
@@ -111,6 +114,7 @@ deployment_groups:
     - homefs
     - datafs
     settings:
+      machine_type: $(vars.controller_machine_type)
       disable_controller_public_ips: false
       disk_size_gb: $(vars.disk_size)
 
@@ -121,5 +125,5 @@ deployment_groups:
     - slurm_controller
     - apptainer_installation
     settings:
-      machine_type: n2-standard-8
+      machine_type: $(vars.login_machine_type)
       disk_size_gb: $(vars.disk_size)
