@@ -23,7 +23,6 @@ import (
 	"hpc-toolkit/pkg/deploymentio"
 	"hpc-toolkit/pkg/modulereader"
 	"hpc-toolkit/pkg/sourcereader"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -55,7 +54,7 @@ func Test(t *testing.T) {
 func setup() {
 	t := time.Now()
 	dirName := fmt.Sprintf("ghpc_modulewriter_test_%s", t.Format(time.RFC3339))
-	dir, err := ioutil.TempDir("", dirName)
+	dir, err := os.MkdirTemp("", dirName)
 	if err != nil {
 		log.Fatalf("modulewriter_test: %v", err)
 	}
@@ -170,7 +169,7 @@ func (s *MySuite) TestPrepDepDir_OverwriteRealDep(c *C) {
 	WriteDeployment(testDC, depDir, false /* overwrite */)
 
 	// confirm existence of resource groups (beyond .ghpc dir)
-	files, _ := ioutil.ReadDir(depDir)
+	files, _ := os.ReadDir(depDir)
 	c.Check(len(files) > 1, Equals, true)
 
 	err := prepDepDir(depDir, true /* overwrite */)
@@ -179,10 +178,10 @@ func (s *MySuite) TestPrepDepDir_OverwriteRealDep(c *C) {
 
 	// Check prev resource groups were moved
 	prevModuleDir := filepath.Join(depDir, HiddenGhpcDirName, prevDeploymentGroupDirName)
-	files1, _ := ioutil.ReadDir(prevModuleDir)
+	files1, _ := os.ReadDir(prevModuleDir)
 	c.Check(len(files1) > 0, Equals, true)
 
-	files2, _ := ioutil.ReadDir(depDir)
+	files2, _ := os.ReadDir(depDir)
 	c.Check(len(files2), Equals, 3) // .ghpc, .gitignore, and instructions file
 }
 
@@ -432,7 +431,7 @@ func (s *MySuite) TestCreateBaseFile(c *C) {
 	c.Assert(fi.Name(), Equals, baseFilename)
 	c.Assert(fi.Size() > 0, Equals, true)
 	c.Assert(fi.IsDir(), Equals, false)
-	b, _ := ioutil.ReadFile(goodPath)
+	b, _ := os.ReadFile(goodPath)
 	c.Assert(strings.Contains(string(b), "Licensed under the Apache License"),
 		Equals, true)
 
@@ -458,7 +457,7 @@ func (s *MySuite) TestAppendHCLToFile(c *C) {
 }
 
 func stringExistsInFile(str string, filename string) (bool, error) {
-	b, err := ioutil.ReadFile(filename)
+	b, err := os.ReadFile(filename)
 	if err != nil {
 		return false, err
 	}
