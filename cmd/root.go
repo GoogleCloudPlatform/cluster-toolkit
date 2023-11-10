@@ -20,6 +20,7 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"hpc-toolkit/pkg/config"
 	"log"
 	"os"
 	"os/exec"
@@ -246,4 +247,13 @@ func execPath() string {
 		return nice
 	}
 	return args0
+}
+
+// checkErr is similar to cobra.CheckErr, but with renderError and log.Fatal
+// NOTE: this function uses empty YamlCtx, so if you have one, use renderError directly.
+func checkErr(err error) {
+	if err != nil {
+		msg := fmt.Sprintf("%s: %s", boldRed("Error"), renderError(err, config.YamlCtx{}))
+		log.Fatal(msg)
+	}
 }

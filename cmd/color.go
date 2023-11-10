@@ -24,6 +24,11 @@ import (
 
 var noColorFlag bool = true
 
+func init() {
+	// Safety precaution in case `initColor` wasn't called.
+	color.NoColor = true
+}
+
 func addColorFlag(flagset *pflag.FlagSet) {
 	flagset.BoolVar(&noColorFlag, "no-color", true, "Disable colorized output.")
 }

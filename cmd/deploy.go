@@ -76,29 +76,27 @@ func getApplyBehavior(autoApprove bool) shell.ApplyBehavior {
 func runDeployCmd(cmd *cobra.Command, args []string) {
 	expandedBlueprintFile := filepath.Join(artifactsDir, expandedBlueprintFilename)
 	dc, _, err := config.NewDeploymentConfig(expandedBlueprintFile)
-	cobra.CheckErr(err)
+	checkErr(err)
 	groups := dc.Config.DeploymentGroups
-	cobra.CheckErr(validateRuntimeDependencies(groups))
-	cobra.CheckErr(shell.ValidateDeploymentDirectory(groups, deploymentRoot))
+	checkErr(validateRuntimeDependencies(groups))
+	checkErr(shell.ValidateDeploymentDirectory(groups, deploymentRoot))
 
 	for _, group := range groups {
 		groupDir := filepath.Join(deploymentRoot, string(group.Name))
-		cobra.CheckErr(shell.ImportInputs(groupDir, artifactsDir, expandedBlueprintFile))
+		checkErr(shell.ImportInputs(groupDir, artifactsDir, expandedBlueprintFile))
 
-		var err error
 		switch group.Kind() {
 		case config.PackerKind:
 			// Packer groups are enforced to have length 1
 			subPath, e := modulewriter.DeploymentSource(group.Modules[0])
-			cobra.CheckErr(e)
+			checkErr(e)
 			moduleDir := filepath.Join(groupDir, subPath)
-			err = deployPackerGroup(moduleDir)
+			checkErr(deployPackerGroup(moduleDir))
 		case config.TerraformKind:
-			err = deployTerraformGroup(groupDir)
+			checkErr(deployTerraformGroup(groupDir))
 		default:
-			err = fmt.Errorf("group %s is an unsupported kind %s", groupDir, group.Kind().String())
+			checkErr(fmt.Errorf("group %s is an unsupported kind %s", groupDir, group.Kind().String()))
 		}
-		cobra.CheckErr(err)
 	}
 	fmt.Println("\n###############################")
 	printAdvancedInstructionsMessage(deploymentRoot)
