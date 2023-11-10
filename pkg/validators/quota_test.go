@@ -208,7 +208,7 @@ requirements:
 		}, false},
 	}
 	for _, tc := range tests {
-		t.Run(fmt.Sprintf("%s", tc.yml), func(t *testing.T) {
+		t.Run(tc.yml, func(t *testing.T) {
 			var in config.Dict
 			bp := config.Blueprint{}
 			bp.Vars.

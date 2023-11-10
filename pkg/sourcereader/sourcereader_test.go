@@ -16,7 +16,6 @@ package sourcereader
 
 import (
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -50,7 +49,7 @@ func Test(t *testing.T) {
 func setup() {
 	t := time.Now()
 	dirName := fmt.Sprintf("ghpc_sourcereader_test_%s", t.Format(time.RFC3339))
-	dir, err := ioutil.TempDir("", dirName)
+	dir, err := os.MkdirTemp("", dirName)
 	if err != nil {
 		log.Fatalf("sourcereader_test: %v", err)
 	}
@@ -168,5 +167,5 @@ func (s *MySuite) TestCopyFromPath(c *C) {
 
 	// Invalid: Specify the same destination path again
 	err = copyFromPath(terraformDir, dstPath)
-	c.Assert(err, ErrorMatches, "The directory already exists: .*")
+	c.Assert(err, ErrorMatches, "the directory already exists: .*")
 }

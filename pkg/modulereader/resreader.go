@@ -20,8 +20,8 @@ package modulereader
 import (
 	"fmt"
 	"hpc-toolkit/pkg/sourcereader"
-	"io/ioutil"
 	"log"
+	"os"
 	"path"
 
 	"github.com/hashicorp/go-getter"
@@ -133,7 +133,7 @@ func GetModuleInfo(source string, kind string) (ModuleInfo, error) {
 	case sourcereader.IsEmbeddedPath(source) || sourcereader.IsLocalPath(source):
 		modPath = source
 	default:
-		tmpDir, err := ioutil.TempDir("", "module-*")
+		tmpDir, err := os.MkdirTemp("", "module-*")
 		if err != nil {
 			return ModuleInfo{}, err
 		}

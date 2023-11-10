@@ -19,7 +19,6 @@ package modulewriter
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sort"
@@ -374,7 +373,7 @@ func (w TFWriter) writeDeploymentGroup(
 func (w TFWriter) restoreState(deploymentDir string) error {
 	prevDeploymentGroupPath := filepath.Join(
 		deploymentDir, HiddenGhpcDirName, prevDeploymentGroupDirName)
-	files, err := ioutil.ReadDir(prevDeploymentGroupPath)
+	files, err := os.ReadDir(prevDeploymentGroupPath)
 	if err != nil {
 		return fmt.Errorf(
 			"Error trying to read previous modules in %s, %w",
@@ -387,8 +386,8 @@ func (w TFWriter) restoreState(deploymentDir string) error {
 			src := filepath.Join(prevDeploymentGroupPath, f.Name(), stateFile)
 			dest := filepath.Join(deploymentDir, f.Name(), stateFile)
 
-			if bytesRead, err := ioutil.ReadFile(src); err == nil {
-				err = ioutil.WriteFile(dest, bytesRead, 0644)
+			if bytesRead, err := os.ReadFile(src); err == nil {
+				err = os.WriteFile(dest, bytesRead, 0644)
 				if err != nil {
 					return fmt.Errorf("failed to write previous state file %s, %w", dest, err)
 				}

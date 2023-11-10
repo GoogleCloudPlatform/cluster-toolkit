@@ -27,7 +27,6 @@ import (
 	"hpc-toolkit/pkg/deploymentio"
 	"hpc-toolkit/pkg/sourcereader"
 	"io"
-	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
@@ -265,7 +264,7 @@ func isOverwriteAllowed(depDir string, overwritingConfig *config.Blueprint, over
 		return false
 	}
 
-	files, err := ioutil.ReadDir(depDir)
+	files, err := os.ReadDir(depDir)
 	if err != nil {
 		return false
 	}
@@ -355,7 +354,7 @@ func prepDepDir(depDir string, overwrite bool) error {
 	}
 
 	// create new backup of deployment group directory
-	files, err := ioutil.ReadDir(depDir)
+	files, err := os.ReadDir(depDir)
 	if err != nil {
 		return fmt.Errorf("Error trying to read directories in %s, %w", depDir, err)
 	}

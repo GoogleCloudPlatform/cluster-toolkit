@@ -26,5 +26,5 @@ type MetaReader struct {
 
 // GetInfo reades ModuleInfo for a meta module
 func (r MetaReader) GetInfo(source string) (ModuleInfo, error) {
-	return ModuleInfo{}, fmt.Errorf("Meta GetInfo not implemented: %s", source)
+	return ModuleInfo{}, fmt.Errorf("meta GetInfo not implemented: %s", source)
 }

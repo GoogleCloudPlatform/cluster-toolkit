@@ -18,7 +18,7 @@ package config
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"regexp"
 	"sort"
 	"strings"
@@ -96,8 +96,8 @@ type DeploymentGroup struct {
 	Name             GroupName        `yaml:"group"`
 	TerraformBackend TerraformBackend `yaml:"terraform_backend,omitempty"`
 	Modules          []Module         `yaml:"modules"`
-	// DEPRECATED fields, keep in the struct for backwards compatibility
-	deprecatedKind interface{} `yaml:"kind,omitempty"`
+	// DEPRECATED fields
+	deprecatedKind interface{} `yaml:"kind,omitempty"` //lint:ignore U1000 keep in the struct for backwards compatibility
 }
 
 // Kind returns the kind of all the modules in the group.
@@ -408,7 +408,7 @@ func (dc DeploymentConfig) ExportBlueprint(outputFilename string) error {
 		return fmt.Errorf("%s: %w", errorMessages["yamlMarshalError"], err)
 	}
 
-	err = ioutil.WriteFile(outputFilename, d, 0644)
+	err = os.WriteFile(outputFilename, d, 0644)
 	if err != nil {
 		// hitting this error writing yaml
 		return fmt.Errorf("%s, Filename: %s: %w",

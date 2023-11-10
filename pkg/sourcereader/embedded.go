@@ -17,7 +17,6 @@ package sourcereader
 import (
 	"fmt"
 	"io/fs"
-	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
@@ -88,7 +87,7 @@ func copyDirFromModules(bfs BaseFS, source string, dest string) error {
 // works against embed.FS.
 // Open Issue: https://github.com/hashicorp/terraform-config-inspect/issues/68
 func copyFSToTempDir(bfs BaseFS, modulePath string) (string, error) {
-	tmpDir, err := ioutil.TempDir("", "tfconfig-module-*")
+	tmpDir, err := os.MkdirTemp("", "tfconfig-module-*")
 	if err != nil {
 		return tmpDir, err
 	}

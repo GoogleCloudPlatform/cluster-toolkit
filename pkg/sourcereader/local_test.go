@@ -103,7 +103,7 @@ func (s *MySuite) TestGetModule_Local(c *C) {
 
 	// Invalid: Write to the same dest directory again
 	err = reader.GetModule(terraformDir, dest)
-	expectedErr := "The directory already exists: .*"
+	expectedErr := "the directory already exists: .*"
 	c.Assert(err, ErrorMatches, expectedErr)
 
 	// Success
