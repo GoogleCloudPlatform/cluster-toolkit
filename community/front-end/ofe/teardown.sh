@@ -69,6 +69,7 @@ tfdestroy() {
 
 		# -- Start the deployment using Terraform
 		#
+		set -o pipefail
 		terraform destroy -auto-approve | tee tfdestroy.log
 	)
 }
