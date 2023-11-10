@@ -19,16 +19,6 @@ variable "project_id" {
   type        = string
 }
 
-variable "deployment_name" {
-  description = "Name of the HPC deployment; used as part of name of the GCS bucket."
-  type        = string
-}
-
-variable "zone" {
-  description = "The zone to deploy to"
-  type        = string
-}
-
 variable "gcs_bucket_path" {
   description = "Bucket name"
   type        = string

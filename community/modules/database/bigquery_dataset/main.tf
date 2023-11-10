@@ -13,11 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
 */
-
 locals {
   # This label allows for billing report tracking based on module.
-  labels = merge(var.labels, { ghpc_module = "biquery_dataset", ghpc_role = "database" })
-  dataset_id   = var.dataset_id != null ? var.dataset_id : "${var.deployment_name}_dataset_${random_id.resource_name_suffix.hex}"
+  labels = merge(var.labels, { ghpc_module = "bigquery_dataset", ghpc_role = "database" })
+}
+locals {
+  dataset_id = var.dataset_id != null ? var.dataset_id : "${var.deployment_name}_dataset_${random_id.resource_name_suffix.hex}"
 }
 
 resource "random_id" "resource_name_suffix" {
@@ -25,6 +26,7 @@ resource "random_id" "resource_name_suffix" {
 }
 
 resource "google_bigquery_dataset" "pbsb" {
-  dataset_id   = local.dataset_id
-  project = var.project_id
+  dataset_id = local.dataset_id
+  project    = var.project_id
+  labels     = local.labels
 }

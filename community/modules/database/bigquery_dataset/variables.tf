@@ -24,19 +24,13 @@ variable "project_id" {
   type        = string
 }
 
-variable "region" {
-  description = "The region where SQL instance will be configured"
-  type        = string
-}
-
 variable "dataset_id" {
   description = "The name of the dataset to be created"
   type        = string
-  default = null
+  default     = null
 }
 
 variable "labels" {
   description = "Labels to add to the instances. Key-value pairs."
   type        = map(string)
 }
-

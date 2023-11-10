@@ -16,9 +16,12 @@
 
 locals {
   # This label allows for billing report tracking based on module.
-  labels = merge(var.labels, { ghpc_module = "pubsub_topic", ghpc_role = "pubsub" })
-  topic_id   = var.topic_id != null ? var.topic_id : "${var.deployment_name}_topic_${random_id.resource_name_suffix.hex}"
-  schema_id   = var.schema_id != null ? var.schema_id : "${var.deployment_name}_schema_${random_id.resource_name_suffix.hex}"
+  labels = merge(var.labels, { ghpc_module = "topic", ghpc_role = "pubsub" })
+}
+
+locals {
+  topic_id  = var.topic_id != null ? var.topic_id : "${var.deployment_name}_topic_${random_id.resource_name_suffix.hex}"
+  schema_id = var.schema_id != null ? var.schema_id : "${var.deployment_name}_schema_${random_id.resource_name_suffix.hex}"
 }
 
 resource "random_id" "resource_name_suffix" {
@@ -26,19 +29,20 @@ resource "random_id" "resource_name_suffix" {
 }
 
 resource "google_pubsub_topic" "example" {
-  name = local.topic_id
+  name       = local.topic_id
   depends_on = [google_pubsub_schema.example]
-  project = var.project_id
+  project    = var.project_id
+  labels     = local.labels
   schema_settings {
-    schema = "projects/${var.project_id}/schemas/${local.schema_id}"
+    schema   = "projects/${var.project_id}/schemas/${local.schema_id}"
     encoding = "BINARY"
   }
 }
 
 resource "google_pubsub_schema" "example" {
-  name = local.schema_id
+  name    = local.schema_id
   project = var.project_id
-  type = "AVRO"
+  type    = "AVRO"
 
   definition = var.schema_json
 }

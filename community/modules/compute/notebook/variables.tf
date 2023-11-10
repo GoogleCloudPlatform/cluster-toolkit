@@ -24,13 +24,6 @@ variable "deployment_name" {
   type        = string
 }
 
-variable "create_tutorial" {
-  description = "Which tutorial files should be created."
-  type        = string
-  default = ""
-}
-
-
 variable "zone" {
   description = "The zone to deploy to"
   type        = string
@@ -46,23 +39,26 @@ variable "labels" {
   type        = map(string)
 }
 
-variable "image_project_id" {
-  description = "Project Id for Image hosting"
-  type        = string
-  default     = ""
+variable "instance_image" {
+  description = "Instance Image"
+  type        = map(string)
+  default = {
+    project = "deeplearning-platform-release"
+    family  = "tf-latest-cpu"
+    name    = null
+  }
+
+  validation {
+    condition     = can(coalesce(var.instance_image.project))
+    error_message = "In var.instance_image, the \"project\" field must be a string set to the Cloud project ID."
+  }
+
+  validation {
+    condition     = can(coalesce(var.instance_image.name)) != can(coalesce(var.instance_image.family))
+    error_message = "In var.instance_image, exactly one of \"family\" or \"name\" fields must be set to desired image family or name."
+  }
 }
 
-variable "image_family" {
-  description = "Image Family"
-  type        = string
-  default     = ""
-}
-
-variable "name_prefix" {
-  description = "Name Prefix."
-  type        = string
-  default     = null
-}
 variable "gcs_bucket_path" {
   description = "Bucket name"
   type        = string
@@ -70,31 +66,6 @@ variable "gcs_bucket_path" {
 }
 
 variable "mount_runner" {
-  description = "mount content "
+  description = "mount content from the google-cloud-storage module"
   type        = any
-}
-
-variable "topic_id" {
-  description = "Pubsub Topic Name"
-  type        = string
-}
-
-variable "topic_schema" {
-  description = "Pubsub Topic schema"
-  type        = string
-}
-
-variable "dataset_id" {
-  description = "Bigquery dataset id"
-  type        = string
-}
-
-variable "table_id" {
-  description = "Bigquery table id"
-  type        = string
-}
-
-variable "region" {
-  description = "Region to run project"
-  type        = string
 }

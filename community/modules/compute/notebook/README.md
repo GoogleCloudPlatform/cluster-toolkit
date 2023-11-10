@@ -1,10 +1,30 @@
-## Description
+# Description
 
-This module creates the Vertex AI Notebook, to be used in tutorials. 
+This module creates the Vertex AI Notebook, to be used in tutorials.
 
 Primarily used for FSI - MonteCarlo Tutorial: **[fsi-montecarlo-on-batch-tutorial]**.
 
 [fsi-montecarlo-on-batch-tutorial]: ../docs/tutorials/fsi-montecarlo-on-batch/README.md
+
+## Usage
+
+This is a simple usage:
+
+```yaml
+  - id: bucket
+    source: community/modules/file-system/cloud-storage-bucket
+    settings: 
+      name_prefix: my-bucket
+      local_mount: /home/jupyter/my-bucket
+
+  - id: notebook
+    source: community/modules/compute/notebook
+    use: [bucket]
+    settings:
+      name_prefix: notebook
+      machine_type: n1-standard-4
+
+```
 
 ## Requirements
 

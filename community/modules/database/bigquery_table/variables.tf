@@ -24,11 +24,6 @@ variable "project_id" {
   type        = string
 }
 
-variable "region" {
-  description = "The region where SQL instance will be configured"
-  type        = string
-}
-
 variable "labels" {
   description = "Labels to add to the instances. Key-value pairs."
   type        = map(string)
@@ -37,7 +32,7 @@ variable "labels" {
 variable "table_id" {
   description = "Table name to be used to create the new BQ Table"
   type        = string
-  default = null
+  default     = null
 }
 
 variable "dataset_id" {

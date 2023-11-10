@@ -16,39 +16,42 @@
 
 locals {
   # This label allows for billing report tracking based on module.
-  labels = merge(var.labels, { ghpc_module = "pubsub_subscription", ghpc_role = "pubsub" })
-  subscription_id   = var.subscription_id != null ? var.subscription_id : "${var.deployment_name}_subscription_${random_id.resource_name_suffix.hex}"
+  labels = merge(var.labels, { ghpc_module = "subscription", ghpc_role = "pubsub" })
+}
+
+locals {
+  subscription_id = var.subscription_id != null ? var.subscription_id : "${var.deployment_name}_subscription_${random_id.resource_name_suffix.hex}"
 }
 
 resource "random_id" "resource_name_suffix" {
   byte_length = 4
 }
 data "google_project" "project" {
-  project_id = "${var.project_id}"
+  project_id = var.project_id
 }
 
 resource "google_project_iam_member" "viewer" {
   project = data.google_project.project.project_id
-  role   = "roles/bigquery.metadataViewer"
-  member = "serviceAccount:service-${data.google_project.project.number}@gcp-sa-pubsub.iam.gserviceaccount.com"
+  role    = "roles/bigquery.metadataViewer"
+  member  = "serviceAccount:service-${data.google_project.project.number}@gcp-sa-pubsub.iam.gserviceaccount.com"
 }
 
 resource "google_project_iam_member" "editor" {
   project = data.google_project.project.project_id
-  role   = "roles/bigquery.dataEditor"
-  member = "serviceAccount:service-${data.google_project.project.number}@gcp-sa-pubsub.iam.gserviceaccount.com"
+  role    = "roles/bigquery.dataEditor"
+  member  = "serviceAccount:service-${data.google_project.project.number}@gcp-sa-pubsub.iam.gserviceaccount.com"
 }
 
 resource "google_pubsub_subscription" "example" {
-  depends_on = [ google_project_iam_member.editor, google_project_iam_member.viewer ]
-  name  = local.subscription_id
-  topic = var.topic_id
-  project = var.project_id
-
+  depends_on = [google_project_iam_member.editor, google_project_iam_member.viewer]
+  name       = local.subscription_id
+  topic      = var.topic_id
+  project    = var.project_id
+  labels     = local.labels
   bigquery_config {
-    table = "${var.project_id}.${var.dataset_id}.${var.table_id}"
+    table            = "${var.project_id}.${var.dataset_id}.${var.table_id}"
     use_topic_schema = true
-    write_metadata = true
+    write_metadata   = true
   }
 
 }

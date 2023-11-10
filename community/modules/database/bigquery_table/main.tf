@@ -16,8 +16,11 @@
 
 locals {
   # This label allows for billing report tracking based on module.
-  labels = merge(var.labels, { ghpc_module = "biquery_table", ghpc_role = "database" })
-  table_id   = var.table_id != null ? var.table_id : "${var.deployment_name}_table_${random_id.resource_name_suffix.hex}"
+  labels = merge(var.labels, { ghpc_module = "bigquery_table", ghpc_role = "database" })
+}
+
+locals {
+  table_id = var.table_id != null ? var.table_id : "${var.deployment_name}_table_${random_id.resource_name_suffix.hex}"
 }
 
 resource "random_id" "resource_name_suffix" {
@@ -26,8 +29,9 @@ resource "random_id" "resource_name_suffix" {
 
 resource "google_bigquery_table" "pbsb" {
   deletion_protection = false
-  project = var.project_id
-  table_id   = local.table_id
-  dataset_id = var.dataset_id
-  schema = var.table_schema
+  project             = var.project_id
+  table_id            = local.table_id
+  dataset_id          = var.dataset_id
+  schema              = var.table_schema
+  labels              = local.labels
 }

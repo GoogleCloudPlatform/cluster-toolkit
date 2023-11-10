@@ -16,11 +16,11 @@
 
 output "topic_id" {
   description = "Name of the topic that was created."
-  value = google_pubsub_topic.example.name
+  value       = google_pubsub_topic.example.name
 }
 
 
 output "topic_schema" {
   description = "Name of the topic schema that was created."
-  value = local.schema_id
+  value       = local.schema_id
 }

@@ -6,6 +6,17 @@ Primarily used for FSI - MonteCarlo Tutorial: **[fsi-montecarlo-on-batch-tutoria
 
 [fsi-montecarlo-on-batch-tutorial]: ../docs/tutorials/fsi-montecarlo-on-batch/README.md
 
+## Usage
+
+```yaml
+id: bq-table
+    source: community/modules/database/bigquery_table
+    use: [bq-dataset]
+    settings:
+      table_id: null
+      table_schema: 'json schema'
+```
+
 ## Requirements
 
 | Name | Version |

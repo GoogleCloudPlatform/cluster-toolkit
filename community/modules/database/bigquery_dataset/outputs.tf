@@ -16,5 +16,5 @@
 
 output "dataset_id" {
   description = "Name of the dataset that was created."
-  value = google_bigquery_dataset.pbsb.dataset_id
+  value       = google_bigquery_dataset.pbsb.dataset_id
 }

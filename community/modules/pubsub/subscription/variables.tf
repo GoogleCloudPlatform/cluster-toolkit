@@ -24,26 +24,21 @@ variable "project_id" {
   type        = string
 }
 
-variable "region" {
-  description = "The region where SQL instance will be configured"
-  type        = string
-}
-
 variable "topic_id" {
   description = "The name of the pubsub topic to subscribe to."
   type        = string
-  default = null
+  default     = null
 }
 
 variable "subscription_id" {
   description = "The name of the pubsub subscription to be created"
   type        = string
-  default = null
+  default     = null
 }
 
 variable "dataset_id" {
   description = "Name of the dataset that was created."
-  type = string
+  type        = string
 }
 
 variable "table_id" {
@@ -55,4 +50,3 @@ variable "labels" {
   description = "Labels to add to the instances. Key-value pairs."
   type        = map(string)
 }
-

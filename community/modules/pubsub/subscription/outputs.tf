@@ -16,5 +16,5 @@
 
 output "subscription_id" {
   description = "Name of the dataset that was created."
-  value = google_pubsub_subscription.example.name
+  value       = google_pubsub_subscription.example.name
 }

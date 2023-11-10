@@ -26,7 +26,6 @@ account. Please validate with the
 * BigQuery
 * Vertex AI Notebooks
 
-
 ## Tutorial architecture
 The overall structure of this tutorial is as follows:
 
@@ -34,7 +33,7 @@ The overall structure of this tutorial is as follows:
   [Batch](https://cloud.google.com/batch/docs/get-started).
 * The output of the Monte Carlo simulation is published to a
   [PubSub](https://cloud.google.com/pubsub/docs/overview) topic.
-* The PubSub data is entered into [BigQuery](https://cloud.google.com/bigquery) 
+* The PubSub data is entered into [BigQuery](https://cloud.google.com/bigquery)
 via a [PubSub BigQuery subscription](https://cloud.google.com/pubsub/docs/bigquery)
 * The data is visualized via a
   [Vertex AI Workbench](https://cloud.google.com/vertex-ai-workbench)
@@ -56,38 +55,38 @@ make
 ./ghpc --help
 ```
 
-2\. Enable Google Cloud Resource Manager:
+2\. Run `ghpc` on the blueprint `fsi-montecarlo-on-batch.yaml`
 
-```
-gcloud services enable cloudresourcemanager.googleapis.com
-```
-
-3\. Run `ghpc` on the blueprint `fsi-montecarlo-on-batch.yaml` 
-
-```
+```bash
 ./ghpc create community/examples/fsi-montecarlo-on-batch.yaml \
    --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
 ```
+
 Where `GOOGLE_CLOUD_PROJECT` has been set via an export command
 
-```
+```shell
 export GOOGLE_CLOUD_PROJECT=my_project_id
 ```
 
 If successful, you will see output similar to:
-```
+
+<blockquote>
+<p>
 To deploy your infrastructure please run:
 
 ./ghpc deploy fsimontecarlo
-```
+</p>
+</blockquote>
 
-4\. Deploy the blueprint as instructed:
+3\. Deploy the blueprint as instructed:
 
-```
+```bash
 ./ghpc deploy fsimontecarlo
 ```
+
 If successful, this will prompt you:
-```
+
+```bash
 Summary of proposed changes: Plan: 22 to add, 0 to change, 0 to destroy.
 (D)isplay full proposed changes,
 (A)pply proposed changes,
@@ -95,7 +94,8 @@ Summary of proposed changes: Plan: 22 to add, 0 to change, 0 to destroy.
 (C)ontinue without applying
 Please select an option [d,a,s,c]:
 ```
-Respond with `apply`, "a". You may be asked to respond twice. 
+
+Respond with `apply`, "a". You may be asked to respond twice.
 
 When the job is complete it will indicate `Succeeded`. You can then proceed to
 the next section.
@@ -104,51 +104,60 @@ At this point, all the required infrastructure has been deployed.
 
 ## Open Vertex AI Workbench
 
-1. Go to the Vertex AI Workbench Notebooks instances in the Google Cloud Console:
+1\. Go to the Vertex AI Workbench Notebooks instances in the Google Cloud Console:
 
 https://console.cloud.google.com/vertex-ai/workbench/user-managed
 
-2. Open JupyterLab on the Notebook instance listed.
+2\. Open JupyterLab on the Notebook instance listed.
 
 <img src="https://services.google.com/fh/files/blogs/fsi_workbench.png" width="500" />
 
-```
+```bash
 Click on `OPEN JUPYTERLAB` link
 ```
 
-3. In the JupyterLab UI, you will see a list of directories:
-```
+3\. In the JupyterLab UI, you will see a list of directories:
+
+```bash
 Select `fsi`
 ```
+
 Under `fsi` all the files required to run the demo have been pepared.
 
 <img src="https://services.google.com/fh/files/blogs/fsi_files.png" width="300" />
 
-4. Open a terminal window by clicking on the terminal icon.
+4\. Open a terminal window by clicking on the terminal icon.
 
 <img src="https://services.google.com/fh/files/blogs/fsi_terminal.png" width="200" />
 
-4. Update the local Python requirements:
-```
+5\. Update the local Python requirements:
+
+```bash
 python3 -m pip install --user -r requirements.txt
 ```
+
 There may be some incompatibilities listed, but it will not affect this demo.
 
-5. Run the `batch.py` Python script to ensure it is working.
-```
+6\. Run the `batch.py` Python script to ensure it is working.
+
+```bash
 python3 batch.py --help
 ``` 
+
 You will see a listing of the help messages
 
-6. To start the VaR simulation, run `batch.py` with the config file and
+7\. To start the VaR simulation, run `batch.py` with the config file and
    `--create_job`
-```
+
+```bash
 python3 batch.py --config_file mc_run.yaml --create_job
 ```
+
 You should see output without any errors, listing information about the job.
 
 > To see if the job is running, use the `--list_jobs` options.
-```
+
+```bash
 python3 batch.py --config_file mc_run.yaml --list_jobs
 ```
 
@@ -199,7 +208,6 @@ or `Alt-Enter`.
 
 <img src="https://services.google.com/fh/files/blogs/fsi_graphs.png" width="600" />
 
-
 ## Summary
 
 In this tutorial, you accomplished the following:
@@ -221,9 +229,7 @@ ensure you are not billed for any of the Cloud usage.
 ### Alternatively
 
 The other choice is to run a `ghpc destroy` command.
-```
+
+```bash
 ./ghpc destroy fsimontecarlo
 ```
-
-
-

@@ -20,10 +20,10 @@ vars:
   deployment_name: fsimontecarlo
   region: us-central1
   zone: us-central1-a
-
 deployment_groups:
 - group: setup
   modules:
+
   - id: enable_apis
     source: community/modules/project/service-enablement
     settings:
@@ -37,52 +37,34 @@ deployment_groups:
         "pubsub.googleapis.com",
         "compute.googleapis.com"
       ]
-
 - group: primary
   modules:
 
-  - id: new-notebook
-    source: community/modules/compute/notebook
-    use:
-      [fsi_bucket,bq-table, pubsub_topic]
-    settings:
-      create_tutorial: fsi
-      name_prefix: notebook
-      machine_type: n1-standard-4
-
   - id: fsi_bucket
     source: community/modules/file-system/cloud-storage-bucket
-    settings: 
+    settings:
       name_prefix: fsi_bucket
       random_suffix: true
       force_destroy: true
       local_mount: /home/jupyter/fsi
-
-  - id: fsi_tutorial_files
-    source: ./community/modules/files/fsi-montecarlo-on-batch
-    use: [bq-dataset, bq-table, fsi_bucket, pubsub_topic]
-    settings:
 
   - id: pubsub_topic
     source: community/modules/pubsub/topic
     settings:
       topic_id: null
 
-  - id: bq_subscription
-    source: community/modules/pubsub/subscription
-    use: [bq-table, pubsub_topic]
-
   - id: bq-dataset
     source: community/modules/database/bigquery_dataset
     settings:
       dataset_id: null
+
 
   - id: bq-table
     source: community/modules/database/bigquery_table
     use: [bq-dataset]
     settings:
       table_id: null
-      table_schema: 
+      table_schema:
         '
         [
           {
@@ -124,3 +106,18 @@ deployment_groups:
         ]
         '
 
+  - id: fsi_notebook
+    source: community/modules/compute/notebook
+    use:
+      [fsi_bucket, bq-table, pubsub_topic]
+    settings:
+      name_prefix: notebook
+      machine_type: n1-standard-4
+
+  - id: fsi_tutorial_files
+    source: community/modules/files/fsi-montecarlo-on-batch
+    use: [bq-dataset, bq-table, fsi_bucket, pubsub_topic]
+
+  - id: bq_subscription
+    source: community/modules/pubsub/subscription
+    use: [bq-table, pubsub_topic]

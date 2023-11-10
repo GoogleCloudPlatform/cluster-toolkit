@@ -24,27 +24,22 @@ variable "project_id" {
   type        = string
 }
 
-variable "region" {
-  description = "The region where SQL instance will be configured"
-  type        = string
-}
-
 variable "topic_id" {
   description = "The name of the pubsub topic to be created"
   type        = string
-  default = null
+  default     = null
 }
 
 variable "schema_id" {
   description = "The name of the pubsub schema to be created"
   type        = string
-  default = null
+  default     = null
 }
 
 variable "schema_json" {
   description = "The JSON definition of the pubsub topic schema"
   type        = string
-  default = <<CCE
+  default     = <<CCE
 {  
   "name" : "Avro",  
   "type" : "record", 
@@ -77,4 +72,3 @@ variable "labels" {
   description = "Labels to add to the instances. Key-value pairs."
   type        = map(string)
 }
-
