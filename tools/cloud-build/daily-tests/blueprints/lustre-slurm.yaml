@@ -26,6 +26,9 @@ vars:
   # enable_placement: false
   # on_host_maintenance: MIGRATE
   num_nodes: 1
+  rocky_image:
+    family: slurm-gcp-5-9-hpc-rocky-linux-8
+    project: schedmd-slurm-public
 
 deployment_groups:
 - group: primary
@@ -100,9 +103,7 @@ deployment_groups:
     source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
     settings:
       node_count_dynamic_max: $(vars.num_nodes)
-      instance_image:
-        family: slurm-gcp-5-9-hpc-rocky-linux-8
-        project: schedmd-slurm-public
+      instance_image: $(vars.rocky_image)
       instance_image_custom: true
 
   - id: rocky_partition
@@ -119,9 +120,7 @@ deployment_groups:
     source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
     settings:
       node_count_dynamic_max: $(vars.num_nodes)
-      instance_image:
-        family: slurm-gcp-5-9-hpc-centos-7
-        project: schedmd-slurm-public
+      instance_image: $(vars.rocky_image)
       instance_image_custom: true
 
   - id: centos_partition
