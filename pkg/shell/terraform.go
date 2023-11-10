@@ -17,6 +17,7 @@
 package shell
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -28,6 +29,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strings"
 
 	"github.com/hashicorp/terraform-exec/tfexec"
 	"github.com/zclconf/go-cty/cty"
@@ -135,17 +137,65 @@ func outputModule(tf *tfexec.Terraform) (map[string]cty.Value, error) {
 	return outputValues, nil
 }
 
-// note planned deprecration of Plan in favor of JSON-only format
-// may need to determine future-proof way of getting human-readable plan
-// https://github.com/hashicorp/terraform-exec/blob/1b7714111a94813e92936051fb3014fec81218d5/tfexec/plan.go#L128-L129
+// See https://github.com/hashicorp/terraform/blob/4ce385a19b93cf7f1b7780d9b2d3cadc5d0ddb31/internal/command/views/json/diagnostic.go#L34
+type Diagnostic struct {
+	Severity string `json:"severity"`
+	Summary  string `json:"summary"`
+	Detail   string `json:"detail"`
+}
+
+type JsonMessage struct {
+	Level      string     `json:"@level"`
+	Diagnostic Diagnostic `json:"diagnostic"`
+}
+
+func parseJsonMessages(data string) []JsonMessage {
+	res := []JsonMessage{}
+	// Every message is on a single line
+	sc := bufio.NewScanner(strings.NewReader(data))
+	for sc.Scan() {
+		var msg JsonMessage
+		if err := json.Unmarshal([]byte(sc.Text()), &msg); err != nil {
+			continue // silently skip the message
+		}
+		res = append(res, msg)
+	}
+	return res
+}
+
+func helpOnPlanError(msgs []JsonMessage) string {
+	missingVar := false
+	for _, msg := range msgs {
+		missingVar = missingVar || msg.Diagnostic.Summary == "No value for required variable"
+	}
+	if missingVar {
+		// Based on assumption that the only undefined variables can possibly come from IGC references.
+		// This may change in the future.
+		return `run "ghpc export-outputs" on previous deployment groups to define inputs`
+	} else {
+		return ""
+	}
+}
+
 func planModule(tf *tfexec.Terraform, path string, destroy bool) (bool, error) {
 	outOpt := tfexec.Out(path)
-	wantsChange, err := tf.Plan(context.Background(), outOpt, tfexec.Destroy(destroy))
+	var jsonOut strings.Builder
+	wantsChange, err := tf.PlanJSON(context.Background(), &jsonOut, outOpt, tfexec.Destroy(destroy))
 	if err != nil {
-		return false, &TfError{
-			help: fmt.Sprintf("terraform plan for deployment group %s failed; suggest running \"ghpc export-outputs\" on previous deployment groups to define inputs", tf.WorkingDir()),
-			err:  err,
+		// Invoke `Plan` to get human-readable error.
+		// TODO: implement rendering to avoid double-call.
+		// Note planned deprecration of Plan in favor of JSON-only format
+		// https://github.com/hashicorp/terraform-exec/blob/1b7714111a94813e92936051fb3014fec81218d5/tfexec/plan.go#L128-L129
+		_, plainError := tf.Plan(context.Background(), tfexec.Destroy(destroy))
+		if plainError == nil { // shouldn't happen
+			plainError = err // fallback to original error (simple `exit status 1`)
 		}
+		msg := fmt.Sprintf("terraform plan for deployment group %s failed", tf.WorkingDir())
+		help := helpOnPlanError(parseJsonMessages(jsonOut.String()))
+		if len(help) > 0 {
+			msg = fmt.Sprintf("%s; %s", msg, help)
+		}
+		return false, &TfError{msg, plainError}
 	}
 
 	return wantsChange, nil
