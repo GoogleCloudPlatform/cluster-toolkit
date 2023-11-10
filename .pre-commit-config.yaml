@@ -62,7 +62,6 @@ repos:
   hooks:
   - id: go-fmt
   - id: go-vet
-  - id: go-lint
   - id: go-imports
   - id: go-cyclo
     args: [-over=15]

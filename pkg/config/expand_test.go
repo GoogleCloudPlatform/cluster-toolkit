@@ -438,7 +438,7 @@ func (s *MySuite) TestValidateModuleReference(c *C) {
 
 	{ // An intergroup reference from group 0 to module 1 in 1 (bad due to group ordering)
 		err := validateModuleReference(bp, a, y.ID)
-		c.Check(err, ErrorMatches, fmt.Sprintf("%s: .*", errorMessages["intergroupOrder"]))
+		c.Check(err, ErrorMatches, fmt.Sprintf("%s: .*", errMsgIntergroupOrder))
 	}
 
 	// A target module that doesn't exist (bad)

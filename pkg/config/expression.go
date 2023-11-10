@@ -82,7 +82,7 @@ func extractSimpleVarExpression(s string) (string, error) {
 	}
 	contents := simpleVariableExp.FindStringSubmatch(s)
 	if len(contents) != 2 { // Should always be (match, contents) here
-		return "", fmt.Errorf("%s %s, failed to extract contents: %v", errorMessages["invalidVar"], s, contents)
+		return "", fmt.Errorf("%s %s, failed to extract contents: %v", errMsgInvalidVar, s, contents)
 	}
 	return contents[1], nil
 }

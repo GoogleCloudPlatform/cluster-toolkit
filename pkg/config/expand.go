@@ -86,7 +86,7 @@ func validateModuleInputs(mp modulePath, m Module, bp Blueprint) error {
 		if !m.Settings.Has(input.Name) {
 			if input.Required {
 				errs.At(ip, fmt.Errorf("%s: Module ID: %s Setting: %s",
-					errorMessages["missingSetting"], m.ID, input.Name))
+					errMsgMissingSetting, m.ID, input.Name))
 			}
 			continue
 		}
@@ -322,7 +322,7 @@ func validateModuleReference(bp Blueprint, from Module, toID ModuleID) error {
 	}
 
 	if to.Kind == PackerKind {
-		return fmt.Errorf("%s: %s", errorMessages["cannotUsePacker"], to.ID)
+		return fmt.Errorf("%s: %s", errMsgCannotUsePacker, to.ID)
 	}
 
 	fg := bp.ModuleGroupOrDie(from.ID)
@@ -330,7 +330,7 @@ func validateModuleReference(bp Blueprint, from Module, toID ModuleID) error {
 	fgi := slices.IndexFunc(bp.DeploymentGroups, func(g DeploymentGroup) bool { return g.Name == fg.Name })
 	tgi := slices.IndexFunc(bp.DeploymentGroups, func(g DeploymentGroup) bool { return g.Name == tg.Name })
 	if tgi > fgi {
-		return fmt.Errorf("%s: %s is in a later group", errorMessages["intergroupOrder"], to.ID)
+		return fmt.Errorf("%s: %s is in a later group", errMsgIntergroupOrder, to.ID)
 	}
 	return nil
 }
@@ -362,7 +362,7 @@ func validateModuleSettingReference(bp Blueprint, mod Module, r Reference) error
 	}
 	found := slices.ContainsFunc(mi.Outputs, func(o modulereader.OutputInfo) bool { return o.Name == r.Name })
 	if !found {
-		return fmt.Errorf("%s: module %s did not have output %s", errorMessages["noOutput"], tm.ID, r.Name)
+		return fmt.Errorf("%s: module %s did not have output %s", errMsgNoOutput, tm.ID, r.Name)
 	}
 	return nil
 }
