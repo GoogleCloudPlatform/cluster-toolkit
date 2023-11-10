@@ -22,10 +22,11 @@ vars:
   region: us-central1
   zone: us-central1-a
   gpu_zones: [us-central1-a, us-central1-b, us-central1-c, us-central1-f]
-  # Visit https://github.com/SchedMD/slurm-gcp/blob/master/docs/images.md#published-image-family
-  # for a list of valid family options with Slurm
-  family: slurm-gcp-5-9-hpc-centos-7
-  project: schedmd-slurm-public
+  slurm_image:
+    # Visit https://github.com/SchedMD/slurm-gcp/blob/master/docs/images.md#published-image-family
+    # for a list of valid family options with Slurm
+    family: slurm-gcp-5-9-hpc-centos-7
+    project: schedmd-slurm-public
   # Set to true for active cluster reconfiguration.
   # Note that setting this option requires additional dependencies to be installed locally.
   # https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/scheduler/schedmd-slurm-gcp-v5-controller#description
@@ -113,9 +114,7 @@ deployment_groups:
     settings:
       node_count_dynamic_max: 4
       machine_type: n2-standard-2
-      instance_image:
-        family: $(vars.family)
-        project: $(vars.project)
+      instance_image: $(vars.slurm_image)
       instance_image_custom: true
       service_account:
         email: $(compute_sa.service_account_email)
@@ -138,9 +137,7 @@ deployment_groups:
     settings:
       node_count_dynamic_max: 20
       machine_type: c2-standard-60  # this is the default
-      instance_image:
-        family: $(vars.family)
-        project: $(vars.project)
+      instance_image: $(vars.slurm_image)
       instance_image_custom: true
       bandwidth_tier: tier_1_enabled
       disk_type: pd-ssd
@@ -166,9 +163,7 @@ deployment_groups:
     settings:
       node_count_dynamic_max: 20
       machine_type: c2d-standard-112
-      instance_image:
-        family: $(vars.family)
-        project: $(vars.project)
+      instance_image: $(vars.slurm_image)
       instance_image_custom: true
       bandwidth_tier: tier_1_enabled
       disk_type: pd-ssd
@@ -189,9 +184,7 @@ deployment_groups:
     settings:
       node_count_dynamic_max: 20
       machine_type: c3-highcpu-176
-      instance_image:
-        family: $(vars.family)
-        project: $(vars.project)
+      instance_image: $(vars.slurm_image)
       instance_image_custom: true
       bandwidth_tier: tier_1_enabled
       disk_type: pd-ssd
@@ -213,9 +206,7 @@ deployment_groups:
       node_count_dynamic_max: 16
       machine_type: a2-ultragpu-8g
       bandwidth_tier: gvnic_enabled
-      instance_image:
-        family: $(vars.family)
-        project: $(vars.project)
+      instance_image: $(vars.slurm_image)
       instance_image_custom: true
       disk_type: pd-ssd
       disk_size_gb: 100
@@ -248,9 +239,7 @@ deployment_groups:
       node_count_dynamic_max: 16
       machine_type: a2-megagpu-16g
       bandwidth_tier: gvnic_enabled
-      instance_image:
-        family: $(vars.family)
-        project: $(vars.project)
+      instance_image: $(vars.slurm_image)
       instance_image_custom: true
       disk_type: pd-ssd
       disk_size_gb: 100
@@ -283,9 +272,7 @@ deployment_groups:
       node_count_dynamic_max: 16
       machine_type: h3-standard-88
       bandwidth_tier: gvnic_enabled  # https://cloud.google.com/compute/docs/compute-optimized-machines#h3_network
-      instance_image:
-        family: $(vars.family)
-        project: $(vars.project)
+      instance_image: $(vars.slurm_image)
       instance_image_custom: true
       service_account:
         email: $(compute_sa.service_account_email)
@@ -310,9 +297,7 @@ deployment_groups:
           c2_partition, c2d_partition, c3_partition, a2_8_partition, a2_16_partition,
           h3_partition]
     settings:
-      instance_image:
-        family: $(vars.family)
-        project: $(vars.project)
+      instance_image: $(vars.slurm_image)
       instance_image_custom: true
       # the following allow for longer boot time
       # which is useful for large GPU nodes
@@ -337,9 +322,7 @@ deployment_groups:
     - network1
     - slurm_controller
     settings:
-      instance_image:
-        family: $(vars.family)
-        project: $(vars.project)
+      instance_image: $(vars.slurm_image)
       instance_image_custom: true
       machine_type: n2-standard-4
       disable_login_public_ips: false
