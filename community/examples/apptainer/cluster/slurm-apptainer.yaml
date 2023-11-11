@@ -17,7 +17,7 @@
 blueprint_name: slurm-apptainer
 
 vars:
-  project_id: ## Set GCP Project ID Here ##
+  project_id: _YOUR_GCP_PROJECT_ID_
   deployment_name: hpctainer
   region: us-central1
   zone: us-central1-a

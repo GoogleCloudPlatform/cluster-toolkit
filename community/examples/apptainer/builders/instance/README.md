@@ -8,7 +8,13 @@ Make a copy of the `build.yaml` file, e.g.,
 
 ```cp build.yaml mybuild.yaml```
 
-Then edit it to set the `project_id` field appropriately. Now you can create the deployment artifacts with the command
+Then edit it to set the `project_id` field appropriately. Use your preferred text editor or the `sed` command below to make the change.
+
+```bash
+sed -i s/_YOUR_GCP_PROJECT_ID_/${PROJECT_ID}/g builder.yaml
+```
+
+Now you can create the deployment artifacts with the command
 
 ```./ghpc create mybuild.yaml```
 

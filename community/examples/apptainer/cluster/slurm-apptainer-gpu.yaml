@@ -17,7 +17,7 @@
 blueprint_name: slurm-apptainer-gpu
 
 vars:
-  project_id: ## Set GCP Project ID Here ##
+  project_id: _YOUR_GCP_PROJECT_ID_
   deployment_name: gputainer
   region: us-central1
   zone: us-central1-a

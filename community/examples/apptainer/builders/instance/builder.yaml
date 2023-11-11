@@ -16,7 +16,7 @@ blueprint_name: apptainer-builder
 
 vars:
   deployment_name: bldtainer
-  project_id: ## Set GCP Project ID Here ##
+  project_id: _YOUR_GCP_PROJECT_ID_
   region: us-central1
   zone: us-central1-a
   machine_type: e2-standard-8
