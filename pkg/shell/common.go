@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/fatih/color"
 	"golang.org/x/exp/maps"
 	"golang.org/x/sys/unix"
 )
@@ -99,11 +100,20 @@ func ApplyChangesChoice(c ProposedChanges) bool {
 	var userResponse string
 
 	for {
-		fmt.Print(`(D)isplay full proposed changes,
-(A)pply proposed changes,
-(S)top and exit,
-(C)ontinue without applying
-Please select an option [d,a,s,c]: `)
+		boldBlue := color.New(color.FgBlue, color.Bold).SprintFunc()
+		boldRed := color.New(color.FgRed, color.Bold).SprintFunc()
+		boldGreen := color.New(color.FgGreen, color.Bold).SprintFunc()
+		boldYellow := color.New(color.FgYellow, color.Bold).SprintFunc()
+
+		lD, cD := boldBlue("(D)isplay full proposed changes"), boldBlue("d")
+		lA, cA := boldGreen("(A)pply proposed changes"), boldGreen("a")
+		lC, cC := boldYellow("(C)ontinue without applying"), boldYellow("c")
+		lS, cS := boldRed("(S)top and exit"), boldRed("s")
+		fmt.Printf(`%s,
+%s,
+%s,
+%s
+Please select an option [%s,%s,%s,%s]: `, lD, lA, lC, lS, cD, cA, cC, cS)
 
 		_, err := fmt.Scanln(&userResponse)
 		if err != nil {
