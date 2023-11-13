@@ -29,7 +29,7 @@ Click the button below to launch the HTCondor tutorial.
 
 ## SC-23 Tutorial
 
-Blueprint used in the Supercomputing 2023 tutorial “Unlocking the potential of HPC in the Google Cloud with Open-Source Tools”
+[Blueprint](./sc23-tutorial/hcls-blueprint.yaml) used in the Supercomputing 2023 tutorial “Unlocking the potential of HPC in the Google Cloud with Open-Source Tools”
 
 ## Application Specific Tutorials
 
