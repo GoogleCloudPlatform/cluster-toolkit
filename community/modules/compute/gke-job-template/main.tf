@@ -26,7 +26,7 @@ locals {
     local.min_allocatable_cpu > 2 ?     # if large enough
     local.min_allocatable_cpu - 1 :     # leave headroom for 1 cpu
     local.min_allocatable_cpu / 2 + 0.1 # else take just over half
-  )
+  ) - (local.any_gcs ? 0.25 : 0)        # save room for gcs side car
 
   cpu_request = (
     var.requested_cpu_per_pod >= 0 ?   # if user supplied requested cpu
@@ -107,6 +107,10 @@ locals {
   }] : []
   node_selectors = concat(local.machine_family_node_selector, local.local_ssd_node_selector, var.node_selectors)
 
+  any_gcs = anytrue([for pvc in var.persistent_volume_claims :
+    pvc.is_gcs
+  ])
+
   job_template_contents = templatefile(
     "${path.module}/templates/gke-job-base.yaml.tftpl",
     {
@@ -133,6 +137,7 @@ locals {
       volume_mounts        = local.volume_mounts
       memory_request       = local.memory_request_string
       ephemeral_request    = local.ephemeral_request_string
+      gcs_annotation       = local.any_gcs
     }
   )
 
