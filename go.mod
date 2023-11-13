@@ -26,7 +26,7 @@ require (
 	github.com/go-git/go-billy/v5 v5.5.0
 	github.com/google/go-cmp v0.6.0
 	github.com/hashicorp/terraform-exec v0.19.0
-	github.com/mattn/go-isatty v0.0.4
+	github.com/mattn/go-isatty v0.0.20
 	github.com/zclconf/go-cty-debug v0.0.0-20191215020915-b22d67c1ba0b
 	google.golang.org/api v0.150.0
 )
