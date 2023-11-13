@@ -115,6 +115,7 @@ locals {
       image             = var.image
       command           = var.command
       node_count        = var.node_count
+      completion_mode   = var.completion_mode
       node_pool_names   = var.node_pool_name
       node_selectors    = local.node_selectors
       full_node_request = local.full_node_request

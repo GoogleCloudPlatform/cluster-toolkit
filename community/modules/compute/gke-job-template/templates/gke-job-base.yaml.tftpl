@@ -10,6 +10,7 @@ metadata:
 spec:
   parallelism: ${node_count}
   completions: ${node_count}
+  completionMode: ${completion_mode}
   template:
     spec:
       %{~ if length(node_pool_names) > 0 ~}

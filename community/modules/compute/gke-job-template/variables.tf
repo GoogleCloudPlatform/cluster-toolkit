@@ -26,6 +26,12 @@ variable "node_count" {
   default     = 1
 }
 
+variable "completion_mode" {
+  description = "Sets value of `completionMode` on the job. Default uses indexed jobs. See [documentation](https://kubernetes.io/blog/2021/04/19/introducing-indexed-jobs/) for more information"
+  type        = string
+  default     = "Indexed"
+}
+
 variable "command" {
   description = "The command and arguments for the container that run in the Pod. The command field corresponds to entrypoint in some container runtimes."
   type        = list(string)
