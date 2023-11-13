@@ -42,7 +42,8 @@ spec:
       containers:
       - name: ${name}-container
         image: ${image}
-        command: [%{~ for s in command ~}"${s}",%{~ endfor ~}]
+        command:
+        %{for s in command}- ${indent(8, yamlencode(s))}%{~ endfor }
         %{~ if gpu_limit != null || cpu_request != null ~}
         resources:
           %{~ if gpu_limit != null ~}
