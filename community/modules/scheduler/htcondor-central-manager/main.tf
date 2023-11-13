@@ -110,7 +110,7 @@ resource "google_storage_bucket_object" "cm_config" {
 }
 
 module "startup_script" {
-  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=336e0a4"
+  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=50644b2"
 
   project_id      = var.project_id
   region          = var.region
