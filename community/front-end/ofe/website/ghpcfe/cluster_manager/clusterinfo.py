@@ -349,7 +349,7 @@ class ClusterInfo:
     id: slurm-sql
     use: [hpc_network]
     settings:
-      sql_instance_name: slurm-sql8-ofe
+      sql_instance_name: sql-{self.cluster.cloud_id}
       tier: "db-g1-small"
     """
             else:
