@@ -369,6 +369,7 @@ vars:
   enable_cleanup_compute: True
   enable_cleanup_subscriptions: True
   enable_bigquery_load: {self.cluster.use_bigquery}
+  instance_image_custom: True
   labels:
     created_by: {SITE_NAME}
 
