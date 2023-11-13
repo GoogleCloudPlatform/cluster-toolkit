@@ -131,6 +131,7 @@ variable "persistent_volume_claims" {
     name          = string
     mount_path    = string
     mount_options = string
+    is_gcs        = bool
   }))
   default = []
 }

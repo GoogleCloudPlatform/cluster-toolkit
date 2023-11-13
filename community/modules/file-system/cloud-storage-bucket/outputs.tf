@@ -62,3 +62,14 @@ output "gcs_bucket_path" {
     google_storage_bucket.bucket
   ]
 }
+
+output "gcs_bucket_name" {
+  description = "Bucket name."
+  # cannot use resource attribute, will cause lookup failure in startup-script
+  value = local.name
+
+  # needed to make sure bucket contents are deleted before bucket
+  depends_on = [
+    google_storage_bucket.bucket
+  ]
+}
