@@ -110,21 +110,22 @@ locals {
   job_template_contents = templatefile(
     "${path.module}/templates/gke-job-base.yaml.tftpl",
     {
-      name              = var.name
-      suffix            = local.suffix
-      image             = var.image
-      command           = var.command
-      node_count        = var.node_count
-      completion_mode   = var.completion_mode
-      node_pool_names   = var.node_pool_name
-      node_selectors    = local.node_selectors
-      full_node_request = local.full_node_request
-      cpu_request       = local.cpu_request_string
-      gpu_limit         = local.gpu_limit_string
-      restart_policy    = var.restart_policy
-      backoff_limit     = var.backoff_limit
-      tolerations       = distinct(var.tolerations)
-      labels            = local.labels
+      name                     = var.name
+      suffix                   = local.suffix
+      image                    = var.image
+      command                  = var.command
+      node_count               = var.node_count
+      completion_mode          = var.completion_mode
+      k8s_service_account_name = var.k8s_service_account_name
+      node_pool_names          = var.node_pool_name
+      node_selectors           = local.node_selectors
+      full_node_request        = local.full_node_request
+      cpu_request              = local.cpu_request_string
+      gpu_limit                = local.gpu_limit_string
+      restart_policy           = var.restart_policy
+      backoff_limit            = var.backoff_limit
+      tolerations              = distinct(var.tolerations)
+      labels                   = local.labels
 
       empty_dir_volumes    = local.empty_dir_volumes
       ephemeral_pd_volumes = local.ephemeral_pd_volumes

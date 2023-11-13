@@ -13,6 +13,9 @@ spec:
   completionMode: ${completion_mode}
   template:
     spec:
+      %{~ if k8s_service_account_name != null ~}
+      serviceAccountName: ${k8s_service_account_name}
+      %{~ endif ~}
       %{~ if length(node_pool_names) > 0 ~}
       affinity:
         nodeAffinity:

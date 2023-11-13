@@ -106,6 +106,7 @@ No modules.
 | <a name="input_ephemeral_volumes"></a> [ephemeral\_volumes](#input\_ephemeral\_volumes) | Will create an emptyDir or ephemeral volume that is backed by the specified type: `memory`, `local-ssd`, `pd-balanced`, `pd-ssd`. `size_gb` is provided in GiB. | <pre>list(object({<br>    type       = string<br>    mount_path = string<br>    size_gb    = number<br>  }))</pre> | `[]` | no |
 | <a name="input_has_gpu"></a> [has\_gpu](#input\_has\_gpu) | Indicates that the job should request nodes with GPUs. Typically supplied by a gke-node-pool module. | `list(bool)` | <pre>[<br>  false<br>]</pre> | no |
 | <a name="input_image"></a> [image](#input\_image) | The container image the job should use. | `string` | `"debian"` | no |
+| <a name="input_k8s_service_account_name"></a> [k8s\_service\_account\_name](#input\_k8s\_service\_account\_name) | Kubernetes service account to run the job as. If null then no service account is specified. | `string` | `null` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the GKE job template. Key-value pairs. | `map(string)` | n/a | yes |
 | <a name="input_machine_family"></a> [machine\_family](#input\_machine\_family) | The machine family to use in the node selector (example: `n2`). If null then machine family will not be used as selector criteria. | `string` | `null` | no |
 | <a name="input_name"></a> [name](#input\_name) | The name of the job. | `string` | `"my-job"` | no |

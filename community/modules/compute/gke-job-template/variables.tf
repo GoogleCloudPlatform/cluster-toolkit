@@ -44,6 +44,12 @@ variable "image" {
   default     = "debian"
 }
 
+variable "k8s_service_account_name" {
+  description = "Kubernetes service account to run the job as. If null then no service account is specified."
+  type        = string
+  default     = null
+}
+
 variable "node_pool_name" {
   description = "A list of node pool names on which to run the job. Can be populated via `use` feild."
   type        = list(string)
