@@ -37,6 +37,7 @@ locals {
 
 
   login_node = {
+    name_prefix      = var.name_prefix
     disk_auto_delete = var.disk_auto_delete
     disk_labels      = merge(var.disk_labels, local.labels)
     disk_size_gb     = var.disk_size_gb
@@ -53,7 +54,6 @@ locals {
     shielded_instance_config = var.shielded_instance_config
 
     gpu                 = one(local.guest_accelerator)
-    group_name          = var.group_name
     instance_template   = var.instance_template
     labels              = local.labels
     machine_type        = var.machine_type

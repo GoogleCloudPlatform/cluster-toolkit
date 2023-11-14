@@ -17,7 +17,7 @@ module "slurm_login_template" {
   source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=6.2.0"
 
   for_each = {
-    for x in var.login_nodes : x.group_name => x
+    for x in var.login_nodes : x.name_prefix => x
     if(x.instance_template == null || x.instance_template == "")
   }
 
@@ -25,6 +25,7 @@ module "slurm_login_template" {
   slurm_cluster_name  = local.slurm_cluster_name
   slurm_instance_role = "login"
   slurm_bucket_path   = module.slurm_files.slurm_bucket_path
+  name_prefix         = each.value.name_prefix
 
   additional_disks         = each.value.additional_disks
   bandwidth_tier           = each.value.bandwidth_tier
@@ -42,7 +43,6 @@ module "slurm_login_template" {
   machine_type             = each.value.machine_type
   metadata                 = each.value.metadata
   min_cpu_platform         = each.value.min_cpu_platform
-  name_prefix              = each.value.group_name
   on_host_maintenance      = each.value.on_host_maintenance
   preemptible              = each.value.preemptible
   region                   = each.value.region
@@ -61,7 +61,7 @@ module "slurm_login_template" {
 # INSTANCE
 module "slurm_login_instance" {
   source   = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_login_instance?ref=6.2.0"
-  for_each = { for x in var.login_nodes : x.group_name => x }
+  for_each = { for x in var.login_nodes : x.name_prefix => x }
 
   project_id         = var.project_id
   slurm_cluster_name = local.slurm_cluster_name
