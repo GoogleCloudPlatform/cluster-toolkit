@@ -382,6 +382,20 @@ variable "network_storage" {
   default = []
 }
 
+variable "login_network_storage" {
+  description = "An array of network attached storage mounts to be configured on all login nodes."
+  type = list(object({
+    server_ip             = string,
+    remote_mount          = string,
+    local_mount           = string,
+    fs_type               = string,
+    mount_options         = string,
+    client_install_runner = map(string) # TODO: is it used? should remove it?
+    mount_runner          = map(string)
+  }))
+  default = []
+}
+
 variable "slurmdbd_conf_tpl" {
   description = "Slurm slurmdbd.conf template file path."
   type        = string
