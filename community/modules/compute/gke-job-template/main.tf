@@ -155,4 +155,11 @@ resource "random_id" "resource_name_suffix" {
 resource "local_file" "job_template" {
   content  = local.job_template_contents
   filename = local.job_template_output_path
+
+  lifecycle {
+    precondition {
+      condition     = local.any_gcs ? var.k8s_service_account_name != null : true
+      error_message = "When using GCS, a kubernetes service account with workload identity is required. gke-cluster module will perform this setup when var.configure_workload_identity_sa is set to true."
+    }
+  }
 }

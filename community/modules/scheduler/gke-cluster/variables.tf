@@ -219,7 +219,7 @@ variable "service_account_scopes" {
 variable "configure_workload_identity_sa" {
   description = "When true, a kubernetes service account will be created and bound using workload identity to the service account used to create the cluster."
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "autoscaling_profile" {
