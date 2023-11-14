@@ -20,6 +20,7 @@ output "persistent_volume_claims" {
     name          = local.pvc_name
     mount_path    = var.network_storage.local_mount
     mount_options = var.network_storage.mount_options
+    is_gcs        = local.is_gcs
   }
-  depends_on = [kubectl_manifest.filestore_pvc]
+  depends_on = [kubectl_manifest.pvc]
 }

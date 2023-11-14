@@ -1,0 +1,17 @@
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ${pvc_name}
+  labels:
+  %{~ for key, val in labels ~}
+    ${key}: ${val}
+  %{~ endfor ~}
+spec:
+  accessModes:
+  - ReadWriteMany
+  storageClassName: ""
+  volumeName: ${pv_name}
+  resources:
+    requests:
+      storage: ${capacity}

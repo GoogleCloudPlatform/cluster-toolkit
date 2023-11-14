@@ -69,3 +69,8 @@ output "instructions" {
     EOT
   )
 }
+
+output "k8s_service_account_name" {
+  description = "Name of k8s service account."
+  value       = one(module.workload_identity[*].k8s_service_account_name)
+}
