@@ -23,18 +23,33 @@ class NodeMaintenance:
                     raise Exception("{} does not exist".format(zone))
         
         self.regex = None
+        self.screen_reader = False
+        res = subprocess.run("gcloud config get accessibility/screen_reader", 
+                             shell=True, capture_output=True, text=True)
+        if res.returncode != 0:
+            raise Exception("Error getting accessibility/screen_reader information")
+        if res.stdout.split("\n")[0] == "True":
+            self.screen_reader = True
         if regex:
             self.regex = re.compile(regex)
         self.maint_nodes = None
         self.upc_maint = None
         self.get_maint_nodes()
         self.get_upcoming_maint()
+
+    # Needs to be used after the command is fully created
+    def remove_accessibility(self, cmd: str) -> str:
+        return "gcloud config set accessibility/screen_reader False && " \
+               "{} && gcloud config set accessibility/screen_reader True".format(cmd)
     
     def get_maint_nodes(self) -> List[str]:
         cmd = "gcloud alpha compute instances list --project={}".format(self.project)
         if self.zones is not None:
             cmd += " --zones=" + ",".join(self.zones)
         cmd += " --filter=scheduling.maintenanceInterval:PERIODIC --format='table(name)'"
+
+        if self.screen_reader:
+            cmd = self.remove_accessibility(cmd)
 
         res = subprocess.run(cmd, shell=True, capture_output=True, text=True)
         if res.returncode == 0:
@@ -55,7 +70,9 @@ class NodeMaintenance:
                 " upcomingMaintenance.startTimeWindow.latest:label=LATEST_START," \
                 " upcomingMaintenance.canReschedule, upcomingMaintenance.type)'"
 
-        print(cmd)
+        if self.screen_reader:
+            cmd = self.remove_accessibility(cmd)
+
         res = subprocess.run(cmd, shell=True, capture_output=True, text=True)
         if res.returncode == 0:
             self.upc_maint = [x.split() for x in res.stdout.split("\n")[1:-1]]
