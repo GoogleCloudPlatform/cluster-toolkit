@@ -22,7 +22,11 @@ locals {
 locals {
   is_gcs = (var.gcs_bucket_name != null)
 
-  filestore_id         = !local.is_gcs ? var.filestore_id : "projects/empty/locations/empty/instances/empty"
+  filestore_id = (
+    !local.is_gcs ?                                  # If not using gcs
+    var.filestore_id :                               # Then filestore_id must be provided
+    "projects/empty/locations/empty/instances/empty" # Otherwise use something arbitrary as it will not be used
+  )
   location             = split("/", local.filestore_id)[3]
   filestore_name       = split("/", local.filestore_id)[5]
   filestore_share_name = trimprefix(var.network_storage.remote_mount, "/")

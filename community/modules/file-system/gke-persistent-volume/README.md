@@ -30,7 +30,8 @@ The following example creates a Filestore and then uses the
   - id: datafs
     source: modules/file-system/filestore
     use: [network1]
-    settings: { local_mount: /data }
+    settings:
+      local_mount: /data
 
   - id: datafs-pv
     source: community/modules/file-system/gke-persistent-volume
@@ -56,7 +57,8 @@ The following example creates a GCS bucket and then uses the
 
   - id: data-bucket
     source: community/modules/file-system/cloud-storage-bucket
-    settings: { local_mount: /data }
+    settings:
+      local_mount: /data
 
   - id: datafs-pv
     source: community/modules/file-system/gke-persistent-volume
