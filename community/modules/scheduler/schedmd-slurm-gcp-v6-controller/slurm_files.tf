@@ -119,7 +119,7 @@ module "slurm_files" {
 
   disable_default_mounts = var.disable_default_mounts
   network_storage        = var.network_storage
-  login_network_storage  = var.network_storage # TODO: reconsider duplication
+  login_network_storage  = var.login_network_storage
 
   partitions  = values(module.slurm_partition)[*]
   nodeset     = values(module.slurm_nodeset)[*]
