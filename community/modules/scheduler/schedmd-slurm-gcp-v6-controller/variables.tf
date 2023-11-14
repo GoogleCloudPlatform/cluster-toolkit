@@ -94,6 +94,7 @@ variable "bucket_dir" {
 variable "login_nodes" {
   description = "List of slurm login instance definitions."
   type = list(object({
+    name_prefix = string
     additional_disks = optional(list(object({
       disk_name    = optional(string)
       device_name  = optional(string)
@@ -118,7 +119,6 @@ variable "login_nodes" {
       count = number
       type  = string
     }))
-    group_name          = string
     instance_template   = optional(string)
     labels              = optional(map(string), {})
     machine_type        = optional(string)
@@ -150,6 +150,10 @@ variable "login_nodes" {
     termination_action   = optional(string)
   }))
   default = []
+  validation {
+    condition     = length(distinct([for x in var.login_nodes : x.name_prefix])) == length(var.login_nodes)
+    error_message = "All login_nodes must have a unique name_prefix."
+  }
 }
 
 ############

@@ -55,7 +55,7 @@ deployment_groups:
     source: ./community/modules/scheduler/schedmd-slurm-gcp-v6-login
     use: [network]
     settings:
-      group_name: "v6tpu"
+      name_prefix: "v6tpu"
       machine_type: n2-standard-4
       disable_login_public_ips: false
 
