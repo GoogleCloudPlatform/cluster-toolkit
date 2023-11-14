@@ -158,7 +158,7 @@ variable "login_nodes" {
 
 variable "nodeset" {
   description = "Define nodesets, as a list."
-  type = list(object({
+  type = set(object({
     node_count_static      = optional(number, 0)
     node_count_dynamic_max = optional(number, 1)
     node_conf              = optional(map(string), {})
