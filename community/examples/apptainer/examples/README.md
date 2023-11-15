@@ -1,4 +1,4 @@
-# Using Apptainer SIF Containers
+# Using Apptainer Containers
 
 ### Dev
 
