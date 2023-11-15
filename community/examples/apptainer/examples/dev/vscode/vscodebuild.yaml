@@ -12,4 +12,8 @@ steps:
   args:
   - 'push'
   - 'vscode.sif'
-  - 'oras://us-docker.pkg.dev/$PROJECT_ID/sifs/vscode:latest'
+  - 'oras://${_LOCATION}/$PROJECT_ID/${REPOSITORY}/vscode:${_VERSION}'
+substitutions:
+  _LOCATION: us-docker.pkg.dev
+  _REPOSITORY: sifs
+  _VERSION: latest
