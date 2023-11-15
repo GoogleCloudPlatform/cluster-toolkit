@@ -29,6 +29,7 @@ vars:
   instance_image:
     family: slurm-gcp-5-9-hpc-rocky-linux-8
     project: schedmd-slurm-public
+  instance_image_custom: true
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
