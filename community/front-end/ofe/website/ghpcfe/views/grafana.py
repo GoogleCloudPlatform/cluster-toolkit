@@ -20,7 +20,7 @@ from revproxy.views import ProxyView
 
 class GrafanaProxyView(LoginRequiredMixin, ProxyView):
     """Proxy View"""
-    upstream = "http://127.0.0.1:3000/"
+    upstream = "http://127.0.0.1:3000/grafana"
 
     def get_proxy_request_headers(self, request):
         headers = super().get_proxy_request_headers(request)
