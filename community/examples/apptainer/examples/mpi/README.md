@@ -139,13 +139,13 @@ ${REPOSITORY_URL}
 Download the `mpich-helloworld` container
 
 ```bash
-apptainer pull oras://us-docker.pkg.dev/wkh-as-vpc-fluxfw/sifs/mpich-helloworld:latest
+apptainer pull oras://#LOCATION#/#PROJECT_ID#/#REPOSITORY#/mpich-helloworld:latest
 INFO:    Downloading oras image
 414.0b / 414.0b [=============================================================================================================================] 100 %0s
 127.9MiB / 127.9MiB [============================================================================================================] 100 % 199.8 MiB/s 0s
 ```
 
-It is not strictly necessary to download the container. You could invoke `apptainer run` as part of your Slurm `srun` command but that would cause each of the MPI ranks in your job to pull the container which would generate unnecessary network traffic and I/O overhead.
+It is not strictly necessary to download the container. You could invoke `apptainer run` as part of your Slurm `srun` command but that would cause each of the MPI ranks in your job to pull the container generating unnecessary network traffic and I/O overhead.
 
 Now run the `mpi_hello_world.c` code across multiple nodes and cores with the command
 
