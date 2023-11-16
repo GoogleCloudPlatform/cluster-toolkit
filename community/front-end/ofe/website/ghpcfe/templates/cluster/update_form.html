@@ -200,7 +200,7 @@
   <hr>
   <p style="text-decoration: underline; font-size: large;">Partitions</p>
   <div class="table-responsive">
-    <table class="table align-middle" id="partitions_table">
+    <table class="table align-middle" id="partitions_table" style="white-space: nowrap;">
       {% for form in cluster_partitions_formset.forms %}
       {% if form.instance %}
       {% if forloop.first %}
@@ -219,7 +219,7 @@
       {% endif %}
       <tr class="part_formset_row">
         {% for field in form.visible_fields %}
-        <td>
+        <td style="min-width: 100px;>
           {% if forloop.first %}
           {% for hidden in form.hidden_fields %}
           {{ hidden }}
