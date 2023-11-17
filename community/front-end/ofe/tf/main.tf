@@ -47,7 +47,8 @@ EOT
   default_labels = {
     ghpcfe_id = var.deployment_name,
   }
-  labels = merge(var.extra_labels, local.default_labels)
+  labels         = merge(var.extra_labels, local.default_labels)
+  generated_uuid = uuid()
 }
 
 
@@ -68,7 +69,7 @@ module "control_bucket" {
 
   project_id = var.project_id
   names      = ["storage"]
-  prefix     = var.deployment_name
+  prefix     = "${var.deployment_name}-${local.generated_uuid}"
   force_destroy = {
     storage = true
   }
