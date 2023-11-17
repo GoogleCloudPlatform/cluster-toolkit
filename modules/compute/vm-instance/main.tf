@@ -135,6 +135,15 @@ resource "google_compute_resource_policy" "placement_policy" {
   }
 }
 
+resource "null_resource" "replace_vm_trigger_from_placement" {
+  triggers = {
+    vm_count                  = try(tostring(var.placement_policy.vm_count), "")
+    availability_domain_count = try(tostring(var.placement_policy.availability_domain_count), "")
+    max_distance              = try(tostring(var.placement_policy.max_distance), "")
+    collocation               = try(var.placement_policy.collocation, "")
+  }
+}
+
 resource "google_compute_instance" "compute_vm" {
   project  = var.project_id
   provider = google-beta
@@ -233,6 +242,10 @@ resource "google_compute_instance" "compute_vm" {
   lifecycle {
     ignore_changes = [
       metadata["ssh-keys"],
+    ]
+
+    replace_triggered_by = [
+      null_resource.replace_vm_trigger_from_placement
     ]
 
     precondition {
