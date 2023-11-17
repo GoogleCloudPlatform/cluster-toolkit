@@ -16,7 +16,7 @@
 package cmd
 
 import (
-	"fmt"
+	"hpc-toolkit/pkg/logging"
 
 	"github.com/spf13/cobra"
 )
@@ -50,5 +50,5 @@ var (
 func runExpandCmd(cmd *cobra.Command, args []string) {
 	dc := expandOrDie(args[0])
 	checkErr(dc.ExportBlueprint(outputFilename))
-	fmt.Printf(boldGreen("Expanded Environment Definition created successfully, saved as %s.\n"), outputFilename)
+	logging.Info(boldGreen("Expanded Environment Definition created successfully, saved as %s."), outputFilename)
 }

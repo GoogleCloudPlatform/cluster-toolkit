@@ -19,6 +19,7 @@ package shell
 import (
 	"fmt"
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/logging"
 	"log"
 	"os"
 	"path/filepath"
@@ -95,7 +96,7 @@ func CheckWritableDir(path string) error {
 // skip making the proposed changes and continue execution (in deploy command)
 // only if the user responds with "y" or "yes" (case-insensitive)
 func ApplyChangesChoice(c ProposedChanges) bool {
-	log.Printf("Summary of proposed changes: %s", strings.TrimSpace(c.Summary))
+	logging.Info("Summary of proposed changes: %s", strings.TrimSpace(c.Summary))
 	var userResponse string
 
 	for {
@@ -116,9 +117,9 @@ Please select an option [d,a,s,c]: `)
 		case "c":
 			return false
 		case "d":
-			fmt.Println(c.Full)
+			logging.Info(c.Full)
 		case "s":
-			log.Fatal("user chose to stop execution of ghpc rather than make proposed changes to infrastructure")
+			logging.Fatal("user chose to stop execution of ghpc rather than make proposed changes to infrastructure")
 		}
 	}
 }
