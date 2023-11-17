@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/modulewriter"
 	"hpc-toolkit/pkg/validators"
 	"log"
@@ -83,31 +84,31 @@ func runCreateCmd(cmd *cobra.Command, args []string) {
 	deplDir := filepath.Join(outputDir, deplName)
 	checkErr(modulewriter.WriteDeployment(dc, deplDir, overwriteDeployment))
 
-	fmt.Println("To deploy your infrastructure please run:")
-	fmt.Println()
-	fmt.Printf(boldGreen("%s deploy %s\n"), execPath(), deplDir)
-	fmt.Println()
+	logging.Info("To deploy your infrastructure please run:")
+	logging.Info("")
+	logging.Info(boldGreen("%s deploy %s"), execPath(), deplDir)
+	logging.Info("")
 	printAdvancedInstructionsMessage(deplDir)
 }
 
 func printAdvancedInstructionsMessage(deplDir string) {
-	fmt.Println("Find instructions for cleanly destroying infrastructure and advanced manual")
-	fmt.Println("deployment instructions at:")
-	fmt.Println()
-	fmt.Printf("%s\n", modulewriter.InstructionsPath(deplDir))
+	logging.Info("Find instructions for cleanly destroying infrastructure and advanced manual")
+	logging.Info("deployment instructions at:")
+	logging.Info("")
+	logging.Info(modulewriter.InstructionsPath(deplDir))
 }
 
 func expandOrDie(path string) config.DeploymentConfig {
 	dc, ctx, err := config.NewDeploymentConfig(path)
 	if err != nil {
-		log.Fatal(renderError(err, ctx))
+		logging.Fatal(renderError(err, ctx))
 	}
 	// Set properties from CLI
 	if err := setCLIVariables(&dc.Config, cliVariables); err != nil {
-		log.Fatalf("Failed to set the variables at CLI: %v", err)
+		logging.Fatal("Failed to set the variables at CLI: %v", err)
 	}
 	if err := setBackendConfig(&dc.Config, cliBEConfigVars); err != nil {
-		log.Fatalf("Failed to set the backend config at CLI: %v", err)
+		logging.Fatal("Failed to set the backend config at CLI: %v", err)
 	}
 	if err := setValidationLevel(&dc.Config, validationLevel); err != nil {
 		log.Fatal(err)
@@ -116,13 +117,13 @@ func expandOrDie(path string) config.DeploymentConfig {
 		log.Fatal(err)
 	}
 	if dc.Config.GhpcVersion != "" {
-		fmt.Printf("ghpc_version setting is ignored.")
+		logging.Info("ghpc_version setting is ignored.")
 	}
 	dc.Config.GhpcVersion = GitCommitInfo
 
 	// Expand the blueprint
 	if err := dc.ExpandConfig(); err != nil {
-		log.Fatal(renderError(err, ctx))
+		logging.Fatal(renderError(err, ctx))
 	}
 
 	validateMaybeDie(dc.Config, ctx)
@@ -134,29 +135,29 @@ func validateMaybeDie(bp config.Blueprint, ctx config.YamlCtx) {
 	if err == nil {
 		return
 	}
-	log.Println(renderError(err, ctx))
+	logging.Error(renderError(err, ctx))
 
-	log.Println("One or more blueprint validators has failed. See messages above for suggested")
-	log.Println("actions. General troubleshooting guidance and instructions for configuring")
-	log.Println("validators are shown below.")
-	log.Println("")
-	log.Println("- https://goo.gle/hpc-toolkit-troubleshooting")
-	log.Println("- https://goo.gle/hpc-toolkit-validation")
-	log.Println("")
-	log.Println("Validators can be silenced or treated as warnings or errors:")
-	log.Println("")
-	log.Println("- https://goo.gle/hpc-toolkit-validation-levels")
-	log.Println("")
+	logging.Error("One or more blueprint validators has failed. See messages above for suggested")
+	logging.Error("actions. General troubleshooting guidance and instructions for configuring")
+	logging.Error("validators are shown below.")
+	logging.Error("")
+	logging.Error("- https://goo.gle/hpc-toolkit-troubleshooting")
+	logging.Error("- https://goo.gle/hpc-toolkit-validation")
+	logging.Error("")
+	logging.Error("Validators can be silenced or treated as warnings or errors:")
+	logging.Error("")
+	logging.Error("- https://goo.gle/hpc-toolkit-validation-levels")
+	logging.Error("")
 
 	switch bp.ValidationLevel {
 	case config.ValidationWarning:
 		{
-			log.Println(boldYellow("Validation failures were treated as a warning, continuing to create blueprint."))
-			log.Println("")
+			logging.Error(boldYellow("Validation failures were treated as a warning, continuing to create blueprint."))
+			logging.Error("")
 		}
 	case config.ValidationError:
 		{
-			log.Fatal(boldRed("validation failed due to the issues listed above"))
+			logging.Fatal(boldRed("validation failed due to the issues listed above"))
 		}
 	}
 
