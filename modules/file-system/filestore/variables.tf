@@ -91,9 +91,10 @@ variable "filestore_tier" {
       "BASIC_HDD",
       "BASIC_SSD",
       "HIGH_SCALE_SSD",
+      "ZONAL",
       "ENTERPRISE"
     ], var.filestore_tier)
-    error_message = "Allowed values for filestore_tier are 'BASIC_HDD','BASIC_SSD','HIGH_SCALE_SSD','ENTERPRISE'.\nhttps://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/filestore_instance#tier\nhttps://cloud.google.com/filestore/docs/reference/rest/v1beta1/Tier."
+    error_message = "Allowed values for filestore_tier are 'BASIC_HDD','BASIC_SSD','HIGH_SCALE_SSD','ZONAL','ENTERPRISE'.\nhttps://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/filestore_instance#tier\nhttps://cloud.google.com/filestore/docs/reference/rest/v1beta1/Tier."
   }
 }
 
