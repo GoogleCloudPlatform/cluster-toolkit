@@ -27,6 +27,8 @@ vars:
   gpu_machine_type: n1-standard-8
   login_machine_type: e2-standard-4
   custom_image_family: apptainer-enabled
+  guest_accelerator_type: nvidia-v100-gpu
+  guest_accelerator_count: 1
   instance_image:
     family: slurm-gcp-5-9-hpc-rocky-linux-8
     project: schedmd-slurm-public
