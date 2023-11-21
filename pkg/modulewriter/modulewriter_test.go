@@ -251,7 +251,7 @@ func (s *MySuite) TestCreateGroupDirs(c *C) {
 	// Setup
 	testDeployDir := filepath.Join(testDir, "test_createGroupDirs")
 	if err := os.Mkdir(testDeployDir, 0755); err != nil {
-		log.Fatal("Failed to create test deployment directory for createGroupDirs")
+		c.Fatal("Failed to create test deployment directory for createGroupDirs")
 	}
 	groupNames := []config.GroupName{"group0", "group1", "group2"}
 
@@ -469,7 +469,7 @@ func (s *MySuite) TestWriteMain(c *C) {
 	testMainDir := filepath.Join(testDir, "TestWriteMain")
 	mainFilePath := filepath.Join(testMainDir, "main.tf")
 	if err := os.Mkdir(testMainDir, 0755); err != nil {
-		log.Fatal("Failed to create test dir for creating main.tf file")
+		c.Fatal("Failed to create test dir for creating main.tf file")
 	}
 
 	// Simple success
@@ -519,7 +519,7 @@ func (s *MySuite) TestWriteOutputs(c *C) {
 	testOutputsDir := filepath.Join(testDir, "TestWriteOutputs")
 	outputsFilePath := filepath.Join(testOutputsDir, "outputs.tf")
 	if err := os.Mkdir(testOutputsDir, 0755); err != nil {
-		log.Fatal("Failed to create test directory for creating outputs.tf file")
+		c.Fatal("Failed to create test directory for creating outputs.tf file")
 	}
 
 	// Simple success, no modules
@@ -555,7 +555,7 @@ func (s *MySuite) TestWriteVariables(c *C) {
 	testVarDir := filepath.Join(testDir, "TestWriteVariables")
 	varsFilePath := filepath.Join(testVarDir, "variables.tf")
 	if err := os.Mkdir(testVarDir, 0755); err != nil {
-		log.Fatal("Failed to create test directory for creating variables.tf file")
+		c.Fatal("Failed to create test directory for creating variables.tf file")
 	}
 
 	noIntergroupVars := []modulereader.VarInfo{}
@@ -590,7 +590,7 @@ func (s *MySuite) TestWriteProviders(c *C) {
 	testProvDir := filepath.Join(testDir, "TestWriteProviders")
 	provFilePath := filepath.Join(testProvDir, "providers.tf")
 	if err := os.Mkdir(testProvDir, 0755); err != nil {
-		log.Fatal("Failed to create test directory for creating providers.tf file")
+		c.Fatal("Failed to create test directory for creating providers.tf file")
 	}
 
 	// Simple success, empty vars
@@ -635,15 +635,15 @@ func (s *MySuite) TestWriteDeploymentGroup_PackerWriter(c *C) {
 	testVars := config.NewDict(map[string]cty.Value{"deployment_name": cty.StringVal(deploymentName)})
 	deploymentDir := filepath.Join(testDir, deploymentName)
 	if err := deploymentio.CreateDirectory(deploymentDir); err != nil {
-		log.Fatal(err)
+		c.Fatal(err)
 	}
 	groupDir := filepath.Join(deploymentDir, "packerGroup")
 	if err := deploymentio.CreateDirectory(groupDir); err != nil {
-		log.Fatal(err)
+		c.Fatal(err)
 	}
 	moduleDir := filepath.Join(groupDir, "testPackerModule")
 	if err := deploymentio.CreateDirectory(moduleDir); err != nil {
-		log.Fatal(err)
+		c.Fatal(err)
 	}
 
 	testPackerModule := config.Module{
@@ -690,7 +690,7 @@ func (s *MySuite) TestWritePackerAutoVars(c *C) {
 
 	testPackerTemplateDir := filepath.Join(testDir, "TestWritePackerTemplate")
 	if err := os.Mkdir(testPackerTemplateDir, 0755); err != nil {
-		log.Fatalf("Failed to create test dir for creating %s file", packerAutoVarFilename)
+		c.Fatalf("Failed to create test dir for creating %s file", packerAutoVarFilename)
 	}
 	err = writePackerAutovars(vars.Items(), testPackerTemplateDir)
 	c.Assert(err, IsNil)

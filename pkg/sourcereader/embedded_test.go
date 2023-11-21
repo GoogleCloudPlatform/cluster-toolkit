@@ -15,7 +15,6 @@
 package sourcereader
 
 import (
-	"log"
 	"os"
 	"path/filepath"
 
@@ -63,7 +62,7 @@ func (s *MySuite) TestCopyDirFromModules(c *C) {
 	testModFS := getTestFS()
 	copyDir := filepath.Join(testDir, "TestCopyDirFromModules")
 	if err := os.Mkdir(copyDir, 0755); err != nil {
-		log.Fatal(err)
+		c.Fatal(err)
 	}
 
 	// Success

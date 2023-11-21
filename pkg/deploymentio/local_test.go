@@ -15,7 +15,6 @@
 package deploymentio
 
 import (
-	"log"
 	"os"
 	"path/filepath"
 
@@ -44,7 +43,7 @@ func (s *MySuite) TestCopyFromPathLocal(c *C) {
 	testSrcFilename := filepath.Join(testDir, "testSrc")
 	str := []byte("TestCopyFromPathLocal")
 	if err := os.WriteFile(testSrcFilename, str, 0755); err != nil {
-		log.Fatalf("deploymentio_test: failed to create %s: %v", testSrcFilename, err)
+		c.Fatalf("deploymentio_test: failed to create %s: %v", testSrcFilename, err)
 	}
 
 	testDstFilename := filepath.Join(testDir, "testDst")
@@ -52,12 +51,12 @@ func (s *MySuite) TestCopyFromPathLocal(c *C) {
 
 	src, err := os.ReadFile(testSrcFilename)
 	if err != nil {
-		log.Fatalf("deploymentio_test: failed to read %s: %v", testSrcFilename, err)
+		c.Fatalf("deploymentio_test: failed to read %s: %v", testSrcFilename, err)
 	}
 
 	dst, err := os.ReadFile(testDstFilename)
 	if err != nil {
-		log.Fatalf("deploymentio_test: failed to read %s: %v", testDstFilename, err)
+		c.Fatalf("deploymentio_test: failed to read %s: %v", testDstFilename, err)
 	}
 
 	c.Assert(string(src), Equals, string(dst))
