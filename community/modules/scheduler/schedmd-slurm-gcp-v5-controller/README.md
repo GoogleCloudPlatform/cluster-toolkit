@@ -114,6 +114,58 @@ page.
 More information on GPU support in Slurm on GCP and other HPC Toolkit modules
 can be found at [docs/gpu-support.md](../../../../docs/gpu-support.md)
 
+## Placement Max Distance
+
+When using
+[enable_placement](../../compute/schedmd-slurm-gcp-v5-partition/README.md#input_enable_placement)
+with Slurm, Google Compute Engine will attempt to place VMs as physically close
+together as possible. Capacity constraints at the time of VM creation may still
+force VMs to be spread across multiple racks. Google provides the `max-distance`
+flag which can used to control the maximum spreading allowed. Read more about
+`max-distance` in the
+[official docs](https://cloud.google.com/compute/docs/instances/use-compact-placement-policies
+).
+
+After deploying a Slurm cluster, you can use the following steps to manually
+configure the max-distance parameter.
+
+1. Make sure your blueprint has `enable_placement: true` setting for Slurm
+   partitions.
+2. Deploy the Slurm cluster and wait for the deployment to complete.
+3. SSH to the deployed Slurm controller
+4. Apply the following edit to `/slurm/scripts/config.yaml`:
+
+    ```yaml
+    # Replace
+    enable_slurm_gcp_plugins: false
+
+    # With
+    enable_slurm_gcp_plugins:
+      max_hops:
+        max_hops: 1
+    ```
+
+The `max_hops` parameter will be used for the `max-distance` argument. In the
+above case using a value of 1 will restrict VM to be placed on the same rack.
+
+You can confirm that the `max-distance`` was applied by calling the following
+command while jobs are running:
+
+```shell
+gcloud beta compute resource-policies list \
+  --format='yaml(name,groupPlacementPolicy.maxDistance)'
+```
+
+> [!WARNING]
+> If a zone lacks capacity, using a lower `max-distance` value (such as 1) is
+> more likely to cause VMs creation to fail.
+
+<!---->
+
+> [!WARNING]
+> `/slurm/scripts/config.yaml` will be overwritten if the blueprint is
+> re-deployed using the `enable_reconfigure` flag.
+
 ## Hybrid Slurm Clusters
 For more information on how to configure an on premise slurm cluster with hybrid
 cloud partitions, see the [schedmd-slurm-gcp-v5-hybrid] module and our
