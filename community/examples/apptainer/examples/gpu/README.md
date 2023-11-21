@@ -16,7 +16,7 @@ gcloud compute ssh \
   --tunnel-through-iap
 ```
 
-This example takes advantage of Apptainers ability to [transform](https://apptainer.org/docs/user/latest/build_a_container.html#converting-containers-from-one-format-to-another) [OCI](https://opencontainers.org/) container images into [SIF](https://github.com/apptainer/sif) images. Rather than building a separate `Julia` SIF image you can just used the version [publicly available](https://hub.docker.com/_/julia) in [Docker Hub](https://hub.docker.com/). You will, however, need to use the `Julia` package manager to add the [CUDA](https://github.com/JuliaGPU/CUDA.jl) and [BenchmarkTools](https://juliaci.github.io/BenchmarkTools.jl/stable/) packages. By default SIF images are readonly, but you can specify a writeable [persistent overlay](https://apptainer.org/docs/user/latest/persistent_overlays.html) at runtime. You will use this mechanism to add the necessary `Julia` packages.
+This example takes advantage of Apptainers ability to [transform](https://apptainer.org/docs/user/latest/build_a_container.html#converting-containers-from-one-format-to-another) [OCI](https://opencontainers.org/) container images into [SIF](https://github.com/apptainer/sif) images. Rather than building a separate `Julia` SIF image you can just use the version [publicly available](https://hub.docker.com/_/julia) in [Docker Hub](https://hub.docker.com/). You will, however, need to use the `Julia` package manager to add the [CUDA](https://github.com/JuliaGPU/CUDA.jl) and [BenchmarkTools](https://juliaci.github.io/BenchmarkTools.jl/stable/) packages. By default SIF images are readonly, but you can specify a writeable [persistent overlay](https://apptainer.org/docs/user/latest/persistent_overlays.html) at runtime. You will use this mechanism to add the necessary `Julia` packages.
 
 Create the persistent overlay with the command
 
@@ -44,7 +44,21 @@ apptainer exec --overlay ./julia_depot.img --fakeroot docker://julia julia -e 'u
 Downloading and pre-compiling the `CUDA` and `BenchmarkTools` packages and all their supporting packages will several minutes. When the process is complete you will see output that looks like
 
 ```
-output
+...
+
+  63 dependencies successfully precompiled in 248 seconds. 5 already precompiled.
+   Resolving package versions...
+   Installed JSON ─────────── v0.21.4
+   Installed BenchmarkTools ─ v1.3.2
+    Updating `/usr/local/share/applications/julia/newdepot/environments/v1.9/Project.toml`
+  [6e4b80f9] + BenchmarkTools v1.3.2
+    Updating `/usr/local/share/applications/julia/newdepot/environments/v1.9/Manifest.toml`
+  [6e4b80f9] + BenchmarkTools v1.3.2
+  [682c06a0] + JSON v0.21.4
+  [a63ad114] + Mmap
+  [9abbd945] + Profile
+Precompiling project...
+  2 dependencies successfully precompiled in 4 seconds. 68 already precompiled
 ```
 
 ## Verify Environment
@@ -86,7 +100,7 @@ Mon Nov 20 17:20:30 2023
 +---------------------------------------------------------------------------------------+
 ```
 
-Now you will make sure that the `Julia` CUDA package is setup correctly. Make sure the _JULIA_DEPOT_PATH is set correctly
+Now you will make sure that the `Julia` CUDA package is setup correctly. Make sure the _JULIA_DEPOT_PATH_ is set correctly
 
 ```bash
 echo $JULIA_DEPOT_PATH
@@ -98,7 +112,7 @@ The resoponse should be
 usr/local/share/applications/julia/depot
 ``` 
 
-Now start the `Julia` REPL with the command
+Then start the `Julia` REPL with the command
 
 ```bash
 apptainer run --nv --overlay ./julia_depot.img --fakeroot docker://julia
@@ -164,6 +178,8 @@ If the environment is configured correctly exit the `Julia` REPL with `^d` and l
 
 ## SAXPY
 
+Run the following command to create a local version of a simple SAXPY program that you will use to run CPU and GPU benchmarks
+
 ```bash
 cat <<- "EOF" > saxpy.jl
 # Compute SAXPY (single-precision a*x + y for scalar a and vectors x and y)
@@ -198,6 +214,8 @@ b = @benchmark CUDA.@sync z_d .= a .* y_d .+ x_d
 EOF
 ```
 
+To run saxpy.jl on a compute node execute the command
+
 ```bash
 srun -p gpu -N1 --gpus-per-node=1 apptainer run --nv --overlay ./julia_depot.img --fakeroot docker://julia ./saxpy.jl
 ```
@@ -213,3 +231,5 @@ INFO:    unknown argument ignored: lazytime
 CPU Median: TrialEstimate(105.737 ms)
 GPU Median: TrialEstimate(1.638 ms)
 ```
+
+This particular code, which is massively parallel and scales with the size of the problem, is about two orders of magnitude faster on the GPU.
