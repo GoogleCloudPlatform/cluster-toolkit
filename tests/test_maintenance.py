@@ -29,28 +29,42 @@ python -m unittest
 # hpc-toolkit-test0 will have nodes that have maintenance
 # hpc-toolkit-test1 will not have nodes that have maintenance
 VALID_PRJS = {"scheduled": "hpc-toolkit-test0", "unscheduled": "hpc-toolkit-test1"}
-SCHED_MAINT_VMS = [f"vm_test{x}" for x in range(10)]
+VM_TYPE_CNT = 10
+# Perioidc maintenance vm list
+PER_MAINT_VMS = [f"vm_test{x}" for x in range(VM_TYPE_CNT)]
+# Add slurm specific nodes to list of periodic maintenance VMS
+PER_MAINT_VMS += [f"slurm_test{x}" for x in range(VM_TYPE_CNT)]
 T1 = "2024-10-26T13:25:51-0700"
 T2 = "2024-10-26T13:26:51-0700"
 # Columns that represent the upcoming maintenance given the command in
 # maintenance.py
-# VM Name, Earliest Sched Maint Start Time, Latest Sched Maint Start Time, Reschedulable, Sched type
-UP_MAINT_VMS = [[SCHED_MAINT_VMS[0], T1, T2, "TRUE", "SCHEDULED"],
-                [SCHED_MAINT_VMS[1], T1, T2, "FALSE", "SCHEDULED"],
-                [SCHED_MAINT_VMS[2], T1, T2, "TRUE", "UNSCHEDULED"],
-                [SCHED_MAINT_VMS[3], T1, T2, "FALSE", "UNSCHEDULED"]]
+# VM Name, Earliest Sched Maint Start Time, Latest Sched Maint Start Time,
+# Reschedulable, Sched type
+# Last 4 are slurm nodes
+UPC_MAINT_VMS = [[PER_MAINT_VMS[0], T1, T2, "TRUE", "SCHEDULED"],
+                [PER_MAINT_VMS[1], T1, T2, "FALSE", "SCHEDULED"],
+                [PER_MAINT_VMS[2], T1, T2, "TRUE", "UNSCHEDULED"],
+                [PER_MAINT_VMS[3], T1, T2, "FALSE", "UNSCHEDULED"],
+                [PER_MAINT_VMS[10], T1, T2, "TRUE", "SCHEDULED"],
+                [PER_MAINT_VMS[11], T1, T2, "FALSE", "SCHEDULED"],
+                [PER_MAINT_VMS[12], T1, T2, "TRUE", "UNSCHEDULED"],
+                [PER_MAINT_VMS[13], T1, T2, "FALSE", "UNSCHEDULED"]]
 VERSION_RES = """
 {
     "alpha": "2023.11.10"
 }
 """
 
-def subprocess_replace(cmd, shell, capture_output, text, 
+def subprocess_replace(cmd, shell, capture_output, text,
                        check) -> subprocess.CompletedProcess:
     res = subprocess.CompletedProcess("", 0)
     res.stdout = ""
-    if maintenance.VER_CMD == cmd:
+    if cmd == maintenance.VER_CMD:
         res.stdout = VERSION_RES
+        return res
+    if cmd == maintenance.SLURM_CMD:
+        for vm in PER_MAINT_VMS[10:]:
+            res.stdout += f"{vm}\n"
         return res
     if fnmatch.fnmatch(cmd, maintenance.PRJ_CMD.format("*")):
         if not any(prj in cmd for prj in list(VALID_PRJS.values())):
@@ -58,12 +72,12 @@ def subprocess_replace(cmd, shell, capture_output, text,
         return res
     if fnmatch.fnmatch(cmd, maintenance.PER_MAINT_CMD.format("*")):
         if VALID_PRJS["scheduled"] in cmd:
-            for vm in SCHED_MAINT_VMS:
+            for vm in PER_MAINT_VMS:
                 res.stdout += f"{vm}\n"
         return res
     if fnmatch.fnmatch(cmd, maintenance.UPC_MAINT_CMD.format("*")):
         if VALID_PRJS["scheduled"] in cmd:
-            for vm in UP_MAINT_VMS:
+            for vm in UPC_MAINT_VMS:
                 res.stdout += f"{vm[0]}\t{vm[1]}\t{vm[2]}\t{vm[3]}\t{vm[4]}\n"
         return res
 
@@ -78,7 +92,7 @@ class TestProgram(unittest.TestCase):
     has_per_str = "Nodes with PERIODIC maintenance"
 
     def test_valid_proj_name(self, mock_subprocess, mock_stdout):
-                maintenance.main(VALID_PRJS["scheduled"])
+        maintenance.main(VALID_PRJS["scheduled"])
 
     def test_invalid_proj_name(self, mock_subprocess, mock_stdout):
         invalid_prj = "hpc-toolkit-bad"
@@ -102,8 +116,17 @@ class TestProgram(unittest.TestCase):
         err_msg = "Output for periodic print found when there should be none"
         self.assertNotIn(self.no_per_str, mock_stdout.getvalue(), err_msg)
         self.assertNotIn(self.has_per_str, mock_stdout.getvalue(), err_msg)
-                         
+
         maintenance.main(project=VALID_PRJS["unscheduled"],
                          print_periodic_vms=False)
         self.assertNotIn(self.no_per_str, mock_stdout.getvalue(), err_msg)
         self.assertNotIn(self.has_per_str, mock_stdout.getvalue(), err_msg)
+
+    def test_slurm_filter(self, mock_subprocess, mock_stdout):
+        maint = maintenance.node_maintenace_factory(VALID_PRJS["scheduled"],
+                                                    check_maint = True,
+                                                    slurm = True)
+        err_msg = "Correct number of slurm nodes not found"
+        self.assertEqual(len(maint.slurm_nodes), VM_TYPE_CNT, err_msg)
+        self.assertEqual(len(maint.per_maint_vms), VM_TYPE_CNT, err_msg)
+        self.assertEqual(len(maint.upc_maint_vms), 4, err_msg)
