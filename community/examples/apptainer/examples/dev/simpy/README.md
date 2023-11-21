@@ -199,7 +199,7 @@ Bank renege
 ## References
 
 This example drew heavily from work at
-- The [CSC Computing Environent](https://csc-training.github.io/csc-env-eff/hands-on/singularity/singularity_extra_replicating-conda.html)]
+- The [CSC Computing Environent](https://csc-training.github.io/csc-env-eff/hands-on/singularity/singularity_extra_replicating-conda.html)
 - [NHR@Göttingen](https://gitlab-ce.gwdg.de/hpc-team-public/science-domains-blog/-/blob/main/20230907_python-apptainer.md)
 
 For a general discussion of containers in an HPC system see [this](https://github.com/dirkpetersen/hpc-containers#why-this-article-)
