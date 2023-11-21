@@ -171,7 +171,7 @@ func (s *MySuite) TestGetHCLInfo(c *C) {
 	pathToEmptyDir := filepath.Join(packerDir, "emptyDir")
 	err = os.Mkdir(pathToEmptyDir, 0755)
 	if err != nil {
-		log.Fatal("TestGetHCLInfo: Failed to create test directory.")
+		c.Fatal("TestGetHCLInfo: Failed to create test directory.")
 	}
 	_, err = getHCLInfo(pathToEmptyDir)
 	expectedErr = "source is not a terraform or packer module: .*"

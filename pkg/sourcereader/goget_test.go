@@ -15,7 +15,6 @@
 package sourcereader
 
 import (
-	"log"
 	"os"
 	"path/filepath"
 
@@ -26,7 +25,7 @@ func (s *MySuite) TestCopyGitModules(c *C) {
 	// Setup
 	destDir := filepath.Join(testDir, "TestCopyGitRepository")
 	if err := os.Mkdir(destDir, 0755); err != nil {
-		log.Fatal(err)
+		c.Fatal(err)
 	}
 	reader := GoGetterSourceReader{}
 
