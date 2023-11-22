@@ -19,7 +19,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"reflect"
 	"testing"
 	"time"
 
@@ -137,21 +136,10 @@ func (s *MySuite) TestIsRemotePath(c *C) {
 }
 
 func (s *MySuite) TestFactory(c *C) {
-	// Local modules
-	locSrcReader := Factory("./modules/anything/else")
-	c.Check(reflect.TypeOf(locSrcReader), Equals, reflect.TypeOf(LocalSourceReader{}))
-
-	// Embedded modules
-	embSrcReader := Factory("modules/anything/else")
-	c.Check(reflect.TypeOf(embSrcReader), Equals, reflect.TypeOf(EmbeddedSourceReader{}))
-
-	// GitHub modules
-	ghSrcString := Factory("github.com/modules")
-	c.Check(reflect.TypeOf(ghSrcString), Equals, reflect.TypeOf(GoGetterSourceReader{}))
-
-	// Git modules
-	gitSrcString := Factory("git::https://gitlab.com/modules")
-	c.Check(reflect.TypeOf(gitSrcString), Equals, reflect.TypeOf(GoGetterSourceReader{}))
+	c.Check(Factory("./modules/anything/else"), FitsTypeOf, LocalSourceReader{})            // Local
+	c.Check(Factory("modules/anything/else"), FitsTypeOf, EmbeddedSourceReader{})           // Embedded
+	c.Check(Factory("github.com/modules"), FitsTypeOf, GoGetterSourceReader{})              // GitHub
+	c.Check(Factory("git::https://gitlab.com/modules"), FitsTypeOf, GoGetterSourceReader{}) // Git
 }
 
 func (s *MySuite) TestCopyFromPath(c *C) {
