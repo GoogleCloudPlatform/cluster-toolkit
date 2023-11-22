@@ -19,7 +19,6 @@ import (
 	"hpc-toolkit/pkg/sourcereader"
 	"os"
 	"path/filepath"
-	"reflect"
 	"testing"
 
 	. "gopkg.in/check.v1"
@@ -72,25 +71,22 @@ func Test(t *testing.T) {
 }
 
 func (s *zeroSuite) TestGetOutputsAsMap(c *C) {
-	// Simple: empty outputs
-	modInfo := ModuleInfo{}
-	outputMap := modInfo.GetOutputsAsMap()
-	c.Assert(len(outputMap), Equals, 0)
+	{ // Simple: empty outputs
+		got := ModuleInfo{}.GetOutputsAsMap()
+		c.Check(got, HasLen, 0)
+	}
 
-	testDescription := "This is a test description"
-	testName := "testName"
-	outputInfo := OutputInfo{Name: testName, Description: testDescription}
-	modInfo.Outputs = []OutputInfo{outputInfo}
-	outputMap = modInfo.GetOutputsAsMap()
-	c.Assert(len(outputMap), Equals, 1)
-	c.Assert(outputMap[testName].Description, Equals, testDescription)
+	{
+		oi := OutputInfo{Name: "zebra", Description: "stripes"}
+		mi := ModuleInfo{Outputs: []OutputInfo{oi}}
+		got := mi.GetOutputsAsMap()
+		c.Check(got, DeepEquals, map[string]OutputInfo{"zebra": oi})
+	}
 }
 
 func (s *zeroSuite) TestFactory(c *C) {
-	pkrReader := Factory(pkrKindString)
-	c.Assert(reflect.TypeOf(pkrReader), Equals, reflect.TypeOf(PackerReader{}))
-	tfReader := Factory(tfKindString)
-	c.Assert(reflect.TypeOf(tfReader), Equals, reflect.TypeOf(TFReader{}))
+	c.Check(Factory(pkrKindString), FitsTypeOf, PackerReader{})
+	c.Check(Factory(tfKindString), FitsTypeOf, TFReader{})
 }
 
 func (s *MySuite) TestGetModuleInfo_Embedded(c *C) {
