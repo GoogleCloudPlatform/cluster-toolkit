@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
-	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -247,11 +246,11 @@ func execPath() string {
 	return args0
 }
 
-// checkErr is similar to cobra.CheckErr, but with renderError and log.Fatal
+// checkErr is similar to cobra.CheckErr, but with renderError and logging.Fatal
 // NOTE: this function uses empty YamlCtx, so if you have one, use renderError directly.
 func checkErr(err error) {
 	if err != nil {
 		msg := fmt.Sprintf("%s: %s", boldRed("Error"), renderError(err, config.YamlCtx{}))
-		log.Fatal(msg)
+		logging.Fatal(msg)
 	}
 }
