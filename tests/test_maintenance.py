@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # Copyright 2023 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,48 +13,59 @@
 # limitations under the License.
 
 import io
+import fnmatch
 import unittest
 import unittest.mock
 import subprocess
-import random
 from tools.maintenance import maintenance
 
 DESCRIPTION = """
-This script is a unit test script for the tools/maintenance/maintenance.py.
+This is a unit test script for the tools/maintenance/maintenance.py.
 
 Usage (run from top level directory of hpc toolkit):
 python -m unittest 
 """
 
-valid_prj_list = [f"hpc-toolkit-test{x}" for x in range(10)]
-sched_maint_vms = [f"vm_test{x}" for x in range(10)]
-can_resched = [True, False]
-type_vars = ["SCHEDULED", "UNSCHEDULED"]
-up_maint_vms = [[sched_maint_vms[i], "2024-10-26T13:25:51-0700", 
-                 "2024-10-26T13:26:51-0700", can_resched[random.randint(0, 1)],
-                 type_vars[random.randint(0, 1)]] 
-                 for i in range(int(len(sched_maint_vms)/2))]
+# hpc-toolkit-test0 will have nodes that have maintenance
+# hpc-toolkit-test1 will not have nodes that have maintenance
+VALID_PRJS = {"scheduled": "hpc-toolkit-test0", "unscheduled": "hpc-toolkit-test1"}
+SCHED_MAINT_VMS = [f"vm_test{x}" for x in range(10)]
+T1 = "2024-10-26T13:25:51-0700"
+T2 = "2024-10-26T13:26:51-0700"
+# Columns that represent the upcoming maintenance given the command in
+# maintenance.py
+# VM Name, Earliest Sched Maint Start Time, Latest Sched Maint Start Time, Reschedulable, Sched type
+UP_MAINT_VMS = [[SCHED_MAINT_VMS[0], T1, T2, "TRUE", "SCHEDULED"],
+                [SCHED_MAINT_VMS[1], T1, T2, "FALSE", "SCHEDULED"],
+                [SCHED_MAINT_VMS[2], T1, T2, "TRUE", "UNSCHEDULED"],
+                [SCHED_MAINT_VMS[3], T1, T2, "FALSE", "UNSCHEDULED"]]
+VERSION_RES = """
+{
+    "alpha": "2023.11.10"
+}
+"""
 
 def subprocess_replace(cmd, shell, capture_output, text, 
                        check) -> subprocess.CompletedProcess:
     res = subprocess.CompletedProcess("", 0)
     res.stdout = ""
-    if "version" in cmd:
-        res.stdout = "{\n\t\"alpha\": \"2023.11.10\"\n}"
-    elif "maintenanceInterval:PERIODIC" in cmd:
-        for vm in sched_maint_vms:
-            res.stdout += f"{vm}\n"
-    elif "upcomingMaintenance" in cmd:
-        for vm in up_maint_vms:
-            res.stdout += f"{vm[0]}\t{vm[1]}\t{vm[2]}\t{vm[3]}\t{vm[4]}\n"
-    elif "projects describe" in cmd:
-        found = False
-        for prj in valid_prj_list:
-            if prj in cmd:
-                found = True
-                break
-        if not found:
+    if maintenance.VER_CMD == cmd:
+        res.stdout = VERSION_RES
+        return res
+    if fnmatch.fnmatch(cmd, maintenance.PRJ_CMD.format("*")):
+        if not any(prj in cmd for prj in list(VALID_PRJS.values())):
             res.returncode = 1
+        return res
+    if fnmatch.fnmatch(cmd, maintenance.PER_MAINT_CMD.format("*")):
+        if VALID_PRJS["scheduled"] in cmd:
+            for vm in SCHED_MAINT_VMS:
+                res.stdout += f"{vm}\n"
+        return res
+    if fnmatch.fnmatch(cmd, maintenance.UPC_MAINT_CMD.format("*")):
+        if VALID_PRJS["scheduled"] in cmd:
+            for vm in UP_MAINT_VMS:
+                res.stdout += f"{vm[0]}\t{vm[1]}\t{vm[2]}\t{vm[3]}\t{vm[4]}\n"
+        return res
 
     return res
 
@@ -64,28 +74,36 @@ def subprocess_replace(cmd, shell, capture_output, text,
                      wraps=subprocess_replace)
 class TestProgram(unittest.TestCase):
 
-    per_test_str1 = "No nodes with periodic maintenance"
-    per_test_str2 = "Nodes with PERIODIC maintenance"
+    no_per_str = "No nodes with periodic maintenance"
+    has_per_str = "Nodes with PERIODIC maintenance"
 
-    def test_proj_name(self, mock_subprocess, mock_stdout):
-        bad_prj = "hpc-toolkit-bad"
-        try:
-            maintenance.main(bad_prj)
-        except subprocess.SubprocessError:
-            pass
-        rand_idx = random.randint(1, len(valid_prj_list))
-        maintenance.main(valid_prj_list[rand_idx])
+    def test_valid_proj_name(self, mock_subprocess, mock_stdout):
+                maintenance.main(VALID_PRJS["scheduled"])
+
+    def test_invalid_proj_name(self, mock_subprocess, mock_stdout):
+        invalid_prj = "hpc-toolkit-bad"
+        self.assertRaises(subprocess.SubprocessError, maintenance.main,
+                          project=invalid_prj)
 
     def test_periodic_print_true(self, mock_subprocess, mock_stdout):
-        maintenance.main(project=valid_prj_list[0], print_periodic_vms=True)
-        self.assertTrue(self.per_test_str1 in mock_stdout.getvalue() or
-                        self.per_test_str2 in mock_stdout.getvalue(),
-                        msg="Output incorrect for periodic print")
-                        
+        maintenance.main(project=VALID_PRJS["scheduled"],
+                         print_periodic_vms=True)
+        self.assertIn(self.has_per_str, mock_stdout.getvalue(),
+                        msg="No nodes found when there should be some")
+
+        maintenance.main(project=VALID_PRJS["unscheduled"],
+                         print_periodic_vms=True)
+        self.assertIn(self.has_per_str, mock_stdout.getvalue(),
+                        msg="Nodes found when there should be none")
 
     def test_periodic_print_false(self, mock_subprocess, mock_stdout):
-        maintenance.main(project=valid_prj_list[0], print_periodic_vms=False)
-        self.assertFalse(self.per_test_str1 in mock_stdout.getvalue() or
-                         self.per_test_str2 in mock_stdout.getvalue(),
-                         msg="Output for periodic print found when there" \
-                             " should be none")
+        maintenance.main(project=VALID_PRJS["scheduled"],
+                         print_periodic_vms=False)
+        err_msg = "Output for periodic print found when there should be none"
+        self.assertNotIn(self.no_per_str, mock_stdout.getvalue(), err_msg)
+        self.assertNotIn(self.has_per_str, mock_stdout.getvalue(), err_msg)
+                         
+        maintenance.main(project=VALID_PRJS["unscheduled"],
+                         print_periodic_vms=False)
+        self.assertNotIn(self.no_per_str, mock_stdout.getvalue(), err_msg)
+        self.assertNotIn(self.has_per_str, mock_stdout.getvalue(), err_msg)
