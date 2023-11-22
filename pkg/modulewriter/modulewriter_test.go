@@ -23,12 +23,10 @@ import (
 	"hpc-toolkit/pkg/deploymentio"
 	"hpc-toolkit/pkg/modulereader"
 	"hpc-toolkit/pkg/sourcereader"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/spf13/afero"
@@ -37,46 +35,35 @@ import (
 	. "gopkg.in/check.v1"
 )
 
-var (
+type MySuite struct {
 	testDir            string
 	terraformModuleDir string
-)
-
-// Setup GoCheck
-type MySuite struct{}
-
-var _ = Suite(&MySuite{})
-
-func Test(t *testing.T) {
-	TestingT(t)
 }
 
-func setup() {
-	t := time.Now()
-	dirName := fmt.Sprintf("ghpc_modulewriter_test_%s", t.Format(time.RFC3339))
-	dir, err := os.MkdirTemp("", dirName)
+func (s *MySuite) SetUpSuite(c *C) {
+	dir, err := os.MkdirTemp("", "ghpc_modulewriter_test_*")
 	if err != nil {
-		log.Fatalf("modulewriter_test: %v", err)
+		c.Fatal(err)
 	}
-	testDir = dir
+	s.testDir = dir
 
 	// Create dummy module in testDir
-	terraformModuleDir = "tfModule"
-	err = os.Mkdir(filepath.Join(testDir, terraformModuleDir), 0755)
-	if err != nil {
-		log.Fatal(err)
+	s.terraformModuleDir = filepath.Join(s.testDir, "tfModule")
+	if err := os.Mkdir(s.terraformModuleDir, 0755); err != nil {
+		c.Fatal(err)
 	}
 }
 
-func teardown() {
-	os.RemoveAll(testDir)
+func (s *MySuite) TearDownSuite(c *C) {
+	if err := os.RemoveAll(s.testDir); err != nil {
+		c.Fatal(err)
+	}
 }
 
 // Test Data Producers
-func getDeploymentConfigForTest() config.DeploymentConfig {
-	testModuleSource := filepath.Join(testDir, terraformModuleDir)
+func (s *MySuite) getDeploymentConfigForTest() config.DeploymentConfig {
 	testModule := config.Module{
-		Source: testModuleSource,
+		Source: s.terraformModuleDir,
 		Kind:   config.TerraformKind,
 		ID:     "testModule",
 		Settings: config.NewDict(map[string]cty.Value{
@@ -91,9 +78,8 @@ func getDeploymentConfigForTest() config.DeploymentConfig {
 			},
 		},
 	}
-	testModuleSourceWithLabels := filepath.Join(testDir, terraformModuleDir)
 	testModuleWithLabels := config.Module{
-		Source: testModuleSourceWithLabels,
+		Source: s.terraformModuleDir,
 		ID:     "testModuleWithLabels",
 		Kind:   config.TerraformKind,
 		Settings: config.NewDict(map[string]cty.Value{
@@ -106,7 +92,7 @@ func getDeploymentConfigForTest() config.DeploymentConfig {
 			Modules: []config.Module{testModule, testModuleWithLabels},
 		},
 	}
-	testDC := config.DeploymentConfig{
+	return config.DeploymentConfig{
 		Config: config.Blueprint{
 			BlueprintName: "simple",
 			Vars: config.NewDict(map[string]cty.Value{
@@ -116,7 +102,16 @@ func getDeploymentConfigForTest() config.DeploymentConfig {
 			DeploymentGroups: testDeploymentGroups,
 		},
 	}
-	return testDC
+}
+
+type zeroSuite struct{}
+
+var _ = []any{ // initialize suites
+	Suite(&MySuite{}),
+	Suite(&zeroSuite{})}
+
+func Test(t *testing.T) {
+	TestingT(t)
 }
 
 // Tests
@@ -141,7 +136,7 @@ func isDeploymentDirPrepped(depDirectoryPath string) error {
 
 func (s *MySuite) TestPrepDepDir(c *C) {
 
-	depDir := filepath.Join(testDir, "dep_prep_test_dir")
+	depDir := filepath.Join(s.testDir, "dep_prep_test_dir")
 
 	// Prep a dir that does not yet exist
 	err := prepDepDir(depDir, false /* overwrite */)
@@ -161,9 +156,9 @@ func (s *MySuite) TestPrepDepDir(c *C) {
 
 func (s *MySuite) TestPrepDepDir_OverwriteRealDep(c *C) {
 	// Test with a real deployment previously written
-	testDC := getDeploymentConfigForTest()
+	testDC := s.getDeploymentConfigForTest()
 	testDC.Config.Vars.Set("deployment_name", cty.StringVal("test_prep_dir"))
-	depDir := filepath.Join(testDir, "test_prep_dir")
+	depDir := filepath.Join(s.testDir, "test_prep_dir")
 
 	// writes a full deployment w/ actual resource groups
 	WriteDeployment(testDC, depDir, false /* overwrite */)
@@ -185,7 +180,7 @@ func (s *MySuite) TestPrepDepDir_OverwriteRealDep(c *C) {
 	c.Check(len(files2), Equals, 3) // .ghpc, .gitignore, and instructions file
 }
 
-func (s *MySuite) TestIsSubset(c *C) {
+func (s *zeroSuite) TestIsSubset(c *C) {
 	baseConfig := []string{"group1", "group2", "group3"}
 	subsetConfig := []string{"group1", "group2"}
 	swapConfig := []string{"group1", "group4", "group3"}
@@ -195,7 +190,7 @@ func (s *MySuite) TestIsSubset(c *C) {
 }
 
 func (s *MySuite) TestIsOverwriteAllowed(c *C) {
-	depDir := filepath.Join(testDir, "overwrite_test")
+	depDir := filepath.Join(s.testDir, "overwrite_test")
 	ghpcDir := filepath.Join(depDir, HiddenGhpcDirName)
 	module1 := filepath.Join(depDir, "group1")
 	module2 := filepath.Join(depDir, "group2")
@@ -234,8 +229,8 @@ func (s *MySuite) TestWriteDeployment(c *C) {
 	afero.WriteFile(aferoFS, "community/modules/green/lime/main.tf", []byte("lime"), 0644)
 	sourcereader.ModuleFS = afero.NewIOFS(aferoFS)
 
-	dc := getDeploymentConfigForTest()
-	dir := filepath.Join(testDir, "test_write_deployment")
+	dc := s.getDeploymentConfigForTest()
+	dir := filepath.Join(s.testDir, "test_write_deployment")
 
 	err := WriteDeployment(dc, dir, false /* overwriteFlag */)
 	c.Check(err, IsNil)
@@ -249,7 +244,7 @@ func (s *MySuite) TestWriteDeployment(c *C) {
 
 func (s *MySuite) TestCreateGroupDirs(c *C) {
 	// Setup
-	testDeployDir := filepath.Join(testDir, "test_createGroupDirs")
+	testDeployDir := filepath.Join(s.testDir, "test_createGroupDirs")
 	if err := os.Mkdir(testDeployDir, 0755); err != nil {
 		c.Fatal("Failed to create test deployment directory for createGroupDirs")
 	}
@@ -305,7 +300,6 @@ func (s *MySuite) TestCreateGroupDirs(c *C) {
 	c.Check(err, IsNil)
 }
 
-// tfwriter.go
 func (s *MySuite) TestRestoreTfState(c *C) {
 	// set up dir structure
 	//
@@ -315,7 +309,7 @@ func (s *MySuite) TestRestoreTfState(c *C) {
 	//          └── fake_resource_group
 	//             └── terraform.tfstate
 	//    └── fake_resource_group
-	depDir := filepath.Join(testDir, "test_restore_state")
+	depDir := filepath.Join(s.testDir, "test_restore_state")
 	deploymentGroupName := "fake_resource_group"
 
 	prevDeploymentGroup := filepath.Join(
@@ -342,7 +336,7 @@ func (s *MySuite) TestRestoreTfState(c *C) {
 	c.Check(err, IsNil)
 }
 
-func (s *MySuite) TestGetTypeTokens(c *C) {
+func (s *zeroSuite) TestGetTypeTokens(c *C) {
 	// Success Integer
 	tok := getTypeTokens(cty.NumberIntVal(-1))
 	c.Assert(len(tok), Equals, 1)
@@ -423,7 +417,7 @@ func (s *MySuite) TestGetTypeTokens(c *C) {
 func (s *MySuite) TestCreateBaseFile(c *C) {
 	// Success
 	baseFilename := "main.tf_TestCreateBaseFile"
-	goodPath := filepath.Join(testDir, baseFilename)
+	goodPath := filepath.Join(s.testDir, baseFilename)
 	err := createBaseFile(goodPath)
 	c.Assert(err, IsNil)
 	fi, err := os.Stat(goodPath)
@@ -444,7 +438,7 @@ func (s *MySuite) TestCreateBaseFile(c *C) {
 func (s *MySuite) TestAppendHCLToFile(c *C) {
 	// Setup
 	testFilename := "main.tf_TestAppendHCLToFile"
-	testPath := filepath.Join(testDir, testFilename)
+	testPath := filepath.Join(s.testDir, testFilename)
 	_, err := os.Create(testPath)
 	c.Assert(err, IsNil)
 	hclFile := hclwrite.NewEmptyFile()
@@ -466,7 +460,7 @@ func stringExistsInFile(str string, filename string) (bool, error) {
 
 func (s *MySuite) TestWriteMain(c *C) {
 	// Setup
-	testMainDir := filepath.Join(testDir, "TestWriteMain")
+	testMainDir := filepath.Join(s.testDir, "TestWriteMain")
 	mainFilePath := filepath.Join(testMainDir, "main.tf")
 	if err := os.Mkdir(testMainDir, 0755); err != nil {
 		c.Fatal("Failed to create test dir for creating main.tf file")
@@ -516,7 +510,7 @@ func (s *MySuite) TestWriteMain(c *C) {
 
 func (s *MySuite) TestWriteOutputs(c *C) {
 	// Setup
-	testOutputsDir := filepath.Join(testDir, "TestWriteOutputs")
+	testOutputsDir := filepath.Join(s.testDir, "TestWriteOutputs")
 	outputsFilePath := filepath.Join(testOutputsDir, "outputs.tf")
 	if err := os.Mkdir(testOutputsDir, 0755); err != nil {
 		c.Fatal("Failed to create test directory for creating outputs.tf file")
@@ -552,7 +546,7 @@ func (s *MySuite) TestWriteOutputs(c *C) {
 
 func (s *MySuite) TestWriteVariables(c *C) {
 	// Setup
-	testVarDir := filepath.Join(testDir, "TestWriteVariables")
+	testVarDir := filepath.Join(s.testDir, "TestWriteVariables")
 	varsFilePath := filepath.Join(testVarDir, "variables.tf")
 	if err := os.Mkdir(testVarDir, 0755); err != nil {
 		c.Fatal("Failed to create test directory for creating variables.tf file")
@@ -587,7 +581,7 @@ func (s *MySuite) TestWriteVariables(c *C) {
 
 func (s *MySuite) TestWriteProviders(c *C) {
 	// Setup
-	testProvDir := filepath.Join(testDir, "TestWriteProviders")
+	testProvDir := filepath.Join(s.testDir, "TestWriteProviders")
 	provFilePath := filepath.Join(testProvDir, "providers.tf")
 	if err := os.Mkdir(testProvDir, 0755); err != nil {
 		c.Fatal("Failed to create test directory for creating providers.tf file")
@@ -619,7 +613,7 @@ func (s *MySuite) TestWriteProviders(c *C) {
 	c.Assert(exists, Equals, true)
 }
 
-func (s *MySuite) TestKind(c *C) {
+func (s *zeroSuite) TestKind(c *C) {
 	tfw := TFWriter{}
 	c.Assert(tfw.kind(), Equals, config.TerraformKind)
 	pkrw := PackerWriter{}
@@ -633,7 +627,7 @@ func (s *MySuite) TestWriteDeploymentGroup_PackerWriter(c *C) {
 	// No Packer modules
 	deploymentName := "deployment_TestWriteModuleLevel_PackerWriter"
 	testVars := config.NewDict(map[string]cty.Value{"deployment_name": cty.StringVal(deploymentName)})
-	deploymentDir := filepath.Join(testDir, deploymentName)
+	deploymentDir := filepath.Join(s.testDir, deploymentName)
 	if err := deploymentio.CreateDirectory(deploymentDir); err != nil {
 		c.Fatal(err)
 	}
@@ -688,7 +682,7 @@ func (s *MySuite) TestWritePackerAutoVars(c *C) {
 	expErr := fmt.Sprintf("error creating variables file %s:.*", packerAutoVarFilename)
 	c.Assert(err, ErrorMatches, expErr)
 
-	testPackerTemplateDir := filepath.Join(testDir, "TestWritePackerTemplate")
+	testPackerTemplateDir := filepath.Join(s.testDir, "TestWritePackerTemplate")
 	if err := os.Mkdir(testPackerTemplateDir, 0755); err != nil {
 		c.Fatalf("Failed to create test dir for creating %s file", packerAutoVarFilename)
 	}
@@ -697,7 +691,7 @@ func (s *MySuite) TestWritePackerAutoVars(c *C) {
 
 }
 
-func (s *MySuite) TestStringEscape(c *C) {
+func (s *zeroSuite) TestStringEscape(c *C) {
 	f := func(s string) string {
 		toks := config.TokensForValue(cty.StringVal(s))
 		return string(toks.Bytes())
@@ -718,14 +712,7 @@ func (s *MySuite) TestStringEscape(c *C) {
 
 }
 
-func TestMain(m *testing.M) {
-	setup()
-	code := m.Run()
-	teardown()
-	os.Exit(code)
-}
-
-func (s *MySuite) TestDeploymentSource(c *C) {
+func (s *zeroSuite) TestDeploymentSource(c *C) {
 	{ // git
 		m := config.Module{Kind: config.TerraformKind, Source: "github.com/x/y.git"}
 		s, err := DeploymentSource(m)
@@ -782,7 +769,7 @@ func (s *MySuite) TestDeploymentSource(c *C) {
 	}
 }
 
-func (s *MySuite) TestSubstituteIgcReferencesInModule(c *C) {
+func (s *zeroSuite) TestSubstituteIgcReferencesInModule(c *C) {
 	d := config.Dict{}
 	d.Set("fold", cty.TupleVal([]cty.Value{
 		cty.StringVal("zebra"),
