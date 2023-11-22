@@ -21,7 +21,7 @@ import (
 	. "gopkg.in/check.v1"
 )
 
-func (s *MySuite) TestValidateVars(c *C) {
+func (s *zeroSuite) TestValidateVars(c *C) {
 	{ // Success
 		vars := Dict{}
 		c.Check(validateVars(vars), IsNil)
@@ -40,7 +40,7 @@ func (s *MySuite) TestValidateVars(c *C) {
 	}
 }
 
-func (s *MySuite) TestValidateSettings(c *C) {
+func (s *zeroSuite) TestValidateSettings(c *C) {
 	path := Root.Groups.At(7).Modules.At(2)
 	testSettingName := "TestSetting"
 	testSettingValue := cty.StringVal("TestValue")
@@ -84,7 +84,7 @@ func (s *MySuite) TestValidateSettings(c *C) {
 
 }
 
-func (s *MySuite) TestValidateModule(c *C) {
+func (s *zeroSuite) TestValidateModule(c *C) {
 	p := Root.Groups.At(2).Modules.At(1)
 	dummyBp := Blueprint{}
 
@@ -128,7 +128,7 @@ func (s *MySuite) TestValidateModule(c *C) {
 	}
 }
 
-func (s *MySuite) TestValidateOutputs(c *C) {
+func (s *zeroSuite) TestValidateOutputs(c *C) {
 	p := Root.Groups.At(2).Modules.At(1)
 
 	{ // Simple case, no outputs in either
