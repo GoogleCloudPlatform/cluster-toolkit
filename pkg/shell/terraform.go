@@ -25,7 +25,6 @@ import (
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/modulereader"
 	"hpc-toolkit/pkg/modulewriter"
-	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -262,7 +261,7 @@ func applyOrDestroy(tf *tfexec.Terraform, b ApplyBehavior, destroy bool) error {
 	// capture Terraform plan in a file
 	f, err := os.CreateTemp("", "plan-)")
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	defer os.Remove(f.Name())
 	wantsChange, err := planModule(tf, f.Name(), destroy)

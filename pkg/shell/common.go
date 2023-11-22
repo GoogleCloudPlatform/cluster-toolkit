@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -108,7 +107,7 @@ Please select an option [d,a,s,c]: `)
 
 		_, err := fmt.Scanln(&userResponse)
 		if err != nil {
-			log.Fatal(err)
+			logging.Fatal("%v", err)
 		}
 
 		switch strings.ToLower(strings.TrimSpace(userResponse)) {
@@ -117,7 +116,7 @@ Please select an option [d,a,s,c]: `)
 		case "c":
 			return false
 		case "d":
-			logging.Info(c.Full)
+			fmt.Println(c.Full)
 		case "s":
 			logging.Fatal("user chose to stop execution of ghpc rather than make proposed changes to infrastructure")
 		}

@@ -24,7 +24,6 @@ import (
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/modulewriter"
 	"hpc-toolkit/pkg/validators"
-	"log"
 	"path/filepath"
 	"strings"
 
@@ -110,12 +109,9 @@ func expandOrDie(path string) config.DeploymentConfig {
 	if err := setBackendConfig(&dc.Config, cliBEConfigVars); err != nil {
 		logging.Fatal("Failed to set the backend config at CLI: %v", err)
 	}
-	if err := setValidationLevel(&dc.Config, validationLevel); err != nil {
-		log.Fatal(err)
-	}
-	if err := skipValidators(&dc); err != nil {
-		log.Fatal(err)
-	}
+	checkErr(setValidationLevel(&dc.Config, validationLevel))
+	checkErr(skipValidators(&dc))
+
 	if dc.Config.GhpcVersion != "" {
 		logging.Info("ghpc_version setting is ignored.")
 	}
