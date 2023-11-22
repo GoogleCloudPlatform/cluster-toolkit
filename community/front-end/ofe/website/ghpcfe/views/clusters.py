@@ -958,7 +958,7 @@ class BackendDestroyCluster(BackendAsyncView):
         ci = ClusterInfo(cluster)
         ci.stop_cluster()
 
-    async def get(self, request, pk):
+    async def post(self, request, pk):
         """this will invoke the background tasks and return immediately"""
         # Mixins don't yet work with Async views
         if not await sync_to_async(lambda: request.user.is_authenticated)():

@@ -207,7 +207,7 @@
 <a href="{% url 'backend-start-cluster' object.id %}" class="btn btn-primary">Retry</a>
 {% endif %}
 {% if cluster.status == "r" or cluster.status == "i" or cluster.status == "s" or cluster.status == "e" %}
-<a href="{% url 'backend-destroy-cluster' object.id %}" class="btn btn-danger">Delete</a>
+<a href="#" class="btn btn-danger" onclick="deleteCluster({{ object.id }})">Delete</a>
 {% endif %}
 {% if object.status == "r" %}
 <a href="{% url 'backend-sync-cluster' object.id %}" class="btn btn-primary">Sync Cluster</a>
@@ -230,5 +230,40 @@
 </div>
 {% endif %}
 {% endif %}
+<script>
+  function deleteCluster(clusterId) {
+      // Confirm the deletion, if needed
+      if (!confirm("Are you sure you want to delete this cluster?")) {
+          return false;
+      }
+
+      // Send the DELETE request
+      fetch('{% url "backend-destroy-cluster" 0 %}'.replace('0', clusterId), {
+          method: 'POST',
+          headers: {
+              'X-CSRFToken': getCookie('csrftoken'), // Include the CSRF token
+          },
+      })
+      .then(response => {
+          if (response.ok) {
+              // Handle success, e.g., redirect to another page
+              window.location.href = '/clusters/';
+          } else {
+              // Handle errors
+              console.error('Failed to delete cluster');
+          }
+      })
+      .catch(error => console.error('Error:', error));
+
+      return false; // Prevent the default link behavior
+  }
+
+  // Function to get the CSRF token from cookies
+  function getCookie(name) {
+      const value = `; ${document.cookie}`;
+      const parts = value.split(`; ${name}=`);
+      if (parts.length === 2) return parts.pop().split(';').shift();
+  }
+</script>
 
 {% endblock %}
