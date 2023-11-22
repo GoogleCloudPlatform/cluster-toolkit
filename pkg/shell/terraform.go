@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/modulereader"
 	"hpc-toolkit/pkg/modulewriter"
 	"log"
@@ -93,7 +94,7 @@ func needsInit(tf *tfexec.Terraform) bool {
 func initModule(tf *tfexec.Terraform) error {
 	var err error
 	if needsInit(tf) {
-		log.Printf("Initializing deployment group %s", tf.WorkingDir())
+		logging.Info("Initializing deployment group %s", tf.WorkingDir())
 		err = tf.Init(context.Background())
 	}
 
@@ -108,7 +109,7 @@ func initModule(tf *tfexec.Terraform) error {
 }
 
 func outputModule(tf *tfexec.Terraform) (map[string]cty.Value, error) {
-	log.Printf("Collecting terraform outputs from %s", tf.WorkingDir())
+	logging.Info("Collecting terraform outputs from %s", tf.WorkingDir())
 	output, err := tf.Output(context.Background())
 	if err != nil {
 		return map[string]cty.Value{}, &TfError{
@@ -231,7 +232,7 @@ func promptForApply(tf *tfexec.Terraform, path string, b ApplyBehavior) bool {
 
 func applyPlanConsoleOutput(tf *tfexec.Terraform, path string) error {
 	planFileOpt := tfexec.DirOrPlan(path)
-	log.Printf("Running terraform apply on deployment group %s", tf.WorkingDir())
+	logging.Info("Running terraform apply on deployment group %s", tf.WorkingDir())
 	tf.SetStdout(os.Stdout)
 	tf.SetStderr(os.Stderr)
 	if err := tf.Apply(context.Background(), planFileOpt); err != nil {
@@ -257,7 +258,7 @@ func applyOrDestroy(tf *tfexec.Terraform, b ApplyBehavior, destroy bool) error {
 		return err
 	}
 
-	log.Printf("Testing if deployment group %s requires %s cloud infrastructure", tf.WorkingDir(), action)
+	logging.Info("Testing if deployment group %s requires %s cloud infrastructure", tf.WorkingDir(), action)
 	// capture Terraform plan in a file
 	f, err := os.CreateTemp("", "plan-)")
 	if err != nil {
@@ -271,10 +272,10 @@ func applyOrDestroy(tf *tfexec.Terraform, b ApplyBehavior, destroy bool) error {
 
 	var apply bool
 	if wantsChange {
-		log.Printf("Deployment group %s requires %s cloud infrastructure", tf.WorkingDir(), action)
+		logging.Info("Deployment group %s requires %s cloud infrastructure", tf.WorkingDir(), action)
 		apply = b == AutomaticApply || promptForApply(tf, f.Name(), b)
 	} else {
-		log.Printf("Cloud infrastructure in deployment group %s is already %s", tf.WorkingDir(), pastTense)
+		logging.Info("Cloud infrastructure in deployment group %s is already %s", tf.WorkingDir(), pastTense)
 	}
 
 	if !apply {
@@ -320,11 +321,11 @@ func ExportOutputs(tf *tfexec.Terraform, artifactsDir string, applyBehavior Appl
 	// blueprint; edge case is that "terraform output" can be missing keys
 	// whose values are null
 	if len(outputValues) == 0 {
-		log.Printf("Deployment group %s contains no artifacts to export", thisGroup)
+		logging.Info("Deployment group %s contains no artifacts to export", thisGroup)
 		return nil
 	}
 
-	log.Printf("Writing outputs artifact from deployment group %s to file %s", thisGroup, filepath)
+	logging.Info("Writing outputs artifact from deployment group %s to file %s", thisGroup, filepath)
 	if err := modulewriter.WriteHclAttributes(outputValues, filepath); err != nil {
 		return err
 	}
@@ -358,7 +359,7 @@ func ImportInputs(deploymentGroupDir string, artifactsDir string, expandedBluepr
 		if len(intergroupOutputNames) == 0 {
 			continue
 		}
-		log.Printf("collecting outputs for group %s from group %s", g.Name, groupName)
+		logging.Info("collecting outputs for group %s from group %s", g.Name, groupName)
 		filepath := outputsFile(artifactsDir, groupName)
 		groupOutputValues, err := modulereader.ReadHclAttributes(filepath)
 		if err != nil {
@@ -414,7 +415,7 @@ func ImportInputs(deploymentGroupDir string, artifactsDir string, expandedBluepr
 	default:
 		return fmt.Errorf("unexpected error: unknown module kind for deployment group %s", g.Name)
 	}
-	log.Printf("Writing outputs for deployment group %s to file %s\n", g.Name, outfile)
+	logging.Info("Writing outputs for deployment group %s to file %s", g.Name, outfile)
 	if err := modulewriter.WriteHclAttributes(allInputValues, outfile); err != nil {
 		return err
 	}
