@@ -47,8 +47,7 @@ EOT
   default_labels = {
     ghpcfe_id = var.deployment_name,
   }
-  labels         = merge(var.extra_labels, local.default_labels)
-  generated_uuid = uuid()
+  labels = merge(var.extra_labels, local.default_labels)
 }
 
 
@@ -67,9 +66,10 @@ module "control_bucket" {
   source  = "terraform-google-modules/cloud-storage/google"
   version = "~> 4.0"
 
-  project_id = var.project_id
-  names      = ["storage"]
-  prefix     = "${var.deployment_name}-${local.generated_uuid}"
+  project_id       = var.project_id
+  names            = ["storage"]
+  prefix           = var.deployment_name
+  randomize_suffix = true
   force_destroy = {
     storage = true
   }
