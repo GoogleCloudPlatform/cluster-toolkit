@@ -41,9 +41,7 @@ type MySuite struct {
 
 func (s *MySuite) SetUpSuite(c *C) {
 	var err error
-	if s.tmpModuleDir, err = os.MkdirTemp("", "modulereader_tests_*"); err != nil {
-		c.Fatal(err)
-	}
+	s.tmpModuleDir = c.MkDir()
 	sourcereader.ModuleFS = testModuleFS
 	rdr := sourcereader.EmbeddedSourceReader{}
 	if err = rdr.CopyDir("modules", s.tmpModuleDir); err != nil {
@@ -52,12 +50,6 @@ func (s *MySuite) SetUpSuite(c *C) {
 
 	s.terraformDir = filepath.Join(s.tmpModuleDir, "test_role", "test_module")
 	s.packerDir = filepath.Join(s.tmpModuleDir, "imaginarium", "zebra")
-}
-
-func (s *MySuite) TearDownSuite(c *C) {
-	if err := os.RemoveAll(s.tmpModuleDir); err != nil {
-		c.Fatal(err)
-	}
 }
 
 type zeroSuite struct{}
@@ -174,23 +166,19 @@ func (s *MySuite) TestGetHCLInfo(c *C) {
 	// Invalid source path - path does not exists
 	fakePath := "./not/a/real/path"
 	_, err := getHCLInfo(fakePath)
-	expectedErr := "source to module does not exist: .*"
-	c.Assert(err, ErrorMatches, expectedErr)
+	c.Assert(err, ErrorMatches, "source to module does not exist: .*")
 	// Invalid source path - points to a file
 	pathToFile := filepath.Join(s.terraformDir, "main.tf")
 	_, err = getHCLInfo(pathToFile)
-	expectedErr = "source of module must be a directory: .*"
-	c.Assert(err, ErrorMatches, expectedErr)
+	c.Assert(err, ErrorMatches, "source of module must be a directory: .*")
 
 	// Invalid source path - points to directory with no .tf files
 	pathToEmptyDir := filepath.Join(s.packerDir, "emptyDir")
-	err = os.Mkdir(pathToEmptyDir, 0755)
-	if err != nil {
+	if err := os.Mkdir(pathToEmptyDir, 0755); err != nil {
 		c.Fatal("TestGetHCLInfo: Failed to create test directory.")
 	}
 	_, err = getHCLInfo(pathToEmptyDir)
-	expectedErr = "source is not a terraform or packer module: .*"
-	c.Assert(err, ErrorMatches, expectedErr)
+	c.Assert(err, ErrorMatches, "source is not a terraform or packer module: .*")
 }
 
 func (s *MySuite) TestGetInfo_TFReder(c *C) {

@@ -41,21 +41,11 @@ type MySuite struct {
 }
 
 func (s *MySuite) SetUpSuite(c *C) {
-	dir, err := os.MkdirTemp("", "ghpc_modulewriter_test_*")
-	if err != nil {
-		c.Fatal(err)
-	}
-	s.testDir = dir
+	s.testDir = c.MkDir()
 
 	// Create dummy module in testDir
 	s.terraformModuleDir = filepath.Join(s.testDir, "tfModule")
 	if err := os.Mkdir(s.terraformModuleDir, 0755); err != nil {
-		c.Fatal(err)
-	}
-}
-
-func (s *MySuite) TearDownSuite(c *C) {
-	if err := os.RemoveAll(s.testDir); err != nil {
 		c.Fatal(err)
 	}
 }
@@ -244,10 +234,7 @@ func (s *MySuite) TestWriteDeployment(c *C) {
 
 func (s *MySuite) TestCreateGroupDirs(c *C) {
 	// Setup
-	testDeployDir := filepath.Join(s.testDir, "test_createGroupDirs")
-	if err := os.Mkdir(testDeployDir, 0755); err != nil {
-		c.Fatal("Failed to create test deployment directory for createGroupDirs")
-	}
+	testDeployDir := c.MkDir()
 	groupNames := []config.GroupName{"group0", "group1", "group2"}
 
 	// No deployment groups
@@ -580,11 +567,8 @@ func (s *MySuite) TestWriteVariables(c *C) {
 
 func (s *MySuite) TestWriteProviders(c *C) {
 	// Setup
-	testProvDir := filepath.Join(s.testDir, "TestWriteProviders")
+	testProvDir := c.MkDir()
 	provFilePath := filepath.Join(testProvDir, "providers.tf")
-	if err := os.Mkdir(testProvDir, 0755); err != nil {
-		c.Fatal("Failed to create test directory for creating providers.tf file")
-	}
 
 	// Simple success, empty vars
 	testVars := make(map[string]cty.Value)
@@ -681,11 +665,8 @@ func (s *MySuite) TestWritePackerAutoVars(c *C) {
 	expErr := fmt.Sprintf("error creating variables file %s:.*", packerAutoVarFilename)
 	c.Assert(err, ErrorMatches, expErr)
 
-	testPackerTemplateDir := filepath.Join(s.testDir, "TestWritePackerTemplate")
-	if err := os.Mkdir(testPackerTemplateDir, 0755); err != nil {
-		c.Fatalf("Failed to create test dir for creating %s file", packerAutoVarFilename)
-	}
-	err = writePackerAutovars(vars.Items(), testPackerTemplateDir)
+	// success
+	err = writePackerAutovars(vars.Items(), c.MkDir())
 	c.Assert(err, IsNil)
 
 }
