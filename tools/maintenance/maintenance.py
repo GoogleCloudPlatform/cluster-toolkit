@@ -30,8 +30,19 @@ USAGE = """
 tools/maintenance/maintenance.py -p <PROJECT_ID> [-n <regex string>] [-m]
 """
 
+UPC_MAINT_CMD = "gcloud alpha compute instances list --project={}" \
+                " --filter='upcomingMaintenance:*' --format='value(name," \
+                "upcomingMaintenance.startTimeWindow.earliest," \
+                "upcomingMaintenance.startTimeWindow.latest," \
+                "upcomingMaintenance.canReschedule,upcomingMaintenance.type)'"
+PER_MAINT_CMD = "gcloud alpha compute instances list --project={}" \
+                " --filter=scheduling.maintenanceInterval:PERIODIC " \
+                " --format='value(name)'"
+VER_CMD = "gcloud version --format='json(\"alpha\")'"
+PRJ_CMD = "gcloud projects describe {}"
+
 def check_gcloud_components() -> None:
-    cmd = "gcloud version --format='json(\"alpha\")'"
+    cmd = VER_CMD
     res = subprocess.run(cmd, shell=True, capture_output=True, text=True,
                          check=False)
     if res.returncode != 0:
@@ -45,10 +56,7 @@ def check_gcloud_components() -> None:
         raise LookupError(err_msg)
 
 def get_maintenance_nodes(project: str, regex: re = None) -> List[str]:
-    cmd = f"gcloud alpha compute instances list --project={project}" \
-            " --filter=scheduling.maintenanceInterval:PERIODIC " \
-            " --format='value(name)'"
-
+    cmd = PER_MAINT_CMD.format(project)
     res = subprocess.run(cmd, shell=True, capture_output=True, text=True,
                          check=False)
     if res.returncode != 0:
@@ -63,12 +71,7 @@ def get_maintenance_nodes(project: str, regex: re = None) -> List[str]:
     return maint_nodes
 
 def get_upcoming_maintenance(project: str, regex: re = None) -> List[str]:
-    cmd = f"gcloud alpha compute instances list --project={project}" \
-            " --filter='upcomingMaintenance:*' --format='value(name," \
-            "upcomingMaintenance.startTimeWindow.earliest," \
-            "upcomingMaintenance.startTimeWindow.latest," \
-            "upcomingMaintenance.canReschedule,upcomingMaintenance.type)'"
-
+    cmd = UPC_MAINT_CMD.format(project)
     res = subprocess.run(cmd, shell=True, capture_output=True, text=True, check=False)
     if res.returncode != 0:
         err_msg = f"Error getting upcoming maintenance list:\n{res.stderr}"
@@ -128,7 +131,7 @@ class NodeMaintenance:
 
 def node_maintenace_factory(project: str, regex: str = None,
                             run_maintenance: bool = False) -> NodeMaintenance:
-    res = subprocess.run(f"gcloud projects describe {project}", shell=True,
+    res = subprocess.run(PRJ_CMD.format(project), shell=True,
                          capture_output=True, text=True, check=False)
 
     if res.returncode != 0:
