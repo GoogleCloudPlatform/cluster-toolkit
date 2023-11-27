@@ -57,6 +57,14 @@ repos:
     files: '.*\.tf$'
     pass_filenames: false
     require_serial: true
+  - id: addlicense
+    name: addlicense
+    language: system
+    entry: addlicense
+    args: ['-c', '"Google LLC"', '-l', 'apache']
+    exclude: docs/videos/healthcare-and-life-sciences/lysozyme-example/submit.sh
+    pass_filenames: true
+
 - repo: https://github.com/dnephin/pre-commit-golang
   rev: v0.5.1
   hooks:
