@@ -14,7 +14,6 @@
 # limitations under the License.
 
 SCRIPT_COMPLETE_FILE="/run/startup_script_msg"
-WARNING_MESSAGE="** WARNING **: HPC Toolkit startup scripts have not started yet."
 
 # Ensure we're in an interactive terminal and not root
 if [ -t 1 ] && [ "$(id -u)" -ne 0 ]; then
@@ -22,10 +21,6 @@ if [ -t 1 ] && [ "$(id -u)" -ne 0 ]; then
 	if [ -s "$SCRIPT_COMPLETE_FILE" ]; then
 		echo
 		cat "$SCRIPT_COMPLETE_FILE"
-		echo
-	elif [ ! -f "$SCRIPT_COMPLETE_FILE" ]; then
-		echo
-		echo "$WARNING_MESSAGE"
 		echo
 	fi
 fi
