@@ -160,10 +160,6 @@ func TestNetworkStorage(t *testing.T) {
 func TestMetadata(t *testing.T) {
 	for _, mod := range notEmpty(query(all()), t) {
 		t.Run(mod.Source, func(t *testing.T) {
-			if (len(mod.Source) % 4) > 2 { // len is poor man's hash
-				t.Skip("TODO: apply to all modules")
-			}
-
 			mtd, err := modulereader.GetMetadata(modPath(mod.Source))
 			if err != nil {
 				t.Error(err)
@@ -179,6 +175,8 @@ func TestMetadata(t *testing.T) {
 			diff := cmp.Diff(legacy.Spec.Requirements.Services, mtd.Spec.Requirements.Services)
 			if diff != "" {
 				t.Errorf("diff (-want +got):\n%s", diff)
+				fmt.Println(filepath.Join(mod.Source, "metadata.yaml"))
+				fmt.Println(legacy.Spec.Requirements.Services)
 			}
 
 		})
