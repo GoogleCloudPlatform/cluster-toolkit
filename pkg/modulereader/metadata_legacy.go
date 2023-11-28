@@ -18,7 +18,7 @@ import (
 	"strings"
 )
 
-func legacyMetadata(source string) Metadata {
+func LegacyMetadata(source string) Metadata {
 	services := []string{}
 	if idx := strings.LastIndex(source, "community/modules/"); idx != -1 {
 		services = defaultAPIList(source[idx:])
