@@ -445,7 +445,7 @@ class ClusterUpdateView(LoginRequiredMixin, UpdateView):
 
 
 
-        # Verify formset validity (suprised there's no method to do this)
+        # Verify formset validity (surprised there's no method to do this)
         for formset, formset_name in [
             (mountpoints, "mountpoints"),
             (partitions, "partitions"),
@@ -646,7 +646,7 @@ class ClusterLogFileView(LoginRequiredMixin, StreamingFileView):
 
 
 class ClusterLogView(LoginRequiredMixin, generic.DetailView):
-    """View to diplay cluster log files"""
+    """View to display cluster log files"""
 
     model = Cluster
     template_name = "cluster/log.html"

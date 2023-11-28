@@ -29,7 +29,7 @@ including:
 ## Getting Started
 To explore the reference architecture, you should follow the these steps:
 
-Before you start, make sure your prerequisits and dependencies are set up:
+Before you start, make sure your prerequisites and dependencies are set up:
 [Set up Cloud HPC Toolkit](https://cloud.google.com/hpc-toolkit/docs/setup/configure-environment).
 
 For deploying the CAE reference blueprint follow the
@@ -79,7 +79,7 @@ storage intact and b) you can build software before you deploy your cluster.
 > - Remote Desktop Group
 >   - **40 `N1 CPUs`**
 >   - **5 `T4 GPUs`**
-> - Slurm Login & Controler VM
+> - Slurm Login & Controller VM
 >   - **24 `N2 CPUs`**
 > - Filestore
 >   - **2x `Basic SSD`**
@@ -237,7 +237,7 @@ Depending on the software you want to use, different installation paths may be r
   Please see the [HCLS Blueprint](../../docs/videos/healthcare-and-life-sciences/README.md) example
   for how the `software_installation` stage can be used to use the spack package manager
   to install all dependencies for a particular version of the software, including compiling
-  the software or its depencies from source.
+  the software or its dependencies from source.
 
   Please also see the [OpenFOAM](../../docs/tutorials/openfoam/spack-openfoam.md) example
   for how this can be used to install the OpenFOAM software.

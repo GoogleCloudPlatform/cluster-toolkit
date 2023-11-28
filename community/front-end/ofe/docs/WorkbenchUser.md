@@ -91,7 +91,7 @@ on the workbench page.
 
 It is important to remember that all data stored on the workbench instance will
 be deleted unless it has been saved in another place such as a shared
-filesystem or transferred elsewhere in another way. Once the destory button is
+filesystem or transferred elsewhere in another way. Once the destroy button is
 clicked a confirmation page will be displayed.
 
 ![Destroy confirmation](images/Workbench_userguide/destroy_confirm.png)

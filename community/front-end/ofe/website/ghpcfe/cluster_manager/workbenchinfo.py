@@ -176,7 +176,7 @@ mount slurm-{cid}-controller:/usr/local/etc/slurm /etc/slurm
         with startup_script.open("w") as f:
             f.write(
                 f"""#!/bin/bash
-echo "starting starup script at `date`" | tee -a /tmp/startup.log
+echo "starting startup script at `date`" | tee -a /tmp/startup.log
 echo "Getting username..." | tee -a /tmp/startup.log
 {startup_script_vars}
 

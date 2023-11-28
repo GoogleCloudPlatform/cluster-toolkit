@@ -5,7 +5,7 @@ Professional cluster. The following extra services are required:
 
 - an existing licensed PBS Professional Server; if provisioned in the cloud, we
   recommend using the [pbspro-server module][pbspro-server].
-- a shared filesystem mounted across all PBS hosts to faciliate file transfers
+- a shared filesystem mounted across all PBS hosts to facilitate file transfers
   for jobs and their stdin/stdout logs
 
 [pbspro-server]: ../pbspro-server/README.md

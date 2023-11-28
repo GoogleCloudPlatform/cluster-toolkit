@@ -65,7 +65,7 @@ locals {
   enable_oslogin = var.enable_oslogin == "INHERIT" ? {} : { enable-oslogin = lookup(local.oslogin_api_values, var.enable_oslogin, "") }
 
   # Network Interfaces
-  # Support for `use` input and base network paramters like `network_self_link` and `subnetwork_self_link`
+  # Support for `use` input and base network parameters like `network_self_link` and `subnetwork_self_link`
   empty_access_config = {
     nat_ip                 = null,
     public_ptr_domain_name = null,

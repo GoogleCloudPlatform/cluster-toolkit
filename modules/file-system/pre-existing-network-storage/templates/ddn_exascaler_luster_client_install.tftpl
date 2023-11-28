@@ -21,7 +21,7 @@
 # all instances must be in the same zone
 # and connected to the same network and subnet
 # to set up EXAScaler Cloud filesystem on a new client instance,
-# run the folowing commands on the client with root privileges:
+# run the following commands on the client with root privileges:
 set -e
 if [[ ! -z $(cat /proc/filesystems | grep lustre) ]]; then
   echo "Skipping lustre client install as it is already supported"
