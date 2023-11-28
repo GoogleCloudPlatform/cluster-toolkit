@@ -623,7 +623,7 @@ deployment_groups:
                 )
                 if len(mgmt_nodes) != 1:
                     logger.warning(
-                        "Found %d contoller nodes, there should be only 1",
+                        "Found %d controller nodes, there should be only 1",
                         len(mgmt_nodes),
                     )
                 if len(mgmt_nodes):

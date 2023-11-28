@@ -9,7 +9,7 @@ node is used in conjunction with the
 [Slurm controller](../SchedMD-slurm-on-gcp-controller).
 
 > **_Warning:_**: Slurm handles startup scripts differently from virtual
-> machines. This will not work in conjuntion with the
+> machines. This will not work in conjunction with the
 > [startup_script](../../../scripts/startup-script/README.md) module.
 
 [login-module]: https://github.com/SchedMD/slurm-gcp/tree/master/tf/modules/login

@@ -487,7 +487,7 @@ value is in the following priority order:
 The `outputs` field adds the output of individual Terraform modules to the
 output of its deployment group. This enables the value to be available via
 `terraform output`. This can useful for displaying the IP of a login node or
-priting instructions on how to use a module, as we have in the
+printing instructions on how to use a module, as we have in the
 [monitoring dashboard module](monitoring/dashboard/README.md#Outputs).
 
 The outputs field is a lists that it can be in either of two formats: a string

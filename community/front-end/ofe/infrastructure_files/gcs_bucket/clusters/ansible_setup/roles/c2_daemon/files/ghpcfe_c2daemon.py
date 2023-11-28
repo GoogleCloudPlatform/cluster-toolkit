@@ -692,7 +692,7 @@ def _make_run_script(job_dir, uid, gid, orig_run_script):
             )
         elif script_url.scheme in ["http", "https"]:
             if recursive_fetch:
-                logger.error("Not Implemented recursive HTTP/HTTPS fetchs")
+                logger.error("Not Implemented recursive HTTP/HTTPS fetches")
                 return None
             fetch = f"curl --silent -O '{text}'"
 

@@ -21,7 +21,7 @@
 # Get-WmiObject is deprecated and removed in Powershell 6.0+
 # https://learn.microsoft.com/en-us/powershell/scripting/whats-new/differences-from-windows-powershell?view=powershell-7#cmdlets-removed-from-powershell
 #
-# We maintain backwards compabitility with older versions of Powershell by using Get-WmiObject if available
+# We maintain backwards compatibility with older versions of Powershell by using Get-WmiObject if available
 function Get-Mgmt-Command {
     $Command = 'Get-CimInstance'
     if (Get-Command Get-WmiObject 2>&1>$null) {
@@ -100,7 +100,7 @@ function Install-Driver {
         New-Item -Path 'C:\' -Name 'NVIDIA-Driver' -ItemType 'directory' | Out-Null
     }
 
-    # Download the file to a specfied directory
+    # Download the file to a specified directory
     Invoke-WebRequest $url -OutFile $file_dir
 
     # Install the file with the specified path from earlier as well as the RunAs admin option

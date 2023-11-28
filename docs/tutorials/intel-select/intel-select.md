@@ -131,7 +131,7 @@ startup script to complete.
 
 > _`Slurm is currently being configured in the background`_
 
-Running the folowing command will allow monitoring the startup scripts on the controller:
+Running the following command will allow monitoring the startup scripts on the controller:
 
 ```bash
 gcloud compute instances get-serial-port-output --port 1 --zone us-central1-c --project <walkthrough-project-id/> slurm-hpc-intel-select-controller | grep startup-script
@@ -205,7 +205,7 @@ not have sufficient quota for C2 instances in your region.
 clck -F intel_hpc_platform_compat-hpc-2018.0
 ```
 
-Notice this job took ~2-3 minutes to start, since all compute nodes have to install the packages at boot time. In a real production system, this would be part of the slurm image (wich is also possible with the HPC Toolkit).
+Notice this job took ~2-3 minutes to start, since all compute nodes have to install the packages at boot time. In a real production system, this would be part of the slurm image (which is also possible with the HPC Toolkit).
 
 Since we used the compute partition, the job ran on [Compute Optimized
 instances](https://cloud.google.com/compute/docs/compute-optimized-machines),

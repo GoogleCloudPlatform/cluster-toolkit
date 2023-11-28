@@ -157,7 +157,7 @@ def generate_vpc_tf_datablock(vpc: VirtualNetwork, target_dir: Path) -> Path:
         key = "name"
     else:
         raise NotImplementedError(
-            f"Cloud Provider {vpc.cloud_provider} not yet implmeneted"
+            f"Cloud Provider {vpc.cloud_provider} not yet implemented"
         )
     with output_file.open("w") as fp:
         fp.write(
@@ -180,7 +180,7 @@ def generate_subnet_tf_datablock(
         key = "name"
     else:
         raise NotImplementedError(
-            f"Cloud Provider {subnet.cloud_provider} not yet implmeneted"
+            f"Cloud Provider {subnet.cloud_provider} not yet implemented"
         )
     with output_file.open("w") as fp:
         fp.write(

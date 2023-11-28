@@ -175,7 +175,7 @@ main() {
 		fi
 	fi
 
-	# Upgrade pip if necesary
+	# Upgrade pip if necessary
 	# Only run if OS is not Debian 12 - Debian 12 does not allow for system level pip installs
 	if [ ! -f /etc/debian_version ] || [ "$(lsb_release -a 2>/dev/null | sed -n 's/Release:\s\+\([0-9]\+\).\?.*/\1/p')" -ne "12" ]; then
 		pip_version=$(${python_path} -m pip --version | sed -nr 's/^pip ([0-9]+\.[0-9]+).*$/\1/p')
@@ -189,7 +189,7 @@ main() {
 	${python_path} -m venv "${venv_path}"
 	venv_python_path=${venv_path}/bin/python3
 
-	# Upgrade pip if necesary
+	# Upgrade pip if necessary
 	pip_version=$(${venv_python_path} -m pip --version | sed -nr 's/^pip ([0-9]+\.[0-9]+).*$/\1/p')
 	pip_major_version=$(echo "${pip_version}" | cut -d '.' -f 1)
 	if [ "${pip_major_version}" -lt "${REQ_PIP_MAJOR_VERSION}" ]; then

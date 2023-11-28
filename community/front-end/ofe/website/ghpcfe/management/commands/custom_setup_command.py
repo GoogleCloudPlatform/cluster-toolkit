@@ -82,4 +82,4 @@ class Command(BaseCommand):
                 socialapp.save()
                 socialapp.sites.add(site)
         except Exception as err:
-            raise CommandError("Initalization failed.") from err
+            raise CommandError("Initialization failed.") from err
