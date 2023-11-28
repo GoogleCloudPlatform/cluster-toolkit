@@ -160,7 +160,7 @@ func TestNetworkStorage(t *testing.T) {
 func TestMetadata(t *testing.T) {
 	for _, mod := range notEmpty(query(all()), t) {
 		t.Run(mod.Source, func(t *testing.T) {
-			if (len(mod.Source) % 4) > 1 { // len is poor man's hash
+			if (len(mod.Source) % 4) > 2 { // len is poor man's hash
 				t.Skip("TODO: apply to all modules")
 			}
 
