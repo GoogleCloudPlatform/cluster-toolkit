@@ -155,7 +155,7 @@ class CredentialViewSet(viewsets.ModelViewSet):
 
 
 class CredentialValidateAPIView(APIView):
-    """Validte credential against cloud platform"""
+    """Validate credential against cloud platform"""
 
     def post(self, request):
         credential = request.data.__getitem__("detail").rstrip()

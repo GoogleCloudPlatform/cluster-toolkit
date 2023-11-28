@@ -246,7 +246,7 @@ def get_region_zone_info(cloud_provider, credentials):
     if cloud_provider == "GCP":
         return _get_gcp_region_zone_info(credentials, ttl_hash=_get_ttl_hash())
     else:
-        raise Exception("Unsupport Cloud Provider")
+        raise Exception("Unsupported Cloud Provider")
 
 
 def _get_gcp_subnets(credentials):
@@ -274,7 +274,7 @@ def get_subnets(cloud_provider, credentials):
     if cloud_provider == "GCP":
         return _get_gcp_subnets(credentials)
     else:
-        raise Exception("Unsupport Cloud Provider")
+        raise Exception("Unsupported Cloud Provider")
 
 
 _gcp_services_list = None
@@ -585,7 +585,7 @@ def get_gcp_workbench_region_zone_info(
 
 
 def get_gcp_filestores(credentials):
-    """Returns an array of Filestore instance informations
+    """Returns an array of Filestore instance information
     E.g.
     [
       {'createTime': ...,

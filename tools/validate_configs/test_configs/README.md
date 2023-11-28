@@ -29,7 +29,7 @@ cluster that includes 2 filestore (/home and /shared), two license servers, a
 head-node and 2 compute vms
 
 **hpc-cluster-slurm.yaml**: Creates a basic auto-scaling SLURM cluster with 2
-SLURM patitions and primarily default settings. The blueprint also creates a new
+SLURM partitions and primarily default settings. The blueprint also creates a new
 VPC network, a filestore instance mounted to `/home` and a workstation VM.
 
 **omnia-cluster-simple.yaml**: Creates a SLURM cluster using

@@ -141,7 +141,7 @@ func createGroupDirs(deploymentPath string, deploymentGroups *[]config.Deploymen
 //     = packer    => <mod.ID>/<package_subdir>
 //   - packer
 //     => <mod.ID>
-//   - embedded (source starts with "modules" or "comunity/modules")
+//   - embedded (source starts with "modules" or "community/modules")
 //     => ./modules/embedded/<mod.Source>
 //   - other
 //     => ./modules/<basename(mod.Source)>-<hash(abs(mod.Source))>

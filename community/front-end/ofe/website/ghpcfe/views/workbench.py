@@ -265,7 +265,7 @@ class WorkbenchUpdate(LoginRequiredMixin, UpdateView):
         context = self.get_context_data()
         workbenchmountpoints = context["mountpoints_formset"]
 
-        # Verify formset validity (suprised there's no method to do this)
+        # Verify formset validity (surprised there's no method to do this)
         for formset in workbenchmountpoints:
             if not formset.is_valid():
                 for error in formset.errors:

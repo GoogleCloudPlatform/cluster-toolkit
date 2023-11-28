@@ -161,7 +161,7 @@ variable "network_storage" {
 }
 
 variable "native_batch_mounting" {
-  description = "Batch can mount some fs_type nativly using the 'volumes' block in the job file. If set to false, all mounting will happen through HPC Toolkit starup scripts."
+  description = "Batch can mount some fs_type nativly using the 'volumes' block in the job file. If set to false, all mounting will happen through HPC Toolkit startup scripts."
   type        = bool
   default     = true
 }

@@ -195,7 +195,7 @@ func execPath() string {
 		// "simplification" of `ghpc` to `./ghpc`
 		return nice
 	}
-	// Code bellow assumes that `args0` contains path to file, not a
+	// Code below assumes that `args0` contains path to file, not a
 	// executable name from PATH.
 
 	{ // Find shortest & nicest form of args0

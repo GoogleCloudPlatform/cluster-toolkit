@@ -387,7 +387,7 @@ def main():
     # The name of the managed instance group.
     scaler.instance_group_manager = args.g  # Ex: 'condor-compute-igm'
 
-    # Default number of cores per intance, will be replaced with actual value
+    # Default number of cores per instance, will be replaced with actual value
     scaler.cores_per_node = 4
 
     # Default number of running instances that the managed instance group should maintain at any given time. This number will go up and down based on the load (number of jobs in the queue)

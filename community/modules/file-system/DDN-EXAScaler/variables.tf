@@ -205,7 +205,7 @@ variable "boot" {
 variable "image" {
   description = "DEPRECATED: Source image properties"
   type        = any
-  # Ommiting type checking so validation can provide more useful error message
+  # Omitting type checking so validation can provide more useful error message
   # type = object({
   #   project = string
   #   family  = string

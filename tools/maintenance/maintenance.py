@@ -169,7 +169,7 @@ if __name__ == "__main__":
     parser.add_argument("-v", "--vm_regex",
                         help="Regular expression search for nodes")
     parser.add_argument("-m", "--print_periodic_vms", action="store_true",
-                        help="Disply nodes that have periodic" \
+                        help="Display nodes that have periodic" \
                              " maintenance setup")
 
     if len(sys.argv)==1:
