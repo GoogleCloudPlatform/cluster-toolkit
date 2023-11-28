@@ -177,7 +177,7 @@ func (s *MySuite) TestPrepDepDir_OverwriteRealDep(c *C) {
 	c.Check(len(files1) > 0, Equals, true)
 
 	files2, _ := os.ReadDir(depDir)
-	c.Check(len(files2), Equals, 3) // .ghpc, .gitignore, and instructions file
+	c.Check(files2, HasLen, 3) // .ghpc, .gitignore, and instructions file
 }
 
 func (s *zeroSuite) TestIsSubset(c *C) {
@@ -339,79 +339,78 @@ func (s *MySuite) TestRestoreTfState(c *C) {
 func (s *zeroSuite) TestGetTypeTokens(c *C) {
 	// Success Integer
 	tok := getTypeTokens(cty.NumberIntVal(-1))
-	c.Assert(len(tok), Equals, 1)
+	c.Assert(tok, HasLen, 1)
 	c.Assert(string(tok[0].Bytes), Equals, string([]byte("number")))
 
 	tok = getTypeTokens(cty.NumberIntVal(0))
-	c.Assert(len(tok), Equals, 1)
+	c.Assert(tok, HasLen, 1)
 	c.Assert(string(tok[0].Bytes), Equals, string([]byte("number")))
 
 	tok = getTypeTokens(cty.NumberIntVal(1))
-	c.Assert(len(tok), Equals, 1)
+	c.Assert(tok, HasLen, 1)
 	c.Assert(string(tok[0].Bytes), Equals, string([]byte("number")))
 
 	// Success Float
 	tok = getTypeTokens(cty.NumberFloatVal(-99.9))
-	c.Assert(len(tok), Equals, 1)
+	c.Assert(tok, HasLen, 1)
 	c.Assert(string(tok[0].Bytes), Equals, string([]byte("number")))
 
 	tok = getTypeTokens(cty.NumberFloatVal(99.9))
-	c.Assert(len(tok), Equals, 1)
+	c.Assert(tok, HasLen, 1)
 	c.Assert(string(tok[0].Bytes), Equals, string([]byte("number")))
 
 	// Success String
 	tok = getTypeTokens(cty.StringVal("Lorum"))
-	c.Assert(len(tok), Equals, 1)
+	c.Assert(tok, HasLen, 1)
 	c.Assert(string(tok[0].Bytes), Equals, string([]byte("string")))
 
 	tok = getTypeTokens(cty.StringVal(""))
-	c.Assert(len(tok), Equals, 1)
+	c.Assert(tok, HasLen, 1)
 	c.Assert(string(tok[0].Bytes), Equals, string([]byte("string")))
 
 	// Success Bool
 	tok = getTypeTokens(cty.BoolVal(true))
-	c.Assert(len(tok), Equals, 1)
+	c.Assert(tok, HasLen, 1)
 	c.Assert(string(tok[0].Bytes), Equals, string([]byte("bool")))
 
 	tok = getTypeTokens(cty.BoolVal(false))
-	c.Assert(len(tok), Equals, 1)
+	c.Assert(tok, HasLen, 1)
 	c.Assert(string(tok[0].Bytes), Equals, string([]byte("bool")))
 
 	// Success tuple
 	tok = getTypeTokens(cty.TupleVal([]cty.Value{}))
-	c.Assert(len(tok), Equals, 1)
+	c.Assert(tok, HasLen, 1)
 	c.Assert(string(tok[0].Bytes), Equals, string([]byte("list")))
 
 	tok = getTypeTokens(cty.TupleVal([]cty.Value{cty.StringVal("Lorum")}))
-	c.Assert(len(tok), Equals, 1)
+	c.Assert(tok, HasLen, 1)
 	c.Assert(string(tok[0].Bytes), Equals, string([]byte("list")))
 
 	// Success list
 	tok = getTypeTokens(cty.ListVal([]cty.Value{cty.StringVal("Lorum")}))
-	c.Assert(len(tok), Equals, 1)
+	c.Assert(tok, HasLen, 1)
 	c.Assert(string(tok[0].Bytes), Equals, string([]byte("list")))
 
 	// Success object
 	tok = getTypeTokens(cty.ObjectVal(map[string]cty.Value{}))
-	c.Assert(len(tok), Equals, 1)
+	c.Assert(tok, HasLen, 1)
 	c.Assert(string(tok[0].Bytes), Equals, string([]byte("any")))
 
 	val := cty.ObjectVal(map[string]cty.Value{"Lorum": cty.StringVal("Ipsum")})
 	tok = getTypeTokens(val)
-	c.Assert(len(tok), Equals, 1)
+	c.Assert(tok, HasLen, 1)
 	c.Assert(string(tok[0].Bytes), Equals, string([]byte("any")))
 
 	// Success Map
 	val = cty.MapVal(map[string]cty.Value{"Lorum": cty.StringVal("Ipsum")})
 	tok = getTypeTokens(val)
-	c.Assert(len(tok), Equals, 1)
+	c.Assert(tok, HasLen, 1)
 	c.Assert(string(tok[0].Bytes), Equals, string([]byte("any")))
 
 	// Success any
 	tok = getTypeTokens(cty.NullVal(cty.DynamicPseudoType))
-	c.Assert(len(tok), Equals, 1)
+	c.Assert(tok, HasLen, 1)
 	c.Assert(string(tok[0].Bytes), Equals, string([]byte("any")))
-
 }
 
 func (s *MySuite) TestCreateBaseFile(c *C) {
