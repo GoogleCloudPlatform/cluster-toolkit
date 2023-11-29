@@ -85,12 +85,14 @@ func (s *MySuite) TestCheckWritableDir(c *C) {
 }
 
 func (s *MySuite) TestMergeMapsWithoutLoss(c *C) {
-	m1 := map[string]int{"foo": 0}
-	m2 := map[string]int{"bar": 1}
+	t := map[string]int{"foo": 0}
+	f := map[string]int{"bar": 1}
 
-	mergeMapsWithoutLoss(m1, m2)
+	c.Check(mergeMapsWithoutLoss(t, f), IsNil)
+	c.Check(f, DeepEquals, map[string]int{"bar": 1})
+	c.Check(t, DeepEquals, map[string]int{"foo": 0, "bar": 1})
 
-	c.Assert(func() { mergeMapsWithoutLoss(m1, m1) }, PanicMatches, "unexpected key collision in maps")
+	c.Check(mergeMapsWithoutLoss(t, f), ErrorMatches, "duplicate key bar")
 }
 
 func (s *MySuite) TestValidateDeploymentDirectory(c *C) {
