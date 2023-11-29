@@ -476,16 +476,17 @@ func (s *MySuite) TestOutputNamesByGroup(c *C) {
 	dc := s.getMultiGroupDeploymentConfig()
 	dc.applyGlobalVariables()
 	dc.applyUseModules()
+	bp := dc.Config
 
-	group0 := dc.Config.DeploymentGroups[0]
+	group0 := bp.DeploymentGroups[0]
 	mod0 := group0.Modules[0]
-	group1 := dc.Config.DeploymentGroups[1]
+	group1 := bp.DeploymentGroups[1]
 
-	outputNamesGroup0, err := OutputNamesByGroup(group0, dc)
+	outputNamesGroup0, err := OutputNamesByGroup(group0, bp)
 	c.Assert(err, IsNil)
 	c.Assert(outputNamesGroup0, DeepEquals, map[GroupName][]string{})
 
-	outputNamesGroup1, err := OutputNamesByGroup(group1, dc)
+	outputNamesGroup1, err := OutputNamesByGroup(group1, bp)
 	c.Assert(err, IsNil)
 	c.Assert(outputNamesGroup1, DeepEquals, map[GroupName][]string{
 		group0.Name: {AutomaticOutputName("test_inter_0", mod0.ID)},
