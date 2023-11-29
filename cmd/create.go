@@ -24,6 +24,7 @@ import (
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/modulewriter"
 	"hpc-toolkit/pkg/validators"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -81,7 +82,8 @@ func runCreateCmd(cmd *cobra.Command, args []string) {
 	deplName, err := dc.Config.DeploymentName()
 	checkErr(err)
 	deplDir := filepath.Join(outputDir, deplName)
-	checkErr(modulewriter.WriteDeployment(dc, deplDir, overwriteDeployment))
+	checkErr(checkOverwriteAllowed(deplDir, dc.Config, overwriteDeployment))
+	checkErr(modulewriter.WriteDeployment(dc, deplDir))
 
 	logging.Info("To deploy your infrastructure please run:")
 	logging.Info("")
@@ -285,4 +287,42 @@ func filterYaml(cmd *cobra.Command, args []string, toComplete string) ([]string,
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
 	return []string{"yaml", "yml"}, cobra.ShellCompDirectiveFilterFileExt
+}
+
+// Determines if overwrite is allowed
+func checkOverwriteAllowed(depDir string, bp config.Blueprint, overwriteFlag bool) error {
+	if _, err := os.Stat(depDir); os.IsNotExist(err) {
+		return nil // all good, no previous deployment
+	}
+
+	useWErr := fmt.Errorf("deployment folder %q already exists, use -w to overwrite", depDir)
+	// try to get previous deployment
+	expPath := filepath.Join(modulewriter.ArtifactsDir(depDir), modulewriter.ExpandedBlueprintName)
+	prev, _, err := config.NewDeploymentConfig(expPath)
+	if err != nil { // malformed previous deployment, rely on flag
+		if overwriteFlag {
+			return nil
+		}
+		return useWErr
+	}
+
+	newGroups := map[config.GroupName]bool{}
+	for _, g := range bp.DeploymentGroups {
+		newGroups[g.Name] = true
+	}
+
+	for _, g := range prev.Config.DeploymentGroups {
+		if !newGroups[g.Name] {
+			return fmt.Errorf("you are attempting to remove a deployment group %q, which is not supported", g.Name)
+		}
+	}
+
+	if prev.Config.GhpcVersion != bp.GhpcVersion {
+		logging.Info("WARNING: ghpc_version has changed from %q to %q", prev.Config.GhpcVersion, bp.GhpcVersion)
+	}
+
+	if !overwriteFlag {
+		return useWErr
+	}
+	return nil
 }

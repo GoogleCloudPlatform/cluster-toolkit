@@ -17,6 +17,9 @@ package cmd
 import (
 	"errors"
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/modulewriter"
+	"os"
+	"path/filepath"
 
 	"github.com/zclconf/go-cty/cty"
 	. "gopkg.in/check.v1"
@@ -163,4 +166,50 @@ func (s *MySuite) TestValidateMaybeDie(c *C) {
 	}
 	ctx, _ := config.NewYamlCtx([]byte{})
 	validateMaybeDie(bp, ctx) // smoke test
+}
+
+func (s *MySuite) TestIsOverwriteAllowed_Absent(c *C) {
+	testDir := c.MkDir()
+	depDir := filepath.Join(testDir, "casper")
+
+	bp := config.Blueprint{}
+	c.Check(checkOverwriteAllowed(depDir, bp, false /*overwriteFlag*/), IsNil)
+	c.Check(checkOverwriteAllowed(depDir, bp, true /*overwriteFlag*/), IsNil)
+}
+
+func (s *MySuite) TestIsOverwriteAllowed_Malformed(c *C) {
+	depDir := c.MkDir() // empty deployment folder considered malformed
+
+	bp := config.Blueprint{}
+	c.Check(checkOverwriteAllowed(depDir, bp, false /*overwriteFlag*/), ErrorMatches, ".* already exists, use -w to overwrite")
+	c.Check(checkOverwriteAllowed(depDir, bp, true /*overwriteFlag*/), IsNil)
+}
+
+func (s *MySuite) TestIsOverwriteAllowed_Present(c *C) {
+	depDir := c.MkDir()
+	artDir := modulewriter.ArtifactsDir(depDir)
+	if err := os.MkdirAll(artDir, 0755); err != nil {
+		c.Fatal(err)
+	}
+
+	prev := config.DeploymentConfig{
+		Config: config.Blueprint{
+			DeploymentGroups: []config.DeploymentGroup{
+				{Name: "isildur"}}}}
+	if err := prev.ExportBlueprint(filepath.Join(artDir, "expanded_blueprint.yaml")); err != nil {
+		c.Fatal(err)
+	}
+
+	super := config.Blueprint{
+		DeploymentGroups: []config.DeploymentGroup{
+			{Name: "isildur"},
+			{Name: "elendil"}}}
+	c.Check(checkOverwriteAllowed(depDir, super, false /*overwriteFlag*/), ErrorMatches, ".* already exists, use -w to overwrite")
+	c.Check(checkOverwriteAllowed(depDir, super, true /*overwriteFlag*/), IsNil)
+
+	sub := config.Blueprint{
+		DeploymentGroups: []config.DeploymentGroup{
+			{Name: "aragorn"}}}
+	c.Check(checkOverwriteAllowed(depDir, sub, false /*overwriteFlag*/), ErrorMatches, `.*remove a deployment group "isildur".*`)
+	c.Check(checkOverwriteAllowed(depDir, sub, true /*overwriteFlag*/), ErrorMatches, `.*remove a deployment group "isildur".*`)
 }

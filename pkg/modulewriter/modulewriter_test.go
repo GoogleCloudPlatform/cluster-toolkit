@@ -108,10 +108,10 @@ func Test(t *testing.T) {
 
 func isDeploymentDirPrepped(depDirectoryPath string) error {
 	if _, err := os.Stat(depDirectoryPath); os.IsNotExist(err) {
-		return fmt.Errorf("deloyment dir does not exist: %s: %w", depDirectoryPath, err)
+		return fmt.Errorf("deployment dir does not exist: %s: %w", depDirectoryPath, err)
 	}
 
-	ghpcDir := filepath.Join(depDirectoryPath, HiddenGhpcDirName)
+	ghpcDir := filepath.Join(depDirectoryPath, ".ghpc")
 	if _, err := os.Stat(ghpcDir); os.IsNotExist(err) {
 		return fmt.Errorf(".ghpc working dir does not exist: %s: %w", ghpcDir, err)
 	}
@@ -125,22 +125,14 @@ func isDeploymentDirPrepped(depDirectoryPath string) error {
 }
 
 func (s *MySuite) TestPrepDepDir(c *C) {
-
 	depDir := filepath.Join(s.testDir, "dep_prep_test_dir")
 
 	// Prep a dir that does not yet exist
-	err := prepDepDir(depDir, false /* overwrite */)
-	c.Check(err, IsNil)
+	c.Check(prepDepDir(depDir), IsNil)
 	c.Check(isDeploymentDirPrepped(depDir), IsNil)
 
-	// Prep of existing dir fails with overwrite set to false
-	err = prepDepDir(depDir, false /* overwrite */)
-	var e *OverwriteDeniedError
-	c.Check(errors.As(err, &e), Equals, true)
-
-	// Prep of existing dir succeeds when overwrite set true
-	err = prepDepDir(depDir, true) /* overwrite */
-	c.Check(err, IsNil)
+	// Prep of existing dir succeeds
+	c.Check(prepDepDir(depDir), IsNil)
 	c.Check(isDeploymentDirPrepped(depDir), IsNil)
 }
 
@@ -151,63 +143,23 @@ func (s *MySuite) TestPrepDepDir_OverwriteRealDep(c *C) {
 	depDir := filepath.Join(s.testDir, "test_prep_dir")
 
 	// writes a full deployment w/ actual resource groups
-	WriteDeployment(testDC, depDir, false /* overwrite */)
+	WriteDeployment(testDC, depDir)
 
 	// confirm existence of resource groups (beyond .ghpc dir)
 	files, _ := os.ReadDir(depDir)
 	c.Check(len(files) > 1, Equals, true)
 
-	err := prepDepDir(depDir, true /* overwrite */)
+	err := prepDepDir(depDir)
 	c.Check(err, IsNil)
 	c.Check(isDeploymentDirPrepped(depDir), IsNil)
 
 	// Check prev resource groups were moved
-	prevModuleDir := filepath.Join(depDir, HiddenGhpcDirName, prevDeploymentGroupDirName)
+	prevModuleDir := filepath.Join(depDir, ".ghpc", prevDeploymentGroupDirName)
 	files1, _ := os.ReadDir(prevModuleDir)
 	c.Check(len(files1) > 0, Equals, true)
 
 	files2, _ := os.ReadDir(depDir)
 	c.Check(files2, HasLen, 3) // .ghpc, .gitignore, and instructions file
-}
-
-func (s *zeroSuite) TestIsSubset(c *C) {
-	baseConfig := []string{"group1", "group2", "group3"}
-	subsetConfig := []string{"group1", "group2"}
-	swapConfig := []string{"group1", "group4", "group3"}
-	c.Check(isSubset(subsetConfig, baseConfig), Equals, true)
-	c.Check(isSubset(baseConfig, subsetConfig), Equals, false)
-	c.Check(isSubset(baseConfig, swapConfig), Equals, false)
-}
-
-func (s *MySuite) TestIsOverwriteAllowed(c *C) {
-	depDir := filepath.Join(s.testDir, "overwrite_test")
-	ghpcDir := filepath.Join(depDir, HiddenGhpcDirName)
-	module1 := filepath.Join(depDir, "group1")
-	module2 := filepath.Join(depDir, "group2")
-	os.MkdirAll(ghpcDir, 0755)
-	os.MkdirAll(module1, 0755)
-	os.MkdirAll(module2, 0755)
-
-	supersetConfig := config.Blueprint{
-		DeploymentGroups: []config.DeploymentGroup{
-			{Name: "group1"},
-			{Name: "group2"},
-			{Name: "group3"},
-		},
-	}
-	swapConfig := config.Blueprint{
-		DeploymentGroups: []config.DeploymentGroup{
-			{Name: "group1"},
-			{Name: "group4"},
-		},
-	}
-
-	// overwrite allowed when new resource group is added
-	c.Check(isOverwriteAllowed(depDir, &supersetConfig, true /* overwriteFlag */), Equals, true)
-	// overwrite fails when resource group is deleted
-	c.Check(isOverwriteAllowed(depDir, &swapConfig, true /* overwriteFlag */), Equals, false)
-	// overwrite fails when overwrite is false
-	c.Check(isOverwriteAllowed(depDir, &supersetConfig, false /* overwriteFlag */), Equals, false)
 }
 
 // modulewriter.go
@@ -222,14 +174,9 @@ func (s *MySuite) TestWriteDeployment(c *C) {
 	dc := s.getDeploymentConfigForTest()
 	dir := filepath.Join(s.testDir, "test_write_deployment")
 
-	err := WriteDeployment(dc, dir, false /* overwriteFlag */)
-	c.Check(err, IsNil)
-	// Overwriting the deployment fails
-	err = WriteDeployment(dc, dir, false /* overwriteFlag */)
-	c.Check(err, NotNil)
-	// Overwriting the deployment succeeds with flag
-	err = WriteDeployment(dc, dir, true /* overwriteFlag */)
-	c.Check(err, IsNil)
+	c.Check(WriteDeployment(dc, dir), IsNil)
+	// Overwriting the deployment succeeds
+	c.Check(WriteDeployment(dc, dir), IsNil)
 }
 
 func (s *MySuite) TestCreateGroupDirs(c *C) {
@@ -299,8 +246,7 @@ func (s *MySuite) TestRestoreTfState(c *C) {
 	depDir := filepath.Join(s.testDir, "test_restore_state")
 	deploymentGroupName := "fake_resource_group"
 
-	prevDeploymentGroup := filepath.Join(
-		depDir, HiddenGhpcDirName, prevDeploymentGroupDirName, deploymentGroupName)
+	prevDeploymentGroup := filepath.Join(HiddenGhpcDir(depDir), prevDeploymentGroupDirName, deploymentGroupName)
 	curDeploymentGroup := filepath.Join(depDir, deploymentGroupName)
 	prevStateFile := filepath.Join(prevDeploymentGroup, tfStateFileName)
 	prevBuStateFile := filepath.Join(prevDeploymentGroup, tfStateBackupFileName)
