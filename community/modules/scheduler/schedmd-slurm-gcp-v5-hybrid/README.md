@@ -181,7 +181,7 @@ No providers.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_slurm_controller_instance"></a> [slurm\_controller\_instance](#module\_slurm\_controller\_instance) | github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_controller_hybrid | 5.9.1 |
+| <a name="module_slurm_controller_instance"></a> [slurm\_controller\_instance](#module\_slurm\_controller\_instance) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_controller_hybrid | 5.9.1 |
 
 ## Resources
 
