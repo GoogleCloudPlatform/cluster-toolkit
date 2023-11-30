@@ -74,13 +74,11 @@ repos:
   - id: go-cyclo
     args: [-over=15]
   - id: go-unit-tests
-  - id: go-build
   - id: go-mod-tidy
 - repo: https://github.com/tekwizely/pre-commit-golang
   rev: v1.0.0-rc.1
   hooks:
   - id: go-critic
-    args: [-disable, "#experimental,sloppyTypeAssert"]
 - repo: https://github.com/Bahjat/pre-commit-golang
   rev: v1.0.2
   hooks:
