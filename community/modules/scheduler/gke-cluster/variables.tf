@@ -270,3 +270,21 @@ variable "service_account" {
     error_message = "service_account is deprecated and replaced with service_account_email and scopes."
   }
 }
+variable "kubernetes_labels" {
+  description = <<-EOT
+  Kubernetes labels to be applied to each node in the node group. Key-value pairs. 
+  (The `kubernetes.io/` and `k8s.io/` prefixes are reserved by Kubernetes Core components and cannot be specified)
+  EOT
+  type        = map(string)
+  default     = null
+}
+variable "image_type" {
+  description = "The default image type used by NAP once a new node pool is being created. Use either COS_CONTAINERD or UBUNTU_CONTAINERD."
+  type        = string
+  default     = "COS_CONTAINERD"
+}
+variable "enable_secure_boot" {
+  description = "Enable secure boot for the nodes.  Keep enabled unless custom kernel modules need to be loaded. See [here](https://cloud.google.com/compute/shielded-vm/docs/shielded-vm#secure-boot) for more info."
+  type        = bool
+  default     = true
+}

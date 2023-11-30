@@ -195,6 +195,7 @@ resource "google_container_node_pool" "system_node_pools" {
   }
 
   node_config {
+    labels          = var.kubernetes_labels
     resource_labels = local.labels
     service_account = var.service_account_email
     oauth_scopes    = var.service_account_scopes
@@ -209,15 +210,15 @@ resource "google_container_node_pool" "system_node_pools" {
     #
     # We use COS_CONTAINERD to be compatible with (optional) gVisor.
     # https://cloud.google.com/kubernetes-engine/docs/how-to/sandbox-pods
-    image_type = "COS_CONTAINERD"
+    image_type = var.image_type
 
     shielded_instance_config {
-      enable_secure_boot          = true
+      enable_secure_boot          = var.enable_secure_boot
       enable_integrity_monitoring = true
     }
 
     gvnic {
-      enabled = true
+      enabled = var.image_type == "COS_CONTAINERD"
     }
 
     # Implied by Workload Identity
