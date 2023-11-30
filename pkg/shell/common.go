@@ -24,7 +24,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"golang.org/x/exp/maps"
 	"golang.org/x/sys/unix"
 )
 
@@ -58,12 +57,14 @@ func intersectMapKeys[K comparable, T any](s []K, m map[K]T) map[K]T {
 	return intersection
 }
 
-func mergeMapsWithoutLoss[K comparable, V any](m1 map[K]V, m2 map[K]V) {
-	expectedLength := len(m1) + len(m2)
-	maps.Copy(m1, m2)
-	if len(m1) != expectedLength {
-		panic(fmt.Errorf("unexpected key collision in maps"))
+func mergeMapsWithoutLoss[K comparable, V any](to map[K]V, from map[K]V) error {
+	for k, v := range from {
+		if _, ok := to[k]; ok {
+			return fmt.Errorf("duplicate key %v", k)
+		}
+		to[k] = v
 	}
+	return nil
 }
 
 // DirInfo reports if path is a directory and new files can be written in it

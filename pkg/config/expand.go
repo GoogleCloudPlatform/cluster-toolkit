@@ -444,22 +444,23 @@ func (dg DeploymentGroup) OutputNames() []string {
 
 // OutputNamesByGroup returns the outputs from prior groups that match input
 // names for this group as a map
-func OutputNamesByGroup(g DeploymentGroup, dc DeploymentConfig) (map[GroupName][]string, error) {
-	refs := g.FindAllIntergroupReferences(dc.Config)
-	inputNames := make([]string, len(refs))
+func OutputNamesByGroup(g DeploymentGroup, bp Blueprint) (map[GroupName][]string, error) {
+	refs := g.FindAllIntergroupReferences(bp)
+	inputs := make([]string, len(refs))
 	for i, ref := range refs {
-		inputNames[i] = AutomaticOutputName(ref.Name, ref.Module)
+		inputs[i] = AutomaticOutputName(ref.Name, ref.Module)
 	}
 
-	i := dc.Config.GroupIndex(g.Name)
+	i := bp.GroupIndex(g.Name)
 	if i == -1 {
 		return nil, fmt.Errorf("group %s not found in blueprint", g.Name)
 	}
-	outputNamesByGroup := make(map[GroupName][]string)
-	for _, g := range dc.Config.DeploymentGroups[:i] {
-		outputNamesByGroup[g.Name] = intersection(inputNames, g.OutputNames())
+
+	res := make(map[GroupName][]string)
+	for _, pg := range bp.DeploymentGroups[:i] {
+		res[pg.Name] = intersection(inputs, pg.OutputNames())
 	}
-	return outputNamesByGroup, nil
+	return res, nil
 }
 
 // return sorted list of elements common to s1 and s2
