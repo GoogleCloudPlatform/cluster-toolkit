@@ -15,20 +15,10 @@
 package sourcereader
 
 import (
-	"fmt"
-	"log"
-	"os"
-	"path/filepath"
+	"embed"
 	"testing"
-	"time"
 
 	. "gopkg.in/check.v1"
-)
-
-var (
-	testDir      string
-	terraformDir string
-	packerDir    string
 )
 
 const (
@@ -36,38 +26,18 @@ const (
 	tfKindString  = "terraform"
 )
 
-// Setup GoCheck
-type MySuite struct{}
+//go:embed modules
+var testEmbeddedFS embed.FS
 
-var _ = Suite(&MySuite{})
+type zeroSuite struct{}
+
+var _ = Suite(&zeroSuite{})
 
 func Test(t *testing.T) {
 	TestingT(t)
 }
 
-func setup() {
-	t := time.Now()
-	dirName := fmt.Sprintf("ghpc_sourcereader_test_%s", t.Format(time.RFC3339))
-	dir, err := os.MkdirTemp("", dirName)
-	if err != nil {
-		log.Fatalf("sourcereader_test: %v", err)
-	}
-	testDir = dir
-}
-
-func teardown() {
-	os.RemoveAll(testDir)
-}
-
-func TestMain(m *testing.M) {
-	setup()
-	createTmpModule()
-	code := m.Run()
-	teardown()
-	os.Exit(code)
-}
-
-func (s *MySuite) TestIsEmbeddedPath(c *C) {
+func (s *zeroSuite) TestIsEmbeddedPath(c *C) {
 	// True: Is an embedded path
 	ret := IsEmbeddedPath("modules/anything/else")
 	c.Assert(ret, Equals, true)
@@ -87,7 +57,7 @@ func (s *MySuite) TestIsEmbeddedPath(c *C) {
 	c.Assert(ret, Equals, false)
 }
 
-func (s *MySuite) TestIsLocalPath(c *C) {
+func (s *zeroSuite) TestIsLocalPath(c *C) {
 	// False: Embedded Path
 	ret := IsLocalPath("modules/anything/else")
 	c.Assert(ret, Equals, false)
@@ -107,7 +77,7 @@ func (s *MySuite) TestIsLocalPath(c *C) {
 	c.Assert(ret, Equals, false)
 }
 
-func (s *MySuite) TestIsRemotePath(c *C) {
+func (s *zeroSuite) TestIsRemotePath(c *C) {
 	// False: Is an embedded path
 	ret := IsRemotePath("modules/anything/else")
 	c.Check(ret, Equals, false)
@@ -135,25 +105,9 @@ func (s *MySuite) TestIsRemotePath(c *C) {
 	c.Check(ret, Equals, true)
 }
 
-func (s *MySuite) TestFactory(c *C) {
+func (s *zeroSuite) TestFactory(c *C) {
 	c.Check(Factory("./modules/anything/else"), FitsTypeOf, LocalSourceReader{})            // Local
 	c.Check(Factory("modules/anything/else"), FitsTypeOf, EmbeddedSourceReader{})           // Embedded
 	c.Check(Factory("github.com/modules"), FitsTypeOf, GoGetterSourceReader{})              // GitHub
 	c.Check(Factory("git::https://gitlab.com/modules"), FitsTypeOf, GoGetterSourceReader{}) // Git
-}
-
-func (s *MySuite) TestCopyFromPath(c *C) {
-	dstPath := filepath.Join(testDir, "TestCopyFromPath_Dst")
-
-	err := copyFromPath(terraformDir, dstPath)
-	c.Assert(err, IsNil)
-	fInfo, err := os.Stat(filepath.Join(dstPath, "main.tf"))
-	c.Assert(err, IsNil)
-	c.Assert(fInfo.Name(), Equals, "main.tf")
-	c.Assert(fInfo.Size() > 0, Equals, true)
-	c.Assert(fInfo.IsDir(), Equals, false)
-
-	// Invalid: Specify the same destination path again
-	err = copyFromPath(terraformDir, dstPath)
-	c.Assert(err, ErrorMatches, "the directory already exists: .*")
 }

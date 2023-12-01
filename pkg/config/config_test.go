@@ -48,7 +48,7 @@ func Test(t *testing.T) {
 }
 
 func (s *MySuite) SetUpSuite(c *C) {
-	simpleYamlFile, err := os.CreateTemp("", "*.yaml")
+	simpleYamlFile, err := os.CreateTemp(c.MkDir(), "*.yaml")
 	if err != nil {
 		c.Fatal(err)
 	}
@@ -78,9 +78,7 @@ deployment_groups:
 	simpleYamlFile.Close()
 
 	// Create test directory with simple modules
-	if s.tmpTestDir, err = os.MkdirTemp("", "ghpc_config_tests_*"); err != nil {
-		c.Fatal(err)
-	}
+	s.tmpTestDir = c.MkDir()
 
 	moduleDir := filepath.Join(s.tmpTestDir, "module")
 	if err = os.Mkdir(moduleDir, 0755); err != nil {
@@ -96,15 +94,6 @@ deployment_groups:
         type        = string
     }`
 	if _, err = varFile.WriteString(testVariablesTF); err != nil {
-		c.Fatal(err)
-	}
-}
-
-func (s *MySuite) TearDownSuite(c *C) {
-	if err := os.Remove(s.simpleYamlFilename); err != nil {
-		c.Fatal(err)
-	}
-	if err := os.RemoveAll(s.tmpTestDir); err != nil {
 		c.Fatal(err)
 	}
 }

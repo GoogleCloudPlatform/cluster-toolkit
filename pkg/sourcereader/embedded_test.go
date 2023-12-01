@@ -18,120 +18,61 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/spf13/afero"
 	. "gopkg.in/check.v1"
 )
 
-const (
-	testMainTf = `
-module "test_module" {
-	source = "testSource"
-}
-data "test_data" "test_data_name" {
-	name = "test_data_name"
-}
-`
-	testVariablesTf = `
-variable "test_variable" {
-	description = "This is just a test"
-	type        = string
-}
-`
-	testOutputsTf = `
-output "test_output" {
-	description = "This is just a test"
-	value       = "test_value"
-}
-`
-)
-
-func getTestFS() afero.IOFS {
-	aferoFS := afero.NewMemMapFs()
-	aferoFS.MkdirAll("modules/network/vpc", 0755)
-	afero.WriteFile(
-		aferoFS, "modules/network/vpc/main.tf", []byte(testMainTf), 0644)
-	afero.WriteFile(
-		aferoFS, "modules/network/vpc/variables.tf", []byte(testVariablesTf), 0644)
-	afero.WriteFile(
-		aferoFS, "modules/network/vpc/output.tf", []byte(testOutputsTf), 0644)
-	return afero.NewIOFS(aferoFS)
+type embeddedSuite struct {
+	r EmbeddedSourceReader
 }
 
-func (s *MySuite) TestCopyDirFromModules(c *C) {
-	// Setup
-	testModFS := getTestFS()
-	copyDir := filepath.Join(testDir, "TestCopyDirFromModules")
-	if err := os.Mkdir(copyDir, 0755); err != nil {
-		c.Fatal(err)
-	}
+var _ = Suite(&embeddedSuite{})
+
+func (s *embeddedSuite) SetUpTest(c *C) {
+	ModuleFS = testEmbeddedFS
+	s.r = EmbeddedSourceReader{}
+}
+
+func (s *embeddedSuite) TestCopyDir_Embedded(c *C) {
+	dst := c.MkDir()
 
 	// Success
-	err := copyDirFromModules(testModFS, "modules/network/vpc", copyDir)
+	err := s.r.CopyDir("modules/network/vpc", dst)
 	c.Assert(err, IsNil)
-	fInfo, err := os.Stat(filepath.Join(copyDir, "main.tf"))
+	fInfo, err := os.Stat(filepath.Join(dst, "main.tf"))
 	c.Assert(err, IsNil)
 	c.Assert(fInfo.Name(), Equals, "main.tf")
 	c.Assert(fInfo.Size() > 0, Equals, true)
 	c.Assert(fInfo.IsDir(), Equals, false)
 
 	// Success: copy files AND dirs
-	err = copyDirFromModules(testModFS, "modules/network/", copyDir)
+	err = s.r.CopyDir("modules/network", dst)
 	c.Assert(err, IsNil)
-	fInfo, err = os.Stat(filepath.Join(copyDir, "vpc/main.tf"))
+	fInfo, err = os.Stat(filepath.Join(dst, "vpc/main.tf"))
 	c.Assert(err, IsNil)
 	c.Assert(fInfo.Name(), Equals, "main.tf")
 	c.Assert(fInfo.Size() > 0, Equals, true)
 	c.Assert(fInfo.IsDir(), Equals, false)
-	fInfo, err = os.Stat(filepath.Join(copyDir, "vpc"))
+	fInfo, err = os.Stat(filepath.Join(dst, "vpc"))
 	c.Assert(err, IsNil)
 	c.Assert(fInfo.Name(), Equals, "vpc")
 	c.Assert(fInfo.Size() > 0, Equals, true)
 	c.Assert(fInfo.IsDir(), Equals, true)
 
 	// Invalid path
-	err = copyDirFromModules(testModFS, "not/valid", copyDir)
+	err = s.r.CopyDir("not/valid", dst)
 	c.Assert(err, ErrorMatches, "*file does not exist")
 
 	// Failure: File Already Exists
-	err = copyDirFromModules(testModFS, "modules/network/", copyDir)
+	err = s.r.CopyDir("modules/network", dst)
 	c.Assert(err, ErrorMatches, "*file exists")
 }
 
-func (s *MySuite) TestCopyFSToTempDir(c *C) {
-	// Setup
-	testModFS := getTestFS()
-
+func (s *embeddedSuite) TestGetModule_Embedded(c *C) {
 	// Success
-	testDir, err := copyFSToTempDir(testModFS, "modules/")
-	defer os.RemoveAll(testDir)
-	c.Assert(err, IsNil)
-	fInfo, err := os.Stat(filepath.Join(testDir, "network/vpc/main.tf"))
-	c.Assert(err, IsNil)
-	c.Assert(fInfo.Name(), Equals, "main.tf")
-	c.Assert(fInfo.Size() > 0, Equals, true)
-	c.Assert(fInfo.IsDir(), Equals, false)
-	fInfo, err = os.Stat(filepath.Join(testDir, "network/vpc"))
-	c.Assert(err, IsNil)
-	c.Assert(fInfo.Name(), Equals, "vpc")
-	c.Assert(fInfo.Size() > 0, Equals, true)
-	c.Assert(fInfo.IsDir(), Equals, true)
-}
-
-func (s *MySuite) TestGetModule_Embedded(c *C) {
-	ModuleFS = getTestFS()
-	reader := EmbeddedSourceReader{}
-
-	// Success
-	dest := filepath.Join(testDir, "TestGetModule_Embedded")
-	err := reader.GetModule("modules/network", dest)
+	dest := filepath.Join(c.MkDir(), c.TestName())
+	err := s.r.GetModule("modules/network", dest)
 	c.Assert(err, IsNil)
 
-	// Invalid: Write to the same dest directory again
-	err = reader.GetModule("modules/network", dest)
-	expectedErr := "the directory already exists: .*"
-	c.Assert(err, ErrorMatches, expectedErr)
-
-	// Success
 	fInfo, err := os.Stat(filepath.Join(dest, "vpc/main.tf"))
 	c.Assert(err, IsNil)
 	c.Assert(fInfo.Name(), Equals, "main.tf")
@@ -143,27 +84,26 @@ func (s *MySuite) TestGetModule_Embedded(c *C) {
 	c.Assert(fInfo.Size() > 0, Equals, true)
 	c.Assert(fInfo.IsDir(), Equals, true)
 
+	// Invalid: Write to the same dest directory again
+	err = s.r.GetModule("modules/network", dest)
+	c.Assert(err, ErrorMatches, "the directory already exists: .*")
+
 	// Invalid: No embedded Module
-	badEmbeddedMod := "modules/does/not/exist"
-	err = reader.GetModule(badEmbeddedMod, dest)
-	expectedErr = "failed to copy embedded module at .*"
-	c.Assert(err, ErrorMatches, expectedErr)
+	err = s.r.GetModule("modules/does/not/exist", dest)
+	c.Assert(err, ErrorMatches, "failed to copy embedded module at .*")
 
 	// Invalid: Unsupported Module Source by EmbeddedSourceReader
 	badSource := "gcs::https://www.googleapis.com/storage/v1/GoogleCloudPlatform/hpc-toolkit/modules"
-	err = reader.GetModule(badSource, dest)
-	expectedErr = "source is not valid: .*"
-	c.Assert(err, ErrorMatches, expectedErr)
+	err = s.r.GetModule(badSource, dest)
+	c.Assert(err, ErrorMatches, "source is not valid: .*")
 }
 
-func (s *MySuite) TestGetModule_NilFs(c *C) {
+func (s *embeddedSuite) TestGetModule_NilFs(c *C) {
 	ModuleFS = nil
-	r := EmbeddedSourceReader{}
-	c.Assert(r.GetModule("here", "there"), NotNil)
+	c.Assert(s.r.GetModule("here", "there"), NotNil)
 }
 
-func (s *MySuite) TestCopyDir_NilFs(c *C) {
+func (s *embeddedSuite) TestCopyDir_NilFs(c *C) {
 	ModuleFS = nil
-	r := EmbeddedSourceReader{}
-	c.Assert(r.CopyDir("here", "there"), NotNil)
+	c.Assert(s.r.CopyDir("here", "there"), NotNil)
 }

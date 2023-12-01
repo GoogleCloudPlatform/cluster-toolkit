@@ -18,40 +18,24 @@ package cmd
 
 import (
 	"os"
+	"path/filepath"
 
 	. "gopkg.in/check.v1"
 )
 
 func (s *MySuite) TestIsDir(c *C) {
-	dir, err := os.MkdirTemp("", "test-*")
-	if err != nil {
-		c.Fatal(err)
-	}
-	defer os.RemoveAll(dir)
+	dir := c.MkDir()
+	c.Assert(checkDir(nil, []string{dir}), IsNil)
 
-	err = checkDir(nil, []string{dir})
+	p := filepath.Join(dir, "does-not-exist")
+	c.Assert(checkDir(nil, []string{p}), NotNil)
+
+	f, err := os.CreateTemp(dir, "test-*")
 	c.Assert(err, IsNil)
-
-	os.RemoveAll(dir)
-	err = checkDir(nil, []string{dir})
-	c.Assert(err, NotNil)
-
-	f, err := os.CreateTemp("", "test-*")
-	if err != nil {
-		c.Fatal(err)
-	}
-	defer os.Remove(f.Name())
-	err = checkDir(nil, []string{f.Name()})
-	c.Assert(err, NotNil)
+	c.Assert(checkDir(nil, []string{f.Name()}), NotNil)
 }
 
 func (s *MySuite) TestRunExport(c *C) {
-	dir, err := os.MkdirTemp("", "test-*")
-	if err != nil {
-		c.Fatal(err)
-	}
-	defer os.RemoveAll(dir)
-
-	err = runExportCmd(nil, []string{dir})
-	c.Assert(err, NotNil)
+	dir := c.MkDir()
+	c.Assert(runExportCmd(nil, []string{dir}), NotNil)
 }
