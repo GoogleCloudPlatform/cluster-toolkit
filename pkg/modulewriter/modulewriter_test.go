@@ -232,59 +232,25 @@ func (s *MySuite) TestWriteDeployment(c *C) {
 	c.Check(err, IsNil)
 }
 
-func (s *MySuite) TestCreateGroupDirs(c *C) {
-	// Setup
-	testDeployDir := c.MkDir()
-	groupNames := []config.GroupName{"group0", "group1", "group2"}
+func (s *MySuite) TestCreateGroupDir(c *C) {
+	deplDir := c.MkDir()
 
-	// No deployment groups
-	testDepGroups := []config.DeploymentGroup{}
-	err := createGroupDirs(testDeployDir, &testDepGroups)
-	c.Check(err, IsNil)
-
-	// Single deployment group
-	testDepGroups = []config.DeploymentGroup{{Name: groupNames[0]}}
-	err = createGroupDirs(testDeployDir, &testDepGroups)
-	c.Check(err, IsNil)
-	grp0Path := filepath.Join(testDeployDir, string(groupNames[0]))
-	_, err = os.Stat(grp0Path)
-	c.Check(errors.Is(err, os.ErrNotExist), Equals, false)
-	c.Check(err, IsNil)
-	err = os.Remove(grp0Path)
-	c.Check(err, IsNil)
-
-	// Multiple deployment groups
-	testDepGroups = []config.DeploymentGroup{
-		{Name: groupNames[0]},
-		{Name: groupNames[1]},
-		{Name: groupNames[2]},
+	{ // Ok
+		got, err := createGroupDir(deplDir, config.DeploymentGroup{Name: "ukulele"})
+		c.Check(err, IsNil)
+		c.Check(got, Equals, filepath.Join(deplDir, "ukulele"))
+		stat, err := os.Stat(got)
+		c.Check(err, IsNil)
+		c.Check(stat.IsDir(), Equals, true)
 	}
-	err = createGroupDirs(testDeployDir, &testDepGroups)
-	c.Check(err, IsNil)
-	// Check for group 0
-	_, err = os.Stat(grp0Path)
-	c.Check(errors.Is(err, os.ErrNotExist), Equals, false)
-	c.Check(err, IsNil)
-	err = os.Remove(grp0Path)
-	c.Check(err, IsNil)
-	// Check for group 1
-	grp1Path := filepath.Join(testDeployDir, string(groupNames[1]))
-	_, err = os.Stat(grp1Path)
-	c.Check(errors.Is(err, os.ErrNotExist), Equals, false)
-	c.Check(err, IsNil)
-	err = os.Remove(grp1Path)
-	c.Check(err, IsNil)
-	// Check for group 2
-	grp2Path := filepath.Join(testDeployDir, string(groupNames[2]))
-	_, err = os.Stat(grp2Path)
-	c.Check(errors.Is(err, os.ErrNotExist), Equals, false)
-	c.Check(err, IsNil)
-	err = os.Remove(grp2Path)
-	c.Check(err, IsNil)
 
-	// deployment group(s) already exists
-	err = createGroupDirs(testDeployDir, &testDepGroups)
-	c.Check(err, IsNil)
+	{ // Dir already exists
+		dir := filepath.Join(deplDir, "guitar")
+		c.Assert(os.Mkdir(dir, 0755), IsNil)
+		got, err := createGroupDir(deplDir, config.DeploymentGroup{Name: "guitar"})
+		c.Check(err, IsNil)
+		c.Check(got, Equals, dir)
+	}
 }
 
 func (s *MySuite) TestRestoreTfState(c *C) {
@@ -609,7 +575,6 @@ func (s *MySuite) TestWriteDeploymentGroup_PackerWriter(c *C) {
 
 	// No Packer modules
 	deploymentName := "deployment_TestWriteModuleLevel_PackerWriter"
-	testVars := config.NewDict(map[string]cty.Value{"deployment_name": cty.StringVal(deploymentName)})
 	deploymentDir := filepath.Join(s.testDir, deploymentName)
 	if err := deploymentio.CreateDirectory(deploymentDir); err != nil {
 		c.Fatal(err)
@@ -634,10 +599,6 @@ func (s *MySuite) TestWriteDeploymentGroup_PackerWriter(c *C) {
 
 	testDC := config.DeploymentConfig{
 		Config: config.Blueprint{
-			BlueprintName:   "",
-			Validators:      nil,
-			ValidationLevel: 0,
-			Vars:            testVars,
 			DeploymentGroups: []config.DeploymentGroup{
 				testDeploymentGroup,
 			},
@@ -648,7 +609,7 @@ func (s *MySuite) TestWriteDeploymentGroup_PackerWriter(c *C) {
 		c.Fatal()
 	}
 	defer os.Remove(f.Name())
-	testWriter.writeDeploymentGroup(testDC, 0, deploymentDir, f)
+	testWriter.writeDeploymentGroup(testDC, 0, groupDir, f)
 	_, err = os.Stat(filepath.Join(moduleDir, packerAutoVarFilename))
 	c.Assert(err, IsNil)
 }

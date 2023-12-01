@@ -72,7 +72,7 @@ repos:
   - id: go-vet
   - id: go-imports
   - id: go-cyclo
-    args: [-over=15]
+    args: [-over=13]
   - id: go-unit-tests
   - id: go-build
   - id: go-mod-tidy

@@ -49,16 +49,16 @@ type ModuleWriter interface {
 	writeDeploymentGroup(
 		dc config.DeploymentConfig,
 		grpIdx int,
-		deployDir string,
+		groupPath string,
 		instructionsFile io.Writer,
 	) error
 	restoreState(deploymentDir string) error
 	kind() config.ModuleKind
 }
 
-var kinds = map[string]ModuleWriter{
-	config.TerraformKind.String(): new(TFWriter),
-	config.PackerKind.String():    new(PackerWriter),
+var kinds = map[config.ModuleKind]ModuleWriter{
+	config.TerraformKind: new(TFWriter),
+	config.PackerKind:    new(PackerWriter),
 }
 
 //go:embed *.tmpl
@@ -72,36 +72,21 @@ func WriteDeployment(dc config.DeploymentConfig, deploymentDir string, overwrite
 		return err
 	}
 
-	if err := copySource(deploymentDir, &dc.Config.DeploymentGroups); err != nil {
-		return err
-	}
-
-	if err := createGroupDirs(deploymentDir, &dc.Config.DeploymentGroups); err != nil {
-		return err
-	}
-
-	f, err := os.Create(InstructionsPath(deploymentDir))
+	instructions, err := os.Create(InstructionsPath(deploymentDir))
 	if err != nil {
 		return err
 	}
-	defer f.Close()
-	fmt.Fprintln(f, "Advanced Deployment Instructions")
-	fmt.Fprintln(f, "================================")
+	defer instructions.Close()
+	fmt.Fprintln(instructions, "Advanced Deployment Instructions")
+	fmt.Fprintln(instructions, "================================")
 
-	for grpIdx, grp := range dc.Config.DeploymentGroups {
-		writer, ok := kinds[grp.Kind().String()]
-		if !ok {
-			return fmt.Errorf(
-				"invalid kind in deployment group %s, got '%s'", grp.Name, grp.Kind())
-		}
-
-		err := writer.writeDeploymentGroup(dc, grpIdx, deploymentDir, f)
-		if err != nil {
-			return fmt.Errorf("error writing deployment group %s: %w", grp.Name, err)
+	for ig := range dc.Config.DeploymentGroups {
+		if err := writeGroup(deploymentDir, dc, ig, instructions); err != nil {
+			return err
 		}
 	}
 
-	writeDestroyInstructions(f, dc, deploymentDir)
+	writeDestroyInstructions(instructions, dc, deploymentDir)
 
 	if err := writeExpandedBlueprint(deploymentDir, dc); err != nil {
 		return err
@@ -115,23 +100,42 @@ func WriteDeployment(dc config.DeploymentConfig, deploymentDir string, overwrite
 	return nil
 }
 
+func writeGroup(deplPath string, dc config.DeploymentConfig, gIdx int, instructions io.Writer) error {
+	g := dc.Config.DeploymentGroups[gIdx]
+	gPath, err := createGroupDir(deplPath, g)
+	if err != nil {
+		return err
+	}
+
+	if err := copyGroupSources(gPath, g); err != nil {
+		return err
+	}
+
+	writer, ok := kinds[g.Kind()]
+	if !ok {
+		return fmt.Errorf("invalid kind in deployment group %q, got %q", g.Name, g.Kind())
+	}
+
+	if err := writer.writeDeploymentGroup(dc, gIdx, gPath, instructions); err != nil {
+		return fmt.Errorf("error writing deployment group %s: %w", g.Name, err)
+	}
+	return nil
+}
+
 // InstructionsPath returns the path to the instructions file for a deployment
 func InstructionsPath(deploymentDir string) string {
 	return filepath.Join(deploymentDir, "instructions.txt")
 }
 
-func createGroupDirs(deploymentPath string, deploymentGroups *[]config.DeploymentGroup) error {
-	for _, grp := range *deploymentGroups {
-		groupPath := filepath.Join(deploymentPath, string(grp.Name))
-		// Create the deployment group directory if not already created.
-		if _, err := os.Stat(groupPath); errors.Is(err, os.ErrNotExist) {
-			if err := os.Mkdir(groupPath, 0755); err != nil {
-				return fmt.Errorf("failed to create directory at %s for deployment group %s: err=%w",
-					groupPath, grp.Name, err)
-			}
+func createGroupDir(deplPath string, g config.DeploymentGroup) (string, error) {
+	gPath := filepath.Join(deplPath, string(g.Name))
+	// Create the deployment group directory if not already created.
+	if _, err := os.Stat(gPath); errors.Is(err, os.ErrNotExist) {
+		if err := os.Mkdir(gPath, 0755); err != nil {
+			return "", fmt.Errorf("failed to create directory at %s for deployment group %s: err=%w", gPath, g.Name, err)
 		}
 	}
-	return nil
+	return gPath, nil
 }
 
 // DeploymentSource returns module source within deployment group
@@ -201,60 +205,55 @@ func copyEmbeddedModules(base string) error {
 	return nil
 }
 
-func copySource(deploymentPath string, deploymentGroups *[]config.DeploymentGroup) error {
-	for iGrp := range *deploymentGroups {
-		grp := &(*deploymentGroups)[iGrp]
-		basePath := filepath.Join(deploymentPath, string(grp.Name))
-
-		var copyEmbedded = false
-		for iMod := range grp.Modules {
-			mod := &grp.Modules[iMod]
-			deplSource, err := DeploymentSource(*mod)
-			if err != nil {
-				return err
-			}
-
-			if mod.Kind == config.TerraformKind {
-				// some terraform modules do not require copying
-				if sourcereader.IsEmbeddedPath(mod.Source) {
-					copyEmbedded = true
-					continue // all embedded terraform modules fill be copied at once
-				}
-				if sourcereader.IsRemotePath(mod.Source) {
-					continue // will be downloaded by terraform
-				}
-			}
-
-			/* Copy source files */
-			var src, dst string
-
-			if sourcereader.IsRemotePath(mod.Source) && mod.Kind == config.PackerKind {
-				src, _ = getter.SourceDirSubdir(mod.Source)
-				dst = filepath.Join(basePath, string(mod.ID))
-			} else {
-				src = mod.Source
-				dst = filepath.Join(basePath, deplSource)
-			}
-			if _, err := os.Stat(dst); err == nil {
-				continue
-			}
-			reader := sourcereader.Factory(src)
-			if err := reader.GetModule(src, dst); err != nil {
-				return fmt.Errorf("failed to get module from %s to %s: %v", src, dst, err)
-			}
-			// remove .git directory if one exists; we do not want submodule
-			// git history in deployment directory
-			if err := os.RemoveAll(filepath.Join(dst, ".git")); err != nil {
-				return err
-			}
+func copyGroupSources(gPath string, g config.DeploymentGroup) error {
+	var copyEmbedded = false
+	for iMod := range g.Modules {
+		mod := &g.Modules[iMod]
+		deplSource, err := DeploymentSource(*mod)
+		if err != nil {
+			return err
 		}
-		if copyEmbedded {
-			if err := copyEmbeddedModules(basePath); err != nil {
-				return fmt.Errorf("failed to copy embedded modules: %v", err)
+
+		if mod.Kind == config.TerraformKind {
+			// some terraform modules do not require copying
+			if sourcereader.IsEmbeddedPath(mod.Source) {
+				copyEmbedded = true
+				continue // all embedded terraform modules fill be copied at once
+			}
+			if sourcereader.IsRemotePath(mod.Source) {
+				continue // will be downloaded by terraform
 			}
 		}
 
+		/* Copy source files */
+		var src, dst string
+
+		if sourcereader.IsRemotePath(mod.Source) && mod.Kind == config.PackerKind {
+			src, _ = getter.SourceDirSubdir(mod.Source)
+			dst = filepath.Join(gPath, string(mod.ID))
+		} else {
+			src = mod.Source
+			dst = filepath.Join(gPath, deplSource)
+		}
+		if _, err := os.Stat(dst); err == nil {
+			continue
+		}
+		reader := sourcereader.Factory(src)
+		if err := reader.GetModule(src, dst); err != nil {
+			return fmt.Errorf("failed to get module from %s to %s: %w", src, dst, err)
+		}
+		// remove .git directory if one exists; we do not want submodule
+		// git history in deployment directory
+		if err := os.RemoveAll(filepath.Join(dst, ".git")); err != nil {
+			return err
+		}
 	}
+	if copyEmbedded {
+		if err := copyEmbeddedModules(gPath); err != nil {
+			return fmt.Errorf("failed to copy embedded modules: %w", err)
+		}
+	}
+
 	return nil
 }
 
