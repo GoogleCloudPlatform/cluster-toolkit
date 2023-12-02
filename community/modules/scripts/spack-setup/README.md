@@ -119,6 +119,15 @@ sudo -i spack python -m pip install package-name
 [SPACK_PYTHON]: https://spack.readthedocs.io/en/latest/getting_started.html#shell-support
 [builds]: https://spack.readthedocs.io/en/latest/binary_caches.html
 
+## Spack Permissions
+
+By default, only root will be have permission to install spack packages. To
+manually call Spack commands as root use the `sudo -i` command, for example:
+`sudo -i spack install tar`. The `-i` runs the command as a login shell and is
+required to make sure `spack` will be the `PATH`.
+
+Installed packages should be readable/executable by anyone on the VM.
+
 ## Deprecations and Breaking Changes
 
 The old `spack-install` module has been replaced by the `spack-setup` and
