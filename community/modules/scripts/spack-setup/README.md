@@ -128,6 +128,48 @@ required to make sure `spack` will be the `PATH`.
 
 Installed packages should be readable/executable by anyone on the VM.
 
+### Non-root package installation
+
+If there is a need to have a non-root user to install spack packages it is
+recommended to create a separate installation for that user and chain Spack installations
+([Spack docs](https://spack.readthedocs.io/en/latest/chain.html#chaining-spack-installations)).
+
+Steps to chain Spack installations:
+
+1. Get the version of the system Spack:
+
+    ```sh
+    $ spack --version
+
+    0.20.0 (e493ab31c6f81a9e415a4b0e0e2263374c61e758)
+    #       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    # Note commit hash and use in next step
+    ```
+
+1. Clone a new spack installation:
+
+    ```sh
+    git clone -c feature.manyFiles=true https://github.com/spack/spack.git <new_location>/spack
+    git -C <new_location>/spack checkout <commit_hash>
+    ```
+
+1. Point the new Spack installation to the system Spack installation. Create a
+   file at `<new_location>/spack/etc/spack/upstreams.yaml` with the following
+   contents:
+
+    ```yaml
+    upstreams:
+      spack-instance-1:
+        install_tree: /sw/spack/opt/spack/
+    ```
+
+1. Add the following line to your `.bashrc` to make sure the new `spack` is in
+   your `PATH`.
+
+   ```sh
+   . <new_location>/spack/share/spack/setup-env.sh
+   ```
+
 ## Deprecations and Breaking Changes
 
 The old `spack-install` module has been replaced by the `spack-setup` and
