@@ -23,7 +23,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/google/go-cmp/cmp"
 	"golang.org/x/exp/slices"
 )
 
@@ -157,28 +156,24 @@ func TestNetworkStorage(t *testing.T) {
 	}
 }
 
-func TestMetadata(t *testing.T) {
+func TestMetadataIsObtainable(t *testing.T) {
+	// Test that `GetMetadata` does not fail. `GetMetadataSafe` falls back to legacy.
 	for _, mod := range notEmpty(query(all()), t) {
 		t.Run(mod.Source, func(t *testing.T) {
-			mtd, err := modulereader.GetMetadata(modPath(mod.Source))
+			_, err := modulereader.GetMetadata(modPath(mod.Source))
 			if err != nil {
 				t.Error(err)
-				return
 			}
+		})
+	}
+}
 
-			if mtd.Spec.Requirements.Services == nil {
+func TestMetadataHasServices(t *testing.T) {
+	for _, mod := range notEmpty(query(all()), t) {
+		t.Run(mod.Source, func(t *testing.T) {
+			if mod.Metadata.Spec.Requirements.Services == nil {
 				t.Error("metadata has no requirements")
 			}
-
-			// for safe transition, check that metadata is the same as legacy. To be removed.
-			legacy := modulereader.LegacyMetadata(mod.Source)
-			diff := cmp.Diff(legacy.Spec.Requirements.Services, mtd.Spec.Requirements.Services)
-			if diff != "" {
-				t.Errorf("diff (-want +got):\n%s", diff)
-				fmt.Println(filepath.Join(mod.Source, "metadata.yaml"))
-				fmt.Println(legacy.Spec.Requirements.Services)
-			}
-
 		})
 	}
 }
