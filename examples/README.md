@@ -275,7 +275,6 @@ This blueprint will take you through a tutorial on an FSI Value at Risk calculat
 
 See the [full tutorial here](../docs/tutorials/fsi-montecarlo-on-batch/README.md).
 
-
 ### [ml-slurm.yaml] ![core-badge]
 
 This blueprint provisions an HPC cluster running the Slurm scheduler with the

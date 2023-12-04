@@ -1,19 +1,33 @@
 ## Description
 
-Creates a PubSub BigQuery subscription for the specified topic. The schema provided must align with the schema of 
-table provided.
+Creates a PubSub BigQuery subscription for the specified topic. The schema
+provided must align with the schema of table provided.
 
 Primarily used for FSI - MonteCarlo Tutorial: **[fsi-montecarlo-on-batch-tutorial]**.
 
 [fsi-montecarlo-on-batch-tutorial]: ../docs/tutorials/fsi-montecarlo-on-batch/README.md
 
+<!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
+Copyright 2023 Google LLC
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
 ## Requirements
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 0.13.0 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.0 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 3.83 |
-| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 3.83 |
 | <a name="requirement_random"></a> [random](#requirement\_random) | ~> 3.0 |
 
 ## Providers
@@ -45,7 +59,6 @@ No modules.
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | The name of the current deployment | `string` | n/a | yes |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the instances. Key-value pairs. | `map(string)` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created | `string` | n/a | yes |
-| <a name="input_region"></a> [region](#input\_region) | The region where SQL instance will be configured | `string` | n/a | yes |
 | <a name="input_subscription_id"></a> [subscription\_id](#input\_subscription\_id) | The name of the pubsub subscription to be created | `string` | `null` | no |
 | <a name="input_table_id"></a> [table\_id](#input\_table\_id) | ID of created BQ table | `string` | n/a | yes |
 | <a name="input_topic_id"></a> [topic\_id](#input\_topic\_id) | The name of the pubsub topic to subscribe to. | `string` | `null` | no |
@@ -55,3 +68,4 @@ No modules.
 | Name | Description |
 |------|-------------|
 | <a name="output_subscription_id"></a> [subscription\_id](#output\_subscription\_id) | Name of the dataset that was created. |
+<!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

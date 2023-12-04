@@ -17,10 +17,9 @@ region: "${region}"
 job_prefix: 'fsi-'
 machine_type: "n2-standard-2"
 volumes:
-  - {bucket_name:  "${bucket_name}", gcs_path:  "/mnt/disks/fsi"}
+- {bucket_name: "${bucket_name}", gcs_path: "/mnt/disks/fsi"}
 
-
-container: 
+container:
   image_uri: "python"
   entry_point: "/bin/bash"
   commands: ["/mnt/disks/fsi/iteration.sh", "$BATCH_TASK_INDEX"]
@@ -32,6 +31,6 @@ cpu_milli: 1000 #optional
 memory_mib: 102400 #optional
 
 
-labels: 
+labels:
   env: "monte"
   type: "carlo"

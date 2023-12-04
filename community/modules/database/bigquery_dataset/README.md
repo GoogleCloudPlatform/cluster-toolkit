@@ -16,6 +16,21 @@ This is a simple usage.
       dataset_id: my_dataset
 ```
 
+<!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
+Copyright 2023 Google LLC
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
 ## Requirements
 
 | Name | Version |
@@ -28,8 +43,8 @@ This is a simple usage.
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google"></a> [google](#provider\_google) | 5.5.0 |
-| <a name="provider_random"></a> [random](#provider\_random) | 3.5.1 |
+| <a name="provider_google"></a> [google](#provider\_google) | >= 3.83 |
+| <a name="provider_random"></a> [random](#provider\_random) | ~> 3.0 |
 
 ## Modules
 
@@ -56,3 +71,4 @@ No modules.
 | Name | Description |
 |------|-------------|
 | <a name="output_dataset_id"></a> [dataset\_id](#output\_dataset\_id) | Name of the dataset that was created. |
+<!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

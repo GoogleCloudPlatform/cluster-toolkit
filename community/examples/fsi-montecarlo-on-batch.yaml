@@ -16,7 +16,7 @@
 blueprint_name: fsi-montecarlo-on-batch
 
 vars:
-  project_id: ## Set GCP Project ID Here ##
+  project_id:  ## Set GCP Project ID Here ##
   deployment_name: fsimontecarlo
   region: us-central1
   zone: us-central1-a
