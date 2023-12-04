@@ -43,7 +43,7 @@ module "pbs_install" {
 }
 
 module "client_startup_script" {
-  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=336e0a4"
+  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=50644b2"
 
   deployment_name = var.deployment_name
   project_id      = var.project_id
@@ -57,7 +57,7 @@ module "client_startup_script" {
 }
 
 module "pbs_client" {
-  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/compute/vm-instance?ref=v1.22.1"
+  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/compute/vm-instance?ref=bb47067"
 
   instance_count = var.instance_count
   spot           = var.spot

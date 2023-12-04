@@ -44,7 +44,7 @@ deployment_groups:
     settings:
       runnable: "echo 'hello world'"
       machine_type: n2-standard-4
-      image:
+      instance_image:
         family: rocky-linux-8-optimized-gcp
         project: rocky-linux-cloud
 

@@ -26,6 +26,12 @@ variable "node_count" {
   default     = 1
 }
 
+variable "completion_mode" {
+  description = "Sets value of `completionMode` on the job. Default uses indexed jobs. See [documentation](https://kubernetes.io/blog/2021/04/19/introducing-indexed-jobs/) for more information"
+  type        = string
+  default     = "Indexed"
+}
+
 variable "command" {
   description = "The command and arguments for the container that run in the Pod. The command field corresponds to entrypoint in some container runtimes."
   type        = list(string)
@@ -36,6 +42,12 @@ variable "image" {
   description = "The container image the job should use."
   type        = string
   default     = "debian"
+}
+
+variable "k8s_service_account_name" {
+  description = "Kubernetes service account to run the job as. If null then no service account is specified."
+  type        = string
+  default     = null
 }
 
 variable "node_pool_name" {
@@ -119,6 +131,7 @@ variable "persistent_volume_claims" {
     name          = string
     mount_path    = string
     mount_options = string
+    is_gcs        = bool
   }))
   default = []
 }

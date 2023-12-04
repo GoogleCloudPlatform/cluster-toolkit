@@ -17,7 +17,6 @@ package modulereader
 import (
 	"embed"
 	"hpc-toolkit/pkg/sourcereader"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -160,12 +159,12 @@ func (s *MySuite) TestGetHCLInfo(c *C) {
 	// Invalid source path - path does not exists
 	fakePath := "./not/a/real/path"
 	_, err := getHCLInfo(fakePath)
-	expectedErr := "Source to module does not exist: .*"
+	expectedErr := "source to module does not exist: .*"
 	c.Assert(err, ErrorMatches, expectedErr)
 	// Invalid source path - points to a file
 	pathToFile := filepath.Join(terraformDir, "main.tf")
 	_, err = getHCLInfo(pathToFile)
-	expectedErr = "Source of module must be a directory: .*"
+	expectedErr = "source of module must be a directory: .*"
 	c.Assert(err, ErrorMatches, expectedErr)
 
 	// Invalid source path - points to directory with no .tf files
@@ -175,7 +174,7 @@ func (s *MySuite) TestGetHCLInfo(c *C) {
 		log.Fatal("TestGetHCLInfo: Failed to create test directory.")
 	}
 	_, err = getHCLInfo(pathToEmptyDir)
-	expectedErr = "Source is not a terraform or packer module: .*"
+	expectedErr = "source is not a terraform or packer module: .*"
 	c.Assert(err, ErrorMatches, expectedErr)
 }
 
@@ -219,7 +218,7 @@ func (s *MySuite) TestGetInfo_MetaReader(c *C) {
 	// Not implemented, expect that error
 	reader := MetaReader{}
 	_, err := reader.GetInfo("")
-	expErr := "Meta GetInfo not implemented: .*"
+	expErr := "meta GetInfo not implemented: .*"
 	c.Assert(err, ErrorMatches, expErr)
 }
 
@@ -265,7 +264,7 @@ func (s *MySuite) TestUnmarshalOutputInfo(c *C) {
 // Util Functions
 func copyEmbeddedModules() {
 	var err error
-	if tmpModuleDir, err = ioutil.TempDir("", "modulereader_tests_*"); err != nil {
+	if tmpModuleDir, err = os.MkdirTemp("", "modulereader_tests_*"); err != nil {
 		log.Fatalf(
 			"Failed to create temp dir for module in modulereader_test, %v", err)
 	}

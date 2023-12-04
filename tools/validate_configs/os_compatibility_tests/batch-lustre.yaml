@@ -21,10 +21,10 @@ vars:
   deployment_name: test
   region: us-central1
   zone: us-central1-a
-  # image:
+  # instance_image:
   #   family: hpc-centos-7
   #   project: centos-cloud
-  image:
+  instance_image:
     family: hpc-rocky-linux-8
     project: rocky-linux-cloud
 

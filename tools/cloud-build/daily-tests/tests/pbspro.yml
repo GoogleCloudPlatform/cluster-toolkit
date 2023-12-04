@@ -20,6 +20,6 @@ blueprint_yaml: "{{ workspace }}/tools/validate_configs/test_configs/pbs-unwrapp
 network: "default"
 remote_node: "{{ deployment_name }}-server-0"
 post_deploy_tests:
-- test-pbspro.yml
+- test-validation/test-pbspro.yml
 custom_vars:
   execution_host_count: "3"

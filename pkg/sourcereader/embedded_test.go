@@ -129,7 +129,7 @@ func (s *MySuite) TestGetModule_Embedded(c *C) {
 
 	// Invalid: Write to the same dest directory again
 	err = reader.GetModule("modules/network", dest)
-	expectedErr := "The directory already exists: .*"
+	expectedErr := "the directory already exists: .*"
 	c.Assert(err, ErrorMatches, expectedErr)
 
 	// Success

@@ -89,12 +89,6 @@ func all(ps ...predicate) predicate {
 	}
 }
 
-func not(p predicate) predicate {
-	return func(mod modInfo) bool {
-		return !p(mod)
-	}
-}
-
 func hasInput(name string) predicate {
 	return func(mod modInfo) bool {
 		_, ok := mod.Input(name)
@@ -102,22 +96,9 @@ func hasInput(name string) predicate {
 	}
 }
 
-func hasOutput(name string) predicate {
-	return func(m modInfo) bool {
-		ind := slices.IndexFunc(m.Outputs, func(i modulereader.OutputInfo) bool { return i.Name == name })
-		return ind != -1
-	}
-}
-
-func ofRole(role string) predicate {
-	return func(mod modInfo) bool {
-		return mod.Role() == role
-	}
-}
-
 // Fails test if slice is empty, returns not empty slice as is.
 func notEmpty[E any](l []E, t *testing.T) []E {
-	if l == nil || len(l) == 0 {
+	if len(l) == 0 {
 		t.Fatal("Did not expect empty list")
 	}
 	return l

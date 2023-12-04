@@ -31,6 +31,7 @@ deployment_groups:
   modules:
   - id: network1
     source: modules/network/vpc
+
   - id: quantum-simulator-setup
     source: modules/scripts/startup-script
     settings:
@@ -66,7 +67,7 @@ deployment_groups:
           conda clean -p -t --yes
           conda activate qsim
           pip install pybind11 cirq
-          git clone https://github.com/quantumlib/qsim.git /opt/qsim
+          git clone -b v0.18.0 https://github.com/quantumlib/qsim.git /opt/qsim
           cd /opt/qsim
           export CUQUANTUM_ROOT=/opt/conda/envs/qsim
           make
@@ -120,6 +121,7 @@ deployment_groups:
           # also "warms up" the GPU to give reliable performance metrics
           conda activate qsim
           python /var/tmp/qsim-example.py
+
   - id: qsimvm
     source: modules/compute/vm-instance
     use:
@@ -133,6 +135,7 @@ deployment_groups:
       instance_image:
         project: ubuntu-os-cloud
         family: ubuntu-2004-lts
+
   - id: wait
     source: community/modules/scripts/wait-for-startup
     settings:

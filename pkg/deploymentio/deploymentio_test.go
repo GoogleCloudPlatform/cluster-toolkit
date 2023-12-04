@@ -16,7 +16,6 @@ package deploymentio
 
 import (
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"testing"
@@ -55,7 +54,7 @@ func Test(t *testing.T) {
 func setup() {
 	t := time.Now()
 	dirName := fmt.Sprintf("ghpc_deploymentio_test_%s", t.Format(time.RFC3339))
-	dir, err := ioutil.TempDir("", dirName)
+	dir, err := os.MkdirTemp("", dirName)
 	if err != nil {
 		log.Fatalf("modulewriter_test: %v", err)
 	}

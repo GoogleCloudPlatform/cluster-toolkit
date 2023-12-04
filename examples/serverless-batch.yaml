@@ -51,7 +51,7 @@ deployment_groups:
     settings:
       runnable: "cat /sw/hello.txt"
       machine_type: n2-standard-4
-      image:
+      instance_image:
         family: hpc-rocky-linux-8
         project: cloud-hpc-image-public
 

@@ -49,12 +49,12 @@ locals {
   combined_runner = {
     type        = "shell"
     content     = module.startup_script.startup_script
-    destination = "combined_install_spack_${local.combined_md5}.sh"
+    destination = "combined_install_ramble_${local.combined_md5}.sh"
   }
 }
 
 module "startup_script" {
-  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=336e0a4"
+  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=50644b2"
 
   labels          = local.labels
   project_id      = var.project_id

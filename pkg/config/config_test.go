@@ -18,7 +18,6 @@ package config
 
 import (
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -100,7 +99,7 @@ func Test(t *testing.T) {
 
 // setup opens a temp file to store the yaml and saves it's name
 func setup() {
-	simpleYamlFile, err := ioutil.TempFile("", "*.yaml")
+	simpleYamlFile, err := os.CreateTemp("", "*.yaml")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -112,7 +111,7 @@ func setup() {
 	simpleYamlFile.Close()
 
 	// Create test directory with simple modules
-	tmpTestDir, err = ioutil.TempDir("", "ghpc_config_tests_*")
+	tmpTestDir, err = os.MkdirTemp("", "ghpc_config_tests_*")
 	if err != nil {
 		log.Fatalf("failed to create temp dir for config tests: %e", err)
 	}
@@ -728,7 +727,7 @@ func (s *MySuite) TestImportBlueprint_ExtraField_ThrowsError(c *C) {
 blueprint_name: hpc-cluster-high-io
 # line below is not in our schema
 dragon: "Lews Therin Telamon"`)
-	file, _ := ioutil.TempFile("", "*.yaml")
+	file, _ := os.CreateTemp("", "*.yaml")
 	file.Write(yaml)
 	filename := file.Name()
 	file.Close()

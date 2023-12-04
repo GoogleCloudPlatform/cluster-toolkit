@@ -13,17 +13,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-WARNING=$(
-	cat <<EOF
-** NOTICE **: System services may not be running until startup scripts complete.
-The output of the command below will end with "Finished Google Compute Engine 
-Startup Scripts." when they are complete. Please review the output for any 
-errors which may indicate that services are unhealthy. 
+SCRIPT_COMPLETE_FILE="/run/startup_script_msg"
 
-sudo journalctl -b 0 -u google-startup-scripts.service
-EOF
-)
-
-echo
-echo "${WARNING}"
-echo
+# Ensure we're in an interactive terminal and not root
+if [ -t 1 ] && [ "$(id -u)" -ne 0 ]; then
+	# Check if the file has contents otherwise skip
+	if [ -s "$SCRIPT_COMPLETE_FILE" ]; then
+		echo
+		cat "$SCRIPT_COMPLETE_FILE"
+		echo
+	fi
+fi

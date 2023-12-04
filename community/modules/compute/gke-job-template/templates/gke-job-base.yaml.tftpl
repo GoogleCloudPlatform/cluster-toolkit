@@ -10,8 +10,17 @@ metadata:
 spec:
   parallelism: ${node_count}
   completions: ${node_count}
+  completionMode: ${completion_mode}
   template:
+    %{~ if gcs_annotation ~}
+    metadata:
+      annotations:
+        gke-gcsfuse/volumes: "true"
+    %{~ endif ~}
     spec:
+      %{~ if k8s_service_account_name != null ~}
+      serviceAccountName: ${k8s_service_account_name}
+      %{~ endif ~}
       %{~ if length(node_pool_names) > 0 ~}
       affinity:
         nodeAffinity:
@@ -41,7 +50,8 @@ spec:
       containers:
       - name: ${name}-container
         image: ${image}
-        command: [%{~ for s in command ~}"${s}",%{~ endfor ~}]
+        command:
+        %{for s in command}- ${indent(8, yamlencode(s))}%{~ endfor }
         %{~ if gpu_limit != null || cpu_request != null ~}
         resources:
           %{~ if gpu_limit != null ~}

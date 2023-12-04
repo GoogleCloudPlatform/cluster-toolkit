@@ -867,7 +867,7 @@ This blueprint shows how to use different storage options with GKE in the toolki
 
 The blueprint contains the following:
 
-* A K8s Job that uses a Filestore as a shared file system between pods.
+* A K8s Job that uses a Filestore and a GCS bucket as shared file systems between pods.
 * A K8s Job that demonstrates different ephemeral storage options:
   * memory backed emptyDir
   * local SSD backed emptyDir

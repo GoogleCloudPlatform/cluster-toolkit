@@ -61,11 +61,12 @@ locals {
       profile_script_path   = var.spack_profile_script_path
     }
   )
+
   install_spack_deps_runner = {
     "type"        = "ansible-local"
     "source"      = "${path.module}/scripts/install_spack_deps.yml"
     "destination" = "install_spack_deps.yml"
-    "args"        = "-e spack_virtualenv_path=${var.spack_virtualenv_path}"
+    "args"        = "-e virtualenv_path=${var.spack_virtualenv_path}"
   }
   install_spack_runner = {
     "type"        = "ansible-local"
@@ -94,7 +95,7 @@ resource "google_storage_bucket" "bucket" {
 }
 
 module "startup_script" {
-  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=336e0a4"
+  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=50644b2"
 
   labels          = local.labels
   project_id      = var.project_id
