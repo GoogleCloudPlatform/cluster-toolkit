@@ -12,12 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-- name: Install dependencies for ramble installation
+---
+
+- name: Create python virtual env for a tool
   become: yes
   hosts: localhost
   vars:
-    ramble_ref: ${ramble_ref}
-    ramble_virtualenv_path: "/usr/local/ramble-python"
+    virtualenv_path: ${virtualenv_path}
   tasks:
   - name: Install dependencies through system package manager
     ansible.builtin.package:
@@ -31,19 +32,19 @@
     delay: 10
     until: package is success
 
-  - name: Ensure a recent copy of pip
+  - name: Create virtualenv for tool
+    # Python 3.6 is minimum we wish to support due to ease of installation on
+    # CentOS 7 and Rocky Linux 8. pip 21.3.1 is the *maximum* version of pip
+    # supported by 3.6. Additionally, recent versions of pip are necessary for
+    # proper dependency resolution of real-world problems with google-cloud-*
+    # (and third-party) Python packages (20.3+ probably effective minimum).
     ansible.builtin.pip:
       name: pip>=21.3.1
-      virtualenv: "{{ ramble_virtualenv_path }}"
+      virtualenv: "{{ virtualenv_path }}"
       virtualenv_command: /usr/bin/python3 -m venv
 
-  - name: Download ramble requirements file
-    ansible.builtin.get_url:
-      url: "https://raw.githubusercontent.com/GoogleCloudPlatform/ramble/{{ ramble_ref }}/requirements.txt"
-      dest: /tmp/requirements.txt
-
-  - name: Install ramble dependencies
+  - name: Add google-cloud-storage to virtualenv
     ansible.builtin.pip:
-      requirements: /tmp/requirements.txt
-      virtualenv: "{{ ramble_virtualenv_path }}"
+      name: google-cloud-storage
+      virtualenv: "{{ virtualenv_path }}"
       virtualenv_command: /usr/bin/python3 -m venv

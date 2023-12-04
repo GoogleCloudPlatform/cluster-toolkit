@@ -49,9 +49,6 @@ steps:
   - |
     set -e
     export PROJECT=build-project
-    # lysozyme-example is under CC-BY-4.0
-    time addlicense -check -ignore **/lysozyme-example/submit.sh . \
-      || { echo "addlicense failed"; exit 1; }
     time make tests
 - id: ofe-virtual-env
   waitFor:

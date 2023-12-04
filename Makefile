@@ -3,7 +3,7 @@ MIN_PACKER_VERSION=1.7.9 # for building images
 MIN_TERRAFORM_VERSION=1.2 # for deploying modules
 MIN_GOLANG_VERSION=1.18 # for building ghpc
 
-.PHONY: install install-user tests format add-google-license install-dev-deps \
+.PHONY: install install-user tests format install-dev-deps \
         warn-go-missing warn-terraform-missing warn-packer-missing \
         warn-go-version warn-terraform-version warn-packer-version \
         test-engine validate_configs validate_golden_copy packer-check \
@@ -63,15 +63,7 @@ install-dev-deps: warn-terraform-version warn-packer-version check-pre-commit ch
 	go install github.com/google/addlicense@latest
 	go install mvdan.cc/sh/v3/cmd/shfmt@latest
 	go install golang.org/x/tools/cmd/goimports@latest
-
-ifeq (, $(shell which addlicense))
-add-google-license:
-	$(error "could not find addlicense in PATH, run: go install github.com/google/addlicense@latest")
-else
-add-google-license:
-	# lysozyme-example is under CC-BY-4.0
-	addlicense -c "Google LLC" -l apache -ignore **/lysozyme-example/submit.sh .
-endif
+	go install honnef.co/go/tools/cmd/staticcheck@latest
 
 # RULES SUPPORTING THE ABOVE
 

@@ -39,6 +39,12 @@ Modules that are still in development and less stable are labeled with the
   Creates a partition to be used by a [slurm-controller][schedmd-slurm-gcp-v5-controller].
 * **[schedmd-slurm-gcp-v5-node-group]** ![community-badge] :
   Creates a node group to be used by the [schedmd-slurm-gcp-v5-partition] module.
+* **[schedmd-slurm-gcp-v6-partition]** ![community-badge] ![experimental-badge]:
+  Creates a partition to be used by a [slurm-controller][schedmd-slurm-gcp-v6-controller].
+* **[schedmd-slurm-gcp-v6-nodeset]** ![community-badge] ![experimental-badge]:
+  Creates a nodeset to be used by the [schedmd-slurm-gcp-v6-partition] module.
+* **[schedmd-slurm-gcp-v6-nodeset-tpu]** ![community-badge] ![experimental-badge]:
+  Creates a TPU nodeset to be used by the [schedmd-slurm-gcp-v6-partition] module.
 * **[gke-node-pool]** ![community-badge] ![experimental-badge] : Creates a
   Kubernetes node pool using GKE.
 * **[gke-job-template]** ![community-badge] ![experimental-badge] : Creates a
@@ -60,6 +66,9 @@ Vertex AI Notebook. Primarily used for FSI - MonteCarlo Tutorial:
 [schedmd-slurm-on-gcp-partition]: ../community/modules/compute/SchedMD-slurm-on-gcp-partition/README.md
 [schedmd-slurm-gcp-v5-partition]: ../community/modules/compute/schedmd-slurm-gcp-v5-partition/README.md
 [schedmd-slurm-gcp-v5-node-group]: ../community/modules/compute/schedmd-slurm-gcp-v5-node-group/README.md
+[schedmd-slurm-gcp-v6-partition]: ../community/modules/compute/schedmd-slurm-gcp-v6-partition/README.md
+[schedmd-slurm-gcp-v6-nodeset]: ../community/modules/compute/schedmd-slurm-gcp-v6-nodeset/README.md
+[schedmd-slurm-gcp-v6-nodeset-tpu]: ../community/modules/compute/schedmd-slurm-gcp-v6-nodeset-tpu/README.md
 [htcondor-execute-point]: ../community/modules/compute/htcondor-execute-point/README.md
 [pbspro-execution]: ../community/modules/compute/pbspro-execution/README.md
 [notebook]: ../community/modules/compute/notebook/README.md
@@ -186,6 +195,10 @@ Pub/Sub subscription. Primarily used for FSI - MonteCarlo Tutorial:
   Creates a Slurm login node using [slurm-gcp-version-5].
 * **[schedmd-slurm-gcp-v5-hybrid]** ![community-badge] ![experimental-badge] :
   Creates hybrid Slurm partition configuration files using [slurm-gcp-version-5].
+* **[schedmd-slurm-gcp-v6-controller]** ![community-badge] ![experimental-badge]:
+  Creates a Slurm controller node using [slurm-gcp-version-6].
+* **[schedmd-slurm-gcp-v6-login]** ![community-badge] ![experimental-badge]:
+  Creates a Slurm login node using [slurm-gcp-version-6].
 * **[htcondor-setup]** ![community-badge] ![experimental-badge] : Creates the
   base infrastructure for an HTCondor pool (service accounts and Cloud Storage bucket).
 * **[htcondor-pool-secrets]** ![community-badge] ![experimental-badge] : Creates
@@ -209,6 +222,8 @@ Pub/Sub subscription. Primarily used for FSI - MonteCarlo Tutorial:
 [htcondor-setup]: ../community/modules/scheduler/htcondor-setup/README.md
 [htcondor-pool-secrets]: ../community/modules/scheduler/htcondor-pool-secrets/README.md
 [htcondor-access-point]: ../community/modules/scheduler/htcondor-access-point/README.md
+[schedmd-slurm-gcp-v6-controller]: ../community/modules/scheduler/schedmd-slurm-gcp-v6-controller/README.md
+[schedmd-slurm-gcp-v6-login]: ../community/modules/scheduler/schedmd-slurm-gcp-v6-login/README.md
 [schedmd-slurm-gcp-v5-controller]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-controller/README.md
 [schedmd-slurm-gcp-v5-login]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-login/README.md
 [schedmd-slurm-gcp-v5-hybrid]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid/README.md
@@ -216,6 +231,7 @@ Pub/Sub subscription. Primarily used for FSI - MonteCarlo Tutorial:
 [schedmd-slurm-on-gcp-login-node]: ../community/modules/scheduler/SchedMD-slurm-on-gcp-login-node/README.md
 [slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/v4.2.1
 [slurm-gcp-version-5]: https://github.com/SchedMD/slurm-gcp/tree/5.9.1
+[slurm-gcp-version-6]: https://github.com/SchedMD/slurm-gcp/tree/6.2.0
 [pbspro-client]: ../community/modules/scheduler/pbspro-client/README.md
 [pbspro-server]: ../community/modules/scheduler/pbspro-server/README.md
 
@@ -504,7 +520,7 @@ value is in the following priority order:
 The `outputs` field adds the output of individual Terraform modules to the
 output of its deployment group. This enables the value to be available via
 `terraform output`. This can useful for displaying the IP of a login node or
-priting instructions on how to use a module, as we have in the
+printing instructions on how to use a module, as we have in the
 [monitoring dashboard module](monitoring/dashboard/README.md#Outputs).
 
 The outputs field is a lists that it can be in either of two formats: a string

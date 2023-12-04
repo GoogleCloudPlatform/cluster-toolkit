@@ -56,16 +56,56 @@ variable "folder_id" {
   default     = ""
 }
 
+# Deprecated, replaced by instance_image
+# tflint-ignore: terraform_unused_declarations
 variable "image_family" {
-  description = "Image of the AI notebook."
+  description = "DEPRECATED: Image of the AI notebook."
   type        = string
-  default     = "tf-latest-cpu"
+  default     = null
+
+  validation {
+    condition     = var.image_family == null
+    error_message = "The 'image_family' setting is deprecated, please use 'var.instance_image' with the fields 'project' and 'family' or 'name'."
+  }
 }
 
+# Deprecated, replaced by instance_image
+# tflint-ignore: terraform_unused_declarations
 variable "image_project" {
-  description = "Google Cloud project where the image is hosted."
+  description = "DEPRECATED: Google Cloud project where the image is hosted."
   type        = string
-  default     = "deeplearning-platform-release"
+  default     = null
+
+  validation {
+    condition     = var.image_project == null
+    error_message = "The 'image_project' setting is deprecated, please use 'var.instance_image' with the fields 'project' and 'family' or 'name'."
+  }
+}
+
+variable "instance_image" {
+  description = <<-EOD
+    Image of the AI notebook.
+
+    Expected Fields:
+    name: The name of the image. Mutually exclusive with family.
+    family: The image family to use. Mutually exclusive with name.
+    project: The project where the image is hosted.
+    EOD
+  type        = map(string)
+  default = {
+    project = "deeplearning-platform-release"
+    family  = "tf-latest-cpu"
+  }
+
+  validation {
+    condition     = can(coalesce(var.instance_image.project))
+    error_message = "In var.instance_image, the \"project\" field must be a string set to the Cloud project ID."
+  }
+
+  validation {
+    condition     = can(coalesce(var.instance_image.name)) != can(coalesce(var.instance_image.family))
+    error_message = "In var.instance_image, exactly one of \"family\" or \"name\" fields must be set to desired image family or name."
+  }
 }
 
 variable "ip_cidr_range" {

@@ -21,16 +21,14 @@ vars:
   region:      # Provided by check.py
   zone:        # Provided by check.py
 
-# Need to have at least one module to have a valid blueprint
-deployment_groups:
+deployment_groups: # Need to have at least one module to have a valid blueprint
 - group: noop
-  modules:
-  - id: noop
-    source: modules/network/pre-existing-vpc
+  modules: [{id: noop, source: modules/network/pre-existing-vpc}]
 
 validators:
 - validator: test_resource_requirements
   inputs:
+    ignore_usage: true
     requirements:
-    - metric: compute.googleapis.com/c2_cpus
-      required: 200
+    - metric: compute.googleapis.com/n2_cpus
+      required: 750

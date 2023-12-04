@@ -11,7 +11,7 @@ https://github.com/GoogleCloudPlatform/ramble
 This module outputs two startup script runners, which can be added to startup
 scripts to setup, ramble and its dependencies.
 
-For this module to be completely functionaly, it depends on a spack
+For this module to be completely functional, it depends on a spack
 installation. For more information, see HPC-Toolkit’s Spack module.
 
 > **_NOTE:_** This is an experimental module and the functionality and
@@ -86,7 +86,7 @@ limitations under the License.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_startup_script"></a> [startup\_script](#module\_startup\_script) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | 336e0a4 |
+| <a name="module_startup_script"></a> [startup\_script](#module\_startup\_script) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | 50644b2 |
 
 ## Resources
 

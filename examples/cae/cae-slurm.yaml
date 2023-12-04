@@ -186,7 +186,7 @@ deployment_groups:
       node_count_dynamic_max: 10
       machine_type: h3-standard-88
       disk_type: 'pd-balanced'
-      bandwidth_tier: 'gvnic_enabled'
+      bandwidth_tier: gvnic_enabled
 
   - id: h3_partition
     source: community/modules/compute/schedmd-slurm-gcp-v5-partition
@@ -208,7 +208,7 @@ deployment_groups:
       node_count_dynamic_max: 10
       machine_type: c3-highmem-176
       disk_type: 'pd-balanced'
-      bandwidth_tier: 'tier_1_enabled'
+      bandwidth_tier: tier_1_enabled
 
   - id: c3_partition
     source: community/modules/compute/schedmd-slurm-gcp-v5-partition

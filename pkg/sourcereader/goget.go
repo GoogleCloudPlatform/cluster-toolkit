@@ -17,7 +17,6 @@ package sourcereader
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"time"
@@ -55,7 +54,7 @@ func getterClient(source string, dst string) getter.Client {
 
 // GetModule copies the git source to a provided destination (the deployment directory)
 func (r GoGetterSourceReader) GetModule(source string, dst string) error {
-	tmp, err := ioutil.TempDir("", "get-module-*")
+	tmp, err := os.MkdirTemp("", "get-module-*")
 	defer os.RemoveAll(tmp)
 	if err != nil {
 		return err

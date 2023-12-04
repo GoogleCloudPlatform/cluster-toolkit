@@ -1,0 +1,39 @@
+# Copyright 2022 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+test_name: hpc-slurm6-tpu
+deployment_name: "v6-tpu-{{ build }}"
+# Manually adding the slurm_cluster_name for use in node names, which filters
+# non-alphanumeric chars and is capped at 10 chars.
+slurm_cluster_name: "v6tpu{{ build[0:5] }}"
+
+cli_deployment_vars:
+   region: us-central1
+   zone: us-central1-b
+
+zone: us-central1-b
+workspace: /workspace
+blueprint_yaml: "{{ workspace }}/community/examples/hpc-slurm6-tpu.yaml"
+network: "default"
+max_nodes: 5
+# Note: Pattern matching in gcloud only supports 1 wildcard, a*-login-* won't work.
+login_node: "{{ slurm_cluster_name }}-login-*"
+controller_node: "{{ slurm_cluster_name }}-controller"
+post_deploy_tests:
+- test-slurm-v6-tpu.yml
+custom_vars:
+   partitions:
+   - tpu

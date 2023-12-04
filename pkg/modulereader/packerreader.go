@@ -18,9 +18,8 @@ package modulereader
 
 import (
 	"fmt"
+	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/sourcereader"
-	"io/ioutil"
-	"log"
 	"os"
 	"path"
 	"path/filepath"
@@ -37,16 +36,16 @@ func NewPackerReader() PackerReader {
 func addTfExtension(filename string) {
 	newFilename := fmt.Sprintf("%s.tf", filename)
 	if err := os.Rename(filename, newFilename); err != nil {
-		log.Fatalf(
+		logging.Fatal(
 			"failed to add .tf extension to %s needed to get info on packer module: %v",
 			filename, err)
 	}
 }
 
 func getHCLFiles(dir string) []string {
-	allFiles, err := ioutil.ReadDir(dir)
+	allFiles, err := os.ReadDir(dir)
 	if err != nil {
-		log.Fatalf("Failed to read packer source directory at %s: %v", dir, err)
+		logging.Fatal("Failed to read packer source directory at %s: %v", dir, err)
 	}
 	var hclFiles []string
 	for _, f := range allFiles {
@@ -62,7 +61,7 @@ func getHCLFiles(dir string) []string {
 
 // GetInfo reads the ModuleInfo for a packer module
 func (r PackerReader) GetInfo(source string) (ModuleInfo, error) {
-	tmpDir, err := ioutil.TempDir("", "pkwriter-*")
+	tmpDir, err := os.MkdirTemp("", "pkwriter-*")
 	if err != nil {
 		return ModuleInfo{}, fmt.Errorf(
 			"failed to create temp directory for packer reader")

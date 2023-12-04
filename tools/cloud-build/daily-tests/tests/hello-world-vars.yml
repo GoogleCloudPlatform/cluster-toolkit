@@ -16,7 +16,7 @@
 ---
 test_name: hello-world
 top_level_var: "top level var"
-post_deploy_tests: [test-hello-world.yml]
+post_deploy_tests: [test-validation/test-hello-world.yml]
 custom_vars:
   foo: "foo var"
   bar: "bar var"

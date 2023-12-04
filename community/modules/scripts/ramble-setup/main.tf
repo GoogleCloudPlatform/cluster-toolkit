@@ -22,8 +22,8 @@ locals {
 locals {
   profile_script = <<-EOF
     if [ -f ${var.install_dir}/share/ramble/setup-env.sh ]; then
-          echo "** Ramble's python virtualenv (/usr/local/ramble-python) is actiavted. Call 'deactivate' to deactivate."
-          . /usr/local/ramble-python/bin/activate
+          test -t 1 && echo "** Ramble's python virtualenv (/usr/local/ramble-python) is activated. Call 'deactivate' to deactivate."
+          VIRTUAL_ENV_DISABLE_PROMPT=1 . ${var.ramble_virtualenv_path}/bin/activate
           . ${var.install_dir}/share/ramble/setup-env.sh
     fi
   EOF
@@ -44,18 +44,25 @@ locals {
     }
   )
 
-  deps_content = templatefile(
-    "${path.module}/templates/install_ramble_deps.yml.tpl",
+  install_ramble_deps_runner = {
+    "type"        = "ansible-local"
+    "source"      = "${path.module}/scripts/install_ramble_deps.yml"
+    "destination" = "install_ramble_deps.yml"
+    "args"        = "-e virtualenv_path=${var.ramble_virtualenv_path}"
+  }
+
+  python_reqs_content = templatefile(
+    "${path.module}/templates/install_ramble_python_deps.yml.tftpl",
     {
-      ramble_ref = var.ramble_ref
+      install_dir     = var.install_dir
+      virtualenv_path = var.ramble_virtualenv_path
     }
   )
 
-  install_ramble_deps_runner = {
+  python_reqs_runner = {
     "type"        = "ansible-local"
-    "content"     = local.deps_content
-    "destination" = "install_ramble_deps.yml"
-    "args"        = "-e ramble_virtualenv_path=${var.ramble_virtualenv_path}"
+    "content"     = local.python_reqs_content
+    "destination" = "install_ramble_reqs.yml"
   }
 
   install_ramble_runner = {
@@ -66,7 +73,7 @@ locals {
 
   bucket_md5  = substr(md5("${var.project_id}.${var.deployment_name}"), 0, 4)
   bucket_name = "ramble-scripts-${local.bucket_md5}"
-  runners     = [local.install_ramble_deps_runner, local.install_ramble_runner]
+  runners     = [local.install_ramble_deps_runner, local.install_ramble_runner, local.python_reqs_runner]
 
   combined_runner = {
     "type"        = "shell"
@@ -86,7 +93,7 @@ resource "google_storage_bucket" "bucket" {
 }
 
 module "startup_script" {
-  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=336e0a4"
+  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=50644b2"
 
   labels          = local.labels
   project_id      = var.project_id

@@ -81,6 +81,7 @@ deployment_groups:
     settings:
       machine_type: n2d-standard-16
       node_count_dynamic_max: 20
+      bandwidth_tier: gvnic_enabled
 
   - id: compute_partition
     source: community/modules/compute/schedmd-slurm-gcp-v5-partition

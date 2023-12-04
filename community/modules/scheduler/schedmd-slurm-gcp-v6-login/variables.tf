@@ -33,9 +33,9 @@ variable "zone" {
   default     = null
 }
 
-variable "group_name" {
+variable "name_prefix" {
   type        = string
-  description = "Name of the login nodes group."
+  description = "Unique name prefix for login nodes"
 }
 
 variable "num_instances" {

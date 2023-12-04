@@ -21,7 +21,9 @@ vars:
   region: us-central1
   zone: us-central1-c
   disk_size_gb: 100
-  new_image_family: htcondor-10x
+  new_image:
+    family: htcondor-10x
+    project: $(vars.project_id)
   enable_shielded_vm: true
 
 # Documentation for each of the modules used below can be found at
@@ -54,7 +56,7 @@ deployment_groups:
     settings:
       disk_size: $(vars.disk_size_gb)
       source_image_family: hpc-rocky-linux-8
-      image_family: $(vars.new_image_family)
+      image_family: $(vars.new_image.family)
 
 - group: pool
   modules:
@@ -75,9 +77,7 @@ deployment_groups:
     - htcondor_secrets
     - htcondor_setup
     settings:
-      instance_image:
-        project: $(vars.project_id)
-        family: $(vars.new_image_family)
+      instance_image: $(vars.new_image)
     outputs:
     - central_manager_name
 
@@ -93,9 +93,7 @@ deployment_groups:
     - htcondor_cm
     settings:
       name_prefix: grp1
-      instance_image:
-        project: $(vars.project_id)
-        family: $(vars.new_image_family)
+      instance_image: $(vars.new_image)
       min_idle: 2
 
   - id: htcondor_execute_point_spot
@@ -107,9 +105,7 @@ deployment_groups:
     - htcondor_cm
     settings:
       name_prefix: spot
-      instance_image:
-        project: $(vars.project_id)
-        family: $(vars.new_image_family)
+      instance_image: $(vars.new_image)
       spot: true
 
   - id: htcondor_access
@@ -124,9 +120,7 @@ deployment_groups:
     settings:
       default_mig_id: $(htcondor_execute_point.mig_id)
       enable_public_ips: true
-      instance_image:
-        project: $(vars.project_id)
-        family: $(vars.new_image_family)
+      instance_image: $(vars.new_image)
     outputs:
     - access_point_ips
     - access_point_name

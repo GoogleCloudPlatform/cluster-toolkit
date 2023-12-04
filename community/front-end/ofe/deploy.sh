@@ -178,7 +178,7 @@ error() {
 # Capture user entry.
 #  - Has an option to hide the response, which is useful for passwords.
 #  - Accepts a default that is used when no user entry.
-#  - Note: this function is used in command substition, i.e. foo=$(ask "bar")
+#  - Note: this function is used in command substitution, i.e. foo=$(ask "bar")
 #          so no echo commands can be used
 #
 # Usage:
@@ -439,7 +439,7 @@ create_service_account() {
 			getcred=1
 			;;
 		*)
-			verbose "assuming re-use of account"
+			verbose "assuming reuse of account"
 			echo ""
 			echo "    Using existing service account: ${service_account}"
 			case $(ask "    Do you want to regenerate a credential? [y/N] ") in

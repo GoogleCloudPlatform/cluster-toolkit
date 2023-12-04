@@ -13,7 +13,7 @@
 # limitations under the License.
 
 '''
-This is a backend part of custom image creation fuctionality.
+This is a backend part of custom image creation functionality.
 Frontend views will talk with functions here to perform real actions.
 '''
 

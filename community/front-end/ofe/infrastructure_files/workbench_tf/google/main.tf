@@ -173,8 +173,9 @@ resource "google_notebooks_instance" "ai_notebook" {
   machine_type = var.machine_type
 
   vm_image {
-    project      = var.image_project
-    image_family = var.image_family
+    image_family = try(var.instance_image.family, null)
+    image_name   = try(var.instance_image.name, null)
+    project      = var.instance_image.project
   }
 
   instance_owners = var.owner_id

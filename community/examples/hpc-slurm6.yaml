@@ -31,6 +31,12 @@ deployment_groups:
   - id: network
     source: modules/network/vpc
 
+  - id: homefs
+    source: modules/file-system/filestore
+    use: [network]
+    settings:
+      local_mount: /home
+
   - id: debug_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [network]
@@ -42,8 +48,7 @@ deployment_groups:
 
   - id: debug_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
-    use:
-    - debug_nodeset
+    use: [debug_nodeset, homefs]
     settings:
       partition_name: debug
       exclusive: false  # allows nodes to stay up after jobs are done
@@ -55,11 +60,11 @@ deployment_groups:
     settings:
       name: ns2
       node_count_dynamic_max: 20
+      bandwidth_tier: gvnic_enabled
 
   - id: compute_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
-    use:
-    - compute_nodeset
+    use: [compute_nodeset, homefs]
     settings:
       partition_name: compute
 
@@ -67,7 +72,7 @@ deployment_groups:
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
     use: [network]
     settings:
-      group_name: login
+      name_prefix: login
       machine_type: n2-standard-4
       disable_login_public_ips: false
 
@@ -78,5 +83,6 @@ deployment_groups:
     - debug_partition
     - compute_partition
     - slurm_login
+    - homefs
     settings:
       disable_controller_public_ips: false

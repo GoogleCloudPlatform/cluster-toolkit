@@ -93,7 +93,7 @@ class BackendAsyncView(generic.View):
         c.save()
 
     def get_task_record_data(self, request):
-        """Called from a syncronous context"""
+        """Called from a synchronous context"""
         return {}
 
     async def _cmd(self, *args, **kwargs):

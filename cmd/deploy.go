@@ -18,9 +18,9 @@ package cmd
 import (
 	"fmt"
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/modulewriter"
 	"hpc-toolkit/pkg/shell"
-	"log"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
@@ -76,31 +76,29 @@ func getApplyBehavior(autoApprove bool) shell.ApplyBehavior {
 func runDeployCmd(cmd *cobra.Command, args []string) {
 	expandedBlueprintFile := filepath.Join(artifactsDir, expandedBlueprintFilename)
 	dc, _, err := config.NewDeploymentConfig(expandedBlueprintFile)
-	cobra.CheckErr(err)
+	checkErr(err)
 	groups := dc.Config.DeploymentGroups
-	cobra.CheckErr(validateRuntimeDependencies(groups))
-	cobra.CheckErr(shell.ValidateDeploymentDirectory(groups, deploymentRoot))
+	checkErr(validateRuntimeDependencies(groups))
+	checkErr(shell.ValidateDeploymentDirectory(groups, deploymentRoot))
 
 	for _, group := range groups {
 		groupDir := filepath.Join(deploymentRoot, string(group.Name))
-		cobra.CheckErr(shell.ImportInputs(groupDir, artifactsDir, expandedBlueprintFile))
+		checkErr(shell.ImportInputs(groupDir, artifactsDir, expandedBlueprintFile))
 
-		var err error
 		switch group.Kind() {
 		case config.PackerKind:
 			// Packer groups are enforced to have length 1
 			subPath, e := modulewriter.DeploymentSource(group.Modules[0])
-			cobra.CheckErr(e)
+			checkErr(e)
 			moduleDir := filepath.Join(groupDir, subPath)
-			err = deployPackerGroup(moduleDir)
+			checkErr(deployPackerGroup(moduleDir))
 		case config.TerraformKind:
-			err = deployTerraformGroup(groupDir)
+			checkErr(deployTerraformGroup(groupDir))
 		default:
-			err = fmt.Errorf("group %s is an unsupported kind %s", groupDir, group.Kind().String())
+			checkErr(fmt.Errorf("group %s is an unsupported kind %s", groupDir, group.Kind().String()))
 		}
-		cobra.CheckErr(err)
 	}
-	fmt.Println("\n###############################")
+	logging.Info("\n###############################")
 	printAdvancedInstructionsMessage(deploymentRoot)
 }
 
@@ -133,15 +131,15 @@ func deployPackerGroup(moduleDir string) error {
 	}
 	buildImage := applyBehavior == shell.AutomaticApply || shell.ApplyChangesChoice(c)
 	if buildImage {
-		log.Printf("initializing packer module at %s", moduleDir)
+		logging.Info("initializing packer module at %s", moduleDir)
 		if err := shell.ExecPackerCmd(moduleDir, false, "init", "."); err != nil {
 			return err
 		}
-		log.Printf("validating packer module at %s", moduleDir)
+		logging.Info("validating packer module at %s", moduleDir)
 		if err := shell.ExecPackerCmd(moduleDir, false, "validate", "."); err != nil {
 			return err
 		}
-		log.Printf("building image using packer module at %s", moduleDir)
+		logging.Info("building image using packer module at %s", moduleDir)
 		if err := shell.ExecPackerCmd(moduleDir, true, "build", "."); err != nil {
 			return err
 		}

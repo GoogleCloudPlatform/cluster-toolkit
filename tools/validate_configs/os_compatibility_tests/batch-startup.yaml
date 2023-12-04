@@ -21,16 +21,16 @@ vars:
   deployment_name: test
   region: us-central1
   zone: us-central1-a
-  # image:
+  # instance_image:
   #   family: ubuntu-2004-lts
   #   project: ubuntu-os-cloud
-  # image:
+  # instance_image:
   #   family: centos-7
   #   project: centos-cloud
-  image:
+  instance_image:
     family: rocky-linux-8
     project: rocky-linux-cloud
-  # image:
+  # instance_image:
   #   family: debian-11
   #   project: debian-cloud
 

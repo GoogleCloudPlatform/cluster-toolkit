@@ -15,12 +15,7 @@
 package deploymentio
 
 import (
-	"fmt"
-	"io/ioutil"
-	"log"
-	"os"
 	"testing"
-	"time"
 
 	"github.com/spf13/afero"
 	. "gopkg.in/check.v1"
@@ -41,36 +36,12 @@ const (
 `
 )
 
-var testDir string
+type zeroSuite struct{}
 
-// Setup GoCheck
-type MySuite struct{}
-
-var _ = Suite(&MySuite{})
+var _ = Suite(&zeroSuite{})
 
 func Test(t *testing.T) {
 	TestingT(t)
-}
-
-func setup() {
-	t := time.Now()
-	dirName := fmt.Sprintf("ghpc_deploymentio_test_%s", t.Format(time.RFC3339))
-	dir, err := ioutil.TempDir("", dirName)
-	if err != nil {
-		log.Fatalf("modulewriter_test: %v", err)
-	}
-	testDir = dir
-}
-
-func teardown() {
-	os.RemoveAll(testDir)
-}
-
-func TestMain(m *testing.M) {
-	setup()
-	code := m.Run()
-	teardown()
-	os.Exit(code)
 }
 
 func getTestFS() afero.IOFS {
@@ -83,7 +54,7 @@ func getTestFS() afero.IOFS {
 	return afero.NewIOFS(aferoFS)
 }
 
-func (s *MySuite) TestGetDeploymentioLocal(c *C) {
+func (s *zeroSuite) TestGetDeploymentioLocal(c *C) {
 	deploymentio := GetDeploymentioLocal()
 	c.Assert(deploymentio, Equals, deploymentios["local"])
 }

@@ -7,7 +7,7 @@ partitions, where cloud partitions can elastically create resources in Google
 Cloud as needed.
 
 This document intends to support the use of the hybrid slurm terraform modules
-provided by SchedMD via [Slurm on GCP][slurm-gcp] and are availabe in the HPC
+provided by SchedMD via [Slurm on GCP][slurm-gcp] and are available in the HPC
 Toolkit through the [schedmd-slurm-gcp-v5-hybrid][hybridmodule] module.
 
 > **_NOTE:_** Since on-premise Slurm configurations can vary significantly,
@@ -192,7 +192,7 @@ settings to be called out:
 The [Slurm on GCP][slurm-gcp] tool from SchedMD provides a set of default images
 based on a selection of base VM disk images. In most cases when deploying a hybrid cluster,
 many of the assumptions in these default images are not sufficient. Because of this, it
-is recomended to create a custom image in your Google Cloud project based on the
+is recommended to create a custom image in your Google Cloud project based on the
 requirements of your on-premise slurm cluster.
 
 [Slurm on GCP][slurm-gcp] also provides a set of [packer templates][slurmgcppacker]

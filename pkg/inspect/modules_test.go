@@ -23,6 +23,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	"golang.org/x/exp/slices"
 )
 
@@ -49,6 +50,12 @@ func (m *modInfo) Role() string {
 
 var allMods []modInfo = nil
 
+// we can't use embedded FS here (defined in super-package).
+// Craft local path.
+func modPath(source string) string {
+	return filepath.Join("../..", source)
+}
+
 func getModules() []modInfo {
 	if allMods != nil {
 		return allMods
@@ -59,7 +66,7 @@ func getModules() []modInfo {
 	}
 	allMods = []modInfo{}
 	for _, sk := range sks {
-		info, err := modulereader.GetModuleInfo(filepath.Join("../..", sk.Source), sk.Kind)
+		info, err := modulereader.GetModuleInfo(modPath(sk.Source), sk.Kind)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -89,12 +96,6 @@ func all(ps ...predicate) predicate {
 	}
 }
 
-func not(p predicate) predicate {
-	return func(mod modInfo) bool {
-		return !p(mod)
-	}
-}
-
 func hasInput(name string) predicate {
 	return func(mod modInfo) bool {
 		_, ok := mod.Input(name)
@@ -102,22 +103,9 @@ func hasInput(name string) predicate {
 	}
 }
 
-func hasOutput(name string) predicate {
-	return func(m modInfo) bool {
-		ind := slices.IndexFunc(m.Outputs, func(i modulereader.OutputInfo) bool { return i.Name == name })
-		return ind != -1
-	}
-}
-
-func ofRole(role string) predicate {
-	return func(mod modInfo) bool {
-		return mod.Role() == role
-	}
-}
-
 // Fails test if slice is empty, returns not empty slice as is.
 func notEmpty[E any](l []E, t *testing.T) []E {
-	if l == nil || len(l) == 0 {
+	if len(l) == 0 {
 		t.Fatal("Did not expect empty list")
 	}
 	return l
@@ -166,5 +154,31 @@ func TestNetworkStorage(t *testing.T) {
 			t.Errorf("%s `network_storage` has unexpected type expected:\n%#v\nor\n%#v\ngot:\n%#v",
 				mod.Source, obj, lst, got)
 		}
+	}
+}
+
+func TestMetadata(t *testing.T) {
+	for _, mod := range notEmpty(query(all()), t) {
+		t.Run(mod.Source, func(t *testing.T) {
+			mtd, err := modulereader.GetMetadata(modPath(mod.Source))
+			if err != nil {
+				t.Error(err)
+				return
+			}
+
+			if mtd.Spec.Requirements.Services == nil {
+				t.Error("metadata has no requirements")
+			}
+
+			// for safe transition, check that metadata is the same as legacy. To be removed.
+			legacy := modulereader.LegacyMetadata(mod.Source)
+			diff := cmp.Diff(legacy.Spec.Requirements.Services, mtd.Spec.Requirements.Services)
+			if diff != "" {
+				t.Errorf("diff (-want +got):\n%s", diff)
+				fmt.Println(filepath.Join(mod.Source, "metadata.yaml"))
+				fmt.Println(legacy.Spec.Requirements.Services)
+			}
+
+		})
 	}
 }

@@ -45,7 +45,7 @@ logger = logging.getLogger(__name__)
 # If no 'target' (aka, coming from the clusters:
 #   * source={cluster_id} - Who sent it?
 
-# Command with reponse callback
+# Command with response callback
 #
 # Commands that require a response should encode a unique key as a message
 # field ('ackid').

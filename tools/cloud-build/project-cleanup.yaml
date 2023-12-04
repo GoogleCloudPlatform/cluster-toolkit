@@ -23,7 +23,18 @@ steps:
   args:
   - -c
   - |
-    set -e
+    failures=0
+    trap 'failures=$((failures+1))' ERR
+    echo
+    echo "Cleaning Resource Policies"
     /workspace/tools/clean-resource-policies.sh
+    echo
+    echo "Cleaning Filestore"
     /workspace/tools/clean-filestore-limit.sh
-    /worksapce/tools/clean-metadata.sh
+    echo
+    echo "Cleaning Metadata"
+    /workspace/tools/clean-metadata.sh
+    if [[ $failures -ne 0 ]]; then
+      echo "Failures during cleanup, check above"
+      exit 1
+    fi
