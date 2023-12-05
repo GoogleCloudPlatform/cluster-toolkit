@@ -51,9 +51,8 @@ def run_command(cmd: str, err_msg: str = None) -> subprocess.CompletedProcess:
     return res
 
 def check_gcloud_components() -> None:
-    cmd = VER_CMD
     err_msg = "Error getting Google Cloud SDK versions"
-    res = run_command(cmd, err_msg)
+    res = run_command(VER_CMD, err_msg)
 
     version_dict = json.loads(res.stdout)
     if "alpha" not in version_dict:
@@ -62,18 +61,16 @@ def check_gcloud_components() -> None:
         raise LookupError(err_msg)
 
 def get_maintenance_nodes(project: str) -> List[str]:
-    cmd = PER_MAINT_CMD.format(project)
     err_msg = "Error getting VMs that have scheduled maintenance"
-    res = run_command(cmd, err_msg)
+    res = run_command(PER_MAINT_CMD.format(project), err_msg)
 
     maint_nodes = res.stdout.split('\n')[:-1]
 
     return maint_nodes
 
 def get_upcoming_maintenance(project: str) -> List[str]:
-    cmd = UPC_MAINT_CMD.format(project)
     err_msg = "Error getting upcoming maintenance list"
-    res = run_command(cmd, err_msg)
+    res = run_command(UPC_MAINT_CMD.format(project), err_msg)
 
     upc_maint = [x.split() for x in res.stdout.split("\n")[:-1]]
 
@@ -93,24 +90,26 @@ class NodeMaintenance:
         self.upc_maint_vms = None
 
     def update_maintenance_nodes(self) -> None:
-        self.per_maint_vms = get_maintenance_nodes(self.project)
+        per_maint_vms = get_maintenance_nodes(self.project)
         if self.regex:
-            self.per_maint_vms = list(filter(self.regex.search,
-                                           self.per_maint_vms))
+            per_maint_vms = list(filter(self.regex.search, per_maint_vms))
 
         if self.slurm_nodes:
-            self.per_maint_vms = list(set(self.per_maint_vms) &
-                                    set(self.slurm_nodes))
+            per_maint_vms = list(set(per_maint_vms) & set(self.slurm_nodes))
+        
+        self.per_maint_vms = per_maint_vms
 
     def update_upcoming_maintenance(self) -> None:
-        self.upc_maint_vms = get_upcoming_maintenance(self.project)
+        upc_maint_vms = get_upcoming_maintenance(self.project)
         if self.regex:
-            self.upc_maint_vms = list(filter(lambda x: self.regex.match(x[0]),
-                                  self.upc_maint_vms))
+            upc_maint_vms = list(filter(lambda x: self.regex.match(x[0]),
+                                  upc_maint_vms))
 
         if self.slurm_nodes:
-            self.upc_maint_vms = [u for u in self.upc_maint_vms if u[0] in
+            upc_maint_vms = [u for u in upc_maint_vms if u[0] in
                               self.slurm_nodes]
+
+        self.upc_maint_vms = upc_maint_vms
 
     def print_maintenance_nodes(self) -> None:
         if self.per_maint_vms is None:
@@ -144,19 +143,17 @@ class NodeMaintenance:
 def node_maintenace_factory(project: str, regex: str = None,
                             check_maint: bool = False,
                             slurm: bool = False) -> NodeMaintenance:
-    cmd = PRJ_CMD.format(project)
     err_msg = f"{project} does not exist or you may not have permission to" \
               " access it"
-    res = run_command(cmd, err_msg)
+    res = run_command(PRJ_CMD.format(project), err_msg)
 
     compiled_regex = None
     if regex:
         try:
             compiled_regex = re.compile(regex)
         except re.error as e:
-            print("Error using provided regular expression")
-            print("The VM list will not be filtered with regular expression")
-            print(f"RegEx error message: {e}")
+            print(f"Invalid regular expression: {e}")
+            sys.exit()
 
     slurm_nodes = None
     if slurm:
@@ -194,7 +191,7 @@ if __name__ == "__main__":
     parser.add_argument("-m", "--print_periodic_vms", action="store_true",
                         help="Display nodes that have periodic" \
                              " maintenance setup")
-    parser.add_argument("-s", "--slurm", action="store_true", 
+    parser.add_argument("-s", "--slurm", action="store_true",
                         help="Filter results based on local slurm cluster")
 
     if len(sys.argv)==1:
