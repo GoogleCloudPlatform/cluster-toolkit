@@ -18,7 +18,7 @@ import (
 	"strings"
 )
 
-func LegacyMetadata(source string) Metadata {
+func legacyMetadata(source string) Metadata {
 	services := []string{}
 	if idx := strings.LastIndex(source, "community/modules/"); idx != -1 {
 		services = defaultAPIList(source[idx:])
@@ -35,6 +35,7 @@ func LegacyMetadata(source string) Metadata {
 	}
 }
 
+// DO NOT MODIFY. Specify in metadata.yaml instead.
 func defaultAPIList(source string) []string {
 	// API lists at
 	// https://console.cloud.google.com/apis/dashboard and
