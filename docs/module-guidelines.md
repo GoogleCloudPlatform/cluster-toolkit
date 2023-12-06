@@ -182,3 +182,24 @@ module "vm" {
 ```
 
 For more information see [startup-script/README](https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/modules/scripts/startup-script#readme).
+
+## Module `metadata.yaml`
+
+**All** modules should have a `metadata.yaml` file in the root directory. The metadata format follows Cloud Foundation Toolkit metadata [schema](https://github.com/GoogleCloudPlatform/cloud-foundation-toolkit/blob/640a8858ffce99a4512904563a2b00e6768f5a31/cli/bpmetadata/schema/gcp-blueprint-metadata.json#L299) with addition of toolkit-specific section `ghpc`.
+
+See example below:
+
+```yaml
+---
+spec:
+  requirements:
+    # `services` has to be defined, 
+    # if no services are required, use empty list: []
+    services: 
+    - serviceA.googleapis.com
+    - serviceB.googleapis.com
+ghpc:  # [optional]
+  # [optional] `inject_module_id`, if set, will inject blueprint 
+  # module id as a value for the module variable `var_name`.
+  inject_module_id: var_name 
+```
