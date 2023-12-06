@@ -177,12 +177,38 @@ func (s *MySuite) TestIsOverwriteAllowed_Absent(c *C) {
 	c.Check(checkOverwriteAllowed(depDir, bp, true /*overwriteFlag*/), IsNil)
 }
 
-func (s *MySuite) TestIsOverwriteAllowed_Malformed(c *C) {
+func (s *MySuite) TestIsOverwriteAllowed_NotGHPC(c *C) {
 	depDir := c.MkDir() // empty deployment folder considered malformed
 
 	bp := config.Blueprint{}
-	c.Check(checkOverwriteAllowed(depDir, bp, false /*overwriteFlag*/), ErrorMatches, ".* already exists, use -w to overwrite")
-	c.Check(checkOverwriteAllowed(depDir, bp, true /*overwriteFlag*/), IsNil)
+	c.Check(checkOverwriteAllowed(depDir, bp, false /*overwriteFlag*/), ErrorMatches, ".* not a valid GHPC deployment folder")
+	c.Check(checkOverwriteAllowed(depDir, bp, true /*overwriteFlag*/), ErrorMatches, ".* not a valid GHPC deployment folder")
+}
+
+func (s *MySuite) TestIsOverwriteAllowed_NoExpanded(c *C) {
+	depDir := c.MkDir() // empty deployment folder considered malformed
+	if err := os.MkdirAll(modulewriter.HiddenGhpcDir(depDir), 0755); err != nil {
+		c.Fatal(err)
+	}
+
+	bp := config.Blueprint{}
+	c.Check(checkOverwriteAllowed(depDir, bp, false /*overwriteFlag*/), ErrorMatches, ".* previous GHPC version is too old")
+	c.Check(checkOverwriteAllowed(depDir, bp, true /*overwriteFlag*/), ErrorMatches, ".* previous GHPC version is too old")
+}
+
+func (s *MySuite) TestIsOverwriteAllowed_Malformed(c *C) {
+	depDir := c.MkDir() // empty deployment folder considered malformed
+	if err := os.MkdirAll(modulewriter.ArtifactsDir(depDir), 0755); err != nil {
+		c.Fatal(err)
+	}
+	expPath := filepath.Join(modulewriter.ArtifactsDir(depDir), "expanded_blueprint.yaml")
+	if err := os.WriteFile(expPath, []byte("humus"), 0644); err != nil {
+		c.Fatal(err)
+	}
+
+	bp := config.Blueprint{}
+	c.Check(checkOverwriteAllowed(depDir, bp, false /*overwriteFlag*/), NotNil)
+	c.Check(checkOverwriteAllowed(depDir, bp, true /*overwriteFlag*/), NotNil)
 }
 
 func (s *MySuite) TestIsOverwriteAllowed_Present(c *C) {
@@ -194,6 +220,7 @@ func (s *MySuite) TestIsOverwriteAllowed_Present(c *C) {
 
 	prev := config.DeploymentConfig{
 		Config: config.Blueprint{
+			GhpcVersion: "TaleOdBygoneYears",
 			DeploymentGroups: []config.DeploymentGroup{
 				{Name: "isildur"}}}}
 	if err := prev.ExportBlueprint(filepath.Join(artDir, "expanded_blueprint.yaml")); err != nil {
@@ -210,6 +237,6 @@ func (s *MySuite) TestIsOverwriteAllowed_Present(c *C) {
 	sub := config.Blueprint{
 		DeploymentGroups: []config.DeploymentGroup{
 			{Name: "aragorn"}}}
-	c.Check(checkOverwriteAllowed(depDir, sub, false /*overwriteFlag*/), ErrorMatches, `.*remove a deployment group "isildur".*`)
+	c.Check(checkOverwriteAllowed(depDir, sub, false /*overwriteFlag*/), ErrorMatches, `.* already exists, use -w to overwrite`)
 	c.Check(checkOverwriteAllowed(depDir, sub, true /*overwriteFlag*/), ErrorMatches, `.*remove a deployment group "isildur".*`)
 }

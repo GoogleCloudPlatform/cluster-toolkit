@@ -295,15 +295,27 @@ func checkOverwriteAllowed(depDir string, bp config.Blueprint, overwriteFlag boo
 		return nil // all good, no previous deployment
 	}
 
-	useWErr := fmt.Errorf("deployment folder %q already exists, use -w to overwrite", depDir)
+	if _, err := os.Stat(modulewriter.HiddenGhpcDir(depDir)); os.IsNotExist(err) {
+		// hidden ghpc dir does not exist
+		return fmt.Errorf("folder %q already exists, and it is not a valid GHPC deployment folder", depDir)
+	}
+
 	// try to get previous deployment
 	expPath := filepath.Join(modulewriter.ArtifactsDir(depDir), modulewriter.ExpandedBlueprintName)
+	if _, err := os.Stat(expPath); os.IsNotExist(err) {
+		return fmt.Errorf("expanded blueprint file %q is missing, maybe your previous GHPC version is too old", expPath)
+	}
 	prev, _, err := config.NewDeploymentConfig(expPath)
-	if err != nil { // malformed previous deployment, rely on flag
-		if overwriteFlag {
-			return nil
-		}
-		return useWErr
+	if err != nil {
+		return err
+	}
+
+	if prev.Config.GhpcVersion != bp.GhpcVersion {
+		logging.Info("WARNING: ghpc_version has changed from %q to %q", prev.Config.GhpcVersion, bp.GhpcVersion)
+	}
+
+	if !overwriteFlag {
+		return fmt.Errorf("deployment folder %q already exists, use -w to overwrite", depDir)
 	}
 
 	newGroups := map[config.GroupName]bool{}
@@ -317,12 +329,5 @@ func checkOverwriteAllowed(depDir string, bp config.Blueprint, overwriteFlag boo
 		}
 	}
 
-	if prev.Config.GhpcVersion != bp.GhpcVersion {
-		logging.Info("WARNING: ghpc_version has changed from %q to %q", prev.Config.GhpcVersion, bp.GhpcVersion)
-	}
-
-	if !overwriteFlag {
-		return useWErr
-	}
 	return nil
 }
