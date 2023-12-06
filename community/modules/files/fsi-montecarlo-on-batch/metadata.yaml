@@ -15,5 +15,4 @@
 
 spec:
   requirements:
-    services:
-    - batch.googleapis.com
+    services: []

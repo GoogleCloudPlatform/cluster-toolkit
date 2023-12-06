@@ -16,4 +16,4 @@
 spec:
   requirements:
     services:
-    - notebooks.googleapis.com
+    - bigquery.googleapis.com
