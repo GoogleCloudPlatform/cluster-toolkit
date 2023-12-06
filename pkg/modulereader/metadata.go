@@ -74,5 +74,5 @@ func GetMetadataSafe(source string) Metadata {
 	if mtd, err := GetMetadata(source); err == nil {
 		return mtd
 	}
-	return LegacyMetadata(source)
+	return legacyMetadata(source)
 }
