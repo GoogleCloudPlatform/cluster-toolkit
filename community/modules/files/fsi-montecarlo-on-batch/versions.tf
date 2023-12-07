@@ -27,6 +27,9 @@ terraform {
     http = {
       version = "~> 3.0"
     }
+    template = {
+      version = "~> 2.0"
+    }
   }
   provider_meta "google" {
     module_name = "blueprints/terraform/hpc-toolkit:fsi-montecarlo-on-batch/v1.25.0"

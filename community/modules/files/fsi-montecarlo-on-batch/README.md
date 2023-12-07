@@ -40,7 +40,7 @@ limitations under the License.
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 3.83 |
 | <a name="requirement_http"></a> [http](#requirement\_http) | ~> 3.0 |
 | <a name="requirement_random"></a> [random](#requirement\_random) | ~> 3.0 |
-| <a name="requirement_template"></a> [template](#requirement\_template) | ~> 3.0 |
+| <a name="requirement_template"></a> [template](#requirement\_template) | ~> 2.0 |
 
 ## Providers
 
@@ -49,7 +49,7 @@ limitations under the License.
 | <a name="provider_google"></a> [google](#provider\_google) | >= 3.83 |
 | <a name="provider_http"></a> [http](#provider\_http) | ~> 3.0 |
 | <a name="provider_random"></a> [random](#provider\_random) | ~> 3.0 |
-| <a name="provider_template"></a> [template](#provider\_template) | ~> 3.0 |
+| <a name="provider_template"></a> [template](#provider\_template) | ~> 2.0 |
 
 ## Modules
 
