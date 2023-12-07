@@ -24,9 +24,6 @@ terraform {
       source  = "hashicorp/random"
       version = "~> 3.0"
     }
-    template = {
-      version = "~> 3.0"
-    }
     http = {
       version = "~> 3.0"
     }
