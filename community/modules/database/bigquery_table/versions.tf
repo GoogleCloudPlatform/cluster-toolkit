@@ -15,18 +15,15 @@
 */
 
 terraform {
+  required_version = ">= 1.0"
   required_providers {
     google = {
       source  = "hashicorp/google"
-      version = ">= 3.83"
+      version = ">= 4.42"
     }
     random = {
       source  = "hashicorp/random"
       version = "~> 3.0"
     }
   }
-  provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:bigquery_table/v1.24.0"
-  }
-  required_version = ">= 1.0"
 }

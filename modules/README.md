@@ -57,8 +57,8 @@ Modules that are still in development and less stable are labeled with the
 * **[SchedMD-slurm-on-gcp-partition]** ![community-badge] ![deprecated-badge] : Creates a partition
   to be used by a [slurm-controller][schedmd-slurm-on-gcp-controller].
 * **[notebook]** ![community-badge] ![experimental-badge] : Creates a
-Vertex AI Notebook. Primarily used for FSI - MonteCarlo Tutorial:
-  [fsi-montecarlo-on-batch-tutorial].
+Vertex AI Notebook. Primarily used for [FSI - MonteCarlo Tutorial](
+  fsi-montecarlo-on-batch-tutorial).
 
 [vm-instance]: compute/vm-instance/README.md
 [gke-node-pool]: ../community/modules/compute/gke-node-pool/README.md
@@ -81,11 +81,10 @@ Vertex AI Notebook. Primarily used for FSI - MonteCarlo Tutorial:
   integrated with a [slurm-controller][schedmd-slurm-on-gcp-controller].
 
 * **[bigquery-dataset]** ![community-badge] ![experimental-badge] : Creates a BQ
-  dataset. Primarily used for FSI - MonteCarlo Tutorial:
-  [fsi-montecarlo-on-batch-tutorial].
+  dataset. Primarily used for [FSI - MonteCarlo Tutorial](fsi-montecarlo-on-batch-tutorial).
 * **[bigquery-table]** ![community-badge] ![experimental-badge] : Creates a BQ
-  table. Primarily used for FSI - MonteCarlo Tutorial:
-  [fsi-montecarlo-on-batch-tutorial].
+  table. Primarily used for
+  [FSI - MonteCarlo Tutorial](fsi-montecarlo-on-batch-tutorial).
 
 [slurm-cloudsql-federation]: ../community/modules/database/slurm-cloudsql-federation/README.md
 [bigquery-dataset]: ../community/modules/database/bigquery_dataset/README.md
@@ -115,12 +114,6 @@ Vertex AI Notebook. Primarily used for FSI - MonteCarlo Tutorial:
 [nfs-server]: ../community/modules/file-system/nfs-server/README.md
 [cloud-storage-bucket]: ../community/modules/file-system/cloud-storage-bucket/README.md
 [gke-persistent-volume]: ../community/modules/file-system/gke-persistent-volume/README.md
-
-### Files
-These modules are custom for copying files from the repo to a destination, primarily a GCS bucket.
-
-* **[fsi-montecarlo-on-batch]** ![community-badge] ![experimental-badge] : Creates a BQ
-  dataset. Primarily used for FSI - MonteCarlo Tutorial:
 
 ### Monitoring
 
@@ -165,11 +158,9 @@ These modules are custom for copying files from the repo to a destination, prima
 ### Pub/Sub
 
 * **[pubsub-topic]** ![community-badge] ![experimental-badge] : Creates a
-Pub/Sub topic. Primarily used for FSI - MonteCarlo Tutorial:
-[fsi-montecarlo-on-batch-tutorial].
+Pub/Sub topic. Primarily used for [FSI - MonteCarlo Tutorial](fsi-montecarlo-on-batch-tutorial).
 * **[pubsub-subscription]** ![community-badge] ![experimental-badge] : Creates a
-Pub/Sub subscription. Primarily used for FSI - MonteCarlo Tutorial:
-[fsi-montecarlo-on-batch-tutorial].
+Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial](fsi-montecarlo-on-batch-tutorial).
 
 [pubsub-topic]: ../community/modules/pubsub/subscription/README.md
 [pubsub-subscription]: ../community/modules/pubsub/topic/README.md

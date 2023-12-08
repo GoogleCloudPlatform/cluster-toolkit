@@ -16,7 +16,7 @@
 
 locals {
   # This label allows for billing report tracking based on module.
-  labels = merge(var.labels, { ghpc_module = "subscription", ghpc_role = "pubsub" })
+  labels = merge(var.labels, { ghpc_module = "bigquery-sub", ghpc_role = "pubsub" })
 }
 
 locals {

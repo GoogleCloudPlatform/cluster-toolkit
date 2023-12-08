@@ -15,6 +15,7 @@
 */
 
 terraform {
+  required_version = ">= 1.0"
   required_providers {
     google = {
       source  = "hashicorp/google"
@@ -37,5 +38,4 @@ terraform {
   provider_meta "google-beta" {
     module_name = "blueprints/terraform/hpc-toolkit:fsi-montecarlo-on-batch/v1.25.0"
   }
-  required_version = ">= 1.0"
 }

@@ -15,10 +15,11 @@
 */
 
 terraform {
+  required_version = ">= 1.0"
   required_providers {
     google = {
       source  = "hashicorp/google"
-      version = ">= 3.83"
+      version = ">= 4.42"
     }
     random = {
       source  = "hashicorp/random"
@@ -28,5 +29,4 @@ terraform {
   provider_meta "google" {
     module_name = "blueprints/terraform/hpc-toolkit:topic/v1.25.0"
   }
-  required_version = ">= 1.0"
 }
