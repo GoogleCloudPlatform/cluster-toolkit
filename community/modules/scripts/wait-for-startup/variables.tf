@@ -17,6 +17,13 @@
 variable "instance_name" {
   description = "Name of the instance we are waiting for"
   type        = string
+  default     = null
+}
+
+variable "instance_names" {
+  description = "A list of names of the instances we are waiting for (this automatically includes any value provided in the singular 'instance_name' setting)"
+  type        = list(string)
+  default     = []
 }
 
 variable "zone" {

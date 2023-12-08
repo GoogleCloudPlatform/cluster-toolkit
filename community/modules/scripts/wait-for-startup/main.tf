@@ -13,22 +13,42 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+locals {
+  instance_names = toset(compact(concat(var.instance_names, [var.instance_name])))
+}
+
+resource "null_resource" "validate_instance_names" {
+  lifecycle {
+    precondition {
+      condition     = length(local.instance_names) > 0
+      error_message = "At least one instance name must be provided"
+    }
+  }
+}
+
 data "google_compute_instance" "vm_instance" {
-  name    = var.instance_name
+  for_each = local.instance_names
+
+  name    = each.value
   zone    = var.zone
   project = var.project_id
 }
 
 resource "null_resource" "wait_for_startup" {
+  for_each = local.instance_names
+
   provisioner "local-exec" {
     command = "/bin/bash ${path.module}/scripts/wait-for-startup-status.sh"
     environment = {
-      INSTANCE_NAME = var.instance_name
+      INSTANCE_NAME = each.value
       ZONE          = var.zone
       PROJECT_ID    = var.project_id
       TIMEOUT       = var.timeout
     }
   }
 
-  triggers = { instance_id_changes = data.google_compute_instance.vm_instance.instance_id }
+  triggers = {
+    instance_id_changes = data.google_compute_instance.vm_instance[each.value].instance_id
+  }
 }
