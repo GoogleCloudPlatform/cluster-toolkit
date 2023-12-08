@@ -14,8 +14,8 @@
 # limitations under the License.
 
 if [[ -z "${INSTANCE_NAME}" ]]; then
-	echo "INSTANCE_NAME is unset"
-	exit 1
+	echo "INSTANCE_NAME is unset... exiting"
+	exit 0
 fi
 if [[ -z "${ZONE}" ]]; then
 	echo "ZONE is unset"
@@ -30,14 +30,26 @@ if [[ -z "${TIMEOUT}" ]]; then
 	exit 1
 fi
 
+echo "Waiting for startup: instance_name='${INSTANCE_NAME}', zone='${ZONE}', project_id='${PROJECT_ID}', timeout_seconds='${TIMEOUT}'"
+
 # Wrapper around grep that swallows the error status code 1
 c1grep() { grep "$@" || test $? = 1; }
 
 now=$(date +%s)
+
+# If VM was created more than 30 days ago, serial port logs may no longer exist.
+# Exit without errors if the instance is older than 30 days.
+logsExpiryDays=30
+createdTimestampIso=$(gcloud compute instances describe "${INSTANCE_NAME}" --project "${PROJECT_ID}" --zone "${ZONE}" --format "value(creationTimestamp)")
+earliestAllowedCreatedTimestamp=$(date -d "${createdTimestampIso} +${logsExpiryDays} day" +%s)
+if [[ "$earliestAllowedCreatedTimestamp" -lt "$now" ]]; then
+	echo "Instance was created more than 30 days ago - serial port 1 logs are likely expired... exiting"
+	exit 0
+fi
+
 deadline=$((now + TIMEOUT))
 error_file=$(mktemp)
-fetch_cmd="gcloud compute instances get-serial-port-output ${INSTANCE_NAME} \
-           --port 1 --zone ${ZONE} --project ${PROJECT_ID}"
+fetch_cmd="gcloud compute instances get-serial-port-output ${INSTANCE_NAME} --port 1 --zone ${ZONE} --project ${PROJECT_ID}"
 # Match string for all finish types of the old guest agent and successful
 # finishes on the new guest agent
 FINISH_LINE="startup-script exit status"
