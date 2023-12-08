@@ -76,10 +76,11 @@ repos:
     args: [-over=15]
   - id: go-unit-tests
   - id: go-mod-tidy
-- repo: https://github.com/tekwizely/pre-commit-golang
-  rev: v1.0.0-rc.1
-  hooks:
-  - id: go-critic
+# Disabled temporarily due to https://github.com/go-critic/go-critic/issues/1388
+# - repo: https://github.com/tekwizely/pre-commit-golang
+#   rev: v1.0.0-rc.1
+#   hooks:
+#   - id: go-critic
 - repo: https://github.com/Bahjat/pre-commit-golang
   rev: v1.0.2
   hooks:
