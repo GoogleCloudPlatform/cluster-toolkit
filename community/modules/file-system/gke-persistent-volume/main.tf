@@ -20,12 +20,20 @@ locals {
 }
 
 locals {
-  location             = split("/", var.filestore_id)[3]
-  filestore_name       = split("/", var.filestore_id)[5]
-  filestore_share_name = trimprefix(var.network_storage.remote_mount, "/")
+  is_gcs = (var.gcs_bucket_name != null)
 
-  pv_name  = "${local.filestore_name}-pv"
-  pvc_name = "${local.filestore_name}-pvc"
+  filestore_id = (
+    !local.is_gcs ?                                  # If not using gcs
+    var.filestore_id :                               # Then filestore_id must be provided
+    "projects/empty/locations/empty/instances/empty" # Otherwise use something arbitrary as it will not be used
+  )
+  location             = split("/", local.filestore_id)[3]
+  filestore_name       = split("/", local.filestore_id)[5]
+  filestore_share_name = trimprefix(var.network_storage.remote_mount, "/")
+  base_name            = local.is_gcs ? var.gcs_bucket_name : local.filestore_name
+
+  pv_name  = "${local.base_name}-pv"
+  pvc_name = "${local.base_name}-pvc"
 
   filestore_pv_contents = templatefile(
     "${path.module}/templates/filestore-pv.yaml.tftpl",
@@ -47,6 +55,26 @@ locals {
       capacity = "${var.capacity_gb}Gi"
       pvc_name = local.pvc_name
       labels   = local.labels
+    }
+  )
+
+  gcs_pv_contents = templatefile(
+    "${path.module}/templates/gcs-pv.yaml.tftpl",
+    {
+      pv_name     = local.pv_name
+      capacity    = "${var.capacity_gb}Gi"
+      labels      = local.labels
+      bucket_name = local.is_gcs ? var.gcs_bucket_name : ""
+    }
+  )
+
+  gcs_pvc_contents = templatefile(
+    "${path.module}/templates/gcs-pvc.yaml.tftpl",
+    {
+      pv_name  = local.pv_name
+      pvc_name = local.pvc_name
+      labels   = local.labels
+      capacity = "${var.capacity_gb}Gi"
     }
   )
 
@@ -76,11 +104,18 @@ provider "kubectl" {
   load_config_file       = false
 }
 
-resource "kubectl_manifest" "filestore_pv" {
-  yaml_body = local.filestore_pv_contents
+resource "kubectl_manifest" "pv" {
+  yaml_body = local.is_gcs ? local.gcs_pv_contents : local.filestore_pv_contents
+
+  lifecycle {
+    precondition {
+      condition     = (var.gcs_bucket_name != null) != (var.filestore_id != null)
+      error_message = "Either gcs_bucket_name or filestore_id must be set."
+    }
+  }
 }
 
-resource "kubectl_manifest" "filestore_pvc" {
-  yaml_body  = local.filestore_pvc_contents
-  depends_on = [kubectl_manifest.filestore_pv]
+resource "kubectl_manifest" "pvc" {
+  yaml_body  = local.is_gcs ? local.gcs_pvc_contents : local.filestore_pvc_contents
+  depends_on = [kubectl_manifest.pv]
 }

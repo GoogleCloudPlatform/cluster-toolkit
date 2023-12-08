@@ -1,5 +1,5 @@
 # Command and Control of Clusters
-Previous incarnations of this Frontend relied on the frontend webserver instance being able to SSH directly to clusters in order to performance command and control (C2) operations. When clusters were created, an admin user was set that would accept a public ssh key for which the webserver owned the private key. This was largely straightfoward, and worked quite well. The clusters were also able to make HTTP API queries to the webserver.
+Previous incarnations of this Frontend relied on the frontend webserver instance being able to SSH directly to clusters in order to performance command and control (C2) operations. When clusters were created, an admin user was set that would accept a public ssh key for which the webserver owned the private key. This was largely straightforward, and worked quite well. The clusters were also able to make HTTP API queries to the webserver.
 
 This works well in the case where webserver and clusters all have public IP addresses, and are able to receive inbound requests, but it breaks down in the case where a user may wish to have the compute clusters not be directly exposed to the public internet.
 

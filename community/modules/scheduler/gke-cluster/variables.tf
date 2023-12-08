@@ -216,6 +216,12 @@ variable "service_account_scopes" {
   default     = ["https://www.googleapis.com/auth/cloud-platform"]
 }
 
+variable "configure_workload_identity_sa" {
+  description = "When true, a kubernetes service account will be created and bound using workload identity to the service account used to create the cluster."
+  type        = bool
+  default     = false
+}
+
 variable "autoscaling_profile" {
   description = "(Beta) Optimize for utilization or availability when deciding to remove nodes. Can be BALANCED or OPTIMIZE_UTILIZATION."
   type        = string

@@ -49,19 +49,20 @@ func validateGlobalLabels(vars Dict) error {
 		errs.At(p, errors.New("vars.labels cannot have more than 64 labels"))
 	}
 	for k, v := range labels.AsValueMap() {
-		// TODO: Use cty.Path to point to the specific label that is invalid
+		vp := p.Cty(cty.Path{}.IndexString(k))
 		if v.Type() != cty.String {
-			errs.At(p, errors.New("vars.labels must be a map of strings"))
+			errs.At(vp, errors.New("vars.labels must be a map of strings"))
+			continue
 		}
 		s := v.AsString()
 
 		// Check that label names are valid
 		if !isValidLabelName(k) {
-			errs.At(p, errors.Errorf("%s: '%s: %s'", errorMessages["labelNameReqs"], k, s))
+			errs.At(vp, errors.Errorf("%s: '%s: %s'", errMsgLabelNameReqs, k, s))
 		}
 		// Check that label values are valid
 		if !isValidLabelValue(s) {
-			errs.At(p, errors.Errorf("%s: '%s: %s'", errorMessages["labelValueReqs"], k, s))
+			errs.At(vp, errors.Errorf("%s: '%s: %s'", errMsgLabelValueReqs, k, s))
 		}
 	}
 	return errs.OrNil()
@@ -83,13 +84,13 @@ func validateVars(vars Dict) error {
 func validateModule(p modulePath, m Module, bp Blueprint) error {
 	// Source/Kind validations are required to pass to perform other validations
 	if m.Source == "" {
-		return BpError{p.Source, fmt.Errorf(errorMessages["emptySource"])}
+		return BpError{p.Source, EmptyModuleSource}
 	}
 	if err := checkMovedModule(m.Source); err != nil {
 		return BpError{p.Source, err}
 	}
 	if !IsValidModuleKind(m.Kind.String()) {
-		return BpError{p.Kind, fmt.Errorf(errorMessages["wrongKind"])}
+		return BpError{p.Kind, InvalidModuleKind}
 	}
 	info, err := modulereader.GetModuleInfo(m.Source, m.Kind.kind)
 	if err != nil {
@@ -98,7 +99,7 @@ func validateModule(p modulePath, m Module, bp Blueprint) error {
 
 	errs := Errors{}
 	if m.ID == "" {
-		errs.At(p.ID, fmt.Errorf(errorMessages["emptyID"]))
+		errs.At(p.ID, EmptyModuleID)
 	}
 	if m.ID == "vars" { // invalid module ID
 		errs.At(p.ID, errors.New("module id cannot be 'vars'"))
@@ -118,7 +119,7 @@ func validateOutputs(p modulePath, mod Module, info modulereader.ModuleInfo) err
 	// Ensure output exists in the underlying modules
 	for io, output := range mod.Outputs {
 		if _, ok := outputs[output.Name]; !ok {
-			err := fmt.Errorf("%s, module: %s output: %s", errorMessages["invalidOutput"], mod.ID, output.Name)
+			err := fmt.Errorf("%s, module: %s output: %s", errMsgInvalidOutput, mod.ID, output.Name)
 			errs.At(p.Outputs.At(io), err)
 		}
 	}
@@ -151,17 +152,17 @@ func validateSettings(
 		// HCL does not support periods in variables names either:
 		// https://hcl.readthedocs.io/en/latest/language_design.html#language-keywords-and-identifiers
 		if strings.Contains(k, ".") {
-			errs.At(sp, errors.New(errorMessages["settingWithPeriod"]))
+			errs.At(sp, ModuleSettingWithPeriod)
 			continue // do not perform other validations
 		}
 		// Setting includes invalid characters
 		if !regexp.MustCompile(`^[a-zA-Z-_][a-zA-Z0-9-_]*$`).MatchString(k) {
-			errs.At(sp, errors.New(errorMessages["settingInvalidChar"]))
+			errs.At(sp, ModuleSettingInvalidChar)
 			continue // do not perform other validations
 		}
 		// Setting not found
 		if _, ok := cVars.Inputs[k]; !ok {
-			errs.At(sp, errors.New(errorMessages["extraSetting"]))
+			errs.At(sp, UnknownModuleSetting)
 			continue // do not perform other validations
 		}
 

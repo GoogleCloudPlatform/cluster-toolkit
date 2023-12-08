@@ -25,7 +25,9 @@ vars:
   deployment_name: image-builder-001
   region: us-central1
   zone: us-central1-c
-  new_image_family: my-slurm-image
+  custom_image:
+    family: my-slurm-image
+    project: $(vars.project_id)
   disk_size: 32
 
 # Documentation for each of the modules used below can be found at
@@ -62,7 +64,7 @@ deployment_groups:
       # You can find size of source image by using following command
       # gcloud compute images describe-from-family <source_image_family> --project schedmd-slurm-public
       disk_size: $(vars.disk_size)
-      image_family: $(vars.new_image_family)
+      image_family: $(vars.custom_image.family)
       state_timeout: 15m
 
 - group: cluster
@@ -72,10 +74,9 @@ deployment_groups:
     settings:
       node_count_dynamic_max: 20
       disk_size_gb: $(vars.disk_size)
-      instance_image:
-        family: $(vars.new_image_family)
-        project: $(vars.project_id)
+      instance_image: $(vars.custom_image)
       instance_image_custom: true
+      bandwidth_tier: gvnic_enabled
 
   - id: compute_partition
     source: community/modules/compute/schedmd-slurm-gcp-v5-partition
@@ -94,9 +95,7 @@ deployment_groups:
     settings:
       disable_controller_public_ips: false
       disk_size_gb: $(vars.disk_size)
-      instance_image:
-        family: $(vars.new_image_family)
-        project: $(vars.project_id)
+      instance_image: $(vars.custom_image)
       instance_image_custom: true
 
   - id: slurm_login
@@ -107,7 +106,5 @@ deployment_groups:
     settings:
       disable_login_public_ips: false
       disk_size_gb: $(vars.disk_size)
-      instance_image:
-        family: $(vars.new_image_family)
-        project: $(vars.project_id)
+      instance_image: $(vars.custom_image)
       instance_image_custom: true

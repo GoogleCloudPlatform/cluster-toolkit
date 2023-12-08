@@ -31,7 +31,7 @@ variable "deployment_name" {
 variable "slurm_cluster_name" {
   type        = string
   description = <<-EOD
-    Cluster name, used for resource naming and slurm accounting. 
+    Cluster name, used for resource naming and slurm accounting.
     If not provided it will default to the first 8 characters of the deployment name (removing any invalid characters).
   EOD
   default     = null
@@ -88,21 +88,13 @@ variable "bucket_dir" {
 #####################
 
 #########
-# LOGIN # TODO
+# LOGIN #
 #########
 
-variable "enable_login" {
-  description = <<EOD
-Enables the creation of login nodes and instance templates.
-EOD
-  type        = bool
-  default     = true
-}
-
-# REVIEWER_NOTE: copied from V6 cluster module as is
 variable "login_nodes" {
   description = "List of slurm login instance definitions."
   type = list(object({
+    name_prefix = string
     additional_disks = optional(list(object({
       disk_name    = optional(string)
       device_name  = optional(string)
@@ -127,7 +119,6 @@ variable "login_nodes" {
       count = number
       type  = string
     }))
-    group_name          = string
     instance_template   = optional(string)
     labels              = optional(map(string), {})
     machine_type        = optional(string)
@@ -159,12 +150,16 @@ variable "login_nodes" {
     termination_action   = optional(string)
   }))
   default = []
+  validation {
+    condition     = length(distinct([for x in var.login_nodes : x.name_prefix])) == length(var.login_nodes)
+    error_message = "All login_nodes must have a unique name_prefix."
+  }
 }
 
 ############
 # NODESETS #
 ############
-# REVIEWER_NOTE: copied from V6 cluster module as is
+
 variable "nodeset" {
   description = "Define nodesets, as a list."
   type = list(object({
@@ -219,18 +214,55 @@ variable "nodeset" {
     source_image_project = optional(string)
     source_image         = optional(string)
     subnetwork_project   = optional(string)
-    subnetwork           = optional(string)
-    spot                 = optional(bool, false)
-    tags                 = optional(list(string), [])
-    termination_action   = optional(string)
-    zones                = optional(list(string), [])
-    zone_target_shape    = optional(string, "ANY_SINGLE_ZONE")
+    # TODO: rename to subnetwork_self_link 
+    subnetwork         = optional(string)
+    spot               = optional(bool, false)
+    tags               = optional(list(string), [])
+    termination_action = optional(string)
+    zones              = optional(list(string), [])
+    zone_target_shape  = optional(string, "ANY_SINGLE_ZONE")
   }))
   default = []
 
   validation {
     condition     = length(distinct([for x in var.nodeset : x.nodeset_name])) == length(var.nodeset)
     error_message = "All nodesets must have a unique name."
+  }
+}
+
+# REVIEWER_NOTE: copied from V6 cluster module as is
+variable "nodeset_tpu" {
+  description = "Define TPU nodesets, as a list."
+  type = list(object({
+    node_count_static      = optional(number, 0)
+    node_count_dynamic_max = optional(number, 1)
+    nodeset_name           = string
+    enable_public_ip       = optional(bool, false)
+    node_type              = string
+    accelerator_config = optional(object({
+      topology = string
+      version  = string
+      }), {
+      topology = ""
+      version  = ""
+    })
+    tf_version   = string
+    preemptible  = optional(bool, false)
+    preserve_tpu = optional(bool, true)
+    zone         = string
+    data_disks   = optional(list(string), [])
+    docker_image = optional(string, "")
+    subnetwork   = optional(string, "")
+    service_account = optional(object({
+      email  = optional(string)
+      scopes = optional(list(string), ["https://www.googleapis.com/auth/cloud-platform"])
+    }))
+  }))
+  default = []
+
+  validation {
+    condition     = length(distinct([for x in var.nodeset_tpu : x.nodeset_name])) == length(var.nodeset_tpu)
+    error_message = "All TPU nodesets must have a unique name."
   }
 }
 
@@ -354,6 +386,20 @@ variable "network_storage" {
   default = []
 }
 
+variable "login_network_storage" {
+  description = "An array of network attached storage mounts to be configured on all login nodes."
+  type = list(object({
+    server_ip             = string,
+    remote_mount          = string,
+    local_mount           = string,
+    fs_type               = string,
+    mount_options         = string,
+    client_install_runner = map(string) # TODO: is it used? should remove it?
+    mount_runner          = map(string)
+  }))
+  default = []
+}
+
 variable "slurmdbd_conf_tpl" {
   description = "Slurm slurmdbd.conf template file path."
   type        = string
@@ -454,6 +500,7 @@ EOD
 
 variable "cloudsql" {
   description = <<EOD
+NOT SUPPORTED YET.
 Use this database instead of the one on the controller.
   server_ip : Address of the database server.
   user      : The user to access the database as.

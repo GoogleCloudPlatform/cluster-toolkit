@@ -38,3 +38,9 @@ output "nodeset" {
 
   value = var.nodeset
 }
+
+output "nodeset_tpu" {
+  description = "Details of a nodesets tpu in this partition"
+
+  value = var.nodeset_tpu
+}

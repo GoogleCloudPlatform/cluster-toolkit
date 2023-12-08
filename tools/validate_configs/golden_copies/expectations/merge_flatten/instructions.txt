@@ -14,7 +14,7 @@ Destroying infrastructure when no longer needed
 Automated
 ---------
 
-./ghpc destroy golden_copy_deployment
+ghpc destroy golden_copy_deployment
 
 Advanced / Manual
 -----------------

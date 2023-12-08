@@ -2,6 +2,8 @@
 
 # Built Binary
 ghpc
+# Expand artifact
+expanded.yaml
 # macOS Desktop Services Store
 .DS_Store
 # workspace level vscode settings
@@ -60,6 +62,9 @@ packer-manifest.json
 
 #### Python Virtual Environments
 venv*/
+
+### Python cache files
+**/__pycache__
 
 #### Exclude from gitingore
 !tools/validate_configs/golden_copies/expectations/*/*/*/defaults.auto.pkrvars.hcl

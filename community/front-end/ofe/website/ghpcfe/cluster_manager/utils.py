@@ -168,7 +168,7 @@ def rsync_dir(
     rsync_cmd.extend([src_dir, tgt_dir])
 
     new_env = os.environ.copy()
-    # Don't have terraform try to re-use any existing SSH agent
+    # Don't have terraform try to reuse any existing SSH agent
     # It has its own keys
     if "SSH_AUTH_SOCK" in new_env:
         del new_env["SSH_AUTH_SOCK"]
@@ -205,7 +205,7 @@ def run_terraform(target_dir, command, arguments=None, extra_env=None):
     log_err_fn = Path(target_dir) / f"terraform_{command}_log.stderr"
 
     new_env = os.environ.copy()
-    # Don't have terraform try to re-use any existing SSH agent
+    # Don't have terraform try to reuse any existing SSH agent
     # It has its own keys
     if "SSH_AUTH_SOCK" in new_env:
         del new_env["SSH_AUTH_SOCK"]

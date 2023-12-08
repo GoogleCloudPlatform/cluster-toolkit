@@ -22,7 +22,7 @@ terraform {
     }
   }
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:service-enablement/v1.24.0"
+    module_name = "blueprints/terraform/hpc-toolkit:service-enablement/v1.26.0"
   }
 
   required_version = ">= 0.14.0"

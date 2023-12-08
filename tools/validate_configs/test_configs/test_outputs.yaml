@@ -32,13 +32,12 @@ deployment_groups:
 
   - id: sql
     source: community/modules/database/slurm-cloudsql-federation
+    use: [vpc]
     outputs:
     - cloudsql
     settings:
       tier: tier
       sql_instance_name: name
-      nat_ips:
-      - ip
 
   - id: filestore
     source: modules/file-system/filestore

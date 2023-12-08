@@ -35,10 +35,20 @@ variable "network_storage" {
 variable "filestore_id" {
   description = "An identifier for a filestore with the format `projects/{{project}}/locations/{{location}}/instances/{{name}}`."
   type        = string
+  default     = null
   validation {
-    condition     = length(split("/", var.filestore_id)) == 6
+    condition = (
+      var.filestore_id == null ||
+      try(length(split("/", var.filestore_id)), 0) == 6
+    )
     error_message = "filestore_id must be in the format of 'projects/{{project}}/locations/{{location}}/instances/{{name}}'."
   }
+}
+
+variable "gcs_bucket_name" {
+  description = "The gcs bucket to be used with the persistent volume."
+  type        = string
+  default     = null
 }
 
 variable "capacity_gb" {

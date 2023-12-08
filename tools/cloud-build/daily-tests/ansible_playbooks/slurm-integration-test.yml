@@ -168,7 +168,6 @@
     - name: Trigger failure (rescue blocks otherwise revert failures)
       ansible.builtin.fail:
         msg: "Failed while setting up test infrastructure"
-      when: true
 
 - name: Run Integration Tests
   hosts: remote_host
@@ -209,16 +208,6 @@
       loop: "{{ post_deploy_tests }}"
       loop_control:
         loop_var: test
-
-    rescue:
-    - name: Check for stockout errors
-      ansible.builtin.include_tasks:
-        file: tasks/check_stockout.yml
-        apply:
-          delegate_to: localhost
-      vars:
-        deployment_name: "{{ deployment_name }}"
-        project: "{{ project }}"
 
     ## Always cleanup, even on failure
     always:
@@ -285,3 +274,12 @@
       vars:
         deployment_name: "{{ deployment_name }}"
         workspace: "{{ workspace }}"
+
+    - name: Check for stockout errors
+      ansible.builtin.include_tasks:
+        file: tasks/check_stockout.yml
+        apply:
+          delegate_to: localhost
+      vars:
+        deployment_name: "{{ deployment_name }}"
+        project: "{{ project }}"

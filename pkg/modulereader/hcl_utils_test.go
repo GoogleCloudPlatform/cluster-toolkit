@@ -20,7 +20,7 @@ import (
 	. "gopkg.in/check.v1"
 )
 
-func (s *MySuite) TestNormalizeType(c *C) {
+func (s *zeroSuite) TestNormalizeType(c *C) {
 	c.Check(
 		NormalizeType("object({count=number,kind=string})"),
 		Equals,
@@ -38,7 +38,7 @@ func (s *MySuite) TestNormalizeType(c *C) {
 
 // a full-loop test of ReadWrite is implemented in modulewriter package
 // focus on modes that should error
-func (s *MySuite) TestReadHclAtttributes(c *C) {
+func (s *zeroSuite) TestReadHclAtttributes(c *C) {
 	fn, err := os.CreateTemp("", "test-*")
 	if err != nil {
 		c.Fatal(err)

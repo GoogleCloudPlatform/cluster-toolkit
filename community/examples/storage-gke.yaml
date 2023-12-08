@@ -43,6 +43,8 @@ deployment_groups:
     use: [network1]
     settings:
       enable_filestore_csi: true
+      enable_gcsfuse_csi: true
+      configure_workload_identity_sa: true  # needed when using GCS
       enable_private_endpoint: false  # Allows for access from authorized public IPs
       master_authorized_networks:
       - display_name: deployment-machine
@@ -57,27 +59,59 @@ deployment_groups:
       zones: [$(vars.zone)]
       machine_type: n2d-standard-2
 
+  ### Google Cloud Storage ###
+
+  - id: data-bucket
+    source: community/modules/file-system/cloud-storage-bucket
+    settings:
+      local_mount: /data
+      random_suffix: true
+      force_destroy: true
+
+  - id: data-bucket-pv
+    source: community/modules/file-system/gke-persistent-volume
+    use: [gke_cluster, data-bucket]
+    settings: {capacity_gb: 5000}
+
   ### Filestore ###
 
-  - id: sharedfs
+  - id: filestore
     source: modules/file-system/filestore
     use: [network1]
     settings: {local_mount: /shared}
 
-  - id: sharedfs-pv
+  - id: shared-filestore-pv
     source: community/modules/file-system/gke-persistent-volume
-    use: [gke_cluster, sharedfs]
+    use: [gke_cluster, filestore]
+
+  ### Shared Storage Job ###
 
   - id: shared-fs-job
     source: community/modules/compute/gke-job-template
-    use: [debug_pool, sharedfs-pv]
+    use:
+    - gke_cluster
+    - debug_pool
+    - shared-filestore-pv
+    - data-bucket-pv
     settings:
       image: bash
       command:
       - bash
       - -c
-      - echo \$(date) >> /shared/timestamp.log; cat /shared/timestamp.log
-      node_count: 3
+      - |
+        echo "Set up job folders"
+        shopt -s extglob; JOB=${HOSTNAME%%-+([[:digit:]])}
+        mkdir /data/${JOB}/ -p; mkdir /shared/${JOB}/ -p;
+
+        echo "Writing seed file to GCS"
+        dd if=/dev/urandom of=/data/${JOB}/${JOB_COMPLETION_INDEX}.dat bs=1K count=1000
+
+        echo "Copy seed data from GCS to Filestore"
+        cp /data/${JOB}/${JOB_COMPLETION_INDEX}.dat /shared/${JOB}/
+
+        echo "Hash file from Filestore and save to GCS"
+        md5sum /shared/${JOB}/${JOB_COMPLETION_INDEX}.dat > /data/${JOB}/${JOB_COMPLETION_INDEX}.md5
+      node_count: 5
     outputs: [instructions]
 
   ### Ephemeral Storage ###

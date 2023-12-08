@@ -255,7 +255,7 @@ variable "enable_slurm_gcp_plugins" {
   description = <<EOD
 Enables calling hooks in scripts/slurm_gcp_plugins during cluster resume and suspend.
 EOD
-  type        = bool
+  type        = any
   default     = false
 }
 
@@ -544,8 +544,8 @@ variable "instance_image" {
     EOD
   type        = map(string)
   default = {
-    family  = "slurm-gcp-5-9-hpc-centos-7"
     project = "schedmd-slurm-public"
+    family  = "slurm-gcp-5-9-hpc-centos-7"
   }
 
   validation {

@@ -15,91 +15,89 @@
 package deploymentio
 
 import (
-	"io/ioutil"
-	"log"
 	"os"
 	"path/filepath"
 
 	. "gopkg.in/check.v1"
 )
 
-func (s *MySuite) TestCreateDirectoryLocal(c *C) {
-	deploymentio := GetDeploymentioLocal()
+func (s *zeroSuite) TestCreateDirectoryLocal(c *C) {
+	dio := GetDeploymentioLocal()
+	dir := c.MkDir()
 
-	// Try to create the exist directory
-	err := deploymentio.CreateDirectory(testDir)
-	expErr := "The directory already exists: .*"
-	c.Assert(err, ErrorMatches, expErr)
-
-	directoryName := "dir_TestCreateDirectoryLocal"
-	createdDir := filepath.Join(testDir, directoryName)
-	err = deploymentio.CreateDirectory(createdDir)
-	c.Assert(err, IsNil)
-
-	_, err = os.Stat(createdDir)
-	c.Assert(err, IsNil)
-}
-
-func (s *MySuite) TestCopyFromPathLocal(c *C) {
-	deploymentio := GetDeploymentioLocal()
-	testSrcFilename := filepath.Join(testDir, "testSrc")
-	str := []byte("TestCopyFromPathLocal")
-	if err := os.WriteFile(testSrcFilename, str, 0755); err != nil {
-		log.Fatalf("deploymentio_test: failed to create %s: %v", testSrcFilename, err)
+	{ // Try to create the exist directory
+		err := dio.CreateDirectory(dir)
+		c.Assert(err, ErrorMatches, "the directory already exists: .*")
 	}
 
-	testDstFilename := filepath.Join(testDir, "testDst")
-	deploymentio.CopyFromPath(testSrcFilename, testDstFilename)
+	{ // Ok
+		sub := filepath.Join(dir, "dog/cat")
+		c.Assert(dio.CreateDirectory(sub), IsNil)
+		stat, err := os.Stat(sub)
+		c.Assert(err, IsNil)
+		c.Check(stat.IsDir(), Equals, true)
+	}
+}
 
-	src, err := ioutil.ReadFile(testSrcFilename)
+func (s *zeroSuite) TestCopyFromPathLocal(c *C) {
+	dio := GetDeploymentioLocal()
+	dir := c.MkDir()
+
+	src := filepath.Join(dir, "zebra")
+	if err := os.WriteFile(src, []byte("jupiter"), 0755); err != nil {
+		c.Fatal(err)
+	}
+
+	dst := filepath.Join(dir, "pony")
+	c.Assert(dio.CopyFromPath(src, dst), IsNil)
+
+	got, err := os.ReadFile(dst)
 	if err != nil {
-		log.Fatalf("deploymentio_test: failed to read %s: %v", testSrcFilename, err)
+		c.Fatal(err)
 	}
 
-	dst, err := ioutil.ReadFile(testDstFilename)
-	if err != nil {
-		log.Fatalf("deploymentio_test: failed to read %s: %v", testDstFilename, err)
+	c.Assert("jupiter", Equals, string(got))
+}
+
+func (s *zeroSuite) TestMkdirWrapper(c *C) {
+	dir := c.MkDir()
+	{ // Success
+		dst := filepath.Join(dir, "piranha/barracuda")
+		c.Assert(mkdirWrapper(dst), IsNil)
 	}
 
-	c.Assert(string(src), Equals, string(dst))
+	{ // Failure: Path is not a directory
+		dst := filepath.Join(dir, "watermelon")
+		_, err := os.Create(dst)
+		c.Assert(err, IsNil)
+
+		c.Assert(mkdirWrapper(dst), ErrorMatches, "failed to create the directory .*")
+	}
 }
 
-func (s *MySuite) TestMkdirWrapper(c *C) {
-	// Success
-	testMkdirWrapperDir := filepath.Join(testDir, "testMkdirWrapperDir")
-	err := mkdirWrapper(testMkdirWrapperDir)
-	c.Assert(err, IsNil)
-
-	// Failure: Path is not a directory
-	badMkdirWrapperDir := filepath.Join(testDir, "NotADir")
-	_, err = os.Create(badMkdirWrapperDir)
-	c.Assert(err, IsNil)
-	err = mkdirWrapper(badMkdirWrapperDir)
-	expErr := "Failed to create the directory .*"
-	c.Assert(err, ErrorMatches, expErr)
-}
-
-func (s *MySuite) TestCopyFromFS(c *C) {
-	// Success
-	deploymentio := GetDeploymentioLocal()
+func (s *zeroSuite) TestCopyFromFS(c *C) {
+	dio := GetDeploymentioLocal()
 	testFS := getTestFS()
-	testSrcGitignore := "pkg/modulewriter/deployment.gitignore.tmpl"
-	testDstGitignore := filepath.Join(testDir, ".gitignore")
-	err := deploymentio.CopyFromFS(testFS, testSrcGitignore, testDstGitignore)
+	dir := c.MkDir()
+
+	// Success
+	src := "pkg/modulewriter/deployment.gitignore.tmpl"
+	dst := filepath.Join(dir, ".gitignore")
+	err := dio.CopyFromFS(testFS, src, dst)
 	c.Assert(err, IsNil)
-	data, err := os.ReadFile(testDstGitignore)
+	data, err := os.ReadFile(dst)
 	c.Assert(err, IsNil)
 	c.Assert(string(data), Equals, testGitignoreTmpl)
 
 	// Success: This truncates the file if it already exists in the destination
-	testSrcNewGitignore := "pkg/modulewriter/deployment_new.gitignore.tmpl"
-	err = deploymentio.CopyFromFS(testFS, testSrcNewGitignore, testDstGitignore)
+	newSrc := "pkg/modulewriter/deployment_new.gitignore.tmpl"
+	err = dio.CopyFromFS(testFS, newSrc, dst)
 	c.Assert(err, IsNil)
-	newData, err := os.ReadFile(testDstGitignore)
+	newData, err := os.ReadFile(dst)
 	c.Assert(err, IsNil)
 	c.Assert(string(newData), Equals, testGitignoreNewTmpl)
 
 	// Failure: Invalid path
-	err = deploymentio.CopyFromFS(testFS, "not/valid", testDstGitignore)
+	err = dio.CopyFromFS(testFS, "not/valid", dst)
 	c.Assert(err, ErrorMatches, "*file does not exist")
 }

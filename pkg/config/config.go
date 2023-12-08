@@ -18,7 +18,7 @@ package config
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"regexp"
 	"sort"
 	"strings"
@@ -35,37 +35,8 @@ const (
 	expectedVarFormat        string = "$(vars.var_name) or $(module_id.output_name)"
 	expectedModFormat        string = "$(module_id) or $(group_id.module_id)"
 	unexpectedConnectionKind string = "connectionKind must be useConnection or deploymentConnection"
-	maxHintDist              int    = 3 // Maximum levenshtein distance where we suggest a hint
+	maxHintDist              int    = 3 // Maximum Levenshtein distance where we suggest a hint
 )
-
-var errorMessages = map[string]string{
-	// config
-	"fileLoadError":    "failed to read the input yaml",
-	"yamlMarshalError": "failed to export the configuration to a blueprint yaml file",
-	"fileSaveError":    "failed to write the expanded yaml",
-	// expand
-	"missingSetting":  "a required setting is missing from a module",
-	"invalidVar":      "invalid variable definition in",
-	"varNotFound":     "Could not find source of variable",
-	"intergroupOrder": "References to outputs from other groups must be to earlier groups",
-	"noOutput":        "Output not found for a variable",
-	"cannotUsePacker": "Packer modules cannot be used by other modules",
-	// validator
-	"emptyID":            "a module id cannot be empty",
-	"emptySource":        "a module source cannot be empty",
-	"wrongKind":          "a module kind is invalid",
-	"extraSetting":       "a setting was added that is not found in the module",
-	"settingWithPeriod":  "a setting name contains a period, which is not supported; variable subfields cannot be set independently in a blueprint.",
-	"settingInvalidChar": "a setting name must begin with a non-numeric character and all characters must be either letters, numbers, dashes ('-') or underscores ('_').",
-	"duplicateGroup":     "group names must be unique",
-	"duplicateID":        "module IDs must be unique",
-	"emptyGroupName":     "group name must be set for each deployment group",
-	"invalidOutput":      "requested output was not found in the module",
-	"valueNotString":     "value was not of type string",
-	"valueEmptyString":   "value is an empty string",
-	"labelNameReqs":      "name must begin with a lowercase letter, can only contain lowercase letters, numeric characters, underscores and dashes, and must be between 1 and 63 characters long",
-	"labelValueReqs":     "value can only contain lowercase letters, numeric characters, underscores and dashes, and must be between 0 and 63 characters long",
-}
 
 // map[moved module path]replacing module path
 var movedModules = map[string]string{
@@ -81,7 +52,7 @@ type GroupName string
 // Validate checks that the group name is valid
 func (n GroupName) Validate() error {
 	if n == "" {
-		return errors.New(errorMessages["emptyGroupName"])
+		return EmptyGroupName
 	}
 
 	if !regexp.MustCompile(`^\w(-*\w)*$`).MatchString(string(n)) {
@@ -96,8 +67,8 @@ type DeploymentGroup struct {
 	Name             GroupName        `yaml:"group"`
 	TerraformBackend TerraformBackend `yaml:"terraform_backend,omitempty"`
 	Modules          []Module         `yaml:"modules"`
-	// DEPRECATED fields, keep in the struct for backwards compatibility
-	deprecatedKind interface{} `yaml:"kind,omitempty"`
+	// DEPRECATED fields
+	deprecatedKind interface{} `yaml:"kind,omitempty"` //lint:ignore U1000 keep in the struct for backwards compatibility
 }
 
 // Kind returns the kind of all the modules in the group.
@@ -405,14 +376,14 @@ func (dc DeploymentConfig) ExportBlueprint(outputFilename string) error {
 	d := buf.Bytes()
 
 	if err != nil {
-		return fmt.Errorf("%s: %w", errorMessages["yamlMarshalError"], err)
+		return fmt.Errorf("%s: %w", errMsgYamlMarshalError, err)
 	}
 
-	err = ioutil.WriteFile(outputFilename, d, 0644)
+	err = os.WriteFile(outputFilename, d, 0644)
 	if err != nil {
 		// hitting this error writing yaml
 		return fmt.Errorf("%s, Filename: %s: %w",
-			errorMessages["fileSaveError"], outputFilename, err)
+			errMsgYamlSaveError, outputFilename, err)
 	}
 	return nil
 }
@@ -437,7 +408,7 @@ func checkModulesAndGroups(bp Blueprint) error {
 		errs.At(pg.Name, grp.Name.Validate())
 
 		if seenGrp[grp.Name] {
-			errs.At(pg.Name, fmt.Errorf("%s: %s used more than once", errorMessages["duplicateGroup"], grp.Name))
+			errs.At(pg.Name, fmt.Errorf("%s: %s used more than once", errMsgDuplicateGroup, grp.Name))
 		}
 		seenGrp[grp.Name] = true
 
@@ -450,7 +421,7 @@ func checkModulesAndGroups(bp Blueprint) error {
 		for im, mod := range grp.Modules {
 			pm := pg.Modules.At(im)
 			if seenMod[mod.ID] {
-				errs.At(pm.ID, fmt.Errorf("%s: %s used more than once", errorMessages["duplicateID"], mod.ID))
+				errs.At(pm.ID, fmt.Errorf("%s: %s used more than once", errMsgDuplicateID, mod.ID))
 			}
 			seenMod[mod.ID] = true
 			errs.Add(validateModule(pm, mod, bp))
@@ -562,7 +533,7 @@ func (bp *Blueprint) DeploymentName() (string, error) {
 	if !bp.Vars.Has("deployment_name") {
 		return "", BpError{path, InputValueError{
 			inputKey: "deployment_name",
-			cause:    errorMessages["varNotFound"],
+			cause:    errMsgVarNotFound,
 		}}
 	}
 
@@ -570,7 +541,7 @@ func (bp *Blueprint) DeploymentName() (string, error) {
 	if v.Type() != cty.String {
 		return "", BpError{path, InputValueError{
 			inputKey: "deployment_name",
-			cause:    errorMessages["valueNotString"],
+			cause:    errMsgValueNotString,
 		}}
 	}
 
@@ -578,7 +549,7 @@ func (bp *Blueprint) DeploymentName() (string, error) {
 	if len(s) == 0 {
 		return "", BpError{path, InputValueError{
 			inputKey: "deployment_name",
-			cause:    errorMessages["valueEmptyString"],
+			cause:    errMsgValueEmptyString,
 		}}
 	}
 
@@ -586,7 +557,7 @@ func (bp *Blueprint) DeploymentName() (string, error) {
 	if !isValidLabelValue(s) {
 		return "", BpError{path, InputValueError{
 			inputKey: "deployment_name",
-			cause:    errorMessages["labelValueReqs"],
+			cause:    errMsgLabelValueReqs,
 		}}
 	}
 
@@ -612,14 +583,14 @@ func (bp *Blueprint) checkBlueprintName() error {
 	if len(bp.BlueprintName) == 0 {
 		return BpError{Root.BlueprintName, InputValueError{
 			inputKey: "blueprint_name",
-			cause:    errorMessages["valueEmptyString"],
+			cause:    errMsgValueEmptyString,
 		}}
 	}
 
 	if !isValidLabelValue(bp.BlueprintName) {
 		return BpError{Root.BlueprintName, InputValueError{
 			inputKey: "blueprint_name",
-			cause:    errorMessages["labelValueReqs"],
+			cause:    errMsgLabelValueReqs,
 		}}
 	}
 

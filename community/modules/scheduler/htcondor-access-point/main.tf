@@ -98,7 +98,8 @@ locals {
 }
 
 data "google_compute_image" "htcondor" {
-  family  = var.instance_image.family
+  family  = try(var.instance_image.family, null)
+  name    = try(var.instance_image.name, null)
   project = var.instance_image.project
 
   lifecycle {
@@ -142,7 +143,7 @@ resource "google_storage_bucket_object" "ap_config" {
 }
 
 module "startup_script" {
-  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=336e0a4"
+  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=50644b2"
 
   project_id      = var.project_id
   region          = var.region

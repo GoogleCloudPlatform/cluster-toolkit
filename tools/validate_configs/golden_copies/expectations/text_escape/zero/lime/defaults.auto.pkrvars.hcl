@@ -24,7 +24,6 @@ labels = {
   brown           = "$(fox)"
   ghpc_blueprint  = "text_escape"
   ghpc_deployment = "golden_copy_deployment"
-  ghpc_role       = "packer"
   ñred            = "ñblue"
 }
 

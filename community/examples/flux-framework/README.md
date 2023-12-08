@@ -12,7 +12,7 @@ The cluster includes
 > **_NOTE:_** prior to running this HPC Toolkit example the [Flux Framework GCP Images](https://github.com/GoogleCloudPlatform/scientific-computing-examples/tree/main/fluxfw-gcp/img#flux-framework-gcp-images)
 > must be created in your project.
 
-### Intial Setup for flux-framework Cluster
+### Initial Setup for flux-framework Cluster
 
 Before provisioning any infrastructure in this project you should follow the
 Toolkit guidance to enable [APIs][apis] and establish minimum resource

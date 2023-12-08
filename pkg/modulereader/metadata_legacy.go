@@ -35,6 +35,7 @@ func legacyMetadata(source string) Metadata {
 	}
 }
 
+// DO NOT MODIFY. Specify in metadata.yaml instead.
 func defaultAPIList(source string) []string {
 	// API lists at
 	// https://console.cloud.google.com/apis/dashboard and

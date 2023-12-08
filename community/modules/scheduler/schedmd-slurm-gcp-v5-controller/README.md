@@ -114,6 +114,58 @@ page.
 More information on GPU support in Slurm on GCP and other HPC Toolkit modules
 can be found at [docs/gpu-support.md](../../../../docs/gpu-support.md)
 
+## Placement Max Distance
+
+When using
+[enable_placement](../../compute/schedmd-slurm-gcp-v5-partition/README.md#input_enable_placement)
+with Slurm, Google Compute Engine will attempt to place VMs as physically close
+together as possible. Capacity constraints at the time of VM creation may still
+force VMs to be spread across multiple racks. Google provides the `max-distance`
+flag which can used to control the maximum spreading allowed. Read more about
+`max-distance` in the
+[official docs](https://cloud.google.com/compute/docs/instances/use-compact-placement-policies
+).
+
+After deploying a Slurm cluster, you can use the following steps to manually
+configure the max-distance parameter.
+
+1. Make sure your blueprint has `enable_placement: true` setting for Slurm
+   partitions.
+2. Deploy the Slurm cluster and wait for the deployment to complete.
+3. SSH to the deployed Slurm controller
+4. Apply the following edit to `/slurm/scripts/config.yaml`:
+
+    ```yaml
+    # Replace
+    enable_slurm_gcp_plugins: false
+
+    # With
+    enable_slurm_gcp_plugins:
+      max_hops:
+        max_hops: 1
+    ```
+
+The `max_hops` parameter will be used for the `max-distance` argument. In the
+above case using a value of 1 will restrict VM to be placed on the same rack.
+
+You can confirm that the `max-distance`` was applied by calling the following
+command while jobs are running:
+
+```shell
+gcloud beta compute resource-policies list \
+  --format='yaml(name,groupPlacementPolicy.maxDistance)'
+```
+
+> [!WARNING]
+> If a zone lacks capacity, using a lower `max-distance` value (such as 1) is
+> more likely to cause VMs creation to fail.
+
+<!---->
+
+> [!WARNING]
+> `/slurm/scripts/config.yaml` will be overwritten if the blueprint is
+> re-deployed using the `enable_reconfigure` flag.
+
 ## Hybrid Slurm Clusters
 For more information on how to configure an on premise slurm cluster with hybrid
 cloud partitions, see the [schedmd-slurm-gcp-v5-hybrid] module and our
@@ -163,8 +215,8 @@ limitations under the License.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_slurm_controller_instance"></a> [slurm\_controller\_instance](#module\_slurm\_controller\_instance) | github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_controller_instance | 5.9.1 |
-| <a name="module_slurm_controller_template"></a> [slurm\_controller\_template](#module\_slurm\_controller\_template) | github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template | 5.9.1 |
+| <a name="module_slurm_controller_instance"></a> [slurm\_controller\_instance](#module\_slurm\_controller\_instance) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_controller_instance | 5.9.1 |
+| <a name="module_slurm_controller_template"></a> [slurm\_controller\_template](#module\_slurm\_controller\_template) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template | 5.9.1 |
 
 ## Resources
 
@@ -203,7 +255,7 @@ limitations under the License.
 | <a name="input_enable_oslogin"></a> [enable\_oslogin](#input\_enable\_oslogin) | Enables Google Cloud os-login for user login and authentication for VMs.<br>See https://cloud.google.com/compute/docs/oslogin | `bool` | `true` | no |
 | <a name="input_enable_reconfigure"></a> [enable\_reconfigure](#input\_enable\_reconfigure) | Enables automatic Slurm reconfiguration when Slurm configuration changes (e.g.<br>slurm.conf.tpl, partition details). Compute instances and resource policies<br>(e.g. placement groups) will be destroyed to align with new configuration.<br>NOTE: Requires Python and Google Pub/Sub API.<br>*WARNING*: Toggling this will impact the running workload. Deployed compute nodes<br>will be destroyed and their jobs will be requeued. | `bool` | `false` | no |
 | <a name="input_enable_shielded_vm"></a> [enable\_shielded\_vm](#input\_enable\_shielded\_vm) | Enable the Shielded VM configuration. Note: the instance image must support option. | `bool` | `false` | no |
-| <a name="input_enable_slurm_gcp_plugins"></a> [enable\_slurm\_gcp\_plugins](#input\_enable\_slurm\_gcp\_plugins) | Enables calling hooks in scripts/slurm\_gcp\_plugins during cluster resume and suspend. | `bool` | `false` | no |
+| <a name="input_enable_slurm_gcp_plugins"></a> [enable\_slurm\_gcp\_plugins](#input\_enable\_slurm\_gcp\_plugins) | Enables calling hooks in scripts/slurm\_gcp\_plugins during cluster resume and suspend. | `any` | `false` | no |
 | <a name="input_epilog_scripts"></a> [epilog\_scripts](#input\_epilog\_scripts) | List of scripts to be used for Epilog. Programs for the slurmd to execute<br>on every node when a user's job completes.<br>See https://slurm.schedmd.com/slurm.conf.html#OPT_Epilog. | <pre>list(object({<br>    filename = string<br>    content  = string<br>  }))</pre> | `[]` | no |
 | <a name="input_gpu"></a> [gpu](#input\_gpu) | DEPRECATED: use var.guest\_accelerator | <pre>object({<br>    type  = string<br>    count = number<br>  })</pre> | `null` | no |
 | <a name="input_guest_accelerator"></a> [guest\_accelerator](#input\_guest\_accelerator) | List of the type and count of accelerator cards attached to the instance. | <pre>list(object({<br>    type  = string,<br>    count = number<br>  }))</pre> | `[]` | no |
