@@ -39,11 +39,6 @@ variable "sql_instance_name" {
   type        = string
 }
 
-variable "nat_ips" {
-  description = "a list of NAT ips to be allow listed for the slurm cluster communication"
-  type        = list(any)
-}
-
 variable "deletion_protection" {
   description = "Whether or not to allow Terraform to destroy the instance."
   type        = string
@@ -65,4 +60,16 @@ variable "sql_password" {
   description = "Password for the SQL database."
   type        = any
   default     = null
+}
+
+variable "network_id" {
+  description = <<-EOT
+    The ID of the GCE VPC network to which the instance is going to be created in.:
+    `projects/<project_id>/global/networks/<network_name>`"
+    EOT
+  type        = string
+  validation {
+    condition     = length(split("/", var.network_id)) == 5
+    error_message = "The network id must be provided in the following format: projects/<project_id>/global/networks/<network_name>."
+  }
 }
