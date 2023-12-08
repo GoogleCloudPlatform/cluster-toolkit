@@ -27,6 +27,10 @@ Click the button below to launch the HTCondor tutorial.
 
 [![Open in Cloud Shell](https://gstatic.com/cloudssh/images/open-btn.svg)](https://shell.cloud.google.com/cloudshell/editor?cloudshell_git_repo=https%3A%2F%2Fgithub.com%2FGoogleCloudPlatform%2Fhpc-toolkit&cloudshell_open_in_editor=community%2Fexamples%2Fhtc-htcondor.yaml&cloudshell_tutorial=docs%2Ftutorials%2Fhtcondor.md)
 
+## SC-23 Tutorial
+
+[Blueprint](./sc23-tutorial/hcls-blueprint.yaml) used in the Supercomputing 2023 tutorial “Unlocking the potential of HPC in the Google Cloud with Open-Source Tools”
+
 ## Application Specific Tutorials
 
 The following three tutorials deploy a cluster, install an hpc application

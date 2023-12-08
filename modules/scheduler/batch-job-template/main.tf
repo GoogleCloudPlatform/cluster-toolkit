@@ -84,8 +84,9 @@ module "instance_template" {
   machine_type         = var.machine_type
   startup_script       = local.startup_from_network_storage
   metadata             = var.network_storage != null ? ({ network_storage = jsonencode(var.network_storage) }) : {}
-  source_image_family  = var.image.family
-  source_image_project = var.image.project
+  source_image_family  = try(var.instance_image.family, "")
+  source_image         = try(var.instance_image.name, "")
+  source_image_project = var.instance_image.project
   on_host_maintenance  = local.on_host_maintenance
 }
 

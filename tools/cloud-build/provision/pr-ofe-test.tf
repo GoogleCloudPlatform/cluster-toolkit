@@ -12,11 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-resource "google_cloudbuild_trigger" "pr_go_1_18_build_test" {
-  name        = "PR-Go-1-18-build-test"
-  description = "Test that the PR builds with Go 1.18"
+# OFE test is specially configured to only run as a PR trigger and does not
+# run on as a nightly build
 
-  filename = "tools/cloud-build/build-test-go1-18.yaml"
+resource "google_cloudbuild_trigger" "pr_ofe_test" {
+  name        = "PR-OFE-test"
+  description = "OFE test while submitting PR"
+
+  filename = "tools/cloud-build/daily-tests/builds/ofe-deployment.yaml"
+  approval_config {
+    approval_required = true
+  }
 
   github {
     owner = "GoogleCloudPlatform"

@@ -20,8 +20,12 @@ vars:
   deployment_name: hpc-intel-select
   region: us-central1
   zone: us-central1-c
-  controller_image_family: slurm-intel-hpc-controller
-  compute_image_family: slurm-intel-hpc-compute
+  controller_image:
+    family: slurm-intel-hpc-controller
+    project: $(vars.project_id)
+  compute_image:
+    family: slurm-intel-hpc-compute
+    project: $(vars.project_id)
   network_name: intel-select-net
   subnetwork_name: intel-select-primary-subnet
 
@@ -33,6 +37,7 @@ deployment_groups:
   modules:
   - id: network1
     source: modules/network/vpc
+
   - id: startup_controller
     source: modules/scripts/startup-script
     settings:
@@ -45,6 +50,7 @@ deployment_groups:
           google_install_mpi --prefix /apps --intel_compliance
     outputs:
     - startup_script
+
   - id: startup_compute
     source: modules/scripts/startup-script
     settings:
@@ -73,6 +79,7 @@ deployment_groups:
           clck -D ${FWD}.db -F ${FWD} -l debug
     outputs:
     - startup_script
+
 - group: build1
   modules:
   - id: controller-image
@@ -82,7 +89,8 @@ deployment_groups:
       disk_size: 20
       source_image_project_id: [schedmd-slurm-public]
       source_image_family: schedmd-slurm-21-08-8-hpc-centos-7
-      image_family: $(vars.controller_image_family)
+      image_family: $(vars.controller_image.family)
+
 - group: build2
   modules:
   - id: compute-image
@@ -92,17 +100,20 @@ deployment_groups:
       disk_size: 20
       source_image_project_id: [schedmd-slurm-public]
       source_image_family: schedmd-slurm-21-08-8-hpc-centos-7
-      image_family: $(vars.compute_image_family)
+      image_family: $(vars.compute_image.family)
+
 - group: cluster
   modules:
   - id: cluster-network
     source: modules/network/pre-existing-vpc
+
   - id: homefs
     source: modules/file-system/filestore
     use:
     - cluster-network
     settings:
       local_mount: /home
+
   # This debug_partition will work out of the box without requesting additional GCP quota.
   - id: debug_partition
     source: community/modules/compute/SchedMD-slurm-on-gcp-partition
@@ -115,9 +126,8 @@ deployment_groups:
       enable_placement: false
       exclusive: false
       machine_type: n2-standard-4
-      instance_image:
-        family: $(vars.compute_image_family)
-        project: $(vars.project_id)
+      instance_image: $(vars.compute_image)
+
   - id: compute_partition
     source: community/modules/compute/SchedMD-slurm-on-gcp-partition
     use:
@@ -125,11 +135,11 @@ deployment_groups:
     - homefs
     settings:
       partition_name: compute
-      instance_image:
-        family: $(vars.compute_image_family)
-        project: $(vars.project_id)
+      instance_image: $(vars.compute_image)
       max_node_count: 100
       machine_type: c2-standard-60
+      bandwidth_tier: gvnic_enabled
+
   - id: slurm_controller
     source: community/modules/scheduler/SchedMD-slurm-on-gcp-controller
     use:
@@ -138,10 +148,9 @@ deployment_groups:
     - homefs
     settings:
       login_node_count: 1
-      instance_image:
-        family: $(vars.controller_image_family)
-        project: $(vars.project_id)
+      instance_image: $(vars.controller_image)
       controller_machine_type: c2-standard-4
+
   - id: slurm_login
     source: community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
     use:
@@ -149,7 +158,5 @@ deployment_groups:
     - slurm_controller
     - homefs
     settings:
-      instance_image:
-        family: $(vars.compute_image_family)
-        project: $(vars.project_id)
+      instance_image: $(vars.compute_image)
       login_machine_type: c2-standard-4

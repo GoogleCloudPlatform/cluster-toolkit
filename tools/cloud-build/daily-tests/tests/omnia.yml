@@ -14,7 +14,7 @@
 
 ---
 
-test_name: omnia
+test_name: omnia-cluster
 deployment_name: "omnia-{{ build }}"
 zone: us-west3-c
 workspace: /workspace

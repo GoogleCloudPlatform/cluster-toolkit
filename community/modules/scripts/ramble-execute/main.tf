@@ -15,34 +15,56 @@
  */
 
 locals {
-  commands_content = var.commands == null ? "" : indent(4, yamlencode(var.commands))
+  # This label allows for billing report tracking based on module.
+  labels = merge(var.labels, { ghpc_module = "ramble-execute", ghpc_role = "scripts" })
+}
+
+locals {
+  commands_content = var.commands == null ? "echo 'no ramble commands provided'" : indent(4, yamlencode(var.commands))
 
   execute_contents = templatefile(
     "${path.module}/templates/ramble_execute.yml.tpl",
     {
-      pre_script = ". ${var.spack_path}/share/spack/setup-env.sh && . ${var.ramble_path}/share/ramble/setup-env.sh"
+      pre_script = "if [ -f ${var.spack_profile_script_path} ]; then . ${var.spack_profile_script_path}; fi; . ${var.ramble_profile_script_path}"
       log_file   = var.log_file
       commands   = local.commands_content
     }
   )
 
-  previous_ramble_runner_content = var.ramble_runner == null ? "" : var.ramble_runner["content"]
-
-  runner_content = <<-EOT
-    ${local.previous_ramble_runner_content}
-    ${local.execute_contents}
-  EOT
+  data_runners = [for data_file in var.data_files : merge(data_file, { type = "data" })]
 
   execute_md5 = substr(md5(local.execute_contents), 0, 4)
+  execute_runner = {
+    type        = "ansible-local"
+    content     = local.execute_contents
+    destination = "ramble_execute_${local.execute_md5}.yml"
+  }
 
-  ramble_execute_runner = {
-    "type"        = "ansible-local"
-    "content"     = local.runner_content
-    "destination" = "ramble_execute_${local.execute_md5}.yml"
+  previous_runners = var.ramble_runner != null ? [var.ramble_runner] : []
+  runners          = concat(local.previous_runners, local.data_runners, [local.execute_runner])
+
+  # Destinations should be unique while also being known at time of apply
+  combined_unique_string = join("\n", [for runner in local.runners : runner["destination"]])
+  combined_md5           = substr(md5(local.combined_unique_string), 0, 4)
+  combined_runner = {
+    type        = "shell"
+    content     = module.startup_script.startup_script
+    destination = "combined_install_ramble_${local.combined_md5}.sh"
   }
 }
 
-resource "local_file" "debug_file" {
+module "startup_script" {
+  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=50644b2"
+
+  labels          = local.labels
+  project_id      = var.project_id
+  deployment_name = var.deployment_name
+  region          = var.region
+  runners         = local.runners
+  gcs_bucket_path = var.gcs_bucket_path
+}
+
+resource "local_file" "debug_file_ansible_execute" {
   content  = local.execute_contents
-  filename = "${path.module}/execute_script.yaml"
+  filename = "${path.module}/debug_execute_${local.execute_md5}.yml"
 }

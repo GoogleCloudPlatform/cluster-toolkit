@@ -47,10 +47,43 @@ variable "type" {
   default     = "pd-ssd"
 }
 
+# Deprecated, replaced by instance_image
+# tflint-ignore: terraform_unused_declarations
 variable "image" {
-  description = "the VM image used by the nfs server"
+  description = "DEPRECATED: The VM image used by the nfs server"
   type        = string
-  default     = "cloud-hpc-image-public/hpc-centos-7"
+  default     = null
+
+  validation {
+    condition     = var.image == null
+    error_message = "The 'var.image' setting is deprecated, please use 'var.instance_image' with the fields 'project' and 'family' or 'name'."
+  }
+}
+
+variable "instance_image" {
+  description = <<-EOD
+    The VM image used by the nfs server.
+
+    Expected Fields:
+    name: The name of the image. Mutually exclusive with family.
+    family: The image family to use. Mutually exclusive with name.
+    project: The project where the image is hosted.
+    EOD
+  type        = map(string)
+  default = {
+    project = "cloud-hpc-image-public"
+    family  = "hpc-centos-7"
+  }
+
+  validation {
+    condition     = can(coalesce(var.instance_image.project))
+    error_message = "In var.instance_image, the \"project\" field must be a string set to the Cloud project ID."
+  }
+
+  validation {
+    condition     = can(coalesce(var.instance_image.name)) != can(coalesce(var.instance_image.family))
+    error_message = "In var.instance_image, exactly one of \"family\" or \"name\" fields must be set to desired image family or name."
+  }
 }
 
 variable "auto_delete_disk" {

@@ -27,7 +27,7 @@ type Local struct{}
 
 func mkdirWrapper(directory string) error {
 	if err := os.MkdirAll(directory, 0755); err != nil {
-		return fmt.Errorf("Failed to create the directory %s: %v", directory, err)
+		return fmt.Errorf("failed to create the directory %s: %v", directory, err)
 	}
 
 	return nil
@@ -36,8 +36,7 @@ func mkdirWrapper(directory string) error {
 // CreateDirectory creates the directory
 func (b *Local) CreateDirectory(directory string) error {
 	if _, err := os.Stat(directory); !os.IsNotExist(err) {
-		return fmt.Errorf(
-			"The directory already exists: %s", directory)
+		return fmt.Errorf("the directory already exists: %s", directory)
 	}
 
 	// Create directory
@@ -57,11 +56,11 @@ func (b *Local) CopyFromPath(src string, dst string) error {
 func (b *Local) CopyFromFS(fs BaseFS, src string, dst string) error {
 	data, err := fs.ReadFile(src)
 	if err != nil {
-		return fmt.Errorf("Failed to read source file %s: err=%w", src, err)
+		return fmt.Errorf("failed to read source file %s: err=%w", src, err)
 	}
 
 	if err := os.WriteFile(dst, data, 0644); err != nil {
-		return fmt.Errorf("Failed to write data in destination file %s: err=%w", dst, err)
+		return fmt.Errorf("failed to write data in destination file %s: err=%w", dst, err)
 	}
 
 	return nil

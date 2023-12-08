@@ -18,6 +18,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [serverless-batch.yaml](#serverless-batchyaml-) ![core-badge]
   * [serverless-batch-mpi.yaml](#serverless-batch-mpiyaml-) ![core-badge]
   * [pfs-lustre.yaml](#pfs-lustreyaml-) ![core-badge]
+  * [cae-slurm.yaml](#cae-slurmyaml-) ![core-badge]
   * [hpc-slurm-ubuntu2004.yaml](#hpc-slurm-ubuntu2004yaml-) ![community-badge]
   * [hpc-intel-select-slurm.yaml](#hpc-intel-select-slurmyaml-) ![community-badge]
   * [pfs-daos.yaml](#pfs-daosyaml-) ![community-badge]
@@ -121,7 +122,7 @@ the experimental badge (![experimental-badge]).
 >
 > ```shell
 > # Install Python3 and run
-> pip3 install -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.8.0/scripts/requirements.txt
+> pip3 install -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.9.1/scripts/requirements.txt
 > ```
 
 Creates a basic auto-scaling Slurm cluster with mostly default settings. The
@@ -534,6 +535,39 @@ For this example the following is needed in the selected region:
 
 [pfs-lustre.yaml]: ./pfs-lustre.yaml
 
+### [cae-slurm.yaml] ![core-badge]
+
+The Computer Aided Engineering (CAE) blueprint captures a reference architecture
+where the right cloud components are assembled to optimally cater to the
+requirements of computationally-intensive CAE workloads. Specifically, it is
+architected around Google Cloud’s VM families that provide a high memory bandwidth
+and a balanced memory/flop ratio, which is particularly useful for per-core licensed
+CAE software. The solution caters also to large CAE use cases, requiring multiple nodes
+that are tightly-coupled via MPI. Special high-memory shapes support even very
+memory-demanding workloads with up to 16GB/core. For file IO, different Google managed
+high performance NFS storage services are available. For very IO demanding workloads,
+third party parallel file systems can be integrated. The scheduling of the workloads
+is done by a workload manager.
+
+The CAE blueprint is intended to be a starting point for more tailored explorations
+or installations of specific CAE codes, as provided by ISVs separately.
+
+A detailed documentation is provided in this [README](cae/README.md).
+
+#### Quota Requirements for cae-slurm.yaml
+
+For this example the following is needed in the selected region:
+
+* Cloud Filestore API: Basic SSD capacity (GB) per region: **5,120 GB**
+* Cloud Filestore API: High Scale SSD capacity (GB) per region: **10,240 GB**
+* Compute Engine API: H3 CPUs: **88/node** active in `balance` partition up to 880
+* Compute Engine API: C3-highmem CPUs: **176/node** active in `highmem` partition up to 1,760
+* Compute Engine API: N1 CPUs: **8/node** active in `desktop` partition up to 40
+* Compute Engine API: T4 GPUs: **1/node** active in `desktop` partition up to 5
+* Compute Engine API: N2 CPUs: **8** for login and **16** for controller
+
+[cae-slurm.yaml]: ../examples/cae/cae-slurm.yaml
+
 ### [hpc-slurm-ubuntu2004.yaml] ![community-badge]
 
 > **Warning**: The variables `enable_reconfigure`,
@@ -542,7 +576,7 @@ For this example the following is needed in the selected region:
 >
 > ```shell
 > # Install Python3 and run
-> pip3 install -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.8.0/scripts/requirements.txt
+> pip3 install -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.9.1/scripts/requirements.txt
 > ```
 
 Similar to the [hpc-slurm.yaml] example, but using Ubuntu 20.04 instead of CentOS 7.
@@ -557,7 +591,6 @@ partition runs on compute optimized nodes of type `cs-standard-60`. The
 
 [Other operating systems]: https://github.com/SchedMD/slurm-gcp/blob/master/docs/images.md#supported-operating-systems
 [hpc-slurm-ubuntu2004.yaml]: ../community/examples/hpc-slurm-ubuntu2004.yaml
-[slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/5.2.0
 
 #### Quota Requirements for hpc-slurm-ubuntu2004.yaml
 
@@ -834,7 +867,7 @@ This blueprint shows how to use different storage options with GKE in the toolki
 
 The blueprint contains the following:
 
-* A K8s Job that uses a Filestore as a shared file system between pods.
+* A K8s Job that uses a Filestore and a GCS bucket as shared file systems between pods.
 * A K8s Job that demonstrates different ephemeral storage options:
   * memory backed emptyDir
   * local SSD backed emptyDir

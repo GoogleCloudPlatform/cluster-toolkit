@@ -27,7 +27,6 @@ import (
 	"hpc-toolkit/pkg/deploymentio"
 	"hpc-toolkit/pkg/sourcereader"
 	"io"
-	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
@@ -137,9 +136,9 @@ func createGroupDirs(deploymentPath string, deploymentGroups *[]config.Deploymen
 
 // DeploymentSource returns module source within deployment group
 // Rules are following:
-//   - git source
-//   - terraform => <mod.Source>
-//   - packer    => <mod.ID>/<package_subdir>
+//   - remote source
+//     = terraform => <mod.Source>
+//     = packer    => <mod.ID>/<package_subdir>
 //   - packer
 //     => <mod.ID>
 //   - embedded (source starts with "modules" or "comunity/modules")
@@ -158,25 +157,23 @@ func DeploymentSource(mod config.Module) (string, error) {
 }
 
 func tfDeploymentSource(mod config.Module) (string, error) {
-	if sourcereader.IsGitPath(mod.Source) {
+	switch {
+	case sourcereader.IsEmbeddedPath(mod.Source):
+		return "./modules/" + filepath.Join("embedded", mod.Source), nil
+	case sourcereader.IsLocalPath(mod.Source):
+		abs, err := filepath.Abs(mod.Source)
+		if err != nil {
+			return "", fmt.Errorf("failed to get absolute path for %#v: %v", mod.Source, err)
+		}
+		base := filepath.Base(mod.Source)
+		return fmt.Sprintf("./modules/%s-%s", base, shortHash(abs)), nil
+	default:
 		return mod.Source, nil
 	}
-	if sourcereader.IsEmbeddedPath(mod.Source) {
-		return "./modules/" + filepath.Join("embedded", mod.Source), nil
-	}
-	if !sourcereader.IsLocalPath(mod.Source) {
-		return "", fmt.Errorf("unexpected module source %s", mod.Source)
-	}
-	abs, err := filepath.Abs(mod.Source)
-	if err != nil {
-		return "", fmt.Errorf("failed to get absolute path for %#v: %v", mod.Source, err)
-	}
-	base := filepath.Base(mod.Source)
-	return fmt.Sprintf("./modules/%s-%s", base, shortHash(abs)), nil
 }
 
 func packerDeploymentSource(mod config.Module) string {
-	if sourcereader.IsGitPath(mod.Source) {
+	if sourcereader.IsRemotePath(mod.Source) {
 		_, subDir := getter.SourceDirSubdir(mod.Source)
 		return filepath.Join(string(mod.ID), subDir)
 	}
@@ -217,18 +214,21 @@ func copySource(deploymentPath string, deploymentGroups *[]config.DeploymentGrou
 				return err
 			}
 
-			if sourcereader.IsGitPath(deplSource) {
-				continue // remote deployment source means that terraform will download it, no op
-			}
-			if sourcereader.IsEmbeddedPath(mod.Source) && mod.Kind == config.TerraformKind {
-				copyEmbedded = true
-				continue // all embedded terraform modules fill be copied at once
+			if mod.Kind == config.TerraformKind {
+				// some terraform modules do not require copying
+				if sourcereader.IsEmbeddedPath(mod.Source) {
+					copyEmbedded = true
+					continue // all embedded terraform modules fill be copied at once
+				}
+				if sourcereader.IsRemotePath(mod.Source) {
+					continue // will be downloaded by terraform
+				}
 			}
 
 			/* Copy source files */
 			var src, dst string
 
-			if sourcereader.IsGitPath(mod.Source) && mod.Kind == config.PackerKind {
+			if sourcereader.IsRemotePath(mod.Source) && mod.Kind == config.PackerKind {
 				src, _ = getter.SourceDirSubdir(mod.Source)
 				dst = filepath.Join(basePath, string(mod.ID))
 			} else {
@@ -264,7 +264,7 @@ func isOverwriteAllowed(depDir string, overwritingConfig *config.Blueprint, over
 		return false
 	}
 
-	files, err := ioutil.ReadDir(depDir)
+	files, err := os.ReadDir(depDir)
 	if err != nil {
 		return false
 	}
@@ -354,7 +354,7 @@ func prepDepDir(depDir string, overwrite bool) error {
 	}
 
 	// create new backup of deployment group directory
-	files, err := ioutil.ReadDir(depDir)
+	files, err := os.ReadDir(depDir)
 	if err != nil {
 		return fmt.Errorf("Error trying to read directories in %s, %w", depDir, err)
 	}
@@ -411,7 +411,7 @@ func writeDestroyInstructions(w io.Writer, dc config.DeploymentConfig, deploymen
 	fmt.Fprintln(w, "Automated")
 	fmt.Fprintln(w, "---------")
 	fmt.Fprintln(w)
-	fmt.Fprintf(w, "./ghpc destroy %s\n", deploymentDir)
+	fmt.Fprintf(w, "ghpc destroy %s\n", deploymentDir)
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Advanced / Manual")
 	fmt.Fprintln(w, "-----------------")

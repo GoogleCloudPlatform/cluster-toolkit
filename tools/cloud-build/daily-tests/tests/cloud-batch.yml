@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ---
-test_name: cloud-batch
+test_name: serverless-batch
 deployment_name: cloud-batch-{{ build }}
 zone: us-central1-c
 workspace: /workspace
@@ -20,8 +20,11 @@ blueprint_yaml: "{{ workspace }}/examples/serverless-batch.yaml"
 network: "default"
 remote_node: "{{ deployment_name }}-batch-login"
 post_deploy_tests:
-- test-batch-submission.yml
-- test-mounts.yml
+- test-validation/test-batch-submission.yml
+- test-validation/test-mounts.yml
 custom_vars:
   project: "{{ project }}"
   mounts: [/sw]
+cli_deployment_vars:
+  region: us-central1
+  zone: "{{ zone }}"

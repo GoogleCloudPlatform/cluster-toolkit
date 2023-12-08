@@ -12,28 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-- name: Install dependencies for ramble installation
-  become: yes
+---
+
+- name: Install Python Requirements
   hosts: localhost
   vars:
-    ramble_ref: ${ramble_ref}
+    install_dir: ${install_dir}
+    virtualenv_path: ${virtualenv_path}
   tasks:
-  - name: Install dependencies through system package manager
-    ansible.builtin.package:
-      name:
-      - python
-      - python3-pip
-      - git
 
-  - name: Ensure a recent copy of pip
+  - name: Install dependencies
     ansible.builtin.pip:
-      name: pip>=21.3.1
-
-  - name: Download ramble requirements file
-    ansible.builtin.get_url:
-      url: "https://raw.githubusercontent.com/GoogleCloudPlatform/ramble/{{ ramble_ref }}/requirements.txt"
-      dest: /tmp/requirements.txt
-
-  - name: Install ramble dependencies
-    ansible.builtin.pip:
-      requirements: /tmp/requirements.txt
+      requirements: "{{ install_dir }}/requirements.txt"
+      virtualenv: "{{ virtualenv_path }}"
+      virtualenv_command: /usr/bin/python3 -m venv

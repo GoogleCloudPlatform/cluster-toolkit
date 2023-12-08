@@ -44,6 +44,7 @@ locals {
 
     # Template By Definition
     additional_disks         = local.additional_disks
+    additional_networks      = var.additional_networks
     bandwidth_tier           = var.bandwidth_tier
     can_ip_forward           = var.can_ip_forward
     disable_smt              = !var.enable_smt

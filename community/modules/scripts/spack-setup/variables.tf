@@ -63,7 +63,7 @@ variable "chmod_mode" {
     For usage information see:
     https://docs.ansible.com/ansible/latest/collections/ansible/builtin/file_module.html#parameter-mode
     EOT
-  default     = "a+rwxs"
+  default     = null
   type        = string
 }
 
@@ -321,4 +321,10 @@ EOT
     condition     = var.environments == null
     error_message = "environments is deprecated. Use spack-execute.commands instead. See variable documentation for proposed alternative commands."
   }
+}
+
+variable "spack_profile_script_path" {
+  description = "Path to the Spack profile.d script. Created by this module"
+  type        = string
+  default     = "/etc/profile.d/spack.sh"
 }

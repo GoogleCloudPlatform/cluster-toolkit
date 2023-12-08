@@ -79,13 +79,13 @@ var (
 func runCreateCmd(cmd *cobra.Command, args []string) {
 	dc := expandOrDie(args[0])
 	deplName, err := dc.Config.DeploymentName()
-	cobra.CheckErr(err)
+	checkErr(err)
 	deplDir := filepath.Join(outputDir, deplName)
-	cobra.CheckErr(modulewriter.WriteDeployment(dc, deplDir, overwriteDeployment))
+	checkErr(modulewriter.WriteDeployment(dc, deplDir, overwriteDeployment))
 
 	fmt.Println("To deploy your infrastructure please run:")
 	fmt.Println()
-	fmt.Printf("./ghpc deploy %s\n", deplDir)
+	fmt.Printf(boldGreen("%s deploy %s\n"), execPath(), deplDir)
 	fmt.Println()
 	printAdvancedInstructionsMessage(deplDir)
 }
@@ -100,7 +100,7 @@ func printAdvancedInstructionsMessage(deplDir string) {
 func expandOrDie(path string) config.DeploymentConfig {
 	dc, ctx, err := config.NewDeploymentConfig(path)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(renderError(err, ctx))
 	}
 	// Set properties from CLI
 	if err := setCLIVariables(&dc.Config, cliVariables); err != nil {
@@ -151,12 +151,12 @@ func validateMaybeDie(bp config.Blueprint, ctx config.YamlCtx) {
 	switch bp.ValidationLevel {
 	case config.ValidationWarning:
 		{
-			log.Println("Validation failures were treated as a warning, continuing to create blueprint.")
+			log.Println(boldYellow("Validation failures were treated as a warning, continuing to create blueprint."))
 			log.Println("")
 		}
 	case config.ValidationError:
 		{
-			log.Fatal("validation failed due to the issues listed above")
+			log.Fatal(boldRed("validation failed due to the issues listed above"))
 		}
 	}
 
@@ -181,7 +181,8 @@ func renderError(err error, ctx config.YamlCtx) string {
 		}
 		return sb.String()
 	case validators.ValidatorError:
-		return fmt.Sprintf("validator %q failed:\n%v\n", te.Validator, renderError(te.Err, ctx))
+		title := boldRed(fmt.Sprintf("validator %q failed:", te.Validator))
+		return fmt.Sprintf("%s\n%v\n", title, renderError(te.Err, ctx))
 	case config.BpError:
 		if pos, ok := findPos(te.Path, ctx); ok {
 			return renderRichError(te.Err, pos, ctx)
@@ -193,11 +194,24 @@ func renderError(err error, ctx config.YamlCtx) string {
 }
 
 func renderRichError(err error, pos config.Pos, ctx config.YamlCtx) string {
+	line := pos.Line - 1
+	if line < 0 {
+		line = 0
+	}
+	if line >= len(ctx.Lines) {
+		line = len(ctx.Lines) - 1
+	}
+
 	pref := fmt.Sprintf("%d: ", pos.Line)
-	arrow := strings.Repeat(" ", len(pref)+pos.Column-1) + "^"
-	return fmt.Sprintf(`Error: %s
+	arrow := " "
+	if pos.Column > 0 {
+		spaces := strings.Repeat(" ", len(pref)+pos.Column-1)
+		arrow = spaces + "^"
+	}
+
+	return fmt.Sprintf(`%s: %s
 %s%s
-%s`, err, pref, ctx.Lines[pos.Line-1], arrow)
+%s`, boldRed("Error"), err, pref, ctx.Lines[line], arrow)
 }
 
 func setCLIVariables(bp *config.Blueprint, s []string) error {

@@ -17,7 +17,7 @@ dill==0.3.6
 distlib==0.3.6
 # django-revproxy==0.11.0 released but not yet in pypi
 git+https://github.com/jazzband/django-revproxy.git@d2234005135dc0771b7c4e0bb0465664ccfa5787
-Django==4.2.3
+Django==4.2.7
 django-allauth==0.54.0
 django-extensions==3.2.3
 djangorestframework==3.14.0
@@ -78,7 +78,7 @@ tomlkit==0.11.8
 typing-inspect==0.9.0
 typing_extensions==4.6.3
 uritemplate==4.1.1
-urllib3==1.26.16
+urllib3==1.26.18
 uvicorn==0.22.0
 virtualenv==20.23.1
 wrapt==1.15.0

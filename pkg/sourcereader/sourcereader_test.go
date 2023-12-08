@@ -16,7 +16,6 @@ package sourcereader
 
 import (
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -50,7 +49,7 @@ func Test(t *testing.T) {
 func setup() {
 	t := time.Now()
 	dirName := fmt.Sprintf("ghpc_sourcereader_test_%s", t.Format(time.RFC3339))
-	dir, err := ioutil.TempDir("", dirName)
+	dir, err := os.MkdirTemp("", dirName)
 	if err != nil {
 		log.Fatalf("sourcereader_test: %v", err)
 	}
@@ -109,46 +108,50 @@ func (s *MySuite) TestIsLocalPath(c *C) {
 	c.Assert(ret, Equals, false)
 }
 
-func (s *MySuite) TestIsGitRepository(c *C) {
+func (s *MySuite) TestIsRemotePath(c *C) {
 	// False: Is an embedded path
-	ret := IsGitPath("modules/anything/else")
-	c.Assert(ret, Equals, false)
+	ret := IsRemotePath("modules/anything/else")
+	c.Check(ret, Equals, false)
 
 	// False: Local path
-	ret = IsGitPath("./anything/else")
-	c.Assert(ret, Equals, false)
+	ret = IsRemotePath("./anything/else")
+	c.Check(ret, Equals, false)
 
-	ret = IsGitPath("./modules")
-	c.Assert(ret, Equals, false)
+	ret = IsRemotePath("./modules")
+	c.Check(ret, Equals, false)
 
-	ret = IsGitPath("../modules/")
-	c.Assert(ret, Equals, false)
+	ret = IsRemotePath("../modules/")
+	c.Check(ret, Equals, false)
 
 	// True, other
-	ret = IsGitPath("github.com/modules")
-	c.Assert(ret, Equals, true)
+	ret = IsRemotePath("github.com/modules")
+	c.Check(ret, Equals, true)
 
 	// True, genetic git repository
-	ret = IsGitPath("git::https://gitlab.com/modules")
-	c.Assert(ret, Equals, true)
+	ret = IsRemotePath("git::https://gitlab.com/modules")
+	c.Check(ret, Equals, true)
+
+	// True, invalid path though nor local nor embedded
+	ret = IsRemotePath("wut:://modules")
+	c.Check(ret, Equals, true)
 }
 
 func (s *MySuite) TestFactory(c *C) {
 	// Local modules
 	locSrcReader := Factory("./modules/anything/else")
-	c.Assert(reflect.TypeOf(locSrcReader), Equals, reflect.TypeOf(LocalSourceReader{}))
+	c.Check(reflect.TypeOf(locSrcReader), Equals, reflect.TypeOf(LocalSourceReader{}))
 
 	// Embedded modules
 	embSrcReader := Factory("modules/anything/else")
-	c.Assert(reflect.TypeOf(embSrcReader), Equals, reflect.TypeOf(EmbeddedSourceReader{}))
+	c.Check(reflect.TypeOf(embSrcReader), Equals, reflect.TypeOf(EmbeddedSourceReader{}))
 
 	// GitHub modules
 	ghSrcString := Factory("github.com/modules")
-	c.Assert(reflect.TypeOf(ghSrcString), Equals, reflect.TypeOf(GitSourceReader{}))
+	c.Check(reflect.TypeOf(ghSrcString), Equals, reflect.TypeOf(GoGetterSourceReader{}))
 
 	// Git modules
 	gitSrcString := Factory("git::https://gitlab.com/modules")
-	c.Assert(reflect.TypeOf(gitSrcString), Equals, reflect.TypeOf(GitSourceReader{}))
+	c.Check(reflect.TypeOf(gitSrcString), Equals, reflect.TypeOf(GoGetterSourceReader{}))
 }
 
 func (s *MySuite) TestCopyFromPath(c *C) {
@@ -164,5 +167,5 @@ func (s *MySuite) TestCopyFromPath(c *C) {
 
 	// Invalid: Specify the same destination path again
 	err = copyFromPath(terraformDir, dstPath)
-	c.Assert(err, ErrorMatches, "The directory already exists: .*")
+	c.Assert(err, ErrorMatches, "the directory already exists: .*")
 }

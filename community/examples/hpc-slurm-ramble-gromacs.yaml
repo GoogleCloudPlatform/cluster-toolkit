@@ -47,7 +47,9 @@ deployment_groups:
       log_file: /var/log/spack.log
       commands: |
         # Un-comment and update mirror_url to install from spack cache
-        # spack mirror add --scope site gcs_cache gs://optionally_set_spack_cache_bucket
+        # if ! spack mirror list | grep -q gcs_cache; then
+        #   spack mirror add --scope site gcs_cache gs://optionally_set_spack_cache_bucket
+        # fi
         # spack buildcache keys --install --trust
 
         spack config --scope defaults add config:build_stage:/opt/apps/spack/spack-stage
@@ -112,6 +114,7 @@ deployment_groups:
     source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
     settings:
       node_count_dynamic_max: 20
+      bandwidth_tier: gvnic_enabled
 
   - id: compute_partition
     source: community/modules/compute/schedmd-slurm-gcp-v5-partition

@@ -43,14 +43,15 @@ RUN go install github.com/terraform-docs/terraform-docs@latest      && \
     go install github.com/go-critic/go-critic/cmd/gocritic@latest   && \
     go install github.com/google/addlicense@latest                  && \
     go install mvdan.cc/sh/v3/cmd/shfmt@latest                      && \
-    go install golang.org/x/tools/cmd/goimports@latest
+    go install golang.org/x/tools/cmd/goimports@latest              && \
+    go install honnef.co/go/tools/cmd/staticcheck@latest
 
 # Setting GHPC dependencies
 WORKDIR /ghpc-tmp
 COPY ./ ./
 
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.8.0/scripts/requirements.txt && \
+    pip install --no-cache-dir -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.9.1/scripts/requirements.txt && \
     pip install --no-cache-dir -r tools/cloud-build/requirements.txt && \
     rm -rf ~/.cache/pip/*
 

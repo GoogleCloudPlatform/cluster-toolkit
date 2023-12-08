@@ -17,7 +17,6 @@ package sourcereader
 import (
 	"fmt"
 	"io/fs"
-	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
@@ -28,12 +27,11 @@ import (
 // hpc-toolkit/modules are not accessible at the package level.
 var ModuleFS BaseFS
 
-// BaseFS is an extension of the fs.FS interface with the functionality needed
-// in CopyDirFromModules. Works with embed.FS and afero.FS
+// BaseFS is an join interface with the functionality needed
+// in copyDirFromModules. Works with embed.FS and afero.FS
 type BaseFS interface {
-	fs.FS
-	ReadDir(string) ([]fs.DirEntry, error)
-	ReadFile(string) ([]byte, error)
+	fs.ReadDirFS
+	fs.ReadFileFS
 }
 
 // EmbeddedSourceReader reads modules from a local directory
@@ -89,7 +87,7 @@ func copyDirFromModules(bfs BaseFS, source string, dest string) error {
 // works against embed.FS.
 // Open Issue: https://github.com/hashicorp/terraform-config-inspect/issues/68
 func copyFSToTempDir(bfs BaseFS, modulePath string) (string, error) {
-	tmpDir, err := ioutil.TempDir("", "tfconfig-module-*")
+	tmpDir, err := os.MkdirTemp("", "tfconfig-module-*")
 	if err != nil {
 		return tmpDir, err
 	}

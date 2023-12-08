@@ -62,6 +62,7 @@ deployment_groups:
     source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
     settings:
       node_count_dynamic_max: 20
+      bandwidth_tier: gvnic_enabled
 
   - id: compute_partition
     source: community/modules/compute/schedmd-slurm-gcp-v5-partition
@@ -80,6 +81,7 @@ deployment_groups:
       # H3 does not support pd-ssd and pd-standard
       # https://cloud.google.com/compute/docs/compute-optimized-machines#h3_disks
       disk_type: pd-balanced
+      bandwidth_tier: gvnic_enabled
 
   - id: h3_partition
     source: community/modules/compute/schedmd-slurm-gcp-v5-partition

@@ -14,16 +14,16 @@
 
 ---
 
-test_name: lustre-vm
+test_name: test-workstation-lustre
 deployment_name: "lustre-vm-{{ build }}"
 zone: us-central1-a
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/tools/cloud-build/daily-tests/blueprints/lustre-vm.yaml"
 network: "default"
-remote_node: "centos-0"
+remote_node: "{{ deployment_name }}-centos-0"
 post_deploy_tests:
-- test-mounts.yml
-- test-lustre-vm.yml
+- test-validation/test-mounts.yml
+- test-validation/test-lustre-vm.yml
 custom_vars:
   output_dir: /lustre/test
   num_slurm_nodes: 1

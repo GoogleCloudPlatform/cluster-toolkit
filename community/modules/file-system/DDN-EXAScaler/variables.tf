@@ -203,20 +203,49 @@ variable "boot" {
 # family: image family name
 # name: !!DEPRECATED!! - image name
 variable "image" {
-  description = "Source image properties"
+  description = "DEPRECATED: Source image properties"
   type        = any
   # Ommiting type checking so validation can provide more useful error message
   # type = object({
   #   project = string
   #   family  = string
   # })
+  default = null
+
+  validation {
+    condition     = var.image == null
+    error_message = "The 'var.image' setting is deprecated, please use 'var.instance_image' with the fields 'project' and 'family' or 'name'."
+  }
+}
+
+variable "instance_image" {
+  description = <<-EOD
+    Source image properties
+
+    Expected Fields:
+    name: Unavailable with this module.
+    family: The image family to use.
+    project: The project where the image is hosted.
+    EOD
+  type        = map(string)
   default = {
     project = "ddn-public"
     family  = "exascaler-cloud-6-2-rocky-linux-8-optimized-gcp"
   }
+
   validation {
-    condition     = lookup(var.image, "name", null) == null && lookup(var.image, "project", null) != null && lookup(var.image, "family", null) != null
-    error_message = "Use image.family & image.project to specify the image. Field image.name is deprecated. See EXAScaler documentation for input options:(https://github.com/DDNStorage/exascaler-cloud-terraform/tree/master/gcp#boot-image-options)."
+    condition     = !can(coalesce(var.instance_image.name))
+    error_message = "In var.instance_image, the \"name\" field is not used, please use the \"family\" setting."
+  }
+
+  validation {
+    condition     = can(coalesce(var.instance_image.project))
+    error_message = "In var.instance_image, the \"project\" field must be a string set to the Cloud project ID."
+  }
+
+  validation {
+    condition     = can(coalesce(var.instance_image.family))
+    error_message = "In var.instance_image, the \"family\" field must be a string set to the image family."
   }
 }
 

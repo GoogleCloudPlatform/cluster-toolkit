@@ -14,7 +14,7 @@
 
 ---
 
-test_name: high-io-slurm-gcp-v5
+test_name: hpc-cluster-high-io-v5
 deployment_name: "io-v5-{{ build }}"
 slurm_cluster_name: "iov5{{ build[0:6] }}"
 zone: us-west4-c
@@ -25,8 +25,8 @@ max_nodes: 5
 login_node: "{{ slurm_cluster_name }}-login-*"
 controller_node: "{{ slurm_cluster_name }}-controller"
 post_deploy_tests:
-- test-mounts.yml
-- test-partitions.yml
+- test-validation/test-mounts.yml
+- test-validation/test-partitions.yml
 custom_vars:
   partitions:
   - compute

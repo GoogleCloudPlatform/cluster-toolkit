@@ -220,7 +220,7 @@ limitations under the License.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_startup_script"></a> [startup\_script](#module\_startup\_script) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | v1.22.1 |
+| <a name="module_startup_script"></a> [startup\_script](#module\_startup\_script) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | 50644b2 |
 
 ## Resources
 
@@ -235,7 +235,7 @@ limitations under the License.
 |------|-------------|------|---------|:--------:|
 | <a name="input_caches_to_populate"></a> [caches\_to\_populate](#input\_caches\_to\_populate) | DEPRECATED<br><br>Use [spack-execute](../spack-execute/) module with the following `commands` can be used to populate a cache:<pre>MIRROR_URL=gs://my-bucket<br>spack buildcache create --mirror-url $MIRROR_URL -af \$(spack find --format /{hash});<br>spack gpg publish --mirror-url $MIRROR_URL;<br>spack buildcache update-index --mirror-url $MIRROR_URL --keys;</pre>Defines caches which will be populated with the installed packages.<br><br>NOTE: GPG Keys should be installed before trying to populate a cache<br>with packages.<br><br>NOTE: The gpg\_keys variable can be used to install existing GPG keys<br>and create new GPG keys, both of which are acceptable for populating a<br>cache. | `list(map(any))` | `null` | no |
 | <a name="input_chgrp_group"></a> [chgrp\_group](#input\_chgrp\_group) | Group to chgrp the Spack clone to. Default will not modify the clone. | `string` | `null` | no |
-| <a name="input_chmod_mode"></a> [chmod\_mode](#input\_chmod\_mode) | Mode to chmod the Spack clone to. Defaults to null (i.e. do not modify).<br>For usage information see:<br>https://docs.ansible.com/ansible/latest/collections/ansible/builtin/file_module.html#parameter-mode | `string` | `"a+rwxs"` | no |
+| <a name="input_chmod_mode"></a> [chmod\_mode](#input\_chmod\_mode) | Mode to chmod the Spack clone to. Defaults to null (i.e. do not modify).<br>For usage information see:<br>https://docs.ansible.com/ansible/latest/collections/ansible/builtin/file_module.html#parameter-mode | `string` | `null` | no |
 | <a name="input_chown_owner"></a> [chown\_owner](#input\_chown\_owner) | Owner to chown the Spack clone to. Default will not modify the clone. | `string` | `null` | no |
 | <a name="input_compilers"></a> [compilers](#input\_compilers) | DEPRECATED<br><br>Use [spack-execute](../spack-execute/) module with the following `commands` can be used to install compilers:<pre>spack install gcc@10.3.0 target=x86_64<br>spack load gcc@10.3.0 target=x86_64<br>spack compiler find --scope site<br>spack clean -s<br>spack unload gcc@10.3.0</pre>Defines compilers for spack to install before installing packages. | `list(string)` | `null` | no |
 | <a name="input_concretize_flags"></a> [concretize\_flags](#input\_concretize\_flags) | DEPRECATED - spack concretize is now performed using the [spack-execute](../spack-execute/) module `commands` variable. | `string` | `null` | no |
@@ -253,6 +253,7 @@ limitations under the License.
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created. | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | Region to place bucket containing startup script. | `string` | n/a | yes |
 | <a name="input_spack_cache_url"></a> [spack\_cache\_url](#input\_spack\_cache\_url) | DEPRECATED<br><br>Use [spack-execute](../spack-execute/) module with the following `commands` can be used to add a build cache:<pre>spack mirror add --scope site <mirror name> gs://my-build-cache<br>spack buildcache keys --install --trust</pre>List of build caches for Spack. | <pre>list(object({<br>    mirror_name = string<br>    mirror_url  = string<br>  }))</pre> | `null` | no |
+| <a name="input_spack_profile_script_path"></a> [spack\_profile\_script\_path](#input\_spack\_profile\_script\_path) | Path to the Spack profile.d script. Created by this module | `string` | `"/etc/profile.d/spack.sh"` | no |
 | <a name="input_spack_ref"></a> [spack\_ref](#input\_spack\_ref) | Git ref to checkout for spack. | `string` | `"v0.20.0"` | no |
 | <a name="input_spack_url"></a> [spack\_url](#input\_spack\_url) | URL to clone the spack repo from. | `string` | `"https://github.com/spack/spack"` | no |
 | <a name="input_spack_virtualenv_path"></a> [spack\_virtualenv\_path](#input\_spack\_virtualenv\_path) | Virtual environment path in which to install Spack Python interpreter and other dependencies | `string` | `"/usr/local/spack-python"` | no |
@@ -261,9 +262,10 @@ limitations under the License.
 
 | Name | Description |
 |------|-------------|
-| <a name="output_controller_startup_script"></a> [controller\_startup\_script](#output\_controller\_startup\_script) | Path to the Spack installation script, duplicate for SLURM controller. |
+| <a name="output_controller_startup_script"></a> [controller\_startup\_script](#output\_controller\_startup\_script) | Spack installation script, duplicate for SLURM controller. |
 | <a name="output_gcs_bucket_path"></a> [gcs\_bucket\_path](#output\_gcs\_bucket\_path) | Bucket containing the startup scripts for spack, to be reused by spack-execute module. |
 | <a name="output_spack_path"></a> [spack\_path](#output\_spack\_path) | Path to the root of the spack installation |
+| <a name="output_spack_profile_script_path"></a> [spack\_profile\_script\_path](#output\_spack\_profile\_script\_path) | Path to the Spack profile.d script. |
 | <a name="output_spack_runner"></a> [spack\_runner](#output\_spack\_runner) | Runner to be used with startup-script module or passed to spack-execute module.<br>- installs Spack dependencies<br>- installs Spack <br>- generates profile.d script to enable access to Spack<br>This is safe to run in parallel by multiple machines. Use in place of deprecated `setup_spack_runner`. |
-| <a name="output_startup_script"></a> [startup\_script](#output\_startup\_script) | Path to the Spack installation script. |
+| <a name="output_startup_script"></a> [startup\_script](#output\_startup\_script) | Spack installation script. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

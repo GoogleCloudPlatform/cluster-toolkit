@@ -223,19 +223,23 @@ description of our support for Windows images.
   <td><a href="../tools/validate_configs/os_compatibility_tests/vm-startup.yaml">✓</a></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/vm-startup.yaml">✓</a></td>
 </tr>
-
 <tr>
   <th rowspan="1">HTCondor</th>
   <th></th>
   <th></th>
-  <td>✓</td><td></td><td>✓</td><td></td>
+  <td></td>
+  <td>✓</td>
+  <td>✓</td>
+  <td></td>
 </tr>
-
 <tr>
   <th rowspan="1">Omnia</th>
   <th></th>
   <th></th>
-  <td></td><td></td><td>✓</td><td></td>
+  <td></td>
+  <td></td>
+  <td>✓</td>
+  <td></td>
 </tr>
 </table>
 
@@ -289,7 +293,7 @@ These instructions apply to the following modules:
 [slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/v5
 [slurm-gcp-packer]: https://github.com/SchedMD/slurm-gcp/tree/v5/packer
 [slurm-gcp-images]: https://github.com/SchedMD/slurm-gcp/blob/v5/docs/images.md
-[slurm-gcp-published-images]: https://github.com/SchedMD/slurm-gcp/blob/5.7.6/docs/images.md#published-image-family
+[slurm-gcp-published-images]: https://github.com/SchedMD/slurm-gcp/blob/5.9.1/docs/images.md#published-image-family
 [gcloud-compute-images]: https://cloud.google.com/sdk/gcloud/reference/compute/images/create
 
 [vm-instance]: ../modules/compute/vm-instance
