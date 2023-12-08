@@ -366,7 +366,7 @@ vars:
   region: {self.cluster.cloud_region}
   zone: {self.cluster.cloud_zone}
   enable_reconfigure: True
-  enable_cleanup_compute: True
+  enable_cleanup_compute: False
   enable_cleanup_subscriptions: True
   enable_bigquery_load: {self.cluster.use_bigquery}
   instance_image_custom: True
