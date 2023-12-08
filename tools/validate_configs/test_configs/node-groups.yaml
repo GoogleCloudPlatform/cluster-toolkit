@@ -144,6 +144,7 @@ deployment_groups:
         on_host_maintenance: TERMINATE
         preemptible: false
         reservation_name: null # will be replaced by default value empty string
+        maintenance_interval: null
         service_account: null
         shielded_instance_config: null
         spot_instance_config: null

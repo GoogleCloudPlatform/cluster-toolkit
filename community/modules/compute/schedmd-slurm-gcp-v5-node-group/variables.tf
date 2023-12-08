@@ -304,6 +304,18 @@ variable "reservation_name" {
   nullable    = false
 }
 
+variable "maintenance_interval" {
+  description = "Specifies the frequency of planned maintenance events. The accepted values are: PERIODIC"
+  type        = string
+  default     = ""
+  nullable    = false
+
+  validation {
+    condition     = contains(["", "PERIODIC"], var.maintenance_interval)
+    error_message = "The only accepted value is \"PERIODIC\". Leave omitted to avoid specifying an interval."
+  }
+}
+
 variable "service_account" {
   type = object({
     email  = string

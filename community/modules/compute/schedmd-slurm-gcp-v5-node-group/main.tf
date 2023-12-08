@@ -63,6 +63,7 @@ locals {
     on_host_maintenance      = var.on_host_maintenance
     preemptible              = var.preemptible
     reservation_name         = var.reservation_name
+    maintenance_interval     = var.maintenance_interval
     shielded_instance_config = var.shielded_instance_config
     source_image_family      = local.source_image_family             # requires source_image_logic.tf
     source_image_project     = local.source_image_project_normalized # requires source_image_logic.tf
