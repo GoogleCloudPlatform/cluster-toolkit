@@ -117,5 +117,5 @@ deployment_groups:
     use: [bq-dataset, bq-table, fsi_bucket, pubsub_topic]
 
   - id: bq_subscription
-    source: community/modules/pubsub/subscription
+    source: community/modules/pubsub/bigquery-sub
     use: [bq-table, pubsub_topic]
