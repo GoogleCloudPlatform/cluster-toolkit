@@ -19,7 +19,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [serverless-batch-mpi.yaml](#serverless-batch-mpiyaml-) ![core-badge]
   * [pfs-lustre.yaml](#pfs-lustreyaml-) ![core-badge]
   * [cae-slurm.yaml](#cae-slurmyaml-) ![core-badge]
-  * [fsi-montecarlo-on-batch.yaml](#fsi-montecarlo-on-batchyaml-) ![community-badge]
+  * [fsi-montecarlo-on-batch.yaml](#fsi-montecarlo-on-batchyaml-) ![community-badge] ![experimental-badge]
   * [hpc-slurm-ubuntu2004.yaml](#hpc-slurm-ubuntu2004yaml-) ![community-badge]
   * [hpc-intel-select-slurm.yaml](#hpc-intel-select-slurmyaml-) ![community-badge]
   * [pfs-daos.yaml](#pfs-daosyaml-) ![community-badge]
