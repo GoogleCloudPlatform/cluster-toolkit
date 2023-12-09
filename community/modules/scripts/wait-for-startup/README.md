@@ -49,18 +49,18 @@ limitations under the License.
 
 ## Requirements
 
-| Name                                                                      | Version   |
-| ------------------------------------------------------------------------- | --------- |
+| Name | Version |
+|------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 0.14.0 |
-| <a name="requirement_google"></a> [google](#requirement\_google)          | >= 3.83   |
-| <a name="requirement_null"></a> [null](#requirement\_null)                | ~> 3.0    |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 3.83 |
+| <a name="requirement_null"></a> [null](#requirement\_null) | ~> 3.0 |
 
 ## Providers
 
-| Name                                                       | Version |
-| ---------------------------------------------------------- | ------- |
+| Name | Version |
+|------|---------|
 | <a name="provider_google"></a> [google](#provider\_google) | >= 3.83 |
-| <a name="provider_null"></a> [null](#provider\_null)       | ~> 3.0  |
+| <a name="provider_null"></a> [null](#provider\_null) | ~> 3.0 |
 
 ## Modules
 
@@ -68,21 +68,23 @@ No modules.
 
 ## Resources
 
-| Name                                                                                                                                      | Type        |
-| ----------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
-| [null_resource.validate_instance_names](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource)            | resource    |
-| [null_resource.wait_for_startup](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource)                   | resource    |
-| [google_compute_instance.vm_instance](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_instance) | data source |
+| Name | Type |
+|------|------|
+| [null_resource.validate_instance_names](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
+| [null_resource.wait_for_startup_multi](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
+| [null_resource.wait_for_startup_single](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
+| [google_compute_instance.vm_instance_multi](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_instance) | data source |
+| [google_compute_instance.vm_instance_single](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_instance) | data source |
 
 ## Inputs
 
-| Name                                                                           | Description                                         | Type           | Default | Required |
-| ------------------------------------------------------------------------------ | --------------------------------------------------- | -------------- | ------- | :------: |
-| <a name="input_instance_name"></a> [instance\_name](#input\_instance\_name)    | Name of the instance we are waiting for             | `string`       | `null`  |    no    |
-| <a name="input_instance_names"></a> [instance\_names](#input\_instance\_names) | A list of names of the instances we are waiting for | `list(string)` | `[]`    |    no    |
-| <a name="input_project_id"></a> [project\_id](#input\_project\_id)             | Project in which the HPC deployment will be created | `string`       | n/a     |   yes    |
-| <a name="input_timeout"></a> [timeout](#input\_timeout)                        | Timeout in seconds                                  | `number`       | `1200`  |    no    |
-| <a name="input_zone"></a> [zone](#input\_zone)                                 | The GCP zone where the instance is running          | `string`       | n/a     |   yes    |
+| Name | Description | Type | Default | Required |
+|------|-------------|------|---------|:--------:|
+| <a name="input_instance_name"></a> [instance\_name](#input\_instance\_name) | Name of the instance we are waiting for | `string` | `null` | no |
+| <a name="input_instance_names"></a> [instance\_names](#input\_instance\_names) | A list of names of the instances we are waiting for (this automatically includes any value provided in the singular 'instance\_name' setting) | `list(string)` | `[]` | no |
+| <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created | `string` | n/a | yes |
+| <a name="input_timeout"></a> [timeout](#input\_timeout) | Timeout in seconds | `number` | `1200` | no |
+| <a name="input_zone"></a> [zone](#input\_zone) | The GCP zone where the instance is running | `string` | n/a | yes |
 
 ## Outputs
 

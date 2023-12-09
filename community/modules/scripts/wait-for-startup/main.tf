@@ -14,34 +14,30 @@
  * limitations under the License.
  */
 
-locals {
-  instance_names = toset(compact(concat(var.instance_names, [var.instance_name])))
-}
-
 resource "null_resource" "validate_instance_names" {
   lifecycle {
     precondition {
-      condition     = length(local.instance_names) > 0
+      condition     = var.instance_name != null || length(var.instance_names) > 0
       error_message = "At least one instance name must be provided"
     }
   }
 }
 
-data "google_compute_instance" "vm_instance" {
-  for_each = local.instance_names
+data "google_compute_instance" "vm_instance_single" {
+  count = var.instance_name == null ? 0 : 1
 
-  name    = each.value
+  name    = var.instance_name
   zone    = var.zone
   project = var.project_id
 }
 
-resource "null_resource" "wait_for_startup" {
-  for_each = local.instance_names
+resource "null_resource" "wait_for_startup_single" {
+  count = var.instance_name == null ? 0 : 1
 
   provisioner "local-exec" {
     command = "/bin/bash ${path.module}/scripts/wait-for-startup-status.sh"
     environment = {
-      INSTANCE_NAME = each.value
+      INSTANCE_NAME = var.instance_name
       ZONE          = var.zone
       PROJECT_ID    = var.project_id
       TIMEOUT       = var.timeout
@@ -49,6 +45,32 @@ resource "null_resource" "wait_for_startup" {
   }
 
   triggers = {
-    instance_id_changes = data.google_compute_instance.vm_instance[each.value].instance_id
+    instance_id_changes = data.google_compute_instance.vm_instance_single[count.index].instance_id
+  }
+}
+
+data "google_compute_instance" "vm_instance_multi" {
+  count = length(var.instance_names)
+
+  name    = var.instance_names[count.index]
+  zone    = var.zone
+  project = var.project_id
+}
+
+resource "null_resource" "wait_for_startup_multi" {
+  count = length(var.instance_names)
+
+  provisioner "local-exec" {
+    command = "/bin/bash ${path.module}/scripts/wait-for-startup-status.sh"
+    environment = {
+      INSTANCE_NAME = var.instance_names[count.index]
+      ZONE          = var.zone
+      PROJECT_ID    = var.project_id
+      TIMEOUT       = var.timeout
+    }
+  }
+
+  triggers = {
+    instance_id_changes = data.google_compute_instance.vm_instance_multi[count.index].instance_id
   }
 }
