@@ -32,10 +32,6 @@ func init() {
 	rootCmd.AddCommand(exportCmd)
 }
 
-var defaultArtifactsDir = filepath.Join(modulewriter.HiddenGhpcDirName, modulewriter.ArtifactsDirName)
-
-const expandedBlueprintFilename string = "expanded_blueprint.yaml"
-
 var (
 	artifactsDir string
 	exportCmd    = &cobra.Command{
@@ -73,7 +69,7 @@ func parseExportImportArgs(cmd *cobra.Command, args []string) {
 
 func getArtifactsDir(deploymentRoot string) string {
 	if artifactsDir == "" {
-		return filepath.Clean(filepath.Join(deploymentRoot, defaultArtifactsDir))
+		return modulewriter.ArtifactsDir(deploymentRoot)
 	}
 	return artifactsDir
 }
@@ -86,7 +82,7 @@ func runExportCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	expandedBlueprintFile := filepath.Join(artifactsDir, expandedBlueprintFilename)
+	expandedBlueprintFile := filepath.Join(artifactsDir, modulewriter.ExpandedBlueprintName)
 	dc, _, err := config.NewDeploymentConfig(expandedBlueprintFile)
 	if err != nil {
 		return err

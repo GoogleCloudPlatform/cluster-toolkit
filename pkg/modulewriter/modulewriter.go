@@ -38,11 +38,19 @@ import (
 const (
 	HiddenGhpcDirName          = ".ghpc"
 	ArtifactsDirName           = "artifacts"
+	ExpandedBlueprintName      = "expanded_blueprint.yaml"
 	prevDeploymentGroupDirName = "previous_deployment_groups"
 	gitignoreTemplate          = "deployment.gitignore.tmpl"
 	artifactsWarningFilename   = "DO_NOT_MODIFY_THIS_DIRECTORY"
-	expandedBlueprintName      = "expanded_blueprint.yaml"
 )
+
+func HiddenGhpcDir(deplDir string) string {
+	return filepath.Join(filepath.Clean(deplDir), HiddenGhpcDirName)
+}
+
+func ArtifactsDir(deplDir string) string {
+	return filepath.Join(HiddenGhpcDir(deplDir), ArtifactsDirName)
+}
 
 // ModuleWriter interface for writing modules to a deployment
 type ModuleWriter interface {
@@ -64,11 +72,9 @@ var kinds = map[string]ModuleWriter{
 //go:embed *.tmpl
 var templatesFS embed.FS
 
-// WriteDeployment writes a deployment directory using modules defined the
-// environment blueprint.
-func WriteDeployment(dc config.DeploymentConfig, deploymentDir string, overwriteFlag bool) error {
-	overwrite := isOverwriteAllowed(deploymentDir, &dc.Config, overwriteFlag)
-	if err := prepDepDir(deploymentDir, overwrite); err != nil {
+// WriteDeployment writes a deployment directory using modules defined the environment blueprint.
+func WriteDeployment(dc config.DeploymentConfig, deploymentDir string) error {
+	if err := prepDepDir(deploymentDir); err != nil {
 		return err
 	}
 
@@ -258,75 +264,13 @@ func copySource(deploymentPath string, deploymentGroups *[]config.DeploymentGrou
 	return nil
 }
 
-// Determines if overwrite is allowed
-func isOverwriteAllowed(depDir string, overwritingConfig *config.Blueprint, overwriteFlag bool) bool {
-	if !overwriteFlag {
-		return false
-	}
-
-	files, err := os.ReadDir(depDir)
-	if err != nil {
-		return false
-	}
-
-	// build list of previous and current deployment groups
-	var prevGroups []string
-	for _, f := range files {
-		if f.IsDir() && f.Name() != HiddenGhpcDirName {
-			prevGroups = append(prevGroups, f.Name())
-		}
-	}
-
-	var curGroups []string
-	for _, group := range overwritingConfig.DeploymentGroups {
-		curGroups = append(curGroups, string(group.Name))
-	}
-
-	return isSubset(prevGroups, curGroups)
-}
-
-func isSubset(sub, super []string) bool {
-	// build set (map keys) from slice
-	superM := make(map[string]bool)
-	for _, item := range super {
-		superM[item] = true
-	}
-
-	for _, item := range sub {
-		if _, found := superM[item]; !found {
-			return false
-		}
-	}
-	return true
-}
-
-// OverwriteDeniedError signifies when a deployment overwrite was denied.
-type OverwriteDeniedError struct {
-	cause error
-}
-
-func (err *OverwriteDeniedError) Error() string {
-	return fmt.Sprintf("Failed to overwrite existing deployment.\n\n"+
-		"Use the -w command line argument to enable overwrite.\n"+
-		"If overwrite is already enabled then this may be because "+
-		"you are attempting to remove a deployment group, which is not supported.\n"+
-		"original error: %v",
-		err.cause)
-}
-
 // Prepares a deployment directory to be written to.
-func prepDepDir(depDir string, overwrite bool) error {
+func prepDepDir(depDir string) error {
 	deploymentio := deploymentio.GetDeploymentioLocal()
-	ghpcDir := filepath.Join(depDir, HiddenGhpcDirName)
-	artifactsDir := filepath.Join(ghpcDir, ArtifactsDirName)
-	gitignoreFile := filepath.Join(depDir, ".gitignore")
+	ghpcDir := HiddenGhpcDir(depDir)
 
 	// create deployment directory
 	if err := deploymentio.CreateDirectory(depDir); err != nil {
-		if !overwrite {
-			return &OverwriteDeniedError{err}
-		}
-
 		// Confirm we have a previously written deployment dir before overwriting.
 		if _, err := os.Stat(ghpcDir); os.IsNotExist(err) {
 			return fmt.Errorf(
@@ -337,12 +281,13 @@ func prepDepDir(depDir string, overwrite bool) error {
 			return fmt.Errorf("failed to create directory at %s: err=%w", ghpcDir, err)
 		}
 
+		gitignoreFile := filepath.Join(depDir, ".gitignore")
 		if err := deploymentio.CopyFromFS(templatesFS, gitignoreTemplate, gitignoreFile); err != nil {
 			return fmt.Errorf("failed to copy template.gitignore file to %s: err=%w", gitignoreFile, err)
 		}
 	}
 
-	if err := prepArtifactsDir(artifactsDir); err != nil {
+	if err := prepArtifactsDir(ArtifactsDir(depDir)); err != nil {
 		return err
 	}
 
@@ -356,7 +301,7 @@ func prepDepDir(depDir string, overwrite bool) error {
 	// create new backup of deployment group directory
 	files, err := os.ReadDir(depDir)
 	if err != nil {
-		return fmt.Errorf("Error trying to read directories in %s, %w", depDir, err)
+		return fmt.Errorf("error trying to read directories in %s, %w", depDir, err)
 	}
 	for _, f := range files {
 		if !f.IsDir() || f.Name() == HiddenGhpcDirName {
@@ -365,7 +310,7 @@ func prepDepDir(depDir string, overwrite bool) error {
 		src := filepath.Join(depDir, f.Name())
 		dest := filepath.Join(prevGroupDir, f.Name())
 		if err := os.Rename(src, dest); err != nil {
-			return fmt.Errorf("Error while moving previous deployment groups: failed on %s: %w", f.Name(), err)
+			return fmt.Errorf("error while moving previous deployment groups: failed on %s: %w", f.Name(), err)
 		}
 	}
 	return nil
@@ -397,9 +342,7 @@ func prepArtifactsDir(artifactsDir string) error {
 }
 
 func writeExpandedBlueprint(depDir string, dc config.DeploymentConfig) error {
-	artifactsDir := filepath.Join(depDir, HiddenGhpcDirName, ArtifactsDirName)
-	blueprintFile := filepath.Join(artifactsDir, expandedBlueprintName)
-	return dc.ExportBlueprint(blueprintFile)
+	return dc.ExportBlueprint(filepath.Join(ArtifactsDir(depDir), ExpandedBlueprintName))
 }
 
 func writeDestroyInstructions(w io.Writer, dc config.DeploymentConfig, deploymentDir string) {

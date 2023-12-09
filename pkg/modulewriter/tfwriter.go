@@ -371,12 +371,11 @@ func (w TFWriter) writeDeploymentGroup(
 
 // Transfers state files from previous resource groups (in .ghpc/) to a newly written blueprint
 func (w TFWriter) restoreState(deploymentDir string) error {
-	prevDeploymentGroupPath := filepath.Join(
-		deploymentDir, HiddenGhpcDirName, prevDeploymentGroupDirName)
+	prevDeploymentGroupPath := filepath.Join(HiddenGhpcDir(deploymentDir), prevDeploymentGroupDirName)
 	files, err := os.ReadDir(prevDeploymentGroupPath)
 	if err != nil {
 		return fmt.Errorf(
-			"Error trying to read previous modules in %s, %w",
+			"error trying to read previous modules in %s, %w",
 			prevDeploymentGroupPath, err)
 	}
 
