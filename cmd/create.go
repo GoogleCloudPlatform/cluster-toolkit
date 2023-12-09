@@ -303,7 +303,7 @@ func checkOverwriteAllowed(depDir string, bp config.Blueprint, overwriteFlag boo
 	// try to get previous deployment
 	expPath := filepath.Join(modulewriter.ArtifactsDir(depDir), modulewriter.ExpandedBlueprintName)
 	if _, err := os.Stat(expPath); os.IsNotExist(err) {
-		return fmt.Errorf("expanded blueprint file %q is missing, maybe your previous GHPC version is too old", expPath)
+		return fmt.Errorf("expanded blueprint file %q is missing, this could be a result of changing GHPC version between consecutive deployments", expPath)
 	}
 	prev, _, err := config.NewDeploymentConfig(expPath)
 	if err != nil {
@@ -311,7 +311,7 @@ func checkOverwriteAllowed(depDir string, bp config.Blueprint, overwriteFlag boo
 	}
 
 	if prev.Config.GhpcVersion != bp.GhpcVersion {
-		logging.Info("WARNING: ghpc_version has changed from %q to %q", prev.Config.GhpcVersion, bp.GhpcVersion)
+		logging.Info("WARNING: ghpc_version has changed from %q to %q, using different versions of GHPC to update a live deployment is not officially supported. Proceed at your own risk", prev.Config.GhpcVersion, bp.GhpcVersion)
 	}
 
 	if !overwriteFlag {

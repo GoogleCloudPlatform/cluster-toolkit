@@ -192,8 +192,8 @@ func (s *MySuite) TestIsOverwriteAllowed_NoExpanded(c *C) {
 	}
 
 	bp := config.Blueprint{}
-	c.Check(checkOverwriteAllowed(depDir, bp, false /*overwriteFlag*/), ErrorMatches, ".* previous GHPC version is too old")
-	c.Check(checkOverwriteAllowed(depDir, bp, true /*overwriteFlag*/), ErrorMatches, ".* previous GHPC version is too old")
+	c.Check(checkOverwriteAllowed(depDir, bp, false /*overwriteFlag*/), ErrorMatches, ".* changing GHPC version.*")
+	c.Check(checkOverwriteAllowed(depDir, bp, true /*overwriteFlag*/), ErrorMatches, ".* changing GHPC version.*")
 }
 
 func (s *MySuite) TestIsOverwriteAllowed_Malformed(c *C) {
