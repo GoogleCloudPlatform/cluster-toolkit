@@ -25,6 +25,7 @@ import (
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/modulereader"
 	"hpc-toolkit/pkg/modulewriter"
+	"hpc-toolkit/pkg/validators"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -197,7 +198,13 @@ func planModule(tf *tfexec.Terraform, path string, destroy bool) (bool, error) {
 		}
 		return false, &TfError{msg, plainError}
 	}
-
+	plan, err := tf.ShowPlanFile(context.Background(), path)
+	if err != nil {
+		return false, err
+	}
+	if err := validators.QuotaCheckPlan(plan); err != nil {
+		return false, err
+	}
 	return wantsChange, nil
 }
 

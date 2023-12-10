@@ -26,6 +26,7 @@ require (
 	github.com/go-git/go-billy/v5 v5.5.0
 	github.com/google/go-cmp v0.6.0
 	github.com/hashicorp/terraform-exec v0.19.0
+	github.com/hashicorp/terraform-json v0.17.1
 	github.com/mattn/go-isatty v0.0.20
 	github.com/zclconf/go-cty-debug v0.0.0-20191215020915-b22d67c1ba0b
 	google.golang.org/api v0.152.0
@@ -36,7 +37,6 @@ require (
 	github.com/apparentlymart/go-textseg/v15 v15.0.0 // indirect
 	github.com/cyphar/filepath-securejoin v0.2.4 // indirect
 	github.com/googleapis/gax-go/v2 v2.12.0 // indirect
-	github.com/hashicorp/terraform-json v0.17.1 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/rogpeppe/go-internal v1.11.0 // indirect
 	golang.org/x/mod v0.12.0 // indirect

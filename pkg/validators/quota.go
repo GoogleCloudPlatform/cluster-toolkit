@@ -16,13 +16,17 @@ package validators
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/logging"
+	"strconv"
 	"strings"
 	"time"
 
 	"golang.org/x/exp/maps"
 
+	tfjson "github.com/hashicorp/terraform-json"
 	"github.com/zclconf/go-cty/cty"
 	"github.com/zclconf/go-cty/cty/convert"
 	"github.com/zclconf/go-cty/cty/gocty"
@@ -423,4 +427,197 @@ func testResourceRequirements(bp config.Blueprint, inputs config.Dict) error {
 	}
 	errs.Add(err)
 	return errs.OrNil()
+}
+
+func QuotaCheckPlan(plan *tfjson.Plan) error {
+	// TODO: check plan.ResourceDrift as well
+	acc := []ResourceRequirement{}
+	for _, r := range plan.ResourceChanges {
+		reqs, err := getResourceChangeRequirements(r)
+		if err != nil {
+			return err
+		}
+		acc = append(acc, reqs...)
+	}
+
+	errs := config.Errors{}
+	up := usageProvider{} // TODO: add usageProvider
+	qerrs, err := validateResourceRequirements(acc, &up)
+	for _, qe := range qerrs {
+		errs.Add(qe)
+	}
+	errs.Add(err)
+
+	return errs.OrNil()
+
+}
+
+type providerHandler func(rc tfjson.ResourceChange) ([]ResourceRequirement, error)
+
+func googleHandler(rc tfjson.ResourceChange) ([]ResourceRequirement, error) {
+	freeResources := map[string]bool{
+		"google_compute_router":             true,
+		"google_compute_router_nat":         true,
+		"google_compute_address":            true,
+		"google_compute_firewall":           true,
+		"google_compute_network":            true,
+		"google_compute_subnetwork":         true,
+		"google_storage_bucket":             true,
+		"google_storage_bucket_iam_binding": true,
+		"google_storage_bucket_object":      true,
+	}
+	if freeResources[rc.Type] {
+		return nil, nil
+	}
+
+	switch rc.Type {
+	case "google_compute_instance":
+		return googleComputeInstanceHandler(rc)
+	case "google_compute_disk":
+		return googleComputeDiskHandler(rc)
+	default:
+		logging.Info("Unknown resource type %q", rc.Type)
+		return nil, nil
+	}
+}
+
+func anyToStruct[T any](v interface{}, p *T) error {
+	bts, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(bts, p)
+}
+
+func parseMachineType(mt string) (string, int, error) {
+	parts := strings.Split(mt, "-")
+	if len(parts) != 3 {
+		return "", 0, fmt.Errorf("invalid machine type %q", mt)
+	}
+	cores, err := strconv.Atoi(parts[2])
+	if err != nil {
+		return "", 0, fmt.Errorf("invalid machine type %q", mt)
+	}
+	return parts[0], cores, nil
+}
+
+func gInstanceRequirements(v interface{}) ([]ResourceRequirement, error) {
+	if v == nil { // no change
+		return nil, nil
+	}
+
+	type params struct {
+		Project     string `json:"project"`
+		MachineType string `json:"machine_type"`
+		Zone        string `json:"zone"`
+	}
+	var p params
+	if err := anyToStruct(v, &p); err != nil {
+		return nil, err
+	}
+
+	if p.Project == "" || p.MachineType == "" || p.Zone == "" {
+		return nil, fmt.Errorf("missing required fields in %v, got %#v", v, p)
+	}
+
+	mf, cores, err := parseMachineType(p.MachineType)
+	if err != nil {
+		return nil, err
+	}
+
+	rr := ResourceRequirement{
+		Consumer:   fmt.Sprintf("projects/%s", p.Project),
+		Service:    "compute.googleapis.com",
+		Required:   int64(cores),
+		Dimensions: map[string]string{"zone": p.Zone},
+	}
+
+	if mf == "h3" { // TODO: + c3a, c3d
+		rr.Metric = "compute.googleapis.com/cpus_per_vm_family"
+		rr.Dimensions["vm_family"] = "H3"
+	} else {
+		rr.Metric = fmt.Sprintf("compute.googleapis.com/%s_cpus", mf)
+	}
+
+	return []ResourceRequirement{rr}, nil
+
+}
+
+func googleComputeInstanceHandler(rc tfjson.ResourceChange) ([]ResourceRequirement, error) {
+	after, err := gInstanceRequirements(rc.Change.After)
+	if err != nil {
+		return nil, err
+	}
+	// assume change is always ["create"] for now
+	// before, err := gInstanceRequirements(rc.Change.Before)
+	// if err != nil {
+	// 	return nil, err
+	// }
+	return after, nil
+}
+
+func gDiskRequirements(v interface{}) ([]ResourceRequirement, error) {
+	if v == nil { // no change
+		return nil, nil
+	}
+
+	type params struct {
+		Project string `json:"project"`
+		Type    string `json:"type"`
+		Size    int    `json:"size"`
+		Zone    string `json:"zone"`
+	}
+	var p params
+	if err := anyToStruct(v, &p); err != nil {
+		return nil, err
+	}
+
+	if p.Project == "" || p.Type == "" || p.Size == 0 || p.Zone == "" {
+		return nil, fmt.Errorf("missing required fields in %v, got %#v", v, p)
+	}
+
+	rr := ResourceRequirement{
+		Consumer:   fmt.Sprintf("projects/%s", p.Project),
+		Service:    "compute.googleapis.com",
+		Metric:     "compute.googleapis.com/disks_total_storage",
+		Required:   int64(p.Size),
+		Dimensions: map[string]string{"zone": p.Zone},
+	}
+	// TODO: add other metrics, check types, e.g.
+	// "compute.googleapis.com/ssd_total_storage"
+	// "file.googleapis.com/standard-storage-gb-per-region "
+	return []ResourceRequirement{rr}, nil
+}
+
+func googleComputeDiskHandler(rc tfjson.ResourceChange) ([]ResourceRequirement, error) {
+	after, err := gDiskRequirements(rc.Change.After)
+	if err != nil {
+		return nil, err
+	}
+	// assume change is always ["create"] for now
+	// before, err := gDiskRequirements(rc.Change.Before)
+	// if err != nil {
+	// 	return nil, err
+	// }
+	return after, nil
+}
+
+func nullProviderHandler(rc tfjson.ResourceChange) ([]ResourceRequirement, error) {
+	return nil, nil
+}
+
+func getResourceChangeRequirements(rc *tfjson.ResourceChange) ([]ResourceRequirement, error) {
+	provider := rc.ProviderName
+	knownProviders := map[string]providerHandler{
+		"registry.terraform.io/hashicorp/google":      googleHandler,
+		"registry.terraform.io/hashicorp/google-beta": googleHandler,
+		"registry.terraform.io/hashicorp/random":      nullProviderHandler,
+		"registry.terraform.io/hashicorp/null":        nullProviderHandler,
+	}
+	fn, ok := knownProviders[provider]
+	if !ok {
+		return nil, fmt.Errorf("unknown provider %q", provider)
+	}
+
+	return fn(*rc)
 }
