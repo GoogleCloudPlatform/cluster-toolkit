@@ -39,6 +39,7 @@ repos:
     entry: tools/autodoc/terraform_docs.sh
     language: script
     files: ^.*\.pkr\.hcl$
+    exclude: (pkg\/.*$)|(tools/validate_configs/golden_copies/.*)
     pass_filenames: true
     require_serial: true
   - id: duplicate-diff
@@ -57,23 +58,33 @@ repos:
     files: '.*\.tf$'
     pass_filenames: false
     require_serial: true
+  - id: addlicense
+    name: addlicense
+    language: system
+    entry: addlicense
+    args: ['-c', '"Google LLC"', '-l', 'apache']
+    exclude: docs/videos/healthcare-and-life-sciences/lysozyme-example/submit.sh
+    pass_filenames: true
+
 - repo: https://github.com/dnephin/pre-commit-golang
   rev: v0.5.1
   hooks:
   - id: go-fmt
   - id: go-vet
-  - id: go-lint
   - id: go-imports
   - id: go-cyclo
     args: [-over=15]
   - id: go-unit-tests
-  - id: go-build
   - id: go-mod-tidy
-- repo: https://github.com/tekwizely/pre-commit-golang
-  rev: v1.0.0-rc.1
+# Disabled temporarily due to https://github.com/go-critic/go-critic/issues/1388
+# - repo: https://github.com/tekwizely/pre-commit-golang
+#   rev: v1.0.0-rc.1
+#   hooks:
+#   - id: go-critic
+- repo: https://github.com/Bahjat/pre-commit-golang
+  rev: v1.0.2
   hooks:
-  - id: go-critic
-    args: [-disable, "#experimental,sloppyTypeAssert"]
+  - id: go-static-check
 - repo: https://github.com/adrienverge/yamllint
   rev: v1.32.0
   hooks:
@@ -102,4 +113,9 @@ repos:
   rev: v4.4.0
   hooks:
   - id: end-of-file-fixer
+- repo: https://github.com/codespell-project/codespell
+  rev: v2.2.6
+  hooks:
+  - id: codespell
+    exclude: requirements.txt$|/js/
 exclude: tools/validate_configs/golden_copies/.*

@@ -23,5 +23,8 @@ done
 uniq_paths=$(echo "${paths[@]}" | tr ' ' '\n' | sort -u)
 
 for path in $uniq_paths; do
-	terraform-docs markdown --config .tfdocs-markdown.yaml "${path}"
+	terraform-docs markdown --config .tfdocs-markdown.yaml "${path}" || {
+		echo "Error generating docs for ${path}"
+		exit 1
+	}
 done

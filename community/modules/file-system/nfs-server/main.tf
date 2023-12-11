@@ -61,6 +61,36 @@ resource "google_compute_disk" "attached_disk" {
   labels  = local.labels
 }
 
+data "google_compute_image" "compute_image" {
+  family  = try(var.instance_image.family, null)
+  name    = try(var.instance_image.name, null)
+  project = var.instance_image.project
+}
+
+resource "null_resource" "image" {
+  triggers = {
+    name    = try(var.instance_image.name, null),
+    family  = try(var.instance_image.family, null),
+    project = var.instance_image.project
+  }
+}
+
+resource "google_compute_disk" "boot_disk" {
+  project = var.project_id
+
+  name   = "${local.name}-boot-disk"
+  image  = data.google_compute_image.compute_image.self_link
+  labels = local.labels
+  zone   = var.zone
+
+  lifecycle {
+    replace_triggered_by = [null_resource.image]
+    ignore_changes = [
+      image
+    ]
+  }
+}
+
 resource "google_compute_instance" "compute_instance" {
   project      = var.project_id
   name         = "${local.name}-nfs-instance"
@@ -69,9 +99,8 @@ resource "google_compute_instance" "compute_instance" {
 
   boot_disk {
     auto_delete = var.auto_delete_disk
-    initialize_params {
-      image = var.image
-    }
+    source      = google_compute_disk.boot_disk.self_link
+    device_name = google_compute_disk.boot_disk.name
   }
 
   attached_disk {

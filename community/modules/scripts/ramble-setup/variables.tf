@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+variable "project_id" {
+  description = "Project in which the HPC deployment will be created."
+  type        = string
+}
+
 variable "install_dir" {
   description = "Destination directory of installation of Ramble."
   default     = "/apps/ramble"
@@ -52,4 +57,31 @@ variable "chmod_mode" {
     EOT
   default     = null
   type        = string
+}
+
+variable "ramble_virtualenv_path" {
+  description = "Virtual environment path in which to install Ramble Python interpreter and other dependencies"
+  default     = "/usr/local/ramble-python"
+  type        = string
+}
+
+variable "deployment_name" {
+  description = "Name of deployment, used to name bucket containing startup script."
+  type        = string
+}
+
+variable "region" {
+  description = "Region to place bucket containing startup script."
+  type        = string
+}
+
+variable "labels" {
+  description = "Key-value pairs of labels to be added to created resources."
+  type        = map(string)
+}
+
+variable "ramble_profile_script_path" {
+  description = "Path to the Ramble profile.d script. Created by this module"
+  type        = string
+  default     = "/etc/profile.d/ramble.sh"
 }

@@ -23,9 +23,8 @@ the following structure:
 * Set good defaults wherever possible. Be opinionated about HPC use cases.
 * Follow common variable [naming conventions](#use-common-names-and-types-for-common-variables).
 * If there are common hpc-toolkit variables already defined, then do not set defaults (`region`, `zone`, `project_id`, `deployment_name`, etc.)
-* All files should contain a license header. Headers can be added automatically using [addlicense](https://github.com/google/addlicense),
-  or `make add-google-license` if adding a Google License.
-* No `provider` blocks should be defined in re-usable modules. It is OK to impose a range of acceptable provider versions.
+* All files should contain a license header. Headers can be added automatically using [addlicense](https://github.com/google/addlicense), or `pre-commit` hook if adding a Google License.
+* No `provider` blocks should be defined in reusable modules. It is OK to impose a range of acceptable provider versions.
   In the case on conflicts, the root module will configure all providers and pass alternatives as an alias. See:
 https://developer.hashicorp.com/terraform/language/modules/develop/providers#implicit-provider-inheritance
 

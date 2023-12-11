@@ -95,8 +95,8 @@ variable "instance_image" {
     EOD
   type        = map(string)
   default = {
-    family  = "slurm-gcp-5-9-hpc-centos-7"
     project = "schedmd-slurm-public"
+    family  = "slurm-gcp-5-9-hpc-centos-7"
   }
 
   validation {
@@ -192,7 +192,7 @@ variable "disk_labels" {
 }
 
 variable "additional_disks" {
-  description = "Configurations of additional disks to be included on the partition nodes. (do not use \"disk_type: local-ssd\"; known issue being addressed)"
+  description = "Configurations of additional disks to be included on the partition nodes."
   type = list(object({
     disk_name    = string
     device_name  = string

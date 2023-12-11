@@ -21,9 +21,10 @@ import (
 	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/modulewriter"
 	"hpc-toolkit/pkg/validators"
-	"log"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -79,50 +80,48 @@ var (
 func runCreateCmd(cmd *cobra.Command, args []string) {
 	dc := expandOrDie(args[0])
 	deplName, err := dc.Config.DeploymentName()
-	cobra.CheckErr(err)
+	checkErr(err)
 	deplDir := filepath.Join(outputDir, deplName)
-	cobra.CheckErr(modulewriter.WriteDeployment(dc, deplDir, overwriteDeployment))
+	checkErr(checkOverwriteAllowed(deplDir, dc.Config, overwriteDeployment))
+	checkErr(modulewriter.WriteDeployment(dc, deplDir))
 
-	fmt.Println("To deploy your infrastructure please run:")
-	fmt.Println()
-	fmt.Printf("./ghpc deploy %s\n", deplDir)
-	fmt.Println()
+	logging.Info("To deploy your infrastructure please run:")
+	logging.Info("")
+	logging.Info(boldGreen("%s deploy %s"), execPath(), deplDir)
+	logging.Info("")
 	printAdvancedInstructionsMessage(deplDir)
 }
 
 func printAdvancedInstructionsMessage(deplDir string) {
-	fmt.Println("Find instructions for cleanly destroying infrastructure and advanced manual")
-	fmt.Println("deployment instructions at:")
-	fmt.Println()
-	fmt.Printf("%s\n", modulewriter.InstructionsPath(deplDir))
+	logging.Info("Find instructions for cleanly destroying infrastructure and advanced manual")
+	logging.Info("deployment instructions at:")
+	logging.Info("")
+	logging.Info(modulewriter.InstructionsPath(deplDir))
 }
 
 func expandOrDie(path string) config.DeploymentConfig {
 	dc, ctx, err := config.NewDeploymentConfig(path)
 	if err != nil {
-		log.Fatal(err)
+		logging.Fatal(renderError(err, ctx))
 	}
 	// Set properties from CLI
 	if err := setCLIVariables(&dc.Config, cliVariables); err != nil {
-		log.Fatalf("Failed to set the variables at CLI: %v", err)
+		logging.Fatal("Failed to set the variables at CLI: %v", err)
 	}
 	if err := setBackendConfig(&dc.Config, cliBEConfigVars); err != nil {
-		log.Fatalf("Failed to set the backend config at CLI: %v", err)
+		logging.Fatal("Failed to set the backend config at CLI: %v", err)
 	}
-	if err := setValidationLevel(&dc.Config, validationLevel); err != nil {
-		log.Fatal(err)
-	}
-	if err := skipValidators(&dc); err != nil {
-		log.Fatal(err)
-	}
+	checkErr(setValidationLevel(&dc.Config, validationLevel))
+	checkErr(skipValidators(&dc))
+
 	if dc.Config.GhpcVersion != "" {
-		fmt.Printf("ghpc_version setting is ignored.")
+		logging.Info("ghpc_version setting is ignored.")
 	}
 	dc.Config.GhpcVersion = GitCommitInfo
 
 	// Expand the blueprint
 	if err := dc.ExpandConfig(); err != nil {
-		log.Fatal(renderError(err, ctx))
+		logging.Fatal(renderError(err, ctx))
 	}
 
 	validateMaybeDie(dc.Config, ctx)
@@ -134,29 +133,29 @@ func validateMaybeDie(bp config.Blueprint, ctx config.YamlCtx) {
 	if err == nil {
 		return
 	}
-	log.Println(renderError(err, ctx))
+	logging.Error(renderError(err, ctx))
 
-	log.Println("One or more blueprint validators has failed. See messages above for suggested")
-	log.Println("actions. General troubleshooting guidance and instructions for configuring")
-	log.Println("validators are shown below.")
-	log.Println("")
-	log.Println("- https://goo.gle/hpc-toolkit-troubleshooting")
-	log.Println("- https://goo.gle/hpc-toolkit-validation")
-	log.Println("")
-	log.Println("Validators can be silenced or treated as warnings or errors:")
-	log.Println("")
-	log.Println("- https://goo.gle/hpc-toolkit-validation-levels")
-	log.Println("")
+	logging.Error("One or more blueprint validators has failed. See messages above for suggested")
+	logging.Error("actions. General troubleshooting guidance and instructions for configuring")
+	logging.Error("validators are shown below.")
+	logging.Error("")
+	logging.Error("- https://goo.gle/hpc-toolkit-troubleshooting")
+	logging.Error("- https://goo.gle/hpc-toolkit-validation")
+	logging.Error("")
+	logging.Error("Validators can be silenced or treated as warnings or errors:")
+	logging.Error("")
+	logging.Error("- https://goo.gle/hpc-toolkit-validation-levels")
+	logging.Error("")
 
 	switch bp.ValidationLevel {
 	case config.ValidationWarning:
 		{
-			log.Println("Validation failures were treated as a warning, continuing to create blueprint.")
-			log.Println("")
+			logging.Error(boldYellow("Validation failures were treated as a warning, continuing to create blueprint."))
+			logging.Error("")
 		}
 	case config.ValidationError:
 		{
-			log.Fatal("validation failed due to the issues listed above")
+			logging.Fatal(boldRed("validation failed due to the issues listed above"))
 		}
 	}
 
@@ -181,7 +180,8 @@ func renderError(err error, ctx config.YamlCtx) string {
 		}
 		return sb.String()
 	case validators.ValidatorError:
-		return fmt.Sprintf("validator %q failed:\n%v\n", te.Validator, renderError(te.Err, ctx))
+		title := boldRed(fmt.Sprintf("validator %q failed:", te.Validator))
+		return fmt.Sprintf("%s\n%v\n", title, renderError(te.Err, ctx))
 	case config.BpError:
 		if pos, ok := findPos(te.Path, ctx); ok {
 			return renderRichError(te.Err, pos, ctx)
@@ -193,11 +193,24 @@ func renderError(err error, ctx config.YamlCtx) string {
 }
 
 func renderRichError(err error, pos config.Pos, ctx config.YamlCtx) string {
+	line := pos.Line - 1
+	if line < 0 {
+		line = 0
+	}
+	if line >= len(ctx.Lines) {
+		line = len(ctx.Lines) - 1
+	}
+
 	pref := fmt.Sprintf("%d: ", pos.Line)
-	arrow := strings.Repeat(" ", len(pref)+pos.Column-1) + "^"
-	return fmt.Sprintf(`Error: %s
+	arrow := " "
+	if pos.Column > 0 {
+		spaces := strings.Repeat(" ", len(pref)+pos.Column-1)
+		arrow = spaces + "^"
+	}
+
+	return fmt.Sprintf(`%s: %s
 %s%s
-%s`, err, pref, ctx.Lines[pos.Line-1], arrow)
+%s`, boldRed("Error"), err, pref, ctx.Lines[line], arrow)
 }
 
 func setCLIVariables(bp *config.Blueprint, s []string) error {
@@ -274,4 +287,47 @@ func filterYaml(cmd *cobra.Command, args []string, toComplete string) ([]string,
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
 	return []string{"yaml", "yml"}, cobra.ShellCompDirectiveFilterFileExt
+}
+
+// Determines if overwrite is allowed
+func checkOverwriteAllowed(depDir string, bp config.Blueprint, overwriteFlag bool) error {
+	if _, err := os.Stat(depDir); os.IsNotExist(err) {
+		return nil // all good, no previous deployment
+	}
+
+	if _, err := os.Stat(modulewriter.HiddenGhpcDir(depDir)); os.IsNotExist(err) {
+		// hidden ghpc dir does not exist
+		return fmt.Errorf("folder %q already exists, and it is not a valid GHPC deployment folder", depDir)
+	}
+
+	// try to get previous deployment
+	expPath := filepath.Join(modulewriter.ArtifactsDir(depDir), modulewriter.ExpandedBlueprintName)
+	if _, err := os.Stat(expPath); os.IsNotExist(err) {
+		return fmt.Errorf("expanded blueprint file %q is missing, this could be a result of changing GHPC version between consecutive deployments", expPath)
+	}
+	prev, _, err := config.NewDeploymentConfig(expPath)
+	if err != nil {
+		return err
+	}
+
+	if prev.Config.GhpcVersion != bp.GhpcVersion {
+		logging.Info("WARNING: ghpc_version has changed from %q to %q, using different versions of GHPC to update a live deployment is not officially supported. Proceed at your own risk", prev.Config.GhpcVersion, bp.GhpcVersion)
+	}
+
+	if !overwriteFlag {
+		return fmt.Errorf("deployment folder %q already exists, use -w to overwrite", depDir)
+	}
+
+	newGroups := map[config.GroupName]bool{}
+	for _, g := range bp.DeploymentGroups {
+		newGroups[g.Name] = true
+	}
+
+	for _, g := range prev.Config.DeploymentGroups {
+		if !newGroups[g.Name] {
+			return fmt.Errorf("you are attempting to remove a deployment group %q, which is not supported", g.Name)
+		}
+	}
+
+	return nil
 }

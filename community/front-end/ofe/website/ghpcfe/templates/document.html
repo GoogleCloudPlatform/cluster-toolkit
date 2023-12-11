@@ -59,7 +59,7 @@ of your cloud provider or obtained from command line.
 <a href="https://cloud.google.com/iam/docs/service-accounts" target="_blank">Service Account</a>. 
 To create a service account: your account must have sufficient permissions. 
 If you are not the <strong>Owner</strong> or <strong>Editor</strong> of the 
-GCP project, follow the instrcutions below. When certain permissions are
+GCP project, follow the instructions below. When certain permissions are
 missing, GCP will give clear error messages. Note the permissions required,
 locate them in <a href="https://cloud.google.com/iam/docs/understanding-roles" target="_blank">this page</a>, and identify suitable
 roles that provide them. Ask the project Owner to assign those extra roles
@@ -89,7 +89,7 @@ creation form here on this website.</li>
 <p><strong>From command line</strong></p>
 
 <p>It is assumed that you have the gcloud command-line tool installed on your
-development syste, or use GCP cloud shell which has this tool pre-installed. </p>
+development system, or use GCP cloud shell which has this tool pre-installed. </p>
 
 
 <hr>
@@ -100,7 +100,7 @@ development syste, or use GCP cloud shell which has this tool pre-installed. </p
 platform. This is because one cluster can support multiple machine types. There 
 are, of course, many good reasons to create multiple clusters on the same 
 platform, e.g. for project management purpose, or to map cloud usages to
-organisational strucutres.</p>
+organisational structures.</p>
 <p>For each cluster, admin users can choose the suitable machine types for the
 organisation's workloads and impose resource limits, e.g. the maximum number 
 of compute nodes for each machine types.</p>
@@ -108,7 +108,7 @@ of compute nodes for each machine types.</p>
 <ul>
 <li><strong>New</strong>: Cluster is being newly configured by a user through the web interface.</li>
 <li><strong>Creating</strong>: Cluster is being created (i.e. hardware is being brought up online).</li>
-<li><strong>Initialising</strong>: Cluster is being initialised (i.e. software is being installed and enviroment is being prepared). By default, these clusters use a CentOS 7 based operating system with software preconfigured to support distributed MPI and hybrid jobs.</li>
+<li><strong>Initialising</strong>: Cluster is being initialised (i.e. software is being installed and environment is being prepared). By default, these clusters use a CentOS 7 based operating system with software preconfigured to support distributed MPI and hybrid jobs.</li>
 <li><strong>Ready</strong>: Cluster is ready for jobs.</li>
 <li><strong>Terminating</strong>: Cluster is being terminated.</li>
 <li><strong>Stopped</strong>: Cluster is stopped (can be restarted).</li>
@@ -129,12 +129,12 @@ users.</p>
 means. Spack, an established package management system for HPC, contains
 build recipes of most widely used applications, including almost all popular 
 open-source packages. For applications not yet covered by the Spack 
-package repository, e.g. codes developped in-house, or commercial packages 
+package repository, e.g. codes developed in-house, or commercial packages 
 that require complex set-up, a script-based approach can be used register them
 to the system.</p>
 <p>Note that an application in this system refers to a unique binary
 installation of a package, as identified by a software version, and a specific
-target architecuture. Spack has intrinsic support on both of these factors,
+target architecture. Spack has intrinsic support on both of these factors,
 generating multiple binaries as required. Spack also builds variants of the same software, e.g. packages with optional features switched on. Experienced users should be able to specify such using Spack specifiers.</p>
 
 <a name="spack-applications"><h5>Spack applications</h5></a>

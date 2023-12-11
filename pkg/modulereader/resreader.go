@@ -19,9 +19,9 @@ package modulereader
 
 import (
 	"fmt"
+	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/sourcereader"
-	"io/ioutil"
-	"log"
+	"os"
 	"path"
 
 	"github.com/hashicorp/go-getter"
@@ -130,8 +130,10 @@ func GetModuleInfo(source string, kind string) (ModuleInfo, error) {
 
 	var modPath string
 	switch {
-	case sourcereader.IsGitPath(source):
-		tmpDir, err := ioutil.TempDir("", "module-*")
+	case sourcereader.IsEmbeddedPath(source) || sourcereader.IsLocalPath(source):
+		modPath = source
+	default:
+		tmpDir, err := os.MkdirTemp("", "module-*")
 		if err != nil {
 			return ModuleInfo{}, err
 		}
@@ -140,19 +142,12 @@ func GetModuleInfo(source string, kind string) (ModuleInfo, error) {
 		modPath = path.Join(pkgPath, subDir)
 		sourceReader := sourcereader.Factory(pkgAddr)
 		if err = sourceReader.GetModule(pkgAddr, pkgPath); err != nil {
-			if subDir != "" {
+			if subDir != "" && kind == "packer" {
 				err = fmt.Errorf("module source %s included \"//\" package syntax; "+
 					"the \"//\" should typically be placed at the root of the repository:\n%w", source, err)
-
 			}
 			return ModuleInfo{}, err
 		}
-
-	case sourcereader.IsEmbeddedPath(source) || sourcereader.IsLocalPath(source):
-		modPath = source
-
-	default:
-		return ModuleInfo{}, fmt.Errorf("source is not valid: %s", source)
 	}
 
 	reader := Factory(kind)
@@ -185,7 +180,7 @@ var kinds = map[string]ModReader{
 func Factory(kind string) ModReader {
 	r, ok := kinds[kind]
 	if !ok {
-		log.Fatalf("Invalid request to create a reader of kind %s", kind)
+		logging.Fatal("Invalid request to create a reader of kind %s", kind)
 	}
 	return r
 }

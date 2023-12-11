@@ -21,7 +21,9 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"strconv"
 
+	"github.com/pkg/errors"
 	"github.com/zclconf/go-cty/cty"
 	"github.com/zclconf/go-cty/cty/gocty"
 	ctyJson "github.com/zclconf/go-cty/cty/json"
@@ -53,16 +55,29 @@ type Pos struct {
 func importBlueprint(f string) (Blueprint, YamlCtx, error) {
 	data, err := os.ReadFile(f)
 	if err != nil {
-		return Blueprint{}, YamlCtx{}, fmt.Errorf("%s, filename=%s: %v", errorMessages["fileLoadError"], f, err)
+		return Blueprint{}, YamlCtx{}, fmt.Errorf("%s, filename=%s: %v", errMsgFileLoadError, f, err)
 	}
 	decoder := yaml.NewDecoder(bytes.NewReader(data))
 	decoder.KnownFields(true)
 
+	yamlCtx, err := NewYamlCtx(data)
+	if err != nil { // YAML parsing error
+		return Blueprint{}, yamlCtx, err
+	}
+
 	var bp Blueprint
 	if err = decoder.Decode(&bp); err != nil {
-		return Blueprint{}, YamlCtx{}, fmt.Errorf(errorMessages["yamlUnmarshalError"], f, err)
+		errs := Errors{}
+		for i, yep := range parseYamlV3Error(err) {
+			path := internalPath.Dot(fmt.Sprintf("bp_schema_error_%d", i))
+			if yep.pos.Line != 0 {
+				yamlCtx.pathToPos[yPath(path.String())] = yep.pos
+			}
+			errs.At(path, errors.New(yep.errMsg))
+		}
+		return Blueprint{}, yamlCtx, errs
 	}
-	return bp, NewYamlCtx(data), nil
+	return bp, yamlCtx, nil
 }
 
 // YamlCtx is a contextual information to render errors.
@@ -120,38 +135,52 @@ func normalizeYamlNode(p yPath, n *yaml.Node) *yaml.Node {
 // NewYamlCtx creates a new YamlCtx from a given YAML data.
 // NOTE: The data should be a valid blueprint YAML (previously used to parse Blueprint),
 // this function will panic if it's not valid YAML and doesn't validate Blueprint structure.
-func NewYamlCtx(data []byte) YamlCtx {
-	var c nodeCapturer
-	if err := yaml.Unmarshal(data, &c); err != nil {
-		panic(err) // shouldn't happen
-	}
-	if c.n == nil {
-		return YamlCtx{} // empty
-	}
-
-	m := map[yPath]Pos{}
-	var walk func(n *yaml.Node, p yPath)
-	walk = func(n *yaml.Node, p yPath) {
-		n = normalizeYamlNode(p, n)
-		m[p] = Pos{n.Line, n.Column}
-		if n.Kind == yaml.MappingNode {
-			for i := 0; i < len(n.Content); i += 2 {
-				walk(n.Content[i+1], p.Dot(n.Content[i].Value))
-			}
-		} else if n.Kind == yaml.SequenceNode {
-			for i, c := range n.Content {
-				walk(c, p.At(i))
-			}
-		}
-	}
-	walk(c.n, "")
-
+func NewYamlCtx(data []byte) (YamlCtx, error) {
 	var lines []string
 	sc := bufio.NewScanner(bytes.NewReader(data))
 	for sc.Scan() {
 		lines = append(lines, sc.Text())
 	}
-	return YamlCtx{m, lines}
+
+	var c nodeCapturer
+	m := map[yPath]Pos{}
+
+	// error may happen if YAML is not valid, regardless of Blueprint schema
+	if err := yaml.Unmarshal(data, &c); err != nil {
+		errs := Errors{}
+		for i, yep := range parseYamlV3Error(err) {
+			path := internalPath.Dot(fmt.Sprintf("yaml_error_%d", i))
+			if yep.pos.Line != 0 {
+				m[yPath(path.String())] = yep.pos
+			}
+			errs.At(path, errors.New(yep.errMsg))
+		}
+		return YamlCtx{m, lines}, errs
+	}
+
+	var walk func(n *yaml.Node, p yPath, posOf *yaml.Node)
+	walk = func(n *yaml.Node, p yPath, posOf *yaml.Node) {
+		n = normalizeYamlNode(p, n)
+		if posOf == nil { // use position of node itself if posOf is not set
+			posOf = n
+		}
+		m[p] = Pos{posOf.Line, posOf.Column}
+
+		if n.Kind == yaml.MappingNode {
+			for i := 0; i < len(n.Content); i += 2 {
+				// for mapping items use position of the key
+				walk(n.Content[i+1], p.Dot(n.Content[i].Value), n.Content[i])
+			}
+		} else if n.Kind == yaml.SequenceNode {
+			for i, c := range n.Content {
+				walk(c, p.At(i), nil)
+			}
+		}
+	}
+	if c.n != nil {
+		walk(c.n, "", nil)
+	}
+	return YamlCtx{m, lines}, nil
 }
 
 type nodeCapturer struct{ n *yaml.Node }
@@ -220,7 +249,7 @@ func (y *YamlValue) unmarshalScalar(n *yaml.Node) error {
 	}
 	ty, err := gocty.ImpliedType(s)
 	if err != nil {
-		return err
+		return fmt.Errorf("line %d: %w", n.Line, err)
 	}
 	if y.v, err = gocty.ToCtyValue(s, ty); err != nil {
 		return err
@@ -229,13 +258,15 @@ func (y *YamlValue) unmarshalScalar(n *yaml.Node) error {
 	if l, is := IsYamlExpressionLiteral(y.v); is { // HCL literal
 		var e Expression
 		if e, err = ParseExpression(l); err != nil {
-			return err
+			// TODO: point to exact location within expression, see Diagnostic.Subject
+			return fmt.Errorf("line %d: %w", n.Line, err)
 		}
 		y.v = e.AsValue()
 	} else if y.v.Type() == cty.String && hasVariable(y.v.AsString()) { // "simple" variable
 		e, err := SimpleVarToExpression(y.v.AsString())
 		if err != nil {
-			return err
+			// TODO: point to exact location within expression, see Diagnostic.Subject
+			return fmt.Errorf("line %d: %w", n.Line, err)
 		}
 		y.v = e.AsValue()
 	}
@@ -304,4 +335,42 @@ func (d Dict) MarshalYAML() (interface{}, error) {
 		return nil, fmt.Errorf("failed to unmarshal JSON: %v", err)
 	}
 	return g, nil
+}
+
+type yamlErrWithPos struct {
+	pos    Pos
+	errMsg string
+}
+
+// yaml.v3 errors are either TypeError - collection of error message or single error message.
+// Parse error messages to extract short error message and position.
+func parseYamlV3Error(err error) []yamlErrWithPos {
+	res := []yamlErrWithPos{}
+	switch err := err.(type) {
+	case *yaml.TypeError:
+		for _, s := range err.Errors {
+			res = append(res, parseYamlV3ErrorString(s))
+		}
+	default:
+		res = append(res, parseYamlV3ErrorString(err.Error()))
+	}
+
+	if len(res) == 0 { // should never happen
+		res = append(res, parseYamlV3ErrorString(err.Error()))
+	}
+	return res
+}
+
+// parseYamlV3Error attempts to extract position and nice error message from yaml.v3 error message.
+// yaml.v3 errors are unstructured, use string parsing to extract information.
+// If no position can be extracted, returns (Pos{}, error.Error()).
+// Else returns (Pos{Line: line_number}, error_message).
+func parseYamlV3ErrorString(s string) yamlErrWithPos {
+	match := regexp.MustCompile(`^(yaml: )?(line (\d+): )?(.*)$`).FindStringSubmatch(s)
+	if match == nil {
+		return yamlErrWithPos{Pos{}, s}
+	}
+	lns, errMsg := match[3], match[4]
+	ln, _ := strconv.Atoi(lns) // Atoi returns 0 on error, which is fine here
+	return yamlErrWithPos{Pos{Line: ln}, errMsg}
 }

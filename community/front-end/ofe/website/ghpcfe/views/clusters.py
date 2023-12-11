@@ -630,7 +630,7 @@ class ClusterLogFileView(LoginRequiredMixin, StreamingFileView):
 
 
 class ClusterLogView(LoginRequiredMixin, generic.DetailView):
-    """View to diplay cluster log files"""
+    """View to display cluster log files"""
 
     model = Cluster
     template_name = "cluster/log.html"

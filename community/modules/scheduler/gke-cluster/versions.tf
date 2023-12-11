@@ -24,8 +24,12 @@ terraform {
       source  = "hashicorp/google-beta"
       version = ">= 4.65.0, < 5.0"
     }
+    kubernetes = {
+      source  = "hashicorp/kubernetes"
+      version = "~> 2.23"
+    }
   }
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:gke-cluster/v1.24.0"
+    module_name = "blueprints/terraform/hpc-toolkit:gke-cluster/v1.26.0"
   }
 }

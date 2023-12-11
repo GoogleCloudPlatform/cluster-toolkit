@@ -39,6 +39,12 @@ Modules that are still in development and less stable are labeled with the
   Creates a partition to be used by a [slurm-controller][schedmd-slurm-gcp-v5-controller].
 * **[schedmd-slurm-gcp-v5-node-group]** ![community-badge] :
   Creates a node group to be used by the [schedmd-slurm-gcp-v5-partition] module.
+* **[schedmd-slurm-gcp-v6-partition]** ![community-badge] ![experimental-badge]:
+  Creates a partition to be used by a [slurm-controller][schedmd-slurm-gcp-v6-controller].
+* **[schedmd-slurm-gcp-v6-nodeset]** ![community-badge] ![experimental-badge]:
+  Creates a nodeset to be used by the [schedmd-slurm-gcp-v6-partition] module.
+* **[schedmd-slurm-gcp-v6-nodeset-tpu]** ![community-badge] ![experimental-badge]:
+  Creates a TPU nodeset to be used by the [schedmd-slurm-gcp-v6-partition] module.
 * **[gke-node-pool]** ![community-badge] ![experimental-badge] : Creates a
   Kubernetes node pool using GKE.
 * **[gke-job-template]** ![community-badge] ![experimental-badge] : Creates a
@@ -57,6 +63,9 @@ Modules that are still in development and less stable are labeled with the
 [schedmd-slurm-on-gcp-partition]: ../community/modules/compute/SchedMD-slurm-on-gcp-partition/README.md
 [schedmd-slurm-gcp-v5-partition]: ../community/modules/compute/schedmd-slurm-gcp-v5-partition/README.md
 [schedmd-slurm-gcp-v5-node-group]: ../community/modules/compute/schedmd-slurm-gcp-v5-node-group/README.md
+[schedmd-slurm-gcp-v6-partition]: ../community/modules/compute/schedmd-slurm-gcp-v6-partition/README.md
+[schedmd-slurm-gcp-v6-nodeset]: ../community/modules/compute/schedmd-slurm-gcp-v6-nodeset/README.md
+[schedmd-slurm-gcp-v6-nodeset-tpu]: ../community/modules/compute/schedmd-slurm-gcp-v6-nodeset-tpu/README.md
 [htcondor-execute-point]: ../community/modules/compute/htcondor-execute-point/README.md
 [pbspro-execution]: ../community/modules/compute/pbspro-execution/README.md
 
@@ -153,6 +162,10 @@ Modules that are still in development and less stable are labeled with the
   Creates a Slurm login node using [slurm-gcp-version-5].
 * **[schedmd-slurm-gcp-v5-hybrid]** ![community-badge] ![experimental-badge] :
   Creates hybrid Slurm partition configuration files using [slurm-gcp-version-5].
+* **[schedmd-slurm-gcp-v6-controller]** ![community-badge] ![experimental-badge]:
+  Creates a Slurm controller node using [slurm-gcp-version-6].
+* **[schedmd-slurm-gcp-v6-login]** ![community-badge] ![experimental-badge]:
+  Creates a Slurm login node using [slurm-gcp-version-6].
 * **[htcondor-setup]** ![community-badge] ![experimental-badge] : Creates the
   base infrastructure for an HTCondor pool (service accounts and Cloud Storage bucket).
 * **[htcondor-pool-secrets]** ![community-badge] ![experimental-badge] : Creates
@@ -176,6 +189,8 @@ Modules that are still in development and less stable are labeled with the
 [htcondor-setup]: ../community/modules/scheduler/htcondor-setup/README.md
 [htcondor-pool-secrets]: ../community/modules/scheduler/htcondor-pool-secrets/README.md
 [htcondor-access-point]: ../community/modules/scheduler/htcondor-access-point/README.md
+[schedmd-slurm-gcp-v6-controller]: ../community/modules/scheduler/schedmd-slurm-gcp-v6-controller/README.md
+[schedmd-slurm-gcp-v6-login]: ../community/modules/scheduler/schedmd-slurm-gcp-v6-login/README.md
 [schedmd-slurm-gcp-v5-controller]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-controller/README.md
 [schedmd-slurm-gcp-v5-login]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-login/README.md
 [schedmd-slurm-gcp-v5-hybrid]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid/README.md
@@ -183,6 +198,7 @@ Modules that are still in development and less stable are labeled with the
 [schedmd-slurm-on-gcp-login-node]: ../community/modules/scheduler/SchedMD-slurm-on-gcp-login-node/README.md
 [slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/v4.2.1
 [slurm-gcp-version-5]: https://github.com/SchedMD/slurm-gcp/tree/5.9.1
+[slurm-gcp-version-6]: https://github.com/SchedMD/slurm-gcp/tree/6.2.0
 [pbspro-client]: ../community/modules/scheduler/pbspro-client/README.md
 [pbspro-server]: ../community/modules/scheduler/pbspro-server/README.md
 
@@ -259,11 +275,15 @@ repository:
 * Filesystem paths
   * modules embedded in the `ghpc` executable
   * modules in the local filesystem
-* Remote modules hosted on github.com or any `git::` repository
-  * when modules are in a subdirectory of the git repository, a special
-  double-slash "//" notation can be required as described below
+* Remote modules using [Terraform URL syntax](https://developer.hashicorp.com/terraform/language/modules/sources)
+  * Hosted on [GitHub](https://developer.hashicorp.com/terraform/language/modules/sources#github)
+  * Google Cloud Storage [Buckets](https://developer.hashicorp.com/terraform/language/modules/sources#gcs-bucket)
+  * Generic [git repositories](https://developer.hashicorp.com/terraform/language/modules/sources#generic-git-repository)
+  
+  when modules are in a subdirectory of the git repository, a special
+  double-slash `//` notation can be required as described below
 
-An important distinction is that git URLs are natively supported by Terraform so
+An important distinction is that those URLs are natively supported by Terraform so
 they are not copied to your deployment directory. Packer does not have native
 support for git-hosted modules so the Toolkit will copy these modules into the
 deployment folder on your behalf.
@@ -395,6 +415,13 @@ are supported, `git::https://` for HTTPS or `git::git@github.com` for SSH.
 Additional formatting and features after `git::` are identical to that of the
 [GitHub Modules](#github-modules) described above.
 
+##### Google Cloud Storage Modules
+
+To use a Terraform module available in a Google Cloud Storage bucket, set the source
+to a URL with the special `gcs::` prefix, followed by a [GCS bucket object URL](https://cloud.google.com/storage/docs/request-endpoints#typical).
+
+For example:  `gcs::https://www.googleapis.com/storage/v1/BUCKET_NAME/PATH_TO_MODULE`
+
 ### Kind (May be Required)
 
 `kind` refers to the way in which a module is deployed. Currently, `kind` can be
@@ -460,7 +487,7 @@ value is in the following priority order:
 The `outputs` field adds the output of individual Terraform modules to the
 output of its deployment group. This enables the value to be available via
 `terraform output`. This can useful for displaying the IP of a login node or
-priting instructions on how to use a module, as we have in the
+printing instructions on how to use a module, as we have in the
 [monitoring dashboard module](monitoring/dashboard/README.md#Outputs).
 
 The outputs field is a lists that it can be in either of two formats: a string

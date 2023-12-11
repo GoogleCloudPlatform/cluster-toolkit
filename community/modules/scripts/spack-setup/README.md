@@ -119,6 +119,57 @@ sudo -i spack python -m pip install package-name
 [SPACK_PYTHON]: https://spack.readthedocs.io/en/latest/getting_started.html#shell-support
 [builds]: https://spack.readthedocs.io/en/latest/binary_caches.html
 
+## Spack Permissions
+
+By default, only root will be have permission to install spack packages. To
+manually call Spack commands as root use the `sudo -i` command, for example:
+`sudo -i spack install tar`. The `-i` runs the command as a login shell and is
+required to make sure `spack` will be the `PATH`.
+
+Installed packages should be readable/executable by anyone on the VM.
+
+### Non-root package installation
+
+If there is a need to have a non-root user to install spack packages it is
+recommended to create a separate installation for that user and chain Spack installations
+([Spack docs](https://spack.readthedocs.io/en/latest/chain.html#chaining-spack-installations)).
+
+Steps to chain Spack installations:
+
+1. Get the version of the system Spack:
+
+    ```sh
+    $ spack --version
+
+    0.20.0 (e493ab31c6f81a9e415a4b0e0e2263374c61e758)
+    #       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    # Note commit hash and use in next step
+    ```
+
+1. Clone a new spack installation:
+
+    ```sh
+    git clone -c feature.manyFiles=true https://github.com/spack/spack.git <new_location>/spack
+    git -C <new_location>/spack checkout <commit_hash>
+    ```
+
+1. Point the new Spack installation to the system Spack installation. Create a
+   file at `<new_location>/spack/etc/spack/upstreams.yaml` with the following
+   contents:
+
+    ```yaml
+    upstreams:
+      spack-instance-1:
+        install_tree: /sw/spack/opt/spack/
+    ```
+
+1. Add the following line to your `.bashrc` to make sure the new `spack` is in
+   your `PATH`.
+
+   ```sh
+   . <new_location>/spack/share/spack/setup-env.sh
+   ```
+
 ## Deprecations and Breaking Changes
 
 The old `spack-install` module has been replaced by the `spack-setup` and
@@ -220,7 +271,7 @@ limitations under the License.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_startup_script"></a> [startup\_script](#module\_startup\_script) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | v1.22.1 |
+| <a name="module_startup_script"></a> [startup\_script](#module\_startup\_script) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | 50644b2 |
 
 ## Resources
 
@@ -253,6 +304,7 @@ limitations under the License.
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created. | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | Region to place bucket containing startup script. | `string` | n/a | yes |
 | <a name="input_spack_cache_url"></a> [spack\_cache\_url](#input\_spack\_cache\_url) | DEPRECATED<br><br>Use [spack-execute](../spack-execute/) module with the following `commands` can be used to add a build cache:<pre>spack mirror add --scope site <mirror name> gs://my-build-cache<br>spack buildcache keys --install --trust</pre>List of build caches for Spack. | <pre>list(object({<br>    mirror_name = string<br>    mirror_url  = string<br>  }))</pre> | `null` | no |
+| <a name="input_spack_profile_script_path"></a> [spack\_profile\_script\_path](#input\_spack\_profile\_script\_path) | Path to the Spack profile.d script. Created by this module | `string` | `"/etc/profile.d/spack.sh"` | no |
 | <a name="input_spack_ref"></a> [spack\_ref](#input\_spack\_ref) | Git ref to checkout for spack. | `string` | `"v0.20.0"` | no |
 | <a name="input_spack_url"></a> [spack\_url](#input\_spack\_url) | URL to clone the spack repo from. | `string` | `"https://github.com/spack/spack"` | no |
 | <a name="input_spack_virtualenv_path"></a> [spack\_virtualenv\_path](#input\_spack\_virtualenv\_path) | Virtual environment path in which to install Spack Python interpreter and other dependencies | `string` | `"/usr/local/spack-python"` | no |
@@ -261,9 +313,10 @@ limitations under the License.
 
 | Name | Description |
 |------|-------------|
-| <a name="output_controller_startup_script"></a> [controller\_startup\_script](#output\_controller\_startup\_script) | Path to the Spack installation script, duplicate for SLURM controller. |
+| <a name="output_controller_startup_script"></a> [controller\_startup\_script](#output\_controller\_startup\_script) | Spack installation script, duplicate for SLURM controller. |
 | <a name="output_gcs_bucket_path"></a> [gcs\_bucket\_path](#output\_gcs\_bucket\_path) | Bucket containing the startup scripts for spack, to be reused by spack-execute module. |
 | <a name="output_spack_path"></a> [spack\_path](#output\_spack\_path) | Path to the root of the spack installation |
+| <a name="output_spack_profile_script_path"></a> [spack\_profile\_script\_path](#output\_spack\_profile\_script\_path) | Path to the Spack profile.d script. |
 | <a name="output_spack_runner"></a> [spack\_runner](#output\_spack\_runner) | Runner to be used with startup-script module or passed to spack-execute module.<br>- installs Spack dependencies<br>- installs Spack <br>- generates profile.d script to enable access to Spack<br>This is safe to run in parallel by multiple machines. Use in place of deprecated `setup_spack_runner`. |
-| <a name="output_startup_script"></a> [startup\_script](#output\_startup\_script) | Path to the Spack installation script. |
+| <a name="output_startup_script"></a> [startup\_script](#output\_startup\_script) | Spack installation script. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

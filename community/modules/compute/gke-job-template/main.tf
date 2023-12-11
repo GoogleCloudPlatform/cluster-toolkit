@@ -26,7 +26,7 @@ locals {
     local.min_allocatable_cpu > 2 ?     # if large enough
     local.min_allocatable_cpu - 1 :     # leave headroom for 1 cpu
     local.min_allocatable_cpu / 2 + 0.1 # else take just over half
-  )
+  ) - (local.any_gcs ? 0.25 : 0)        # save room for gcs side car
 
   cpu_request = (
     var.requested_cpu_per_pod >= 0 ?   # if user supplied requested cpu
@@ -107,23 +107,29 @@ locals {
   }] : []
   node_selectors = concat(local.machine_family_node_selector, local.local_ssd_node_selector, var.node_selectors)
 
+  any_gcs = anytrue([for pvc in var.persistent_volume_claims :
+    pvc.is_gcs
+  ])
+
   job_template_contents = templatefile(
     "${path.module}/templates/gke-job-base.yaml.tftpl",
     {
-      name              = var.name
-      suffix            = local.suffix
-      image             = var.image
-      command           = var.command
-      node_count        = var.node_count
-      node_pool_names   = var.node_pool_name
-      node_selectors    = local.node_selectors
-      full_node_request = local.full_node_request
-      cpu_request       = local.cpu_request_string
-      gpu_limit         = local.gpu_limit_string
-      restart_policy    = var.restart_policy
-      backoff_limit     = var.backoff_limit
-      tolerations       = distinct(var.tolerations)
-      labels            = local.labels
+      name                     = var.name
+      suffix                   = local.suffix
+      image                    = var.image
+      command                  = var.command
+      node_count               = var.node_count
+      completion_mode          = var.completion_mode
+      k8s_service_account_name = var.k8s_service_account_name
+      node_pool_names          = var.node_pool_name
+      node_selectors           = local.node_selectors
+      full_node_request        = local.full_node_request
+      cpu_request              = local.cpu_request_string
+      gpu_limit                = local.gpu_limit_string
+      restart_policy           = var.restart_policy
+      backoff_limit            = var.backoff_limit
+      tolerations              = distinct(var.tolerations)
+      labels                   = local.labels
 
       empty_dir_volumes    = local.empty_dir_volumes
       ephemeral_pd_volumes = local.ephemeral_pd_volumes
@@ -131,6 +137,7 @@ locals {
       volume_mounts        = local.volume_mounts
       memory_request       = local.memory_request_string
       ephemeral_request    = local.ephemeral_request_string
+      gcs_annotation       = local.any_gcs
     }
   )
 
@@ -148,4 +155,11 @@ resource "random_id" "resource_name_suffix" {
 resource "local_file" "job_template" {
   content  = local.job_template_contents
   filename = local.job_template_output_path
+
+  lifecycle {
+    precondition {
+      condition     = local.any_gcs ? var.k8s_service_account_name != null : true
+      error_message = "When using GCS, a kubernetes service account with workload identity is required. gke-cluster module will perform this setup when var.configure_workload_identity_sa is set to true."
+    }
+  }
 }

@@ -87,3 +87,12 @@ variable "gcs_bucket_path" {
   description = "The GCS path for storage bucket and the object, starting with `gs://`."
   type        = string
 }
+
+variable "spack_profile_script_path" {
+  description = <<-EOT
+    Path to the Spack profile.d script. Created by an instance of spack-setup.
+    Can be defined explicitly, or by chaining an instance of a spack-setup module
+    through a `use` setting.
+  EOT
+  type        = string
+}

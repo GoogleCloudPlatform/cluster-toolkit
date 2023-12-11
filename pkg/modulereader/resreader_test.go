@@ -17,11 +17,8 @@ package modulereader
 import (
 	"embed"
 	"hpc-toolkit/pkg/sourcereader"
-	"io/ioutil"
-	"log"
 	"os"
 	"path/filepath"
-	"reflect"
 	"testing"
 
 	. "gopkg.in/check.v1"
@@ -33,49 +30,58 @@ const (
 	tfKindString  = "terraform"
 )
 
-var (
+//go:embed modules
+var testModuleFS embed.FS
+
+type MySuite struct {
 	tmpModuleDir string
 	terraformDir string
 	packerDir    string
-)
+}
 
-// Setup GoCheck
-type MySuite struct{}
+func (s *MySuite) SetUpSuite(c *C) {
+	var err error
+	s.tmpModuleDir = c.MkDir()
+	sourcereader.ModuleFS = testModuleFS
+	rdr := sourcereader.EmbeddedSourceReader{}
+	if err = rdr.CopyDir("modules", s.tmpModuleDir); err != nil {
+		c.Fatal(err)
+	}
 
-var _ = Suite(&MySuite{})
+	s.terraformDir = filepath.Join(s.tmpModuleDir, "test_role", "test_module")
+	s.packerDir = filepath.Join(s.tmpModuleDir, "imaginarium", "zebra")
+}
 
-//go:embed modules
-var testModuleFS embed.FS
+type zeroSuite struct{}
+
+var _ = []any{ // initialize suites
+	Suite(&MySuite{}),
+	Suite(&zeroSuite{})}
 
 func Test(t *testing.T) {
 	TestingT(t)
 }
 
-func (s *MySuite) TestGetOutputsAsMap(c *C) {
-	// Simple: empty outputs
-	modInfo := ModuleInfo{}
-	outputMap := modInfo.GetOutputsAsMap()
-	c.Assert(len(outputMap), Equals, 0)
+func (s *zeroSuite) TestGetOutputsAsMap(c *C) {
+	{ // Simple: empty outputs
+		got := ModuleInfo{}.GetOutputsAsMap()
+		c.Check(got, HasLen, 0)
+	}
 
-	testDescription := "This is a test description"
-	testName := "testName"
-	outputInfo := OutputInfo{Name: testName, Description: testDescription}
-	modInfo.Outputs = []OutputInfo{outputInfo}
-	outputMap = modInfo.GetOutputsAsMap()
-	c.Assert(len(outputMap), Equals, 1)
-	c.Assert(outputMap[testName].Description, Equals, testDescription)
+	{
+		oi := OutputInfo{Name: "zebra", Description: "stripes"}
+		mi := ModuleInfo{Outputs: []OutputInfo{oi}}
+		got := mi.GetOutputsAsMap()
+		c.Check(got, DeepEquals, map[string]OutputInfo{"zebra": oi})
+	}
 }
 
-func (s *MySuite) TestFactory(c *C) {
-	pkrReader := Factory(pkrKindString)
-	c.Assert(reflect.TypeOf(pkrReader), Equals, reflect.TypeOf(PackerReader{}))
-	tfReader := Factory(tfKindString)
-	c.Assert(reflect.TypeOf(tfReader), Equals, reflect.TypeOf(TFReader{}))
+func (s *zeroSuite) TestFactory(c *C) {
+	c.Check(Factory(pkrKindString), FitsTypeOf, PackerReader{})
+	c.Check(Factory(tfKindString), FitsTypeOf, TFReader{})
 }
 
 func (s *MySuite) TestGetModuleInfo_Embedded(c *C) {
-	sourcereader.ModuleFS = testModuleFS
-
 	{ // Success
 		mi, err := GetModuleInfo("modules/test_role/test_module", tfKindString)
 		c.Assert(err, IsNil)
@@ -104,29 +110,27 @@ func (s *MySuite) TestGetModuleInfo_Embedded(c *C) {
 	}
 
 	{ // Invalid: Unsupported source
-		_, err := GetModuleInfo("gcs::https://www.googleapis.com/storage/v1/GoogleCloudPlatform/hpc-toolkit/modules", tfKindString)
-		c.Check(err, ErrorMatches, "source is not valid: .*")
+		_, err := GetModuleInfo("wut::hpc-toolkit/modules", tfKindString)
+		c.Check(err, NotNil)
 	}
 }
 
-func (s *MySuite) TestGetModuleInfo_Git(c *C) {
+func (s *zeroSuite) TestGetModuleInfo_Git(c *C) {
 
 	// Invalid git repository - path does not exists
 	badGitRepo := "github.com:not/exist.git"
 	_, err := GetModuleInfo(badGitRepo, tfKindString)
-	expectedErr := "failed to clone git module at .*"
-	c.Assert(err, ErrorMatches, expectedErr)
+	c.Check(err, NotNil)
 
 	// Invalid: Unsupported Module Source
 	badSource := "gcs::https://www.googleapis.com/storage/v1/GoogleCloudPlatform/hpc-toolkit/modules"
 	_, err = GetModuleInfo(badSource, tfKindString)
-	expectedErr = "source is not valid: .*"
-	c.Assert(err, ErrorMatches, expectedErr)
+	c.Check(err, NotNil)
 }
 
 func (s *MySuite) TestGetModuleInfo_Local(c *C) {
 	{ // Success
-		mi, err := GetModuleInfo(terraformDir, tfKindString)
+		mi, err := GetModuleInfo(s.terraformDir, tfKindString)
 		c.Assert(err, IsNil)
 		c.Check(mi, DeepEquals, ModuleInfo{
 			Inputs: []VarInfo{{
@@ -153,8 +157,8 @@ func (s *MySuite) TestGetModuleInfo_Local(c *C) {
 	}
 
 	{ // Invalid: Unsupported Module Source
-		_, err := GetModuleInfo("gcs::https://www.googleapis.com/storage/v1/GoogleCloudPlatform/hpc-toolkit/modules", tfKindString)
-		c.Assert(err, ErrorMatches, "source is not valid: .*")
+		_, err := GetModuleInfo("wut:://hpc-toolkit/modules", tfKindString)
+		c.Assert(err, NotNil)
 	}
 }
 
@@ -162,29 +166,24 @@ func (s *MySuite) TestGetHCLInfo(c *C) {
 	// Invalid source path - path does not exists
 	fakePath := "./not/a/real/path"
 	_, err := getHCLInfo(fakePath)
-	expectedErr := "Source to module does not exist: .*"
-	c.Assert(err, ErrorMatches, expectedErr)
+	c.Assert(err, ErrorMatches, "source to module does not exist: .*")
 	// Invalid source path - points to a file
-	pathToFile := filepath.Join(terraformDir, "main.tf")
+	pathToFile := filepath.Join(s.terraformDir, "main.tf")
 	_, err = getHCLInfo(pathToFile)
-	expectedErr = "Source of module must be a directory: .*"
-	c.Assert(err, ErrorMatches, expectedErr)
+	c.Assert(err, ErrorMatches, "source of module must be a directory: .*")
 
 	// Invalid source path - points to directory with no .tf files
-	pathToEmptyDir := filepath.Join(packerDir, "emptyDir")
-	err = os.Mkdir(pathToEmptyDir, 0755)
-	if err != nil {
-		log.Fatal("TestGetHCLInfo: Failed to create test directory.")
+	pathToEmptyDir := filepath.Join(s.packerDir, "emptyDir")
+	if err := os.Mkdir(pathToEmptyDir, 0755); err != nil {
+		c.Fatal("TestGetHCLInfo: Failed to create test directory.")
 	}
 	_, err = getHCLInfo(pathToEmptyDir)
-	expectedErr = "Source is not a terraform or packer module: .*"
-	c.Assert(err, ErrorMatches, expectedErr)
+	c.Assert(err, ErrorMatches, "source is not a terraform or packer module: .*")
 }
 
-// tfreader.go
 func (s *MySuite) TestGetInfo_TFReder(c *C) {
 	reader := NewTFReader()
-	info, err := reader.GetInfo(terraformDir)
+	info, err := reader.GetInfo(s.terraformDir)
 	c.Assert(err, IsNil)
 	c.Check(info, DeepEquals, ModuleInfo{
 		Inputs:  []VarInfo{{Name: "test_variable", Type: "string", Description: "This is just a test", Required: true}},
@@ -193,7 +192,6 @@ func (s *MySuite) TestGetInfo_TFReder(c *C) {
 
 }
 
-// packerreader.go
 func (s *MySuite) TestGetInfo_PackerReader(c *C) {
 	reader := NewPackerReader()
 	exp := ModuleInfo{
@@ -204,30 +202,29 @@ func (s *MySuite) TestGetInfo_PackerReader(c *C) {
 			Required:    true}}}
 
 	{ // Didn't already exist, succeeds
-		info, err := reader.GetInfo(packerDir)
+		info, err := reader.GetInfo(s.packerDir)
 		c.Assert(err, IsNil)
 		c.Check(info, DeepEquals, exp)
 	}
 
 	{ // Already exists, succeeds
-		info, err := reader.GetInfo(packerDir)
+		info, err := reader.GetInfo(s.packerDir)
 		c.Assert(err, IsNil)
 		c.Check(info, DeepEquals, exp)
 	}
 }
 
-// metareader.go
-func (s *MySuite) TestGetInfo_MetaReader(c *C) {
+func (s *zeroSuite) TestGetInfo_MetaReader(c *C) {
 	// Not implemented, expect that error
 	reader := MetaReader{}
 	_, err := reader.GetInfo("")
-	expErr := "Meta GetInfo not implemented: .*"
+	expErr := "meta GetInfo not implemented: .*"
 	c.Assert(err, ErrorMatches, expErr)
 }
 
 // module outputs can be specified as a simple string for the output name or as
 // a YAML mapping of name/description/sensitive (str,str,bool)
-func (s *MySuite) TestUnmarshalOutputInfo(c *C) {
+func (s *zeroSuite) TestUnmarshalOutputInfo(c *C) {
 	var oinfo OutputInfo
 	var y string
 
@@ -262,36 +259,4 @@ func (s *MySuite) TestUnmarshalOutputInfo(c *C) {
 	// should not ummarshal an object with non-boolean sensitive type
 	y = "{ name: foo, description: bar, sensitive: contingent }"
 	c.Check(yaml.Unmarshal([]byte(y), &oinfo), NotNil)
-}
-
-// Util Functions
-func copyEmbeddedModules() {
-	var err error
-	if tmpModuleDir, err = ioutil.TempDir("", "modulereader_tests_*"); err != nil {
-		log.Fatalf(
-			"Failed to create temp dir for module in modulereader_test, %v", err)
-	}
-	sourcereader.ModuleFS = testModuleFS
-	rdr := sourcereader.EmbeddedSourceReader{}
-	if err = rdr.CopyDir("modules", tmpModuleDir); err != nil {
-		log.Fatalf("failed to copy embedded modules, %v", err)
-	}
-
-	terraformDir = filepath.Join(tmpModuleDir, "test_role", "test_module")
-	packerDir = filepath.Join(tmpModuleDir, "imaginarium", "zebra")
-}
-
-func teardownTmpModule() {
-	if err := os.RemoveAll(tmpModuleDir); err != nil {
-		log.Fatalf(
-			"modulereader_test: Failed to delete contents of test directory %s, %v",
-			tmpModuleDir, err)
-	}
-}
-
-func TestMain(m *testing.M) {
-	copyEmbeddedModules()
-	code := m.Run()
-	teardownTmpModule()
-	os.Exit(code)
 }

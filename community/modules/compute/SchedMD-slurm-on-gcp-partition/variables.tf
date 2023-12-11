@@ -52,8 +52,8 @@ variable "instance_image" {
     EOD
   type        = map(string)
   default = {
-    family  = "schedmd-slurm-21-08-8-hpc-centos-7"
     project = "schedmd-slurm-public"
+    family  = "schedmd-slurm-21-08-8-hpc-centos-7"
   }
 
   validation {
@@ -153,7 +153,7 @@ variable "regional_capacity" {
 }
 
 variable "regional_policy" {
-  description = "locationPolicy defintion for regional bulkInsert()"
+  description = "locationPolicy definition for regional bulkInsert()"
   type        = any
   default     = {}
 }

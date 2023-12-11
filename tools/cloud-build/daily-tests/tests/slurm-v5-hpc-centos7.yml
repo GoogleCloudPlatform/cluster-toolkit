@@ -33,8 +33,8 @@ max_nodes: 5
 login_node: "{{ slurm_cluster_name }}-login-*"
 controller_node: "{{ slurm_cluster_name }}-controller"
 post_deploy_tests:
-- test-mounts.yml
-- test-partitions.yml
+- test-validation/test-mounts.yml
+- test-validation/test-partitions.yml
 custom_vars:
   partitions:
   - compute

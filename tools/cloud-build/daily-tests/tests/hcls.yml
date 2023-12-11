@@ -32,8 +32,8 @@ cli_deployment_vars:
   disable_login_public_ips: "false"
   disable_controller_public_ips: "false"
 post_deploy_tests:
-- test-mounts.yml
-- test-partitions.yml
+- test-validation/test-mounts.yml
+- test-validation/test-partitions.yml
 custom_vars:
   partitions:
   - compute

@@ -16,5 +16,5 @@
 test_name: ofe-deployment
 deployment_name: ofe-deployment-{{ build }}
 zone: us-central1-c
-post_deploy_tests: [test-ofe-deployment.yml]
+post_deploy_tests: [test-validation/test-ofe-deployment.yml]
 workspace: /workspace

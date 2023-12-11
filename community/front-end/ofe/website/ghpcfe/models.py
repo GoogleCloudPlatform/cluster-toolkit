@@ -329,7 +329,7 @@ class VirtualNetwork(CloudResource):
         validators=[
             RFC1035Validator(
                 63,
-                "VPC Name must be RFC1035 Compliant (lower case, alpha-numeric "
+                "VPC Name must be RFC1035 Compliant (lower case, alphanumeric "
                 "with hyphens)",
             )
         ],
@@ -362,7 +362,7 @@ class VirtualSubnet(CloudResource):
             RFC1035Validator(
                 63,
                 "Subnet Name must be RFC1035 Compliant (lower case, "
-                " alpha-numeric with hyphens)",
+                " alphanumeric with hyphens)",
             )
         ],
     )
@@ -547,7 +547,7 @@ class StartupScript(models.Model):
     )
     description = models.TextField(
         max_length=4000,
-        help_text="(Optional) description of this stratup script",
+        help_text="(Optional) description of this startup script",
         blank=True,
         null=True,
     )
@@ -602,7 +602,7 @@ class Image(CloudResource):
 
     source_image_family = models.CharField(
         max_length=60,
-        help_text="Enter a soure image family",
+        help_text="Enter a source image family",
         blank=False,
         default="schedmd-v5-slurm-22-05-8-rocky-linux-8",
     )
@@ -614,7 +614,7 @@ class Image(CloudResource):
 
     enable_os_login = models.CharField(
         max_length=5,
-        help_text="Enable OS Login durring the image creation?",
+        help_text="Enable OS Login during the image creation?",
         choices=(("TRUE", "TRUE"),("FALSE", "FALSE")),
         default="TRUE",
     )
@@ -662,7 +662,7 @@ class Cluster(CloudResource):
             RFC1035Validator(
                 17,
                 "Cluster Name must be RFC1035 Compliant (lower case, "
-                "alpha-numeric with hyphens)",
+                "alphanumeric with hyphens)",
             )
         ],
     )
@@ -1507,7 +1507,7 @@ class Workbench(CloudResource):
             RFC1035Validator(
                 63,
                 "Workbench Name must be RFC1035 Compliant (lower-case "
-                "alpha-numeric with hyphens)",
+                "alphanumeric with hyphens)",
             )
         ],
     )

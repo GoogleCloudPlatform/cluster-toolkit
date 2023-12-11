@@ -1,0 +1,254 @@
+# Copyright 2023 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+---
+
+#
+#           ****************
+#######  CAE Solution Blueprint #######
+#           ****************
+#
+# This blueprint features a reference design suited for CAE applications on GCP.
+# It sets up the following infrastructure:
+#   * Google's H3 VMs, ideally suited for CAE workloads
+#   * Google's C3-highmem VM, suited for workloads with 16GB/core requirement
+#   * Google's Filestore NFS-based shared storage
+#   * Google's Chrome Remote Desktop
+#   * SLURM workload scheduler
+#
+blueprint_name: cae-slurm
+vars:
+  project_id: ## Set GCP Project ID Here ##
+  deployment_name: cae-slurm
+  # check here for other regions with H3 deployments: https://cloud.google.com/compute/docs/regions-zones
+  # For example
+  # region: europe-west4
+  # zone: europe-west4-b
+  region: us-central1
+  zone: us-central1-a
+  # Visit https://github.com/SchedMD/slurm-gcp/blob/master/docs/images.md#published-image-family
+  # for a list of valid family options with Slurm; note: the image types for the compute nodes
+  # and the Chrome Remote Desktop (CRD) need to have the same Slurm base.
+  instance_image:
+    family: slurm-gcp-5-9-hpc-centos-7
+    project: schedmd-slurm-public
+  crd_instance_image:
+    family: slurm-gcp-5-9-debian-11   # must be Debian for CRD
+    project: schedmd-slurm-public
+
+# Documentation for each of the modules used below can be found at
+# https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
+deployment_groups:
+
+# ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#
+#
+# Deployment Group: Setup
+#
+# Sets up VPC network, persistent NFS shares, dashboard
+# ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+- group: setup
+  modules:
+
+  ####### Virtual Private Cloud Setup #######
+  # This creates a virtual private network for your cloud setup
+  - id: network1
+    source: modules/network/vpc
+    settings:
+      network_name: cae-slurm-net
+      subnetwork_name: primary-subnet
+
+  ####### User Home Storage #######
+  # This block creates an NFS file share for /home
+  - id: homefs
+    source: modules/file-system/filestore
+    use: [network1]
+    settings:
+      filestore_tier: BASIC_SSD
+      size_gb: 2560
+      filestore_share_name: homeshare
+      local_mount: /home
+
+  ####### Shared Software Storage #######
+  # This block creates NFS file share for shared software installations
+  - id: appsfs
+    source: modules/file-system/filestore
+    use: [network1]
+    settings:
+      filestore_tier: BASIC_SSD
+      size_gb: 2560
+      filestore_share_name: appsshare
+      local_mount: /apps
+
+  ####### Dashboard #######
+  # This module activates integration with a dashboard on the Google Cloud Console
+  - id: hpc_dash
+    source: modules/monitoring/dashboard
+    outputs: [instructions]
+
+# ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#
+#
+# Deployment Group: Software Installation
+#
+# This deployment group is a stub for installing software before
+# bringing up the actual cluster.
+# See the README.md for useful software deployment patterns.
+#
+# ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# - group: software_installation
+#   modules:
+
+# ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#
+#
+# Deployment Group: Cluster
+#
+# Provisions the actual CAE cluster with compute partitions,
+# remote desktop partition and connects to the previously set up
+# NFS shares.
+# ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+- group: cluster
+  modules:
+
+  #######  Scratch #######
+  # This block creates an NFS file share for scratch. If you experience an IO bottleneck,
+  # consider to use the more performant version HIGH_SCALE_SSD with the following settings:
+  - id: scratchfs
+    source: modules/file-system/filestore
+    use: [network1]
+    settings:
+      filestore_tier: HIGH_SCALE_SSD
+      size_gb: 10240    # smallest size for HIGH_SSD_SCALE
+      filestore_share_name: scratchshare
+      local_mount: /scratch
+
+  # If you require maximum IO performance, you can consider to bring up a dedicated parallel
+  # file system, e.g. DDN Exascaler Lustre, Sycomp GPFS, or Intel DAOS.
+  # Note: Those solutions may have associated license cost.
+  #
+  # Please visit here for more information
+  # - DDN Exascaler Lustre: https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/community/modules/file-system/DDN-EXAScaler/README.md
+  # - Sycomp IBM Spectrum Scale: https://console.developers.google.com/marketplace/product/sycomp/sycomp-storage-fueled-by-ibm-spectrum-scale
+  # - Intel DAOS: https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/community/modules/file-system/Intel-DAOS/README.md
+
+  ######## Remote Desktop(s) #######
+  # This block enables a partition for nodes that support Chrome Remote Desktop
+  # see here for use: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/examples#hpc-slurm-chromedesktopyaml--
+  - id: remotedesktop
+    source: community/modules/remote-desktop/chrome-remote-desktop
+    use: [network1]
+    settings:
+      install_nvidia_driver: true
+      # instance_count: 0 will create installation scripts only
+      # which can be used with slurm node provisioning
+      instance_count: 0
+
+  - id: remotedesktop_node_group
+    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
+    settings:
+      machine_type: n1-standard-8
+      node_count_dynamic_max: 5
+      instance_image: $(vars.crd_instance_image)
+      guest_accelerator:
+      - type: nvidia-tesla-t4-vws
+        count: 1
+
+  - id: remotedesktop_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
+    use:
+    - network1
+    - homefs
+    - appsfs
+    - scratchfs
+    - remotedesktop
+    - remotedesktop_node_group
+    settings:
+      partition_name: desktop
+      enable_placement: false
+      partition_startup_scripts_timeout: 900
+
+  ####### Balanced partition #######
+  # this block creates a partition uses GCP H3-standard VM for regular jobs with 4GB/core
+  - id: h3_node_group
+    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
+    settings:
+      node_count_dynamic_max: 10
+      machine_type: h3-standard-88
+      disk_type: 'pd-balanced'
+      bandwidth_tier: gvnic_enabled
+
+  - id: h3_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
+    use:
+    - network1
+    - homefs
+    - appsfs
+    - scratchfs
+    - h3_node_group
+    settings:
+      partition_name: balance
+      is_default: true
+
+  ####### High-Mem partition #######
+  #  this block creates partition uses GCP C3-highmem VM for jobs with 16GB/core requirement
+  - id: c3_node_group
+    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
+    settings:
+      node_count_dynamic_max: 10
+      machine_type: c3-highmem-176
+      disk_type: 'pd-balanced'
+      bandwidth_tier: tier_1_enabled
+
+  - id: c3_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
+    use:
+    - network1
+    - homefs
+    - appsfs
+    - scratchfs
+    - c3_node_group
+    settings:
+      partition_name: highmem
+
+  ####### Scheduler: SLURM #######
+  # This block creates a SLURM controller
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
+    use:
+    - network1
+    - homefs
+    - appsfs
+    - scratchfs
+    - h3_partition
+    - c3_partition
+    - remotedesktop_partition
+    settings:
+      machine_type: n2-standard-16
+      compute_startup_scripts_timeout: 900
+      cloud_parameters:
+        resume_rate: 0
+        resume_timeout: 900
+        suspend_rate: 0
+        suspend_timeout: 300
+        no_comma_params: false
+
+  ####### Scheduler: SLURM #######
+  # This block creates a SLURM login node
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v5-login
+    use:
+    - network1
+    - slurm_controller
+    settings:
+      machine_type: n2-standard-8

@@ -39,7 +39,9 @@ deployment_groups:
     source: community/modules/file-system/nfs-server
     use: [network1]
     settings:
-      image: rocky-linux-cloud/rocky-linux-8
+      instance_image:
+        project: rocky-linux-cloud
+        family: rocky-linux-8
       auto_delete_disk: true
 
   - id: spack-setup

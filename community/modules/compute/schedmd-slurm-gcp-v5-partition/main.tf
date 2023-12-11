@@ -38,7 +38,7 @@ data "google_compute_zones" "available" {
 }
 
 module "slurm_partition" {
-  source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_partition?ref=5.9.1"
+  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_partition?ref=5.9.1"
 
   slurm_cluster_name                = local.slurm_cluster_name
   partition_nodes                   = var.node_groups

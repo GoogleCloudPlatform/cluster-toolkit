@@ -322,3 +322,9 @@ EOT
     error_message = "environments is deprecated. Use spack-execute.commands instead. See variable documentation for proposed alternative commands."
   }
 }
+
+variable "spack_profile_script_path" {
+  description = "Path to the Spack profile.d script. Created by this module"
+  type        = string
+  default     = "/etc/profile.d/spack.sh"
+}

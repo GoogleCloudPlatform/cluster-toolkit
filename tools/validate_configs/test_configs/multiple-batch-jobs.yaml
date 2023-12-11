@@ -66,7 +66,7 @@ deployment_groups:
     settings:
       runnable: "cat /sw/hello.txt"
       machine_type: n2-standard-4
-      image:
+      instance_image:
         family: rocky-linux-8-optimized-gcp
         project: rocky-linux-cloud
 
@@ -78,7 +78,7 @@ deployment_groups:
       machine_type: n2-standard-8
       job_id: job-2
       job_filename: batch-job-2.json
-      image:
+      instance_image:
         family: rocky-linux-8-optimized-gcp
         project: rocky-linux-cloud
 

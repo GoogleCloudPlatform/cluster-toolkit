@@ -15,22 +15,10 @@
 package sourcereader
 
 import (
-	"fmt"
-	"io/ioutil"
-	"log"
-	"os"
-	"path/filepath"
-	"reflect"
+	"embed"
 	"testing"
-	"time"
 
 	. "gopkg.in/check.v1"
-)
-
-var (
-	testDir      string
-	terraformDir string
-	packerDir    string
 )
 
 const (
@@ -38,38 +26,18 @@ const (
 	tfKindString  = "terraform"
 )
 
-// Setup GoCheck
-type MySuite struct{}
+//go:embed modules
+var testEmbeddedFS embed.FS
 
-var _ = Suite(&MySuite{})
+type zeroSuite struct{}
+
+var _ = Suite(&zeroSuite{})
 
 func Test(t *testing.T) {
 	TestingT(t)
 }
 
-func setup() {
-	t := time.Now()
-	dirName := fmt.Sprintf("ghpc_sourcereader_test_%s", t.Format(time.RFC3339))
-	dir, err := ioutil.TempDir("", dirName)
-	if err != nil {
-		log.Fatalf("sourcereader_test: %v", err)
-	}
-	testDir = dir
-}
-
-func teardown() {
-	os.RemoveAll(testDir)
-}
-
-func TestMain(m *testing.M) {
-	setup()
-	createTmpModule()
-	code := m.Run()
-	teardown()
-	os.Exit(code)
-}
-
-func (s *MySuite) TestIsEmbeddedPath(c *C) {
+func (s *zeroSuite) TestIsEmbeddedPath(c *C) {
 	// True: Is an embedded path
 	ret := IsEmbeddedPath("modules/anything/else")
 	c.Assert(ret, Equals, true)
@@ -89,7 +57,7 @@ func (s *MySuite) TestIsEmbeddedPath(c *C) {
 	c.Assert(ret, Equals, false)
 }
 
-func (s *MySuite) TestIsLocalPath(c *C) {
+func (s *zeroSuite) TestIsLocalPath(c *C) {
 	// False: Embedded Path
 	ret := IsLocalPath("modules/anything/else")
 	c.Assert(ret, Equals, false)
@@ -109,60 +77,37 @@ func (s *MySuite) TestIsLocalPath(c *C) {
 	c.Assert(ret, Equals, false)
 }
 
-func (s *MySuite) TestIsGitRepository(c *C) {
+func (s *zeroSuite) TestIsRemotePath(c *C) {
 	// False: Is an embedded path
-	ret := IsGitPath("modules/anything/else")
-	c.Assert(ret, Equals, false)
+	ret := IsRemotePath("modules/anything/else")
+	c.Check(ret, Equals, false)
 
 	// False: Local path
-	ret = IsGitPath("./anything/else")
-	c.Assert(ret, Equals, false)
+	ret = IsRemotePath("./anything/else")
+	c.Check(ret, Equals, false)
 
-	ret = IsGitPath("./modules")
-	c.Assert(ret, Equals, false)
+	ret = IsRemotePath("./modules")
+	c.Check(ret, Equals, false)
 
-	ret = IsGitPath("../modules/")
-	c.Assert(ret, Equals, false)
+	ret = IsRemotePath("../modules/")
+	c.Check(ret, Equals, false)
 
 	// True, other
-	ret = IsGitPath("github.com/modules")
-	c.Assert(ret, Equals, true)
+	ret = IsRemotePath("github.com/modules")
+	c.Check(ret, Equals, true)
 
 	// True, genetic git repository
-	ret = IsGitPath("git::https://gitlab.com/modules")
-	c.Assert(ret, Equals, true)
+	ret = IsRemotePath("git::https://gitlab.com/modules")
+	c.Check(ret, Equals, true)
+
+	// True, invalid path though nor local nor embedded
+	ret = IsRemotePath("wut:://modules")
+	c.Check(ret, Equals, true)
 }
 
-func (s *MySuite) TestFactory(c *C) {
-	// Local modules
-	locSrcReader := Factory("./modules/anything/else")
-	c.Assert(reflect.TypeOf(locSrcReader), Equals, reflect.TypeOf(LocalSourceReader{}))
-
-	// Embedded modules
-	embSrcReader := Factory("modules/anything/else")
-	c.Assert(reflect.TypeOf(embSrcReader), Equals, reflect.TypeOf(EmbeddedSourceReader{}))
-
-	// GitHub modules
-	ghSrcString := Factory("github.com/modules")
-	c.Assert(reflect.TypeOf(ghSrcString), Equals, reflect.TypeOf(GitSourceReader{}))
-
-	// Git modules
-	gitSrcString := Factory("git::https://gitlab.com/modules")
-	c.Assert(reflect.TypeOf(gitSrcString), Equals, reflect.TypeOf(GitSourceReader{}))
-}
-
-func (s *MySuite) TestCopyFromPath(c *C) {
-	dstPath := filepath.Join(testDir, "TestCopyFromPath_Dst")
-
-	err := copyFromPath(terraformDir, dstPath)
-	c.Assert(err, IsNil)
-	fInfo, err := os.Stat(filepath.Join(dstPath, "main.tf"))
-	c.Assert(err, IsNil)
-	c.Assert(fInfo.Name(), Equals, "main.tf")
-	c.Assert(fInfo.Size() > 0, Equals, true)
-	c.Assert(fInfo.IsDir(), Equals, false)
-
-	// Invalid: Specify the same destination path again
-	err = copyFromPath(terraformDir, dstPath)
-	c.Assert(err, ErrorMatches, "The directory already exists: .*")
+func (s *zeroSuite) TestFactory(c *C) {
+	c.Check(Factory("./modules/anything/else"), FitsTypeOf, LocalSourceReader{})            // Local
+	c.Check(Factory("modules/anything/else"), FitsTypeOf, EmbeddedSourceReader{})           // Embedded
+	c.Check(Factory("github.com/modules"), FitsTypeOf, GoGetterSourceReader{})              // GitHub
+	c.Check(Factory("git::https://gitlab.com/modules"), FitsTypeOf, GoGetterSourceReader{}) // Git
 }

@@ -36,7 +36,7 @@ def get_package_list():
 
 
 def get_package_info(names):
-    pkgs = [spack.repo.get(name) for name in names]
+    pkgs = [spack.repo.PATH.get_pkg_class(name) for name in names]
     return (
         {
             "name": pkg.name,

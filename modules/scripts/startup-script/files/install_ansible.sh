@@ -15,6 +15,8 @@
 
 REQ_ANSIBLE_VERSION=2.11
 REQ_ANSIBLE_PIP_VERSION=4.10.0
+REQ_PIP_WHEEL_VERSION=0.37.1
+REQ_PIP_SETUPTOOLS_VERSION=59.6.0
 REQ_PIP_MAJOR_VERSION=21
 REQ_PYTHON3_VERSION=6
 
@@ -39,7 +41,8 @@ apt_wait() {
 install_python_deps() {
 	if [ -f /etc/debian_version ] || grep -qi ubuntu /etc/lsb-release 2>/dev/null ||
 		grep -qi ubuntu /etc/os-release 2>/dev/null; then
-		apt-get install -y python3-distutils
+		apt-get update --allow-releaseinfo-change-origin --allow-releaseinfo-change-label
+		apt-get install -y python3-distutils python3-venv
 	fi
 }
 
@@ -81,7 +84,7 @@ install_python3_yum() {
 		echo "Unsupported version of centos/RHEL/Rocky"
 		return 1
 	fi
-	yum install --disablerepo="*" --enablerepo="${enable_repo}" -y python3 python3-pip
+	yum install --disablerepo="*" --enablerepo="${enable_repo}" -y python3 python3-pip python3-venv
 	python_path=$(rpm -ql python3 | grep 'bin/python3$')
 }
 
@@ -89,7 +92,8 @@ install_python3_yum() {
 # newly installed packaged.
 install_python3_apt() {
 	apt_wait
-	apt-get install -y python3 python3-distutils python3-pip
+	apt-get update --allow-releaseinfo-change-origin --allow-releaseinfo-change-label
+	apt-get install -y python3 python3-distutils python3-pip python3-venv
 	python_path=$(command -v python3)
 }
 
@@ -125,7 +129,7 @@ install_pip3_yum() {
 # Install python3 with the apt package manager. Updates python_path to the
 # newly installed packaged.
 install_pip3_apt() {
-	apt-get update
+	apt-get update --allow-releaseinfo-change-origin --allow-releaseinfo-change-label
 	apt-get install -y python3-pip
 }
 
@@ -170,16 +174,29 @@ main() {
 			return 1
 		fi
 	fi
-	pip_version=$(${python_path} -m pip --version | sed -nr 's/^pip ([0-9]+\.[0-9]+).*$/\1/p')
-	pip_major_version=$(echo "${pip_version}" | cut -d '.' -f 1)
-	if [ "${pip_major_version}" -lt "${REQ_PIP_MAJOR_VERSION}" ]; then
-		${python_path} -m pip install --upgrade pip
+
+	# Upgrade pip if necessary
+	# Only run if OS is not Debian 12 - Debian 12 does not allow for system level pip installs
+	if [ ! -f /etc/debian_version ] || [ "$(lsb_release -a 2>/dev/null | sed -n 's/Release:\s\+\([0-9]\+\).\?.*/\1/p')" -ne "12" ]; then
+		pip_version=$(${python_path} -m pip --version | sed -nr 's/^pip ([0-9]+\.[0-9]+).*$/\1/p')
+		pip_major_version=$(echo "${pip_version}" | cut -d '.' -f 1)
+		if [ "${pip_major_version}" -lt "${REQ_PIP_MAJOR_VERSION}" ]; then
+			${python_path} -m pip install --upgrade pip
+		fi
 	fi
 
 	# Create pip virtual environment for HPC Toolkit
-	${python_path} -m pip install virtualenv
-	${python_path} -m virtualenv "${venv_path}"
+	${python_path} -m venv "${venv_path}"
 	venv_python_path=${venv_path}/bin/python3
+
+	# Upgrade pip if necessary
+	pip_version=$(${venv_python_path} -m pip --version | sed -nr 's/^pip ([0-9]+\.[0-9]+).*$/\1/p')
+	pip_major_version=$(echo "${pip_version}" | cut -d '.' -f 1)
+	if [ "${pip_major_version}" -lt "${REQ_PIP_MAJOR_VERSION}" ]; then
+		${venv_python_path} -m pip install --upgrade pip
+	fi
+
+	${venv_python_path} -m pip install -U wheel==${REQ_PIP_WHEEL_VERSION} setuptools==${REQ_PIP_SETUPTOOLS_VERSION}
 
 	# configure ansible to always use correct Python binary
 	if [ ! -f /etc/ansible/ansible.cfg ]; then

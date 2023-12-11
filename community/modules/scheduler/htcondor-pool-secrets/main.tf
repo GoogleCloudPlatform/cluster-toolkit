@@ -82,7 +82,7 @@ resource "google_secret_manager_secret" "pool_password" {
   labels = local.labels
 
   replication {
-    automatic = true
+    auto {}
   }
 }
 
@@ -98,7 +98,7 @@ resource "google_secret_manager_secret" "execute_point_idtoken" {
   labels = local.labels
 
   replication {
-    automatic = true
+    auto {}
   }
 }
 

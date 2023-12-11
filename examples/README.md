@@ -18,6 +18,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [serverless-batch.yaml](#serverless-batchyaml-) ![core-badge]
   * [serverless-batch-mpi.yaml](#serverless-batch-mpiyaml-) ![core-badge]
   * [pfs-lustre.yaml](#pfs-lustreyaml-) ![core-badge]
+  * [cae-slurm.yaml](#cae-slurmyaml-) ![core-badge]
   * [hpc-slurm-ubuntu2004.yaml](#hpc-slurm-ubuntu2004yaml-) ![community-badge]
   * [hpc-intel-select-slurm.yaml](#hpc-intel-select-slurmyaml-) ![community-badge]
   * [pfs-daos.yaml](#pfs-daosyaml-) ![community-badge]
@@ -199,7 +200,7 @@ with 80GB of GPU memory each.
 * `a216` with [`a2-megagpu-16g` nodes][a2] with 16 of the NVIDIA A100 GPU accelerators
 with 40GB of GPU memory each.
 
-For all partions other than `n2`, [compact placement] policies are enabled by default
+For all partitions other than `n2`, [compact placement] policies are enabled by default
 and nodes are created and destroyed on a per-job basis. Furthermore, these partitions
 are configured with:
 
@@ -534,6 +535,39 @@ For this example the following is needed in the selected region:
 
 [pfs-lustre.yaml]: ./pfs-lustre.yaml
 
+### [cae-slurm.yaml] ![core-badge]
+
+The Computer Aided Engineering (CAE) blueprint captures a reference architecture
+where the right cloud components are assembled to optimally cater to the
+requirements of computationally-intensive CAE workloads. Specifically, it is
+architected around Google Cloud’s VM families that provide a high memory bandwidth
+and a balanced memory/flop ratio, which is particularly useful for per-core licensed
+CAE software. The solution caters also to large CAE use cases, requiring multiple nodes
+that are tightly-coupled via MPI. Special high-memory shapes support even very
+memory-demanding workloads with up to 16GB/core. For file IO, different Google managed
+high performance NFS storage services are available. For very IO demanding workloads,
+third party parallel file systems can be integrated. The scheduling of the workloads
+is done by a workload manager.
+
+The CAE blueprint is intended to be a starting point for more tailored explorations
+or installations of specific CAE codes, as provided by ISVs separately.
+
+A detailed documentation is provided in this [README](cae/README.md).
+
+#### Quota Requirements for cae-slurm.yaml
+
+For this example the following is needed in the selected region:
+
+* Cloud Filestore API: Basic SSD capacity (GB) per region: **5,120 GB**
+* Cloud Filestore API: High Scale SSD capacity (GB) per region: **10,240 GB**
+* Compute Engine API: H3 CPUs: **88/node** active in `balance` partition up to 880
+* Compute Engine API: C3-highmem CPUs: **176/node** active in `highmem` partition up to 1,760
+* Compute Engine API: N1 CPUs: **8/node** active in `desktop` partition up to 40
+* Compute Engine API: T4 GPUs: **1/node** active in `desktop` partition up to 5
+* Compute Engine API: N2 CPUs: **8** for login and **16** for controller
+
+[cae-slurm.yaml]: ../examples/cae/cae-slurm.yaml
+
 ### [hpc-slurm-ubuntu2004.yaml] ![community-badge]
 
 > **Warning**: The variables `enable_reconfigure`,
@@ -833,7 +867,7 @@ This blueprint shows how to use different storage options with GKE in the toolki
 
 The blueprint contains the following:
 
-* A K8s Job that uses a Filestore as a shared file system between pods.
+* A K8s Job that uses a Filestore and a GCS bucket as shared file systems between pods.
 * A K8s Job that demonstrates different ephemeral storage options:
   * memory backed emptyDir
   * local SSD backed emptyDir

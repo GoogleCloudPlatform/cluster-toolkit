@@ -13,6 +13,9 @@
 # limitations under the License.
 
 locals {
+  # This label allows for billing report tracking based on module.
+  labels = merge(var.labels, { ghpc_module = "custom-image", ghpc_role = "packer" })
+
   # construct a unique image name from the image family
   image_family       = var.image_family != null ? var.image_family : var.deployment_name
   image_name_default = "${local.image_family}-${formatdate("YYYYMMDD't'hhmmss'z'", timestamp())}"
@@ -93,7 +96,7 @@ source "googlecompute" "toolkit_image" {
   project_id                  = var.project_id
   image_name                  = local.image_name
   image_family                = local.image_family
-  image_labels                = var.labels
+  image_labels                = local.labels
   machine_type                = var.machine_type
   accelerator_type            = local.accelerator_type
   accelerator_count           = var.accelerator_count
@@ -116,7 +119,7 @@ source "googlecompute" "toolkit_image" {
   winrm_insecure              = local.winrm_insecure
   winrm_use_ssl               = local.winrm_use_ssl
   zone                        = var.zone
-  labels                      = var.labels
+  labels                      = local.labels
   metadata                    = local.metadata
   startup_script_file         = var.startup_script_file
   wrap_startup_script         = var.wrap_startup_script

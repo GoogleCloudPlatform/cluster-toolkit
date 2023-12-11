@@ -116,7 +116,7 @@ class ClusterForm(forms.ModelForm):
 
         super().__init__(*args, **kwargs)
 
-        # For machine types, will use JS to get valid types dependant on
+        # For machine types, will use JS to get valid types dependent on
         # cloud zone. So bypass cleaning and choices
         def prep_dynamic_select(field, value):
             self.fields[field].widget.choices = [
@@ -234,7 +234,7 @@ class ClusterMountPointForm(forms.ModelForm):
 
 
 class ClusterPartitionForm(forms.ModelForm):
-    """Form for Cluster Paritions"""
+    """Form for Cluster Partitions"""
 
     machine_type = forms.ChoiceField(widget=forms.Select())
     GPU_type = forms.ChoiceField(widget=forms.Select()) # pylint: disable=invalid-name

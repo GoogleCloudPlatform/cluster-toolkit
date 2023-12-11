@@ -327,7 +327,7 @@ def create_cluster_dashboard(cluster):
             "uid": None,
             "title": f"Cluster {cluster.name}",
             "panels": panels,
-            "verison": 0,
+            "version": 0,
         },
         "filderId": 0,
         "overwrite": True,

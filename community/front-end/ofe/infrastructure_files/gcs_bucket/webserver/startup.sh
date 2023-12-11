@@ -98,17 +98,6 @@ GOOGLE_CLIENT_SECRET=$(/usr/local/bin/yq e '.google_client_secret' /tmp/config)
 repo_fork=$(/usr/local/bin/yq e '.git_fork' /tmp/config)
 repo_branch=$(/usr/local/bin/yq e '.git_branch' /tmp/config)
 # 'yq' does not handle multi-line string properly, need to restore the correct key format
-DEPLOY_KEY1=$(/usr/local/bin/yq e '.deploy_key1' /tmp/config | tr ' ' '\n' | base64 -d)
-rm -f /tmp/config
-
-# Install go from golang as repo version is too low for hpc-toolkit
-#
-curl --silent --show-error --location https://golang.org/dl/go1.18.8.linux-amd64.tar.gz --output /tmp/go1.18.8.linux-amd64.tar.gz
-rm -rf /usr/local/go && tar -C /usr/local -xzf /tmp/go1.18.8.linux-amd64.tar.gz
-
-# Add path entry for Go binaries to bashrc for all users (only works on future logins)
-# shellcheck disable=SC2016
-echo 'export PATH=$PATH:/usr/local/go/bin:~/go/bin' >>/etc/bashrc
 
 printf "\n####################\n#### Creating firewall & SELinux rules\n####################\n"
 printf "Adding rule for port 22 (ssh): "
@@ -147,23 +136,7 @@ fi
 useradd -r -m -d /opt/gcluster gcluster
 
 if [ "${deploy_mode}" == "git" ]; then
-	printf "Adding deployment keys..\n"
-	mkdir -p /opt/gcluster/.ssh
-
-	echo "$DEPLOY_KEY1" >/opt/gcluster/.ssh/gcluster-deploykey
-	sed -i -e :a -e '/^\n*$/{$d;N;ba' -e '}' /opt/gcluster/.ssh/gcluster-deploykey
-	cat >>/opt/gcluster/.ssh/config <<+
-
-host github.com
-        hostname github.com
-        IdentityFile ~/.ssh/gcluster-deploykey
-        StrictHostKeyChecking=accept-new
-+
-	chmod 700 /opt/gcluster/.ssh
-	chmod 600 /opt/gcluster/.ssh/*
-	chown gcluster -R /opt/gcluster/.ssh
-
-	fetch_hpc_toolkit="git clone -b \"${repo_branch}\" git@github.com:${repo_fork}/hpc-toolkit.git"
+	fetch_hpc_toolkit="git clone -b \"${repo_branch}\" https://github.com/${repo_fork}/hpc-toolkit.git"
 
 elif [ "${deploy_mode}" == "tarball" ]; then
 	printf "\n####################\n#### Download web application files\n####################\n"
@@ -181,13 +154,26 @@ chown gcluster:gcluster -R /opt/gcluster
 sudo su - gcluster -c /bin/bash <<EOF
   cd /opt/gcluster
   ${fetch_hpc_toolkit}
+EOF
 
+# Install go version specified in go.mod file
+#
+GO_VERSION=$(awk '/^go/ {print $2}' "/opt/gcluster/hpc-toolkit/go.mod")
+GO_DOWNLOAD_URL="https://golang.org/dl/go${GO_VERSION}.linux-amd64.tar.gz"
+curl --silent --show-error --location "${GO_DOWNLOAD_URL}" --output "/tmp/go${GO_VERSION}.linux-amd64.tar.gz"
+rm -rf /usr/local/go && tar -C /usr/local -xzf "/tmp/go${GO_VERSION}.linux-amd64.tar.gz"
+
+# Add path entry for Go binaries to bashrc for all users (only works on future logins)
+# shellcheck disable=SC2016
+echo 'export PATH=$PATH:/usr/local/go/bin:~/go/bin' >>/etc/bashrc
+
+sudo su - gcluster -c /bin/bash <<EOF
   cd /opt/gcluster/hpc-toolkit/community/front-end
 
   printf "\nDownloading Frontend dependencies...\n"
   mkdir dependencies
   pushd dependencies
-  git clone -b v0.17.1 --depth 1 https://github.com/spack/spack.git
+  git clone -b v0.21.0 --depth 1 https://github.com/spack/spack.git
   printf "\npre-generating Spack package list\n"
   ./spack/bin/spack list > /dev/null
   popd
@@ -205,7 +191,7 @@ sudo su - gcluster -c /bin/bash <<EOF
   printf "\nUpgrading pip...\n"
   pip install --upgrade pip
   printf "\nInstalling pip requirements...\n"
-  pip install -r /opt/gcluster/hpc-toolkit/community/front-end/requirements.txt
+  pip install -r /opt/gcluster/hpc-toolkit/community/front-end/ofe/requirements.txt
 
   printf "Generating configuration file for backend..."
   echo "config:" > configuration.yaml
@@ -254,7 +240,7 @@ EOL
 printf "Creating supervisord service..."
 echo "[program:gcluster-uvicorn-background]
 process_name=%(program_name)s_%(process_num)02d
-directory=/opt/gcluster/hpc-toolkit/community/front-end/website
+directory=/opt/gcluster/hpc-toolkit/community/front-end/ofe/website
 command=/opt/gcluster/django-env/bin/uvicorn website.asgi:application --reload --host 127.0.0.1 --port 8001
 autostart=true
 autorestart=true
@@ -271,8 +257,8 @@ After=supervisord.service grafana-server.service
 
 [Service]
 Type=forking
-ExecStart=/usr/sbin/nginx -p /opt/gcluster/run/ -c /opt/gcluster/hpc-toolkit/community/front-end/website/nginx.conf
-ExecStop=/usr/sbin/nginx -p /opt/gcluster/run/ -c /opt/gcluster/hpc-toolkit/community/front-end/website/nginx.conf -s stop
+ExecStart=/usr/sbin/nginx -p /opt/gcluster/run/ -c /opt/gcluster/hpc-toolkit/community/front-end/ofe/website/nginx.conf
+ExecStop=/usr/sbin/nginx -p /opt/gcluster/run/ -c /opt/gcluster/hpc-toolkit/community/front-end/ofe/website/nginx.conf -s stop
 PIDFile=/opt/gcluster/run/nginx.pid
 Restart=no
 
@@ -290,7 +276,7 @@ systemctl status gcluster.service
 #
 sudo su - gcluster -c /bin/bash <<EOF
   source /opt/gcluster/django-env/bin/activate
-  cd /opt/gcluster/hpc-toolkit/community/front-end/website
+  cd /opt/gcluster/hpc-toolkit/community/front-end/ofe/website
   python manage.py setup_grafana "${DJANGO_EMAIL}"
 EOF
 
@@ -298,7 +284,7 @@ EOF
 #
 if [ -n "${SERVER_HOSTNAME}" ]; then
 	printf "Installing LetsEncrypt Certificate"
-	/usr/bin/certbot --nginx --nginx-server-root=/opt/gcluster/hpc-toolkit/community/front-end/website -m "${DJANGO_EMAIL}" --agree-tos -d "${SERVER_HOSTNAME}"
+	/usr/bin/certbot --nginx --nginx-server-root=/opt/gcluster/hpc-toolkit/community/front-end/ofe/website -m "${DJANGO_EMAIL}" --agree-tos -d "${SERVER_HOSTNAME}"
 
 	printf "Installing Cron entry to keep Cert up to date"
 	tmpcron=$(mktemp)
@@ -306,7 +292,7 @@ if [ -n "${SERVER_HOSTNAME}" ]; then
 	echo "0 12 * * * /usr/bin/certbot renew --quiet" >>"${tmpcron}"
 
 	# .. if something more forceful/complete is needed:
-	#	echo "0 12 * * * /usr/bin/certbot certonly --force-renew --quiet" --nginx --nginx-server-root=/opt/gcluster/hpc-toolkit/community/front-end/website --cert-name "${SERVER_HOSTNAME}" -m "${DJANGO_EMAIL}" >>"${tmpcron}"
+	#	echo "0 12 * * * /usr/bin/certbot certonly --force-renew --quiet" --nginx --nginx-server-root=/opt/gcluster/hpc-toolkit/community/front-end/ofe/website --cert-name "${SERVER_HOSTNAME}" -m "${DJANGO_EMAIL}" >>"${tmpcron}"
 
 	crontab -u root "${tmpcron}"
 	rm "${tmpcron}"

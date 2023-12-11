@@ -24,12 +24,12 @@ import (
 )
 
 func (s *MySuite) TestExpand(c *C) {
-	dc := getDeploymentConfigForTest()
+	dc := s.getDeploymentConfigForTest()
 	c.Check(dc.expand(), IsNil)
 }
 
 func (s *MySuite) TestExpandBackends(c *C) {
-	dc := getDeploymentConfigForTest()
+	dc := s.getDeploymentConfigForTest()
 	deplName := dc.Config.Vars.Get("deployment_name").AsString()
 
 	dc.Config.TerraformBackendDefaults = TerraformBackend{Type: "gcs"}
@@ -55,7 +55,7 @@ func (s *MySuite) TestExpandBackends(c *C) {
 	c.Assert(gotPrefix, Equals, cty.StringVal(expPrefix))
 }
 
-func (s *MySuite) TestAddListValue(c *C) {
+func (s *zeroSuite) TestAddListValue(c *C) {
 	mod := Module{ID: "TestModule"}
 
 	setting := "newSetting"
@@ -71,7 +71,7 @@ func (s *MySuite) TestAddListValue(c *C) {
 		AsProductOfModuleUse(MustParseExpression(`flatten(["value2", flatten(["value1"])])`).AsValue(), "mod1", "mod2"))
 }
 
-func (s *MySuite) TestUseModule(c *C) {
+func (s *zeroSuite) TestUseModule(c *C) {
 	// Setup
 	used := Module{
 		ID:     "UsedModule",
@@ -202,11 +202,11 @@ func (s *MySuite) TestUseModule(c *C) {
 func (s *MySuite) TestApplyUseModules(c *C) {
 
 	{ // Simple Case
-		dc := getDeploymentConfigForTest()
+		dc := s.getDeploymentConfigForTest()
 		c.Assert(dc.applyUseModules(), IsNil)
 	}
 	{ // Has Use Modules
-		dc := getDeploymentConfigForTest()
+		dc := s.getDeploymentConfigForTest()
 		g := &dc.Config.DeploymentGroups[0]
 
 		using := Module{
@@ -238,7 +238,7 @@ func (s *MySuite) TestApplyUseModules(c *C) {
 	}
 
 	{ // test multigroup deployment with config that has a known good match
-		dc := getMultiGroupDeploymentConfig()
+		dc := s.getMultiGroupDeploymentConfig()
 		m := &dc.Config.DeploymentGroups[1].Modules[0]
 		c.Assert(m.Settings, DeepEquals, Dict{})
 		c.Assert(dc.applyUseModules(), IsNil)
@@ -248,7 +248,7 @@ func (s *MySuite) TestApplyUseModules(c *C) {
 	}
 
 	{ // Deliberately break the match and see that no settings are added
-		dc := getMultiGroupDeploymentConfig()
+		dc := s.getMultiGroupDeploymentConfig()
 		mod := &dc.Config.DeploymentGroups[1].Modules[0]
 		c.Assert(mod.Settings, DeepEquals, Dict{})
 
@@ -260,7 +260,7 @@ func (s *MySuite) TestApplyUseModules(c *C) {
 	}
 }
 
-func (s *MySuite) TestCombineLabels(c *C) {
+func (s *zeroSuite) TestCombineLabels(c *C) {
 	infoWithLabels := modulereader.ModuleInfo{Inputs: []modulereader.VarInfo{{Name: "labels"}}}
 
 	coral := Module{
@@ -268,8 +268,7 @@ func (s *MySuite) TestCombineLabels(c *C) {
 		ID:     "coral",
 		Settings: NewDict(map[string]cty.Value{
 			"labels": cty.ObjectVal(map[string]cty.Value{
-				"magenta":   cty.StringVal("orchid"),
-				"ghpc_role": cty.StringVal("maroon"),
+				"magenta": cty.StringVal("orchid"),
 			}),
 		}),
 	}
@@ -305,32 +304,25 @@ func (s *MySuite) TestCombineLabels(c *C) {
 	labelsRef := GlobalRef("labels").AsExpression().AsValue()
 
 	lime := dc.Config.DeploymentGroups[0]
-	// Labels are set and override role
+	// Labels are set
 	coral = lime.Modules[0]
 	c.Check(coral.Settings.Get("labels"), DeepEquals, FunctionCallExpression(
 		"merge",
 		labelsRef,
-		cty.ObjectVal(map[string]cty.Value{
-			"ghpc_role": cty.StringVal("blue")}),
-		cty.ObjectVal(map[string]cty.Value{
-			"ghpc_role": cty.StringVal("maroon"),
-			"magenta":   cty.StringVal("orchid")}),
+		cty.ObjectVal(map[string]cty.Value{"magenta": cty.StringVal("orchid")}),
 	).AsValue())
 
-	// Labels are not set, infer role from module.source
+	// Labels are not set
 	khaki = lime.Modules[1]
-	c.Check(khaki.Settings.Get("labels"), DeepEquals, FunctionCallExpression(
-		"merge",
-		labelsRef,
-		cty.ObjectVal(map[string]cty.Value{"ghpc_role": cty.StringVal("brown")}),
-	).AsValue())
+	c.Check(khaki.Settings.Get("labels"), DeepEquals, labelsRef)
+
 	// No labels input
 	silver = lime.Modules[2]
 	c.Check(silver.Settings.Get("labels"), DeepEquals, cty.NilVal)
 }
 
 func (s *MySuite) TestApplyGlobalVariables(c *C) {
-	dc := getDeploymentConfigForTest()
+	dc := s.getDeploymentConfigForTest()
 	mod := &dc.Config.DeploymentGroups[0].Modules[0]
 
 	// Test no inputs, none required
@@ -345,11 +337,6 @@ func (s *MySuite) TestApplyGlobalVariables(c *C) {
 		}},
 	})
 
-	err := dc.applyGlobalVariables()
-	expectedErrorStr := fmt.Sprintf("%s: Module ID: %s Setting: gold",
-		errorMessages["missingSetting"], mod.ID)
-	c.Check(err, ErrorMatches, expectedErrorStr)
-
 	// Test no input, one required, exists in globals
 	dc.Config.Vars.Set("gold", cty.StringVal("val"))
 	c.Check(dc.applyGlobalVariables(), IsNil)
@@ -359,9 +346,8 @@ func (s *MySuite) TestApplyGlobalVariables(c *C) {
 		GlobalRef("gold").AsExpression().AsValue())
 
 	// Test one input, one required
-	mod.Settings.Set(requiredVar.Name, cty.StringVal("val"))
-	err = dc.applyGlobalVariables()
-	c.Assert(err, IsNil)
+	mod.Settings.Set("reqVar", cty.StringVal("val"))
+	c.Assert(dc.applyGlobalVariables(), IsNil)
 
 	// Test one input, none required, exists in globals
 	setTestModuleInfo(*mod, modulereader.ModuleInfo{
@@ -371,11 +357,10 @@ func (s *MySuite) TestApplyGlobalVariables(c *C) {
 			Required: false,
 		}},
 	})
-	err = dc.applyGlobalVariables()
-	c.Assert(err, IsNil)
+	c.Assert(dc.applyGlobalVariables(), IsNil)
 }
 
-func (s *MySuite) TestIsSimpleVariable(c *C) {
+func (s *zeroSuite) TestIsSimpleVariable(c *C) {
 	// True: Correct simple variable
 	got := isSimpleVariable("$(some_text)")
 	c.Assert(got, Equals, true)
@@ -402,7 +387,7 @@ func (s *MySuite) TestIsSimpleVariable(c *C) {
 	c.Assert(got, Equals, false)
 }
 
-func (s *MySuite) TestHasVariable(c *C) {
+func (s *zeroSuite) TestHasVariable(c *C) {
 	// True: simple variable
 	got := hasVariable("$(some_text)")
 	c.Assert(got, Equals, true)
@@ -429,7 +414,7 @@ func (s *MySuite) TestHasVariable(c *C) {
 	c.Assert(got, Equals, false)
 }
 
-func (s *MySuite) TestValidateModuleReference(c *C) {
+func (s *zeroSuite) TestValidateModuleReference(c *C) {
 	a := Module{ID: "moduleA"}
 	b := Module{ID: "moduleB"}
 	y := Module{ID: "moduleY"}
@@ -453,7 +438,7 @@ func (s *MySuite) TestValidateModuleReference(c *C) {
 
 	{ // An intergroup reference from group 0 to module 1 in 1 (bad due to group ordering)
 		err := validateModuleReference(bp, a, y.ID)
-		c.Check(err, ErrorMatches, fmt.Sprintf("%s: .*", errorMessages["intergroupOrder"]))
+		c.Check(err, ErrorMatches, fmt.Sprintf("%s: .*", errMsgIntergroupOrder))
 	}
 
 	// A target module that doesn't exist (bad)
@@ -464,7 +449,7 @@ func (s *MySuite) TestValidateModuleReference(c *C) {
 
 }
 
-func (s *MySuite) TestIntersection(c *C) {
+func (s *zeroSuite) TestIntersection(c *C) {
 	is := intersection([]string{"A", "B", "C"}, []string{"A", "B", "C"})
 	c.Assert(is, DeepEquals, []string{"A", "B", "C"})
 
@@ -488,19 +473,20 @@ func (s *MySuite) TestIntersection(c *C) {
 }
 
 func (s *MySuite) TestOutputNamesByGroup(c *C) {
-	dc := getMultiGroupDeploymentConfig()
+	dc := s.getMultiGroupDeploymentConfig()
 	dc.applyGlobalVariables()
 	dc.applyUseModules()
+	bp := dc.Config
 
-	group0 := dc.Config.DeploymentGroups[0]
+	group0 := bp.DeploymentGroups[0]
 	mod0 := group0.Modules[0]
-	group1 := dc.Config.DeploymentGroups[1]
+	group1 := bp.DeploymentGroups[1]
 
-	outputNamesGroup0, err := OutputNamesByGroup(group0, dc)
+	outputNamesGroup0, err := OutputNamesByGroup(group0, bp)
 	c.Assert(err, IsNil)
 	c.Assert(outputNamesGroup0, DeepEquals, map[GroupName][]string{})
 
-	outputNamesGroup1, err := OutputNamesByGroup(group1, dc)
+	outputNamesGroup1, err := OutputNamesByGroup(group1, bp)
 	c.Assert(err, IsNil)
 	c.Assert(outputNamesGroup1, DeepEquals, map[GroupName][]string{
 		group0.Name: {AutomaticOutputName("test_inter_0", mod0.ID)},

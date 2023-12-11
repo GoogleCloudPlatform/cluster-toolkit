@@ -31,7 +31,7 @@ locals {
   private_endpoint_message = trimspace(
     <<-EOT
       This cluster was created with 'enable_private_endpoint: true'. 
-      It cannot be accessed from a public IP addressses.
+      It cannot be accessed from a public IP addresses.
       One way to access this cluster is from a VM created in the GKE cluster subnet.
     EOT
   )
@@ -68,4 +68,9 @@ output "instructions" {
           --project ${var.project_id}
     EOT
   )
+}
+
+output "k8s_service_account_name" {
+  description = "Name of k8s service account."
+  value       = one(module.workload_identity[*].k8s_service_account_name)
 }

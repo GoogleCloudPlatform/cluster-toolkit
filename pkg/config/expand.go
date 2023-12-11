@@ -20,8 +20,6 @@ import (
 	"regexp"
 	"strings"
 
-	"path/filepath"
-
 	"hpc-toolkit/pkg/modulereader"
 
 	"github.com/agext/levenshtein"
@@ -33,7 +31,6 @@ import (
 const (
 	blueprintLabel  string = "ghpc_blueprint"
 	deploymentLabel string = "ghpc_deployment"
-	roleLabel       string = "ghpc_role"
 )
 
 var (
@@ -61,8 +58,42 @@ func (dc *DeploymentConfig) expand() error {
 		return err
 	}
 
+	if err := validateInputsAllModules(dc.Config); err != nil {
+		return err
+	}
+
 	dc.Config.populateOutputs()
 	return nil
+}
+
+func validateInputsAllModules(bp Blueprint) error {
+	errs := Errors{}
+	for ig, g := range bp.DeploymentGroups {
+		for im, m := range g.Modules {
+			p := Root.Groups.At(ig).Modules.At(im)
+			errs.Add(validateModuleInputs(p, m, bp))
+		}
+	}
+	return errs.OrNil()
+}
+
+func validateModuleInputs(mp modulePath, m Module, bp Blueprint) error {
+	mi := m.InfoOrDie()
+	errs := Errors{}
+	for _, input := range mi.Inputs {
+		ip := mp.Settings.Dot(input.Name)
+
+		if !m.Settings.Has(input.Name) {
+			if input.Required {
+				errs.At(ip, fmt.Errorf("%s: Module ID: %s Setting: %s",
+					errMsgMissingSetting, m.ID, input.Name))
+			}
+			continue
+		}
+
+		// TODO: Check set value and input dtypes convertability
+	}
+	return errs.OrNil()
 }
 
 func (dc *DeploymentConfig) expandBackends() {
@@ -195,22 +226,8 @@ func moduleHasInput(m Module, n string) bool {
 	return false
 }
 
-// Returns enclosing directory of source directory.
-func getRole(source string) string {
-	role := filepath.Base(filepath.Dir(source))
-	// Returned by base if containing directory was not explicit
-	invalidRoles := []string{"..", ".", "/"}
-	for _, ir := range invalidRoles {
-		if role == ir {
-			return "other"
-		}
-	}
-	return role
-}
-
 // combineLabels sets defaults for labels based on other variables and merges
-// the global labels defined in Vars with module setting labels. It also
-// determines the role and sets it for each module independently.
+// the global labels defined in Vars with module setting labels.
 func (dc *DeploymentConfig) combineLabels() {
 	vars := &dc.Config.Vars
 	defaults := map[string]cty.Value{
@@ -236,17 +253,15 @@ func combineModuleLabels(mod *Module, dc DeploymentConfig) {
 		return // no op
 	}
 
-	extra := map[string]cty.Value{
-		roleLabel: cty.StringVal(getRole(mod.Source))}
-	args := []cty.Value{
-		GlobalRef(labels).AsExpression().AsValue(),
-		cty.ObjectVal(extra),
-	}
-	if !mod.Settings.Get(labels).IsNull() {
-		args = append(args, mod.Settings.Get(labels))
-	}
+	ref := GlobalRef(labels).AsExpression().AsValue()
+	set := mod.Settings.Get(labels)
 
-	mod.Settings.Set(labels, FunctionCallExpression("merge", args...).AsValue())
+	if !set.IsNull() {
+		merged := FunctionCallExpression("merge", ref, set).AsValue()
+		mod.Settings.Set(labels, merged) // = merge(vars.labels, {...labels_from_settings...})
+	} else {
+		mod.Settings.Set(labels, ref) // = vars.labels
+	}
 }
 
 // mergeMaps takes an arbitrary number of maps, and returns a single map that contains
@@ -275,16 +290,7 @@ func (bp Blueprint) applyGlobalVarsInModule(mod *Module) error {
 		if bp.Vars.Has(input.Name) {
 			ref := GlobalRef(input.Name)
 			mod.Settings.Set(input.Name, ref.AsExpression().AsValue())
-			continue
 		}
-
-		if input.Required {
-			// It's not explicitly set, and not global is set
-			// Fail if no default has been set
-			return fmt.Errorf("%s: Module ID: %s Setting: %s",
-				errorMessages["missingSetting"], mod.ID, input.Name)
-		}
-		// Default exists, the module will handle it
 	}
 	return nil
 }
@@ -316,7 +322,7 @@ func validateModuleReference(bp Blueprint, from Module, toID ModuleID) error {
 	}
 
 	if to.Kind == PackerKind {
-		return fmt.Errorf("%s: %s", errorMessages["cannotUsePacker"], to.ID)
+		return fmt.Errorf("%s: %s", errMsgCannotUsePacker, to.ID)
 	}
 
 	fg := bp.ModuleGroupOrDie(from.ID)
@@ -324,7 +330,7 @@ func validateModuleReference(bp Blueprint, from Module, toID ModuleID) error {
 	fgi := slices.IndexFunc(bp.DeploymentGroups, func(g DeploymentGroup) bool { return g.Name == fg.Name })
 	tgi := slices.IndexFunc(bp.DeploymentGroups, func(g DeploymentGroup) bool { return g.Name == tg.Name })
 	if tgi > fgi {
-		return fmt.Errorf("%s: %s is in a later group", errorMessages["intergroupOrder"], to.ID)
+		return fmt.Errorf("%s: %s is in a later group", errMsgIntergroupOrder, to.ID)
 	}
 	return nil
 }
@@ -356,7 +362,7 @@ func validateModuleSettingReference(bp Blueprint, mod Module, r Reference) error
 	}
 	found := slices.ContainsFunc(mi.Outputs, func(o modulereader.OutputInfo) bool { return o.Name == r.Name })
 	if !found {
-		return fmt.Errorf("%s: module %s did not have output %s", errorMessages["noOutput"], tm.ID, r.Name)
+		return fmt.Errorf("%s: module %s did not have output %s", errMsgNoOutput, tm.ID, r.Name)
 	}
 	return nil
 }
@@ -438,22 +444,23 @@ func (dg DeploymentGroup) OutputNames() []string {
 
 // OutputNamesByGroup returns the outputs from prior groups that match input
 // names for this group as a map
-func OutputNamesByGroup(g DeploymentGroup, dc DeploymentConfig) (map[GroupName][]string, error) {
-	refs := g.FindAllIntergroupReferences(dc.Config)
-	inputNames := make([]string, len(refs))
+func OutputNamesByGroup(g DeploymentGroup, bp Blueprint) (map[GroupName][]string, error) {
+	refs := g.FindAllIntergroupReferences(bp)
+	inputs := make([]string, len(refs))
 	for i, ref := range refs {
-		inputNames[i] = AutomaticOutputName(ref.Name, ref.Module)
+		inputs[i] = AutomaticOutputName(ref.Name, ref.Module)
 	}
 
-	i := dc.Config.GroupIndex(g.Name)
+	i := bp.GroupIndex(g.Name)
 	if i == -1 {
 		return nil, fmt.Errorf("group %s not found in blueprint", g.Name)
 	}
-	outputNamesByGroup := make(map[GroupName][]string)
-	for _, g := range dc.Config.DeploymentGroups[:i] {
-		outputNamesByGroup[g.Name] = intersection(inputNames, g.OutputNames())
+
+	res := make(map[GroupName][]string)
+	for _, pg := range bp.DeploymentGroups[:i] {
+		res[pg.Name] = intersection(inputs, pg.OutputNames())
 	}
-	return outputNamesByGroup, nil
+	return res, nil
 }
 
 // return sorted list of elements common to s1 and s2

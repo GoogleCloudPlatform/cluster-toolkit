@@ -23,6 +23,7 @@ locals {
   profile_script = <<-EOF
     SPACK_PYTHON=${var.spack_virtualenv_path}/bin/python3
     if [ -f ${var.install_dir}/share/spack/setup-env.sh ]; then
+          test -t 1 && echo "Running Spack setup, this may take a moment on first login."
           . ${var.install_dir}/share/spack/setup-env.sh
     fi
   EOF
@@ -38,7 +39,7 @@ locals {
 
   finalize_setup_script = <<-EOF
     set -e
-    . /etc/profile.d/spack.sh
+    . ${var.spack_profile_script_path}
     spack config --scope site add 'packages:all:permissions:read:world'
     spack gpg init
     spack compiler find --scope site
@@ -57,13 +58,15 @@ locals {
       chgrp_group           = var.chgrp_group == null ? "" : var.chgrp_group
       chmod_mode            = var.chmod_mode == null ? "" : var.chmod_mode
       finalize_setup_script = indent(4, yamlencode(local.finalize_setup_script))
+      profile_script_path   = var.spack_profile_script_path
     }
   )
+
   install_spack_deps_runner = {
     "type"        = "ansible-local"
     "source"      = "${path.module}/scripts/install_spack_deps.yml"
     "destination" = "install_spack_deps.yml"
-    "args"        = "-e spack_virtualenv_path=${var.spack_virtualenv_path}"
+    "args"        = "-e virtualenv_path=${var.spack_virtualenv_path}"
   }
   install_spack_runner = {
     "type"        = "ansible-local"
@@ -92,7 +95,7 @@ resource "google_storage_bucket" "bucket" {
 }
 
 module "startup_script" {
-  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=v1.22.1"
+  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=50644b2"
 
   labels          = local.labels
   project_id      = var.project_id

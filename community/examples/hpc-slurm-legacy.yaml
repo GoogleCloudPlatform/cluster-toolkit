@@ -69,6 +69,7 @@ deployment_groups:
       enable_placement: false
       exclusive: false
       machine_type: n2-standard-4
+      bandwidth_tier: gvnic_enabled
 
   # This compute_partition is far more performant than low_cost_partition.
   - id: compute_partition
@@ -81,6 +82,7 @@ deployment_groups:
     settings:
       max_node_count: 200
       partition_name: compute
+      bandwidth_tier: gvnic_enabled
 
   - id: slurm_controller
     source: community/modules/scheduler/SchedMD-slurm-on-gcp-controller

@@ -20,8 +20,8 @@ blueprint_yaml: "{{ workspace }}/examples/serverless-batch.yaml"
 network: "default"
 remote_node: "{{ deployment_name }}-batch-login"
 post_deploy_tests:
-- test-batch-submission.yml
-- test-mounts.yml
+- test-validation/test-batch-submission.yml
+- test-validation/test-mounts.yml
 custom_vars:
   project: "{{ project }}"
   mounts: [/sw]

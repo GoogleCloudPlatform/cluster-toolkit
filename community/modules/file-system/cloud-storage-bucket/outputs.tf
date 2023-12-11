@@ -62,3 +62,8 @@ output "gcs_bucket_path" {
     google_storage_bucket.bucket
   ]
 }
+
+output "gcs_bucket_name" {
+  description = "Bucket name."
+  value       = google_storage_bucket.bucket.name
+}

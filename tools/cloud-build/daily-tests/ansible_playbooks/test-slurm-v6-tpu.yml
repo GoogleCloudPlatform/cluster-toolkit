@@ -1,0 +1,91 @@
+# Copyright 2022 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+- name: Assert variables are defined
+  ansible.builtin.assert:
+    that:
+    - custom_vars.partitions is defined
+
+- name: Get partition info
+  ansible.builtin.command: sinfo --format='%P' --noheader
+  changed_when: False
+  register: partition_output
+  retries: 10
+  delay: 12
+  until: partition_output.rc == 0
+
+- name: Count Slurm nodes
+  ansible.builtin.shell:
+    sinfo -t 'IDLE&POWERED_DOWN' --noheader --format "%n"
+  args:
+    executable: /bin/bash
+  changed_when: False
+  register: initial_node_count
+
+- name: Check partitions exist
+  ansible.builtin.fail:
+    msg: Test Check Partitions failed
+  when: item not in partition_output.stdout
+  loop: "{{ custom_vars.partitions }}"
+
+- name: Run JAX verification
+  register: jax_status
+  failed_when: jax_status.rc != 0
+  ansible.builtin.command: |
+    srun -N 1 -p tpu bash -c '
+    pip install --upgrade 'jax[tpu]>0.3.0' -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
+    python3 -c "
+    import sys
+    import jax
+
+    want_device_count=8
+    want_local_device_count=8
+    want_pmap_result=jax.pmap(lambda x: jax.lax.psum(x, \"i\"), axis_name=\"i\")(jax.numpy.ones(want_local_device_count))
+
+    # The total number of TPU cores in the Pod
+    device_count=jax.device_count(\"tpu\")
+
+    # The number of TPU cores attached to this host
+    local_device_count = jax.local_device_count()
+
+    # The psum is performed over all mapped devices across the Pod
+    xs = jax.numpy.ones(jax.local_device_count())
+    r = jax.pmap(lambda x: jax.lax.psum(x, \"i\"), axis_name=\"i\")(xs)
+
+    # Print from a single host to avoid duplicated output
+    if jax.process_index() == 0:
+      print(\"global device count:\", jax.device_count(\"tpu\"))
+      print(\"local device count:\", jax.local_device_count(\"tpu\"))
+      print(\"pmap result:\", r)
+
+      # Compare the result and return error code
+      if device_count != want_device_count:
+        print(\"error: got device count \", device_count)
+        sys.exit(1)
+      if local_device_count != want_local_device_count:
+        print(\"error: got local device count \", local_device_count)
+        sys.exit(1)
+      if not jax.numpy.allclose(r, want_pmap_result):
+        print(\"error: got pmap result \", r)
+        sys.exit(1)
+    else:
+      print(\"error: process index is non zero\")
+      sys.exit(1)
+    "'
+
+- name: Print debug output
+  ansible.builtin.debug:
+    var: jax_status.stdout_lines

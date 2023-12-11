@@ -44,7 +44,7 @@ resource "google_container_cluster" "gke_cluster" {
   location        = var.region
   resource_labels = local.labels
 
-  # decouple node pool lifecyle from cluster life cycle
+  # decouple node pool lifecycle from cluster life cycle
   remove_default_node_pool = true
   initial_node_count       = 1 # must be set when remove_default_node_pool is set
 
@@ -170,7 +170,7 @@ resource "google_container_cluster" "gke_cluster" {
   monitoring_service = "monitoring.googleapis.com/kubernetes"
 }
 
-# We define explict node pools, so that it can be modified without
+# We define explicit node pools, so that it can be modified without
 # having to destroy the entire cluster.
 resource "google_container_node_pool" "system_node_pools" {
   provider = google-beta
@@ -202,7 +202,7 @@ resource "google_container_node_pool" "system_node_pools" {
     taint           = var.system_node_pool_taints
 
     # Forcing the use of the Container-optimized image, as it is the only
-    # image with the proper logging deamon installed.
+    # image with the proper logging daemon installed.
     #
     # cos images use Shielded VMs since v1.13.6-gke.0.
     # https://cloud.google.com/kubernetes-engine/docs/how-to/node-images
@@ -275,4 +275,30 @@ resource "google_project_iam_member" "node_service_account_artifact_registry" {
   project = var.project_id
   role    = "roles/artifactregistry.reader"
   member  = "serviceAccount:${local.sa_email}"
+}
+
+data "google_client_config" "default" {}
+
+provider "kubernetes" {
+  host                   = "https://${google_container_cluster.gke_cluster.endpoint}"
+  cluster_ca_certificate = base64decode(google_container_cluster.gke_cluster.master_auth[0].cluster_ca_certificate)
+  token                  = data.google_client_config.default.access_token
+}
+
+module "workload_identity" {
+  count   = var.configure_workload_identity_sa ? 1 : 0
+  source  = "terraform-google-modules/kubernetes-engine/google//modules/workload-identity"
+  version = "29.0.0"
+
+  use_existing_gcp_sa = true
+  name                = "workload-identity-k8-sa"
+  gcp_sa_name         = local.sa_email
+  project_id          = var.project_id
+  roles               = var.enable_gcsfuse_csi ? ["roles/storage.admin"] : []
+
+  # https://github.com/terraform-google-modules/terraform-google-kubernetes-engine/issues/1059
+  depends_on = [
+    data.google_compute_default_service_account.default_sa,
+    google_container_cluster.gke_cluster
+  ]
 }
