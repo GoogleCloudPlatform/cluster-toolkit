@@ -916,7 +916,7 @@ deploy_from_config() {
 	ip_address=${yaml_array[ip_address]}
 	django_superuser_username=${yaml_array[django_superuser_username]}
 	django_superuser_email=${yaml_array[django_superuser_email]}
-	deployment_mode=${yaml_array[deployment_mode]:-git}
+	deployment_mode=${yaml_array[deployment_mode]:-tarball}
 	repo_fork=${yaml_array[repo_fork]:-GoogleCloudPlatform}
 	repo_branch=${yaml_array[repo_branch]:-main}
 
