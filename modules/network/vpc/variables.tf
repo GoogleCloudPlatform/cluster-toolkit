@@ -31,6 +31,7 @@ variable "subnetwork_name" {
   default     = null
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "subnetwork_size" {
   description = "DEPRECATED: please see https://goo.gle/hpc-toolkit-vpc-deprecation for migration instructions"
   type        = number
@@ -117,6 +118,7 @@ variable "subnetworks" {
   }
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "primary_subnetwork" {
   description = "DEPRECATED: please see https://goo.gle/hpc-toolkit-vpc-deprecation for migration instructions"
   type        = map(string)
@@ -127,6 +129,7 @@ variable "primary_subnetwork" {
   }
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "additional_subnetworks" {
   description = "DEPRECATED: please see https://goo.gle/hpc-toolkit-vpc-deprecation for migration instructions"
   type        = list(map(string))

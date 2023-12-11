@@ -90,6 +90,7 @@ variable "labels" {
 
 # variables to be deprecated
 
+# tflint-ignore: terraform_unused_declarations
 variable "log_file" {
   description = <<-EOT
   DEPRECATED 
@@ -105,6 +106,7 @@ variable "log_file" {
   }
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "spack_cache_url" {
   description = <<-EOT
   DEPRECATED
@@ -129,6 +131,7 @@ variable "spack_cache_url" {
   }
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "configs" {
   description = <<-EOT
   DEPRECATED
@@ -151,6 +154,7 @@ variable "configs" {
   }
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "compilers" {
   description = <<-EOT
   DEPRECATED
@@ -175,6 +179,7 @@ variable "compilers" {
   }
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "licenses" {
   description = <<-EOT
   DEPRECATED
@@ -202,6 +207,7 @@ variable "licenses" {
   }
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "packages" {
   description = <<-EOT
   DEPRECATED
@@ -222,6 +228,7 @@ variable "packages" {
   }
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "install_flags" {
   description = "DEPRECATED - spack install is now performed using the [spack-execute](../spack-execute/) module `commands` variable."
   default     = null
@@ -232,6 +239,7 @@ variable "install_flags" {
   }
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "concretize_flags" {
   description = "DEPRECATED - spack concretize is now performed using the [spack-execute](../spack-execute/) module `commands` variable."
   default     = null
@@ -242,6 +250,7 @@ variable "concretize_flags" {
   }
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "gpg_keys" {
   description = <<EOT
   DEPRECATED
@@ -265,6 +274,7 @@ EOT
   }
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "caches_to_populate" {
   description = <<-EOT
   DEPRECATED
@@ -295,6 +305,7 @@ EOT
   }
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "environments" {
   description = <<-EOT
   DEPRECATED
