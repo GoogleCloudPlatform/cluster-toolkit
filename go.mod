@@ -5,7 +5,7 @@ go 1.20
 require (
 	cloud.google.com/go/compute v1.23.3 // indirect
 	cloud.google.com/go/storage v1.35.1 // indirect
-	github.com/go-git/go-git/v5 v5.10.1
+	github.com/go-git/go-git/v5 v5.11.0
 	github.com/hashicorp/go-getter v1.7.3
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/hashicorp/hcl/v2 v2.19.1
