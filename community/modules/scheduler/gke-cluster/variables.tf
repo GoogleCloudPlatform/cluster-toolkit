@@ -258,6 +258,7 @@ variable "timeout_update" {
 }
 
 # Deprecated
+# tflint-ignore: terraform_unused_declarations
 variable "service_account" {
   description = "DEPRECATED: use service_account_email and scopes."
   type = object({
