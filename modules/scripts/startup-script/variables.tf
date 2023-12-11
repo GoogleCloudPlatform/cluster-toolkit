@@ -136,6 +136,7 @@ variable "configure_ssh_host_patterns" {
   default     = []
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "prepend_ansible_installer" {
   description = <<EOT
   DEPRECATED. Use `install_ansible=false` to prevent ansible installation.

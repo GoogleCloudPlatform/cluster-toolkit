@@ -31,6 +31,7 @@ variable "description" {
   default     = "Service Account"
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "descriptions" {
   description = "Deprecated; create single service accounts using var.description."
   type        = list(string)
@@ -71,6 +72,7 @@ variable "name" {
   type        = string
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "names" {
   description = "Deprecated; create single service accounts using var.name."
   type        = list(string)
@@ -88,6 +90,7 @@ variable "org_id" {
   default     = ""
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "prefix" {
   description = "Deprecated; prefix now set using var.deployment_name"
   type        = string
