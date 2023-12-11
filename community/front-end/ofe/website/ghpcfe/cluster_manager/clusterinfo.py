@@ -54,7 +54,7 @@ class ClusterInfo:
 
     def __init__(self, cluster):
         self.config = utils.load_config()
-        self.ghpc_path = self.config["baseDir"].parent.parent / "ghpc"
+        self.ghpc_path = "/opt/gcluster/hpc-toolkit/ghpc"
 
         self.cluster = cluster
         self.cluster_dir = (
@@ -531,7 +531,7 @@ deployment_groups:
             with log_out_fn.open("wb") as log_out:
                 with log_err_fn.open("wb") as log_err:
                     subprocess.run(
-                        [self.ghpc_path.as_posix(), "create", "cluster.yaml","-w"],
+                        [self.ghpc_path, "create", "cluster.yaml","-w"],
                         cwd=target_dir,
                         stdout=log_out,
                         stderr=log_err,

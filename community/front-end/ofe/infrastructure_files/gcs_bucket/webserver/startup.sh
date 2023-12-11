@@ -168,7 +168,7 @@ rm -rf /usr/local/go && tar -C /usr/local -xzf "/tmp/go${GO_VERSION}.linux-amd64
 echo 'export PATH=$PATH:/usr/local/go/bin:~/go/bin' >>/etc/bashrc
 
 sudo su - gcluster -c /bin/bash <<EOF
-  cd /opt/gcluster/hpc-toolkit/community/front-end
+  cd /opt/gcluster/hpc-toolkit/community/front-end/ofe
 
   printf "\nDownloading Frontend dependencies...\n"
   mkdir dependencies
