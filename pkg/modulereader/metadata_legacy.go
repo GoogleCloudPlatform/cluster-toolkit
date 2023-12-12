@@ -16,9 +16,11 @@ package modulereader
 
 import (
 	"strings"
+
+	"github.com/GoogleCloudPlatform/cloud-foundation-toolkit/cli/bpmetadata"
 )
 
-func legacyMetadata(source string) Metadata {
+func legacyMetadata(source string) *bpmetadata.BlueprintMetadata {
 	services := []string{}
 	if idx := strings.LastIndex(source, "community/modules/"); idx != -1 {
 		services = defaultAPIList(source[idx:])
@@ -26,9 +28,9 @@ func legacyMetadata(source string) Metadata {
 		services = defaultAPIList(source[idx:])
 	}
 
-	return Metadata{
-		Spec: MetadataSpec{
-			Requirements: MetadataRequirements{
+	return &bpmetadata.BlueprintMetadata{
+		Spec: &bpmetadata.BlueprintMetadataSpec{
+			Requirements: &bpmetadata.BlueprintRequirements{
 				Services: services,
 			},
 		},

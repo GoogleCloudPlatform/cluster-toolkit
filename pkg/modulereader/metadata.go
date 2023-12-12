@@ -20,32 +20,16 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/GoogleCloudPlatform/cloud-foundation-toolkit/cli/bpmetadata"
 	"gopkg.in/yaml.v3"
 )
 
-// Metadata corresponds to BlueprintMetadata in CFT schema
-// See https://github.com/GoogleCloudPlatform/cloud-foundation-toolkit/blob/master/cli/bpmetadata/schema/gcp-blueprint-metadata.json#L278
-type Metadata struct {
-	Spec MetadataSpec `yaml:"spec"`
-}
-
-// MetadataSpec corresponds to BlueprintMetadataSpec in CFT schema
-// See https://github.com/GoogleCloudPlatform/cloud-foundation-toolkit/blob/master/cli/bpmetadata/schema/gcp-blueprint-metadata.json#L299
-type MetadataSpec struct {
-	Requirements MetadataRequirements `yaml:"requirements"`
-}
-
-// MetadataRequirements corresponds to BlueprintRequirements in CFT schema
-// See https://github.com/GoogleCloudPlatform/cloud-foundation-toolkit/blob/master/cli/bpmetadata/schema/gcp-blueprint-metadata.json#L416
-type MetadataRequirements struct {
-	Services []string `yaml:"services"`
-}
-
 // GetMetadata reads and parses `metadata.yaml` from module root.
 // Expects source to be either a local or embedded path.
-func GetMetadata(source string) (Metadata, error) {
+func GetMetadata(source string) (*bpmetadata.BlueprintMetadata, error) {
 	var err error
 	var data []byte
+	// TODO: use bpmetadata.UnmarshalMetadata, it performs some additional checks
 	filePath := filepath.Join(source, "metadata.yaml")
 
 	switch {
@@ -60,17 +44,17 @@ func GetMetadata(source string) (Metadata, error) {
 		err = errors.New("source must be local or embedded")
 	}
 	if err != nil {
-		return Metadata{}, err
+		return nil, err
 	}
 
-	var mtd Metadata
+	var mtd bpmetadata.BlueprintMetadata
 	err = yaml.Unmarshal(data, &mtd)
-	return mtd, err
+	return &mtd, err
 }
 
 // GetMetadataSafe attempts to GetMetadata if it fails returns
 // hardcoded legacy metadata.
-func GetMetadataSafe(source string) Metadata {
+func GetMetadataSafe(source string) *bpmetadata.BlueprintMetadata {
 	if mtd, err := GetMetadata(source); err == nil {
 		return mtd
 	}

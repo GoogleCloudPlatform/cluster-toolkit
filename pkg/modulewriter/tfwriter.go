@@ -152,7 +152,7 @@ func writeVariables(vars map[string]cty.Value, extraVars []modulereader.VarInfo,
 		inputs = append(inputs, newInput)
 	}
 	inputs = append(inputs, extraVars...)
-	slices.SortFunc(inputs, func(i, j modulereader.VarInfo) bool { return i.Name < j.Name })
+	slices.SortFunc(inputs, func(i, j modulereader.VarInfo) int { return strings.Compare(i.Name, j.Name) })
 
 	// Create HCL Body
 	hclFile := hclwrite.NewEmptyFile()
