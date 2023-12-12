@@ -272,8 +272,7 @@ func prepDepDir(depDir string) error {
 	if err := deploymentio.CreateDirectory(depDir); err != nil {
 		// Confirm we have a previously written deployment dir before overwriting.
 		if _, err := os.Stat(ghpcDir); os.IsNotExist(err) {
-			return fmt.Errorf(
-				"while trying to update the deployment directory at %s, the '.ghpc/' dir could not be found", depDir)
+			return fmt.Errorf("while trying to update the deployment directory at %s, the '.ghpc/' dir could not be found", depDir)
 		}
 	} else {
 		if err := deploymentio.CreateDirectory(ghpcDir); err != nil {
