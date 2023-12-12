@@ -17,7 +17,6 @@ limitations under the License.
 package modulewriter
 
 import (
-	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/deploymentio"
@@ -674,4 +673,18 @@ func (s *zeroSuite) TestSubstituteIgcReferencesInModule(c *C) {
 		config.MustParseExpression(`var.pink + 6 + var.lime`).AsValue(),
 		config.MustParseExpression(`module.tennis.brown`).AsValue(),
 	})})
+}
+
+func (s *zeroSuite) TestWritePackerDestroyInstructions(c *C) {
+	{ // no manifest
+		b := new(strings.Builder)
+		WritePackerDestroyInstructions(b, nil)
+		c.Check(b.String(), Equals, "")
+	}
+	{ // with manifest
+		b := new(strings.Builder)
+		WritePackerDestroyInstructions(b, []string{"Aldebaran", "Betelgeuse"})
+		got := strings.ReplaceAll(b.String(), "\n", "") // one-line to simplify matcher
+		c.Check(got, Matches, ".*Aldebaran.*Betelgeuse.*")
+	}
 }

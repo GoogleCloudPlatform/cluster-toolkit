@@ -354,9 +354,7 @@ func (w TFWriter) restoreState(deploymentDir string) error {
 	prevDeploymentGroupPath := filepath.Join(HiddenGhpcDir(deploymentDir), prevDeploymentGroupDirName)
 	files, err := os.ReadDir(prevDeploymentGroupPath)
 	if err != nil {
-		return fmt.Errorf(
-			"error trying to read previous modules in %s, %w",
-			prevDeploymentGroupPath, err)
+		return fmt.Errorf("error trying to read previous modules in %s, %w", prevDeploymentGroupPath, err)
 	}
 
 	for _, f := range files {
