@@ -49,13 +49,31 @@ dnf install -y epel-release
 dnf update -y --security
 dnf config-manager --add-repo https://rpm.releases.hashicorp.com/RHEL/hashicorp.repo
 dnf install --best -y google-cloud-sdk nano make gcc python38-devel unzip git \
-	rsync nginx bind-utils policycoreutils-python-utils \
-	terraform packer supervisor python3-certbot-nginx \
-	grafana
+	rsync wget nginx bind-utils policycoreutils-python-utils \
+	terraform packer supervisor python3-certbot-nginx
 curl --silent --show-error --location https://github.com/mikefarah/yq/releases/download/v4.13.4/yq_linux_amd64 --output /usr/local/bin/yq
 chmod +x /usr/local/bin/yq
 curl --silent --show-error --location https://github.com/koalaman/shellcheck/releases/download/stable/shellcheck-stable.linux.x86_64.tar.xz --output /tmp/shellcheck.tar.xz
 tar xfa /tmp/shellcheck.tar.xz --strip=1 --directory /usr/local/bin
+
+# Install Grafana
+curl -sSL -o gpg.key https://rpm.grafana.com/gpg.key
+rpm --import gpg.key
+
+tee /etc/yum.repos.d/grafana.repo <<EOL
+[grafana]
+name=grafana
+baseurl=https://rpm.grafana.com
+repo_gpgcheck=1
+enabled=1
+gpgcheck=1
+gpgkey=https://rpm.grafana.com/gpg.key
+sslverify=1
+sslcacert=/etc/pki/tls/certs/ca-bundle.crt
+exclude=*beta*
+EOL
+
+dnf install -y grafana
 
 # Packages for https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/scheduler/schedmd-slurm-gcp-v5-controller#input_enable_cleanup_compute
 pip3.8 install google-api-python-client \
@@ -150,7 +168,7 @@ rm -rf /usr/local/go && tar -C /usr/local -xzf "/tmp/go${GO_VERSION}.linux-amd64
 echo 'export PATH=$PATH:/usr/local/go/bin:~/go/bin' >>/etc/bashrc
 
 sudo su - gcluster -c /bin/bash <<EOF
-  cd /opt/gcluster/hpc-toolkit/community/front-end
+  cd /opt/gcluster/hpc-toolkit/community/front-end/ofe
 
   printf "\nDownloading Frontend dependencies...\n"
   mkdir dependencies
@@ -209,13 +227,15 @@ EOF
 
 # Tweak Grafana settings
 #
-sed -i \
-	-e '/^\[server]/,/^\[/{s/serve_from_sub_path = false/serve_from_sub_path = true/}' \
-	-e '/^\[server]/,/^\[/{s/root_url = \(.*\)\/$/root_url = \1\/grafana\//}' \
-	-e '/^\[auth.proxy]/,/^\[/{s/enabled = false/enabled = true/}' \
-	-e '/^\[auth.proxy]/,/^\[/{s/whitelist =.*/whitelist = 127.0.0.1/}' \
-	-e '/^\[auth.proxy]/,/^\[/{s/header_property =.*/header_property = email/}' \
-	/etc/grafana/grafana.ini
+cat <<EOL >/etc/grafana/grafana.ini
+[server]
+serve_from_sub_path = true
+root_url = %(protocol)s://%(domain)s:%(http_port)s/grafana/
+[auth.proxy]
+enabled = true
+whitelist = 127.0.0.1
+header_property = email
+EOL
 
 printf "Creating supervisord service..."
 echo "[program:gcluster-uvicorn-background]

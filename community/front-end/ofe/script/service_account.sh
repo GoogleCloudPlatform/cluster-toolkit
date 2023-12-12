@@ -60,7 +60,11 @@ SA_ROLES=('aiplatform.admin'
 	'notebooks.admin'
 	'resourcemanager.projectIamAdmin'
 	'monitoring.viewer'
-	'pubsub.admin')
+	'pubsub.admin'
+	'cloudsql.admin'
+	'bigquery.admin'
+	'secretmanager.admin'
+	'servicenetworking.networksAdmin')
 
 #
 #

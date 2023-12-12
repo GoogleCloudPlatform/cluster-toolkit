@@ -53,6 +53,8 @@ PRJ_API['iam.googleapis.com']='Identity and Access Management (IAM) API'
 PRJ_API['oslogin.googleapis.com']='Cloud OS Login API'
 PRJ_API['cloudbilling.googleapis.com']='Cloud Billing API'
 PRJ_API['aiplatform.googleapis.com']='Vertex AI API'
+PRJ_API['bigqueryconnection.googleapis.com']='BigQuery Connection API'
+PRJ_API['sqladmin.googleapis.com']='Cloud SQL Admin API'
 
 # Location for output credential file = pwd/credential.json
 #
@@ -914,7 +916,7 @@ deploy_from_config() {
 	ip_address=${yaml_array[ip_address]}
 	django_superuser_username=${yaml_array[django_superuser_username]}
 	django_superuser_email=${yaml_array[django_superuser_email]}
-	deployment_mode=${yaml_array[deployment_mode]:-git}
+	deployment_mode=${yaml_array[deployment_mode]:-tarball}
 	repo_fork=${yaml_array[repo_fork]:-GoogleCloudPlatform}
 	repo_branch=${yaml_array[repo_branch]:-main}
 

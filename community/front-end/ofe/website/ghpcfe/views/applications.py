@@ -252,6 +252,15 @@ class SpackApplicationCreateView(LoginRequiredMixin, generic.CreateView):
                 f"@{self.object.version}"
                 f'{self.object.spack_spec if self.object.spack_spec else ""}'
             )
+
+        # Check if install_partition is not null
+        if not self.object.install_partition:
+            messages.error(
+                self.request,
+                'Please select an "Install Partition" before saving the application.'
+            )
+            return self.form_invalid(form)
+
         self.object.save()
         form.save_m2m()
         messages.success(
@@ -350,7 +359,7 @@ class ApplicationViewSet(viewsets.ModelViewSet):
     serializer_class = ApplicationSerializer
 
 
-class SpackPackageViewSet(viewsets.ViewSet):
+class SpackPackageViewSet(LoginRequiredMixin, viewsets.ViewSet):
     """Download a list of Spack packages available"""
 
     def list(self, request):
