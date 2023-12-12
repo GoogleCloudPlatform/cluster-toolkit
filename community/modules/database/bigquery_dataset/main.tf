@@ -18,7 +18,7 @@ locals {
   labels = merge(var.labels, { ghpc_module = "bigquery_dataset", ghpc_role = "database" })
 }
 locals {
-  dataset_id = var.dataset_id != null ? var.dataset_id : "${var.deployment_name}_dataset_${random_id.resource_name_suffix.hex}"
+  dataset_id = var.dataset_id != null ? var.dataset_id : replace("${var.deployment_name}_dataset_${random_id.resource_name_suffix.hex}", "-", "_")
 }
 
 resource "random_id" "resource_name_suffix" {

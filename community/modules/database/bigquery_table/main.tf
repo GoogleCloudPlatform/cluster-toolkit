@@ -20,7 +20,7 @@ locals {
 }
 
 locals {
-  table_id = var.table_id != null ? var.table_id : "${var.deployment_name}_table_${random_id.resource_name_suffix.hex}"
+  table_id = var.table_id != null ? var.table_id : replace("${var.deployment_name}_table_${random_id.resource_name_suffix.hex}", "-", "_")
 }
 
 resource "random_id" "resource_name_suffix" {
