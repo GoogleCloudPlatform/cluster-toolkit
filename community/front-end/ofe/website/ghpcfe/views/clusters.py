@@ -396,7 +396,7 @@ class ClusterUpdateView(LoginRequiredMixin, UpdateView):
             form.add_error("login_node_disk_type", "Invalid Disk Type")
             return self.form_invalid(form)
 
-        # Verify formset validity (suprised there's no method to do this)
+        # Verify formset validity (surprised there's no method to do this)
         for formset, formset_name in [
             (mountpoints, "mountpoints"),
             (partitions, "partitions"),
