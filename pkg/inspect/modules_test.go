@@ -171,8 +171,8 @@ func TestMetadataIsObtainable(t *testing.T) {
 func TestMetadataHasServices(t *testing.T) {
 	for _, mod := range notEmpty(query(all()), t) {
 		t.Run(mod.Source, func(t *testing.T) {
-			if mod.Metadata.Spec.Requirements.Services == nil {
-				t.Error("metadata has no requirements")
+			if mod.Metadata.GetSpec().GetRequirements().GetServices() == nil {
+				t.Error("metadata has no spec.requirements.services set")
 			}
 		})
 	}

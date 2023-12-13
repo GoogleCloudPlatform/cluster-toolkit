@@ -191,7 +191,7 @@ func testApisEnabled(bp config.Blueprint, inputs config.Dict) error {
 	}
 	apis := map[string]bool{}
 	bp.WalkModules(func(m *config.Module) error {
-		services := m.InfoOrDie().Metadata.Spec.Requirements.Services
+		services := m.InfoOrDie().Metadata.GetSpec().GetRequirements().GetServices()
 		for _, api := range services {
 			apis[api] = true
 		}
