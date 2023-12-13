@@ -79,7 +79,7 @@ No modules.
 | <a name="input_instance_image"></a> [instance\_image](#input\_instance\_image) | Instance Image | `map(string)` | <pre>{<br>  "family": "tf-latest-cpu",<br>  "name": null,<br>  "project": "deeplearning-platform-release"<br>}</pre> | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the resource Key-value pairs. | `map(string)` | n/a | yes |
 | <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | The machine type to employ | `string` | n/a | yes |
-| <a name="input_mount_runner"></a> [mount\_runner](#input\_mount\_runner) | mount content from the google-cloud-storage module | `any` | n/a | yes |
+| <a name="input_mount_runner"></a> [mount\_runner](#input\_mount\_runner) | mount content from the google-cloud-storage module | `map(string)` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | ID of project in which the notebook will be created. | `string` | n/a | yes |
 | <a name="input_zone"></a> [zone](#input\_zone) | The zone to deploy to | `string` | n/a | yes |
 

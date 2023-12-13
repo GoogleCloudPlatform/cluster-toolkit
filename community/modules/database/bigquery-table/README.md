@@ -72,7 +72,7 @@ No modules.
 |------|-------------|------|---------|:--------:|
 | <a name="input_dataset_id"></a> [dataset\_id](#input\_dataset\_id) | Dataset name to be used to create the new BQ Table | `string` | n/a | yes |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | The name of the current deployment | `string` | n/a | yes |
-| <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the instances. Key-value pairs. | `map(string)` | n/a | yes |
+| <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the tables. Key-value pairs. | `map(string)` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created | `string` | n/a | yes |
 | <a name="input_table_id"></a> [table\_id](#input\_table\_id) | Table name to be used to create the new BQ Table | `string` | `null` | no |
 | <a name="input_table_schema"></a> [table\_schema](#input\_table\_schema) | Schema used to create the new BQ Table | `string` | n/a | yes |

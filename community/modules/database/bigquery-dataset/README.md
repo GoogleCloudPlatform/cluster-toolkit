@@ -65,7 +65,7 @@ No modules.
 |------|-------------|------|---------|:--------:|
 | <a name="input_dataset_id"></a> [dataset\_id](#input\_dataset\_id) | The name of the dataset to be created | `string` | `null` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | The name of the current deployment | `string` | n/a | yes |
-| <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the instances. Key-value pairs. | `map(string)` | n/a | yes |
+| <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the dataset. Key-value pairs. | `map(string)` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created | `string` | n/a | yes |
 
 ## Outputs
