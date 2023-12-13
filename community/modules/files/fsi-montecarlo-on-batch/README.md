@@ -11,7 +11,7 @@ Primarily used for FSI - MonteCarlo Tutorial **[fsi-montecarlo-on-batch-tutorial
 This copies the module files to the specified GCS bucket. It is expected that
 the bucket will be mounted on the target VM.
 
-Some of the files are templates, and `main.tf` translates the files with the 
+Some of the files are templates, and `main.tf` translates the files with the
 passed variable values. This way the user does not have to change things like
 pointing to the correct bigquery table or adding in the project_id.
 
@@ -20,6 +20,8 @@ pointing to the correct bigquery table or adding in the project_id.
     source: community/modules/files/fsi-montecarlo-on-batch
     use: [bq-dataset, bq-table, fsi_bucket, pubsub_topic]
 ```
+
+## License
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 Copyright 2023 Google LLC

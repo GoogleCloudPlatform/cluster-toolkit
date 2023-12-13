@@ -15,4 +15,4 @@
 
 spec:
   requirements:
-    services: []
+    services: [storage.googleapis.com]

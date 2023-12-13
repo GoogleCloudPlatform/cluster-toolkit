@@ -26,6 +26,8 @@ This is a simple usage:
 
 ```
 
+## License
+
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 Copyright 2023 Google LLC
 
@@ -72,13 +74,13 @@ No modules.
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the HPC deployment; used as part of name of the GCS bucket. | `string` | n/a | yes |
-| <a name="input_gcs_bucket_path"></a> [gcs\_bucket\_path](#input\_gcs\_bucket\_path) | Bucket name | `string` | `null` | no |
+| <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the HPC deployment; used as part of name of the notebook. | `string` | n/a | yes |
+| <a name="input_gcs_bucket_path"></a> [gcs\_bucket\_path](#input\_gcs\_bucket\_path) | Bucket name, can be provided from the google-cloud-storage module | `string` | `null` | no |
 | <a name="input_instance_image"></a> [instance\_image](#input\_instance\_image) | Instance Image | `map(string)` | <pre>{<br>  "family": "tf-latest-cpu",<br>  "name": null,<br>  "project": "deeplearning-platform-release"<br>}</pre> | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the resource Key-value pairs. | `map(string)` | n/a | yes |
 | <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | The machine type to employ | `string` | n/a | yes |
 | <a name="input_mount_runner"></a> [mount\_runner](#input\_mount\_runner) | mount content from the google-cloud-storage module | `any` | n/a | yes |
-| <a name="input_project_id"></a> [project\_id](#input\_project\_id) | ID of project in which GCS bucket will be created. | `string` | n/a | yes |
+| <a name="input_project_id"></a> [project\_id](#input\_project\_id) | ID of project in which the notebook will be created. | `string` | n/a | yes |
 | <a name="input_zone"></a> [zone](#input\_zone) | The zone to deploy to | `string` | n/a | yes |
 
 ## Outputs

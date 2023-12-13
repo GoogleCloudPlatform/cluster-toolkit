@@ -15,4 +15,6 @@
 
 spec:
   requirements:
-    services: [notebooks.googleapis.com]
+    services:
+    - notebooks.googleapis.com
+    - storage.googleapis.com

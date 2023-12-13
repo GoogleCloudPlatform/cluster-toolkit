@@ -6,6 +6,20 @@ Primarily used for FSI - MonteCarlo Tutorial: **[fsi-montecarlo-on-batch-tutoria
 
 [fsi-montecarlo-on-batch-tutorial]: ../docs/tutorials/fsi-montecarlo-on-batch/README.md
 
+### Example
+
+The following example creates a Pub/Sub topic.
+
+```yaml
+  - id: pubsub_topic
+    source: community/modules/pubsub/topic
+```
+
+Also see usages in this
+[example blueprint](../../../examples/fsi-montecarlo-on-batch.yaml).
+
+## License
+
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 Copyright 2023 Google LLC
 

@@ -36,7 +36,7 @@ variable "table_id" {
 }
 
 variable "dataset_id" {
-  description = "Table name to be used to create the new BQ Table"
+  description = "Dataset name to be used to create the new BQ Table"
   type        = string
 }
 

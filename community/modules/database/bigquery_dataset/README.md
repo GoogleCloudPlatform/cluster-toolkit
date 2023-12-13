@@ -16,6 +16,8 @@ This is a simple usage.
       dataset_id: my_dataset
 ```
 
+## License
+
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 Copyright 2023 Google LLC
 

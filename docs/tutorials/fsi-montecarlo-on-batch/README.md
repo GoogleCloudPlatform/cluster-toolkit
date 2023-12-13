@@ -204,7 +204,7 @@ or `Alt-Enter`.
 
 <img src="https://services.google.com/fh/files/blogs/fsi_output.png" width="500" />
 
-> Finally, when you run Cell #5, you will see graphs and table summaries.
+> Finally, when you run Cell #4, you will see graphs and table summaries.
 
 <img src="https://services.google.com/fh/files/blogs/fsi_graphs.png" width="600" />
 

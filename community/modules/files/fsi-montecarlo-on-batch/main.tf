@@ -35,7 +35,6 @@ data "template_file" "mc_run_py" {
 }
 
 resource "google_storage_bucket_object" "mc_run" {
-
   name    = "mc_run.py"
   content = data.template_file.mc_run_py.rendered
   bucket  = local.bucket
@@ -90,7 +89,6 @@ resource "google_storage_bucket_object" "get_requirements" {
   bucket  = local.bucket
 }
 
-
 resource "google_storage_bucket_object" "get_iteration_sh" {
   name    = "iteration.sh"
   content = file("${path.module}/iteration.sh")
@@ -98,7 +96,6 @@ resource "google_storage_bucket_object" "get_iteration_sh" {
 }
 
 resource "google_storage_bucket_object" "get_mc_reqs" {
-
   name    = "mc_run_reqs.txt"
   content = file("${path.module}/mc_run_reqs.txt")
   bucket  = local.bucket

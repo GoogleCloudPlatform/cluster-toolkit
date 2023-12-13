@@ -23,7 +23,7 @@ locals {
   suffix               = random_id.resource_name_suffix.hex
   name                 = "${var.deployment_name}-notebook-${local.suffix}"
   bucket               = replace(var.gcs_bucket_path, "gs://", "")
-  post_script_filename = "mount.sh"
+  post_script_filename = "mount-${local.suffix}.sh"
 
   # mount_runner_args is defined here: https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/3abddcfbd245b0e6747917a4e55b30658414ffd7/community/modules/file-system/cloud-storage-bucket/outputs.tf#L40
   mount_args = split(" ", var.mount_runner.args)
@@ -62,7 +62,7 @@ resource "google_notebooks_instance" "instance" {
 }
 
 resource "google_storage_bucket_object" "mount_script" {
-  name    = "mount.sh"
+  name    = local.post_script_filename
   content = local.content5
   bucket  = local.bucket
 }

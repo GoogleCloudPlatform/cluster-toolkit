@@ -15,12 +15,12 @@
  */
 
 variable "project_id" {
-  description = "ID of project in which GCS bucket will be created."
+  description = "ID of project in which the notebook will be created."
   type        = string
 }
 
 variable "deployment_name" {
-  description = "Name of the HPC deployment; used as part of name of the GCS bucket."
+  description = "Name of the HPC deployment; used as part of name of the notebook."
   type        = string
 }
 
@@ -60,7 +60,7 @@ variable "instance_image" {
 }
 
 variable "gcs_bucket_path" {
-  description = "Bucket name"
+  description = "Bucket name, can be provided from the google-cloud-storage module"
   type        = string
   default     = null
 }

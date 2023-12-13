@@ -15,6 +15,6 @@
 */
 
 output "subscription_id" {
-  description = "Name of the dataset that was created."
+  description = "Name of the subscription that was created."
   value       = google_pubsub_subscription.example.name
 }

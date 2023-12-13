@@ -13,9 +13,17 @@ id: bq-table
     source: community/modules/database/bigquery_table
     use: [bq-dataset]
     settings:
-      table_id: null
-      table_schema: 'json schema'
+      table_schema:
+        '
+        [
+          {
+            "name": "id", "type": "STRING"
+          }
+        ]
+        '
 ```
+
+## License
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 Copyright 2023 Google LLC
@@ -62,7 +70,7 @@ No modules.
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_dataset_id"></a> [dataset\_id](#input\_dataset\_id) | Table name to be used to create the new BQ Table | `string` | n/a | yes |
+| <a name="input_dataset_id"></a> [dataset\_id](#input\_dataset\_id) | Dataset name to be used to create the new BQ Table | `string` | n/a | yes |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | The name of the current deployment | `string` | n/a | yes |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the instances. Key-value pairs. | `map(string)` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created | `string` | n/a | yes |

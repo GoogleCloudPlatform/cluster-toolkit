@@ -1,3 +1,28 @@
+# Description
+
+This module creates a Bigquery Pub/Sub Subscription.
+
+Primarily used for FSI - MonteCarlo Tutorial:
+**[fsi-montecarlo-on-batch-tutorial]**.
+
+[fsi-montecarlo-on-batch-tutorial]: ../docs/tutorials/fsi-montecarlo-on-batch/README.md
+
+## Example
+
+The following example creates a Bigquery subscription using a Bigquery table and
+Pub/Sub topic.
+
+```yaml
+  - id: bq_subscription
+    source: community/modules/pubsub/bigquery-sub
+    use: [bq-table, pubsub_topic]
+```
+
+Also see usages in this
+[example blueprint](../../../examples/fsi-montecarlo-on-batch.yaml).
+
+## License
+
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 Copyright 2023 Google LLC
 
@@ -46,17 +71,17 @@ No modules.
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_dataset_id"></a> [dataset\_id](#input\_dataset\_id) | Name of the dataset that was created. | `string` | n/a | yes |
+| <a name="input_dataset_id"></a> [dataset\_id](#input\_dataset\_id) | Name of the dataset that was created. Can be provided by the bigquery\_table module | `string` | n/a | yes |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | The name of the current deployment | `string` | n/a | yes |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the instances. Key-value pairs. | `map(string)` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created | `string` | n/a | yes |
 | <a name="input_subscription_id"></a> [subscription\_id](#input\_subscription\_id) | The name of the pubsub subscription to be created | `string` | `null` | no |
-| <a name="input_table_id"></a> [table\_id](#input\_table\_id) | ID of created BQ table | `string` | n/a | yes |
-| <a name="input_topic_id"></a> [topic\_id](#input\_topic\_id) | The name of the pubsub topic to subscribe to. | `string` | `null` | no |
+| <a name="input_table_id"></a> [table\_id](#input\_table\_id) | ID of created BQ table. Can be provided by the bigquery\_table module | `string` | n/a | yes |
+| <a name="input_topic_id"></a> [topic\_id](#input\_topic\_id) | The name of the pubsub topic to subscribe to. Can be provided by the pubsub/topic module | `string` | `null` | no |
 
 ## Outputs
 
 | Name | Description |
 |------|-------------|
-| <a name="output_subscription_id"></a> [subscription\_id](#output\_subscription\_id) | Name of the dataset that was created. |
+| <a name="output_subscription_id"></a> [subscription\_id](#output\_subscription\_id) | Name of the subscription that was created. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

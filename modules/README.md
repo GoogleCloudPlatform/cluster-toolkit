@@ -56,9 +56,8 @@ Modules that are still in development and less stable are labeled with the
   Creates execution hosts for use in a PBS Professional cluster.
 * **[SchedMD-slurm-on-gcp-partition]** ![community-badge] ![deprecated-badge] : Creates a partition
   to be used by a [slurm-controller][schedmd-slurm-on-gcp-controller].
-* **[notebook]** ![community-badge] ![experimental-badge] : Creates a
-Vertex AI Notebook. Primarily used for [FSI - MonteCarlo Tutorial](
-  fsi-montecarlo-on-batch-tutorial).
+* **[notebook]** ![community-badge] ![experimental-badge] : Creates a Vertex AI
+  Notebook. Primarily used for [FSI - MonteCarlo Tutorial][fsi-montecarlo-on-batch-tutorial].
 
 [vm-instance]: compute/vm-instance/README.md
 [gke-node-pool]: ../community/modules/compute/gke-node-pool/README.md
@@ -79,12 +78,11 @@ Vertex AI Notebook. Primarily used for [FSI - MonteCarlo Tutorial](
 * **[slurm-cloudsql-federation]** ![community-badge] ![experimental-badge] :
   Creates a [Google SQL Instance](https://cloud.google.com/sql/) meant to be
   integrated with a [slurm-controller][schedmd-slurm-on-gcp-controller].
-
 * **[bigquery-dataset]** ![community-badge] ![experimental-badge] : Creates a BQ
-  dataset. Primarily used for [FSI - MonteCarlo Tutorial](fsi-montecarlo-on-batch-tutorial).
+  dataset. Primarily used for [FSI - MonteCarlo Tutorial][fsi-montecarlo-on-batch-tutorial].
 * **[bigquery-table]** ![community-badge] ![experimental-badge] : Creates a BQ
   table. Primarily used for
-  [FSI - MonteCarlo Tutorial](fsi-montecarlo-on-batch-tutorial).
+  [FSI - MonteCarlo Tutorial][fsi-montecarlo-on-batch-tutorial].
 
 [slurm-cloudsql-federation]: ../community/modules/database/slurm-cloudsql-federation/README.md
 [bigquery-dataset]: ../community/modules/database/bigquery_dataset/README.md
@@ -157,13 +155,13 @@ Vertex AI Notebook. Primarily used for [FSI - MonteCarlo Tutorial](
 
 ### Pub/Sub
 
-* **[pubsub-topic]** ![community-badge] ![experimental-badge] : Creates a
-Pub/Sub topic. Primarily used for [FSI - MonteCarlo Tutorial](fsi-montecarlo-on-batch-tutorial).
-* **[pubsub-subscription]** ![community-badge] ![experimental-badge] : Creates a
-Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial](fsi-montecarlo-on-batch-tutorial).
+* **[topic]** ![community-badge] ![experimental-badge] : Creates a
+Pub/Sub topic. Primarily used for [FSI - MonteCarlo Tutorial][fsi-montecarlo-on-batch-tutorial].
+* **[bigquery-sub]** ![community-badge] ![experimental-badge] : Creates a
+Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial][fsi-montecarlo-on-batch-tutorial].
 
-[pubsub-topic]: ../community/modules/pubsub/subscription/README.md
-[pubsub-subscription]: ../community/modules/pubsub/topic/README.md
+[topic]: ../community/modules/pubsub/topic/README.md
+[bigquery-sub]: ../community/modules/pubsub/bigquery-sub/README.md
 
 ### Remote Desktop
 

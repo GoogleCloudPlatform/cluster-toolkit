@@ -50,19 +50,15 @@ deployment_groups:
 
   - id: pubsub_topic
     source: community/modules/pubsub/topic
-    settings:
 
   - id: bq-dataset
     source: community/modules/database/bigquery_dataset
     settings:
-      dataset_id: null
-
 
   - id: bq-table
     source: community/modules/database/bigquery_table
     use: [bq-dataset]
     settings:
-      table_id: null
       table_schema:
         '
         [
@@ -107,8 +103,7 @@ deployment_groups:
 
   - id: fsi_notebook
     source: community/modules/compute/notebook
-    use:
-      [fsi_bucket]
+    use: [fsi_bucket]
     settings:
       machine_type: n1-standard-4
 
