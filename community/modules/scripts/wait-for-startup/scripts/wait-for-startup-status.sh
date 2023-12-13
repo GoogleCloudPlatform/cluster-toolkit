@@ -36,14 +36,19 @@ c1grep() { grep "$@" || test $? = 1; }
 now=$(date +%s)
 deadline=$((now + TIMEOUT))
 error_file=$(mktemp)
-fetch_cmd="gcloud compute instances get-serial-port-output ${INSTANCE_NAME} --port 1 --zone ${ZONE} --project ${PROJECT_ID}"
+fetch_cmd="gcloud compute instances get-serial-port-output ${INSTANCE_NAME} \
+           --port 1 --zone ${ZONE} --project ${PROJECT_ID}"
+# Match string for all finish types of the old guest agent and successful
+# finishes on the new guest agent
 FINISH_LINE="startup-script exit status"
+# Match string for failures on the new guest agent
 FINISH_LINE_ERR="Script.*failed with error:"
 
 until [[ now -gt deadline ]]; do
 	ser_log=$(
 		set -o pipefail
-		${fetch_cmd} 2>"${error_file}" | c1grep "${FINISH_LINE}\|${FINISH_LINE_ERR}"
+		${fetch_cmd} 2>"${error_file}" |
+			c1grep "${FINISH_LINE}\|${FINISH_LINE_ERR}"
 	) || {
 		cat "${error_file}"
 		exit 1
@@ -54,6 +59,8 @@ until [[ now -gt deadline ]]; do
 	now=$(date +%s)
 done
 
+# This line checks for an exit code - the assumption is that there is a number
+# at the end of the line and it is an exit code
 STATUS=$(sed -r 's/.*([0-9]+)\s*$/\1/' <<<"${ser_log}" | uniq)
 # This specific text is monitored for in tests, do not change.
 INSPECT_OUTPUT_TEXT="To inspect the startup script output, please run:"
