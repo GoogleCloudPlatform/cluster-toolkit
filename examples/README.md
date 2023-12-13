@@ -34,6 +34,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [storage-gke](#storage-gkeyaml--) ![community-badge] ![experimental-badge]
   * [htc-slurm.yaml](#htc-slurmyaml--) ![community-badge] ![experimental-badge]
   * [htc-htcondor.yaml](#htc-htcondoryaml--) ![community-badge] ![experimental-badge]
+  * [fsi-montecarlo-on-batch.yaml](#fsi-montecarlo-on-batchyaml-) ![community-badge] ![experimental-badge]
   * [tutorial-starccm-slurm.yaml](#tutorial-starccm-slurmyaml--) ![community-badge] ![experimental-badge]
   * [tutorial-starccm.yaml](#tutorial-starccmyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-ramble-gromacs.yaml](#hpc-slurm-ramble-gromacsyaml--) ![community-badge] ![experimental-badge]
@@ -915,6 +916,20 @@ For more information see:
 * [General Slurm High Throughput documentation](https://slurm.schedmd.com/high_throughput.html)
 
 [htc-slurm.yaml]: ../community/examples/htc-slurm.yaml
+
+### [fsi-montecarlo-on-batch.yaml](../community/examples/fsi-montecarlo-on-batch.yaml) ![community-badge] ![experimental-badge]
+
+## Monte Carlo Simulations for Value at Risk
+
+This blueprint will take you through a tutorial on an FSI Value at Risk calculation using Cloud tools:
+
+* Batch
+* Pub/Sub
+  * BigQuery pubsub subscription
+* BigQuery
+* Vertex AI Notebooks
+
+See the [full tutorial here](../docs/tutorials/fsi-montecarlo-on-batch/README.md).
 
 ### [tutorial-starccm-slurm.yaml] ![community-badge] ![experimental-badge]
 
