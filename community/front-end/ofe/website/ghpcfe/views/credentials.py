@@ -29,6 +29,7 @@ from ..serializers import CredentialSerializer
 from ..permissions import CredentialPermission, SuperUserRequiredMixin
 from ..cluster_manager import validate_credential
 from .. import grafana
+from grafana_api.grafana_api import GrafanaClientError
 
 
 class CredentialListView(SuperUserRequiredMixin, generic.ListView):
@@ -70,13 +71,22 @@ class CredentialCreateView(SuperUserRequiredMixin, CreateView):
     def form_valid(self, form):
         self.object = form.save(commit=False)
         self.object.owner = self.request.user
-        self.object.save()
-        grafana.add_gcp_datasource(self.object.name, self.object.detail)
-        messages.success(
-            self.request, f"Credential {self.object.name} validated and saved."
-        )
-        return HttpResponseRedirect(self.get_success_url())
 
+        try:
+            grafana.add_gcp_datasource(self.object.name, self.object.detail)
+        except GrafanaClientError as e:
+            if "Client Error 409: data source with the same name already exists" in str(e):
+                # Add an error message to the form
+                form.add_error(None, "Credential with the same name already exists or this name can't be used. Please change the name.")
+                return self.form_invalid(form)
+            else:
+                # Handle other GrafanaClientError cases
+                messages.error(self.request, f"Grafana Error: {e}")
+                raise e  # Raise the error to handle it at a higher level
+            
+        self.object.save()
+        messages.success(self.request, f"Credential {self.object.name} validated and saved.")
+        return HttpResponseRedirect(self.get_success_url())
 
 class CredentialUpdateView(SuperUserRequiredMixin, UpdateView):
     """Custom UpdateView for Credential model"""

@@ -22,6 +22,18 @@ done
 
 uniq_paths=$(echo "${paths[@]}" | tr ' ' '\n' | sort -u)
 
+pre=$(git status --short --untracked-files=all | sort)
+
 for path in $uniq_paths; do
-	terraform-docs markdown --config .tfdocs-markdown.yaml "${path}"
+	terraform-docs markdown --config .tfdocs-markdown.yaml "${path}" || {
+		echo "Error generating docs for ${path}"
+		exit 1
+	}
 done
+
+post=$(git status --short --untracked-files=all | sort)
+
+diff <(echo "${pre}") <(echo "${post}") || {
+	echo "Error: git status has changed after running terraform-docs"
+	exit 1
+}

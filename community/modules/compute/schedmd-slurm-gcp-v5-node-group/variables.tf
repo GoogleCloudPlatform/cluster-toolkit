@@ -126,6 +126,7 @@ variable "instance_image_custom" {
   default     = false
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "source_image_project" {
   type        = string
   description = "DEPRECATED: Use `instance_image` instead."
@@ -136,6 +137,7 @@ variable "source_image_project" {
   }
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "source_image_family" {
   type        = string
   description = "DEPRECATED: Use `instance_image` instead."
@@ -146,6 +148,7 @@ variable "source_image_family" {
   }
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "source_image" {
   type        = string
   description = "DEPRECATED: Use `instance_image` instead."
@@ -192,7 +195,7 @@ variable "disk_labels" {
 }
 
 variable "additional_disks" {
-  description = "Configurations of additional disks to be included on the partition nodes. (do not use \"disk_type: local-ssd\"; known issue being addressed)"
+  description = "Configurations of additional disks to be included on the partition nodes."
   type = list(object({
     disk_name    = string
     device_name  = string
@@ -263,6 +266,7 @@ variable "on_host_maintenance" {
   default     = "TERMINATE"
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "gpu" {
   type = object({
     type  = string

@@ -13,7 +13,6 @@
  See the License for the specific language governing permissions and
  limitations under the License.
 -->
-
 {% extends "base_generic.html" %}
 
 {% block content %}
@@ -25,7 +24,7 @@
 
   <form action="" method="post" enctype="multipart/form-data">
     {% csrf_token %}
-
+  
   {% for field in form.visible_fields %}
     <div class="form-group">
       {{ field.label_tag }}
@@ -36,6 +35,7 @@
       {% endif %}
     </div>
   {% endfor %}
+  
 
     <br/>  
     <input type="submit" value="Save" class="btn btn-primary"/>

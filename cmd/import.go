@@ -17,6 +17,7 @@ package cmd
 
 import (
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/modulewriter"
 	"hpc-toolkit/pkg/shell"
 	"path/filepath"
 
@@ -50,7 +51,7 @@ func runImportCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	expandedBlueprintFile := filepath.Join(artifactsDir, expandedBlueprintFilename)
+	expandedBlueprintFile := filepath.Join(artifactsDir, modulewriter.ExpandedBlueprintName)
 	dc, _, err := config.NewDeploymentConfig(expandedBlueprintFile)
 	if err != nil {
 		return err

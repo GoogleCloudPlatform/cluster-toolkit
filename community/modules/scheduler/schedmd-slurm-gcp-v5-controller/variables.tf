@@ -293,6 +293,7 @@ EOD
   default = []
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "gpu" {
   type = object({
     type  = string
@@ -349,6 +350,7 @@ EOD
   default     = null
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "network_ip" {
   type        = string
   description = "DEPRECATED: Use `static_ips` variable to assign an internal static ip address."
@@ -575,6 +577,7 @@ variable "instance_image_custom" {
   default     = false
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "source_image_project" {
   type        = string
   description = "DEPRECATED: Use `instance_image` instead."
@@ -585,6 +588,7 @@ variable "source_image_project" {
   }
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "source_image_family" {
   type        = string
   description = "DEPRECATED: Use `instance_image` instead."
@@ -595,6 +599,7 @@ variable "source_image_family" {
   }
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "source_image" {
   type        = string
   description = "DEPRECATED: Use `instance_image` instead."

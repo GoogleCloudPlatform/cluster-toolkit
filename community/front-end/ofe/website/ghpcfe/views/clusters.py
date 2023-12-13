@@ -25,7 +25,7 @@ from rest_framework.authentication import (
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from django.shortcuts import render, get_object_or_404
+from django.shortcuts import render, get_object_or_404, redirect
 from django.db import transaction
 from django.db.models import Q
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -124,152 +124,30 @@ class ClusterDetailView(LoginRequiredMixin, generic.DetailView):
         #     ClusterInstanceType.objects.filter(cluster=self.kwargs['pk'])
         return context
 
-
-class ClusterCreateView1(LoginRequiredMixin, generic.ListView):
-    """Custom view for the first step of cluster creation"""
-
-    model = Credential
-    template_name = "credential/select_form.html"
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context["navtab"] = "cluster"
-        return context
-
-    def post(self, request):
-        return HttpResponseRedirect(
-            reverse(
-                "cluster-create2",
-                kwargs={"credential": request.POST["credential"]},
-            )
-        )
-
-
-class ClusterCreateView2(LoginRequiredMixin, CreateView):
+class ClusterCreateView(LoginRequiredMixin, CreateView):
     """Custom CreateView for Cluster model"""
 
-    template_name = "cluster/create_form.html"
-    form_class = ClusterForm
-
-    def find_default_instance_type(self):
-        return "c2-standard-60"
-
-    def find_default_instance_type_vcpus(self):
-        return 30  # Default to Hyperthreads off
-
-    def add_default_mounts(self, cluster):
-        export = cluster.shared_fs.exports.all()[0]
-        mp = MountPoint(
-            export=export,
-            cluster=cluster,
-            mount_order=0,
-            mount_options="defaults,nofail,nosuid",
-            mount_path="/opt/cluster",
-        )
-        mp.save()
-        export = cluster.shared_fs.exports.all()[1]
-        mp = MountPoint(
-            export=export,
-            cluster=cluster,
-            mount_order=1,
-            mount_options="defaults,nofail,nosuid",
-            mount_path="/home",
-        )
-        mp.save()
-
-    def get_initial(self):
-        return {"cloud_credential": self.cloud_credential}
-
     def get(self, request, *args, **kwargs):
-        self.cloud_credential = get_object_or_404(
-            Credential, pk=kwargs["credential"]
-        )
-        return super().get(request, *args, **kwargs)
+        # Check if there are any credentials available
+        credentials = Credential.objects.filter(owner=self.request.user)
 
-    def post(self, request, *args, **kwargs):
-        self.cloud_credential = get_object_or_404(
-            Credential, pk=request.POST["cloud_credential"]
-        )
-        return super().post(request, *args, **kwargs)
+        if credentials.exists():
+            # Create a new cluster with default values
+            cluster = Cluster(
+                cloud_credential=credentials.first(),
+                name="cluster", 
+                owner=request.user,
+                status="n",
+                spackdir="/opt/cluster/spack",
+                num_login_nodes=1)
 
-    def form_valid(self, form):
-        self.object = form.save(commit=False)
-        self.object.owner = self.request.user
+            cluster.save()
 
-        unique_str = secrets.token_hex(4)
-        self.object.cloud_id = self.object.name + "-" + unique_str
-        self.object.cloud_region = self.object.subnet.cloud_region
-        shared_fs = Filesystem(
-            **{
-                "name": f"{self.object.name}-sharedfs",
-                "cloud_credential": self.object.cloud_credential,
-                "cloud_id": self.object.cloud_id,
-                "cloud_state": self.object.cloud_state,
-                "cloud_region": self.object.cloud_region,
-                "cloud_zone": self.object.cloud_zone,
-                "subnet": self.object.subnet,
-                "fstype": "n",
-                "impl_type": FilesystemImpl.BUILT_IN,
-            }
-        )
-        shared_fs.save()
-        export = FilesystemExport(
-            filesystem=shared_fs, export_name="/opt/cluster"
-        )
-        export.save()
-        export = FilesystemExport(filesystem=shared_fs, export_name="/home")
-        export.save()
-        self.object.shared_fs = shared_fs
-        self.object.save()
-        form.save_m2m()
-
-        # This MUST come after the self.object being saved, so that it has
-        # already been assigned an ID
-        self.add_default_mounts(self.object)
-        self.object.partitions.create(
-            **{
-                "name": "batch",
-                "machine_type": self.find_default_instance_type(),
-                "dynamic_node_count": 4,
-                "vCPU_per_node": self.find_default_instance_type_vcpus(),
-            }
-        )
-        self.object.save()
-
-        messages.success(
-            self.request,
-            "A record for this cluster has been created. Click the 'Edit' "
-            "button to customise it and click 'Create' button to provision "
-            "the cluster.",
-        )
-        return HttpResponseRedirect(self.get_success_url())
-
-    def get_context_data(self, **kwargs):
-        """Perform extra query to populate instance types data"""
-
-        context = super().get_context_data(**kwargs)
-
-        region_info = cloud_info.get_region_zone_info(
-            "GCP", self.cloud_credential.detail
-        )
-        subnet_regions = {
-            sn.id: sn.cloud_region
-            for sn in VirtualSubnet.objects.filter(
-                cloud_credential=self.cloud_credential
-            )
-            .filter(Q(cloud_state="i") | Q(cloud_state="m"))
-            .all()
-        }
-
-        context["subnet_regions"] = json.dumps(subnet_regions)
-        context["region_info"] = json.dumps(region_info)
-        context["navtab"] = "cluster"
-        return context
-
-    def get_success_url(self):
-        # Redirect to backend view that creates cluster files
-        return reverse("backend-create-cluster", kwargs={"pk": self.object.pk})
-
+            return redirect('backend-create-cluster', pk=cluster.pk)
+        else:
+            # Redirect to the credentials creation page with a message
+            messages.error(self.request, "Please create a credential before creating a cluster.")
+            return redirect('credentials')  # Adjust to your credential creation view name
 
 class ClusterUpdateView(LoginRequiredMixin, UpdateView):
     """Custom UpdateView for Cluster model"""
@@ -281,14 +159,59 @@ class ClusterUpdateView(LoginRequiredMixin, UpdateView):
     def get_mp_formset(self, **kwargs):
         def formfield_cb(model_field, **kwargs):
             field = model_field.formfield(**kwargs)
+            cluster = self.object
+            
             if model_field.name == "export":
-                cluster = self.object
+                if cluster.shared_fs is None:
+                    # Create and save the shared filesystem, exports, and mount points
+                    shared_fs = Filesystem(
+                        name=f"{cluster.name}-sharedfs",
+                        cloud_credential=cluster.cloud_credential,
+                        cloud_id=cluster.cloud_id,
+                        cloud_state=cluster.cloud_state,
+                        cloud_region=cluster.cloud_region,
+                        cloud_zone=cluster.cloud_zone,
+                        subnet=cluster.subnet,
+                        fstype="n",
+                        impl_type=FilesystemImpl.BUILT_IN,
+                    )
+                    shared_fs.save()
+
+                    export = FilesystemExport(filesystem=shared_fs, export_name="/opt/cluster")
+                    export.save()
+                    export = FilesystemExport(filesystem=shared_fs, export_name="/home")
+                    export.save()
+
+                    cluster.shared_fs = shared_fs
+                    cluster.save()
+
+                    # Create and save mount points
+                    export = cluster.shared_fs.exports.all()[0]
+                    mp = MountPoint(
+                        export=export,
+                        cluster=cluster,
+                        mount_order=0,
+                        mount_options="defaults,nofail,nosuid",
+                        mount_path="/opt/cluster",
+                    )
+                    mp.save()
+                    export = cluster.shared_fs.exports.all()[1]
+                    mp = MountPoint(
+                        export=export,
+                        cluster=cluster,
+                        mount_order=1,
+                        mount_options="defaults,nofail,nosuid",
+                        mount_path="/home",
+                    )
+                    mp.save()
+            
+            # Continue with the usual logic for handling exports
+            if cluster.shared_fs is not None:
                 fsquery = (
                     Filesystem.objects.exclude(
                         impl_type=FilesystemImpl.BUILT_IN
                     )
                     .filter(cloud_state__in=["m", "i"])
-                    .filter(vpc=cluster.subnet.vpc)
                     .values_list("pk", flat=True)
                 )
                 # Add back our cluster's filesystem
@@ -296,7 +219,9 @@ class ClusterUpdateView(LoginRequiredMixin, UpdateView):
                 field.queryset = FilesystemExport.objects.filter(
                     filesystem__in=fsystems
                 )
+            
             return field
+
 
         # This creates a new class on the fly
         FormClass = inlineformset_factory(  # pylint: disable=invalid-name
@@ -305,7 +230,7 @@ class ClusterUpdateView(LoginRequiredMixin, UpdateView):
             form=ClusterMountPointForm,
             formfield_callback=formfield_cb,
             can_delete=True,
-            extra=1,
+            extra=0,
         )
 
         if self.request.POST:
@@ -315,6 +240,19 @@ class ClusterUpdateView(LoginRequiredMixin, UpdateView):
     def get_partition_formset(self, **kwargs):
         def formfield_cb(model_field, **kwargs):
             field = model_field.formfield(**kwargs)
+            cluster = self.object
+
+            if not cluster.partitions.exists():
+                logger.info("No partitions exist, creating a default one.")
+                # Create and save the default partition with hardcoded values
+                default_partition = ClusterPartition(
+                    name="batch",
+                    machine_type="c2-standard-60",
+                    dynamic_node_count=4,
+                    vCPU_per_node=30,
+                    cluster=cluster  # Set the cluster for the partition
+                )
+                default_partition.save()
             return field
 
         # This creates a new class on the fly
@@ -324,7 +262,7 @@ class ClusterUpdateView(LoginRequiredMixin, UpdateView):
             form=ClusterPartitionForm,
             formfield_callback=formfield_cb,
             can_delete=True,
-            extra=1,
+            extra=0,
         )
 
         if self.request.POST:
@@ -332,8 +270,13 @@ class ClusterUpdateView(LoginRequiredMixin, UpdateView):
         return FormClass(instance=self.object, **kwargs)
 
     def get_success_url(self):
-        # Update the Terraform
-        return reverse("backend-update-cluster", kwargs={"pk": self.object.pk})
+        logger.info(f"Current cluster state { self.object.cloud_state }")
+        if self.object.cloud_state == "m":
+            # Perform live cluster reconfiguration
+            return reverse("backend-reconfigure-cluster", kwargs={"pk": self.object.pk})
+        elif self.object.cloud_state == "nm":
+            # Perform live cluster reconfiguration
+            return reverse("backend-start-cluster", kwargs={"pk": self.object.pk})
 
     def _get_region_info(self):
         if not hasattr(self, "region_info"):
@@ -359,20 +302,30 @@ class ClusterUpdateView(LoginRequiredMixin, UpdateView):
             .filter(Q(cloud_state="i") | Q(cloud_state="m"))
             .all()
         }
+        
         context["subnet_regions"] = json.dumps(subnet_regions)
         context["object"] = self.object
         context["region_info"] = json.dumps(self._get_region_info())
         context["navtab"] = "cluster"
         context["mountpoints_formset"] = self.get_mp_formset()
         context["cluster_partitions_formset"] = self.get_partition_formset()
+        context["title"] = "Create cluster" if self.object.status == "n" else "Update cluster"
         return context
 
+
     def form_valid(self, form):
+        logger.info("In form_valid")
         context = self.get_context_data()
         mountpoints = context["mountpoints_formset"]
         partitions = context["cluster_partitions_formset"]
-        suffix = self.object.cloud_id.split("-")[-1]
-        self.object.cloud_id = self.object.name + "-" + suffix
+
+        if self.object.status == "n":
+            # If creating a new cluster generate unique cloud id.
+            unique_str = secrets.token_hex(4)
+            self.object.cloud_id = self.object.name + "-" + unique_str
+            suffix = self.object.cloud_id.split("-")[-1]
+            self.object.cloud_id = self.object.name + "-" + suffix
+        
         self.object.cloud_region = self.object.subnet.cloud_region
 
         machine_info = cloud_info.get_machine_types(
@@ -391,9 +344,9 @@ class ClusterUpdateView(LoginRequiredMixin, UpdateView):
             )
             if x["name"].startswith("pd-")
         }
-
-        if self.object.status != "n":
-            form.add_error("Running clusters cannot currently be updated!")
+        
+        if self.object.status != "n" and self.object.status != "r":
+            form.add_error(None, "It is not newly created cluster or it is not running yet.")
             return self.form_invalid(form)
 
         # Verify Disk Types & Sizes
@@ -443,8 +396,6 @@ class ClusterUpdateView(LoginRequiredMixin, UpdateView):
             form.add_error("login_node_disk_type", "Invalid Disk Type")
             return self.form_invalid(form)
 
-
-
         # Verify formset validity (surprised there's no method to do this)
         for formset, formset_name in [
             (mountpoints, "mountpoints"),
@@ -454,43 +405,73 @@ class ClusterUpdateView(LoginRequiredMixin, UpdateView):
                 form.add_error(None, f"Error in {formset_name} section")
                 return self.form_invalid(form)
 
+        # Get the existing MountPoint objects associated with the cluster
+        existing_mount_points = MountPoint.objects.filter(cluster=self.object)
+
+        # Iterate through the existing mount points and check if they are in the updated formset
+        for mount_point in existing_mount_points:
+            if not any(mount_point_form.instance == mount_point for mount_point_form in mountpoints.forms):
+                # The mount point is not in the updated formset, so delete it
+                mount_point_path = mount_point.mount_path
+                mount_point_id = mount_point.pk
+                logger.info(f"Deleting mount point: {mount_point_path}, ID: {mount_point_id}")
+                mount_point.delete()
+
+       # Get the existing ClusterPartition objects associated with the cluster
+        existing_partitions = ClusterPartition.objects.filter(cluster=self.object)
+
+        # Iterate through the existing partitions and check if they are in the updated formset
+        for partition in existing_partitions:
+            if not any(partition_form.instance == partition for partition_form in partitions.forms):
+                # The partition is not in the updated formset, so delete it
+                partition_name = partition.name
+                partition_id = partition.pk
+                logger.info(f"Deleting partition: {partition_name}, ID: {partition_id}")
+                partition.delete()
+
         try:
             with transaction.atomic():
+                # Save the modified Cluster object
+                self.object.save()
                 self.object = form.save()
                 mountpoints.instance = self.object
                 mountpoints.save()
 
                 partitions.instance = self.object
                 parts = partitions.save()
+                
                 try:
                     for part in parts:
-                        part.vCPU_per_node = machine_info[part.machine_type][
-                            "vCPU"
-                        ] // (1 if part.enable_hyperthreads else 2)
+                        part.vCPU_per_node = machine_info[part.machine_type]["vCPU"] // (1 if part.enable_hyperthreads else 2)
                         # Validate GPU choice
                         if part.GPU_type:
                             try:
-                                accel_info = machine_info[part.machine_type][
-                                    "accelerators"
-                                ][part.GPU_type]
+                                accel_info = machine_info[part.machine_type]["accelerators"][part.GPU_type]
                                 if (
                                     part.GPU_per_node < accel_info["min_count"]
-                                    or part.GPU_per_node
-                                    > accel_info["max_count"]
+                                    or part.GPU_per_node > accel_info["max_count"]
                                 ):
                                     raise ValidationError(
-                                        "Invalid number of GPUs of type "
-                                        f"{part.GPU_type}"
+                                        "Invalid number of GPUs of type " f"{part.GPU_type}"
                                     )
                             except KeyError as err:
+                                raise ValidationError(f"Invalid GPU type {part.GPU_type}") from err
+                        # Add validation for machine_type and disk_type combinations here
+                        invalid_combinations = [
+                            ("c3-", "pd-standard"),
+                            ("h3-", "pd-standard"),
+                            ("h3-", "pd-ssd"),
+                        ]
+                        for machine_prefix, disk_type in invalid_combinations:
+                            if part.machine_type.startswith(machine_prefix) and part.boot_disk_type == disk_type:
+                                logger.info("invalid disk")
                                 raise ValidationError(
-                                    f"Invalid GPU type {part.GPU_type}"
-                                ) from err
+                                    f"Invalid combination: machine_type {part.machine_type} cannot be used with disk_type {disk_type}."
+                                )
                 except KeyError as err:
-                    raise ValidationError(
-                        "Error in Partition - invalid machine type: "
-                        f"{part.machine_type}"
-                    ) from err
+                    raise ValidationError("Error in Partition - invalid machine type: " f"{part.machine_type}") from err
+
+                # Continue with saving the 'parts' if no validation errors were raised
                 parts = partitions.save()
 
         except ValidationError as ve:
@@ -498,9 +479,12 @@ class ClusterUpdateView(LoginRequiredMixin, UpdateView):
             return self.form_invalid(form)
 
         msg = (
-            "Cluster configuration updated. Click 'Edit' to make further "
-            "changes and click 'Create' to provision the cluster."
+            "Provisioning a new cluster. This may take up to 15 minutes."
         )
+        
+        if self.object.status == "r":
+            msg = "Reconfiguring running cluster, this may take few minutes."
+
         messages.success(self.request, msg)
 
         # Be kind... Check filesystems to verify all in the same zone as us.
@@ -904,12 +888,12 @@ class BackendCreateCluster(BackendAsyncView):
         args = await self.get_orm(pk)
         await self.create_task("Create Cluster", *args)
         return HttpResponseRedirect(
-            reverse("cluster-detail", kwargs={"pk": pk})
+            reverse("cluster-update", kwargs={"pk": pk})
         )
 
 
-class BackendUpdateClusterTerraform(BackendAsyncView):
-    """View to apply DB changes to Terraform"""
+class BackendReconfigureCluster(BackendAsyncView):
+    """View to reconfigure the cluster."""
 
     @sync_to_async
     def get_orm(self, cluster_id):
@@ -919,6 +903,7 @@ class BackendUpdateClusterTerraform(BackendAsyncView):
     def cmd(self, unused_task_id, unused_token, cluster):
         ci = ClusterInfo(cluster)
         ci.update()
+        ci.reconfigure_cluster()
 
     async def get(self, request, pk):
         """this will invoke the background tasks and return immediately"""
@@ -928,7 +913,7 @@ class BackendUpdateClusterTerraform(BackendAsyncView):
         await self.test_user_is_cluster_admin(request.user)
 
         args = await self.get_orm(pk)
-        await self.create_task("Update Cluster TFVars", *args)
+        await self.create_task("Live Reconfigure the Cluster", *args)
         return HttpResponseRedirect(
             reverse("cluster-detail", kwargs={"pk": pk})
         )
@@ -940,11 +925,12 @@ class BackendStartCluster(BackendAsyncView):
     @sync_to_async
     def get_orm(self, cluster_id):
         cluster = Cluster.objects.get(pk=cluster_id)
-        return (cluster,)
+        creds = cluster.cloud_credential.detail
+        return (cluster, creds)
 
-    def cmd(self, unused_task_id, unused_token, cluster):
+    def cmd(self, unused_task_id, unused_token, cluster, creds):
         ci = ClusterInfo(cluster)
-        ci.start_cluster()
+        ci.start_cluster(creds)
 
     async def get(self, request, pk):
         """this will invoke the background tasks and return immediately"""
@@ -961,7 +947,7 @@ class BackendStartCluster(BackendAsyncView):
 
 
 class BackendDestroyCluster(BackendAsyncView):
-    """A view to make async call to create a new cluster"""
+    """A view to make async call to destroy a cluster"""
 
     @sync_to_async
     def get_orm(self, cluster_id):
@@ -972,7 +958,7 @@ class BackendDestroyCluster(BackendAsyncView):
         ci = ClusterInfo(cluster)
         ci.stop_cluster()
 
-    async def get(self, request, pk):
+    async def post(self, request, pk):
         """this will invoke the background tasks and return immediately"""
         # Mixins don't yet work with Async views
         if not await sync_to_async(lambda: request.user.is_authenticated)():
@@ -1012,6 +998,19 @@ class BackendSyncCluster(LoginRequiredMixin, generic.View):
         return HttpResponseRedirect(
             reverse("cluster-detail", kwargs={"pk": pk})
         )
+
+class BackendClusterStatus(LoginRequiredMixin, generic.View):
+    """Backend handler for cluster syncing"""
+
+    def get(self, request, pk, *args, **kwargs):
+        """
+        This handles GET request with parameter pk.
+        for example: /backend/cluster-status/50 
+        """
+        cluster = get_object_or_404(Cluster, pk=pk)
+        logger.info(f"Current cluster {pk} status: {cluster.status}")
+
+        return JsonResponse({'status': cluster.status})
 
 
 class BackendAuthUserGCP(BackendAsyncView):

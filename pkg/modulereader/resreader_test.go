@@ -21,6 +21,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/GoogleCloudPlatform/cloud-foundation-toolkit/cli/bpmetadata"
 	. "gopkg.in/check.v1"
 	"gopkg.in/yaml.v3"
 )
@@ -95,9 +96,9 @@ func (s *MySuite) TestGetModuleInfo_Embedded(c *C) {
 				Name:        "test_output",
 				Description: "This is just a test",
 				Sensitive:   false}},
-			Metadata: Metadata{
-				Spec: MetadataSpec{
-					Requirements: MetadataRequirements{
+			Metadata: &bpmetadata.BlueprintMetadata{
+				Spec: &bpmetadata.BlueprintMetadataSpec{
+					Requirements: &bpmetadata.BlueprintRequirements{
 						Services: []string{
 							"room.service.vip",
 							"protection.service.GCPD",
@@ -142,9 +143,10 @@ func (s *MySuite) TestGetModuleInfo_Local(c *C) {
 				Name:        "test_output",
 				Description: "This is just a test",
 				Sensitive:   false}},
-			Metadata: Metadata{
-				Spec: MetadataSpec{
-					Requirements: MetadataRequirements{
+
+			Metadata: &bpmetadata.BlueprintMetadata{
+				Spec: &bpmetadata.BlueprintMetadataSpec{
+					Requirements: &bpmetadata.BlueprintRequirements{
 						Services: []string{
 							"room.service.vip",
 							"protection.service.GCPD",
