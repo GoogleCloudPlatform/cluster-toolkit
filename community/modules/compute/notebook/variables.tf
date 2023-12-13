@@ -67,5 +67,5 @@ variable "gcs_bucket_path" {
 
 variable "mount_runner" {
   description = "mount content from the google-cloud-storage module"
-  type        = any
+  type        = map(string)
 }

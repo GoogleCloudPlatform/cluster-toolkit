@@ -25,7 +25,7 @@ variable "project_id" {
 }
 
 variable "labels" {
-  description = "Labels to add to the instances. Key-value pairs."
+  description = "Labels to add to the tables. Key-value pairs."
   type        = map(string)
 }
 

@@ -31,6 +31,6 @@ variable "dataset_id" {
 }
 
 variable "labels" {
-  description = "Labels to add to the instances. Key-value pairs."
+  description = "Labels to add to the dataset. Key-value pairs."
   type        = map(string)
 }
