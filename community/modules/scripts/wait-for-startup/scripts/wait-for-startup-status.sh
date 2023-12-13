@@ -37,25 +37,26 @@ now=$(date +%s)
 deadline=$((now + TIMEOUT))
 error_file=$(mktemp)
 fetch_cmd="gcloud compute instances get-serial-port-output ${INSTANCE_NAME} --port 1 --zone ${ZONE} --project ${PROJECT_ID}"
+FINISH_LINE="startup-script exit status"
+FINISH_LINE_ERR="Script.*failed with error:"
 
 until [[ now -gt deadline ]]; do
-	FINISH_LINE="startup-script exit status"
 	ser_log=$(
 		set -o pipefail
-		${fetch_cmd} 2>"${error_file}" | c1grep "${FINISH_LINE}"
+		${fetch_cmd} 2>"${error_file}" | c1grep "${FINISH_LINE}\|${FINISH_LINE_ERR}"
 	) || {
 		cat "${error_file}"
 		exit 1
 	}
-	STATUS=$(sed -r 's/.*([0-9]+)\s*$/\1/' <<<"${ser_log}" | uniq)
-	if [[ -n "${STATUS}" ]]; then break; fi
-	echo "could not detect end of startup script. Sleeping."
+	if [[ -n "${ser_log}" ]]; then break; fi
+	echo "Could not detect end of startup script. Sleeping."
 	sleep 5
 	now=$(date +%s)
 done
 
+STATUS=$(sed -r 's/.*([0-9]+)\s*$/\1/' <<<"${ser_log}" | uniq)
 # This specific text is monitored for in tests, do not change.
-INSPECT_OUTPUT_TEXT="to inspect the startup script output, please run:"
+INSPECT_OUTPUT_TEXT="To inspect the startup script output, please run:"
 if [[ "${STATUS}" == 0 ]]; then
 	echo "startup-script finished successfully"
 elif [[ "${STATUS}" == 1 ]]; then
@@ -67,7 +68,7 @@ elif [[ now -ge deadline ]]; then
 	echo "${fetch_cmd}"
 	exit 1
 else
-	echo "invalid return status '${STATUS}'"
+	echo "Invalid return status: '${STATUS}'"
 	echo "${INSPECT_OUTPUT_TEXT}"
 	echo "${fetch_cmd}"
 	exit 1
