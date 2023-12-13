@@ -27,7 +27,6 @@ variable "project_id" {
 variable "topic_id" {
   description = "The name of the pubsub topic to subscribe to. Can be provided by the pubsub/topic module"
   type        = string
-  default     = null
 }
 
 variable "subscription_id" {
@@ -37,12 +36,12 @@ variable "subscription_id" {
 }
 
 variable "dataset_id" {
-  description = "Name of the dataset that was created. Can be provided by the bigquery_table module"
+  description = "Name of the dataset that was created. Can be provided by the bigquery-table module"
   type        = string
 }
 
 variable "table_id" {
-  description = "ID of created BQ table. Can be provided by the bigquery_table module"
+  description = "ID of created BQ table. Can be provided by the bigquery-table module"
   type        = string
 }
 

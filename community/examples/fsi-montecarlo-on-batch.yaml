@@ -52,11 +52,11 @@ deployment_groups:
     source: community/modules/pubsub/topic
 
   - id: bq-dataset
-    source: community/modules/database/bigquery_dataset
+    source: community/modules/database/bigquery-dataset
     settings:
 
   - id: bq-table
-    source: community/modules/database/bigquery_table
+    source: community/modules/database/bigquery-table
     use: [bq-dataset]
     settings:
       table_schema:

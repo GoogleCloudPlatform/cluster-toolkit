@@ -85,8 +85,8 @@ Modules that are still in development and less stable are labeled with the
   [FSI - MonteCarlo Tutorial][fsi-montecarlo-on-batch-tutorial].
 
 [slurm-cloudsql-federation]: ../community/modules/database/slurm-cloudsql-federation/README.md
-[bigquery-dataset]: ../community/modules/database/bigquery_dataset/README.md
-[bigquery-table]: ../community/modules/database/bigquery_table/README.md
+[bigquery-dataset]: ../community/modules/database/bigquery-dataset/README.md
+[bigquery-table]: ../community/modules/database/bigquery-table/README.md
 [fsi-montecarlo-on-batch]: ../community/modules/files/fsi-montecarlo-on-batch/README.md
 
 ### File System
