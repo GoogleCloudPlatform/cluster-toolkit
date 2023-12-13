@@ -71,13 +71,13 @@ No modules.
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_dataset_id"></a> [dataset\_id](#input\_dataset\_id) | Name of the dataset that was created. Can be provided by the bigquery\_table module | `string` | n/a | yes |
+| <a name="input_dataset_id"></a> [dataset\_id](#input\_dataset\_id) | Name of the dataset that was created. Can be provided by the bigquery-table module | `string` | n/a | yes |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | The name of the current deployment | `string` | n/a | yes |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the instances. Key-value pairs. | `map(string)` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created | `string` | n/a | yes |
 | <a name="input_subscription_id"></a> [subscription\_id](#input\_subscription\_id) | The name of the pubsub subscription to be created | `string` | `null` | no |
-| <a name="input_table_id"></a> [table\_id](#input\_table\_id) | ID of created BQ table. Can be provided by the bigquery\_table module | `string` | n/a | yes |
-| <a name="input_topic_id"></a> [topic\_id](#input\_topic\_id) | The name of the pubsub topic to subscribe to. Can be provided by the pubsub/topic module | `string` | `null` | no |
+| <a name="input_table_id"></a> [table\_id](#input\_table\_id) | ID of created BQ table. Can be provided by the bigquery-table module | `string` | n/a | yes |
+| <a name="input_topic_id"></a> [topic\_id](#input\_topic\_id) | The name of the pubsub topic to subscribe to. Can be provided by the pubsub/topic module | `string` | n/a | yes |
 
 ## Outputs
 

@@ -56,7 +56,7 @@ No modules.
 
 | Name | Type |
 |------|------|
-| [google_bigquery_dataset.pbsb](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/bigquery-dataset) | resource |
+| [google_bigquery_dataset.pbsb](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/bigquery_dataset) | resource |
 | [random_id.resource_name_suffix](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/id) | resource |
 
 ## Inputs

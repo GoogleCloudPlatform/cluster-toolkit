@@ -63,7 +63,7 @@ No modules.
 
 | Name | Type |
 |------|------|
-| [google_bigquery_table.pbsb](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/bigquery-table) | resource |
+| [google_bigquery_table.pbsb](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/bigquery_table) | resource |
 | [random_id.resource_name_suffix](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/id) | resource |
 
 ## Inputs
