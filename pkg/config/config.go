@@ -265,9 +265,16 @@ func (dc *DeploymentConfig) ExpandConfig() error {
 	dc.Config.setGlobalLabels()
 	dc.Config.addKindToModules()
 
+	if vars, err := dc.Config.evalVars(); err != nil {
+		return err
+	} else {
+		dc.Config.Vars = vars
+	}
+
 	if err := validateBlueprint(dc.Config); err != nil {
 		return err
 	}
+
 	return dc.expand()
 }
 
@@ -311,24 +318,25 @@ func GetUsedDeploymentVars(val cty.Value) []string {
 
 // ListUnusedVariables returns a list of variables that are defined but not used
 func (bp Blueprint) ListUnusedVariables() []string {
-	// these variables are required or automatically constructed and applied;
-	// these should not be listed unused otherwise no blueprints are valid
+	// Gather all scopes where variables are used
+	ns := map[string]cty.Value{
+		"vars": bp.Vars.AsObject(),
+	}
+	bp.WalkModules(func(m *Module) error {
+		ns["module_"+string(m.ID)] = m.Settings.AsObject()
+		return nil
+	})
+	for _, v := range bp.Validators {
+		ns["validator_"+v.Validator] = v.Inputs.AsObject()
+	}
+
+	// these variables are required or automatically added;
 	var used = map[string]bool{
 		"labels":          true,
 		"deployment_name": true,
 	}
-
-	bp.WalkModules(func(m *Module) error {
-		for _, v := range GetUsedDeploymentVars(m.Settings.AsObject()) {
-			used[v] = true
-		}
-		return nil
-	})
-
-	for _, v := range bp.Validators {
-		for _, v := range GetUsedDeploymentVars(v.Inputs.AsObject()) {
-			used[v] = true
-		}
+	for _, v := range GetUsedDeploymentVars(cty.ObjectVal(ns)) {
+		used[v] = true
 	}
 
 	unused := []string{}
@@ -468,10 +476,7 @@ func checkBackends(bp Blueprint) error {
 
 // validateBlueprint runs a set of simple early checks on the imported input YAML
 func validateBlueprint(bp Blueprint) error {
-	errs := Errors{}
-
-	_, err := bp.DeploymentName()
-	return errs.Add(err).
+	return (&Errors{}).
 		Add(bp.checkBlueprintName()).
 		Add(validateVars(bp.Vars)).
 		Add(checkModulesAndGroups(bp)).
@@ -526,20 +531,23 @@ func isValidLabelValue(value string) bool {
 	return matchLabelValueExp.MatchString(value)
 }
 
-// DeploymentName returns the deployment_name from the config and does approperate checks.
-func (bp *Blueprint) DeploymentName() (string, error) {
+func (bp *Blueprint) DeploymentName() string {
+	return bp.Vars.Get("deployment_name").AsString()
+}
+
+func validateDeploymentName(vars Dict) error {
 	path := Root.Vars.Dot("deployment_name")
 
-	if !bp.Vars.Has("deployment_name") {
-		return "", BpError{path, InputValueError{
+	if !vars.Has("deployment_name") {
+		return BpError{path, InputValueError{
 			inputKey: "deployment_name",
 			cause:    errMsgVarNotFound,
 		}}
 	}
 
-	v := bp.Vars.Get("deployment_name")
-	if v.Type() != cty.String {
-		return "", BpError{path, InputValueError{
+	v := vars.Get("deployment_name")
+	if v.Type() != cty.String || v.IsNull() || !v.IsKnown() {
+		return BpError{path, InputValueError{
 			inputKey: "deployment_name",
 			cause:    errMsgValueNotString,
 		}}
@@ -547,7 +555,7 @@ func (bp *Blueprint) DeploymentName() (string, error) {
 
 	s := v.AsString()
 	if len(s) == 0 {
-		return "", BpError{path, InputValueError{
+		return BpError{path, InputValueError{
 			inputKey: "deployment_name",
 			cause:    errMsgValueEmptyString,
 		}}
@@ -555,13 +563,12 @@ func (bp *Blueprint) DeploymentName() (string, error) {
 
 	// Check that deployment_name is a valid label
 	if !isValidLabelValue(s) {
-		return "", BpError{path, InputValueError{
+		return BpError{path, InputValueError{
 			inputKey: "deployment_name",
 			cause:    errMsgLabelValueReqs,
 		}}
 	}
-
-	return s, nil
+	return nil
 }
 
 // ProjectID returns the project_id
@@ -665,7 +672,7 @@ func checkPackerGroups(groups []DeploymentGroup) error {
 	return errs.OrNil()
 }
 
-func (bp *Blueprint) evalVars() error {
+func (bp *Blueprint) evalVars() (Dict, error) {
 	// 0 - unvisited
 	// 1 - on stack
 	// 2 - done
@@ -706,10 +713,9 @@ func (bp *Blueprint) evalVars() error {
 	for n := range bp.Vars.Items() {
 		if used[n] == 0 { // unvisited
 			if err := dfs(n); err != nil {
-				return err
+				return Dict{}, err
 			}
 		}
 	}
-	bp.Vars = res
-	return nil
+	return res, nil
 }

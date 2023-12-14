@@ -22,19 +22,23 @@ import (
 )
 
 func (s *zeroSuite) TestValidateVars(c *C) {
+	base := map[string]cty.Value{
+		"deployment_name": cty.StringVal("serengeti"),
+	}
+
 	{ // Success
-		vars := Dict{}
+		vars := Dict{base}
 		c.Check(validateVars(vars), IsNil)
 	}
 
 	{ // Fail: Nil value
-		vars := Dict{}
+		vars := Dict{base}
 		vars.Set("fork", cty.NilVal)
 		c.Check(validateVars(vars), NotNil)
 	}
 
 	{ // Fail: labels not a map
-		vars := Dict{}
+		vars := Dict{base}
 		vars.Set("labels", cty.StringVal("a_string"))
 		c.Check(validateVars(vars), NotNil)
 	}
