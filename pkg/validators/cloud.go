@@ -28,17 +28,47 @@ import (
 	serviceusage "google.golang.org/api/serviceusage/v1"
 )
 
-func getErrorReason(err googleapi.Error) (bool, string, map[string]interface{}) {
+func getErrorReason(err googleapi.Error) (string, map[string]interface{}) {
 	for _, d := range err.Details {
 		m, ok := d.(map[string]interface{})
 		if !ok {
 			continue
 		}
 		if reason, ok := m["reason"].(string); ok {
-			return true, reason, m["metadata"].(map[string]interface{})
+			return reason, m["metadata"].(map[string]interface{})
 		}
 	}
-	return false, "", nil
+	return "", nil
+}
+
+func newDisabledServiceError(title string, name string, pid string) error {
+	return hint(
+		fmt.Errorf("%s service is disabled in project %s", title, pid),
+		fmt.Sprintf("%s can be enabled at https://console.cloud.google.com/apis/library/%s?project=%s", title, name, pid))
+}
+
+func handleServiceUsageError(err error, pid string) error {
+	if err == nil {
+		return nil
+	}
+
+	var herr *googleapi.Error
+	if !errors.As(err, &herr) {
+		return fmt.Errorf("unhandled error: %s", err)
+	}
+
+	reason, metadata := getErrorReason(*herr)
+	switch reason {
+	case "SERVICE_DISABLED":
+		return newDisabledServiceError("Service Usage API", "serviceusage.googleapis.com", pid)
+	case "SERVICE_CONFIG_NOT_FOUND_OR_PERMISSION_DENIED":
+		return fmt.Errorf("service %s does not exist in project %s", metadata["services"], pid)
+	case "USER_PROJECT_DENIED":
+		return fmt.Errorf(projectError, pid)
+	case "SU_MISSING_NAMES":
+		return nil // occurs if API list is empty and 0 APIs to validate
+	}
+	return fmt.Errorf("unhandled error: %s", herr)
 }
 
 // TestApisEnabled tests whether APIs are enabled in given project
@@ -63,37 +93,12 @@ func TestApisEnabled(projectID string, requiredAPIs []string) error {
 
 	resp, err := s.Services.BatchGet(prefix).Names(serviceNames...).Do()
 	if err != nil {
-		var herr *googleapi.Error
-		if !errors.As(err, &herr) {
-			return fmt.Errorf("unhandled error: %s", err)
-		}
-		ok, reason, metadata := getErrorReason(*herr)
-		if !ok {
-			return fmt.Errorf("unhandled error: %s", err)
-		}
-		switch reason {
-		case "SERVICE_DISABLED":
-			return hint(
-				fmt.Errorf(serviceDisabledMsg, projectID),
-				fmt.Sprintf(enableAPImsg, "serviceusage.googleapis.com", projectID))
-		case "SERVICE_CONFIG_NOT_FOUND_OR_PERMISSION_DENIED":
-			return fmt.Errorf("service %s does not exist in project %s", metadata["services"], projectID)
-		case "USER_PROJECT_DENIED":
-			return fmt.Errorf(projectError, projectID)
-		case "SU_MISSING_NAMES":
-			// occurs if API list is empty and 0 APIs to validate
-			return nil
-		default:
-			return fmt.Errorf("unhandled error: %s", err)
-		}
+		return handleServiceUsageError(err, projectID)
 	}
-
 	errs := config.Errors{}
 	for _, service := range resp.Services {
 		if service.State == "DISABLED" {
-			errs.Add(hint(
-				fmt.Errorf("%s: service is disabled in project %s", service.Config.Name, projectID),
-				fmt.Sprintf(enableAPImsg, service.Config.Name, projectID)))
+			errs.Add(newDisabledServiceError(service.Config.Title, service.Config.Name, projectID))
 		}
 	}
 	return errs.OrNil()
@@ -109,15 +114,8 @@ func TestProjectExists(projectID string) error {
 	}
 	_, err = s.Projects.Get(projectID).Fields().Do()
 	if err != nil {
-		if strings.Contains(err.Error(), computeDisabledError) {
-			errs := config.Errors{}
-			return errs.
-				Add(hint(
-					fmt.Errorf(computeDisabledMsg, projectID),
-					fmt.Sprintf(enableAPImsg, "serviceusage.googleapis.com", projectID))).
-				Add(hint(
-					fmt.Errorf(serviceDisabledMsg, projectID),
-					fmt.Sprintf(enableAPImsg, "serviceusage.googleapis.com", projectID)))
+		if strings.Contains(err.Error(), "Compute Engine API has not been used in project") {
+			return newDisabledServiceError("Compute Engine API", "compute.googleapis.com", projectID)
 		}
 		return fmt.Errorf(projectError, projectID)
 	}
