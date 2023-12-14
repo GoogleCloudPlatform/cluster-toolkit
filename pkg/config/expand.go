@@ -290,6 +290,11 @@ func (bp Blueprint) applyGlobalVarsInModule(mod *Module) error {
 		if bp.Vars.Has(input.Name) {
 			ref := GlobalRef(input.Name)
 			mod.Settings.Set(input.Name, ref.AsExpression().AsValue())
+			continue
+		}
+
+		if input.Name == mi.Metadata.Ghpc.InjectModuleId {
+			mod.Settings.Set(input.Name, cty.StringVal(string(mod.ID)))
 		}
 	}
 	return nil

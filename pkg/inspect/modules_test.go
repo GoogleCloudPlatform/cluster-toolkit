@@ -171,8 +171,26 @@ func TestMetadataIsObtainable(t *testing.T) {
 func TestMetadataHasServices(t *testing.T) {
 	for _, mod := range notEmpty(query(all()), t) {
 		t.Run(mod.Source, func(t *testing.T) {
-			if mod.Metadata.GetSpec().GetRequirements().GetServices() == nil {
+			if mod.Metadata.Spec.Requirements.Services == nil {
 				t.Error("metadata has no spec.requirements.services set")
+			}
+		})
+	}
+}
+
+func TestMetadataInjectModuleId(t *testing.T) {
+	for _, mod := range notEmpty(query(all()), t) {
+		t.Run(mod.Source, func(t *testing.T) {
+			gm := mod.Metadata.Ghpc
+			if gm.InjectModuleId == "" {
+				return
+			}
+			in, ok := mod.Input(gm.InjectModuleId)
+			if !ok {
+				t.Fatalf("has no input %q", gm.InjectModuleId)
+			}
+			if in.Type != "string" {
+				t.Errorf("%q type is not a string, but %q", gm.InjectModuleId, in.Type)
 			}
 		})
 	}

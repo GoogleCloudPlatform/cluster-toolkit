@@ -24,7 +24,6 @@ import (
 	"os"
 	"path"
 
-	"github.com/GoogleCloudPlatform/cloud-foundation-toolkit/cli/bpmetadata"
 	"github.com/hashicorp/go-getter"
 	"gopkg.in/yaml.v3"
 )
@@ -100,7 +99,7 @@ func enforceMapKeys(input map[string]interface{}, allowedKeys map[string]bool) e
 type ModuleInfo struct {
 	Inputs   []VarInfo
 	Outputs  []OutputInfo
-	Metadata *bpmetadata.BlueprintMetadata
+	Metadata Metadata
 }
 
 // GetOutputsAsMap returns the outputs list as a map for quicker access

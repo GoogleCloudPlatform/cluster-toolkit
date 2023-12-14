@@ -21,7 +21,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/GoogleCloudPlatform/cloud-foundation-toolkit/cli/bpmetadata"
 	. "gopkg.in/check.v1"
 	"gopkg.in/yaml.v3"
 )
@@ -96,13 +95,14 @@ func (s *MySuite) TestGetModuleInfo_Embedded(c *C) {
 				Name:        "test_output",
 				Description: "This is just a test",
 				Sensitive:   false}},
-			Metadata: &bpmetadata.BlueprintMetadata{
-				Spec: &bpmetadata.BlueprintMetadataSpec{
-					Requirements: &bpmetadata.BlueprintRequirements{
+			Metadata: Metadata{
+				Spec: MetadataSpec{
+					Requirements: MetadataRequirements{
 						Services: []string{
 							"room.service.vip",
 							"protection.service.GCPD",
-						}}}}})
+						}}},
+				Ghpc: MetadataGhpc{InjectModuleId: "test_variable"}}})
 	}
 
 	{ // Invalid: No embedded modules
@@ -144,13 +144,15 @@ func (s *MySuite) TestGetModuleInfo_Local(c *C) {
 				Description: "This is just a test",
 				Sensitive:   false}},
 
-			Metadata: &bpmetadata.BlueprintMetadata{
-				Spec: &bpmetadata.BlueprintMetadataSpec{
-					Requirements: &bpmetadata.BlueprintRequirements{
+			Metadata: Metadata{
+				Spec: MetadataSpec{
+					Requirements: MetadataRequirements{
 						Services: []string{
 							"room.service.vip",
 							"protection.service.GCPD",
-						}}}}})
+						}}},
+				Ghpc: MetadataGhpc{InjectModuleId: "test_variable"},
+			}})
 	}
 
 	{ // Invalid source path - path does not exists
