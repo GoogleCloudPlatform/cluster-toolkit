@@ -22,14 +22,10 @@ import (
 	"github.com/zclconf/go-cty/cty"
 )
 
-const enableAPImsg = "%[1]s: can be enabled at https://console.cloud.google.com/apis/library/%[1]s?project=%[2]s"
 const projectError = "project ID %s does not exist or your credentials do not have permission to access it"
 const regionError = "region %s is not available in project ID %s or your credentials do not have permission to access it"
 const zoneError = "zone %s is not available in project ID %s or your credentials do not have permission to access it"
 const zoneInRegionError = "zone %s is not in region %s in project ID %s or your credentials do not have permissions to access it"
-const computeDisabledError = "Compute Engine API has not been used in project"
-const computeDisabledMsg = "the Compute Engine API must be enabled in project %s to validate blueprint global variables"
-const serviceDisabledMsg = "the Service Usage API must be enabled in project %s to validate that all APIs needed by the blueprint are enabled"
 const unusedModuleMsg = "module %q uses module %q, but matching setting and outputs were not found. This may be because the value is set explicitly or set by a prior used module"
 
 func handleClientError(e error) error {
