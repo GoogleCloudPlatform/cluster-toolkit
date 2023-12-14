@@ -24,7 +24,7 @@ steps:
   - '--cache-from'
   - '${_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/hpc-toolkit-workstation:latest'
   - '--build-arg'
-  - 'TFLINT_VERSION=v0.46.0'
+  - 'TFLINT_VERSION=v0.49.0'
   - '-f'
   - 'tools/cloud-workstations/Dockerfile'
   - '.'

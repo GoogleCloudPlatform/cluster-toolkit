@@ -85,6 +85,7 @@ variable "job_data" {
   }
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "job_template_contents" {
   description = "Deprecated (use `job_data`): The contents of the Google Cloud Batch job template. Typically supplied by a batch-job-template module."
   type        = string
@@ -95,6 +96,7 @@ variable "job_template_contents" {
   }
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "job_filename" {
   description = "Deprecated (use `job_data`): The filename of the generated job template file. Typically supplied by a batch-job-template module."
   type        = string
@@ -105,6 +107,7 @@ variable "job_filename" {
   }
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "job_id" {
   description = "Deprecated (use `job_data`): The ID for the Google Cloud Batch job. Typically supplied by a batch-job-template module for use in the output instructions."
   type        = string

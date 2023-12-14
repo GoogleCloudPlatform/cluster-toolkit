@@ -202,6 +202,7 @@ variable "boot" {
 # project: project name
 # family: image family name
 # name: !!DEPRECATED!! - image name
+# tflint-ignore: terraform_unused_declarations
 variable "image" {
   description = "DEPRECATED: Source image properties"
   type        = any
