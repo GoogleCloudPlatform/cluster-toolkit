@@ -16,7 +16,7 @@ The most effective way to incorporate Apptainer into you cloud-based HPC systems
 
 You can use Apptainer to package your development environment to streamline your workflow in a cluster deployed via the HPC Toolkit. We provide examples of 
 - packaging a [miniconda](https://docs.conda.io/projects/miniconda/en/latest/) environment using Apptainer and then deploying and using it in a Slurm allocation
-- packaging the [VS Code](https://code.visualstudio.com/) IDE, deploying it in a Slurm allocation and connecting to if from your local VS Code IDE
+- packaging the [VSCode](https://code.visualstudio.com/) IDE, deploying it in a Slurm allocation and connecting to it from your local VSCode IDE
 
 ### GPU
 
@@ -28,6 +28,5 @@ Many modern HPC codes take advantage of the massively parallel execution capabil
 
 ## Demostrations
 
-We provide a set of demonstations of Apptainer's use in larger _real world_ applications
-- [OpenRadioss](https://www.openradioss.org/)
-- [Multi-GPU Differentiable Modeling](https://github.com/PTsolvers/gpu-workshop-JuliaCon23/tree/main)
+We provide a demonstation of Apptainer's use in a larger _real world_ application
+- [OpenFOAM](./demos/openfoam/)
