@@ -193,6 +193,25 @@ openfoam reconstructParMesh -constant
 openfoam reconstructPar -latestTime
 EOF
 ```
+Set up access to the Artifact Registry repository
+
+```bash
+export REPOSITORY_URL=#ARTIFACT REGISTRY REPOSITORY URL# e.g. oras://us-docker.pkg.dev/myproject/sifs
+```
+
+```bash
+apptainer remote login \
+--username=oauth2accesstoken \
+--password=$(gcloud auth print-access-token) \ 
+${REPOSITORY_URL}
+```
+
+Pull the `openfoam-pmi2` container and put it in `~/bin`
+```bash
+apptainer pull ${REPOSITORY_URL}/openfoam2306-pmi2:latest
+mkdir ~/bin
+mv openfoam2306-pmi2_latest.sif ~/bin/openfoam
+```
 
 Now you are ready to actually run the simultion with the command
 ```bash
@@ -223,11 +242,23 @@ To start the ParaView server, create an allocation on a compute node in the `gpu
 ```bash
 salloc --partition=gpu -n4 --gpus-per-node=1
 ```
-[authenticate to AR and pull the paraview container]
+
+Set up access to the Artifact Registry repository
+
+```bash
+export REPOSITORY_URL=#ARTIFACT REGISTRY REPOSITORY URL# e.g. oras://us-docker.pkg.dev/myproject/sifs
+```
+
+```bash
+apptainer remote login \
+--username=oauth2accesstoken \
+--password=$(gcloud auth print-access-token) \ 
+${REPOSITORY_URL}
+```
 
 Now start the ParaView server with the command
 ```bash
-apptainer exec --nv ~/paraview_pv-v5.7.1-egl-py3.sif /opt/paraview/bin/pvserver
+apptainer exec --nv ${REPOSITORY_URL}/paraview:pv-v5.7.1-egl-py3 /opt/paraview/bin/pvserver
 ```
 
 You should see output similar to
@@ -293,5 +324,3 @@ To bring down your HPC system use the command
 ```bash
 ./ghpc destroy ofdemo
 ```
-
-## Acknowledgements
