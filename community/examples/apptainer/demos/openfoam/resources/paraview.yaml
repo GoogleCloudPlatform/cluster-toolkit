@@ -6,13 +6,13 @@ steps:
 - name: 'gcr.io/$PROJECT_ID/apptainer'
   args:
   - 'pull'
-  - 'docker://kitware/paraview:pv-v5.7.1-egl-py3'
+  - 'docker://kitware/paraview:${_VERSION}'
 - name: 'gcr.io/$PROJECT_ID/apptainer'
   args:
   - 'push'
   - 'paraview_pv-v5.7.1-egl-py3.sif'
-  - 'oras://${_LOCATION}/$PROJECT_ID/${_REPOSITORY}/paraview:pv-v5.7.1-egl-py3'
+  - 'oras://${_LOCATION}/$PROJECT_ID/${_REPOSITORY}/paraview:${_VERSION}'
 substitutions:
   _LOCATION: us-docker.pkg.dev
   _REPOSITORY: sifs
-  _VERSION: latest
+  _VERSION: pv-v5.7.1-egl-py3
