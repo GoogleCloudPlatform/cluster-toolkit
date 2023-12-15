@@ -1,0 +1,18 @@
+Bootstrap: docker
+From: rockylinux/rockylinux:latest
+
+%post
+    dnf -y group install "Development tools"
+    dnf -y install epel-release
+    crb enable
+    dnf -y install wget
+    dnf -y install hwloc slurm-pmi slurm-pmi-devel
+    dnf -y install gcc gcc-gfortran gcc-c++
+    dnf -y clean all
+    wget https://download.open-mpi.org/release/open-mpi/v4.1/openmpi-4.1.4.tar.gz
+    tar zxvf openmpi-4.1.4.tar.gz && rm openmpi-4.1.4.tar.gz
+    cd openmpi-4.1.4
+    ./configure --with-hwloc=internal --prefix=/opt/openmpi \
+      --with-slurm --with-pmi=/usr
+    make -j $(nproc)
+    make install

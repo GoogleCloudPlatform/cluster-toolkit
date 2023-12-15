@@ -1,0 +1,18 @@
+# In this directory, run the following command to ingest the OCI kitware/paraview
+# OCI container into your Artifact Registry repository
+# $ gcloud builds submit . --config=paraview.yaml
+
+steps:
+- name: 'gcr.io/$PROJECT_ID/apptainer'
+  args:
+  - 'pull'
+  - 'docker://kitware/paraview:pv-v5.7.1-egl-py3'
+- name: 'gcr.io/$PROJECT_ID/apptainer'
+  args:
+  - 'push'
+  - 'paraview_pv-v5.7.1-egl-py3.sif'
+  - 'oras://${_LOCATION}/$PROJECT_ID/${_REPOSITORY}/paraview:pv-v5.7.1-egl-py3'
+substitutions:
+  _LOCATION: us-docker.pkg.dev
+  _REPOSITORY: sifs
+  _VERSION: latest

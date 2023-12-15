@@ -1,0 +1,29 @@
+# In this directory, run the following command to build this builder.
+# $ gcloud builds submit . --config=openfoam-pmi2.yaml
+
+steps:
+- name: 'gcr.io/$PROJECT_ID/apptainer'
+  args: 
+  - 'build'
+  - '--fakeroot'
+  - '--build-arg' 
+  - 'LOCATION=${_LOCATION}'
+  - '--build-arg'
+  - 'PROJECT_ID=$PROJECT_ID'
+  - '--build-arg'
+  - 'REPO=${_REPOSITORY}'
+  - '--build-arg'
+  - 'OMPI4_PMI2_VERSION=${_VERSION}'
+  - '--build-arg'
+  - 'OPENFOAM_VERSION=${_VERSION}'
+  - 'openfoam2306-pmi2.sif'
+  - 'openfoam-pmi2.def'
+- name: 'gcr.io/$PROJECT_ID/apptainer'
+  args:
+  - 'push'
+  - 'openfoam2306-pmi2.sif'
+  - 'oras://${_LOCATION}/$PROJECT_ID/${_REPOSITORY}/openfoam2306-pmi2:${_VERSION}'
+substitutions:
+  _LOCATION: us-docker.pkg.dev
+  _REPOSITORY: sifs
+  _VERSION: latest

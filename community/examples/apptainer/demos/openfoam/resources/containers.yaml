@@ -1,0 +1,65 @@
+# In this directory, run the following command to build these containers.
+# $ gcloud builds submit . --config=containers.yaml
+
+steps:
+- name: 'gcr.io/$PROJECT_ID/apptainer'
+  args:
+  - 'pull'
+  - 'docker://kitware/paraview:pv-v5.7.1-egl-py3'
+- name: 'gcr.io/$PROJECT_ID/apptainer'
+  args:
+  - 'push'
+  - 'paraview_pv-v5.7.1-egl-py3.sif'
+  - 'oras://${_LOCATION}/$PROJECT_ID/${_REPOSITORY}/paraview:pv-v5.7.1-egl-py3'
+- name: 'gcr.io/$PROJECT_ID/apptainer'
+  args:
+  - 'build'
+  - '--fakeroot'
+  - 'ompi4-pmi2.sif'
+  - 'ompi4-pmi2.def'
+- name: 'gcr.io/$PROJECT_ID/apptainer'
+  args:
+  - 'push'
+  - 'ompi4-pmi2.sif'
+  - 'oras://${_LOCATION}/$PROJECT_ID/${_REPOSITORY}/ompi4-pmi2:${_VERSION}'
+- name: 'gcr.io/cloud-builders/git'
+  args: ['clone', 'https://develop.openfoam.com/packaging/containers.git']
+- name: 'bash'
+  script: |
+    cp -r containers/docker/* .
+- name: 'gcr.io/$PROJECT_ID/apptainer'
+  args:
+  - 'build'
+  - '--fakeroot'
+  - 'openfoam2306.sif'
+  - 'openfoam-run_rocky-template.def'
+- name: 'gcr.io/$PROJECT_ID/apptainer'
+  args:
+  - 'push'
+  - 'openfoam2306.sif'
+  - 'oras://${_LOCATION}/$PROJECT_ID/${_REPOSITORY}/openfoam2306:${_VERSION}'
+- name: 'gcr.io/$PROJECT_ID/apptainer'
+  args: 
+  - 'build'
+  - '--fakeroot'
+  - '--build-arg' 
+  - 'LOCATION=${_LOCATION}'
+  - '--build-arg'
+  - 'PROJECT_ID=$PROJECT_ID'
+  - '--build-arg'
+  - 'REPO=${_REPOSITORY}'
+  - '--build-arg'
+  - 'OMPI4_PMI2_VERSION=${_VERSION}'
+  - '--build-arg'
+  - 'OPENFOAM_VERSION=${_VERSION}'
+  - 'openfoam2306-pmi2.sif'
+  - 'openfoam-pmi2.def'
+- name: 'gcr.io/$PROJECT_ID/apptainer'
+  args:
+  - 'push'
+  - 'openfoam2306-pmi2.sif'
+  - 'oras://${_LOCATION}/$PROJECT_ID/${_REPOSITORY}/openfoam2306-pmi2:${_VERSION}'
+substitutions:
+  _LOCATION: us-docker.pkg.dev
+  _REPOSITORY: sifs
+  _VERSION: latest

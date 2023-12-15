@@ -1,0 +1,155 @@
+# Copyright 2022 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: of-demo
+
+vars:
+  project_id: _YOUR_GCP_PROJECT_ID_
+  deployment_name: ofdemo
+  region: us-central1
+  zone: us-central1-a
+  disk_size: 64
+  compute_machine_type: c2-standard-60
+  controller_machine_type: n2-standard-8
+  gpu_machine_type: n1-standard-8
+  login_machine_type: e2-standard-4
+  custom_image_family: apptainer-enabled
+  guest_accelerator_type: nvidia-tesla-v100
+  guest_accelerator_count: 1
+  instance_image:
+    family: slurm-gcp-5-9-hpc-rocky-linux-8
+    project: schedmd-slurm-public
+  instance_image_custom: true
+
+# Documentation for each of the modules used below can be found at
+# https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
+
+deployment_groups:
+- group: scripts
+  modules:
+  - source: modules/scripts/startup-script
+    kind: terraform
+    id: apptainer_installation
+    settings:
+      runners:
+      - type: shell
+        content: |
+          #!/bin/bash
+          dnf install -y epel-release
+          dnf install -y apptainer
+        destination: /tmp/install-apptainer.sh
+
+- group: network
+  modules:
+  - id: hpc_apptainer_net
+    source: modules/network/vpc
+
+- group: apptainer-enabled-build
+  modules:
+  - id: apptainer-enabled-image
+    source: modules/packer/custom-image
+    kind: packer
+    use:
+    - hpc_apptainer_net
+    - apptainer_installation
+    settings:
+      source_image_project_id: [schedmd-slurm-public]
+      source_image_family: slurm-gcp-5-9-hpc-rocky-linux-8 
+      disk_size: $(vars.disk_size)
+      image_family: $(vars.custom_image_family)
+      state_timeout: 20m
+
+- group: storage
+  modules:
+  - id: homefs
+    source: modules/file-system/filestore
+    use: [hpc_apptainer_net]
+    settings:
+      local_mount: /home
+
+- group: cluster
+  modules:
+  - id: gpu_node_group
+    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
+    settings:
+      node_count_dynamic_max: 4
+      node_count_static: 1
+      machine_type: $(vars.gpu_machine_type)
+      disk_size_gb: $(vars.disk_size)
+      guest_accelerator:
+      - type: $(vars.guest_accelerator_type)
+        count: $(vars.guest_accelerator_count)
+      instance_image:
+        family: $(vars.custom_image_family)
+        project: $(vars.project_id)
+
+  - id: gpu_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
+    use:
+    - hpc_apptainer_net
+    - gpu_node_group
+    - homefs
+    settings:
+      partition_name: gpu
+      exclusive: false # allows nodes to stay up after jobs are done
+      enable_placement: false # the default is: true
+      is_default: false
+
+  - id: compute_node_group
+    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
+    settings:
+      node_count_dynamic_max: 10
+      machine_type: $(vars.compute_machine_type)
+      disk_size_gb: $(vars.disk_size)
+      instance_image:
+        family: $(vars.custom_image_family)
+        project: $(vars.project_id)
+
+  - id: compute_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
+    use:
+    - hpc_apptainer_net
+    - compute_node_group
+    - homefs
+    settings:
+      partition_name: compute
+      exclusive: true
+      enable_placement: true
+      is_default: true
+
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
+    use:
+    - hpc_apptainer_net
+    - compute_partition 
+    - gpu_partition
+    - homefs
+    settings:
+      machine_type: $(vars.controller_machine_type)
+      disable_controller_public_ips: false
+      disk_size_gb: $(vars.disk_size)
+
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v5-login
+    use:
+    - hpc_apptainer_net
+    - slurm_controller
+    settings:
+      machine_type: $(vars.login_machine_type)
+      disk_size_gb: $(vars.disk_size)
+      instance_image:
+        family: $(vars.custom_image_family)
+        project: $(vars.project_id)

@@ -1,0 +1,20 @@
+Bootstrap: oras
+From: {{ LOCATION }}/{{ PROJECT_ID }}/{{ REPO }}/ompi4-pmi2:{{ OMPI4_PMI2_VERSION }}
+Stage: mpi
+
+Bootstrap: oras
+From: {{ LOCATION }}/{{ PROJECT_ID }}/{{ REPO }}/openfoam2306:{{ OPENFOAM_VERSION }}
+Stage: runtime
+
+%files from mpi
+    /opt/openmpi /opt/openmpi
+
+%post
+    dnf -y install slurm-pmi
+    dnf -y clean all
+
+%post
+    echo 'export MPI_ARCH_PATH=/opt/openmpi' > $(bash /openfoam/assets/query.sh -show-prefix)/etc/config.sh/prefs.sys-openmpi
+
+%runscript
+    exec /openfoam/run "$@"
