@@ -214,12 +214,9 @@ resource "google_compute_instance" "compute_vm" {
     total_egress_bandwidth_tier = local.enable_tier_1 ? "TIER_1" : "DEFAULT"
   }
 
-  dynamic "service_account" {
-    for_each = var.service_account == null ? [] : [var.service_account]
-    content {
-      email  = lookup(service_account.value, "email", null)
-      scopes = lookup(service_account.value, "scopes", null)
-    }
+  service_account {
+    email  = var.service_account_email
+    scopes = var.service_account_scopes
   }
 
   guest_accelerator = local.guest_accelerator
