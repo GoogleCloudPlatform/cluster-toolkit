@@ -121,14 +121,77 @@ sudo -i spack python -m pip install package-name
 
 ## Spack Permissions
 
-By default, only root will be have permission to install spack packages. To
-manually call Spack commands as root use the `sudo -i` command, for example:
-`sudo -i spack install tar`. The `-i` runs the command as a login shell and is
-required to make sure `spack` will be the `PATH`.
+### System `spack` user is created - Default
 
-Installed packages should be readable/executable by anyone on the VM.
+By default this module will create a `spack` linux user and group with
+consistent UID and GID. This user and group will own the Spack installation. To
+allow a user to manually add Spack packages to the system Spack installation,
+you can add the user to the spack group:
 
-### Non-root package installation
+```sh
+sudo usermod -a -G spack <username>
+```
+
+Log out and back in so the group change will take effect, then `<username>` will
+be able to call `spack install <package>`.
+
+You can use the `system_user_name`, `system_user_uid`, and `system_user_gid` to
+customize the name and ids of the system user.
+
+### Use and existing user
+
+Alternatively, if `system_user_name` is a user already on the system, then this
+existing user will be used for Spack installation.
+
+#### OS Login User
+
+If OS Login is enabled (default for most HPC Toolkit modules) then you can
+provide an OS Login user name:
+
+```yaml
+  - id: spack-setup
+    source: community/modules/scripts/spack-setup
+    settings:
+      system_user_name: username_company_com
+```
+
+This will work even if the user has not yet logged onto the machine. When the
+specified user does later log on to the machine they will be able to call
+`spack install` without any further configuration.
+
+#### Pre-configured user
+
+You can also use a startup script to configure a user:
+
+```yaml
+  - id: spack-setup
+    source: community/modules/scripts/spack-setup
+    settings:
+      system_user_name: special-user
+
+  - id: startup
+    source: modules/scripts/startup-script
+    settings:
+      runners:
+        - type: shell
+          destination: "create_user.sh"
+          content: |
+            #!/bin/bash
+            sudo useradd -u 799 special-user
+            sudo groupadd -g 922 org-group
+            sudo usermod -g org-group special-user
+        - $(spack-setup.spack_runner)
+
+  - id: spack-vms
+    source: modules/compute/vm-instance
+    use: [network1, startup]
+    settings:
+      name_prefix: spack-vm
+      machine_type: n2d-standard-2
+      instance_count: 5
+```
+
+### Chaining spack installations
 
 If there is a need to have a non-root user to install spack packages it is
 recommended to create a separate installation for that user and chain Spack installations
