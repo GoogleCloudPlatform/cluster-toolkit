@@ -54,3 +54,8 @@ output "ramble_profile_script_path" {
   description = "Path to Ramble profile script."
   value       = var.ramble_profile_script_path
 }
+
+output "system_user_name" {
+  description = "The system user used for Ramble installation."
+  value       = var.system_user_name
+}

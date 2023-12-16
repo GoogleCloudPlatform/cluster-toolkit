@@ -45,27 +45,63 @@ variable "configure_for_google" {
   default     = true
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "chown_owner" {
-  description = "Owner to chown the Spack clone to. Default will not modify the clone."
+  description = "Deprecated: use `system_user_name`."
   default     = null
   type        = string
+
+  validation {
+    condition     = var.chown_owner == null
+    error_message = "chown_owner is deprecated. Use system_user_name to set the owner of the installation."
+  }
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "chgrp_group" {
-  description = "Group to chgrp the Spack clone to. Default will not modify the clone."
+  description = "Deprecated: installation will be owned by group of `system_user_name`. If special group is needed, supply user with group assigned."
   default     = null
   type        = string
+
+  validation {
+    condition     = var.chgrp_group == null
+    error_message = "chgrp_group is deprecated. Use system_user_name to set owning user and group."
+  }
 }
 
 variable "chmod_mode" {
   description = <<-EOT
-    Mode to chmod the Spack clone to. Defaults to null (i.e. do not modify).
+    `chmod` to apply to the Spack installation. Adds group write by default.
     For usage information see:
     https://docs.ansible.com/ansible/latest/collections/ansible/builtin/file_module.html#parameter-mode
     EOT
-  default     = null
+  default     = "g+w"
   type        = string
 }
+
+variable "system_user_name" {
+  description = "Name of system user that will perform installation of Spack. It will be created if it does not exist."
+  default     = "spack"
+  type        = string
+
+  validation {
+    condition     = var.system_user_name != null
+    error_message = "A name for the system user to use for installation must be provided."
+  }
+}
+
+variable "system_user_uid" {
+  description = "UID used when creating system user. Ignored if `system_user_name` already exists on system. Default of 833 is arbitrary."
+  default     = 833
+  type        = number
+}
+
+variable "system_user_gid" {
+  description = "GID used when creating system user group. Ignored if `system_user_name` already exists on system. Default of 833 is arbitrary."
+  default     = 833
+  type        = number
+}
+
 
 variable "spack_virtualenv_path" {
   description = "Virtual environment path in which to install Spack Python interpreter and other dependencies"
