@@ -38,3 +38,8 @@ output "spack_profile_script_path" {
   description = "Path to the Spack profile.d script."
   value       = var.spack_profile_script_path
 }
+
+output "system_user_name" {
+  description = "The system user used to execute commands."
+  value       = var.system_user_name
+}
