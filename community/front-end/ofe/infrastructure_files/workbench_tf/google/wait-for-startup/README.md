@@ -19,7 +19,7 @@ up a node.
   kind: terraform
   id: wait
   settings:
-    instance_name: ((module.workstation.name[0]))
+    instance_name: $(workstation.name[0])
 ```
 
 ## License

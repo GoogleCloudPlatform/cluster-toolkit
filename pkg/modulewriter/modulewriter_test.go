@@ -593,12 +593,13 @@ func (s *zeroSuite) TestSubstituteIgcReferencesInModule(c *C) {
 		config.MustParseExpression(`module.golf.red + 6 + module.golf.green`).AsValue(),
 		config.MustParseExpression(`module.tennis.brown`).AsValue(),
 	}))
-	m := SubstituteIgcReferencesInModule(
+	m, err := SubstituteIgcReferencesInModule(
 		config.Module{Settings: d},
 		map[config.Reference]modulereader.VarInfo{
 			config.ModuleRef("golf", "red"):   {Name: "pink"},
 			config.ModuleRef("golf", "green"): {Name: "lime"},
 		})
+	c.Assert(err, IsNil)
 	c.Check(m.Settings.Items(), DeepEquals, map[string]cty.Value{"fold": cty.TupleVal([]cty.Value{
 		cty.StringVal("zebra"),
 		config.MustParseExpression(`var.pink + 6 + var.lime`).AsValue(),

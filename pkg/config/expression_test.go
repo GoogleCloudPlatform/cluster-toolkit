@@ -15,6 +15,7 @@
 package config
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -101,13 +102,12 @@ $(vars.here)`, `"4gold\n${var.here}"`, false}, // quoted strings may not be spli
 
 		{`5gold
 was here`, `"5gold\nwas here"`, false},
-		{"6gold $(vars.here", ``, true},      // missing close parenthesis
-		{"7gold $(vars.here + 2)", ``, true}, // unsupported expression
+		{"6gold $(vars.here", ``, true}, // missing close parenthesis
 
 		{`#!/bin/bash
 echo "Hello $(vars.project_id) from $(vars.region)"`, `"#!/bin/bash\necho \"Hello ${var.project_id} from ${var.region}\""`, false},
 		{"", `""`, false},
-		{`$(try(vars.this) + one(vars.time))`, "", true}, // fails because of unsupported expression, but it should be parsed
+		{`$(try(vars.this) + one(vars.time))`, "try(var.this)+one(var.time)", false},
 
 		// Escaping
 		{`q $(vars.t)`, `"q ${var.t}"`, false},           // no escaping
@@ -117,6 +117,13 @@ echo "Hello $(vars.project_id) from $(vars.region)"`, `"#!/bin/bash\necho \"Hell
 		{`q \\\\$(vars.t)`, `"q \\\\${var.t}"`, false},   // escaped `\\`
 		{`q \\\\\$(vars.t)`, `"q \\\\$(vars.t)"`, false}, // escaped both `\\` and `$(`
 
+		// Translation of complex expressions BP -> Terraform
+		{"$(vars.green + amber.blue)", "var.green+module.amber.blue", false},
+		{"$(5 + vars.blue)", "5+var.blue", false},
+		{"$(5)", "5", false},
+		{`$("${vars.green}_${vars.sleeve}")`, `"${var.green}_${var.sleeve}"`, false},
+		{"$(fun(vars.green))", "fun(var.green)", false},
+
 		// Untranslatable expressions
 		{"$(vars)", "", true},
 		{"$(sleeve)", "", true},
@@ -124,6 +131,7 @@ echo "Hello $(vars.project_id) from $(vars.region)"`, `"#!/bin/bash\necho \"Hell
 		{`$(box["green"])`, "", true},  // can't index module
 		{"$(vars[3]])", "", true},      // can't index vars
 		{`$(vars["green"])`, "", true}, // can't index module
+
 	}
 	for _, tc := range tests {
 		t.Run(tc.input, func(t *testing.T) {
@@ -221,5 +229,41 @@ func TestMergeFunctionCallExpression(t *testing.T) {
 	}
 	if diff := cmp.Diff(want, got, ctydebug.CmpOptions); diff != "" {
 		t.Errorf("diff (-want +got):\n%s", diff)
+	}
+}
+
+func TestReplaceTokens(t *testing.T) {
+	type test struct {
+		body string
+		old  string
+		new  string
+		want string
+	}
+	tests := []test{
+		{"var.green", "var.green", "var.blue", "var.blue"},
+		{"var.green + var.green", "var.green", "var.blue", "var.blue+var.blue"},
+		{"vars.green + 5", "vars.green", "var.green", "var.green+5"},
+		{"var.green + var.blue", "vars.gold", "var.silver", "var.green+var.blue"},
+	}
+	for _, tc := range tests {
+		t.Run(fmt.Sprintf("s/%s/%s/%s", tc.old, tc.new, tc.body), func(t *testing.T) {
+			b, err := parseHcl(tc.body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			o, err := parseHcl(tc.old)
+			if err != nil {
+				t.Fatal(err)
+			}
+			n, err := parseHcl(tc.new)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			got := replaceTokens(b, o, n)
+			if diff := cmp.Diff(tc.want, string(got.Bytes())); diff != "" {
+				t.Errorf("diff (-want +got):\n%s", diff)
+			}
+		})
 	}
 }

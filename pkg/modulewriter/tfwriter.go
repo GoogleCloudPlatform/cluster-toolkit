@@ -308,7 +308,10 @@ func (w TFWriter) writeDeploymentGroup(
 	}
 
 	// Write main.tf file
-	doctoredModules := substituteIgcReferences(g.Modules, intergroupVars)
+	doctoredModules, err := substituteIgcReferences(g.Modules, intergroupVars)
+	if err != nil {
+		return fmt.Errorf("error substituting intergroup references in deployment group %s: %w", g.Name, err)
+	}
 	if err := writeMain(doctoredModules, g.TerraformBackend, groupPath); err != nil {
 		return fmt.Errorf("error writing main.tf file for deployment group %s: %w", g.Name, err)
 	}
@@ -403,36 +406,46 @@ func getUsedDeploymentVars(group config.DeploymentGroup, bp config.Blueprint) ma
 	return filteredVars
 }
 
-func substituteIgcReferences(mods []config.Module, igcRefs map[config.Reference]modulereader.VarInfo) []config.Module {
+func substituteIgcReferences(mods []config.Module, igcRefs map[config.Reference]modulereader.VarInfo) ([]config.Module, error) {
 	doctoredMods := make([]config.Module, len(mods))
 	for i, mod := range mods {
-		doctoredMods[i] = SubstituteIgcReferencesInModule(mod, igcRefs)
+		dm, err := SubstituteIgcReferencesInModule(mod, igcRefs)
+		if err != nil {
+			return nil, err
+		}
+		doctoredMods[i] = dm
 	}
-	return doctoredMods
+	return doctoredMods, nil
 }
 
 // SubstituteIgcReferencesInModule updates expressions in Module settings to use
 // special IGC var name instead of the module reference
-func SubstituteIgcReferencesInModule(mod config.Module, igcRefs map[config.Reference]modulereader.VarInfo) config.Module {
-	v, _ := cty.Transform(mod.Settings.AsObject(), func(p cty.Path, v cty.Value) (cty.Value, error) {
+func SubstituteIgcReferencesInModule(mod config.Module, igcRefs map[config.Reference]modulereader.VarInfo) (config.Module, error) {
+	v, err := cty.Transform(mod.Settings.AsObject(), func(p cty.Path, v cty.Value) (cty.Value, error) {
 		e, is := config.IsExpressionValue(v)
 		if !is {
 			return v, nil
 		}
-		ue := string(e.Tokenize().Bytes())
-		for _, r := range e.References() {
+		refs := e.References()
+		for _, r := range refs {
 			oi, exists := igcRefs[r]
 			if !exists {
 				continue
 			}
-			s := fmt.Sprintf("module.%s.%s", r.Module, r.Name)
-			rs := fmt.Sprintf("var.%s", oi.Name)
-			ue = strings.ReplaceAll(ue, s, rs)
+			old := r.AsExpression()
+			new := config.GlobalRef(oi.Name).AsExpression()
+			var err error
+			if e, err = config.ReplaceSubExpressions(e, old, new); err != nil {
+				return cty.NilVal, err
+			}
 		}
-		return config.MustParseExpression(ue).AsValue(), nil
+		return e.AsValue(), nil
 	})
+	if err != nil {
+		return config.Module{}, err
+	}
 	mod.Settings = config.NewDict(v.AsValueMap())
-	return mod
+	return mod, nil
 }
 
 // FindIntergroupVariables returns all unique intergroup references made by
