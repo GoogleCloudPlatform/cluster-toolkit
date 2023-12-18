@@ -44,9 +44,6 @@ var (
 // expand expands variables and strings in the yaml config. Used directly by
 // ExpandConfig for the create and expand commands.
 func (dc *DeploymentConfig) expand() error {
-	if err := dc.Config.evalVars(); err != nil {
-		return err
-	}
 	dc.expandBackends()
 	dc.combineLabels()
 
@@ -103,11 +100,11 @@ func (dc *DeploymentConfig) expandBackends() {
 	//    backend into resource groups which have no explicit
 	//    TerraformBackend
 	// 3. In all cases, add a prefix for GCS backends if one is not defined
-	blueprint := &dc.Config
-	defaults := blueprint.TerraformBackendDefaults
+	bp := &dc.Config
+	defaults := bp.TerraformBackendDefaults
 	if defaults.Type != "" {
-		for i := range blueprint.DeploymentGroups {
-			grp := &blueprint.DeploymentGroups[i]
+		for i := range bp.DeploymentGroups {
+			grp := &bp.DeploymentGroups[i]
 			be := &grp.TerraformBackend
 			if be.Type == "" {
 				be.Type = defaults.Type
@@ -117,11 +114,7 @@ func (dc *DeploymentConfig) expandBackends() {
 				}
 			}
 			if be.Type == "gcs" && !be.Configuration.Has("prefix") {
-				prefix := blueprint.BlueprintName
-				if deployment, err := blueprint.DeploymentName(); err == nil {
-					prefix += "/" + deployment
-				}
-				prefix += "/" + string(grp.Name)
+				prefix := fmt.Sprintf("%s/%s/%s", bp.BlueprintName, bp.DeploymentName(), grp.Name)
 				be.Configuration.Set("prefix", cty.StringVal(prefix))
 			}
 		}

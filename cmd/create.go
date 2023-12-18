@@ -79,9 +79,7 @@ var (
 
 func runCreateCmd(cmd *cobra.Command, args []string) {
 	dc := expandOrDie(args[0])
-	deplName, err := dc.Config.DeploymentName()
-	checkErr(err)
-	deplDir := filepath.Join(outputDir, deplName)
+	deplDir := filepath.Join(outputDir, dc.Config.DeploymentName())
 	checkErr(checkOverwriteAllowed(deplDir, dc.Config, overwriteDeployment))
 	checkErr(modulewriter.WriteDeployment(dc, deplDir))
 
