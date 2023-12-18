@@ -23,6 +23,7 @@ import (
 
 	"github.com/zclconf/go-cty/cty"
 	"golang.org/x/exp/maps"
+	"golang.org/x/exp/slices"
 	compute "google.golang.org/api/compute/v1"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
@@ -369,13 +370,19 @@ func testModuleNotUsed(bp config.Blueprint, inputs config.Dict) error {
 		return err
 	}
 	errs := config.Errors{}
-	bp.WalkModules(func(m *config.Module) error {
-		for _, u := range m.ListUnusedModules() {
-			// TODO: add yaml position to the error
-			errs.Add(fmt.Errorf(unusedModuleMsg, m.ID, u))
+	for ig, g := range bp.DeploymentGroups {
+		for im, m := range g.Modules {
+			ums := m.ListUnusedModules()
+			p := config.Root.Groups.At(ig).Modules.At(im).Use
+
+			for iu, u := range m.Use {
+				if slices.Contains(ums, u) {
+					errs.At(p.At(iu), fmt.Errorf(unusedModuleMsg, m.ID, u))
+				}
+			}
 		}
-		return nil
-	})
+	}
+
 	return errs.OrNil()
 }
 

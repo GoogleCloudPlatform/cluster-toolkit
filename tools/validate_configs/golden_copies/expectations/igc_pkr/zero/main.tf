@@ -26,37 +26,31 @@ module "network0" {
 module "homefs" {
   source          = "./modules/embedded/modules/file-system/filestore"
   deployment_name = var.deployment_name
-  labels = merge(var.labels, {
-    ghpc_role = "file-system"
-  })
-  local_mount = "/home"
-  network_id  = module.network0.network_id
-  project_id  = var.project_id
-  region      = var.region
-  zone        = var.zone
+  labels          = var.labels
+  local_mount     = "/home"
+  network_id      = module.network0.network_id
+  project_id      = var.project_id
+  region          = var.region
+  zone            = var.zone
 }
 
 module "projectsfs" {
   source          = "./modules/embedded/modules/file-system/filestore"
   deployment_name = var.deployment_name
-  labels = merge(var.labels, {
-    ghpc_role = "file-system"
-  })
-  local_mount = "/projects"
-  network_id  = module.network0.network_id
-  project_id  = var.project_id
-  region      = var.region
-  zone        = var.zone
+  labels          = var.labels
+  local_mount     = "/projects"
+  network_id      = module.network0.network_id
+  project_id      = var.project_id
+  region          = var.region
+  zone            = var.zone
 }
 
 module "script" {
   source          = "./modules/embedded/modules/scripts/startup-script"
   deployment_name = var.deployment_name
-  labels = merge(var.labels, {
-    ghpc_role = "scripts"
-  })
-  project_id = var.project_id
-  region     = var.region
+  labels          = var.labels
+  project_id      = var.project_id
+  region          = var.region
   runners = [{
     content     = "#!/bin/bash\necho \"Hello, World!\"\n"
     destination = "hello.sh"

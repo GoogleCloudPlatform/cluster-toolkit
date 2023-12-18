@@ -55,7 +55,7 @@ type Pos struct {
 func importBlueprint(f string) (Blueprint, YamlCtx, error) {
 	data, err := os.ReadFile(f)
 	if err != nil {
-		return Blueprint{}, YamlCtx{}, fmt.Errorf("%s, filename=%s: %v", errorMessages["fileLoadError"], f, err)
+		return Blueprint{}, YamlCtx{}, fmt.Errorf("%s, filename=%s: %v", errMsgFileLoadError, f, err)
 	}
 	decoder := yaml.NewDecoder(bytes.NewReader(data))
 	decoder.KnownFields(true)

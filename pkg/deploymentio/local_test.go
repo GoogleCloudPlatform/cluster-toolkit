@@ -15,7 +15,6 @@
 package deploymentio
 
 import (
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -28,7 +27,7 @@ func (s *MySuite) TestCreateDirectoryLocal(c *C) {
 
 	// Try to create the exist directory
 	err := deploymentio.CreateDirectory(testDir)
-	expErr := "The directory already exists: .*"
+	expErr := "the directory already exists: .*"
 	c.Assert(err, ErrorMatches, expErr)
 
 	directoryName := "dir_TestCreateDirectoryLocal"
@@ -51,12 +50,12 @@ func (s *MySuite) TestCopyFromPathLocal(c *C) {
 	testDstFilename := filepath.Join(testDir, "testDst")
 	deploymentio.CopyFromPath(testSrcFilename, testDstFilename)
 
-	src, err := ioutil.ReadFile(testSrcFilename)
+	src, err := os.ReadFile(testSrcFilename)
 	if err != nil {
 		log.Fatalf("deploymentio_test: failed to read %s: %v", testSrcFilename, err)
 	}
 
-	dst, err := ioutil.ReadFile(testDstFilename)
+	dst, err := os.ReadFile(testDstFilename)
 	if err != nil {
 		log.Fatalf("deploymentio_test: failed to read %s: %v", testDstFilename, err)
 	}
@@ -75,7 +74,7 @@ func (s *MySuite) TestMkdirWrapper(c *C) {
 	_, err = os.Create(badMkdirWrapperDir)
 	c.Assert(err, IsNil)
 	err = mkdirWrapper(badMkdirWrapperDir)
-	expErr := "Failed to create the directory .*"
+	expErr := "failed to create the directory .*"
 	c.Assert(err, ErrorMatches, expErr)
 }
 

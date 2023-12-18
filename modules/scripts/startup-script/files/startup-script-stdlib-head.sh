@@ -30,26 +30,12 @@ readonly E_RUN_OR_DIE=5
 readonly E_MISSING_MANDATORY_ARG=9
 readonly E_UNKNOWN_ARG=10
 
-SUCCESS_MESSAGE=$(
-	cat <<-EOF
-		** NOTICE **: The VM startup scripts have finished running successfully.  
-		Systems are configured and running.
-	EOF
-)
+SCRIPT_COMPLETE_FILE="/run/startup_script_msg"
+SUCCESS_MESSAGE="* NOTICE **: The HPC Toolkit startup scripts have finished running successfully."
 readonly SUCCESS_MESSAGE
-ERROR_MESSAGE=$(
-	cat <<-EOF
-		** ERROR **: The VM startup scripts have finished running, but produced an error.
-		Systems may be in an unhealthy state.
-	EOF
-)
+ERROR_MESSAGE="** ERROR **: The HPC Toolkit startup scripts have finished running, but produced an error."
 readonly ERROR_MESSAGE
-WARNING_MESSAGE=$(
-	cat <<-EOF
-		** WARNING **: The VM startup scripts for this machine have started.
-		Systems may not be configured or running.
-	EOF
-)
+WARNING_MESSAGE="** WARNING **: The HPC Toolkit startup scripts are currently running."
 readonly WARNING_MESSAGE
 
 stdlib::debug() {
@@ -82,6 +68,7 @@ stdlib::error() {
 stdlib::announce_runners_start() {
 	if [ -z "$recursive_proc" ]; then
 		wall -n "$WARNING_MESSAGE"
+		echo "$WARNING_MESSAGE" >"$SCRIPT_COMPLETE_FILE"
 	fi
 	export recursive_proc=$((${recursive_proc:=0} + 1))
 }
@@ -92,8 +79,10 @@ stdlib::announce_runners_end() {
 	if [ "$recursive_proc" -le "0" ]; then
 		if [ "$exit_code" -ne "0" ]; then
 			wall -n "$ERROR_MESSAGE"
+			echo "$ERROR_MESSAGE" >"$SCRIPT_COMPLETE_FILE"
 		else
 			wall -n "$SUCCESS_MESSAGE"
+			echo -n "" >"$SCRIPT_COMPLETE_FILE"
 		fi
 	fi
 }

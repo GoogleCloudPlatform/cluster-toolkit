@@ -63,8 +63,8 @@ No providers.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_client_startup_script"></a> [client\_startup\_script](#module\_client\_startup\_script) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | 336e0a4 |
-| <a name="module_instances"></a> [instances](#module\_instances) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/compute/vm-instance | v1.22.1 |
+| <a name="module_client_startup_script"></a> [client\_startup\_script](#module\_client\_startup\_script) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | 50644b2 |
+| <a name="module_instances"></a> [instances](#module\_instances) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/compute/vm-instance | bb47067 |
 
 ## Resources
 
@@ -85,7 +85,7 @@ No resources.
 | <a name="input_guest_accelerator"></a> [guest\_accelerator](#input\_guest\_accelerator) | List of the type and count of accelerator cards attached to the instance. Requires virtual workstation accelerator if Nvidia Grid Drivers are required | <pre>list(object({<br>    type  = string,<br>    count = number<br>  }))</pre> | <pre>[<br>  {<br>    "count": 1,<br>    "type": "nvidia-tesla-t4-vws"<br>  }<br>]</pre> | no |
 | <a name="input_install_nvidia_driver"></a> [install\_nvidia\_driver](#input\_install\_nvidia\_driver) | Installs the nvidia driver (true/false). For details, see https://cloud.google.com/compute/docs/gpus/install-drivers-gpu | `bool` | n/a | yes |
 | <a name="input_instance_count"></a> [instance\_count](#input\_instance\_count) | Number of instances | `number` | `1` | no |
-| <a name="input_instance_image"></a> [instance\_image](#input\_instance\_image) | Image used to build chrome remote desktop node. The default image is from<br>family= \"debian-11\" and project = \"debian-cloud\". An alternative image is<br>from family  = \"ubuntu-2204-lts\" and project = \"ubuntu-os-cloud\". | <pre>object({<br>    family  = string,<br>    project = string<br>  })</pre> | <pre>{<br>  "family": "debian-11",<br>  "project": "debian-cloud"<br>}</pre> | no |
+| <a name="input_instance_image"></a> [instance\_image](#input\_instance\_image) | Image used to build chrome remote desktop node. The default image is from<br>family= \"debian-11\" and project = \"debian-cloud\". An alternative image is<br>from family  = \"ubuntu-2204-lts\" and project = \"ubuntu-os-cloud\".<br><br>Expected Fields:<br>name: The name of the image. Mutually exclusive with family.<br>family: The image family to use. Mutually exclusive with name.<br>project: The project where the image is hosted. | `map(string)` | <pre>{<br>  "family": "debian-11",<br>  "project": "debian-cloud"<br>}</pre> | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the instances. Key-value pairs. | `map(string)` | `{}` | no |
 | <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | Machine type to use for the instance creation. Must be N1 family if GPU is used. | `string` | `"n1-standard-8"` | no |
 | <a name="input_metadata"></a> [metadata](#input\_metadata) | Metadata, provided as a map | `map(string)` | `{}` | no |

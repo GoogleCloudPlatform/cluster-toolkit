@@ -22,7 +22,7 @@ terraform {
     }
   }
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:schedmd-slurm-gcp-v5-login/v1.25.0"
+    module_name = "blueprints/terraform/hpc-toolkit:schedmd-slurm-gcp-v5-login/v1.26.1"
   }
   required_version = ">= 1.1"
 }

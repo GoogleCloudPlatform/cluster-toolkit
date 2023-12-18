@@ -1,0 +1,196 @@
+# Copyright 2023 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: hcls-cluster
+
+vars:
+  project_id:  ## Set GCP Project ID Here ##
+  deployment_name: hcls-01
+  region: us-central1
+  zone: us-central1-c
+
+deployment_groups:
+- group: enable_apis
+  modules:
+
+  ### Enable APIs ###
+  - id: services-api
+    source: community/modules/project/service-enablement
+    settings:
+      gcp_service_list:
+      - file.googleapis.com
+      - iam.googleapis.com
+      - pubsub.googleapis.com
+      - secretmanager.googleapis.com
+      - serviceusage.googleapis.com
+      - compute.googleapis.com
+      - stackdriver.googleapis.com
+
+- group: cluster
+  modules:
+
+  ### Network ###
+  - id: network1
+    source: modules/network/vpc
+    settings:
+      network_name: hcls-cluster-net
+      subnetwork_name: primary-subnet
+
+  ### Storage ###
+  - id: nfs
+    source: community/modules/file-system/nfs-server
+    use: [network1]
+    settings:
+      local_mounts: [/home, /apps]
+
+  ### Spack and Ramble ###
+  - id: spack-setup
+    source: community/modules/scripts/spack-setup
+    settings:
+      install_dir: /apps/spack
+      spack_ref: 'v0.20.1'
+      chmod_mode: 'a+rwX'  # Not secure, OK for single user cluster
+
+  - id: spack-execute
+    source: community/modules/scripts/spack-execute
+    use:
+    - spack-setup
+    settings:
+      commands: |
+        spack config --scope=site add "concretizer:targets:host_compatible:false"
+        spack config --scope=site add "config:build_stage:[/apps/spack_stage]"
+
+  - id: ramble-setup
+    source: community/modules/scripts/ramble-setup
+    settings:
+      install_dir: /apps/ramble
+      ramble_ref: 'develop'
+      chmod_mode: 'a+rwX'  # Not secure, OK for single user cluster
+
+  - id: ramble-execute
+    source: community/modules/scripts/ramble-execute
+    use:
+    - spack-setup
+    - ramble-setup
+    settings:
+      data_files:
+      - destination: /apps/ramble_configs/gromacs_ramble.yaml
+        content: |
+          ramble:
+            variables:
+              mpi_command: 'mpirun -n {n_ranks} -ppn {processes_per_node} -hostfile hostfile'
+              batch_submit: 'sbatch {slurm_execute}'
+              processes_per_node: 30
+              partition: 'compute'
+            applications:
+              gromacs:
+                workloads:
+                  '{app_workload}':
+                    experiments:
+                      '{size}test':
+                        variables:
+                          n_nodes: 1
+                          app_workload: ['water_bare', 'water_gmx50']
+                          type: pme
+                          size: [0096, 0192, 0384, 0768, 1536]
+                        matrix:
+                        - app_workload
+                        - size
+            spack:
+              concretized: true
+              packages:
+                gcc:
+                  spack_spec: gcc@13.1.0 target=x86_64
+                  compiler_spec: gcc@13.1.0
+                gromacs:
+                  spack_spec: gromacs@2020.6 target=cascadelake
+                  compiler: gcc
+                impi:
+                  spack_spec: intel-oneapi-mpi@2021.9.0 target=cascadelake
+                  compiler: gcc
+              environments:
+                gromacs:
+                  packages:
+                  - gromacs
+                  - impi
+      - destination: /apps/ramble_configs/slurm_execute.tpl
+        content: |
+          #!/bin/bash
+          #SBATCH -p {partition}
+          #SBATCH -N {n_nodes}
+          #SBATCH --ntasks-per-node {processes_per_node}
+          #SBATCH --time 20
+          cd "{experiment_run_dir}"
+          scontrol show hostnames > {experiment_run_dir}/hostfile
+          {command}
+
+  - id: controller-startup
+    source: modules/scripts/startup-script
+    settings:
+      runners:
+      - $(spack-setup.spack_runner)
+      - $(spack-execute.spack_runner)
+      - $(ramble-setup.ramble_runner)
+      - $(ramble-execute.ramble_runner)
+      - type: data
+        destination: /apps/user_setup.sh
+        content: |
+          #!/bin/bash
+          export WORKSPACE="$HOME/gromacs_workspace"
+          ramble workspace create -d "$WORKSPACE" -c "/apps/ramble_configs/gromacs_ramble.yaml" -t "/apps/ramble_configs/slurm_execute.tpl"
+          ramble -D "$WORKSPACE" workspace setup
+          ramble -D "$WORKSPACE" on
+          echo -e "Please wait for the experiments to complete. Check on their status with 'squeue'. Then run:\n ramble -D \"$WORKSPACE\" workspace analyze\ncat \"$WORKSPACE/results.latest.txt\""
+      - type: shell
+        destination: /apps/update_perms.sh
+        content: |
+          #!/bin/bash
+          chmod a+x /apps/user_setup.sh
+          chmod -R a+rwX /apps/*
+
+  ### Slurm Cluster ###
+  - id: compute_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use:
+    - network1
+    settings:
+      node_count_dynamic_max: 2
+      machine_type: c2-standard-60
+
+  - id: compute_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use:
+    - compute_nodeset
+    - nfs
+    settings:
+      partition_name: compute
+      exclusive: false
+
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    use:
+    - network1
+    - compute_partition
+    - nfs
+    settings:
+      machine_type: n2-standard-4
+      disable_controller_public_ips: false
+      controller_startup_script: $(controller-startup.controller_startup_script)
+      controller_startup_scripts_timeout: 0
+
+  ### Resource Monitoring ###
+  - id: hpc-dash
+    source: modules/monitoring/dashboard

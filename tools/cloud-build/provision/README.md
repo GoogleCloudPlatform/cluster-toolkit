@@ -37,7 +37,6 @@ When prompted for project, use integration test project.
 |------|--------|---------|
 | <a name="module_daily_project_cleanup_schedule"></a> [daily\_project\_cleanup\_schedule](#module\_daily\_project\_cleanup\_schedule) | ./trigger-schedule | n/a |
 | <a name="module_daily_test_schedule"></a> [daily\_test\_schedule](#module\_daily\_test\_schedule) | ./trigger-schedule | n/a |
-| <a name="module_release_test_schedule"></a> [release\_test\_schedule](#module\_release\_test\_schedule) | ./trigger-schedule | n/a |
 | <a name="module_weekly_build_dependency_check_schedule"></a> [weekly\_build\_dependency\_check\_schedule](#module\_weekly\_build\_dependency\_check\_schedule) | ./trigger-schedule | n/a |
 | <a name="module_weekly_builder_image_schedule"></a> [weekly\_builder\_image\_schedule](#module\_weekly\_builder\_image\_schedule) | ./trigger-schedule | n/a |
 
@@ -51,13 +50,13 @@ When prompted for project, use integration test project.
 | [google_cloudbuild_trigger.pr_ofe_test](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/cloudbuild_trigger) | resource |
 | [google_cloudbuild_trigger.pr_test](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/cloudbuild_trigger) | resource |
 | [google_cloudbuild_trigger.pr_validation](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/cloudbuild_trigger) | resource |
-| [google_cloudbuild_trigger.release_test](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/cloudbuild_trigger) | resource |
 | [google_cloudbuild_trigger.weekly_build_dependency_check](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/cloudbuild_trigger) | resource |
 | [google_cloudbuild_trigger.weekly_builder_image](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/cloudbuild_trigger) | resource |
 | [google_cloudbuild_trigger.zebug_fast_build_failure](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/cloudbuild_trigger) | resource |
 | [google_cloudbuild_trigger.zebug_fast_build_success](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/cloudbuild_trigger) | resource |
+| [google_compute_reservation.c2standard60_us_west4_c](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_reservation) | resource |
+| [google_compute_reservation.n1standard8_with_tesla_t4_europe_west1_d](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_reservation) | resource |
 | [external_external.list_tests_midnight](https://registry.terraform.io/providers/hashicorp/external/latest/docs/data-sources/external) | data source |
-| [external_external.list_tests_morning](https://registry.terraform.io/providers/hashicorp/external/latest/docs/data-sources/external) | data source |
 
 ## Inputs
 

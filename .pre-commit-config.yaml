@@ -62,7 +62,6 @@ repos:
   hooks:
   - id: go-fmt
   - id: go-vet
-  - id: go-lint
   - id: go-imports
   - id: go-cyclo
     args: [-over=15]
@@ -74,6 +73,10 @@ repos:
   hooks:
   - id: go-critic
     args: [-disable, "#experimental,sloppyTypeAssert"]
+- repo: https://github.com/Bahjat/pre-commit-golang
+  rev: v1.0.2
+  hooks:
+  - id: go-static-check
 - repo: https://github.com/adrienverge/yamllint
   rev: v1.32.0
   hooks:

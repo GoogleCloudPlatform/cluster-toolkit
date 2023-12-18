@@ -17,13 +17,11 @@
 module "homefs" {
   source          = "./modules/embedded/modules/file-system/filestore"
   deployment_name = var.deployment_name
-  labels = merge(var.labels, {
-    ghpc_role = "file-system"
-  })
-  local_mount = "/home"
-  name        = var.subnetwork_name_network0
-  network_id  = var.network_id_network0
-  project_id  = var.project_id
-  region      = var.region
-  zone        = var.zone
+  labels          = var.labels
+  local_mount     = "/home"
+  name            = var.subnetwork_name_network0
+  network_id      = var.network_id_network0
+  project_id      = var.project_id
+  region          = var.region
+  zone            = var.zone
 }

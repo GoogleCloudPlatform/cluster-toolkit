@@ -45,8 +45,6 @@ deployment_groups:
           image_name: \((cat /dog))
           labels: |-
             ((merge(var.labels, {
-              ghpc_role = "packer"
-              }, {
               brown = "$(fox)"
             })))
           project_id: ((var.project_id))

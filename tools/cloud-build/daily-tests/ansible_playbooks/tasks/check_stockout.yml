@@ -22,9 +22,7 @@
 - name: Check logs for stockout on compute nodes
   changed_when: false
   register: stockout
-  until: stockout.rc == 0
-  retries: 5
-  delay: 10
+  failed_when: false
   ansible.builtin.command: >-
     gcloud logging --project {{ project }} read
     'protoPayload.response.error.errors.message="{{ item }}" AND protoPayload.request.instanceProperties.labels.value="{{ deployment_name }}"'
@@ -43,4 +41,4 @@
   when: item.stdout != ""
   with_items: "{{ stockout.results }}"
   loop_control:
-    label: "{{ item.item }}"
+    label: "{{ item.cmd }}"

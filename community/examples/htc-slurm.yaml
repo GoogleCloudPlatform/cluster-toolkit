@@ -75,6 +75,7 @@ deployment_groups:
     settings:
       name: c2s60
       node_count_dynamic_max: 200
+      bandwidth_tier: gvnic_enabled
 
   - id: compute_node_group_c2s30
     source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
@@ -82,6 +83,7 @@ deployment_groups:
       name: c2s30
       node_count_dynamic_max: 200
       machine_type: c2-standard-30
+      bandwidth_tier: gvnic_enabled
 
   - id: compute_partition
     source: community/modules/compute/schedmd-slurm-gcp-v5-partition
@@ -107,6 +109,7 @@ deployment_groups:
       name: n2s2
       machine_type: n2-standard-2
       node_count_dynamic_max: 10
+      bandwidth_tier: gvnic_enabled
 
   - id: low_cost_node_group_n2s4
     source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
@@ -114,6 +117,7 @@ deployment_groups:
       name: n2s4
       machine_type: n2-standard-4
       node_count_dynamic_max: 10
+      bandwidth_tier: gvnic_enabled
 
   - id: low_cost_partition
     source: community/modules/compute/schedmd-slurm-gcp-v5-partition

@@ -91,17 +91,10 @@ variable "bucket_dir" {
 # LOGIN #
 #########
 
-variable "enable_login" {
-  description = <<EOD
-Enables the creation of login nodes and instance templates.
-EOD
-  type        = bool
-  default     = true
-}
-
 variable "login_nodes" {
   description = "List of slurm login instance definitions."
   type = list(object({
+    name_prefix = string
     additional_disks = optional(list(object({
       disk_name    = optional(string)
       device_name  = optional(string)
@@ -126,7 +119,6 @@ variable "login_nodes" {
       count = number
       type  = string
     }))
-    group_name          = string
     instance_template   = optional(string)
     labels              = optional(map(string), {})
     machine_type        = optional(string)
@@ -158,6 +150,10 @@ variable "login_nodes" {
     termination_action   = optional(string)
   }))
   default = []
+  validation {
+    condition     = length(distinct([for x in var.login_nodes : x.name_prefix])) == length(var.login_nodes)
+    error_message = "All login_nodes must have a unique name_prefix."
+  }
 }
 
 ############
@@ -218,12 +214,13 @@ variable "nodeset" {
     source_image_project = optional(string)
     source_image         = optional(string)
     subnetwork_project   = optional(string)
-    subnetwork           = optional(string)
-    spot                 = optional(bool, false)
-    tags                 = optional(list(string), [])
-    termination_action   = optional(string)
-    zones                = optional(list(string), [])
-    zone_target_shape    = optional(string, "ANY_SINGLE_ZONE")
+    # TODO: rename to subnetwork_self_link 
+    subnetwork         = optional(string)
+    spot               = optional(bool, false)
+    tags               = optional(list(string), [])
+    termination_action = optional(string)
+    zones              = optional(list(string), [])
+    zone_target_shape  = optional(string, "ANY_SINGLE_ZONE")
   }))
   default = []
 
@@ -389,6 +386,20 @@ variable "network_storage" {
   default = []
 }
 
+variable "login_network_storage" {
+  description = "An array of network attached storage mounts to be configured on all login nodes."
+  type = list(object({
+    server_ip             = string,
+    remote_mount          = string,
+    local_mount           = string,
+    fs_type               = string,
+    mount_options         = string,
+    client_install_runner = map(string) # TODO: is it used? should remove it?
+    mount_runner          = map(string)
+  }))
+  default = []
+}
+
 variable "slurmdbd_conf_tpl" {
   description = "Slurm slurmdbd.conf template file path."
   type        = string
@@ -489,6 +500,7 @@ EOD
 
 variable "cloudsql" {
   description = <<EOD
+NOT SUPPORTED YET.
 Use this database instead of the one on the controller.
   server_ip : Address of the database server.
   user      : The user to access the database as.

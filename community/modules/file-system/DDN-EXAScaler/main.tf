@@ -54,7 +54,7 @@ module "ddn_exascaler" {
   network         = var.network_properties == null ? local.named_net : var.network_properties
   subnetwork      = var.subnetwork_properties == null ? local.named_subnet : var.subnetwork_properties
   boot            = var.boot
-  image           = var.image
+  image           = var.instance_image
   mgs             = var.mgs
   mgt             = var.mgt
   mnt             = var.mnt

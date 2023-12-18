@@ -74,8 +74,8 @@ No providers.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_client_startup_script"></a> [client\_startup\_script](#module\_client\_startup\_script) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | 336e0a4 |
-| <a name="module_pbs_client"></a> [pbs\_client](#module\_pbs\_client) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/compute/vm-instance | v1.22.1 |
+| <a name="module_client_startup_script"></a> [client\_startup\_script](#module\_client\_startup\_script) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | 50644b2 |
+| <a name="module_pbs_client"></a> [pbs\_client](#module\_pbs\_client) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/compute/vm-instance | bb47067 |
 | <a name="module_pbs_install"></a> [pbs\_install](#module\_pbs\_install) | github.com/GoogleCloudPlatform/hpc-toolkit//community/modules/scripts/pbspro-install | v1.22.1 |
 
 ## Resources
@@ -95,7 +95,7 @@ No resources.
 | <a name="input_enable_public_ips"></a> [enable\_public\_ips](#input\_enable\_public\_ips) | If set to true, instances will have public IPs on the internet. | `bool` | `true` | no |
 | <a name="input_guest_accelerator"></a> [guest\_accelerator](#input\_guest\_accelerator) | List of the type and count of accelerator cards attached to the instance. | <pre>list(object({<br>    type  = string,<br>    count = number<br>  }))</pre> | `null` | no |
 | <a name="input_instance_count"></a> [instance\_count](#input\_instance\_count) | Number of instances | `number` | `1` | no |
-| <a name="input_instance_image"></a> [instance\_image](#input\_instance\_image) | Instance Image | <pre>object({<br>    family  = string,<br>    project = string<br>  })</pre> | <pre>{<br>  "family": "hpc-centos-7",<br>  "project": "cloud-hpc-image-public"<br>}</pre> | no |
+| <a name="input_instance_image"></a> [instance\_image](#input\_instance\_image) | Instance Image<br><br>Expected Fields:<br>name: The name of the image. Mutually exclusive with family.<br>family: The image family to use. Mutually exclusive with name.<br>project: The project where the image is hosted. | `map(string)` | <pre>{<br>  "family": "hpc-centos-7",<br>  "project": "cloud-hpc-image-public"<br>}</pre> | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the instances. Key-value pairs. | `map(string)` | n/a | yes |
 | <a name="input_local_ssd_count"></a> [local\_ssd\_count](#input\_local\_ssd\_count) | The number of local SSDs to attach to each VM. See https://cloud.google.com/compute/docs/disks/local-ssd. | `number` | `0` | no |
 | <a name="input_local_ssd_interface"></a> [local\_ssd\_interface](#input\_local\_ssd\_interface) | Interface to be used with local SSDs. Can be either 'NVME' or 'SCSI'. No effect unless `local_ssd_count` is also set. | `string` | `"NVME"` | no |

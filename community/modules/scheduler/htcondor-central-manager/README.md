@@ -99,7 +99,7 @@ limitations under the License.
 |------|--------|---------|
 | <a name="module_central_manager_instance_template"></a> [central\_manager\_instance\_template](#module\_central\_manager\_instance\_template) | github.com/terraform-google-modules/terraform-google-vm//modules/instance_template | 84d7959 |
 | <a name="module_htcondor_cm"></a> [htcondor\_cm](#module\_htcondor\_cm) | github.com/terraform-google-modules/terraform-google-vm//modules/mig | aea74d1 |
-| <a name="module_startup_script"></a> [startup\_script](#module\_startup\_script) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | 336e0a4 |
+| <a name="module_startup_script"></a> [startup\_script](#module\_startup\_script) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | 50644b2 |
 
 ## Resources
 
@@ -124,7 +124,7 @@ limitations under the License.
 | <a name="input_enable_oslogin"></a> [enable\_oslogin](#input\_enable\_oslogin) | Enable or Disable OS Login with "ENABLE" or "DISABLE". Set to "INHERIT" to inherit project OS Login setting. | `string` | `"ENABLE"` | no |
 | <a name="input_enable_shielded_vm"></a> [enable\_shielded\_vm](#input\_enable\_shielded\_vm) | Enable the Shielded VM configuration (var.shielded\_instance\_config). | `bool` | `false` | no |
 | <a name="input_htcondor_bucket_name"></a> [htcondor\_bucket\_name](#input\_htcondor\_bucket\_name) | Name of HTCondor configuration bucket | `string` | n/a | yes |
-| <a name="input_instance_image"></a> [instance\_image](#input\_instance\_image) | Custom VM image with HTCondor installed using the htcondor-install module. | <pre>object({<br>    family  = string,<br>    project = string<br>  })</pre> | n/a | yes |
+| <a name="input_instance_image"></a> [instance\_image](#input\_instance\_image) | Custom VM image with HTCondor installed using the htcondor-install module."<br><br>Expected Fields:<br>name: The name of the image. Mutually exclusive with family.<br>family: The image family to use. Mutually exclusive with name.<br>project: The project where the image is hosted. | `map(string)` | n/a | yes |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to resources. List key, value pairs. | `map(string)` | n/a | yes |
 | <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | Machine type to use for HTCondor central managers | `string` | `"c2-standard-4"` | no |
 | <a name="input_metadata"></a> [metadata](#input\_metadata) | Metadata to add to HTCondor central managers | `map(string)` | `{}` | no |
