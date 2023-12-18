@@ -23,7 +23,7 @@ import subprocess
 DESCRIPTION = """
 babysit_tests is a tool to approve & retry CloudBuild tests.
 It monitors status of builds referenced by PR commit SHA,
-it will approve and retry tests accoding to configured concurrency and retry policies.
+it will approve and retry tests according to configured concurrency and retry policies.
 The tool will terminate itself once there is no more actions to take or no reasons to wait for status changes.
 The subset of tests to monitor can be configured by using test_selectors, e.g. "all", exact_name_of_test.
 Usage:
@@ -227,7 +227,7 @@ class Babysitter:
         if num_running == len(active):
             return True  # waiting for results
         if num_running >= self.concurrency:
-            return True  # waiting for "openning"
+            return True  # waiting for "opening"
 
         pend = next(
             (b for b in not_running if b.status == Status.PENDING), None)

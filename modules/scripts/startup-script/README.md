@@ -72,7 +72,7 @@ This script will do the following at VM startup:
   ansible is not version 2.11 or higher.
 
 To use the virtual environment created by this script, you can activate it by
-running the following commmand on the VM:
+running the following command on the VM:
 
 ```shell
 source /usr/local/ghpc-venv/bin/activate
@@ -124,7 +124,7 @@ by this module:
 sudo DEBUG=1 google_metadata_script_runner startup
 ```
 
-To view ouputs from a Linux startup script, run:
+To view outputs from a Linux startup script, run:
 
 ```shell
 sudo journalctl -u google-startup-scripts.service

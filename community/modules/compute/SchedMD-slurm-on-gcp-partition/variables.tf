@@ -153,7 +153,7 @@ variable "regional_capacity" {
 }
 
 variable "regional_policy" {
-  description = "locationPolicy defintion for regional bulkInsert()"
+  description = "locationPolicy definition for regional bulkInsert()"
   type        = any
   default     = {}
 }

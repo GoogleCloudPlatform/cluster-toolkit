@@ -37,7 +37,7 @@ request an `emptyDir` volume. This can be accomplished using the
 [`local_ssd_count_ephemeral_storage`] variable.
 
 The second, more complex, option is for GCP to attach these nodes as raw block
-storage. In this case, the cluster administrator is responible for software
+storage. In this case, the cluster administrator is responsible for software
 RAID settings, partitioning, formatting and mounting these disks on the host
 OS.  Still, this may be desired behavior in use cases which aren't supported
 by an `emptyDir` volume (for example, a `ReadOnlyMany` or `ReadWriteMany` PV).

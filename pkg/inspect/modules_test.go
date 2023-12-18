@@ -49,6 +49,12 @@ func (m *modInfo) Role() string {
 
 var allMods []modInfo = nil
 
+// we can't use embedded FS here (defined in super-package).
+// Craft local path.
+func modPath(source string) string {
+	return filepath.Join("../..", source)
+}
+
 func getModules() []modInfo {
 	if allMods != nil {
 		return allMods
@@ -59,7 +65,7 @@ func getModules() []modInfo {
 	}
 	allMods = []modInfo{}
 	for _, sk := range sks {
-		info, err := modulereader.GetModuleInfo(filepath.Join("../..", sk.Source), sk.Kind)
+		info, err := modulereader.GetModuleInfo(modPath(sk.Source), sk.Kind)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -147,5 +153,45 @@ func TestNetworkStorage(t *testing.T) {
 			t.Errorf("%s `network_storage` has unexpected type expected:\n%#v\nor\n%#v\ngot:\n%#v",
 				mod.Source, obj, lst, got)
 		}
+	}
+}
+
+func TestMetadataIsObtainable(t *testing.T) {
+	// Test that `GetMetadata` does not fail. `GetMetadataSafe` falls back to legacy.
+	for _, mod := range notEmpty(query(all()), t) {
+		t.Run(mod.Source, func(t *testing.T) {
+			_, err := modulereader.GetMetadata(modPath(mod.Source))
+			if err != nil {
+				t.Error(err)
+			}
+		})
+	}
+}
+
+func TestMetadataHasServices(t *testing.T) {
+	for _, mod := range notEmpty(query(all()), t) {
+		t.Run(mod.Source, func(t *testing.T) {
+			if mod.Metadata.Spec.Requirements.Services == nil {
+				t.Error("metadata has no spec.requirements.services set")
+			}
+		})
+	}
+}
+
+func TestMetadataInjectModuleId(t *testing.T) {
+	for _, mod := range notEmpty(query(all()), t) {
+		t.Run(mod.Source, func(t *testing.T) {
+			gm := mod.Metadata.Ghpc
+			if gm.InjectModuleId == "" {
+				return
+			}
+			in, ok := mod.Input(gm.InjectModuleId)
+			if !ok {
+				t.Fatalf("has no input %q", gm.InjectModuleId)
+			}
+			if in.Type != "string" {
+				t.Errorf("%q type is not a string, but %q", gm.InjectModuleId, in.Type)
+			}
+		})
 	}
 }

@@ -30,7 +30,7 @@ if [[ -z "${TIMEOUT}" ]]; then
 	exit 1
 fi
 
-# Wrapepr arround grep that swallows the error status code 1
+# Wrapper around grep that swallows the error status code 1
 c1grep() { grep "$@" || test $? = 1; }
 
 now=$(date +%s)

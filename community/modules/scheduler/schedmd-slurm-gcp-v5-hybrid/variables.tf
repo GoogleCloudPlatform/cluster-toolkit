@@ -262,14 +262,14 @@ variable "partition" {
 
 variable "google_app_cred_path" {
   type        = string
-  description = "Path to Google Applicaiton Credentials."
+  description = "Path to Google Application Credentials."
   default     = null
 }
 
 variable "slurm_bin_dir" {
   type        = string
   description = <<-EOD
-    Path to directroy of Slurm binary commands (e.g. scontrol, sinfo). If 'null',
+    Path to directory of Slurm binary commands (e.g. scontrol, sinfo). If 'null',
     then it will be assumed that binaries are in $PATH.
     EOD
   default     = null

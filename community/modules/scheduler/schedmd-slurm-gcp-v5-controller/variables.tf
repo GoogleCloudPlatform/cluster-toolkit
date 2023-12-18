@@ -255,7 +255,7 @@ variable "enable_slurm_gcp_plugins" {
   description = <<EOD
 Enables calling hooks in scripts/slurm_gcp_plugins during cluster resume and suspend.
 EOD
-  type        = bool
+  type        = any
   default     = false
 }
 

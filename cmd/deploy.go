@@ -18,9 +18,9 @@ package cmd
 import (
 	"fmt"
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/modulewriter"
 	"hpc-toolkit/pkg/shell"
-	"log"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
@@ -74,7 +74,7 @@ func getApplyBehavior(autoApprove bool) shell.ApplyBehavior {
 }
 
 func runDeployCmd(cmd *cobra.Command, args []string) {
-	expandedBlueprintFile := filepath.Join(artifactsDir, expandedBlueprintFilename)
+	expandedBlueprintFile := filepath.Join(artifactsDir, modulewriter.ExpandedBlueprintName)
 	dc, _, err := config.NewDeploymentConfig(expandedBlueprintFile)
 	checkErr(err)
 	groups := dc.Config.DeploymentGroups
@@ -98,7 +98,7 @@ func runDeployCmd(cmd *cobra.Command, args []string) {
 			checkErr(fmt.Errorf("group %s is an unsupported kind %s", groupDir, group.Kind().String()))
 		}
 	}
-	fmt.Println("\n###############################")
+	logging.Info("\n###############################")
 	printAdvancedInstructionsMessage(deploymentRoot)
 }
 
@@ -131,15 +131,15 @@ func deployPackerGroup(moduleDir string) error {
 	}
 	buildImage := applyBehavior == shell.AutomaticApply || shell.ApplyChangesChoice(c)
 	if buildImage {
-		log.Printf("initializing packer module at %s", moduleDir)
+		logging.Info("initializing packer module at %s", moduleDir)
 		if err := shell.ExecPackerCmd(moduleDir, false, "init", "."); err != nil {
 			return err
 		}
-		log.Printf("validating packer module at %s", moduleDir)
+		logging.Info("validating packer module at %s", moduleDir)
 		if err := shell.ExecPackerCmd(moduleDir, false, "validate", "."); err != nil {
 			return err
 		}
-		log.Printf("building image using packer module at %s", moduleDir)
+		logging.Info("building image using packer module at %s", moduleDir)
 		if err := shell.ExecPackerCmd(moduleDir, true, "build", "."); err != nil {
 			return err
 		}

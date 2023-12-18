@@ -17,165 +17,253 @@
 {% extends "base_generic.html" %}
 
 {% block meta %}
-  {% if cluster.status == "c" or cluster.status == "i" or cluster.status == "t" %}
-  <meta http-equiv="refresh" content="15" />
-  {% endif %}
-  {% if object.status == "c" or object.status == "t" %}
-  {# aka, if Terraform running, let's show the TF log #}
-  <script>
-window.onload=function(event) {
-		var xhr_ = new XMLHttpRequest();
-		xhr_.open("GET", "{% url 'cluster-log-file' cluster.id 0 %}", true);
-		xhr_.onprogress = function() {
-            $('#id_log_1').append(xhr_.responseText);
-            $('#id_log_1').scrollTop($('#id_log_1')[0].scrollHeight);
-        }
-		xhr_.onload = function() {
-            $('#id_log_1').val(xhr_.responseText);
-            $('#id_log_1').scrollTop($('#id_log_1')[0].scrollHeight);
-        }
-		xhr_.send()
-}
-  </script>
-  <style>
-.log-file {
+{% if cluster.status == "c" or cluster.status == "i" or cluster.status == "t" %}
+<meta http-equiv="refresh" content="15" />
+{% endif %}
+{% if object.status == "c" or object.status == "t" %}
+{# aka, if Terraform running, let's show the TF log #}
+<script>
+  window.onload = function (event) {
+    var xhr_ = new XMLHttpRequest();
+    xhr_.open("GET", "{% url 'cluster-log-file' cluster.id 0 %}", true);
+    xhr_.onprogress = function () {
+      $('#id_log_1').append(xhr_.responseText);
+      $('#id_log_1').scrollTop($('#id_log_1')[0].scrollHeight);
+    }
+    xhr_.onload = function () {
+      $('#id_log_1').val(xhr_.responseText);
+      $('#id_log_1').scrollTop($('#id_log_1')[0].scrollHeight);
+    }
+    xhr_.send()
+  }
+</script>
+<style>
+  .log-file {
     white-space: pre;
     font-family: monospace;
-}
-  </style>
-  {% endif %}
+  }
+</style>
+{% endif %}
 {% endblock %}
 
 {% block content %}
-  <h2>Cluster Detail</h2>
-    <p><b>Cluster ID:</b> {{ object.id }}</p>
-    <p><b>Name:</b> {{ object.name }}</p>
-    <p><b>Region:</b> {{ object.cloud_region }}</p>
-    <p><b>Zone:</b> {{ object.cloud_zone }}</p>
-    <p><b>VPC & Subnet:</b> {{ object.subnet.vpc.name }} - {{object.subnet.name}}</p>
-    <p><b>Controller node IP:</b> {{ object.controller_node.public_ip }}</p>
-    <p><b>Controller node type:</b> {{object.controller_instance_type }} with {{ object.controller_disk_size }} GB {{ object.controller_disk_type }} boot disk.</p>
-    <p><b>Login nodes:</b> {{ object.num_login_nodes }}{% if object.login_nodes.count %}: {% for login in object.login_nodes.all %}{{ login.public_ip }}{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}</p>
-    <p><b>Login node(s) type:</b> {{object.login_node_instance_type }} with {{ object.login_node_disk_size }} GB {{ object.login_node_disk_type }} boot disk.</p>
-    <p>
-      <b>Status:</b>
-      {% if cluster.status == "c" or cluster.status == "i" or cluster.status  == "t"  %}
-         <img src="/static/img/loading.gif" style="width:32px;height:32px;">
-      {% endif %}
-      {% if object.status == "r" %}
-         <img src="/static/img/status-ready.png" style="width:32px;height:32px;">
-      {% endif %}
-      {{ object.get_status_display }}
-      {% if object.grafana_dashboard_url %}
-        &nbsp;&nbsp;&nbsp;<a href="{{object.grafana_dashboard_url}}" target="_blank">Grafana Dashboard</a>
-      {% endif %}
-    </p>
+<h2>Cluster Detail</h2>
+<p><b>Cluster ID:</b> {{ object.id }}</p>
+<p><b>Name:</b> {{ object.name }}</p>
+<p><b>Region:</b> {{ object.cloud_region }}</p>
+<p><b>Zone:</b> {{ object.cloud_zone }}</p>
+<p><b>VPC & Subnet:</b> {{ object.subnet.vpc.name }} - {{object.subnet.name}}</p>
+<p><b>Controller node IP:</b>
+  {% if object.controller_node.public_ip %}
+  {{ object.controller_node.public_ip }}
+  {% else %}
+  {{ object.controller_node.internal_ip }}
+  {% endif %}
+</p>
+<p><b>Controller node type:</b> {{object.controller_instance_type }} with {{ object.controller_disk_size }} GB {{ object.controller_disk_type }} boot disk.</p>
+<p><b>Login nodes:</b> {{ object.num_login_nodes }}{% if object.login_nodes.count %}:
+  {% for login in object.login_nodes.all %}
+  {% if login.public_ip %}
+  {{ login.public_ip }}
+  {% else %}
+  {{ login.internal_ip }}
+  {% endif %}
+  {% if not forloop.last %}, {% endif %}
+  {% endfor %}
+  {% endif %}
+</p>
+<p><b>Login node(s) type:</b> {{object.login_node_instance_type }} with {{ object.login_node_disk_size }} GB {{ object.login_node_disk_type }} boot disk.</p>
+<p id="status-p">
+  <b>Status:</b>
+  {% if cluster.status == "c" or cluster.status == "i" or cluster.status == "t" or cluster.status == "n" %}
+  <img src="/static/img/loading.gif" style="width:32px;height:32px;">
+  <script>
+    setInterval(function () {
+      $.ajax({
+        url: "{% url 'backend-cluster-status' object.id %}",
+        type: "GET",
+        dataType: "json",
+        success: function (data) {
+          // update the object status display
+          var statusElement = $("#status-p");
+          var statusText = response.status;
+          statusElement.html("<b>Status: {{ object.get_status_display }}</b>");
 
-    <div class="form-group">
-      <div class="custom-control custom-checkbox">
-        <input type="checkbox" class="custom-control-input" id="show-advanced-features" data-toggle="collapse" data-target="#advanced-features">
-        <label class="custom-control-label" for="show-advanced-features">Show Advanced Details</label>
-      </div>
-    </div>
-    
-    <div id="advanced-features" class="collapse">
-      <p><b>Login node image:</b> {{ object.login_node_image.name }}</p>
-      <p><b>Controller node image:</b> {{ object.controller_node_image.name }}</p>
-    </div>
+          // check if the status is "r" and stop the refresh interval
+          if (statusText == "r") {
+            clearInterval(refreshIntervalId);
+          }
+        },
+        error: function (xhr, status, error) {
+          console.log("Error refreshing data");
+        }
+      });
+    }, 5000);
+  </script>
+  {% endif %}
 
-    <hr>
-    <p style="text-decoration: underline; font-size: large;">Partitions</p>
-    <div class="table-responsive">
-    <table class="table align-middle">
-      <tr>
-        <th>Partition Name</th>
-        <th>Instance Type</th>
-        <th>vCPUs per Node</th>
-        <th>GPU Type</th>
-        <th>GPUs per Node</th>
-        <th>Dynamic Instances</th>
-        <th>Static Instances</th>
-      </tr>
-      {% for part in object.partitions.all %}
-      <tr>
-        <td>{{ part.name }}</td>
-        <td>{{ part.machine_type }}</td>
-        <td>{{ part.vCPU_per_node }}</td>
-	<td>{% if part.GPU_per_node > 0 %}{{ part.GPU_type }}{% else %}-{% endif %}</td>
-	<td>{% if part.GPU_per_node > 0 %}{{ part.GPU_per_node }}{% else %}-{% endif %}</td>
-        <td>{{ part.dynamic_node_count }}</td>
-        <td>{{ part.static_node_count }}</td>
-      </tr>
-      {% endfor %}
-    </table>
-    </div>
+  {% if object.status == "r" %}
+  <img src="/static/img/status-ready.png" style="width:32px;height:32px;">
+  {% endif %}
+  {{ object.get_status_display }}
+  {% if object.grafana_dashboard_url %}
+  &nbsp;&nbsp;&nbsp;<a href="{{object.grafana_dashboard_url}}" target="_blank">Grafana Dashboard</a>
+  {% endif %}
+  {% if object.status == "e" %}
+<div class="alert alert-warning">
+  <p><strong>Cluster Deployment Status Update:</strong> The cluster deployment encountered some difficulties. It's
+    possible that certain resources may have been partially created.</p>
+  <p>To ensure a clean slate, kindly consider clicking the "Delete" button located at the bottom.</p>
+  <p>If you wish to give it another try, click the "Retry" button.</p>
+  <p>Before making your decision, we strongly recommend examining the logs for more insights; just click "View Logs" for
+    a better understanding of the situation.</p>
+</div>
+{% endif %}
+</p>
+
+<div class="form-group">
+  <div class="custom-control custom-checkbox">
+    <input type="checkbox" class="custom-control-input" id="show-advanced-features" data-toggle="collapse"
+      data-target="#advanced-features">
+    <label class="custom-control-label" for="show-advanced-features">Show Advanced Details</label>
+  </div>
+</div>
+
+<div id="advanced-features" class="collapse">
+  <p><b>Login node image:</b> {{ object.login_node_image.name }}</p>
+  <p><b>Controller node image:</b> {{ object.controller_node_image.name }}</p>
+</div>
+
+<hr>
+<p style="text-decoration: underline; font-size: large;">Partitions</p>
+<div class="table-responsive">
+  <table class="table align-middle">
+    <tr>
+      <th>Partition Name</th>
+      <th>Instance Type</th>
+      <th>vCPUs per Node</th>
+      <th>GPU Type</th>
+      <th>GPUs per Node</th>
+      <th>Dynamic Instances</th>
+      <th>Static Instances</th>
+    </tr>
+    {% for part in object.partitions.all %}
+    <tr>
+      <td>{{ part.name }}</td>
+      <td>{{ part.machine_type }}</td>
+      <td>{{ part.vCPU_per_node }}</td>
+      <td>{% if part.GPU_per_node > 0 %}{{ part.GPU_type }}{% else %}-{% endif %}</td>
+      <td>{% if part.GPU_per_node > 0 %}{{ part.GPU_per_node }}{% else %}-{% endif %}</td>
+      <td>{{ part.dynamic_node_count }}</td>
+      <td>{{ part.static_node_count }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
 
 {% if admin_view == 1 %}
-    <p style="text-decoration: underline; font-size: large;">Authorized Users</p>
-    <div class="table-responsive">
-    <table class="table align-middle">
-      <tr>
-        <th>First Name</th>
-        <th>Last Name</th>
-        <th>UserID</th>
-      </tr>
-      {% for instance in object.authorised_users.all %}
-      <tr>
-        <td>{{ instance.first_name }}</td>
-        <td>{{ instance.last_name }}</td>
-        <td>{{ instance.username }}</td>
-      </tr>
-      {% endfor %}
-    </table>
-    </div>
+<p style="text-decoration: underline; font-size: large;">Authorized Users</p>
+<div class="table-responsive">
+  <table class="table align-middle">
+    <tr>
+      <th>First Name</th>
+      <th>Last Name</th>
+      <th>UserID</th>
+    </tr>
+    {% for instance in object.authorised_users.all %}
+    <tr>
+      <td>{{ instance.first_name }}</td>
+      <td>{{ instance.last_name }}</td>
+      <td>{{ instance.username }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
 {% endif %}
 
 
-    <p style="text-decoration: underline; font-size: large;">Filesystem Mounts</p>
-    <div class="table-responsive">
-    <table class="table align-middle">
-      <tr>
-        <th>Mount Path</th>
-        <th>Filesystem</th>
-      </tr>
-      {% for instance in object.mount_points.all %}
-      <tr>
-        <td>{{ instance.mount_path }}</td>
-        <td>{{ instance.export }}</td>
-      </tr>
-      {% endfor %}
-    </table>
-    </div>
+<p style="text-decoration: underline; font-size: large;">Filesystem Mounts</p>
+<div class="table-responsive">
+  <table class="table align-middle">
+    <tr>
+      <th>Mount Path</th>
+      <th>Filesystem</th>
+    </tr>
+    {% for instance in object.mount_points.all %}
+    <tr>
+      <td>{{ instance.mount_path }}</td>
+      <td>{{ instance.export }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
 
 
 {% if admin_view == 1 %}
-    {% if object.status == "d" %}
-    <div class="alert alert-info">This cluster is destroyed and its settings archived. No further change is possible.</div>
-    {% elif object.status == "n"  %}
-    <a href="{% url 'cluster-update' object.id %}" class="btn btn-primary">Edit</a>
-    {% endif %}
-    {% if object.status == "n" %}
-    <a href="{% url 'cluster-delete' object.id %}" class="btn btn-primary">Delete</a>
-    <a href="{% url 'backend-start-cluster' object.id %}" class="btn btn-primary">Create</a>
-    {% endif %}
-    {% if object.status == "r" %}
-    <a href="{% url 'backend-sync-cluster' object.id %}" class="btn btn-primary">Sync Cluster</a>
-    <a href="{% url 'application-create-spack-cluster' object.id %}" class="btn btn-primary">Install Spack Application</a>
-    <a href="{% url 'application-create-install' object.id %}" class="btn btn-primary">Install Custom Application</a>
-    <a href="{% url 'application-create' object.id %}" class="btn btn-primary">Add Manually-configured Application</a>
-    {% endif %}
-    {% if object.status != "n" %}
-    <a href="{% url 'cluster-log' cluster.id %}" class="btn btn-primary">View Logs</a>
-    {% endif %}
-    <br/><br/>
-
-    {% if object.status == "c" or object.status == "t" %}
-    {# aka, if Terraform running, let's show the TF log #}
-    <hr>
-    <div><h5>Terraform progress...</h5>
-        <textarea class="log-file form-control" id="id_log_1" rows=10 disabled readonly></textarea>
-    </div>
-    {% endif %}
+{% if object.status == "d" %}
+<div class="alert alert-info">This cluster is destroyed and its settings archived. No further change is possible.</div>
 {% endif %}
+{% if cluster.status == "e" %}
+<a href="{% url 'backend-start-cluster' object.id %}" class="btn btn-primary">Retry</a>
+{% endif %}
+{% if cluster.status == "r" or cluster.status == "i" or cluster.status == "s" or cluster.status == "e" %}
+<a href="#" class="btn btn-danger" onclick="deleteCluster({{ object.id }})">Delete</a>
+{% endif %}
+{% if object.status == "r" %}
+<a href="{% url 'backend-sync-cluster' object.id %}" class="btn btn-primary">Sync Cluster</a>
+<a href="{% url 'application-create-spack-cluster' object.id %}" class="btn btn-primary">Install Spack Application</a>
+<a href="{% url 'application-create-install' object.id %}" class="btn btn-primary">Install Custom Application</a>
+<a href="{% url 'application-create' object.id %}" class="btn btn-primary">Add Manually-configured Application</a>
+<a href="{% url 'cluster-update' object.id %}" class="btn btn-primary">Edit Cluster</a>
+{% endif %}
+{% if object.status != "n" %}
+<a href="{% url 'cluster-log' cluster.id %}" class="btn btn-primary">View Logs</a>
+{% endif %}
+<br /><br />
+
+{% if object.status == "c" or object.status == "t" %}
+{# aka, if Terraform running, let's show the TF log #}
+<hr>
+<div>
+  <h5>Terraform progress...</h5>
+  <textarea class="log-file form-control" id="id_log_1" rows=10 disabled readonly></textarea>
+</div>
+{% endif %}
+{% endif %}
+<script>
+  function deleteCluster(clusterId) {
+      // Confirm the deletion, if needed
+      if (!confirm("Are you sure you want to delete this cluster?")) {
+          return false;
+      }
+
+      // Send the DELETE request
+      fetch('{% url "backend-destroy-cluster" 0 %}'.replace('0', clusterId), {
+          method: 'POST',
+          headers: {
+              'X-CSRFToken': getCookie('csrftoken'), // Include the CSRF token
+          },
+      })
+      .then(response => {
+          if (response.ok) {
+              // Handle success, e.g., redirect to another page
+              window.location.href = '/clusters/';
+          } else {
+              // Handle errors
+              console.error('Failed to delete cluster');
+          }
+      })
+      .catch(error => console.error('Error:', error));
+
+      return false; // Prevent the default link behavior
+  }
+
+  // Function to get the CSRF token from cookies
+  function getCookie(name) {
+      const value = `; ${document.cookie}`;
+      const parts = value.split(`; ${name}=`);
+      if (parts.length === 2) return parts.pop().split(';').shift();
+  }
+</script>
 
 {% endblock %}

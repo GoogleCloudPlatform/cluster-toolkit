@@ -51,7 +51,7 @@ WORKDIR /ghpc-tmp
 COPY ./ ./
 
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.9.1/scripts/requirements.txt && \
+    pip install --no-cache-dir -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/v5/scripts/requirements.txt && \
     pip install --no-cache-dir -r tools/cloud-build/requirements.txt && \
     rm -rf ~/.cache/pip/*
 

@@ -1,3 +1,39 @@
+## Description
+
+This module creates partition of [TPU](https://cloud.google.com/tpu/docs/intro-to-tpu) nodeset.
+TPUs are Google's custom-developed application specific ICs to accelerate machine
+learning workloads.
+
+### Example
+
+The following code snippet creates TPU partition with following attributes.
+
+- TPU nodeset module is connected to `network` module.
+- TPU nodeset is of type `v2-8` and version `2.10.0`, you can check different configuration [configuration](https://cloud.google.com/tpu/docs/supported-tpu-configurations)
+- TPU vms are preemptible.
+- `preserve_tpu` is set to false. This means, suspended vms will be deleted.
+- Partition module uses this defined `tpu_nodeset` module and this partition can
+be accessed as `tpu` partition.
+
+```yaml
+  - id: tpu_nodeset
+    source: ./community/modules/compute/schedmd-slurm-gcp-v6-nodeset-tpu
+    use: [network]
+    settings:
+      name: v2x8
+      node_type: v2-8
+      tf_version: 2.10.0
+      disable_public_ips: false
+      preemptible: true
+      preserve_tpu: false
+
+  - id: tpu_partition
+    source: ./community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use: [tpu_nodeset]
+    settings:
+      partition_name: tpu
+```
+
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 ## Requirements
 

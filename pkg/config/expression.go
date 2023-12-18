@@ -299,7 +299,7 @@ func (e BaseExpression) key() expressionKey {
 // do not attempt to build it by other means.
 func (e BaseExpression) AsValue() cty.Value {
 	k := e.key()
-	// we don't care if ot overrides as expressions are identical
+	// we don't care if it overrides as expressions are identical
 	globalExpressions[k] = e
 	return cty.DynamicVal.Mark(k)
 }

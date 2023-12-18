@@ -12,7 +12,7 @@ applications. and manage user access. Normal HPC users should refer to the
 [User Guide](user_guide.md) for guidance on how to prepare and run jobs on
 clusters that have been set up by administrators.
 
-Basic administrator knowledge of the Google Cloud Plaform is needed in order to
+Basic administrator knowledge of the Google Cloud Platform is needed in order to
 create projects and user accounts, but all other low-level administration tasks
 are handled by the portal.
 
@@ -75,7 +75,7 @@ All further deployment actions must be performed from this directory.
 
 #### Google Cloud Platform
 
-Your organisation must already have access to the Google Cloud Plaform (GCP)
+Your organisation must already have access to the Google Cloud Platform (GCP)
 and be able to create projects and users.  A project and a user account with
 enabled APIs and roles/permissions need to be created. The user account must
 also be authenticated on the client machine to allow it to provision GCP
@@ -198,6 +198,9 @@ To use this configuration file for automated deployment, follow these steps:
   django_superuser_username: sysadm
   django_superuser_password: Passw0rd! # (optional if DJANGO_SUPERUSER_PASSWORD is passed)
   django_superuser_email: sysadmin@example.com
+  deployment_mode: git # (optional)
+  repo_fork: GoogleCloudPlatform # (optional)
+  repo_branch: develop # (optional)
   ```
 
  1. Save the file in the same directory as the deploy.sh script.
@@ -299,7 +302,7 @@ be reachable by the VPC subnets intended to be used for clusters.
 
 An internal address can be used if the cluster shares the same VPC with the
 imported filesystem. Alternatively, system administrators can set up hybrid
-connectivity (such as extablishing network peering) beforing mounting the
+connectivity (such as extablishing network peering) before mounting the
 external filesystem located elsewhere on GCP.
 
 ## Cluster Management
@@ -352,7 +355,7 @@ A typical workflow for creating a new cluster is as follows:
    cluster can be specified.
 1. In the *Create a new cluster* form, give the new cluster a name. Cloud
    resource names are subject to naming constraints and will be validated by the
-   system.  In general, lower-case alpha-numeric names with hyphens are
+   system.  In general, lower-case alphanumeric names with hyphens are
    accepted.
 1. From the *Subnet* dropdown list, select the subnet within which the cluster
    resides.
@@ -554,5 +557,5 @@ back-end logic is handled, which can also help with certain issues.
   `terraform destroy` there for clean up cloud resources.
 - Certain database records might get corrupted and need to be removed for
   failed clusters or network/filesystem components. This can be done from the
-  Django Admin site, although adminstrators need to exercise caution while
+  Django Admin site, although administrators need to exercise caution while
   modifying the raw data in Django database.

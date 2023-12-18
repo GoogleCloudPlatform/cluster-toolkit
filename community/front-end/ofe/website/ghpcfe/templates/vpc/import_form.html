@@ -18,7 +18,7 @@
 
 {% block extrameta %}
 <script>
-function vpcSelected() {
+  function vpcSelected() {
     {% autoescape off %}
     var subnets_info = {{ vpc_sub_map }};
     {% endautoescape %}
@@ -29,56 +29,65 @@ function vpcSelected() {
     subnets_info[vpc_component.value].forEach(function (item) {
       var el = document.createElement("option");
       el.text = item[0] + ' [CIDR: ' + item[2] + '] [region: ' + item[1] + ']';
-      el.setAttribute("value", item[0]) 
+      el.setAttribute("value", item[0]);
       subnet_element.appendChild(el);
     });
-}
-
+  }
 </script>
+
 {% endblock %}
 
 
 {% block content %}
-  <h2>Import an existing VPC</h2>  
+<h2>Import an existing VPC</h2>
 
-  <div class="alert alert-info" role="alter">Register an externally created VPC with this system within which clusters can be created.</div>
+<div class="alert alert-info" role="alter">Register an externally created VPC with this system within which clusters can
+  be created.</div>
 
-  {% if form.non_field_errors %}
-  <div class="alert alert-danger" role="alert">{{ form.non_field_errors.as_text }}</div>
-  {% endif %}
+{% if form.non_field_errors %}
+<div class="alert alert-danger" role="alert">{{ form.non_field_errors.as_text }}</div>
+{% endif %}
 
-  <form action="" method="post">
-    {% csrf_token %}
+<form action="" method="post">
+  {% csrf_token %}
 
-    <input type="hidden" name="cloud_credential" class="form-control" id="id_cloud_credential" value="{{ form.cloud_credential.value }}">
-    <input type="hidden" name="cloud_id" class="form-control" id="id_cloud_id" value="">
-    <div class="form-group">
-      {{ form.cloud_credential.label_tag }}
-      {{ form.cloud_credential.errors }}
-      {{ form.cloud_credential }}
-        <small class="form-text text-muted">{{ form.cloud_credential.help_text }}</small>
-    </div>
-    <div class="form-group">
-      {{ form.name.label_tag }}
-      {{ form.name.errors }}
-      {{ form.name }}
-        <small class="form-text text-muted">{{ form.name.help_text }}</small>
-    </div>
-    <div class="form-group">
-      {{ form.vpc.label_tag }}
-      {{ form.vpc.errors }}
-      {{ form.vpc }}
-        <small class="form-text text-muted">{{ form.vpc.help_text }}</small>
-    </div>
-    <div class="form-group">
-      {{ form.subnets.label_tag }}
-      {{ form.subnets.errors }}
-      {{ form.subnets }}
-        <small class="form-text text-muted">{{ form.subnets.help_text }}</small>
-    </div>
+  <input type="hidden" name="cloud_credential" class="form-control" id="id_cloud_credential"
+    value="{{ form.cloud_credential.value }}">
+  <input type="hidden" name="cloud_id" class="form-control" id="id_cloud_id" value="">
+  <div class="form-group">
+    {{ form.cloud_credential.label_tag }}
+    {{ form.cloud_credential.errors }}
+    {{ form.cloud_credential }}
+    <small class="form-text text-muted">{{ form.cloud_credential.help_text }}</small>
+  </div>
+  <div class="form-group">
+    {{ form.name.label_tag }}
+    {{ form.name.errors }}
+    {{ form.name }}
+    <small class="form-text text-muted">{{ form.name.help_text }}</small>
+  </div>
+  <div class="form-group">
+    {{ form.vpc.label_tag }}
+    {{ form.vpc.errors }}
+    {{ form.vpc }}
+    <small class="form-text text-muted">{{ form.vpc.help_text }}</small>
+  </div>
+  <div class="form-group">
+    {{ form.subnets.label_tag }}
+    {{ form.subnets.errors }}
+    {{ form.subnets }}
+    <small class="form-text text-muted">{{ form.subnets.help_text }}</small>
+  </div>
 
-    <br/>
-    <input type="submit" value="Save" class="btn btn-primary"/>
-  </form>
-
+  <br />
+  <input type="submit" value="Save" class="btn btn-primary" />
+</form>
+<script>
+  var vpcSelect = document.getElementById('id_vpc');
+  vpcSelect.addEventListener('change', vpcSelected);
+  // Wait for the document to be fully loaded before running the script
+  document.addEventListener('DOMContentLoaded', function () {
+    vpcSelected();
+  });
+</script>
 {% endblock %}

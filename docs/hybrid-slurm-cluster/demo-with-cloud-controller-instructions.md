@@ -57,7 +57,7 @@ found at [docs/hybrid.md][slurm-gcp-hybrid].
 
 * [create-networks.yaml] creates VPC networks in 2 projects with IP ranges that
   are suitable for setting up bidirectional network peering. These networks will
-  be used by subequent blueprints.
+  be used by subsequent blueprints.
 * [static-cluster.yaml] defines a slurm cluster with 4 static nodes that will be
   used to simulate an on-premise slurm cluster.
 * [hybrid-configuration.yaml] sets up the hybrid project and creates a hybrid

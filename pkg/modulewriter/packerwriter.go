@@ -57,11 +57,10 @@ func writePackerAutovars(vars map[string]cty.Value, dst string) error {
 func (w PackerWriter) writeDeploymentGroup(
 	dc config.DeploymentConfig,
 	grpIdx int,
-	deployDir string,
+	groupPath string,
 	instructionsFile io.Writer,
 ) error {
 	depGroup := dc.Config.DeploymentGroups[grpIdx]
-	groupPath := filepath.Join(deployDir, string(depGroup.Name))
 	igcInputs := map[string]bool{}
 
 	for _, mod := range depGroup.Modules {

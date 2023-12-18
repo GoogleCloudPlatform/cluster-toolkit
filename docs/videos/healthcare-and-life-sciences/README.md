@@ -108,7 +108,7 @@ storage intact and b) you can build software before you deploy your cluster.
    id.
 
    If you are running this as a test, and don't care about the files created in
-   the cloud buckets being destroyed, it is recommneded you run:
+   the cloud buckets being destroyed, it is recommended you run:
 
    ```bash
    ./ghpc create docs/videos/healthcare-and-life-sciences/hcls-blueprint.yaml -w --vars project_id=<project> --vars bucket_force_delete=true
@@ -151,7 +151,7 @@ storage intact and b) you can build software before you deploy your cluster.
 
    > [!NOTE]
    > At this point do not proceed with the ghpc prompt for the `cluster` group.
-   > Continue with the steps below before proceding.
+   > Continue with the steps below before proceeding.
 
    This step will create a storage bucket for depositing software. The bucket
    will have the prefix `hcls-user-provided-software` followed by a the

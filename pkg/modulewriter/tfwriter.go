@@ -152,7 +152,7 @@ func writeVariables(vars map[string]cty.Value, extraVars []modulereader.VarInfo,
 		inputs = append(inputs, newInput)
 	}
 	inputs = append(inputs, extraVars...)
-	slices.SortFunc(inputs, func(i, j modulereader.VarInfo) bool { return i.Name < j.Name })
+	slices.SortFunc(inputs, func(i, j modulereader.VarInfo) int { return strings.Compare(i.Name, j.Name) })
 
 	// Create HCL Body
 	hclFile := hclwrite.NewEmptyFile()
@@ -294,90 +294,67 @@ func writeTerraformInstructions(w io.Writer, grpPath string, n config.GroupName,
 	}
 }
 
-// writeDeploymentGroup creates and sets up the provided terraform deployment
-// group in the provided deployment directory
-// depGroup: The deployment group that is being written
-// globalVars: The top-level variables, needed for writing terraform.tfvars and
-// variables.tf
-// groupDir: The path to the directory the resource group will be created in
+// writeDeploymentGroup creates and sets up the terraform deployment group
 func (w TFWriter) writeDeploymentGroup(
 	dc config.DeploymentConfig,
 	groupIndex int,
-	deploymentDir string,
-	instructionsFile io.Writer,
+	groupPath string,
+	instructions io.Writer,
 ) error {
-	depGroup := dc.Config.DeploymentGroups[groupIndex]
-	deploymentVars := getUsedDeploymentVars(depGroup, dc.Config)
-	intergroupVars := FindIntergroupVariables(depGroup, dc.Config)
+	g := dc.Config.DeploymentGroups[groupIndex]
+	deploymentVars := getUsedDeploymentVars(g, dc.Config)
+	intergroupVars := FindIntergroupVariables(g, dc.Config)
 	intergroupInputs := make(map[string]bool)
 	for _, igVar := range intergroupVars {
 		intergroupInputs[igVar.Name] = true
 	}
 
-	groupPath := filepath.Join(deploymentDir, string(depGroup.Name))
-
 	// Write main.tf file
-	doctoredModules := substituteIgcReferences(depGroup.Modules, intergroupVars)
-	if err := writeMain(
-		doctoredModules, depGroup.TerraformBackend, groupPath,
-	); err != nil {
-		return fmt.Errorf("error writing main.tf file for deployment group %s: %v",
-			depGroup.Name, err)
+	doctoredModules := substituteIgcReferences(g.Modules, intergroupVars)
+	if err := writeMain(doctoredModules, g.TerraformBackend, groupPath); err != nil {
+		return fmt.Errorf("error writing main.tf file for deployment group %s: %w", g.Name, err)
 	}
 
 	// Write variables.tf file
 	if err := writeVariables(deploymentVars, maps.Values(intergroupVars), groupPath); err != nil {
-		return fmt.Errorf(
-			"error writing variables.tf file for deployment group %s: %v",
-			depGroup.Name, err)
+		return fmt.Errorf("error writing variables.tf file for deployment group %s: %w", g.Name, err)
 	}
 
 	// Write outputs.tf file
-	if err := writeOutputs(depGroup.Modules, groupPath); err != nil {
-		return fmt.Errorf(
-			"error writing outputs.tf file for deployment group %s: %v",
-			depGroup.Name, err)
+	if err := writeOutputs(g.Modules, groupPath); err != nil {
+		return fmt.Errorf("error writing outputs.tf file for deployment group %s: %w", g.Name, err)
 	}
 
 	// Write terraform.tfvars file
 	if err := writeTfvars(deploymentVars, groupPath); err != nil {
-		return fmt.Errorf(
-			"error writing terraform.tfvars file for deployment group %s: %v",
-			depGroup.Name, err)
+		return fmt.Errorf("error writing terraform.tfvars file for deployment group %s: %w", g.Name, err)
 	}
 
 	// Write providers.tf file
 	if err := writeProviders(deploymentVars, groupPath); err != nil {
-		return fmt.Errorf(
-			"error writing providers.tf file for deployment group %s: %v",
-			depGroup.Name, err)
+		return fmt.Errorf("error writing providers.tf file for deployment group %s: %w", g.Name, err)
 	}
 
 	// Write versions.tf file
 	if err := writeVersions(groupPath); err != nil {
-		return fmt.Errorf(
-			"error writing versions.tf file for deployment group %s: %v",
-			depGroup.Name, err)
+		return fmt.Errorf("error writing versions.tf file for deployment group %s: %v", g.Name, err)
 	}
 
 	multiGroupDeployment := len(dc.Config.DeploymentGroups) > 1
 	printImportInputs := multiGroupDeployment && groupIndex > 0
 	printExportOutputs := multiGroupDeployment && groupIndex < len(dc.Config.DeploymentGroups)-1
 
-	writeTerraformInstructions(instructionsFile, groupPath, depGroup.Name, printExportOutputs, printImportInputs)
+	writeTerraformInstructions(instructions, groupPath, g.Name, printExportOutputs, printImportInputs)
 
 	return nil
 }
 
 // Transfers state files from previous resource groups (in .ghpc/) to a newly written blueprint
 func (w TFWriter) restoreState(deploymentDir string) error {
-	prevDeploymentGroupPath := filepath.Join(
-		deploymentDir, HiddenGhpcDirName, prevDeploymentGroupDirName)
+	prevDeploymentGroupPath := filepath.Join(HiddenGhpcDir(deploymentDir), prevDeploymentGroupDirName)
 	files, err := os.ReadDir(prevDeploymentGroupPath)
 	if err != nil {
-		return fmt.Errorf(
-			"Error trying to read previous modules in %s, %w",
-			prevDeploymentGroupPath, err)
+		return fmt.Errorf("error trying to read previous modules in %s, %w", prevDeploymentGroupPath, err)
 	}
 
 	for _, f := range files {

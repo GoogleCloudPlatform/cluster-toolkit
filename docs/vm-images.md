@@ -61,6 +61,29 @@ publisher may choose to delete and re-publish images with the same name.
 > The `name` setting is not always available, depending on the source module.
 > In these cases, please default back to the family setting.
 
+The following is a list of commonly used base images that can be used in a
+blueprint:
+
+```yaml
+    settings:
+
+      instance_image:
+        family: hpc-rocky-linux-8
+        project: cloud-hpc-image-public
+
+      instance_image:
+        family: hpc-centos-7
+        project: cloud-hpc-image-public
+
+      instance_image:
+        family: debian-11
+        project: debian-cloud
+
+      instance_image:
+        family: ubuntu-2004-lts
+        project: ubuntu-os-cloud
+```
+
 ### Pinning Specifics Images
 
 Users may want to be able to guarantee that an image has not been changed across

@@ -19,402 +19,637 @@
 {% block extrameta %}
 {% load static %}
 <script src="{% static 'js/jquery.cookie.js' %}"></script>
+
+{% load static %}
+{% endblock %}
+
+{% block content %}
+<h2>{{ title }}</h2>
+
+{% if form.errors %}
+{% for field in form %}
+{% for error in field.errors %}
+<div class="alert alert-danger">
+  <strong>{{field.name}} {{ error|escape }}</strong>
+</div>
+{% endfor %}
+{% endfor %}
+{% for error in form.non_field_errors %}
+<div class="alert alert-danger">
+  <strong>{{ error|escape }}</strong>
+</div>
+{% endfor %}
+{% endif %}
+
+<form action="" method="post" id="clusterForm">
+  {% csrf_token %}
+  <div class="form-group displayed">
+    {{ form.cloud_credential.errors }}
+    {{ form.cloud_credential.label_tag }}
+    {{ form.cloud_credential }}
+    <small class="form-text text-muted">{{ form.cloud_credential.help_text }}</small>
+  </div>
+  <div class="form-group displayed">
+    {{ form.name.errors }}
+    {{ form.name.label_tag }}
+    {{ form.name }}
+    <small class="form-text text-muted">{{ form.name.help_text }}</small>
+  </div>
+  <div class="form-group displayed">
+    {{ form.subnet.errors }}
+    {{ form.subnet.label_tag }}
+    {{ form.subnet }}
+    <small class="form-text text-muted">{{ form.subnet.help_text }}</small>
+  </div>
+  <div class="form-group displayed">
+    {{ form.cloud_region.errors }}
+    {{ form.cloud_region.label_tag }}
+    {{ form.cloud_region }}
+    <small class="form-text text-muted">{{ form.cloud_region.help_text }}</small>
+  </div>
+  <div class="form-group displayed">
+    {{ form.cloud_zone.errors }}
+    {{ form.cloud_zone.label_tag }}
+    {{ form.cloud_zone }}
+    <small class="form-text text-muted">{{ form.cloud_zone.help_text }}</small>
+  </div>
+  <div class="form-group">
+    {{ form.authorised_users.errors }}
+    {{ form.authorised_users.label_tag }}
+    {{ form.authorised_users }}
+    <small class="form-text text-muted">{{ form.authorised_users.help_text }}</small>
+  </div>
+  <div class="form-group">
+    {{ form.spackdir.errors }}
+    {{ form.spackdir.label_tag }}
+    {{ form.spackdir }}
+    <small class="form-text text-muted">{{ form.spackdir.help_text }}</small>
+  </div>
+
+  <hr>
+  <p style="text-decoration: underline; font-size: large;">Static Nodes</p>
+  <div class="table-responsive">
+    <table class="table align-middle">
+      <thead>
+        <tr>
+          <th></th>
+          <th># Nodes</th>
+          <th>Instance Type</th>
+          <th>Boot Disk Size (GB)</th>
+          <th>Boot Disk Type</th>
+          <th>Image</th>
+        </tr>
+      </thead>
+      <tr>
+        <th>Controller</th>
+        <td>
+          <div class="form-group">
+            <input type="number" name="num_controller_nodes" value="1" class="form-control" disabled>
+          </div>
+        </td>
+        <td>
+          <div class="form-group">
+            {{ form.controller_instance_type.errors.as_ul }}
+            {{ form.controller_instance_type }}
+          </div>
+        </td>
+        <td>
+          <div class="form-group">
+            {{ form.controller_disk_size.errors.as_ul }}
+            {{ form.controller_disk_size }}
+          </div>
+        </td>
+        <td>
+          <div class="form-group">
+            {{ form.controller_disk_type.errors.as_ul }}
+            {{ form.controller_disk_type }}
+          </div>
+        </td>
+        <td>
+          <div class="form-group">
+            {{ form.controller_node_image.errors.as_ul }}
+            {{ form.controller_node_image }}
+          </div>
+        </td>
+      </tr>
+      <tr>
+        <th>Login Nodes</th>
+        <td>
+          <div class="form-group">
+            {{ form.num_login_nodes.errors.as_ul }}
+            {{ form.num_login_nodes }}
+          </div>
+        </td>
+        <td>
+          <div class="form-group">
+            {{ form.login_node_instance_type.errors.as_ul }}
+            {{ form.login_node_instance_type }}
+          </div>
+        </td>
+        <td>
+          <div class="form-group">
+            {{ form.login_node_disk_size.errors.as_ul }}
+            {{ form.login_node_disk_size }}
+          </div>
+        </td>
+        <td>
+          <div class="form-group">
+            {{ form.login_node_disk_type.errors.as_ul }}
+            {{ form.login_node_disk_type }}
+          </div>
+        </td>
+        <td>
+          <div class="form-group">
+            {{ form.login_node_image.errors.as_ul }}
+            {{ form.login_node_image }}
+          </div>
+        </td>
+      </tr>
+    </table>
+  </div>
+
+  <hr>
+  <p style="text-decoration: underline; font-size: large;">Filesystem Mounts</p>
+  <div class="table-responsive">
+    <table class="table align-middle">
+      {{ mountpoints_formset.management_form }}
+      {% for form in mountpoints_formset.forms %}
+      {% if forloop.first %}
+      <thead>
+        <tr>
+          {% for field in form.visible_fields %}<th>{{ field.label|capfirst }}</th>{% endfor %}
+        </tr>
+      </thead>
+      {% endif %}
+      <tr class="mp_formset_row">
+        {% for field in form.visible_fields %}
+        <td>
+          {% if forloop.first %}
+          {% for hidden in form.hidden_fields %}
+          {{ hidden }}
+          {% endfor %}
+          {% endif %}
+          {{ field.errors.as_ul }}
+          {{ field }}
+        </td>
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+  <hr>
+  <p style="text-decoration: underline; font-size: large;">Partitions</p>
+  <div class="table-responsive">
+    <table class="table align-middle" id="partitions_table" style="white-space: nowrap;">
+      {% for form in cluster_partitions_formset.forms %}
+      {% if form.instance %}
+      {% if forloop.first %}
+      <thead>
+        <tr>
+          {% for field in form.visible_fields %}<th>{{ field.label|capfirst }}</th>{% endfor %}
+        </tr>
+      </thead>
+      {% endif %}
+      {% if form.errors %}
+      {% for error in form.non_field_errors %}
+      <div class="alert alert-danger">
+        <strong>{{ error|escape }}</strong>
+      </div>
+      {% endfor %}
+      {% endif %}
+      <tr class="part_formset_row">
+        {% for field in form.visible_fields %}
+        <td style="min-width: 100px;">
+          {% if forloop.first %}
+          {% for hidden in form.hidden_fields %}
+          {{ hidden }}
+          {% endfor %}
+          {% endif %}
+          {{ field.errors.as_ul }}
+          {{ field }}
+        </td>
+        {% endfor %}
+      </tr>
+      {% endif %}
+      {% endfor %}
+    </table>
+    {{ cluster_partitions_formset.management_form }}
+  </div>
+  <hr>
+  <p style="text-decoration: underline; font-size: large;">Additional features</p>
+  <div class="form-group">
+    {{ form.use_cloudsql.errors }}
+    <div class="grid-container">
+      <label class="slider-switch-container">
+        <div class="slider-switch">
+          {{ form.use_cloudsql }}
+          <span class="slider"></span>
+        </div>
+      </label>
+      <div class="help-text">
+        {{ form.use_cloudsql.help_text }}
+      </div>
+    </div>
+  </div>
+  <div class="form-group">
+    {{ form.use_bigquery.errors }}
+    <div class="grid-container">
+      <label class="slider-switch-container">
+        <div class="slider-switch">
+          {{ form.use_bigquery }}
+          <span class="slider"></span>
+        </div>
+      </label>
+      <div class="help-text">
+        {{ form.use_bigquery.help_text }}
+      </div>
+    </div>
+  </div>
+  <hr>
+
+  <br />
+  {% if object.status == "n" %}
+  <input type="submit" value="Create" class="btn btn-primary" />
+  <a href="{% url 'cluster-delete' object.id %}" class="btn btn-danger">Delete</a>
+  {% endif %}
+  {% if object.status == "r" %}
+  <div class="alert alert-warning">
+    <p><strong>WARNING:</strong> Updating a running cluster will cause the following:</p>
+    <ul>
+      <li>Deployed compute nodes will be destroyed.</li>
+      <li>Running workloads will be impacted.</li>
+      <li>Jobs will be requeued.</li>
+    </ul>
+    <hr>
+    <p><strong>Important Note:</strong> Filesystem changes will not affect static nodes, including the controller, login
+      nodes, and always-running compute nodes.</p>
+    <p> These nodes will have to be updated manually.</p>
+  </div>
+  <input type="submit" value="Update" class="btn btn-primary" />
+  {% endif %}
+
+</form>
+<hr>
+
+{% endblock %}
+
+{% block tailscript %}
+<script src="{% static 'js/jquery.formset.js' %}"></script>
 <script>
-{% autoescape off %}
-var subnet_map = {{ subnet_regions }};
-var region_info = {{ region_info }};
-{% endautoescape %}
-
-function subnetSelected() {
-    subnet_element = document.getElementById("id_subnet");
-    zone_element = document.getElementById("id_cloud_zone");
-    old_zone = zone_element.value;
-    $(zone_element).find('option').remove().end();
-    region_info[subnet_map[subnet_element.value]].forEach(function (item) {
-      var el = document.createElement("option");
-      el.text = item;
-      el.setAttribute("value", item) 
-      if (old_zone == item) {
-          el.setAttribute("selected", true);
-      }
-      zone_element.appendChild(el);
-    });
-}
-
-function updateMachineAvailability() {
+  function updateMachineAvailability() {
     // Get machine Info
     // For each select of class 'machine_type_select'...
     //     Save it's value
     //     Clear the options
     //     Replace options
     //     Restore it's value
+    var cloudZoneInput = document.getElementById('id_cloud_zone');
+    var cloudRegionInput = document.getElementById('id_cloud_region');
 
-    var subnet_element = document.getElementById("id_subnet");
-    var zone_element = document.getElementById("id_cloud_zone");
-    var region = subnet_map[subnet_element.value];
-    var zone = zone_element.value;
+    if (!cloudZoneInput.readOnly) {
+      // If the field is not read-only, use select options
+      zone = cloudZoneInput.options[cloudZoneInput.selectedIndex].text;
+      region = cloudRegionInput.options[cloudRegionInput.selectedIndex].text;
+    } else {
+      // If the field is read-only, use the input values
+      zone = cloudZoneInput.value;
+      region = cloudRegionInput.value;
+    }
+
     machine_info = $.ajax({
-        url: "{% url 'api-instancetype-list' %}" + "?cluster={{ object.id }}&region=" + region + "&zone=" + zone,
-        type: "GET",
-        dataType: "json",
-        headers: {'X-CSRFToken': $.cookie("csrftoken")}
-    }).done(function(data) {
-        $(".machine_type_select:visible").each(function(pos, selObj) {
-            var curVal = selObj.value;
-            $(selObj).empty();
-            $.each(data.machine_types, function(i, machineName) {
-                var option = document.createElement("option");
-                option.text = machineName;
-                option.setAttribute("value", machineName);
-                selObj.appendChild(option)
-            });
-            var id_prefix = selObj.id.slice(0, selObj.id.lastIndexOf("-"));
-            var gpuCount = $(selObj).parent().parent().find("#" + id_prefix + "-GPU_per_node")[0];
-            var gpuType = $(selObj).parent().parent().find("#" + id_prefix + "-GPU_type")[0];
-            selObj.onchange = function() {
-                var newMachType = selObj.value;
-                machine_data = $.ajax({
-                    url: "{% url 'api-instancetype-list' %}" + newMachType + "/?cluster={{ object.id }}&region=" + region + "&zone=" + zone,
-                    type: "GET",
-                    dataType: "json",
-                    headers: {'X-CSRFToken': $.cookie("csrftoken")}
-                }).done(function(data) {
-                    oldGPUType = gpuType.value;
-                    $(gpuType).empty();
-                    accelerators = new Map(Object.entries(data.accelerators));
-                    var accelRequired = ( accelerators.size == 1) && ([...accelerators][0][1].min_count > 0 );
-
-                    if ( !accelRequired ) {
-                        var option = document.createElement("option");
-                        option.text = "None";
-                        option.setAttribute("value", "");
-                        gpuType.appendChild(option);
-                    }
-
-                    accelerators.forEach(function(range, type, accels) {
-                        var option = document.createElement("option");
-                        option.text = type;
-                        option.setAttribute("value", type);
-                        gpuType.appendChild(option);
-                    });
-
-                    gpuType.onchange = function() {
-                        if ( accelerators.has(gpuType.value) ) {
-                            gpuCount.readOnly = false;
-                            gpuCount.min = accelerators.get(gpuType.value)['min_count'];
-                            gpuCount.max = accelerators.get(gpuType.value)['max_count'];
-                            if ( gpuCount.value < gpuCount.min ) {
-                                gpuCount.value = gpuCount.min;
-                            }
-                            if ( gpuCount.value > gpuCount.max ) {
-                                gpuCount.value = gpuCount.max;
-                            }
-                        } else {
-                            gpuCount.min = gpuCount.max = gpuCount.value = 0;
-                        }
-                        if ( gpuCount.min == gpuCount.max ) {
-                            gpuCount.readOnly = true;
-                        }
-                        $(gpuType).nextAll().remove();
-                        if ( newMachType.startsWith("n1-") && gpuType.value ) {
-                            $(gpuType).after('<p>WARNING: N1 instances with GPUs have strict limitations that are not checked in the Frontend.  Please see <a href="https://cloud.google.com/compute/docs/gpus">the docs</a></p>');
-                        }
-                    };
-                    if ( accelRequired ) {
-                        gpuType.value = [...accelerators][0][0];
-                        gpuCount.value = [...accelerators][0][1].min_count;
-                        gpuType.onchange();
-                    } else if ( accelerators.has(oldGPUType) ) {
-                        gpuType.value = oldGPUType;
-                        gpuType.onchange();
-                    } else {
-                        gpuType.value = "";
-                        gpuCount.value = 0;
-                        gpuType.onchange();
-                    }
-                    gpuType.readOnly = (accelerators.size == 0);
-                });
-            };
-            selObj.value = curVal;
-            selObj.onchange();
-
+      url: "{% url 'api-instancetype-list' %}" + "?cluster={{ object.id }}&region=" + region + "&zone=" + zone,
+      type: "GET",
+      dataType: "json",
+      headers: { 'X-CSRFToken': $.cookie("csrftoken") }
+    }).done(function (data) {
+      $(".machine_type_select:visible").each(function (pos, selObj) {
+        var curVal = selObj.value;
+        $(selObj).empty();
+        $.each(data.machine_types, function (i, machineName) {
+          var option = document.createElement("option");
+          option.text = machineName;
+          option.setAttribute("value", machineName);
+          selObj.appendChild(option)
         });
+        var id_prefix = selObj.id.slice(0, selObj.id.lastIndexOf("-"));
+        var gpuCount = $(selObj).parent().parent().find("#" + id_prefix + "-GPU_per_node")[0];
+        var gpuType = $(selObj).parent().parent().find("#" + id_prefix + "-GPU_type")[0];
+        selObj.onchange = function () {
+          var newMachType = selObj.value;
+          machine_data = $.ajax({
+            url: "{% url 'api-instancetype-list' %}" + newMachType + "/?cluster={{ object.id }}&region=" + region + "&zone=" + zone,
+            type: "GET",
+            dataType: "json",
+            headers: { 'X-CSRFToken': $.cookie("csrftoken") }
+          }).done(function (data) {
+            oldGPUType = gpuType.value;
+            $(gpuType).empty();
+            accelerators = new Map(Object.entries(data.accelerators));
+            var accelRequired = (accelerators.size == 1) && ([...accelerators][0][1].min_count > 0);
+
+            if (!accelRequired) {
+              var option = document.createElement("option");
+              option.text = "None";
+              option.setAttribute("value", "");
+              gpuType.appendChild(option);
+            }
+
+            accelerators.forEach(function (range, type, accels) {
+              var option = document.createElement("option");
+              option.text = type;
+              option.setAttribute("value", type);
+              gpuType.appendChild(option);
+            });
+
+            gpuType.onchange = function () {
+              if (accelerators.has(gpuType.value)) {
+                gpuCount.readOnly = false;
+                gpuCount.min = accelerators.get(gpuType.value)['min_count'];
+                gpuCount.max = accelerators.get(gpuType.value)['max_count'];
+                if (gpuCount.value < gpuCount.min) {
+                  gpuCount.value = gpuCount.min;
+                }
+                if (gpuCount.value > gpuCount.max) {
+                  gpuCount.value = gpuCount.max;
+                }
+              } else {
+                gpuCount.min = gpuCount.max = gpuCount.value = 0;
+              }
+              if (gpuCount.min == gpuCount.max) {
+                gpuCount.readOnly = true;
+              }
+              $(gpuType).nextAll().remove();
+              if (newMachType.startsWith("n1-") && gpuType.value) {
+                $(gpuType).after('<p>WARNING: N1 instances with GPUs have strict limitations that are not checked in the Frontend.  Please see <a href="https://cloud.google.com/compute/docs/gpus">the docs</a></p>');
+              }
+            };
+            if (accelRequired) {
+              gpuType.value = [...accelerators][0][0];
+              gpuCount.value = [...accelerators][0][1].min_count;
+              gpuType.onchange();
+            } else if (accelerators.has(oldGPUType)) {
+              gpuType.value = oldGPUType;
+              gpuType.onchange();
+            } else {
+              gpuType.value = "";
+              gpuCount.value = 0;
+              gpuType.onchange();
+            }
+            gpuType.readOnly = (accelerators.size == 0);
+          });
+        };
+        selObj.value = curVal;
+        selObj.onchange();
+
+      });
     });
+  }
 
+  function updateDiskAvailability() {
+    var cloudZoneInput = document.getElementById('id_cloud_zone');
+    var cloudRegionInput = document.getElementById('id_cloud_region');
 
-}
+    if (!cloudZoneInput.readOnly) {
+      // If the field is not read-only, use select options
+      zone = cloudZoneInput.options[cloudZoneInput.selectedIndex].text;
+      region = cloudRegionInput.options[cloudRegionInput.selectedIndex].text;
+    } else {
+      // If the field is read-only, use the input values
+      zone = cloudZoneInput.value;
+      region = cloudRegionInput.value;
+    }
 
-
-function updateDiskAvailability() {
-    var subnet_element = document.getElementById("id_subnet");
-    var zone_element = document.getElementById("id_cloud_zone");
-    var region = subnet_map[subnet_element.value];
-    var zone = zone_element.value;
     disk_info = $.ajax({
-        url: "{% url 'api-disktype-list' %}" + "?cluster={{ object.id }}&region=" + region + "&zone=" + zone,
-        type: "GET",
-        dataType: "json",
-        headers: {'X-CSRFToken': $.cookie("csrftoken")}
-    }).done(function(data) {
-        $(".disk_type_select").each(function(pos, selObj) {
-            var curVal = selObj.value;
-            $(selObj).empty();
-            $.each(data.disks, function(i, disk_info) {
-                if ( disk_info.name.startsWith("pd-") ) { // Only Persistent Disks
-                    var option = document.createElement("option");
-                    option.text = disk_info.description;
-                    option.setAttribute("value", disk_info.name);
-                    selObj.appendChild(option);
-                }
-            });
-            var id_prefix = selObj.id.slice(0, selObj.id.lastIndexOf("_disk_type"));
-            var disk_size_sel = $(selObj).parentsUntil("tbody").find("#" + id_prefix + "_disk_size")[0];
-            selObj.onchange = function() {
-                disk = data.disks.find(d => d.name == selObj.value);
-                disk_size_sel.min = disk.minSizeGB;
-                disk_size_sel.max = disk.maxSizeGB;
-                if ( Number(disk_size_sel.value) < disk_size_sel.min ) {
-                    disk_size_sel.value = disk_size_sel.min;
-                } else if ( Number(disk_size_sel.value) > disk_size_sel.max ) {
-                    disk_size_sel.value = disk_size_sel.max;
-                }
-            };
-            selObj.value = curVal;
-            selObj.onchange();
+      url: "{% url 'api-disktype-list' %}" + "?cluster={{ object.id }}&region=" + region + "&zone=" + zone,
+      type: "GET",
+      dataType: "json",
+      headers: { 'X-CSRFToken': $.cookie("csrftoken") }
+    }).done(function (data) {
+      $(".disk_type_select").each(function (pos, selObj) {
+        var curVal = selObj.value;
+        $(selObj).empty();
+        $.each(data.disks, function (i, disk_info) {
+          if (disk_info.name.startsWith("pd-")) { // Only Persistent Disks
+            var option = document.createElement("option");
+            option.text = disk_info.description;
+            option.setAttribute("value", disk_info.name);
+            selObj.appendChild(option);
+          }
         });
+        var id_prefix = selObj.id.slice(0, selObj.id.lastIndexOf("_disk_type"));
+        var disk_size_sel = $(selObj).parentsUntil("tbody").find("#" + id_prefix + "_disk_size")[0];
+        selObj.onchange = function () {
+          disk = data.disks.find(d => d.name == selObj.value);
+          disk_size_sel.min = disk.minSizeGB;
+          disk_size_sel.max = disk.maxSizeGB;
+          if (Number(disk_size_sel.value) < disk_size_sel.min) {
+            disk_size_sel.value = disk_size_sel.min;
+          } else if (Number(disk_size_sel.value) > disk_size_sel.max) {
+            disk_size_sel.value = disk_size_sel.max;
+          }
+        };
+        selObj.value = curVal;
+        selObj.onchange();
+      });
     });
-}
+  }
+  // Function to populate regions and zones based on the selected credential
+  function populateRegionsAndZones() {
+    // Get the selected credential value
+    var selectedCredential = document.getElementById('id_cloud_credential').value;
+    var subnetSelect = document.getElementById('id_subnet');
+    var subnetSelectText = subnetSelect.options[subnetSelect.selectedIndex].text;
+    // Extract the region from the selected subnet
+    var regionSubnet = subnetSelectText.split(' - ')[2]; // Assumes the region is always the third part after splitting
+
+    // Make the request to the backend
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', '/backend/get-regions/' + selectedCredential, true);
+    xhr.onreadystatechange = function () {
+      if (xhr.readyState === 4 && xhr.status === 200) {
+        // Parse the response as JSON
+        var response = JSON.parse(xhr.responseText);
+
+        // Get the "Cloud region" and "Cloud zone" select elements
+        var regionSelect = document.getElementById('id_cloud_region');
+        var zoneSelect = document.getElementById('id_cloud_zone');
+
+        // Clear the existing options
+        regionSelect.innerHTML = '';
+
+        // Create a new option for the region
+        var regionOption = document.createElement('option');
+        regionOption.value = regionSubnet;
+        regionOption.text = regionSubnet;
+        regionSelect.appendChild(regionOption);
+
+        // Automatically select the corresponding region from the list
+        for (var i = 0; i < regionSelect.options.length; i++) {
+          if (regionSelect.options[i].value === regionSubnet) {
+            regionSelect.options[i].selected = true;
+            break;
+          }
+        }
+
+        // Attach an event listener to the "change" event of the "Cloud region" select element
+        regionSelect.addEventListener('change', function () {
+          var selectedRegion = regionSelect.value;
+
+          // Clear the existing options in the "Cloud zone" select element
+          zoneSelect.innerHTML = '';
+
+          // Get the zones for the selected region
+          var zones = response[selectedRegion];
+          for (var i = 0; i < zones.length; i++) {
+            var zone = zones[i];
+            var zoneOption = document.createElement('option');
+            zoneOption.value = zone;
+            zoneOption.text = zone;
+            zoneSelect.appendChild(zoneOption);
+          }
+
+          //Update node types and disk based on zone
+          updateMachineAvailability();
+          updateDiskAvailability();
+
+        });
+
+        // Trigger the "change" event to populate the initial "Cloud zone" options
+        regionSelect.dispatchEvent(new Event('change'));
+      }
+    };
+    xhr.send();
+  }
+
+  var subnetSelect = document.getElementById('id_subnet');
+  subnetSelect.addEventListener('change', populateRegionsAndZones);
 
 
-function updateZoneAvailability() {
-    updateMachineAvailability();
-    updateDiskAvailability();
-}
-
-$(document).ready(function() {
-    document.getElementById("id_subnet").onchange = subnetSelected;
-    subnetSelected();
-    updateZoneAvailability();
-    $("#id_cloud_zone").on("change", updateZoneAvailability);
-});
-
+  $('.mp_formset_row').formset({
+    addText: 'add mount point',
+    /*addCssClass: 'add-row btn btn-info',*/
+    deleteText: 'remove',
+    /*deleteCssClass: 'delete-row btn btn-danger',*/
+    prefix: 'mount_points',
+    formCssClass: 'dynamic-mp',
+  });
+  $('.part_formset_row').formset({
+    addText: 'add partition',
+    deleteText: 'remove',
+    prefix: 'partitions',
+    formCssClass: 'dynamic-part',
+    added: function () {
+      updateMachineAvailability();
+      updateDiskAvailability();
+    }, // Called each time a new form is added
+  });
 </script>
-{% load static %}
-{% endblock %}
 
-{% block content %}
-  <h2>Update cluster</h2>  
+{% if object.status == "r" %}
+<script>
+  // Wait for the document to be fully loaded before running the script
+  document.addEventListener('DOMContentLoaded', function () {
+    // Get all elements with the class "displayed"
+    var elements = document.getElementsByClassName('displayed');
 
-{% if form.errors %}
-{% for field in form %}
-{% for error in field.errors %}
-<div class="alert alert-danger">
-<strong>{{field.name}} {{ error|escape }}</strong>
-</div>
-{% endfor %}
-{% endfor %}
-{% for error in form.non_field_errors %}
-<div class="alert alert-danger">
-<strong>{{ error|escape }}</strong>
-</div>
-{% endfor %}
+    // Loop through the elements and set their display property to "none"
+    for (var i = 0; i < elements.length; i++) {
+      elements[i].style.display = 'none';
+    }
+
+    updateDiskAvailability()
+    updateMachineAvailability()
+
+  });
+</script>
 {% endif %}
 
-  <form action="" method="post" id="clusterForm">
-    {% csrf_token %}
+<style>
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
 
-    <input type="hidden" name="cloud_credential" class="form-control" id="id_credential" value="{{ form.cloud_credential.value }}">
-    <div class="form-group">
-      {{ form.name.errors }}
-      {{ form.name.label_tag }}
-      {{ form.name }}
-        <small class="form-text text-muted">{{ form.name.help_text }}</small>
-    </div>
-    <div class="form-group">
-      {{ form.subnet.errors }}
-      {{ form.subnet.label_tag }}
-      {{ form.subnet }}
-        <small class="form-text text-muted">{{ form.subnet.help_text }}</small>
-    </div>
-    <div class="form-group">
-      {{ form.cloud_zone.errors }}
-      {{ form.cloud_zone.label_tag }}
-      {{ form.cloud_zone }}
-        <small class="form-text text-muted">{{ form.cloud_zone.help_text }}</small>
-    </div>
-    <div class="form-group">
-      {{ form.authorised_users.errors }}
-      {{ form.authorised_users.label_tag }}
-      {{ form.authorised_users }}
-        <small class="form-text text-muted">{{ form.authorised_users.help_text }}</small>
-    </div>
-    <div class="form-group">
-      {{ form.spackdir.errors }}
-      {{ form.spackdir.label_tag }}
-      {{ form.spackdir }}
-        <small class="form-text text-muted">{{ form.spackdir.help_text }}</small>
-    </div>
+  th,
+  td,
+  th {
+    background-color: #f2f2f2;
+    border: 1px solid #ddd;
+    padding: 20px;
+  }
 
-    <hr>
-    <p style="text-decoration: underline; font-size: large;">Static Nodes</p>
-    <div class="table-responsive">
-        <table class="table align-middle">
-            <thead><tr>
-            <th></th>
-            <th># Nodes</th>
-            <th>Instance Type</th>
-            <th>Boot Disk Size (GB)</th>
-            <th>Boot Disk Type</th>
-            </tr></thead>
-            <tr>
-                <th>Controller</th>
-                <td>
-    <div class="form-group">
-        <input type="number" name="num_controller_nodes" value="1" class="form-control" disabled>
-    </div>
-                </td>
-                <td>
-    <div class="form-group">
-      {{ form.controller_instance_type.errors.as_ul }}
-      {{ form.controller_instance_type }}
-    </div>
-                </td>
-                <td>
-    <div class="form-group">
-      {{ form.controller_disk_size.errors.as_ul }}
-      {{ form.controller_disk_size }}
-    </div>
-                </td>
-                <td>
-    <div class="form-group">
-      {{ form.controller_disk_type.errors.as_ul }}
-      {{ form.controller_disk_type }}
-    </div>
-                </td>
-            </tr>
-            <tr>
-                <th>Login Nodes</th>
-                <td>
-    <div class="form-group">
-      {{ form.num_login_nodes.errors.as_ul }}
-      {{ form.num_login_nodes }}
-    </div>
-                </td>
-                <td>
-    <div class="form-group">
-      {{ form.login_node_instance_type.errors.as_ul }}
-      {{ form.login_node_instance_type }}
-    </div>
-                </td>
-                <td>
-    <div class="form-group">
-      {{ form.login_node_disk_size.errors.as_ul }}
-      {{ form.login_node_disk_size }}
-    </div>
-                </td>
-                <td>
-    <div class="form-group">
-      {{ form.login_node_disk_type.errors.as_ul }}
-      {{ form.login_node_disk_type }}
-    </div>
-                </td>
-            </tr>
-        </table>
-    </div>
+  .part_formset_row td {
+    vertical-align: top;
+  }
 
-    <hr>
-    <p style="text-decoration: underline; font-size: large;">Filesystem Mounts</p>
-    <div class="table-responsive">
-        <table class="table align-middle">
-        {{ mountpoints_formset.management_form }}
-        {% for form in mountpoints_formset.forms %}
-          {% if forloop.first %}
-            <thead>
-            <tr>
-              {% for field in form.visible_fields %}<th>{{ field.label|capfirst }}</th>{% endfor %}
-            </tr>
-            </thead>
-          {% endif %}
-          <tr class="mp_formset_row">
-            {% for field in form.visible_fields %}
-              <td>
-              {% if forloop.first %}
-                {% for hidden in form.hidden_fields %}
-                  {{ hidden }}
-                {% endfor %}
-              {% endif %}
-                {{ field.errors.as_ul }}
-                {{ field }}
-              </td>
-            {% endfor %}
-          </tr>
-        {% endfor %}    
-        </table>
-    </div>
+  /* Style the select fields to fit within the table cells */
+  select {
+    width: 100%;
+    box-sizing: border-box;
+    /* Include padding and borders in the width */
+  }
 
+  /* Hide the default checkbox input */
+  .slider-switch input {
+    display: none;
+  }
 
-    <hr>
-    <p style="text-decoration: underline; font-size: large;">Partitions</p>
-    <div class="table-responsive">
-        <table class="table align-middle">
-        {% for form in cluster_partitions_formset.forms %}
-          {% if forloop.first %}
-            <thead>
-            <tr>
-              {% for field in form.visible_fields %}<th>{{ field.label|capfirst }}</th>{% endfor %}
-            </tr>
-            </thead>
-          {% endif %}
-          {% if form.errors %}
-            {% for error in form.non_field_errors %}
-              <div class="alert alert-danger">
-              <strong>{{ error|escape }}</strong>
-              </div>
-            {% endfor %}
-          {% endif %}
-          <tr class="part_formset_row">
-            {% for field in form.visible_fields %}
-              <td>
-              {% if forloop.first %}
-                {% for hidden in form.hidden_fields %}
-                  {{ hidden }}
-                {% endfor %}
-              {% endif %}
-                {{ field.errors.as_ul }}
-                {{ field }}
-              </td>
-            {% endfor %}
-          </tr>
-        {% endfor %}    
-        </table>
-        {{ cluster_partitions_formset.management_form }}
-    </div>
-    <br/>  
-    <input type="submit" value="Save" class="btn btn-primary"/>
-    <button class="btn btn-primary" onclick="javascript:history.back();"/>Cancel</button>
-  </form>
+  /* Style the slider container */
+  .slider-switch {
+    position: relative;
+    display: inline-block;
+    width: 60px;
+    height: 34px;
+  }
 
-{% endblock %}
+  /* Style the slider itself */
+  .slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    -webkit-transition: .4s;
+    transition: .4s;
+    border-radius: 34px;
+  }
 
-{% block tailscript %}
-<script src="{% static 'js/jquery.formset.js' %}"></script>
-<script type="text/javascript">
-    $('.mp_formset_row').formset({
-        addText: 'add mount point',
-        /*addCssClass: 'add-row btn btn-info',*/
-        deleteText: 'remove',
-        /*deleteCssClass: 'delete-row btn btn-danger',*/
-        prefix: 'mount_points',
-        formCssClass: 'dynamic-mp',
-        hideLastAddForm: 'true'
-    });
-    $('.part_formset_row').formset({
-        addText: 'add partition',
-        deleteText: 'remove',
-        prefix: 'partitions',
-        formCssClass: 'dynamic-part',
-        hideLastAddForm: 'true',
-        added: updateMachineAvailability, // Called each time a new form is added
-    });
-</script>
+  /* Style the slider's "on" state */
+  .slider:before {
+    position: absolute;
+    content: "";
+    height: 26px;
+    width: 26px;
+    left: 4px;
+    bottom: 4px;
+    background-color: white;
+    -webkit-transition: .4s;
+    transition: .4s;
+    border-radius: 50%;
+  }
+
+  /* When the checkbox is checked, change the background color of the slider */
+  .slider-switch input:checked+.slider {
+    background-color: #2196F3;
+  }
+
+  /* When the checkbox is checked, move the slider to the right */
+  .slider-switch input:checked+.slider:before {
+    -webkit-transform: translateX(26px);
+    -ms-transform: translateX(26px);
+    transform: translateX(26px);
+  }
+
+  .grid-container {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    /* Adjust column widths as needed */
+    align-items: left;
+    gap: 10px;
+    /* Adjust the gap as needed */
+    width: 100%;
+  }
+</style>
 {% endblock %}

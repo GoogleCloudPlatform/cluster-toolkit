@@ -19,12 +19,11 @@ package shell
 import (
 	"fmt"
 	"hpc-toolkit/pkg/config"
-	"log"
+	"hpc-toolkit/pkg/logging"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"golang.org/x/exp/maps"
 	"golang.org/x/sys/unix"
 )
 
@@ -58,12 +57,14 @@ func intersectMapKeys[K comparable, T any](s []K, m map[K]T) map[K]T {
 	return intersection
 }
 
-func mergeMapsWithoutLoss[K comparable, V any](m1 map[K]V, m2 map[K]V) {
-	expectedLength := len(m1) + len(m2)
-	maps.Copy(m1, m2)
-	if len(m1) != expectedLength {
-		panic(fmt.Errorf("unexpected key collision in maps"))
+func mergeMapsWithoutLoss[K comparable, V any](to map[K]V, from map[K]V) error {
+	for k, v := range from {
+		if _, ok := to[k]; ok {
+			return fmt.Errorf("duplicate key %v", k)
+		}
+		to[k] = v
 	}
+	return nil
 }
 
 // DirInfo reports if path is a directory and new files can be written in it
@@ -95,7 +96,7 @@ func CheckWritableDir(path string) error {
 // skip making the proposed changes and continue execution (in deploy command)
 // only if the user responds with "y" or "yes" (case-insensitive)
 func ApplyChangesChoice(c ProposedChanges) bool {
-	log.Printf("Summary of proposed changes: %s", strings.TrimSpace(c.Summary))
+	logging.Info("Summary of proposed changes: %s", strings.TrimSpace(c.Summary))
 	var userResponse string
 
 	for {
@@ -107,7 +108,7 @@ Please select an option [d,a,s,c]: `)
 
 		_, err := fmt.Scanln(&userResponse)
 		if err != nil {
-			log.Fatal(err)
+			logging.Fatal("%v", err)
 		}
 
 		switch strings.ToLower(strings.TrimSpace(userResponse)) {
@@ -118,7 +119,7 @@ Please select an option [d,a,s,c]: `)
 		case "d":
 			fmt.Println(c.Full)
 		case "s":
-			log.Fatal("user chose to stop execution of ghpc rather than make proposed changes to infrastructure")
+			logging.Fatal("user chose to stop execution of ghpc rather than make proposed changes to infrastructure")
 		}
 	}
 }

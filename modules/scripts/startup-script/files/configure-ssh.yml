@@ -30,7 +30,7 @@
           StrictHostKeyChecking no
       marker: "# {mark} ANSIBLE MANAGED BLOCK {{item}}"
     loop: "{{ host_name_prefix }}"
-  - name: "Create ssh keys in .bashrc if not alrady done"
+  - name: "Create ssh keys in .bashrc if not already done"
     ansible.builtin.lineinfile:
       path: "{{ bashrc }}"
       regexp: '^{{ setup_ssh_script }}'

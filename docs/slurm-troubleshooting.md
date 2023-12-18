@@ -210,7 +210,7 @@ The error will appear similar to:
 
 We anticipate that this limit will be configured in future releases of the Slurm
 module, however we recommend that you use a dedicated build VM where possible
-to execute scripts of significat duration. This pattern is demonstrated in the
+to execute scripts of significant duration. This pattern is demonstrated in the
 [AMD-optimized Slurm cluster example](../community/examples/AMD/).
 
 ### Slurm Controller Startup Fails with `exportfs` Error

@@ -13,7 +13,7 @@
 # limitations under the License.
 
 ---
-- name: Add Enviornment Modules
+- name: Add Environment Modules
   ansible.builtin.yum:
     name:
     - environment-modules

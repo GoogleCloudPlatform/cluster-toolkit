@@ -44,7 +44,7 @@ resource "google_container_cluster" "gke_cluster" {
   location        = var.region
   resource_labels = local.labels
 
-  # decouple node pool lifecyle from cluster life cycle
+  # decouple node pool lifecycle from cluster life cycle
   remove_default_node_pool = true
   initial_node_count       = 1 # must be set when remove_default_node_pool is set
 
@@ -170,7 +170,7 @@ resource "google_container_cluster" "gke_cluster" {
   monitoring_service = "monitoring.googleapis.com/kubernetes"
 }
 
-# We define explict node pools, so that it can be modified without
+# We define explicit node pools, so that it can be modified without
 # having to destroy the entire cluster.
 resource "google_container_node_pool" "system_node_pools" {
   provider = google-beta
@@ -202,7 +202,7 @@ resource "google_container_node_pool" "system_node_pools" {
     taint           = var.system_node_pool_taints
 
     # Forcing the use of the Container-optimized image, as it is the only
-    # image with the proper logging deamon installed.
+    # image with the proper logging daemon installed.
     #
     # cos images use Shielded VMs since v1.13.6-gke.0.
     # https://cloud.google.com/kubernetes-engine/docs/how-to/node-images
