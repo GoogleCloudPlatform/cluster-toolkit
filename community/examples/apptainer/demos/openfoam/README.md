@@ -14,6 +14,9 @@ to create a custom PMI2 enabled OpenFOAM container you will use to run the paral
 simulation portion of the demo. You will also use the `ingestion` technique to pull the standard [kitware/paraview](https://hub.docker.com/r/kitware/paraview)
 image from [Docker Hub](https://hub.docker.com/), transform it into a SIF image, and store it in [Artifact Registry](https://cloud.google.com/artifact-registry).
 
+### Before you begin
+This demonstration assumes you have access to an [Artifact Registry](https://cloud.google.com/artifact-registry) repository and that you have set up the Apptainer custom build step. See [this section](../../README.md#before-you-begin) for details.
+
 ## Containers
 
 You will use [Cloud Build](https://cloud.google.com/build?hl=en) to build four containers as part of this demonstration
@@ -22,12 +25,22 @@ You will use [Cloud Build](https://cloud.google.com/build?hl=en) to build four c
 - [openfoam-pmi2](./resources/openfoam-pmi2.def) OpenFOAM 2306 repackaged to use the Slurm PMI enabled Open MPI runtime
 - [paraview](./resources/paraview.yaml) which _ingests_ the OCI ParaView container and stores it in SIF format in Artifact Registry
 
+All of the Apptainer definition files and Cloud Build configurations are in the [resources](./resources/) directory. Change to that directory now
+```bash
+cd resources
+```
+
 If you are in a hurry you can build all the containers at once using the command
 ```bash
 gcloud builds submit --config=containers.yaml .
 ```
 
-Now you can skip to the **Simulation** section of this demostration.
+Go back to the parent directory
+```bash
+cd ..
+```
+
+Now you can skip to the [HPC System Deployment](#hpc-system-deployment) section of this demostration.
 
 ### OpenFOAM && Open MPI
 
@@ -36,9 +49,14 @@ simplifies running containerized MPI codes, by eliminating the need to to comple
 solution more portable since it independent of the MPI runtime(s) installed on the HPC system. The [ompi4-pmi2.def](./resources/ompi4-pmi2.def) container
 definition adds the `--with-slurm` and `--with -pmi` flags to a standard Open MPI build. The resulting runtime binaries will support the use of [PMI](https://www.mcs.anl.gov/papers/P1760.pdf) to do the necessary _wire-up_ at the beginning of an MPI computation.
 
+All of the Apptainer definition files and Cloud Build configurations are in the [resources](./resources/) directory. Change to that directory now
+```bash
+cd resources
+```
+
 The command
 ```bash
-gcloud builds submit --config=opmi4-mpi2.yaml
+gcloud builds submit --config=opmi4-mpi2.yaml .
 ```
 
 builds the PMI-enabled Open MPI runtime container and stores it in Artifact Registry.
@@ -49,7 +67,7 @@ and then builds the runtime in a [Rocky Linux](https://rockylinux.org/) based co
 
 Build this interim container with the command
 ```bash
-gcloud builds submit --config=openfoam.yaml
+gcloud builds submit --config=openfoam.yaml .
 ```
 
 Now you are ready to combine the PMI-enabled Open MPI runtime with the OpenFOAM runtime. The [openfoam-pmi2.def](./resources/openfoam-pmi2.def) container
@@ -77,7 +95,7 @@ Finally the `slurm-pmi` package is installed and some environment variable insta
 
 You build it using the command
 ```bash
-gcloud builds submit --config=openfoam-pmi2.yaml
+gcloud builds submit --config=openfoam-pmi2.yaml .
 ```
 
 ### Paraview
@@ -88,14 +106,24 @@ gives you more control over what users and/or applications can access them and i
 
 Ingest the Paraview OCI container with the command
 ```bash
-gcloud builds submit --config=paraview.yaml
+gcloud builds submit --config=paraview.yaml .
+```
+
+Go back to the parent directory
+```bash
+cd ..
 ```
 
 ## HPC System Deployment
 
-Use the [OpenFoam blueprint](./hpc/of-demo.yaml)  as the basis for your HPC system. It is conifgured to deploy two partitions. 
+Use the [OpenFoam blueprint](./hpc/of-demo.yaml) in the `hpc` directory as the basis for your HPC system. It is conifgured to deploy two partitions. 
 - A `compute` partition that will dynamically allocate up to 10 [compute-optimized](https://cloud.google.com/compute/docs/compute-optimized-machines#c2_machine_types) C2-Standard-60 instances.
 - A `gpu` partition with up to four N1-STANDARD-8 [general-purpose](https://cloud.google.com/compute/docs/general-purpose-machines#n1_machines) instances one of which will be statically allocated when the system is deployed.
+
+Change directories to the `hpc` directory
+```bash
+cd hpc
+```
 
 Use your preferred text editor or the `sed` command below to set the correct PROJECT_ID value in the blueprint.
 
@@ -125,6 +153,11 @@ ofdemo/instructions.txt
 Per the instructions, bring up your HPC system with the command
 ```bash
 ./ghpc deploy ofdemo
+```
+
+Go back to the parent directory
+```bash
+cd ..
 ```
 
 ## Simulation

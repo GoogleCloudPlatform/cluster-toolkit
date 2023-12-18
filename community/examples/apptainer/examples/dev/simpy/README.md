@@ -8,6 +8,9 @@ This example illustrates one way to capture a Conda environment using Apptainer.
 
 In this example you will create an Apptainer container that packages a conda installation of the [SimPy](https://simpy.readthedocs.io/en/latest/) discrete event simulator. You will build the container using [Google Cloud Build](https://cloud.google.com/build?hl=en), store it in [Google Artifact Registry](https://cloud.google.com/artifact-registry), and then deploy and run it in a [Slurm](https://slurm.schedmd.com/documentation.html)-based HPC System deployed with the [Cloud HPC Toolkit](https://cloud.google.com/hpc-toolkit/docs/overview).
 
+### Before you begin
+This demonstration assumes you have access to an [Artifact Registry](https://cloud.google.com/artifact-registry) repository and that you have set up the Apptainer custom build step. See [this section](../../../README.md#before-you-begin) for details.
+
 ## Container Definition
 
 The [simpy.def](./simpy.def) file defines the construction of the container by the `apptainer build` command. `simpy.def` defines a [mult-stage build](https://apptainer.org/docs/user/latest/definition_files.html#multi-stage-builds) that separates the container construction into `install` and `runtime` stages. While not strictly necessary for this simple example it is a best practice which often creates a smaller final image without the entire development stack.

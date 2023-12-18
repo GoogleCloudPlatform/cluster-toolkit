@@ -4,7 +4,12 @@ This example illustrates the use of the [Apptainer](https://apptainer.org/) cont
 
 ## Builders
 
-While you can easily use existing [Docker](https://hub.docker.com/) with Apptainer it is more efficient to package your code in the [Singularity Image Format](https://apptainer.org/docs/user/latest/definition_files.html) (SIF) using the `apptainer build` command. We demonstrate using the HPC Toolkit to create a _build instance_ that you can use to create SIF images. We also provide a _custom build step_ that will allow you to use [Google Cloud Build](https://cloud.google.com/build?hl=en) to create SIF images on our serverless CI/CD platform.
+While you can easily use existing [Docker/OCI](https://hub.docker.com/) containers with Apptainer it is more efficient to package your code in the [Singularity Image Format](https://apptainer.org/docs/user/latest/definition_files.html) (SIF) using the `apptainer build` command. We demonstrate using the HPC Toolkit to create a _build instance_ that you can use to create SIF images. We also provide a _custom build step_ that will allow you to use [Google Cloud Build](https://cloud.google.com/build?hl=en) to create SIF images on our serverless CI/CD platform.
+
+### Before you begin
+Most of the examples here use Cloud Build to build Apptainer containers, those containers are then stored in an [Artifact Registry](https://cloud.google.com/artifact-registry) repository. Therefore, if you don't already have an Artifact Registry (AR) repository, you should create one as described [here](https://cloud.google.com/artifact-registry/docs/repositories/create-repos#description). The Cloud Build configuration defaults for the examples assume a mulit-region AR repo with the location `us-docker.pkg.dev`. If you create or use a regional AR repo you will need to use the `--substitutions` flag when you submit builds to Cloud Build to change the default location.
+
+In addition to an AR repo to store containers, you will need to create a custom Apptainer `build step` that the example Cloud Build configurations use to build containers. Creation of the custom apptainer build step is described [here](./builders/cloud/README.md#apptainer-build-step).
 
 ## Clusters
 

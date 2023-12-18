@@ -4,6 +4,9 @@
 
 This example demonstrates packaging `vscode` in an Apptainer container, deploying the container to a compute node in a Slurm-based HPC system created using the [Cloud HPC Toolkit](https://cloud.google.com/hpc-toolkit/docs/overview), and connecting to it via the `vscode` [Remote Tunnels](https://code.visualstudio.com/docs/remote/tunnels) extension.
 
+### Before you begin
+This demonstration assumes you have access to an [Artifact Registry](https://cloud.google.com/artifact-registry) repository and that you have set up the Apptainer custom build step. See [this section](../../../README.md#before-you-begin) for details.
+
 ## Container Definition
 
 The [vscode.def](./vscode.def) file defines the construction of the container by the `apptainer build` command.

@@ -1,5 +1,10 @@
 # Using Apptainer Containers
 
+These examples cover some common uses of container technology for high performance computing.
+
+### Before you begin
+This demonstration assumes you have access to an [Artifact Registry](https://cloud.google.com/artifact-registry) repository and that you have set up the Apptainer custom build step. See [this section](../README.md#before-you-begin) for details.
+
 ### Dev
 
 You can use Apptainer to package your development environment to streamline your workflow in a cluster deployed via the HPC Toolkit. We provide examples of 

@@ -4,6 +4,9 @@ Many modern HPC codes take advantage of the massively parallel execution capabil
 
 The [Julia](https://julialang.org/) programming language provides a seamless interface to [NVIDIA](https://juliagpu.org/cuda/) and [AMD](https://juliagpu.org/rocm/) GPUs. Google supports a broad range of [NVIDIA GPUs](https://cloud.google.com/gpu). The [Cloud HPC Toolkit](https://cloud.google.com/hpc-toolkit/docs/overview) creates Slurm-based HPC systems whose compute nodes have the NVIDIA CUDA drivers and runtime installed and can be configured with one or more GPUs attached. You will use Apptainers built-in support for NVIDIA GPUs to deploy as simple massively parallel code: [SAXPY](https://developer.nvidia.com/blog/n-ways-to-saxpy-demonstrating-the-breadth-of-gpu-programming-options/) the `hello world` of massively parallel programming.
 
+### Before you begin
+This demonstration assumes you have access to an [Artifact Registry](https://cloud.google.com/artifact-registry) repository and that you have set up the Apptainer custom build step. See [this section](../../README.md#before-you-begin) for details.
+
 ## Setup
 
 Deploy a Slurm-based HPC system using the [slurm-apptainer-gpu.yaml](../../../cluster/slurm-apptainer-gpu.yaml) blueprint following the process described [here](../../../cluster/README.md). Login to the HPC system's login node with the command

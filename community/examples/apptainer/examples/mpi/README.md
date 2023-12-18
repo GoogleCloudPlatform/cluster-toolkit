@@ -2,6 +2,9 @@
 
 [MPI](https://en.wikipedia.org/wiki/Message_Passing_Interface) is an important component of many HPC applications. Apptainer enables you to package MPI codes along with your chosen MPI runtime, e.g. [Open MPI](https://www.open-mpi.org/), [MPICH](https://www.mpich.org/), etc., and then take advantage Slurm's support for the [Process Management Interface](https://link.springer.com/chapter/10.1007/978-3-642-15646-5_4) (PMI) to execute them independent of the MPI runtime(s) available on the cluster.
 
+### Before you begin
+This demonstration assumes you have access to an [Artifact Registry](https://cloud.google.com/artifact-registry) repository and that you have set up the Apptainer custom build step. See [this section](../../README.md#before-you-begin) for details.
+
 ## Container Definition
 
 This example illustrates the utility of [multi-stage builds](https://apptainer.org/docs/user/latest/definition_files.html#multi-stage-builds). You will create two containers
