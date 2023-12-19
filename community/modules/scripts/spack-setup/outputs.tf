@@ -51,6 +51,6 @@ output "spack_profile_script_path" {
 }
 
 output "system_user_name" {
-  description = "The system user used for Spack installation."
+  description = "The system user used to install Spack. It can be reused by spack-execute module to install spack packages."
   value       = var.system_user_name
 }

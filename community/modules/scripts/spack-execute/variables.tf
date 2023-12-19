@@ -84,7 +84,7 @@ variable "spack_runner" {
 }
 
 variable "system_user_name" {
-  description = "Name of The system user used to execute commands. Generally passed from the spack-setup module."
+  description = "Name of the system user used to execute commands. Generally passed from the spack-setup module."
   type        = string
 }
 

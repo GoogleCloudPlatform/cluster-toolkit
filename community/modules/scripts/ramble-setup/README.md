@@ -126,5 +126,5 @@ limitations under the License.
 | <a name="output_ramble_ref"></a> [ramble\_ref](#output\_ramble\_ref) | Git ref the ramble install is checked out to use |
 | <a name="output_ramble_runner"></a> [ramble\_runner](#output\_ramble\_runner) | Runner to be used with startup-script module or passed to ramble-execute module.<br>- installs Ramble dependencies<br>- installs Ramble<br>- generates profile.d script to enable access to Ramble<br>This is safe to run in parallel by multiple machines. |
 | <a name="output_startup_script"></a> [startup\_script](#output\_startup\_script) | Ramble installation script. |
-| <a name="output_system_user_name"></a> [system\_user\_name](#output\_system\_user\_name) | The system user used for Ramble installation. |
+| <a name="output_system_user_name"></a> [system\_user\_name](#output\_system\_user\_name) | The system user used to install Ramble. It can be reused by ramble-execute module to execute Ramble commands. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

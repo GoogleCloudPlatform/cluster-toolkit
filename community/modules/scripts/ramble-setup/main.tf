@@ -37,7 +37,7 @@ locals {
       git_url               = var.ramble_url
       git_ref               = var.ramble_ref
       chmod_mode            = var.chmod_mode == null ? "" : var.chmod_mode
-      system_user_name      = var.system_user_name == null ? "" : var.system_user_name
+      system_user_name      = var.system_user_name
       system_user_uid       = var.system_user_uid == null ? "" : var.system_user_uid
       system_user_gid       = var.system_user_gid == null ? "" : var.system_user_gid
       finalize_setup_script = "echo 'no finalize setup script'"

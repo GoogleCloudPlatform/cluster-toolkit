@@ -38,7 +38,7 @@
       content: "{{ profile_script }}"
     when: profile_script
 
-  - name: Lookup user to use for install
+  - name: Look up user to use for install
     block:
     
     - name: Check if user already exists
@@ -46,7 +46,7 @@
         database: passwd
         key: "{{ system_user_name }}"
 
-    - name: Looking existing user details
+    - name: Look up existing user details
       ansible.builtin.user:
         name: "{{ system_user_name }}"
       register: system_user

@@ -158,7 +158,7 @@ provide an OS Login user name:
 ```
 
 This will work even if the user has not yet logged onto the machine. When the
-specified user does later log on to the machine they will be able to call
+specified user does log on to the machine they will be able to call
 `spack install` without any further configuration.
 
 #### Pre-configured user
@@ -387,5 +387,5 @@ limitations under the License.
 | <a name="output_spack_profile_script_path"></a> [spack\_profile\_script\_path](#output\_spack\_profile\_script\_path) | Path to the Spack profile.d script. |
 | <a name="output_spack_runner"></a> [spack\_runner](#output\_spack\_runner) | Runner to be used with startup-script module or passed to spack-execute module.<br>- installs Spack dependencies<br>- installs Spack <br>- generates profile.d script to enable access to Spack<br>This is safe to run in parallel by multiple machines. Use in place of deprecated `setup_spack_runner`. |
 | <a name="output_startup_script"></a> [startup\_script](#output\_startup\_script) | Spack installation script. |
-| <a name="output_system_user_name"></a> [system\_user\_name](#output\_system\_user\_name) | The system user used for Spack installation. |
+| <a name="output_system_user_name"></a> [system\_user\_name](#output\_system\_user\_name) | The system user used to install Spack. It can be reused by spack-execute module to install spack packages. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
