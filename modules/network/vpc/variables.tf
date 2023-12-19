@@ -227,3 +227,19 @@ variable "firewall_rules" {
   description = "List of firewall rules"
   default     = []
 }
+
+variable "firewall_log_config" {
+  type        = string
+  description = "Firewall log configuration for Toolkit firewall rules (var.enable_iap_ssh_ingress and others)"
+  default     = "DISABLE_LOGGING"
+  nullable    = false
+
+  validation {
+    condition = contains([
+      "INCLUDE_ALL_METADATA",
+      "EXCLUDE_ALL_METADATA",
+      "DISABLE_LOGGING",
+    ], var.firewall_log_config)
+    error_message = "var.firewall_log_config must be set to \"DISABLE_LOGGING\", or enable logging with \"INCLUDE_ALL_METADATA\" or \"EXCLUDE_ALL_METADATA\""
+  }
+}
