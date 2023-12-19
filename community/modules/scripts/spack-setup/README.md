@@ -136,7 +136,9 @@ Log out and back in so the group change will take effect, then `<username>` will
 be able to call `spack install <package>`.
 
 You can use the `system_user_name`, `system_user_uid`, and `system_user_gid` to
-customize the name and ids of the system user.
+customize the name and ids of the system user. While unlikely, it is possible
+that the default `system_user_uid` or `system_user_gid` could conflict with
+existing UIDs.
 
 ### Use and existing user
 
@@ -371,9 +373,9 @@ limitations under the License.
 | <a name="input_spack_ref"></a> [spack\_ref](#input\_spack\_ref) | Git ref to checkout for spack. | `string` | `"v0.20.0"` | no |
 | <a name="input_spack_url"></a> [spack\_url](#input\_spack\_url) | URL to clone the spack repo from. | `string` | `"https://github.com/spack/spack"` | no |
 | <a name="input_spack_virtualenv_path"></a> [spack\_virtualenv\_path](#input\_spack\_virtualenv\_path) | Virtual environment path in which to install Spack Python interpreter and other dependencies | `string` | `"/usr/local/spack-python"` | no |
-| <a name="input_system_user_gid"></a> [system\_user\_gid](#input\_system\_user\_gid) | GID used when creating system user group. Ignored if `system_user_name` already exists on system. Default of 833 is arbitrary. | `number` | `833` | no |
+| <a name="input_system_user_gid"></a> [system\_user\_gid](#input\_system\_user\_gid) | GID used when creating system user group. Ignored if `system_user_name` already exists on system. Default of 1104762903 is arbitrary. | `number` | `1104762903` | no |
 | <a name="input_system_user_name"></a> [system\_user\_name](#input\_system\_user\_name) | Name of system user that will perform installation of Spack. It will be created if it does not exist. | `string` | `"spack"` | no |
-| <a name="input_system_user_uid"></a> [system\_user\_uid](#input\_system\_user\_uid) | UID used when creating system user. Ignored if `system_user_name` already exists on system. Default of 833 is arbitrary. | `number` | `833` | no |
+| <a name="input_system_user_uid"></a> [system\_user\_uid](#input\_system\_user\_uid) | UID used when creating system user. Ignored if `system_user_name` already exists on system. Default of 1104762903 is arbitrary. | `number` | `1104762903` | no |
 
 ## Outputs
 

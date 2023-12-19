@@ -91,14 +91,14 @@ variable "system_user_name" {
 }
 
 variable "system_user_uid" {
-  description = "UID used when creating system user. Ignored if `system_user_name` already exists on system. Default of 833 is arbitrary."
-  default     = 833
+  description = "UID used when creating system user. Ignored if `system_user_name` already exists on system. Default of 1104762903 is arbitrary."
+  default     = 1104762903
   type        = number
 }
 
 variable "system_user_gid" {
-  description = "GID used when creating system user group. Ignored if `system_user_name` already exists on system. Default of 833 is arbitrary."
-  default     = 833
+  description = "GID used when creating system user group. Ignored if `system_user_name` already exists on system. Default of 1104762903 is arbitrary."
+  default     = 1104762903
   type        = number
 }
 

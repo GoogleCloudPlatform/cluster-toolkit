@@ -111,9 +111,9 @@ limitations under the License.
 | <a name="input_ramble_url"></a> [ramble\_url](#input\_ramble\_url) | URL for Ramble repository to clone. | `string` | `"https://github.com/GoogleCloudPlatform/ramble"` | no |
 | <a name="input_ramble_virtualenv_path"></a> [ramble\_virtualenv\_path](#input\_ramble\_virtualenv\_path) | Virtual environment path in which to install Ramble Python interpreter and other dependencies | `string` | `"/usr/local/ramble-python"` | no |
 | <a name="input_region"></a> [region](#input\_region) | Region to place bucket containing startup script. | `string` | n/a | yes |
-| <a name="input_system_user_gid"></a> [system\_user\_gid](#input\_system\_user\_gid) | GID used when creating system user group. Ignored if `system_user_name` already exists on system. Default of 834 is arbitrary. | `number` | `834` | no |
+| <a name="input_system_user_gid"></a> [system\_user\_gid](#input\_system\_user\_gid) | GID used when creating system user group. Ignored if `system_user_name` already exists on system. Default of 1104762904 is arbitrary. | `number` | `1104762904` | no |
 | <a name="input_system_user_name"></a> [system\_user\_name](#input\_system\_user\_name) | Name of system user that will perform installation of Ramble. It will be created if it does not exist. | `string` | `"ramble"` | no |
-| <a name="input_system_user_uid"></a> [system\_user\_uid](#input\_system\_user\_uid) | UID used when creating system user. Ignored if `system_user_name` already exists on system. Default of 834 is arbitrary. | `number` | `834` | no |
+| <a name="input_system_user_uid"></a> [system\_user\_uid](#input\_system\_user\_uid) | UID used when creating system user. Ignored if `system_user_name` already exists on system. Default of 1104762904 is arbitrary. | `number` | `1104762904` | no |
 
 ## Outputs
 
