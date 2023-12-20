@@ -284,12 +284,5 @@ variable "tags" {
 
 variable "subnetwork_self_link" {
   type        = string
-  description = "Subnet to deploy to. Either network_self_link or subnetwork_self_link must be specified."
-  default     = null
-}
-
-variable "subnetwork_project" {
-  type        = string
-  description = "The project that subnetwork belongs to."
-  default     = null
+  description = "Subnet to deploy to."
 }

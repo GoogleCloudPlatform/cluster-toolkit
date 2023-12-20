@@ -52,7 +52,6 @@ module "slurm_login_template" {
   source_image_project     = each.value.source_image_project
   source_image             = each.value.source_image
   spot                     = each.value.spot
-  subnetwork_project       = each.value.subnetwork_project
   subnetwork               = each.value.subnetwork
   tags                     = concat([local.slurm_cluster_name], each.value.tags)
   termination_action       = each.value.termination_action

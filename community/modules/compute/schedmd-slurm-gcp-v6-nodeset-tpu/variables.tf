@@ -104,7 +104,6 @@ variable "docker_image" {
 variable "subnetwork_self_link" {
   type        = string
   description = "The name of the subnetwork to attach the TPU-vm of this nodeset to."
-  default     = null
 }
 
 variable "service_account" {

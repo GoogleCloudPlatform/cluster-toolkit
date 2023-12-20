@@ -53,7 +53,7 @@ module "slurm_nodeset_template" {
   source_image_family      = each.value.source_image_family
   source_image_project     = each.value.source_image_project
   source_image             = each.value.source_image
-  subnetwork               = each.value.subnetwork
+  subnetwork               = each.value.subnetwork_self_link
   tags                     = concat([local.slurm_cluster_name], each.value.tags)
 }
 
@@ -70,7 +70,7 @@ module "slurm_nodeset" {
   node_count_static      = each.value.node_count_static
   nodeset_name           = each.value.nodeset_name
   node_conf              = each.value.node_conf
-  subnetwork_self_link   = each.value.subnetwork
+  subnetwork_self_link   = each.value.subnetwork_self_link
   zones                  = each.value.zones
   zone_target_shape      = each.value.zone_target_shape
 }
@@ -94,7 +94,7 @@ module "slurm_nodeset_tpu" {
   service_account        = each.value.service_account
   data_disks             = each.value.data_disks
   docker_image           = each.value.docker_image
-  subnetwork             = each.value.subnetwork
+  subnetwork             = each.value.subnetwork_self_link
 }
 
 # PARTITION
