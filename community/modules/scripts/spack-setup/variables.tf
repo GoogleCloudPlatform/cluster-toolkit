@@ -71,37 +71,35 @@ variable "chgrp_group" {
 
 variable "chmod_mode" {
   description = <<-EOT
-    `chmod` to apply to the Spack installation. Adds group write by default.
+    `chmod` to apply to the Spack installation. Adds group write by default. Set to `""` (empty string) to prevent modification.
     For usage information see:
     https://docs.ansible.com/ansible/latest/collections/ansible/builtin/file_module.html#parameter-mode
     EOT
   default     = "g+w"
   type        = string
+  nullable    = false
 }
 
 variable "system_user_name" {
   description = "Name of system user that will perform installation of Spack. It will be created if it does not exist."
   default     = "spack"
   type        = string
-
-  validation {
-    condition     = var.system_user_name != null
-    error_message = "A name for the system user to use for installation must be provided."
-  }
+  nullable    = false
 }
 
 variable "system_user_uid" {
   description = "UID used when creating system user. Ignored if `system_user_name` already exists on system. Default of 1104762903 is arbitrary."
   default     = 1104762903
   type        = number
+  nullable    = false
 }
 
 variable "system_user_gid" {
   description = "GID used when creating system user group. Ignored if `system_user_name` already exists on system. Default of 1104762903 is arbitrary."
   default     = 1104762903
   type        = number
+  nullable    = false
 }
-
 
 variable "spack_virtualenv_path" {
   description = "Virtual environment path in which to install Spack Python interpreter and other dependencies"
