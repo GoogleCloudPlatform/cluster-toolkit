@@ -113,9 +113,10 @@ module "slurm_files" {
   enable_debug_logging = var.enable_debug_logging
   extra_logging_flags  = var.extra_logging_flags
 
-  enable_bigquery_load = var.enable_bigquery_load
-  epilog_scripts       = var.epilog_scripts
-  prolog_scripts       = var.prolog_scripts
+  enable_bigquery_load     = var.enable_bigquery_load
+  epilog_scripts           = var.epilog_scripts
+  prolog_scripts           = var.prolog_scripts
+  enable_slurm_gcp_plugins = var.enable_slurm_gcp_plugins
 
   disable_default_mounts = var.disable_default_mounts
   network_storage        = var.network_storage
