@@ -130,15 +130,29 @@ variable "labels" {
   type        = map(string)
 }
 
+variable "service_account_email" {
+  description = "Service account e-mail address to use with the node pool"
+  type        = string
+  default     = null
+}
+
+variable "service_account_scopes" {
+  description = "Scopes to to use with the node pool."
+  type        = set(string)
+  default     = ["https://www.googleapis.com/auth/cloud-platform"]
+}
+
+# tflint-ignore: terraform_unused_declarations
 variable "service_account" {
-  description = "Service account to attach to the instance. See https://www.terraform.io/docs/providers/google/r/compute_instance_template.html#service_account."
+  description = "DEPRECATED - Use `service_account_email` and `service_account_scopes` instead."
   type = object({
     email  = string,
     scopes = set(string)
   })
-  default = {
-    email  = null
-    scopes = ["https://www.googleapis.com/auth/cloud-platform"]
+  default = null
+  validation {
+    condition     = var.service_account == null
+    error_message = "The 'service_account' setting is deprecated, please use 'var.service_account_email' and 'var.service_account_scopes' instead."
   }
 }
 

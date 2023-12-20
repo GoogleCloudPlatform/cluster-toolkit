@@ -71,12 +71,10 @@ deployment_groups:
       labels:
         ghpc_role: license
       disable_public_ips: true
-      service_account:
-        email: null
-        scopes:
-        - "https://www.googleapis.com/auth/devstorage.read_only"
-        - "https://www.googleapis.com/auth/logging.write"
-        - |
-          Lorem ipsum dolor sit amet
-          consectetur adipiscing elit
-          sed do eiusmod tempor
+      service_account_scopes:
+      - "https://www.googleapis.com/auth/devstorage.read_only"
+      - "https://www.googleapis.com/auth/logging.write"
+      - |
+        Lorem ipsum dolor sit amet
+        consectetur adipiscing elit
+        sed do eiusmod tempor
