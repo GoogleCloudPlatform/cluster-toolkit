@@ -37,9 +37,9 @@ module "bucket" {
     (local.synth_bucket_name) = true
   }
 
-  labels = {
+  labels = merge(local.labels, {
     slurm_cluster_name = local.slurm_cluster_name
-  }
+  })
 }
 
 # BUCKET IAMs
