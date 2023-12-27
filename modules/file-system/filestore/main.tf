@@ -64,9 +64,10 @@ resource "google_filestore_instance" "filestore_instance" {
   labels = local.labels
 
   networks {
-    network      = local.shared_vpc ? var.network_id : local.network_name
-    connect_mode = var.connect_mode
-    modes        = ["MODE_IPV4"]
+    network           = local.shared_vpc ? var.network_id : local.network_name
+    connect_mode      = var.connect_mode
+    modes             = ["MODE_IPV4"]
+    reserved_ip_range = var.reserved_ip_range
   }
 
   dynamic "timeouts" {
