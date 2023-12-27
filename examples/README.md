@@ -1237,8 +1237,6 @@ The variable is referred to by the source, either vars for deploment variables
 or the module ID for module variables, followed by the name of the value being
 referenced. The entire variable is then wrapped in “$()”.
 
-Currently, string interpolation with variables is not supported.
-
 ### Literal Variables
 
 Literal variables should only be used by those familiar

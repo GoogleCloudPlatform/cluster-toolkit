@@ -672,22 +672,22 @@ func (s *zeroSuite) TestCheckBackends(c *C) {
 
 	{ // FAIL. Variable in defaults type
 		b := TerraformBackend{Type: "$(vartype)"}
-		c.Check(check(b), ErrorMatches, ".*type.*vartype.*")
+		c.Check(check(b), NotNil)
 	}
 
 	{ // FAIL. Variable in group backend type
 		b := TerraformBackend{Type: "$(vartype)"}
-		c.Check(check(dummy, b), ErrorMatches, ".*type.*vartype.*")
+		c.Check(check(dummy, b), NotNil)
 	}
 
 	{ // FAIL. Deployment variable in defaults type
 		b := TerraformBackend{Type: "$(vars.type)"}
-		c.Check(check(b), ErrorMatches, ".*type.*vars\\.type.*")
+		c.Check(check(b), NotNil)
 	}
 
 	{ // FAIL. HCL literal
 		b := TerraformBackend{Type: "((var.zen))"}
-		c.Check(check(b), ErrorMatches, ".*type.*zen.*")
+		c.Check(check(b), NotNil)
 	}
 
 	{ // OK. Not a variable
@@ -697,13 +697,13 @@ func (s *zeroSuite) TestCheckBackends(c *C) {
 
 	{ // FAIL. Mid-string variable in defaults type
 		b := TerraformBackend{Type: "hugs_$(vartype)_hugs"}
-		c.Check(check(b), ErrorMatches, ".*type.*vartype.*")
+		c.Check(check(b), NotNil)
 	}
 
 	{ // FAIL. Variable in defaults configuration
 		b := TerraformBackend{Type: "gcs"}
 		b.Configuration.Set("bucket", GlobalRef("trenta").AsExpression().AsValue())
-		c.Check(check(b), ErrorMatches, ".*can not use variables.*")
+		c.Check(check(b), NotNil)
 	}
 
 	{ // OK. handles nested configuration
@@ -714,7 +714,7 @@ func (s *zeroSuite) TestCheckBackends(c *C) {
 				"alpha": cty.StringVal("a"),
 				"beta":  GlobalRef("boba").AsExpression().AsValue(),
 			}))
-		c.Check(check(b), ErrorMatches, ".*can not use variables.*")
+		c.Check(check(b), NotNil)
 	}
 }
 

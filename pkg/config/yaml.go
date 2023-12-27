@@ -22,6 +22,7 @@ import (
 	"os"
 	"regexp"
 	"strconv"
+	"strings"
 
 	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/pkg/errors"
@@ -255,22 +256,24 @@ func (y *YamlValue) unmarshalScalar(n *yaml.Node) error {
 	}
 	y.Wrap(v)
 
-	if l, is := IsYamlExpressionLiteral(y.Unwrap()); is { // HCL literal
-		var e Expression
-		if e, err = ParseExpression(l); err != nil {
-			// TODO: point to exact location within expression, see Diagnostic.Subject
-			return nodeToPosErr(n, err)
+	if y.Unwrap().Type() == cty.String {
+		if y.v, err = parseYamlString(y.v.AsString()); err != nil {
+			return fmt.Errorf("line %d: %w", n.Line, err)
 		}
-		y.Wrap(e.AsValue())
-	} else if y.Unwrap().Type() == cty.String && hasVariable(y.Unwrap().AsString()) { // "simple" variable
-		e, err := SimpleVarToExpression(y.Unwrap().AsString())
-		if err != nil {
-			// TODO: point to exact location within expression, see Diagnostic.Subject
-			return nodeToPosErr(n, err)
-		}
-		y.Wrap(e.AsValue())
 	}
+
 	return nil
+}
+
+func parseYamlString(s string) (cty.Value, error) {
+	if strings.HasPrefix(s, "((") && strings.HasSuffix(s, "))") { // HCL literal
+		if e, err := ParseExpression(s[2 : len(s)-2]); err != nil {
+			return cty.NilVal, err
+		} else {
+			return e.AsValue(), nil
+		}
+	}
+	return parseBpLit(s)
 }
 
 func (y *YamlValue) unmarshalObject(n *yaml.Node) error {

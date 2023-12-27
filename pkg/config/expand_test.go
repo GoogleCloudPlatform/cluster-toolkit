@@ -338,60 +338,6 @@ func (s *MySuite) TestApplyGlobalVariables(c *C) {
 		GlobalRef("gold").AsExpression().AsValue())
 }
 
-func (s *zeroSuite) TestIsSimpleVariable(c *C) {
-	// True: Correct simple variable
-	got := isSimpleVariable("$(some_text)")
-	c.Assert(got, Equals, true)
-	// False: Missing $
-	got = isSimpleVariable("(some_text)")
-	c.Assert(got, Equals, false)
-	// False: Missing (
-	got = isSimpleVariable("$some_text)")
-	c.Assert(got, Equals, false)
-	// False: Missing )
-	got = isSimpleVariable("$(some_text")
-	c.Assert(got, Equals, false)
-	// False: Contains Prefix
-	got = isSimpleVariable("prefix-$(some_text)")
-	c.Assert(got, Equals, false)
-	// False: Contains Suffix
-	got = isSimpleVariable("$(some_text)-suffix")
-	c.Assert(got, Equals, false)
-	// False: Contains prefix and suffix
-	got = isSimpleVariable("prefix-$(some_text)-suffix")
-	c.Assert(got, Equals, false)
-	// False: empty string
-	got = isSimpleVariable("")
-	c.Assert(got, Equals, false)
-}
-
-func (s *zeroSuite) TestHasVariable(c *C) {
-	// True: simple variable
-	got := hasVariable("$(some_text)")
-	c.Assert(got, Equals, true)
-	// True: has prefix
-	got = hasVariable("prefix-$(some_text)")
-	c.Assert(got, Equals, true)
-	// True: has suffix
-	got = hasVariable("$(some_text)-suffix")
-	c.Assert(got, Equals, true)
-	// True: Two variables
-	got = hasVariable("$(some_text)$(some_more)")
-	c.Assert(got, Equals, true)
-	// True: two variable with other text
-	got = hasVariable("prefix-$(some_text)-$(some_more)-suffix")
-	c.Assert(got, Equals, true)
-	// False: missing $
-	got = hasVariable("(some_text)")
-	c.Assert(got, Equals, false)
-	// False: missing (
-	got = hasVariable("$some_text)")
-	c.Assert(got, Equals, false)
-	// False: missing )
-	got = hasVariable("$(some_text")
-	c.Assert(got, Equals, false)
-}
-
 func (s *zeroSuite) TestValidateModuleReference(c *C) {
 	a := Module{ID: "moduleA"}
 	b := Module{ID: "moduleB"}

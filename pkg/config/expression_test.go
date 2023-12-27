@@ -71,35 +71,7 @@ func TestTraversalToReference(t *testing.T) {
 	}
 }
 
-func TestIsYamlHclLiteral(t *testing.T) {
-	type test struct {
-		input string
-		want  string
-		check bool
-	}
-	tests := []test{
-		{"((var.green))", "var.green", true},
-		{"((${var.green}))", "${var.green}", true},
-		{"(( 7 + a }))", " 7 + a }", true},
-		{"(var.green)", "", false},
-		{"((var.green)", "", false},
-		{"$(var.green)", "", false},
-		{"${var.green}", "", false},
-	}
-	for _, tc := range tests {
-		t.Run(tc.input, func(t *testing.T) {
-			got, check := IsYamlExpressionLiteral(cty.StringVal(tc.input))
-			if diff := cmp.Diff(tc.want, got); diff != "" {
-				t.Errorf("diff (-want +got):\n%s", diff)
-			}
-			if diff := cmp.Diff(tc.check, check); diff != "" {
-				t.Errorf("diff (-want +got):\n%s", diff)
-			}
-		})
-	}
-}
-
-func TestSimpleVarToExpression(t *testing.T) {
+func TestParseBpLit(t *testing.T) {
 	type test struct {
 		input string
 		want  string
@@ -119,24 +91,51 @@ func TestSimpleVarToExpression(t *testing.T) {
 		{"$(box.green.sleeve[3])", "module.box.green.sleeve[3]", false},
 		{`$(box.green["sleeve"])`, `module.box.green["sleeve"]`, false},
 
+		{`1gold was here`, `1gold was here`, false},
+		{`2gold $(vars.here)`, `"2gold ${var.here}"`, false},
+		{`3gold $(vars.here) but $(vars.gone)`, `"3gold ${var.here} but ${var.gone}"`, false},
+		{`4gold \$(vars.here)`, `4gold \$(vars.here)`, false},
+
+		{`5gold
+$(vars.here)`, `"5gold\n${var.here}"`, false}, // quoted strings may not be split over multiple lines
+
+		{`6gold
+was here`, `6gold
+was here`, false}, // no need to special handling if it's just a string, hclwrite will take care of it
+
+		{"7gold $(vars.here", ``, true},      // missing close parenthesis
+		{"8gold $(vars.here + 2)", ``, true}, // unsupported expression
+
 		{"$(vars)", "", true},
 		{"$(sleeve)", "", true},
-		{"gold $(var.here)", "", true},
 		{"$(box[3])", "", true},        // can't index module
 		{`$(box["green"])`, "", true},  // can't index module
 		{"$(vars[3]])", "", true},      // can't index vars
 		{`$(vars["green"])`, "", true}, // can't index module
+
+		{`#!/bin/bash
+echo "Hello $(vars.project_id) from $(vars.region)"`, `"#!/bin/bash\necho \"Hello ${var.project_id} from ${var.region}\""`, false},
+		{"", "", false},
+		{`$(try(vars.this) + one(vars.time))`, "", true}, // fails because of unsupported expression, but it should be parsed
 	}
 	for _, tc := range tests {
 		t.Run(tc.input, func(t *testing.T) {
-			exp, err := SimpleVarToExpression(tc.input)
+			v, err := parseBpLit(tc.input)
 			if tc.err != (err != nil) {
 				t.Errorf("got unexpected error: %s", err)
 			}
 			if err != nil {
 				return
 			}
-			got := string(exp.Tokenize().Bytes())
+			var got string
+			if v.Type() == cty.String {
+				got = v.AsString()
+			} else if exp, is := IsExpressionValue(v); is {
+				got = string(exp.Tokenize().Bytes())
+			} else {
+				t.Fatalf("got value of unexpected type: %#v", v)
+			}
+
 			if diff := cmp.Diff(tc.want, got); diff != "" {
 				t.Errorf("diff (-want +got):\n%s", diff)
 			}
@@ -163,26 +162,6 @@ func TestTokensForValueNoLiteral(t *testing.T) {
 	got.Body().AppendUnstructuredTokens(TokensForValue(val))
 
 	if diff := cmp.Diff(string(want.Bytes()), string(got.Bytes())); diff != "" {
-		t.Errorf("diff (-want +got):\n%s", diff)
-	}
-}
-
-func TestTokensForValueWithLiteral(t *testing.T) {
-	val := cty.ObjectVal(map[string]cty.Value{
-		"tan": cty.TupleVal([]cty.Value{
-			cty.StringVal("((var.kilo + 8))"),             // HCL literal
-			MustParseExpression("var.tina + 4").AsValue(), // HclExpression value
-		})})
-	want := `
-{
-  tan = [var.kilo + 8, var.tina + 4]
-}`[1:]
-
-	gotF := hclwrite.NewEmptyFile()
-	gotF.Body().AppendUnstructuredTokens(TokensForValue(val))
-	got := hclwrite.Format(gotF.Bytes()) // format to normalize whitespace
-
-	if diff := cmp.Diff(want, string(got)); diff != "" {
 		t.Errorf("diff (-want +got):\n%s", diff)
 	}
 }

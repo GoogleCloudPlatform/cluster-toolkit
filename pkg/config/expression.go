@@ -22,6 +22,7 @@ import (
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/hashicorp/hcl/v2/hclwrite"
+	"github.com/pkg/errors"
 	"github.com/zclconf/go-cty/cty"
 	"github.com/zclconf/go-cty/cty/function"
 	"github.com/zclconf/go-cty/cty/function/stdlib"
@@ -54,41 +55,9 @@ func (r Reference) AsExpression() Expression {
 	return MustParseExpression(fmt.Sprintf("module.%s.%s", r.Module, r.Name))
 }
 
-// MakeStringInterpolationError generates an error message guiding the user to proper escape syntax
-func MakeStringInterpolationError(s string) error {
-	matchall := anyVariableExp.FindAllString(s, -1)
-	hint := ""
-	for _, element := range matchall {
-		// the regex match will include the first matching character
-		// this might be (1) "^" or (2) any character EXCEPT "\"
-		// if (2), we have to remove the first character from the match
-		if element[0:2] != "$(" {
-			element = strings.Replace(element, element[0:1], "", 1)
-		}
-		hint += "\\" + element + " will be rendered as " + element + "\n"
-	}
-	return fmt.Errorf(
-		"variables \"$(...)\" within strings are not yet implemented. remove them or add a backslash to render literally. \n%s", hint)
-}
-
-// Takes `$(expression)` and returns `expression`
-func extractSimpleVarExpression(s string) (string, error) {
-	if !hasVariable(s) {
-		return "", fmt.Errorf("%#v is not a variable", s)
-	}
-	if !isSimpleVariable(s) {
-		return "", MakeStringInterpolationError(s)
-	}
-	contents := simpleVariableExp.FindStringSubmatch(s)
-	if len(contents) != 2 { // Should always be (match, contents) here
-		return "", fmt.Errorf("%s %s, failed to extract contents: %v", errMsgInvalidVar, s, contents)
-	}
-	return contents[1], nil
-}
-
 // Takes traversal in "blueprint namespace" (e.g. `vars.zone` or `homefs.mount`)
 // and transforms it to `Expression`.
-func simpleTraversalToExpression(t hcl.Traversal) (Expression, error) {
+func bpTraversalToExpression(t hcl.Traversal) (Expression, error) {
 	if len(t) < 2 {
 		return nil, fmt.Errorf(expectedVarFormat)
 	}
@@ -116,12 +85,8 @@ func simpleTraversalToExpression(t hcl.Traversal) (Expression, error) {
 	}, nil
 }
 
-// SimpleVarToExpression takes a string `$(...)` and transforms it to `Expression`
-func SimpleVarToExpression(s string) (Expression, error) {
-	s, err := extractSimpleVarExpression(s)
-	if err != nil {
-		return nil, err
-	}
+// bpLitToExpression takes a content of `$(...)`-literal and transforms it to `Expression`
+func bpLitToExpression(s string) (Expression, error) {
 	hexp, diag := hclsyntax.ParseExpression([]byte(s), "", hcl.Pos{})
 	if diag.HasErrors() {
 		return nil, diag
@@ -129,7 +94,7 @@ func SimpleVarToExpression(s string) (Expression, error) {
 
 	switch texp := hexp.(type) {
 	case *hclsyntax.ScopeTraversalExpr:
-		exp, err := simpleTraversalToExpression(texp.Traversal)
+		exp, err := bpTraversalToExpression(texp.Traversal)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse variable %q: %w", s, err)
 		}
@@ -175,20 +140,6 @@ func TraversalToReference(t hcl.Traversal) (Reference, error) {
 	}
 }
 
-// IsYamlExpressionLiteral checks if passed value of type cty.String
-// and its content starts with "((" and ends with "))".
-// Returns trimmed string and result of test.
-func IsYamlExpressionLiteral(v cty.Value) (string, bool) {
-	if v.Type() != cty.String {
-		return "", false
-	}
-	s := v.AsString()
-	if len(s) < 4 || s[:2] != "((" || s[len(s)-2:] != "))" {
-		return "", false
-	}
-	return s[2 : len(s)-2], true
-}
-
 // Expression is a representation of expressions in Blueprint
 type Expression interface {
 	// Eval evaluates the expression in the context of Blueprint
@@ -207,6 +158,7 @@ type Expression interface {
 }
 
 // ParseExpression returns Expression
+// Expects expression in "terraform namespace" (e.g. `var.zone` or `module.homefs.mount`)
 func ParseExpression(s string) (Expression, error) {
 	e, diag := hclsyntax.ParseExpression([]byte(s), "", hcl.Pos{})
 	if diag.HasErrors() {
@@ -362,11 +314,7 @@ func TokensForValue(val cty.Value) hclwrite.Tokens {
 	if e, is := IsExpressionValue(val); is {
 		return e.Tokenize()
 	}
-	val, _ = val.Unmark()                          // remove marks, as we don't need them anymore
-	if s, is := IsYamlExpressionLiteral(val); is { // return it "as is"
-		return hclwrite.TokensForIdentifier(s)
-	}
-
+	val, _ = val.Unmark() // remove marks, as we don't need them anymore
 	ty := val.Type()
 	if ty == cty.String {
 		s := val.AsString()
@@ -441,4 +389,126 @@ func evalValue(v cty.Value, bp Blueprint) (cty.Value, error) {
 		}
 		return v, nil
 	})
+}
+
+type pToken struct {
+	s string
+	e Expression
+}
+
+func tokenizeBpString(s string) ([]pToken, error) {
+	toks := []pToken{}
+	var exp Expression
+	var err error
+
+	for len(s) > 0 {
+		i := strings.Index(s, "$(")
+		if i == -1 { // plain string until the end
+			toks = append(toks, pToken{s: s}) // add everything
+			s = ""                            // and terminate
+		} else if strings.HasSuffix(s[:i+2], `\$(`) { // escaped
+			toks = append(toks, pToken{s: s[:i+2]}) // add "...\$("
+			s = s[i+2:]                             // continue after "\$("
+		} else { // found beginning of expression
+			toks = append(toks, pToken{s: s[:i]}) // add up to "$("
+			exp, s, err = greedyParseHcl(s[i+2:]) // parse after "$("
+			if err != nil {
+				return nil, err
+			}
+			toks = append(toks, pToken{e: exp}) // add expression
+		}
+	}
+	return toks, nil
+}
+
+func compactTokens(toks []pToken) []pToken {
+	res := []pToken{}
+	for _, t := range toks {
+		if t.e != nil {
+			res = append(res, t) // add as is
+		} else {
+			if t.s == "" {
+				continue // skip
+			}
+			if len(res) > 0 && res[len(res)-1].e == nil {
+				res[len(res)-1].s += t.s // merge with previous
+			} else {
+				res = append(res, t) // add as is
+			}
+		}
+	}
+	return res
+}
+
+func parseBpLit(s string) (cty.Value, error) {
+	toks, err := tokenizeBpString(s)
+	if err != nil {
+		return cty.NilVal, err
+	}
+	toks = compactTokens(toks)
+	if len(toks) == 0 {
+		return cty.StringVal(""), nil
+	}
+	if len(toks) == 1 {
+		if toks[0].e != nil {
+			return toks[0].e.AsValue(), nil
+		} else {
+			return cty.StringVal(toks[0].s), nil
+		}
+	}
+
+	exp, err := buildStringInterpolation(toks)
+	if err != nil {
+		return cty.NilVal, err
+	}
+	return exp.AsValue(), nil
+}
+
+// greedyParseHcl tries to parse prefix of `s` as a valid HCL expression.
+// It iterates over all closing brackets and tries to parse expression up to them.
+// The shortest expression is returned. E.g:
+// "var.hi) $(var.there)" -> "var.hi"
+// "try(var.this) + one(var.time)) tail" -> "try(var.this) + one(var.time)"
+func greedyParseHcl(s string) (Expression, string, error) {
+	err := errors.New("no closing parenthesis")
+	for i := 0; i < len(s); i++ {
+		if s[i] != ')' {
+			continue
+		}
+		_, diag := hclsyntax.ParseExpression([]byte(s[:i]), "", hcl.Pos{})
+		if !diag.HasErrors() { // found an expression
+			exp, err := bpLitToExpression(s[:i])
+			return exp, s[i+1:], err
+		}
+		err = diag // save error, try to find another closing bracket
+	}
+	return nil, s, err
+}
+
+func buildStringInterpolation(pts []pToken) (Expression, error) {
+	toks := hclwrite.Tokens{&hclwrite.Token{
+		Type:  hclsyntax.TokenOQuote,
+		Bytes: []byte(`"`)},
+	}
+
+	for _, pt := range pts {
+		if pt.e != nil {
+			toks = append(toks, &hclwrite.Token{
+				Type:  hclsyntax.TokenTemplateInterp,
+				Bytes: []byte(`${`)})
+			toks = append(toks, pt.e.Tokenize()...)
+			toks = append(toks, &hclwrite.Token{
+				Type:  hclsyntax.TokenTemplateSeqEnd,
+				Bytes: []byte(`}`)})
+		} else {
+			stoks := hclwrite.TokensForValue(cty.StringVal(pt.s))
+			stoks = stoks[1 : len(stoks)-1] // remove quotes
+			toks = append(toks, stoks...)
+		}
+	}
+
+	toks = append(toks, &hclwrite.Token{
+		Type:  hclsyntax.TokenCQuote,
+		Bytes: []byte(`"`)})
+	return ParseExpression(string(toks.Bytes()))
 }

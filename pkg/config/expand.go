@@ -17,7 +17,6 @@ package config
 import (
 	"errors"
 	"fmt"
-	"regexp"
 
 	"hpc-toolkit/pkg/modulereader"
 
@@ -30,14 +29,6 @@ import (
 const (
 	blueprintLabel  string = "ghpc_blueprint"
 	deploymentLabel string = "ghpc_deployment"
-)
-
-var (
-	// Checks if a variable exists only as a substring, ex:
-	// Matches: "a$(vars.example)", "word $(vars.example)", "word$(vars.example)", "$(vars.example)"
-	// Doesn't match: "\$(vars.example)", "no variable in this string"
-	anyVariableExp    *regexp.Regexp = regexp.MustCompile(`(^|[^\\])\$\((.*?)\)`)
-	simpleVariableExp *regexp.Regexp = regexp.MustCompile(`^\$\((.*)\)$`)
 )
 
 // expand expands variables and strings in the yaml config. Used directly by
@@ -418,16 +409,6 @@ func validateModuleSettingReference(bp Blueprint, mod Module, r Reference) error
 		return hintSpelling(r.Name, outputs, err)
 	}
 	return nil
-}
-
-// isSimpleVariable checks if the entire string is just a single variable
-func isSimpleVariable(str string) bool {
-	return simpleVariableExp.MatchString(str)
-}
-
-// hasVariable checks to see if any variable exists in a string
-func hasVariable(str string) bool {
-	return anyVariableExp.MatchString(str)
 }
 
 // FindAllIntergroupReferences finds all intergroup references within the group
