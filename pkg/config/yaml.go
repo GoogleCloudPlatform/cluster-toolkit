@@ -388,7 +388,7 @@ func parseYamlV3Error(err error) error {
 // If no position can be extracted, returns error without position.
 // Else returns PosError{Pos{Line: line_number}, error_message}.
 func parseYamlV3ErrorString(s string) error {
-	match := regexp.MustCompile(`^(yaml: )?(line (\d+): )?(.*)$`).FindStringSubmatch(s)
+	match := regexp.MustCompile(`^(yaml: )?(line (\d+): )?((.|\n)*)$`).FindStringSubmatch(s)
 	if match == nil {
 		return errors.New(s)
 	}

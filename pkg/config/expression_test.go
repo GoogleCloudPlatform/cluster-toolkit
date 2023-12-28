@@ -106,6 +106,9 @@ was here`, `"5gold\nwas here"`, false},
 
 		{`#!/bin/bash
 echo "Hello $(vars.project_id) from $(vars.region)"`, `"#!/bin/bash\necho \"Hello ${var.project_id} from ${var.region}\""`, false},
+		{`#!/bin/bash
+echo "Hello $(vars.project_id)"
+`, `"#!/bin/bash\necho \"Hello ${var.project_id}\"\n"`, false},
 		{"", `""`, false},
 		{`$(try(vars.this) + one(vars.time))`, "try(var.this)+one(var.time)", false},
 
