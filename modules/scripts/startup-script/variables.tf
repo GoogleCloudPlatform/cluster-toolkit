@@ -158,3 +158,10 @@ variable "ansible_virtualenv_path" {
     error_message = "var.ansible_virtualenv_path must be an absolute path to a directory without spaces or special characters"
   }
 }
+
+variable "http_proxy" {
+  description = "Web (http and https) proxy configuration for pip, apt, and yum/dnf"
+  type        = string
+  default     = ""
+  nullable    = false
+}
