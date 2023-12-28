@@ -22,7 +22,6 @@ import (
 
 	"hpc-toolkit/pkg/modulereader"
 
-	"github.com/agext/levenshtein"
 	"github.com/zclconf/go-cty/cty"
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
@@ -313,10 +312,12 @@ func AutomaticOutputName(outputName string, moduleID ModuleID) string {
 func validateModuleReference(bp Blueprint, from Module, toID ModuleID) error {
 	to, err := bp.Module(toID)
 	if err != nil {
-		if hint, ok := bp.SuggestModuleIDHint(toID); ok {
-			return HintError{fmt.Sprintf("Did you mean \"%s\"?", hint), err}
-		}
-		return err
+		mods := []string{}
+		bp.WalkModules(func(m *Module) error {
+			mods = append(mods, string(m.ID))
+			return nil
+		})
+		return hintSpelling(string(toID), mods, err)
 	}
 
 	if to.Kind == PackerKind {
@@ -341,15 +342,22 @@ func validateModuleSettingReference(bp Blueprint, mod Module, r Reference) error
 	// simplest case to evaluate is a deployment variable's existence
 	if r.GlobalVar {
 		if !bp.Vars.Has(r.Name) {
-			return fmt.Errorf("module %#v references unknown global variable %#v", mod.ID, r.Name)
+			err := fmt.Errorf("module %#v references unknown global variable %#v", mod.ID, r.Name)
+			vars := maps.Keys(bp.Vars.Items())
+			return hintSpelling(r.Name, vars, err)
 		}
 		return nil
 	}
 
 	if err := validateModuleReference(bp, mod, r.Module); err != nil {
 		var unkModErr UnknownModuleError
-		if errors.As(err, &unkModErr) && levenshtein.Distance(string(unkModErr.ID), "vars", nil) <= 2 {
-			return HintError{"Did you mean \"vars\"?", unkModErr}
+		if errors.As(err, &unkModErr) {
+			hints := []string{"vars"}
+			bp.WalkModules(func(m *Module) error {
+				hints = append(hints, string(m.ID))
+				return nil
+			})
+			return hintSpelling(string(unkModErr.ID), hints, unkModErr)
 		}
 		return err
 	}
@@ -358,9 +366,15 @@ func validateModuleSettingReference(bp Blueprint, mod Module, r Reference) error
 	if err != nil {
 		return err
 	}
-	found := slices.ContainsFunc(mi.Outputs, func(o modulereader.OutputInfo) bool { return o.Name == r.Name })
-	if !found {
-		return fmt.Errorf("%s: module %s did not have output %s", errMsgNoOutput, tm.ID, r.Name)
+
+	outputs := []string{}
+	for _, o := range mi.Outputs {
+		outputs = append(outputs, o.Name)
+	}
+
+	if !slices.Contains(outputs, r.Name) {
+		err := fmt.Errorf("module %q does not have output %q", tm.ID, r.Name)
+		return hintSpelling(r.Name, outputs, err)
 	}
 	return nil
 }

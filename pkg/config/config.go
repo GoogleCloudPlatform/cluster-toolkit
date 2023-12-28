@@ -101,25 +101,19 @@ func (bp *Blueprint) Module(id ModuleID) (*Module, error) {
 	return mod, nil
 }
 
-// SuggestModuleIDHint return a correct spelling of given ModuleID id if one
-// is close enough (based on maxHintDist)
-func (bp Blueprint) SuggestModuleIDHint(id ModuleID) (string, bool) {
-	clMod := ""
-	minDist := -1
-	bp.WalkModules(func(m *Module) error {
-		dist := levenshtein.Distance(string(m.ID), string(id), nil)
-		if minDist == -1.0 || dist < minDist {
-			minDist = dist
-			clMod = string(m.ID)
+func hintSpelling(s string, dict []string, err error) error {
+	best, minDist := "", maxHintDist+1
+	for _, w := range dict {
+		d := levenshtein.Distance(s, w, nil)
+		if d < minDist {
+			best, minDist = w, d
 		}
-		return nil
-	})
-
-	if clMod != "" && minDist <= maxHintDist {
-		return clMod, true
 	}
+	if minDist <= maxHintDist {
+		return HintError{fmt.Sprintf("did you mean %q?", best), err}
+	}
+	return err
 
-	return "", false
 }
 
 // ModuleGroup returns the group containing the module
