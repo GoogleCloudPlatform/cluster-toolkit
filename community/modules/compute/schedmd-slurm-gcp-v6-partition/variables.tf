@@ -113,8 +113,7 @@ variable "nodeset" {
     source_image_family  = optional(string)
     source_image_project = optional(string)
     source_image         = optional(string)
-    subnetwork_project   = optional(string)
-    subnetwork           = optional(string)
+    subnetwork_self_link = string
     spot                 = optional(bool, false)
     tags                 = optional(list(string), [])
     termination_action   = optional(string)
@@ -150,7 +149,7 @@ variable "nodeset_tpu" {
     zone         = string
     data_disks   = optional(list(string), [])
     docker_image = optional(string, "")
-    subnetwork   = optional(string, "")
+    subnetwork   = string
     service_account = optional(object({
       email  = optional(string)
       scopes = optional(list(string), ["https://www.googleapis.com/auth/cloud-platform"])

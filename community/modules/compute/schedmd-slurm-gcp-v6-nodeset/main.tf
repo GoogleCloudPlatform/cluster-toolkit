@@ -67,8 +67,7 @@ locals {
     source_image_family      = local.source_image_family             # requires source_image_logic.tf
     source_image_project     = local.source_image_project_normalized # requires source_image_logic.tf
     source_image             = local.source_image                    # requires source_image_logic.tf
-    subnetwork_project       = var.subnetwork_project
-    subnetwork               = var.subnetwork_self_link
+    subnetwork_self_link     = var.subnetwork_self_link
     tags                     = var.tags
     spot                     = var.enable_spot_vm
     termination_action       = try(var.spot_instance_config.termination_action, null)

@@ -76,8 +76,7 @@ module "slurm_controller_template" {
   source_image         = local.source_image                    # requires source_image_logic.tf
 
   # spot = TODO: add support for spot (?)
-  subnetwork_project = var.subnetwork_project
-  subnetwork         = var.subnetwork_self_link
+  subnetwork = var.subnetwork_self_link
 
   tags = concat([local.slurm_cluster_name], var.tags)
   # termination_action = TODO: add support for termination_action (?)
@@ -105,7 +104,6 @@ module "slurm_controller_instance" {
   slurm_cluster_name  = local.slurm_cluster_name
   slurm_instance_role = "controller"
   static_ips          = var.static_ips
-  subnetwork_project  = var.subnetwork_project
   subnetwork          = var.subnetwork_self_link
   zone                = var.zone
 

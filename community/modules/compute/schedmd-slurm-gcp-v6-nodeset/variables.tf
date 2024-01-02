@@ -378,11 +378,4 @@ EOD
 variable "subnetwork_self_link" {
   type        = string
   description = "Subnet to deploy to."
-  default     = null
-}
-
-variable "subnetwork_project" {
-  description = "The project the subnetwork belongs to."
-  type        = string
-  default     = ""
 }
