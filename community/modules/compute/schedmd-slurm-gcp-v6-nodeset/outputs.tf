@@ -24,9 +24,4 @@ output "nodeset" {
     ], "${substr(var.machine_type, 0, 3)}:${var.disk_type}")
     error_message = "A disk_type=${var.disk_type} cannot be used with machine_type=${var.machine_type}."
   }
-
-  precondition {
-    condition     = can(regex("^[a-z](?:[a-z0-9]{0,5})$", local.name))
-    error_message = "Nodeset name (var.name) must begin with a letter, be fully alphanumeric and be 6 characters or less. Regexp: '^[a-z](?:[a-z0-9]{0,5})$'."
-  }
 }

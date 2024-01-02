@@ -37,7 +37,7 @@ deployment_groups:
     settings:
       local_mount: /home
 
-  - id: debug_nodeset
+  - id: dbugns
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [network]
     settings:
@@ -47,13 +47,13 @@ deployment_groups:
 
   - id: debug_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
-    use: [debug_nodeset, homefs]
+    use: [dbugns, homefs]
     settings:
       partition_name: debug
       exclusive: false  # allows nodes to stay up after jobs are done
       is_default: true
 
-  - id: compute_nodeset
+  - id: compns
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [network]
     settings:
@@ -63,7 +63,7 @@ deployment_groups:
 
   - id: compute_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
-    use: [compute_nodeset, homefs]
+    use: [compns, homefs]
     settings:
       partition_name: compute
 

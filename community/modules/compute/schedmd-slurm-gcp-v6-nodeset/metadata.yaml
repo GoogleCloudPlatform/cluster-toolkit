@@ -17,4 +17,4 @@ spec:
   requirements:
     services: []
 ghpc:
-  inject_module_id: toolkit_module_id
+  inject_module_id: name

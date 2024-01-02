@@ -18,9 +18,6 @@ locals {
 }
 
 locals {
-  auto_name = substr(replace(var.toolkit_module_id, "/[^a-z0-9]/", ""), 0, 6)
-  name      = try(coalesce(var.name, local.auto_name), "")
-
   additional_disks = [
     for ad in var.additional_disks : {
       disk_name    = ad.disk_name
@@ -37,7 +34,7 @@ locals {
     node_count_static      = var.node_count_static
     node_count_dynamic_max = var.node_count_dynamic_max
     node_conf              = var.node_conf
-    nodeset_name           = local.name
+    nodeset_name           = var.name
 
     disk_auto_delete = var.disk_auto_delete
     disk_labels      = merge(local.labels, var.disk_labels)
