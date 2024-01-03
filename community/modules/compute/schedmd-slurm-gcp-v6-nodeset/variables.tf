@@ -13,16 +13,8 @@
 # limitations under the License.
 
 variable "name" {
-  description = "Name of the nodeset."
+  description = "Name of the nodeset. Automatically populated by the module id if not set"
   type        = string
-
-  validation {
-    condition     = can(regex("^[a-z](?:[a-z0-9]{0,5})$", var.name))
-    error_message = <<EOT
-Nodeset name (var.name) must begin with a letter, be fully alphanumeric and be 6 characters or less.
-Got "${var.name}" (set to module id by default).
-EOT
-  }
 }
 
 variable "node_conf" {
