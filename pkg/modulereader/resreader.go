@@ -25,13 +25,14 @@ import (
 	"path"
 
 	"github.com/hashicorp/go-getter"
+	"github.com/zclconf/go-cty/cty"
 	"gopkg.in/yaml.v3"
 )
 
 // VarInfo stores information about a module input variables
 type VarInfo struct {
 	Name        string
-	Type        string
+	Type        cty.Type
 	Description string
 	Default     interface{}
 	Required    bool

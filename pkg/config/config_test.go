@@ -179,14 +179,8 @@ func (s *MySuite) getMultiGroupDeploymentConfig() DeploymentConfig {
 
 	testModuleInfo0 := modulereader.ModuleInfo{
 		Inputs: []modulereader.VarInfo{
-			{
-				Name: "deployment_name",
-				Type: "string",
-			},
-			{
-				Name: altProjectIDSetting,
-				Type: "string",
-			},
+			{Name: "deployment_name", Type: cty.String},
+			{Name: altProjectIDSetting, Type: cty.String},
 		},
 		Outputs: []modulereader.OutputInfo{
 			{
@@ -220,13 +214,8 @@ func (s *MySuite) getMultiGroupDeploymentConfig() DeploymentConfig {
 
 	testModuleInfo2 := modulereader.ModuleInfo{
 		Inputs: []modulereader.VarInfo{
-			{
-				Name: "deployment_name",
-				Type: "string",
-			},
-			{
-				Name: matchingIntergroupName,
-			},
+			{Name: "deployment_name", Type: cty.String},
+			{Name: matchingIntergroupName},
 		},
 		Outputs: []modulereader.OutputInfo{},
 	}

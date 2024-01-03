@@ -61,9 +61,13 @@ func getHCLInfo(source string) (ModuleInfo, error) {
 	var vars []VarInfo
 	var outs []OutputInfo
 	for _, v := range module.Variables {
+		ty, err := GetCtyType(v.Type)
+		if err != nil {
+			return ModuleInfo{}, fmt.Errorf("failed to parse type of variable %q: %w", v.Name, err)
+		}
 		vInfo := VarInfo{
 			Name:        v.Name,
-			Type:        v.Type,
+			Type:        ty,
 			Description: v.Description,
 			Default:     v.Default,
 			Required:    v.Required,
@@ -82,15 +86,27 @@ func getHCLInfo(source string) (ModuleInfo, error) {
 	return ret, nil
 }
 
-// Transforms HCL type string into cty.Type
-func getCtyType(hclType string) (cty.Type, error) {
+// Transforms Terraform type string into cty.Type
+func GetCtyType(hclType string) (cty.Type, error) {
+	if hclType == "" { // treat empty type as `any`
+		// see https://developer.hashicorp.com/terraform/language/values/variables#type-constraints
+		return cty.DynamicPseudoType, nil
+	}
 	expr, diags := hclsyntax.ParseExpression([]byte(hclType), "", hcl.Pos{Line: 1, Column: 1})
 	if diags.HasErrors() {
-		return cty.Type{}, diags
+		return cty.NilType, diags
 	}
-	typ, diags := typeexpr.TypeConstraint(expr)
+
+	switch hcl.ExprAsKeyword(expr) {
+	case "list":
+		return cty.List(cty.DynamicPseudoType), nil
+	case "map":
+		return cty.Map(cty.DynamicPseudoType), nil
+	}
+
+	typ, _, diags := typeexpr.TypeConstraintWithDefaults(expr)
 	if diags.HasErrors() {
-		return cty.Type{}, diags
+		return cty.NilType, diags
 	}
 	return typ, nil
 }
@@ -104,7 +120,7 @@ func getCtyType(hclType string) (cty.Type, error) {
 //
 // This method is fail-safe, if error arises passed type will be returned without changes.
 func NormalizeType(hclType string) string {
-	ctyType, err := getCtyType(hclType)
+	ctyType, err := GetCtyType(hclType)
 	if err != nil {
 		logging.Error("Failed to parse HCL type='%s', got %v", hclType, err)
 		return hclType

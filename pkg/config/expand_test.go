@@ -77,10 +77,7 @@ func (s *zeroSuite) TestUseModule(c *C) {
 		ID:     "UsedModule",
 		Source: "usedSource",
 	}
-	varInfoNumber := modulereader.VarInfo{
-		Name: "val1",
-		Type: "number",
-	}
+	varInfoNumber := modulereader.VarInfo{Name: "val1", Type: cty.Number}
 	ref := ModuleRef("UsedModule", "val1").AsExpression().AsValue()
 
 	{ // Pass: No Inputs, No Outputs
@@ -152,7 +149,7 @@ func (s *zeroSuite) TestUseModule(c *C) {
 	{ // Pass: Single Input/Output match, input is list, not already set
 		mod := Module{ID: "lime", Source: "limeTree"}
 		setTestModuleInfo(mod, modulereader.ModuleInfo{
-			Inputs: []modulereader.VarInfo{{Name: "val1", Type: "list"}},
+			Inputs: []modulereader.VarInfo{{Name: "val1", Type: cty.List(cty.Number)}},
 		})
 		setTestModuleInfo(used, modulereader.ModuleInfo{
 			Outputs: []modulereader.OutputInfo{{Name: "val1"}},
@@ -169,7 +166,7 @@ func (s *zeroSuite) TestUseModule(c *C) {
 		mod := Module{ID: "lime", Source: "limeTree"}
 		mod.Settings.Set("val1", AsProductOfModuleUse(cty.TupleVal([]cty.Value{ref}), "other"))
 		setTestModuleInfo(mod, modulereader.ModuleInfo{
-			Inputs: []modulereader.VarInfo{{Name: "val1", Type: "list"}},
+			Inputs: []modulereader.VarInfo{{Name: "val1", Type: cty.List(cty.Number)}},
 		})
 		setTestModuleInfo(used, modulereader.ModuleInfo{
 			Outputs: []modulereader.OutputInfo{{Name: "val1"}},
@@ -187,7 +184,7 @@ func (s *zeroSuite) TestUseModule(c *C) {
 		mod := Module{ID: "lime", Source: "limeTree"}
 		mod.Settings.Set("val1", cty.TupleVal([]cty.Value{ref}))
 		setTestModuleInfo(mod, modulereader.ModuleInfo{
-			Inputs: []modulereader.VarInfo{{Name: "val1", Type: "list"}},
+			Inputs: []modulereader.VarInfo{{Name: "val1", Type: cty.List(cty.Number)}},
 		})
 		setTestModuleInfo(used, modulereader.ModuleInfo{
 			Outputs: []modulereader.OutputInfo{{Name: "val1"}},
@@ -220,9 +217,7 @@ func (s *MySuite) TestApplyUseModules(c *C) {
 
 		setTestModuleInfo(using, modulereader.ModuleInfo{
 			Inputs: []modulereader.VarInfo{{
-				Name: "potato",
-				Type: "number",
-			}}})
+				Name: "potato", Type: cty.Number}}})
 		setTestModuleInfo(used, modulereader.ModuleInfo{
 			Outputs: []modulereader.OutputInfo{
 				{Name: "potato"}}})
@@ -332,7 +327,7 @@ func (s *MySuite) TestApplyGlobalVariables(c *C) {
 	setTestModuleInfo(*mod, modulereader.ModuleInfo{
 		Inputs: []modulereader.VarInfo{{
 			Name:     "gold",
-			Type:     "string",
+			Type:     cty.String,
 			Required: true,
 		}},
 	})
@@ -353,7 +348,7 @@ func (s *MySuite) TestApplyGlobalVariables(c *C) {
 	setTestModuleInfo(*mod, modulereader.ModuleInfo{
 		Inputs: []modulereader.VarInfo{{
 			Name:     "gold",
-			Type:     "string",
+			Type:     cty.String,
 			Required: false,
 		}},
 	})
