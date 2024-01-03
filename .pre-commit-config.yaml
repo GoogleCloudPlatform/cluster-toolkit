@@ -101,7 +101,8 @@ repos:
     # MD034 - Bare URL used
     # MD041 - First line in file should be a top level header
     # MD046 - Code block style
-    args: [--disable-rules, "MD013,MD022,MD033,MD034,MD041,MD046", scan]
+    # MD024 - Multiple headings cannot contain the same content.
+    args: [--disable-rules, "MD013,MD022,MD033,MD034,MD041,MD046,MD024", scan]
 - repo: https://github.com/jumanjihouse/pre-commit-hooks
   rev: "3.0.0"
   hooks:
