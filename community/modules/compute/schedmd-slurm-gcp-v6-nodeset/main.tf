@@ -18,6 +18,8 @@ locals {
 }
 
 locals {
+  name = substr(replace(var.name, "/[^a-z0-9]/", ""), 0, 6)
+
   additional_disks = [
     for ad in var.additional_disks : {
       disk_name    = ad.disk_name
@@ -34,7 +36,7 @@ locals {
     node_count_static      = var.node_count_static
     node_count_dynamic_max = var.node_count_dynamic_max
     node_conf              = var.node_conf
-    nodeset_name           = var.name
+    nodeset_name           = local.name
 
     disk_auto_delete = var.disk_auto_delete
     disk_labels      = merge(local.labels, var.disk_labels)
