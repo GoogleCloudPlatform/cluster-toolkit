@@ -15,8 +15,9 @@
 */
 
 locals {
-  network_name    = var.network_name == null ? "${var.deployment_name}-net" : var.network_name
-  subnetwork_name = var.subnetwork_name == null ? "${var.deployment_name}-primary-subnet" : var.subnetwork_name
+  autoname        = replace(var.deployment_name, "_", "-")
+  network_name    = var.network_name == null ? "${local.autoname}-net" : var.network_name
+  subnetwork_name = var.subnetwork_name == null ? "${local.autoname}-primary-subnet" : var.subnetwork_name
 
   # define a default subnetwork for cases in which no explicit subnetworks are
   # defined in var.subnetworks
