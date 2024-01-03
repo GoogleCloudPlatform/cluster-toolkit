@@ -41,9 +41,13 @@ locals {
     set -e
     . ${var.spack_profile_script_path}
     spack config --scope site add 'packages:all:permissions:read:world'
+    spack config --scope site add 'packages:all:permissions:write:group'
     spack gpg init
     spack compiler find --scope site
     ${local.add_google_mirror_script}
+    # perform fast install to make sure Spack is fully initialized
+    spack install xz
+    spack uninstall --yes-to-all xz
   EOF
 
   script_content = templatefile(
@@ -54,9 +58,10 @@ locals {
       install_dir           = var.install_dir
       git_url               = var.spack_url
       git_ref               = var.spack_ref
-      chown_owner           = var.chown_owner == null ? "" : var.chown_owner
-      chgrp_group           = var.chgrp_group == null ? "" : var.chgrp_group
-      chmod_mode            = var.chmod_mode == null ? "" : var.chmod_mode
+      chmod_mode            = var.chmod_mode
+      system_user_name      = var.system_user_name
+      system_user_uid       = var.system_user_uid
+      system_user_gid       = var.system_user_gid
       finalize_setup_script = indent(4, yamlencode(local.finalize_setup_script))
       profile_script_path   = var.spack_profile_script_path
     }
@@ -74,7 +79,7 @@ locals {
     "destination" = "install_spack.yml"
   }
 
-  bucket_md5  = substr(md5("${var.project_id}.${var.deployment_name}"), 0, 4)
+  bucket_md5  = substr(md5("${var.project_id}.${var.deployment_name}.${local.script_content}"), 0, 4)
   bucket_name = "spack-scripts-${local.bucket_md5}"
   runners     = [local.install_spack_deps_runner, local.install_spack_runner]
 

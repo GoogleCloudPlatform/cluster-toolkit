@@ -109,6 +109,18 @@ variable "connect_mode" {
   default     = "DIRECT_PEERING"
 }
 
+variable "reserved_ip_range" {
+  description = "Reserved IP range for Filestore instance (set to null to enable automatic selection)"
+  type        = string
+  default     = null
+  nullable    = true
+
+  validation {
+    condition     = var.reserved_ip_range == null || can(cidrhost(var.reserved_ip_range, 0))
+    error_message = "IP address range must be in CIDR format."
+  }
+}
+
 variable "mount_options" {
   description = "NFS mount options to mount file system."
   type        = string

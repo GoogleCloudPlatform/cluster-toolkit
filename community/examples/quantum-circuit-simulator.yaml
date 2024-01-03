@@ -41,6 +41,8 @@ deployment_groups:
         content: |
           #!/bin/bash
           # This script implements https://quantumai.google/qsim/tutorials/gcp_gpu
+          # Disable any user interactive prompt during upgrade script.
+          export DEBIAN_FRONTEND=noninteractive
           set -e -o pipefail
           curl -O https://raw.githubusercontent.com/GoogleCloudPlatform/compute-gpu-installation/main/linux/install_gpu_driver.py
           python3 install_gpu_driver.py
@@ -67,7 +69,7 @@ deployment_groups:
           conda clean -p -t --yes
           conda activate qsim
           pip install pybind11 cirq
-          git clone https://github.com/quantumlib/qsim.git /opt/qsim
+          git clone -b v0.18.0 https://github.com/quantumlib/qsim.git /opt/qsim
           cd /opt/qsim
           export CUQUANTUM_ROOT=/opt/conda/envs/qsim
           make

@@ -21,7 +21,7 @@ locals {
 
 # NODESET
 module "slurm_nodeset_template" {
-  source   = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=6.2.0"
+  source   = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=6.2.0"
   for_each = local.nodeset_map
 
   project_id          = var.project_id
@@ -53,12 +53,12 @@ module "slurm_nodeset_template" {
   source_image_family      = each.value.source_image_family
   source_image_project     = each.value.source_image_project
   source_image             = each.value.source_image
-  subnetwork               = each.value.subnetwork
+  subnetwork               = each.value.subnetwork_self_link
   tags                     = concat([local.slurm_cluster_name], each.value.tags)
 }
 
 module "slurm_nodeset" {
-  source   = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_nodeset?ref=6.2.0"
+  source   = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_nodeset?ref=6.2.0"
   for_each = local.nodeset_map
 
   instance_template_self_link = module.slurm_nodeset_template[each.key].self_link
@@ -70,14 +70,14 @@ module "slurm_nodeset" {
   node_count_static      = each.value.node_count_static
   nodeset_name           = each.value.nodeset_name
   node_conf              = each.value.node_conf
-  subnetwork_self_link   = each.value.subnetwork
+  subnetwork_self_link   = each.value.subnetwork_self_link
   zones                  = each.value.zones
   zone_target_shape      = each.value.zone_target_shape
 }
 
 # NODESET TPU
 module "slurm_nodeset_tpu" {
-  source   = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_nodeset_tpu?ref=6.2.0"
+  source   = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_nodeset_tpu?ref=6.2.0"
   for_each = local.nodeset_tpu_map
 
   project_id             = var.project_id
@@ -94,12 +94,12 @@ module "slurm_nodeset_tpu" {
   service_account        = each.value.service_account
   data_disks             = each.value.data_disks
   docker_image           = each.value.docker_image
-  subnetwork             = each.value.subnetwork
+  subnetwork             = each.value.subnetwork_self_link
 }
 
 # PARTITION
 module "slurm_partition" {
-  source   = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_partition?ref=6.2.0"
+  source   = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_partition?ref=6.2.0"
   for_each = local.partition_map
 
   partition_nodeset     = [for x in each.value.partition_nodeset : module.slurm_nodeset[x].nodeset_name if try(module.slurm_nodeset[x], null) != null]

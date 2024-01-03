@@ -136,6 +136,7 @@ variable "configure_ssh_host_patterns" {
   default     = []
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "prepend_ansible_installer" {
   description = <<EOT
   DEPRECATED. Use `install_ansible=false` to prevent ansible installation.
@@ -156,4 +157,11 @@ variable "ansible_virtualenv_path" {
     condition     = can(regex("^(/[\\w-]+)+$", var.ansible_virtualenv_path))
     error_message = "var.ansible_virtualenv_path must be an absolute path to a directory without spaces or special characters"
   }
+}
+
+variable "http_proxy" {
+  description = "Web (http and https) proxy configuration for pip, apt, and yum/dnf"
+  type        = string
+  default     = ""
+  nullable    = false
 }

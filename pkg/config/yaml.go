@@ -23,6 +23,7 @@ import (
 	"regexp"
 	"strconv"
 
+	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/pkg/errors"
 	"github.com/zclconf/go-cty/cty"
 	"github.com/zclconf/go-cty/cty/gocty"
@@ -319,7 +320,8 @@ func (d *Dict) UnmarshalYAML(n *yaml.Node) error {
 func (d Dict) MarshalYAML() (interface{}, error) {
 	o, _ := cty.Transform(d.AsObject(), func(p cty.Path, v cty.Value) (cty.Value, error) {
 		if e, is := IsExpressionValue(v); is {
-			return e.makeYamlExpressionValue(), nil
+			s := string(hclwrite.Format(e.Tokenize().Bytes()))
+			return cty.StringVal("((" + s + "))"), nil
 		}
 		return v, nil
 	})

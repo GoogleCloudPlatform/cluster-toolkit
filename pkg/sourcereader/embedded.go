@@ -28,7 +28,7 @@ import (
 var ModuleFS BaseFS
 
 // BaseFS is an join interface with the functionality needed
-// in copyDirFromModules. Works with embed.FS and afero.FS
+// in copyDir. Works with embed.FS and afero.FS
 type BaseFS interface {
 	fs.ReadDirFS
 	fs.ReadFileFS
@@ -53,8 +53,8 @@ func copyFileOut(bfs BaseFS, src string, dst string) error {
 	return nil
 }
 
-// copyDirFromModules copies an FS directory to a local path
-func copyDirFromModules(bfs BaseFS, source string, dest string) error {
+// copyDir copies an FS directory to a local path
+func copyDir(bfs BaseFS, source string, dest string) error {
 	dirEntries, err := bfs.ReadDir(source)
 	if err != nil {
 		return err
@@ -70,7 +70,7 @@ func copyDirFromModules(bfs BaseFS, source string, dest string) error {
 			if err := os.Mkdir(entryDest, 0755); err != nil {
 				return err
 			}
-			if err = copyDirFromModules(bfs, entrySource, entryDest); err != nil {
+			if err = copyDir(bfs, entrySource, entryDest); err != nil {
 				return err
 			}
 		} else {
@@ -83,23 +83,16 @@ func copyDirFromModules(bfs BaseFS, source string, dest string) error {
 	return nil
 }
 
-// copyFSToTempDir is a temporary workaround until tfconfig.ReadFromFilesystem
-// works against embed.FS.
-// Open Issue: https://github.com/hashicorp/terraform-config-inspect/issues/68
 func copyFSToTempDir(bfs BaseFS, modulePath string) (string, error) {
 	tmpDir, err := os.MkdirTemp("", "tfconfig-module-*")
 	if err != nil {
 		return tmpDir, err
 	}
-	err = copyDirFromModules(bfs, modulePath, tmpDir)
-	return tmpDir, err
+	return tmpDir, copyDir(bfs, modulePath, tmpDir)
 }
 
 // GetModule copies the embedded source to a provided destination (the deployment directory)
 func (r EmbeddedSourceReader) GetModule(modPath string, copyPath string) error {
-	if ModuleFS == nil {
-		return fmt.Errorf("embedded file system is not initialized")
-	}
 	if !IsEmbeddedPath(modPath) {
 		return fmt.Errorf("source is not valid: %s", modPath)
 	}
@@ -120,5 +113,5 @@ func (r EmbeddedSourceReader) CopyDir(src string, dst string) error {
 	if ModuleFS == nil {
 		return fmt.Errorf("embedded file system is not initialized")
 	}
-	return copyDirFromModules(ModuleFS, src, dst)
+	return copyDir(ModuleFS, src, dst)
 }

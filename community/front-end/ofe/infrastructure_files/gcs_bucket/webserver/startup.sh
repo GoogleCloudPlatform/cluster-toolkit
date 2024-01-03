@@ -49,13 +49,31 @@ dnf install -y epel-release
 dnf update -y --security
 dnf config-manager --add-repo https://rpm.releases.hashicorp.com/RHEL/hashicorp.repo
 dnf install --best -y google-cloud-sdk nano make gcc python38-devel unzip git \
-	rsync nginx bind-utils policycoreutils-python-utils \
-	terraform packer supervisor python3-certbot-nginx \
-	grafana
+	rsync wget nginx bind-utils policycoreutils-python-utils \
+	terraform packer supervisor python3-certbot-nginx
 curl --silent --show-error --location https://github.com/mikefarah/yq/releases/download/v4.13.4/yq_linux_amd64 --output /usr/local/bin/yq
 chmod +x /usr/local/bin/yq
 curl --silent --show-error --location https://github.com/koalaman/shellcheck/releases/download/stable/shellcheck-stable.linux.x86_64.tar.xz --output /tmp/shellcheck.tar.xz
 tar xfa /tmp/shellcheck.tar.xz --strip=1 --directory /usr/local/bin
+
+# Install Grafana
+curl -sSL -o gpg.key https://rpm.grafana.com/gpg.key
+rpm --import gpg.key
+
+tee /etc/yum.repos.d/grafana.repo <<EOL
+[grafana]
+name=grafana
+baseurl=https://rpm.grafana.com
+repo_gpgcheck=1
+enabled=1
+gpgcheck=1
+gpgkey=https://rpm.grafana.com/gpg.key
+sslverify=1
+sslcacert=/etc/pki/tls/certs/ca-bundle.crt
+exclude=*beta*
+EOL
+
+dnf install -y grafana
 
 # Packages for https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/scheduler/schedmd-slurm-gcp-v5-controller#input_enable_cleanup_compute
 pip3.8 install google-api-python-client \
@@ -80,8 +98,6 @@ GOOGLE_CLIENT_SECRET=$(/usr/local/bin/yq e '.google_client_secret' /tmp/config)
 repo_fork=$(/usr/local/bin/yq e '.git_fork' /tmp/config)
 repo_branch=$(/usr/local/bin/yq e '.git_branch' /tmp/config)
 # 'yq' does not handle multi-line string properly, need to restore the correct key format
-DEPLOY_KEY1=$(/usr/local/bin/yq e '.deploy_key1' /tmp/config | tr ' ' '\n' | base64 -d)
-rm -f /tmp/config
 
 printf "\n####################\n#### Creating firewall & SELinux rules\n####################\n"
 printf "Adding rule for port 22 (ssh): "
@@ -120,23 +136,7 @@ fi
 useradd -r -m -d /opt/gcluster gcluster
 
 if [ "${deploy_mode}" == "git" ]; then
-	printf "Adding deployment keys..\n"
-	mkdir -p /opt/gcluster/.ssh
-
-	echo "$DEPLOY_KEY1" >/opt/gcluster/.ssh/gcluster-deploykey
-	sed -i -e :a -e '/^\n*$/{$d;N;ba' -e '}' /opt/gcluster/.ssh/gcluster-deploykey
-	cat >>/opt/gcluster/.ssh/config <<+
-
-host github.com
-        hostname github.com
-        IdentityFile ~/.ssh/gcluster-deploykey
-        StrictHostKeyChecking=accept-new
-+
-	chmod 700 /opt/gcluster/.ssh
-	chmod 600 /opt/gcluster/.ssh/*
-	chown gcluster -R /opt/gcluster/.ssh
-
-	fetch_hpc_toolkit="git clone -b \"${repo_branch}\" git@github.com:${repo_fork}/hpc-toolkit.git"
+	fetch_hpc_toolkit="git clone -b \"${repo_branch}\" https://github.com/${repo_fork}/hpc-toolkit.git"
 
 elif [ "${deploy_mode}" == "tarball" ]; then
 	printf "\n####################\n#### Download web application files\n####################\n"
@@ -168,12 +168,12 @@ rm -rf /usr/local/go && tar -C /usr/local -xzf "/tmp/go${GO_VERSION}.linux-amd64
 echo 'export PATH=$PATH:/usr/local/go/bin:~/go/bin' >>/etc/bashrc
 
 sudo su - gcluster -c /bin/bash <<EOF
-  cd /opt/gcluster/hpc-toolkit/community/front-end
+  cd /opt/gcluster/hpc-toolkit/community/front-end/ofe
 
   printf "\nDownloading Frontend dependencies...\n"
   mkdir dependencies
   pushd dependencies
-  git clone -b v0.17.1 --depth 1 https://github.com/spack/spack.git
+  git clone -b v0.21.0 --depth 1 https://github.com/spack/spack.git
   printf "\npre-generating Spack package list\n"
   ./spack/bin/spack list > /dev/null
   popd
@@ -191,7 +191,7 @@ sudo su - gcluster -c /bin/bash <<EOF
   printf "\nUpgrading pip...\n"
   pip install --upgrade pip
   printf "\nInstalling pip requirements...\n"
-  pip install -r /opt/gcluster/hpc-toolkit/community/front-end/requirements.txt
+  pip install -r /opt/gcluster/hpc-toolkit/community/front-end/ofe/requirements.txt
 
   printf "Generating configuration file for backend..."
   echo "config:" > configuration.yaml
@@ -227,18 +227,20 @@ EOF
 
 # Tweak Grafana settings
 #
-sed -i \
-	-e '/^\[server]/,/^\[/{s/serve_from_sub_path = false/serve_from_sub_path = true/}' \
-	-e '/^\[server]/,/^\[/{s/root_url = \(.*\)\/$/root_url = \1\/grafana\//}' \
-	-e '/^\[auth.proxy]/,/^\[/{s/enabled = false/enabled = true/}' \
-	-e '/^\[auth.proxy]/,/^\[/{s/whitelist =.*/whitelist = 127.0.0.1/}' \
-	-e '/^\[auth.proxy]/,/^\[/{s/header_property =.*/header_property = email/}' \
-	/etc/grafana/grafana.ini
+cat <<EOL >/etc/grafana/grafana.ini
+[server]
+serve_from_sub_path = true
+root_url = %(protocol)s://%(domain)s:%(http_port)s/grafana/
+[auth.proxy]
+enabled = true
+whitelist = 127.0.0.1
+header_property = email
+EOL
 
 printf "Creating supervisord service..."
 echo "[program:gcluster-uvicorn-background]
 process_name=%(program_name)s_%(process_num)02d
-directory=/opt/gcluster/hpc-toolkit/community/front-end/website
+directory=/opt/gcluster/hpc-toolkit/community/front-end/ofe/website
 command=/opt/gcluster/django-env/bin/uvicorn website.asgi:application --reload --host 127.0.0.1 --port 8001
 autostart=true
 autorestart=true
@@ -255,8 +257,8 @@ After=supervisord.service grafana-server.service
 
 [Service]
 Type=forking
-ExecStart=/usr/sbin/nginx -p /opt/gcluster/run/ -c /opt/gcluster/hpc-toolkit/community/front-end/website/nginx.conf
-ExecStop=/usr/sbin/nginx -p /opt/gcluster/run/ -c /opt/gcluster/hpc-toolkit/community/front-end/website/nginx.conf -s stop
+ExecStart=/usr/sbin/nginx -p /opt/gcluster/run/ -c /opt/gcluster/hpc-toolkit/community/front-end/ofe/website/nginx.conf
+ExecStop=/usr/sbin/nginx -p /opt/gcluster/run/ -c /opt/gcluster/hpc-toolkit/community/front-end/ofe/website/nginx.conf -s stop
 PIDFile=/opt/gcluster/run/nginx.pid
 Restart=no
 
@@ -274,7 +276,7 @@ systemctl status gcluster.service
 #
 sudo su - gcluster -c /bin/bash <<EOF
   source /opt/gcluster/django-env/bin/activate
-  cd /opt/gcluster/hpc-toolkit/community/front-end/website
+  cd /opt/gcluster/hpc-toolkit/community/front-end/ofe/website
   python manage.py setup_grafana "${DJANGO_EMAIL}"
 EOF
 
@@ -282,7 +284,7 @@ EOF
 #
 if [ -n "${SERVER_HOSTNAME}" ]; then
 	printf "Installing LetsEncrypt Certificate"
-	/usr/bin/certbot --nginx --nginx-server-root=/opt/gcluster/hpc-toolkit/community/front-end/website -m "${DJANGO_EMAIL}" --agree-tos -d "${SERVER_HOSTNAME}"
+	/usr/bin/certbot --nginx --nginx-server-root=/opt/gcluster/hpc-toolkit/community/front-end/ofe/website -m "${DJANGO_EMAIL}" --agree-tos -d "${SERVER_HOSTNAME}"
 
 	printf "Installing Cron entry to keep Cert up to date"
 	tmpcron=$(mktemp)
@@ -290,7 +292,7 @@ if [ -n "${SERVER_HOSTNAME}" ]; then
 	echo "0 12 * * * /usr/bin/certbot renew --quiet" >>"${tmpcron}"
 
 	# .. if something more forceful/complete is needed:
-	#	echo "0 12 * * * /usr/bin/certbot certonly --force-renew --quiet" --nginx --nginx-server-root=/opt/gcluster/hpc-toolkit/community/front-end/website --cert-name "${SERVER_HOSTNAME}" -m "${DJANGO_EMAIL}" >>"${tmpcron}"
+	#	echo "0 12 * * * /usr/bin/certbot certonly --force-renew --quiet" --nginx --nginx-server-root=/opt/gcluster/hpc-toolkit/community/front-end/ofe/website --cert-name "${SERVER_HOSTNAME}" -m "${DJANGO_EMAIL}" >>"${tmpcron}"
 
 	crontab -u root "${tmpcron}"
 	rm "${tmpcron}"

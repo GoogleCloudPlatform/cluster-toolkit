@@ -198,6 +198,9 @@ To use this configuration file for automated deployment, follow these steps:
   django_superuser_username: sysadm
   django_superuser_password: Passw0rd! # (optional if DJANGO_SUPERUSER_PASSWORD is passed)
   django_superuser_email: sysadmin@example.com
+  deployment_mode: git # (optional)
+  repo_fork: GoogleCloudPlatform # (optional)
+  repo_branch: develop # (optional)
   ```
 
  1. Save the file in the same directory as the deploy.sh script.

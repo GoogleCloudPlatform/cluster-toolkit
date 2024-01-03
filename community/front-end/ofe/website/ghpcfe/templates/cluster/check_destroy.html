@@ -19,8 +19,9 @@
 {% block content %}
   <h2>Destroy cluster</h2>
 
-  <form method="get" action="{% url 'backend-destroy-cluster' cluster.id %}">
-
+  <form method="post" action="{% url 'backend-destroy-cluster' cluster.id %}">
+    {% csrf_token %}
+    
     <br/>
 
     <div class="alert alert-danger">You are going to destroy cluster <strong>{{ cluster.name }}</strong>.

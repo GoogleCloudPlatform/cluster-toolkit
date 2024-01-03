@@ -18,6 +18,8 @@ locals {
 }
 
 locals {
+  name = substr(replace(var.name, "/[^a-z0-9]/", ""), 0, 6)
+
   additional_disks = [
     for ad in var.additional_disks : {
       disk_name    = ad.disk_name
@@ -34,7 +36,7 @@ locals {
     node_count_static      = var.node_count_static
     node_count_dynamic_max = var.node_count_dynamic_max
     node_conf              = var.node_conf
-    nodeset_name           = var.name
+    nodeset_name           = local.name
 
     disk_auto_delete = var.disk_auto_delete
     disk_labels      = merge(local.labels, var.disk_labels)
@@ -67,8 +69,7 @@ locals {
     source_image_family      = local.source_image_family             # requires source_image_logic.tf
     source_image_project     = local.source_image_project_normalized # requires source_image_logic.tf
     source_image             = local.source_image                    # requires source_image_logic.tf
-    subnetwork_project       = var.subnetwork_project
-    subnetwork               = var.subnetwork_self_link
+    subnetwork_self_link     = var.subnetwork_self_link
     tags                     = var.tags
     spot                     = var.enable_spot_vm
     termination_action       = try(var.spot_instance_config.termination_action, null)

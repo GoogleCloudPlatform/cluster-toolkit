@@ -24,6 +24,7 @@ import (
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/modulewriter"
 	"hpc-toolkit/pkg/validators"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -78,10 +79,9 @@ var (
 
 func runCreateCmd(cmd *cobra.Command, args []string) {
 	dc := expandOrDie(args[0])
-	deplName, err := dc.Config.DeploymentName()
-	checkErr(err)
-	deplDir := filepath.Join(outputDir, deplName)
-	checkErr(modulewriter.WriteDeployment(dc, deplDir, overwriteDeployment))
+	deplDir := filepath.Join(outputDir, dc.Config.DeploymentName())
+	checkErr(checkOverwriteAllowed(deplDir, dc.Config, overwriteDeployment))
+	checkErr(modulewriter.WriteDeployment(dc, deplDir))
 
 	logging.Info("To deploy your infrastructure please run:")
 	logging.Info("")
@@ -285,4 +285,47 @@ func filterYaml(cmd *cobra.Command, args []string, toComplete string) ([]string,
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
 	return []string{"yaml", "yml"}, cobra.ShellCompDirectiveFilterFileExt
+}
+
+// Determines if overwrite is allowed
+func checkOverwriteAllowed(depDir string, bp config.Blueprint, overwriteFlag bool) error {
+	if _, err := os.Stat(depDir); os.IsNotExist(err) {
+		return nil // all good, no previous deployment
+	}
+
+	if _, err := os.Stat(modulewriter.HiddenGhpcDir(depDir)); os.IsNotExist(err) {
+		// hidden ghpc dir does not exist
+		return fmt.Errorf("folder %q already exists, and it is not a valid GHPC deployment folder", depDir)
+	}
+
+	// try to get previous deployment
+	expPath := filepath.Join(modulewriter.ArtifactsDir(depDir), modulewriter.ExpandedBlueprintName)
+	if _, err := os.Stat(expPath); os.IsNotExist(err) {
+		return fmt.Errorf("expanded blueprint file %q is missing, this could be a result of changing GHPC version between consecutive deployments", expPath)
+	}
+	prev, _, err := config.NewDeploymentConfig(expPath)
+	if err != nil {
+		return err
+	}
+
+	if prev.Config.GhpcVersion != bp.GhpcVersion {
+		logging.Info("WARNING: ghpc_version has changed from %q to %q, using different versions of GHPC to update a live deployment is not officially supported. Proceed at your own risk", prev.Config.GhpcVersion, bp.GhpcVersion)
+	}
+
+	if !overwriteFlag {
+		return fmt.Errorf("deployment folder %q already exists, use -w to overwrite", depDir)
+	}
+
+	newGroups := map[config.GroupName]bool{}
+	for _, g := range bp.DeploymentGroups {
+		newGroups[g.Name] = true
+	}
+
+	for _, g := range prev.Config.DeploymentGroups {
+		if !newGroups[g.Name] {
+			return fmt.Errorf("you are attempting to remove a deployment group %q, which is not supported", g.Name)
+		}
+	}
+
+	return nil
 }

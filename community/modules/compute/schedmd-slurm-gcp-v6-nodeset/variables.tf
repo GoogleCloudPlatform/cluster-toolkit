@@ -13,14 +13,8 @@
 # limitations under the License.
 
 variable "name" {
-  description = "Name of the nodeset."
+  description = "Name of the nodeset. Automatically populated by the module id if not set"
   type        = string
-  default     = "ghpc"
-
-  validation {
-    condition     = can(regex("^[a-z](?:[a-z0-9]{0,5})$", var.name))
-    error_message = "Nodeset name (var.name) must begin with a letter, be fully alphanumeric and be 6 characters or less. Regexp: '^[a-z](?:[a-z0-9]{0,5})$'."
-  }
 }
 
 variable "node_conf" {
@@ -378,11 +372,4 @@ EOD
 variable "subnetwork_self_link" {
   type        = string
   description = "Subnet to deploy to."
-  default     = null
-}
-
-variable "subnetwork_project" {
-  description = "The project the subnetwork belongs to."
-  type        = string
-  default     = ""
 }

@@ -103,12 +103,7 @@ urlpatterns += [
         name="vpc-import2",
     ),
     path(
-        "cluster/create/", ClusterCreateView1.as_view(), name="cluster-create"
-    ),
-    path(
-        "cluster/create2/?credential=<int:credential>",
-        ClusterCreateView2.as_view(),
-        name="cluster-create2",
+        "cluster/create/", ClusterCreateView.as_view(), name="cluster-create"
     ),
     path(
         "application/create1",
@@ -412,14 +407,19 @@ urlpatterns += [
         name="backend-create-cluster",
     ),
     path(
-        "backend/cluster-updateTF/<int:pk>",
-        BackendUpdateClusterTerraform.as_view(),
-        name="backend-update-cluster",
+        "backend/cluster-reconfigure/<int:pk>",
+        BackendReconfigureCluster.as_view(),
+        name="backend-reconfigure-cluster",
     ),
     path(
         "backend/cluster-start/<int:pk>",
         BackendStartCluster.as_view(),
         name="backend-start-cluster",
+    ),
+    path(
+        "backend/cluster-status/<int:pk>",
+        BackendClusterStatus.as_view(),
+        name="backend-cluster-status",
     ),
     path(
         "backend/cluster_destroy/<int:pk>",

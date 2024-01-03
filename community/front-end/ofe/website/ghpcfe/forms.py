@@ -115,23 +115,6 @@ class ClusterForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
 
         super().__init__(*args, **kwargs)
-        credential = self._get_creds(kwargs)
-
-        self.fields["subnet"].queryset = VirtualSubnet.objects.filter(
-            cloud_credential=credential
-        ).filter(Q(cloud_state="i") | Q(cloud_state="m"))
-
-        if self.instance.cloud_state not in ["nm"]:
-            # Need to disable things
-            for field in self.fields.keys():
-                self.field[field].disabled = True
-
-        self.fields["cloud_zone"].widget.choices = [
-            (
-                self.instance.cloud_zone,
-                self.instance.cloud_zone
-            )
-        ]
 
         # For machine types, will use JS to get valid types dependent on
         # cloud zone. So bypass cleaning and choices
@@ -158,15 +141,26 @@ class ClusterForm(forms.ModelForm):
             self.instance.login_node_disk_type
         )
 
+        # If cluster is running make some of form field ready only.
+        if self.instance.status == "r":
+            logger.info("Cluster is running making some fields ready only")
+            # Define a list of field names you want to set as readonly
+            fields_to_make_readonly = ['cloud_credential', 'name', 'subnet', 'cloud_region', 'cloud_zone']
+
+            # Loop through the fields and set the 'readonly' attribute
+            for field_name in fields_to_make_readonly:
+                self.fields[field_name].widget = forms.TextInput(attrs={'class': 'form-control'})
+                self.fields[field_name].widget.attrs['readonly'] = True
 
     class Meta:
         model = Cluster
 
         fields = (
+            "cloud_credential",
             "name",
             "subnet",
+            "cloud_region",
             "cloud_zone",
-            "cloud_credential",
             "authorised_users",
             "spackdir",
             "controller_instance_type",
@@ -178,15 +172,20 @@ class ClusterForm(forms.ModelForm):
             "login_node_disk_size",
             "login_node_image",
             "controller_node_image",
+            "use_cloudsql",
+            "use_bigquery",
         )
 
         widgets = {
             "name": forms.TextInput(attrs={"class": "form-control"}),
             "cloud_credential": forms.Select(
-                attrs={"class": "form-control", "disabled": True}
+                attrs={"class": "form-control"}
             ),
             "subnet": forms.Select(attrs={"class": "form-control"}),
+            "cloud_region": forms.Select(attrs={"class": "form-control", "readonly": "readonly"}),
             "cloud_zone": forms.Select(attrs={"class": "form-control"}),
+            "authorised_users": forms.SelectMultiple(attrs={"class": "form-control"}),
+            "spackdir": forms.TextInput(attrs={"class": "form-control"}),
             "controller_instance_type": forms.Select(
                 attrs={"class": "form-control machine_type_select"}
             ),
@@ -216,6 +215,8 @@ class ClusterForm(forms.ModelForm):
                                                        "id": "controller-node-image",
                                                        "name": "controller_node_image",
                                                        "value": "",}),
+            "use_cloudsql": forms.CheckboxInput(attrs={"class": "required checkbox"}),
+            "use_bigquery": forms.CheckboxInput(attrs={"class": "required checkbox"}),
         }
 
 
@@ -251,6 +252,12 @@ class ClusterPartitionForm(forms.ModelForm):
             "enable_node_reuse",
             "GPU_type",
             "GPU_per_node",
+            "boot_disk_type",
+            "boot_disk_size",
+            "additional_disk_type",
+            "additional_disk_count",
+            "additional_disk_size",
+            "additional_disk_auto_delete"
         )
 
     def __init__(self, *args, **kwargs):
@@ -262,24 +269,39 @@ class ClusterPartitionForm(forms.ModelForm):
                 self.fields[field].widget.attrs.update(
                     {"title": self.fields[field].help_text}
                 )
+        
+        self.fields["boot_disk_type"].widget = forms.Select(attrs={"class": "form-control disk_type_select"})
+        self.fields["additional_disk_type"].widget = forms.Select(attrs={"class": "form-control disk_type_select"})
 
         self.fields["machine_type"].widget.attrs[
             "class"
         ] += " machine_type_select"
-        # NOTE:  This is a just a hack...
-        # We need to set choices such that the current value is valid,
-        # so that the current 'value' is valid, and gets selected.
-        self.fields["machine_type"].widget.choices = [
-            (self.instance.machine_type, self.instance.machine_type)
-        ]
-        self.fields["GPU_type"].widget.choices = [
-            (self.instance.GPU_type, self.instance.GPU_type)
-        ]
 
-        # NOTE: Hack to bypass cleaning 'machine_type' & GPU_type here,
-        # and do so in form_valid
-        self.fields["machine_type"].clean = lambda value: value
-        self.fields["GPU_type"].clean = lambda value: value
+        def prep_dynamic_select(field, value):
+            self.fields[field].widget.choices = [
+                ( value, value )
+            ]
+            self.fields[field].clean = lambda value: value
+        
+        prep_dynamic_select(
+            "boot_disk_type",
+            self.instance.boot_disk_type
+        )
+
+        prep_dynamic_select(
+            "additional_disk_type",
+            self.instance.additional_disk_type
+        )
+
+        prep_dynamic_select(
+            "machine_type",
+            self.instance.machine_type
+        )
+
+        prep_dynamic_select(
+            "GPU_type",
+            self.instance.GPU_type
+        )
 
     def clean(self):
         cleaned_data = super().clean()

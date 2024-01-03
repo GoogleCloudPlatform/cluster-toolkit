@@ -27,7 +27,7 @@ With no mode flags set, this program will print the information about VMs with
 upcoming maintenance.
 """
 USAGE = """
-tools/maintenance/maintenance.py -p <PROJECT_ID> [-n <regex string>] [-m]
+tools/maintenance/maintenance.py -p <PROJECT_ID> [-n <regex string>] [-m] [-s]
 """
 
 UPC_MAINT_CMD = "gcloud alpha compute instances list --project={}" \
@@ -40,14 +40,19 @@ PER_MAINT_CMD = "gcloud alpha compute instances list --project={}" \
                 " --format='value(name)'"
 VER_CMD = "gcloud version --format='json(\"alpha\")'"
 PRJ_CMD = "gcloud projects describe {}"
+SLURM_CMD = "sinfo --format=%n --noheader"
 
-def check_gcloud_components() -> None:
-    cmd = VER_CMD
+def run_command(cmd: str, err_msg: str = None) -> subprocess.CompletedProcess:
     res = subprocess.run(cmd, shell=True, capture_output=True, text=True,
                          check=False)
     if res.returncode != 0:
-        err_msg = f"Error getting Google Cloud SDK versions:\n{res.stderr}"
-        raise subprocess.SubprocessError(err_msg)
+        raise subprocess.SubprocessError(f"{err_msg}:\n{res.stderr}")
+
+    return res
+
+def check_gcloud_components() -> None:
+    err_msg = "Error getting Google Cloud SDK versions"
+    res = run_command(VER_CMD, err_msg)
 
     version_dict = json.loads(res.stdout)
     if "alpha" not in version_dict:
@@ -55,31 +60,19 @@ def check_gcloud_components() -> None:
                    " version list"
         raise LookupError(err_msg)
 
-def get_maintenance_nodes(project: str, regex: re = None) -> List[str]:
-    cmd = PER_MAINT_CMD.format(project)
-    res = subprocess.run(cmd, shell=True, capture_output=True, text=True,
-                         check=False)
-    if res.returncode != 0:
-        err_msg = "Error getting VMs that have scheduled " \
-                  f"maintenance:\n{res.stderr}"
-        raise subprocess.SubprocessError(err_msg)
+def get_maintenance_nodes(project: str) -> List[str]:
+    err_msg = "Error getting VMs that have scheduled maintenance"
+    res = run_command(PER_MAINT_CMD.format(project), err_msg)
 
     maint_nodes = res.stdout.split('\n')[:-1]
-    if regex:
-        return list(filter(regex.match, maint_nodes))
 
     return maint_nodes
 
-def get_upcoming_maintenance(project: str, regex: re = None) -> List[str]:
-    cmd = UPC_MAINT_CMD.format(project)
-    res = subprocess.run(cmd, shell=True, capture_output=True, text=True, check=False)
-    if res.returncode != 0:
-        err_msg = f"Error getting upcoming maintenance list:\n{res.stderr}"
-        raise subprocess.SubprocessError(err_msg)
+def get_upcoming_maintenance(project: str) -> List[str]:
+    err_msg = "Error getting upcoming maintenance list"
+    res = run_command(UPC_MAINT_CMD.format(project), err_msg)
 
     upc_maint = [x.split() for x in res.stdout.split("\n")[:-1]]
-    if regex:
-        return list(filter(lambda x: regex.match(x[0]), upc_maint))
 
     return upc_maint
 
@@ -88,72 +81,99 @@ class NodeMaintenance:
     Class to keep track of project, zones, and search terms for nodes, as well
     as results from gcloud queries
     '''
-    def __init__(self, project: str, regex: re = None) -> None:
+    def __init__(self, project: str, regex: re = None,
+                 slurm_nodes: List[str] = None) -> None:
         self.project = project
         self.regex = regex
-        self.maint_nodes = None
-        self.upc_maint = None
+        self.slurm_nodes = slurm_nodes
+        self.per_maint_vms = None
+        self.upc_maint_vms = None
 
     def update_maintenance_nodes(self) -> None:
-        self.maint_nodes = get_maintenance_nodes(self.project, self.regex)
+        per_maint_vms = get_maintenance_nodes(self.project)
+        if self.regex:
+            per_maint_vms = list(filter(self.regex.search, per_maint_vms))
+
+        if self.slurm_nodes:
+            per_maint_vms = list(set(per_maint_vms) & set(self.slurm_nodes))
+        
+        self.per_maint_vms = per_maint_vms
 
     def update_upcoming_maintenance(self) -> None:
-        self.upc_maint = get_upcoming_maintenance(self.project, self.regex)
+        upc_maint_vms = get_upcoming_maintenance(self.project)
+        if self.regex:
+            upc_maint_vms = list(filter(lambda x: self.regex.match(x[0]),
+                                  upc_maint_vms))
+
+        if self.slurm_nodes:
+            upc_maint_vms = [u for u in upc_maint_vms if u[0] in
+                              self.slurm_nodes]
+
+        self.upc_maint_vms = upc_maint_vms
 
     def print_maintenance_nodes(self) -> None:
-        if self.maint_nodes is None:
+        if self.per_maint_vms is None:
             self.update_maintenance_nodes()
 
-        if not self.maint_nodes:
+        if not self.per_maint_vms:
             print("No nodes with periodic maintenance\n")
             return
 
         print("Nodes with PERIODIC maintenance")
-        for x in self.maint_nodes:
+        for x in self.per_maint_vms:
             print(x)
         print()
 
     def print_upcoming_maintenance(self) -> None:
-        if self.upc_maint is None:
+        if self.upc_maint_vms is None:
             self.update_upcoming_maintenance()
 
-        if not self.upc_maint:
+        if not self.upc_maint_vms:
             print("No upcoming maintenance\n")
             return
 
         print("Upcoming maintenance:")
-        row_format ="{:30}" * (len(self.upc_maint[0]))
+        row_format ="{:30}" * (len(self.upc_maint_vms[0]))
         print(row_format.format(*["Name", "Earliest Start", "Latest Start",
                                   "Can Reschedule", "Maintenance Type"]))
-        for row in self.upc_maint:
+        for row in self.upc_maint_vms:
             print(row_format.format(*row))
         print()
 
 def node_maintenace_factory(project: str, regex: str = None,
-                            run_maintenance: bool = False) -> NodeMaintenance:
-    res = subprocess.run(PRJ_CMD.format(project), shell=True,
-                         capture_output=True, text=True, check=False)
-
-    if res.returncode != 0:
-        err_msg = f"{project} does not exist or you may not have permission" \
-                   " to access it"
-        raise subprocess.SubprocessError(err_msg)
+                            check_maint: bool = False,
+                            slurm: bool = False) -> NodeMaintenance:
+    err_msg = f"{project} does not exist or you may not have permission to" \
+              " access it"
+    res = run_command(PRJ_CMD.format(project), err_msg)
 
     compiled_regex = None
     if regex:
-        compiled_regex = re.compile(regex)
+        try:
+            compiled_regex = re.compile(regex)
+        except re.error as e:
+            print(f"Invalid regular expression: {e}")
+            sys.exit()
 
-    maint = NodeMaintenance(project, compiled_regex)
-    if run_maintenance:
+    slurm_nodes = None
+    if slurm:
+        err_msg = "sinfo command failed, are you on a Slurm cluster?"
+        res = run_command(SLURM_CMD, err_msg)
+        slurm_nodes = res.stdout.split()
+
+    maint = NodeMaintenance(project, compiled_regex, slurm_nodes)
+    if check_maint:
         maint.update_maintenance_nodes()
     maint.update_upcoming_maintenance()
 
     return maint
 
-def main(project: str, vm_regex: str = None, print_periodic_vms: bool = False) -> None:
+def main(project: str, vm_regex: str = None, print_periodic_vms: bool = False,
+         slurm: bool = False) -> None:
     check_gcloud_components()
 
-    maint = node_maintenace_factory(project, vm_regex, print_periodic_vms)
+    maint = node_maintenace_factory(project, vm_regex, print_periodic_vms, 
+                                    slurm)
 
     if print_periodic_vms:
         maint.print_maintenance_nodes()
@@ -171,6 +191,8 @@ if __name__ == "__main__":
     parser.add_argument("-m", "--print_periodic_vms", action="store_true",
                         help="Display nodes that have periodic" \
                              " maintenance setup")
+    parser.add_argument("-s", "--slurm", action="store_true",
+                        help="Filter results based on local slurm cluster")
 
     if len(sys.argv)==1:
         parser.print_help(sys.stderr)
@@ -178,4 +200,4 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    main(args.project, args.vm_regex, args.print_periodic_vms)
+    main(args.project, args.vm_regex, args.print_periodic_vms, args.slurm)

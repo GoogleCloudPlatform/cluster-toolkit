@@ -48,7 +48,7 @@ func Test(t *testing.T) {
 }
 
 func (s *MySuite) SetUpSuite(c *C) {
-	simpleYamlFile, err := os.CreateTemp("", "*.yaml")
+	simpleYamlFile, err := os.CreateTemp(c.MkDir(), "*.yaml")
 	if err != nil {
 		c.Fatal(err)
 	}
@@ -78,9 +78,7 @@ deployment_groups:
 	simpleYamlFile.Close()
 
 	// Create test directory with simple modules
-	if s.tmpTestDir, err = os.MkdirTemp("", "ghpc_config_tests_*"); err != nil {
-		c.Fatal(err)
-	}
+	s.tmpTestDir = c.MkDir()
 
 	moduleDir := filepath.Join(s.tmpTestDir, "module")
 	if err = os.Mkdir(moduleDir, 0755); err != nil {
@@ -96,15 +94,6 @@ deployment_groups:
         type        = string
     }`
 	if _, err = varFile.WriteString(testVariablesTF); err != nil {
-		c.Fatal(err)
-	}
-}
-
-func (s *MySuite) TearDownSuite(c *C) {
-	if err := os.Remove(s.simpleYamlFilename); err != nil {
-		c.Fatal(err)
-	}
-	if err := os.RemoveAll(s.tmpTestDir); err != nil {
 		c.Fatal(err)
 	}
 }
@@ -419,51 +408,46 @@ func (s *zeroSuite) TestGetModule(c *C) {
 	}
 }
 
-func (s *zeroSuite) TestDeploymentName(c *C) {
-	bp := Blueprint{}
+func (s *zeroSuite) TestValidateDeploymentName(c *C) {
 	var e InputValueError
 
+	h := func(val cty.Value) error {
+		vars := NewDict(map[string]cty.Value{"deployment_name": val})
+		return validateDeploymentName(vars)
+	}
+
 	// Is deployment_name a valid string?
-	bp.Vars.Set("deployment_name", cty.StringVal("yellow"))
-	dn, err := bp.DeploymentName()
-	c.Assert(dn, Equals, "yellow")
-	c.Assert(err, IsNil)
+	c.Check(h(cty.StringVal("yellow")), IsNil)
 
-	// Is deployment_name an empty string?
-	bp.Vars.Set("deployment_name", cty.StringVal(""))
-	dn, err = bp.DeploymentName()
-	c.Assert(dn, Equals, "")
-	c.Check(errors.As(err, &e), Equals, true)
+	{ // Is deployment_name an empty string?
+		err := h(cty.StringVal(""))
+		c.Check(errors.As(err, &e), Equals, true)
+	}
 
-	// Is deployment_name not a string?
-	bp.Vars.Set("deployment_name", cty.NumberIntVal(100))
-	dn, err = bp.DeploymentName()
-	c.Assert(dn, Equals, "")
-	c.Check(errors.As(err, &e), Equals, true)
+	{ // Is deployment_name not a string?
+		err := h(cty.NumberIntVal(100))
+		c.Check(errors.As(err, &e), Equals, true)
+	}
 
-	// Is deployment_names longer than 63 characters?
-	bp.Vars.Set("deployment_name", cty.StringVal("deployment_name-deployment_name-deployment_name-deployment_name-0123"))
-	dn, err = bp.DeploymentName()
-	c.Assert(dn, Equals, "")
-	c.Check(errors.As(err, &e), Equals, true)
+	{ // Is deployment_names longer than 63 characters?
+		err := h(cty.StringVal("deployment_name-deployment_name-deployment_name-deployment_name-0123"))
+		c.Check(errors.As(err, &e), Equals, true)
+	}
 
-	// Does deployment_name contain special characters other than dashes or underscores?
-	bp.Vars.Set("deployment_name", cty.StringVal("deployment.name"))
-	dn, err = bp.DeploymentName()
-	c.Assert(dn, Equals, "")
-	c.Check(errors.As(err, &e), Equals, true)
+	{ // Does deployment_name contain special characters other than dashes or underscores?
+		err := h(cty.StringVal("deployment.name"))
+		c.Check(errors.As(err, &e), Equals, true)
+	}
 
-	// Does deployment_name contain capital letters?
-	bp.Vars.Set("deployment_name", cty.StringVal("Deployment_name"))
-	dn, err = bp.DeploymentName()
-	c.Assert(dn, Equals, "")
-	c.Check(errors.As(err, &e), Equals, true)
+	{ // Does deployment_name contain capital letters?
+		err := h(cty.StringVal("Deployment_name"))
+		c.Check(errors.As(err, &e), Equals, true)
+	}
 
-	// Is deployment_name not set?
-	bp.Vars = Dict{}
-	dn, err = bp.DeploymentName()
-	c.Assert(dn, Equals, "")
-	c.Check(errors.As(err, &e), Equals, true)
+	{ // Is deployment_name not set?
+		err := validateDeploymentName(Dict{})
+		c.Check(errors.As(err, &e), Equals, true)
+	}
 }
 
 func (s *zeroSuite) TestCheckBlueprintName(c *C) {
@@ -913,12 +897,19 @@ func (s *zeroSuite) TestEvalVars(c *C) {
 			"bc": MustParseExpression(`"${var.b}|${var.c}"`).AsValue(),
 		})
 		bp := Blueprint{Vars: vars}
-		c.Check(bp.evalVars(), IsNil)
-		c.Check(bp.Vars.Items(), DeepEquals, map[string]cty.Value{
+		got, err := bp.evalVars()
+		c.Check(err, IsNil)
+		c.Check(got.Items(), DeepEquals, map[string]cty.Value{
 			"a":  cty.StringVal("A"),
 			"b":  cty.StringVal("A_B"),
 			"c":  cty.StringVal("A_B_C"),
 			"bc": cty.StringVal("A_B|A_B_C"),
+		})
+		c.Check(bp.Vars.Items(), DeepEquals, map[string]cty.Value{ // no change
+			"a":  cty.StringVal("A"),
+			"b":  MustParseExpression(`"${var.a}_B"`).AsValue(),
+			"c":  MustParseExpression(`"${var.b}_C"`).AsValue(),
+			"bc": MustParseExpression(`"${var.b}|${var.c}"`).AsValue(),
 		})
 	}
 	{ // Non global ref
@@ -926,8 +917,7 @@ func (s *zeroSuite) TestEvalVars(c *C) {
 			"a": cty.StringVal("A"),
 			"b": MustParseExpression(`"${var.a}_${module.foo.ko}"`).AsValue(),
 		})
-		bp := Blueprint{Vars: vars}
-		err := bp.evalVars()
+		_, err := (&Blueprint{Vars: vars}).evalVars()
 		var berr BpError
 		if errors.As(err, &berr) {
 			c.Check(berr.Path.String(), Equals, "vars.b")
@@ -942,8 +932,7 @@ func (s *zeroSuite) TestEvalVars(c *C) {
 			"bo":  cty.StringVal("===="),
 			"ros": MustParseExpression(`"${var.uro}_${var.bo}_ros"`).AsValue(),
 		})
-		bp := Blueprint{Vars: vars}
-		err := bp.evalVars()
+		_, err := (&Blueprint{Vars: vars}).evalVars()
 		var berr BpError
 		if errors.As(err, &berr) {
 			if berr.Path.String() != "vars.uro" && berr.Path.String() != "vars.ros" {

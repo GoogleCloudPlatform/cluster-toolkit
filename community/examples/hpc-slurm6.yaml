@@ -41,7 +41,6 @@ deployment_groups:
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [network]
     settings:
-      name: ns1
       node_count_dynamic_max: 4
       machine_type: n2-standard-2
       enable_placement: false  # the default is: true

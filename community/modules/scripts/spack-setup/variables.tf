@@ -45,26 +45,60 @@ variable "configure_for_google" {
   default     = true
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "chown_owner" {
-  description = "Owner to chown the Spack clone to. Default will not modify the clone."
+  description = "Deprecated: use `system_user_name`."
   default     = null
   type        = string
+
+  validation {
+    condition     = var.chown_owner == null
+    error_message = "chown_owner is deprecated. Use system_user_name to set the owner of the installation."
+  }
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "chgrp_group" {
-  description = "Group to chgrp the Spack clone to. Default will not modify the clone."
+  description = "Deprecated: installation will be owned by group of `system_user_name`. If special group is needed, supply user with group assigned."
   default     = null
   type        = string
+
+  validation {
+    condition     = var.chgrp_group == null
+    error_message = "chgrp_group is deprecated. Use system_user_name to set owning user and group."
+  }
 }
 
 variable "chmod_mode" {
   description = <<-EOT
-    Mode to chmod the Spack clone to. Defaults to null (i.e. do not modify).
+    `chmod` to apply to the Spack installation. Adds group write by default. Set to `""` (empty string) to prevent modification.
     For usage information see:
     https://docs.ansible.com/ansible/latest/collections/ansible/builtin/file_module.html#parameter-mode
     EOT
-  default     = null
+  default     = "g+w"
   type        = string
+  nullable    = false
+}
+
+variable "system_user_name" {
+  description = "Name of system user that will perform installation of Spack. It will be created if it does not exist."
+  default     = "spack"
+  type        = string
+  nullable    = false
+}
+
+variable "system_user_uid" {
+  description = "UID used when creating system user. Ignored if `system_user_name` already exists on system. Default of 1104762903 is arbitrary."
+  default     = 1104762903
+  type        = number
+  nullable    = false
+}
+
+variable "system_user_gid" {
+  description = "GID used when creating system user group. Ignored if `system_user_name` already exists on system. Default of 1104762903 is arbitrary."
+  default     = 1104762903
+  type        = number
+  nullable    = false
 }
 
 variable "spack_virtualenv_path" {
@@ -90,6 +124,7 @@ variable "labels" {
 
 # variables to be deprecated
 
+# tflint-ignore: terraform_unused_declarations
 variable "log_file" {
   description = <<-EOT
   DEPRECATED 
@@ -105,6 +140,7 @@ variable "log_file" {
   }
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "spack_cache_url" {
   description = <<-EOT
   DEPRECATED
@@ -129,6 +165,7 @@ variable "spack_cache_url" {
   }
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "configs" {
   description = <<-EOT
   DEPRECATED
@@ -151,6 +188,7 @@ variable "configs" {
   }
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "compilers" {
   description = <<-EOT
   DEPRECATED
@@ -175,6 +213,7 @@ variable "compilers" {
   }
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "licenses" {
   description = <<-EOT
   DEPRECATED
@@ -202,6 +241,7 @@ variable "licenses" {
   }
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "packages" {
   description = <<-EOT
   DEPRECATED
@@ -222,6 +262,7 @@ variable "packages" {
   }
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "install_flags" {
   description = "DEPRECATED - spack install is now performed using the [spack-execute](../spack-execute/) module `commands` variable."
   default     = null
@@ -232,6 +273,7 @@ variable "install_flags" {
   }
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "concretize_flags" {
   description = "DEPRECATED - spack concretize is now performed using the [spack-execute](../spack-execute/) module `commands` variable."
   default     = null
@@ -242,6 +284,7 @@ variable "concretize_flags" {
   }
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "gpg_keys" {
   description = <<EOT
   DEPRECATED
@@ -265,6 +308,7 @@ EOT
   }
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "caches_to_populate" {
   description = <<-EOT
   DEPRECATED
@@ -295,6 +339,7 @@ EOT
   }
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "environments" {
   description = <<-EOT
   DEPRECATED

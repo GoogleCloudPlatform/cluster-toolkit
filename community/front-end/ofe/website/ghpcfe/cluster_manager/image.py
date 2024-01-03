@@ -33,7 +33,7 @@ class ImageBackend:
 
     def __init__(self, image):
         self.config = utils.load_config()
-        self.ghpc_path = self.config["baseDir"].parents[1] / "ghpc"
+        self.ghpc_path = "/opt/gcluster/hpc-toolkit/ghpc"
         
         self.image = image
         self.image_dir = (
@@ -177,7 +177,7 @@ deployment_groups:
             with log_out_fn.open("wb") as log_out:
                 with log_err_fn.open("wb") as log_err:
                     subprocess.run(
-                        [self.ghpc_path.as_posix(), "create", "image.yaml"],
+                        [self.ghpc_path, "create", "image.yaml"],
                         cwd=target_dir,
                         stdout=log_out,
                         stderr=log_err,

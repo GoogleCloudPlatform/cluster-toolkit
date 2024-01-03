@@ -31,6 +31,7 @@ variable "subnetwork_name" {
   default     = null
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "subnetwork_size" {
   description = "DEPRECATED: please see https://goo.gle/hpc-toolkit-vpc-deprecation for migration instructions"
   type        = number
@@ -117,6 +118,7 @@ variable "subnetworks" {
   }
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "primary_subnetwork" {
   description = "DEPRECATED: please see https://goo.gle/hpc-toolkit-vpc-deprecation for migration instructions"
   type        = map(string)
@@ -127,6 +129,7 @@ variable "primary_subnetwork" {
   }
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "additional_subnetworks" {
   description = "DEPRECATED: please see https://goo.gle/hpc-toolkit-vpc-deprecation for migration instructions"
   type        = list(map(string))
@@ -223,4 +226,20 @@ variable "firewall_rules" {
   type        = any
   description = "List of firewall rules"
   default     = []
+}
+
+variable "firewall_log_config" {
+  type        = string
+  description = "Firewall log configuration for Toolkit firewall rules (var.enable_iap_ssh_ingress and others)"
+  default     = "DISABLE_LOGGING"
+  nullable    = false
+
+  validation {
+    condition = contains([
+      "INCLUDE_ALL_METADATA",
+      "EXCLUDE_ALL_METADATA",
+      "DISABLE_LOGGING",
+    ], var.firewall_log_config)
+    error_message = "var.firewall_log_config must be set to \"DISABLE_LOGGING\", or enable logging with \"INCLUDE_ALL_METADATA\" or \"EXCLUDE_ALL_METADATA\""
+  }
 }

@@ -83,6 +83,11 @@ variable "ramble_runner" {
   })
 }
 
+variable "system_user_name" {
+  description = "Name of the system user used to execute commands. Generally passed from the ramble-setup module."
+  type        = string
+}
+
 variable "gcs_bucket_path" {
   description = "The GCS path for storage bucket and the object, starting with `gs://`."
   type        = string

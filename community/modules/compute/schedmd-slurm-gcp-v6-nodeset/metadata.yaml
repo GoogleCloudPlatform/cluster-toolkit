@@ -16,3 +16,5 @@
 spec:
   requirements:
     services: []
+ghpc:
+  inject_module_id: name

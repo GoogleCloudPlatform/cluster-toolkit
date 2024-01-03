@@ -175,8 +175,8 @@ main() {
 		fi
 	fi
 
-	# Upgrade pip if necessary
-	# Only run if OS is not Debian 12 - Debian 12 does not allow for system level pip installs
+	# Upgrade system-wide pip
+	# Do not run on Debian 12 - system pip package modification is forbidden
 	if [ ! -f /etc/debian_version ] || [ "$(lsb_release -a 2>/dev/null | sed -n 's/Release:\s\+\([0-9]\+\).\?.*/\1/p')" -ne "12" ]; then
 		pip_version=$(${python_path} -m pip --version | sed -nr 's/^pip ([0-9]+\.[0-9]+).*$/\1/p')
 		pip_major_version=$(echo "${pip_version}" | cut -d '.' -f 1)
@@ -196,7 +196,17 @@ main() {
 		${venv_python_path} -m pip install --upgrade pip
 	fi
 
-	${venv_python_path} -m pip install -U wheel==${REQ_PIP_WHEEL_VERSION} setuptools==${REQ_PIP_SETUPTOOLS_VERSION}
+	# upgrade wheel if necessary
+	wheel_pkg=$(${venv_python_path} -m pip list --format=freeze | grep "^wheel")
+	if [ "$wheel_pkg" != "wheel==${REQ_PIP_WHEEL_VERSION}" ]; then
+		${venv_python_path} -m pip install -U wheel==${REQ_PIP_WHEEL_VERSION}
+	fi
+
+	# upgrade setuptools if necessary
+	setuptools_pkg=$(${venv_python_path} -m pip list --format=freeze | grep "^setuptools")
+	if [ "$setuptools_pkg" != "setuptools==${REQ_PIP_SETUPTOOLS_VERSION}" ]; then
+		${venv_python_path} -m pip install -U setuptools==${REQ_PIP_SETUPTOOLS_VERSION}
+	fi
 
 	# configure ansible to always use correct Python binary
 	if [ ! -f /etc/ansible/ansible.cfg ]; then

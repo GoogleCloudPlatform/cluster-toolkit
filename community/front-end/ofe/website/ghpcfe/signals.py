@@ -32,7 +32,8 @@ def sync_vnet_subnet_state(sender, **kwargs):
 @receiver(post_delete, sender=Cluster)
 def delete_cluster_extras(sender, **kwargs):
     cluster = kwargs["instance"]
-    cluster.shared_fs.delete()
+    if cluster.shared_fs:
+        cluster.shared_fs.delete()
     if cluster.controller_node:
         cluster.controller_node.delete()
 

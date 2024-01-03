@@ -230,6 +230,7 @@ variable "timeout_update" {
 
 # Deprecated
 
+# tflint-ignore: terraform_unused_declarations
 variable "total_min_nodes" {
   description = "DEPRECATED: Use autoscaling_total_min_nodes."
   type        = number
@@ -240,6 +241,7 @@ variable "total_min_nodes" {
   }
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "total_max_nodes" {
   description = "DEPRECATED: Use autoscaling_total_max_nodes."
   type        = number
@@ -250,6 +252,7 @@ variable "total_max_nodes" {
   }
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "service_account" {
   description = "DEPRECATED: use service_account_email and scopes."
   type = object({

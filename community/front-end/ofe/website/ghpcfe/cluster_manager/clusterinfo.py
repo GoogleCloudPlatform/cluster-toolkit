@@ -54,7 +54,7 @@ class ClusterInfo:
 
     def __init__(self, cluster):
         self.config = utils.load_config()
-        self.ghpc_path = self.config["baseDir"].parent.parent / "ghpc"
+        self.ghpc_path = "/opt/gcluster/hpc-toolkit/ghpc"
 
         self.cluster = cluster
         self.cluster_dir = (
@@ -81,18 +81,22 @@ class ClusterInfo:
             The required credentials can be obtained from the cloud provider's dashboard or
             by following the documentation for obtaining authentication credentials.
         """
-        self._create_cluster_dir()
-        self._set_credentials(credentials)
-        self.update()
+        #self._create_cluster_dir()
+        #self._set_credentials(credentials)
+        #self.update()
 
     def update(self):
         self._prepare_ghpc_yaml()
         self._prepare_bootstrap_gcs()
 
-    def start_cluster(self):
+    def start_cluster(self, credentials):
         self.cluster.cloud_state = "nm"
         self.cluster.status = "c"
         self.cluster.save()
+
+        self._create_cluster_dir()
+        self._set_credentials(credentials)
+        self.update()
 
         try:
             self._run_ghpc()
@@ -111,6 +115,23 @@ class ClusterInfo:
             self.cluster.save()
             raise
 
+    def reconfigure_cluster(self):
+        try:
+            self._run_ghpc()
+            self._initialize_terraform()
+            self._apply_terraform()
+            self.cluster.status = "r"
+            self.cluster.cloud_state = "m"
+            self.cluster.save()
+
+        # Not a lot we can do if terraform fails, it's on the admin user to
+        # investigate and fix the errors shown in the log
+        except Exception:  # pylint: disable=broad-except
+            self.cluster.status = "e"
+            self.cluster.cloud_state = "nm"
+            self.cluster.save()
+            raise
+
     def stop_cluster(self):
         self._destroy_terraform()
 
@@ -118,7 +139,10 @@ class ClusterInfo:
         return self.cluster.get_access_key()
 
     def _create_cluster_dir(self):
-        self.cluster_dir.mkdir(parents=True)
+        try:
+            self.cluster_dir.mkdir(parents=True)
+        except FileExistsError:
+            pass  # Do nothing if the directory already exists
 
     def _get_credentials_file(self):
         return self.cluster_dir / "cloud_credentials"
@@ -137,24 +161,29 @@ class ClusterInfo:
     def _create_ssh_key(self, target_dir):
         # ssh-keygen -t rsa -f <tgtdir>/.ssh/id_rsa -N ""
         sshdir = target_dir / ".ssh"
-        sshdir.mkdir(mode=0o711)
+        
+        if not sshdir.exists():
+            sshdir.mkdir(mode=0o711)
 
-        priv_key_file = sshdir / "id_rsa"
+            priv_key_file = sshdir / "id_rsa"
 
-        subprocess.run(
-            [
-                "ssh-keygen",
-                "-t",
-                "rsa",
-                "-f",
-                priv_key_file.as_posix(),
-                "-N",
-                "",
-                "-C",
-                "citc@mgmt",
-            ],
-            check=True,
-        )
+            subprocess.run(
+                [
+                    "ssh-keygen",
+                    "-t",
+                    "rsa",
+                    "-f",
+                    priv_key_file.as_posix(),
+                    "-N",
+                    "",
+                    "-C",
+                    "citc@mgmt",
+                ],
+                check=True,
+            )
+        else:
+            # Directory already exists, no need to create it again
+            pass
 
     def _prepare_ghpc_filesystems(self):
         yaml = []
@@ -197,6 +226,21 @@ class ClusterInfo:
         project: {self.cluster.project_id}"""
             else:
                 instance_image_yaml = ""
+
+            if part.additional_disk_count > 0 and part.additional_disk_count is not None:
+                additional_disks_yaml = f"""additional_disks:
+"""
+                for disk in range(part.additional_disk_count):
+                    additional_disks_yaml += f"""      - device_name: disk{disk}
+        disk_name: null
+        disk_size_gb: {part.additional_disk_size}
+        disk_type: {part.additional_disk_type}
+        disk_labels: {{}}
+        auto_delete: {part.additional_disk_auto_delete}
+        boot: false\n"""
+            else:
+                additional_disks_yaml = ""
+
             yaml.append(
                 f"""
   - source: community/modules/compute/schedmd-slurm-gcp-v5-partition
@@ -219,7 +263,10 @@ class ClusterInfo:
       machine_type: {part.machine_type}
       node_count_dynamic_max: {part.dynamic_node_count}
       node_count_static: {part.static_node_count}
+      disk_size_gb: {part.boot_disk_size}
+      disk_type: {part.boot_disk_type}
       {instance_image_yaml}
+      {additional_disks_yaml}
 """
             )
 
@@ -292,7 +339,22 @@ class ClusterInfo:
             """
             else:
                 controller_image_yaml = ""
-                
+
+            if self.cluster.use_cloudsql:
+                controller_uses = self._yaml_refs_to_uses(
+                ["hpc_network"] + partitions_references + filesystems_references + ["slurm-sql"]
+                )
+                slurmdbd_cloudsql_yaml = f"""  - source: community/modules/database/slurm-cloudsql-federation
+    kind: terraform
+    id: slurm-sql
+    use: [hpc_network]
+    settings:
+      sql_instance_name: sql-{self.cluster.cloud_id}
+      tier: "db-g1-small"
+    """
+            else:
+                slurmdbd_cloudsql_yaml = ""
+
             with yaml_file.open("w") as f:
                 f.write(
             f"""
@@ -303,6 +365,11 @@ vars:
   deployment_name: {self.cluster.cloud_id}
   region: {self.cluster.cloud_region}
   zone: {self.cluster.cloud_zone}
+  enable_reconfigure: True
+  enable_cleanup_compute: False
+  enable_cleanup_subscriptions: True
+  enable_bigquery_load: {self.cluster.use_bigquery}
+  instance_image_custom: True
   labels:
     created_by: {SITE_NAME}
 
@@ -330,8 +397,7 @@ deployment_groups:
       - monitoring.metricWriter
       - logging.logWriter
       - storage.objectAdmin
-      - pubsub.publisher
-      - pubsub.subscriber
+      - pubsub.admin
       - compute.securityAdmin
       - iam.serviceAccountAdmin
       - resourcemanager.projectIamAdmin
@@ -339,12 +405,12 @@ deployment_groups:
 
 {partitions_yaml}
 
+{slurmdbd_cloudsql_yaml}
+
   - source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
     kind: terraform
     id: slurm_controller
     settings:
-      enable_cleanup_compute: True
-      enable_cleanup_subscriptions: True
       cloud_parameters:
         resume_rate: 0
         resume_timeout: 500
@@ -370,8 +436,6 @@ deployment_groups:
       compute_startup_script: |
         #!/bin/bash
         gsutil cp gs://{startup_bucket}/clusters/{self.cluster.id}/bootstrap_compute.sh - | bash
-#TODO:     enable_cleanup_compute: True
-#TODO:     enable_cleanup_subscriptions: True
     use:
 {controller_uses}
 
@@ -467,7 +531,7 @@ deployment_groups:
             with log_out_fn.open("wb") as log_out:
                 with log_err_fn.open("wb") as log_err:
                     subprocess.run(
-                        [self.ghpc_path.as_posix(), "create", "cluster.yaml"],
+                        [self.ghpc_path, "create", "cluster.yaml","-w"],
                         cwd=target_dir,
                         stdout=log_out,
                         stderr=log_err,
@@ -527,7 +591,19 @@ deployment_groups:
             except (KeyError, IndexError):
                 pass
 
-            return ComputeInstance(**ci_kwargs)
+            # Check if a model with the same attributes exists
+            try:
+                existing_instance = ComputeInstance.objects.get(
+                    internal_ip=ci_kwargs["internal_ip"]
+                )
+                # If the instance already exists, update its attributes
+                for key, value in ci_kwargs.items():
+                    setattr(existing_instance, key, value)
+                existing_instance.save()
+                return existing_instance  # Return the existing instance
+            except ComputeInstance.DoesNotExist:
+                # If the instance doesn't exist, create a new one
+                return ComputeInstance(**ci_kwargs)          
 
         return [model_from_tf(instance) for instance in tf_nodes]
 
@@ -603,8 +679,13 @@ deployment_groups:
                 state = json.load(statefp)
 
                 # Apply Perms to the service accounts
-                service_accounts = self._get_service_accounts(state)
-                self._apply_service_account_permissions(service_accounts)
+                try:
+                    service_accounts = self._get_service_accounts(state)
+                    self._apply_service_account_permissions(service_accounts)
+                except Exception as e:
+                    # Be nicer to the user and continue creating cluster
+                    logger.warning(f"An error occurred while applying permissions to service accounts: {e}")
+
 
                 # Cluster is now being initialized
                 self.cluster.internal_name = self.cluster.name
@@ -665,13 +746,12 @@ deployment_groups:
 
         except subprocess.CalledProcessError as err:
             # We can error during provisioning, in which case Terraform
-            # doesn't tear things down.  Run a `destroy`, just in case
+            # doesn't tear things down.
             logger.error("Terraform apply failed", exc_info=err)
             if err.stdout:
                 logger.info("TF stdout:\n%s\n", err.stdout.decode("utf-8"))
             if err.stderr:
                 logger.info("TF stderr:\n%s\n", err.stderr.decode("utf-8"))
-            self._destroy_terraform()
             raise
 
     def _destroy_terraform(self):

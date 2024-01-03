@@ -27,6 +27,7 @@ import (
 // See https://github.com/GoogleCloudPlatform/cloud-foundation-toolkit/blob/master/cli/bpmetadata/schema/gcp-blueprint-metadata.json#L278
 type Metadata struct {
 	Spec MetadataSpec `yaml:"spec"`
+	Ghpc MetadataGhpc `yaml:"ghpc"`
 }
 
 // MetadataSpec corresponds to BlueprintMetadataSpec in CFT schema
@@ -41,11 +42,19 @@ type MetadataRequirements struct {
 	Services []string `yaml:"services"`
 }
 
+// GHPC-specific addition to CFT schema
+type MetadataGhpc struct {
+	// Optional, set to the string-typed module variable name.
+	// If set, the blueprint module id will be set as a value of this variable.
+	InjectModuleId string `yaml:"inject_module_id"`
+}
+
 // GetMetadata reads and parses `metadata.yaml` from module root.
 // Expects source to be either a local or embedded path.
 func GetMetadata(source string) (Metadata, error) {
 	var err error
 	var data []byte
+	// TODO: use bpmetadata.UnmarshalMetadata, it performs some additional checks
 	filePath := filepath.Join(source, "metadata.yaml")
 
 	switch {
@@ -74,5 +83,5 @@ func GetMetadataSafe(source string) Metadata {
 	if mtd, err := GetMetadata(source); err == nil {
 		return mtd
 	}
-	return LegacyMetadata(source)
+	return legacyMetadata(source)
 }

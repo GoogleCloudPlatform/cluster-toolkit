@@ -54,21 +54,13 @@ func (s *MySuite) TestIntersectMapKeys(c *C) {
 }
 
 func (s *MySuite) TestCheckWritableDir(c *C) {
-	err := CheckWritableDir("")
-	c.Assert(err, IsNil)
+	c.Assert(CheckWritableDir(""), IsNil)
 
-	dir, err := os.MkdirTemp("", "example")
-	if err != nil {
+	dir := c.MkDir()
+	if err := os.Chmod(dir, 0700); err != nil {
 		c.Fatal(err)
 	}
-	defer os.RemoveAll(dir)
-
-	err = os.Chmod(dir, 0700)
-	if err != nil {
-		c.Error(err)
-	}
-	err = CheckWritableDir(dir)
-	c.Assert(err, IsNil)
+	c.Assert(CheckWritableDir(dir), IsNil)
 
 	// This test reliably fails in Cloud Build although it works in Linux
 	// and in MacOS. TODO: investigate why
@@ -80,25 +72,22 @@ func (s *MySuite) TestCheckWritableDir(c *C) {
 	// c.Assert(err, NotNil)
 
 	os.RemoveAll(dir)
-	err = CheckWritableDir(dir)
-	c.Assert(err, NotNil)
+	c.Assert(CheckWritableDir(dir), NotNil)
 }
 
 func (s *MySuite) TestMergeMapsWithoutLoss(c *C) {
-	m1 := map[string]int{"foo": 0}
-	m2 := map[string]int{"bar": 1}
+	t := map[string]int{"foo": 0}
+	f := map[string]int{"bar": 1}
 
-	mergeMapsWithoutLoss(m1, m2)
+	c.Check(mergeMapsWithoutLoss(t, f), IsNil)
+	c.Check(f, DeepEquals, map[string]int{"bar": 1})
+	c.Check(t, DeepEquals, map[string]int{"foo": 0, "bar": 1})
 
-	c.Assert(func() { mergeMapsWithoutLoss(m1, m1) }, PanicMatches, "unexpected key collision in maps")
+	c.Check(mergeMapsWithoutLoss(t, f), ErrorMatches, "duplicate key bar")
 }
 
 func (s *MySuite) TestValidateDeploymentDirectory(c *C) {
-	dir, err := os.MkdirTemp("", "test-*")
-	if err != nil {
-		c.Fatal(err)
-	}
-
+	dir := c.MkDir()
 	groups := []config.DeploymentGroup{
 		{
 			Name: "zero",
@@ -119,18 +108,15 @@ func (s *MySuite) TestValidateDeploymentDirectory(c *C) {
 	}
 
 	// do not fail if exactly matching directories
-	err = ValidateDeploymentDirectory(groups, dir)
-	c.Assert(err, IsNil)
+	c.Assert(ValidateDeploymentDirectory(groups, dir), IsNil)
 
 	// do not fail for extra directories
 	badGroupDir := filepath.Join(dir, "not-a-group-name")
 	os.Mkdir(badGroupDir, 0755)
-	err = ValidateDeploymentDirectory(groups, dir)
-	c.Assert(err, IsNil)
+	c.Assert(ValidateDeploymentDirectory(groups, dir), IsNil)
 	os.Remove(badGroupDir)
 
 	// do fail if missing directories
 	os.Remove(filepath.Join(dir, string(groups[0].Name)))
-	err = ValidateDeploymentDirectory(groups, dir)
-	c.Assert(err, NotNil)
+	c.Assert(ValidateDeploymentDirectory(groups, dir), NotNil)
 }

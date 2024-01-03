@@ -23,7 +23,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/google/go-cmp/cmp"
 	"golang.org/x/exp/slices"
 )
 
@@ -157,30 +156,42 @@ func TestNetworkStorage(t *testing.T) {
 	}
 }
 
-func TestMetadata(t *testing.T) {
+func TestMetadataIsObtainable(t *testing.T) {
+	// Test that `GetMetadata` does not fail. `GetMetadataSafe` falls back to legacy.
 	for _, mod := range notEmpty(query(all()), t) {
 		t.Run(mod.Source, func(t *testing.T) {
-			if (len(mod.Source) % 4) > 2 { // len is poor man's hash
-				t.Skip("TODO: apply to all modules")
-			}
-
-			mtd, err := modulereader.GetMetadata(modPath(mod.Source))
+			_, err := modulereader.GetMetadata(modPath(mod.Source))
 			if err != nil {
 				t.Error(err)
+			}
+		})
+	}
+}
+
+func TestMetadataHasServices(t *testing.T) {
+	for _, mod := range notEmpty(query(all()), t) {
+		t.Run(mod.Source, func(t *testing.T) {
+			if mod.Metadata.Spec.Requirements.Services == nil {
+				t.Error("metadata has no spec.requirements.services set")
+			}
+		})
+	}
+}
+
+func TestMetadataInjectModuleId(t *testing.T) {
+	for _, mod := range notEmpty(query(all()), t) {
+		t.Run(mod.Source, func(t *testing.T) {
+			gm := mod.Metadata.Ghpc
+			if gm.InjectModuleId == "" {
 				return
 			}
-
-			if mtd.Spec.Requirements.Services == nil {
-				t.Error("metadata has no requirements")
+			in, ok := mod.Input(gm.InjectModuleId)
+			if !ok {
+				t.Fatalf("has no input %q", gm.InjectModuleId)
 			}
-
-			// for safe transition, check that metadata is the same as legacy. To be removed.
-			legacy := modulereader.LegacyMetadata(mod.Source)
-			diff := cmp.Diff(legacy.Spec.Requirements.Services, mtd.Spec.Requirements.Services)
-			if diff != "" {
-				t.Errorf("diff (-want +got):\n%s", diff)
+			if in.Type != "string" {
+				t.Errorf("%q type is not a string, but %q", gm.InjectModuleId, in.Type)
 			}
-
 		})
 	}
 }

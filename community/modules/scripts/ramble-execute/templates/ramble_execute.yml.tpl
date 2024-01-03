@@ -18,6 +18,7 @@
     pre_script: ${pre_script}
     log_file: ${log_file}
     commands: ${commands}
+    system_user_name: ${system_user_name}
   tasks:
   - name: Execute command block
     block:
@@ -31,6 +32,12 @@
           Logs from commands will not be printed here until success (or failure)
           Streaming logs can be found at {{ log_file }}
 
+    - name: Ensure user can write to log file
+      ansible.builtin.file:
+        path: "{{ log_file }}"
+        state: touch
+        owner: "{{ system_user_name }}"
+
     - name: Execute commands
       ansible.builtin.shell: |
         set -eo pipefail
@@ -43,6 +50,8 @@
       args:
         executable: /bin/bash
       register: output
+      become: true
+      become_user: "{{ system_user_name }}"
 
     always:
     - name: Print commands output

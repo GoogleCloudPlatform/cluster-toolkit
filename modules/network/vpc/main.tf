@@ -15,8 +15,9 @@
 */
 
 locals {
-  network_name    = var.network_name == null ? "${var.deployment_name}-net" : var.network_name
-  subnetwork_name = var.subnetwork_name == null ? "${var.deployment_name}-primary-subnet" : var.subnetwork_name
+  autoname        = replace(var.deployment_name, "_", "-")
+  network_name    = var.network_name == null ? "${local.autoname}-net" : var.network_name
+  subnetwork_name = var.subnetwork_name == null ? "${local.autoname}-primary-subnet" : var.subnetwork_name
 
   # define a default subnetwork for cases in which no explicit subnetworks are
   # defined in var.subnetworks
@@ -72,6 +73,13 @@ locals {
     var.enable_iap_winrm_ingress ? "5986" : "",
   ]), var.extra_iap_ports))
 
+  firewall_log_api_values = {
+    "DISABLE_LOGGING"      = null
+    "INCLUDE_ALL_METADATA" = { metadata = "INCLUDE_ALL_METADATA" },
+    "EXCLUDE_ALL_METADATA" = { metadata = "EXCLUDE_ALL_METADATA" },
+  }
+  firewall_log_config = lookup(local.firewall_log_api_values, var.firewall_log_config, null)
+
   allow_iap_ingress = {
     name                    = "${local.network_name}-fw-allow-iap-ingress"
     description             = "allow TCP access via Identity-Aware Proxy"
@@ -86,10 +94,8 @@ locals {
       protocol = "tcp"
       ports    = local.iap_ports
     }]
-    deny = []
-    log_config = {
-      metadata = "INCLUDE_ALL_METADATA"
-    }
+    deny       = []
+    log_config = local.firewall_log_config
   }
 
   allow_ssh_ingress = {
@@ -106,10 +112,8 @@ locals {
       protocol = "tcp"
       ports    = ["22"]
     }]
-    deny = []
-    log_config = {
-      metadata = "INCLUDE_ALL_METADATA"
-    }
+    deny       = []
+    log_config = local.firewall_log_config
   }
 
   allow_internal_traffic = {
@@ -133,10 +137,8 @@ locals {
       ports    = null
       },
     ]
-    deny = []
-    log_config = {
-      metadata = "INCLUDE_ALL_METADATA"
-    }
+    deny       = []
+    log_config = local.firewall_log_config
   }
 
   firewall_rules = concat(

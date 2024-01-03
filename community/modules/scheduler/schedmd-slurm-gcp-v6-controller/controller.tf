@@ -35,7 +35,7 @@ locals {
 
 # INSTANCE TEMPLATE
 module "slurm_controller_template" {
-  source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=6.2.0"
+  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=6.2.0"
   count  = local.have_template ? 0 : 1
 
   project_id          = var.project_id
@@ -76,8 +76,7 @@ module "slurm_controller_template" {
   source_image         = local.source_image                    # requires source_image_logic.tf
 
   # spot = TODO: add support for spot (?)
-  subnetwork_project = var.subnetwork_project
-  subnetwork         = var.subnetwork_self_link
+  subnetwork = var.subnetwork_self_link
 
   tags = concat([local.slurm_cluster_name], var.tags)
   # termination_action = TODO: add support for termination_action (?)
@@ -93,7 +92,7 @@ locals {
 }
 
 module "slurm_controller_instance" {
-  source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/_slurm_instance?ref=6.2.0"
+  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/_slurm_instance?ref=6.2.0"
 
   access_config       = !var.disable_controller_public_ips ? [local.access_config] : []
   add_hostname_suffix = false
@@ -105,7 +104,6 @@ module "slurm_controller_instance" {
   slurm_cluster_name  = local.slurm_cluster_name
   slurm_instance_role = "controller"
   static_ips          = var.static_ips
-  subnetwork_project  = var.subnetwork_project
   subnetwork          = var.subnetwork_self_link
   zone                = var.zone
 
@@ -151,7 +149,7 @@ resource "google_secret_manager_secret_iam_member" "cloudsql_secret_accessor" {
 
 # Destroy all compute nodes on `terraform destroy`
 module "cleanup_compute_nodes" {
-  source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_destroy_nodes?ref=6.2.0"
+  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_destroy_nodes?ref=6.2.0"
   count  = var.enable_cleanup_compute ? 1 : 0
 
   slurm_cluster_name = local.slurm_cluster_name
@@ -162,7 +160,7 @@ module "cleanup_compute_nodes" {
 
 # Destroy all resource policies on `terraform destroy`
 module "cleanup_resource_policies" {
-  source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_destroy_resource_policies?ref=6.2.0"
+  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_destroy_resource_policies?ref=6.2.0"
   count  = var.enable_cleanup_compute ? 1 : 0
 
   slurm_cluster_name = local.slurm_cluster_name

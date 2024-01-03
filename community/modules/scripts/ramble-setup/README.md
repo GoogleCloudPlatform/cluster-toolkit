@@ -99,9 +99,9 @@ limitations under the License.
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_chgrp_group"></a> [chgrp\_group](#input\_chgrp\_group) | Group to chgrp the Ramble clone to. Default will not modify the clone. | `string` | `null` | no |
-| <a name="input_chmod_mode"></a> [chmod\_mode](#input\_chmod\_mode) | Mode to chmod the Ramble clone to. Defaults to null (i.e. do not modify).<br>For usage information see:<br>https://docs.ansible.com/ansible/latest/collections/ansible/builtin/file_module.html#parameter-mode | `string` | `null` | no |
-| <a name="input_chown_owner"></a> [chown\_owner](#input\_chown\_owner) | Owner to chown the Ramble clone to. Default will not modify the clone. | `string` | `null` | no |
+| <a name="input_chgrp_group"></a> [chgrp\_group](#input\_chgrp\_group) | Deprecated: installation will be owned by group of `system_user_name`. If special group is needed, supply user with group assigned. | `string` | `null` | no |
+| <a name="input_chmod_mode"></a> [chmod\_mode](#input\_chmod\_mode) | Mode to chmod the Ramble clone to. Defaults to `""` (i.e. do not modify).<br>For usage information see:<br>https://docs.ansible.com/ansible/latest/collections/ansible/builtin/file_module.html#parameter-mode | `string` | `""` | no |
+| <a name="input_chown_owner"></a> [chown\_owner](#input\_chown\_owner) | Deprecated: use `system_user_name`. | `string` | `null` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of deployment, used to name bucket containing startup script. | `string` | n/a | yes |
 | <a name="input_install_dir"></a> [install\_dir](#input\_install\_dir) | Destination directory of installation of Ramble. | `string` | `"/apps/ramble"` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Key-value pairs of labels to be added to created resources. | `map(string)` | n/a | yes |
@@ -111,6 +111,9 @@ limitations under the License.
 | <a name="input_ramble_url"></a> [ramble\_url](#input\_ramble\_url) | URL for Ramble repository to clone. | `string` | `"https://github.com/GoogleCloudPlatform/ramble"` | no |
 | <a name="input_ramble_virtualenv_path"></a> [ramble\_virtualenv\_path](#input\_ramble\_virtualenv\_path) | Virtual environment path in which to install Ramble Python interpreter and other dependencies | `string` | `"/usr/local/ramble-python"` | no |
 | <a name="input_region"></a> [region](#input\_region) | Region to place bucket containing startup script. | `string` | n/a | yes |
+| <a name="input_system_user_gid"></a> [system\_user\_gid](#input\_system\_user\_gid) | GID used when creating system user group. Ignored if `system_user_name` already exists on system. Default of 1104762904 is arbitrary. | `number` | `1104762904` | no |
+| <a name="input_system_user_name"></a> [system\_user\_name](#input\_system\_user\_name) | Name of system user that will perform installation of Ramble. It will be created if it does not exist. | `string` | `"ramble"` | no |
+| <a name="input_system_user_uid"></a> [system\_user\_uid](#input\_system\_user\_uid) | UID used when creating system user. Ignored if `system_user_name` already exists on system. Default of 1104762904 is arbitrary. | `number` | `1104762904` | no |
 
 ## Outputs
 
@@ -123,4 +126,5 @@ limitations under the License.
 | <a name="output_ramble_ref"></a> [ramble\_ref](#output\_ramble\_ref) | Git ref the ramble install is checked out to use |
 | <a name="output_ramble_runner"></a> [ramble\_runner](#output\_ramble\_runner) | Runner to be used with startup-script module or passed to ramble-execute module.<br>- installs Ramble dependencies<br>- installs Ramble<br>- generates profile.d script to enable access to Ramble<br>This is safe to run in parallel by multiple machines. |
 | <a name="output_startup_script"></a> [startup\_script](#output\_startup\_script) | Ramble installation script. |
+| <a name="output_system_user_name"></a> [system\_user\_name](#output\_system\_user\_name) | The system user used to install Ramble. It can be reused by ramble-execute module to execute Ramble commands. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

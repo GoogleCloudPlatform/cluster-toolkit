@@ -1,3 +1,39 @@
+## Description
+
+This module creates partition of [TPU](https://cloud.google.com/tpu/docs/intro-to-tpu) nodeset.
+TPUs are Google's custom-developed application specific ICs to accelerate machine
+learning workloads.
+
+### Example
+
+The following code snippet creates TPU partition with following attributes.
+
+- TPU nodeset module is connected to `network` module.
+- TPU nodeset is of type `v2-8` and version `2.10.0`, you can check different configuration [configuration](https://cloud.google.com/tpu/docs/supported-tpu-configurations)
+- TPU vms are preemptible.
+- `preserve_tpu` is set to false. This means, suspended vms will be deleted.
+- Partition module uses this defined `tpu_nodeset` module and this partition can
+be accessed as `tpu` partition.
+
+```yaml
+  - id: tpu_nodeset
+    source: ./community/modules/compute/schedmd-slurm-gcp-v6-nodeset-tpu
+    use: [network]
+    settings:
+      name: v2x8
+      node_type: v2-8
+      tf_version: 2.10.0
+      disable_public_ips: false
+      preemptible: true
+      preserve_tpu: false
+
+  - id: tpu_partition
+    source: ./community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use: [tpu_nodeset]
+    settings:
+      partition_name: tpu
+```
+
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 ## Requirements
 
@@ -32,7 +68,7 @@ No resources.
 | <a name="input_preemptible"></a> [preemptible](#input\_preemptible) | Should use preemptibles to burst. | `bool` | `false` | no |
 | <a name="input_preserve_tpu"></a> [preserve\_tpu](#input\_preserve\_tpu) | Specify whether TPU-vms will get preserve on suspend, if set to true, on suspend vm is stopped, on false it gets deleted | `bool` | `true` | no |
 | <a name="input_service_account"></a> [service\_account](#input\_service\_account) | Service account to attach to the TPU-vm. If none is given, the default service account and scopes will be used. | <pre>object({<br>    email  = string<br>    scopes = set(string)<br>  })</pre> | `null` | no |
-| <a name="input_subnetwork_self_link"></a> [subnetwork\_self\_link](#input\_subnetwork\_self\_link) | The name of the subnetwork to attach the TPU-vm of this nodeset to. | `string` | `null` | no |
+| <a name="input_subnetwork_self_link"></a> [subnetwork\_self\_link](#input\_subnetwork\_self\_link) | The name of the subnetwork to attach the TPU-vm of this nodeset to. | `string` | n/a | yes |
 | <a name="input_tf_version"></a> [tf\_version](#input\_tf\_version) | Nodeset Tensorflow version, see https://cloud.google.com/tpu/docs/supported-tpu-configurations#tpu_vm for details. | `string` | `"2.9.1"` | no |
 | <a name="input_zone"></a> [zone](#input\_zone) | Zone in which to create compute VMs. Additional zones in the same region can be specified in var.zones. | `string` | n/a | yes |
 

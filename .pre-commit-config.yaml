@@ -39,6 +39,7 @@ repos:
     entry: tools/autodoc/terraform_docs.sh
     language: script
     files: ^.*\.pkr\.hcl$
+    exclude: (pkg\/.*$)|(tools/validate_configs/golden_copies/.*)
     pass_filenames: true
     require_serial: true
   - id: duplicate-diff
@@ -72,15 +73,14 @@ repos:
   - id: go-vet
   - id: go-imports
   - id: go-cyclo
-    args: [-over=15]
+    args: [-over=13]
   - id: go-unit-tests
-  - id: go-build
   - id: go-mod-tidy
-- repo: https://github.com/tekwizely/pre-commit-golang
-  rev: v1.0.0-rc.1
-  hooks:
-  - id: go-critic
-    args: [-disable, "#experimental,sloppyTypeAssert"]
+# Disabled temporarily due to https://github.com/go-critic/go-critic/issues/1388
+# - repo: https://github.com/tekwizely/pre-commit-golang
+#   rev: v1.0.0-rc.1
+#   hooks:
+#   - id: go-critic
 - repo: https://github.com/Bahjat/pre-commit-golang
   rev: v1.0.2
   hooks:
@@ -117,5 +117,5 @@ repos:
   rev: v2.2.6
   hooks:
   - id: codespell
-    exclude: requirements.txt$|/js/
+    exclude: requirements.txt$|/js/|go.sum$
 exclude: tools/validate_configs/golden_copies/.*

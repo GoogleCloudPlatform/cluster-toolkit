@@ -37,9 +37,9 @@ module "bucket" {
     (local.synth_bucket_name) = true
   }
 
-  labels = {
+  labels = merge(local.labels, {
     slurm_cluster_name = local.slurm_cluster_name
-  }
+  })
 }
 
 # BUCKET IAMs
@@ -87,7 +87,7 @@ locals {
 }
 
 module "slurm_files" {
-  source = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_files?ref=6.2.0"
+  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_files?ref=6.2.0"
 
   project_id         = var.project_id
   slurm_cluster_name = local.slurm_cluster_name
@@ -113,9 +113,10 @@ module "slurm_files" {
   enable_debug_logging = var.enable_debug_logging
   extra_logging_flags  = var.extra_logging_flags
 
-  enable_bigquery_load = var.enable_bigquery_load
-  epilog_scripts       = var.epilog_scripts
-  prolog_scripts       = var.prolog_scripts
+  enable_bigquery_load     = var.enable_bigquery_load
+  epilog_scripts           = var.epilog_scripts
+  prolog_scripts           = var.prolog_scripts
+  enable_slurm_gcp_plugins = var.enable_slurm_gcp_plugins
 
   disable_default_mounts = var.disable_default_mounts
   network_storage        = var.network_storage

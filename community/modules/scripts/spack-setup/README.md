@@ -119,6 +119,122 @@ sudo -i spack python -m pip install package-name
 [SPACK_PYTHON]: https://spack.readthedocs.io/en/latest/getting_started.html#shell-support
 [builds]: https://spack.readthedocs.io/en/latest/binary_caches.html
 
+## Spack Permissions
+
+### System `spack` user is created - Default
+
+By default this module will create a `spack` linux user and group with
+consistent UID and GID. This user and group will own the Spack installation. To
+allow a user to manually add Spack packages to the system Spack installation,
+you can add the user to the spack group:
+
+```sh
+sudo usermod -a -G spack <username>
+```
+
+Log out and back in so the group change will take effect, then `<username>` will
+be able to call `spack install <package>`.
+
+You can use the `system_user_name`, `system_user_uid`, and `system_user_gid` to
+customize the name and ids of the system user. While unlikely, it is possible
+that the default `system_user_uid` or `system_user_gid` could conflict with
+existing UIDs.
+
+### Use and existing user
+
+Alternatively, if `system_user_name` is a user already on the system, then this
+existing user will be used for Spack installation.
+
+#### OS Login User
+
+If OS Login is enabled (default for most HPC Toolkit modules) then you can
+provide an OS Login user name:
+
+```yaml
+  - id: spack-setup
+    source: community/modules/scripts/spack-setup
+    settings:
+      system_user_name: username_company_com
+```
+
+This will work even if the user has not yet logged onto the machine. When the
+specified user does log on to the machine they will be able to call
+`spack install` without any further configuration.
+
+#### Pre-configured user
+
+You can also use a startup script to configure a user:
+
+```yaml
+  - id: spack-setup
+    source: community/modules/scripts/spack-setup
+    settings:
+      system_user_name: special-user
+
+  - id: startup
+    source: modules/scripts/startup-script
+    settings:
+      runners:
+        - type: shell
+          destination: "create_user.sh"
+          content: |
+            #!/bin/bash
+            sudo useradd -u 799 special-user
+            sudo groupadd -g 922 org-group
+            sudo usermod -g org-group special-user
+        - $(spack-setup.spack_runner)
+
+  - id: spack-vms
+    source: modules/compute/vm-instance
+    use: [network1, startup]
+    settings:
+      name_prefix: spack-vm
+      machine_type: n2d-standard-2
+      instance_count: 5
+```
+
+### Chaining spack installations
+
+If there is a need to have a non-root user to install spack packages it is
+recommended to create a separate installation for that user and chain Spack installations
+([Spack docs](https://spack.readthedocs.io/en/latest/chain.html#chaining-spack-installations)).
+
+Steps to chain Spack installations:
+
+1. Get the version of the system Spack:
+
+    ```sh
+    $ spack --version
+
+    0.20.0 (e493ab31c6f81a9e415a4b0e0e2263374c61e758)
+    #       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    # Note commit hash and use in next step
+    ```
+
+1. Clone a new spack installation:
+
+    ```sh
+    git clone -c feature.manyFiles=true https://github.com/spack/spack.git <new_location>/spack
+    git -C <new_location>/spack checkout <commit_hash>
+    ```
+
+1. Point the new Spack installation to the system Spack installation. Create a
+   file at `<new_location>/spack/etc/spack/upstreams.yaml` with the following
+   contents:
+
+    ```yaml
+    upstreams:
+      spack-instance-1:
+        install_tree: /sw/spack/opt/spack/
+    ```
+
+1. Add the following line to your `.bashrc` to make sure the new `spack` is in
+   your `PATH`.
+
+   ```sh
+   . <new_location>/spack/share/spack/setup-env.sh
+   ```
+
 ## Deprecations and Breaking Changes
 
 The old `spack-install` module has been replaced by the `spack-setup` and
@@ -234,9 +350,9 @@ limitations under the License.
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | <a name="input_caches_to_populate"></a> [caches\_to\_populate](#input\_caches\_to\_populate) | DEPRECATED<br><br>Use [spack-execute](../spack-execute/) module with the following `commands` can be used to populate a cache:<pre>MIRROR_URL=gs://my-bucket<br>spack buildcache create --mirror-url $MIRROR_URL -af \$(spack find --format /{hash});<br>spack gpg publish --mirror-url $MIRROR_URL;<br>spack buildcache update-index --mirror-url $MIRROR_URL --keys;</pre>Defines caches which will be populated with the installed packages.<br><br>NOTE: GPG Keys should be installed before trying to populate a cache<br>with packages.<br><br>NOTE: The gpg\_keys variable can be used to install existing GPG keys<br>and create new GPG keys, both of which are acceptable for populating a<br>cache. | `list(map(any))` | `null` | no |
-| <a name="input_chgrp_group"></a> [chgrp\_group](#input\_chgrp\_group) | Group to chgrp the Spack clone to. Default will not modify the clone. | `string` | `null` | no |
-| <a name="input_chmod_mode"></a> [chmod\_mode](#input\_chmod\_mode) | Mode to chmod the Spack clone to. Defaults to null (i.e. do not modify).<br>For usage information see:<br>https://docs.ansible.com/ansible/latest/collections/ansible/builtin/file_module.html#parameter-mode | `string` | `null` | no |
-| <a name="input_chown_owner"></a> [chown\_owner](#input\_chown\_owner) | Owner to chown the Spack clone to. Default will not modify the clone. | `string` | `null` | no |
+| <a name="input_chgrp_group"></a> [chgrp\_group](#input\_chgrp\_group) | Deprecated: installation will be owned by group of `system_user_name`. If special group is needed, supply user with group assigned. | `string` | `null` | no |
+| <a name="input_chmod_mode"></a> [chmod\_mode](#input\_chmod\_mode) | `chmod` to apply to the Spack installation. Adds group write by default. Set to `""` (empty string) to prevent modification.<br>For usage information see:<br>https://docs.ansible.com/ansible/latest/collections/ansible/builtin/file_module.html#parameter-mode | `string` | `"g+w"` | no |
+| <a name="input_chown_owner"></a> [chown\_owner](#input\_chown\_owner) | Deprecated: use `system_user_name`. | `string` | `null` | no |
 | <a name="input_compilers"></a> [compilers](#input\_compilers) | DEPRECATED<br><br>Use [spack-execute](../spack-execute/) module with the following `commands` can be used to install compilers:<pre>spack install gcc@10.3.0 target=x86_64<br>spack load gcc@10.3.0 target=x86_64<br>spack compiler find --scope site<br>spack clean -s<br>spack unload gcc@10.3.0</pre>Defines compilers for spack to install before installing packages. | `list(string)` | `null` | no |
 | <a name="input_concretize_flags"></a> [concretize\_flags](#input\_concretize\_flags) | DEPRECATED - spack concretize is now performed using the [spack-execute](../spack-execute/) module `commands` variable. | `string` | `null` | no |
 | <a name="input_configs"></a> [configs](#input\_configs) | DEPRECATED<br><br>Use [spack-execute](../spack-execute/) module with the following `commands` can be used to add a single config:<pre>spack config --scope defaults add config:default:true</pre>Alternatively, use `data_files` to transfer a config file and use the `spack config add -f <file>` command to add the config.<br><br>List of configuration options to set within spack. | `list(map(any))` | `null` | no |
@@ -257,6 +373,9 @@ limitations under the License.
 | <a name="input_spack_ref"></a> [spack\_ref](#input\_spack\_ref) | Git ref to checkout for spack. | `string` | `"v0.20.0"` | no |
 | <a name="input_spack_url"></a> [spack\_url](#input\_spack\_url) | URL to clone the spack repo from. | `string` | `"https://github.com/spack/spack"` | no |
 | <a name="input_spack_virtualenv_path"></a> [spack\_virtualenv\_path](#input\_spack\_virtualenv\_path) | Virtual environment path in which to install Spack Python interpreter and other dependencies | `string` | `"/usr/local/spack-python"` | no |
+| <a name="input_system_user_gid"></a> [system\_user\_gid](#input\_system\_user\_gid) | GID used when creating system user group. Ignored if `system_user_name` already exists on system. Default of 1104762903 is arbitrary. | `number` | `1104762903` | no |
+| <a name="input_system_user_name"></a> [system\_user\_name](#input\_system\_user\_name) | Name of system user that will perform installation of Spack. It will be created if it does not exist. | `string` | `"spack"` | no |
+| <a name="input_system_user_uid"></a> [system\_user\_uid](#input\_system\_user\_uid) | UID used when creating system user. Ignored if `system_user_name` already exists on system. Default of 1104762903 is arbitrary. | `number` | `1104762903` | no |
 
 ## Outputs
 
@@ -268,4 +387,5 @@ limitations under the License.
 | <a name="output_spack_profile_script_path"></a> [spack\_profile\_script\_path](#output\_spack\_profile\_script\_path) | Path to the Spack profile.d script. |
 | <a name="output_spack_runner"></a> [spack\_runner](#output\_spack\_runner) | Runner to be used with startup-script module or passed to spack-execute module.<br>- installs Spack dependencies<br>- installs Spack <br>- generates profile.d script to enable access to Spack<br>This is safe to run in parallel by multiple machines. Use in place of deprecated `setup_spack_runner`. |
 | <a name="output_startup_script"></a> [startup\_script](#output\_startup\_script) | Spack installation script. |
+| <a name="output_system_user_name"></a> [system\_user\_name](#output\_system\_user\_name) | The system user used to install Spack. It can be reused by spack-execute module to install spack packages. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

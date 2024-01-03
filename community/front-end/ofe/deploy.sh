@@ -53,6 +53,8 @@ PRJ_API['iam.googleapis.com']='Identity and Access Management (IAM) API'
 PRJ_API['oslogin.googleapis.com']='Cloud OS Login API'
 PRJ_API['cloudbilling.googleapis.com']='Cloud Billing API'
 PRJ_API['aiplatform.googleapis.com']='Vertex AI API'
+PRJ_API['bigqueryconnection.googleapis.com']='BigQuery Connection API'
+PRJ_API['sqladmin.googleapis.com']='Cloud SQL Admin API'
 
 # Location for output credential file = pwd/credential.json
 #
@@ -128,6 +130,9 @@ HELP1
     subnet_name:                 Name of the subnet to use for the deployment
     dns_hostname:                Hostname to assign to the deployment's IP address
     ip_address:                  Static IP address to use for the deployment
+	deployment_mode:             The mode used to deploy the FrontEnd, which must be either 'git' or 'tarball'
+	repo_fork:					 The GitHub owner of the forked repo that is used for the deployment, if the 'git' deployment mode is used
+	repo_branch:				 The git branch of the forked repo that is used for the deployment, if the 'git' deployment mode is used
   
   To set the Django superuser password securely, you can set the DJANGO_SUPERUSER_PASSWORD
   environment variable with the password you want to use, like this:
@@ -156,6 +161,9 @@ HELP1
   django_superuser_username: sysadm
   django_superuser_password: Passw0rd! (optional if DJANGO_SUPERUSER_PASSWORD is passed)
   django_superuser_email: sysadmin@example.com
+  deployment_mode: git (optional)
+  repo_fork: GoogleCloudPlatform (optional)
+  repo_branch: develop (optional)
 
 HELP2
 }
@@ -500,18 +508,11 @@ deploy() {
 	if [ "${deployment_mode}" == "tarball" ]; then
 
 		basedir=$(git rev-parse --show-toplevel)
-		sdir=${SCRIPT_DIR#"${basedir}"}
 		tdir=/tmp/hpc-toolkit
 
 		cp -R "${basedir}" ${tdir}/
 		(
 			cd ${tdir}
-			#
-			# Shuffle contents to put paths where they are expected to be
-			# TODO: remove hardwired paths in TKFE source code
-			#
-			mkdir -p community/front-end
-			mv ${tdir}"${sdir}"/* community/front-end/
 
 			tar -zcf "${SCRIPT_DIR}"/tf/deployment.tar.gz \
 				--exclude=.terraform \
@@ -520,6 +521,7 @@ deploy() {
 				--directory=/tmp \
 				./hpc-toolkit 2>/dev/null
 		)
+
 		rm -rf ${tdir}
 	fi
 
@@ -555,21 +557,14 @@ TFVARS
 			echo "static_ip = \"${ip_address}\"" >>terraform.tfvars
 		fi
 
-		#### git deployment not yet available - commented out, reinstate later
-		####
-		#### - will need to make sure paths are modified
-		#
-		#    if [ "${deployment}" == "git" ]; then
-		#	echo "Will clone hpc-toolkit from github.com/${REPO_FORK:-GoogleCloudPlatform}.git branch ${REPO_BRANCH:-main}."
-		#	echo "Set REPO_BRANCH and REPO_FORK environment variables to override"
-		#
-		#	cat >>terraform.tfvars <<+
-		#    repo_branch = "${REPO_BRANCH:-main}"
-		#    repo_fork = "${REPO_FORK:-GoogleCloudPlatform}"
-		#    deployment_key = "${deploy_key}"
-		#+
-		#    fi
-		####
+		if [ "${deployment_mode}" == "git" ]; then
+			echo "Will clone hpc-toolkit from github.com/${repo_fork}/hpc-toolkit.git ${repo_branch} branch."
+
+			cat <<-END >>terraform.tfvars
+				repo_fork = "${repo_fork}"
+				repo_branch = "${repo_branch}"
+			END
+		fi
 
 		echo ""
 		#    echo "terraform.tfvars file has been created in the 'tf' directory."
@@ -850,42 +845,28 @@ SERVICEACC
 
 	esac
 
-	#
-	# For now, we have restricted deployment to only be via tarball
-	#
-	# TODO - Reinstate option to deploy from git, once close to formal release
-	#        and location and access to open repository is available.
-	#
-	#        Will need to make sure that names, etc., are correct and don't
-	#        break deployment and startup scripts (e.g. 'root' directory name
-	#        must be "hpc-toolkit")
-	#
-	#echo ""
-	#echo "Please select deployment method of server software:"
-	#echo "  1) Use a copy of the code from this computer"
-	#echo "  2) Clone the git repo when server deploys"
-	#deploy_choice=$(ask "  Please choose one of the above options", "1")
-	#if [ "${deploy_choice}" == "1" ]; then
-	#	deployment_mode="tarball"
-	#elif [ "${deploy_choice}" == "2" ]; then
-	#	deployment_mode="git"
-	#	deploy_key=$(ask "For Git clones, please specify the path to the deployment key")
-	#	if [ ! -r "${deploy_key}" ]; then
-	#		error "Deployment key file cannot be read."
-	#		exit 1
-	#	fi
-	#	deploy_key=$(realpath "${deploy_key}")
-	#else
-	#	error "Invalid selection"
-	#	exit 1
-	#fi
-	deployment_mode="tarball"
+	echo ""
+	echo "Please select deployment method of server software:"
+	echo "  1) Clone the git repo when server deploys"
+	echo "  2) Use a copy of the code from this computer"
+	deploy_choice=$(ask "  Please choose one of the above options", "1")
+	if [ "${deploy_choice}" == "1" ]; then
+		deployment_mode="git"
+		repo_fork=$(ask "Please specify the forked repo owner (or just press Enter)", "GoogleCloudPlatform")
+		repo_branch=$(ask "Please specify the forked repo branch (or just press Enter)", "main")
+	elif [ "${deploy_choice}" == "2" ]; then
+		deployment_mode="tarball"
+	else
+		error "Invalid selection"
+		exit 1
+	fi
 
 	# -- Summarise entered parameters back to user
 	#
 	echo ""
 	echo "***  Deployment summary:  ***"
 	echo ""
+	echo "    Deploymnet mode:  ${deployment_mode}"
 	echo "    Deployment name:  ${deployment_name}"
 	echo "    GCP project ID:   ${project_id}"
 	echo "    GCP zone:         ${zone}"
@@ -935,6 +916,9 @@ deploy_from_config() {
 	ip_address=${yaml_array[ip_address]}
 	django_superuser_username=${yaml_array[django_superuser_username]}
 	django_superuser_email=${yaml_array[django_superuser_email]}
+	deployment_mode=${yaml_array[deployment_mode]:-tarball}
+	repo_fork=${yaml_array[repo_fork]:-GoogleCloudPlatform}
+	repo_branch=${yaml_array[repo_branch]:-main}
 
 	# Set password from environment variable if it exists, otherwise from YAML file
 	if [[ -n ${DJANGO_SUPERUSER_PASSWORD+x} ]]; then
@@ -954,6 +938,7 @@ deploy_from_config() {
 	echo ""
 	echo "***  Deployment summary:  ***"
 	echo ""
+	echo "    Deploymnet mode:  ${deployment_mode}"
 	echo "    Deployment name:  ${deployment_name}"
 	echo "    GCP project ID:   ${project_id}"
 	echo "    GCP zone:         ${zone}"
@@ -977,7 +962,6 @@ deploy_from_config() {
 	echo "    Admin email:      ${django_superuser_email}"
 	echo ""
 
-	deployment_mode="tarball"
 	deploy
 }
 
