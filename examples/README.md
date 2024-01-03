@@ -14,6 +14,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [hpc-slurm.yaml](#hpc-slurmyaml-) ![core-badge]
   * [hpc-enterprise-slurm.yaml](#hpc-enterprise-slurmyaml-) ![core-badge]
   * [hpc-slurm6.yaml](#hpc-slurm6yaml-) ![community-badge] ![experimental-badge]
+  * [hpc-slurm6-tpu.yaml](#hpc-slurm6-tpuyaml-) ![community-badge] ![experimental-badge]
   * [ml-slurm.yaml](#ml-slurmyaml-) ![core-badge]
   * [image-builder.yaml](#image-builderyaml-) ![core-badge]
   * [serverless-batch.yaml](#serverless-batchyaml-) ![core-badge]
@@ -293,6 +294,19 @@ performance analysis should be done on the `compute` partition. By default it
 uses `c2-standard-60` VMs with placement groups enabled. You may need to request
 additional quota for `C2 CPUs` in the region you are deploying in. You can
 select the compute partition using the `-p compute` argument when running `srun`.
+
+### [hpc-slurm6-tpu.yaml] ![community-badge] ![experimental-badge]
+
+> **Warning**: Requires additional dependencies **to be installed on the system deploying the infrastructure**.
+>
+> ```shell
+> # Install Python3 and run
+> pip3 install -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/6.2.1/scripts/requirements.txt
+> ```
+
+Creates an auto-scaling Slurm cluster with TPU nodes.
+
+[hpc-slurm6-tpu.yaml]: ../community/examples/hpc-slurm6-tpu.yaml
 
 ### [ml-slurm.yaml] ![core-badge]
 
