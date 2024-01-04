@@ -120,18 +120,18 @@ func writeTfvars(vars map[string]cty.Value, dst string) error {
 	return err
 }
 
-func getHclType(t cty.Type) string {
+func relaxVarType(t cty.Type) cty.Type {
 	if t.IsPrimitiveType() {
-		return typeexpr.TypeString(t)
+		return t
 	}
 	if t.IsListType() || t.IsTupleType() || t.IsSetType() {
-		return "list"
+		return cty.List(cty.DynamicPseudoType) // list of any
 	}
-	return typeexpr.TypeString(cty.DynamicPseudoType) // any
+	return cty.DynamicPseudoType // any
 }
 
-func getTypeTokens(v cty.Value) hclwrite.Tokens {
-	return simpleTokens(getHclType(v.Type()))
+func getTypeTokens(ty cty.Type) hclwrite.Tokens {
+	return simpleTokens(typeexpr.TypeString(ty))
 }
 
 func writeVariables(vars map[string]cty.Value, extraVars []modulereader.VarInfo, dst string) error {
@@ -143,13 +143,11 @@ func writeVariables(vars map[string]cty.Value, extraVars []modulereader.VarInfo,
 
 	var inputs []modulereader.VarInfo
 	for k, v := range vars {
-		typeStr := getHclType(v.Type())
-		newInput := modulereader.VarInfo{
+		inputs = append(inputs, modulereader.VarInfo{
 			Name:        k,
-			Type:        typeStr,
+			Type:        relaxVarType(v.Type()),
 			Description: fmt.Sprintf("Toolkit deployment variable: %s", k),
-		}
-		inputs = append(inputs, newInput)
+		})
 	}
 	inputs = append(inputs, extraVars...)
 	slices.SortFunc(inputs, func(i, j modulereader.VarInfo) int { return strings.Compare(i.Name, j.Name) })
@@ -164,7 +162,7 @@ func writeVariables(vars map[string]cty.Value, extraVars []modulereader.VarInfo,
 		hclBlock := hclBody.AppendNewBlock("variable", []string{k.Name})
 		blockBody := hclBlock.Body()
 		blockBody.SetAttributeValue("description", cty.StringVal(k.Description))
-		blockBody.SetAttributeRaw("type", simpleTokens(k.Type))
+		blockBody.SetAttributeRaw("type", getTypeTokens(k.Type))
 	}
 
 	// Write file
@@ -446,7 +444,7 @@ func FindIntergroupVariables(group config.DeploymentGroup, bp config.Blueprint) 
 		n := config.AutomaticOutputName(r.Name, r.Module)
 		res[r] = modulereader.VarInfo{
 			Name:        n,
-			Type:        getHclType(cty.DynamicPseudoType),
+			Type:        cty.DynamicPseudoType,
 			Description: "Automatically generated input from previous groups (ghpc import-inputs --help)",
 			Required:    true,
 		}

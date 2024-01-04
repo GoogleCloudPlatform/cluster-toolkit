@@ -18,7 +18,6 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
-	"strings"
 
 	"hpc-toolkit/pkg/modulereader"
 
@@ -121,8 +120,8 @@ func (dc *DeploymentConfig) expandBackends() {
 	}
 }
 
-func getModuleInputMap(inputs []modulereader.VarInfo) map[string]string {
-	modInputs := make(map[string]string)
+func getModuleInputMap(inputs []modulereader.VarInfo) map[string]cty.Type {
+	modInputs := make(map[string]cty.Type)
 	for _, input := range inputs {
 		modInputs[input.Name] = input.Type
 	}
@@ -178,7 +177,7 @@ func useModule(mod *Module, use Module) {
 
 		// skip settings that are not of list type, but already have a value
 		// these were probably added by a previous call to this function
-		isList := strings.HasPrefix(inputType, "list")
+		isList := inputType.IsListType()
 		if alreadySet && !isList {
 			continue
 		}
