@@ -337,10 +337,11 @@ b: null
 c: ~
 d: "null"
 `
+	anyNull := cty.NullVal(cty.DynamicPseudoType)
 	want := cty.ObjectVal(map[string]cty.Value{
-		"a": cty.NilVal,
-		"b": cty.NilVal,
-		"c": cty.NilVal,
+		"a": anyNull,
+		"b": anyNull,
+		"c": anyNull,
 		"d": cty.StringVal("null"),
 	})
 

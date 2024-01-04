@@ -23,6 +23,7 @@ import (
 
 	"github.com/agext/levenshtein"
 	"github.com/zclconf/go-cty/cty"
+	"github.com/zclconf/go-cty/cty/convert"
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
 )
@@ -87,9 +88,36 @@ func validateModuleInputs(mp modulePath, m Module, bp Blueprint) error {
 			continue
 		}
 
-		// TODO: Check set value and input dtypes convertability
+		errs.At(ip, checkInputValueMatchesType(m.Settings.Get(input.Name), input, bp))
 	}
 	return errs.OrNil()
+}
+
+func attemptEvalModuleInput(val cty.Value, bp Blueprint) (cty.Value, bool) {
+	v, err := evalValue(val, bp)
+	// there could be a legitimate reasons for it.
+	// e.g. use of modules output or unsupported (by ghpc) functions
+	// TODO:
+	// * substitute module outputs with an UnknownValue
+	// * skip if uses functions with side-effects, e.g. `file`
+	// * add implementation of all pure terraform functions
+	// * add positive selection for eval-errors to bubble up
+	return v, err == nil
+}
+
+func checkInputValueMatchesType(val cty.Value, input modulereader.VarInfo, bp Blueprint) error {
+	v, ok := attemptEvalModuleInput(val, bp)
+	if !ok || input.Type == cty.NilType {
+		return nil // skip, can do nothing
+	}
+	// cty does panic on some edge cases, e.g. (cty.NilVal)
+	// we don't anticipate any of those, but just in case, catch panic and swallow it
+	defer func() { recover() }()
+	// TODO: consider returning error (not panic) or logging warning
+	if _, err := convert.Convert(v, input.Type); err != nil {
+		return fmt.Errorf("unsuitable value for %q: %w", input.Name, err)
+	}
+	return nil
 }
 
 func (dc *DeploymentConfig) expandBackends() {

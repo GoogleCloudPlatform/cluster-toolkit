@@ -58,8 +58,8 @@ func (s *MySuite) getDeploymentConfigForTest() config.DeploymentConfig {
 		Kind:   config.TerraformKind,
 		ID:     "testModule",
 		Settings: config.NewDict(map[string]cty.Value{
-			"deployment_name": cty.NilVal,
-			"project_id":      cty.NilVal,
+			"deployment_name": cty.NullVal(cty.String),
+			"project_id":      cty.NullVal(cty.String),
 		}),
 		Outputs: []modulereader.OutputInfo{
 			{
