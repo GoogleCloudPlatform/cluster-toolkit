@@ -5,7 +5,7 @@ easy for customers to deploy HPC environments on Google Cloud.
 
 In this tutorial you will use the HPC Toolkit to:
 
-* Deploy a [Slurm](https://github.com/SchedMD/slurm-gcp#readme) HPC cluster on
+* Deploy a [Slurm](https://github.com/GoogleCloudPlatform/slurm-gcp#readme) HPC cluster on
   Google Cloud
 * Use [Spack](https://spack.io/) to install the OpenFOAM application and all of
   its dependencies
@@ -13,10 +13,10 @@ In this tutorial you will use the HPC Toolkit to:
   cluster
 * Tear down the cluster
 
-Estimated time to complete:  
-The tutorial takes 3 hr. to complete,  
-of which 2.5 hr is for installing software  
-(without cache).  
+Estimated time to complete:
+The tutorial takes 3 hr. to complete,
+of which 2.5 hr is for installing software
+(without cache).
 
 > **_NOTE:_** With a complete Spack cache, the tutorial takes 30 min.
 
@@ -31,7 +31,7 @@ Once you have selected a project, click START.
 ## Enable APIs & Permissions
 
 In a new Google Cloud project there are several apis that must be enabled to
-deploy your HPC cluster. These will be caught when you perform `terraform apply`
+deploy your HPC cluster. These will be caught when you perform `./ghpc create`
 but you can save time by enabling them now by running:
 
 <walkthrough-enable-apis apis="file.googleapis.com,compute.googleapis.com,logging.googleapis.com,serviceusage.googleapis.com"></walkthrough-enable-apis>
@@ -84,12 +84,8 @@ This file describes the cluster you will deploy. It defines:
   * sets up a Spack environment including downloading an example input deck
   * places a submission script on a shared drive
 * a Slurm cluster
-  * a Slurm login node
   * a Slurm controller
   * An auto-scaling Slurm partition
-
-[This diagram](https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/application_demo/docs/tutorials/application_demo.md#blueprint-diagram)
-shows how the different modules relate to each other.
 
 After you have inspected the file, use the ghpc binary to create a deployment
 folder by running:
@@ -106,24 +102,19 @@ contains the terraform needed to deploy your cluster.
 
 ## Deploy the Cluster
 
-Use the following commands to run terraform and deploy your cluster.
+Use below command to deploy your cluster.
+
+```bash
+./ghpc deploy spack-openfoam
+```
+
+You can also use below command to generate a _plan_ that describes the Google
+Cloud resources that will be deployed.
 
 ```bash
 terraform -chdir=spack-openfoam/primary init
 terraform -chdir=spack-openfoam/primary apply
 ```
-
-The `terraform apply` command will generate a _plan_ that describes the Google
-Cloud resources that will be deployed.
-
-You can review the plan and then start the deployment by typing
-**`yes [enter]`**.
-
-The deployment will take about 30 seconds. There should be regular status updates
-in the terminal.
-
-If the `apply` is successful, a message similar to the following will be
-displayed:
 
 <!-- Note: Bash blocks give "copy to cloud shell" option.  -->
 <!-- "shell" or "text" is used in places where command should not be run in cloud shell. -->
@@ -153,21 +144,21 @@ the final output from the above command:
 
 Optionally while you wait, you can see your deployed VMs on Google Cloud
 Console. Open the link below in a new window. Look for
-`slurm-spack-openfoam-controller` and `slurm-spack-openfoam-login0`. If you don't
+`slurm-spack-openfoam-controller`. If you don't
 see your VMs make sure you have the correct project selected (top left).
 
 ```text
 https://console.cloud.google.com/compute?project=<walkthrough-project-id/>
 ```
 
-## Connecting to the login node
+## Connecting to the controller node
 
-Once the startup script has completed, connect to the login node.
+Once the startup script has completed, connect to the controller node.
 
-Use the following command to ssh into the login node from cloud shell:
+Use the following command to ssh into the controller node from cloud shell:
 
 ```bash
-gcloud compute ssh slurm-spack-openfoam-login0 --zone us-central1-c --project <walkthrough-project-id/>
+gcloud compute ssh spackopenf-controller --zone us-central1-c --project <walkthrough-project-id/>
 ```
 
 You may be prompted to set up SSH. If so follow the prompts and if asked for a
@@ -191,15 +182,15 @@ following instructions:
    https://console.cloud.google.com/compute?project=<walkthrough-project-id/>
    ```
 
-1. Click on the `SSH` button associated with the `slurm-spack-openfoam-login0`
+1. Click on the `SSH` button associated with the `spackopenf-controller`
    instance.
 
    This will open a separate pop up window with a terminal into our newly
-   created Slurm login VM.
+   created Slurm controller VM.
 
 ## Run a Job on the Cluster
 
-   **The commands below should be run on the Slurm login node.**
+   **The commands below should be run on the Slurm controller node.**
 
 We will use the submission script (see line 122 of the blueprint) to submit a
 OpenFOAM job.
@@ -247,7 +238,7 @@ about 5 minutes to run.
 Several files will have been generated in the `test_run/` folder you created.
 
 The `slurm-1.out` file has information on the run such as performance. You can
-view this file by running the following command on the login node:
+view this file by running the following command on the controller node:
 
 ```bash
 cat slurm-*.out
@@ -268,9 +259,9 @@ https://console.cloud.google.com/monitoring/dashboards?project=<walkthrough-proj
 To avoid incurring ongoing charges we will want to destroy our cluster.
 
 For this we need to return to our cloud shell terminal. Run `exit` in the
-terminal to close the SSH connection to the login node:
+terminal to close the SSH connection to the controller node:
 
-> **_NOTE:_** If you are accessing the login node terminal via a separate pop-up
+> **_NOTE:_** If you are accessing the controller node terminal via a separate pop-up
 > then make sure to call `exit` in the pop-up window.
 
 ```bash
@@ -280,7 +271,7 @@ exit
 Run the following command in the cloud shell terminal to destroy the cluster:
 
 ```bash
-terraform -chdir=spack-openfoam/primary destroy -auto-approve
+./ghpc deploy spack-openfoam
 ```
 
 When complete you should see something like:
