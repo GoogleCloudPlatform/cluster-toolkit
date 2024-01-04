@@ -156,10 +156,10 @@ type groupPath struct {
 	basePath
 	Name    basePath              `path:".group"`
 	Backend backendPath           `path:".terraform_backend"`
-	Modules arrayPath[modulePath] `path:".modules"`
+	Modules arrayPath[ModulePath] `path:".modules"`
 }
 
-type modulePath struct {
+type ModulePath struct {
 	basePath
 	Source   basePath              `path:".source"`
 	Kind     basePath              `path:".kind"`
