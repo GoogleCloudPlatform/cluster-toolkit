@@ -16,3 +16,5 @@
 spec:
   requirements:
     services: []
+ghpc:
+  has_to_be_used: true

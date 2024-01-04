@@ -18,3 +18,4 @@ spec:
     services: []
 ghpc:
   inject_module_id: name
+  has_to_be_used: true

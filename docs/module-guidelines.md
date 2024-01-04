@@ -201,5 +201,8 @@ spec:
 ghpc:  # [optional]
   # [optional] `inject_module_id`, if set, will inject blueprint 
   # module id as a value for the module variable `var_name`.
-  inject_module_id: var_name 
+  inject_module_id: var_name
+  # [optional] `has_to_be_used` is a boolean flag, if set to true,
+  # the creation will fail if the module is not used.
+  has_to_be_used: true 
 ```
