@@ -154,6 +154,7 @@ func TestTokensForValueNoLiteral(t *testing.T) {
 				"ba": cty.NumberIntVal(56),
 			})}),
 		"pony.zebra": cty.NilVal,
+		"zanzibar":   cty.NullVal(cty.DynamicPseudoType),
 	})
 	want := hclwrite.NewEmptyFile()
 	want.Body().AppendUnstructuredTokens(hclwrite.TokensForValue(val))
