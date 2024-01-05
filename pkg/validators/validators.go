@@ -15,6 +15,7 @@
 package validators
 
 import (
+	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"strings"
@@ -27,19 +28,15 @@ const regionError = "region %s is not available in project ID %s or your credent
 const zoneError = "zone %s is not available in project ID %s or your credentials do not have permission to access it"
 const zoneInRegionError = "zone %s is not in region %s in project ID %s or your credentials do not have permissions to access it"
 const unusedModuleMsg = "module %q uses module %q, but matching setting and outputs were not found. This may be because the value is set explicitly or set by a prior used module"
+const credentialsHint = "load application default credentials following instructions at https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/README.md#supplying-cloud-credentials-to-terraform"
+
+var ErrNoDefaultCredentials = errors.New("could not find application default credentials")
 
 func handleClientError(e error) error {
 	if strings.Contains(e.Error(), "could not find default credentials") {
-		return hint(
-			fmt.Errorf("could not find application default credentials"),
-			"load application default credentials following instructions at https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/README.md#supplying-cloud-credentials-to-terraform")
+		return config.HintError{Hint: credentialsHint, Err: ErrNoDefaultCredentials}
 	}
 	return e
-}
-
-// TODO: use HintError trait once its implemented
-func hint(err error, h string) error {
-	return fmt.Errorf("%w\n%s", err, h)
 }
 
 const (

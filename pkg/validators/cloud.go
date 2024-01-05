@@ -42,9 +42,9 @@ func getErrorReason(err googleapi.Error) (string, map[string]interface{}) {
 }
 
 func newDisabledServiceError(title string, name string, pid string) error {
-	return hint(
-		fmt.Errorf("%s service is disabled in project %s", title, pid),
-		fmt.Sprintf("%s can be enabled at https://console.cloud.google.com/apis/library/%s?project=%s", title, name, pid))
+	return config.HintError{
+		Hint: fmt.Sprintf("%s can be enabled at https://console.cloud.google.com/apis/library/%s?project=%s", title, name, pid),
+		Err:  fmt.Errorf("%s service is disabled in project %s", title, pid)}
 }
 
 func handleServiceUsageError(err error, pid string) error {
