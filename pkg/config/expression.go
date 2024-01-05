@@ -25,7 +25,6 @@ import (
 	"github.com/zclconf/go-cty/cty"
 	"github.com/zclconf/go-cty/cty/function"
 	"github.com/zclconf/go-cty/cty/function/stdlib"
-	"golang.org/x/exp/maps"
 )
 
 // Reference is data struct that represents a reference to a variable.
@@ -422,17 +421,17 @@ func functions() map[string]function.Function {
 	}
 }
 
-func valueReferences(v cty.Value) []Reference {
-	r := map[Reference]bool{}
-	cty.Walk(v, func(_ cty.Path, v cty.Value) (bool, error) {
+func valueReferences(v cty.Value) map[Reference]cty.Path {
+	r := map[Reference]cty.Path{}
+	cty.Walk(v, func(p cty.Path, v cty.Value) (bool, error) {
 		if e, is := IsExpressionValue(v); is {
 			for _, ref := range e.References() {
-				r[ref] = true
+				r[ref] = p
 			}
 		}
 		return true, nil
 	})
-	return maps.Keys(r)
+	return r
 }
 
 func evalValue(v cty.Value, bp Blueprint) (cty.Value, error) {

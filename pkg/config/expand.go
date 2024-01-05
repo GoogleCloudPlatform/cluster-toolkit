@@ -431,7 +431,7 @@ func (dg DeploymentGroup) FindAllIntergroupReferences(bp Blueprint) []Reference 
 func FindIntergroupReferences(v cty.Value, mod Module, bp Blueprint) []Reference {
 	g := bp.ModuleGroupOrDie(mod.ID)
 	res := []Reference{}
-	for _, r := range valueReferences(v) {
+	for r := range valueReferences(v) {
 		if !r.GlobalVar && bp.ModuleGroupOrDie(r.Module).Name != g.Name {
 			res = append(res, r)
 		}

@@ -302,7 +302,7 @@ func (m Module) ListUnusedModules() ModuleIDs {
 // GetUsedDeploymentVars returns a list of deployment vars used in the given value
 func GetUsedDeploymentVars(val cty.Value) []string {
 	res := []string{}
-	for _, ref := range valueReferences(val) {
+	for ref := range valueReferences(val) {
 		if ref.GlobalVar {
 			res = append(res, ref.Name)
 		}
@@ -647,9 +647,10 @@ func (bp *Blueprint) WalkModules(walker func(*Module) error) error {
 func validateModuleSettingReferences(p modulePath, m Module, bp Blueprint) error {
 	errs := Errors{}
 	for k, v := range m.Settings.Items() {
-		for _, r := range valueReferences(v) {
-			// TODO: add a cty.Path suffix to the errors path for better location
-			errs.At(p.Settings.Dot(k), validateModuleSettingReference(bp, m, r))
+		for r, rp := range valueReferences(v) {
+			errs.At(
+				p.Settings.Dot(k).Cty(rp),
+				validateModuleSettingReference(bp, m, r))
 		}
 	}
 	return errs.OrNil()
@@ -678,18 +679,13 @@ func (bp *Blueprint) evalVars() (Dict, error) {
 	dfs = func(n string) error {
 		used[n] = 1 // put on stack
 		v := bp.Vars.Get(n)
-		for _, ref := range valueReferences(v) {
+		for ref, rp := range valueReferences(v) {
+			p := Root.Vars.Dot(n).Cty(rp)
 			if !ref.GlobalVar {
-				return BpError{
-					Root.Vars.Dot(n),
-					fmt.Errorf("non-global variable %q referenced in expression", ref.Name),
-				}
+				return BpError{p, fmt.Errorf("non-global variable %q referenced in expression", ref.Name)}
 			}
 			if used[ref.Name] == 1 {
-				return BpError{
-					Root.Vars.Dot(n),
-					fmt.Errorf("cyclic dependency detected: %q -> %q", n, ref.Name),
-				}
+				return BpError{p, fmt.Errorf("cyclic dependency detected: %q -> %q", n, ref.Name)}
 			}
 			if used[ref.Name] == 0 {
 				if err := dfs(ref.Name); err != nil {
