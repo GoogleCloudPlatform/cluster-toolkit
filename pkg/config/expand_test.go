@@ -320,9 +320,6 @@ func (s *MySuite) TestApplyGlobalVariables(c *C) {
 	dc := s.getDeploymentConfigForTest()
 	mod := &dc.Config.DeploymentGroups[0].Modules[0]
 
-	// Test no inputs, none required
-	c.Check(dc.applyGlobalVariables(), IsNil)
-
 	// Test no inputs, one required, doesn't exist in globals
 	setTestModuleInfo(*mod, modulereader.ModuleInfo{
 		Inputs: []modulereader.VarInfo{{
@@ -334,25 +331,11 @@ func (s *MySuite) TestApplyGlobalVariables(c *C) {
 
 	// Test no input, one required, exists in globals
 	dc.Config.Vars.Set("gold", cty.StringVal("val"))
-	c.Check(dc.applyGlobalVariables(), IsNil)
+	dc.applyGlobalVariables()
 	c.Assert(
 		mod.Settings.Get("gold"),
 		DeepEquals,
 		GlobalRef("gold").AsExpression().AsValue())
-
-	// Test one input, one required
-	mod.Settings.Set("reqVar", cty.StringVal("val"))
-	c.Assert(dc.applyGlobalVariables(), IsNil)
-
-	// Test one input, none required, exists in globals
-	setTestModuleInfo(*mod, modulereader.ModuleInfo{
-		Inputs: []modulereader.VarInfo{{
-			Name:     "gold",
-			Type:     cty.String,
-			Required: false,
-		}},
-	})
-	c.Assert(dc.applyGlobalVariables(), IsNil)
 }
 
 func (s *zeroSuite) TestIsSimpleVariable(c *C) {

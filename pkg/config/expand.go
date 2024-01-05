@@ -50,9 +50,7 @@ func (dc *DeploymentConfig) expand() error {
 		return err
 	}
 
-	if err := dc.applyGlobalVariables(); err != nil {
-		return err
-	}
+	dc.applyGlobalVariables()
 
 	if err := validateInputsAllModules(dc.Config); err != nil {
 		return err
@@ -64,16 +62,13 @@ func (dc *DeploymentConfig) expand() error {
 
 func validateInputsAllModules(bp Blueprint) error {
 	errs := Errors{}
-	for ig, g := range bp.DeploymentGroups {
-		for im, m := range g.Modules {
-			p := Root.Groups.At(ig).Modules.At(im)
-			errs.Add(validateModuleInputs(p, m, bp))
-		}
-	}
+	bp.WalkModulesSafe(func(p ModulePath, m *Module) {
+		errs.Add(validateModuleInputs(p, *m, bp))
+	})
 	return errs.OrNil()
 }
 
-func validateModuleInputs(mp modulePath, m Module, bp Blueprint) error {
+func validateModuleInputs(mp ModulePath, m Module, bp Blueprint) error {
 	mi := m.InfoOrDie()
 	errs := Errors{}
 	for _, input := range mi.Inputs {
@@ -224,7 +219,7 @@ func useModule(mod *Module, use Module) {
 // applyUseModules applies variables from modules listed in the "use" field
 // when/if applicable
 func (dc *DeploymentConfig) applyUseModules() error {
-	return dc.Config.WalkModules(func(m *Module) error {
+	return dc.Config.WalkModules(func(_ ModulePath, m *Module) error {
 		for _, u := range m.Use {
 			used, err := dc.Config.Module(u)
 			if err != nil { // should never happen
@@ -260,9 +255,8 @@ func (dc *DeploymentConfig) combineLabels() {
 	gl := mergeMaps(defaults, vars.Get(labels).AsValueMap())
 	vars.Set(labels, cty.ObjectVal(gl))
 
-	dc.Config.WalkModules(func(mod *Module) error {
+	dc.Config.WalkModulesSafe(func(_ ModulePath, mod *Module) {
 		combineModuleLabels(mod, *dc)
-		return nil
 	})
 }
 
@@ -297,7 +291,7 @@ func mergeMaps(ms ...map[string]cty.Value) map[string]cty.Value {
 	return r
 }
 
-func (bp Blueprint) applyGlobalVarsInModule(mod *Module) error {
+func (bp Blueprint) applyGlobalVarsInModule(mod *Module) {
 	mi := mod.InfoOrDie()
 	for _, input := range mi.Inputs {
 		// Module setting exists? Nothing more needs to be done.
@@ -316,14 +310,13 @@ func (bp Blueprint) applyGlobalVarsInModule(mod *Module) error {
 			mod.Settings.Set(input.Name, cty.StringVal(string(mod.ID)))
 		}
 	}
-	return nil
 }
 
 // applyGlobalVariables takes any variables defined at the global level and
 // applies them to module settings if not already set.
-func (dc *DeploymentConfig) applyGlobalVariables() error {
-	return dc.Config.WalkModules(func(mod *Module) error {
-		return dc.Config.applyGlobalVarsInModule(mod)
+func (dc *DeploymentConfig) applyGlobalVariables() {
+	dc.Config.WalkModulesSafe(func(_ ModulePath, m *Module) {
+		dc.Config.applyGlobalVarsInModule(m)
 	})
 }
 
@@ -340,9 +333,8 @@ func validateModuleReference(bp Blueprint, from Module, toID ModuleID) error {
 	to, err := bp.Module(toID)
 	if err != nil {
 		mods := []string{}
-		bp.WalkModules(func(m *Module) error {
+		bp.WalkModulesSafe(func(_ ModulePath, m *Module) {
 			mods = append(mods, string(m.ID))
-			return nil
 		})
 		return hintSpelling(string(toID), mods, err)
 	}
@@ -380,9 +372,8 @@ func validateModuleSettingReference(bp Blueprint, mod Module, r Reference) error
 		var unkModErr UnknownModuleError
 		if errors.As(err, &unkModErr) {
 			hints := []string{"vars"}
-			bp.WalkModules(func(m *Module) error {
+			bp.WalkModulesSafe(func(_ ModulePath, m *Module) {
 				hints = append(hints, string(m.ID))
-				return nil
 			})
 			return hintSpelling(string(unkModErr.ID), hints, unkModErr)
 		}
@@ -442,15 +433,14 @@ func FindIntergroupReferences(v cty.Value, mod Module, bp Blueprint) []Reference
 // find all intergroup references and add them to source Module.Outputs
 func (bp *Blueprint) populateOutputs() {
 	refs := map[Reference]bool{}
-	bp.WalkModules(func(m *Module) error {
+	bp.WalkModulesSafe(func(_ ModulePath, m *Module) {
 		rs := FindIntergroupReferences(m.Settings.AsObject(), *m, *bp)
 		for _, r := range rs {
 			refs[r] = true
 		}
-		return nil
 	})
 
-	bp.WalkModules(func(m *Module) error {
+	bp.WalkModulesSafe(func(_ ModulePath, m *Module) {
 		for r := range refs {
 			if r.Module != m.ID {
 				continue // find IGC references pointing to this module
@@ -465,7 +455,6 @@ func (bp *Blueprint) populateOutputs() {
 			})
 
 		}
-		return nil
 	})
 }
 

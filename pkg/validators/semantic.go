@@ -26,19 +26,14 @@ func testModuleNotUsed(bp config.Blueprint, inputs config.Dict) error {
 		return err
 	}
 	errs := config.Errors{}
-	for ig, g := range bp.DeploymentGroups {
-		for im, m := range g.Modules {
-			ums := m.ListUnusedModules()
-			p := config.Root.Groups.At(ig).Modules.At(im).Use
-
-			for iu, u := range m.Use {
-				if slices.Contains(ums, u) {
-					errs.At(p.At(iu), fmt.Errorf(unusedModuleMsg, m.ID, u))
-				}
+	bp.WalkModulesSafe(func(p config.ModulePath, m *config.Module) {
+		ums := m.ListUnusedModules()
+		for iu, u := range m.Use {
+			if slices.Contains(ums, u) {
+				errs.At(p.Use.At(iu), fmt.Errorf(unusedModuleMsg, m.ID, u))
 			}
 		}
-	}
-
+	})
 	return errs.OrNil()
 }
 

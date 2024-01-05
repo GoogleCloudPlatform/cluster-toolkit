@@ -188,12 +188,11 @@ func testApisEnabled(bp config.Blueprint, inputs config.Dict) error {
 		return err
 	}
 	apis := map[string]bool{}
-	bp.WalkModules(func(m *config.Module) error {
+	bp.WalkModulesSafe(func(_ config.ModulePath, m *config.Module) {
 		services := m.InfoOrDie().Metadata.Spec.Requirements.Services
 		for _, api := range services {
 			apis[api] = true
 		}
-		return nil
 	})
 	return TestApisEnabled(p, maps.Keys(apis))
 }

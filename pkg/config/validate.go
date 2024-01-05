@@ -82,7 +82,7 @@ func validateVars(vars Dict) error {
 	return errs.OrNil()
 }
 
-func validateModule(p modulePath, m Module, bp Blueprint) error {
+func validateModule(p ModulePath, m Module, bp Blueprint) error {
 	// Source/Kind validations are required to pass to perform other validations
 	if m.Source == "" {
 		return BpError{p.Source, EmptyModuleSource}
@@ -113,7 +113,7 @@ func validateModule(p modulePath, m Module, bp Blueprint) error {
 		OrNil()
 }
 
-func validateOutputs(p modulePath, mod Module, info modulereader.ModuleInfo) error {
+func validateOutputs(p ModulePath, mod Module, info modulereader.ModuleInfo) error {
 	errs := Errors{}
 	outputs := info.GetOutputsAsMap()
 
@@ -133,7 +133,7 @@ type moduleVariables struct {
 }
 
 func validateSettings(
-	p modulePath,
+	p ModulePath,
 	mod Module,
 	info modulereader.ModuleInfo) error {
 

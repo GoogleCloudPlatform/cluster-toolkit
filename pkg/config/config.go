@@ -89,11 +89,10 @@ func (g DeploymentGroup) Kind() ModuleKind {
 // Module return the module with the given ID
 func (bp *Blueprint) Module(id ModuleID) (*Module, error) {
 	var mod *Module
-	bp.WalkModules(func(m *Module) error {
+	bp.WalkModulesSafe(func(_ ModulePath, m *Module) {
 		if m.ID == id {
 			mod = m
 		}
-		return nil
 	})
 	if mod == nil {
 		return nil, UnknownModuleError{id}
@@ -316,9 +315,8 @@ func (bp Blueprint) ListUnusedVariables() []string {
 	ns := map[string]cty.Value{
 		"vars": bp.Vars.AsObject(),
 	}
-	bp.WalkModules(func(m *Module) error {
+	bp.WalkModulesSafe(func(_ ModulePath, m *Module) {
 		ns["module_"+string(m.ID)] = m.Settings.AsObject()
-		return nil
 	})
 	for _, v := range bp.Validators {
 		ns["validator_"+v.Validator] = v.Inputs.AsObject()
@@ -392,11 +390,10 @@ func (dc DeploymentConfig) ExportBlueprint(outputFilename string) error {
 
 // addKindToModules sets the kind to 'terraform' when empty.
 func (bp *Blueprint) addKindToModules() {
-	bp.WalkModules(func(m *Module) error {
+	bp.WalkModulesSafe(func(_ ModulePath, m *Module) {
 		if m.Kind == UnknownKind {
 			m.Kind = TerraformKind
 		}
-		return nil
 	})
 }
 
@@ -434,7 +431,7 @@ func checkModulesAndGroups(bp Blueprint) error {
 
 // validateModuleUseReferences verifies that any used modules exist and
 // are in the correct group
-func validateModuleUseReferences(p modulePath, mod Module, bp Blueprint) error {
+func validateModuleUseReferences(p ModulePath, mod Module, bp Blueprint) error {
 	errs := Errors{}
 	for iu, used := range mod.Use {
 		errs.At(p.Use.At(iu), validateModuleReference(bp, mod, used))
@@ -630,12 +627,13 @@ func IsProductOfModuleUse(v cty.Value) []ModuleID {
 }
 
 // WalkModules walks all modules in the blueprint and calls the walker function
-func (bp *Blueprint) WalkModules(walker func(*Module) error) error {
+func (bp *Blueprint) WalkModules(walker func(ModulePath, *Module) error) error {
 	for ig := range bp.DeploymentGroups {
 		g := &bp.DeploymentGroups[ig]
 		for im := range g.Modules {
+			p := Root.Groups.At(ig).Modules.At(im)
 			m := &g.Modules[im]
-			if err := walker(m); err != nil {
+			if err := walker(p, m); err != nil {
 				return err
 			}
 		}
@@ -643,8 +641,15 @@ func (bp *Blueprint) WalkModules(walker func(*Module) error) error {
 	return nil
 }
 
+func (bp *Blueprint) WalkModulesSafe(walker func(ModulePath, *Module)) {
+	bp.WalkModules(func(p ModulePath, m *Module) error {
+		walker(p, m)
+		return nil
+	})
+}
+
 // validate every module setting in the blueprint containing a reference
-func validateModuleSettingReferences(p modulePath, m Module, bp Blueprint) error {
+func validateModuleSettingReferences(p ModulePath, m Module, bp Blueprint) error {
 	errs := Errors{}
 	for k, v := range m.Settings.Items() {
 		for r, rp := range valueReferences(v) {
