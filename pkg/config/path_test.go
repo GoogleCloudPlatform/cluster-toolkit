@@ -72,9 +72,6 @@ func TestPath(t *testing.T) {
 		{r.Backend.Type, "terraform_backend_defaults.type"},
 		{r.Backend.Configuration, "terraform_backend_defaults.configuration"},
 		{r.Backend.Configuration.Dot("goo"), "terraform_backend_defaults.configuration.goo"},
-
-		{internalPath, "__internal_path__"},
-		{internalPath.Dot("a"), "__internal_path__.a"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.want, func(t *testing.T) {
@@ -103,8 +100,6 @@ func TestPathParent(t *testing.T) {
 		{r.Vars.Dot("red").Cty(cp.IndexInt(6)), r.Vars.Dot("red")},
 		{r.Vars.Dot("red").Cty(cp.IndexInt(6).IndexString("gg")), r.Vars.Dot("red").Cty(cp.IndexInt(6))},
 		{r.Vars.Dot("red").Cty(cp.IndexInt(6).IndexString("gg").Index(cty.True)), r.Vars.Dot("red").Cty(cp.IndexInt(6))},
-		{internalPath, nil},
-		{internalPath.Dot("gold"), internalPath},
 	}
 	for _, tc := range tests {
 		t.Run(tc.p.String(), func(t *testing.T) {

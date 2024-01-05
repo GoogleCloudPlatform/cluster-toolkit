@@ -260,7 +260,7 @@ func TestDictWrongTypeUnmarshalYAML(t *testing.T) {
 	if err == nil {
 		t.Errorf("expected error, got nil")
 	}
-	if diff := cmp.Diff(err.Error(), "line 2: must be a mapping, got number"); diff != "" {
+	if diff := cmp.Diff(err.Error(), "line 2 column 1: must be a mapping, got number"); diff != "" {
 		t.Errorf("diff (-want +got):\n%s", diff)
 	}
 }
