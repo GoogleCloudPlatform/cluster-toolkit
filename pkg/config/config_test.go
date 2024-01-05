@@ -831,17 +831,17 @@ func (s *zeroSuite) TestValidateModuleSettingReference(c *C) {
 	// FAIL. get global hint
 	mod := ModuleID("var")
 	unkModErr := UnknownModuleError{mod}
-	c.Check(errors.Is(vld(bp, mod11, ModuleRef(mod, "kale")), HintError{"Did you mean \"vars\"?", unkModErr}), Equals, true)
+	c.Check(errors.Is(vld(bp, mod11, ModuleRef(mod, "kale")), HintError{`did you mean "vars"?`, unkModErr}), Equals, true)
 
 	// FAIL. get module ID hint
 	mod = ModuleID("pkp")
 	unkModErr = UnknownModuleError{mod}
-	c.Check(errors.Is(vld(bp, mod11, ModuleRef(mod, "kale")), HintError{fmt.Sprintf("Did you mean \"%s\"?", string(pkr.ID)), unkModErr}), Equals, true)
+	c.Check(errors.Is(vld(bp, mod11, ModuleRef(mod, "kale")), HintError{fmt.Sprintf("did you mean %q?", string(pkr.ID)), unkModErr}), Equals, true)
 
 	// FAIL. get no hint
 	mod = ModuleID("test")
 	unkModErr = UnknownModuleError{mod}
-	c.Check(errors.Is(vld(bp, mod11, ModuleRef(mod, "kale")), HintError{fmt.Sprintf("Did you mean \"%s\"?", string(pkr.ID)), unkModErr}), Equals, false)
+	c.Check(errors.Is(vld(bp, mod11, ModuleRef(mod, "kale")), HintError{fmt.Sprintf("did you mean %q?", string(pkr.ID)), unkModErr}), Equals, false)
 	c.Check(errors.Is(vld(bp, mod11, ModuleRef(mod, "kale")), unkModErr), Equals, true)
 }
 

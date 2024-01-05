@@ -153,7 +153,6 @@ const (
 	errMsgInvalidVar       = string("invalid variable definition in")
 	errMsgVarNotFound      = string("could not find source of variable")
 	errMsgIntergroupOrder  = string("references to outputs from other groups must be to earlier groups")
-	errMsgNoOutput         = string("output not found for a variable")
 	errMsgCannotUsePacker  = string("Packer modules cannot be used by other modules")
 	errMsgDuplicateGroup   = string("group names must be unique")
 	errMsgDuplicateID      = string("module IDs must be unique")
