@@ -219,12 +219,21 @@ func (ms *ModuleIDs) UnmarshalYAML(n *yaml.Node) error {
 
 // YamlValue is wrapper around cty.Value to handle YAML unmarshal.
 type YamlValue struct {
-	v cty.Value
+	v cty.Value // do not use this field directly, use Wrap() and Unwrap() instead
 }
 
 // Unwrap returns wrapped cty.Value.
 func (y YamlValue) Unwrap() cty.Value {
+	if y.v == cty.NilVal {
+		// we can't use 0-value of cty.Value (NilVal)
+		// instead it should be a proper null(any) value
+		return cty.NullVal(cty.DynamicPseudoType)
+	}
 	return y.v
+}
+
+func (y *YamlValue) Wrap(v cty.Value) {
+	y.v = v
 }
 
 // UnmarshalYAML implements custom YAML unmarshaling.
@@ -252,24 +261,26 @@ func (y *YamlValue) unmarshalScalar(n *yaml.Node) error {
 	if err != nil {
 		return fmt.Errorf("line %d: %w", n.Line, err)
 	}
-	if y.v, err = gocty.ToCtyValue(s, ty); err != nil {
+	v, err := gocty.ToCtyValue(s, ty)
+	if err != nil {
 		return err
 	}
+	y.Wrap(v)
 
-	if l, is := IsYamlExpressionLiteral(y.v); is { // HCL literal
+	if l, is := IsYamlExpressionLiteral(y.Unwrap()); is { // HCL literal
 		var e Expression
 		if e, err = ParseExpression(l); err != nil {
 			// TODO: point to exact location within expression, see Diagnostic.Subject
 			return fmt.Errorf("line %d: %w", n.Line, err)
 		}
-		y.v = e.AsValue()
-	} else if y.v.Type() == cty.String && hasVariable(y.v.AsString()) { // "simple" variable
-		e, err := SimpleVarToExpression(y.v.AsString())
+		y.Wrap(e.AsValue())
+	} else if y.Unwrap().Type() == cty.String && hasVariable(y.Unwrap().AsString()) { // "simple" variable
+		e, err := SimpleVarToExpression(y.Unwrap().AsString())
 		if err != nil {
 			// TODO: point to exact location within expression, see Diagnostic.Subject
 			return fmt.Errorf("line %d: %w", n.Line, err)
 		}
-		y.v = e.AsValue()
+		y.Wrap(e.AsValue())
 	}
 	return nil
 }
@@ -281,9 +292,9 @@ func (y *YamlValue) unmarshalObject(n *yaml.Node) error {
 	}
 	mv := map[string]cty.Value{}
 	for k, y := range my {
-		mv[k] = y.v
+		mv[k] = y.Unwrap()
 	}
-	y.v = cty.ObjectVal(mv)
+	y.Wrap(cty.ObjectVal(mv))
 	return nil
 }
 
@@ -294,9 +305,9 @@ func (y *YamlValue) unmarshalTuple(n *yaml.Node) error {
 	}
 	lv := []cty.Value{}
 	for _, y := range ly {
-		lv = append(lv, y.v)
+		lv = append(lv, y.Unwrap())
 	}
-	y.v = cty.TupleVal(lv)
+	y.Wrap(cty.TupleVal(lv))
 	return nil
 }
 
@@ -306,11 +317,11 @@ func (d *Dict) UnmarshalYAML(n *yaml.Node) error {
 	if err := n.Decode(&v); err != nil {
 		return err
 	}
-	ty := v.v.Type()
+	ty := v.Unwrap().Type()
 	if !ty.IsObjectType() {
 		return fmt.Errorf("line %d: must be a mapping, got %s", n.Line, ty.FriendlyName())
 	}
-	for k, w := range v.v.AsValueMap() {
+	for k, w := range v.Unwrap().AsValueMap() {
 		d.Set(k, w)
 	}
 	return nil

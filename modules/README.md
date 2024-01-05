@@ -437,7 +437,7 @@ are supported, `git::https://` for HTTPS or `git::git@github.com` for SSH.
 Additional formatting and features after `git::` are identical to that of the
 [GitHub Modules](#github-modules) described above.
 
-##### Google Cloud Storage Modules
+#### Google Cloud Storage Modules
 
 To use a Terraform module available in a Google Cloud Storage bucket, set the source
 to a URL with the special `gcs::` prefix, followed by a [GCS bucket object URL](https://cloud.google.com/storage/docs/request-endpoints#typical).

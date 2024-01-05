@@ -27,6 +27,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
+	"github.com/hashicorp/hcl/v2/ext/typeexpr"
 	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/spf13/afero"
 	"github.com/zclconf/go-cty/cty"
@@ -56,8 +58,8 @@ func (s *MySuite) getDeploymentConfigForTest() config.DeploymentConfig {
 		Kind:   config.TerraformKind,
 		ID:     "testModule",
 		Settings: config.NewDict(map[string]cty.Value{
-			"deployment_name": cty.NilVal,
-			"project_id":      cty.NilVal,
+			"deployment_name": cty.NullVal(cty.String),
+			"project_id":      cty.NullVal(cty.String),
 		}),
 		Outputs: []modulereader.OutputInfo{
 			{
@@ -234,81 +236,31 @@ func (s *MySuite) TestRestoreTfState(c *C) {
 	c.Check(err, IsNil)
 }
 
-func (s *zeroSuite) TestGetTypeTokens(c *C) {
-	// Success Integer
-	tok := getTypeTokens(cty.NumberIntVal(-1))
-	c.Assert(tok, HasLen, 1)
-	c.Assert(string(tok[0].Bytes), Equals, string([]byte("number")))
-
-	tok = getTypeTokens(cty.NumberIntVal(0))
-	c.Assert(tok, HasLen, 1)
-	c.Assert(string(tok[0].Bytes), Equals, string([]byte("number")))
-
-	tok = getTypeTokens(cty.NumberIntVal(1))
-	c.Assert(tok, HasLen, 1)
-	c.Assert(string(tok[0].Bytes), Equals, string([]byte("number")))
-
-	// Success Float
-	tok = getTypeTokens(cty.NumberFloatVal(-99.9))
-	c.Assert(tok, HasLen, 1)
-	c.Assert(string(tok[0].Bytes), Equals, string([]byte("number")))
-
-	tok = getTypeTokens(cty.NumberFloatVal(99.9))
-	c.Assert(tok, HasLen, 1)
-	c.Assert(string(tok[0].Bytes), Equals, string([]byte("number")))
-
-	// Success String
-	tok = getTypeTokens(cty.StringVal("Lorum"))
-	c.Assert(tok, HasLen, 1)
-	c.Assert(string(tok[0].Bytes), Equals, string([]byte("string")))
-
-	tok = getTypeTokens(cty.StringVal(""))
-	c.Assert(tok, HasLen, 1)
-	c.Assert(string(tok[0].Bytes), Equals, string([]byte("string")))
-
-	// Success Bool
-	tok = getTypeTokens(cty.BoolVal(true))
-	c.Assert(tok, HasLen, 1)
-	c.Assert(string(tok[0].Bytes), Equals, string([]byte("bool")))
-
-	tok = getTypeTokens(cty.BoolVal(false))
-	c.Assert(tok, HasLen, 1)
-	c.Assert(string(tok[0].Bytes), Equals, string([]byte("bool")))
-
-	// Success tuple
-	tok = getTypeTokens(cty.TupleVal([]cty.Value{}))
-	c.Assert(tok, HasLen, 1)
-	c.Assert(string(tok[0].Bytes), Equals, string([]byte("list")))
-
-	tok = getTypeTokens(cty.TupleVal([]cty.Value{cty.StringVal("Lorum")}))
-	c.Assert(tok, HasLen, 1)
-	c.Assert(string(tok[0].Bytes), Equals, string([]byte("list")))
-
-	// Success list
-	tok = getTypeTokens(cty.ListVal([]cty.Value{cty.StringVal("Lorum")}))
-	c.Assert(tok, HasLen, 1)
-	c.Assert(string(tok[0].Bytes), Equals, string([]byte("list")))
-
-	// Success object
-	tok = getTypeTokens(cty.ObjectVal(map[string]cty.Value{}))
-	c.Assert(tok, HasLen, 1)
-	c.Assert(string(tok[0].Bytes), Equals, string([]byte("any")))
-
-	val := cty.ObjectVal(map[string]cty.Value{"Lorum": cty.StringVal("Ipsum")})
-	tok = getTypeTokens(val)
-	c.Assert(tok, HasLen, 1)
-	c.Assert(string(tok[0].Bytes), Equals, string([]byte("any")))
-
-	// Success Map
-	val = cty.MapVal(map[string]cty.Value{"Lorum": cty.StringVal("Ipsum")})
-	tok = getTypeTokens(val)
-	c.Assert(tok, HasLen, 1)
-	c.Assert(string(tok[0].Bytes), Equals, string([]byte("any")))
-
-	// Success any
-	tok = getTypeTokens(cty.NullVal(cty.DynamicPseudoType))
-	c.Assert(tok, HasLen, 1)
-	c.Assert(string(tok[0].Bytes), Equals, string([]byte("any")))
+func TestGetTypeTokensRelaxed(t *testing.T) {
+	type test struct {
+		input cty.Type
+		want  string
+	}
+	tests := []test{
+		{cty.Number, "number"},
+		{cty.String, "string"},
+		{cty.Bool, "bool"},
+		{cty.Tuple([]cty.Type{}), "list(any)"},
+		{cty.Tuple([]cty.Type{cty.String}), "list(any)"},
+		{cty.List(cty.String), "list(any)"},
+		{cty.Object(map[string]cty.Type{}), "any"},
+		{cty.Object(map[string]cty.Type{"Lorum": cty.String}), "any"},
+		{cty.Map(cty.String), "any"},
+		{cty.DynamicPseudoType, "any"},
+	}
+	for _, tc := range tests {
+		t.Run(typeexpr.TypeString(tc.input), func(t *testing.T) {
+			got := string(getTypeTokens(relaxVarType(tc.input)).Bytes())
+			if diff := cmp.Diff(tc.want, got); diff != "" {
+				t.Errorf("diff (-want +got):\n%s", diff)
+			}
+		})
+	}
 }
 
 func (s *MySuite) TestCreateBaseFile(c *C) {
