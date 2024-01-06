@@ -28,9 +28,6 @@ This creates a Slurm login node which is:
   `use`
 * of VM machine type `n2-standard-4`
 
-For a complete example using this module, see
-[hpc-slurm.yaml](../../../../examples/hpc-slurm.yaml).
-
 ## Custom Images
 
 For more information on creating valid custom images for the login node VM
