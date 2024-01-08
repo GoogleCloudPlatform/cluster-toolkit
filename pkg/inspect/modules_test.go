@@ -197,3 +197,24 @@ func TestMetadataInjectModuleId(t *testing.T) {
 		})
 	}
 }
+
+func TestOutputForbiddenNames(t *testing.T) {
+	nowhere := []string{}
+	allowed := map[string][]string{
+		// Global blueprint variables we don't want to get overwritten.
+		"project_id":      {"community/modules/project/new-project"},
+		"labels":          nowhere,
+		"region":          nowhere,
+		"zone":            nowhere,
+		"deployment_name": nowhere,
+	}
+	for _, mod := range query(all()) {
+		t.Run(mod.Source, func(t *testing.T) {
+			for _, out := range mod.Outputs {
+				if where, ok := allowed[out.Name]; ok && !slices.Contains(where, mod.Source) {
+					t.Errorf("forbidden name for output %q", out.Name)
+				}
+			}
+		})
+	}
+}
