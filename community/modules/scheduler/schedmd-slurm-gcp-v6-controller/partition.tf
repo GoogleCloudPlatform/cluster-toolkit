@@ -21,7 +21,7 @@ locals {
 
 # NODESET
 module "slurm_nodeset_template" {
-  source   = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=6.2.0"
+  source   = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=6.2.1"
   for_each = local.nodeset_map
 
   project_id          = var.project_id
@@ -54,17 +54,18 @@ module "slurm_nodeset_template" {
   source_image_project     = each.value.source_image_project
   source_image             = each.value.source_image
   subnetwork               = each.value.subnetwork_self_link
+  additional_networks      = each.value.additional_networks
+  access_config            = each.value.access_config
   tags                     = concat([local.slurm_cluster_name], each.value.tags)
 }
 
 module "slurm_nodeset" {
-  source   = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_nodeset?ref=6.2.0"
+  source   = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_nodeset?ref=6.2.1"
   for_each = local.nodeset_map
 
   instance_template_self_link = module.slurm_nodeset_template[each.key].self_link
 
   enable_placement       = each.value.enable_placement
-  enable_public_ip       = each.value.enable_public_ip
   network_tier           = each.value.network_tier
   node_count_dynamic_max = each.value.node_count_dynamic_max
   node_count_static      = each.value.node_count_static
@@ -73,11 +74,12 @@ module "slurm_nodeset" {
   subnetwork_self_link   = each.value.subnetwork_self_link
   zones                  = each.value.zones
   zone_target_shape      = each.value.zone_target_shape
+  reservation_name       = each.value.reservation_name
 }
 
 # NODESET TPU
 module "slurm_nodeset_tpu" {
-  source   = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_nodeset_tpu?ref=6.2.0"
+  source   = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_nodeset_tpu?ref=6.2.1"
   for_each = local.nodeset_tpu_map
 
   project_id             = var.project_id
@@ -99,7 +101,7 @@ module "slurm_nodeset_tpu" {
 
 # PARTITION
 module "slurm_partition" {
-  source   = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_partition?ref=6.2.0"
+  source   = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_partition?ref=6.2.1"
   for_each = local.partition_map
 
   partition_nodeset     = [for x in each.value.partition_nodeset : module.slurm_nodeset[x].nodeset_name if try(module.slurm_nodeset[x], null) != null]
