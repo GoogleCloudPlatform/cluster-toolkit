@@ -32,6 +32,9 @@ locals {
     }
   ]
 
+  public_access_config = var.disable_public_ips ? [] : [{ nat_ip = null, network_tier = null }]
+  access_config        = length(var.access_config) == 0 ? local.public_access_config : var.access_config
+
   nodeset = {
     node_count_static      = var.node_count_static
     node_count_dynamic_max = var.node_count_dynamic_max
@@ -50,7 +53,6 @@ locals {
 
     enable_confidential_vm = var.enable_confidential_vm
     enable_placement       = var.enable_placement
-    enable_public_ip       = !var.disable_public_ips
     enable_oslogin         = var.enable_oslogin
     enable_shielded_vm     = var.enable_shielded_vm
     gpu                    = one(local.guest_accelerator)
@@ -70,9 +72,12 @@ locals {
     source_image_project     = local.source_image_project_normalized # requires source_image_logic.tf
     source_image             = local.source_image                    # requires source_image_logic.tf
     subnetwork_self_link     = var.subnetwork_self_link
+    additional_networks      = var.additional_networks
+    access_config            = local.access_config
     tags                     = var.tags
     spot                     = var.enable_spot_vm
     termination_action       = try(var.spot_instance_config.termination_action, null)
+    reservation_name         = var.reservation_name
 
     zones             = toset(concat([var.zone], tolist(var.zones)))
     zone_target_shape = var.zone_target_shape

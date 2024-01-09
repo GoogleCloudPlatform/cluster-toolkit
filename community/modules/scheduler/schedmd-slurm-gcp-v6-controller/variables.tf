@@ -184,7 +184,6 @@ variable "nodeset" {
     disk_type              = optional(string)
     enable_confidential_vm = optional(bool, false)
     enable_placement       = optional(bool, false)
-    enable_public_ip       = optional(bool, false)
     enable_oslogin         = optional(bool, true)
     enable_shielded_vm     = optional(bool, false)
     gpu = optional(object({
@@ -213,11 +212,29 @@ variable "nodeset" {
     source_image_project = optional(string)
     source_image         = optional(string)
     subnetwork_self_link = string
-    spot                 = optional(bool, false)
-    tags                 = optional(list(string), [])
-    termination_action   = optional(string)
-    zones                = optional(list(string), [])
-    zone_target_shape    = optional(string, "ANY_SINGLE_ZONE")
+    additional_networks = optional(list(object({
+      network            = string
+      subnetwork         = string
+      subnetwork_project = string
+      network_ip         = string
+      access_config = list(object({
+        nat_ip       = string
+        network_tier = string
+      }))
+      ipv6_access_config = list(object({
+        network_tier = string
+      }))
+    })))
+    access_config = optional(list(object({
+      nat_ip       = string
+      network_tier = string
+    })))
+    spot               = optional(bool, false)
+    tags               = optional(list(string), [])
+    termination_action = optional(string)
+    zones              = optional(list(string), [])
+    zone_target_shape  = optional(string, "ANY_SINGLE_ZONE")
+    reservation_name   = optional(string)
   }))
   default = []
 
@@ -303,13 +320,13 @@ EOD
 
 variable "enable_devel" {
   type        = bool
-  description = "Enables development mode. Not for production use."
-  default     = false
+  description = "Enables development mode."
+  default     = true
 }
 
 variable "enable_debug_logging" {
   type        = bool
-  description = "Enables debug logging mode. Not for production use."
+  description = "Enables debug logging mode."
   default     = false
 }
 
