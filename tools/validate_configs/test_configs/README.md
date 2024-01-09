@@ -21,9 +21,6 @@ supplied guest accelerators are adding to the VM instances.
 filestore as a /home directory and a network. This has been used as a demo
 blueprint when presenting the toolkit.
 
-**hpc-cluster-high-io-remote-state.yaml**: Creates a cluster with high
-performance IO system with all Terraform state stored remotely.
-
 **hpc-cluster-2filestore-4s_instance.yaml**: A slightly more complicated HPC
 cluster that includes 2 filestore (/home and /shared), two license servers, a
 head-node and 2 compute vms
