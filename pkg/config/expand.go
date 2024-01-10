@@ -56,6 +56,10 @@ func (dc *DeploymentConfig) expand() error {
 		return err
 	}
 
+	if err := validateModulesAreUsed(dc.Config); err != nil {
+		return err
+	}
+
 	dc.Config.populateOutputs()
 	return nil
 }
@@ -112,6 +116,25 @@ func checkInputValueMatchesType(val cty.Value, input modulereader.VarInfo, bp Bl
 		return fmt.Errorf("unsuitable value for %q: %w", input.Name, err)
 	}
 	return nil
+}
+
+func validateModulesAreUsed(bp Blueprint) error {
+	used := map[ModuleID]bool{}
+	bp.WalkModulesSafe(func(_ ModulePath, m *Module) {
+		for ref := range valueReferences(m.Settings.AsObject()) {
+			used[ref.Module] = true
+		}
+	})
+
+	errs := Errors{}
+	bp.WalkModulesSafe(func(p ModulePath, m *Module) {
+		if m.InfoOrDie().Metadata.Ghpc.HasToBeUsed && !used[m.ID] {
+			errs.At(p.ID, HintError{
+				"you need to add it to the `use`-block of downstream modules",
+				fmt.Errorf("module %q was not used", m.ID)})
+		}
+	})
+	return errs.OrNil()
 }
 
 func (dc *DeploymentConfig) expandBackends() {
