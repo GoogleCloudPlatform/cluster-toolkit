@@ -14,7 +14,7 @@
 
 ---
 
-test_name: hpc-slurm6-tpu
+test_name: slurm6-tpu
 deployment_name: "v6-tpu-{{ build }}"
 # Manually adding the slurm_cluster_name for use in node names, which filters
 # non-alphanumeric chars and is capped at 10 chars.
