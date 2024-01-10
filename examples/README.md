@@ -13,7 +13,6 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
 * [Blueprint Descriptions](#blueprint-descriptions)
   * [hpc-slurm.yaml](#hpc-slurmyaml-) ![core-badge]
   * [hpc-enterprise-slurm.yaml](#hpc-enterprise-slurmyaml-) ![core-badge]
-  * [hpc-slurm6.yaml](#hpc-slurm6yaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm6-tpu.yaml](#hpc-slurm6-tpuyaml--) ![community-badge] ![experimental-badge]
   * [ml-slurm.yaml](#ml-slurmyaml-) ![core-badge]
   * [image-builder.yaml](#image-builderyaml-) ![core-badge]
@@ -118,13 +117,11 @@ the experimental badge (![experimental-badge]).
 
 ### [hpc-slurm.yaml] ![core-badge]
 
-> **Warning**: The variables `enable_reconfigure`,
-> `enable_cleanup_compute`, and `enable_cleanup_subscriptions`, if set to
-> `true`, require additional dependencies **to be installed on the system deploying the infrastructure**.
+> **Warning**: Requires additional dependencies **to be installed on the system deploying the infrastructure**.
 >
 > ```shell
 > # Install Python3 and run
-> pip3 install -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.9.1/scripts/requirements.txt
+> pip3 install -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/6.2.1/scripts/requirements.txt
 > ```
 
 Creates a basic auto-scaling Slurm cluster with mostly default settings. The
@@ -264,35 +261,6 @@ to 256
   _not needed for `n2` partition_
 
 [hpc-enterprise-slurm.yaml]: ./hpc-enterprise-slurm.yaml
-
-### [hpc-slurm6.yaml] ![community-badge] ![experimental-badge]
-
-> **Warning**: Requires additional dependencies **to be installed on the system deploying the infrastructure**.
->
-> ```shell
-> # Install Python3 and run
-> pip3 install -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/6.2.1/scripts/requirements.txt
-> ```
-
-Creates a basic auto-scaling Slurm cluster with mostly default settings. The
-blueprint also creates a new VPC network, and a filestore instance mounted to
-`/home`.
-
-There are 2 partitions in this example: `debug`, and `compute`. The `debug`
-partition uses `n2-standard-2` VMs, which should work out of the box without
-needing to request additional quota. The purpose of the `debug` partition is to
-make sure that first time users are not immediately blocked by quota
-limitations.
-
-[hpc-slurm6.yaml]: ../community/examples/hpc-slurm6.yaml
-
-#### Compute Partition
-
-There is a `compute` partition that achieves higher performance. Any
-performance analysis should be done on the `compute` partition. By default it
-uses `c2-standard-60` VMs with placement groups enabled. You may need to request
-additional quota for `C2 CPUs` in the region you are deploying in. You can
-select the compute partition using the `-p compute` argument when running `srun`.
 
 ### [hpc-slurm6-tpu.yaml] ![community-badge] ![experimental-badge]
 
