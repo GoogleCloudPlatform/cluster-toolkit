@@ -64,6 +64,9 @@ steps:
     echo '    use: [gke_cluster]'                                      >> $${SG_EXAMPLE}
     echo '    settings: {name: ubuntu, image_type: UBUNTU_CONTAINERD}' >> $${SG_EXAMPLE}
 
+    # avoids conflict with other tests
+    sed -i "s/gke-subnet/gke-subnet-$${BUILD_ID_SHORT}/" $${SG_EXAMPLE}
+
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
       --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
       --extra-vars="@tools/cloud-build/daily-tests/tests/gke.yml"
