@@ -13,8 +13,8 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
 * [Blueprint Descriptions](#blueprint-descriptions)
   * [hpc-slurm.yaml](#hpc-slurmyaml-) ![core-badge]
   * [hpc-enterprise-slurm.yaml](#hpc-enterprise-slurmyaml-) ![core-badge]
-  * [hpc-slurm6.yaml](#hpc-slurm6yaml-) ![community-badge] ![experimental-badge]
-  * [hpc-slurm6-tpu.yaml](#hpc-slurm6-tpuyaml-) ![community-badge] ![experimental-badge]
+  * [hpc-slurm6.yaml](#hpc-slurm6yaml--) ![community-badge] ![experimental-badge]
+  * [hpc-slurm6-tpu.yaml](#hpc-slurm6-tpuyaml--) ![community-badge] ![experimental-badge]
   * [ml-slurm.yaml](#ml-slurmyaml-) ![core-badge]
   * [image-builder.yaml](#image-builderyaml-) ![core-badge]
   * [serverless-batch.yaml](#serverless-batchyaml-) ![core-badge]
