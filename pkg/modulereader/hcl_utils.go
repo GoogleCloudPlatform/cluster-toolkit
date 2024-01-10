@@ -16,8 +16,8 @@ package modulereader
 
 import (
 	"fmt"
+	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/sourcereader"
-	"log"
 	"os"
 
 	"github.com/hashicorp/hcl/v2"
@@ -106,7 +106,7 @@ func getCtyType(hclType string) (cty.Type, error) {
 func NormalizeType(hclType string) string {
 	ctyType, err := getCtyType(hclType)
 	if err != nil {
-		log.Printf("Failed to parse HCL type='%s', got %v", hclType, err)
+		logging.Error("Failed to parse HCL type='%s', got %v", hclType, err)
 		return hclType
 	}
 	return typeexpr.TypeString(ctyType)

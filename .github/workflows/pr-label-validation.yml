@@ -43,6 +43,13 @@ jobs:
         count: 1
         labels: "release-chore, release-key-new-features, release-new-modules, release-module-improvements, release-improvements, release-deprecations, release-version-updates, release-bugfix"
         message: "This PR is being prevented from merging because it is not labeled.  Please add a label to this PR.  Accepted labels: release-chore, release-key-new-features, release-new-modules, release-module-improvements, release-improvements, release-deprecations, release-version-updates, release-bugfix"
+    - id: do-not-merge
+      uses: mheap/github-action-required-labels@v5
+      with:
+        mode: exactly
+        count: 0
+        labels: "do-not-merge"
+        add_comment: false
     - id: print-labels
       run: |
         echo "Current PR labels:"

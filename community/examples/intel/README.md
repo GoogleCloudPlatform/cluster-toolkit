@@ -272,7 +272,7 @@ Both daos-server instances should show a state of *Joined*.
 
 #### About the DAOS Command Line Tools
 
-The DAOS Management tool `dmg` is used by System Administrators to manange the DAOS storage [system](https://docs.daos.io/v2.2/overview/architecture/#daos-system) and DAOS [pools](https://docs.daos.io/v2.2/overview/storage/#daos-pool). Therefore, `sudo` must be used when running `dmg`.
+The DAOS Management tool `dmg` is used by System Administrators to manage the DAOS storage [system](https://docs.daos.io/v2.2/overview/architecture/#daos-system) and DAOS [pools](https://docs.daos.io/v2.2/overview/storage/#daos-pool). Therefore, `sudo` must be used when running `dmg`.
 
 The DAOS CLI `daos` is used by both users and System Administrators to create and manage [containers](https://docs.daos.io/v2.2/overview/storage/#daos-container). It is not necessary to use `sudo` with the `daos` command.
 

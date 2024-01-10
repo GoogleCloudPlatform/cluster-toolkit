@@ -90,7 +90,7 @@ def create_filesystem(fs: Filesystem) -> None:
 
 
 def _run_ghpc(target_dir: Path) -> None:
-    ghpc_path = utils.load_config()["baseDir"].parent.parent / "ghpc"
+    ghpc_path = "/opt/gcluster/hpc-toolkit/ghpc"
 
     try:
         logger.info("Invoking ghpc create")
@@ -99,7 +99,7 @@ def _run_ghpc(target_dir: Path) -> None:
         with log_out_fn.open("wb") as log_out:
             with log_err_fn.open("wb") as log_err:
                 subprocess.run(
-                    [ghpc_path.as_posix(), "create", "filesystem.yaml"],
+                    [ghpc_path, "create", "filesystem.yaml"],
                     cwd=target_dir,
                     stdout=log_out,
                     stderr=log_err,

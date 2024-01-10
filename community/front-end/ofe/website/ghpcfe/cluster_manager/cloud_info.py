@@ -37,13 +37,17 @@ gcp_machine_table = defaultdict(
         "n2": defaultdict(lambda: "cascadelake"),
         "n2d": defaultdict(lambda: "zen2"),
         "n1": defaultdict(lambda: "x86_64"),
+        "c3": defaultdict(lambda: "sapphirerapids"),
+        "c3d": defaultdict(lambda: "zen2"),
         # Compute Optimized
         "c2": defaultdict(lambda: "cascadelake"),
         "c2d": defaultdict(
             lambda: "zen2"  # TODO: Should be zen3, but CentOS7 doesn't have
         ),  # a new enough kernel to recognize as such.
         "t2d": defaultdict(lambda: "zen2"),  # TODO: Should also be zen3
+        "h3": defaultdict(lambda: "sapphirerapids"),
         # Memory Optimized
+        "m2": defaultdict(lambda: "icelake"),
         "m2": defaultdict(lambda: "cascadelake"),
         "m1": defaultdict(
             lambda: "broadwell",
@@ -57,7 +61,6 @@ gcp_machine_table = defaultdict(
 
 def _get_arch_for_node_type_gcp(instance):
     try:
-        logger.info(instance.split("-"))
         family, group, _ = instance.split("-", maxsplit=2)
         return gcp_machine_table[family][group]
     except ValueError:
@@ -246,7 +249,7 @@ def get_region_zone_info(cloud_provider, credentials):
     if cloud_provider == "GCP":
         return _get_gcp_region_zone_info(credentials, ttl_hash=_get_ttl_hash())
     else:
-        raise Exception("Unsupport Cloud Provider")
+        raise Exception("Unsupported Cloud Provider")
 
 
 def _get_gcp_subnets(credentials):
@@ -274,7 +277,7 @@ def get_subnets(cloud_provider, credentials):
     if cloud_provider == "GCP":
         return _get_gcp_subnets(credentials)
     else:
-        raise Exception("Unsupport Cloud Provider")
+        raise Exception("Unsupported Cloud Provider")
 
 
 _gcp_services_list = None
@@ -354,12 +357,16 @@ def _get_gcp_instance_pricing(
         instance_description_mapper = {
             "e2": "E2 Instance Core",
             "n2d": "N2D AMD Instance Core",
+            "h3": "Compute optimized Core",
+            "c3": "Compute optimized Core",
             "c2": "Compute optimized Core",
             "c2d": "C2D AMD Instance Core",
+            "c3d": "C3D AMD Instance Core",
             "t2d": "T2D AMD Instance Core",
             "a2": "A2 Instance Core",
             "m1": "Memory-optimized Instance Core",  # ??
             "m2": "Memory Optimized Upgrade Premium for Memory-optimized Instance Core",  # pylint: disable=line-too-long
+            "m3": "Memory-optimized Instance Core",
             "n2": "N2 Instance Core",
             "n1": "Custom Instance Core",  # ??
         }
@@ -400,10 +407,15 @@ def _get_gcp_instance_pricing(
             "e2": "E2 Instance Ram",
             "n2d": "N2D AMD Instance Ram",
             "c2": "Compute optimized Ram",
+            "c3": "Compute optimized Ram",
+            "h3": "Compute optimized Ram",
             "c2d": "C2D AMD Instance Ram",
+            "c3d": "C3D AMD Instance Ram",
             "t2d": "T2D AMD Instance Ram",
             "a2": "A2 Instance Ram",
-            "m1": "Memory-optimized Instance Ram",  # ??
+            "m1": "Memory-optimized Instance Ram",
+            "m2": "Memory-optimized Instance Ram",
+            "m3": "Memory-optimized Instance Ram",  # ??
             "n2": "N2 Instance Ram",
             "n1": "Custom Instance Ram", # ??
         }
@@ -585,7 +597,7 @@ def get_gcp_workbench_region_zone_info(
 
 
 def get_gcp_filestores(credentials):
-    """Returns an array of Filestore instance informations
+    """Returns an array of Filestore instance information
     E.g.
     [
       {'createTime': ...,

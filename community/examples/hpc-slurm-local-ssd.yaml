@@ -17,7 +17,7 @@
 blueprint_name: hpc-slurm-local-ssd
 
 vars:
-  project_id: ## Set GCP Project ID Here ##
+  project_id:  ## Set GCP Project ID Here ##
   deployment_name: hpc-localssd
   region: us-central1
   zone: us-central1-a
@@ -56,7 +56,7 @@ deployment_groups:
         auto_delete: true
         boot: false
       bandwidth_tier: gvnic_enabled
-      machine_type: n1-standard-16
+      machine_type: c2-standard-4
       node_count_dynamic_max: 5
       node_count_static: 0
 
@@ -70,6 +70,35 @@ deployment_groups:
       is_default: true
       partition_name: ssdcomp
       region: us-central1
+      startup_script: |
+        #!/bin/bash
+        set -e -o pipefail
+
+        # this script assumes it is running on a RedHat-derivative OS
+        yum install -y mdadm
+
+        RAID_DEVICE=/dev/md0
+        DST_MNT=/mnt/localssd
+        DISK_LABEL=LOCALSSD
+        OPTIONS=discard,defaults
+
+        # if mount is successful, do nothing
+        if mount --source LABEL="$DISK_LABEL" --target="$DST_MNT" -o "$OPTIONS"; then
+                exit 0
+        fi
+
+        # Create new RAID, format ext4 and mount
+        # TODO: handle case of zero or 1 local SSD disk
+        # TODO: handle case when /dev/md0 exists but was not mountable
+        DEVICES=`nvme list | grep nvme_ | grep -v nvme_card-pd | awk '{print $1}' | paste -sd ' '`
+        NB_DEVICES=`nvme list | grep nvme_ | grep -v nvme_card-pd | awk '{print $1}' | wc -l`
+        mdadm --create "$RAID_DEVICE" --level=0 --raid-devices=$NB_DEVICES $DEVICES
+        mkfs.ext4 -F "$RAID_DEVICE"
+        tune2fs "$RAID_DEVICE" -r 131072
+        e2label "$RAID_DEVICE" "$DISK_LABEL"
+        mkdir -p "$DST_MNT"
+        mount --source LABEL="$DISK_LABEL" --target="$DST_MNT" -o "$OPTIONS"
+        chmod 1777 "$DST_MNT"
 
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
@@ -84,27 +113,6 @@ deployment_groups:
         suspend_rate: 0
         suspend_timeout: 300
         no_comma_params: false
-      compute_startup_script: |
-        #!/bin/bash
-        export LOG_FILE=/tmp/custom_startup.log
-        export DST_MNT="/mount/localssd" # TODO: set this appropriately
-        if [ -d $DST_MNT ]; then
-          echo "DST_MNT already exists. Canceling." >> $LOG_FILE
-          exit 1
-        fi
-        sudo yum install mdadm -y
-        lsblk >> $LOG_FILE
-        export DEVICES=`lsblk -d -n -oNAME,RO | grep 'nvme.*0$' | awk {'print "/dev/" $1'}`
-        export NB_DEVICES=`lsblk -d -n -oNAME,RO | grep 'nvme.*0$' | wc | awk {'print $1'}`
-        sudo mdadm --create /dev/md0 --level=0 --raid-devices=$NB_DEVICES $DEVICES
-        sudo mkfs.ext4 -F /dev/md0
-        sudo mkdir -p $DST_MNT
-        sudo mount /dev/md0 $DST_MNT
-        sudo chmod a+w $DST_MNT
-        echo UUID=`sudo blkid -s UUID -o value /dev/md0` $DST_MNT ext4 discard,defaults,nofail 0 2 | sudo tee -a /etc/fstab
-        cat /etc/fstab >> $LOG_FILE
-        echo "DONE" >> $LOG_FILE
-        cat $LOG_FILE
       machine_type: n1-standard-4
 
   - id: slurm_login

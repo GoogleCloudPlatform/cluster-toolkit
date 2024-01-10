@@ -66,9 +66,10 @@ module "control_bucket" {
   source  = "terraform-google-modules/cloud-storage/google"
   version = "~> 4.0"
 
-  project_id = var.project_id
-  names      = ["storage"]
-  prefix     = var.deployment_name
+  project_id       = var.project_id
+  names            = ["storage"]
+  prefix           = var.deployment_name
+  randomize_suffix = true
   force_destroy = {
     storage = true
   }

@@ -6,7 +6,7 @@ Professional cluster. The following requirements must be observed:
 - one must have an existing Altair license server with sufficient licenses to
   run PBS Pro
 - jobs should be submitted from a network filesystem mounted on all hosts to
-  faciliate file transfers for jobs and their logs
+  facilitate file transfers for jobs and their logs
 
 ### Example
 

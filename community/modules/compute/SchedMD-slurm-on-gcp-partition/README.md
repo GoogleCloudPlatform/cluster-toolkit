@@ -85,7 +85,7 @@ No resources.
 | <a name="input_partition_name"></a> [partition\_name](#input\_partition\_name) | The name of the slurm partition | `string` | n/a | yes |
 | <a name="input_preemptible_bursting"></a> [preemptible\_bursting](#input\_preemptible\_bursting) | Should use preemptibles to burst | `string` | `false` | no |
 | <a name="input_regional_capacity"></a> [regional\_capacity](#input\_regional\_capacity) | If True, then create instances in the region that has available capacity. Specify the region in the zone field. | `bool` | `false` | no |
-| <a name="input_regional_policy"></a> [regional\_policy](#input\_regional\_policy) | locationPolicy defintion for regional bulkInsert() | `any` | `{}` | no |
+| <a name="input_regional_policy"></a> [regional\_policy](#input\_regional\_policy) | locationPolicy definition for regional bulkInsert() | `any` | `{}` | no |
 | <a name="input_static_node_count"></a> [static\_node\_count](#input\_static\_node\_count) | Number of nodes to be statically created | `number` | `0` | no |
 | <a name="input_subnetwork_name"></a> [subnetwork\_name](#input\_subnetwork\_name) | The name of the pre-defined VPC subnet you want the nodes to attach to based on Region. | `string` | n/a | yes |
 | <a name="input_zone"></a> [zone](#input\_zone) | Compute Platform zone where the notebook server will be located | `string` | n/a | yes |

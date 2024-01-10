@@ -33,9 +33,27 @@ locals {
   sql_password      = var.sql_password == null ? random_password.password.result : var.sql_password
 }
 
+resource "google_compute_global_address" "private_ip_address" {
+  provider = google-beta
+
+  name          = "slurm-cloudsql-private-ip-${random_id.resource_name_suffix.hex}"
+  purpose       = "VPC_PEERING"
+  address_type  = "INTERNAL"
+  prefix_length = 16
+  network       = var.network_id
+}
+
+resource "google_service_networking_connection" "private_vpc_connection" {
+  provider = google-beta
+
+  network                 = var.network_id
+  service                 = "servicenetworking.googleapis.com"
+  reserved_peering_ranges = google_compute_global_address.private_ip_address[*].name
+}
+
 resource "google_sql_database_instance" "instance" {
   project             = var.project_id
-  depends_on          = [var.nat_ips]
+  depends_on          = [google_service_networking_connection.private_vpc_connection]
   name                = local.sql_instance_name
   region              = var.region
   deletion_protection = var.deletion_protection
@@ -45,18 +63,9 @@ resource "google_sql_database_instance" "instance" {
     user_labels = local.labels
     tier        = var.tier
     ip_configuration {
-
-      ipv4_enabled = true
-
-      dynamic "authorized_networks" {
-        for_each = var.nat_ips
-        iterator = ip
-
-        content {
-          name  = ip.value
-          value = "${ip.value}/32"
-        }
-      }
+      ipv4_enabled                                  = false
+      private_network                               = var.network_id
+      enable_private_path_for_google_cloud_services = true
     }
   }
 }
@@ -75,8 +84,9 @@ resource "google_sql_user" "users" {
 }
 
 resource "google_bigquery_connection" "connection" {
-  provider = google-beta
+  provider = google
   project  = var.project_id
+  location = var.region
   cloud_sql {
     instance_id = google_sql_database_instance.instance.connection_name
     database    = google_sql_database.database.name

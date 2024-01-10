@@ -23,9 +23,8 @@ the following structure:
 * Set good defaults wherever possible. Be opinionated about HPC use cases.
 * Follow common variable [naming conventions](#use-common-names-and-types-for-common-variables).
 * If there are common hpc-toolkit variables already defined, then do not set defaults (`region`, `zone`, `project_id`, `deployment_name`, etc.)
-* All files should contain a license header. Headers can be added automatically using [addlicense](https://github.com/google/addlicense),
-  or `make add-google-license` if adding a Google License.
-* No `provider` blocks should be defined in re-usable modules. It is OK to impose a range of acceptable provider versions.
+* All files should contain a license header. Headers can be added automatically using [addlicense](https://github.com/google/addlicense), or `pre-commit` hook if adding a Google License.
+* No `provider` blocks should be defined in reusable modules. It is OK to impose a range of acceptable provider versions.
   In the case on conflicts, the root module will configure all providers and pass alternatives as an alias. See:
 https://developer.hashicorp.com/terraform/language/modules/develop/providers#implicit-provider-inheritance
 
@@ -183,3 +182,24 @@ module "vm" {
 ```
 
 For more information see [startup-script/README](https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/modules/scripts/startup-script#readme).
+
+## Module `metadata.yaml`
+
+**All** modules should have a `metadata.yaml` file in the root directory. The metadata format follows Cloud Foundation Toolkit metadata [schema](https://github.com/GoogleCloudPlatform/cloud-foundation-toolkit/blob/640a8858ffce99a4512904563a2b00e6768f5a31/cli/bpmetadata/schema/gcp-blueprint-metadata.json#L299) with addition of toolkit-specific section `ghpc`.
+
+See example below:
+
+```yaml
+---
+spec:
+  requirements:
+    # `services` has to be defined, 
+    # if no services are required, use empty list: []
+    services: 
+    - serviceA.googleapis.com
+    - serviceB.googleapis.com
+ghpc:  # [optional]
+  # [optional] `inject_module_id`, if set, will inject blueprint 
+  # module id as a value for the module variable `var_name`.
+  inject_module_id: var_name 
+```

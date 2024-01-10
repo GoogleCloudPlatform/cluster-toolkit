@@ -44,9 +44,6 @@ var (
 // expand expands variables and strings in the yaml config. Used directly by
 // ExpandConfig for the create and expand commands.
 func (dc *DeploymentConfig) expand() error {
-	if err := dc.Config.evalVars(); err != nil {
-		return err
-	}
 	dc.expandBackends()
 	dc.combineLabels()
 
@@ -103,11 +100,11 @@ func (dc *DeploymentConfig) expandBackends() {
 	//    backend into resource groups which have no explicit
 	//    TerraformBackend
 	// 3. In all cases, add a prefix for GCS backends if one is not defined
-	blueprint := &dc.Config
-	defaults := blueprint.TerraformBackendDefaults
+	bp := &dc.Config
+	defaults := bp.TerraformBackendDefaults
 	if defaults.Type != "" {
-		for i := range blueprint.DeploymentGroups {
-			grp := &blueprint.DeploymentGroups[i]
+		for i := range bp.DeploymentGroups {
+			grp := &bp.DeploymentGroups[i]
 			be := &grp.TerraformBackend
 			if be.Type == "" {
 				be.Type = defaults.Type
@@ -117,11 +114,7 @@ func (dc *DeploymentConfig) expandBackends() {
 				}
 			}
 			if be.Type == "gcs" && !be.Configuration.Has("prefix") {
-				prefix := blueprint.BlueprintName
-				if deployment, err := blueprint.DeploymentName(); err == nil {
-					prefix += "/" + deployment
-				}
-				prefix += "/" + string(grp.Name)
+				prefix := fmt.Sprintf("%s/%s/%s", bp.BlueprintName, bp.DeploymentName(), grp.Name)
 				be.Configuration.Set("prefix", cty.StringVal(prefix))
 			}
 		}
@@ -290,6 +283,11 @@ func (bp Blueprint) applyGlobalVarsInModule(mod *Module) error {
 		if bp.Vars.Has(input.Name) {
 			ref := GlobalRef(input.Name)
 			mod.Settings.Set(input.Name, ref.AsExpression().AsValue())
+			continue
+		}
+
+		if input.Name == mi.Metadata.Ghpc.InjectModuleId {
+			mod.Settings.Set(input.Name, cty.StringVal(string(mod.ID)))
 		}
 	}
 	return nil
@@ -444,22 +442,23 @@ func (dg DeploymentGroup) OutputNames() []string {
 
 // OutputNamesByGroup returns the outputs from prior groups that match input
 // names for this group as a map
-func OutputNamesByGroup(g DeploymentGroup, dc DeploymentConfig) (map[GroupName][]string, error) {
-	refs := g.FindAllIntergroupReferences(dc.Config)
-	inputNames := make([]string, len(refs))
+func OutputNamesByGroup(g DeploymentGroup, bp Blueprint) (map[GroupName][]string, error) {
+	refs := g.FindAllIntergroupReferences(bp)
+	inputs := make([]string, len(refs))
 	for i, ref := range refs {
-		inputNames[i] = AutomaticOutputName(ref.Name, ref.Module)
+		inputs[i] = AutomaticOutputName(ref.Name, ref.Module)
 	}
 
-	i := dc.Config.GroupIndex(g.Name)
+	i := bp.GroupIndex(g.Name)
 	if i == -1 {
 		return nil, fmt.Errorf("group %s not found in blueprint", g.Name)
 	}
-	outputNamesByGroup := make(map[GroupName][]string)
-	for _, g := range dc.Config.DeploymentGroups[:i] {
-		outputNamesByGroup[g.Name] = intersection(inputNames, g.OutputNames())
+
+	res := make(map[GroupName][]string)
+	for _, pg := range bp.DeploymentGroups[:i] {
+		res[pg.Name] = intersection(inputs, pg.OutputNames())
 	}
-	return outputNamesByGroup, nil
+	return res, nil
 }
 
 // return sorted list of elements common to s1 and s2

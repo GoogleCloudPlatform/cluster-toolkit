@@ -21,8 +21,9 @@
     git_url: ${git_url}
     git_ref: ${git_ref}
     chmod_mode: ${chmod_mode}
-    chown_owner: ${chown_owner}
-    chgrp_group: ${chgrp_group}
+    system_user_name: ${system_user_name}
+    system_user_uid: ${system_user_uid}
+    system_user_gid: ${system_user_gid}
     finalize_setup_script: ${finalize_setup_script}
     profile_script_path: ${profile_script_path}
   tasks:
@@ -36,6 +37,36 @@
       mode: '0644'
       content: "{{ profile_script }}"
     when: profile_script
+
+  - name: Look up user to use for install
+    block:
+    
+    - name: Check if user already exists
+      ansible.builtin.getent:
+        database: passwd
+        key: "{{ system_user_name }}"
+
+    - name: Look up existing user details
+      ansible.builtin.user:
+        name: "{{ system_user_name }}"
+      register: system_user
+
+    rescue:
+    - name: User did not exist, create group for system user 
+      ansible.builtin.group:
+        name: "{{ system_user_name }}"
+        gid: "{{ system_user_gid }}"
+        system: true
+      register: system_group
+
+    - name: Create system user
+      ansible.builtin.user:
+        name: "{{ system_user_name }}"
+        comment: "{{ sw_name }} installation"
+        uid: "{{ system_user_uid }}"
+        group: "{{ system_group.name }}"
+        system: true
+      register: system_user
 
   - name: Create parent of install directory
     ansible.builtin.file:
@@ -66,18 +97,26 @@
       - git --git-dir={{ install_dir }}/.git checkout {{ git_ref }}
     when: lock_out.rc == 0 and clone_res.rc != 0
 
-  - name: Set ownership and permissions
+  - name: Transfer ownership to system user
     ansible.builtin.file:
       path: "{{ install_dir }}"
-      mode: "{{ chmod_mode | default(omit, true)  }}"
-      owner: "{{ chown_owner | default(omit, true) }}"
-      group: "{{ chgrp_group | default(omit, true)  }}"
+      owner: "{{ system_user.name }}"
+      group: "{{ system_user.group }}"
       recurse: true
-    when: (lock_out.rc == 0) and ((chmod_mode != None) or (chown_owner != None) or (chgrp_group != None))
+    when: lock_out.rc == 0
 
   - name: Finalize setup
     ansible.builtin.shell: "{{ finalize_setup_script }}"
     when: lock_out.rc == 0 and finalize_setup_script
+    become: true
+    become_user: "{{ system_user.name }}"
+
+  - name: Apply chmod 
+    ansible.builtin.file:
+      path: "{{ install_dir }}"
+      mode: "{{ chmod_mode | default(omit, true)  }}"
+      recurse: true
+    when: (lock_out.rc == 0) and (chmod_mode != None)
 
   - name: Release lock
     ansible.builtin.file:

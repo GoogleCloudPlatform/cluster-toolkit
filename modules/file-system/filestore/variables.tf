@@ -91,9 +91,10 @@ variable "filestore_tier" {
       "BASIC_HDD",
       "BASIC_SSD",
       "HIGH_SCALE_SSD",
+      "ZONAL",
       "ENTERPRISE"
     ], var.filestore_tier)
-    error_message = "Allowed values for filestore_tier are 'BASIC_HDD','BASIC_SSD','HIGH_SCALE_SSD','ENTERPRISE'.\nhttps://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/filestore_instance#tier\nhttps://cloud.google.com/filestore/docs/reference/rest/v1beta1/Tier."
+    error_message = "Allowed values for filestore_tier are 'BASIC_HDD','BASIC_SSD','HIGH_SCALE_SSD','ZONAL','ENTERPRISE'.\nhttps://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/filestore_instance#tier\nhttps://cloud.google.com/filestore/docs/reference/rest/v1beta1/Tier."
   }
 }
 
@@ -106,6 +107,18 @@ variable "connect_mode" {
   description = "Used to select mode - supported values DIRECT_PEERING and PRIVATE_SERVICE_ACCESS."
   type        = string
   default     = "DIRECT_PEERING"
+}
+
+variable "reserved_ip_range" {
+  description = "Reserved IP range for Filestore instance (set to null to enable automatic selection)"
+  type        = string
+  default     = null
+  nullable    = true
+
+  validation {
+    condition     = var.reserved_ip_range == null || can(cidrhost(var.reserved_ip_range, 0))
+    error_message = "IP address range must be in CIDR format."
+  }
 }
 
 variable "mount_options" {

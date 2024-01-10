@@ -21,7 +21,7 @@ import (
 )
 
 // Dict maps string key to cty.Value.
-// Zero Dict value is initialized (as oposed to nil map).
+// Zero Dict value is initialized (as opposed to nil map).
 type Dict struct {
 	m map[string]cty.Value
 }

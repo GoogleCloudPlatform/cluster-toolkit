@@ -70,12 +70,13 @@ func validateGlobalLabels(vars Dict) error {
 
 // validateVars checks the global variables for viable types
 func validateVars(vars Dict) error {
-	errs := Errors{}
-	errs.Add(validateGlobalLabels(vars))
+	errs := (&Errors{}).
+		Add(validateDeploymentName(vars)).
+		Add(validateGlobalLabels(vars))
 	// Check for any nil values
 	for key, val := range vars.Items() {
 		if val.IsNull() {
-			errs.At(Root.Vars.Dot(key), fmt.Errorf("deployment variable %s was not set", key))
+			errs.At(Root.Vars.Dot(key), fmt.Errorf("deployment variable %q was not set", key))
 		}
 	}
 	return errs.OrNil()

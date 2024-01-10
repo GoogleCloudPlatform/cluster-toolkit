@@ -57,9 +57,6 @@ steps:
   - |
     set -e
     export PROJECT=build-project
-    # lysozyme-example is under CC-BY-4.0
-    addlicense -check -ignore **/lysozyme-example/submit.sh . \
-      || { echo "addlicense failed"; exit 1; }
     make tests
 images: [
   'us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder']

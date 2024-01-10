@@ -21,7 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/config"
-	"log"
+	"hpc-toolkit/pkg/logging"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -49,10 +49,10 @@ var (
 HPC deployments on the Google Cloud Platform.`,
 		Run: func(cmd *cobra.Command, args []string) {
 			if err := cmd.Help(); err != nil {
-				log.Fatalf("cmd.Help function failed: %s", err)
+				logging.Fatal("cmd.Help function failed: %s", err)
 			}
 		},
-		Version:     "v1.26.1",
+		Version:     "v1.27.0",
 		Annotations: annotation,
 	}
 )
@@ -66,12 +66,9 @@ func init() {
 
 // Execute the root command
 func Execute() error {
-	// Don't prefix messages with data & time to improve readability.
-	// See https://pkg.go.dev/log#pkg-constants
-	log.SetFlags(0)
 	mismatch, branch, hash, dir := checkGitHashMismatch()
 	if mismatch {
-		fmt.Fprintf(os.Stderr, "WARNING: ghpc binary was built from a different commit (%s/%s) than the current git branch in %s (%s/%s). You can rebuild the binary by running 'make'\n",
+		logging.Error("WARNING: ghpc binary was built from a different commit (%s/%s) than the current git branch in %s (%s/%s). You can rebuild the binary by running 'make'",
 			GitBranch, GitCommitHash[0:7], dir, branch, hash[0:7])
 	}
 
@@ -198,7 +195,7 @@ func execPath() string {
 		// "simplification" of `ghpc` to `./ghpc`
 		return nice
 	}
-	// Code bellow assumes that `args0` contains path to file, not a
+	// Code below assumes that `args0` contains path to file, not a
 	// executable name from PATH.
 
 	{ // Find shortest & nicest form of args0
@@ -249,11 +246,11 @@ func execPath() string {
 	return args0
 }
 
-// checkErr is similar to cobra.CheckErr, but with renderError and log.Fatal
+// checkErr is similar to cobra.CheckErr, but with renderError and logging.Fatal
 // NOTE: this function uses empty YamlCtx, so if you have one, use renderError directly.
 func checkErr(err error) {
 	if err != nil {
 		msg := fmt.Sprintf("%s: %s", boldRed("Error"), renderError(err, config.YamlCtx{}))
-		log.Fatal(msg)
+		logging.Fatal(msg)
 	}
 }

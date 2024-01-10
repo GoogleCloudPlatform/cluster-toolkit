@@ -19,8 +19,8 @@ package modulereader
 
 import (
 	"fmt"
+	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/sourcereader"
-	"log"
 	"os"
 	"path"
 
@@ -180,7 +180,7 @@ var kinds = map[string]ModReader{
 func Factory(kind string) ModReader {
 	r, ok := kinds[kind]
 	if !ok {
-		log.Fatalf("Invalid request to create a reader of kind %s", kind)
+		logging.Fatal("Invalid request to create a reader of kind %s", kind)
 	}
 	return r
 }

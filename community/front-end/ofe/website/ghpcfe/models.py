@@ -39,6 +39,7 @@ CLOUD_RESOURCE_MGMT_STATUS = (
     ("nm", "New"),  # Just defined, managed
     ("cm", "Creating"),  # In the process of creating, managed
     ("m", "Managed/Running"),  # Created, operational, managed
+    ("re", "Reconfiguring"),  # Created, operational, managed
     ("dm", "Destroying"),  # In the process of deleting, managed
     ("xm", "Destroyed"),  # Deleted, managed
     ("um", "Unknown"),  # Unknown, following error
@@ -328,7 +329,7 @@ class VirtualNetwork(CloudResource):
         validators=[
             RFC1035Validator(
                 63,
-                "VPC Name must be RFC1035 Compliant (lower case, alpha-numeric "
+                "VPC Name must be RFC1035 Compliant (lower case, alphanumeric "
                 "with hyphens)",
             )
         ],
@@ -361,7 +362,7 @@ class VirtualSubnet(CloudResource):
             RFC1035Validator(
                 63,
                 "Subnet Name must be RFC1035 Compliant (lower case, "
-                " alpha-numeric with hyphens)",
+                " alphanumeric with hyphens)",
             )
         ],
     )
@@ -546,7 +547,7 @@ class StartupScript(models.Model):
     )
     description = models.TextField(
         max_length=4000,
-        help_text="(Optional) description of this stratup script",
+        help_text="(Optional) description of this startup script",
         blank=True,
         null=True,
     )
@@ -601,7 +602,7 @@ class Image(CloudResource):
 
     source_image_family = models.CharField(
         max_length=60,
-        help_text="Enter a soure image family",
+        help_text="Enter a source image family",
         blank=False,
         default="schedmd-v5-slurm-22-05-8-rocky-linux-8",
     )
@@ -613,7 +614,7 @@ class Image(CloudResource):
 
     enable_os_login = models.CharField(
         max_length=5,
-        help_text="Enable OS Login durring the image creation?",
+        help_text="Enable OS Login during the image creation?",
         choices=(("TRUE", "TRUE"),("FALSE", "FALSE")),
         default="TRUE",
     )
@@ -661,7 +662,7 @@ class Cluster(CloudResource):
             RFC1035Validator(
                 17,
                 "Cluster Name must be RFC1035 Compliant (lower case, "
-                "alpha-numeric with hyphens)",
+                "alphanumeric with hyphens)",
             )
         ],
     )
@@ -689,13 +690,14 @@ class Cluster(CloudResource):
         ("c", "Cluster is being created"),
         ("i", "Cluster is being initialised"),
         ("r", "Cluster is ready for jobs"),
+        ("re", "Cluster is reconfiguring"),
         ("s", "Cluster is stopped (can be restarted)"),
         ("t", "Cluster is terminating"),
         ("e", "Cluster deployment has failed"),
         ("d", "Cluster has been deleted"),
     )
     status = models.CharField(
-        max_length=1,
+        max_length=2,
         choices=CLUSTER_STATUS,
         default="n",
         help_text="Status of this cluster",
@@ -788,6 +790,18 @@ class Cluster(CloudResource):
         default=None,
         on_delete=models.SET_NULL,
     )
+    use_cloudsql = models.BooleanField(
+        default=False,
+        help_text=(
+            "Would you like to use Cloud SQL for Slurm accounting database?"
+        ),
+    )
+    use_bigquery = models.BooleanField(
+        default=False,
+        help_text=(
+            "Would you like to send Slurm accounting data to BigQuery?"
+        ),
+    )
 
     def get_access_key(self):
         return Token.objects.get(user=self.owner)
@@ -853,7 +867,7 @@ class ComputeInstance(CloudResource):
 
 
 class ClusterPartition(models.Model):
-    """Compute partition on a clustero"""
+    """Compute partition on a cluster"""
 
     # Define the regex pattern validator
     name_validator = RegexValidator(
@@ -896,7 +910,7 @@ class ClusterPartition(models.Model):
         default=0,
     )
     enable_placement = models.BooleanField(
-        default=True,
+        default=False,
         help_text=(
             "Enable Placement Groups (currently only valid for C2, C2D and C3"
             "instances)"
@@ -917,6 +931,17 @@ class ClusterPartition(models.Model):
         help_text="The number of vCPU per node of the partition",
         default=1,
     )
+    boot_disk_type = models.CharField(
+        max_length=30,
+        help_text="GCP Persistent Disk type",
+        default="pd-standard",
+    )
+    boot_disk_size = models.PositiveIntegerField(
+        validators=[MinValueValidator(49)],
+        help_text="Boot disk size (in GB)",
+        default=50,
+        blank=True,
+    )
     GPU_per_node = models.PositiveIntegerField(  # pylint: disable=invalid-name
         validators=[MinValueValidator(0)],
         help_text="The number of GPU per node of the partition",
@@ -925,9 +950,35 @@ class ClusterPartition(models.Model):
     GPU_type = models.CharField(  # pylint: disable=invalid-name
         max_length=64, blank=True, default="", help_text="GPU device type"
     )
+    additional_disk_count = models.PositiveIntegerField(
+        help_text="How many additional disks?",
+        default=0,
+        blank=True,
+    )
+    additional_disk_type = models.CharField(
+        max_length=30,
+        blank=True,
+        help_text="Additional Disk type",
+        default="pd-standard",
+    )
+    additional_disk_size = models.PositiveIntegerField(
+        help_text="Disk size (in GB)",
+        default=375,
+        blank=True,
+    )
+    additional_disk_auto_delete = models.BooleanField(
+        default=True,
+        help_text=(
+            "Automatically delete additional disk when node is deleted?"
+        ),
+    )
 
     def __str__(self):
         return self.name
+
+    def clean(self):
+        if self.enable_placement and self.enable_node_reuse:
+            raise ValidationError("You cannot enable both Placement Groups and Node Reuse simultaneously.") 
 
 
 class ApplicationInstallationLocation(models.Model):
@@ -1456,7 +1507,7 @@ class Workbench(CloudResource):
             RFC1035Validator(
                 63,
                 "Workbench Name must be RFC1035 Compliant (lower-case "
-                "alpha-numeric with hyphens)",
+                "alphanumeric with hyphens)",
             )
         ],
     )

@@ -19,3 +19,5 @@ spec:
     services:
     - room.service.vip
     - protection.service.GCPD
+ghpc:
+  inject_module_id: "test_variable"

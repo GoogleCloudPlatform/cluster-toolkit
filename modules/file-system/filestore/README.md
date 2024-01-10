@@ -9,13 +9,14 @@ Toolkit, see the extended [Network Storage documentation](../../../docs/network_
 
 ### Filestore tiers
 
-At the time of writing, Filestore supports 4 [tiers of service][tiers] that are
+At the time of writing, Filestore supports 5 [tiers of service][tiers] that are
 specified in the Toolkit using the following names:
 
 - Basic HDD: "BASIC\_HDD" ([preferred][tierapi]) or "STANDARD" (deprecated)
 - Basic SSD: "BASIC\_SSD" ([preferred][tierapi]) or "PREMIUM" (deprecated)
-- High Scale SSD: "HIGH\_SCALE\_SSD"
+- Zonal With Higher Capacity Band or High Scale SSD: "HIGH\_SCALE\_SSD"
 - Enterprise: "ENTERPRISE"
+- Zonal With Lower Capacity Band: "ZONAL"
 
 [tierapi]: https://cloud.google.com/filestore/docs/reference/rest/v1beta1/Tier
 
@@ -184,6 +185,7 @@ No modules.
 | <a name="input_network_id"></a> [network\_id](#input\_network\_id) | The ID of the GCE VPC network to which the instance is connected given in the format:<br>`projects/<project_id>/global/networks/<network_name>`" | `string` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | ID of project in which Filestore instance will be created. | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | Location for Filestore instances at Enterprise tier. | `string` | n/a | yes |
+| <a name="input_reserved_ip_range"></a> [reserved\_ip\_range](#input\_reserved\_ip\_range) | Reserved IP range for Filestore instance (set to null to enable automatic selection) | `string` | `null` | no |
 | <a name="input_size_gb"></a> [size\_gb](#input\_size\_gb) | Storage size of the filestore instance in GB. | `number` | `1024` | no |
 | <a name="input_zone"></a> [zone](#input\_zone) | Location for Filestore instances below Enterprise tier. | `string` | n/a | yes |
 

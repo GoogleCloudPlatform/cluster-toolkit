@@ -202,11 +202,6 @@ type Expression interface {
 	// This function is the ONLY way to get an Expression as a cty.Value,
 	// do not attempt to build it by other means.
 	AsValue() cty.Value
-	// makeYamlExpressionValue returns a cty.Value, that is rendered as
-	// HCL literal in Blueprint syntax. Returned value isn't functional,
-	// as it doesn't reference an Expression.
-	// This method should only be used for marshaling Blueprint YAML.
-	makeYamlExpressionValue() cty.Value
 	// key returns unique identifier of this expression in universe of all possible expressions.
 	// `ex1.key() == ex2.key()` => `ex1` and `ex2` are identical.
 	key() expressionKey
@@ -278,15 +273,6 @@ func (e BaseExpression) References() []Reference {
 	return c
 }
 
-// makeYamlExpressionValue returns a cty.Value, that is rendered as
-// HCL literal in Blueprint syntax. Returned value isn't functional,
-// as it doesn't reference an Expression.
-// This method should only be used for marshaling Blueprint YAML.
-func (e BaseExpression) makeYamlExpressionValue() cty.Value {
-	s := string(hclwrite.Format(e.Tokenize().Bytes()))
-	return cty.StringVal("((" + s + "))")
-}
-
 // key returns unique identifier of this expression in universe of all possible expressions.
 // `ex1.key() == ex2.key()` => `ex1` and `ex2` are identical.
 func (e BaseExpression) key() expressionKey {
@@ -299,7 +285,7 @@ func (e BaseExpression) key() expressionKey {
 // do not attempt to build it by other means.
 func (e BaseExpression) AsValue() cty.Value {
 	k := e.key()
-	// we don't care if ot overrides as expressions are identical
+	// we don't care if it overrides as expressions are identical
 	globalExpressions[k] = e
 	return cty.DynamicVal.Mark(k)
 }

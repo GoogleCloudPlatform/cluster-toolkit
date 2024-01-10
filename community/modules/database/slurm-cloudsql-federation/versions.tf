@@ -30,10 +30,10 @@ terraform {
     }
   }
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:slurm-cloudsql-federation/v1.26.1"
+    module_name = "blueprints/terraform/hpc-toolkit:slurm-cloudsql-federation/v1.27.0"
   }
   provider_meta "google-beta" {
-    module_name = "blueprints/terraform/hpc-toolkit:slurm-cloudsql-federation/v1.26.1"
+    module_name = "blueprints/terraform/hpc-toolkit:slurm-cloudsql-federation/v1.27.0"
   }
 
   required_version = ">= 0.13.0"

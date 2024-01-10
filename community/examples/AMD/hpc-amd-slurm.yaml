@@ -169,7 +169,7 @@ deployment_groups:
       disable_public_ips: true
       instance_image:
         # these images must match the images used by Slurm modules below because
-        # we are building OpenMPI with PMI support in libaries contained in
+        # we are building OpenMPI with PMI support in libraries contained in
         # Slurm installation
         family: slurm-gcp-5-9-hpc-centos-7
         project: schedmd-slurm-public
