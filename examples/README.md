@@ -43,7 +43,6 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [hpc-slurm-chromedesktop.yaml](#hpc-slurm-chromedesktopyaml--) ![community-badge] ![experimental-badge]
   * [flux-cluster](#flux-clusteryaml--) ![community-badge] ![experimental-badge]
   * [tutorial-fluent.yaml](#tutorial-fluentyaml--) ![community-badge] ![experimental-badge]
-  * [hpc-slurm-legacy.yaml](#hpc-slurm-legacyyaml--) ![community-badge] ![deprecated-badge]
   * [hpc-slurm-legacy-sharedvpc.yaml](#hpc-slurm-legacy-sharedvpcyaml--) ![community-badge] ![deprecated-badge]
 * [Blueprint Schema](#blueprint-schema)
 * [Writing an HPC Blueprint](#writing-an-hpc-blueprint)
@@ -1024,54 +1023,6 @@ is deployed as the native resource manager.
 See [README](../community/examples/flux-framework/README.md)
 
 [flux-cluster.yaml]: ../community/examples/flux-framework/flux-cluster.yaml
-
-### [hpc-slurm-legacy.yaml] ![community-badge] ![deprecated-badge]
-
-Creates a Slurm cluster with tiered file systems for higher performance. It
-connects to the default VPC of the project and creates two partitions and a
-login node.
-
-File systems:
-
-* The homefs mounted at `/home` is a default "BASIC_HDD" tier filestore with
-  1 TiB of capacity
-* The projectsfs is mounted at `/projects` and is a high scale SSD filestore
-  instance with 10TiB of capacity.
-* The scratchfs is mounted at `/scratch` and is a
-  [DDN Exascaler Lustre](../community/modules/file-system/DDN-EXAScaler/README.md)
-  file system designed for high IO performance. The capacity is ~10TiB.
-
-> **Warning**: The DDN Exascaler Lustre file system has a license cost as
-> described in the pricing section of the
-> [DDN EXAScaler Cloud Marketplace Solution](https://console.developers.google.com/marketplace/product/ddnstorage/).
-
-There are two partitions in this example: `low_cost` and `compute`. The
-`low_cost` partition uses `n2-standard-4` VMs. This partition can be used for
-debugging and workloads that do not require high performance.
-
-Similar to the small example, there is a
-[compute partition](#compute-partition) that should be used for any performance
-analysis.
-
-#### Quota Requirements for hpc-slurm-legacy.yaml
-
-For this example the following is needed in the selected region:
-
-* Cloud Filestore API: Basic HDD (Standard) capacity (GB) per region: **1,024 GB**
-* Cloud Filestore API: High Scale SSD capacity (GB) per region: **10,240 GiB** - _min
-  quota request is 61,440 GiB_
-* Compute Engine API: Persistent Disk SSD (GB): **~14,050 GB**
-* Compute Engine API: Persistent Disk Standard (GB): **~396 GB static + 20
-  GB/node** up to 4596 GB
-* Compute Engine API: N2 CPUs: **158**
-* Compute Engine API: C2 CPUs: **8** for controller node and **60/node** active
-  in `compute` partition up to 12,008
-* Compute Engine API: Affinity Groups: **one for each job in parallel** - _only
-  needed for `compute` partition_
-* Compute Engine API: Resource policies: **one for each job in parallel** -
-  _only needed for `compute` partition_
-
-[hpc-slurm-legacy.yaml]: ../community/examples/hpc-slurm-legacy.yaml
 
 ### [hpc-slurm-legacy-sharedvpc.yaml] ![community-badge] ![deprecated-badge]
 
