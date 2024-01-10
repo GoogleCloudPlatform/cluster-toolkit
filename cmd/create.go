@@ -159,58 +159,6 @@ func validateMaybeDie(bp config.Blueprint, ctx config.YamlCtx) {
 
 }
 
-func findPos(path config.Path, ctx config.YamlCtx) (config.Pos, bool) {
-	pos, ok := ctx.Pos(path)
-	for !ok && path.Parent() != nil {
-		path = path.Parent()
-		pos, ok = ctx.Pos(path)
-	}
-	return pos, ok
-}
-
-func renderError(err error, ctx config.YamlCtx) string {
-	switch te := err.(type) {
-	case config.Errors:
-		var sb strings.Builder
-		for _, e := range te.Errors {
-			sb.WriteString(renderError(e, ctx))
-			sb.WriteString("\n")
-		}
-		return sb.String()
-	case validators.ValidatorError:
-		title := boldRed(fmt.Sprintf("validator %q failed:", te.Validator))
-		return fmt.Sprintf("%s\n%v\n", title, renderError(te.Err, ctx))
-	case config.BpError:
-		if pos, ok := findPos(te.Path, ctx); ok {
-			return renderRichError(te.Err, pos, ctx)
-		}
-		return renderError(te.Err, ctx)
-	default:
-		return err.Error()
-	}
-}
-
-func renderRichError(err error, pos config.Pos, ctx config.YamlCtx) string {
-	line := pos.Line - 1
-	if line < 0 {
-		line = 0
-	}
-	if line >= len(ctx.Lines) {
-		line = len(ctx.Lines) - 1
-	}
-
-	pref := fmt.Sprintf("%d: ", pos.Line)
-	arrow := " "
-	if pos.Column > 0 {
-		spaces := strings.Repeat(" ", len(pref)+pos.Column-1)
-		arrow = spaces + "^"
-	}
-
-	return fmt.Sprintf(`%s: %s
-%s%s
-%s`, boldRed("Error"), err, pref, ctx.Lines[line], arrow)
-}
-
 func setCLIVariables(bp *config.Blueprint, s []string) error {
 	for _, cliVar := range s {
 		arr := strings.SplitN(cliVar, "=", 2)

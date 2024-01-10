@@ -15,7 +15,6 @@
 package cmd
 
 import (
-	"errors"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/modulewriter"
 	"os"
@@ -131,32 +130,6 @@ func (s *MySuite) TestValidationLevels(c *C) {
 	c.Check(bp.ValidationLevel, Equals, config.ValidationIgnore)
 
 	c.Check(setValidationLevel(&bp, "INVALID"), NotNil)
-}
-
-func (s *MySuite) TestRenderError(c *C) {
-	{ // simple
-		err := errors.New("arbuz")
-		got := renderError(err, config.YamlCtx{})
-		c.Check(got, Equals, "arbuz")
-	}
-	{ // has pos, but context doesn't contain it
-		ctx, _ := config.NewYamlCtx([]byte(``))
-		pth := config.Root.Vars.Dot("kale")
-		err := config.BpError{Path: pth, Err: errors.New("arbuz")}
-		got := renderError(err, ctx)
-		c.Check(got, Equals, "arbuz")
-	}
-	{ // has pos, has context
-		ctx, _ := config.NewYamlCtx([]byte(`
-vars:
-  kale: dos`))
-		pth := config.Root.Vars.Dot("kale")
-		err := config.BpError{Path: pth, Err: errors.New("arbuz")}
-		got := renderError(err, ctx)
-		c.Check(got, Equals, `Error: arbuz
-3:   kale: dos
-     ^`)
-	}
 }
 
 func (s *MySuite) TestValidateMaybeDie(c *C) {
