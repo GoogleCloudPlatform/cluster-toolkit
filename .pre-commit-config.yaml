@@ -89,7 +89,7 @@ repos:
   rev: v1.32.0
   hooks:
   - id: yamllint
-    args: [-c=.yamllint]
+    args: [-c=.yamllint, --no-warnings]
 - repo: https://github.com/jackdewinter/pymarkdown
   rev: v0.9.12
   hooks:
