@@ -25,6 +25,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/zclconf/go-cty/cty"
+	"golang.org/x/exp/maps"
 )
 
 const maxLabels = 64
@@ -163,7 +164,8 @@ func validateSettings(
 		}
 		// Setting not found
 		if _, ok := cVars.Inputs[k]; !ok {
-			errs.At(sp, UnknownModuleSetting)
+			err := hintSpelling(k, maps.Keys(cVars.Inputs), UnknownModuleSetting)
+			errs.At(sp, err)
 			continue // do not perform other validations
 		}
 
