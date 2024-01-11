@@ -27,7 +27,7 @@ Toolkit, see the extended [Network Storage documentation](../../../../docs/netwo
 ## Mounting
 
 To mount the DDN EXAScaler Lustre file system you must first install the DDN
-Luster client and then call the proper `mount` command.
+Lustre client and then call the proper `mount` command.
 
 Both of these steps are automatically handled with the use of the `use` command
 in a selection of HPC Toolkit modules. See the [compatibility matrix][matrix] in
