@@ -106,8 +106,7 @@ module "slurm_controller_instance" {
   static_ips          = var.static_ips
   subnetwork          = var.subnetwork_self_link
   zone                = var.zone
-
-  metadata = var.metadata
+  metadata            = var.metadata
 
   depends_on = [
     module.slurm_files,
@@ -155,6 +154,11 @@ module "cleanup_compute_nodes" {
   slurm_cluster_name = local.slurm_cluster_name
   project_id         = var.project_id
   when_destroy       = true
+
+  # Depend on controller network, as a best effort to avoid
+  # subnetwork resourceInUseByAnotherResource error
+  # NOTE: Can not use nodeset subnetworks as "A static list expression is required"
+  depends_on = [var.subnetwork_self_link]
 }
 
 
