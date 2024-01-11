@@ -133,7 +133,7 @@ variable "target_size" {
 variable "max_size" {
   description = "Maximum size of the HTCondor execute point pool."
   type        = number
-  default     = 100
+  default     = 5
 }
 
 variable "min_idle" {
