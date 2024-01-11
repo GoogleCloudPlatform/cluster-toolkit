@@ -48,6 +48,7 @@ type OutputInfo struct {
 
 // UnmarshalYAML supports parsing YAML OutputInfo fields as a simple list of
 // strings or as a list of maps directly into OutputInfo struct
+// TODO: unmarshal logic shouldn't be defined in this package, move to pkg/config
 func (mo *OutputInfo) UnmarshalYAML(value *yaml.Node) error {
 	var name string
 	const yamlErrorMsg string = "block beginning at line %d: %s"

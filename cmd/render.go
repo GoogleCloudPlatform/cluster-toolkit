@@ -40,6 +40,8 @@ func renderError(err error, ctx config.YamlCtx) string {
 		return renderHintError(te, ctx)
 	case config.BpError:
 		return renderBpError(te, ctx)
+	case config.PosError:
+		return renderPosError(te, ctx)
 	default:
 		return fmt.Sprintf("%s: %s", boldRed("Error"), err)
 	}
@@ -65,12 +67,14 @@ func renderHintError(err config.HintError, ctx config.YamlCtx) string {
 
 func renderBpError(err config.BpError, ctx config.YamlCtx) string {
 	if pos, ok := findPos(err.Path, ctx); ok {
-		return renderPosError(err.Err, pos, ctx)
+		posErr := config.PosError{Pos: pos, Err: err.Err}
+		return renderPosError(posErr, ctx)
 	}
 	return renderError(err.Err, ctx)
 }
 
-func renderPosError(err error, pos config.Pos, ctx config.YamlCtx) string {
+func renderPosError(err config.PosError, ctx config.YamlCtx) string {
+	pos := err.Pos
 	line := pos.Line - 1
 	if line < 0 || line >= len(ctx.Lines) {
 		return renderError(err, ctx)
@@ -83,5 +87,5 @@ func renderPosError(err error, pos config.Pos, ctx config.YamlCtx) string {
 		arrow = spaces + "^"
 	}
 
-	return fmt.Sprintf("%s\n%s%s\n%s", renderError(err, ctx), pref, ctx.Lines[line], arrow)
+	return fmt.Sprintf("%s\n%s%s\n%s", renderError(err.Err, ctx), pref, ctx.Lines[line], arrow)
 }

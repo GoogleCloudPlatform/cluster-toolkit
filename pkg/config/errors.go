@@ -35,6 +35,20 @@ func (e BpError) Unwrap() error {
 	return e.Err
 }
 
+// PosError is an error wrapper to augment Position
+type PosError struct {
+	Pos Pos
+	Err error
+}
+
+func (e PosError) Error() string {
+	return fmt.Sprintf("line %d column %d: %s", e.Pos.Line, e.Pos.Column, e.Err)
+}
+
+func (e PosError) Unwrap() error {
+	return e.Err
+}
+
 // HintError wraps another error to suggest other values
 type HintError struct {
 	Hint string
