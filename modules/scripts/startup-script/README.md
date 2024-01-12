@@ -130,6 +130,37 @@ To view outputs from a Linux startup script, run:
 sudo journalctl -u google-startup-scripts.service
 ```
 
+### Monitoring Agent Installation
+
+This `startup-script` module has several options for installing a Google
+monitoring agent. There are two relevant settings: `install_stackdriver_agent`
+and `install_cloud_ops_agent`.
+
+The _Stackdriver Agent_ also called the _Legacy Cloud Monitoring Agent_ provides
+better performance under some HPC workloads. While official documentation
+recommends using the _Cloud Ops Agent_, it is recommended to use
+`install_stackdriver_agent` when performance is important.
+
+If an image or machine already has Cloud Ops Agent installed and you would like
+to instead use the Stackdrier Agent, the following script will remove the Cloud
+Ops Agent and install the Stackdriver Agent.
+
+```bash
+# Remove Cloud Ops Agent
+sudo systemctl stop google-cloud-ops-agent.service
+sudo systemctl disable google-cloud-ops-agent.service
+curl -sSO https://dl.google.com/cloudagents/add-google-cloud-ops-agent-repo.sh
+sudo bash add-google-cloud-ops-agent-repo.sh --uninstall
+sudo bash add-google-cloud-ops-agent-repo.sh --remove-repo
+
+# Install Stackdriver Agent
+curl -sSO https://dl.google.com/cloudagents/add-monitoring-agent-repo.sh
+sudo bash add-monitoring-agent-repo.sh --also-install
+curl -sSO https://dl.google.com/cloudagents/add-logging-agent-repo.sh
+sudo bash add-logging-agent-repo.sh --also-install
+sudo service stackdriver-agent start
+```
+
 ### Example
 
 ```yaml
@@ -171,7 +202,7 @@ they are able to do so by using the `gcs_bucket_path` as shown in the below exam
   source: ./modules/scripts/startup-script
   settings:
     gcs_bucket_path: gs://user-test-bucket/folder1/folder2
-    install_cloud_ops_agent: true
+    install_stackdriver_agent: true
 
 - id: compute-cluster
   source: ./modules/compute/vm-instance
@@ -238,7 +269,8 @@ No modules.
 | <a name="input_gcs_bucket_path"></a> [gcs\_bucket\_path](#input\_gcs\_bucket\_path) | The GCS path for storage bucket and the object, starting with `gs://`. | `string` | `null` | no |
 | <a name="input_http_proxy"></a> [http\_proxy](#input\_http\_proxy) | Web (http and https) proxy configuration for pip, apt, and yum/dnf | `string` | `""` | no |
 | <a name="input_install_ansible"></a> [install\_ansible](#input\_install\_ansible) | Run Ansible installation script if either set to true or unset and runner of type 'ansible-local' are used. | `bool` | `null` | no |
-| <a name="input_install_cloud_ops_agent"></a> [install\_cloud\_ops\_agent](#input\_install\_cloud\_ops\_agent) | Run Google Ops Agent installation script if set to true. | `bool` | `false` | no |
+| <a name="input_install_cloud_ops_agent"></a> [install\_cloud\_ops\_agent](#input\_install\_cloud\_ops\_agent) | Warning: Consider using `install_stackdriver_agent` for better performance. Run Google Ops Agent installation script if set to true. | `bool` | `false` | no |
+| <a name="input_install_stackdriver_agent"></a> [install\_stackdriver\_agent](#input\_install\_stackdriver\_agent) | Run Google Stackdriver Agent installation script if set to true. Preferred over ops agent for performance. | `bool` | `false` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels for the created GCS bucket. Key-value pairs. | `map(string)` | n/a | yes |
 | <a name="input_prepend_ansible_installer"></a> [prepend\_ansible\_installer](#input\_prepend\_ansible\_installer) | DEPRECATED. Use `install_ansible=false` to prevent ansible installation. | `bool` | `null` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created | `string` | n/a | yes |

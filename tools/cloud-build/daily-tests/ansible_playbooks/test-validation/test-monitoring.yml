@@ -19,24 +19,28 @@
   vars:
     vm_name: "{{ remote_node }}"
     timeout_seconds: 600
+
 - name: Gather service facts
   become: true
   ansible.builtin.service_facts:
-- name: Fail if ops agent is not running
+
+- name: Fail if stackdriver agent is not running
   ansible.builtin.assert:
     that:
-    - ansible_facts.services["google-cloud-ops-agent.service"].status == "enabled"
-    - ansible_facts.services["google-cloud-ops-agent-fluent-bit.service"].state == "running"
-    - ansible_facts.services["google-cloud-ops-agent-opentelemetry-collector.service"].state == "running"
+    - ansible_facts.services["stackdriver-agent"].status == "enabled"
+    - ansible_facts.services["stackdriver-agent"].state == "running"
+
 - name: Check that monitoring dashboard has been created
   changed_when: false
   ansible.builtin.command: gcloud monitoring dashboards list --format="get(displayName)"
   run_once: true
   delegate_to: localhost
   register: dashboards
+
 - name: Print dashboard information
   ansible.builtin.debug:
     var: dashboards
+
 - name: Fail if the HPC Dashboard hasn't been created
   ansible.builtin.fail:
     msg: Failed to create dashboard

@@ -113,7 +113,13 @@ EOT
 }
 
 variable "install_cloud_ops_agent" {
-  description = "Run Google Ops Agent installation script if set to true."
+  description = "Warning: Consider using `install_stackdriver_agent` for better performance. Run Google Ops Agent installation script if set to true."
+  type        = bool
+  default     = false
+}
+
+variable "install_stackdriver_agent" {
+  description = "Run Google Stackdriver Agent installation script if set to true. Preferred over ops agent for performance."
   type        = bool
   default     = false
 }

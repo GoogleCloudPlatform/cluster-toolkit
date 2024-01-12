@@ -42,7 +42,7 @@ deployment_groups:
     kind: terraform
     id: startup
     settings:
-      install_cloud_ops_agent: true
+      install_stackdriver_agent: true
       install_ansible: true
 
   - source: modules/compute/vm-instance
