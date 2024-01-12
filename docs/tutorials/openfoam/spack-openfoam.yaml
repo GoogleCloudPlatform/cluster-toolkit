@@ -35,7 +35,7 @@ deployment_groups:
   - id: spack-setup
     source: community/modules/scripts/spack-setup
     settings:
-      install_dir: /apps/spack
+      install_dir: /opt/apps/spack
       spack_ref: v0.20.0
 
   - id: spack-execute
@@ -95,7 +95,7 @@ deployment_groups:
         # fi
         # spack buildcache keys --install --trust
 
-        spack config --scope defaults add config:build_stage:/apps/spack/spack-stage
+        spack config --scope defaults add config:build_stage:/opt/apps/spack/spack-stage
         spack config --scope defaults add -f /tmp/projections-config.yaml
         spack config --scope site add -f /tmp/slurm-external-config.yaml
 
@@ -124,17 +124,16 @@ deployment_groups:
         destination: setup_openfoam.sh
         content: |
           #!/bin/bash
-          source /apps/spack/share/spack/setup-env.sh
+          source /opt/apps/spack/share/spack/setup-env.sh
           spack env activate openfoam
-          chmod -R a+rwX /apps/spack/var/spack/environments/openfoam
       - type: data
-        destination: /apps/openfoam/submit_openfoam.sh
+        destination: /opt/apps/openfoam/submit_openfoam.sh
         content: |
           #!/bin/bash
           #SBATCH -N 2
           #SBATCH --ntasks-per-node 30
 
-          source /apps/spack/share/spack/setup-env.sh
+          source /opt/apps/spack/share/spack/setup-env.sh
           spack env activate openfoam
 
           cd $SLURM_SUBMIT_DIR

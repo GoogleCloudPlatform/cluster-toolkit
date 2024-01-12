@@ -75,7 +75,7 @@ which should be open in the Cloud Shell Editor (on the left).
 
 This file describes the cluster you will deploy. It defines:
 
-* the existing default network from your project
+* a vpc network
 * a monitoring dashboard with metrics on your cluster
 * a definition of a custom Spack installation
 * a startup script that
@@ -135,16 +135,16 @@ controller. This command can be used to view progress and check for completion
 of the startup script:
 
 ```bash
-gcloud compute instances get-serial-port-output --port 1 --zone us-central1-c --project <walkthrough-project-id/> slurm-spack-openfoam-controller | grep google_metadata_script_runner
+gcloud compute instances get-serial-port-output --port 1 --zone us-central1-c --project <walkthrough-project-id/> spackopenf-controller | grep google_metadata_script_runner
 ```
 
 When the startup script has finished running you will see the following line as
 the final output from the above command:
-> _`slurm-spack-openfoam-controller google_metadata_script_runner: Finished running startup scripts.`_
+> _`spackopenf-controller google_metadata_script_runner: Finished running startup scripts.`_
 
 Optionally while you wait, you can see your deployed VMs on Google Cloud
 Console. Open the link below in a new window. Look for
-`slurm-spack-openfoam-controller`. If you don't
+`spackopenf-controller`. If you don't
 see your VMs make sure you have the correct project selected (top left).
 
 ```text
@@ -204,7 +204,7 @@ OpenFOAM job.
 2. Submit the job to Slurm to be scheduled:
 
    ```bash
-   sbatch /apps/openfoam/submit_openfoam.sh
+   sbatch /opt/apps/openfoam/submit_openfoam.sh
    ```
 
 3. Once submitted, you can watch the job progress by repeatedly calling the
@@ -218,7 +218,7 @@ The `sbatch` command trigger Slurm to auto-scale up several nodes to run the job
 
 You can refresh the `Compute Engine` > `VM instances` page and see that
 additional VMs are being/have been created. These will be named something like
-`slurm-spack-openfoam-compute-0-0`.
+`spackopenf-comput-0`.
 
 When running `squeue`, observe the job status start as `CF` (configuring),
 change to `R` (running) once the compute VMs have been created, and finally `CG`
@@ -271,7 +271,7 @@ exit
 Run the following command in the cloud shell terminal to destroy the cluster:
 
 ```bash
-./ghpc deploy spack-openfoam
+./ghpc destroy spack-openfoam
 ```
 
 When complete you should see something like:
