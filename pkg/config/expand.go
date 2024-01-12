@@ -80,8 +80,7 @@ func validateModuleInputs(mp ModulePath, m Module, bp Blueprint) error {
 
 		if !m.Settings.Has(input.Name) {
 			if input.Required {
-				errs.At(ip, fmt.Errorf("%s: Module ID: %s Setting: %s",
-					errMsgMissingSetting, m.ID, input.Name))
+				errs.At(ip, fmt.Errorf("a required setting %q is missing from a module %q", input.Name, m.ID))
 			}
 			continue
 		}
