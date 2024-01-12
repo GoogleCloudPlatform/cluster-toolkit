@@ -12,6 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+set -e -o pipefail
 
 LEGACY_MONITORING_PACKAGE='stackdriver-agent'
 LEGACY_MONITORING_SCRIPT_URL='https://dl.google.com/cloudagents/add-monitoring-agent-repo.sh'
@@ -21,7 +22,7 @@ LEGACY_LOGGING_SCRIPT_URL='https://dl.google.com/cloudagents/add-logging-agent-r
 OPSAGENT_PACKAGE='google-cloud-ops-agent'
 OPSAGENT_SCRIPT_URL='https://dl.google.com/cloudagents/add-google-cloud-ops-agent-repo.sh'
 
-install_legacy="${1:-true}"
+ops_or_legacy="${1:-legacy}"
 
 fail() {
 	echo >&2 "[$(date +'%Y-%m-%dT%H:%M:%S%z')] $*"
@@ -113,11 +114,22 @@ main() {
 		fail "Unsupported platform."
 	fi
 
-	if is_legacy_installed || is_opsagent_installed; then
-		fail "Legacy (stackdriver) or Ops Agent is already installed."
+	# Handle cases that agent is already installed
+	if [[ -z "$(is_legacy_monitoring_installed)" && -n $(is_legacy_logging_installed) ]] ||
+		[[ -n "$(is_legacy_monitoring_installed)" && -z $(is_legacy_logging_installed) ]]; then
+		fail "Bad state: legacy agent is partially installed"
+	elif [[ "${ops_or_legacy}" == "legacy" ]] && is_legacy_installed; then
+		echo "Legacy agent is already installed"
+		exit 0
+	elif [[ "${ops_or_legacy}" != "legacy" ]] && is_opsagent_installed; then
+		echo "Ops agent is already installed"
+		exit 0
+	elif is_legacy_installed || is_opsagent_installed; then
+		fail "Agent is already installed but does not match requested agent of ${ops_or_legacy}"
 	fi
 
-	if [[ "${install_legacy}" == true ]]; then
+	# install agent
+	if [[ "${ops_or_legacy}" == "legacy" ]]; then
 		echo "Installing legacy monitoring agent (stackdriver)"
 		install_stackdriver_agent
 	else

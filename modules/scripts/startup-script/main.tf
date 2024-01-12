@@ -26,7 +26,7 @@ locals {
       type        = "shell"
       source      = "${path.module}/files/install_monitoring_agent.sh"
       destination = "install_monitoring_agent_automatic.sh"
-      args        = var.install_cloud_ops_agent ? "false" : "true" # install legacy (stackdriver)
+      args        = var.install_cloud_ops_agent ? "ops" : "legacy" # install legacy (stackdriver)
     }] :
     []
   )
@@ -175,7 +175,7 @@ resource "google_storage_bucket_object" "scripts" {
 
   lifecycle {
     precondition {
-      condition     = !var.install_cloud_ops_agent || !var.install_stackdriver_agent
+      condition     = !(var.install_cloud_ops_agent && var.install_stackdriver_agent)
       error_message = "Only one of var.install_stackdriver_agent or var.install_cloud_ops_agent can be set. Stackdriver is recommended for best performance."
     }
   }
