@@ -64,6 +64,7 @@ locals {
     min_cpu_platform  = var.min_cpu_platform
 
     on_host_maintenance      = var.on_host_maintenance
+    maintenance_interval     = var.maintenance_interval
     preemptible              = var.preemptible
     region                   = var.region
     service_account          = var.service_account

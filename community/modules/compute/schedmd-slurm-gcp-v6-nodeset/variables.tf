@@ -240,6 +240,12 @@ variable "on_host_maintenance" {
   default     = "TERMINATE"
 }
 
+variable "maintenance_interval" {
+  description = "Specifies the frequency of planned maintenance events. The accepted values are: PERIODIC"
+  type        = string
+  default     = null
+}
+
 variable "guest_accelerator" {
   description = "List of the type and count of accelerator cards attached to the instance."
   type = list(object({
