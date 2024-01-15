@@ -171,6 +171,25 @@ variable "system_node_pool_taints" {
   }]
 }
 
+variable "system_node_pool_kubernetes_labels" {
+  description = <<-EOT
+  Kubernetes labels to be applied to each node in the node group. Key-value pairs. 
+  (The `kubernetes.io/` and `k8s.io/` prefixes are reserved by Kubernetes Core components and cannot be specified)
+  EOT
+  type        = map(string)
+  default     = null
+}
+variable "system_node_pool_image_type" {
+  description = "The default image type used by NAP once a new node pool is being created. Use either COS_CONTAINERD or UBUNTU_CONTAINERD."
+  type        = string
+  default     = "COS_CONTAINERD"
+}
+variable "system_node_pool_enable_secure_boot" {
+  description = "Enable secure boot for the nodes.  Keep enabled unless custom kernel modules need to be loaded. See [here](https://cloud.google.com/compute/shielded-vm/docs/shielded-vm#secure-boot) for more info."
+  type        = bool
+  default     = true
+}
+
 variable "enable_private_nodes" {
   description = "(Beta) Whether nodes have internal IP addresses only."
   type        = bool
