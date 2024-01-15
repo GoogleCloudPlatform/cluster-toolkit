@@ -88,7 +88,7 @@ The solution here is to [request more of the specified quota](#gcp-quotas),
 `C2 CPUs` in the example above. Alternatively, you could switch the partition's
 [machine type][partition-machine-type], to one which has sufficient quota.
 
-[partition-machine-type]: community/modules/compute/SchedMD-slurm-on-gcp-partition/README.md#input_machine_type
+[partition-machine-type]: community/modules/compute/schedmd-slurm-gcp-v6-nodeset/README.md#input_machine_type
 
 #### Placement Groups (Slurm)
 
@@ -109,7 +109,7 @@ resume.py ERROR: group operation failed: Requested minimum count of 6 VMs could 
 One way to resolve this is to set [enable_placement][partition-enable-placement]
 to `false` on the partition in question.
 
-[partition-enable-placement]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/compute/SchedMD-slurm-on-gcp-partition#input_enable_placement
+[partition-enable-placement]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/compute/schedmd-slurm-gcp-v6-nodeset#input_enable_placement
 
 #### VMs Get Stuck in Status Staging When Using Placement Groups With vm-instance
 
@@ -188,8 +188,8 @@ After creating the service account, it can be set via the
 
 [def-compute-sa]: https://cloud.google.com/compute/docs/access/service-accounts#default_service_account
 [slurm-on-gcp-ug]: https://goo.gle/slurm-gcp-user-guide
-[slurm-on-gcp-con]: community/modules/scheduler/SchedMD-slurm-on-gcp-controller/README.md
-[slurm-on-gcp-login]: community/modules/scheduler/SchedMD-slurm-on-gcp-login-node/README.md
+[slurm-on-gcp-con]: community/modules/scheduler/schedmd-slurm-gcp-v6-controller/README.md
+[slurm-on-gcp-login]: community/modules/scheduler/schedmd-slurm-gcp-v6-login/README.md
 
 ### Timeout Error / Startup Script Failure (Slurm V5)
 
