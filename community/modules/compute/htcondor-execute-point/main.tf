@@ -199,7 +199,7 @@ module "mig" {
     max_unavailable_percent      = null
     min_ready_sec                = 300
     minimal_action               = "REPLACE"
-    type                         = "OPPORTUNISTIC"
+    type                         = var.update_policy
   }]
 
 }

@@ -127,6 +127,37 @@ the University of Wisconsin-Madison. Support for HTCondor is available via:
 
 [chtc]: https://chtc.cs.wisc.edu/
 
+## Behavior of Managed Instance Group (MIG)
+
+Regional [MIGs][mig] are used to provision Execute Points. By default, VMs
+will be provisioned in any of the zones available in that region, however, it
+can be constrained to run in fewer zones (or a single zone) using
+[var.zones](#input_zones).
+
+By default, the VM replacement policy is set to [opportunistic]. In practice,
+this means that the Execute Points will _NOT_ be automatically replaced by
+Terraform when changes to the instance template / HTCondor configuration are
+made. We recommend leaving this at the default value as it will allow the
+HTCondor autoscaler to replace VMs when they become idle without disrupting
+running jobs.
+
+However, if it is desired [var.update_policy][#input_update_policy] can be set
+to "PROACTIVE" to enable automatic replacement. This will disrupt running jobs
+and send them back to the queue. Alternatively, one can leave the setting at
+"OPPORTUNISTIC" and update:
+
+- intentionally by issuing an update via Cloud Console or using gcloud (below)
+- VMs becomes unhealthy or are otherwise automatically replaced (e.g. regular
+  Google Cloud maintenance)
+
+For example, to manually update all instances in a MIG:
+
+```text
+gcloud compute instance-groups managed update-instances \
+   <<NAME-OF-MIG>> --all-instances --region <<REGION>> \
+   --project <<PROJECT_ID>> --minimal-action replace
+```
+
 ## Known Issues
 
 When using OS Login with "external users" (outside of the Google Cloud
@@ -217,6 +248,7 @@ limitations under the License.
 | <a name="input_spot"></a> [spot](#input\_spot) | Provision VMs using discounted Spot pricing, allowing for preemption | `bool` | `false` | no |
 | <a name="input_subnetwork_self_link"></a> [subnetwork\_self\_link](#input\_subnetwork\_self\_link) | The self link of the subnetwork HTCondor execute points will join | `string` | `null` | no |
 | <a name="input_target_size"></a> [target\_size](#input\_target\_size) | Initial size of the HTCondor execute point pool; set to null (default) to avoid Terraform management of size. | `number` | `null` | no |
+| <a name="input_update_policy"></a> [update\_policy](#input\_update\_policy) | Replacement policy for Access Point Managed Instance Group ("PROACTIVE" to replace immediately or "OPPORTUNISTIC" to replace upon instance power cycle) | `string` | `"OPPORTUNISTIC"` | no |
 | <a name="input_windows_startup_ps1"></a> [windows\_startup\_ps1](#input\_windows\_startup\_ps1) | Startup script to run at boot-time for Windows-based HTCondor execute points | `list(string)` | `[]` | no |
 | <a name="input_zones"></a> [zones](#input\_zones) | Zone(s) in which execute points may be created. If not supplied, will default to all zones in var.region. | `list(string)` | `[]` | no |
 
