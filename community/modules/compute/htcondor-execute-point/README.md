@@ -3,7 +3,7 @@
 This module performs the following tasks:
 
 - create an instance template from which execute points will be created
-- create a managed instance group (MIG) for execute points
+- create a managed instance group ([MIG][mig]) for execute points
 - create a Toolkit runner to configure the autoscaler to scale the MIG
 
 It is expected to be used with the [htcondor-install] and [htcondor-setup]
@@ -11,6 +11,7 @@ modules.
 
 [htcondor-install]: ../../scripts/htcondor-install/README.md
 [htcondor-setup]: ../../scheduler/htcondor-setup/README.md
+[mig]: https://cloud.google.com/compute/docs/instance-groups/
 
 ### Known limitations
 
