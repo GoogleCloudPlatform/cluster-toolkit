@@ -34,12 +34,14 @@ A regional [MIG][mig] is used to provision the Access Point, although only
 in any of the zones available in that region, however, it can be constrained to
 run in fewer zones (or a single zone) using [var.zones](#input_zones).
 
-By default, the VM replacement policy is set to [opportunistic]. In practice,
-this means that the Access Point will _NOT_ be automatically replaced by
-Terraform when changes to the instance template / HTCondor configuration are
-made. The Access Point is _NOT_ safe to replace automatically as its local storage
-contains the state of the job queue. By default, the Access Point will be
-replaced only when:
+When the configuration of the Central Manager is changed, the MIG can be
+configured to [replace the VM][replacement] using a "proactive" or
+"opportunistic" policy. By default, the Access Point replacement policy is
+opportunistic. In practice, this means that the Access Point will _NOT_ be
+automatically replaced by Terraform when changes to the instance template /
+HTCondor configuration are made. The Access Point is _NOT_ safe to replace
+automatically as its local storage contains the state of the job queue. By
+default, the Access Point will be replaced only when:
 
 - intentionally by issuing an update via Cloud Console or using gcloud (below)
 - the VM becomes unhealthy or is otherwise automatically replaced (e.g. regular
@@ -53,10 +55,10 @@ gcloud compute instance-groups managed update-instances \
    --project <<PROJECT_ID>> --minimal-action replace
 ```
 
-This mode can be switched to "PROACTIVE" (automatic) replacement by setting
-[var.update_policy][#input_update_policy]. In this case we recommend the use of
-Filestore to store the job queue state ("spool") and setting
-[var.spool_parent_dir][#input_spool_parent_dir] to its mount point:
+This mode can be switched to proactive (automatic) replacement by setting
+[var.update_policy](#input_update_policy) to "PROACTIVE". In this case we
+recommend the use of Filestore to store the job queue state ("spool") and
+setting [var.spool_parent_dir][#input_spool_parent_dir] to its mount point:
 
 ```yaml
   - id: spoolfs
@@ -82,7 +84,7 @@ Filestore to store the job queue state ("spool") and setting
       spool_parent_dir: /shared
 ```
 
-[opportunistic]: https://cloud.google.com/compute/docs/instance-groups/rolling-out-updates-to-managed-instance-groups#type
+[replacement]: https://cloud.google.com/compute/docs/instance-groups/rolling-out-updates-to-managed-instance-groups#type
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 Copyright 2023 Google LLC

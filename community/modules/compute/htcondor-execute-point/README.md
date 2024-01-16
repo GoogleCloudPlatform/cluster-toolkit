@@ -134,17 +134,18 @@ will be provisioned in any of the zones available in that region, however, it
 can be constrained to run in fewer zones (or a single zone) using
 [var.zones](#input_zones).
 
-By default, the VM replacement policy is set to [opportunistic]. In practice,
-this means that the Execute Points will _NOT_ be automatically replaced by
-Terraform when changes to the instance template / HTCondor configuration are
-made. We recommend leaving this at the default value as it will allow the
-HTCondor autoscaler to replace VMs when they become idle without disrupting
-running jobs.
+When the configuration of an Execute Point is changed, the MIG can be configured
+to [replace the VM][replacement] using a "proactive" or "opportunistic" policy.
+By default, the policy is set to opportunistic. In practice, this means that
+Execute Points will _NOT_ be automatically replaced by Terraform when changes to
+the instance template / HTCondor configuration are made. We recommend leaving
+this at the default value as it will allow the HTCondor autoscaler to replace
+VMs when they become idle without disrupting running jobs.
 
-However, if it is desired [var.update_policy][#input_update_policy] can be set
+However, if it is desired [var.update_policy](#input_update_policy) can be set
 to "PROACTIVE" to enable automatic replacement. This will disrupt running jobs
 and send them back to the queue. Alternatively, one can leave the setting at
-"OPPORTUNISTIC" and update:
+the default value of "OPPORTUNISTIC" and update:
 
 - intentionally by issuing an update via Cloud Console or using gcloud (below)
 - VMs becomes unhealthy or are otherwise automatically replaced (e.g. regular
@@ -157,6 +158,8 @@ gcloud compute instance-groups managed update-instances \
    <<NAME-OF-MIG>> --all-instances --region <<REGION>> \
    --project <<PROJECT_ID>> --minimal-action replace
 ```
+
+[replacement]: https://cloud.google.com/compute/docs/instance-groups/rolling-out-updates-to-managed-instance-groups#type
 
 ## Known Issues
 

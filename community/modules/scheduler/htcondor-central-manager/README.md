@@ -31,14 +31,18 @@ A regional [MIG][mig] is used to provision the central manager, although only
 in any of the zones available in that region, however, it can be constrained to
 run in fewer zones (or a single zone) using [var.zones](#input_zones).
 
-By default, the VM replacement policy is set to [proactive]. In practice, this
-means that the Central Manager will be replaced by Terraform when changes to
-the instance template / HTCondor configuration are made. The Central Manager is
-safe to replace automatically as it gathers its state information from periodic
-messages exchanged with the rest of the HTCondor pool.
+When the configuration of the Central Manager is changed, the MIG can be
+configured to [replace the VM][replacement] using a "proactive" or
+"opportunistic" policy. By default, the Central Manager replacement policy is
+set to proactive. In practice, this means that the Central Manager will be
+replaced by Terraform when changes to the instance template / HTCondor
+configuration are made. The Central Manager is safe to replace automatically as
+it gathers its state information from periodic messages exchanged with the rest
+of the HTCondor pool.
 
-This mode can be switched to "OPPORTUNISTIC" by setting [var.update_policy][#input_update_policy].
-In this case, the Central Manager will be replaced only when:
+This mode can be configured by setting [var.update_policy](#input_update_policy)
+to either "PROACTIVE" (default) or "OPPORTUNISTIC". If set to opportunistic
+replacement, the Central Manager will be replaced only when:
 
 - intentionally by issuing an update via Cloud Console or using gcloud (below)
 - the VM becomes unhealthy or is otherwise automatically replaced (e.g. regular
@@ -52,7 +56,7 @@ gcloud compute instance-groups managed update-instances \
    --project <<PROJECT_ID>> --minimal-action replace
 ```
 
-[proactive]: https://cloud.google.com/compute/docs/instance-groups/rolling-out-updates-to-managed-instance-groups#type
+[replacement]: https://cloud.google.com/compute/docs/instance-groups/rolling-out-updates-to-managed-instance-groups#type
 
 ## Limiting inter-zone egress
 
