@@ -78,6 +78,7 @@ func TestParseBpLit(t *testing.T) {
 		err   bool
 	}
 	tests := []test{
+		// Single expression, without string interpolation
 		{"$(vars.green)", "var.green", false},
 		{"$(vars.green[3])", "var.green[3]", false},
 		{"$(vars.green.sleeve)", "var.green.sleeve", false},
@@ -91,32 +92,38 @@ func TestParseBpLit(t *testing.T) {
 		{"$(box.green.sleeve[3])", "module.box.green.sleeve[3]", false},
 		{`$(box.green["sleeve"])`, `module.box.green["sleeve"]`, false},
 
-		{`1gold was here`, `1gold was here`, false},
+		// String interpolation
+		{`1gold was here`, `"1gold was here"`, false},
 		{`2gold $(vars.here)`, `"2gold ${var.here}"`, false},
 		{`3gold $(vars.here) but $(vars.gone)`, `"3gold ${var.here} but ${var.gone}"`, false},
-		{`4gold \$(vars.here)`, `4gold \$(vars.here)`, false},
+		{`4gold
+$(vars.here)`, `"4gold\n${var.here}"`, false}, // quoted strings may not be split over multiple lines
 
 		{`5gold
-$(vars.here)`, `"5gold\n${var.here}"`, false}, // quoted strings may not be split over multiple lines
+was here`, `"5gold\nwas here"`, false},
+		{"6gold $(vars.here", ``, true},      // missing close parenthesis
+		{"7gold $(vars.here + 2)", ``, true}, // unsupported expression
 
-		{`6gold
-was here`, `6gold
-was here`, false}, // no need to special handling if it's just a string, hclwrite will take care of it
+		{`#!/bin/bash
+echo "Hello $(vars.project_id) from $(vars.region)"`, `"#!/bin/bash\necho \"Hello ${var.project_id} from ${var.region}\""`, false},
+		{"", `""`, false},
+		{`$(try(vars.this) + one(vars.time))`, "", true}, // fails because of unsupported expression, but it should be parsed
 
-		{"7gold $(vars.here", ``, true},      // missing close parenthesis
-		{"8gold $(vars.here + 2)", ``, true}, // unsupported expression
+		// Escaping
+		{`q $(vars.t)`, `"q ${var.t}"`, false},           // no escaping
+		{`q \$(vars.t)`, `"q $(vars.t)"`, false},         // escaped `$(`
+		{`q \\$(vars.t)`, `"q \\${var.t}"`, false},       // escaped `\`
+		{`q \\\$(vars.t)`, `"q \\$(vars.t)"`, false},     // escaped both `\` and `$(`
+		{`q \\\\$(vars.t)`, `"q \\\\${var.t}"`, false},   // escaped `\\`
+		{`q \\\\\$(vars.t)`, `"q \\\\$(vars.t)"`, false}, // escaped both `\\` and `$(`
 
+		// Untranslatable expressions
 		{"$(vars)", "", true},
 		{"$(sleeve)", "", true},
 		{"$(box[3])", "", true},        // can't index module
 		{`$(box["green"])`, "", true},  // can't index module
 		{"$(vars[3]])", "", true},      // can't index vars
 		{`$(vars["green"])`, "", true}, // can't index module
-
-		{`#!/bin/bash
-echo "Hello $(vars.project_id) from $(vars.region)"`, `"#!/bin/bash\necho \"Hello ${var.project_id} from ${var.region}\""`, false},
-		{"", "", false},
-		{`$(try(vars.this) + one(vars.time))`, "", true}, // fails because of unsupported expression, but it should be parsed
 	}
 	for _, tc := range tests {
 		t.Run(tc.input, func(t *testing.T) {
@@ -129,7 +136,7 @@ echo "Hello $(vars.project_id) from $(vars.region)"`, `"#!/bin/bash\necho \"Hell
 			}
 			var got string
 			if v.Type() == cty.String {
-				got = v.AsString()
+				got = string(hclwrite.TokensForValue(v).Bytes())
 			} else if exp, is := IsExpressionValue(v); is {
 				got = string(exp.Tokenize().Bytes())
 			} else {

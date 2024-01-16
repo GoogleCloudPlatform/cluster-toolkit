@@ -291,18 +291,6 @@ func HasMark[T any](val cty.Value) (T, bool) {
 	return tgt, found
 }
 
-func escapeBlueprintVariables(s string) string {
-	// Convert \$(not.variable) to $(not.variable)
-	re := regexp.MustCompile(`\\\$\(`)
-	return re.ReplaceAllString(s, `$(`)
-}
-
-func escapeLiteralVariables(s string) string {
-	// Convert \((not.variable)) to ((not.variable))
-	re := regexp.MustCompile(`\\\(\(`)
-	return re.ReplaceAllString(s, `((`)
-}
-
 // TokensForValue is a modification of hclwrite.TokensForValue.
 // The only difference in behavior is handling "HCL literal" strings.
 func TokensForValue(val cty.Value) hclwrite.Tokens {
@@ -316,14 +304,6 @@ func TokensForValue(val cty.Value) hclwrite.Tokens {
 	}
 	val, _ = val.Unmark() // remove marks, as we don't need them anymore
 	ty := val.Type()
-	if ty == cty.String {
-		s := val.AsString()
-		// The order of application matters, for an edge cases like: `\$\((` -> `$((`
-		s = escapeLiteralVariables(s)
-		s = escapeBlueprintVariables(s)
-		return hclwrite.TokensForValue(cty.StringVal(s))
-	}
-
 	if ty.IsListType() || ty.IsSetType() || ty.IsTupleType() {
 		tl := []hclwrite.Tokens{}
 		for it := val.ElementIterator(); it.Next(); {
@@ -400,18 +380,24 @@ func tokenizeBpString(s string) ([]pToken, error) {
 	toks := []pToken{}
 	var exp Expression
 	var err error
+	bsRe := regexp.MustCompile(`\\*$`) // to count number of backslashes at the end
 
 	for len(s) > 0 {
 		i := strings.Index(s, "$(")
 		if i == -1 { // plain string until the end
-			toks = append(toks, pToken{s: s}) // add everything
-			s = ""                            // and terminate
-		} else if strings.HasSuffix(s[:i+2], `\$(`) { // escaped
-			toks = append(toks, pToken{s: s[:i+2]}) // add "...\$("
-			s = s[i+2:]                             // continue after "\$("
+			toks, s = append(toks, pToken{s: s}), "" // add everything
+			break                                    // and terminate
+		}
+		p := s[:i]
+		s = s[i+2:]                       // split as `p$(s`
+		bs := len(bsRe.FindString(p))     // get number of trailing backslashes
+		p = p[:len(p)-bs+bs/2]            // keep (smaller) half of backslashes
+		toks = append(toks, pToken{s: p}) // add tokens up to "$("
+
+		if bs%2 == 1 { // escaped $(
+			toks = append(toks, pToken{s: "$("}) // add "$("
 		} else { // found beginning of expression
-			toks = append(toks, pToken{s: s[:i]}) // add up to "$("
-			exp, s, err = greedyParseHcl(s[i+2:]) // parse after "$("
+			exp, s, err = greedyParseHcl(s) // parse after "$("
 			if err != nil {
 				return nil, err
 			}

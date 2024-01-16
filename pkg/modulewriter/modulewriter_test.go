@@ -529,27 +529,6 @@ func (s *MySuite) TestWritePackerAutoVars(c *C) {
 
 }
 
-func (s *zeroSuite) TestStringEscape(c *C) {
-	f := func(s string) string {
-		toks := config.TokensForValue(cty.StringVal(s))
-		return string(toks.Bytes())
-	}
-	// LiteralVariables
-	c.Check(f(`\((not.var))`), Equals, `"((not.var))"`)
-	c.Check(f(`abc\((not.var))abc`), Equals, `"abc((not.var))abc"`)
-	c.Check(f(`abc \((not.var)) abc`), Equals, `"abc ((not.var)) abc"`)
-	c.Check(f(`abc \((not.var1)) abc \((not.var2)) abc`), Equals, `"abc ((not.var1)) abc ((not.var2)) abc"`)
-	c.Check(f(`abc \\((escape.backslash))`), Equals, `"abc \\((escape.backslash))"`)
-
-	// BlueprintVariables
-	c.Check(f(`\$(not.var)`), Equals, `"$(not.var)"`)
-	c.Check(f(`abc\$(not.var)abc`), Equals, `"abc$(not.var)abc"`)
-	c.Check(f(`abc \$(not.var) abc`), Equals, `"abc $(not.var) abc"`)
-	c.Check(f(`abc \$(not.var1) abc \$(not.var2) abc`), Equals, `"abc $(not.var1) abc $(not.var2) abc"`)
-	c.Check(f(`abc \\$(escape.backslash)`), Equals, `"abc \\$(escape.backslash)"`)
-
-}
-
 func (s *zeroSuite) TestDeploymentSource(c *C) {
 	{ // git
 		m := config.Module{Kind: config.TerraformKind, Source: "github.com/x/y.git"}

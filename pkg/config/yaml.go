@@ -265,13 +265,20 @@ func (y *YamlValue) unmarshalScalar(n *yaml.Node) error {
 	return nil
 }
 
+func isHCLLiteral(s string) bool {
+	return strings.HasPrefix(s, "((") && strings.HasSuffix(s, "))")
+}
+
 func parseYamlString(s string) (cty.Value, error) {
-	if strings.HasPrefix(s, "((") && strings.HasSuffix(s, "))") { // HCL literal
+	if isHCLLiteral(s) {
 		if e, err := ParseExpression(s[2 : len(s)-2]); err != nil {
 			return cty.NilVal, err
 		} else {
 			return e.AsValue(), nil
 		}
+	}
+	if strings.HasPrefix(s, `\((`) && strings.HasSuffix(s, `))`) {
+		return cty.StringVal(s[1:]), nil // escaped HCL literal
 	}
 	return parseBpLit(s)
 }
@@ -321,9 +328,24 @@ func (d *Dict) UnmarshalYAML(n *yaml.Node) error {
 // MarshalYAML implements custom YAML marshaling.
 func (d Dict) MarshalYAML() (interface{}, error) {
 	o, _ := cty.Transform(d.AsObject(), func(p cty.Path, v cty.Value) (cty.Value, error) {
+		if v.IsNull() {
+			return v, nil
+		}
 		if e, is := IsExpressionValue(v); is {
 			s := string(hclwrite.Format(e.Tokenize().Bytes()))
 			return cty.StringVal("((" + s + "))"), nil
+		}
+		if v.Type() == cty.String {
+			// Need to escape back the non-expressions (both HCL and blueprint ones)
+			s := v.AsString()
+			if isHCLLiteral(s) {
+				// yaml: "\((foo))" -unmarshal-> cty: "((foo))" -marshall-> yaml: "\((foo))"
+				// NOTE: don't attempt to escape both HCL and blueprint expressions
+				// they don't get unmarshalled together, terminate here
+				return cty.StringVal(`\` + s), nil
+			}
+			// yaml: "\$(var.foo)" -unmarshal-> cty: "$(var.foo)" -marshall-> yaml: "\$(var.foo)"
+			return cty.StringVal(strings.ReplaceAll(s, `$(`, `\$(`)), nil
 		}
 		return v, nil
 	})
