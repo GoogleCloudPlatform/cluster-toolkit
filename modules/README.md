@@ -301,7 +301,7 @@ repository:
   * Hosted on [GitHub](https://developer.hashicorp.com/terraform/language/modules/sources#github)
   * Google Cloud Storage [Buckets](https://developer.hashicorp.com/terraform/language/modules/sources#gcs-bucket)
   * Generic [git repositories](https://developer.hashicorp.com/terraform/language/modules/sources#generic-git-repository)
-  
+
   when modules are in a subdirectory of the git repository, a special
   double-slash `//` notation can be required as described below
 

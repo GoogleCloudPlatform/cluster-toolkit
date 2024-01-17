@@ -5,19 +5,6 @@
 Find the quickstart tutorial on
 [Google Cloud docs](https://cloud.google.com/hpc-toolkit/docs/quickstarts/slurm-cluster).
 
-## Intel Select Tutorial
-
-Walks through deploying an HPC cluster that is based on the
-[HPC virtual machine (VM) image][hpc-vm-image] and complies to the
-[Intel Select Solution for Simulation and Modeling criteria][intel-select].
-
-Click the button below to launch the Intel Select tutorial.
-
-[![Open in Cloud Shell](https://gstatic.com/cloudssh/images/open-btn.svg)](https://shell.cloud.google.com/cloudshell/editor?cloudshell_git_repo=https%3A%2F%2Fgithub.com%2FGoogleCloudPlatform%2Fhpc-toolkit&cloudshell_open_in_editor=docs%2Ftutorials%2Fintel-select%2Fhpc-cluster-intel-select.yaml&cloudshell_tutorial=docs%2Ftutorials%2Fintel-select%2Fintel-select.md)
-
-[hpc-vm-image]: https://cloud.google.com/compute/docs/instances/create-hpc-vm
-[intel-select]: https://www.intel.com/content/www/us/en/products/solutions/select-solutions/hpc/simulation-modeling.html
-
 ## HTCondor Tutorial
 
 Walk through deploying an HTCondor pool that supports jobs running inside Docker
@@ -26,6 +13,8 @@ containers or the base [HPC VM Image][hpc-vm-image].
 Click the button below to launch the HTCondor tutorial.
 
 [![Open in Cloud Shell](https://gstatic.com/cloudssh/images/open-btn.svg)](https://shell.cloud.google.com/cloudshell/editor?cloudshell_git_repo=https%3A%2F%2Fgithub.com%2FGoogleCloudPlatform%2Fhpc-toolkit&cloudshell_open_in_editor=community%2Fexamples%2Fhtc-htcondor.yaml&cloudshell_tutorial=docs%2Ftutorials%2Fhtcondor.md)
+
+[hpc-vm-image]: https://cloud.google.com/compute/docs/instances/create-hpc-vm
 
 ## SC-23 Tutorial
 
@@ -61,11 +50,11 @@ modules relate to each other.
 
 ```mermaid
 graph TB
-    A(Virtual Private Cloud) 
+    A(Virtual Private Cloud)
     C(Spack Install Script)
     D(Startup Scripts)
     E(Compute Partition)
-    F(Slurm Controller) 
+    F(Slurm Controller)
     G(Slurm Login Node)
     B(Monitoring Dashboard)
     C --> D

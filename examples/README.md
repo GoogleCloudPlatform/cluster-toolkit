@@ -21,7 +21,6 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [pfs-lustre.yaml](#pfs-lustreyaml-) ![core-badge]
   * [cae-slurm.yaml](#cae-slurmyaml-) ![core-badge]
   * [hpc-slurm-ubuntu2004.yaml](#hpc-slurm-ubuntu2004yaml-) ![community-badge]
-  * [hpc-intel-select-slurm.yaml](#hpc-intel-select-slurmyaml-) ![community-badge]
   * [pfs-daos.yaml](#pfs-daosyaml-) ![community-badge]
   * [hpc-slurm-daos.yaml](#hpc-slurm-daosyaml-) ![community-badge]
   * [hpc-amd-slurm.yaml](#hpc-amd-slurmyaml-) ![community-badge]
@@ -619,17 +618,6 @@ For this example the following is needed in the selected region:
   needed for `compute` partition_
 * Compute Engine API: Resource policies: **one for each job in parallel** -
   _only needed for `compute` partition_
-
-### [hpc-intel-select-slurm.yaml] ![community-badge]
-
-This example provisions a Slurm cluster automating the [steps to comply to the
-Intel Select Solutions for Simulation & Modeling Criteria][intelselect]. It is
-more extensively discussed in a dedicated [README for Intel
-examples][intel-examples-readme].
-
-[hpc-intel-select-slurm.yaml]: ../community/examples/intel/hpc-intel-select-slurm.yaml
-[intel-examples-readme]: ../community/examples/intel/README.md
-[intelselect]: https://cloud.google.com/compute/docs/instances/create-intel-select-solution-hpc-clusters
 
 ### [pfs-daos.yaml] ![community-badge]
 
