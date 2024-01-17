@@ -89,6 +89,22 @@ variable "zone" {
   type        = string
 }
 
+variable "zones" {
+  description = <<-EOD
+    Additional nodes in which to allow creation of partition nodes. Google Cloud
+    will find zone based on availability, quota and reservations.
+    EOD
+  type        = set(string)
+  default     = []
+
+  validation {
+    condition = alltrue([
+      for x in var.zones : length(regexall("^[a-z0-9-]+$", x)) > 0
+    ])
+    error_message = "A value in var.zones is not a valid zone name (example: us-central1-f)."
+  }
+}
+
 variable "data_disks" {
   description = "The data disks to include in the TPU node"
   type        = list(string)

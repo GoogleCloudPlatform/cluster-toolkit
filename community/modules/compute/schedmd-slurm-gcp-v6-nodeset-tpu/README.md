@@ -71,6 +71,7 @@ No resources.
 | <a name="input_subnetwork_self_link"></a> [subnetwork\_self\_link](#input\_subnetwork\_self\_link) | The name of the subnetwork to attach the TPU-vm of this nodeset to. | `string` | n/a | yes |
 | <a name="input_tf_version"></a> [tf\_version](#input\_tf\_version) | Nodeset Tensorflow version, see https://cloud.google.com/tpu/docs/supported-tpu-configurations#tpu_vm for details. | `string` | `"2.9.1"` | no |
 | <a name="input_zone"></a> [zone](#input\_zone) | Zone in which to create compute VMs. Additional zones in the same region can be specified in var.zones. | `string` | n/a | yes |
+| <a name="input_zones"></a> [zones](#input\_zones) | Additional nodes in which to allow creation of partition nodes. Google Cloud<br>will find zone based on availability, quota and reservations. | `set(string)` | `[]` | no |
 
 ## Outputs
 

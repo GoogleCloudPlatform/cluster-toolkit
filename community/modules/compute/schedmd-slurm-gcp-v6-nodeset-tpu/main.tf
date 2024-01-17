@@ -37,6 +37,6 @@ locals {
     # TODO: rename to subnetwork_self_link, requires changes to the scripts
     subnetwork      = var.subnetwork_self_link
     service_account = var.service_account
-    zone            = var.zone
+    zones           = toset(concat([var.zone], tolist(var.zones)))
   }
 }

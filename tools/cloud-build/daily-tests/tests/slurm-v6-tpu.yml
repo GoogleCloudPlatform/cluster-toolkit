@@ -22,7 +22,8 @@ slurm_cluster_name: "v6tpu{{ build[0:5] }}"
 
 cli_deployment_vars:
    region: us-central1
-   zone: us-central1-b
+   zone: us-central1-a
+   zones: "[us-central1-b,us-central1-c,us-central1-f]"
 
 zone: us-central1-b
 workspace: /workspace
