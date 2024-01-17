@@ -254,14 +254,13 @@ func (y *YamlValue) unmarshalScalar(n *yaml.Node) error {
 	if err != nil {
 		return err
 	}
-	y.Wrap(v)
 
-	if y.Unwrap().Type() == cty.String {
-		if y.v, err = parseYamlString(y.v.AsString()); err != nil {
+	if v.Type() == cty.String {
+		if v, err = parseYamlString(v.AsString()); err != nil {
 			return fmt.Errorf("line %d: %w", n.Line, err)
 		}
 	}
-
+	y.Wrap(v)
 	return nil
 }
 

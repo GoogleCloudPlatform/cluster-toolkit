@@ -1260,6 +1260,18 @@ Whenever possible, blueprint variables are preferred over literal variables.
 `ghpc` will perform basic validation making sure all blueprint variables are
 defined before creating a deployment, making debugging quicker and easier.
 
+### String Interpolation
+
+The `$(...)` expressions can be used within strings, see:
+
+```yaml
+settings:
+  title: Magnificent $(vars.name)
+  script: |
+    #!/bin/bash
+    echo "Hello $(vars.project_id) from $(vars.region)"
+```
+
 ### Escape Variables
 
 Under circumstances where the variable notation conflicts with the content of a setting or string, for instance when defining a startup-script runner that uses a subshell like in the example below, a non-quoted backslash (`\`) can be used as an escape character. It preserves the literal value of the next character that follows:
