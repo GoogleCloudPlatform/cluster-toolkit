@@ -98,6 +98,11 @@ deployment_groups:
     settings:
       runners:
       - type: shell
+        destination: remove_lustre_client.sh
+        content: |
+          #!/bin/bash
+          rm /etc/yum.repos.d/lustre-client.repo
+      - type: shell
         content: $(daos.daos_client_install_script)
         destination: /tmp/daos_client_install.sh
       - type: data
@@ -110,55 +115,76 @@ deployment_groups:
         content: $(daos.daos_client_config_script)
         destination: /var/daos/daos_client_config.sh
 
-  ## This debug_partition will work out of the box without requesting additional GCP quota.
+  - id: debug_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network1]
+    settings:
+      node_count_dynamic_max: 4
+      machine_type: n2-standard-2
+      enable_placement: false  # the default is: true
+      service_account:
+        email: null
+        scopes:
+        - "https://www.googleapis.com/auth/monitoring.write"
+        - "https://www.googleapis.com/auth/logging.write"
+        - "https://www.googleapis.com/auth/devstorage.read_only"
+        - "https://www.googleapis.com/auth/cloud-platform"
+
   - id: debug_partition
-    source: community/modules/compute/SchedMD-slurm-on-gcp-partition
-    use:
-    - network1
-    - homefs
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use: [debug_nodeset, homefs]
     settings:
       partition_name: debug
-      max_node_count: 4
-      enable_placement: false
-      machine_type: n2-standard-2
+      is_default: true
 
-  # This compute_partition is far more performant than debug_partition but may require requesting GCP quotas first.
+  - id: compute_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network1]
+    settings:
+      node_count_dynamic_max: 20
+      bandwidth_tier: gvnic_enabled
+      service_account:
+        email: null
+        scopes:
+        - "https://www.googleapis.com/auth/monitoring.write"
+        - "https://www.googleapis.com/auth/logging.write"
+        - "https://www.googleapis.com/auth/devstorage.read_only"
+        - "https://www.googleapis.com/auth/cloud-platform"
+
+
   - id: compute_partition
-    source: community/modules/compute/SchedMD-slurm-on-gcp-partition
-    use:
-    - network1
-    - homefs
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use: [compute_nodeset, homefs]
     settings:
       partition_name: compute
-      max_node_count: 20
-      bandwidth_tier: gvnic_enabled
-
-  - id: slurm_controller
-    source: community/modules/scheduler/SchedMD-slurm-on-gcp-controller
-    use:
-    - network1
-    - homefs
-    - debug_partition  # debug partition will be default as it is listed first
-    - compute_partition
-    - daos-client-script
-    settings:
-      login_node_count: 1
-      compute_node_scopes:
-      - "https://www.googleapis.com/auth/monitoring.write"
-      - "https://www.googleapis.com/auth/logging.write"
-      - "https://www.googleapis.com/auth/devstorage.read_only"
-      - "https://www.googleapis.com/auth/cloud-platform"
 
   - id: slurm_login
-    source: community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    use: [network1]
+    settings:
+      name_prefix: login
+      machine_type: n2-standard-4
+      disable_login_public_ips: false
+      service_account:
+        email: null
+        scopes:
+        - "https://www.googleapis.com/auth/monitoring.write"
+        - "https://www.googleapis.com/auth/logging.write"
+        - "https://www.googleapis.com/auth/devstorage.read_only"
+        - "https://www.googleapis.com/auth/cloud-platform"
+
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     use:
     - network1
+    - debug_partition
+    - compute_partition
+    - slurm_login
     - homefs
-    - slurm_controller
     - daos-client-script
     settings:
-      login_scopes:
-      - "https://www.googleapis.com/auth/monitoring.write"
-      - "https://www.googleapis.com/auth/logging.write"
-      - "https://www.googleapis.com/auth/devstorage.read_only"
-      - "https://www.googleapis.com/auth/cloud-platform"
+      disable_controller_public_ips: false
+      login_startup_script: $(daos-client-script.startup_script)
+      controller_startup_scripts_timeout: 1000
+      login_startup_scripts_timeout: 1000
+      compute_startup_scripts_timeout: 1000

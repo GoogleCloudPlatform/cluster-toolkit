@@ -241,9 +241,9 @@ The [hpc-slurm-daos.yaml](hpc-slurm-daos.yaml) blueprint describes an environmen
 
 The blueprint uses modules from
 - [google-cloud-daos][google-cloud-daos]
-- [community/modules/scheduler/SchedMD-slurm-on-gcp-controller][SchedMD-slurm-on-gcp-controller]
-- [community/modules/scheduler/SchedMD-slurm-on-gcp-login-node][SchedMD-slurm-on-gcp-login-node]
-- [community/modules/compute/SchedMD-slurm-on-gcp-partition][SchedMD-slurm-on-gcp-partition]
+- [community/modules/scheduler/schedmd-slurm-gcp-v6-controller][schedmd-slurm-gcp-v6-controller]
+- [community/modules/scheduler/schedmd-slurm-gcp-v6-login][schedmd-slurm-gcp-v6-login]
+- [community/modules/compute/schedmd-slurm-gcp-v6-partition][schedmd-slurm-gcp-v6-partition]
 
 The blueprint also uses a Packer template from the [Google Cloud
 DAOS][google-cloud-daos] repository. Please review the [introduction to image
@@ -266,9 +266,9 @@ The Pre-deployment Guide provides instructions for enabling service accounts, AP
 
 [packer-template]: https://github.com/daos-stack/google-cloud-daos/blob/main/images/daos.pkr.hcl
 [apis]: ../../../README.md#enable-gcp-apis
-[SchedMD-slurm-on-gcp-controller]: ../../modules/scheduler/SchedMD-slurm-on-gcp-controller
-[SchedMD-slurm-on-gcp-login-node]: ../../modules/scheduler/SchedMD-slurm-on-gcp-login-node
-[SchedMD-slurm-on-gcp-partition]: ../../modules/compute/SchedMD-slurm-on-gcp-partition
+[schedmd-slurm-gcp-v6-controller]: ../../modules/scheduler/schedmd-slurm-gcp-v6-controller
+[schedmd-slurm-gcp-v6-login]: ../../modules/scheduler/schedmd-slurm-gcp-v6-login
+[schedmd-slurm-gcp-v6-partition]: ../../modules/compute/schedmd-slurm-gcp-v6-partition
 
 Follow the Toolkit guidance to enable [APIs][apis] and establish minimum resource [quotas][quotas] for Slurm.
 
