@@ -26,7 +26,7 @@ deployment_groups:
 - group: primary
   modules:
   - id: network1
-    source: modules/network/pre-existing-vpc
+    source: modules/network/vpc
 
   - id: hpc_dash
     source: modules/monitoring/dashboard
@@ -35,8 +35,8 @@ deployment_groups:
   - id: spack-setup
     source: community/modules/scripts/spack-setup
     settings:
-      install_dir: /apps/spack
-      spack_ref: v0.19.0
+      install_dir: /opt/apps/spack
+      spack_ref: v0.20.0
 
   - id: spack-execute
     source: community/modules/scripts/spack-execute
@@ -88,7 +88,7 @@ deployment_groups:
         # fi
         # spack buildcache keys --install --trust
 
-        spack config --scope defaults add config:build_stage:/apps/spack/spack-stage
+        spack config --scope defaults add config:build_stage:/opt/apps/spack/spack-stage
         spack config --scope defaults add -f /tmp/projections-config.yaml
         spack config --scope site add -f /tmp/slurm-external-config.yaml
 
@@ -107,22 +107,26 @@ deployment_groups:
     source: modules/scripts/startup-script
     settings:
       runners:
+      # remove lustre client temporary to avoid startup failure due to known
+      # issue.
+      - type: shell
+        destination: remove_lustre_client.sh
+        content: |
+          #!/bin/bash
+          rm /etc/yum.repos.d/lustre-client.repo
       - $(spack-execute.spack_runner)
       - type: shell
         destination: setup_gromacs.sh
         content: |
           #!/bin/bash
-          source /apps/spack/share/spack/setup-env.sh
+          source /opt/apps/spack/share/spack/setup-env.sh
           spack env activate gromacs
-          chmod -R a+rwX /apps/spack/var/spack/environments/gromacs
-          mkdir -p /apps/gromacs
-          chmod a+rwx /apps/gromacs
-          cd /apps/gromacs
+          cd /opt/apps/gromacs
           wget --no-verbose https://ftp.gromacs.org/pub/benchmarks/water_GMX50_bare.tar.gz
           tar xzf water_GMX50_bare.tar.gz
 
       - type: data
-        destination: /apps/gromacs/submit_gromacs.sh
+        destination: /opt/apps/gromacs/submit_gromacs.sh
         content: |
           #!/bin/bash
           #SBATCH -N 2
@@ -131,36 +135,36 @@ deployment_groups:
           # Size can be 0000.65  0000.96  0001.5  0003  0006  0012  0024  0048  0096  0192  0384  0768  1536  3072
           # Type can be 'pme' or 'rf'
 
-          source /apps/spack/share/spack/setup-env.sh
+          source /opt/apps/spack/share/spack/setup-env.sh
           spack env activate gromacs
 
           # Check that gmx_mpi exists
           which gmx_mpi
           cd $SLURM_SUBMIT_DIR
-          cp /apps/gromacs/water-cut1.0_GMX50_bare/1536/* .
+          cp /opt/apps/gromacs/water-cut1.0_GMX50_bare/1536/* .
           scontrol show hostnames ${SLURM_JOB_NODELIST} > hostfile
           gmx_mpi grompp -f pme.mdp -c conf.gro -p topol.top -o input.tpr
           mpirun -n 60 -hostfile hostfile -ppn 30 gmx_mpi mdrun -notunepme -dlb yes -v -resethway -noconfout -nsteps 4000 -s input.tpr
 
+  - id: compute_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network1]
+    settings:
+      node_count_dynamic_max: 20
+      bandwidth_tier: gvnic_enabled
+
   - id: compute_partition
-    source: community/modules/compute/SchedMD-slurm-on-gcp-partition
-    use:
-    - network1
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use: [compute_nodeset]
     settings:
       partition_name: compute
-      max_node_count: 20
 
   - id: slurm_controller
-    source: community/modules/scheduler/SchedMD-slurm-on-gcp-controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     use:
     - network1
     - compute_partition
     settings:
+      disable_controller_public_ips: false
+      controller_startup_scripts_timeout: 21600
       controller_startup_script: $(controller-setup.startup_script)
-      login_node_count: 1
-
-  - id: slurm_login
-    source: community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
-    use:
-    - network1
-    - slurm_controller
