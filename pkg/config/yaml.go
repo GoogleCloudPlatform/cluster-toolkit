@@ -22,6 +22,7 @@ import (
 	"os"
 	"regexp"
 	"strconv"
+	"strings"
 
 	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/pkg/errors"
@@ -253,24 +254,32 @@ func (y *YamlValue) unmarshalScalar(n *yaml.Node) error {
 	if err != nil {
 		return err
 	}
-	y.Wrap(v)
 
-	if l, is := IsYamlExpressionLiteral(y.Unwrap()); is { // HCL literal
-		var e Expression
-		if e, err = ParseExpression(l); err != nil {
-			// TODO: point to exact location within expression, see Diagnostic.Subject
-			return nodeToPosErr(n, err)
+	if v.Type() == cty.String {
+		if v, err = parseYamlString(v.AsString()); err != nil {
+			return fmt.Errorf("line %d: %w", n.Line, err)
 		}
-		y.Wrap(e.AsValue())
-	} else if y.Unwrap().Type() == cty.String && hasVariable(y.Unwrap().AsString()) { // "simple" variable
-		e, err := SimpleVarToExpression(y.Unwrap().AsString())
-		if err != nil {
-			// TODO: point to exact location within expression, see Diagnostic.Subject
-			return nodeToPosErr(n, err)
-		}
-		y.Wrap(e.AsValue())
 	}
+	y.Wrap(v)
 	return nil
+}
+
+func isHCLLiteral(s string) bool {
+	return strings.HasPrefix(s, "((") && strings.HasSuffix(s, "))")
+}
+
+func parseYamlString(s string) (cty.Value, error) {
+	if isHCLLiteral(s) {
+		if e, err := ParseExpression(s[2 : len(s)-2]); err != nil {
+			return cty.NilVal, err
+		} else {
+			return e.AsValue(), nil
+		}
+	}
+	if strings.HasPrefix(s, `\((`) && strings.HasSuffix(s, `))`) {
+		return cty.StringVal(s[1:]), nil // escaped HCL literal
+	}
+	return parseBpLit(s)
 }
 
 func (y *YamlValue) unmarshalObject(n *yaml.Node) error {
@@ -318,9 +327,24 @@ func (d *Dict) UnmarshalYAML(n *yaml.Node) error {
 // MarshalYAML implements custom YAML marshaling.
 func (d Dict) MarshalYAML() (interface{}, error) {
 	o, _ := cty.Transform(d.AsObject(), func(p cty.Path, v cty.Value) (cty.Value, error) {
+		if v.IsNull() {
+			return v, nil
+		}
 		if e, is := IsExpressionValue(v); is {
 			s := string(hclwrite.Format(e.Tokenize().Bytes()))
 			return cty.StringVal("((" + s + "))"), nil
+		}
+		if v.Type() == cty.String {
+			// Need to escape back the non-expressions (both HCL and blueprint ones)
+			s := v.AsString()
+			if isHCLLiteral(s) {
+				// yaml: "\((foo))" -unmarshal-> cty: "((foo))" -marshall-> yaml: "\((foo))"
+				// NOTE: don't attempt to escape both HCL and blueprint expressions
+				// they don't get unmarshalled together, terminate here
+				return cty.StringVal(`\` + s), nil
+			}
+			// yaml: "\$(var.foo)" -unmarshal-> cty: "$(var.foo)" -marshall-> yaml: "\$(var.foo)"
+			return cty.StringVal(strings.ReplaceAll(s, `$(`, `\$(`)), nil
 		}
 		return v, nil
 	})

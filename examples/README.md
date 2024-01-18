@@ -1225,8 +1225,6 @@ The variable is referred to by the source, either vars for deploment variables
 or the module ID for module variables, followed by the name of the value being
 referenced. The entire variable is then wrapped in “$()”.
 
-Currently, string interpolation with variables is not supported.
-
 ### Literal Variables
 
 Literal variables should only be used by those familiar
@@ -1249,6 +1247,18 @@ everything inside will be provided as is to the module.
 Whenever possible, blueprint variables are preferred over literal variables.
 `ghpc` will perform basic validation making sure all blueprint variables are
 defined before creating a deployment, making debugging quicker and easier.
+
+### String Interpolation
+
+The `$(...)` expressions can be used within strings, see:
+
+```yaml
+settings:
+  title: Magnificent $(vars.name)
+  script: |
+    #!/bin/bash
+    echo "Hello $(vars.project_id) from $(vars.region)"
+```
 
 ### Escape Variables
 
