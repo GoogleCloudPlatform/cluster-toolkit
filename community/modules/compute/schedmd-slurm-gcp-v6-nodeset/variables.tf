@@ -32,7 +32,7 @@ variable "node_count_static" {
 variable "node_count_dynamic_max" {
   description = "Maximum number of dynamic nodes allowed in this partition."
   type        = number
-  default     = 1
+  default     = 10
 }
 
 ## VM Definition
