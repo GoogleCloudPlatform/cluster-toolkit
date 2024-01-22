@@ -204,7 +204,7 @@ ls -lh "${HOME}/daos/cont1"
 
 A work-around for this issue to disable caching when mounting the container.
 
-```
+```bash
 dfuse --singlethread --disable-caching --pool=pool1 --container=cont1 --mountpoint="${HOME}/daos/cont1"
 ```
 
@@ -234,7 +234,7 @@ See the [DFuse (DAOS FUSE)](https://docs.daos.io/v2.4/user/filesystem/?h=dfuse#d
 
 Delete the remaining infrastructure
 
-```shell
+```bash
 ghpc destroy pfs-daos --auto-approve
 ```
 
@@ -436,16 +436,15 @@ See the [DFuse (DAOS FUSE)](https://docs.daos.io/v2.4/user/filesystem/?h=dfuse#d
 
 ### Delete the DAOS/Slurm Cluster infrastructure when not in use
 
-> **_NOTE:_** All data on the DAOS file system will be permanently lost after cluster deletion.
-
-> **_NOTE:_** If the Slurm controller is shut down before the auto-scale instances
-> are destroyed those instances will be left running.
+> **Note:**
+> - Data on the DAOS file system will be permanently lost after cluster deletion.
+> - If the Slurm controller is shut down before the auto-scale instances are destroyed, those compute instances will be left running.
 
 Open your browser to the VM instances page and ensure that instances named "compute"
 have been shutdown and deleted by the Slurm autoscaler.
 
 Delete the remaining infrastructure:
 
-```shell
+```bash
 ghpc destroy hpc-slurm-daos --auto-approve
 ```
