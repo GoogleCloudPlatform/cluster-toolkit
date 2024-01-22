@@ -17,3 +17,5 @@ spec:
   requirements:
     services:
     - compute.googleapis.com
+ghpc:
+  inject_module_id: name_prefix
