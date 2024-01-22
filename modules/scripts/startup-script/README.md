@@ -161,6 +161,16 @@ sudo bash add-logging-agent-repo.sh --also-install
 sudo service stackdriver-agent start
 ```
 
+You can test if one of the agents is running using the following commands:
+
+```bash
+# For Cloud Ops Agent
+sudo systemctl status google-cloud-ops-agent
+
+# For Stackdriver Agent
+sudo service stackdriver-agent status
+```
+
 ### Example
 
 ```yaml
