@@ -186,7 +186,7 @@ main() {
 	fi
 
 	# Create pip virtual environment for HPC Toolkit
-	${python_path} -m venv "${venv_path}"
+	${python_path} -m venv "${venv_path}" --copies
 	venv_python_path=${venv_path}/bin/python3
 
 	# Upgrade pip if necessary
