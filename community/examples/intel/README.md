@@ -436,7 +436,8 @@ See the [DFuse (DAOS FUSE)](https://docs.daos.io/v2.4/user/filesystem/?h=dfuse#d
 
 ### Delete the DAOS/Slurm Cluster infrastructure when not in use
 
-> **Note:**
+> **_NOTE:_**
+>
 > - Data on the DAOS file system will be permanently lost after cluster deletion.
 > - If the Slurm controller is shut down before the auto-scale instances are destroyed, those compute instances will be left running.
 
