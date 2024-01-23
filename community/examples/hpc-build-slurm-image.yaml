@@ -38,6 +38,8 @@ deployment_groups:
   - id: slurm-build-script
     source: modules/scripts/startup-script
     settings:
+      # Do not create Ansible virtual env; Install system wide Ansible below.
+      install_ansible: false
       runners:
       - type: shell
         destination: prep-for-slurm-build.sh
@@ -49,9 +51,10 @@ deployment_groups:
           dnf install -y python38
           alternatives --set python3 /usr/bin/python3.8
           python3 -m pip install pip --upgrade
-          python3 -m pip install ansible
+          python3 -m pip install ansible==4.10.0
           python3 -m pip install selinux
           export PATH=/usr/local/bin:$PATH
+          ansible --version
           ansible-galaxy role install googlecloudplatform.google_cloud_ops_agents
       - type: data
         destination: /var/tmp/slurm_vars.json
