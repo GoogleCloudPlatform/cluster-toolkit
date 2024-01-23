@@ -85,7 +85,7 @@ variable "preserve_tpu" {
 }
 
 variable "zone" {
-  description = "Zone in which to create compute VMs. Additional zones in the same region can be specified in var.zones."
+  description = "Zone in which to create compute VMs. TPU partitions can only specify a single zone."
   type        = string
 }
 
