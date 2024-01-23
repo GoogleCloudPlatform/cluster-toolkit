@@ -149,7 +149,7 @@ Set ACLs to allow any user to create a container in *pool1*.
 sudo dmg pool update-acl -e A::EVERYONE@:rcta pool1
 ```
 
-See the [Pool Operations](https://docs.daos.io/v2.4/admin/pool_operations) section of the of the DAOS Administration Guide for more information about creating pools.
+See the [Pool Operations](https://docs.daos.io/v2.4/admin/pool_operations) section of the DAOS Administration Guide for more information about creating pools.
 
 #### Create a Container
 
@@ -162,7 +162,7 @@ For the purpose of this demo create the container without specifying ACLs. The c
 daos container create --type=POSIX --properties=rf:0 pool1 cont1
 ```
 
-See the [Container Management](https://docs.daos.io/v2.4/user/container) section of the of the DAOS User Guide for more information about creating containers.
+See the [Container Management](https://docs.daos.io/v2.4/user/container) section of the DAOS User Guide for more information about creating containers.
 
 #### Mount the DAOS Container
 
@@ -212,7 +212,7 @@ See the [File System](https://docs.daos.io/v2.4/user/filesystem/) section of the
 
 ### Unmount the DAOS Container
 
-The container will need to by unmounted before you log out.  If this is not done it can leave open file handles and prevent the container from being mounted when you log in again.
+The container will need to be unmounted before you log out.  If this is not done it can leave open file handles and prevent the container from being mounted when you log in again.
 
 Verify that the container is unmounted
 
