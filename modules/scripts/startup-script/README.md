@@ -165,11 +165,24 @@ You can test if one of the agents is running using the following commands:
 
 ```bash
 # For Cloud Ops Agent
-sudo systemctl status google-cloud-ops-agent
+$ sudo systemctl is-active google-cloud-ops-agent"*"
+active
+active
+active
+active
 
-# For Stackdriver Agent
-sudo service stackdriver-agent status
+# For Legacy Monitoring and Logging Agents
+$ sudo service stackdriver-agent status
+stackdriver-agent is running           [  OK  ]
+$ sudo service google-fluentd status
+google-fluentd is running              [  OK  ]
 ```
+
+For official documentation see troubleshooting docs:
+
+- [Cloud Ops Agent](https://cloud.google.com/stackdriver/docs/solutions/agents/ops-agent/troubleshoot-install-startup)
+- [Legacy Monitoring Agent](https://cloud.google.com/stackdriver/docs/solutions/agents/monitoring/troubleshooting)
+- [Legacy Logging Agent](https://cloud.google.com/stackdriver/docs/solutions/agents/logging/troubleshooting)
 
 ### Example
 
