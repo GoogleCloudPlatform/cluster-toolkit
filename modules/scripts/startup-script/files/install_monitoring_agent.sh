@@ -71,6 +71,7 @@ handle_debian() {
 		install_with_retry "${LEGACY_MONITORING_SCRIPT_URL}"
 		install_with_retry "${LEGACY_LOGGING_SCRIPT_URL}"
 		service stackdriver-agent start
+		service google-fluentd start
 	}
 }
 
@@ -102,6 +103,7 @@ handle_redhat() {
 		curl -sS "${LEGACY_MONITORING_SCRIPT_URL}" | bash -s -- --also-install
 		curl -sS "${LEGACY_LOGGING_SCRIPT_URL}" | bash -s -- --also-install
 		service stackdriver-agent start
+		service google-fluentd start
 	}
 }
 
