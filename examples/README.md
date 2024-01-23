@@ -48,10 +48,9 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [Top Level Parameters](#top-level-parameters)
   * [Deployment Variables](#deployment-variables)
   * [Deployment Groups](#deployment-groups)
-* [Variables](#variables)
-  * [Blueprint Variables](#blueprint-variables)
-  * [Literal Variables](#literal-variables)
-  * [Escape Variables](#escape-variables)
+* [Variables and expressions](#variables-and-expressions)
+  * [Blueprint expressions](#blueprint-expressions)
+  * [Escape expressions](#escape-expressions)
 
 ## Instructions
 
@@ -1193,19 +1192,20 @@ default in the [modules](../modules/README.md) folder.
 To learn more about how to refer to a module in a blueprint file, please consult the
 [modules README file.](../modules/README.md)
 
-## Variables
+## Variables and expressions
 
 Variables can be used to refer both to values defined elsewhere in the blueprint
 and to the output and structure of other modules.
 
-### Blueprint Variables
+### Blueprint expressions
 
-Variables in a blueprint file can refer to deployment variables or the outputs
-of other modules. For deployment and module variables, the syntax is as follows:
+Expressions in a blueprint file can refer to deployment variables or the outputs
+of other modules. The entire expression is wrapped in `$()`. The syntax is as follows:
 
 ```yaml
 vars:
   zone: us-central1-a
+  num_nodes: 2
 
 deployment_groups:
   - group: primary
@@ -1219,53 +1219,23 @@ deployment_groups:
          settings:
             key1: $(vars.zone)
             key2: $(resource1.name)
+            # access nested fields
+            key3: $(resource1.nodes[0].private_ip)
+            # arithmetic expression
+            key4: $(vars.num_nodes + 5)
+            # string interpolation
+            key5: $(resource1.name)_$(vars.zone)
+            # multiline string interpolation
+            key6: |
+              #!/bin/bash
+              echo "Hello $(vars.project_id) from $(vars.region)"
+            # use a function, supported by Terraform
+            key7: $(jsonencode(resource1.config))
 ```
 
-The variable is referred to by the source, either vars for deploment variables
-or the module ID for module variables, followed by the name of the value being
-referenced. The entire variable is then wrapped in “$()”.
+### Escape expressions
 
-### Literal Variables
-
-Literal variables should only be used by those familiar
-with the underlying module technology (Terraform or Packer);
-Literal variables are occasionally needed when calling a function or other complex statements. For example, to JSON-encode network storage metadata:
-
-```yaml
-metadata:
-  network_storage: ((jsonencode([module.appfs.network_storage])))
-```
-
-Here the network1 module is referenced, the terraform module name is the same as
-the ID in the blueprint file. From the module we can refer to it's underlying
-variables as deep as we need, in this case the self_link for it's
-primary_subnetwork.
-
-The entire text of the variable is wrapped in double parentheses indicating that
-everything inside will be provided as is to the module.
-
-Whenever possible, blueprint variables are preferred over literal variables.
-`ghpc` will perform basic validation making sure all blueprint variables are
-defined before creating a deployment, making debugging quicker and easier.
-
-### String Interpolation
-
-The `$(...)` expressions can be used within strings, see:
-
-```yaml
-settings:
-  title: Magnificent $(vars.name)
-  script: |
-    #!/bin/bash
-    echo "Hello $(vars.project_id) from $(vars.region)"
-```
-
-### Escape Variables
-
-Under circumstances where the variable notation conflicts with the content of a setting or string, for instance when defining a startup-script runner that uses a subshell like in the example below, a non-quoted backslash (`\`) can be used as an escape character. It preserves the literal value of the next character that follows:
-
-* `\$(not.bp_var)` evaluates to `$(not.bp_var)`.
-* `\((not.literal_var))` evaluates to `((not.literal_var))`.
+Under circumstances where the expression notation conflicts with the content of a setting or string, for instance when defining a startup-script runner that uses a subshell like in the example below, a non-quoted backslash (`\`) can be used as an escape character. It preserves the literal value of the next character that follows:  `\$(not.bp_var)` evaluates to `$(not.bp_var)`.
 
 ```yaml
 deployment_groups:
@@ -1273,12 +1243,6 @@ deployment_groups:
      modules:
        - id: resource1
          source: path/to/module/1
-         settings:
-            key1: \((not.literal_var))   ## Evaluates to "((not.literal_var))".
-         ...
-       - id: resource2
-         source: path/to/module/2
-         ...
          settings:
             key1: |
               #!/bin/bash
