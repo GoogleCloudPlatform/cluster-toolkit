@@ -48,10 +48,9 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [Top Level Parameters](#top-level-parameters)
   * [Deployment Variables](#deployment-variables)
   * [Deployment Groups](#deployment-groups)
-* [Variables](#variables)
-  * [Blueprint Variables](#blueprint-variables)
-  * [Literal Variables](#literal-variables)
-  * [Escape Variables](#escape-variables)
+* [Variables and expressions](#variables-and-expressions)
+  * [Blueprint expressions](#blueprint-expressions)
+  * [Escape expressions](#escape-expressions)
 
 ## Instructions
 
@@ -1234,9 +1233,9 @@ deployment_groups:
             key7: $(jsonencode(resource1.config))
 ```
 
-### Escape Variables
+### Escape expressions
 
-Under circumstances where the variable notation conflicts with the content of a setting or string, for instance when defining a startup-script runner that uses a subshell like in the example below, a non-quoted backslash (`\`) can be used as an escape character. It preserves the literal value of the next character that follows:  `\$(not.bp_var)` evaluates to `$(not.bp_var)`.
+Under circumstances where the expression notation conflicts with the content of a setting or string, for instance when defining a startup-script runner that uses a subshell like in the example below, a non-quoted backslash (`\`) can be used as an escape character. It preserves the literal value of the next character that follows:  `\$(not.bp_var)` evaluates to `$(not.bp_var)`.
 
 ```yaml
 deployment_groups:
