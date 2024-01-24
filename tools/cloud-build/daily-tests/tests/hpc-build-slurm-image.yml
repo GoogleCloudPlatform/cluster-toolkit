@@ -20,6 +20,8 @@ zone: us-central1-c
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/community/examples/hpc-build-slurm-image.yaml"
 network: "{{ deployment_name }}-net"
+packer_group_name: build-slurm
+packer_module_id: slurm-custom-image
 cli_deployment_vars:
   network_name: "{{ network }}"
   subnetwork_name: "{{ network }}-sub"
