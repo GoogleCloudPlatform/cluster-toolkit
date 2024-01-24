@@ -51,7 +51,7 @@ deployment_groups:
           dnf install -y python38
           alternatives --set python3 /usr/bin/python3.8
           python3 -m pip install pip --upgrade
-          python3 -m pip install ansible==4.10.0
+          python3 -m pip install ansible==6.7.0
           python3 -m pip install selinux
           export PATH=/usr/local/bin:$PATH
           ansible --version
