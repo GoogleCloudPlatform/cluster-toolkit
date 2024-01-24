@@ -343,18 +343,27 @@ func (s *zeroSuite) TestListUnusedModules(c *C) {
 	}
 }
 
-func (s *MySuite) TestListUnusedVariables(c *C) {
-	dc := s.getDeploymentConfigForTest()
-	dc.applyGlobalVariables()
+func (s *zeroSuite) TestListUnusedVariables(c *C) {
+	bp := Blueprint{
+		Vars: NewDict(map[string]cty.Value{
+			"deployment_name": cty.StringVal("green"),
+			"flathead_screw":  cty.NumberIntVal(1),
+			"pony":            cty.NumberIntVal(2),
+			"stripes":         cty.NumberIntVal(3),
+			"zebra":           MustParseExpression("var.pony + var.stripes").AsValue(),
+		}),
+		DeploymentGroups: []DeploymentGroup{{Modules: []Module{{
+			Settings: NewDict(map[string]cty.Value{
+				"circus": GlobalRef("pony").AsExpression().AsValue(),
+			}),
+		}}}},
+		Validators: []Validator{{
+			Inputs: NewDict(map[string]cty.Value{
+				"savannah": GlobalRef("zebra").AsExpression().AsValue(),
+			})}}}
+	bp.origVars = NewDict(bp.Vars.Items())
 
-	unusedVars := dc.Config.ListUnusedVariables()
-	c.Assert(unusedVars, DeepEquals, []string{"project_id"})
-
-	dc = s.getMultiGroupDeploymentConfig()
-	dc.applyGlobalVariables()
-
-	unusedVars = dc.Config.ListUnusedVariables()
-	c.Assert(unusedVars, DeepEquals, []string{"unused_key"})
+	c.Check(bp.ListUnusedVariables(), DeepEquals, []string{"flathead_screw"})
 }
 
 func (s *zeroSuite) TestAddKindToModules(c *C) {

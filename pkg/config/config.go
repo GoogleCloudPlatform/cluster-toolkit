@@ -245,6 +245,10 @@ type Blueprint struct {
 	Vars                     Dict
 	DeploymentGroups         []DeploymentGroup `yaml:"deployment_groups"`
 	TerraformBackendDefaults TerraformBackend  `yaml:"terraform_backend_defaults,omitempty"`
+
+	// Preserves the original values of `Vars` (as defined by the user),
+	// while `Vars` can mutate (add `labels`, evaluate values).
+	origVars Dict
 }
 
 // DeploymentConfig is a container for the imported YAML data and supporting data for
@@ -255,6 +259,7 @@ type DeploymentConfig struct {
 
 // ExpandConfig expands the yaml config in place
 func (dc *DeploymentConfig) ExpandConfig() error {
+	dc.Config.origVars = NewDict(dc.Config.Vars.Items()) // copy
 	dc.Config.setGlobalLabels()
 	dc.Config.addKindToModules()
 
@@ -313,7 +318,7 @@ func GetUsedDeploymentVars(val cty.Value) []string {
 func (bp Blueprint) ListUnusedVariables() []string {
 	// Gather all scopes where variables are used
 	ns := map[string]cty.Value{
-		"vars": bp.Vars.AsObject(),
+		"vars": bp.origVars.AsObject(),
 	}
 	bp.WalkModulesSafe(func(_ ModulePath, m *Module) {
 		ns["module_"+string(m.ID)] = m.Settings.AsObject()
@@ -322,22 +327,19 @@ func (bp Blueprint) ListUnusedVariables() []string {
 		ns["validator_"+v.Validator] = v.Inputs.AsObject()
 	}
 
-	// these variables are required or automatically added;
 	var used = map[string]bool{
-		"labels":          true,
-		"deployment_name": true,
+		"deployment_name": true, // required => always used
 	}
 	for _, v := range GetUsedDeploymentVars(cty.ObjectVal(ns)) {
 		used[v] = true
 	}
 
 	unused := []string{}
-	for k := range bp.Vars.Items() {
+	for k := range bp.origVars.Items() {
 		if _, ok := used[k]; !ok {
 			unused = append(unused, k)
 		}
 	}
-
 	return unused
 }
 
