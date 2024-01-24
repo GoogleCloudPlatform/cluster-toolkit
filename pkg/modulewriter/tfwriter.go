@@ -42,26 +42,17 @@ const (
 // TFWriter writes terraform to the blueprint folder
 type TFWriter struct{}
 
-// createBaseFile creates a baseline file for all terraform/hcl including a
-// license and any other boilerplate
-func createBaseFile(path string) error {
-	baseFile, err := os.Create(path)
+func writeHclFile(path string, hclFile *hclwrite.File) error {
+	f, err := os.Create(path)
 	if err != nil {
-		return err
+		return fmt.Errorf("error writing %q: %v", path, err)
 	}
-	defer baseFile.Close()
-	_, err = baseFile.WriteString(license)
-	return err
-}
-
-func appendHCLToFile(path string, hclBytes []byte) error {
-	file, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0644)
-	if err != nil {
-		return err
+	defer f.Close()
+	if _, err := f.WriteString(license); err != nil {
+		return fmt.Errorf("error writing %q: %v", path, err)
 	}
-	defer file.Close()
-	if _, err = file.Write(hclBytes); err != nil {
-		return err
+	if _, err := f.Write(hclwrite.Format(hclFile.Bytes())); err != nil {
+		return fmt.Errorf("error writing %q: %v", path, err)
 	}
 	return nil
 }
@@ -101,16 +92,7 @@ func writeOutputs(
 	if len(outputs) == 0 {
 		return nil
 	}
-	hclBytes := hclFile.Bytes()
-	outputsPath := filepath.Join(dst, "outputs.tf")
-	if err := createBaseFile(outputsPath); err != nil {
-		return fmt.Errorf("error creating outputs.tf file: %v", err)
-	}
-	err := appendHCLToFile(outputsPath, hclBytes)
-	if err != nil {
-		return fmt.Errorf("error writing HCL to outputs.tf file: %v", err)
-	}
-	return nil
+	return writeHclFile(filepath.Join(dst, "outputs.tf"), hclFile)
 }
 
 func writeTfvars(vars map[string]cty.Value, dst string) error {
@@ -135,12 +117,6 @@ func getTypeTokens(ty cty.Type) hclwrite.Tokens {
 }
 
 func writeVariables(vars map[string]cty.Value, extraVars []modulereader.VarInfo, dst string) error {
-	// Create file
-	variablesPath := filepath.Join(dst, "variables.tf")
-	if err := createBaseFile(variablesPath); err != nil {
-		return fmt.Errorf("error creating variables.tf file: %v", err)
-	}
-
 	var inputs []modulereader.VarInfo
 	for k, v := range vars {
 		inputs = append(inputs, modulereader.VarInfo{
@@ -165,11 +141,7 @@ func writeVariables(vars map[string]cty.Value, extraVars []modulereader.VarInfo,
 		blockBody.SetAttributeRaw("type", getTypeTokens(k.Type))
 	}
 
-	// Write file
-	if err := appendHCLToFile(variablesPath, hclFile.Bytes()); err != nil {
-		return fmt.Errorf("error writing HCL to variables.tf file: %v", err)
-	}
-	return nil
+	return writeHclFile(filepath.Join(dst, "variables.tf"), hclFile)
 }
 
 func writeMain(
@@ -177,13 +149,6 @@ func writeMain(
 	tfBackend config.TerraformBackend,
 	dst string,
 ) error {
-	// Create file
-	mainPath := filepath.Join(dst, "main.tf")
-	if err := createBaseFile(mainPath); err != nil {
-		return fmt.Errorf("error creating main.tf file: %v", err)
-	}
-
-	// Create HCL Body
 	hclFile := hclwrite.NewEmptyFile()
 	hclBody := hclFile.Body()
 
@@ -218,25 +183,13 @@ func writeMain(
 			moduleBody.SetAttributeRaw(setting, config.TokensForValue(value))
 		}
 	}
-	// Write file
-	hclBytes := hclFile.Bytes()
-	hclBytes = hclwrite.Format(hclBytes)
-	if err := appendHCLToFile(mainPath, hclBytes); err != nil {
-		return fmt.Errorf("error writing HCL to main.tf file: %v", err)
-	}
-	return nil
+
+	return writeHclFile(filepath.Join(dst, "main.tf"), hclFile)
 }
 
 var simpleTokens = hclwrite.TokensForIdentifier
 
 func writeProviders(vars map[string]cty.Value, dst string) error {
-	// Create file
-	providersPath := filepath.Join(dst, "providers.tf")
-	if err := createBaseFile(providersPath); err != nil {
-		return fmt.Errorf("error creating providers.tf file: %v", err)
-	}
-
-	// Create HCL Body
 	hclFile := hclwrite.NewEmptyFile()
 	hclBody := hclFile.Body()
 
@@ -254,26 +207,36 @@ func writeProviders(vars map[string]cty.Value, dst string) error {
 			provBody.SetAttributeRaw("region", simpleTokens("var.region"))
 		}
 	}
-
-	// Write file
-	hclBytes := hclFile.Bytes()
-	if err := appendHCLToFile(providersPath, hclBytes); err != nil {
-		return fmt.Errorf("error writing HCL to providers.tf file: %v", err)
-	}
-	return nil
+	return writeHclFile(filepath.Join(dst, "providers.tf"), hclFile)
 }
 
 func writeVersions(dst string) error {
-	// Create file
-	versionsPath := filepath.Join(dst, "versions.tf")
-	if err := createBaseFile(versionsPath); err != nil {
-		return fmt.Errorf("error creating versions.tf file: %v", err)
+	f := hclwrite.NewEmptyFile()
+	body := f.Body()
+	body.AppendNewline()
+	tfb := body.AppendNewBlock("terraform", []string{}).Body()
+	tfb.SetAttributeValue("required_version", cty.StringVal(">= 1.2"))
+	tfb.AppendNewline()
+
+	type provider struct {
+		alias   string
+		source  string
+		version string
 	}
-	// Write hard-coded version information
-	if err := appendHCLToFile(versionsPath, []byte(tfversions)); err != nil {
-		return fmt.Errorf("error writing HCL to versions.tf file: %v", err)
+	providers := []provider{
+		{"google", "hashicorp/google", "~> 4.84.0"},
+		{"google-beta", "hashicorp/google-beta", "~> 4.84.0"},
 	}
-	return nil
+
+	pb := tfb.AppendNewBlock("required_providers", []string{}).Body()
+
+	for _, p := range providers {
+		pb.SetAttributeValue(p.alias, cty.ObjectVal(map[string]cty.Value{
+			"source":  cty.StringVal(p.source),
+			"version": cty.StringVal(p.version),
+		}))
+	}
+	return writeHclFile(filepath.Join(dst, "versions.tf"), f)
 }
 
 func writeTerraformInstructions(w io.Writer, grpPath string, n config.GroupName, printExportOutputs bool, printImportInputs bool) {

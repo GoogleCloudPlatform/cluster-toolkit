@@ -263,12 +263,15 @@ func TestGetTypeTokensRelaxed(t *testing.T) {
 	}
 }
 
-func (s *MySuite) TestCreateBaseFile(c *C) {
+func (s *MySuite) TestWriteHclFile(c *C) {
+	hclF := hclwrite.NewEmptyFile()
+	hclF.Body().SetAttributeValue("zebra", cty.NumberIntVal(0))
+
 	// Success
 	baseFilename := "main.tf_TestCreateBaseFile"
 	goodPath := filepath.Join(s.testDir, baseFilename)
-	err := createBaseFile(goodPath)
-	c.Assert(err, IsNil)
+	c.Assert(writeHclFile(goodPath, hclF), IsNil)
+
 	fi, err := os.Stat(goodPath)
 	c.Assert(err, IsNil)
 	c.Assert(fi.Name(), Equals, baseFilename)
@@ -277,26 +280,11 @@ func (s *MySuite) TestCreateBaseFile(c *C) {
 	b, _ := os.ReadFile(goodPath)
 	c.Assert(strings.Contains(string(b), "Licensed under the Apache License"),
 		Equals, true)
+	c.Assert(strings.Contains(string(b), "zebra"), Equals, true)
 
 	// Error: not a correct path
 	fakePath := filepath.Join("not/a/real/dir", "main.tf_TestCreateBaseFile")
-	err = createBaseFile(fakePath)
-	c.Assert(err, ErrorMatches, ".* no such file or directory")
-}
-
-func (s *MySuite) TestAppendHCLToFile(c *C) {
-	// Setup
-	testFilename := "main.tf_TestAppendHCLToFile"
-	testPath := filepath.Join(s.testDir, testFilename)
-	_, err := os.Create(testPath)
-	c.Assert(err, IsNil)
-	hclFile := hclwrite.NewEmptyFile()
-	hclBody := hclFile.Body()
-	hclBody.SetAttributeValue("dummyAttributeName", cty.NumberIntVal(0))
-
-	// Success
-	err = appendHCLToFile(testPath, hclFile.Bytes())
-	c.Assert(err, IsNil)
+	c.Assert(writeHclFile(fakePath, hclF), ErrorMatches, ".* no such file or directory")
 }
 
 func stringExistsInFile(str string, filename string) (bool, error) {
@@ -373,7 +361,10 @@ func (s *MySuite) TestWriteOutputs(c *C) {
 	// Success: Outputs added
 	outputList := []modulereader.OutputInfo{
 		{Name: "output1"},
-		{Name: "output2"},
+		{
+			Name:      "output2",
+			Sensitive: true,
+		},
 	}
 	moduleWithOutputs := config.Module{Outputs: outputList, ID: "testMod"}
 	testModules = []config.Module{moduleWithOutputs}
@@ -389,7 +380,7 @@ func (s *MySuite) TestWriteOutputs(c *C) {
 
 	// Failure: Bad path
 	err = writeOutputs(testModules, "not/a/real/path")
-	c.Assert(err, ErrorMatches, "error creating outputs.tf file: .*")
+	c.Assert(err, ErrorMatches, ".*outputs.tf.*")
 
 }
 
@@ -410,7 +401,7 @@ func (s *MySuite) TestWriteVariables(c *C) {
 
 	// Failure: Bad path
 	err = writeVariables(testVars, noIntergroupVars, "not/a/real/path")
-	c.Assert(err, ErrorMatches, "error creating variables.tf file: .*")
+	c.Assert(err, NotNil)
 
 	// Success, common vars
 	testVars["deployment_name"] = cty.StringVal("test_deployment")
@@ -445,8 +436,7 @@ func (s *MySuite) TestWriteProviders(c *C) {
 	c.Assert(exists, Equals, false)
 
 	// Failure: Bad Path
-	err = writeProviders(testVars, "not/a/real/path")
-	c.Assert(err, ErrorMatches, "error creating providers.tf file: .*")
+	c.Assert(writeProviders(testVars, "not/a/real/path"), NotNil)
 
 	// Success: All vars
 	testVars["project_id"] = cty.StringVal("test_project")
@@ -520,7 +510,7 @@ func (s *MySuite) TestWritePackerAutoVars(c *C) {
 	// fail writing to a bad path
 	badDestPath := "not/a/real/path"
 	err := writePackerAutovars(vars.Items(), badDestPath)
-	expErr := fmt.Sprintf("error creating variables file %s:.*", packerAutoVarFilename)
+	expErr := fmt.Sprintf(".*%s.*", packerAutoVarFilename)
 	c.Assert(err, ErrorMatches, expErr)
 
 	// success

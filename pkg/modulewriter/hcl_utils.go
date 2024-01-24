@@ -15,9 +15,6 @@
 package modulewriter
 
 import (
-	"fmt"
-	"path/filepath"
-
 	"hpc-toolkit/pkg/config"
 
 	"github.com/hashicorp/hcl/v2/hclwrite"
@@ -26,10 +23,6 @@ import (
 
 // WriteHclAttributes writes tfvars/pkvars.hcl files
 func WriteHclAttributes(vars map[string]cty.Value, dst string) error {
-	if err := createBaseFile(dst); err != nil {
-		return fmt.Errorf("error creating variables file %v: %v", filepath.Base(dst), err)
-	}
-
 	hclFile := hclwrite.NewEmptyFile()
 	hclBody := hclFile.Body()
 	for _, k := range orderKeys(vars) {
@@ -37,11 +30,5 @@ func WriteHclAttributes(vars map[string]cty.Value, dst string) error {
 		toks := config.TokensForValue(vars[k])
 		hclBody.SetAttributeRaw(k, toks)
 	}
-
-	hclBytes := hclFile.Bytes()
-	err := appendHCLToFile(dst, hclBytes)
-	if err != nil {
-		return fmt.Errorf("error writing HCL to %v: %v", filepath.Base(dst), err)
-	}
-	return err
+	return writeHclFile(dst, hclFile)
 }
