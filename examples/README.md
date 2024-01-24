@@ -20,6 +20,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [serverless-batch-mpi.yaml](#serverless-batch-mpiyaml-) ![core-badge]
   * [pfs-lustre.yaml](#pfs-lustreyaml-) ![core-badge]
   * [cae-slurm.yaml](#cae-slurmyaml-) ![core-badge]
+  * [hpc-build-slurm-image.yaml](#hpc-build-slurm-imageyaml-) ![community-badge]
   * [hpc-slurm-ubuntu2004.yaml](#hpc-slurm-ubuntu2004yaml-) ![community-badge]
   * [pfs-daos.yaml](#pfs-daosyaml-) ![community-badge]
   * [hpc-slurm-daos.yaml](#hpc-slurm-daosyaml-) ![community-badge]
@@ -578,6 +579,25 @@ For this example the following is needed in the selected region:
 * Compute Engine API: N2 CPUs: **8** for login and **16** for controller
 
 [cae-slurm.yaml]: ../examples/cae/cae-slurm.yaml
+
+### [hpc-build-slurm-image.yaml] ![community-badge]
+
+This blueprint demonstrates how to use HPC Toolkit to build a Slurm image on top
+of an existing image, `hpc-rocky-linux-8` in the case of this example.
+
+The blueprint contains 3 groups:
+
+1. The first group creates a network and generates the scripts that will install
+   Slurm. This uses the Ansible Playbook contained in the
+   [Slurm on GCP](https://github.com/GoogleCloudPlatform/slurm-gcp) repo.
+2. The second group executes the build using Packer to run the scripts from the
+   first group. This can take ~30 min and will generate a custom Slurm image in
+   your project.
+3. The third group deploys a demo cluster that uses the newly built image. For a
+   real world use case the demo cluster can be swapped out for a more powerful
+   slurm cluster from other examples.
+
+[hpc-build-slurm-image.yaml]: ../community/examples/hpc-build-slurm-image.yaml
 
 ### [hpc-slurm-ubuntu2004.yaml] ![community-badge]
 
