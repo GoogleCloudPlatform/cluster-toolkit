@@ -384,7 +384,8 @@ type pToken struct {
 	e Expression
 }
 
-func tokenizeBpString(s string) ([]pToken, error) {
+func tokenizeBpLine(s string) ([]pToken, error) {
+	line := s // copy
 	toks := []pToken{}
 	var exp Expression
 	var err error
@@ -405,12 +406,47 @@ func tokenizeBpString(s string) ([]pToken, error) {
 		if bs%2 == 1 { // escaped $(
 			toks = append(toks, pToken{s: "$("}) // add "$("
 		} else { // found beginning of expression
+			offset := len(line) - len(s)
 			exp, s, err = greedyParseHcl(s) // parse after "$("
 			if err != nil {
-				return nil, err
+				return nil, prepareParseHclErr(err, line, offset)
 			}
 			toks = append(toks, pToken{e: exp}) // add expression
 		}
+	}
+	return toks, nil
+}
+
+// One can't translate HCL diagnostics position to the global YAML position,
+// due to lack of information about YAML string-style (e.g. double quoted, plain, folded etc),
+// therefore start position of the string in YAML document and indentation.
+// Render error in a scope of a single line of the string instead.
+func prepareParseHclErr(err error, line string, offset int) error {
+	var col int
+	if diag, is := err.(hcl.Diagnostics); is {
+		derr, _ := diag.Errs()[0].(*hcl.Diagnostic)
+		col = offset + derr.Subject.Start.Column
+		err = fmt.Errorf("%s; %s", derr.Summary, derr.Detail)
+	} else {
+		col = offset // point at the beginning of expression
+	}
+	return fmt.Errorf("%s\n  %s\n  %s^", err, line, strings.Repeat(" ", col))
+}
+
+func tokenizeBpString(s string) ([]pToken, error) {
+	toks := []pToken{}
+
+	// can't use `bufio.NewScanner` as it doesn't preserve trailing empty lines
+	lines := regexp.MustCompile("\r?\n").Split(s, -1)
+	for _, line := range lines {
+		if len(toks) > 0 {
+			toks = append(toks, pToken{s: "\n"})
+		}
+		ltoks, err := tokenizeBpLine(line)
+		if err != nil {
+			return nil, err
+		}
+		toks = append(toks, ltoks...)
 	}
 	return toks, nil
 }
