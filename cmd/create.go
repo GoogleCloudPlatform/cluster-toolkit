@@ -52,6 +52,10 @@ func init() {
 			"Note: Terraform state IS preserved. \n"+
 			"Note: Terraform workspaces are NOT supported (behavior undefined). \n"+
 			"Note: Packer is NOT supported.")
+	createCmd.Flags().BoolVar(&forceOverwrite, "force", false,
+		"Forces overwrite of existing deployment directory. \n"+
+			"If set, --overwrite-deployment is implied. \n"+
+			"No validation is performed on the existing deployment directory.")
 	rootCmd.AddCommand(createCmd)
 }
 
@@ -62,6 +66,7 @@ var (
 
 	cliBEConfigVars     []string
 	overwriteDeployment bool
+	forceOverwrite      bool
 	validationLevel     string
 	validationLevelDesc = "Set validation level to one of (\"ERROR\", \"WARNING\", \"IGNORE\")"
 	validatorsToSkip    []string
@@ -80,7 +85,7 @@ var (
 func runCreateCmd(cmd *cobra.Command, args []string) {
 	dc := expandOrDie(args[0])
 	deplDir := filepath.Join(outputDir, dc.Config.DeploymentName())
-	checkErr(checkOverwriteAllowed(deplDir, dc.Config, overwriteDeployment))
+	checkErr(checkOverwriteAllowed(deplDir, dc.Config, overwriteDeployment, forceOverwrite))
 	checkErr(modulewriter.WriteDeployment(dc, deplDir))
 
 	logging.Info("To deploy your infrastructure please run:")
@@ -235,29 +240,37 @@ func filterYaml(cmd *cobra.Command, args []string, toComplete string) ([]string,
 	return []string{"yaml", "yml"}, cobra.ShellCompDirectiveFilterFileExt
 }
 
+func forceErr(err error) error {
+	return config.HintError{
+		Err:  err,
+		Hint: "Use `--force` to overwrite the deployment anyway. Proceed at your own risk."}
+}
+
 // Determines if overwrite is allowed
-func checkOverwriteAllowed(depDir string, bp config.Blueprint, overwriteFlag bool) error {
-	if _, err := os.Stat(depDir); os.IsNotExist(err) {
+func checkOverwriteAllowed(depDir string, bp config.Blueprint, overwriteFlag bool, forceFlag bool) error {
+	if _, err := os.Stat(depDir); os.IsNotExist(err) || forceFlag {
 		return nil // all good, no previous deployment
 	}
 
 	if _, err := os.Stat(modulewriter.HiddenGhpcDir(depDir)); os.IsNotExist(err) {
 		// hidden ghpc dir does not exist
-		return fmt.Errorf("folder %q already exists, and it is not a valid GHPC deployment folder", depDir)
+		return forceErr(fmt.Errorf("folder %q already exists, and it is not a valid GHPC deployment folder", depDir))
 	}
 
 	// try to get previous deployment
 	expPath := filepath.Join(modulewriter.ArtifactsDir(depDir), modulewriter.ExpandedBlueprintName)
 	if _, err := os.Stat(expPath); os.IsNotExist(err) {
-		return fmt.Errorf("expanded blueprint file %q is missing, this could be a result of changing GHPC version between consecutive deployments", expPath)
+		return forceErr(fmt.Errorf("expanded blueprint file %q is missing, this could be a result of changing GHPC version between consecutive deployments", expPath))
 	}
 	prev, _, err := config.NewDeploymentConfig(expPath)
 	if err != nil {
-		return err
+		return forceErr(err)
 	}
 
 	if prev.Config.GhpcVersion != bp.GhpcVersion {
-		logging.Info("WARNING: ghpc_version has changed from %q to %q, using different versions of GHPC to update a live deployment is not officially supported. Proceed at your own risk", prev.Config.GhpcVersion, bp.GhpcVersion)
+		return forceErr(fmt.Errorf(
+			"ghpc_version has changed from %q to %q, using different versions of GHPC to update a live deployment is not officially supported",
+			prev.Config.GhpcVersion, bp.GhpcVersion))
 	}
 
 	if !overwriteFlag {
@@ -271,7 +284,7 @@ func checkOverwriteAllowed(depDir string, bp config.Blueprint, overwriteFlag boo
 
 	for _, g := range prev.Config.DeploymentGroups {
 		if !newGroups[g.Name] {
-			return fmt.Errorf("you are attempting to remove a deployment group %q, which is not supported", g.Name)
+			return forceErr(fmt.Errorf("you are attempting to remove a deployment group %q, which is not supported", g.Name))
 		}
 	}
 
