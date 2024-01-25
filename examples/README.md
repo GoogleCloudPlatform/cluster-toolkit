@@ -25,7 +25,6 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [pfs-daos.yaml](#pfs-daosyaml-) ![community-badge]
   * [hpc-slurm-daos.yaml](#hpc-slurm-daosyaml-) ![community-badge]
   * [hpc-amd-slurm.yaml](#hpc-amd-slurmyaml-) ![community-badge]
-  * [quantum-circuit-simulator.yaml](#quantum-circuit-simulatoryaml-) ![community-badge]
   * [client-google-cloud-storage.yaml](#client-google-cloud-storageyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-gromacs.yaml](#hpc-slurm-gromacsyaml--) ![community-badge] ![experimental-badge]
   * [omnia-cluster.yaml](#omnia-clusteryaml--) ![community-badge] ![experimental-badge]
@@ -665,27 +664,6 @@ examples][amd-examples-readme].
 [hpc-amd-slurm.yaml]: ../community/examples/AMD/hpc-amd-slurm.yaml
 [AOCC]: https://developer.amd.com/amd-aocc/
 [amd-examples-readme]: ../community/examples/AMD/README.md
-
-### [quantum-circuit-simulator.yaml] ![community-badge]
-
-This blueprint provisions a [N1 series VM with NVIDIA T4 GPU accelerator][t4]
-and compiles [qsim], a [Google Quantum AI][gqai]-developed tool that simulates
-quantum circuits using CPUs and GPUs. The installation of qsim, the [CUDA
-Toolkit][cudatk], and the [cuQuantum SDK][cqsdk] is fully automated but takes a
-significant time (approx. 20 minutes). Once complete, a qsim example can be run
-by connecting to the VM by SSH and running
-
-```shell
-conda activate qsim
-python /var/tmp/qsim-example.py
-```
-
-[gqai]: https://quantumai.google/
-[quantum-circuit-simulator.yaml]: ../community/examples/quantum-circuit-simulator.yaml
-[t4]: https://cloud.google.com/compute/docs/gpus#nvidia_t4_gpus
-[qsim]: https://quantumai.google/qsim
-[cqsdk]: https://developer.nvidia.com/cuquantum-sdk
-[cudatk]: https://developer.nvidia.com/cuda-toolkit
 
 ### [client-google-cloud-storage.yaml] ![community-badge] ![experimental-badge]
 
