@@ -213,12 +213,13 @@ type ModuleIDs []ModuleID
 
 // Module stores YAML definition of an HPC cluster component defined in a blueprint
 type Module struct {
-	Source   string
-	Kind     ModuleKind
-	ID       ModuleID
-	Use      ModuleIDs                 `yaml:"use,omitempty"`
-	Outputs  []modulereader.OutputInfo `yaml:"outputs,omitempty"`
-	Settings Dict                      `yaml:"settings,omitempty"`
+	Source    string
+	Kind      ModuleKind
+	ID        ModuleID
+	Use       ModuleIDs                 `yaml:"use,omitempty"`
+	Outputs   []modulereader.OutputInfo `yaml:"outputs,omitempty"`
+	Settings  Dict                      `yaml:"settings,omitempty"`
+	Protected bool                      `yaml:"protected,omitempty"`
 	// DEPRECATED fields, keep in the struct for backwards compatibility
 	RequiredApis     interface{} `yaml:"required_apis,omitempty"`
 	WrapSettingsWith interface{} `yaml:"wrapsettingswith,omitempty"`

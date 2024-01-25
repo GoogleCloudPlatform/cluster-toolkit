@@ -24,7 +24,9 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/ext/typeexpr"
+	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/zclconf/go-cty/cty"
 	"golang.org/x/exp/maps"
@@ -166,25 +168,53 @@ func writeMain(
 
 	for _, mod := range modules {
 		hclBody.AppendNewline()
-		// Add block
-		moduleBlock := hclBody.AppendNewBlock("module", []string{string(mod.ID)})
-		moduleBody := moduleBlock.Body()
-
-		// Add source attribute
-		ds, err := DeploymentSource(mod)
-		if err != nil {
+		if err := writeModule(mod, hclBody); err != nil {
 			return err
-		}
-		moduleBody.SetAttributeValue("source", cty.StringVal(ds))
-
-		// For each Setting
-		for _, setting := range orderKeys(mod.Settings.Items()) {
-			value := mod.Settings.Get(setting)
-			moduleBody.SetAttributeRaw(setting, config.TokensForValue(value))
 		}
 	}
 
 	return writeHclFile(filepath.Join(dst, "main.tf"), hclFile)
+}
+
+func writeModule(mod config.Module, b *hclwrite.Body) error {
+	mb := b.AppendNewBlock("module", []string{string(mod.ID)}).Body()
+
+	ds, err := DeploymentSource(mod)
+	if err != nil {
+		return err
+	}
+	mb.SetAttributeValue("source", cty.StringVal(ds))
+
+	for _, setting := range orderKeys(mod.Settings.Items()) {
+		value := mod.Settings.Get(setting)
+		mb.SetAttributeRaw(setting, config.TokensForValue(value))
+	}
+
+	if mod.Protected {
+		rn := fmt.Sprintf("protection_%s", mod.ID)
+		rb := b.AppendNewBlock("resource", []string{"null_resource", rn}).Body()
+
+		rb.SetAttributeRaw("depends_on", tokensForDependsOn(mod.ID))
+		rb.SetAttributeRaw("triggers", config.TokensForValue(mod.Settings.AsObject()))
+
+		lb := rb.AppendNewBlock("lifecycle", []string{}).Body()
+		lb.SetAttributeValue("prevent_destroy", cty.BoolVal(true))
+	}
+	return nil
+}
+
+// Construct tokens for following HCL: `[module.<module_id>]`
+// Can't use SetAttributeValue, as reference would be represented as a StringVal =>
+// Warning: Quoted references are deprecated
+func tokensForDependsOn(mod config.ModuleID) hclwrite.Tokens {
+	tr := hcl.Traversal{
+		hcl.TraverseRoot{Name: "module"},
+		hcl.TraverseAttr{Name: string(mod)}}
+	return append(
+		hclwrite.Tokens{&hclwrite.Token{Type: hclsyntax.TokenOBrack, Bytes: []byte(`[`)}},
+		append(
+			hclwrite.TokensForTraversal(tr),
+			&hclwrite.Token{Type: hclsyntax.TokenCBrack, Bytes: []byte(`]`)})...)
 }
 
 var simpleTokens = hclwrite.TokensForIdentifier
