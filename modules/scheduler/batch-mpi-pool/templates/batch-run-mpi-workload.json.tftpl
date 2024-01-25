@@ -1,0 +1,28 @@
+{
+  "taskGroups": [{
+    "taskSpec": {
+      "runnables": [
+        {
+          "script": {
+            "text": "mpirun --hostfile=/etc/cloudbatch-taskgroup-hosts -np ${pool_size} -ppn 1 hostname"
+          }
+        }
+      ]%{ if nfs_share != null },
+      "volumes":[
+        {
+          "nfs":{
+            "server": "${nfs_share.server_ip}",
+            "remote_path": "${nfs_share.remote_path}"
+          },
+          "mount_path": "${nfs_share.mount_path}"
+        }
+      ]%{ endif }
+    }
+  }],
+  "logsPolicy": {
+    "destination": "CLOUD_LOGGING"
+  },
+  "labels": {
+    "goog-batch-job-group": "${pool_name}"
+  }
+}

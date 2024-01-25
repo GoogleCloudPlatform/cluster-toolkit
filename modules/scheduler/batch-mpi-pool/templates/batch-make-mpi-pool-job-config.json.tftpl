@@ -1,0 +1,43 @@
+{
+  "taskGroups": [{
+    "taskSpec": {
+      "runnables": [
+        {
+          "script": {
+            "text": "google_mpi_tuning --nosmt; google_install_mpi --intel_mpi; echo ready"
+          }
+        }
+      ]
+      %{ if nfs_share != null },"volumes":[
+        {
+          "nfs":{
+            "server": "${nfs_share.server_ip}",
+            "remote_path": "${nfs_share.remote_path}"
+          },
+          "mount_path": "${nfs_share.mount_path}"
+        }
+      ]%{ endif }
+    },
+    "taskCount":${pool_size},
+    "taskCountPerNode": 1,
+    "requireHostsFile": true,
+    "permissiveSsh": true
+  }],
+  "allocationPolicy":{
+    "instances":{
+      "policy":{
+        "machineType": %{ if machine_type != "" }"${machine_type}"%{ else }"c2-standard-60"%{ endif },
+        "bootDisk": {
+          "image": %{ if boot_image != "" }"${boot_image}"%{ else }"batch-hpc-centos"%{ endif }
+        }
+      }
+    }
+  },
+  "logsPolicy": {
+    "destination": "CLOUD_LOGGING"
+  },
+  "labels": {
+    "goog-batch-job-group": "${pool_name}",
+    "goog-batch-node-pool-max-idle-time": "${pool_duration}"
+  }
+}

@@ -1,0 +1,7 @@
+  This deployment has created a Batch Node Pool via the Batch Job projects/${project}/locations/${location}/jobs/${job_id}.
+  After this initial pool-configuration job has completed, you can submit additional jobs to Batch to be executed on the pool.
+
+  A configuration for a simple MPI job that runs "hostname" once on each node of the pool is included in batch-run-mpi-workload.json.
+  You can submit a job with this configuration with gcloud.
+
+      gcloud batch jobs submit --project=${project} --location=${location} --config=${run_mpi_config_path}
