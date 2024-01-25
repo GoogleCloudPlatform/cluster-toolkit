@@ -55,46 +55,50 @@ deployment_groups:
       local_mount: /home
       connect_mode: PRIVATE_SERVICE_ACCESS
 
-  # This debug_partition will work out of the box without requesting additional GCP quota.
+  - id: debug_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network1]
+    settings:
+      node_count_dynamic_max: 4
+      machine_type: n2-standard-2
+      enable_placement: false  # the default is: true
+
   - id: debug_partition
-    source: community/modules/compute/SchedMD-slurm-on-gcp-partition
-    use:
-    - network1
-    - homefs
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use: [debug_nodeset, homefs]
     settings:
       partition_name: debug
-      max_node_count: 4
-      enable_placement: false
-      exclusive: false
-      machine_type: n2-standard-2
+      exclusive: false  # allows nodes to stay up after jobs are done
+      is_default: true
 
-  # This compute_partition is far more performant than debug_partition but may require requesting GCP quotas first.
-  - id: compute_partition
-    source: community/modules/compute/SchedMD-slurm-on-gcp-partition
-    use:
-    - network1
-    - homefs
+  - id: compute_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network1]
     settings:
-      partition_name: compute
-      max_node_count: 20
+      node_count_dynamic_max: 20
       bandwidth_tier: gvnic_enabled
 
-  - id: slurm_controller
-    source: community/modules/scheduler/SchedMD-slurm-on-gcp-controller
-    use:
-    - network1
-    - homefs
-    - debug_partition  # debug partition will be default as it is listed first
-    - compute_partition
+  - id: compute_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use: [compute_nodeset, homefs]
     settings:
-      login_node_count: 1
-      shared_vpc_host_project: $(vars.host_project_id)
+      partition_name: compute
 
   - id: slurm_login
-    source: community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    use: [network1]
+    settings:
+      name_prefix: login
+      machine_type: n2-standard-4
+      disable_login_public_ips: false
+
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     use:
     - network1
+    - debug_partition
+    - compute_partition
+    - slurm_login
     - homefs
-    - slurm_controller
     settings:
-      shared_vpc_host_project: $(vars.host_project_id)
+      disable_controller_public_ips: false

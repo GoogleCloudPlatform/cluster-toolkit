@@ -25,6 +25,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [pfs-daos.yaml](#pfs-daosyaml-) ![community-badge]
   * [hpc-slurm-daos.yaml](#hpc-slurm-daosyaml-) ![community-badge]
   * [hpc-amd-slurm.yaml](#hpc-amd-slurmyaml-) ![community-badge]
+  * [hpc-slurm-legacy-sharedvpc.yaml](#hpc-slurm-legacy-sharedvpcyaml-) ![community-badge]
   * [client-google-cloud-storage.yaml](#client-google-cloud-storageyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-gromacs.yaml](#hpc-slurm-gromacsyaml--) ![community-badge] ![experimental-badge]
   * [omnia-cluster.yaml](#omnia-clusteryaml--) ![community-badge] ![experimental-badge]
@@ -41,7 +42,6 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [hpc-slurm-chromedesktop.yaml](#hpc-slurm-chromedesktopyaml--) ![community-badge] ![experimental-badge]
   * [flux-cluster](#flux-clusteryaml--) ![community-badge] ![experimental-badge]
   * [tutorial-fluent.yaml](#tutorial-fluentyaml--) ![community-badge] ![experimental-badge]
-  * [hpc-slurm-legacy-sharedvpc.yaml](#hpc-slurm-legacy-sharedvpcyaml--) ![community-badge] ![deprecated-badge]
 * [Blueprint Schema](#blueprint-schema)
 * [Writing an HPC Blueprint](#writing-an-hpc-blueprint)
   * [Blueprint Boilerplate](#blueprint-boilerplate)
@@ -977,12 +977,17 @@ See [README](../community/examples/flux-framework/README.md)
 
 [flux-cluster.yaml]: ../community/examples/flux-framework/flux-cluster.yaml
 
-### [hpc-slurm-legacy-sharedvpc.yaml] ![community-badge] ![deprecated-badge]
+### [hpc-slurm-legacy-sharedvpc.yaml] ![community-badge]
 
 This blueprint demonstrates the use of the Slurm and Filestore modules in
-the service project of an existing Shared VPC.  Before attempting to deploy the
+the service project of an existing Shared VPC. Before attempting to deploy the
 blueprint, one must first complete [initial setup for provisioning Filestore in
-a Shared VPC service project][fs-shared-vpc].
+a Shared VPC service project][fs-shared-vpc]. Depending on how the shared VPC
+was created one may have to perform a few additional manual steps to configure
+the VPC. One may need to create firewall rules allowing SSH to be able to access
+the controller and login nodes. Also since this blueprint doesn't use external
+IPs for compute nodes, one must needs to [set up cloud nat][cloudnat] and
+[set up iap][iap].
 
 [hpc-slurm-legacy-sharedvpc.yaml]: ../community/examples/hpc-slurm-legacy-sharedvpc.yaml
 [fs-shared-vpc]: https://cloud.google.com/filestore/docs/shared-vpc
