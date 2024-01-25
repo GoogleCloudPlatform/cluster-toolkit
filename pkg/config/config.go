@@ -478,7 +478,7 @@ func validateBlueprint(bp Blueprint) error {
 
 // SkipValidator marks validator(s) as skipped,
 // if no validator is present, adds one, marked as skipped.
-func (dc *DeploymentConfig) SkipValidator(name string) error {
+func (dc *DeploymentConfig) SkipValidator(name string) {
 	if dc.Config.Validators == nil {
 		dc.Config.Validators = []Validator{}
 	}
@@ -492,7 +492,6 @@ func (dc *DeploymentConfig) SkipValidator(name string) error {
 	if !skipped {
 		dc.Config.Validators = append(dc.Config.Validators, Validator{Validator: name, Skip: true})
 	}
-	return nil
 }
 
 // InputValueError signifies a problem with the blueprint name.

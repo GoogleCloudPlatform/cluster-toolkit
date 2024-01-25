@@ -110,7 +110,7 @@ func expandOrDie(path string) config.DeploymentConfig {
 		logging.Fatal("Failed to set the backend config at CLI: %v", err)
 	}
 	checkErr(setValidationLevel(&dc.Config, validationLevel))
-	checkErr(skipValidators(&dc))
+	skipValidators(&dc)
 
 	if dc.Config.GhpcVersion != "" {
 		logging.Info("ghpc_version setting is ignored.")
@@ -216,16 +216,10 @@ func setValidationLevel(bp *config.Blueprint, s string) error {
 	return nil
 }
 
-func skipValidators(dc *config.DeploymentConfig) error {
-	if validatorsToSkip == nil {
-		return nil
-	}
+func skipValidators(dc *config.DeploymentConfig) {
 	for _, v := range validatorsToSkip {
-		if err := dc.SkipValidator(v); err != nil {
-			return err
-		}
+		dc.SkipValidator(v)
 	}
-	return nil
 }
 
 func filterYaml(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {

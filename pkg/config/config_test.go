@@ -730,14 +730,14 @@ func (s *zeroSuite) TestCheckBackends(c *C) {
 func (s *zeroSuite) TestSkipValidator(c *C) {
 	{
 		dc := DeploymentConfig{Config: Blueprint{Validators: nil}}
-		c.Check(dc.SkipValidator("zebra"), IsNil)
+		dc.SkipValidator("zebra")
 		c.Check(dc.Config.Validators, DeepEquals, []Validator{
 			{Validator: "zebra", Skip: true}})
 	}
 	{
 		dc := DeploymentConfig{Config: Blueprint{Validators: []Validator{
 			{Validator: "pony"}}}}
-		c.Check(dc.SkipValidator("zebra"), IsNil)
+		dc.SkipValidator("zebra")
 		c.Check(dc.Config.Validators, DeepEquals, []Validator{
 			{Validator: "pony"},
 			{Validator: "zebra", Skip: true}})
@@ -746,7 +746,7 @@ func (s *zeroSuite) TestSkipValidator(c *C) {
 		dc := DeploymentConfig{Config: Blueprint{Validators: []Validator{
 			{Validator: "pony"},
 			{Validator: "zebra"}}}}
-		c.Check(dc.SkipValidator("zebra"), IsNil)
+		dc.SkipValidator("zebra")
 		c.Check(dc.Config.Validators, DeepEquals, []Validator{
 			{Validator: "pony"},
 			{Validator: "zebra", Skip: true}})
@@ -755,7 +755,7 @@ func (s *zeroSuite) TestSkipValidator(c *C) {
 		dc := DeploymentConfig{Config: Blueprint{Validators: []Validator{
 			{Validator: "pony"},
 			{Validator: "zebra", Skip: true}}}}
-		c.Check(dc.SkipValidator("zebra"), IsNil)
+		dc.SkipValidator("zebra")
 		c.Check(dc.Config.Validators, DeepEquals, []Validator{
 			{Validator: "pony"},
 			{Validator: "zebra", Skip: true}})
@@ -765,7 +765,7 @@ func (s *zeroSuite) TestSkipValidator(c *C) {
 			{Validator: "zebra"},
 			{Validator: "pony"},
 			{Validator: "zebra"}}}}
-		c.Check(dc.SkipValidator("zebra"), IsNil)
+		dc.SkipValidator("zebra")
 		c.Check(dc.Config.Validators, DeepEquals, []Validator{
 			{Validator: "zebra", Skip: true},
 			{Validator: "pony"},

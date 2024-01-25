@@ -74,9 +74,12 @@ func (s *MySuite) TestSetCLIVariables(c *C) {
 	// Failure: Variable without '='
 	bp = config.Blueprint{}
 	inv := []string{"project_idcli_test_project_id"}
+	c.Check(setCLIVariables(&bp, inv), ErrorMatches, "invalid format: .*")
 
-	c.Assert(setCLIVariables(&bp, inv), ErrorMatches, "invalid format: .*")
-	c.Check(bp.Vars, DeepEquals, config.Dict{})
+	// Failure: Unmarshalable value
+	bp = config.Blueprint{}
+	inv = []string{"pyrite={gold"}
+	c.Check(setCLIVariables(&bp, inv), ErrorMatches, ".*unable to convert.*pyrite.*gold.*")
 }
 
 func (s *MySuite) TestSetBackendConfig(c *C) {
