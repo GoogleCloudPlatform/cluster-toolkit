@@ -315,8 +315,8 @@ These instructions apply to the following modules:
 
 [slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/v5
 [slurm-gcp-packer]: https://github.com/SchedMD/slurm-gcp/tree/v5/packer
-[slurm-gcp-images]: https://github.com/SchedMD/slurm-gcp/blob/v5/docs/images.md
-[slurm-gcp-published-images]: https://github.com/SchedMD/slurm-gcp/blob/5.9.1/docs/images.md#published-image-family
+[slurm-gcp-images]: https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md
+[slurm-gcp-published-images]: https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#published-image-family
 [gcloud-compute-images]: https://cloud.google.com/sdk/gcloud/reference/compute/images/create
 
 [vm-instance]: ../modules/compute/vm-instance
