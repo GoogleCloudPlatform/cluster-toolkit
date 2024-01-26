@@ -142,7 +142,7 @@ resource "google_secret_manager_secret_iam_member" "cloudsql_secret_accessor" {
 
   secret_id = google_secret_manager_secret.cloudsql[0].id
   role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${local.service_account[0].email}"
+  member    = "serviceAccount:${local.service_account.email}"
 }
 
 

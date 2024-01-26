@@ -29,45 +29,49 @@ deployment_groups:
     source: modules/network/vpc
 
   - id: homefs
-    source: ./community/modules/file-system/nfs-server
+    source: community/modules/file-system/nfs-server
     use: [network1]
     settings:
       labels:
         ghpc_role: storage-home
 
   - id: slurm-sql
-    source: ./community/modules/database/slurm-cloudsql-federation
+    source: community/modules/database/slurm-cloudsql-federation
     use: [network1]
     settings:
       sql_instance_name: slurm-sql8
       tier: "db-f1-micro"
 
-  - id: compute-partition
-    source: ./community/modules/compute/SchedMD-slurm-on-gcp-partition
-    use:
-    - homefs
-    - network1
+  - id: compute-nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network1]
     settings:
-      partition_name: compute
-      max_node_count: 20
+      node_count_dynamic_max: 20
       machine_type: c2-standard-4
 
+  - id: compute-partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use:
+    - homefs
+    - compute-nodeset
+    settings:
+      partition_name: compute
+
   - id: slurm-controller
-    source: ./community/modules/scheduler/SchedMD-slurm-on-gcp-controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     use:
     - homefs
     - compute-partition
+    - slurm-login
     - slurm-sql
     - network1
     settings:
-      login_node_count: 1
-      disable_compute_public_ips: true
       disable_controller_public_ips: true
 
   - id: slurm-login
-    source: ./community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
     use:
-    - slurm-controller
     - network1
     settings:
+      name_prefix: login
       disable_login_public_ips: true
