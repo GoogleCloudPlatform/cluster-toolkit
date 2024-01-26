@@ -18,3 +18,5 @@ test_name: ml-slurm
 deployment_name: ml-slurm-{{ build }}
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/examples/ml-slurm.yaml"
+packer_group_name: packer
+packer_module_id: custom-image
