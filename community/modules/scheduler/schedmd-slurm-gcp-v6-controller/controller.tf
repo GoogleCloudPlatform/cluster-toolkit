@@ -35,7 +35,7 @@ locals {
 
 # INSTANCE TEMPLATE
 module "slurm_controller_template" {
-  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=6.3.1_20240118"
+  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=6.3.2"
   count  = local.have_template ? 0 : 1
 
   project_id          = var.project_id
@@ -92,7 +92,7 @@ locals {
 }
 
 module "slurm_controller_instance" {
-  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/_slurm_instance?ref=6.3.1_20240118"
+  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/_slurm_instance?ref=6.3.2"
 
   access_config       = !var.disable_controller_public_ips ? [local.access_config] : []
   add_hostname_suffix = false
@@ -142,13 +142,13 @@ resource "google_secret_manager_secret_iam_member" "cloudsql_secret_accessor" {
 
   secret_id = google_secret_manager_secret.cloudsql[0].id
   role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${local.service_account[0].email}"
+  member    = "serviceAccount:${local.service_account.email}"
 }
 
 
 # Destroy all compute nodes on `terraform destroy`
 module "cleanup_compute_nodes" {
-  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_destroy_nodes?ref=6.3.1_20240118"
+  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_destroy_nodes?ref=6.3.2"
   count  = var.enable_cleanup_compute ? 1 : 0
 
   slurm_cluster_name = local.slurm_cluster_name
@@ -164,7 +164,7 @@ module "cleanup_compute_nodes" {
 
 # Destroy all resource policies on `terraform destroy`
 module "cleanup_resource_policies" {
-  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_destroy_resource_policies?ref=6.3.1_20240118"
+  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_destroy_resource_policies?ref=6.3.2"
   count  = var.enable_cleanup_compute ? 1 : 0
 
   slurm_cluster_name = local.slurm_cluster_name
