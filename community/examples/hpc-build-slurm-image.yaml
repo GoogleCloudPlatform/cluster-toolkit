@@ -15,12 +15,12 @@
 blueprint_name: hpc-build-slurm-image
 
 vars:
-  project_id: ns-playground-2023-01-19  ## Set GCP Project ID Here ##
+  project_id:  ## Set GCP Project ID Here ##
   deployment_name: build-slurm-1
   region: us-central1
   zone: us-central1-a
 
-  image_build_machine_type: n2d-standard-32
+  image_build_machine_type: n2d-standard-16
   build_from_image_family: hpc-rocky-linux-8
   build_from_image_project: cloud-hpc-image-public
   built_image_family: my-custom-slurm
