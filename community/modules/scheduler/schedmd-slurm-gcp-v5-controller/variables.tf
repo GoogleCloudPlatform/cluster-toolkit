@@ -128,6 +128,11 @@ variable "login_startup_scripts_timeout" {
     EOD
   type        = number
   default     = 300
+
+  validation {
+    condition     = var.login_startup_scripts_timeout == 300
+    error_message = "Changes to login_startup_scripts_timeout (default: 300s) are not respected, this is a known issue that will be fixed in a later release"
+  }
 }
 
 variable "cgroup_conf_tpl" {
