@@ -25,7 +25,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [pfs-daos.yaml](#pfs-daosyaml-) ![community-badge]
   * [hpc-slurm-daos.yaml](#hpc-slurm-daosyaml-) ![community-badge]
   * [hpc-amd-slurm.yaml](#hpc-amd-slurmyaml-) ![community-badge]
-  * [hpc-slurm-legacy-sharedvpc.yaml](#hpc-slurm-legacy-sharedvpcyaml-) ![community-badge]
+  * [hpc-slurm-sharedvpc.yaml](#hpc-slurm-sharedvpcyaml-) ![community-badge]
   * [client-google-cloud-storage.yaml](#client-google-cloud-storageyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-gromacs.yaml](#hpc-slurm-gromacsyaml--) ![community-badge] ![experimental-badge]
   * [omnia-cluster.yaml](#omnia-clusteryaml--) ![community-badge] ![experimental-badge]
@@ -977,7 +977,7 @@ See [README](../community/examples/flux-framework/README.md)
 
 [flux-cluster.yaml]: ../community/examples/flux-framework/flux-cluster.yaml
 
-### [hpc-slurm-legacy-sharedvpc.yaml] ![community-badge]
+### [hpc-slurm-sharedvpc.yaml] ![community-badge]
 
 This blueprint demonstrates the use of the Slurm and Filestore modules in
 the service project of an existing Shared VPC. Before attempting to deploy the
@@ -989,7 +989,7 @@ the controller and login nodes. Also since this blueprint doesn't use external
 IPs for compute nodes, one must needs to [set up cloud nat][cloudnat] and
 [set up iap][iap].
 
-[hpc-slurm-legacy-sharedvpc.yaml]: ../community/examples/hpc-slurm-legacy-sharedvpc.yaml
+[hpc-slurm-sharedvpc.yaml]: ../community/examples/hpc-slurm-sharedvpc.yaml
 [fs-shared-vpc]: https://cloud.google.com/filestore/docs/shared-vpc
 
 ## Blueprint Schema
