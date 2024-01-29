@@ -20,7 +20,7 @@ vars:
   region: us-central1
   zone: us-central1-a
 
-  image_build_machine_type: n2d-standard-32
+  image_build_machine_type: n2d-standard-16
   build_from_image_family: hpc-rocky-linux-8
   build_from_image_project: cloud-hpc-image-public
   built_image_family: my-custom-slurm
