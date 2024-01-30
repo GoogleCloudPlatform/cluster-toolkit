@@ -16,7 +16,9 @@ package modulereader
 
 import (
 	"os"
+	"testing"
 
+	"github.com/zclconf/go-cty/cty"
 	. "gopkg.in/check.v1"
 )
 
@@ -49,4 +51,49 @@ func (s *zeroSuite) TestReadHclAtttributes(c *C) {
 
 	_, err = ReadHclAttributes(fn.Name())
 	c.Assert(err, NotNil)
+}
+
+func TestReplaceTokens(t *testing.T) {
+	type test struct {
+		ty   string
+		err  bool
+		want cty.Type
+	}
+	tests := []test{
+		{"", false, cty.DynamicPseudoType},
+
+		{"string", false, cty.String},
+
+		{"list", false, cty.List(cty.DynamicPseudoType)},
+		{"list(string)", false, cty.List(cty.String)},
+		{"list(any)", false, cty.List(cty.DynamicPseudoType)},
+
+		{"map", false, cty.Map(cty.DynamicPseudoType)},
+		{"map(string)", false, cty.Map(cty.String)},
+		{"map(any)", false, cty.Map(cty.DynamicPseudoType)},
+
+		{`object({sweet=string})`, false,
+			cty.Object(map[string]cty.Type{"sweet": cty.String})},
+		{`object({sweet=optional(string)})`, false,
+			cty.ObjectWithOptionalAttrs(map[string]cty.Type{"sweet": cty.String}, []string{"sweet"})},
+		{`object({sweet=optional(string, "caramel")})`, false,
+			cty.ObjectWithOptionalAttrs(map[string]cty.Type{"sweet": cty.String}, []string{"sweet"})},
+
+		{"for", true, cty.NilType},
+	}
+	for _, tc := range tests {
+		t.Run(tc.ty, func(t *testing.T) {
+			got, err := GetCtyType(tc.ty)
+			if tc.err != (err != nil) {
+				t.Errorf("got unexpected error: %s", err)
+			}
+			if err != nil {
+				return
+			}
+
+			if !got.Equals(tc.want) {
+				t.Errorf("\nwant: %#v\ngot: %#v", tc.want, got)
+			}
+		})
+	}
 }
