@@ -104,12 +104,12 @@ and therefore must have access to GCS.
 > `https://www.googleapis.com/auth/devstorage.read_only`.
 >
 > This is set as a default scope in the [vm-instance],
-> [SchedMD-slurm-on-gcp-login-node] and [SchedMD-slurm-on-gcp-controller]
+> [schedMD-slurm-on-gcp-login-node] and [schedMD-slurm-on-gcp-controller]
 > modules
 
 [vm-instance]: ../../compute/vm-instance/README.md
-[SchedMD-slurm-on-gcp-login-node]: ../../../community/modules/scheduler/SchedMD-slurm-on-gcp-login-node/README.md
-[SchedMD-slurm-on-gcp-controller]: ../../../community/modules/scheduler/SchedMD-slurm-on-gcp-controller/README.md
+[schedMD-slurm-on-gcp-login-node]: ../../../community/modules/scheduler/schedmd-slurm-gcp-v6-login/README.md
+[schedMD-slurm-on-gcp-controller]: ../../../community/modules/scheduler/schedmd-slurm-gcp-v6-controller/README.md
 
 ### Tracking startup script execution
 

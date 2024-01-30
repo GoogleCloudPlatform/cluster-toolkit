@@ -54,15 +54,12 @@ Modules that are still in development and less stable are labeled with the
   pool][htcondor-setup].
 * **[pbspro-execution]** ![community-badge] ![experimental-badge] :
   Creates execution hosts for use in a PBS Professional cluster.
-* **[SchedMD-slurm-on-gcp-partition]** ![community-badge] ![deprecated-badge] : Creates a partition
-  to be used by a [slurm-controller][schedmd-slurm-on-gcp-controller].
 * **[notebook]** ![community-badge] ![experimental-badge] : Creates a Vertex AI
   Notebook. Primarily used for [FSI - MonteCarlo Tutorial][fsi-montecarlo-on-batch-tutorial].
 
 [vm-instance]: compute/vm-instance/README.md
 [gke-node-pool]: ../community/modules/compute/gke-node-pool/README.md
 [gke-job-template]: ../community/modules/compute/gke-job-template/README.md
-[schedmd-slurm-on-gcp-partition]: ../community/modules/compute/SchedMD-slurm-on-gcp-partition/README.md
 [schedmd-slurm-gcp-v5-partition]: ../community/modules/compute/schedmd-slurm-gcp-v5-partition/README.md
 [schedmd-slurm-gcp-v5-node-group]: ../community/modules/compute/schedmd-slurm-gcp-v5-node-group/README.md
 [schedmd-slurm-gcp-v6-partition]: ../community/modules/compute/schedmd-slurm-gcp-v6-partition/README.md
@@ -77,7 +74,7 @@ Modules that are still in development and less stable are labeled with the
 
 * **[slurm-cloudsql-federation]** ![community-badge] ![experimental-badge] :
   Creates a [Google SQL Instance](https://cloud.google.com/sql/) meant to be
-  integrated with a [slurm-controller][schedmd-slurm-on-gcp-controller].
+  integrated with a [slurm-controller][schedmd-slurm-gcp-v6-controller].
 * **[bigquery-dataset]** ![community-badge] ![experimental-badge] : Creates a BQ
   dataset. Primarily used for [FSI - MonteCarlo Tutorial][fsi-montecarlo-on-batch-tutorial].
 * **[bigquery-table]** ![community-badge] ![experimental-badge] : Creates a BQ
@@ -200,10 +197,6 @@ Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial][fsi-monteca
   a client host for submitting jobs to a PBS Professional cluster.
 * **[pbspro-server]** ![community-badge] ![experimental-badge] : Creates
   a server host for operating a PBS Professional cluster.
-* **[SchedMD-slurm-on-gcp-controller]** ![community-badge] ![deprecated-badge] : Creates a Slurm
-  controller node using [slurm-gcp].
-* **[SchedMD-slurm-on-gcp-login-node]** ![community-badge] ![deprecated-badge] : Creates a Slurm
-  login node using [slurm-gcp].
 
 [batch-job-template]: ../modules/scheduler/batch-job-template/README.md
 [batch-login-node]: ../modules/scheduler/batch-login-node/README.md
@@ -216,9 +209,6 @@ Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial][fsi-monteca
 [schedmd-slurm-gcp-v5-controller]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-controller/README.md
 [schedmd-slurm-gcp-v5-login]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-login/README.md
 [schedmd-slurm-gcp-v5-hybrid]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid/README.md
-[schedmd-slurm-on-gcp-controller]: ../community/modules/scheduler/SchedMD-slurm-on-gcp-controller/README.md
-[schedmd-slurm-on-gcp-login-node]: ../community/modules/scheduler/SchedMD-slurm-on-gcp-login-node/README.md
-[slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/v4.2.1
 [slurm-gcp-version-5]: https://github.com/SchedMD/slurm-gcp/tree/5.9.1
 [slurm-gcp-version-6]: https://github.com/SchedMD/slurm-gcp/tree/6.2.0
 [pbspro-client]: ../community/modules/scheduler/pbspro-client/README.md
@@ -274,6 +264,11 @@ Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial][fsi-monteca
 [spack-setup]: ../community/modules/scripts/spack-setup/README.md
 [spack-execute]: ../community/modules/scripts/spack-execute/README.md
 [wait-for-startup]: ../community/modules/scripts/wait-for-startup/README.md
+
+> **_NOTE:_** Slurm V4 is deprecated. In case, you want to use V4 modules, please use
+[ghpc-v1.27.0](https://github.com/GoogleCloudPlatform/hpc-toolkit/releases/tag/v1.27.0)
+source code and build ghpc binary from this. This source code also contains
+deprecated examples using V4 modules for your reference.
 
 ## Module Fields
 
