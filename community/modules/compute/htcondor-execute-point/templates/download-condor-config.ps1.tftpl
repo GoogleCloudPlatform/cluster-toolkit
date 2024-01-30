@@ -18,3 +18,8 @@ if ($local_hash -cne $remote_hash) {
     gcloud storage cp ${config_object} $config_file
     Restart-Service condor
 }
+
+# ignored if service is already running; must be here to handle case where
+# machine is rebooted, but configuration has previously been downloaded
+# and service is disabled from automatic start
+Start-Service condor
