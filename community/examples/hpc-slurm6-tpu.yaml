@@ -26,7 +26,7 @@ deployment_groups:
 - group: primary
   modules:
   - id: network
-    source: modules/network/pre-existing-vpc
+    source: modules/network/vpc
 
   - id: tpu_nodeset
     source: ./community/modules/compute/schedmd-slurm-gcp-v6-nodeset-tpu
@@ -35,7 +35,6 @@ deployment_groups:
       name: v2x8
       node_type: v2-8
       tf_version: 2.10.0
-      disable_public_ips: false
       # Preemptible TPUs cost much less than non-preemptible TPUs.
       # The Cloud TPU service might preempt (shut down) these TPUs at any time.
       # https://cloud.google.com/tpu/docs/preemptible
