@@ -349,24 +349,16 @@ func orderKeys[T any](settings map[string]T) []string {
 }
 
 func getUsedDeploymentVars(group config.DeploymentGroup, bp config.Blueprint) map[string]cty.Value {
-	// labels must always be written as a variable as it is implicitly added
-	groupInputs := map[string]bool{
-		"labels": true,
+	res := map[string]cty.Value{
+		// labels must always be written as a variable as it is implicitly added
+		"labels": bp.Vars.Get("labels"),
 	}
-
 	for _, mod := range group.Modules {
 		for _, v := range config.GetUsedDeploymentVars(mod.Settings.AsObject()) {
-			groupInputs[v] = true
+			res[v] = bp.Vars.Get(v)
 		}
 	}
-
-	filteredVars := make(map[string]cty.Value)
-	for key, val := range bp.Vars.Items() {
-		if groupInputs[key] {
-			filteredVars[key] = val
-		}
-	}
-	return filteredVars
+	return res
 }
 
 func substituteIgcReferences(mods []config.Module, igcRefs map[config.Reference]modulereader.VarInfo) ([]config.Module, error) {

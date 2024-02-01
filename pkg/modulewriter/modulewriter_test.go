@@ -460,44 +460,39 @@ func (s *MySuite) TestWriteDeploymentGroup_PackerWriter(c *C) {
 	deploymentio := deploymentio.GetDeploymentioLocal()
 	testWriter := PackerWriter{}
 
-	// No Packer modules
-	deploymentName := "deployment_TestWriteModuleLevel_PackerWriter"
-	deploymentDir := filepath.Join(s.testDir, deploymentName)
-	if err := deploymentio.CreateDirectory(deploymentDir); err != nil {
-		c.Fatal(err)
-	}
-	groupDir := filepath.Join(deploymentDir, "packerGroup")
-	if err := deploymentio.CreateDirectory(groupDir); err != nil {
-		c.Fatal(err)
-	}
-	moduleDir := filepath.Join(groupDir, "testPackerModule")
-	if err := deploymentio.CreateDirectory(moduleDir); err != nil {
-		c.Fatal(err)
-	}
+	otherMod := config.Module{ID: "tortoise"}
 
-	testPackerModule := config.Module{
+	mod := config.Module{
 		Kind: config.PackerKind,
-		ID:   "testPackerModule",
-	}
-	testDeploymentGroup := config.DeploymentGroup{
-		Name:    "packerGroup",
-		Modules: []config.Module{testPackerModule},
+		ID:   "prince",
+		Settings: config.NewDict(map[string]cty.Value{
+			"zebra":  cty.StringVal("checker"),                                                     // const
+			"salmon": config.GlobalRef("golf").AsExpression().AsValue(),                            // var
+			"bear":   config.Reference{Module: otherMod.ID, Name: "rome"}.AsExpression().AsValue(), // IGC
+		}),
 	}
 
-	testDC := config.DeploymentConfig{
+	dc := config.DeploymentConfig{
 		Config: config.Blueprint{
+			Vars: config.NewDict(map[string]cty.Value{
+				"golf": cty.NumberIntVal(17),
+			}),
 			DeploymentGroups: []config.DeploymentGroup{
-				testDeploymentGroup,
+				{Name: "bread", Modules: []config.Module{otherMod}},
+				{Name: "green", Modules: []config.Module{mod}},
 			},
 		},
 	}
-	f, err := os.CreateTemp("", "tmpf")
-	if err != nil {
-		c.Fatal()
+
+	dir := c.MkDir()
+	moduleDir := filepath.Join(dir, string(mod.ID))
+	if err := deploymentio.CreateDirectory(moduleDir); err != nil {
+		c.Fatal(err)
 	}
-	defer os.Remove(f.Name())
-	testWriter.writeDeploymentGroup(testDC, 0, groupDir, f)
-	_, err = os.Stat(filepath.Join(moduleDir, packerAutoVarFilename))
+	instructions := new(strings.Builder)
+
+	c.Assert(testWriter.writeDeploymentGroup(dc, 1, dir, instructions), IsNil)
+	_, err := os.Stat(filepath.Join(moduleDir, packerAutoVarFilename))
 	c.Assert(err, IsNil)
 }
 
