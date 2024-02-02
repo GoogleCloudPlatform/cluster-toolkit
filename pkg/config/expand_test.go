@@ -23,11 +23,6 @@ import (
 	. "gopkg.in/check.v1"
 )
 
-func (s *MySuite) TestExpand(c *C) {
-	dc := s.getDeploymentConfigForTest()
-	c.Check(dc.expand(), IsNil)
-}
-
 func (s *MySuite) TestExpandBackends(c *C) {
 	dc := s.getDeploymentConfigForTest()
 	deplName := dc.Config.Vars.Get("deployment_name").AsString()

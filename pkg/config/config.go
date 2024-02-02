@@ -260,7 +260,6 @@ type DeploymentConfig struct {
 // ExpandConfig expands the yaml config in place
 func (dc *DeploymentConfig) ExpandConfig() error {
 	dc.Config.origVars = NewDict(dc.Config.Vars.Items()) // copy
-	dc.Config.setGlobalLabels()
 	dc.Config.addKindToModules()
 
 	if vars, err := dc.Config.evalVars(); err != nil {
@@ -269,17 +268,29 @@ func (dc *DeploymentConfig) ExpandConfig() error {
 		dc.Config.Vars = vars
 	}
 
+	dc.expandBackends()
+	dc.combineLabels()
+
 	if err := validateBlueprint(dc.Config); err != nil {
 		return err
 	}
 
-	return dc.expand()
-}
-
-func (bp *Blueprint) setGlobalLabels() {
-	if !bp.Vars.Has("labels") {
-		bp.Vars.Set("labels", cty.EmptyObjectVal)
+	if err := dc.applyUseModules(); err != nil {
+		return err
 	}
+
+	dc.applyGlobalVariables()
+
+	if err := validateInputsAllModules(dc.Config); err != nil {
+		return err
+	}
+
+	if err := validateModulesAreUsed(dc.Config); err != nil {
+		return err
+	}
+
+	dc.Config.populateOutputs()
+	return nil
 }
 
 // ListUnusedModules provides a list modules that are in the
