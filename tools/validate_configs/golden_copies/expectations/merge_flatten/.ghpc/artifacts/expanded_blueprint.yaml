@@ -29,11 +29,11 @@ vars:
   deployment_name: golden_copy_deployment
   labels:
     ghpc_blueprint: merge_flatten
-    ghpc_deployment: golden_copy_deployment
+    ghpc_deployment: ((var.deployment_name ))
   project_id: invalid-project
-  region: us-east4
+  region: (("us-east${var.region_number}"))
   region_number: 4
-  zone: us-east4-c
+  zone: (("${var.region}-c"))
 deployment_groups:
   - group: zero
     modules:

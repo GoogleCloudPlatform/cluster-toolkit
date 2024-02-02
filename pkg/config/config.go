@@ -246,10 +246,6 @@ type Blueprint struct {
 	Vars                     Dict
 	DeploymentGroups         []DeploymentGroup `yaml:"deployment_groups"`
 	TerraformBackendDefaults TerraformBackend  `yaml:"terraform_backend_defaults,omitempty"`
-
-	// Preserves the original values of `Vars` (as defined by the user),
-	// while `Vars` can mutate (add `labels`, evaluate values).
-	origVars Dict
 }
 
 // DeploymentSettings are deployment-specific override settings
@@ -317,7 +313,7 @@ func GetUsedDeploymentVars(val cty.Value) []string {
 func (bp Blueprint) ListUnusedVariables() []string {
 	// Gather all scopes where variables are used
 	ns := map[string]cty.Value{
-		"vars": bp.origVars.AsObject(),
+		"vars": bp.Vars.AsObject(),
 	}
 	bp.WalkModulesSafe(func(_ ModulePath, m *Module) {
 		ns["module_"+string(m.ID)] = m.Settings.AsObject()
@@ -334,7 +330,7 @@ func (bp Blueprint) ListUnusedVariables() []string {
 	}
 
 	unused := []string{}
-	for _, k := range bp.origVars.Keys() {
+	for _, k := range bp.Vars.Keys() {
 		if _, ok := used[k]; !ok {
 			unused = append(unused, k)
 		}
@@ -520,20 +516,24 @@ func isValidLabelValue(value string) bool {
 }
 
 func (bp *Blueprint) DeploymentName() string {
-	return bp.Vars.Get("deployment_name").AsString()
+	v, _ := bp.Eval(GlobalRef("deployment_name").AsValue()) // ignore errors as we already validated the blueprint
+	return v.AsString()
 }
 
-func validateDeploymentName(vars Dict) error {
+func validateDeploymentName(bp Blueprint) error {
 	path := Root.Vars.Dot("deployment_name")
 
-	if !vars.Has("deployment_name") {
+	if !bp.Vars.Has("deployment_name") {
 		return BpError{path, InputValueError{
 			inputKey: "deployment_name",
 			cause:    errMsgVarNotFound,
 		}}
 	}
 
-	v := vars.Get("deployment_name")
+	v, err := bp.Eval(GlobalRef("deployment_name").AsValue())
+	if err != nil {
+		return BpError{path, err}
+	}
 	if v.Type() != cty.String || v.IsNull() || !v.IsKnown() {
 		return BpError{path, InputValueError{
 			inputKey: "deployment_name",
@@ -565,7 +565,11 @@ func (bp Blueprint) ProjectID() (string, error) {
 	if !bp.Vars.Has(pid) {
 		return "", BpError{Root.Vars, fmt.Errorf("%q variable is not specified", pid)}
 	}
-	v := bp.Vars.Get(pid)
+
+	v, err := bp.Eval(GlobalRef(pid).AsValue())
+	if err != nil {
+		return "", err
+	}
 	if v.Type() != cty.String {
 		return "", BpError{Root.Vars.Dot(pid), fmt.Errorf("%q variable is not a string", pid)}
 	}

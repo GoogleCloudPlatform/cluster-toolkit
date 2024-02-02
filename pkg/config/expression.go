@@ -384,9 +384,12 @@ func valueReferences(v cty.Value) map[Reference]cty.Path {
 }
 
 func (bp *Blueprint) Eval(v cty.Value) (cty.Value, error) {
+	vars, err := bp.evalVars()
+	if err != nil {
+		return cty.NilVal, err
+	}
 	ctx := hcl.EvalContext{
-		Variables: map[string]cty.Value{
-			"var": bp.Vars.AsObject()},
+		Variables: map[string]cty.Value{"var": vars.AsObject()},
 		Functions: functions()}
 	return eval(v, &ctx)
 }

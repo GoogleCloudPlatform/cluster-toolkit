@@ -27,10 +27,13 @@ validators:
     skip: true
 vars:
   deployment_name: golden_copy_deployment
-  labels:
-    ghpc_blueprint: text_escape
-    ghpc_deployment: golden_copy_deployment
-    ñred: ñblue
+  labels: |-
+    ((merge({
+      ghpc_blueprint  = "text_escape"
+      ghpc_deployment = var.deployment_name
+      }, {
+      ñred = "ñblue"
+    })))
   project_id: invalid-project
   zone: us-east4-c
 deployment_groups:

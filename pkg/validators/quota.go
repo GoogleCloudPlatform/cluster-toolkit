@@ -351,6 +351,8 @@ func parseResourceRequirementsInputs(bp config.Blueprint, inputs config.Dict) (r
 		return rrInputs{}, err
 	}
 
+	vars, _ := bp.Vars.Eval(bp)
+
 	// fill in default values
 	ignoreUsage := ifNull(clean.GetAttr("ignore_usage"), cty.False)
 	projectID, err := bp.ProjectID()
@@ -367,11 +369,11 @@ func parseResourceRequirementsInputs(bp config.Blueprint, inputs config.Dict) (r
 			return rrInputs{}, err
 		}
 		defDims := map[string]cty.Value{}
-		if bp.Vars.Has("region") {
-			defDims["region"] = bp.Vars.Get("region")
+		if vars.Has("region") {
+			defDims["region"] = vars.Get("region")
 		}
-		if bp.Vars.Has("zone") {
-			defDims["zone"] = bp.Vars.Get("zone")
+		if vars.Has("zone") {
+			defDims["zone"] = vars.Get("zone")
 		}
 		defDimsVal := cty.MapValEmpty(cty.String)
 		if len(defDims) > 0 {
