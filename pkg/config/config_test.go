@@ -225,7 +225,7 @@ func (s *MySuite) getMultiGroupDeploymentConfig() DeploymentConfig {
 		Kind:   TerraformKind,
 		Source: testModuleSource0,
 		Settings: NewDict(map[string]cty.Value{
-			altProjectIDSetting: GlobalRef("project_id").AsExpression().AsValue(),
+			altProjectIDSetting: GlobalRef("project_id").AsValue(),
 		}),
 		Outputs: []modulereader.OutputInfo{
 			{Name: matchingIntergroupName},
@@ -239,7 +239,7 @@ func (s *MySuite) getMultiGroupDeploymentConfig() DeploymentConfig {
 		Source: testModuleSource1,
 		Settings: NewDict(map[string]cty.Value{
 			matchingIntragroupName1: cty.StringVal("explicit-intra-value"),
-			matchingIntragroupName2: ModuleRef(mod0.ID, matchingIntragroupName2).AsExpression().AsValue(),
+			matchingIntragroupName2: ModuleRef(mod0.ID, matchingIntragroupName2).AsValue(),
 		}),
 		Use: ModuleIDs{mod0.ID},
 	}
@@ -354,12 +354,12 @@ func (s *zeroSuite) TestListUnusedVariables(c *C) {
 		}),
 		DeploymentGroups: []DeploymentGroup{{Modules: []Module{{
 			Settings: NewDict(map[string]cty.Value{
-				"circus": GlobalRef("pony").AsExpression().AsValue(),
+				"circus": GlobalRef("pony").AsValue(),
 			}),
 		}}}},
 		Validators: []Validator{{
 			Inputs: NewDict(map[string]cty.Value{
-				"savannah": GlobalRef("zebra").AsExpression().AsValue(),
+				"savannah": GlobalRef("zebra").AsValue(),
 			})}}}
 	bp.origVars = NewDict(bp.Vars.Items())
 
@@ -711,7 +711,7 @@ func (s *zeroSuite) TestCheckBackends(c *C) {
 
 	{ // FAIL. Variable in defaults configuration
 		b := TerraformBackend{Type: "gcs"}
-		b.Configuration.Set("bucket", GlobalRef("trenta").AsExpression().AsValue())
+		b.Configuration.Set("bucket", GlobalRef("trenta").AsValue())
 		c.Check(check(b), NotNil)
 	}
 
@@ -721,7 +721,7 @@ func (s *zeroSuite) TestCheckBackends(c *C) {
 			Set("bucket", cty.StringVal("trenta")).
 			Set("complex", cty.ObjectVal(map[string]cty.Value{
 				"alpha": cty.StringVal("a"),
-				"beta":  GlobalRef("boba").AsExpression().AsValue(),
+				"beta":  GlobalRef("boba").AsValue(),
 			}))
 		c.Check(check(b), NotNil)
 	}
@@ -856,7 +856,7 @@ func (s *zeroSuite) TestValidateModuleSettingReference(c *C) {
 
 func (s *zeroSuite) TestValidateModuleSettingReferences(c *C) {
 	m := Module{ID: "m"}
-	m.Settings.Set("white", GlobalRef("zebra").AsExpression().AsValue())
+	m.Settings.Set("white", GlobalRef("zebra").AsValue())
 	bp := Blueprint{}
 	p := Root.Groups.At(0).Modules.At(0)
 

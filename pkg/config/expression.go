@@ -56,6 +56,10 @@ func (r Reference) AsExpression() Expression {
 	return MustParseExpression(fmt.Sprintf("module.%s.%s", r.Module, r.Name))
 }
 
+func (r Reference) AsValue() cty.Value {
+	return r.AsExpression().AsValue()
+}
+
 // Takes traversal in "blueprint namespace" (e.g. `vars.zone` or `homefs.mount`)
 // and transforms it to "terraform namespace" (e.g. `var.zone` or `module.homefs.mount`).
 func bpTraversalToTerraform(t hcl.Traversal) (hcl.Traversal, error) {

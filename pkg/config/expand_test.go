@@ -78,7 +78,7 @@ func (s *zeroSuite) TestUseModule(c *C) {
 		Source: "usedSource",
 	}
 	varInfoNumber := modulereader.VarInfo{Name: "val1", Type: cty.Number}
-	ref := ModuleRef("UsedModule", "val1").AsExpression().AsValue()
+	ref := ModuleRef("UsedModule", "val1").AsValue()
 
 	{ // Pass: No Inputs, No Outputs
 		mod := Module{ID: "lime", Source: "modSource"}
@@ -237,7 +237,7 @@ func (s *MySuite) TestApplyUseModules(c *C) {
 		m := &dc.Config.DeploymentGroups[1].Modules[0]
 		c.Assert(m.Settings, DeepEquals, Dict{})
 		c.Assert(dc.applyUseModules(), IsNil)
-		ref := ModuleRef("TestModule0", "test_inter_0").AsExpression().AsValue()
+		ref := ModuleRef("TestModule0", "test_inter_0").AsValue()
 		c.Assert(m.Settings.Items(), DeepEquals, map[string]cty.Value{
 			"test_inter_0": AsProductOfModuleUse(ref, "TestModule0")})
 	}
@@ -296,7 +296,7 @@ func (s *zeroSuite) TestCombineLabels(c *C) {
 		"ghpc_deployment": cty.StringVal("golden"),
 	}))
 
-	labelsRef := GlobalRef("labels").AsExpression().AsValue()
+	labelsRef := GlobalRef("labels").AsValue()
 
 	lime := dc.Config.DeploymentGroups[0]
 	// Labels are set
@@ -335,7 +335,7 @@ func (s *MySuite) TestApplyGlobalVariables(c *C) {
 	c.Assert(
 		mod.Settings.Get("gold"),
 		DeepEquals,
-		GlobalRef("gold").AsExpression().AsValue())
+		GlobalRef("gold").AsValue())
 }
 
 func (s *zeroSuite) TestValidateModuleReference(c *C) {

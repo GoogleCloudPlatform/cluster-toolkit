@@ -75,9 +75,9 @@ func (s *MySuite) TestDefaultValidators(c *C) {
 	unusedVars := config.Validator{Validator: "test_deployment_variable_not_used"}
 	apisEnabled := config.Validator{Validator: "test_apis_enabled"}
 
-	projectRef := config.GlobalRef("project_id").AsExpression().AsValue()
-	regionRef := config.GlobalRef("region").AsExpression().AsValue()
-	zoneRef := config.GlobalRef("zone").AsExpression().AsValue()
+	projectRef := config.GlobalRef("project_id").AsValue()
+	regionRef := config.GlobalRef("region").AsValue()
+	zoneRef := config.GlobalRef("zone").AsValue()
 
 	projectExists := config.Validator{
 		Validator: testProjectExistsName,
