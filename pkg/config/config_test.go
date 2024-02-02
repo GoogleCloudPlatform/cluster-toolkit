@@ -940,4 +940,19 @@ func (s *zeroSuite) TestEvalVars(c *C) {
 			c.Error(err, " should be BpError")
 		}
 	}
+
+	{ // Non-computable
+		vars := NewDict(map[string]cty.Value{
+			"uro": MustParseExpression("DoesHalt(var.bo)").AsValue(),
+			"bo":  cty.StringVal("01_10"),
+		})
+		_, err := (&Blueprint{Vars: vars}).evalVars()
+		var berr BpError
+		if errors.As(err, &berr) {
+			c.Check(berr.Error(), Matches, ".*no function.*DoesHalt.*")
+			c.Check(berr.Path.String(), Equals, "vars.uro")
+		} else {
+			c.Error(err, " should be BpError")
+		}
+	}
 }

@@ -671,45 +671,63 @@ func checkPackerGroups(groups []DeploymentGroup) error {
 	return errs.OrNil()
 }
 
-func (bp *Blueprint) evalVars() (Dict, error) {
-	// 0 - unvisited
-	// 1 - on stack
-	// 2 - done
-	used := map[string]int{}
-	res := Dict{}
+func varsTopologicalOrder(vars Dict) ([]string, error) {
+	// 0, 1, 2 - unvisited, on stack, exited
+	used := map[string]int{} // default is 0 - unvisited
+	res := []string{}
 
-	// walk vars in reverse topological order, and evaluate them
+	// walk vars in reverse topological order
 	var dfs func(string) error
 	dfs = func(n string) error {
 		used[n] = 1 // put on stack
-		v := bp.Vars.Get(n)
+		v := vars.Get(n)
 		for ref, rp := range valueReferences(v) {
-			p := Root.Vars.Dot(n).Cty(rp)
+			// TODO: instead of ref.Name render as a full reference
+			repr, p := ref.Name, Root.Vars.Dot(n).Cty(rp)
+
 			if !ref.GlobalVar {
-				return BpError{p, fmt.Errorf("non-global variable %q referenced in expression", ref.Name)}
+				return BpError{p, fmt.Errorf("non-global variable %q referenced in expression", repr)}
 			}
+
 			if used[ref.Name] == 1 {
-				return BpError{p, fmt.Errorf("cyclic dependency detected: %q -> %q", n, ref.Name)}
+				return BpError{p, fmt.Errorf("cyclic dependency detected: %q -> %q", n, repr)}
 			}
+
 			if used[ref.Name] == 0 {
 				if err := dfs(ref.Name); err != nil {
 					return err
 				}
 			}
 		}
-
-		used[n] = 2 // remove from stack and evaluate
-		ev, err := evalValue(v, Blueprint{Vars: res})
-		res.Set(n, ev)
-		return err
+		used[n] = 2 // remove from stack and add to result
+		res = append(res, n)
+		return nil
 	}
 
-	for n := range bp.Vars.Items() {
+	for n := range vars.Items() {
 		if used[n] == 0 { // unvisited
 			if err := dfs(n); err != nil {
-				return Dict{}, err
+				return nil, err
 			}
 		}
+	}
+	return res, nil
+}
+
+func (bp *Blueprint) evalVars() (Dict, error) {
+	order, err := varsTopologicalOrder(bp.Vars)
+	if err != nil {
+		return Dict{}, err
+	}
+
+	res := Dict{}
+	for _, n := range order {
+		v := bp.Vars.Get(n)
+		ev, err := evalValue(v, Blueprint{Vars: res})
+		if err != nil {
+			return Dict{}, BpError{Root.Vars.Dot(n), err}
+		}
+		res.Set(n, ev)
 	}
 	return res, nil
 }
