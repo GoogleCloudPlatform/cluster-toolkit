@@ -190,7 +190,7 @@ func TestFlattenFunctionCallExpression(t *testing.T) {
 	})}
 	expr := FunctionCallExpression("flatten", cty.TupleVal([]cty.Value{
 		cty.TupleVal([]cty.Value{cty.NumberIntVal(1), cty.NumberIntVal(2)}),
-		GlobalRef("three").AsExpression().AsValue(),
+		GlobalRef("three").AsValue(),
 	}))
 
 	want := cty.TupleVal([]cty.Value{
@@ -218,7 +218,7 @@ func TestMergeFunctionCallExpression(t *testing.T) {
 			"one": cty.NumberIntVal(1),
 			"two": cty.NumberIntVal(3),
 		}),
-		GlobalRef("fix").AsExpression().AsValue(),
+		GlobalRef("fix").AsValue(),
 	)
 
 	want := cty.ObjectVal(map[string]cty.Value{

@@ -150,13 +150,13 @@ func inputsAsStrings(inputs config.Dict) (map[string]string, error) {
 // inspect the blueprint for global variables that exist and add an appropriate validators.
 func defaults(bp config.Blueprint) []config.Validator {
 	projectIDExists := bp.Vars.Has("project_id")
-	projectRef := config.GlobalRef("project_id").AsExpression().AsValue()
+	projectRef := config.GlobalRef("project_id").AsValue()
 
 	regionExists := bp.Vars.Has("region")
-	regionRef := config.GlobalRef("region").AsExpression().AsValue()
+	regionRef := config.GlobalRef("region").AsValue()
 
 	zoneExists := bp.Vars.Has("zone")
-	zoneRef := config.GlobalRef("zone").AsExpression().AsValue()
+	zoneRef := config.GlobalRef("zone").AsValue()
 
 	defaults := []config.Validator{
 		{Validator: testModuleNotUsedName},

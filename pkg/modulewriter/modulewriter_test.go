@@ -466,9 +466,9 @@ func (s *MySuite) TestWriteDeploymentGroup_PackerWriter(c *C) {
 		Kind: config.PackerKind,
 		ID:   "prince",
 		Settings: config.NewDict(map[string]cty.Value{
-			"zebra":  cty.StringVal("checker"),                                                     // const
-			"salmon": config.GlobalRef("golf").AsExpression().AsValue(),                            // var
-			"bear":   config.Reference{Module: otherMod.ID, Name: "rome"}.AsExpression().AsValue(), // IGC
+			"zebra":  cty.StringVal("checker"),                                      // const
+			"salmon": config.GlobalRef("golf").AsValue(),                            // var
+			"bear":   config.Reference{Module: otherMod.ID, Name: "rome"}.AsValue(), // IGC
 		}),
 	}
 

@@ -217,9 +217,7 @@ func useModule(mod *Module, use Module) {
 			continue
 		}
 
-		v := AsProductOfModuleUse(
-			ModuleRef(use.ID, setting).AsExpression().AsValue(),
-			use.ID)
+		v := AsProductOfModuleUse(ModuleRef(use.ID, setting).AsValue(), use.ID)
 
 		if !isList {
 			mod.Settings.Set(setting, v)
@@ -279,7 +277,7 @@ func combineModuleLabels(mod *Module, dc DeploymentConfig) {
 		return // no op
 	}
 
-	ref := GlobalRef(labels).AsExpression().AsValue()
+	ref := GlobalRef(labels).AsValue()
 	set := mod.Settings.Get(labels)
 
 	if !set.IsNull() {
@@ -314,8 +312,7 @@ func (bp Blueprint) applyGlobalVarsInModule(mod *Module) {
 
 		// If it's not set, is there a global we can use?
 		if bp.Vars.Has(input.Name) {
-			ref := GlobalRef(input.Name)
-			mod.Settings.Set(input.Name, ref.AsExpression().AsValue())
+			mod.Settings.Set(input.Name, GlobalRef(input.Name).AsValue())
 			continue
 		}
 
