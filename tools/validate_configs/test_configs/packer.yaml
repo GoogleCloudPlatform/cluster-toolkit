@@ -20,7 +20,7 @@ vars:
   project_id:  ## Set GCP Project ID Here ##
   deployment_name: hpc-slurm1
   region: europe-west4
-  zone: europe-west4-a
+  zone: $(vars.region)-a
   network_name: image-builder-net
   subnetwork_name: image-builder-primary-subnet
 
