@@ -335,7 +335,7 @@ func (bp Blueprint) ListUnusedVariables() []string {
 	}
 
 	unused := []string{}
-	for k := range bp.origVars.Items() {
+	for _, k := range bp.origVars.Keys() {
 		if _, ok := used[k]; !ok {
 			unused = append(unused, k)
 		}

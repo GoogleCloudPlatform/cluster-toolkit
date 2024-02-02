@@ -18,6 +18,7 @@ import (
 	"fmt"
 
 	"github.com/zclconf/go-cty/cty"
+	"golang.org/x/exp/maps"
 )
 
 // Dict maps string key to cty.Value.
@@ -74,6 +75,10 @@ func (d *Dict) Items() map[string]cty.Value {
 		}
 	}
 	return m
+}
+
+func (d *Dict) Keys() []string {
+	return maps.Keys(d.m)
 }
 
 // AsObject returns Dict as cty.ObjectVal

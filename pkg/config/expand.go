@@ -375,8 +375,7 @@ func validateModuleSettingReference(bp Blueprint, mod Module, r Reference) error
 	if r.GlobalVar {
 		if !bp.Vars.Has(r.Name) {
 			err := fmt.Errorf("module %#v references unknown global variable %#v", mod.ID, r.Name)
-			vars := maps.Keys(bp.Vars.Items())
-			return hintSpelling(r.Name, vars, err)
+			return hintSpelling(r.Name, bp.Vars.Keys(), err)
 		}
 		return nil
 	}
