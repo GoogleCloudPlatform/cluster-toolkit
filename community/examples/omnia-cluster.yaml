@@ -14,6 +14,8 @@
 
 ---
 
+# WARNING: this example has been deprecated as of v1.28.0 of the HPC Toolkit
+
 blueprint_name: omnia-cluster
 
 vars:
