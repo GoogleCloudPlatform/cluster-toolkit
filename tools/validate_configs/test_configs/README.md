@@ -29,11 +29,6 @@ head-node and 2 compute vms
 SLURM partitions and primarily default settings. The blueprint also creates a new
 VPC network, a filestore instance mounted to `/home` and a workstation VM.
 
-**omnia-cluster-simple.yaml**: Creates a SLURM cluster using
-[DellHPC Omnia](https://github.com/dellhpc/omnia). The cluster is comprised of
-one manager node and eight compute nodes that share a `/home` mounted filestore
-instance. The pre-existing default VPC network is used.
-
 **instance_with_startup.yaml**: Creates a simple cluster with one
 vm-instance and filestore using the startup-script module to setup and
 mount the filestore instance.
