@@ -25,7 +25,7 @@ locals {
   tasks_per_node = var.task_count_per_node != null ? var.task_count_per_node : (var.mpi_mode ? 1 : null)
 
   job_template_contents = templatefile(
-    "${path.module}/templates/batch-job-base.json.tftpl",
+    "${path.module}/templates/batch-job-base.yaml.tftpl",
     {
       synchronized       = var.mpi_mode
       runnable           = var.runnable
@@ -40,7 +40,7 @@ locals {
   )
 
   job_id                   = var.job_id != null ? var.job_id : var.deployment_name
-  job_filename             = var.job_filename != null ? var.job_filename : "cloud-batch-${local.job_id}.json"
+  job_filename             = var.job_filename != null ? var.job_filename : "cloud-batch-${local.job_id}.yaml"
   job_template_output_path = "${path.root}/${local.job_filename}"
 
   subnetwork_name    = var.subnetwork != null ? var.subnetwork.name : "default"
