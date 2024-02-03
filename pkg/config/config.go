@@ -24,6 +24,7 @@ import (
 	"strings"
 
 	"github.com/agext/levenshtein"
+	"github.com/hashicorp/hcl/v2"
 	"github.com/pkg/errors"
 	"github.com/zclconf/go-cty/cty"
 	"gopkg.in/yaml.v3"
@@ -720,14 +721,17 @@ func (bp *Blueprint) evalVars() (Dict, error) {
 		return Dict{}, err
 	}
 
-	res := Dict{}
+	res := map[string]cty.Value{}
+	ctx := hcl.EvalContext{
+		Variables: map[string]cty.Value{},
+		Functions: functions()}
 	for _, n := range order {
-		v := bp.Vars.Get(n)
-		ev, err := evalValue(v, Blueprint{Vars: res})
+		ctx.Variables["var"] = cty.ObjectVal(res)
+		ev, err := eval(bp.Vars.Get(n), &ctx)
 		if err != nil {
 			return Dict{}, BpError{Root.Vars.Dot(n), err}
 		}
-		res.Set(n, ev)
+		res[n] = ev
 	}
-	return res, nil
+	return NewDict(res), nil
 }
