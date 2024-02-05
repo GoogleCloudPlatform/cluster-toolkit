@@ -17,6 +17,7 @@
 blueprint_name: hpc-slurm-ramble-gromacs
 
 vars:
+  enable_devel: true
   project_id:  ## Set GCP Project ID Here ##
   deployment_name: hpc-slurm-ramble-gromacs
   region: us-central1

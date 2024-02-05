@@ -17,6 +17,7 @@
 blueprint_name: starccm-on-slurm
 
 vars:
+  enable_devel: true
   project_id:  ## Set GCP Project ID Here ##
   deployment_name: starccm-slurm
   region: us-central1
