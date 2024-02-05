@@ -132,7 +132,7 @@ information, see the SchedMD documentation:
 * [srun Documentation](https://slurm.schedmd.com/srun.html)
 * [sbatch Documentation](https://slurm.schedmd.com/sbatch.html)
 
-[slurm-gcp]: https://github.com/SchedMD/slurm-gcp
+[slurm-gcp]: https://github.com/GoogleCloudPlatform/slurm-gcp
 [cloud_parameters]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/scheduler/schedmd-slurm-gcp-v5-controller#input_cloud_parameters
 
 ## Further Reading

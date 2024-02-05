@@ -17,12 +17,13 @@
 
 # This blueprint provisions a cluster using the Slurm scheduler configured to
 # efficiently run many short duration, loosely-coupled (non-MPI) jobs. See also:
-# https://github.com/SchedMD/slurm-gcp/blob/master/docs/htc.md
+# https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/htc.md
 # https://slurm.schedmd.com/high_throughput.html
 
 blueprint_name: htc-slurm
 
 vars:
+  enable_devel: true
   project_id:  ## Set GCP Project ID Here ##
   deployment_name: htc-slurm
   region: us-west4

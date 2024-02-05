@@ -17,15 +17,16 @@
 blueprint_name: slurm-crd
 
 vars:
+  enable_devel: true
   project_id:  ## Set GCP Project ID Here ##
   deployment_name: slurm-crd-01
   region: us-central1
   zone: us-central1-c
   instance_image_crd:
-    family: slurm-gcp-5-9-debian-11
+    family: slurm-gcp-5-10-debian-11
     project: schedmd-slurm-public
   instance_image:
-    family: slurm-gcp-5-9-hpc-centos-7
+    family: slurm-gcp-5-10-hpc-centos-7
     project: schedmd-slurm-public
 
 # Documentation for each of the modules used below can be found at
