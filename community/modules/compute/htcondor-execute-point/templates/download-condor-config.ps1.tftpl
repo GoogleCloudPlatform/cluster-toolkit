@@ -16,6 +16,10 @@ $remote_hash = gcloud --format="value(md5_hash)" storage hash ${config_object}
 if ($local_hash -cne $remote_hash) {
     Write-Output "Updating condor configuration"
     gcloud storage cp ${config_object} $config_file
+    if ($LASTEXITCODE -ne 0)
+    {
+        throw "Could not download HTCondor configuration; exiting startup script"
+    }
     Restart-Service condor
 }
 
