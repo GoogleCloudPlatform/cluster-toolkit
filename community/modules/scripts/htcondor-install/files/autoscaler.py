@@ -253,6 +253,9 @@ class AutoScaler:
         current_target = responseGroupInfo["targetSize"]
         print(f"Current MIG target size: {current_target}")
 
+        # Find instances that are being modified by the MIG (currentAction is
+        # any value other than "NONE"). A common reason an instance is modified
+        # is it because it has failed a health check.
         reqModifyingInstances = self.instanceGroupManagers.listManagedInstances(
             project=self.project,
             **self.zoneargs,
