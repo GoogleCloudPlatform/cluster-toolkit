@@ -198,7 +198,7 @@ func TestFlattenFunctionCallExpression(t *testing.T) {
 		cty.NumberIntVal(2),
 		cty.NumberIntVal(3)})
 
-	got, err := expr.Eval(bp)
+	got, err := bp.Eval(expr.AsValue())
 	if err != nil {
 		t.Errorf("got unexpected error: %s", err)
 	}
@@ -226,7 +226,7 @@ func TestMergeFunctionCallExpression(t *testing.T) {
 		"two": cty.NumberIntVal(2),
 	})
 
-	got, err := expr.Eval(bp)
+	got, err := bp.Eval(expr.AsValue())
 	if err != nil {
 		t.Errorf("got unexpected error: %s", err)
 	}

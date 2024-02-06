@@ -82,7 +82,7 @@ func validateModuleInputs(mp ModulePath, m Module, bp Blueprint) error {
 }
 
 func attemptEvalModuleInput(val cty.Value, bp Blueprint) (cty.Value, bool) {
-	v, err := evalValue(val, bp)
+	v, err := bp.Eval(val)
 	// there could be a legitimate reasons for it.
 	// e.g. use of modules output or unsupported (by ghpc) functions
 	// TODO:
