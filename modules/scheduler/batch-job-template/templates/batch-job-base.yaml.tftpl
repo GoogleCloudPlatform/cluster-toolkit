@@ -6,7 +6,7 @@ taskGroups:
             name: "wait-for-node-startup"
         %{~ endif ~}
         - script:
-            text: ${jsonencode(runnable)}
+            text: ${indent(12, chomp(yamlencode(runnable)))}
         %{~ if synchronized ~}
         - barrier:
             name: "wait-for-workload-to-complete"
