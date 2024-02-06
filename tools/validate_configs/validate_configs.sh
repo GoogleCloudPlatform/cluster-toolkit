@@ -82,6 +82,24 @@ run_test() {
 		fi
 		cd .. # back to deployment folder
 	done
+	expanded=".ghpc/artifacts/expanded_blueprint.yaml"
+	${GHPC_PATH} expand -l ERROR \
+		--skip-validators="${VALIDATORS_TO_SKIP},test_module_not_used" \
+		--vars="project_id=${PROJECT},deployment_name=${DEPLOYMENT}" \
+		"${expanded}" --out=expanded_again.yaml >/dev/null ||
+		{
+			echo "*** ERROR: error re-expanding at ${exampleFile}"
+			exit 1
+		}
+	# TODO: re-enable this check once the trailing space in expressions is fixed, e.g.:
+	# -          labels: ((var.labels ))
+	# +          labels: ((var.labels))
+	#
+	# diff -u "${expanded}" "expanded_again.yaml" ||
+	# 	{
+	# 		echo "*** ERROR: re-expanded blueprint does not match the expanded one at ${exampleFile}"
+	# 		exit 1
+	# 	}
 	cd ..
 	rm -rf "${DEPLOYMENT}" || {
 		echo "*** ERROR: could not remove deployment folder from $(pwd)"
