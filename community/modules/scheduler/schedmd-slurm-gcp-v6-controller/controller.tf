@@ -158,10 +158,15 @@ module "cleanup_compute_nodes" {
   project_id         = var.project_id
   when_destroy       = true
 
-  # Depend on controller network, as a best effort to avoid
-  # subnetwork resourceInUseByAnotherResource error
-  # NOTE: Can not use nodeset subnetworks as "A static list expression is required"
-  depends_on = [var.subnetwork_self_link]
+
+  depends_on = [
+    # Depend on controller network, as a best effort to avoid
+    # subnetwork resourceInUseByAnotherResource error
+    # NOTE: Can not use nodeset subnetworks as "A static list expression is required"
+    var.subnetwork_self_link,
+    # Ensure VMs are destroyed before resource policies
+    module.cleanup_resource_policies[0],
+  ]
 }
 
 
