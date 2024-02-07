@@ -31,30 +31,6 @@ const (
 	deploymentLabel string = "ghpc_deployment"
 )
 
-// expand expands variables and strings in the yaml config. Used directly by
-// ExpandConfig for the create and expand commands.
-func (dc *DeploymentConfig) expand() error {
-	dc.expandBackends()
-	dc.combineLabels()
-
-	if err := dc.applyUseModules(); err != nil {
-		return err
-	}
-
-	dc.applyGlobalVariables()
-
-	if err := validateInputsAllModules(dc.Config); err != nil {
-		return err
-	}
-
-	if err := validateModulesAreUsed(dc.Config); err != nil {
-		return err
-	}
-
-	dc.Config.populateOutputs()
-	return nil
-}
-
 func validateInputsAllModules(bp Blueprint) error {
 	errs := Errors{}
 	bp.WalkModulesSafe(func(p ModulePath, m *Module) {
