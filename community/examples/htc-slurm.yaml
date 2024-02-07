@@ -147,8 +147,8 @@ deployment_groups:
     settings:
       machine_type: c2-standard-8
       disable_controller_public_ips: $(vars.disable_public_ips)
-      slurm_conf_tpl: modules/embedded/community/modules/scheduler/schedmd-slurm-gcp-v5-controller/etc/slurm.conf.tpl
-      slurmdbd_conf_tpl: modules/embedded/community/modules/scheduler/schedmd-slurm-gcp-v5-controller/etc/slurmdbd.conf.tpl
+      slurm_conf_tpl: modules/embedded/community/modules/scheduler/schedmd-slurm-gcp-v5-controller/etc/htc-slurm.conf.tpl
+      slurmdbd_conf_tpl: modules/embedded/community/modules/scheduler/schedmd-slurm-gcp-v5-controller/etc/htc-slurmdbd.conf.tpl
 
   - id: slurm_login
     source: community/modules/scheduler/schedmd-slurm-gcp-v5-login
