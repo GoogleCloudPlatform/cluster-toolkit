@@ -27,6 +27,7 @@ import (
 	"github.com/zclconf/go-cty/cty"
 	"github.com/zclconf/go-cty/cty/function"
 	"github.com/zclconf/go-cty/cty/function/stdlib"
+	"golang.org/x/exp/maps"
 )
 
 // Reference is data struct that represents a reference to a variable.
@@ -212,13 +213,25 @@ type BaseExpression struct {
 	rs   []Reference
 }
 
+func handleEvalErr(diag hcl.Diagnostics) error {
+	if !diag.HasErrors() {
+		return nil
+	}
+	err := diag.Errs()[0]
+	if match := regexp.MustCompile(`There is no function named "(\w+)"`).FindStringSubmatch(err.Error()); match != nil {
+		sf := strings.Join(maps.Keys(functions()), ", ")
+		return HintError{
+			Err:  fmt.Errorf("unsupported function %q", match[1]),
+			Hint: fmt.Sprintf("this context only supports following functions: %v", sf)}
+	}
+	return err
+
+}
+
 // Eval evaluates the expression in the context of Blueprint
 func (e BaseExpression) Eval(ctx *hcl.EvalContext) (cty.Value, error) {
 	v, diag := e.e.Value(ctx)
-	if diag.HasErrors() {
-		return cty.NilVal, diag
-	}
-	return v, nil
+	return v, handleEvalErr(diag)
 }
 
 // Tokenize returns Tokens to be used for marshalling HCL
