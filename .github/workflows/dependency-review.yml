@@ -26,6 +26,7 @@ permissions:
 
 jobs:
   dependency-review:
+    if: github.repository == 'GoogleCloudPlatform/hpc-toolkit'
     runs-on: ubuntu-latest
     steps:
     - name: 'Checkout Repository'
