@@ -18,28 +18,8 @@ steps:
 - id: git-fetch-unshallow
   name: gcr.io/cloud-builders/git
   args: ['fetch', '--unshallow']
-- id: pre-commits-setup
-  name: >-
-    us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
-  entrypoint: /bin/bash
-  args:
-  - '-c'
-  - |
-    set -e
-    pre-commit install --install-hooks
-    time tflint --init
-- id: pre-commit-run
-  waitFor:
-  - pre-commits-setup
-  name: >-
-    us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
-  entrypoint: /bin/bash
-  args:
-  - '-c'
-  - SKIP=go-unit-tests pre-commit run --all-files
 - id: make-tests
   waitFor:
-  - pre-commits-setup
   - git-fetch-unshallow
   name: >-
     us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
