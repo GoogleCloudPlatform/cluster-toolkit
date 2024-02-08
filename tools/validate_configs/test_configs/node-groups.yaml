@@ -139,7 +139,7 @@ deployment_groups:
         instance_template: null
         labels: $(vars.labels)
         machine_type: n2-standard-16
-        maintenance_interval: null
+        maintenance_interval: ""
         metadata: {}
         min_cpu_platform: null
         on_host_maintenance: TERMINATE

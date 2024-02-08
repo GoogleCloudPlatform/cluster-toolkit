@@ -414,14 +414,14 @@ variable "additional_networks" {
 }
 
 variable "maintenance_interval" {
-  description = "Specifies the frequency of planned maintenance events. Must be unset (null) or \"PERIODIC\"."
-  default     = null
+  description = "Specifies the frequency of planned maintenance events. Must be \"PERIODIC\" or empty string to not use this feature."
+  default     = ""
   type        = string
-  nullable    = true
+  nullable    = false
 
   validation {
-    condition     = var.maintenance_interval == null || var.maintenance_interval == "PERIODIC"
-    error_message = "var.maintenance_interval must be unset (null) or set to \"PERIODIC\""
+    condition     = contains(["", "PERIODIC"], var.maintenance_interval)
+    error_message = "var.maintenance_interval must be the empty string or \"PERIODIC\""
   }
 }
 
