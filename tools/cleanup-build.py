@@ -61,16 +61,16 @@ def destroy(deployment_folder: str) -> bool:
         sys.stdout.buffer.write(line)
     process.wait()
 
-    if process.returncode == 0:
-        print("Deployment destroyed")
-        return True
-    else:
+    if process.returncode:
         stdout, stderr = process.communicate()
         print(f'stdout: {stdout}')
         print(f'stderr: {stderr}\n\n')
         print("Deployment destroy failed. Command to manually destroy:")
         print(f"./ghpc destroy {deployment_folder} --auto-approve")
         return False
+
+    print("Deployment destroyed")
+    return True
 
 def main():
     parser = argparse.ArgumentParser()
