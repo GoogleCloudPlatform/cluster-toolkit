@@ -16,7 +16,6 @@
 blueprint_name: ml-slurm
 
 vars:
-  enable_devel: true
   project_id:  ## Set project id here
   deployment_name: ml-example
   region: asia-southeast1

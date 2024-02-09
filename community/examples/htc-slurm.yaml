@@ -23,7 +23,6 @@
 blueprint_name: htc-slurm
 
 vars:
-  enable_devel: true
   project_id:  ## Set GCP Project ID Here ##
   deployment_name: htc-slurm
   region: us-west4
