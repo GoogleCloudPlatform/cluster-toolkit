@@ -21,38 +21,52 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func init() {
-	expandCmd.Flags().StringVarP(&bpFilenameDeprecated, "config", "c", "", "")
-	cobra.CheckErr(expandCmd.Flags().MarkDeprecated("config",
-		"please see the command usage for more details."))
+func addExpandFlags(c *cobra.Command, addOutFlag bool) *cobra.Command {
+	if addOutFlag {
+		c.Flags().StringVarP(&expandFlags.outputPath, "out", "o", "expanded.yaml",
+			"Output file for the expanded HPC Environment Definition.")
+	}
 
-	deploymentFileFlag := "deployment-file"
-	expandCmd.Flags().StringVarP(&deploymentFile, deploymentFileFlag, "d", "",
+	c.Flags().StringVarP(&expandFlags.deploymentFile, "deployment-file", "d", "",
 		"Toolkit Deployment File.")
-	expandCmd.Flags().MarkHidden(deploymentFileFlag)
-	expandCmd.Flags().StringVarP(&outputFilename, "out", "o", "expanded.yaml",
-		"Output file for the expanded HPC Environment Definition.")
-	expandCmd.Flags().StringSliceVar(&cliVariables, "vars", nil, msgCLIVars)
-	expandCmd.Flags().StringSliceVar(&cliBEConfigVars, "backend-config", nil, msgCLIBackendConfig)
-	expandCmd.Flags().StringVarP(&validationLevel, "validation-level", "l", "WARNING", validationLevelDesc)
-	expandCmd.Flags().StringSliceVar(&validatorsToSkip, "skip-validators", nil, skipValidatorsDesc)
+	c.Flags().MarkHidden("deployment-file")
+
+	c.Flags().StringSliceVar(&expandFlags.cliVariables, "vars", nil,
+		"Comma-separated list of name=value variables to override YAML configuration. Can be used multiple times.")
+	c.Flags().StringSliceVar(&expandFlags.cliBEConfigVars, "backend-config", nil,
+		"Comma-separated list of name=value variables to set Terraform backend configuration. Can be used multiple times.")
+	c.Flags().StringVarP(&expandFlags.validationLevel, "validation-level", "l", "WARNING",
+		"Set validation level to one of (\"ERROR\", \"WARNING\", \"IGNORE\")")
+	c.Flags().StringSliceVar(&expandFlags.validatorsToSkip, "skip-validators", nil, "Validators to skip")
+	return c
+}
+
+func init() {
 	rootCmd.AddCommand(expandCmd)
 }
 
 var (
-	outputFilename string
-	expandCmd      = &cobra.Command{
+	expandFlags = struct {
+		outputPath       string
+		deploymentFile   string
+		cliVariables     []string
+		cliBEConfigVars  []string
+		validationLevel  string
+		validatorsToSkip []string
+	}{}
+
+	expandCmd = addExpandFlags(&cobra.Command{
 		Use:               "expand BLUEPRINT_NAME",
 		Short:             "Expand the Environment Blueprint.",
 		Long:              "Updates the Environment Blueprint in the same way as create, but without writing the deployment.",
 		Run:               runExpandCmd,
 		Args:              cobra.ExactArgs(1),
 		ValidArgsFunction: filterYaml,
-	}
+	}, true /*addOutFlag*/)
 )
 
 func runExpandCmd(cmd *cobra.Command, args []string) {
-	bp := expandOrDie(args[0], deploymentFile)
-	checkErr(bp.Export(outputFilename))
-	logging.Info(boldGreen("Expanded Environment Definition created successfully, saved as %s."), outputFilename)
+	bp := expandOrDie(args[0])
+	checkErr(bp.Export(expandFlags.outputPath))
+	logging.Info(boldGreen("Expanded Environment Definition created successfully, saved as %s."), expandFlags.outputPath)
 }
