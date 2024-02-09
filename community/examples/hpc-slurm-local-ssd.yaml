@@ -17,7 +17,6 @@
 blueprint_name: hpc-slurm-local-ssd
 
 vars:
-  enable_devel: true
   project_id:  ## Set GCP Project ID Here ##
   deployment_name: hpc-localssd
   region: us-central1

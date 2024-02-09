@@ -28,7 +28,6 @@
 #
 blueprint_name: cae-slurm
 vars:
-  enable_devel: true
   project_id: ## Set GCP Project ID Here ##
   deployment_name: cae-slurm
   # check here for other regions with H3 deployments: https://cloud.google.com/compute/docs/regions-zones
