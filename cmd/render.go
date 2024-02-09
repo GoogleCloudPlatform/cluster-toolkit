@@ -77,7 +77,7 @@ func renderPosError(err config.PosError, ctx config.YamlCtx) string {
 	pos := err.Pos
 	line := pos.Line - 1
 	if line < 0 || line >= len(ctx.Lines) {
-		return renderError(err, ctx)
+		return renderError(err.Err, ctx)
 	}
 
 	pref := fmt.Sprintf("%d: ", pos.Line)
