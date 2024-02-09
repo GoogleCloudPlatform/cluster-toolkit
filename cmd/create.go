@@ -33,72 +33,59 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const msgCLIVars = "Comma-separated list of name=value variables to override YAML configuration. Can be used multiple times."
-const msgCLIBackendConfig = "Comma-separated list of name=value variables to set Terraform backend configuration. Can be used multiple times."
-
-func init() {
-	createCmd.Flags().StringVarP(&bpFilenameDeprecated, "config", "c", "", "")
-	cobra.CheckErr(createCmd.Flags().MarkDeprecated("config",
-		"please see the command usage for more details."))
-
-	deploymentFileFlag := "deployment-file"
-	createCmd.Flags().StringVarP(&deploymentFile, deploymentFileFlag, "d", "",
-		"Toolkit Deployment File.")
-	createCmd.Flags().MarkHidden(deploymentFileFlag)
-	createCmd.MarkFlagFilename(deploymentFileFlag, "yaml", "yml")
-	createCmd.Flags().StringVarP(&outputDir, "out", "o", "",
+func addCreateFlags(c *cobra.Command) *cobra.Command {
+	c.Flags().StringVarP(&createFlags.outputDir, "out", "o", "",
 		"Sets the output directory where the HPC deployment directory will be created.")
-	createCmd.Flags().StringSliceVar(&cliVariables, "vars", nil, msgCLIVars)
-	createCmd.Flags().StringSliceVar(&cliBEConfigVars, "backend-config", nil, msgCLIBackendConfig)
-	createCmd.Flags().StringVarP(&validationLevel, "validation-level", "l", "WARNING", validationLevelDesc)
-	createCmd.Flags().StringSliceVar(&validatorsToSkip, "skip-validators", nil, skipValidatorsDesc)
-	createCmd.Flags().BoolVarP(&overwriteDeployment, "overwrite-deployment", "w", false,
+	c.Flags().BoolVarP(&createFlags.overwriteDeployment, "overwrite-deployment", "w", false,
 		"If specified, an existing deployment directory is overwritten by the new deployment. \n"+
 			"Note: Terraform state IS preserved. \n"+
 			"Note: Terraform workspaces are NOT supported (behavior undefined). \n"+
 			"Note: Packer is NOT supported.")
-	createCmd.Flags().BoolVar(&forceOverwrite, "force", false,
+	c.Flags().BoolVar(&createFlags.forceOverwrite, "force", false,
 		"Forces overwrite of existing deployment directory. \n"+
 			"If set, --overwrite-deployment is implied. \n"+
 			"No validation is performed on the existing deployment directory.")
+	return addExpandFlags(c, false /*addOutFlag to avoid clash with "create" `out` flag*/)
+}
+
+func init() {
 	rootCmd.AddCommand(createCmd)
 }
 
 var (
-	bpFilenameDeprecated string
-	deploymentFile       string
-	outputDir            string
-	cliVariables         []string
+	createFlags = struct {
+		outputDir           string
+		overwriteDeployment bool
+		forceOverwrite      bool
+	}{}
 
-	cliBEConfigVars     []string
-	overwriteDeployment bool
-	forceOverwrite      bool
-	validationLevel     string
-	validationLevelDesc = "Set validation level to one of (\"ERROR\", \"WARNING\", \"IGNORE\")"
-	validatorsToSkip    []string
-	skipValidatorsDesc  = "Validators to skip"
-
-	createCmd = &cobra.Command{
-		Use:               "create BLUEPRINT_NAME",
+	createCmd = addCreateFlags(&cobra.Command{
+		Use:               "create <BLUEPRINT_FILE>",
 		Short:             "Create a new deployment.",
 		Long:              "Create a new deployment based on a provided blueprint.",
 		Run:               runCreateCmd,
 		Args:              cobra.ExactArgs(1),
 		ValidArgsFunction: filterYaml,
-	}
+	})
 )
 
 func runCreateCmd(cmd *cobra.Command, args []string) {
-	dc := expandOrDie(args[0], deploymentFile)
-	deplDir := filepath.Join(outputDir, dc.Config.DeploymentName())
-	checkErr(checkOverwriteAllowed(deplDir, dc.Config, overwriteDeployment, forceOverwrite))
-	checkErr(modulewriter.WriteDeployment(dc, deplDir))
+	deplDir := doCreate(args[0])
 
 	logging.Info("To deploy your infrastructure please run:")
 	logging.Info("")
 	logging.Info(boldGreen("%s deploy %s"), execPath(), deplDir)
 	logging.Info("")
 	printAdvancedInstructionsMessage(deplDir)
+
+}
+
+func doCreate(bpPath string) string {
+	dc := expandOrDie(bpPath)
+	deplDir := filepath.Join(createFlags.outputDir, dc.Config.DeploymentName())
+	checkErr(checkOverwriteAllowed(deplDir, dc.Config, createFlags.overwriteDeployment, createFlags.forceOverwrite))
+	checkErr(modulewriter.WriteDeployment(dc, deplDir))
+	return deplDir
 }
 
 func printAdvancedInstructionsMessage(deplDir string) {
@@ -108,7 +95,8 @@ func printAdvancedInstructionsMessage(deplDir string) {
 	logging.Info(modulewriter.InstructionsPath(deplDir))
 }
 
-func expandOrDie(path string, dPath string) config.DeploymentConfig {
+// TODO: move to expand.go
+func expandOrDie(path string) config.DeploymentConfig {
 	dc, ctx, err := config.NewDeploymentConfig(path)
 	if err != nil {
 		logging.Fatal(renderError(err, ctx))
@@ -116,22 +104,22 @@ func expandOrDie(path string, dPath string) config.DeploymentConfig {
 
 	var ds config.DeploymentSettings
 	var dCtx config.YamlCtx
-	if dPath != "" {
-		ds, dCtx, err = config.NewDeploymentSettings(dPath)
+	if expandFlags.deploymentFile != "" {
+		ds, dCtx, err = config.NewDeploymentSettings(expandFlags.deploymentFile)
 		if err != nil {
 			logging.Fatal(renderError(err, dCtx))
 		}
 	}
-	if err := setCLIVariables(&ds, cliVariables); err != nil {
+	if err := setCLIVariables(&ds, expandFlags.cliVariables); err != nil {
 		logging.Fatal("Failed to set the variables at CLI: %v", err)
 	}
-	if err := setBackendConfig(&ds, cliBEConfigVars); err != nil {
+	if err := setBackendConfig(&ds, expandFlags.cliBEConfigVars); err != nil {
 		logging.Fatal("Failed to set the backend config at CLI: %v", err)
 	}
 
 	mergeDeploymentSettings(&dc.Config, ds)
 
-	checkErr(setValidationLevel(&dc.Config, validationLevel))
+	checkErr(setValidationLevel(&dc.Config, expandFlags.validationLevel))
 	skipValidators(&dc)
 
 	if dc.Config.GhpcVersion != "" {
@@ -148,6 +136,7 @@ func expandOrDie(path string, dPath string) config.DeploymentConfig {
 	return dc
 }
 
+// TODO: move to expand.go
 func validateMaybeDie(bp config.Blueprint, ctx config.YamlCtx) {
 	err := validators.Execute(bp)
 	if err == nil {
@@ -181,6 +170,7 @@ func validateMaybeDie(bp config.Blueprint, ctx config.YamlCtx) {
 
 }
 
+// TODO: move to expand.go
 func setCLIVariables(ds *config.DeploymentSettings, s []string) error {
 	for _, cliVar := range s {
 		arr := strings.SplitN(cliVar, "=", 2)
@@ -199,6 +189,7 @@ func setCLIVariables(ds *config.DeploymentSettings, s []string) error {
 	return nil
 }
 
+// TODO: move to expand.go
 func setBackendConfig(ds *config.DeploymentSettings, s []string) error {
 	if len(s) == 0 {
 		return nil // no op
@@ -234,6 +225,7 @@ func mergeDeploymentSettings(bp *config.Blueprint, ds config.DeploymentSettings)
 }
 
 // SetValidationLevel allows command-line tools to set the validation level
+// TODO: move to expand.go
 func setValidationLevel(bp *config.Blueprint, s string) error {
 	switch s {
 	case "ERROR":
@@ -248,17 +240,11 @@ func setValidationLevel(bp *config.Blueprint, s string) error {
 	return nil
 }
 
+// TODO: move to expand.go
 func skipValidators(dc *config.DeploymentConfig) {
-	for _, v := range validatorsToSkip {
+	for _, v := range expandFlags.validatorsToSkip {
 		dc.SkipValidator(v)
 	}
-}
-
-func filterYaml(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-	if len(args) != 0 {
-		return nil, cobra.ShellCompDirectiveNoFileComp
-	}
-	return []string{"yaml", "yml"}, cobra.ShellCompDirectiveFilterFileExt
 }
 
 func forceErr(err error) error {

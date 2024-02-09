@@ -16,7 +16,7 @@
 package cmd
 
 import (
-	"fmt"
+	"errors"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/modulewriter"
 	"hpc-toolkit/pkg/shell"
@@ -26,89 +26,60 @@ import (
 )
 
 func init() {
-	artifactsFlag := "artifacts"
-	exportCmd.Flags().StringVarP(&artifactsDir, artifactsFlag, "a", "", "Artifacts output directory (automatically configured if unset)")
-	exportCmd.MarkFlagDirname(artifactsFlag)
 	rootCmd.AddCommand(exportCmd)
 }
 
 var (
-	artifactsDir string
-	exportCmd    = &cobra.Command{
+	exportImportArgs = struct {
+		deplRoot string
+		groupDir string
+	}{}
+
+	exportCmd = addArtifactsDirFlag(&cobra.Command{
 		Use:               "export-outputs DEPLOYMENT_GROUP_DIRECTORY",
 		Short:             "Export outputs from deployment group.",
 		Long:              "Export output values from deployment group to other deployment groups that depend upon them.",
 		Args:              cobra.MatchAll(cobra.ExactArgs(1), checkDir),
 		ValidArgsFunction: matchDirs,
 		PreRun:            parseExportImportArgs,
-		RunE:              runExportCmd,
+		Run:               runExportCmd,
 		SilenceUsage:      true,
-	}
+	})
 )
 
-func checkDir(cmd *cobra.Command, args []string) error {
-	path := args[0]
-	if path == "" {
-		return nil
-	}
-	if isDir, _ := shell.DirInfo(path); !(isDir) {
-		return fmt.Errorf("%s must be a directory", path)
-	}
-
-	return nil
-}
-
-func matchDirs(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-	return nil, cobra.ShellCompDirectiveFilterDirs | cobra.ShellCompDirectiveNoFileComp
-}
-
 func parseExportImportArgs(cmd *cobra.Command, args []string) {
-	deploymentRoot = filepath.Join(filepath.Clean(args[0]), "..")
-	artifactsDir = getArtifactsDir(deploymentRoot)
+	gd := filepath.Clean(args[0])
+
+	exportImportArgs.groupDir = gd
+	exportImportArgs.deplRoot = filepath.Join(gd, "..")
 }
 
-func getArtifactsDir(deploymentRoot string) string {
-	if artifactsDir == "" {
-		return modulewriter.ArtifactsDir(deploymentRoot)
-	}
-	return artifactsDir
-}
+func runExportCmd(cmd *cobra.Command, _ []string) {
+	args := exportImportArgs
 
-func runExportCmd(cmd *cobra.Command, args []string) error {
-	groupDir := filepath.Clean(args[0])
-	deploymentGroup := config.GroupName(filepath.Base(args[0]))
+	artifactsDir := getArtifactsDir(args.deplRoot)
+	deploymentGroup := config.GroupName(filepath.Base(args.groupDir))
 
-	if err := shell.CheckWritableDir(artifactsDir); err != nil {
-		return err
-	}
+	checkErr(shell.CheckWritableDir(artifactsDir))
 
 	expandedBlueprintFile := filepath.Join(artifactsDir, modulewriter.ExpandedBlueprintName)
 	dc, _, err := config.NewDeploymentConfig(expandedBlueprintFile)
-	if err != nil {
-		return err
-	}
+	checkErr(err)
 
-	if err := shell.ValidateDeploymentDirectory(dc.Config.DeploymentGroups, deploymentRoot); err != nil {
-		return err
-	}
+	checkErr(shell.ValidateDeploymentDirectory(dc.Config.DeploymentGroups, args.deplRoot))
 
 	group, err := dc.Config.Group(deploymentGroup)
-	if err != nil {
-		return err
-	}
+	checkErr(err)
+
 	if group.Kind() == config.PackerKind {
-		return fmt.Errorf("export command is unsupported on Packer modules because they do not have outputs")
+		checkErr(errors.New("export command is unsupported on Packer modules because they do not have outputs"))
 	}
 	if group.Kind() != config.TerraformKind {
-		return fmt.Errorf("export command is supported for Terraform modules only")
+		checkErr(errors.New("export command is supported for Terraform modules only"))
 	}
 
-	tf, err := shell.ConfigureTerraform(groupDir)
-	if err != nil {
-		return err
-	}
-	if err = shell.ExportOutputs(tf, artifactsDir, shell.NeverApply); err != nil {
-		return err
-	}
-	return nil
+	tf, err := shell.ConfigureTerraform(args.groupDir)
+	checkErr(err)
+
+	checkErr(shell.ExportOutputs(tf, artifactsDir, shell.NeverApply))
 }
