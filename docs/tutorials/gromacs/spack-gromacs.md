@@ -84,6 +84,7 @@ This file describes the cluster you will deploy. It defines:
   * sets up a Spack environment including downloading an example input deck
   * places a submission script on a shared drive
 * a Slurm cluster
+  * a Slurm login node
   * a Slurm controller
   * An auto-scaling Slurm partition
 
@@ -138,21 +139,21 @@ the final output from the above command:
 
 Optionally while you wait, you can see your deployed VMs on Google Cloud
 Console. Open the link below in a new window. Look for
-`spackgroma-controller`. If you don't
+`spackgroma-controller` and `spackgroma-login-login-001`. If you don't
 see your VMs make sure you have the correct project selected (top left).
 
 ```text
 https://console.cloud.google.com/compute?project=<walkthrough-project-id/>
 ```
 
-## Connecting to the controller node
+## Connecting to the login node
 
-Once the startup script has completed, connect to the controller node.
+Once the startup script has completed, connect to the login node.
 
-Use the following command to ssh into the controller node from cloud shell:
+Use the following command to ssh into the login node from cloud shell:
 
 ```bash
-gcloud compute ssh spackgroma-controller --zone us-central1-c --project <walkthrough-project-id/>
+gcloud compute ssh spackgroma-login-login-001 --zone us-central1-c --project <walkthrough-project-id/>
 ```
 
 You may be prompted to set up SSH. If so follow the prompts and if asked for a
@@ -176,15 +177,15 @@ following instructions:
    https://console.cloud.google.com/compute?project=<walkthrough-project-id/>
    ```
 
-1. Click on the `SSH` button associated with the `spackgroma-controller`
+1. Click on the `SSH` button associated with the `spackgroma-login-login-001`
    instance.
 
    This will open a separate pop up window with a terminal into our newly
-   created Slurm controller VM.
+   created Slurm login VM.
 
 ## Run a Job on the Cluster
 
-   **The commands below should be run on the Slurm controller node.**
+   **The commands below should be run on the Slurm login node.**
 
 We will use the submission script (see line 122 of the blueprint) to submit a
 Gromacs job.
@@ -233,7 +234,7 @@ Several files will have been generated in the `test_run/` folder you created.
 
 The `md.log` and `slurm-1.out` files have information on the run such as
 performance. You can view these files by running the following commands on the
-controller node:
+login node:
 
 ```bash
 cat slurm-*.out
@@ -258,9 +259,9 @@ https://console.cloud.google.com/monitoring/dashboards?project=<walkthrough-proj
 To avoid incurring ongoing charges we will want to destroy our cluster.
 
 For this we need to return to our cloud shell terminal. Run `exit` in the
-terminal to close the SSH connection to the controller node:
+terminal to close the SSH connection to the login node:
 
-> **_NOTE:_** If you are accessing the controller node terminal via a separate pop-up
+> **_NOTE:_** If you are accessing the login node terminal via a separate pop-up
 > then make sure to call `exit` in the pop-up window.
 
 ```bash
