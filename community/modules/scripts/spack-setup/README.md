@@ -135,6 +135,10 @@ sudo usermod -a -G spack <username>
 Log out and back in so the group change will take effect, then `<username>` will
 be able to call `spack install <package>`.
 
+> [!NOTE]
+> A background persistent SSH connections may prevent the group change from
+> taking effect.
+
 You can use the `system_user_name`, `system_user_uid`, and `system_user_gid` to
 customize the name and ids of the system user. While unlikely, it is possible
 that the default `system_user_uid` or `system_user_gid` could conflict with
