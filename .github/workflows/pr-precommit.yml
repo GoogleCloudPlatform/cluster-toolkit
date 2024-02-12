@@ -44,6 +44,10 @@ jobs:
     - uses: terraform-linters/setup-tflint@v4
       with:
         tflint_version: v0.49.0
+    - run: tflint --init
+      env:
+        # https://github.com/terraform-linters/tflint/blob/master/docs/user-guide/plugins.md#avoiding-rate-limiting
+        GITHUB_TOKEN: ${{ github.token }}
     - uses: pre-commit/action@v3.0.1
     - uses: pre-commit-ci/lite-action@v1.0.2
       # this if statement looks funny but it ensures that this step runs
