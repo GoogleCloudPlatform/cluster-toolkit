@@ -104,7 +104,7 @@ locals {
   storage_bucket_name       = coalesce(one(google_storage_bucket.configs_bucket[*].name), local.user_provided_bucket_name)
 
   load_runners = templatefile(
-    "${path.module}/templates/startup-script-custom.tpl",
+    "${path.module}/templates/startup-script-custom.tftpl",
     {
       bucket = local.storage_bucket_name,
       runners = [
