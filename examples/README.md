@@ -1,4 +1,4 @@
-# Example Blueprints
+# Example Blueprints GG
 
 This directory contains a set of example blueprint files that can be fed into
 gHPC to create a deployment.
