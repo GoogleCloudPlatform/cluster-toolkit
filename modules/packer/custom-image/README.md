@@ -1,7 +1,8 @@
 # Custom Images in the HPC Toolkit
 
-Please review the [introduction to image building](../../../docs/image-building.md)
-for general information on building custom images using the Toolkit.
+Please review the
+[introduction to image building](../../../docs/image-building.md) for general
+information on building custom images using the Toolkit.
 
 ## Introduction
 
@@ -12,42 +13,85 @@ repeated use. The VM's boot disk is specified from a source image that defaults
 to the [HPC VM Image][hpcimage]. This Packer "template" supports customization
 by the following approaches following a [recommended use](#recommended-use):
 
-* [startup-script metadata][startup-metadata] from [raw string][sss] or
+- [startup-script metadata][startup-metadata] from [raw string][sss] or
   [file][ssf]
-* [Shell scripts][shell] uploaded from the Packer execution
-  environment to the VM
-* [Ansible playbooks][ansible] uploaded from the Packer
-  execution environment to the VM
+- [Shell scripts][shell] uploaded from the Packer execution environment to the
+  VM
+- [Ansible playbooks][ansible] uploaded from the Packer execution environment to
+  the VM
 
-They can be specified independently of one another, so that anywhere from 1 to
-3 solutions can be used simultaneously. In the case that 0 scripts are supplied,
+They can be specified independently of one another, so that anywhere from 1 to 3
+solutions can be used simultaneously. In the case that 0 scripts are supplied,
 the source boot disk is effectively copied to your project without
 customization. This can be useful in scenarios where increased control over the
 image maintenance lifecycle is desired or when policies restrict the use of
 images to internal projects.
 
-[sss]: #input_startup_script
-[ssf]: #input_startup_script_file
-[shell]: #input_shell_scripts
-[ansible]: #input_ansible_playbooks
-[hpcimage]: https://cloud.google.com/compute/docs/instances/create-hpc-vm
-[Image Builder]: ../../../examples/image-builder.yaml
-[startup-script]: ../../../modules/scripts/startup-script
-[examples README]: ../../../examples/README.md#image-builderyaml-
-[startup-metadata]: https://cloud.google.com/compute/docs/instances/startup-scripts/linux
+## Minimum requirements
+
+### Outbound internet access
+
+Most customization scripts require access to resources on the public internet.
+This can be achieved by one of the following 2 approaches:
+
+1. Using a public IP address on the VM
+
+- Set [var.omit_external_ip](#input_omit_external_ip) to `true`
+
+1. Configuring a VPC with a Cloud NAT in the region of the VM
+
+- Use the \[vpc\] module which automates NAT creation
+
+### Inbound internet access
+
+Read [order of execution](#order-of-execution) below for a discussion of VM
+customization solutions and their requirements for inbound SSH access.
+[Environments without SSH access](#environments-without-ssh-access) should use
+the metadata-based startup-script solution.
+
+A simple way to enable inbound SSH access is to use the VPC module with
+`allowed_ssh_ip_ranges` set to `0.0.0.0/0`.
+
+### User or service account running Packer
+
+The user or service account running Packer must have the permission to create
+VMs in the selected VPC network and, if [use_iap](#input_use_iap) is set, must
+have the "IAP-Secured Tunnel User" role. Recommended roles are:
+
+- `roles/compute.instanceAdmin.v1`
+- `roles/iap.tunnelResourceAccessor`
+
+### VM service account roles
+
+The service account attached to the temporary build VM created by Packer should
+have the ability to write Cloud Logging entries so that you may inspect and
+debug build logs. When using the metadata startup-script customization solution,
+the service account attached to the temporary build VM created by Packer must
+have the permission to modify its own metadata and to read from Cloud Storage
+buckets. Recommended roles are:
+
+- `roles/compute.instanceAdmin.v1`
+- `roles/logging.logWriter`
+- `roles/monitoring.metricWriter`
+- `roles/storage.objectViewer`
+
+These roles are demonstrated in the [image builder example][examples readme].
 
 ## Example blueprints
 
-A recommended pattern for building images with this module is to use the terraform
-based [startup-script] module along with this packer custom-image module. Below you
-can find links to several examples of this pattern, including usage instructions.
+A recommended pattern for building images with this module is to use the
+terraform based [startup-script] module along with this packer custom-image
+module. Below you can find links to several examples of this pattern, including
+usage instructions.
 
 ### [Image Builder]
-The [Image Builder] blueprint demonstrates a solution that builds an image using:
 
-* The [HPC VM Image][hpcimage] as a base upon which to customize
-* A VPC network with firewall rules that allow IAP-based SSH tunnels
-* A Toolkit runner that installs a custom script
+The [Image Builder] blueprint demonstrates a solution that builds an image
+using:
+
+- The [HPC VM Image][hpcimage] as a base upon which to customize
+- A VPC network with firewall rules that allow IAP-based SSH tunnels
+- A Toolkit runner that installs a custom script
 
 Please review the [examples README] for usage instructions.
 
@@ -61,27 +105,26 @@ order relative to one another.
 1. After shell scripts complete, all Ansible playbooks will execute in the
    configured order
 
-> **_NOTE:_** if both [startup\_script][sss] and [startup\_script\_file][ssf]
-> are specified, then [startup\_script\_file][ssf] takes precedence.
+> **_NOTE:_** if both [startup_script][sss] and [startup_script_file][ssf] are
+> specified, then [startup_script_file][ssf] takes precedence.
 
 ## Recommended use
 
 Because the [metadata startup script executes in parallel](#order-of-execution)
 with the other solutions, conflicts can arise, especially when package managers
-(`yum` or `apt`) lock their databases during package installation. Therefore,
-it is recommended to choose one of the following approaches:
+(`yum` or `apt`) lock their databases during package installation. Therefore, it
+is recommended to choose one of the following approaches:
 
-1. Specify _either_ [startup\_script][sss] _or_ [startup\_script\_file][ssf]
-   and do not specify [shell\_scripts][shell] or [ansible\_playbooks][ansible].
-   * This can be especially useful in [environments that restrict SSH access](#environments-without-ssh-access)
-1. Specify any combination of [shell\_scripts][shell] and
-   [ansible\_playbooks][ansible] and do not specify [startup\_script][sss] or
-   [startup\_script\_file][ssf].
+1. Specify _either_ [startup_script][sss] _or_ [startup_script_file][ssf] and do
+   not specify [shell_scripts][shell] or [ansible_playbooks][ansible].
+   - This can be especially useful in
+     [environments that restrict SSH access](#environments-without-ssh-access)
+1. Specify any combination of [shell_scripts][shell] and
+   [ansible_playbooks][ansible] and do not specify [startup_script][sss] or
+   [startup_script_file][ssf].
 
 If any of the startup script approaches fail by returning a code other than 0,
 Packer will determine that the build has failed and refuse to save the image.
-
-[metaorder]: https://cloud.google.com/compute/docs/instances/startup-scripts/linux#order_of_execution_of_linux_startup_scripts
 
 ## External access with SSH
 
@@ -91,24 +134,21 @@ environment. SSH access can be enabled one of 2 ways:
 
 1. The VM is created without a public IP address and SSH tunnels are created
    using [Identity-Aware Proxy (IAP)][iaptunnel].
-   * Allow [use\_iap](#input_use_iap) to take on its default value of `true`
+   - Allow [use_iap](#input_use_iap) to take on its default value of `true`
 1. The VM is created with an IP address on the public internet and firewall
    rules allow SSH access from the Packer execution environment.
-   * Set `omit_external_ip = false` (or `omit_external_ip: false` in a
+   - Set `omit_external_ip = false` (or `omit_external_ip: false` in a
      blueprint)
-   * Add firewall rules that open SSH to the VM
+   - Add firewall rules that open SSH to the VM
 
 The Packer template defaults to using to the 1st IAP-based solution because it
-is more secure (no exposure to public internet) and because the [Toolkit VPC
-module](../../network/vpc/README.md) automatically sets up all necessary
-firewall rules for SSH tunneling and outbound-only access to the internet
-through [Cloud NAT][cloudnat].
+is more secure (no exposure to public internet) and because the
+[Toolkit VPC module](../../network/vpc/README.md) automatically sets up all
+necessary firewall rules for SSH tunneling and outbound-only access to the
+internet through [Cloud NAT][cloudnat].
 
-In either SSH solution, customization scripts should be supplied as files in
-the [shell\_scripts][shell] and [ansible\_playbooks][ansible] settings.
-
-[iaptunnel]: https://cloud.google.com/iap/docs/using-tcp-forwarding
-[cloudnat]: https://cloud.google.com/nat/docs/overview
+In either SSH solution, customization scripts should be supplied as files in the
+[shell_scripts][shell] and [ansible_playbooks][ansible] settings.
 
 ## Environments without SSH access
 
@@ -117,22 +157,22 @@ Many network environments disallow SSH access to VMs. In these environments, the
 execute entirely independently of the Packer execution environment.
 
 In this scenario, a single scripts should be supplied in the form of a string to
-the [startup\_script][sss] input variable. This solution integrates well with
-Toolkit runners. Runners operate by using a single startup script whose
-behavior is extended by downloading and executing a customizable set of runners
-from Cloud Storage at startup.
+the [startup_script][sss] input variable. This solution integrates well with
+Toolkit runners. Runners operate by using a single startup script whose behavior
+is extended by downloading and executing a customizable set of runners from
+Cloud Storage at startup.
 
-> **_NOTE:_** Packer will attempt to use SSH if either [shell\_scripts][shell]
-> or [ansible\_playbooks][ansible] are set to non-empty values. Leave them at
-> their default, empty values to ensure access by SSH is disabled.
+> **_NOTE:_** Packer will attempt to use SSH if either [shell_scripts][shell] or
+> [ansible_playbooks][ansible] are set to non-empty values. Leave them at their
+> default, empty values to ensure access by SSH is disabled.
 
 ## Supplying startup script as a string
 
-The [startup\_script][sss] parameter accepts scripts formatted as strings. In
-Packer and Terraform, multi-line strings can be specified using [heredoc
-syntax](https://www.terraform.io/language/expressions/strings#heredoc-strings)
-in an input [Packer variables file][pkrvars] (`*.pkrvars.hcl`) For example,
-the following snippet defines a multi-line bash script followed by an integer
+The [startup_script][sss] parameter accepts scripts formatted as strings. In
+Packer and Terraform, multi-line strings can be specified using
+[heredoc syntax](https://www.terraform.io/language/expressions/strings#heredoc-strings)
+in an input [Packer variables file][pkrvars] (`*.pkrvars.hcl`) For example, the
+following snippet defines a multi-line bash script followed by an integer
 representing the size, in GiB, of the resulting image:
 
 ```hcl
@@ -158,8 +198,6 @@ In a blueprint, the equivalent syntax is:
 ...
 ```
 
-[pkrvars]: https://www.packer.io/guides/hcl/variables#from-a-file
-
 ## Monitoring startup script execution
 
 When using startup script customization, Packer will print very limited output
@@ -172,11 +210,11 @@ to the console. For example:
 ==> example.googlecompute.toolkit_image: Startup script, if any, has finished running.
 ```
 
-Using the default value for [var.scopes][#input_scopes], the output of startup
-script execution will be stored in Cloud Logging. It can be examined using the
-[Cloud Logging Console][logging-console] or with a [gcloud logging
-read][logging-read-docs] command (substituting `<<PROJECT_ID>>` with your
-project ID):
+Using the default value for \[var.scopes\]\[#input_scopes\], the output of
+startup script execution will be stored in Cloud Logging. It can be examined
+using the [Cloud Logging Console][logging-console] or with a
+[gcloud logging read][logging-read-docs] command (substituting `<<PROJECT_ID>>`
+with your project ID):
 
 ```shell
 $ gcloud logging --project <<PROJECT_ID>> read \
@@ -187,28 +225,26 @@ $ gcloud logging --project <<PROJECT_ID>> read \
 Note that this command will print **all** startup script entries within the
 project within the "freshness" window **in reverse order**. You may need to
 identify the instance ID of the Packer VM and filter further by that value using
-`gcloud` or `grep`. To print the entries in the order they would have appeared on
-your console, we recommend piping the output of this command to the standard
+`gcloud` or `grep`. To print the entries in the order they would have appeared
+on your console, we recommend piping the output of this command to the standard
 Linux utility `tac`.
-
-[logging-console]: https://console.cloud.google.com/logs/
-[logging-read-docs]: https://cloud.google.com/sdk/gcloud/reference/logging/read
 
 ## License
 
 Copyright 2022 Google LLC
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use
+this file except in compliance with the License. You may obtain a copy of the
+License at
 
-     http://www.apache.org/licenses/LICENSE-2.0
+```text
+ http://www.apache.org/licenses/LICENSE-2.0
+```
 
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+Unless required by applicable law or agreed to in writing, software distributed
+under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
+CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 ## Requirements
@@ -273,3 +309,18 @@ No resources.
 
 No outputs.
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
+
+[ansible]: #input_ansible_playbooks
+[cloudnat]: https://cloud.google.com/nat/docs/overview
+[examples readme]: ../../../examples/README.md#image-builderyaml-
+[hpcimage]: https://cloud.google.com/compute/docs/instances/create-hpc-vm
+[iaptunnel]: https://cloud.google.com/iap/docs/using-tcp-forwarding
+[image builder]: ../../../examples/image-builder.yaml
+[logging-console]: https://console.cloud.google.com/logs/
+[logging-read-docs]: https://cloud.google.com/sdk/gcloud/reference/logging/read
+[pkrvars]: https://www.packer.io/guides/hcl/variables#from-a-file
+[shell]: #input_shell_scripts
+[ssf]: #input_startup_script_file
+[sss]: #input_startup_script
+[startup-metadata]: https://cloud.google.com/compute/docs/instances/startup-scripts/linux
+[startup-script]: ../../../modules/scripts/startup-script
