@@ -36,6 +36,53 @@ images to internal projects.
 [examples README]: ../../../examples/README.md#image-builderyaml-
 [startup-metadata]: https://cloud.google.com/compute/docs/instances/startup-scripts/linux
 
+## Minimum requirements
+
+### Outbound internet access
+
+Most customization scripts require access to resources on the public internet.
+This can be achieved by one of the following 2 approaches:
+
+1. Using a public IP address on the VM
+
+* Set [var.omit_external_ip](#input_omit_external_ip) to `true`
+
+1. Configuring a VPC with a Cloud NAT in the region of the VM
+
+* Use the [vpc] module which automates NAT creation
+
+### Inbound internet access
+
+Read [order of execution](#order-of-execution) below for a discussion of VM
+customization solutions and their requirements for inbound SSH access.
+[Environments without SSH access](#environments-without-ssh-access) should use
+the metadata-based startup-script solution.
+
+### User or service account running Packer
+
+The user or service account running Packer must have the permission to create
+VMs in the selected VPC network and, if [use_iap](#input_use_iap) is set, must
+have the "IAP-Secured Tunnel User" role. Recommended roles are:
+
+* `roles/compute.instanceAdmin.v1`
+* `roles/iap.tunnelResourceAccessor`
+
+### VM service account roles
+
+The service account attached to the temporary build VM created by Packer should
+have the ability to write Cloud Logging entries so that you may inspect and
+debug build logs. When using the metadata startup-script customization solution,
+the service account attached to the temporary build VM created by Packer must
+have the permission to modify its own metadata and to read from Cloud Storage
+buckets. Recommended roles are:
+
+* `roles/compute.instanceAdmin.v1`
+* `roles/logging.logWriter`
+* `roles/monitoring.metricWriter`
+* `roles/storage.objectViewer`
+
+These roles are demonstrated in the [image builder example][examples README].
+
 ## Example blueprints
 
 A recommended pattern for building images with this module is to use the terraform
