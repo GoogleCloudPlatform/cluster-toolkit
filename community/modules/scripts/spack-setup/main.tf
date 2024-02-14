@@ -79,7 +79,7 @@ locals {
     "destination" = "install_spack.yml"
   }
 
-  bucket_md5  = substr(md5("${var.project_id}.${var.deployment_name}.${local.script_content}"), 0, 4)
+  bucket_md5  = substr(md5("${var.project_id}.${var.deployment_name}.${local.script_content}"), 0, 8)
   bucket_name = "spack-scripts-${local.bucket_md5}"
   runners     = [local.install_spack_deps_runner, local.install_spack_runner]
 
@@ -100,7 +100,7 @@ resource "google_storage_bucket" "bucket" {
 }
 
 module "startup_script" {
-  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=50644b2"
+  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=v1.27.0&depth=1"
 
   labels          = local.labels
   project_id      = var.project_id

@@ -21,7 +21,7 @@ deployment_name: "rock-8-{{ build }}"
 slurm_cluster_name: "rock8{{ build[0:5] }}"
 
 cli_deployment_vars:
-   instance_image: "{family: slurm-gcp-5-9-hpc-rocky-linux-8, project: schedmd-slurm-public}"
+   instance_image: "{family: slurm-gcp-5-10-hpc-rocky-linux-8, project: schedmd-slurm-public}"
    region: us-west4
    zone: us-west4-c
 

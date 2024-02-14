@@ -18,6 +18,7 @@ import (
 	"fmt"
 
 	"github.com/zclconf/go-cty/cty"
+	"golang.org/x/exp/maps"
 )
 
 // Dict maps string key to cty.Value.
@@ -76,6 +77,10 @@ func (d *Dict) Items() map[string]cty.Value {
 	return m
 }
 
+func (d *Dict) Keys() []string {
+	return maps.Keys(d.m)
+}
+
 // AsObject returns Dict as cty.ObjectVal
 func (d *Dict) AsObject() cty.Value {
 	return cty.ObjectVal(d.Items())
@@ -92,7 +97,7 @@ func (d Dict) IsZero() bool {
 func (d Dict) Eval(bp Blueprint) (Dict, error) {
 	var res Dict
 	for k, v := range d.Items() {
-		r, err := evalValue(v, bp)
+		r, err := bp.Eval(v)
 		if err != nil {
 			return Dict{}, fmt.Errorf("error while trying to evaluate %#v: %w", k, err)
 		}

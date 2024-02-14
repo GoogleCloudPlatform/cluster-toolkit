@@ -20,6 +20,11 @@ use role:get_htcondor_central_manager
 CONDOR_HOST = $(IPV4_ADDRESS)
 
 # Central Manager configuration settings
+# https://htcondor.readthedocs.io/en/23.0/admin-manual/configuration-macros.html#condor-collector-configuration-file-entries
+# https://htcondor.readthedocs.io/en/23.0/admin-manual/configuration-macros.html#condor-negotiator-configuration-file-entries
+# set classad lifetime (expiration) to ~5x the update interval for all daemons
+# defaults to 900s
+CLASSAD_LIFETIME = 180
 COLLECTOR_UPDATE_INTERVAL = 30
 NEGOTIATOR_UPDATE_INTERVAL = 30
 NEGOTIATOR_DEPTH_FIRST = True

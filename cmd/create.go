@@ -52,6 +52,10 @@ func init() {
 			"Note: Terraform state IS preserved. \n"+
 			"Note: Terraform workspaces are NOT supported (behavior undefined). \n"+
 			"Note: Packer is NOT supported.")
+	createCmd.Flags().BoolVar(&forceOverwrite, "force", false,
+		"Forces overwrite of existing deployment directory. \n"+
+			"If set, --overwrite-deployment is implied. \n"+
+			"No validation is performed on the existing deployment directory.")
 	rootCmd.AddCommand(createCmd)
 }
 
@@ -62,6 +66,7 @@ var (
 
 	cliBEConfigVars     []string
 	overwriteDeployment bool
+	forceOverwrite      bool
 	validationLevel     string
 	validationLevelDesc = "Set validation level to one of (\"ERROR\", \"WARNING\", \"IGNORE\")"
 	validatorsToSkip    []string
@@ -80,7 +85,7 @@ var (
 func runCreateCmd(cmd *cobra.Command, args []string) {
 	dc := expandOrDie(args[0])
 	deplDir := filepath.Join(outputDir, dc.Config.DeploymentName())
-	checkErr(checkOverwriteAllowed(deplDir, dc.Config, overwriteDeployment))
+	checkErr(checkOverwriteAllowed(deplDir, dc.Config, overwriteDeployment, forceOverwrite))
 	checkErr(modulewriter.WriteDeployment(dc, deplDir))
 
 	logging.Info("To deploy your infrastructure please run:")
@@ -110,7 +115,7 @@ func expandOrDie(path string) config.DeploymentConfig {
 		logging.Fatal("Failed to set the backend config at CLI: %v", err)
 	}
 	checkErr(setValidationLevel(&dc.Config, validationLevel))
-	checkErr(skipValidators(&dc))
+	skipValidators(&dc)
 
 	if dc.Config.GhpcVersion != "" {
 		logging.Info("ghpc_version setting is ignored.")
@@ -157,58 +162,6 @@ func validateMaybeDie(bp config.Blueprint, ctx config.YamlCtx) {
 		}
 	}
 
-}
-
-func findPos(path config.Path, ctx config.YamlCtx) (config.Pos, bool) {
-	pos, ok := ctx.Pos(path)
-	for !ok && path.Parent() != nil {
-		path = path.Parent()
-		pos, ok = ctx.Pos(path)
-	}
-	return pos, ok
-}
-
-func renderError(err error, ctx config.YamlCtx) string {
-	switch te := err.(type) {
-	case config.Errors:
-		var sb strings.Builder
-		for _, e := range te.Errors {
-			sb.WriteString(renderError(e, ctx))
-			sb.WriteString("\n")
-		}
-		return sb.String()
-	case validators.ValidatorError:
-		title := boldRed(fmt.Sprintf("validator %q failed:", te.Validator))
-		return fmt.Sprintf("%s\n%v\n", title, renderError(te.Err, ctx))
-	case config.BpError:
-		if pos, ok := findPos(te.Path, ctx); ok {
-			return renderRichError(te.Err, pos, ctx)
-		}
-		return renderError(te.Err, ctx)
-	default:
-		return err.Error()
-	}
-}
-
-func renderRichError(err error, pos config.Pos, ctx config.YamlCtx) string {
-	line := pos.Line - 1
-	if line < 0 {
-		line = 0
-	}
-	if line >= len(ctx.Lines) {
-		line = len(ctx.Lines) - 1
-	}
-
-	pref := fmt.Sprintf("%d: ", pos.Line)
-	arrow := " "
-	if pos.Column > 0 {
-		spaces := strings.Repeat(" ", len(pref)+pos.Column-1)
-		arrow = spaces + "^"
-	}
-
-	return fmt.Sprintf(`%s: %s
-%s%s
-%s`, boldRed("Error"), err, pref, ctx.Lines[line], arrow)
 }
 
 func setCLIVariables(bp *config.Blueprint, s []string) error {
@@ -268,16 +221,10 @@ func setValidationLevel(bp *config.Blueprint, s string) error {
 	return nil
 }
 
-func skipValidators(dc *config.DeploymentConfig) error {
-	if validatorsToSkip == nil {
-		return nil
-	}
+func skipValidators(dc *config.DeploymentConfig) {
 	for _, v := range validatorsToSkip {
-		if err := dc.SkipValidator(v); err != nil {
-			return err
-		}
+		dc.SkipValidator(v)
 	}
-	return nil
 }
 
 func filterYaml(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
@@ -287,29 +234,37 @@ func filterYaml(cmd *cobra.Command, args []string, toComplete string) ([]string,
 	return []string{"yaml", "yml"}, cobra.ShellCompDirectiveFilterFileExt
 }
 
+func forceErr(err error) error {
+	return config.HintError{
+		Err:  err,
+		Hint: "Use `--force` to overwrite the deployment anyway. Proceed at your own risk."}
+}
+
 // Determines if overwrite is allowed
-func checkOverwriteAllowed(depDir string, bp config.Blueprint, overwriteFlag bool) error {
-	if _, err := os.Stat(depDir); os.IsNotExist(err) {
+func checkOverwriteAllowed(depDir string, bp config.Blueprint, overwriteFlag bool, forceFlag bool) error {
+	if _, err := os.Stat(depDir); os.IsNotExist(err) || forceFlag {
 		return nil // all good, no previous deployment
 	}
 
 	if _, err := os.Stat(modulewriter.HiddenGhpcDir(depDir)); os.IsNotExist(err) {
 		// hidden ghpc dir does not exist
-		return fmt.Errorf("folder %q already exists, and it is not a valid GHPC deployment folder", depDir)
+		return forceErr(fmt.Errorf("folder %q already exists, and it is not a valid GHPC deployment folder", depDir))
 	}
 
 	// try to get previous deployment
 	expPath := filepath.Join(modulewriter.ArtifactsDir(depDir), modulewriter.ExpandedBlueprintName)
 	if _, err := os.Stat(expPath); os.IsNotExist(err) {
-		return fmt.Errorf("expanded blueprint file %q is missing, this could be a result of changing GHPC version between consecutive deployments", expPath)
+		return forceErr(fmt.Errorf("expanded blueprint file %q is missing, this could be a result of changing GHPC version between consecutive deployments", expPath))
 	}
 	prev, _, err := config.NewDeploymentConfig(expPath)
 	if err != nil {
-		return err
+		return forceErr(err)
 	}
 
 	if prev.Config.GhpcVersion != bp.GhpcVersion {
-		logging.Info("WARNING: ghpc_version has changed from %q to %q, using different versions of GHPC to update a live deployment is not officially supported. Proceed at your own risk", prev.Config.GhpcVersion, bp.GhpcVersion)
+		return forceErr(fmt.Errorf(
+			"ghpc_version has changed from %q to %q, using different versions of GHPC to update a live deployment is not officially supported",
+			prev.Config.GhpcVersion, bp.GhpcVersion))
 	}
 
 	if !overwriteFlag {
@@ -323,7 +278,7 @@ func checkOverwriteAllowed(depDir string, bp config.Blueprint, overwriteFlag boo
 
 	for _, g := range prev.Config.DeploymentGroups {
 		if !newGroups[g.Name] {
-			return fmt.Errorf("you are attempting to remove a deployment group %q, which is not supported", g.Name)
+			return forceErr(fmt.Errorf("you are attempting to remove a deployment group %q, which is not supported", g.Name))
 		}
 	}
 

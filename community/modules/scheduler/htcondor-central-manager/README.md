@@ -31,9 +31,18 @@ A regional [MIG][mig] is used to provision the central manager, although only
 in any of the zones available in that region, however, it can be constrained to
 run in fewer zones (or a single zone) using [var.zones](#input_zones).
 
-The VM replacement policy is set to [opportunistic]. In practice, this means
-that an active VM will not be replaced by Terraform actions, but may be
-replaced when either:
+When the configuration of the Central Manager is changed, the MIG can be
+configured to [replace the VM][replacement] using a "proactive" or
+"opportunistic" policy. By default, the Central Manager replacement policy is
+set to proactive. In practice, this means that the Central Manager will be
+replaced by Terraform when changes to the instance template / HTCondor
+configuration are made. The Central Manager is safe to replace automatically as
+it gathers its state information from periodic messages exchanged with the rest
+of the HTCondor pool.
+
+This mode can be configured by setting [var.update_policy](#input_update_policy)
+to either "PROACTIVE" (default) or "OPPORTUNISTIC". If set to opportunistic
+replacement, the Central Manager will be replaced only when:
 
 - intentionally by issuing an update via Cloud Console or using gcloud (below)
 - the VM becomes unhealthy or is otherwise automatically replaced (e.g. regular
@@ -47,7 +56,7 @@ gcloud compute instance-groups managed update-instances \
    --project <<PROJECT_ID>> --minimal-action replace
 ```
 
-[opportunistic]: https://cloud.google.com/compute/docs/instance-groups/rolling-out-updates-to-managed-instance-groups#type
+[replacement]: https://cloud.google.com/compute/docs/instance-groups/rolling-out-updates-to-managed-instance-groups#type
 
 ## Limiting inter-zone egress
 
@@ -99,7 +108,7 @@ limitations under the License.
 |------|--------|---------|
 | <a name="module_central_manager_instance_template"></a> [central\_manager\_instance\_template](#module\_central\_manager\_instance\_template) | github.com/terraform-google-modules/terraform-google-vm//modules/instance_template | 84d7959 |
 | <a name="module_htcondor_cm"></a> [htcondor\_cm](#module\_htcondor\_cm) | github.com/terraform-google-modules/terraform-google-vm//modules/mig | aea74d1 |
-| <a name="module_startup_script"></a> [startup\_script](#module\_startup\_script) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | 50644b2 |
+| <a name="module_startup_script"></a> [startup\_script](#module\_startup\_script) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | v1.27.0&depth=1 |
 
 ## Resources
 
@@ -135,6 +144,7 @@ limitations under the License.
 | <a name="input_service_account_scopes"></a> [service\_account\_scopes](#input\_service\_account\_scopes) | Scopes by which to limit service account attached to central manager. | `set(string)` | <pre>[<br>  "https://www.googleapis.com/auth/cloud-platform"<br>]</pre> | no |
 | <a name="input_shielded_instance_config"></a> [shielded\_instance\_config](#input\_shielded\_instance\_config) | Shielded VM configuration for the instance (must set var.enabled\_shielded\_vm) | <pre>object({<br>    enable_secure_boot          = bool<br>    enable_vtpm                 = bool<br>    enable_integrity_monitoring = bool<br>  })</pre> | <pre>{<br>  "enable_integrity_monitoring": true,<br>  "enable_secure_boot": true,<br>  "enable_vtpm": true<br>}</pre> | no |
 | <a name="input_subnetwork_self_link"></a> [subnetwork\_self\_link](#input\_subnetwork\_self\_link) | The self link of the subnetwork in which the HTCondor central manager will be created. | `string` | `null` | no |
+| <a name="input_update_policy"></a> [update\_policy](#input\_update\_policy) | Replacement policy for Central Manager ("PROACTIVE" to replace immediately or "OPPORTUNISTIC" to replace upon instance power cycle). | `string` | `"PROACTIVE"` | no |
 | <a name="input_zones"></a> [zones](#input\_zones) | Zone(s) in which central manager may be created. If not supplied, will default to all zones in var.region. | `list(string)` | `[]` | no |
 
 ## Outputs

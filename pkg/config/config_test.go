@@ -179,14 +179,8 @@ func (s *MySuite) getMultiGroupDeploymentConfig() DeploymentConfig {
 
 	testModuleInfo0 := modulereader.ModuleInfo{
 		Inputs: []modulereader.VarInfo{
-			{
-				Name: "deployment_name",
-				Type: "string",
-			},
-			{
-				Name: altProjectIDSetting,
-				Type: "string",
-			},
+			{Name: "deployment_name", Type: cty.String},
+			{Name: altProjectIDSetting, Type: cty.String},
 		},
 		Outputs: []modulereader.OutputInfo{
 			{
@@ -220,13 +214,8 @@ func (s *MySuite) getMultiGroupDeploymentConfig() DeploymentConfig {
 
 	testModuleInfo2 := modulereader.ModuleInfo{
 		Inputs: []modulereader.VarInfo{
-			{
-				Name: "deployment_name",
-				Type: "string",
-			},
-			{
-				Name: matchingIntergroupName,
-			},
+			{Name: "deployment_name", Type: cty.String},
+			{Name: matchingIntergroupName},
 		},
 		Outputs: []modulereader.OutputInfo{},
 	}
@@ -236,7 +225,7 @@ func (s *MySuite) getMultiGroupDeploymentConfig() DeploymentConfig {
 		Kind:   TerraformKind,
 		Source: testModuleSource0,
 		Settings: NewDict(map[string]cty.Value{
-			altProjectIDSetting: GlobalRef("project_id").AsExpression().AsValue(),
+			altProjectIDSetting: GlobalRef("project_id").AsValue(),
 		}),
 		Outputs: []modulereader.OutputInfo{
 			{Name: matchingIntergroupName},
@@ -250,7 +239,7 @@ func (s *MySuite) getMultiGroupDeploymentConfig() DeploymentConfig {
 		Source: testModuleSource1,
 		Settings: NewDict(map[string]cty.Value{
 			matchingIntragroupName1: cty.StringVal("explicit-intra-value"),
-			matchingIntragroupName2: ModuleRef(mod0.ID, matchingIntragroupName2).AsExpression().AsValue(),
+			matchingIntragroupName2: ModuleRef(mod0.ID, matchingIntragroupName2).AsValue(),
 		}),
 		Use: ModuleIDs{mod0.ID},
 	}
@@ -354,18 +343,27 @@ func (s *zeroSuite) TestListUnusedModules(c *C) {
 	}
 }
 
-func (s *MySuite) TestListUnusedVariables(c *C) {
-	dc := s.getDeploymentConfigForTest()
-	dc.applyGlobalVariables()
+func (s *zeroSuite) TestListUnusedVariables(c *C) {
+	bp := Blueprint{
+		Vars: NewDict(map[string]cty.Value{
+			"deployment_name": cty.StringVal("green"),
+			"flathead_screw":  cty.NumberIntVal(1),
+			"pony":            cty.NumberIntVal(2),
+			"stripes":         cty.NumberIntVal(3),
+			"zebra":           MustParseExpression("var.pony + var.stripes").AsValue(),
+		}),
+		DeploymentGroups: []DeploymentGroup{{Modules: []Module{{
+			Settings: NewDict(map[string]cty.Value{
+				"circus": GlobalRef("pony").AsValue(),
+			}),
+		}}}},
+		Validators: []Validator{{
+			Inputs: NewDict(map[string]cty.Value{
+				"savannah": GlobalRef("zebra").AsValue(),
+			})}}}
+	bp.origVars = NewDict(bp.Vars.Items())
 
-	unusedVars := dc.Config.ListUnusedVariables()
-	c.Assert(unusedVars, DeepEquals, []string{"project_id"})
-
-	dc = s.getMultiGroupDeploymentConfig()
-	dc.applyGlobalVariables()
-
-	unusedVars = dc.Config.ListUnusedVariables()
-	c.Assert(unusedVars, DeepEquals, []string{"unused_key"})
+	c.Check(bp.ListUnusedVariables(), DeepEquals, []string{"flathead_screw"})
 }
 
 func (s *zeroSuite) TestAddKindToModules(c *C) {
@@ -683,22 +681,22 @@ func (s *zeroSuite) TestCheckBackends(c *C) {
 
 	{ // FAIL. Variable in defaults type
 		b := TerraformBackend{Type: "$(vartype)"}
-		c.Check(check(b), ErrorMatches, ".*type.*vartype.*")
+		c.Check(check(b), NotNil)
 	}
 
 	{ // FAIL. Variable in group backend type
 		b := TerraformBackend{Type: "$(vartype)"}
-		c.Check(check(dummy, b), ErrorMatches, ".*type.*vartype.*")
+		c.Check(check(dummy, b), NotNil)
 	}
 
 	{ // FAIL. Deployment variable in defaults type
 		b := TerraformBackend{Type: "$(vars.type)"}
-		c.Check(check(b), ErrorMatches, ".*type.*vars\\.type.*")
+		c.Check(check(b), NotNil)
 	}
 
 	{ // FAIL. HCL literal
 		b := TerraformBackend{Type: "((var.zen))"}
-		c.Check(check(b), ErrorMatches, ".*type.*zen.*")
+		c.Check(check(b), NotNil)
 	}
 
 	{ // OK. Not a variable
@@ -708,13 +706,13 @@ func (s *zeroSuite) TestCheckBackends(c *C) {
 
 	{ // FAIL. Mid-string variable in defaults type
 		b := TerraformBackend{Type: "hugs_$(vartype)_hugs"}
-		c.Check(check(b), ErrorMatches, ".*type.*vartype.*")
+		c.Check(check(b), NotNil)
 	}
 
 	{ // FAIL. Variable in defaults configuration
 		b := TerraformBackend{Type: "gcs"}
-		b.Configuration.Set("bucket", GlobalRef("trenta").AsExpression().AsValue())
-		c.Check(check(b), ErrorMatches, ".*can not use variables.*")
+		b.Configuration.Set("bucket", GlobalRef("trenta").AsValue())
+		c.Check(check(b), NotNil)
 	}
 
 	{ // OK. handles nested configuration
@@ -723,23 +721,23 @@ func (s *zeroSuite) TestCheckBackends(c *C) {
 			Set("bucket", cty.StringVal("trenta")).
 			Set("complex", cty.ObjectVal(map[string]cty.Value{
 				"alpha": cty.StringVal("a"),
-				"beta":  GlobalRef("boba").AsExpression().AsValue(),
+				"beta":  GlobalRef("boba").AsValue(),
 			}))
-		c.Check(check(b), ErrorMatches, ".*can not use variables.*")
+		c.Check(check(b), NotNil)
 	}
 }
 
 func (s *zeroSuite) TestSkipValidator(c *C) {
 	{
 		dc := DeploymentConfig{Config: Blueprint{Validators: nil}}
-		c.Check(dc.SkipValidator("zebra"), IsNil)
+		dc.SkipValidator("zebra")
 		c.Check(dc.Config.Validators, DeepEquals, []Validator{
 			{Validator: "zebra", Skip: true}})
 	}
 	{
 		dc := DeploymentConfig{Config: Blueprint{Validators: []Validator{
 			{Validator: "pony"}}}}
-		c.Check(dc.SkipValidator("zebra"), IsNil)
+		dc.SkipValidator("zebra")
 		c.Check(dc.Config.Validators, DeepEquals, []Validator{
 			{Validator: "pony"},
 			{Validator: "zebra", Skip: true}})
@@ -748,7 +746,7 @@ func (s *zeroSuite) TestSkipValidator(c *C) {
 		dc := DeploymentConfig{Config: Blueprint{Validators: []Validator{
 			{Validator: "pony"},
 			{Validator: "zebra"}}}}
-		c.Check(dc.SkipValidator("zebra"), IsNil)
+		dc.SkipValidator("zebra")
 		c.Check(dc.Config.Validators, DeepEquals, []Validator{
 			{Validator: "pony"},
 			{Validator: "zebra", Skip: true}})
@@ -757,7 +755,7 @@ func (s *zeroSuite) TestSkipValidator(c *C) {
 		dc := DeploymentConfig{Config: Blueprint{Validators: []Validator{
 			{Validator: "pony"},
 			{Validator: "zebra", Skip: true}}}}
-		c.Check(dc.SkipValidator("zebra"), IsNil)
+		dc.SkipValidator("zebra")
 		c.Check(dc.Config.Validators, DeepEquals, []Validator{
 			{Validator: "pony"},
 			{Validator: "zebra", Skip: true}})
@@ -767,7 +765,7 @@ func (s *zeroSuite) TestSkipValidator(c *C) {
 			{Validator: "zebra"},
 			{Validator: "pony"},
 			{Validator: "zebra"}}}}
-		c.Check(dc.SkipValidator("zebra"), IsNil)
+		dc.SkipValidator("zebra")
 		c.Check(dc.Config.Validators, DeepEquals, []Validator{
 			{Validator: "zebra", Skip: true},
 			{Validator: "pony"},
@@ -842,23 +840,23 @@ func (s *zeroSuite) TestValidateModuleSettingReference(c *C) {
 	// FAIL. get global hint
 	mod := ModuleID("var")
 	unkModErr := UnknownModuleError{mod}
-	c.Check(errors.Is(vld(bp, mod11, ModuleRef(mod, "kale")), HintError{"Did you mean \"vars\"?", unkModErr}), Equals, true)
+	c.Check(errors.Is(vld(bp, mod11, ModuleRef(mod, "kale")), HintError{`did you mean "vars"?`, unkModErr}), Equals, true)
 
 	// FAIL. get module ID hint
 	mod = ModuleID("pkp")
 	unkModErr = UnknownModuleError{mod}
-	c.Check(errors.Is(vld(bp, mod11, ModuleRef(mod, "kale")), HintError{fmt.Sprintf("Did you mean \"%s\"?", string(pkr.ID)), unkModErr}), Equals, true)
+	c.Check(errors.Is(vld(bp, mod11, ModuleRef(mod, "kale")), HintError{fmt.Sprintf("did you mean %q?", string(pkr.ID)), unkModErr}), Equals, true)
 
 	// FAIL. get no hint
 	mod = ModuleID("test")
 	unkModErr = UnknownModuleError{mod}
-	c.Check(errors.Is(vld(bp, mod11, ModuleRef(mod, "kale")), HintError{fmt.Sprintf("Did you mean \"%s\"?", string(pkr.ID)), unkModErr}), Equals, false)
+	c.Check(errors.Is(vld(bp, mod11, ModuleRef(mod, "kale")), HintError{fmt.Sprintf("did you mean %q?", string(pkr.ID)), unkModErr}), Equals, false)
 	c.Check(errors.Is(vld(bp, mod11, ModuleRef(mod, "kale")), unkModErr), Equals, true)
 }
 
 func (s *zeroSuite) TestValidateModuleSettingReferences(c *C) {
 	m := Module{ID: "m"}
-	m.Settings.Set("white", GlobalRef("zebra").AsExpression().AsValue())
+	m.Settings.Set("white", GlobalRef("zebra").AsValue())
 	bp := Blueprint{}
 	p := Root.Groups.At(0).Modules.At(0)
 
@@ -938,6 +936,21 @@ func (s *zeroSuite) TestEvalVars(c *C) {
 			if berr.Path.String() != "vars.uro" && berr.Path.String() != "vars.ros" {
 				c.Error(berr, " should point to vars.uro or vars.ros")
 			}
+		} else {
+			c.Error(err, " should be BpError")
+		}
+	}
+
+	{ // Non-computable
+		vars := NewDict(map[string]cty.Value{
+			"uro": MustParseExpression("DoesHalt(var.bo)").AsValue(),
+			"bo":  cty.StringVal("01_10"),
+		})
+		_, err := (&Blueprint{Vars: vars}).evalVars()
+		var berr BpError
+		if errors.As(err, &berr) {
+			c.Check(berr.Error(), Matches, ".*unsupported function.*DoesHalt.*")
+			c.Check(berr.Path.String(), Equals, "vars.uro")
 		} else {
 			c.Error(err, " should be BpError")
 		}

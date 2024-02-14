@@ -26,7 +26,7 @@ deployment_groups:
 - group: primary
   modules:
   - id: network1
-    source: modules/network/pre-existing-vpc
+    source: modules/network/vpc
 
   - id: hpc_dash
     source: modules/monitoring/dashboard
@@ -35,8 +35,8 @@ deployment_groups:
   - id: spack-setup
     source: community/modules/scripts/spack-setup
     settings:
-      install_dir: /apps/spack
-      spack_ref: v0.19.0
+      install_dir: /opt/apps/spack
+      spack_ref: v0.20.0
 
   - id: spack-execute
     source: community/modules/scripts/spack-execute
@@ -95,12 +95,12 @@ deployment_groups:
         # fi
         # spack buildcache keys --install --trust
 
-        spack config --scope defaults add config:build_stage:/apps/spack/spack-stage
+        spack config --scope defaults add config:build_stage:/opt/apps/spack/spack-stage
         spack config --scope defaults add -f /tmp/projections-config.yaml
         spack config --scope site add -f /tmp/slurm-external-config.yaml
 
-        spack install gcc@9.3.0 %gcc@4.8.5 target=x86_64
-        spack load gcc@9.3.0 %gcc@4.8.5 target=x86_64
+        spack install gcc@9.3.0 %gcc@8.5.0 target=x86_64
+        spack load gcc@9.3.0 %gcc@8.5.0 target=x86_64
         spack compiler find --scope site
 
         if ! spack env list | grep -q openfoam; then
@@ -110,28 +110,30 @@ deployment_groups:
           spack install
         fi
 
-  - id: controller-setup
+  - id: login-setup
     source: modules/scripts/startup-script
     settings:
       runners:
+      - type: shell
+        destination: remove_lustre_client.sh
+        content: |
+          #!/bin/bash
+          rm /etc/yum.repos.d/lustre-client.repo
       - $(spack-execute.spack_runner)
       - type: shell
         destination: setup_openfoam.sh
         content: |
           #!/bin/bash
-          source /apps/spack/share/spack/setup-env.sh
+          source /opt/apps/spack/share/spack/setup-env.sh
           spack env activate openfoam
-          chmod -R a+rwX /apps/spack/var/spack/environments/openfoam
-          mkdir -p /apps/openfoam
-          chmod a+rwx /apps/openfoam
       - type: data
-        destination: /apps/openfoam/submit_openfoam.sh
+        destination: /opt/apps/openfoam/submit_openfoam.sh
         content: |
           #!/bin/bash
           #SBATCH -N 2
           #SBATCH --ntasks-per-node 30
 
-          source /apps/spack/share/spack/setup-env.sh
+          source /opt/apps/spack/share/spack/setup-env.sh
           spack env activate openfoam
 
           cd $SLURM_SUBMIT_DIR
@@ -153,25 +155,36 @@ deployment_groups:
           mpirun -n 60 -npernode 30 -hostfile hostfile snappyHexMesh -overwrite -parallel
           mpirun -n 60 -npernode 30 -hostfile hostfile potentialFoam -parallel
           mpirun -n 60 -npernode 30 -hostfile hostfile simpleFoam -parallel
+
+  - id: compute_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network1]
+    settings:
+      node_count_dynamic_max: 2
+      bandwidth_tier: gvnic_enabled
+
   - id: compute_partition
-    source: community/modules/compute/SchedMD-slurm-on-gcp-partition
-    use:
-    - network1
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use: [compute_nodeset]
     settings:
       partition_name: compute
-      max_node_count: 20
+      is_default: true
+
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    use: [network1]
+    settings:
+      name_prefix: login
+      machine_type: n2-standard-4
+      disable_login_public_ips: false
 
   - id: slurm_controller
-    source: community/modules/scheduler/SchedMD-slurm-on-gcp-controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     use:
     - network1
     - compute_partition
+    - slurm_login
     settings:
-      controller_startup_script: $(controller-setup.startup_script)
-      login_node_count: 1
-
-  - id: slurm_login
-    source: community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
-    use:
-    - network1
-    - slurm_controller
+      login_startup_script: $(login-setup.startup_script)
+      login_startup_scripts_timeout: 21600
+      disable_controller_public_ips: false

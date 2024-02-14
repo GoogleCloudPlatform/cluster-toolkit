@@ -23,9 +23,9 @@ vars:
   zone: us-central1-a
   gpu_zones: [us-central1-a, us-central1-b, us-central1-c, us-central1-f]
   slurm_image:
-    # Visit https://github.com/SchedMD/slurm-gcp/blob/master/docs/images.md#published-image-family
+    # Visit https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#published-image-family
     # for a list of valid family options with Slurm
-    family: slurm-gcp-5-9-hpc-centos-7
+    family: slurm-gcp-5-10-hpc-centos-7
     project: schedmd-slurm-public
   # Set to true for active cluster reconfiguration.
   # Note that setting this option requires additional dependencies to be installed locally.
@@ -89,16 +89,12 @@ deployment_groups:
     source: modules/file-system/filestore
     use: [network1]
     settings:
-      filestore_tier: BASIC_SSD
-      size_gb: 2560  # smallest size for BASIC_SSD
       local_mount: /home
 
   - id: projectsfs
     source: modules/file-system/filestore
     use: [network1]
     settings:
-      filestore_tier: HIGH_SCALE_SSD
-      size_gb: 10240  # smallest size for HIGH_SCALE_SSD
       local_mount: /projects
 
   # This file system has an associated license cost.

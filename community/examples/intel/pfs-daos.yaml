@@ -1,4 +1,4 @@
-# Copyright 2022 Google LLC
+# Copyright 2024 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,11 +21,10 @@ vars:
   deployment_name: pfs-daos
   region: us-central1
   zone: us-central1-c
-  server_image_family: daos-server-hpc-rocky-8
-  client_image_family: daos-client-hpc-rocky-8
-
-# Documentation for each of the modules used below can be found at
-# https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
+  daos_server_image_family: daos-server-hpc-rocky-8
+  daos_client_image_family: daos-client-hpc-rocky-8
+  daos_version: "2.4"
+  tags: []
 
 # Note: this blueprint assumes the existence of a default global network and
 # subnetwork in the region chosen above
@@ -38,12 +37,12 @@ deployment_groups:
 
 - group: daos-server-image
   modules:
-  # more info: https://github.com/daos-stack/google-cloud-daos/tree/v0.4.1/images
+  # more info: https://github.com/daos-stack/google-cloud-daos/tree/main/images
   - id: daos-server-image
-    source: github.com/daos-stack/google-cloud-daos//images?ref=v0.4.1&depth=1
+    source: "github.com/daos-stack/google-cloud-daos//images?ref=v0.5.0&depth=1"
     kind: packer
     settings:
-      daos_version: 2.2.0
+      daos_version: $(vars.daos_version)
       daos_repo_base_url: https://packages.daos.io
       daos_packages_repo_file: EL8/packages/x86_64/daos_packages.repo
       use_iap: true
@@ -58,16 +57,16 @@ deployment_groups:
       use_internal_ip: true
       omit_external_ip: false
       daos_install_type: server
-      image_family: $(vars.server_image_family)
+      image_family: $(vars.daos_server_image_family)
 
 - group: daos-client-image
   modules:
-  # more info: https://github.com/daos-stack/google-cloud-daos/tree/v0.4.1/images
+  # more info: https://github.com/daos-stack/google-cloud-daos/tree/v0.5.0/images
   - id: daos-client-image
-    source: github.com/daos-stack/google-cloud-daos//images?ref=v0.4.1&depth=1
+    source: "github.com/daos-stack/google-cloud-daos//images?ref=v0.5.0&depth=1"
     kind: packer
     settings:
-      daos_version: 2.2.0
+      daos_version: $(vars.daos_version)
       daos_repo_base_url: https://packages.daos.io
       daos_packages_repo_file: EL8/packages/x86_64/daos_packages.repo
       use_iap: true
@@ -82,24 +81,29 @@ deployment_groups:
       use_internal_ip: true
       omit_external_ip: false
       daos_install_type: client
-      image_family: $(vars.client_image_family)
+      image_family: $(vars.daos_client_image_family)
 
 - group: daos-cluster
   modules:
-  # more info: https://github.com/daos-stack/google-cloud-daos/tree/v0.4.1/terraform/modules/daos_server
+  # more info: https://github.com/daos-stack/google-cloud-daos/tree/develop/terraform/modules/daos_server
   - id: daos-server
-    source: github.com/daos-stack/google-cloud-daos.git//terraform/modules/daos_server?ref=v0.4.1&depth=1
+    # source: $(vars.daos_server_module_source_url)
+    source: "github.com/daos-stack/google-cloud-daos//terraform/modules/daos_server?ref=v0.5.0&depth=1"
     use: [network1]
     settings:
       number_of_instances: 2
       labels: {ghpc_role: file-system}
-      os_family: $(vars.server_image_family)
+      os_family: $(vars.daos_server_image_family)
+      daos_scm_size: "172"
+      tags: $(vars.tags)
 
-  # more info: https://github.com/daos-stack/google-cloud-daos/tree/v0.4.1/terraform/modules/daos_client
+  # more info: https://github.com/daos-stack/google-cloud-daos/tree/develop/terraform/modules/daos_client
   - id: daos-client
-    source: github.com/daos-stack/google-cloud-daos.git//terraform/modules/daos_client?ref=v0.4.1&depth=1
+    # source: $(vars.daos_client_module_source_url)
+    source: "github.com/daos-stack/google-cloud-daos//terraform/modules/daos_client?ref=v0.5.0&depth=1"
     use: [network1, daos-server]
     settings:
       number_of_instances: 2
       labels: {ghpc_role: compute}
-      os_family: $(vars.client_image_family)
+      os_family: $(vars.daos_client_image_family)
+      tags: $(vars.tags)

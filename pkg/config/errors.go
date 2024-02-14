@@ -35,6 +35,20 @@ func (e BpError) Unwrap() error {
 	return e.Err
 }
 
+// PosError is an error wrapper to augment Position
+type PosError struct {
+	Pos Pos
+	Err error
+}
+
+func (e PosError) Error() string {
+	return fmt.Sprintf("line %d column %d: %s", e.Pos.Line, e.Pos.Column, e.Err)
+}
+
+func (e PosError) Unwrap() error {
+	return e.Err
+}
+
 // HintError wraps another error to suggest other values
 type HintError struct {
 	Hint string
@@ -149,11 +163,9 @@ const (
 	errMsgFileLoadError    = string("failed to read the input yaml")
 	errMsgYamlMarshalError = string("failed to export the configuration to a blueprint yaml file")
 	errMsgYamlSaveError    = string("failed to write the expanded yaml")
-	errMsgMissingSetting   = string("a required setting is missing from a module")
 	errMsgInvalidVar       = string("invalid variable definition in")
 	errMsgVarNotFound      = string("could not find source of variable")
 	errMsgIntergroupOrder  = string("references to outputs from other groups must be to earlier groups")
-	errMsgNoOutput         = string("output not found for a variable")
 	errMsgCannotUsePacker  = string("Packer modules cannot be used by other modules")
 	errMsgDuplicateGroup   = string("group names must be unique")
 	errMsgDuplicateID      = string("module IDs must be unique")

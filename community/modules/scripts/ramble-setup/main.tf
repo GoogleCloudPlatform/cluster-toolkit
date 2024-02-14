@@ -72,7 +72,7 @@ locals {
     "destination" = "install_ramble.yml"
   }
 
-  bucket_md5  = substr(md5("${var.project_id}.${var.deployment_name}"), 0, 4)
+  bucket_md5  = substr(md5("${var.project_id}.${var.deployment_name}"), 0, 8)
   bucket_name = "ramble-scripts-${local.bucket_md5}"
   runners     = [local.install_ramble_deps_runner, local.install_ramble_runner, local.python_reqs_runner]
 
@@ -94,7 +94,7 @@ resource "google_storage_bucket" "bucket" {
 }
 
 module "startup_script" {
-  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=50644b2"
+  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=v1.27.0&depth=1"
 
   labels          = local.labels
   project_id      = var.project_id

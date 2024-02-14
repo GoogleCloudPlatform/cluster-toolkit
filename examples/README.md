@@ -13,21 +13,21 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
 * [Blueprint Descriptions](#blueprint-descriptions)
   * [hpc-slurm.yaml](#hpc-slurmyaml-) ![core-badge]
   * [hpc-enterprise-slurm.yaml](#hpc-enterprise-slurmyaml-) ![core-badge]
+  * [hpc-slurm6-tpu.yaml](#hpc-slurm6-tpuyaml--) ![community-badge] ![experimental-badge]
   * [ml-slurm.yaml](#ml-slurmyaml-) ![core-badge]
   * [image-builder.yaml](#image-builderyaml-) ![core-badge]
   * [serverless-batch.yaml](#serverless-batchyaml-) ![core-badge]
   * [serverless-batch-mpi.yaml](#serverless-batch-mpiyaml-) ![core-badge]
   * [pfs-lustre.yaml](#pfs-lustreyaml-) ![core-badge]
   * [cae-slurm.yaml](#cae-slurmyaml-) ![core-badge]
+  * [hpc-build-slurm-image.yaml](#hpc-build-slurm-imageyaml-) ![community-badge]
   * [hpc-slurm-ubuntu2004.yaml](#hpc-slurm-ubuntu2004yaml-) ![community-badge]
-  * [hpc-intel-select-slurm.yaml](#hpc-intel-select-slurmyaml-) ![community-badge]
   * [pfs-daos.yaml](#pfs-daosyaml-) ![community-badge]
   * [hpc-slurm-daos.yaml](#hpc-slurm-daosyaml-) ![community-badge]
   * [hpc-amd-slurm.yaml](#hpc-amd-slurmyaml-) ![community-badge]
-  * [quantum-circuit-simulator.yaml](#quantum-circuit-simulatoryaml-) ![community-badge]
+  * [hpc-slurm-sharedvpc.yaml](#hpc-slurm-sharedvpcyaml-) ![community-badge]
   * [client-google-cloud-storage.yaml](#client-google-cloud-storageyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-gromacs.yaml](#hpc-slurm-gromacsyaml--) ![community-badge] ![experimental-badge]
-  * [omnia-cluster.yaml](#omnia-clusteryaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-local-ssd.yaml](#hpc-slurm-local-ssdyaml--) ![community-badge] ![experimental-badge]
   * [hpc-gke.yaml](#hpc-gkeyaml--) ![community-badge] ![experimental-badge]
   * [ml-gke](#ml-gkeyaml--) ![community-badge] ![experimental-badge]
@@ -41,18 +41,16 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [hpc-slurm-chromedesktop.yaml](#hpc-slurm-chromedesktopyaml--) ![community-badge] ![experimental-badge]
   * [flux-cluster](#flux-clusteryaml--) ![community-badge] ![experimental-badge]
   * [tutorial-fluent.yaml](#tutorial-fluentyaml--) ![community-badge] ![experimental-badge]
-  * [hpc-slurm-legacy.yaml](#hpc-slurm-legacyyaml--) ![community-badge] ![deprecated-badge]
-  * [hpc-slurm-legacy-sharedvpc.yaml](#hpc-slurm-legacy-sharedvpcyaml--) ![community-badge] ![deprecated-badge]
+  * [omnia-cluster.yaml](#omnia-clusteryaml---) ![community-badge] ![experimental-badge] ![deprecated-badge]
 * [Blueprint Schema](#blueprint-schema)
 * [Writing an HPC Blueprint](#writing-an-hpc-blueprint)
   * [Blueprint Boilerplate](#blueprint-boilerplate)
   * [Top Level Parameters](#top-level-parameters)
   * [Deployment Variables](#deployment-variables)
   * [Deployment Groups](#deployment-groups)
-* [Variables](#variables)
-  * [Blueprint Variables](#blueprint-variables)
-  * [Literal Variables](#literal-variables)
-  * [Escape Variables](#escape-variables)
+* [Variables and expressions](#variables-and-expressions)
+  * [Blueprint expressions](#blueprint-expressions)
+  * [Escape expressions](#escape-expressions)
 
 ## Instructions
 
@@ -117,13 +115,11 @@ the experimental badge (![experimental-badge]).
 
 ### [hpc-slurm.yaml] ![core-badge]
 
-> **Warning**: The variables `enable_reconfigure`,
-> `enable_cleanup_compute`, and `enable_cleanup_subscriptions`, if set to
-> `true`, require additional dependencies **to be installed on the system deploying the infrastructure**.
+> **Warning**: Requires additional dependencies **to be installed on the system deploying the infrastructure**.
 >
 > ```shell
 > # Install Python3 and run
-> pip3 install -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.9.1/scripts/requirements.txt
+> pip3 install -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/6.2.1/scripts/requirements.txt
 > ```
 
 Creates a basic auto-scaling Slurm cluster with mostly default settings. The
@@ -263,6 +259,19 @@ to 256
   _not needed for `n2` partition_
 
 [hpc-enterprise-slurm.yaml]: ./hpc-enterprise-slurm.yaml
+
+### [hpc-slurm6-tpu.yaml] ![community-badge] ![experimental-badge]
+
+> **Warning**: Requires additional dependencies **to be installed on the system deploying the infrastructure**.
+>
+> ```shell
+> # Install Python3 and run
+> pip3 install -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/6.2.1/scripts/requirements.txt
+> ```
+
+Creates an auto-scaling Slurm cluster with TPU nodes.
+
+[hpc-slurm6-tpu.yaml]: ../community/examples/hpc-slurm6-tpu.yaml
 
 ### [ml-slurm.yaml] ![core-badge]
 
@@ -569,6 +578,25 @@ For this example the following is needed in the selected region:
 
 [cae-slurm.yaml]: ../examples/cae/cae-slurm.yaml
 
+### [hpc-build-slurm-image.yaml] ![community-badge]
+
+This blueprint demonstrates how to use HPC Toolkit to build a Slurm image on top
+of an existing image, `hpc-rocky-linux-8` in the case of this example.
+
+The blueprint contains 3 groups:
+
+1. The first group creates a network and generates the scripts that will install
+   Slurm. This uses the Ansible Playbook contained in the
+   [Slurm on GCP](https://github.com/GoogleCloudPlatform/slurm-gcp) repo.
+2. The second group executes the build using Packer to run the scripts from the
+   first group. This can take ~30 min and will generate a custom Slurm image in
+   your project.
+3. The third group deploys a demo cluster that uses the newly built image. For a
+   real world use case the demo cluster can be swapped out for a more powerful
+   slurm cluster from other examples.
+
+[hpc-build-slurm-image.yaml]: ../community/examples/hpc-build-slurm-image.yaml
+
 ### [hpc-slurm-ubuntu2004.yaml] ![community-badge]
 
 > **Warning**: The variables `enable_reconfigure`,
@@ -577,11 +605,11 @@ For this example the following is needed in the selected region:
 >
 > ```shell
 > # Install Python3 and run
-> pip3 install -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.9.1/scripts/requirements.txt
+> pip3 install -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/5.10.2/scripts/requirements.txt
 > ```
 
 Similar to the [hpc-slurm.yaml] example, but using Ubuntu 20.04 instead of CentOS 7.
-[Other operating systems] are supported by SchedMD for the the Slurm on GCP project and images are listed [here](https://github.com/SchedMD/slurm-gcp/blob/master/docs/images.md#published-image-family). Only the examples listed in this page been tested by the Cloud HPC Toolkit team.
+[Other operating systems] are supported by SchedMD for the the Slurm on GCP project and images are listed [here](https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#published-image-family). Only the examples listed in this page been tested by the Cloud HPC Toolkit team.
 
 The cluster will support 2 partitions named `debug` and `compute`.
 The `debug` partition is the default partition and runs on smaller
@@ -590,7 +618,7 @@ specifying in the `srun` command via the `--partition` flag. The `compute`
 partition runs on compute optimized nodes of type `cs-standard-60`. The
 `compute` partition may require additional quota before using.
 
-[Other operating systems]: https://github.com/SchedMD/slurm-gcp/blob/master/docs/images.md#supported-operating-systems
+[Other operating systems]: https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#supported-operating-systems
 [hpc-slurm-ubuntu2004.yaml]: ../community/examples/hpc-slurm-ubuntu2004.yaml
 
 #### Quota Requirements for hpc-slurm-ubuntu2004.yaml
@@ -608,17 +636,6 @@ For this example the following is needed in the selected region:
   needed for `compute` partition_
 * Compute Engine API: Resource policies: **one for each job in parallel** -
   _only needed for `compute` partition_
-
-### [hpc-intel-select-slurm.yaml] ![community-badge]
-
-This example provisions a Slurm cluster automating the [steps to comply to the
-Intel Select Solutions for Simulation & Modeling Criteria][intelselect]. It is
-more extensively discussed in a dedicated [README for Intel
-examples][intel-examples-readme].
-
-[hpc-intel-select-slurm.yaml]: ../community/examples/intel/hpc-intel-select-slurm.yaml
-[intel-examples-readme]: ../community/examples/intel/README.md
-[intelselect]: https://cloud.google.com/compute/docs/instances/create-intel-select-solution-hpc-clusters
 
 ### [pfs-daos.yaml] ![community-badge]
 
@@ -647,27 +664,6 @@ examples][amd-examples-readme].
 [hpc-amd-slurm.yaml]: ../community/examples/AMD/hpc-amd-slurm.yaml
 [AOCC]: https://developer.amd.com/amd-aocc/
 [amd-examples-readme]: ../community/examples/AMD/README.md
-
-### [quantum-circuit-simulator.yaml] ![community-badge]
-
-This blueprint provisions a [N1 series VM with NVIDIA T4 GPU accelerator][t4]
-and compiles [qsim], a [Google Quantum AI][gqai]-developed tool that simulates
-quantum circuits using CPUs and GPUs. The installation of qsim, the [CUDA
-Toolkit][cudatk], and the [cuQuantum SDK][cqsdk] is fully automated but takes a
-significant time (approx. 20 minutes). Once complete, a qsim example can be run
-by connecting to the VM by SSH and running
-
-```shell
-conda activate qsim
-python /var/tmp/qsim-example.py
-```
-
-[gqai]: https://quantumai.google/
-[quantum-circuit-simulator.yaml]: ../community/examples/quantum-circuit-simulator.yaml
-[t4]: https://cloud.google.com/compute/docs/gpus#nvidia_t4_gpus
-[qsim]: https://quantumai.google/qsim
-[cqsdk]: https://developer.nvidia.com/cuquantum-sdk
-[cudatk]: https://developer.nvidia.com/cuda-toolkit
 
 ### [client-google-cloud-storage.yaml] ![community-badge] ![experimental-badge]
 
@@ -791,7 +787,9 @@ node scaling study of the Lignocellulose benchmark for Gromacs.
 
 [hpc-slurm-ramble-gromacs.yaml]: ../community/examples/hpc-slurm-ramble-gromacs.yaml
 
-### [omnia-cluster.yaml] ![community-badge] ![experimental-badge]
+### [omnia-cluster.yaml] ![community-badge] ![experimental-badge] ![deprecated-badge]
+
+_This blueprint has been deprecated and will be removed on August 1, 2024._
 
 Creates a simple [Dell Omnia][omnia-github] provisioned cluster with an
 omnia-manager node that acts as the slurm manager and 2 omnia-compute nodes on
@@ -912,7 +910,7 @@ tuned for the execution of many short-duration, loosely-coupled (non-MPI) jobs.
 
 For more information see:
 
-* [Slurm on Google Cloud High Throughput documentation](https://github.com/SchedMD/slurm-gcp/blob/master/docs/htc.md)
+* [Slurm on Google Cloud High Throughput documentation](https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/htc.md)
 * [General Slurm High Throughput documentation](https://slurm.schedmd.com/high_throughput.html)
 
 [htc-slurm.yaml]: ../community/examples/htc-slurm.yaml
@@ -981,62 +979,19 @@ See [README](../community/examples/flux-framework/README.md)
 
 [flux-cluster.yaml]: ../community/examples/flux-framework/flux-cluster.yaml
 
-### [hpc-slurm-legacy.yaml] ![community-badge] ![deprecated-badge]
-
-Creates a Slurm cluster with tiered file systems for higher performance. It
-connects to the default VPC of the project and creates two partitions and a
-login node.
-
-File systems:
-
-* The homefs mounted at `/home` is a default "BASIC_HDD" tier filestore with
-  1 TiB of capacity
-* The projectsfs is mounted at `/projects` and is a high scale SSD filestore
-  instance with 10TiB of capacity.
-* The scratchfs is mounted at `/scratch` and is a
-  [DDN Exascaler Lustre](../community/modules/file-system/DDN-EXAScaler/README.md)
-  file system designed for high IO performance. The capacity is ~10TiB.
-
-> **Warning**: The DDN Exascaler Lustre file system has a license cost as
-> described in the pricing section of the
-> [DDN EXAScaler Cloud Marketplace Solution](https://console.developers.google.com/marketplace/product/ddnstorage/).
-
-There are two partitions in this example: `low_cost` and `compute`. The
-`low_cost` partition uses `n2-standard-4` VMs. This partition can be used for
-debugging and workloads that do not require high performance.
-
-Similar to the small example, there is a
-[compute partition](#compute-partition) that should be used for any performance
-analysis.
-
-#### Quota Requirements for hpc-slurm-legacy.yaml
-
-For this example the following is needed in the selected region:
-
-* Cloud Filestore API: Basic HDD (Standard) capacity (GB) per region: **1,024 GB**
-* Cloud Filestore API: High Scale SSD capacity (GB) per region: **10,240 GiB** - _min
-  quota request is 61,440 GiB_
-* Compute Engine API: Persistent Disk SSD (GB): **~14,050 GB**
-* Compute Engine API: Persistent Disk Standard (GB): **~396 GB static + 20
-  GB/node** up to 4596 GB
-* Compute Engine API: N2 CPUs: **158**
-* Compute Engine API: C2 CPUs: **8** for controller node and **60/node** active
-  in `compute` partition up to 12,008
-* Compute Engine API: Affinity Groups: **one for each job in parallel** - _only
-  needed for `compute` partition_
-* Compute Engine API: Resource policies: **one for each job in parallel** -
-  _only needed for `compute` partition_
-
-[hpc-slurm-legacy.yaml]: ../community/examples/hpc-slurm-legacy.yaml
-
-### [hpc-slurm-legacy-sharedvpc.yaml] ![community-badge] ![deprecated-badge]
+### [hpc-slurm-sharedvpc.yaml] ![community-badge]
 
 This blueprint demonstrates the use of the Slurm and Filestore modules in
-the service project of an existing Shared VPC.  Before attempting to deploy the
+the service project of an existing Shared VPC. Before attempting to deploy the
 blueprint, one must first complete [initial setup for provisioning Filestore in
-a Shared VPC service project][fs-shared-vpc].
+a Shared VPC service project][fs-shared-vpc]. Depending on how the shared VPC
+was created one may have to perform a few additional manual steps to configure
+the VPC. One may need to create firewall rules allowing SSH to be able to access
+the controller and login nodes. Also since this blueprint doesn't use external
+IPs for compute nodes, one must needs to [set up cloud nat][cloudnat] and
+[set up iap][iap].
 
-[hpc-slurm-legacy-sharedvpc.yaml]: ../community/examples/hpc-slurm-legacy-sharedvpc.yaml
+[hpc-slurm-sharedvpc.yaml]: ../community/examples/hpc-slurm-sharedvpc.yaml
 [fs-shared-vpc]: https://cloud.google.com/filestore/docs/shared-vpc
 
 ## Blueprint Schema
@@ -1242,19 +1197,20 @@ default in the [modules](../modules/README.md) folder.
 To learn more about how to refer to a module in a blueprint file, please consult the
 [modules README file.](../modules/README.md)
 
-## Variables
+## Variables and expressions
 
 Variables can be used to refer both to values defined elsewhere in the blueprint
 and to the output and structure of other modules.
 
-### Blueprint Variables
+### Blueprint expressions
 
-Variables in a blueprint file can refer to deployment variables or the outputs
-of other modules. For deployment and module variables, the syntax is as follows:
+Expressions in a blueprint file can refer to deployment variables or the outputs
+of other modules. The entire expression is wrapped in `$()`. The syntax is as follows:
 
 ```yaml
 vars:
   zone: us-central1-a
+  num_nodes: 2
 
 deployment_groups:
   - group: primary
@@ -1268,43 +1224,23 @@ deployment_groups:
          settings:
             key1: $(vars.zone)
             key2: $(resource1.name)
+            # access nested fields
+            key3: $(resource1.nodes[0].private_ip)
+            # arithmetic expression
+            key4: $(vars.num_nodes + 5)
+            # string interpolation
+            key5: $(resource1.name)_$(vars.zone)
+            # multiline string interpolation
+            key6: |
+              #!/bin/bash
+              echo "Hello $(vars.project_id) from $(vars.region)"
+            # use a function, supported by Terraform
+            key7: $(jsonencode(resource1.config))
 ```
 
-The variable is referred to by the source, either vars for deploment variables
-or the module ID for module variables, followed by the name of the value being
-referenced. The entire variable is then wrapped in “$()”.
+### Escape expressions
 
-Currently, string interpolation with variables is not supported.
-
-### Literal Variables
-
-Literal variables should only be used by those familiar
-with the underlying module technology (Terraform or Packer);
-Literal variables are occasionally needed when calling a function or other complex statements. For example, to JSON-encode network storage metadata:
-
-```yaml
-metadata:
-  network_storage: ((jsonencode([module.appfs.network_storage])))
-```
-
-Here the network1 module is referenced, the terraform module name is the same as
-the ID in the blueprint file. From the module we can refer to it's underlying
-variables as deep as we need, in this case the self_link for it's
-primary_subnetwork.
-
-The entire text of the variable is wrapped in double parentheses indicating that
-everything inside will be provided as is to the module.
-
-Whenever possible, blueprint variables are preferred over literal variables.
-`ghpc` will perform basic validation making sure all blueprint variables are
-defined before creating a deployment, making debugging quicker and easier.
-
-### Escape Variables
-
-Under circumstances where the variable notation conflicts with the content of a setting or string, for instance when defining a startup-script runner that uses a subshell like in the example below, a non-quoted backslash (`\`) can be used as an escape character. It preserves the literal value of the next character that follows:
-
-* `\$(not.bp_var)` evaluates to `$(not.bp_var)`.
-* `\((not.literal_var))` evaluates to `((not.literal_var))`.
+Under circumstances where the expression notation conflicts with the content of a setting or string, for instance when defining a startup-script runner that uses a subshell like in the example below, a non-quoted backslash (`\`) can be used as an escape character. It preserves the literal value of the next character that follows:  `\$(not.bp_var)` evaluates to `$(not.bp_var)`.
 
 ```yaml
 deployment_groups:
@@ -1312,12 +1248,6 @@ deployment_groups:
      modules:
        - id: resource1
          source: path/to/module/1
-         settings:
-            key1: \((not.literal_var))   ## Evaluates to "((not.literal_var))".
-         ...
-       - id: resource2
-         source: path/to/module/2
-         ...
          settings:
             key1: |
               #!/bin/bash

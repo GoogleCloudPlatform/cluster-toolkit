@@ -5,7 +5,7 @@ easy for customers to deploy HPC environments on Google Cloud.
 
 In this tutorial you will use the HPC Toolkit to:
 
-* Deploy a [Slurm](https://github.com/SchedMD/slurm-gcp#readme) HPC cluster on
+* Deploy a [Slurm](https://github.com/GoogleCloudPlatform/slurm-gcp#readme) HPC cluster on
   Google Cloud
 * Use [Spack](https://spack.io/) to install the OpenFOAM application and all of
   its dependencies
@@ -13,10 +13,10 @@ In this tutorial you will use the HPC Toolkit to:
   cluster
 * Tear down the cluster
 
-Estimated time to complete:  
-The tutorial takes 3 hr. to complete,  
-of which 2.5 hr is for installing software  
-(without cache).  
+Estimated time to complete:
+The tutorial takes 3 hr. to complete,
+of which 2.5 hr is for installing software
+(without cache).
 
 > **_NOTE:_** With a complete Spack cache, the tutorial takes 30 min.
 
@@ -31,7 +31,7 @@ Once you have selected a project, click START.
 ## Enable APIs & Permissions
 
 In a new Google Cloud project there are several apis that must be enabled to
-deploy your HPC cluster. These will be caught when you perform `terraform apply`
+deploy your HPC cluster. These will be caught when you perform `./ghpc create`
 but you can save time by enabling them now by running:
 
 <walkthrough-enable-apis apis="file.googleapis.com,compute.googleapis.com,logging.googleapis.com,serviceusage.googleapis.com"></walkthrough-enable-apis>
@@ -75,7 +75,7 @@ which should be open in the Cloud Shell Editor (on the left).
 
 This file describes the cluster you will deploy. It defines:
 
-* the existing default network from your project
+* a vpc network
 * a monitoring dashboard with metrics on your cluster
 * a definition of a custom Spack installation
 * a startup script that
@@ -87,9 +87,6 @@ This file describes the cluster you will deploy. It defines:
   * a Slurm login node
   * a Slurm controller
   * An auto-scaling Slurm partition
-
-[This diagram](https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/application_demo/docs/tutorials/application_demo.md#blueprint-diagram)
-shows how the different modules relate to each other.
 
 After you have inspected the file, use the ghpc binary to create a deployment
 folder by running:
@@ -106,24 +103,19 @@ contains the terraform needed to deploy your cluster.
 
 ## Deploy the Cluster
 
-Use the following commands to run terraform and deploy your cluster.
+Use below command to deploy your cluster.
+
+```bash
+./ghpc deploy spack-openfoam
+```
+
+You can also use below command to generate a _plan_ that describes the Google
+Cloud resources that will be deployed.
 
 ```bash
 terraform -chdir=spack-openfoam/primary init
 terraform -chdir=spack-openfoam/primary apply
 ```
-
-The `terraform apply` command will generate a _plan_ that describes the Google
-Cloud resources that will be deployed.
-
-You can review the plan and then start the deployment by typing
-**`yes [enter]`**.
-
-The deployment will take about 30 seconds. There should be regular status updates
-in the terminal.
-
-If the `apply` is successful, a message similar to the following will be
-displayed:
 
 <!-- Note: Bash blocks give "copy to cloud shell" option.  -->
 <!-- "shell" or "text" is used in places where command should not be run in cloud shell. -->
@@ -144,16 +136,16 @@ controller. This command can be used to view progress and check for completion
 of the startup script:
 
 ```bash
-gcloud compute instances get-serial-port-output --port 1 --zone us-central1-c --project <walkthrough-project-id/> slurm-spack-openfoam-controller | grep google_metadata_script_runner
+gcloud compute instances get-serial-port-output --port 1 --zone us-central1-c --project <walkthrough-project-id/> spackopenf-controller | grep google_metadata_script_runner
 ```
 
 When the startup script has finished running you will see the following line as
 the final output from the above command:
-> _`slurm-spack-openfoam-controller google_metadata_script_runner: Finished running startup scripts.`_
+> _`spackopenf-controller google_metadata_script_runner: Finished running startup scripts.`_
 
 Optionally while you wait, you can see your deployed VMs on Google Cloud
 Console. Open the link below in a new window. Look for
-`slurm-spack-openfoam-controller` and `slurm-spack-openfoam-login0`. If you don't
+`spackopenf-controller` and `spackopenf-login-login-001`. If you don't
 see your VMs make sure you have the correct project selected (top left).
 
 ```text
@@ -167,7 +159,7 @@ Once the startup script has completed, connect to the login node.
 Use the following command to ssh into the login node from cloud shell:
 
 ```bash
-gcloud compute ssh slurm-spack-openfoam-login0 --zone us-central1-c --project <walkthrough-project-id/>
+gcloud compute ssh spackopenf-login-login-001 --zone us-central1-c --project <walkthrough-project-id/>
 ```
 
 You may be prompted to set up SSH. If so follow the prompts and if asked for a
@@ -191,7 +183,7 @@ following instructions:
    https://console.cloud.google.com/compute?project=<walkthrough-project-id/>
    ```
 
-1. Click on the `SSH` button associated with the `slurm-spack-openfoam-login0`
+1. Click on the `SSH` button associated with the `spackopenf-login-login-001`
    instance.
 
    This will open a separate pop up window with a terminal into our newly
@@ -213,7 +205,7 @@ OpenFOAM job.
 2. Submit the job to Slurm to be scheduled:
 
    ```bash
-   sbatch /apps/openfoam/submit_openfoam.sh
+   sbatch /opt/apps/openfoam/submit_openfoam.sh
    ```
 
 3. Once submitted, you can watch the job progress by repeatedly calling the
@@ -227,7 +219,7 @@ The `sbatch` command trigger Slurm to auto-scale up several nodes to run the job
 
 You can refresh the `Compute Engine` > `VM instances` page and see that
 additional VMs are being/have been created. These will be named something like
-`slurm-spack-openfoam-compute-0-0`.
+`spackopenf-comput-0`.
 
 When running `squeue`, observe the job status start as `CF` (configuring),
 change to `R` (running) once the compute VMs have been created, and finally `CG`
@@ -280,7 +272,7 @@ exit
 Run the following command in the cloud shell terminal to destroy the cluster:
 
 ```bash
-terraform -chdir=spack-openfoam/primary destroy -auto-approve
+./ghpc destroy spack-openfoam
 ```
 
 When complete you should see something like:

@@ -63,7 +63,7 @@ deployment_groups:
   - id: startup
     source: ./modules/scripts/startup-script
     settings:
-      install_cloud_ops_agent: true
+      install_stackdriver_agent: true
       runners:
       - type: data
         source: /tmp/foo.tgz

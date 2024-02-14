@@ -156,10 +156,10 @@ type groupPath struct {
 	basePath
 	Name    basePath              `path:".group"`
 	Backend backendPath           `path:".terraform_backend"`
-	Modules arrayPath[modulePath] `path:".modules"`
+	Modules arrayPath[ModulePath] `path:".modules"`
 }
 
-type modulePath struct {
+type ModulePath struct {
 	basePath
 	Source   basePath              `path:".source"`
 	Kind     basePath              `path:".kind"`
@@ -178,9 +178,6 @@ type outputPath struct {
 
 // Root is a starting point for creating a Blueprint Path
 var Root rootPath
-
-// internalPath is to be used to report problems outside of Blueprint schema (e.g. YAML parsing error position)
-var internalPath = mapPath[basePath]{basePath{nil, "__internal_path__"}}
 
 func init() {
 	initPath(&Root, nil, "")
