@@ -277,12 +277,3 @@
       vars:
         deployment_name: "{{ deployment_name }}"
         workspace: "{{ workspace }}"
-
-    - name: Check for stockout errors
-      ansible.builtin.include_tasks:
-        file: tasks/check_stockout.yml
-        apply:
-          delegate_to: localhost
-      vars:
-        deployment_name: "{{ deployment_name }}"
-        project: "{{ project }}"
