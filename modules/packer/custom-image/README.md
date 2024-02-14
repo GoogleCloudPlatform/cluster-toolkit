@@ -49,6 +49,9 @@ customization solutions and their requirements for inbound SSH access.
 [Environments without SSH access](#environments-without-ssh-access) should use
 the metadata-based startup-script solution.
 
+A simple way to enable inbound SSH access is to use the VPC module with
+`allowed_ssh_ip_ranges` set to `0.0.0.0/0`.
+
 ### User or service account running Packer
 
 The user or service account running Packer must have the permission to create
