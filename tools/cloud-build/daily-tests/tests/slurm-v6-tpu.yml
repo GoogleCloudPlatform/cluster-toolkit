@@ -14,7 +14,7 @@
 
 ---
 
-test_name: slurm6-tpu
+test_name: hpc-slurm6-tpu
 deployment_name: "v6-tpu-{{ build }}"
 # Manually adding the slurm_cluster_name for use in node names, which filters
 # non-alphanumeric chars and is capped at 10 chars.
@@ -27,7 +27,7 @@ cli_deployment_vars:
 zone: us-central1-b
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/community/examples/hpc-slurm6-tpu.yaml"
-network: "{{ deployment_name }}-net"
+network: "default"
 max_nodes: 5
 # Note: Pattern matching in gcloud only supports 1 wildcard, a*-login-* won't work.
 login_node: "{{ slurm_cluster_name }}-login-*"

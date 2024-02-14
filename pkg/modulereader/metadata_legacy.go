@@ -41,6 +41,9 @@ func defaultAPIList(source string) []string {
 	// https://console.cloud.google.com/apis/dashboard and
 	// https://console.cloud.google.com/apis/library
 	staticAPIMap := map[string][]string{
+		"community/modules/compute/SchedMD-slurm-on-gcp-partition": {
+			"compute.googleapis.com",
+		},
 		"community/modules/compute/htcondor-execute-point": {
 			"compute.googleapis.com",
 			"storage.googleapis.com",
@@ -82,10 +85,11 @@ func defaultAPIList(source string) []string {
 		"community/modules/project/service-enablement": {
 			"serviceusage.googleapis.com",
 		},
-		"community/modules/scheduler/schedmd-slurm-gcp-v6-controller": {
+		"community/modules/scheduler/SchedMD-slurm-on-gcp-controller": {
 			"compute.googleapis.com",
-			"iam.googleapis.com",
-			"storage.googleapis.com",
+		},
+		"community/modules/scheduler/SchedMD-slurm-on-gcp-login-node": {
+			"compute.googleapis.com",
 		},
 		"community/modules/compute/gke-node-pool": {
 			"container.googleapis.com",

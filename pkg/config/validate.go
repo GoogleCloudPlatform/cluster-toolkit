@@ -25,7 +25,6 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/zclconf/go-cty/cty"
-	"golang.org/x/exp/maps"
 )
 
 const maxLabels = 64
@@ -83,7 +82,7 @@ func validateVars(vars Dict) error {
 	return errs.OrNil()
 }
 
-func validateModule(p ModulePath, m Module, bp Blueprint) error {
+func validateModule(p modulePath, m Module, bp Blueprint) error {
 	// Source/Kind validations are required to pass to perform other validations
 	if m.Source == "" {
 		return BpError{p.Source, EmptyModuleSource}
@@ -114,7 +113,7 @@ func validateModule(p ModulePath, m Module, bp Blueprint) error {
 		OrNil()
 }
 
-func validateOutputs(p ModulePath, mod Module, info modulereader.ModuleInfo) error {
+func validateOutputs(p modulePath, mod Module, info modulereader.ModuleInfo) error {
 	errs := Errors{}
 	outputs := info.GetOutputsAsMap()
 
@@ -134,7 +133,7 @@ type moduleVariables struct {
 }
 
 func validateSettings(
-	p ModulePath,
+	p modulePath,
 	mod Module,
 	info modulereader.ModuleInfo) error {
 
@@ -164,8 +163,7 @@ func validateSettings(
 		}
 		// Setting not found
 		if _, ok := cVars.Inputs[k]; !ok {
-			err := hintSpelling(k, maps.Keys(cVars.Inputs), UnknownModuleSetting)
-			errs.At(sp, err)
+			errs.At(sp, UnknownModuleSetting)
 			continue // do not perform other validations
 		}
 

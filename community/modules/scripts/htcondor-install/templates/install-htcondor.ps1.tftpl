@@ -15,7 +15,7 @@ Remove-Item "$runtime_installer"
 
 # download HTCondor installer
 $htcondor_installer = 'C:\htcondor.msi'
-%{ if condor_version == "23.*" }
+%{ if condor_version == "10.*" }
 Invoke-WebRequest https://research.cs.wisc.edu/htcondor/tarball/23.0/current/condor-Windows-x64.msi -OutFile "$htcondor_installer"
 %{ else ~}
 Invoke-WebRequest https://research.cs.wisc.edu/htcondor/tarball/23.0/${condor_version}/release/condor-${condor_version}-Windows-x64.msi -OutFile "$htcondor_installer"
@@ -29,17 +29,12 @@ $args=$args + ' INSTALLDIR="C:\Condor"'
 Start-Process "msiexec.exe" -Wait -ArgumentList "$args"
 Remove-Item "$htcondor_installer"
 
-# do not start HTCondor on boot by default. Allow startup script to download
-# configuration first and then start HTCondor
-Set-Service -StartupType Manual condor
-
 # remove settings from condor_config that we want to override in configuration step
 Set-Content -Path "C:\Condor\condor_config" -Value (Get-Content -Path "C:\Condor\condor_config" | Select-String -Pattern '^CONDOR_HOST' -NotMatch)
 Set-Content -Path "C:\Condor\condor_config" -Value (Get-Content -Path "C:\Condor\condor_config" | Select-String -Pattern '^INSTALL_USER' -NotMatch)
 Set-Content -Path "C:\Condor\condor_config" -Value (Get-Content -Path "C:\Condor\condor_config" | Select-String -Pattern '^DAEMON_LIST' -NotMatch)
 Set-Content -Path "C:\Condor\condor_config" -Value (Get-Content -Path "C:\Condor\condor_config" | Select-String -Pattern '^use SECURITY' -NotMatch)
 
-# install Python so that custom ClassAd hooks can execute
 $python_installer = 'C:\python-installer.exe'
 Invoke-WebRequest -Uri "https://www.python.org/ftp/python/3.11.4/python-3.11.4-amd64.exe" -OutFile "$python_installer"
 Start-Process -FilePath "$python_installer" -Wait -ArgumentList '/quiet InstallAllUsers=1 PrependPath=1 Include_test=0'

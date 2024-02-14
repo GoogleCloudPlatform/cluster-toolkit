@@ -13,7 +13,7 @@
 # limitations under the License.
 
 ---
-timeout: 5400s  # 1.5h
+timeout: 14400s  # 4hr
 steps:
 ## Test simple golang build
 - id: build_ghpc
@@ -34,7 +34,9 @@ steps:
   - -c
   - echo "done fetching builder"
 
-- id: hpc-build-slurm-image
+# test quantum circuit simulator example (startup-script runs example code after
+# compiling libraries)
+- id: quantum-circuit
   waitFor: ["fetch_builder", "build_ghpc"]
   name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
   entrypoint: /bin/bash
@@ -48,6 +50,6 @@ steps:
     BUILD_ID_FULL=$BUILD_ID
     BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
 
-    ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/multigroup-integration-test.yml \
+    ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
       --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
-      --extra-vars="@tools/cloud-build/daily-tests/tests/hpc-build-slurm-image.yml"
+      --extra-vars="@tools/cloud-build/daily-tests/tests/qsim.yml"

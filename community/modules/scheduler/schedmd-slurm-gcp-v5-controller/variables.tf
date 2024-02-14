@@ -15,7 +15,7 @@
  */
 
 # Most variables have been sourced and modified from the SchedMD/slurm-gcp
-# github repository: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/5.10.2
+# github repository: https://github.com/SchedMD/slurm-gcp/tree/5.9.1
 
 variable "access_config" {
   description = "Access configurations, i.e. IPs via which the VM instance can be accessed via the Internet."
@@ -128,11 +128,6 @@ variable "login_startup_scripts_timeout" {
     EOD
   type        = number
   default     = 300
-
-  validation {
-    condition     = var.login_startup_scripts_timeout == 300
-    error_message = "Changes to login_startup_scripts_timeout (default: 300s) are not respected, this is a known issue that will be fixed in a later release"
-  }
 }
 
 variable "cgroup_conf_tpl" {
@@ -214,7 +209,7 @@ variable "enable_cleanup_compute" {
     placement groups) managed by this module, when cluster is destroyed.
 
     NOTE: Requires Python and pip packages listed at the following link:
-    https://github.com/GoogleCloudPlatform/slurm-gcp/blob/3979e81fc5e4f021b5533a23baa474490f4f3614/scripts/requirements.txt
+    https://github.com/SchedMD/slurm-gcp/blob/3979e81fc5e4f021b5533a23baa474490f4f3614/scripts/requirements.txt
 
     *WARNING*: Toggling this may impact the running workload. Deployed compute nodes
     may be destroyed and their jobs will be requeued.
@@ -229,7 +224,7 @@ variable "enable_cleanup_subscriptions" {
     cluster is destroyed.
 
     NOTE: Requires Python and pip packages listed at the following link:
-    https://github.com/GoogleCloudPlatform/slurm-gcp/blob/3979e81fc5e4f021b5533a23baa474490f4f3614/scripts/requirements.txt
+    https://github.com/SchedMD/slurm-gcp/blob/3979e81fc5e4f021b5533a23baa474490f4f3614/scripts/requirements.txt
 
     *WARNING*: Toggling this may temporarily impact var.enable_reconfigure behavior.
     EOD
@@ -413,7 +408,6 @@ variable "partition" {
         enable_spot_vm         = bool
         group_name             = string
         instance_template      = string
-        maintenance_interval   = string
         node_conf              = map(string)
         reservation_name       = string
         spot_instance_config = object({
@@ -553,7 +547,7 @@ variable "instance_image" {
   type        = map(string)
   default = {
     project = "schedmd-slurm-public"
-    family  = "slurm-gcp-5-10-hpc-centos-7"
+    family  = "slurm-gcp-5-9-hpc-centos-7"
   }
 
   validation {

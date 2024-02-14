@@ -260,7 +260,7 @@ func TestDictWrongTypeUnmarshalYAML(t *testing.T) {
 	if err == nil {
 		t.Errorf("expected error, got nil")
 	}
-	if diff := cmp.Diff(err.Error(), "line 2 column 1: must be a mapping, got number"); diff != "" {
+	if diff := cmp.Diff(err.Error(), "line 2: must be a mapping, got number"); diff != "" {
 		t.Errorf("diff (-want +got):\n%s", diff)
 	}
 }
@@ -337,11 +337,10 @@ b: null
 c: ~
 d: "null"
 `
-	anyNull := cty.NullVal(cty.DynamicPseudoType)
 	want := cty.ObjectVal(map[string]cty.Value{
-		"a": anyNull,
-		"b": anyNull,
-		"c": anyNull,
+		"a": cty.NilVal,
+		"b": cty.NilVal,
+		"c": cty.NilVal,
 		"d": cty.StringVal("null"),
 	})
 

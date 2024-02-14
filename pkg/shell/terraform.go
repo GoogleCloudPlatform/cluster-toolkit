@@ -413,10 +413,7 @@ func ImportInputs(deploymentGroupDir string, artifactsDir string, expandedBluepr
 		}
 
 		igcVars := modulewriter.FindIntergroupVariables(g, bp)
-		newModule, err := modulewriter.SubstituteIgcReferencesInModule(config.Module{Settings: intergroupSettings}, igcVars)
-		if err != nil {
-			return err
-		}
+		newModule := modulewriter.SubstituteIgcReferencesInModule(config.Module{Settings: intergroupSettings}, igcVars)
 
 		if err := mergeMapsWithoutLoss(inputs, bp.Vars.Items()); err != nil {
 			return err

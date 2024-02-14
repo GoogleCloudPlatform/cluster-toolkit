@@ -17,11 +17,13 @@ package config
 import (
 	"errors"
 	"fmt"
+	"regexp"
+	"strings"
 
 	"hpc-toolkit/pkg/modulereader"
 
+	"github.com/agext/levenshtein"
 	"github.com/zclconf/go-cty/cty"
-	"github.com/zclconf/go-cty/cty/convert"
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
 )
@@ -31,15 +33,48 @@ const (
 	deploymentLabel string = "ghpc_deployment"
 )
 
+var (
+	// Checks if a variable exists only as a substring, ex:
+	// Matches: "a$(vars.example)", "word $(vars.example)", "word$(vars.example)", "$(vars.example)"
+	// Doesn't match: "\$(vars.example)", "no variable in this string"
+	anyVariableExp    *regexp.Regexp = regexp.MustCompile(`(^|[^\\])\$\((.*?)\)`)
+	simpleVariableExp *regexp.Regexp = regexp.MustCompile(`^\$\((.*)\)$`)
+)
+
+// expand expands variables and strings in the yaml config. Used directly by
+// ExpandConfig for the create and expand commands.
+func (dc *DeploymentConfig) expand() error {
+	dc.expandBackends()
+	dc.combineLabels()
+
+	if err := dc.applyUseModules(); err != nil {
+		return err
+	}
+
+	if err := dc.applyGlobalVariables(); err != nil {
+		return err
+	}
+
+	if err := validateInputsAllModules(dc.Config); err != nil {
+		return err
+	}
+
+	dc.Config.populateOutputs()
+	return nil
+}
+
 func validateInputsAllModules(bp Blueprint) error {
 	errs := Errors{}
-	bp.WalkModulesSafe(func(p ModulePath, m *Module) {
-		errs.Add(validateModuleInputs(p, *m, bp))
-	})
+	for ig, g := range bp.DeploymentGroups {
+		for im, m := range g.Modules {
+			p := Root.Groups.At(ig).Modules.At(im)
+			errs.Add(validateModuleInputs(p, m, bp))
+		}
+	}
 	return errs.OrNil()
 }
 
-func validateModuleInputs(mp ModulePath, m Module, bp Blueprint) error {
+func validateModuleInputs(mp modulePath, m Module, bp Blueprint) error {
 	mi := m.InfoOrDie()
 	errs := Errors{}
 	for _, input := range mi.Inputs {
@@ -47,59 +82,14 @@ func validateModuleInputs(mp ModulePath, m Module, bp Blueprint) error {
 
 		if !m.Settings.Has(input.Name) {
 			if input.Required {
-				errs.At(ip, fmt.Errorf("a required setting %q is missing from a module %q", input.Name, m.ID))
+				errs.At(ip, fmt.Errorf("%s: Module ID: %s Setting: %s",
+					errMsgMissingSetting, m.ID, input.Name))
 			}
 			continue
 		}
 
-		errs.At(ip, checkInputValueMatchesType(m.Settings.Get(input.Name), input, bp))
+		// TODO: Check set value and input dtypes convertability
 	}
-	return errs.OrNil()
-}
-
-func attemptEvalModuleInput(val cty.Value, bp Blueprint) (cty.Value, bool) {
-	v, err := bp.Eval(val)
-	// there could be a legitimate reasons for it.
-	// e.g. use of modules output or unsupported (by ghpc) functions
-	// TODO:
-	// * substitute module outputs with an UnknownValue
-	// * skip if uses functions with side-effects, e.g. `file`
-	// * add implementation of all pure terraform functions
-	// * add positive selection for eval-errors to bubble up
-	return v, err == nil
-}
-
-func checkInputValueMatchesType(val cty.Value, input modulereader.VarInfo, bp Blueprint) error {
-	v, ok := attemptEvalModuleInput(val, bp)
-	if !ok || input.Type == cty.NilType {
-		return nil // skip, can do nothing
-	}
-	// cty does panic on some edge cases, e.g. (cty.NilVal)
-	// we don't anticipate any of those, but just in case, catch panic and swallow it
-	defer func() { recover() }()
-	// TODO: consider returning error (not panic) or logging warning
-	if _, err := convert.Convert(v, input.Type); err != nil {
-		return fmt.Errorf("unsuitable value for %q: %w", input.Name, err)
-	}
-	return nil
-}
-
-func validateModulesAreUsed(bp Blueprint) error {
-	used := map[ModuleID]bool{}
-	bp.WalkModulesSafe(func(_ ModulePath, m *Module) {
-		for ref := range valueReferences(m.Settings.AsObject()) {
-			used[ref.Module] = true
-		}
-	})
-
-	errs := Errors{}
-	bp.WalkModulesSafe(func(p ModulePath, m *Module) {
-		if m.InfoOrDie().Metadata.Ghpc.HasToBeUsed && !used[m.ID] {
-			errs.At(p.ID, HintError{
-				"you need to add it to the `use`-block of downstream modules",
-				fmt.Errorf("module %q was not used", m.ID)})
-		}
-	})
 	return errs.OrNil()
 }
 
@@ -131,8 +121,8 @@ func (dc *DeploymentConfig) expandBackends() {
 	}
 }
 
-func getModuleInputMap(inputs []modulereader.VarInfo) map[string]cty.Type {
-	modInputs := make(map[string]cty.Type)
+func getModuleInputMap(inputs []modulereader.VarInfo) map[string]string {
+	modInputs := make(map[string]string)
 	for _, input := range inputs {
 		modInputs[input.Name] = input.Type
 	}
@@ -188,12 +178,14 @@ func useModule(mod *Module, use Module) {
 
 		// skip settings that are not of list type, but already have a value
 		// these were probably added by a previous call to this function
-		isList := inputType.IsListType()
+		isList := strings.HasPrefix(inputType, "list")
 		if alreadySet && !isList {
 			continue
 		}
 
-		v := AsProductOfModuleUse(ModuleRef(use.ID, setting).AsValue(), use.ID)
+		v := AsProductOfModuleUse(
+			ModuleRef(use.ID, setting).AsExpression().AsValue(),
+			use.ID)
 
 		if !isList {
 			mod.Settings.Set(setting, v)
@@ -206,7 +198,7 @@ func useModule(mod *Module, use Module) {
 // applyUseModules applies variables from modules listed in the "use" field
 // when/if applicable
 func (dc *DeploymentConfig) applyUseModules() error {
-	return dc.Config.WalkModules(func(_ ModulePath, m *Module) error {
+	return dc.Config.WalkModules(func(m *Module) error {
 		for _, u := range m.Use {
 			used, err := dc.Config.Module(u)
 			if err != nil { // should never happen
@@ -242,8 +234,9 @@ func (dc *DeploymentConfig) combineLabels() {
 	gl := mergeMaps(defaults, vars.Get(labels).AsValueMap())
 	vars.Set(labels, cty.ObjectVal(gl))
 
-	dc.Config.WalkModulesSafe(func(_ ModulePath, mod *Module) {
+	dc.Config.WalkModules(func(mod *Module) error {
 		combineModuleLabels(mod, *dc)
+		return nil
 	})
 }
 
@@ -253,7 +246,7 @@ func combineModuleLabels(mod *Module, dc DeploymentConfig) {
 		return // no op
 	}
 
-	ref := GlobalRef(labels).AsValue()
+	ref := GlobalRef(labels).AsExpression().AsValue()
 	set := mod.Settings.Get(labels)
 
 	if !set.IsNull() {
@@ -278,7 +271,7 @@ func mergeMaps(ms ...map[string]cty.Value) map[string]cty.Value {
 	return r
 }
 
-func (bp Blueprint) applyGlobalVarsInModule(mod *Module) {
+func (bp Blueprint) applyGlobalVarsInModule(mod *Module) error {
 	mi := mod.InfoOrDie()
 	for _, input := range mi.Inputs {
 		// Module setting exists? Nothing more needs to be done.
@@ -288,7 +281,8 @@ func (bp Blueprint) applyGlobalVarsInModule(mod *Module) {
 
 		// If it's not set, is there a global we can use?
 		if bp.Vars.Has(input.Name) {
-			mod.Settings.Set(input.Name, GlobalRef(input.Name).AsValue())
+			ref := GlobalRef(input.Name)
+			mod.Settings.Set(input.Name, ref.AsExpression().AsValue())
 			continue
 		}
 
@@ -296,13 +290,14 @@ func (bp Blueprint) applyGlobalVarsInModule(mod *Module) {
 			mod.Settings.Set(input.Name, cty.StringVal(string(mod.ID)))
 		}
 	}
+	return nil
 }
 
 // applyGlobalVariables takes any variables defined at the global level and
 // applies them to module settings if not already set.
-func (dc *DeploymentConfig) applyGlobalVariables() {
-	dc.Config.WalkModulesSafe(func(_ ModulePath, m *Module) {
-		dc.Config.applyGlobalVarsInModule(m)
+func (dc *DeploymentConfig) applyGlobalVariables() error {
+	return dc.Config.WalkModules(func(mod *Module) error {
+		return dc.Config.applyGlobalVarsInModule(mod)
 	})
 }
 
@@ -318,11 +313,10 @@ func AutomaticOutputName(outputName string, moduleID ModuleID) string {
 func validateModuleReference(bp Blueprint, from Module, toID ModuleID) error {
 	to, err := bp.Module(toID)
 	if err != nil {
-		mods := []string{}
-		bp.WalkModulesSafe(func(_ ModulePath, m *Module) {
-			mods = append(mods, string(m.ID))
-		})
-		return hintSpelling(string(toID), mods, err)
+		if hint, ok := bp.SuggestModuleIDHint(toID); ok {
+			return HintError{fmt.Sprintf("Did you mean \"%s\"?", hint), err}
+		}
+		return err
 	}
 
 	if to.Kind == PackerKind {
@@ -347,20 +341,15 @@ func validateModuleSettingReference(bp Blueprint, mod Module, r Reference) error
 	// simplest case to evaluate is a deployment variable's existence
 	if r.GlobalVar {
 		if !bp.Vars.Has(r.Name) {
-			err := fmt.Errorf("module %#v references unknown global variable %#v", mod.ID, r.Name)
-			return hintSpelling(r.Name, bp.Vars.Keys(), err)
+			return fmt.Errorf("module %#v references unknown global variable %#v", mod.ID, r.Name)
 		}
 		return nil
 	}
 
 	if err := validateModuleReference(bp, mod, r.Module); err != nil {
 		var unkModErr UnknownModuleError
-		if errors.As(err, &unkModErr) {
-			hints := []string{"vars"}
-			bp.WalkModulesSafe(func(_ ModulePath, m *Module) {
-				hints = append(hints, string(m.ID))
-			})
-			return hintSpelling(string(unkModErr.ID), hints, unkModErr)
+		if errors.As(err, &unkModErr) && levenshtein.Distance(string(unkModErr.ID), "vars", nil) <= 2 {
+			return HintError{"Did you mean \"vars\"?", unkModErr}
 		}
 		return err
 	}
@@ -369,17 +358,21 @@ func validateModuleSettingReference(bp Blueprint, mod Module, r Reference) error
 	if err != nil {
 		return err
 	}
-
-	outputs := []string{}
-	for _, o := range mi.Outputs {
-		outputs = append(outputs, o.Name)
-	}
-
-	if !slices.Contains(outputs, r.Name) {
-		err := fmt.Errorf("module %q does not have output %q", tm.ID, r.Name)
-		return hintSpelling(r.Name, outputs, err)
+	found := slices.ContainsFunc(mi.Outputs, func(o modulereader.OutputInfo) bool { return o.Name == r.Name })
+	if !found {
+		return fmt.Errorf("%s: module %s did not have output %s", errMsgNoOutput, tm.ID, r.Name)
 	}
 	return nil
+}
+
+// isSimpleVariable checks if the entire string is just a single variable
+func isSimpleVariable(str string) bool {
+	return simpleVariableExp.MatchString(str)
+}
+
+// hasVariable checks to see if any variable exists in a string
+func hasVariable(str string) bool {
+	return anyVariableExp.MatchString(str)
 }
 
 // FindAllIntergroupReferences finds all intergroup references within the group
@@ -397,7 +390,7 @@ func (dg DeploymentGroup) FindAllIntergroupReferences(bp Blueprint) []Reference 
 func FindIntergroupReferences(v cty.Value, mod Module, bp Blueprint) []Reference {
 	g := bp.ModuleGroupOrDie(mod.ID)
 	res := []Reference{}
-	for r := range valueReferences(v) {
+	for _, r := range valueReferences(v) {
 		if !r.GlobalVar && bp.ModuleGroupOrDie(r.Module).Name != g.Name {
 			res = append(res, r)
 		}
@@ -408,14 +401,15 @@ func FindIntergroupReferences(v cty.Value, mod Module, bp Blueprint) []Reference
 // find all intergroup references and add them to source Module.Outputs
 func (bp *Blueprint) populateOutputs() {
 	refs := map[Reference]bool{}
-	bp.WalkModulesSafe(func(_ ModulePath, m *Module) {
+	bp.WalkModules(func(m *Module) error {
 		rs := FindIntergroupReferences(m.Settings.AsObject(), *m, *bp)
 		for _, r := range rs {
 			refs[r] = true
 		}
+		return nil
 	})
 
-	bp.WalkModulesSafe(func(_ ModulePath, m *Module) {
+	bp.WalkModules(func(m *Module) error {
 		for r := range refs {
 			if r.Module != m.ID {
 				continue // find IGC references pointing to this module
@@ -430,6 +424,7 @@ func (bp *Blueprint) populateOutputs() {
 			})
 
 		}
+		return nil
 	})
 }
 

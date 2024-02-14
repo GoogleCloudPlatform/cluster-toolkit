@@ -23,6 +23,11 @@ import (
 	. "gopkg.in/check.v1"
 )
 
+func (s *MySuite) TestExpand(c *C) {
+	dc := s.getDeploymentConfigForTest()
+	c.Check(dc.expand(), IsNil)
+}
+
 func (s *MySuite) TestExpandBackends(c *C) {
 	dc := s.getDeploymentConfigForTest()
 	deplName := dc.Config.Vars.Get("deployment_name").AsString()
@@ -72,8 +77,11 @@ func (s *zeroSuite) TestUseModule(c *C) {
 		ID:     "UsedModule",
 		Source: "usedSource",
 	}
-	varInfoNumber := modulereader.VarInfo{Name: "val1", Type: cty.Number}
-	ref := ModuleRef("UsedModule", "val1").AsValue()
+	varInfoNumber := modulereader.VarInfo{
+		Name: "val1",
+		Type: "number",
+	}
+	ref := ModuleRef("UsedModule", "val1").AsExpression().AsValue()
 
 	{ // Pass: No Inputs, No Outputs
 		mod := Module{ID: "lime", Source: "modSource"}
@@ -144,7 +152,7 @@ func (s *zeroSuite) TestUseModule(c *C) {
 	{ // Pass: Single Input/Output match, input is list, not already set
 		mod := Module{ID: "lime", Source: "limeTree"}
 		setTestModuleInfo(mod, modulereader.ModuleInfo{
-			Inputs: []modulereader.VarInfo{{Name: "val1", Type: cty.List(cty.Number)}},
+			Inputs: []modulereader.VarInfo{{Name: "val1", Type: "list"}},
 		})
 		setTestModuleInfo(used, modulereader.ModuleInfo{
 			Outputs: []modulereader.OutputInfo{{Name: "val1"}},
@@ -161,7 +169,7 @@ func (s *zeroSuite) TestUseModule(c *C) {
 		mod := Module{ID: "lime", Source: "limeTree"}
 		mod.Settings.Set("val1", AsProductOfModuleUse(cty.TupleVal([]cty.Value{ref}), "other"))
 		setTestModuleInfo(mod, modulereader.ModuleInfo{
-			Inputs: []modulereader.VarInfo{{Name: "val1", Type: cty.List(cty.Number)}},
+			Inputs: []modulereader.VarInfo{{Name: "val1", Type: "list"}},
 		})
 		setTestModuleInfo(used, modulereader.ModuleInfo{
 			Outputs: []modulereader.OutputInfo{{Name: "val1"}},
@@ -179,7 +187,7 @@ func (s *zeroSuite) TestUseModule(c *C) {
 		mod := Module{ID: "lime", Source: "limeTree"}
 		mod.Settings.Set("val1", cty.TupleVal([]cty.Value{ref}))
 		setTestModuleInfo(mod, modulereader.ModuleInfo{
-			Inputs: []modulereader.VarInfo{{Name: "val1", Type: cty.List(cty.Number)}},
+			Inputs: []modulereader.VarInfo{{Name: "val1", Type: "list"}},
 		})
 		setTestModuleInfo(used, modulereader.ModuleInfo{
 			Outputs: []modulereader.OutputInfo{{Name: "val1"}},
@@ -212,7 +220,9 @@ func (s *MySuite) TestApplyUseModules(c *C) {
 
 		setTestModuleInfo(using, modulereader.ModuleInfo{
 			Inputs: []modulereader.VarInfo{{
-				Name: "potato", Type: cty.Number}}})
+				Name: "potato",
+				Type: "number",
+			}}})
 		setTestModuleInfo(used, modulereader.ModuleInfo{
 			Outputs: []modulereader.OutputInfo{
 				{Name: "potato"}}})
@@ -232,7 +242,7 @@ func (s *MySuite) TestApplyUseModules(c *C) {
 		m := &dc.Config.DeploymentGroups[1].Modules[0]
 		c.Assert(m.Settings, DeepEquals, Dict{})
 		c.Assert(dc.applyUseModules(), IsNil)
-		ref := ModuleRef("TestModule0", "test_inter_0").AsValue()
+		ref := ModuleRef("TestModule0", "test_inter_0").AsExpression().AsValue()
 		c.Assert(m.Settings.Items(), DeepEquals, map[string]cty.Value{
 			"test_inter_0": AsProductOfModuleUse(ref, "TestModule0")})
 	}
@@ -291,7 +301,7 @@ func (s *zeroSuite) TestCombineLabels(c *C) {
 		"ghpc_deployment": cty.StringVal("golden"),
 	}))
 
-	labelsRef := GlobalRef("labels").AsValue()
+	labelsRef := GlobalRef("labels").AsExpression().AsValue()
 
 	lime := dc.Config.DeploymentGroups[0]
 	// Labels are set
@@ -315,22 +325,93 @@ func (s *MySuite) TestApplyGlobalVariables(c *C) {
 	dc := s.getDeploymentConfigForTest()
 	mod := &dc.Config.DeploymentGroups[0].Modules[0]
 
+	// Test no inputs, none required
+	c.Check(dc.applyGlobalVariables(), IsNil)
+
 	// Test no inputs, one required, doesn't exist in globals
 	setTestModuleInfo(*mod, modulereader.ModuleInfo{
 		Inputs: []modulereader.VarInfo{{
 			Name:     "gold",
-			Type:     cty.String,
+			Type:     "string",
 			Required: true,
 		}},
 	})
 
 	// Test no input, one required, exists in globals
 	dc.Config.Vars.Set("gold", cty.StringVal("val"))
-	dc.applyGlobalVariables()
+	c.Check(dc.applyGlobalVariables(), IsNil)
 	c.Assert(
 		mod.Settings.Get("gold"),
 		DeepEquals,
-		GlobalRef("gold").AsValue())
+		GlobalRef("gold").AsExpression().AsValue())
+
+	// Test one input, one required
+	mod.Settings.Set("reqVar", cty.StringVal("val"))
+	c.Assert(dc.applyGlobalVariables(), IsNil)
+
+	// Test one input, none required, exists in globals
+	setTestModuleInfo(*mod, modulereader.ModuleInfo{
+		Inputs: []modulereader.VarInfo{{
+			Name:     "gold",
+			Type:     "string",
+			Required: false,
+		}},
+	})
+	c.Assert(dc.applyGlobalVariables(), IsNil)
+}
+
+func (s *zeroSuite) TestIsSimpleVariable(c *C) {
+	// True: Correct simple variable
+	got := isSimpleVariable("$(some_text)")
+	c.Assert(got, Equals, true)
+	// False: Missing $
+	got = isSimpleVariable("(some_text)")
+	c.Assert(got, Equals, false)
+	// False: Missing (
+	got = isSimpleVariable("$some_text)")
+	c.Assert(got, Equals, false)
+	// False: Missing )
+	got = isSimpleVariable("$(some_text")
+	c.Assert(got, Equals, false)
+	// False: Contains Prefix
+	got = isSimpleVariable("prefix-$(some_text)")
+	c.Assert(got, Equals, false)
+	// False: Contains Suffix
+	got = isSimpleVariable("$(some_text)-suffix")
+	c.Assert(got, Equals, false)
+	// False: Contains prefix and suffix
+	got = isSimpleVariable("prefix-$(some_text)-suffix")
+	c.Assert(got, Equals, false)
+	// False: empty string
+	got = isSimpleVariable("")
+	c.Assert(got, Equals, false)
+}
+
+func (s *zeroSuite) TestHasVariable(c *C) {
+	// True: simple variable
+	got := hasVariable("$(some_text)")
+	c.Assert(got, Equals, true)
+	// True: has prefix
+	got = hasVariable("prefix-$(some_text)")
+	c.Assert(got, Equals, true)
+	// True: has suffix
+	got = hasVariable("$(some_text)-suffix")
+	c.Assert(got, Equals, true)
+	// True: Two variables
+	got = hasVariable("$(some_text)$(some_more)")
+	c.Assert(got, Equals, true)
+	// True: two variable with other text
+	got = hasVariable("prefix-$(some_text)-$(some_more)-suffix")
+	c.Assert(got, Equals, true)
+	// False: missing $
+	got = hasVariable("(some_text)")
+	c.Assert(got, Equals, false)
+	// False: missing (
+	got = hasVariable("$some_text)")
+	c.Assert(got, Equals, false)
+	// False: missing )
+	got = hasVariable("$(some_text")
+	c.Assert(got, Equals, false)
 }
 
 func (s *zeroSuite) TestValidateModuleReference(c *C) {

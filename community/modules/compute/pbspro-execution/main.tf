@@ -53,7 +53,7 @@ module "pbs_install" {
 }
 
 module "execution_startup_script" {
-  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=v1.27.0&depth=1"
+  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=50644b2"
 
   deployment_name = var.deployment_name
   project_id      = var.project_id

@@ -19,7 +19,7 @@ vars:
   project_id:  #
   deployment_name: igc-tf-test
   region: us-east4
-  zone: $(vars.region)-c
+  zone: us-east4-c
 
 deployment_groups:
 - group: zero

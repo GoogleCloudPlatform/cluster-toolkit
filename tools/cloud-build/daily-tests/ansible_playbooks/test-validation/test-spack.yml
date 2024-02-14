@@ -17,8 +17,8 @@
 - name: Include wait for startup script
   ansible.builtin.include_tasks: "tasks/wait-for-startup-script.yml"
   vars:
-    vm_name: "{{ image_name }}"
-    timeout_seconds: 21600
+    vm_name: "{{ login_node }}"
+    timeout_seconds: 7200
 - name: Ensure spack is installed
   ansible.builtin.command: spack --version
   changed_when: False
