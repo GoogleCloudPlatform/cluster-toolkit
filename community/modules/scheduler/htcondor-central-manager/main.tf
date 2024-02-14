@@ -110,7 +110,7 @@ resource "google_storage_bucket_object" "cm_config" {
 }
 
 module "startup_script" {
-  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=v1.27.0&depth=1"
+  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=50644b2"
 
   project_id      = var.project_id
   region          = var.region
@@ -177,14 +177,14 @@ module "htcondor_cm" {
 
   update_policy = [{
     instance_redistribution_type = "NONE"
-    replacement_method           = "RECREATE" # preserves hostnames (necessary for PROACTIVE replacement)
-    max_surge_fixed              = 0          # must be 0 to preserve hostnames
+    replacement_method           = "SUBSTITUTE"
+    max_surge_fixed              = length(local.zones)
     max_unavailable_fixed        = length(local.zones)
     max_surge_percent            = null
     max_unavailable_percent      = null
     min_ready_sec                = 300
     minimal_action               = "REPLACE"
-    type                         = var.update_policy
+    type                         = "OPPORTUNISTIC"
   }]
 
   stateful_ips = [{

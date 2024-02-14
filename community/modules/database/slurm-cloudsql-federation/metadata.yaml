@@ -18,4 +18,3 @@ spec:
     services:
     - bigqueryconnection.googleapis.com
     - sqladmin.googleapis.com
-    - servicenetworking.googleapis.com

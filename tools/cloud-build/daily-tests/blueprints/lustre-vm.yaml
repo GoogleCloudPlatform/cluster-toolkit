@@ -110,7 +110,7 @@ deployment_groups:
   - id: wait-centos
     source: community/modules/scripts/wait-for-startup
     settings:
-      instance_name: $(workstation-centos.name[0])
+      instance_name: ((module.workstation-centos.name[0]))
       timeout: 7200
 
   - id: workstation-rocky
@@ -128,7 +128,7 @@ deployment_groups:
   - id: wait-rocky
     source: community/modules/scripts/wait-for-startup
     settings:
-      instance_name: $(workstation-rocky.name[0])
+      instance_name: ((module.workstation-rocky.name[0]))
       timeout: 7200
 
   # - id: workstation-ubuntu
@@ -145,5 +145,5 @@ deployment_groups:
   # - id: wait-ubuntu
   #   source: community/modules/scripts/wait-for-startup
   #   settings:
-  #     instance_name: $(workstation-ubuntu.name[0])
+  #     instance_name: ((module.workstation-ubuntu.name[0]))
   #     timeout: 7200

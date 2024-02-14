@@ -22,7 +22,6 @@ import (
 	"os"
 	"regexp"
 	"strconv"
-	"strings"
 
 	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/pkg/errors"
@@ -69,7 +68,15 @@ func importBlueprint(f string) (Blueprint, YamlCtx, error) {
 
 	var bp Blueprint
 	if err = decoder.Decode(&bp); err != nil {
-		return Blueprint{}, yamlCtx, parseYamlV3Error(err)
+		errs := Errors{}
+		for i, yep := range parseYamlV3Error(err) {
+			path := internalPath.Dot(fmt.Sprintf("bp_schema_error_%d", i))
+			if yep.pos.Line != 0 {
+				yamlCtx.pathToPos[yPath(path.String())] = yep.pos
+			}
+			errs.At(path, errors.New(yep.errMsg))
+		}
+		return Blueprint{}, yamlCtx, errs
 	}
 	return bp, yamlCtx, nil
 }
@@ -141,7 +148,15 @@ func NewYamlCtx(data []byte) (YamlCtx, error) {
 
 	// error may happen if YAML is not valid, regardless of Blueprint schema
 	if err := yaml.Unmarshal(data, &c); err != nil {
-		return YamlCtx{m, lines}, parseYamlV3Error(err)
+		errs := Errors{}
+		for i, yep := range parseYamlV3Error(err) {
+			path := internalPath.Dot(fmt.Sprintf("yaml_error_%d", i))
+			if yep.pos.Line != 0 {
+				m[yPath(path.String())] = yep.pos
+			}
+			errs.At(path, errors.New(yep.errMsg))
+		}
+		return YamlCtx{m, lines}, errs
 	}
 
 	var walk func(n *yaml.Node, p yPath, posOf *yaml.Node)
@@ -171,10 +186,6 @@ func NewYamlCtx(data []byte) (YamlCtx, error) {
 
 type nodeCapturer struct{ n *yaml.Node }
 
-func nodeToPosErr(n *yaml.Node, err error) PosError {
-	return PosError{Pos{Line: n.Line, Column: n.Column}, err}
-}
-
 func (c *nodeCapturer) UnmarshalYAML(n *yaml.Node) error {
 	c.n = n
 	return nil
@@ -188,7 +199,7 @@ func (mk *ModuleKind) UnmarshalYAML(n *yaml.Node) error {
 		mk.kind = kind
 		return nil
 	}
-	return nodeToPosErr(n, errors.New(`kind must be "packer" or "terraform" or removed from YAML`))
+	return fmt.Errorf("line %d: kind must be \"packer\" or \"terraform\" or removed from YAML", n.Line)
 }
 
 // MarshalYAML implements a custom marshaler from ModuleKind to YAML string
@@ -200,7 +211,7 @@ func (mk ModuleKind) MarshalYAML() (interface{}, error) {
 func (ms *ModuleIDs) UnmarshalYAML(n *yaml.Node) error {
 	var ids []ModuleID
 	if err := n.Decode(&ids); err != nil {
-		return nodeToPosErr(n, errors.New("`use` must be a list of module ids"))
+		return fmt.Errorf("line %d: `use` must be a list of module ids", n.Line)
 	}
 	*ms = ids
 	return nil
@@ -208,21 +219,12 @@ func (ms *ModuleIDs) UnmarshalYAML(n *yaml.Node) error {
 
 // YamlValue is wrapper around cty.Value to handle YAML unmarshal.
 type YamlValue struct {
-	v cty.Value // do not use this field directly, use Wrap() and Unwrap() instead
+	v cty.Value
 }
 
 // Unwrap returns wrapped cty.Value.
 func (y YamlValue) Unwrap() cty.Value {
-	if y.v == cty.NilVal {
-		// we can't use 0-value of cty.Value (NilVal)
-		// instead it should be a proper null(any) value
-		return cty.NullVal(cty.DynamicPseudoType)
-	}
 	return y.v
-}
-
-func (y *YamlValue) Wrap(v cty.Value) {
-	y.v = v
 }
 
 // UnmarshalYAML implements custom YAML unmarshaling.
@@ -236,7 +238,7 @@ func (y *YamlValue) UnmarshalYAML(n *yaml.Node) error {
 	case yaml.SequenceNode:
 		err = y.unmarshalTuple(n)
 	default:
-		err = nodeToPosErr(n, fmt.Errorf("cannot decode node with unknown kind %d", n.Kind))
+		err = fmt.Errorf("line %d: cannot decode node with unknown kind %d", n.Line, n.Kind)
 	}
 	return err
 }
@@ -248,38 +250,28 @@ func (y *YamlValue) unmarshalScalar(n *yaml.Node) error {
 	}
 	ty, err := gocty.ImpliedType(s)
 	if err != nil {
-		return nodeToPosErr(n, err)
+		return fmt.Errorf("line %d: %w", n.Line, err)
 	}
-	v, err := gocty.ToCtyValue(s, ty)
-	if err != nil {
+	if y.v, err = gocty.ToCtyValue(s, ty); err != nil {
 		return err
 	}
 
-	if v.Type() == cty.String {
-		if v, err = parseYamlString(v.AsString()); err != nil {
+	if l, is := IsYamlExpressionLiteral(y.v); is { // HCL literal
+		var e Expression
+		if e, err = ParseExpression(l); err != nil {
+			// TODO: point to exact location within expression, see Diagnostic.Subject
 			return fmt.Errorf("line %d: %w", n.Line, err)
 		}
-	}
-	y.Wrap(v)
-	return nil
-}
-
-func isHCLLiteral(s string) bool {
-	return strings.HasPrefix(s, "((") && strings.HasSuffix(s, "))")
-}
-
-func parseYamlString(s string) (cty.Value, error) {
-	if isHCLLiteral(s) {
-		if e, err := ParseExpression(s[2 : len(s)-2]); err != nil {
-			return cty.NilVal, err
-		} else {
-			return e.AsValue(), nil
+		y.v = e.AsValue()
+	} else if y.v.Type() == cty.String && hasVariable(y.v.AsString()) { // "simple" variable
+		e, err := SimpleVarToExpression(y.v.AsString())
+		if err != nil {
+			// TODO: point to exact location within expression, see Diagnostic.Subject
+			return fmt.Errorf("line %d: %w", n.Line, err)
 		}
+		y.v = e.AsValue()
 	}
-	if strings.HasPrefix(s, `\((`) && strings.HasSuffix(s, `))`) {
-		return cty.StringVal(s[1:]), nil // escaped HCL literal
-	}
-	return parseBpLit(s)
+	return nil
 }
 
 func (y *YamlValue) unmarshalObject(n *yaml.Node) error {
@@ -289,9 +281,9 @@ func (y *YamlValue) unmarshalObject(n *yaml.Node) error {
 	}
 	mv := map[string]cty.Value{}
 	for k, y := range my {
-		mv[k] = y.Unwrap()
+		mv[k] = y.v
 	}
-	y.Wrap(cty.ObjectVal(mv))
+	y.v = cty.ObjectVal(mv)
 	return nil
 }
 
@@ -302,9 +294,9 @@ func (y *YamlValue) unmarshalTuple(n *yaml.Node) error {
 	}
 	lv := []cty.Value{}
 	for _, y := range ly {
-		lv = append(lv, y.Unwrap())
+		lv = append(lv, y.v)
 	}
-	y.Wrap(cty.TupleVal(lv))
+	y.v = cty.TupleVal(lv)
 	return nil
 }
 
@@ -314,11 +306,11 @@ func (d *Dict) UnmarshalYAML(n *yaml.Node) error {
 	if err := n.Decode(&v); err != nil {
 		return err
 	}
-	ty := v.Unwrap().Type()
+	ty := v.v.Type()
 	if !ty.IsObjectType() {
-		return nodeToPosErr(n, fmt.Errorf("must be a mapping, got %s", ty.FriendlyName()))
+		return fmt.Errorf("line %d: must be a mapping, got %s", n.Line, ty.FriendlyName())
 	}
-	for k, w := range v.Unwrap().AsValueMap() {
+	for k, w := range v.v.AsValueMap() {
 		d.Set(k, w)
 	}
 	return nil
@@ -327,24 +319,9 @@ func (d *Dict) UnmarshalYAML(n *yaml.Node) error {
 // MarshalYAML implements custom YAML marshaling.
 func (d Dict) MarshalYAML() (interface{}, error) {
 	o, _ := cty.Transform(d.AsObject(), func(p cty.Path, v cty.Value) (cty.Value, error) {
-		if v.IsNull() {
-			return v, nil
-		}
 		if e, is := IsExpressionValue(v); is {
 			s := string(hclwrite.Format(e.Tokenize().Bytes()))
 			return cty.StringVal("((" + s + "))"), nil
-		}
-		if v.Type() == cty.String {
-			// Need to escape back the non-expressions (both HCL and blueprint ones)
-			s := v.AsString()
-			if isHCLLiteral(s) {
-				// yaml: "\((foo))" -unmarshal-> cty: "((foo))" -marshall-> yaml: "\((foo))"
-				// NOTE: don't attempt to escape both HCL and blueprint expressions
-				// they don't get unmarshalled together, terminate here
-				return cty.StringVal(`\` + s), nil
-			}
-			// yaml: "\$(var.foo)" -unmarshal-> cty: "$(var.foo)" -marshall-> yaml: "\$(var.foo)"
-			return cty.StringVal(strings.ReplaceAll(s, `$(`, `\$(`)), nil
 		}
 		return v, nil
 	})
@@ -362,37 +339,40 @@ func (d Dict) MarshalYAML() (interface{}, error) {
 	return g, nil
 }
 
+type yamlErrWithPos struct {
+	pos    Pos
+	errMsg string
+}
+
 // yaml.v3 errors are either TypeError - collection of error message or single error message.
 // Parse error messages to extract short error message and position.
-func parseYamlV3Error(err error) error {
-	errs := Errors{}
+func parseYamlV3Error(err error) []yamlErrWithPos {
+	res := []yamlErrWithPos{}
 	switch err := err.(type) {
 	case *yaml.TypeError:
 		for _, s := range err.Errors {
-			errs.Add(parseYamlV3ErrorString(s))
+			res = append(res, parseYamlV3ErrorString(s))
 		}
-	case PosError:
-		errs.Add(err)
 	default:
-		errs.Add(parseYamlV3ErrorString(err.Error()))
+		res = append(res, parseYamlV3ErrorString(err.Error()))
 	}
 
-	if !errs.Any() { // should never happen
-		errs.Add(parseYamlV3ErrorString(err.Error()))
+	if len(res) == 0 { // should never happen
+		res = append(res, parseYamlV3ErrorString(err.Error()))
 	}
-	return errs
+	return res
 }
 
 // parseYamlV3Error attempts to extract position and nice error message from yaml.v3 error message.
 // yaml.v3 errors are unstructured, use string parsing to extract information.
-// If no position can be extracted, returns error without position.
-// Else returns PosError{Pos{Line: line_number}, error_message}.
-func parseYamlV3ErrorString(s string) error {
-	match := regexp.MustCompile(`^(yaml: )?(line (\d+): )?((.|\n)*)$`).FindStringSubmatch(s)
+// If no position can be extracted, returns (Pos{}, error.Error()).
+// Else returns (Pos{Line: line_number}, error_message).
+func parseYamlV3ErrorString(s string) yamlErrWithPos {
+	match := regexp.MustCompile(`^(yaml: )?(line (\d+): )?(.*)$`).FindStringSubmatch(s)
 	if match == nil {
-		return errors.New(s)
+		return yamlErrWithPos{Pos{}, s}
 	}
 	lns, errMsg := match[3], match[4]
 	ln, _ := strconv.Atoi(lns) // Atoi returns 0 on error, which is fine here
-	return PosError{Pos{Line: ln}, errors.New(errMsg)}
+	return yamlErrWithPos{Pos{Line: ln}, errMsg}
 }

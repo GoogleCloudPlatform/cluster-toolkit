@@ -24,7 +24,6 @@ import (
 	"strings"
 
 	"github.com/agext/levenshtein"
-	"github.com/hashicorp/hcl/v2"
 	"github.com/pkg/errors"
 	"github.com/zclconf/go-cty/cty"
 	"gopkg.in/yaml.v3"
@@ -90,10 +89,11 @@ func (g DeploymentGroup) Kind() ModuleKind {
 // Module return the module with the given ID
 func (bp *Blueprint) Module(id ModuleID) (*Module, error) {
 	var mod *Module
-	bp.WalkModulesSafe(func(_ ModulePath, m *Module) {
+	bp.WalkModules(func(m *Module) error {
 		if m.ID == id {
 			mod = m
 		}
+		return nil
 	})
 	if mod == nil {
 		return nil, UnknownModuleError{id}
@@ -101,19 +101,25 @@ func (bp *Blueprint) Module(id ModuleID) (*Module, error) {
 	return mod, nil
 }
 
-func hintSpelling(s string, dict []string, err error) error {
-	best, minDist := "", maxHintDist+1
-	for _, w := range dict {
-		d := levenshtein.Distance(s, w, nil)
-		if d < minDist {
-			best, minDist = w, d
+// SuggestModuleIDHint return a correct spelling of given ModuleID id if one
+// is close enough (based on maxHintDist)
+func (bp Blueprint) SuggestModuleIDHint(id ModuleID) (string, bool) {
+	clMod := ""
+	minDist := -1
+	bp.WalkModules(func(m *Module) error {
+		dist := levenshtein.Distance(string(m.ID), string(id), nil)
+		if minDist == -1.0 || dist < minDist {
+			minDist = dist
+			clMod = string(m.ID)
 		}
-	}
-	if minDist <= maxHintDist {
-		return HintError{fmt.Sprintf("did you mean %q?", best), err}
-	}
-	return err
+		return nil
+	})
 
+	if clMod != "" && minDist <= maxHintDist {
+		return clMod, true
+	}
+
+	return "", false
 }
 
 // ModuleGroup returns the group containing the module
@@ -246,10 +252,6 @@ type Blueprint struct {
 	Vars                     Dict
 	DeploymentGroups         []DeploymentGroup `yaml:"deployment_groups"`
 	TerraformBackendDefaults TerraformBackend  `yaml:"terraform_backend_defaults,omitempty"`
-
-	// Preserves the original values of `Vars` (as defined by the user),
-	// while `Vars` can mutate (add `labels`, evaluate values).
-	origVars Dict
 }
 
 // DeploymentConfig is a container for the imported YAML data and supporting data for
@@ -260,7 +262,7 @@ type DeploymentConfig struct {
 
 // ExpandConfig expands the yaml config in place
 func (dc *DeploymentConfig) ExpandConfig() error {
-	dc.Config.origVars = NewDict(dc.Config.Vars.Items()) // copy
+	dc.Config.setGlobalLabels()
 	dc.Config.addKindToModules()
 
 	if vars, err := dc.Config.evalVars(); err != nil {
@@ -269,29 +271,17 @@ func (dc *DeploymentConfig) ExpandConfig() error {
 		dc.Config.Vars = vars
 	}
 
-	dc.expandBackends()
-	dc.combineLabels()
-
 	if err := validateBlueprint(dc.Config); err != nil {
 		return err
 	}
 
-	if err := dc.applyUseModules(); err != nil {
-		return err
+	return dc.expand()
+}
+
+func (bp *Blueprint) setGlobalLabels() {
+	if !bp.Vars.Has("labels") {
+		bp.Vars.Set("labels", cty.EmptyObjectVal)
 	}
-
-	dc.applyGlobalVariables()
-
-	if err := validateInputsAllModules(dc.Config); err != nil {
-		return err
-	}
-
-	if err := validateModulesAreUsed(dc.Config); err != nil {
-		return err
-	}
-
-	dc.Config.populateOutputs()
-	return nil
 }
 
 // ListUnusedModules provides a list modules that are in the
@@ -318,7 +308,7 @@ func (m Module) ListUnusedModules() ModuleIDs {
 // GetUsedDeploymentVars returns a list of deployment vars used in the given value
 func GetUsedDeploymentVars(val cty.Value) []string {
 	res := []string{}
-	for ref := range valueReferences(val) {
+	for _, ref := range valueReferences(val) {
 		if ref.GlobalVar {
 			res = append(res, ref.Name)
 		}
@@ -330,28 +320,32 @@ func GetUsedDeploymentVars(val cty.Value) []string {
 func (bp Blueprint) ListUnusedVariables() []string {
 	// Gather all scopes where variables are used
 	ns := map[string]cty.Value{
-		"vars": bp.origVars.AsObject(),
+		"vars": bp.Vars.AsObject(),
 	}
-	bp.WalkModulesSafe(func(_ ModulePath, m *Module) {
+	bp.WalkModules(func(m *Module) error {
 		ns["module_"+string(m.ID)] = m.Settings.AsObject()
+		return nil
 	})
 	for _, v := range bp.Validators {
 		ns["validator_"+v.Validator] = v.Inputs.AsObject()
 	}
 
+	// these variables are required or automatically added;
 	var used = map[string]bool{
-		"deployment_name": true, // required => always used
+		"labels":          true,
+		"deployment_name": true,
 	}
 	for _, v := range GetUsedDeploymentVars(cty.ObjectVal(ns)) {
 		used[v] = true
 	}
 
 	unused := []string{}
-	for _, k := range bp.origVars.Keys() {
+	for k := range bp.Vars.Items() {
 		if _, ok := used[k]; !ok {
 			unused = append(unused, k)
 		}
 	}
+
 	return unused
 }
 
@@ -404,10 +398,11 @@ func (dc DeploymentConfig) ExportBlueprint(outputFilename string) error {
 
 // addKindToModules sets the kind to 'terraform' when empty.
 func (bp *Blueprint) addKindToModules() {
-	bp.WalkModulesSafe(func(_ ModulePath, m *Module) {
+	bp.WalkModules(func(m *Module) error {
 		if m.Kind == UnknownKind {
 			m.Kind = TerraformKind
 		}
+		return nil
 	})
 }
 
@@ -445,7 +440,7 @@ func checkModulesAndGroups(bp Blueprint) error {
 
 // validateModuleUseReferences verifies that any used modules exist and
 // are in the correct group
-func validateModuleUseReferences(p ModulePath, mod Module, bp Blueprint) error {
+func validateModuleUseReferences(p modulePath, mod Module, bp Blueprint) error {
 	errs := Errors{}
 	for iu, used := range mod.Use {
 		errs.At(p.Use.At(iu), validateModuleReference(bp, mod, used))
@@ -454,15 +449,17 @@ func validateModuleUseReferences(p ModulePath, mod Module, bp Blueprint) error {
 }
 
 func checkBackend(b TerraformBackend) error {
-	err := errors.New("can not use expressions in terraform_backend block")
-	val, perr := parseYamlString(b.Type)
-
-	if _, is := IsExpressionValue(val); is || perr != nil {
-		return err
+	const errMsg = "can not use variables in terraform_backend block, got '%s=%s'"
+	// TerraformBackend.Type is typed as string, "simple" variables and HCL literals stay "as is".
+	if hasVariable(b.Type) {
+		return fmt.Errorf(errMsg, "type", b.Type)
+	}
+	if _, is := IsYamlExpressionLiteral(cty.StringVal(b.Type)); is {
+		return fmt.Errorf(errMsg, "type", b.Type)
 	}
 	return cty.Walk(b.Configuration.AsObject(), func(p cty.Path, v cty.Value) (bool, error) {
 		if _, is := IsExpressionValue(v); is {
-			return false, err
+			return false, fmt.Errorf("can not use variables in terraform_backend block")
 		}
 		return true, nil
 	})
@@ -490,7 +487,7 @@ func validateBlueprint(bp Blueprint) error {
 
 // SkipValidator marks validator(s) as skipped,
 // if no validator is present, adds one, marked as skipped.
-func (dc *DeploymentConfig) SkipValidator(name string) {
+func (dc *DeploymentConfig) SkipValidator(name string) error {
 	if dc.Config.Validators == nil {
 		dc.Config.Validators = []Validator{}
 	}
@@ -504,6 +501,7 @@ func (dc *DeploymentConfig) SkipValidator(name string) {
 	if !skipped {
 		dc.Config.Validators = append(dc.Config.Validators, Validator{Validator: name, Skip: true})
 	}
+	return nil
 }
 
 // InputValueError signifies a problem with the blueprint name.
@@ -638,13 +636,12 @@ func IsProductOfModuleUse(v cty.Value) []ModuleID {
 }
 
 // WalkModules walks all modules in the blueprint and calls the walker function
-func (bp *Blueprint) WalkModules(walker func(ModulePath, *Module) error) error {
+func (bp *Blueprint) WalkModules(walker func(*Module) error) error {
 	for ig := range bp.DeploymentGroups {
 		g := &bp.DeploymentGroups[ig]
 		for im := range g.Modules {
-			p := Root.Groups.At(ig).Modules.At(im)
 			m := &g.Modules[im]
-			if err := walker(p, m); err != nil {
+			if err := walker(m); err != nil {
 				return err
 			}
 		}
@@ -652,21 +649,13 @@ func (bp *Blueprint) WalkModules(walker func(ModulePath, *Module) error) error {
 	return nil
 }
 
-func (bp *Blueprint) WalkModulesSafe(walker func(ModulePath, *Module)) {
-	bp.WalkModules(func(p ModulePath, m *Module) error {
-		walker(p, m)
-		return nil
-	})
-}
-
 // validate every module setting in the blueprint containing a reference
-func validateModuleSettingReferences(p ModulePath, m Module, bp Blueprint) error {
+func validateModuleSettingReferences(p modulePath, m Module, bp Blueprint) error {
 	errs := Errors{}
 	for k, v := range m.Settings.Items() {
-		for r, rp := range valueReferences(v) {
-			errs.At(
-				p.Settings.Dot(k).Cty(rp),
-				validateModuleSettingReference(bp, m, r))
+		for _, r := range valueReferences(v) {
+			// TODO: add a cty.Path suffix to the errors path for better location
+			errs.At(p.Settings.Dot(k), validateModuleSettingReference(bp, m, r))
 		}
 	}
 	return errs.OrNil()
@@ -683,66 +672,50 @@ func checkPackerGroups(groups []DeploymentGroup) error {
 	return errs.OrNil()
 }
 
-func varsTopologicalOrder(vars Dict) ([]string, error) {
-	// 0, 1, 2 - unvisited, on stack, exited
-	used := map[string]int{} // default is 0 - unvisited
-	res := []string{}
+func (bp *Blueprint) evalVars() (Dict, error) {
+	// 0 - unvisited
+	// 1 - on stack
+	// 2 - done
+	used := map[string]int{}
+	res := Dict{}
 
-	// walk vars in reverse topological order
+	// walk vars in reverse topological order, and evaluate them
 	var dfs func(string) error
 	dfs = func(n string) error {
 		used[n] = 1 // put on stack
-		v := vars.Get(n)
-		for ref, rp := range valueReferences(v) {
-			// TODO: instead of ref.Name render as a full reference
-			repr, p := ref.Name, Root.Vars.Dot(n).Cty(rp)
-
+		v := bp.Vars.Get(n)
+		for _, ref := range valueReferences(v) {
 			if !ref.GlobalVar {
-				return BpError{p, fmt.Errorf("non-global variable %q referenced in expression", repr)}
+				return BpError{
+					Root.Vars.Dot(n),
+					fmt.Errorf("non-global variable %q referenced in expression", ref.Name),
+				}
 			}
-
 			if used[ref.Name] == 1 {
-				return BpError{p, fmt.Errorf("cyclic dependency detected: %q -> %q", n, repr)}
+				return BpError{
+					Root.Vars.Dot(n),
+					fmt.Errorf("cyclic dependency detected: %q -> %q", n, ref.Name),
+				}
 			}
-
 			if used[ref.Name] == 0 {
 				if err := dfs(ref.Name); err != nil {
 					return err
 				}
 			}
 		}
-		used[n] = 2 // remove from stack and add to result
-		res = append(res, n)
-		return nil
+
+		used[n] = 2 // remove from stack and evaluate
+		ev, err := evalValue(v, Blueprint{Vars: res})
+		res.Set(n, ev)
+		return err
 	}
 
-	for n := range vars.Items() {
+	for n := range bp.Vars.Items() {
 		if used[n] == 0 { // unvisited
 			if err := dfs(n); err != nil {
-				return nil, err
+				return Dict{}, err
 			}
 		}
 	}
 	return res, nil
-}
-
-func (bp *Blueprint) evalVars() (Dict, error) {
-	order, err := varsTopologicalOrder(bp.Vars)
-	if err != nil {
-		return Dict{}, err
-	}
-
-	res := map[string]cty.Value{}
-	ctx := hcl.EvalContext{
-		Variables: map[string]cty.Value{},
-		Functions: functions()}
-	for _, n := range order {
-		ctx.Variables["var"] = cty.ObjectVal(res)
-		ev, err := eval(bp.Vars.Get(n), &ctx)
-		if err != nil {
-			return Dict{}, BpError{Root.Vars.Dot(n), err}
-		}
-		res[n] = ev
-	}
-	return NewDict(res), nil
 }

@@ -89,7 +89,7 @@ func TestEval(t *testing.T) {
 	}
 	d := NewDict(map[string]cty.Value{
 		"abyss": cty.ObjectVal(map[string]cty.Value{
-			"white": GlobalRef("zebra").AsValue(),
+			"white": GlobalRef("zebra").AsExpression().AsValue(),
 			"green": cty.StringVal("grass"),
 		})})
 	want := NewDict(map[string]cty.Value{

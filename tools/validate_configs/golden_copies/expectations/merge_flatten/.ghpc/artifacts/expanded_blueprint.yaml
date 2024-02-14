@@ -32,7 +32,6 @@ vars:
     ghpc_deployment: golden_copy_deployment
   project_id: invalid-project
   region: us-east4
-  region_number: 4
   zone: us-east4-c
 deployment_groups:
   - group: zero

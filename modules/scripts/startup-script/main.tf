@@ -20,16 +20,11 @@ locals {
 }
 
 locals {
-  monitoring_agent_installer = (
-    var.install_cloud_ops_agent || var.install_stackdriver_agent ?
-    [{
-      type        = "shell"
-      source      = "${path.module}/files/install_monitoring_agent.sh"
-      destination = "install_monitoring_agent_automatic.sh"
-      args        = var.install_cloud_ops_agent ? "ops" : "legacy" # install legacy (stackdriver)
-    }] :
-    []
-  )
+  ops_agent_installer = var.install_cloud_ops_agent ? [{
+    type        = "shell"
+    source      = "${path.module}/files/install_cloud_ops_agent.sh"
+    destination = "install_cloud_ops_agent_automatic.sh"
+  }] : []
 
   warnings = [
     {
@@ -89,7 +84,7 @@ locals {
   runners = concat(
     local.warnings,
     local.proxy_runner,
-    local.monitoring_agent_installer,
+    local.ops_agent_installer,
     local.ansible_installer,
     local.configure_ssh_runners,
     var.runners
@@ -171,13 +166,6 @@ resource "google_storage_bucket_object" "scripts" {
   timeouts {
     create = "10m"
     update = "10m"
-  }
-
-  lifecycle {
-    precondition {
-      condition     = !(var.install_cloud_ops_agent && var.install_stackdriver_agent)
-      error_message = "Only one of var.install_stackdriver_agent or var.install_cloud_ops_agent can be set. Stackdriver is recommended for best performance."
-    }
   }
 }
 

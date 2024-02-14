@@ -37,12 +37,6 @@ func (s *zeroSuite) TestValidateVars(c *C) {
 		c.Check(validateVars(vars), NotNil)
 	}
 
-	{ // Fail: Null value
-		vars := Dict{base}
-		vars.Set("fork", cty.NullVal(cty.String))
-		c.Check(validateVars(vars), NotNil)
-	}
-
 	{ // Fail: labels not a map
 		vars := Dict{base}
 		vars.Set("labels", cty.StringVal("a_string"))

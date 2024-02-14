@@ -85,7 +85,7 @@ variable "preserve_tpu" {
 }
 
 variable "zone" {
-  description = "Zone in which to create compute VMs. TPU partitions can only specify a single zone."
+  description = "Zone in which to create compute VMs. Additional zones in the same region can be specified in var.zones."
   type        = string
 }
 
@@ -96,7 +96,7 @@ variable "data_disks" {
 }
 
 variable "docker_image" {
-  description = "The gcp container registry id docker image to use in the TPU vms, it defaults to gcr.io/schedmd-slurm-public/tpu:slurm-gcp-6-3-tf-<var.tf_version>"
+  description = "The gcp container registry id docker image to use in the TPU vms, it defaults to gcr.io/schedmd-slurm-public/tpu:slurm-gcp-6-1-tf-<var.tf_version>"
   type        = string
   default     = null
 }
@@ -104,6 +104,7 @@ variable "docker_image" {
 variable "subnetwork_self_link" {
   type        = string
   description = "The name of the subnetwork to attach the TPU-vm of this nodeset to."
+  default     = null
 }
 
 variable "service_account" {

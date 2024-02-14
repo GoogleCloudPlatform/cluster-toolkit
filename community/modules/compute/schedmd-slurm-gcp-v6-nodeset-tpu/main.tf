@@ -34,9 +34,8 @@ locals {
     docker_image = var.docker_image
 
     enable_public_ip = !var.disable_public_ips
-    # TODO: rename to subnetwork_self_link, requires changes to the scripts
-    subnetwork      = var.subnetwork_self_link
-    service_account = var.service_account
-    zone            = var.zone
+    subnetwork       = var.subnetwork_self_link
+    service_account  = var.service_account
+    zone             = var.zone
   }
 }

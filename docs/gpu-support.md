@@ -6,9 +6,9 @@
   * HTCondor modules including [htcondor-install], [htcondor-setup] and
     [htcondor-execute-point].
   * [omnia-install]
-* Slurm on GCP modules where applicable, both version 5 and version 6
+* Slurm on GCP modules where applicable, both version 4 and version 5
   * `schedmd-slurm-gcp-v5-*`
-  * `schedmd-slurm-gcp-v6-*`
+  * `SchedMD-slurm-on-gcp-*`
 * PBS Pro modules (`pbspro-*`)
 * Cloud Batch modules through custom instance templates
 
@@ -69,6 +69,10 @@ resources.
 
 #### Interface Considerations
 
+The Slurm on GCP v4 modules (`SchedMD-slurm-on-gcp-*`) have a different
+interface for defining attached accelerators, `gpu_type` and `gpu_count`. These
+must be set even if the machine type implies GPUs.
+
 The Slurm on GCP v5 HPC Toolkit modules (`schedmd-slurm-gcp-v5-*`) have two
 variables that can be used to define attached GPUs. The variable
 `guest_accelerators` is the recommended option as it is consistent with other
@@ -80,8 +84,9 @@ provides consistency with the underlying terraform modules from the
 
 As mentioned above, VMs with many guest accelerators can take longer to deploy.
 Slurm sets timeouts for creating VMs, and it's possible for high GPU
-configurations to push past the default timeout. We recommend using the Slurm on
-GCP v5 modules.
+configurations to push past the default timeout. The timeout in the
+Slurm on GCP v4 HPC Toolkit modules (`SchedMD-slurm-on-gcp-*`) cannot
+be increased, therefore we recommend using the Slurm on GCP v5 modules.
 
 The v5 Toolkit modules (`schedmd-slurm-gcp-v5-*`) allow Slurm configuration
 timeouts to customized via the [cloud_parameters] variable on the [controller].
@@ -132,7 +137,7 @@ information, see the SchedMD documentation:
 * [srun Documentation](https://slurm.schedmd.com/srun.html)
 * [sbatch Documentation](https://slurm.schedmd.com/sbatch.html)
 
-[slurm-gcp]: https://github.com/GoogleCloudPlatform/slurm-gcp
+[slurm-gcp]: https://github.com/SchedMD/slurm-gcp
 [cloud_parameters]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/scheduler/schedmd-slurm-gcp-v5-controller#input_cloud_parameters
 
 ## Further Reading

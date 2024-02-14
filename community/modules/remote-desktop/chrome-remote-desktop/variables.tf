@@ -58,7 +58,7 @@ variable "network_storage" {
 variable "instance_image" {
   description = <<-EOD
     Image used to build chrome remote desktop node. The default image is from
-    family= \"debian-12\" and project = \"debian-cloud\". An alternative image is
+    family= \"debian-11\" and project = \"debian-cloud\". An alternative image is
     from family  = \"ubuntu-2204-lts\" and project = \"ubuntu-os-cloud\".
 
     Expected Fields:
@@ -69,7 +69,7 @@ variable "instance_image" {
   type        = map(string)
   default = {
     project = "debian-cloud"
-    family  = "debian-12"
+    family  = "debian-11"
   }
 }
 

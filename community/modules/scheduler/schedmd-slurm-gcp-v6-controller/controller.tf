@@ -35,7 +35,7 @@ locals {
 
 # INSTANCE TEMPLATE
 module "slurm_controller_template" {
-  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=6.3.4"
+  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=6.2.0"
   count  = local.have_template ? 0 : 1
 
   project_id          = var.project_id
@@ -76,7 +76,8 @@ module "slurm_controller_template" {
   source_image         = local.source_image                    # requires source_image_logic.tf
 
   # spot = TODO: add support for spot (?)
-  subnetwork = var.subnetwork_self_link
+  subnetwork_project = var.subnetwork_project
+  subnetwork         = var.subnetwork_self_link
 
   tags = concat([local.slurm_cluster_name], var.tags)
   # termination_action = TODO: add support for termination_action (?)
@@ -92,7 +93,7 @@ locals {
 }
 
 module "slurm_controller_instance" {
-  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/_slurm_instance?ref=6.3.4"
+  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/_slurm_instance?ref=6.2.0"
 
   access_config       = !var.disable_controller_public_ips ? [local.access_config] : []
   add_hostname_suffix = false
@@ -104,15 +105,14 @@ module "slurm_controller_instance" {
   slurm_cluster_name  = local.slurm_cluster_name
   slurm_instance_role = "controller"
   static_ips          = var.static_ips
+  subnetwork_project  = var.subnetwork_project
   subnetwork          = var.subnetwork_self_link
   zone                = var.zone
-  metadata            = var.metadata
 
-  labels = merge(local.labels, {
-    slurm_files_checksum = module.slurm_files.checksum
-  })
+  metadata = var.metadata
 
   depends_on = [
+    module.slurm_files,
     # Ensure nodes are destroyed before controller is
     module.cleanup_compute_nodes[0],
   ]
@@ -145,34 +145,24 @@ resource "google_secret_manager_secret_iam_member" "cloudsql_secret_accessor" {
 
   secret_id = google_secret_manager_secret.cloudsql[0].id
   role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${local.service_account.email}"
+  member    = "serviceAccount:${local.service_account[0].email}"
 }
 
 
 # Destroy all compute nodes on `terraform destroy`
 module "cleanup_compute_nodes" {
-  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_destroy_nodes?ref=6.3.4"
+  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_destroy_nodes?ref=6.2.0"
   count  = var.enable_cleanup_compute ? 1 : 0
 
   slurm_cluster_name = local.slurm_cluster_name
   project_id         = var.project_id
   when_destroy       = true
-
-
-  depends_on = [
-    # Depend on controller network, as a best effort to avoid
-    # subnetwork resourceInUseByAnotherResource error
-    # NOTE: Can not use nodeset subnetworks as "A static list expression is required"
-    var.subnetwork_self_link,
-    # Ensure VMs are destroyed before resource policies
-    module.cleanup_resource_policies[0],
-  ]
 }
 
 
 # Destroy all resource policies on `terraform destroy`
 module "cleanup_resource_policies" {
-  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_destroy_resource_policies?ref=6.3.4"
+  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_destroy_resource_policies?ref=6.2.0"
   count  = var.enable_cleanup_compute ? 1 : 0
 
   slurm_cluster_name = local.slurm_cluster_name

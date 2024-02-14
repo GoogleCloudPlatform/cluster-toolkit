@@ -130,6 +130,14 @@ deployment_groups:
     outputs:
     - startup_script
 
+  - id: partition
+    source: ./community/modules/compute/SchedMD-slurm-on-gcp-partition
+    use: [vpc]
+    outputs:
+    - partition
+    settings:
+      partition_name: compute
+
   - id: lustre
     source: ./community/modules/file-system/DDN-EXAScaler
     outputs:
@@ -138,3 +146,11 @@ deployment_groups:
     - mount_command
     - http_console
     - network_storage
+
+  - id: controller
+    source: ./community/modules/scheduler/SchedMD-slurm-on-gcp-controller
+    use:
+    - partition
+    - vpc
+    outputs:
+    - controller_name

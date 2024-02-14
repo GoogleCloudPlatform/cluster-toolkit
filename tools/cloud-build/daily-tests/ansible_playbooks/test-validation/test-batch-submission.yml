@@ -28,7 +28,7 @@
   - name: Submit batch job
     register: batch_submission
     changed_when: batch_submission.rc == 0
-    ansible.builtin.command: gcloud alpha batch jobs submit {{ deployment_name }} --config=/home/batch-jobs/cloud-batch-{{ deployment_name }}.yaml --location={{ cli_deployment_vars.region }} --project={{ custom_vars.project }}
+    ansible.builtin.command: gcloud alpha batch jobs submit {{ deployment_name }} --config=/home/batch-jobs/cloud-batch-{{ deployment_name }}.json --location={{ cli_deployment_vars.region }} --project={{ custom_vars.project }}
   - name: Wait for job to run
     changed_when: false
     ansible.builtin.command: gcloud alpha batch jobs describe {{ deployment_name }} --location={{ cli_deployment_vars.region }} --project={{ custom_vars.project }}

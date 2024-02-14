@@ -13,8 +13,14 @@
 # limitations under the License.
 
 variable "name" {
-  description = "Name of the nodeset. Automatically populated by the module id if not set"
+  description = "Name of the nodeset."
   type        = string
+  default     = "ghpc"
+
+  validation {
+    condition     = can(regex("^[a-z](?:[a-z0-9]{0,5})$", var.name))
+    error_message = "Nodeset name (var.name) must begin with a letter, be fully alphanumeric and be 6 characters or less. Regexp: '^[a-z](?:[a-z0-9]{0,5})$'."
+  }
 }
 
 variable "node_conf" {
@@ -32,7 +38,7 @@ variable "node_count_static" {
 variable "node_count_dynamic_max" {
   description = "Maximum number of dynamic nodes allowed in this partition."
   type        = number
-  default     = 10
+  default     = 1
 }
 
 ## VM Definition
@@ -76,7 +82,7 @@ variable "instance_image" {
     EOD
   type        = map(string)
   default = {
-    family  = "slurm-gcp-6-3-hpc-rocky-linux-8"
+    family  = "slurm-gcp-6-1-hpc-rocky-linux-8"
     project = "schedmd-slurm-public"
   }
 
@@ -372,46 +378,11 @@ EOD
 variable "subnetwork_self_link" {
   type        = string
   description = "Subnet to deploy to."
-}
-
-variable "additional_networks" {
-  description = "Additional network interface details for GCE, if any."
-  default     = []
-  type = list(object({
-    network            = string
-    subnetwork         = string
-    subnetwork_project = string
-    network_ip         = string
-    nic_type           = string
-    stack_type         = string
-    queue_count        = number
-    access_config = list(object({
-      nat_ip       = string
-      network_tier = string
-    }))
-    ipv6_access_config = list(object({
-      network_tier = string
-    }))
-    alias_ip_range = list(object({
-      ip_cidr_range         = string
-      subnetwork_range_name = string
-    }))
-  }))
-}
-
-variable "access_config" {
-  description = "Access configurations, i.e. IPs via which the VM instance can be accessed via the Internet."
-  type = list(object({
-    nat_ip       = string
-    network_tier = string
-  }))
-  default = []
-}
-
-variable "reservation_name" {
-  description = <<-EOD
-    Sets reservation affinity for instances created from this nodeset.
-  EOD
-  type        = string
   default     = null
+}
+
+variable "subnetwork_project" {
+  description = "The project the subnetwork belongs to."
+  type        = string
+  default     = ""
 }

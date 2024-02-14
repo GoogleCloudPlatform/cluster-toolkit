@@ -244,7 +244,7 @@ variable "instance_image" {
     EOD
   type        = map(string)
   default = {
-    family  = "slurm-gcp-6-3-hpc-rocky-linux-8"
+    family  = "slurm-gcp-6-1-hpc-rocky-linux-8"
     project = "schedmd-slurm-public"
   }
 
@@ -284,5 +284,12 @@ variable "tags" {
 
 variable "subnetwork_self_link" {
   type        = string
-  description = "Subnet to deploy to."
+  description = "Subnet to deploy to. Either network_self_link or subnetwork_self_link must be specified."
+  default     = null
+}
+
+variable "subnetwork_project" {
+  type        = string
+  description = "The project that subnetwork belongs to."
+  default     = null
 }

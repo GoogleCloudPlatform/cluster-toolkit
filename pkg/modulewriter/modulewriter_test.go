@@ -27,8 +27,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/google/go-cmp/cmp"
-	"github.com/hashicorp/hcl/v2/ext/typeexpr"
 	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/spf13/afero"
 	"github.com/zclconf/go-cty/cty"
@@ -58,8 +56,8 @@ func (s *MySuite) getDeploymentConfigForTest() config.DeploymentConfig {
 		Kind:   config.TerraformKind,
 		ID:     "testModule",
 		Settings: config.NewDict(map[string]cty.Value{
-			"deployment_name": cty.NullVal(cty.String),
-			"project_id":      cty.NullVal(cty.String),
+			"deployment_name": cty.NilVal,
+			"project_id":      cty.NilVal,
 		}),
 		Outputs: []modulereader.OutputInfo{
 			{
@@ -236,42 +234,89 @@ func (s *MySuite) TestRestoreTfState(c *C) {
 	c.Check(err, IsNil)
 }
 
-func TestGetTypeTokensRelaxed(t *testing.T) {
-	type test struct {
-		input cty.Type
-		want  string
-	}
-	tests := []test{
-		{cty.Number, "number"},
-		{cty.String, "string"},
-		{cty.Bool, "bool"},
-		{cty.Tuple([]cty.Type{}), "list(any)"},
-		{cty.Tuple([]cty.Type{cty.String}), "list(any)"},
-		{cty.List(cty.String), "list(any)"},
-		{cty.Object(map[string]cty.Type{}), "any"},
-		{cty.Object(map[string]cty.Type{"Lorum": cty.String}), "any"},
-		{cty.Map(cty.String), "any"},
-		{cty.DynamicPseudoType, "any"},
-	}
-	for _, tc := range tests {
-		t.Run(typeexpr.TypeString(tc.input), func(t *testing.T) {
-			got := string(getTypeTokens(relaxVarType(tc.input)).Bytes())
-			if diff := cmp.Diff(tc.want, got); diff != "" {
-				t.Errorf("diff (-want +got):\n%s", diff)
-			}
-		})
-	}
+func (s *zeroSuite) TestGetTypeTokens(c *C) {
+	// Success Integer
+	tok := getTypeTokens(cty.NumberIntVal(-1))
+	c.Assert(tok, HasLen, 1)
+	c.Assert(string(tok[0].Bytes), Equals, string([]byte("number")))
+
+	tok = getTypeTokens(cty.NumberIntVal(0))
+	c.Assert(tok, HasLen, 1)
+	c.Assert(string(tok[0].Bytes), Equals, string([]byte("number")))
+
+	tok = getTypeTokens(cty.NumberIntVal(1))
+	c.Assert(tok, HasLen, 1)
+	c.Assert(string(tok[0].Bytes), Equals, string([]byte("number")))
+
+	// Success Float
+	tok = getTypeTokens(cty.NumberFloatVal(-99.9))
+	c.Assert(tok, HasLen, 1)
+	c.Assert(string(tok[0].Bytes), Equals, string([]byte("number")))
+
+	tok = getTypeTokens(cty.NumberFloatVal(99.9))
+	c.Assert(tok, HasLen, 1)
+	c.Assert(string(tok[0].Bytes), Equals, string([]byte("number")))
+
+	// Success String
+	tok = getTypeTokens(cty.StringVal("Lorum"))
+	c.Assert(tok, HasLen, 1)
+	c.Assert(string(tok[0].Bytes), Equals, string([]byte("string")))
+
+	tok = getTypeTokens(cty.StringVal(""))
+	c.Assert(tok, HasLen, 1)
+	c.Assert(string(tok[0].Bytes), Equals, string([]byte("string")))
+
+	// Success Bool
+	tok = getTypeTokens(cty.BoolVal(true))
+	c.Assert(tok, HasLen, 1)
+	c.Assert(string(tok[0].Bytes), Equals, string([]byte("bool")))
+
+	tok = getTypeTokens(cty.BoolVal(false))
+	c.Assert(tok, HasLen, 1)
+	c.Assert(string(tok[0].Bytes), Equals, string([]byte("bool")))
+
+	// Success tuple
+	tok = getTypeTokens(cty.TupleVal([]cty.Value{}))
+	c.Assert(tok, HasLen, 1)
+	c.Assert(string(tok[0].Bytes), Equals, string([]byte("list")))
+
+	tok = getTypeTokens(cty.TupleVal([]cty.Value{cty.StringVal("Lorum")}))
+	c.Assert(tok, HasLen, 1)
+	c.Assert(string(tok[0].Bytes), Equals, string([]byte("list")))
+
+	// Success list
+	tok = getTypeTokens(cty.ListVal([]cty.Value{cty.StringVal("Lorum")}))
+	c.Assert(tok, HasLen, 1)
+	c.Assert(string(tok[0].Bytes), Equals, string([]byte("list")))
+
+	// Success object
+	tok = getTypeTokens(cty.ObjectVal(map[string]cty.Value{}))
+	c.Assert(tok, HasLen, 1)
+	c.Assert(string(tok[0].Bytes), Equals, string([]byte("any")))
+
+	val := cty.ObjectVal(map[string]cty.Value{"Lorum": cty.StringVal("Ipsum")})
+	tok = getTypeTokens(val)
+	c.Assert(tok, HasLen, 1)
+	c.Assert(string(tok[0].Bytes), Equals, string([]byte("any")))
+
+	// Success Map
+	val = cty.MapVal(map[string]cty.Value{"Lorum": cty.StringVal("Ipsum")})
+	tok = getTypeTokens(val)
+	c.Assert(tok, HasLen, 1)
+	c.Assert(string(tok[0].Bytes), Equals, string([]byte("any")))
+
+	// Success any
+	tok = getTypeTokens(cty.NullVal(cty.DynamicPseudoType))
+	c.Assert(tok, HasLen, 1)
+	c.Assert(string(tok[0].Bytes), Equals, string([]byte("any")))
 }
 
-func (s *MySuite) TestWriteHclFile(c *C) {
-	hclF := hclwrite.NewEmptyFile()
-	hclF.Body().SetAttributeValue("zebra", cty.NumberIntVal(0))
-
+func (s *MySuite) TestCreateBaseFile(c *C) {
 	// Success
 	baseFilename := "main.tf_TestCreateBaseFile"
 	goodPath := filepath.Join(s.testDir, baseFilename)
-	c.Assert(writeHclFile(goodPath, hclF), IsNil)
-
+	err := createBaseFile(goodPath)
+	c.Assert(err, IsNil)
 	fi, err := os.Stat(goodPath)
 	c.Assert(err, IsNil)
 	c.Assert(fi.Name(), Equals, baseFilename)
@@ -280,11 +325,26 @@ func (s *MySuite) TestWriteHclFile(c *C) {
 	b, _ := os.ReadFile(goodPath)
 	c.Assert(strings.Contains(string(b), "Licensed under the Apache License"),
 		Equals, true)
-	c.Assert(strings.Contains(string(b), "zebra"), Equals, true)
 
 	// Error: not a correct path
 	fakePath := filepath.Join("not/a/real/dir", "main.tf_TestCreateBaseFile")
-	c.Assert(writeHclFile(fakePath, hclF), ErrorMatches, ".* no such file or directory")
+	err = createBaseFile(fakePath)
+	c.Assert(err, ErrorMatches, ".* no such file or directory")
+}
+
+func (s *MySuite) TestAppendHCLToFile(c *C) {
+	// Setup
+	testFilename := "main.tf_TestAppendHCLToFile"
+	testPath := filepath.Join(s.testDir, testFilename)
+	_, err := os.Create(testPath)
+	c.Assert(err, IsNil)
+	hclFile := hclwrite.NewEmptyFile()
+	hclBody := hclFile.Body()
+	hclBody.SetAttributeValue("dummyAttributeName", cty.NumberIntVal(0))
+
+	// Success
+	err = appendHCLToFile(testPath, hclFile.Bytes())
+	c.Assert(err, IsNil)
 }
 
 func stringExistsInFile(str string, filename string) (bool, error) {
@@ -361,10 +421,7 @@ func (s *MySuite) TestWriteOutputs(c *C) {
 	// Success: Outputs added
 	outputList := []modulereader.OutputInfo{
 		{Name: "output1"},
-		{
-			Name:      "output2",
-			Sensitive: true,
-		},
+		{Name: "output2"},
 	}
 	moduleWithOutputs := config.Module{Outputs: outputList, ID: "testMod"}
 	testModules = []config.Module{moduleWithOutputs}
@@ -380,7 +437,7 @@ func (s *MySuite) TestWriteOutputs(c *C) {
 
 	// Failure: Bad path
 	err = writeOutputs(testModules, "not/a/real/path")
-	c.Assert(err, ErrorMatches, ".*outputs.tf.*")
+	c.Assert(err, ErrorMatches, "error creating outputs.tf file: .*")
 
 }
 
@@ -401,7 +458,7 @@ func (s *MySuite) TestWriteVariables(c *C) {
 
 	// Failure: Bad path
 	err = writeVariables(testVars, noIntergroupVars, "not/a/real/path")
-	c.Assert(err, NotNil)
+	c.Assert(err, ErrorMatches, "error creating variables.tf file: .*")
 
 	// Success, common vars
 	testVars["deployment_name"] = cty.StringVal("test_deployment")
@@ -436,7 +493,8 @@ func (s *MySuite) TestWriteProviders(c *C) {
 	c.Assert(exists, Equals, false)
 
 	// Failure: Bad Path
-	c.Assert(writeProviders(testVars, "not/a/real/path"), NotNil)
+	err = writeProviders(testVars, "not/a/real/path")
+	c.Assert(err, ErrorMatches, "error creating providers.tf file: .*")
 
 	// Success: All vars
 	testVars["project_id"] = cty.StringVal("test_project")
@@ -460,39 +518,44 @@ func (s *MySuite) TestWriteDeploymentGroup_PackerWriter(c *C) {
 	deploymentio := deploymentio.GetDeploymentioLocal()
 	testWriter := PackerWriter{}
 
-	otherMod := config.Module{ID: "tortoise"}
-
-	mod := config.Module{
-		Kind: config.PackerKind,
-		ID:   "prince",
-		Settings: config.NewDict(map[string]cty.Value{
-			"zebra":  cty.StringVal("checker"),                                      // const
-			"salmon": config.GlobalRef("golf").AsValue(),                            // var
-			"bear":   config.Reference{Module: otherMod.ID, Name: "rome"}.AsValue(), // IGC
-		}),
+	// No Packer modules
+	deploymentName := "deployment_TestWriteModuleLevel_PackerWriter"
+	deploymentDir := filepath.Join(s.testDir, deploymentName)
+	if err := deploymentio.CreateDirectory(deploymentDir); err != nil {
+		c.Fatal(err)
 	}
-
-	dc := config.DeploymentConfig{
-		Config: config.Blueprint{
-			Vars: config.NewDict(map[string]cty.Value{
-				"golf": cty.NumberIntVal(17),
-			}),
-			DeploymentGroups: []config.DeploymentGroup{
-				{Name: "bread", Modules: []config.Module{otherMod}},
-				{Name: "green", Modules: []config.Module{mod}},
-			},
-		},
+	groupDir := filepath.Join(deploymentDir, "packerGroup")
+	if err := deploymentio.CreateDirectory(groupDir); err != nil {
+		c.Fatal(err)
 	}
-
-	dir := c.MkDir()
-	moduleDir := filepath.Join(dir, string(mod.ID))
+	moduleDir := filepath.Join(groupDir, "testPackerModule")
 	if err := deploymentio.CreateDirectory(moduleDir); err != nil {
 		c.Fatal(err)
 	}
-	instructions := new(strings.Builder)
 
-	c.Assert(testWriter.writeDeploymentGroup(dc, 1, dir, instructions), IsNil)
-	_, err := os.Stat(filepath.Join(moduleDir, packerAutoVarFilename))
+	testPackerModule := config.Module{
+		Kind: config.PackerKind,
+		ID:   "testPackerModule",
+	}
+	testDeploymentGroup := config.DeploymentGroup{
+		Name:    "packerGroup",
+		Modules: []config.Module{testPackerModule},
+	}
+
+	testDC := config.DeploymentConfig{
+		Config: config.Blueprint{
+			DeploymentGroups: []config.DeploymentGroup{
+				testDeploymentGroup,
+			},
+		},
+	}
+	f, err := os.CreateTemp("", "tmpf")
+	if err != nil {
+		c.Fatal()
+	}
+	defer os.Remove(f.Name())
+	testWriter.writeDeploymentGroup(testDC, 0, groupDir, f)
+	_, err = os.Stat(filepath.Join(moduleDir, packerAutoVarFilename))
 	c.Assert(err, IsNil)
 }
 
@@ -505,12 +568,33 @@ func (s *MySuite) TestWritePackerAutoVars(c *C) {
 	// fail writing to a bad path
 	badDestPath := "not/a/real/path"
 	err := writePackerAutovars(vars.Items(), badDestPath)
-	expErr := fmt.Sprintf(".*%s.*", packerAutoVarFilename)
+	expErr := fmt.Sprintf("error creating variables file %s:.*", packerAutoVarFilename)
 	c.Assert(err, ErrorMatches, expErr)
 
 	// success
 	err = writePackerAutovars(vars.Items(), c.MkDir())
 	c.Assert(err, IsNil)
+
+}
+
+func (s *zeroSuite) TestStringEscape(c *C) {
+	f := func(s string) string {
+		toks := config.TokensForValue(cty.StringVal(s))
+		return string(toks.Bytes())
+	}
+	// LiteralVariables
+	c.Check(f(`\((not.var))`), Equals, `"((not.var))"`)
+	c.Check(f(`abc\((not.var))abc`), Equals, `"abc((not.var))abc"`)
+	c.Check(f(`abc \((not.var)) abc`), Equals, `"abc ((not.var)) abc"`)
+	c.Check(f(`abc \((not.var1)) abc \((not.var2)) abc`), Equals, `"abc ((not.var1)) abc ((not.var2)) abc"`)
+	c.Check(f(`abc \\((escape.backslash))`), Equals, `"abc \\((escape.backslash))"`)
+
+	// BlueprintVariables
+	c.Check(f(`\$(not.var)`), Equals, `"$(not.var)"`)
+	c.Check(f(`abc\$(not.var)abc`), Equals, `"abc$(not.var)abc"`)
+	c.Check(f(`abc \$(not.var) abc`), Equals, `"abc $(not.var) abc"`)
+	c.Check(f(`abc \$(not.var1) abc \$(not.var2) abc`), Equals, `"abc $(not.var1) abc $(not.var2) abc"`)
+	c.Check(f(`abc \\$(escape.backslash)`), Equals, `"abc \\$(escape.backslash)"`)
 
 }
 
@@ -578,13 +662,12 @@ func (s *zeroSuite) TestSubstituteIgcReferencesInModule(c *C) {
 		config.MustParseExpression(`module.golf.red + 6 + module.golf.green`).AsValue(),
 		config.MustParseExpression(`module.tennis.brown`).AsValue(),
 	}))
-	m, err := SubstituteIgcReferencesInModule(
+	m := SubstituteIgcReferencesInModule(
 		config.Module{Settings: d},
 		map[config.Reference]modulereader.VarInfo{
 			config.ModuleRef("golf", "red"):   {Name: "pink"},
 			config.ModuleRef("golf", "green"): {Name: "lime"},
 		})
-	c.Assert(err, IsNil)
 	c.Check(m.Settings.Items(), DeepEquals, map[string]cty.Value{"fold": cty.TupleVal([]cty.Value{
 		cty.StringVal("zebra"),
 		config.MustParseExpression(`var.pink + 6 + var.lime`).AsValue(),

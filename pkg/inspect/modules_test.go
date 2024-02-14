@@ -23,8 +23,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hashicorp/hcl/v2/ext/typeexpr"
-	"github.com/zclconf/go-cty/cty"
 	"golang.org/x/exp/slices"
 )
 
@@ -123,7 +121,7 @@ func checkInputType(t *testing.T, mod modInfo, input string, expected string) {
 		t.Errorf("%s does not have input %s", mod.Source, input)
 	}
 	expected = modulereader.NormalizeType(expected)
-	got := typeexpr.TypeString(i.Type)
+	got := modulereader.NormalizeType(i.Type)
 	if expected != got {
 		t.Errorf("%s %s has unexpected type expected:\n%#v\ngot:\n%#v",
 			mod.Source, input, expected, got)
@@ -150,7 +148,7 @@ func TestNetworkStorage(t *testing.T) {
 
 	for _, mod := range notEmpty(query(hasInput("network_storage")), t) {
 		i, _ := mod.Input("network_storage")
-		got := typeexpr.TypeString(i.Type)
+		got := modulereader.NormalizeType(i.Type)
 		if got != obj && got != lst {
 			t.Errorf("%s `network_storage` has unexpected type expected:\n%#v\nor\n%#v\ngot:\n%#v",
 				mod.Source, obj, lst, got)
@@ -191,29 +189,8 @@ func TestMetadataInjectModuleId(t *testing.T) {
 			if !ok {
 				t.Fatalf("has no input %q", gm.InjectModuleId)
 			}
-			if in.Type != cty.String {
+			if in.Type != "string" {
 				t.Errorf("%q type is not a string, but %q", gm.InjectModuleId, in.Type)
-			}
-		})
-	}
-}
-
-func TestOutputForbiddenNames(t *testing.T) {
-	nowhere := []string{}
-	allowed := map[string][]string{
-		// Global blueprint variables we don't want to get overwritten.
-		"project_id":      {"community/modules/project/new-project"},
-		"labels":          nowhere,
-		"region":          nowhere,
-		"zone":            nowhere,
-		"deployment_name": nowhere,
-	}
-	for _, mod := range query(all()) {
-		t.Run(mod.Source, func(t *testing.T) {
-			for _, out := range mod.Outputs {
-				if where, ok := allowed[out.Name]; ok && !slices.Contains(where, mod.Source) {
-					t.Errorf("forbidden name for output %q", out.Name)
-				}
 			}
 		})
 	}

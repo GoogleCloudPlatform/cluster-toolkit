@@ -31,9 +31,6 @@ images to internal projects.
 [shell]: #input_shell_scripts
 [ansible]: #input_ansible_playbooks
 [hpcimage]: https://cloud.google.com/compute/docs/instances/create-hpc-vm
-[Image Builder]: ../../../examples/image-builder.yaml
-[startup-script]: ../../../modules/scripts/startup-script
-[examples README]: ../../../examples/README.md#image-builderyaml-
 [startup-metadata]: https://cloud.google.com/compute/docs/instances/startup-scripts/linux
 
 ## Example blueprints
@@ -50,6 +47,16 @@ The [Image Builder] blueprint demonstrates a solution that builds an image using
 * A Toolkit runner that installs a custom script
 
 Please review the [examples README] for usage instructions.
+
+### Intel-Optimized Slurm Cluster
+
+The [Intel-Optimized] Slurm Cluster [blueprint](../../../community/examples/intel/hpc-intel-select-slurm.yaml)
+adds the Intel compliance software on top of a Slurm on GCP image.
+
+[Image Builder]: ../../../examples/image-builder.yaml
+[startup-script]: ../../../modules/scripts/startup-script
+[examples README]: ../../../examples/README.md#image-builderyaml-
+[Intel-Optimized]: ../../../community/examples/intel/README.md#intel-optimized-slurm-cluster
 
 ## Order of execution
 

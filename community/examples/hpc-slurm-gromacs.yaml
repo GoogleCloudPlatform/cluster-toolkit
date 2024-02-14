@@ -29,7 +29,7 @@ deployment_groups:
 - group: primary
   modules:
   - id: network1
-    source: modules/network/vpc
+    source: modules/network/pre-existing-vpc
 
   ## Filesystems
   - id: appsfs
@@ -49,7 +49,6 @@ deployment_groups:
     source: community/modules/scripts/spack-setup
     settings:
       install_dir: /sw/spack
-      spack_ref: v0.20.0
 
   - id: spack-execute
     source: community/modules/scripts/spack-execute
@@ -69,11 +68,11 @@ deployment_groups:
                 projections:
                   all: '{name}/{version}-{compiler.name}-{compiler.version}'
       commands: |
-        ## Un-comment and update mirror_url to install from spack cache
-        ## if ! spack mirror list | grep -q gcs_cache; then
-        ##   spack mirror add --scope site gcs_cache gs://optionally_set_spack_cache_bucket
-        ## fi
-        ## spack buildcache keys --install --trust
+        # Un-comment and update mirror_url to install from spack cache
+        # if ! spack mirror list | grep -q gcs_cache; then
+        #   spack mirror add --scope site gcs_cache gs://optionally_set_spack_cache_bucket
+        # fi
+        # spack buildcache keys --install --trust
 
         spack config --scope defaults add config:build_stage:/sw/spack/spack-stage
         spack config --scope defaults add -f /tmp/projections-config.yaml
@@ -83,52 +82,38 @@ deployment_groups:
         spack compiler find --scope site
 
         spack install intel-mpi@2018.4.274%gcc@10.3.0
-        spack install gromacs@2023.1 %gcc@10.3.0 ^intel-mpi@2018.4.274 ^cmake@3.26.3 %gcc@8.5.0
-
-  - id: script
-    source: modules/scripts/startup-script
-    settings:
-      runners:
-      # remove lustre client temporary to avoid startup failure due to known
-      # issue.
-      - type: shell
-        destination: remove_lustre_client.sh
-        content: |
-          #!/bin/bash
-          rm /etc/yum.repos.d/lustre-client.repo
-      - $(spack-execute.spack_runner)
-
-  - id: compute_nodeset
-    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [network1]
-    settings:
-      node_count_dynamic_max: 20
-      bandwidth_tier: gvnic_enabled
+        spack install gromacs@2023.1 %gcc@10.3.0 ^intel-mpi@2018.4.274 ^cmake@3.26.3 %gcc@4.8.5
 
   - id: compute_partition
-    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
-    use: [compute_nodeset, homefs, appsfs]
-    settings:
-      partition_name: compute
-      is_default: true
-
-  - id: slurm_login
-    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
-    use: [network1]
-    settings:
-      name_prefix: login
-      machine_type: n2-standard-4
-      disable_login_public_ips: false
-
-  - id: slurm_controller
-    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    source: community/modules/compute/SchedMD-slurm-on-gcp-partition
     use:
     - network1
-    - compute_partition
-    - slurm_login
     - homefs
     - appsfs
     settings:
-      disable_controller_public_ips: false
-      login_startup_script: $(script.startup_script)
-      login_startup_scripts_timeout: 21600
+      partition_name: compute
+      max_node_count: 20
+      bandwidth_tier: gvnic_enabled
+
+  - id: slurm_controller
+    source: community/modules/scheduler/SchedMD-slurm-on-gcp-controller
+    use:
+    - network1
+    - homefs
+    - appsfs
+    - compute_partition
+    settings:
+      login_node_count: 1
+
+  - id: slurm_login
+    source: community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
+    use:
+    - network1
+    - homefs
+    - appsfs
+    - slurm_controller
+    - spack-execute
+    settings:
+      login_machine_type: c2-standard-4
+      login_scopes:
+      - https://www.googleapis.com/auth/cloud-platform

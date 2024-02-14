@@ -18,8 +18,6 @@ locals {
 }
 
 locals {
-  name = substr(replace(var.name, "/[^a-z0-9]/", ""), 0, 6)
-
   additional_disks = [
     for ad in var.additional_disks : {
       disk_name    = ad.disk_name
@@ -32,14 +30,11 @@ locals {
     }
   ]
 
-  public_access_config = var.disable_public_ips ? [] : [{ nat_ip = null, network_tier = null }]
-  access_config        = length(var.access_config) == 0 ? local.public_access_config : var.access_config
-
   nodeset = {
     node_count_static      = var.node_count_static
     node_count_dynamic_max = var.node_count_dynamic_max
     node_conf              = var.node_conf
-    nodeset_name           = local.name
+    nodeset_name           = var.name
 
     disk_auto_delete = var.disk_auto_delete
     disk_labels      = merge(local.labels, var.disk_labels)
@@ -53,6 +48,7 @@ locals {
 
     enable_confidential_vm = var.enable_confidential_vm
     enable_placement       = var.enable_placement
+    enable_public_ip       = !var.disable_public_ips
     enable_oslogin         = var.enable_oslogin
     enable_shielded_vm     = var.enable_shielded_vm
     gpu                    = one(local.guest_accelerator)
@@ -71,13 +67,11 @@ locals {
     source_image_family      = local.source_image_family             # requires source_image_logic.tf
     source_image_project     = local.source_image_project_normalized # requires source_image_logic.tf
     source_image             = local.source_image                    # requires source_image_logic.tf
-    subnetwork_self_link     = var.subnetwork_self_link
-    additional_networks      = var.additional_networks
-    access_config            = local.access_config
+    subnetwork_project       = var.subnetwork_project
+    subnetwork               = var.subnetwork_self_link
     tags                     = var.tags
     spot                     = var.enable_spot_vm
     termination_action       = try(var.spot_instance_config.termination_action, null)
-    reservation_name         = var.reservation_name
 
     zones             = toset(concat([var.zone], tolist(var.zones)))
     zone_target_shape = var.zone_target_shape

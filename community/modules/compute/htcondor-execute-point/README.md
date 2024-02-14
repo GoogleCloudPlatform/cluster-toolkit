@@ -3,7 +3,7 @@
 This module performs the following tasks:
 
 - create an instance template from which execute points will be created
-- create a managed instance group ([MIG][mig]) for execute points
+- create a managed instance group (MIG) for execute points
 - create a Toolkit runner to configure the autoscaler to scale the MIG
 
 It is expected to be used with the [htcondor-install] and [htcondor-setup]
@@ -11,7 +11,6 @@ modules.
 
 [htcondor-install]: ../../scripts/htcondor-install/README.md
 [htcondor-setup]: ../../scheduler/htcondor-setup/README.md
-[mig]: https://cloud.google.com/compute/docs/instance-groups/
 
 ### Known limitations
 
@@ -128,40 +127,6 @@ the University of Wisconsin-Madison. Support for HTCondor is available via:
 
 [chtc]: https://chtc.cs.wisc.edu/
 
-## Behavior of Managed Instance Group (MIG)
-
-Regional [MIGs][mig] are used to provision Execute Points. By default, VMs
-will be provisioned in any of the zones available in that region, however, it
-can be constrained to run in fewer zones (or a single zone) using
-[var.zones](#input_zones).
-
-When the configuration of an Execute Point is changed, the MIG can be configured
-to [replace the VM][replacement] using a "proactive" or "opportunistic" policy.
-By default, the policy is set to opportunistic. In practice, this means that
-Execute Points will _NOT_ be automatically replaced by Terraform when changes to
-the instance template / HTCondor configuration are made. We recommend leaving
-this at the default value as it will allow the HTCondor autoscaler to replace
-VMs when they become idle without disrupting running jobs.
-
-However, if it is desired [var.update_policy](#input_update_policy) can be set
-to "PROACTIVE" to enable automatic replacement. This will disrupt running jobs
-and send them back to the queue. Alternatively, one can leave the setting at
-the default value of "OPPORTUNISTIC" and update:
-
-- intentionally by issuing an update via Cloud Console or using gcloud (below)
-- VMs becomes unhealthy or are otherwise automatically replaced (e.g. regular
-  Google Cloud maintenance)
-
-For example, to manually update all instances in a MIG:
-
-```text
-gcloud compute instance-groups managed update-instances \
-   <<NAME-OF-MIG>> --all-instances --region <<REGION>> \
-   --project <<PROJECT_ID>> --minimal-action replace
-```
-
-[replacement]: https://cloud.google.com/compute/docs/instance-groups/rolling-out-updates-to-managed-instance-groups#type
-
 ## Known Issues
 
 When using OS Login with "external users" (outside of the Google Cloud
@@ -212,7 +177,7 @@ limitations under the License.
 |------|--------|---------|
 | <a name="module_execute_point_instance_template"></a> [execute\_point\_instance\_template](#module\_execute\_point\_instance\_template) | terraform-google-modules/vm/google//modules/instance_template | ~> 8.0 |
 | <a name="module_mig"></a> [mig](#module\_mig) | github.com/terraform-google-modules/terraform-google-vm//modules/mig | aea74d1 |
-| <a name="module_startup_script"></a> [startup\_script](#module\_startup\_script) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | v1.27.0&depth=1 |
+| <a name="module_startup_script"></a> [startup\_script](#module\_startup\_script) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | 50644b2 |
 
 ## Resources
 
@@ -239,7 +204,7 @@ limitations under the License.
 | <a name="input_instance_image"></a> [instance\_image](#input\_instance\_image) | HTCondor execute point VM image<br><br>Expected Fields:<br>name: The name of the image. Mutually exclusive with family.<br>family: The image family to use. Mutually exclusive with name.<br>project: The project where the image is hosted. | `map(string)` | <pre>{<br>  "family": "hpc-rocky-linux-8",<br>  "project": "cloud-hpc-image-public"<br>}</pre> | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to HTConodr execute points | `map(string)` | n/a | yes |
 | <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | Machine type to use for HTCondor execute points | `string` | `"n2-standard-4"` | no |
-| <a name="input_max_size"></a> [max\_size](#input\_max\_size) | Maximum size of the HTCondor execute point pool. | `number` | `5` | no |
+| <a name="input_max_size"></a> [max\_size](#input\_max\_size) | Maximum size of the HTCondor execute point pool. | `number` | `100` | no |
 | <a name="input_metadata"></a> [metadata](#input\_metadata) | Metadata to add to HTCondor execute points | `map(string)` | `{}` | no |
 | <a name="input_min_idle"></a> [min\_idle](#input\_min\_idle) | Minimum number of idle VMs in the HTCondor pool (if pool reaches var.max\_size, this minimum is not guaranteed); set to ensure jobs beginning run more quickly. | `number` | `0` | no |
 | <a name="input_name_prefix"></a> [name\_prefix](#input\_name\_prefix) | Name prefix given to hostnames in this group of execute points; must be unique across all instances of this module | `string` | n/a | yes |
@@ -252,7 +217,6 @@ limitations under the License.
 | <a name="input_spot"></a> [spot](#input\_spot) | Provision VMs using discounted Spot pricing, allowing for preemption | `bool` | `false` | no |
 | <a name="input_subnetwork_self_link"></a> [subnetwork\_self\_link](#input\_subnetwork\_self\_link) | The self link of the subnetwork HTCondor execute points will join | `string` | `null` | no |
 | <a name="input_target_size"></a> [target\_size](#input\_target\_size) | Initial size of the HTCondor execute point pool; set to null (default) to avoid Terraform management of size. | `number` | `null` | no |
-| <a name="input_update_policy"></a> [update\_policy](#input\_update\_policy) | Replacement policy for Access Point Managed Instance Group ("PROACTIVE" to replace immediately or "OPPORTUNISTIC" to replace upon instance power cycle) | `string` | `"OPPORTUNISTIC"` | no |
 | <a name="input_windows_startup_ps1"></a> [windows\_startup\_ps1](#input\_windows\_startup\_ps1) | Startup script to run at boot-time for Windows-based HTCondor execute points | `list(string)` | `[]` | no |
 | <a name="input_zones"></a> [zones](#input\_zones) | Zone(s) in which execute points may be created. If not supplied, will default to all zones in var.region. | `list(string)` | `[]` | no |
 
