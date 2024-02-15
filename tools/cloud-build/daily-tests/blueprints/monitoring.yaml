@@ -21,6 +21,8 @@ vars:
   deployment_name: monitoring
   region: us-central1
   zone: us-central1-c
+  add_deployment_name_before_prefix: true
+  machine_type: c2-standard-4
 
 deployment_groups:
 - group: primary
@@ -38,24 +40,47 @@ deployment_groups:
   - id: bucket-for-startup-script
     source: community/modules/file-system/cloud-storage-bucket
 
-  - id: startup
+  - id: startup-ops
     source: modules/scripts/startup-script
     use: [bucket-for-startup-script]
     settings:
       install_cloud_ops_agent: true
 
-  - id: workstation
-    source: ./modules/compute/vm-instance
+  - id: workstation-ops
+    source: modules/compute/vm-instance
     use:
     - network
     - homefs
-    - startup
+    - startup-ops
     settings:
-      machine_type: c2-standard-4
-      metadata:
-        enable-oslogin: true
+      name_prefix: workstation-ops
+
+  - id: startup-stack
+    source: modules/scripts/startup-script
+    use: [bucket-for-startup-script]
+    settings:
+      install_stackdriver_agent: true
+
+  - id: workstation-stack
+    source: modules/compute/vm-instance
+    use:
+    - network
+    - homefs
+    - startup-stack
+    settings:
+      name_prefix: workstation-stackdriver
+
+  - id: wait0
+    source: community/modules/scripts/wait-for-startup
+    settings:
+      instance_name: $(workstation-ops.name[0])
+
+  - id: wait1
+    source: community/modules/scripts/wait-for-startup
+    settings:
+      instance_name: $(workstation-stack.name[0])
 
   - id: hpc-dash
-    source: ./modules/monitoring/dashboard
+    source: modules/monitoring/dashboard
     settings:
       title: $(vars.deployment_name)

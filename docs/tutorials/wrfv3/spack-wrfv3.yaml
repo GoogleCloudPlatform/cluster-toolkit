@@ -26,7 +26,7 @@ deployment_groups:
 - group: primary
   modules:
   - id: network1
-    source: modules/network/pre-existing-vpc
+    source: modules/network/vpc
 
   - id: hpc_dash
     source: modules/monitoring/dashboard
@@ -35,8 +35,8 @@ deployment_groups:
   - id: spack-setup
     source: community/modules/scripts/spack-setup
     settings:
-      install_dir: /apps/spack
-      spack_ref: v0.19.0
+      install_dir: /opt/apps/spack
+      spack_ref: v0.20.0
 
   - id: spack-execute
     source: community/modules/scripts/spack-execute
@@ -88,7 +88,7 @@ deployment_groups:
         # fi
         # spack buildcache keys --install --trust
 
-        spack config --scope defaults add config:build_stage:/apps/spack/spack-stage
+        spack config --scope defaults add config:build_stage:/opt/apps/spack/spack-stage
         spack config --scope defaults add -f /tmp/projections-config.yaml
         spack config --scope site add -f /tmp/slurm-external-config.yaml
 
@@ -107,58 +107,62 @@ deployment_groups:
     source: modules/scripts/startup-script
     settings:
       runners:
+      - type: shell
+        destination: remove_lustre_client.sh
+        content: |
+          #!/bin/bash
+          rm /etc/yum.repos.d/lustre-client.repo
       - $(spack-execute.spack_runner)
       - type: shell
         destination: wrfv3_setup.sh
         content: |
           #!/bin/bash
-          source /apps/spack/share/spack/setup-env.sh
+          source /opt/apps/spack/share/spack/setup-env.sh
           spack env activate wrfv3
-          chmod -R a+rwX /apps/spack/var/spack/environments/wrfv3
-          mkdir -p /apps/wrfv3
-          chmod a+rwx /apps/wrfv3
-          cd /apps/wrfv3
+          chmod -R a+rwX /opt/apps/spack/var/spack/environments/wrfv3
+          mkdir -p /opt/apps/wrfv3
+          chmod a+rwx /opt/apps/wrfv3
+          cd /opt/apps/wrfv3
           wget --no-verbose https://www2.mmm.ucar.edu/wrf/bench/conus12km_v3911/bench_12km.tar.bz2
           tar xjf bench_12km.tar.bz2
       - type: data
-        destination: /apps/wrfv3/submit_wrfv3.sh
+        destination: /opt/apps/wrfv3/submit_wrfv3.sh
         content: |
           #!/bin/bash
           #SBATCH -N 2
           #SBATCH --ntasks-per-node 30
 
-          source /apps/spack/share/spack/setup-env.sh
+          source /opt/apps/spack/share/spack/setup-env.sh
           spack env activate wrfv3
 
           # Check that wrf.exe exists
           which wrf.exe
           cd $SLURM_SUBMIT_DIR
-          cp /apps/wrfv3/bench_12km/* .
+          cp /opt/apps/wrfv3/bench_12km/* .
           WRF=`spack location -i wrf`
           ln -s $WRF/run/* .
           scontrol show hostnames ${SLURM_JOB_NODELIST} > hostfile
 
           mpirun -n 60 -hostfile hostfile -ppn ${SLURM_NTASKS_PER_NODE} wrf.exe
 
+  - id: compute_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network1]
+    settings:
+      node_count_dynamic_max: 20
+
   - id: compute_partition
-    source: community/modules/compute/SchedMD-slurm-on-gcp-partition
-    use:
-    - network1
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use: [compute_nodeset]
     settings:
       partition_name: compute
-      max_node_count: 20
 
   - id: slurm_controller
-    source: community/modules/scheduler/SchedMD-slurm-on-gcp-controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     use:
     - network1
     - compute_partition
     settings:
+      disable_controller_public_ips: false
+      controller_startup_scripts_timeout: 21600
       controller_startup_script: $(controller-setup.startup_script)
-      login_node_count: 1
-
-  - id: slurm_login
-    source: community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
-    use:
-    - network1
-    - slurm_controller

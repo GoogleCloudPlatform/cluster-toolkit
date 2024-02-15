@@ -1,4 +1,4 @@
-# Copyright 2022 Google LLC
+# Copyright 2024 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,38 +18,42 @@ blueprint_name: hpc-slurm-daos
 
 vars:
   project_id:  ## Set GCP Project ID Here ##
-  deployment_name: daos-slurm
+  deployment_name: hpc-slurm-daos
   region: us-central1
   zone: us-central1-c
-  server_image_family: daos-server-hpc-rocky-8
-
-# Documentation for each of the modules used below can be found at
-# https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
+  daos_server_image_family: daos-server-hpc-rocky-8
+  daos_version: "2.4"
+  tags: []
 
 # Note: this blueprint assumes the existence of a default global network and
 # subnetwork in the region chosen above
+
+validators:
+- validator: test_module_not_used
+  inputs: {}
+  skip: true
 
 deployment_groups:
 - group: primary
   modules:
   - id: network1
-    source: modules/network/pre-existing-vpc
+    source: modules/network/vpc
 
   - id: homefs
     source: modules/file-system/filestore
     use: [network1]
     settings:
-      local_mount: "/home"
+      local_mount: /home
 
 - group: daos-server-image
   modules:
-  # more info: https://github.com/daos-stack/google-cloud-daos/tree/v0.4.1/images
+  # more info: https://github.com/daos-stack/google-cloud-daos/tree/main/images
   - id: daos-server-image
-    source: github.com/daos-stack/google-cloud-daos//images?ref=v0.4.1&depth=1
+    source: "github.com/daos-stack/google-cloud-daos//images?ref=v0.5.0&depth=1"
     kind: packer
     settings:
-      daos_version: 2.2.0
-      daos_repo_base_url: https://packages.daos.io
+      daos_version: $(vars.daos_version)
+      daos_repo_base_url: https://packages.daos.io/
       daos_packages_repo_file: EL8/packages/x86_64/daos_packages.repo
       use_iap: true
       enable_oslogin: false
@@ -63,26 +67,25 @@ deployment_groups:
       use_internal_ip: true
       omit_external_ip: false
       daos_install_type: server
-      image_family: $(vars.server_image_family)
+      image_family: $(vars.daos_server_image_family)
 
 - group: cluster
   modules:
   # more info: https://github.com/daos-stack/google-cloud-daos/tree/main/terraform/modules/daos_server
   - id: daos
-    source: github.com/daos-stack/google-cloud-daos//terraform/modules/daos_server?ref=v0.4.1&depth=1
+    source: "github.com/daos-stack/google-cloud-daos//terraform/modules/daos_server?ref=v0.5.0&depth=1"
     use: [network1]
     settings:
       labels: {ghpc_role: file-system}
-      # The default DAOS settings are optimized for TCO
-      # The following will tune this system for best perf
       machine_type: "n2-standard-16"
-      os_family: $(vars.server_image_family)
+      os_family: $(vars.daos_server_image_family)
       daos_disk_count: 4
-      daos_scm_size: 45
+      tags: $(vars.tags)
       pools:
       - name: "pool1"
-        size: "6.4TB"
-        tier_ratio: 3
+        size: "100%"
+        # Do not set value for scm_size when size=100%
+        daos_scm_size:
         user: "root@"
         group: "root@"
         acls:
@@ -98,8 +101,13 @@ deployment_groups:
     settings:
       runners:
       - type: shell
-        content: $(daos.daos_client_install_script)
-        destination: /tmp/daos_client_install.sh
+        destination: remove_lustre_client_repo.sh
+        content: |
+          #!/bin/bash
+          rm -f /etc/yum.repos.d/lustre-client.repo
+          dnf clean all --verbose
+          rm -rf /var/cache/dnf/*
+          dnf makecache
       - type: data
         content: $(daos.daos_agent_yml)
         destination: /etc/daos/daos_agent.yml
@@ -107,58 +115,88 @@ deployment_groups:
         content: $(daos.daos_control_yml)
         destination: /etc/daos/daos_control.yml
       - type: shell
+        content: $(daos.daos_client_install_script)
+        destination: /tmp/daos_client_install.sh
+      - type: shell
         content: $(daos.daos_client_config_script)
-        destination: /var/daos/daos_client_config.sh
+        destination: /tmp/daos_client_config.sh
 
-  ## This debug_partition will work out of the box without requesting additional GCP quota.
+  - id: debug_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network1]
+    settings:
+      name: ns1
+      node_count_dynamic_max: 4
+      machine_type: n2-standard-2
+      enable_placement: false  # the default is: true
+      service_account:
+        email: null
+        scopes:
+        - "https://www.googleapis.com/auth/monitoring.write"
+        - "https://www.googleapis.com/auth/logging.write"
+        - "https://www.googleapis.com/auth/devstorage.read_only"
+        - "https://www.googleapis.com/auth/cloud-platform"
+
   - id: debug_partition
-    source: community/modules/compute/SchedMD-slurm-on-gcp-partition
-    use:
-    - network1
-    - homefs
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use: [debug_nodeset, homefs]
     settings:
       partition_name: debug
-      max_node_count: 4
-      enable_placement: false
-      machine_type: n2-standard-2
+      exclusive: false  # allows nodes to stay up after jobs are done
+      is_default: true
 
-  # This compute_partition is far more performant than debug_partition but may require requesting GCP quotas first.
+  - id: compute_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network1]
+    settings:
+      name: ns2
+      node_count_dynamic_max: 20
+      bandwidth_tier: gvnic_enabled
+      service_account:
+        email: null
+        scopes:
+        - "https://www.googleapis.com/auth/monitoring.write"
+        - "https://www.googleapis.com/auth/logging.write"
+        - "https://www.googleapis.com/auth/devstorage.read_only"
+        - "https://www.googleapis.com/auth/cloud-platform"
+
   - id: compute_partition
-    source: community/modules/compute/SchedMD-slurm-on-gcp-partition
-    use:
-    - network1
-    - homefs
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use: [compute_nodeset, homefs]
     settings:
       partition_name: compute
-      max_node_count: 20
-      bandwidth_tier: gvnic_enabled
-
-  - id: slurm_controller
-    source: community/modules/scheduler/SchedMD-slurm-on-gcp-controller
-    use:
-    - network1
-    - homefs
-    - debug_partition  # debug partition will be default as it is listed first
-    - compute_partition
-    - daos-client-script
-    settings:
-      login_node_count: 1
-      compute_node_scopes:
-      - "https://www.googleapis.com/auth/monitoring.write"
-      - "https://www.googleapis.com/auth/logging.write"
-      - "https://www.googleapis.com/auth/devstorage.read_only"
-      - "https://www.googleapis.com/auth/cloud-platform"
 
   - id: slurm_login
-    source: community/modules/scheduler/SchedMD-slurm-on-gcp-login-node
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    use: [network1]
+    settings:
+      name_prefix: login
+      machine_type: n2-standard-4
+      disable_login_public_ips: false
+      tags: $(vars.tags)
+      service_account:
+        email: null
+        scopes:
+        - "https://www.googleapis.com/auth/monitoring.write"
+        - "https://www.googleapis.com/auth/logging.write"
+        - "https://www.googleapis.com/auth/devstorage.read_only"
+        - "https://www.googleapis.com/auth/cloud-platform"
+
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     use:
     - network1
+    - debug_partition
+    - compute_partition
+    - slurm_login
     - homefs
-    - slurm_controller
     - daos-client-script
     settings:
-      login_scopes:
-      - "https://www.googleapis.com/auth/monitoring.write"
-      - "https://www.googleapis.com/auth/logging.write"
-      - "https://www.googleapis.com/auth/devstorage.read_only"
-      - "https://www.googleapis.com/auth/cloud-platform"
+      disable_controller_public_ips: false
+      compute_startup_script: $(daos-client-script.startup_script)
+      controller_startup_script: $(daos-client-script.startup_script)
+      login_startup_script: $(daos-client-script.startup_script)
+      compute_startup_scripts_timeout: 1000
+      controller_startup_scripts_timeout: 1000
+      login_startup_scripts_timeout: 1000
+      tags: $(vars.tags)

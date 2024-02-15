@@ -333,10 +333,7 @@ func prepArtifactsDir(artifactsDir string) error {
 	defer f.Close()
 
 	_, err = f.WriteString(artifactsWarning)
-	if err != nil {
-		return err
-	}
-	return nil
+	return err
 }
 
 func writeExpandedBlueprint(depDir string, dc config.DeploymentConfig) error {
@@ -366,7 +363,6 @@ func writeDestroyInstructions(w io.Writer, dc config.DeploymentConfig, deploymen
 		}
 		if grp.Kind() == config.PackerKind {
 			packerManifests = append(packerManifests, filepath.Join(grpPath, string(grp.Modules[0].ID), "packer-manifest.json"))
-
 		}
 	}
 

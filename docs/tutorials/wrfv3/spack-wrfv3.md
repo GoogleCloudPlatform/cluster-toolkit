@@ -5,7 +5,7 @@ easy for customers to deploy HPC environments on Google Cloud.
 
 In this tutorial you will use the HPC Toolkit to:
 
-* Deploy a [Slurm](https://github.com/SchedMD/slurm-gcp#readme) HPC cluster on
+* Deploy a [Slurm](https://github.com/GoogleCloudPlatform/slurm-gcp#readme) HPC cluster on
   Google Cloud
 * Use [Spack](https://spack.io/) to install the Weather Research and Forecasting (WRF) Model application and all of
   its dependencies
@@ -13,10 +13,10 @@ In this tutorial you will use the HPC Toolkit to:
   cluster
 * Tear down the cluster
 
-Estimated time to complete:  
-The tutorial takes 2 hr. to complete,  
-of which 1.5 hr is for installing software  
-(without cache).  
+Estimated time to complete:
+The tutorial takes 2 hr. to complete,
+of which 1.5 hr is for installing software
+(without cache).
 
 > **_NOTE:_** With a complete Spack cache, the tutorial takes 30 min.
 
@@ -75,7 +75,7 @@ which should be open in the Cloud Shell Editor (on the left).
 
 This file describes the cluster you will deploy. It defines:
 
-* the existing default network from your project
+* a vpc network
 * a monitoring dashboard with metrics on your cluster
 * a definition of a custom Spack installation
 * a startup script that
@@ -84,7 +84,6 @@ This file describes the cluster you will deploy. It defines:
   * sets up a Spack environment including downloading an example input deck
   * places a submission script on a shared drive
 * a Slurm cluster
-  * a Slurm login node
   * a Slurm controller
   * An auto-scaling Slurm partition
 
@@ -106,24 +105,18 @@ contains the terraform needed to deploy your cluster.
 
 ## Deploy the Cluster
 
-Use the following commands to run terraform and deploy your cluster.
+Use below command to deploy your cluster.
+
+```bash
+./ghpc deploy spack-wrfv3
+```
+
+You can also use below command to generate a plan that describes the Google Cloud resources that will be deployed.
 
 ```bash
 terraform -chdir=spack-wrfv3/primary init
 terraform -chdir=spack-wrfv3/primary apply
 ```
-
-The `terraform apply` command will generate a _plan_ that describes the Google
-Cloud resources that will be deployed.
-
-You can review the plan and then start the deployment by typing
-**`yes [enter]`**.
-
-The deployment will take about 30 seconds. There should be regular status updates
-in the terminal.
-
-If the `apply` is successful, a message similar to the following will be
-displayed:
 
 <!-- Note: Bash blocks give "copy to cloud shell" option.  -->
 <!-- "shell" or "text" is used in places where command should not be run in cloud shell. -->
@@ -144,30 +137,30 @@ controller. This command can be used to view progress and check for completion
 of the startup script:
 
 ```bash
-gcloud compute instances get-serial-port-output --port 1 --zone us-central1-c --project <walkthrough-project-id/> slurm-spack-wrfv3-controller | grep google_metadata_script_runner
+gcloud compute instances get-serial-port-output --port 1 --zone us-central1-c --project <walkthrough-project-id/> spackwrfv3-controller | grep google_metadata_script_runner
 ```
 
 When the startup script has finished running you will see the following line as
 the final output from the above command:
-> _`slurm-spack-wrfv3-controller google_metadata_script_runner: Finished running startup scripts.`_
+> _`spackwrfv3-controller google_metadata_script_runner: Finished running startup scripts.`_
 
 Optionally while you wait, you can see your deployed VMs on Google Cloud
 Console. Open the link below in a new window. Look for
-`slurm-spack-wrfv3-controller` and `slurm-spack-wrfv3-login0`. If you don't
+`spackwrfv3-controller`. If you don't
 see your VMs make sure you have the correct project selected (top left).
 
 ```text
 https://console.cloud.google.com/compute?project=<walkthrough-project-id/>
 ```
 
-## Connecting to the login node
+## Connecting to the controller node
 
-Once the startup script has completed, connect to the login node.
+Once the startup script has completed, connect to the controller node.
 
-Use the following command to ssh into the login node from cloud shell:
+Use the following command to ssh into the controller node from cloud shell:
 
 ```bash
-gcloud compute ssh slurm-spack-wrfv3-login0 --zone us-central1-c --project <walkthrough-project-id/>
+gcloud compute ssh spackwrfv3-controller --zone us-central1-c --project <walkthrough-project-id/>
 ```
 
 You may be prompted to set up SSH. If so follow the prompts and if asked for a
@@ -191,15 +184,15 @@ following instructions:
    https://console.cloud.google.com/compute?project=<walkthrough-project-id/>
    ```
 
-1. Click on the `SSH` button associated with the `slurm-spack-wrfv3-login0`
+1. Click on the `SSH` button associated with the `spackwrfv3-controller`
    instance.
 
    This will open a separate pop up window with a terminal into our newly
-   created Slurm login VM.
+   created Slurm controller VM.
 
 ## Run a Job on the Cluster
 
-   **The commands below should be run on the Slurm login node.**
+   **The commands below should be run on the Slurm controller node.**
 
 We will use the submission script (see line 122 of the blueprint) to submit a
 Weather Research and Forecasting (WRF) Model job.
@@ -213,7 +206,7 @@ Weather Research and Forecasting (WRF) Model job.
 2. Submit the job to Slurm to be scheduled:
 
    ```bash
-   sbatch /apps/wrfv3/submit_wrfv3.sh
+   sbatch /opt/apps/wrfv3/submit_wrfv3.sh
    ```
 
 3. Once submitted, you can watch the job progress by repeatedly calling the
@@ -227,7 +220,7 @@ The `sbatch` command trigger Slurm to auto-scale up several nodes to run the job
 
 You can refresh the `Compute Engine` > `VM instances` page and see that
 additional VMs are being/have been created. These will be named something like
-`slurm-spack-wrfv3-compute-0-0`.
+`spackwrfv3-compute-0`.
 
 When running `squeue`, observe the job status start as `CF` (configuring),
 change to `R` (running) once the compute VMs have been created, and finally `CG`
@@ -247,7 +240,7 @@ about 5 minutes to run.
 Several files will have been generated in the `test_run/` folder you created.
 
 The `rsl.out.0000` file has information on the run. You can view this file by
-running the following command on the login node:
+running the following command on the controller node:
 
 ```bash
 cat rsl.out.0000
@@ -268,9 +261,9 @@ https://console.cloud.google.com/monitoring/dashboards?project=<walkthrough-proj
 To avoid incurring ongoing charges we will want to destroy our cluster.
 
 For this we need to return to our cloud shell terminal. Run `exit` in the
-terminal to close the SSH connection to the login node:
+terminal to close the SSH connection to the controller node:
 
-> **_NOTE:_** If you are accessing the login node terminal via a separate pop-up
+> **_NOTE:_** If you are accessing the controller node terminal via a separate pop-up
 > then make sure to call `exit` in the pop-up window.
 
 ```bash
@@ -280,7 +273,7 @@ exit
 Run the following command in the cloud shell terminal to destroy the cluster:
 
 ```bash
-terraform -chdir=spack-wrfv3/primary destroy -auto-approve
+./ghpc destroy spack-wrfv3
 ```
 
 When complete you should see something like:

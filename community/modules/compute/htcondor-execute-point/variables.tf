@@ -133,7 +133,7 @@ variable "target_size" {
 variable "max_size" {
   description = "Maximum size of the HTCondor execute point pool."
   type        = number
-  default     = 100
+  default     = 5
 }
 
 variable "min_idle" {
@@ -234,5 +234,15 @@ variable "shielded_instance_config" {
     enable_secure_boot          = true
     enable_vtpm                 = true
     enable_integrity_monitoring = true
+  }
+}
+
+variable "update_policy" {
+  description = "Replacement policy for Access Point Managed Instance Group (\"PROACTIVE\" to replace immediately or \"OPPORTUNISTIC\" to replace upon instance power cycle)"
+  type        = string
+  default     = "OPPORTUNISTIC"
+  validation {
+    condition     = contains(["PROACTIVE", "OPPORTUNISTIC"], var.update_policy)
+    error_message = "Allowed string values for var.update_policy are \"PROACTIVE\" or \"OPPORTUNISTIC\"."
   }
 }

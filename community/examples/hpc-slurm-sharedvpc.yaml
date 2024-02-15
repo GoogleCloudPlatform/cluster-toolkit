@@ -1,4 +1,4 @@
-# Copyright 2022 Google LLC
+# Copyright 2021 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,34 +14,51 @@
 
 ---
 
-blueprint_name: hpc-slurm6
+blueprint_name: hpc-slurm-legacy-sharedvpc
+
+# IMPORTANT NOTES
+#
+# 1. This blueprint expects a Shared VPC to exist and has already been shared
+#    from a Host project to a Service project.
+# 2. It also anticipates that the custom steps for provisioning a Filestore
+#    instance in a Shared VPC in a service project have been completed:
+#
+#    https://cloud.google.com/filestore/docs/shared-vpc
+#
+# 3. Replace project_id, host_project_id, network_name, subnetwork_name with
+#    valid values in your environment
 
 vars:
   project_id:  ## Set GCP Project ID Here ##
-  deployment_name: slurm-gcp-v6
-  region: us-west4
-  zone: us-west4-c
-  instance_image:
-    family: slurm-gcp-6-1-hpc-rocky-linux-8
-    project: schedmd-slurm-public
+  host_project_id: your-host-project
+  deployment_name: hpc-small-shared-vpc
+  region: us-central1
+  zone: us-central1-c
+
+# Documentation for each of the modules used below can be found at
+# https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
 
 deployment_groups:
 - group: primary
   modules:
-  - id: network
-    source: modules/network/vpc
+  - id: network1
+    source: modules/network/pre-existing-vpc
+    settings:
+      project_id: $(vars.host_project_id)
+      network_name: your-shared-network
+      subnetwork_name: your-shared-subnetwork
 
   - id: homefs
     source: modules/file-system/filestore
-    use: [network]
+    use: [network1]
     settings:
       local_mount: /home
+      connect_mode: PRIVATE_SERVICE_ACCESS
 
   - id: debug_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [network]
+    use: [network1]
     settings:
-      name: ns1
       node_count_dynamic_max: 4
       machine_type: n2-standard-2
       enable_placement: false  # the default is: true
@@ -56,9 +73,8 @@ deployment_groups:
 
   - id: compute_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [network]
+    use: [network1]
     settings:
-      name: ns2
       node_count_dynamic_max: 20
       bandwidth_tier: gvnic_enabled
 
@@ -70,7 +86,7 @@ deployment_groups:
 
   - id: slurm_login
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
-    use: [network]
+    use: [network1]
     settings:
       name_prefix: login
       machine_type: n2-standard-4
@@ -79,7 +95,7 @@ deployment_groups:
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     use:
-    - network
+    - network1
     - debug_partition
     - compute_partition
     - slurm_login

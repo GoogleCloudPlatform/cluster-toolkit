@@ -15,6 +15,7 @@
 package config
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -71,41 +72,14 @@ func TestTraversalToReference(t *testing.T) {
 	}
 }
 
-func TestIsYamlHclLiteral(t *testing.T) {
-	type test struct {
-		input string
-		want  string
-		check bool
-	}
-	tests := []test{
-		{"((var.green))", "var.green", true},
-		{"((${var.green}))", "${var.green}", true},
-		{"(( 7 + a }))", " 7 + a }", true},
-		{"(var.green)", "", false},
-		{"((var.green)", "", false},
-		{"$(var.green)", "", false},
-		{"${var.green}", "", false},
-	}
-	for _, tc := range tests {
-		t.Run(tc.input, func(t *testing.T) {
-			got, check := IsYamlExpressionLiteral(cty.StringVal(tc.input))
-			if diff := cmp.Diff(tc.want, got); diff != "" {
-				t.Errorf("diff (-want +got):\n%s", diff)
-			}
-			if diff := cmp.Diff(tc.check, check); diff != "" {
-				t.Errorf("diff (-want +got):\n%s", diff)
-			}
-		})
-	}
-}
-
-func TestSimpleVarToExpression(t *testing.T) {
+func TestParseBpLit(t *testing.T) {
 	type test struct {
 		input string
 		want  string
 		err   bool
 	}
 	tests := []test{
+		// Single expression, without string interpolation
 		{"$(vars.green)", "var.green", false},
 		{"$(vars.green[3])", "var.green[3]", false},
 		{"$(vars.green.sleeve)", "var.green.sleeve", false},
@@ -119,24 +93,67 @@ func TestSimpleVarToExpression(t *testing.T) {
 		{"$(box.green.sleeve[3])", "module.box.green.sleeve[3]", false},
 		{`$(box.green["sleeve"])`, `module.box.green["sleeve"]`, false},
 
+		// String interpolation
+		{`1gold was here`, `"1gold was here"`, false},
+		{`2gold $(vars.here)`, `"2gold ${var.here}"`, false},
+		{`3gold $(vars.here) but $(vars.gone)`, `"3gold ${var.here} but ${var.gone}"`, false},
+		{`4gold
+$(vars.here)`, `"4gold\n${var.here}"`, false}, // quoted strings may not be split over multiple lines
+
+		{`5gold
+was here`, `"5gold\nwas here"`, false},
+		{"6gold $(vars.here", ``, true}, // missing close parenthesis
+
+		{`#!/bin/bash
+echo "Hello $(vars.project_id) from $(vars.region)"`, `"#!/bin/bash\necho \"Hello ${var.project_id} from ${var.region}\""`, false},
+		{`#!/bin/bash
+echo "Hello $(vars.project_id)"
+`, `"#!/bin/bash\necho \"Hello ${var.project_id}\"\n"`, false},
+		{"", `""`, false},
+		{`$(try(vars.this) + one(vars.time))`, "try(var.this)+one(var.time)", false},
+
+		// Escaping
+		{`q $(vars.t)`, `"q ${var.t}"`, false},           // no escaping
+		{`q \$(vars.t)`, `"q $(vars.t)"`, false},         // escaped `$(`
+		{`q \\$(vars.t)`, `"q \\${var.t}"`, false},       // escaped `\`
+		{`q \\\$(vars.t)`, `"q \\$(vars.t)"`, false},     // escaped both `\` and `$(`
+		{`q \\\\$(vars.t)`, `"q \\\\${var.t}"`, false},   // escaped `\\`
+		{`q \\\\\$(vars.t)`, `"q \\\\$(vars.t)"`, false}, // escaped both `\\` and `$(`
+
+		// Translation of complex expressions BP -> Terraform
+		{"$(vars.green + amber.blue)", "var.green+module.amber.blue", false},
+		{"$(5 + vars.blue)", "5+var.blue", false},
+		{"$(5)", "5", false},
+		{`$("${vars.green}_${vars.sleeve}")`, `"${var.green}_${var.sleeve}"`, false},
+		{"$(fun(vars.green))", "fun(var.green)", false},
+
+		// Untranslatable expressions
 		{"$(vars)", "", true},
 		{"$(sleeve)", "", true},
-		{"gold $(var.here)", "", true},
 		{"$(box[3])", "", true},        // can't index module
 		{`$(box["green"])`, "", true},  // can't index module
 		{"$(vars[3]])", "", true},      // can't index vars
 		{`$(vars["green"])`, "", true}, // can't index module
+
 	}
 	for _, tc := range tests {
 		t.Run(tc.input, func(t *testing.T) {
-			exp, err := SimpleVarToExpression(tc.input)
+			v, err := parseBpLit(tc.input)
 			if tc.err != (err != nil) {
 				t.Errorf("got unexpected error: %s", err)
 			}
 			if err != nil {
 				return
 			}
-			got := string(exp.Tokenize().Bytes())
+			var got string
+			if v.Type() == cty.String {
+				got = string(hclwrite.TokensForValue(v).Bytes())
+			} else if exp, is := IsExpressionValue(v); is {
+				got = string(exp.Tokenize().Bytes())
+			} else {
+				t.Fatalf("got value of unexpected type: %#v", v)
+			}
+
 			if diff := cmp.Diff(tc.want, got); diff != "" {
 				t.Errorf("diff (-want +got):\n%s", diff)
 			}
@@ -154,6 +171,7 @@ func TestTokensForValueNoLiteral(t *testing.T) {
 				"ba": cty.NumberIntVal(56),
 			})}),
 		"pony.zebra": cty.NilVal,
+		"zanzibar":   cty.NullVal(cty.DynamicPseudoType),
 	})
 	want := hclwrite.NewEmptyFile()
 	want.Body().AppendUnstructuredTokens(hclwrite.TokensForValue(val))
@@ -166,33 +184,13 @@ func TestTokensForValueNoLiteral(t *testing.T) {
 	}
 }
 
-func TestTokensForValueWithLiteral(t *testing.T) {
-	val := cty.ObjectVal(map[string]cty.Value{
-		"tan": cty.TupleVal([]cty.Value{
-			cty.StringVal("((var.kilo + 8))"),             // HCL literal
-			MustParseExpression("var.tina + 4").AsValue(), // HclExpression value
-		})})
-	want := `
-{
-  tan = [var.kilo + 8, var.tina + 4]
-}`[1:]
-
-	gotF := hclwrite.NewEmptyFile()
-	gotF.Body().AppendUnstructuredTokens(TokensForValue(val))
-	got := hclwrite.Format(gotF.Bytes()) // format to normalize whitespace
-
-	if diff := cmp.Diff(want, string(got)); diff != "" {
-		t.Errorf("diff (-want +got):\n%s", diff)
-	}
-}
-
 func TestFlattenFunctionCallExpression(t *testing.T) {
 	bp := Blueprint{Vars: NewDict(map[string]cty.Value{
 		"three": cty.NumberIntVal(3),
 	})}
 	expr := FunctionCallExpression("flatten", cty.TupleVal([]cty.Value{
 		cty.TupleVal([]cty.Value{cty.NumberIntVal(1), cty.NumberIntVal(2)}),
-		GlobalRef("three").AsExpression().AsValue(),
+		GlobalRef("three").AsValue(),
 	}))
 
 	want := cty.TupleVal([]cty.Value{
@@ -200,7 +198,7 @@ func TestFlattenFunctionCallExpression(t *testing.T) {
 		cty.NumberIntVal(2),
 		cty.NumberIntVal(3)})
 
-	got, err := expr.Eval(bp)
+	got, err := bp.Eval(expr.AsValue())
 	if err != nil {
 		t.Errorf("got unexpected error: %s", err)
 	}
@@ -220,7 +218,7 @@ func TestMergeFunctionCallExpression(t *testing.T) {
 			"one": cty.NumberIntVal(1),
 			"two": cty.NumberIntVal(3),
 		}),
-		GlobalRef("fix").AsExpression().AsValue(),
+		GlobalRef("fix").AsValue(),
 	)
 
 	want := cty.ObjectVal(map[string]cty.Value{
@@ -228,11 +226,47 @@ func TestMergeFunctionCallExpression(t *testing.T) {
 		"two": cty.NumberIntVal(2),
 	})
 
-	got, err := expr.Eval(bp)
+	got, err := bp.Eval(expr.AsValue())
 	if err != nil {
 		t.Errorf("got unexpected error: %s", err)
 	}
 	if diff := cmp.Diff(want, got, ctydebug.CmpOptions); diff != "" {
 		t.Errorf("diff (-want +got):\n%s", diff)
+	}
+}
+
+func TestReplaceTokens(t *testing.T) {
+	type test struct {
+		body string
+		old  string
+		new  string
+		want string
+	}
+	tests := []test{
+		{"var.green", "var.green", "var.blue", "var.blue"},
+		{"var.green + var.green", "var.green", "var.blue", "var.blue+var.blue"},
+		{"vars.green + 5", "vars.green", "var.green", "var.green+5"},
+		{"var.green + var.blue", "vars.gold", "var.silver", "var.green+var.blue"},
+	}
+	for _, tc := range tests {
+		t.Run(fmt.Sprintf("s/%s/%s/%s", tc.old, tc.new, tc.body), func(t *testing.T) {
+			b, err := parseHcl(tc.body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			o, err := parseHcl(tc.old)
+			if err != nil {
+				t.Fatal(err)
+			}
+			n, err := parseHcl(tc.new)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			got := replaceTokens(b, o, n)
+			if diff := cmp.Diff(tc.want, string(got.Bytes())); diff != "" {
+				t.Errorf("diff (-want +got):\n%s", diff)
+			}
+		})
 	}
 }

@@ -52,7 +52,7 @@ HPC deployments on the Google Cloud Platform.`,
 				logging.Fatal("cmd.Help function failed: %s", err)
 			}
 		},
-		Version:     "v1.27.0",
+		Version:     "v1.28.1",
 		Annotations: annotation,
 	}
 )
@@ -250,7 +250,6 @@ func execPath() string {
 // NOTE: this function uses empty YamlCtx, so if you have one, use renderError directly.
 func checkErr(err error) {
 	if err != nil {
-		msg := fmt.Sprintf("%s: %s", boldRed("Error"), renderError(err, config.YamlCtx{}))
-		logging.Fatal(msg)
+		logging.Fatal(renderError(err, config.YamlCtx{}))
 	}
 }

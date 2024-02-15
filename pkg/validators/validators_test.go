@@ -32,37 +32,39 @@ func Test(t *testing.T) {
 }
 
 func (s *MySuite) TestCheckInputs(c *C) {
+	dummy := cty.NullVal(cty.String)
+
 	{ // OK: Inputs is equal to required inputs without regard to ordering
 		i := config.NewDict(map[string]cty.Value{
-			"in0": cty.NilVal,
-			"in1": cty.NilVal})
+			"in0": dummy,
+			"in1": dummy})
 		c.Check(checkInputs(i, []string{"in0", "in1"}), IsNil)
 		c.Check(checkInputs(i, []string{"in1", "in0"}), IsNil)
 	}
 
 	{ // FAIL: inputs are a proper subset of required inputs
 		i := config.NewDict(map[string]cty.Value{
-			"in0": cty.NilVal,
-			"in1": cty.NilVal})
+			"in0": dummy,
+			"in1": dummy})
 		err := checkInputs(i, []string{"in0", "in1", "in2"})
 		c.Check(err, NotNil)
 	}
 
 	{ // FAIL: inputs intersect with required inputs but are not a proper subset
 		i := config.NewDict(map[string]cty.Value{
-			"in0": cty.NilVal,
-			"in1": cty.NilVal,
-			"in3": cty.NilVal})
+			"in0": dummy,
+			"in1": dummy,
+			"in3": dummy})
 		err := checkInputs(i, []string{"in0", "in1", "in2"})
 		c.Check(err, NotNil)
 	}
 
 	{ // FAIL inputs are a proper superset of required inputs
 		i := config.NewDict(map[string]cty.Value{
-			"in0": cty.NilVal,
-			"in1": cty.NilVal,
-			"in2": cty.NilVal,
-			"in3": cty.NilVal})
+			"in0": dummy,
+			"in1": dummy,
+			"in2": dummy,
+			"in3": dummy})
 		err := checkInputs(i, []string{"in0", "in1", "in2"})
 		c.Check(err, ErrorMatches, "only 3 inputs \\[in0 in1 in2\\] should be provided")
 	}
@@ -73,9 +75,9 @@ func (s *MySuite) TestDefaultValidators(c *C) {
 	unusedVars := config.Validator{Validator: "test_deployment_variable_not_used"}
 	apisEnabled := config.Validator{Validator: "test_apis_enabled"}
 
-	projectRef := config.GlobalRef("project_id").AsExpression().AsValue()
-	regionRef := config.GlobalRef("region").AsExpression().AsValue()
-	zoneRef := config.GlobalRef("zone").AsExpression().AsValue()
+	projectRef := config.GlobalRef("project_id").AsValue()
+	regionRef := config.GlobalRef("region").AsValue()
+	zoneRef := config.GlobalRef("zone").AsValue()
 
 	projectExists := config.Validator{
 		Validator: testProjectExistsName,

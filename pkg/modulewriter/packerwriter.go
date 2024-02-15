@@ -61,21 +61,14 @@ func (w PackerWriter) writeDeploymentGroup(
 	instructionsFile io.Writer,
 ) error {
 	depGroup := dc.Config.DeploymentGroups[grpIdx]
-	igcInputs := map[string]bool{}
 
 	for _, mod := range depGroup.Modules {
 		pure := config.Dict{}
 		for setting, v := range mod.Settings.Items() {
-			igcRefs := config.FindIntergroupReferences(v, mod, dc.Config)
-			if len(igcRefs) == 0 {
+			if len(config.FindIntergroupReferences(v, mod, dc.Config)) == 0 {
 				pure.Set(setting, v)
 			}
-			for _, r := range igcRefs {
-				n := config.AutomaticOutputName(r.Name, r.Module)
-				igcInputs[n] = true
-			}
 		}
-
 		av, err := pure.Eval(dc.Config)
 		if err != nil {
 			return err

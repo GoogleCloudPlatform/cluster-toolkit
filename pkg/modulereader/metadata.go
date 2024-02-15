@@ -47,6 +47,8 @@ type MetadataGhpc struct {
 	// Optional, set to the string-typed module variable name.
 	// If set, the blueprint module id will be set as a value of this variable.
 	InjectModuleId string `yaml:"inject_module_id"`
+	// If set to true, the creation will fail if the module is not used.
+	HasToBeUsed bool `yaml:"has_to_be_used"`
 }
 
 // GetMetadata reads and parses `metadata.yaml` from module root.
@@ -54,7 +56,6 @@ type MetadataGhpc struct {
 func GetMetadata(source string) (Metadata, error) {
 	var err error
 	var data []byte
-	// TODO: use bpmetadata.UnmarshalMetadata, it performs some additional checks
 	filePath := filepath.Join(source, "metadata.yaml")
 
 	switch {

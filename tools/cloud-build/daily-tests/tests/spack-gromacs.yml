@@ -15,14 +15,17 @@
 ---
 
 test_name: hpc-slurm-gromacs
-deployment_name: "spack-gromacs-{{ build }}"
+deployment_name: "groma-{{ build }}"
+slurm_cluster_name: "groma{{ build[0:5] }}"
 zone: us-central1-c
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/community/examples/hpc-slurm-gromacs.yaml"
-network: "default"
+network: "{{ deployment_name }}-net"
 max_nodes: 5
-login_node: slurm-{{ deployment_name }}-login0
-controller_node: slurm-{{ deployment_name }}-controller
+login_node: "{{ slurm_cluster_name }}-login-*"
+# Image name to be used to filter logs from /var/log/messages for startup script.
+image_name: "slurm-gcp-dev-hpc-rocky-linux-8-*"
+controller_node: "{{ slurm_cluster_name }}-controller"
 post_deploy_tests:
 - test-validation/test-spack.yml
 custom_vars:

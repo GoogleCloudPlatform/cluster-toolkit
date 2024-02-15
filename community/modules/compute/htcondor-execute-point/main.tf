@@ -125,7 +125,7 @@ resource "google_storage_bucket_object" "execute_config" {
 }
 
 module "startup_script" {
-  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=50644b2"
+  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=v1.27.0&depth=1"
 
   project_id      = var.project_id
   region          = var.region
@@ -199,7 +199,7 @@ module "mig" {
     max_unavailable_percent      = null
     min_ready_sec                = 300
     minimal_action               = "REPLACE"
-    type                         = "OPPORTUNISTIC"
+    type                         = var.update_policy
   }]
 
 }

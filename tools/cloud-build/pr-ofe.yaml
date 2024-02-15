@@ -14,23 +14,22 @@
 
 ---
 
-test_name: hpc-slurm-legacy
-deployment_name: "hpc-high-io-{{ build }}"
-zone: us-west4-c
-workspace: /workspace
-blueprint_yaml: "{{ workspace }}/community/examples/hpc-slurm-legacy.yaml"
-network: "default"
-max_nodes: 5
-login_node: "slurm-{{ deployment_name }}-login0"
-controller_node: "slurm-{{ deployment_name }}-controller"
-post_deploy_tests:
-- test-validation/test-mounts.yml
-- test-validation/test-partitions.yml
-custom_vars:
-  partitions:
-  - compute
-  - low_cost
-  mounts:
-  - /home
-  - /scratch
-  - /projects
+steps:
+- id: git-fetch-unshallow
+  name: gcr.io/cloud-builders/git
+  args: ['fetch', '--unshallow']
+- id: ofe-virtual-env
+  waitFor: [git-fetch-unshallow]
+  name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
+  entrypoint: /bin/bash
+  args:
+  - '-c'
+  - |
+    set -e
+    python3 -m venv /opt/ofe
+    source /opt/ofe/bin/activate
+    pip install --upgrade pip
+    pip install --dry-run --no-cache-dir -r community/front-end/ofe/requirements.txt
+timeout: "1200s"
+options:
+  machineType: N1_HIGHCPU_8

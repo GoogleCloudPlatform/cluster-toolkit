@@ -21,6 +21,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/zclconf/go-cty/cty"
 	. "gopkg.in/check.v1"
 	"gopkg.in/yaml.v3"
 )
@@ -88,7 +89,7 @@ func (s *MySuite) TestGetModuleInfo_Embedded(c *C) {
 		c.Check(mi, DeepEquals, ModuleInfo{
 			Inputs: []VarInfo{{
 				Name:        "test_variable",
-				Type:        "string",
+				Type:        cty.String,
 				Description: "This is just a test",
 				Required:    true}},
 			Outputs: []OutputInfo{{
@@ -136,7 +137,7 @@ func (s *MySuite) TestGetModuleInfo_Local(c *C) {
 		c.Check(mi, DeepEquals, ModuleInfo{
 			Inputs: []VarInfo{{
 				Name:        "test_variable",
-				Type:        "string",
+				Type:        cty.String,
 				Description: "This is just a test",
 				Required:    true}},
 			Outputs: []OutputInfo{{
@@ -190,7 +191,7 @@ func (s *MySuite) TestGetInfo_TFReder(c *C) {
 	info, err := reader.GetInfo(s.terraformDir)
 	c.Assert(err, IsNil)
 	c.Check(info, DeepEquals, ModuleInfo{
-		Inputs:  []VarInfo{{Name: "test_variable", Type: "string", Description: "This is just a test", Required: true}},
+		Inputs:  []VarInfo{{Name: "test_variable", Type: cty.String, Description: "This is just a test", Required: true}},
 		Outputs: []OutputInfo{{Name: "test_output", Description: "This is just a test"}},
 	})
 
@@ -201,7 +202,7 @@ func (s *MySuite) TestGetInfo_PackerReader(c *C) {
 	exp := ModuleInfo{
 		Inputs: []VarInfo{{
 			Name:        "test_variable",
-			Type:        "string",
+			Type:        cty.String,
 			Description: "This is just a test",
 			Required:    true}}}
 
@@ -263,4 +264,9 @@ func (s *zeroSuite) TestUnmarshalOutputInfo(c *C) {
 	// should not ummarshal an object with non-boolean sensitive type
 	y = "{ name: foo, description: bar, sensitive: contingent }"
 	c.Check(yaml.Unmarshal([]byte(y), &oinfo), NotNil)
+}
+
+func (s *zeroSuite) TestLegacyMetadata(c *C) { // dummy test for sake of coverage
+	mi := legacyMetadata("modules/arbuz/velikan")
+	c.Check(mi.Spec.Requirements.Services, DeepEquals, []string{})
 }

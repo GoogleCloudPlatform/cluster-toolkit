@@ -36,7 +36,7 @@ steps:
   - echo "done fetching builder"
 
 ## Test Slurm v6 TPU example
-- id: slurm-gcp-v6-tpu
+- id: slurm6-tpu
   waitFor: ["fetch_builder", "build_ghpc"]
   name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
   entrypoint: /bin/bash

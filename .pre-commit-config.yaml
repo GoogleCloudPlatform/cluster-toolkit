@@ -15,7 +15,7 @@
 ---
 repos:
 - repo: https://github.com/antonbabenko/pre-commit-terraform
-  rev: v1.82.0
+  rev: v1.86.0
   hooks:
   - id: terraform_fmt
   - id: terraform_tflint
@@ -82,16 +82,16 @@ repos:
 #   hooks:
 #   - id: go-critic
 - repo: https://github.com/Bahjat/pre-commit-golang
-  rev: v1.0.2
+  rev: v1.0.3
   hooks:
   - id: go-static-check
 - repo: https://github.com/adrienverge/yamllint
-  rev: v1.32.0
+  rev: v1.34.0
   hooks:
   - id: yamllint
-    args: [-c=.yamllint]
+    args: [-c=.yamllint, --no-warnings]
 - repo: https://github.com/jackdewinter/pymarkdown
-  rev: v0.9.12
+  rev: v0.9.17
   hooks:
   - id: pymarkdown
     # Rules at https://github.com/jackdewinter/pymarkdown/tree/main/docs/rules
@@ -101,7 +101,8 @@ repos:
     # MD034 - Bare URL used
     # MD041 - First line in file should be a top level header
     # MD046 - Code block style
-    args: [--disable-rules, "MD013,MD022,MD033,MD034,MD041,MD046", scan]
+    # MD024 - Multiple headings cannot contain the same content.
+    args: [--disable-rules, "MD013,MD022,MD033,MD034,MD041,MD046,MD024", scan]
 - repo: https://github.com/jumanjihouse/pre-commit-hooks
   rev: "3.0.0"
   hooks:
@@ -110,7 +111,7 @@ repos:
   - id: shfmt
     exclude: ".*tpl"
 - repo: https://github.com/pre-commit/pre-commit-hooks
-  rev: v4.4.0
+  rev: v4.5.0
   hooks:
   - id: end-of-file-fixer
 - repo: https://github.com/codespell-project/codespell

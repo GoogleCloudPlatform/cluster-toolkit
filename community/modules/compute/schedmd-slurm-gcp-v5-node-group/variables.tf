@@ -15,7 +15,7 @@
  */
 
 # Most variables have been sourced and modified from the SchedMD/slurm-gcp
-# github repository: https://github.com/SchedMD/slurm-gcp/tree/5.9.1
+# github repository: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/5.10.2
 
 variable "project_id" {
   description = "Project in which the HPC deployment will be created."
@@ -96,7 +96,7 @@ variable "instance_image" {
   type        = map(string)
   default = {
     project = "schedmd-slurm-public"
-    family  = "slurm-gcp-5-9-hpc-centos-7"
+    family  = "slurm-gcp-5-10-hpc-centos-7"
   }
 
   validation {
@@ -411,6 +411,18 @@ variable "additional_networks" {
       subnetwork_range_name = string
     }))
   }))
+}
+
+variable "maintenance_interval" {
+  description = "Specifies the frequency of planned maintenance events. Must be \"PERIODIC\" or empty string to not use this feature."
+  default     = ""
+  type        = string
+  nullable    = false
+
+  validation {
+    condition     = contains(["", "PERIODIC"], var.maintenance_interval)
+    error_message = "var.maintenance_interval must be the empty string or \"PERIODIC\""
+  }
 }
 
 variable "disable_public_ips" {
