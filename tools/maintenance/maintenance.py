@@ -43,8 +43,8 @@ PRJ_CMD = "gcloud projects describe {}"
 SLURM_CMD = "sinfo --format=%n --noheader"
 
 def run_command(cmd: str, err_msg: str = None) -> subprocess.CompletedProcess:
-    res = subprocess.run(cmd, shell=True, capture_output=True, text=True,
-                         check=False)
+    res = subprocess.run(cmd, shell=True, universal_newlines=True, check=False,
+                         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if res.returncode != 0:
         raise subprocess.SubprocessError(f"{err_msg}:\n{res.stderr}")
 
