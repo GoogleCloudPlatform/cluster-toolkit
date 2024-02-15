@@ -125,9 +125,12 @@ Modules that are still in development and less stable are labeled with the
   regional subnetworks and firewall rules.
 * **[pre-existing-vpc]** ![core-badge] : Used to connect newly
   built components to a pre-existing VPC network.
+* **[firewall-rules]** ![core-badge] ![experimental-badge]: Add custom firewall
+  rules to existing networks (commonly used with [pre-existing-vpc])
 
 [vpc]: network/vpc/README.md
 [pre-existing-vpc]: network/pre-existing-vpc/README.md
+[firewall-rules]: network/firewall-rules/README.md
 
 ### Packer
 
