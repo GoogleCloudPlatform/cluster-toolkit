@@ -26,10 +26,10 @@ terraform {
     }
   }
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:bigquery-sub/v1.28.0"
+    module_name = "blueprints/terraform/hpc-toolkit:bigquery-sub/v1.28.1"
   }
   provider_meta "google-beta" {
-    module_name = "blueprints/terraform/hpc-toolkit:bigquery-sub/v1.28.0"
+    module_name = "blueprints/terraform/hpc-toolkit:bigquery-sub/v1.28.1"
   }
   required_version = ">= 1.0"
 }
