@@ -250,8 +250,8 @@ description of our support for Windows images.
   <th rowspan="1">HTCondor</th>
   <th></th>
   <th></th>
-  <td></td>
   <td>✓</td>
+  <td></td>
   <td>✓</td>
   <td></td>
 </tr>
