@@ -102,14 +102,14 @@ func (s *MySuite) TestSetBackendConfig(c *C) {
 }
 
 func (s *MySuite) TestMergeDeploymentSettings(c *C) {
-	ds := config.DeploymentSettings{
+	ds1 := config.DeploymentSettings{
 		Vars: config.NewDict(map[string]cty.Value{
 			"project_id":      cty.StringVal("ds_test_project_id"),
 			"deployment_name": cty.StringVal("ds_deployment_name"),
 		}),
 	}
 
-	bp := config.Blueprint{
+	bp1 := config.Blueprint{
 		Vars: config.NewDict(map[string]cty.Value{
 			"project_id":  cty.StringVal("bp_test_project_id"),
 			"example_var": cty.StringVal("bp_example_value"),
@@ -117,25 +117,25 @@ func (s *MySuite) TestMergeDeploymentSettings(c *C) {
 	}
 
 	// test priority-based merging of deployment variables
-	mergeDeploymentSettings(&bp, ds)
-	c.Check(bp.Vars.Items(), DeepEquals, map[string]cty.Value{
+	mergeDeploymentSettings(&bp1, ds1)
+	c.Check(bp1.Vars.Items(), DeepEquals, map[string]cty.Value{
 		"project_id":      cty.StringVal("ds_test_project_id"),
 		"deployment_name": cty.StringVal("ds_deployment_name"),
 		"example_var":     cty.StringVal("bp_example_value"),
 	})
 
 	// check merging zero-value backends
-	ds = config.DeploymentSettings{
+	ds2 := config.DeploymentSettings{
 		TerraformBackendDefaults: config.TerraformBackend{},
 	}
-	bp = config.Blueprint{
+	bp2 := config.Blueprint{
 		TerraformBackendDefaults: config.TerraformBackend{},
 	}
-	mergeDeploymentSettings(&bp, ds)
-	c.Check(bp.TerraformBackendDefaults, DeepEquals, config.TerraformBackend{})
+	mergeDeploymentSettings(&bp2, ds2)
+	c.Check(bp2.TerraformBackendDefaults, DeepEquals, config.TerraformBackend{})
 
 	// check keeping blueprint defined backend with no backend in deployment file
-	bp = config.Blueprint{
+	bp3 := config.Blueprint{
 		TerraformBackendDefaults: config.TerraformBackend{
 			Type: "gsc",
 			Configuration: config.NewDict(map[string]cty.Value{
@@ -143,8 +143,8 @@ func (s *MySuite) TestMergeDeploymentSettings(c *C) {
 			}),
 		},
 	}
-	mergeDeploymentSettings(&bp, ds)
-	c.Check(bp.TerraformBackendDefaults, DeepEquals, config.TerraformBackend{
+	mergeDeploymentSettings(&bp3, ds2)
+	c.Check(bp3.TerraformBackendDefaults, DeepEquals, config.TerraformBackend{
 		Type: "gsc",
 		Configuration: config.NewDict(map[string]cty.Value{
 			"bucket": cty.StringVal("bp_bucket"),
@@ -152,7 +152,7 @@ func (s *MySuite) TestMergeDeploymentSettings(c *C) {
 	})
 
 	// check overriding blueprint defined backend with deployment file
-	ds = config.DeploymentSettings{
+	ds3 := config.DeploymentSettings{
 		TerraformBackendDefaults: config.TerraformBackend{
 			Type: "gsc",
 			Configuration: config.NewDict(map[string]cty.Value{
@@ -160,8 +160,8 @@ func (s *MySuite) TestMergeDeploymentSettings(c *C) {
 			}),
 		},
 	}
-	mergeDeploymentSettings(&bp, ds)
-	c.Check(bp.TerraformBackendDefaults, DeepEquals, config.TerraformBackend{
+	mergeDeploymentSettings(&bp3, ds3)
+	c.Check(bp3.TerraformBackendDefaults, DeepEquals, config.TerraformBackend{
 		Type: "gsc",
 		Configuration: config.NewDict(map[string]cty.Value{
 			"bucket": cty.StringVal("ds_bucket"),
