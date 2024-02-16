@@ -514,7 +514,6 @@ EOD
 
 variable "cloudsql" {
   description = <<EOD
-NOT SUPPORTED YET.
 Use this database instead of the one on the controller.
   server_ip : Address of the database server.
   user      : The user to access the database as.
