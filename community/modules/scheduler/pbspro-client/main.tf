@@ -32,7 +32,7 @@ locals {
 }
 
 module "pbs_install" {
-  source = "github.com/GoogleCloudPlatform/hpc-toolkit//community/modules/scripts/pbspro-install?ref=v1.22.1"
+  source = "github.com/GoogleCloudPlatform/hpc-toolkit//community/modules/scripts/pbspro-install?ref=v1.28.1&depth=1"
 
   pbs_exec   = var.pbs_exec
   pbs_home   = var.pbs_home
@@ -43,7 +43,7 @@ module "pbs_install" {
 }
 
 module "client_startup_script" {
-  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=v1.27.0&depth=1"
+  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=v1.28.1&depth=1"
 
   deployment_name = var.deployment_name
   project_id      = var.project_id
@@ -57,7 +57,7 @@ module "client_startup_script" {
 }
 
 module "pbs_client" {
-  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/compute/vm-instance?ref=bb47067"
+  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/compute/vm-instance?ref=v1.28.1&depth=1"
 
   instance_count = var.instance_count
   spot           = var.spot
@@ -69,11 +69,11 @@ module "pbs_client" {
   zone            = var.zone
   labels          = local.labels
 
-  machine_type    = var.machine_type
-  service_account = var.service_account
-  metadata        = var.metadata
-  startup_script  = module.client_startup_script.startup_script
-  enable_oslogin  = var.enable_oslogin
+  machine_type          = var.machine_type
+  service_account_email = var.service_account.email
+  metadata              = var.metadata
+  startup_script        = module.client_startup_script.startup_script
+  enable_oslogin        = var.enable_oslogin
 
   instance_image        = var.instance_image
   disk_size_gb          = var.disk_size_gb
