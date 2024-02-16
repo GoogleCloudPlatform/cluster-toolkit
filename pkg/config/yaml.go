@@ -74,6 +74,26 @@ func importBlueprint(f string) (Blueprint, YamlCtx, error) {
 	return bp, yamlCtx, nil
 }
 
+func importDeploymentFile(f string) (DeploymentSettings, YamlCtx, error) {
+	data, err := os.ReadFile(f)
+	if err != nil {
+		return DeploymentSettings{}, YamlCtx{}, fmt.Errorf("%s, filename=%s: %v", errMsgFileLoadError, f, err)
+	}
+	decoder := yaml.NewDecoder(bytes.NewReader(data))
+	decoder.KnownFields(true)
+
+	yamlCtx, err := NewYamlCtx(data)
+	if err != nil { // YAML parsing error
+		return DeploymentSettings{}, yamlCtx, err
+	}
+
+	var depl DeploymentSettings
+	if err = decoder.Decode(&depl); err != nil {
+		return DeploymentSettings{}, yamlCtx, parseYamlV3Error(err)
+	}
+	return depl, yamlCtx, nil
+}
+
 // YamlCtx is a contextual information to render errors.
 type YamlCtx struct {
 	pathToPos map[yPath]Pos

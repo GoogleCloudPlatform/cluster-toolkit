@@ -25,8 +25,8 @@ import (
 )
 
 func (s *MySuite) TestSetCLIVariables(c *C) {
-	bp := config.Blueprint{}
-	bp.Vars.Set("deployment_name", cty.StringVal("bush"))
+	ds := config.DeploymentSettings{}
+	ds.Vars.Set("deployment_name", cty.StringVal("bush"))
 
 	vars := []string{
 		"project_id=cli_test_project_id",
@@ -42,9 +42,9 @@ func (s *MySuite) TestSetCLIVariables(c *C) {
 		"keyArrayOfMaps=[foo, {bar: baz, qux: 1}]",
 		"keyMapOfArrays={foo: [1, 2, 3], bar: [a, b, c]}",
 	}
-	c.Assert(setCLIVariables(&bp, vars), IsNil)
+	c.Assert(setCLIVariables(&ds, vars), IsNil)
 	c.Check(
-		bp.Vars.Items(), DeepEquals, map[string]cty.Value{
+		ds.Vars.Items(), DeepEquals, map[string]cty.Value{
 			"project_id":      cty.StringVal("cli_test_project_id"),
 			"deployment_name": cty.StringVal("cli_deployment_name"),
 			"region":          cty.StringVal("cli_region"),
@@ -72,14 +72,14 @@ func (s *MySuite) TestSetCLIVariables(c *C) {
 		})
 
 	// Failure: Variable without '='
-	bp = config.Blueprint{}
+	ds = config.DeploymentSettings{}
 	inv := []string{"project_idcli_test_project_id"}
-	c.Check(setCLIVariables(&bp, inv), ErrorMatches, "invalid format: .*")
+	c.Check(setCLIVariables(&ds, inv), ErrorMatches, "invalid format: .*")
 
 	// Failure: Unmarshalable value
-	bp = config.Blueprint{}
+	ds = config.DeploymentSettings{}
 	inv = []string{"pyrite={gold"}
-	c.Check(setCLIVariables(&bp, inv), ErrorMatches, ".*unable to convert.*pyrite.*gold.*")
+	c.Check(setCLIVariables(&ds, inv), ErrorMatches, ".*unable to convert.*pyrite.*gold.*")
 }
 
 func (s *MySuite) TestSetBackendConfig(c *C) {
@@ -90,14 +90,82 @@ func (s *MySuite) TestSetBackendConfig(c *C) {
 		"odor=strong",
 	}
 
-	bp := config.Blueprint{}
-	c.Assert(setBackendConfig(&bp, vars), IsNil)
+	ds := config.DeploymentSettings{}
+	c.Assert(setBackendConfig(&ds, vars), IsNil)
 
-	be := bp.TerraformBackendDefaults
+	be := ds.TerraformBackendDefaults
 	c.Check(be.Type, Equals, "green")
 	c.Check(be.Configuration.Items(), DeepEquals, map[string]cty.Value{
 		"taste": cty.StringVal("sweet"),
 		"odor":  cty.StringVal("strong"),
+	})
+}
+
+func (s *MySuite) TestMergeDeploymentSettings(c *C) {
+	ds := config.DeploymentSettings{
+		Vars: config.NewDict(map[string]cty.Value{
+			"project_id":      cty.StringVal("ds_test_project_id"),
+			"deployment_name": cty.StringVal("ds_deployment_name"),
+		}),
+	}
+
+	bp := config.Blueprint{
+		Vars: config.NewDict(map[string]cty.Value{
+			"project_id":  cty.StringVal("bp_test_project_id"),
+			"example_var": cty.StringVal("bp_example_value"),
+		}),
+	}
+
+	// test priority-based merging of deployment variables
+	mergeDeploymentSettings(&bp, ds)
+	c.Check(bp.Vars.Items(), DeepEquals, map[string]cty.Value{
+		"project_id":      cty.StringVal("ds_test_project_id"),
+		"deployment_name": cty.StringVal("ds_deployment_name"),
+		"example_var":     cty.StringVal("bp_example_value"),
+	})
+
+	// check merging zero-value backends
+	ds = config.DeploymentSettings{
+		TerraformBackendDefaults: config.TerraformBackend{},
+	}
+	bp = config.Blueprint{
+		TerraformBackendDefaults: config.TerraformBackend{},
+	}
+	mergeDeploymentSettings(&bp, ds)
+	c.Check(bp.TerraformBackendDefaults, DeepEquals, config.TerraformBackend{})
+
+	// check keeping blueprint defined backend with no backend in deployment file
+	bp = config.Blueprint{
+		TerraformBackendDefaults: config.TerraformBackend{
+			Type: "gsc",
+			Configuration: config.NewDict(map[string]cty.Value{
+				"bucket": cty.StringVal("bp_bucket"),
+			}),
+		},
+	}
+	mergeDeploymentSettings(&bp, ds)
+	c.Check(bp.TerraformBackendDefaults, DeepEquals, config.TerraformBackend{
+		Type: "gsc",
+		Configuration: config.NewDict(map[string]cty.Value{
+			"bucket": cty.StringVal("bp_bucket"),
+		}),
+	})
+
+	// check overriding blueprint defined backend with deployment file
+	ds = config.DeploymentSettings{
+		TerraformBackendDefaults: config.TerraformBackend{
+			Type: "gsc",
+			Configuration: config.NewDict(map[string]cty.Value{
+				"bucket": cty.StringVal("ds_bucket"),
+			}),
+		},
+	}
+	mergeDeploymentSettings(&bp, ds)
+	c.Check(bp.TerraformBackendDefaults, DeepEquals, config.TerraformBackend{
+		Type: "gsc",
+		Configuration: config.NewDict(map[string]cty.Value{
+			"bucket": cty.StringVal("ds_bucket"),
+		}),
 	})
 }
 
@@ -106,17 +174,17 @@ func (s *MySuite) TestSetBackendConfig_Invalid(c *C) {
 	vars := []string{
 		"typegreen",
 	}
-	bp := config.Blueprint{}
-	c.Assert(setBackendConfig(&bp, vars), ErrorMatches, "invalid format: .*")
+	ds := config.DeploymentSettings{}
+	c.Assert(setBackendConfig(&ds, vars), ErrorMatches, "invalid format: .*")
 }
 
 func (s *MySuite) TestSetBackendConfig_NoOp(c *C) {
-	bp := config.Blueprint{
+	ds := config.DeploymentSettings{
 		TerraformBackendDefaults: config.TerraformBackend{
 			Type: "green"}}
 
-	c.Assert(setBackendConfig(&bp, []string{}), IsNil)
-	c.Check(bp.TerraformBackendDefaults, DeepEquals, config.TerraformBackend{
+	c.Assert(setBackendConfig(&ds, []string{}), IsNil)
+	c.Check(ds.TerraformBackendDefaults, DeepEquals, config.TerraformBackend{
 		Type: "green"})
 }
 
