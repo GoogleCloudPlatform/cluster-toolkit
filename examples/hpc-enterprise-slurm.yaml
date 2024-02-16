@@ -17,7 +17,6 @@
 blueprint_name: hpc-enterprise-slurm
 
 vars:
-  enable_devel: true
   project_id:  ## Set GCP Project ID Here ##
   deployment_name: hpc01
   region: us-central1
