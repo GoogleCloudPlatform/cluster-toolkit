@@ -127,6 +127,7 @@ No modules.
 | Name | Type |
 |------|------|
 | [google_storage_bucket.bucket](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket) | resource |
+| [google_storage_bucket_iam_binding.viewers](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_iam_binding) | resource |
 | [random_id.resource_name_suffix](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/id) | resource |
 
 ## Inputs
@@ -143,6 +144,7 @@ No modules.
 | <a name="input_random_suffix"></a> [random\_suffix](#input\_random\_suffix) | If true, a random id will be appended to the suffix of the bucket name. | `bool` | `false` | no |
 | <a name="input_region"></a> [region](#input\_region) | The region to deploy to | `string` | n/a | yes |
 | <a name="input_use_deployment_name_in_bucket_name"></a> [use\_deployment\_name\_in\_bucket\_name](#input\_use\_deployment\_name\_in\_bucket\_name) | If true, the deployment name will be included as part of the bucket name. This helps prevent naming clashes across multiple deployments. | `bool` | `true` | no |
+| <a name="input_viewers"></a> [viewers](#input\_viewers) | A list of additional accounts that can read packages from this bucket | `set(string)` | `[]` | no |
 
 ## Outputs
 

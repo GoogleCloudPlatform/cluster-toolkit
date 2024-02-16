@@ -69,3 +69,16 @@ variable "force_destroy" {
   type        = bool
   default     = false
 }
+
+variable "viewers" {
+  description = "A list of additional accounts that can read packages from this bucket"
+  type        = set(string)
+  default     = []
+
+  validation {
+    error_message = "All bucket viewers must be in IAM style: user:user@example.com, serviceAccount:sa@example.com, or group:group@example.com."
+    condition = alltrue([
+      for viewer in var.viewers : length(regexall("^(user|serviceAccount|group):", viewer)) > 0
+    ])
+  }
+}
