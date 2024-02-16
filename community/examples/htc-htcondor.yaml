@@ -60,21 +60,26 @@ deployment_groups:
 
 - group: pool
   modules:
+  - id: htcondor_service_accounts
+    source: community/modules/scheduler/htcondor-service-accounts
+
   - id: htcondor_setup
     source: community/modules/scheduler/htcondor-setup
     use:
     - network1
+    - htcondor_service_accounts
 
   - id: htcondor_secrets
     source: community/modules/scheduler/htcondor-pool-secrets
     use:
-    - htcondor_setup
+    - htcondor_service_accounts
 
   - id: htcondor_cm
     source: community/modules/scheduler/htcondor-central-manager
     use:
     - network1
     - htcondor_secrets
+    - htcondor_service_accounts
     - htcondor_setup
     settings:
       instance_image: $(vars.new_image)
@@ -89,6 +94,7 @@ deployment_groups:
     use:
     - network1
     - htcondor_secrets
+    - htcondor_service_accounts
     - htcondor_setup
     - htcondor_cm
     settings:
@@ -101,6 +107,7 @@ deployment_groups:
     use:
     - network1
     - htcondor_secrets
+    - htcondor_service_accounts
     - htcondor_setup
     - htcondor_cm
     settings:
@@ -113,6 +120,7 @@ deployment_groups:
     use:
     - network1
     - htcondor_secrets
+    - htcondor_service_accounts
     - htcondor_setup
     - htcondor_cm
     - htcondor_execute_point
