@@ -32,8 +32,11 @@ import (
 
 // Suite that creates a temporary directory for testing
 type MySuite struct {
-	tmpTestDir         string
-	simpleYamlFilename string
+	tmpTestDir          string
+	simpleYamlFilename  string
+	deploymentFilename  string
+	emptyFilename       string
+	unsupportedFilename string
 }
 
 // Suite that does not use any setup
@@ -48,6 +51,26 @@ func Test(t *testing.T) {
 }
 
 func (s *MySuite) SetUpSuite(c *C) {
+	emptyFile, err := os.CreateTemp(c.MkDir(), "*.yaml")
+	if err != nil {
+		c.Fatal(err)
+	}
+	s.emptyFilename = emptyFile.Name()
+	emptyFile.Close()
+
+	unsupportedFile, err := os.CreateTemp(c.MkDir(), "*.yaml")
+	if err != nil {
+		c.Fatal(err)
+	}
+	_, err = unsupportedFile.Write([]byte(`
+not_a_field: not_a_value
+`))
+	if err != nil {
+		c.Fatal(err)
+	}
+	s.unsupportedFilename = unsupportedFile.Name()
+	unsupportedFile.Close()
+
 	simpleYamlFile, err := os.CreateTemp(c.MkDir(), "*.yaml")
 	if err != nil {
 		c.Fatal(err)
@@ -76,6 +99,24 @@ deployment_groups:
 	}
 	s.simpleYamlFilename = simpleYamlFile.Name()
 	simpleYamlFile.Close()
+
+	deploymentYamlFile, err := os.CreateTemp(c.MkDir(), "*.yaml")
+	if err != nil {
+		c.Fatal(err)
+	}
+	_, err = deploymentYamlFile.Write([]byte(`
+vars:
+  project_id: ds-project
+terraform_backend_defaults:
+  type: gcs
+  configuration:
+    bucket: ds-tf-state-bucket
+`))
+	if err != nil {
+		c.Fatal(err)
+	}
+	s.deploymentFilename = deploymentYamlFile.Name()
+	deploymentYamlFile.Close()
 
 	// Create test directory with simple modules
 	s.tmpTestDir = c.MkDir()
@@ -487,8 +528,33 @@ func (s *MySuite) TestImportBlueprint(c *C) {
 	c.Assert(err, IsNil)
 	c.Check(bp.BlueprintName, Equals, "simple")
 	c.Check(bp.DeploymentGroups[0].Modules[0].ID, Equals, ModuleID("vpc"))
+
+	_, _, emptyErr := importBlueprint(s.emptyFilename)
+	c.Assert(emptyErr, NotNil)
+
+	_, _, unsupportedErr := importBlueprint(s.unsupportedFilename)
+	c.Assert(unsupportedErr, NotNil)
 }
 
+func (s *MySuite) TestNewDeploymentSettings(c *C) {
+	ds, _, err := NewDeploymentSettings(s.deploymentFilename)
+	c.Assert(err, IsNil)
+	c.Check(ds.Vars.Items(), DeepEquals, map[string]cty.Value{
+		"project_id": cty.StringVal("ds-project"),
+	})
+	c.Check(ds.TerraformBackendDefaults, DeepEquals, TerraformBackend{
+		Type: "gcs",
+		Configuration: NewDict(map[string]cty.Value{
+			"bucket": cty.StringVal("ds-tf-state-bucket"),
+		}),
+	})
+
+	_, _, emptyErr := NewDeploymentSettings(s.emptyFilename)
+	c.Assert(emptyErr, NotNil)
+
+	_, _, unsupportedErr := NewDeploymentSettings(s.unsupportedFilename)
+	c.Assert(unsupportedErr, NotNil)
+}
 func (s *zeroSuite) TestValidateGlobalLabels(c *C) {
 
 	labelName := "my_test_label_name"

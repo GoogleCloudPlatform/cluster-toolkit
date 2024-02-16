@@ -54,17 +54,25 @@ type Pos struct {
 	Column int
 }
 
-func importBlueprint(f string) (Blueprint, YamlCtx, error) {
+func readYaml(f string) (*yaml.Decoder, YamlCtx, error) {
 	data, err := os.ReadFile(f)
 	if err != nil {
-		return Blueprint{}, YamlCtx{}, fmt.Errorf("%s, filename=%s: %v", errMsgFileLoadError, f, err)
+		return &yaml.Decoder{}, YamlCtx{}, fmt.Errorf("%s, filename=%s: %v", errMsgFileLoadError, f, err)
 	}
 	decoder := yaml.NewDecoder(bytes.NewReader(data))
 	decoder.KnownFields(true)
 
 	yamlCtx, err := NewYamlCtx(data)
 	if err != nil { // YAML parsing error
-		return Blueprint{}, yamlCtx, err
+		return &yaml.Decoder{}, yamlCtx, err
+	}
+	return decoder, yamlCtx, nil
+}
+
+func importBlueprint(f string) (Blueprint, YamlCtx, error) {
+	decoder, yamlCtx, err := readYaml(f)
+	if err != nil {
+		return Blueprint{}, YamlCtx{}, err
 	}
 
 	var bp Blueprint
@@ -75,16 +83,9 @@ func importBlueprint(f string) (Blueprint, YamlCtx, error) {
 }
 
 func importDeploymentFile(f string) (DeploymentSettings, YamlCtx, error) {
-	data, err := os.ReadFile(f)
+	decoder, yamlCtx, err := readYaml(f)
 	if err != nil {
-		return DeploymentSettings{}, YamlCtx{}, fmt.Errorf("%s, filename=%s: %v", errMsgFileLoadError, f, err)
-	}
-	decoder := yaml.NewDecoder(bytes.NewReader(data))
-	decoder.KnownFields(true)
-
-	yamlCtx, err := NewYamlCtx(data)
-	if err != nil { // YAML parsing error
-		return DeploymentSettings{}, yamlCtx, err
+		return DeploymentSettings{}, YamlCtx{}, err
 	}
 
 	var depl DeploymentSettings
