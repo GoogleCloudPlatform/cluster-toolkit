@@ -46,9 +46,9 @@ locals {
   submit_script_contents = templatefile(
     "${path.module}/templates/batch-submit.sh.tftpl",
     {
-      project = var.project_id
+      project  = var.project_id
       location = var.region
-      config = local_file.job_template.filename
+      config   = local_file.job_template.filename
     }
   )
   submit_script_output_path = "${path.root}/submit-job.sh"
@@ -106,13 +106,13 @@ resource "local_file" "job_template" {
 }
 
 resource "local_file" "submit_script" {
-  content = local.submit_script_contents
+  content  = local.submit_script_contents
   filename = local.submit_script_output_path
 }
 
 resource "null_resource" "submit_job" {
-  depends_on = [ local_file.job_template ]
-  count = var.submit ? 1 : 0
+  depends_on = [local_file.job_template]
+  count      = var.submit ? 1 : 0
 
   # A new deployment should always submit a new job. Old finished jobs aren't persistent parts of
   # Cloud infrastructure.

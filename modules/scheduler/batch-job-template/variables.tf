@@ -217,6 +217,6 @@ variable "on_host_maintenance" {
 
 variable "submit" {
   description = "When set to true, the generated job file will be submitted automatically to Google Cloud as part of terraform apply."
-  type = bool
-  default = false
+  type        = bool
+  default     = false
 }
