@@ -647,28 +647,11 @@ func (s *zeroSuite) TestCheckMovedModules(c *C) {
 	c.Assert(checkMovedModule("./community/modules/scheduler/cloud-batch-job"), NotNil)
 }
 
-func (s *zeroSuite) TestCheckBackends(c *C) {
-	// Helper to create blueprint with backend blocks only (first one is defaults)
-	// and run checkBackends.
-	check := func(d TerraformBackend, gb ...TerraformBackend) error {
-		gs := []DeploymentGroup{}
-		for _, b := range gb {
-			gs = append(gs, DeploymentGroup{TerraformBackend: b})
-		}
-		bp := Blueprint{
-			TerraformBackendDefaults: d,
-			DeploymentGroups:         gs,
-		}
-		return checkBackends(bp)
-	}
-	dummy := TerraformBackend{}
+func (s *zeroSuite) TestCheckBackend(c *C) {
+	p := Root.Groups.At(173).Backend
 
 	{ // OK. Absent
-		c.Check(checkBackends(Blueprint{}), IsNil)
-	}
-
-	{ // OK. Dummies
-		c.Check(check(dummy, dummy, dummy), IsNil)
+		c.Check(checkBackend(p, TerraformBackend{}), IsNil)
 	}
 
 	{ // OK. No variables used
@@ -676,46 +659,31 @@ func (s *zeroSuite) TestCheckBackends(c *C) {
 		b.Configuration.
 			Set("bucket", cty.StringVal("trenta")).
 			Set("impersonate_service_account", cty.StringVal("who"))
-		c.Check(check(b), IsNil)
+		c.Check(checkBackend(p, b), IsNil)
 	}
 
-	{ // FAIL. Variable in defaults type
+	{ // FAIL. Expression in type
 		b := TerraformBackend{Type: "$(vartype)"}
-		c.Check(check(b), NotNil)
-	}
-
-	{ // FAIL. Variable in group backend type
-		b := TerraformBackend{Type: "$(vartype)"}
-		c.Check(check(dummy, b), NotNil)
-	}
-
-	{ // FAIL. Deployment variable in defaults type
-		b := TerraformBackend{Type: "$(vars.type)"}
-		c.Check(check(b), NotNil)
+		c.Check(checkBackend(p, b), NotNil)
 	}
 
 	{ // FAIL. HCL literal
 		b := TerraformBackend{Type: "((var.zen))"}
-		c.Check(check(b), NotNil)
+		c.Check(checkBackend(p, b), NotNil)
 	}
 
 	{ // OK. Not a variable
 		b := TerraformBackend{Type: "\\$(vartype)"}
-		c.Check(check(b), IsNil)
+		c.Check(checkBackend(p, b), IsNil)
 	}
 
-	{ // FAIL. Mid-string variable in defaults type
-		b := TerraformBackend{Type: "hugs_$(vartype)_hugs"}
-		c.Check(check(b), NotNil)
-	}
-
-	{ // FAIL. Variable in defaults configuration
+	{ // FAIL. Variable in configuration
 		b := TerraformBackend{Type: "gcs"}
 		b.Configuration.Set("bucket", GlobalRef("trenta").AsValue())
-		c.Check(check(b), NotNil)
+		c.Check(checkBackend(p, b), NotNil)
 	}
 
-	{ // OK. handles nested configuration
+	{ // FAIL. handles nested configuration
 		b := TerraformBackend{Type: "gcs"}
 		b.Configuration.
 			Set("bucket", cty.StringVal("trenta")).
@@ -723,7 +691,7 @@ func (s *zeroSuite) TestCheckBackends(c *C) {
 				"alpha": cty.StringVal("a"),
 				"beta":  GlobalRef("boba").AsValue(),
 			}))
-		c.Check(check(b), NotNil)
+		c.Check(checkBackend(p, b), NotNil)
 	}
 }
 

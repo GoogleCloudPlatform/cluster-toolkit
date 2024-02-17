@@ -260,38 +260,19 @@ type DeploymentConfig struct {
 
 // ExpandConfig expands the yaml config in place
 func (dc *DeploymentConfig) ExpandConfig() error {
-	dc.Config.origVars = NewDict(dc.Config.Vars.Items()) // copy
-	dc.Config.addKindToModules()
-
-	if vars, err := dc.Config.evalVars(); err != nil {
-		return err
-	} else {
-		dc.Config.Vars = vars
-	}
-
-	dc.expandBackends()
-	dc.combineLabels()
-
-	if err := validateBlueprint(dc.Config); err != nil {
+	bp := &dc.Config
+	// expand the blueprint in dependency order:
+	// BlueprintName -> DefaultBackend -> Vars -> Groups
+	if err := bp.checkBlueprintName(); err != nil {
 		return err
 	}
-
-	if err := dc.applyUseModules(); err != nil {
+	if err := checkBackend(Root.Backend, bp.TerraformBackendDefaults); err != nil {
 		return err
 	}
-
-	dc.applyGlobalVariables()
-
-	if err := validateInputsAllModules(dc.Config); err != nil {
+	if err := bp.expandVars(); err != nil {
 		return err
 	}
-
-	if err := validateModulesAreUsed(dc.Config); err != nil {
-		return err
-	}
-
-	dc.Config.populateOutputs()
-	return nil
+	return bp.expandGroups()
 }
 
 // ListUnusedModules provides a list modules that are in the
@@ -429,6 +410,10 @@ func checkModulesAndGroups(bp Blueprint) error {
 			errs.At(pg.Modules, errors.New("deployment group must have at least one module"))
 		} else if grp.Kind() == UnknownKind {
 			errs.At(pg.Modules, errors.New("mixing modules of differing kinds in a deployment group is not supported"))
+		} else if grp.Kind() == PackerKind && len(grp.Modules) > 1 {
+			errs.At(pg, HintError{
+				Err:  fmt.Errorf("packer group %q has more than 1 module", grp.Name),
+				Hint: "separate each packer module into its own deployment group"})
 		}
 
 		for im, mod := range grp.Modules {
@@ -439,6 +424,8 @@ func checkModulesAndGroups(bp Blueprint) error {
 			seenMod[mod.ID] = true
 			errs.Add(validateModule(pm, mod, bp))
 		}
+
+		errs.Add(checkBackend(pg.Backend, grp.TerraformBackend))
 	}
 	return errs.OrNil()
 }
@@ -453,39 +440,24 @@ func validateModuleUseReferences(p ModulePath, mod Module, bp Blueprint) error {
 	return errs.OrNil()
 }
 
-func checkBackend(b TerraformBackend) error {
+func checkBackend(bep backendPath, be TerraformBackend) error {
 	err := errors.New("can not use expressions in terraform_backend block")
-	val, perr := parseYamlString(b.Type)
+	val, perr := parseYamlString(be.Type)
 
 	if _, is := IsExpressionValue(val); is || perr != nil {
-		return err
+		return BpError{bep.Type, err}
 	}
-	return cty.Walk(b.Configuration.AsObject(), func(p cty.Path, v cty.Value) (bool, error) {
-		if _, is := IsExpressionValue(v); is {
-			return false, err
-		}
-		return true, nil
-	})
-}
-
-func checkBackends(bp Blueprint) error {
-	errs := Errors{}
-	errs.At(Root.Backend, checkBackend(bp.TerraformBackendDefaults))
-	for ig, g := range bp.DeploymentGroups {
-		errs.At(Root.Groups.At(ig).Backend, checkBackend(g.TerraformBackend))
+	var errs Errors
+	for k, c := range be.Configuration.Items() {
+		cp := bep.Configuration.Dot(k)
+		errs.Add(cty.Walk(c, func(vp cty.Path, v cty.Value) (bool, error) {
+			if _, is := IsExpressionValue(v); is {
+				errs.At(cp.Cty(vp), err)
+			}
+			return true, nil
+		}))
 	}
 	return errs.OrNil()
-}
-
-// validateBlueprint runs a set of simple early checks on the imported input YAML
-func validateBlueprint(bp Blueprint) error {
-	return (&Errors{}).
-		Add(bp.checkBlueprintName()).
-		Add(validateVars(bp.Vars)).
-		Add(checkModulesAndGroups(bp)).
-		Add(checkPackerGroups(bp.DeploymentGroups)).
-		Add(checkBackends(bp)).
-		OrNil()
 }
 
 // SkipValidator marks validator(s) as skipped,
@@ -667,17 +639,6 @@ func validateModuleSettingReferences(p ModulePath, m Module, bp Blueprint) error
 			errs.At(
 				p.Settings.Dot(k).Cty(rp),
 				validateModuleSettingReference(bp, m, r))
-		}
-	}
-	return errs.OrNil()
-}
-
-func checkPackerGroups(groups []DeploymentGroup) error {
-	errs := Errors{}
-	for ig, group := range groups {
-		if group.Kind() == PackerKind && len(group.Modules) != 1 {
-			errs.At(Root.Groups.At(ig),
-				fmt.Errorf("group %s is \"kind: packer\" but has more than 1 module; separate each packer module into its own deployment group", group.Name))
 		}
 	}
 	return errs.OrNil()
