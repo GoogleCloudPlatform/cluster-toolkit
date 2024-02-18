@@ -252,6 +252,12 @@ type Blueprint struct {
 	origVars Dict
 }
 
+// DeploymentSettings are deployment-specific override settings
+type DeploymentSettings struct {
+	TerraformBackendDefaults TerraformBackend `yaml:"terraform_backend_defaults,omitempty"`
+	Vars                     Dict
+}
+
 // DeploymentConfig is a container for the imported YAML data and supporting data for
 // creating the blueprint from it
 type DeploymentConfig struct {
@@ -376,6 +382,14 @@ func NewDeploymentConfig(configFilename string) (DeploymentConfig, YamlCtx, erro
 		bp.ValidationLevel = ValidationError
 	}
 	return DeploymentConfig{Config: bp}, ctx, nil
+}
+
+func NewDeploymentSettings(deploymentFilename string) (DeploymentSettings, YamlCtx, error) {
+	depl, ctx, err := importDeploymentFile(deploymentFilename)
+	if err != nil {
+		return DeploymentSettings{}, ctx, err
+	}
+	return depl, ctx, nil
 }
 
 // ExportBlueprint exports the internal representation of a blueprint config
