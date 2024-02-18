@@ -43,6 +43,16 @@ locals {
   job_filename             = var.job_filename != null ? var.job_filename : "cloud-batch-${local.job_id}.yaml"
   job_template_output_path = "${path.root}/${local.job_filename}"
 
+  submit_script_contents = templatefile(
+    "${path.module}/templates/batch-submit.sh.tftpl",
+    {
+      project  = var.project_id
+      location = var.region
+      config   = local_file.job_template.filename
+    }
+  )
+  submit_script_output_path = "${path.root}/submit-job.sh"
+
   subnetwork_name    = var.subnetwork != null ? var.subnetwork.name : "default"
   subnetwork_project = var.subnetwork != null ? var.subnetwork.project : var.project_id
 
@@ -93,4 +103,24 @@ module "instance_template" {
 resource "local_file" "job_template" {
   content  = local.job_template_contents
   filename = local.job_template_output_path
+}
+
+resource "local_file" "submit_script" {
+  content  = local.submit_script_contents
+  filename = local.submit_script_output_path
+}
+
+resource "null_resource" "submit_job" {
+  depends_on = [local_file.job_template]
+  count      = var.submit ? 1 : 0
+
+  # A new deployment should always submit a new job. Old finished jobs aren't persistent parts of
+  # Cloud infrastructure.
+  triggers = {
+    always_run = timestamp()
+  }
+
+  provisioner "local-exec" {
+    command = local.submit_script_output_path
+  }
 }
