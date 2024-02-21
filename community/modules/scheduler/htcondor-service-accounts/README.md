@@ -1,8 +1,18 @@
 ## Description
 
-This module creates a bucket in which to store HTCondor configurations and
-a firewall rule that allows Managed Instance Group health checks to probe the
-health of HTCondor VMs.
+This module creates the service accounts for use by the primary elements of an
+[HTCondor pool][pool]:
+
+- Central Managers
+- Access Points
+- Execute Points
+
+Each service account is assigned common roles necessary for the VM to function
+properly. In particular, nearly every VM requires the ability to read from Cloud
+Storage buckets and write Cloud Logging entries. These roles are configurable
+as described below.
+
+[pool]: https://htcondor.readthedocs.io/en/latest/admin-manual/introduction-admin-manual.html#the-different-roles-a-machine-can-play
 
 ### Example
 
@@ -62,7 +72,7 @@ the University of Wisconsin-Madison. Support for HTCondor is available via:
 ## License
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
-Copyright 2022 Google LLC
+Copyright 2024 Google LLC
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -90,8 +100,9 @@ No providers.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_health_check_firewall_rule"></a> [health\_check\_firewall\_rule](#module\_health\_check\_firewall\_rule) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/network/firewall-rules | 9e695aab |
-| <a name="module_htcondor_bucket"></a> [htcondor\_bucket](#module\_htcondor\_bucket) | github.com/GoogleCloudPlatform/hpc-toolkit//community/modules/file-system/cloud-storage-bucket/ | 9e695aab |
+| <a name="module_access_point_service_account"></a> [access\_point\_service\_account](#module\_access\_point\_service\_account) | github.com/GoogleCloudPlatform/hpc-toolkit//community/modules/project/service-account | v1.28.1&depth=1 |
+| <a name="module_central_manager_service_account"></a> [central\_manager\_service\_account](#module\_central\_manager\_service\_account) | github.com/GoogleCloudPlatform/hpc-toolkit//community/modules/project/service-account | v1.28.1&depth=1 |
+| <a name="module_execute_point_service_account"></a> [execute\_point\_service\_account](#module\_execute\_point\_service\_account) | github.com/GoogleCloudPlatform/hpc-toolkit//community/modules/project/service-account | v1.28.1&depth=1 |
 
 ## Resources
 
@@ -101,18 +112,17 @@ No resources.
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_access_point_service_account_email"></a> [access\_point\_service\_account\_email](#input\_access\_point\_service\_account\_email) | Service account e-mail for HTCondor Access Point | `string` | n/a | yes |
-| <a name="input_central_manager_service_account_email"></a> [central\_manager\_service\_account\_email](#input\_central\_manager\_service\_account\_email) | Service account e-mail for HTCondor Central Manager | `string` | n/a | yes |
+| <a name="input_access_point_roles"></a> [access\_point\_roles](#input\_access\_point\_roles) | Project-wide roles for HTCondor Access Point service account | `list(string)` | <pre>[<br>  "roles/compute.instanceAdmin",<br>  "roles/monitoring.metricWriter",<br>  "roles/logging.logWriter",<br>  "roles/storage.objectViewer"<br>]</pre> | no |
+| <a name="input_central_manager_roles"></a> [central\_manager\_roles](#input\_central\_manager\_roles) | Project-wide roles for HTCondor Central Manager service account | `list(string)` | <pre>[<br>  "roles/monitoring.metricWriter",<br>  "roles/logging.logWriter",<br>  "roles/storage.objectViewer"<br>]</pre> | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | HPC Toolkit deployment name. HTCondor cloud resource names will include this value. | `string` | n/a | yes |
-| <a name="input_execute_point_service_account_email"></a> [execute\_point\_service\_account\_email](#input\_execute\_point\_service\_account\_email) | Service account e-mail for HTCondor Execute Points | `string` | n/a | yes |
-| <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to resources. List key, value pairs. | `map(string)` | n/a | yes |
+| <a name="input_execute_point_roles"></a> [execute\_point\_roles](#input\_execute\_point\_roles) | Project-wide roles for HTCondor Execute Point service account | `list(string)` | <pre>[<br>  "roles/monitoring.metricWriter",<br>  "roles/logging.logWriter",<br>  "roles/storage.objectViewer"<br>]</pre> | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which HTCondor pool will be created | `string` | n/a | yes |
-| <a name="input_region"></a> [region](#input\_region) | Default region for creating resources | `string` | n/a | yes |
-| <a name="input_subnetwork_self_link"></a> [subnetwork\_self\_link](#input\_subnetwork\_self\_link) | The self link of the subnetwork in which Central Managers will be placed. | `string` | n/a | yes |
 
 ## Outputs
 
 | Name | Description |
 |------|-------------|
-| <a name="output_htcondor_bucket_name"></a> [htcondor\_bucket\_name](#output\_htcondor\_bucket\_name) | Name of the HTCondor configuration bucket |
+| <a name="output_access_point_service_account_email"></a> [access\_point\_service\_account\_email](#output\_access\_point\_service\_account\_email) | HTCondor Access Point Service Account (e-mail format) |
+| <a name="output_central_manager_service_account_email"></a> [central\_manager\_service\_account\_email](#output\_central\_manager\_service\_account\_email) | HTCondor Central Manager Service Account (e-mail format) |
+| <a name="output_execute_point_service_account_email"></a> [execute\_point\_service\_account\_email](#output\_execute\_point\_service\_account\_email) | HTCondor Execute Point Service Account (e-mail format) |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

@@ -24,32 +24,33 @@ variable "deployment_name" {
   type        = string
 }
 
-variable "labels" {
-  description = "Labels to add to resources. List key, value pairs."
-  type        = map(string)
+variable "access_point_roles" {
+  description = "Project-wide roles for HTCondor Access Point service account"
+  type        = list(string)
+  default = [
+    "roles/compute.instanceAdmin",
+    "roles/monitoring.metricWriter",
+    "roles/logging.logWriter",
+    "roles/storage.objectViewer",
+  ]
 }
 
-variable "region" {
-  description = "Default region for creating resources"
-  type        = string
+variable "central_manager_roles" {
+  description = "Project-wide roles for HTCondor Central Manager service account"
+  type        = list(string)
+  default = [
+    "roles/monitoring.metricWriter",
+    "roles/logging.logWriter",
+    "roles/storage.objectViewer",
+  ]
 }
 
-variable "subnetwork_self_link" {
-  description = "The self link of the subnetwork in which Central Managers will be placed."
-  type        = string
-}
-
-variable "access_point_service_account_email" {
-  description = "Service account e-mail for HTCondor Access Point"
-  type        = string
-}
-
-variable "central_manager_service_account_email" {
-  description = "Service account e-mail for HTCondor Central Manager"
-  type        = string
-}
-
-variable "execute_point_service_account_email" {
-  description = "Service account e-mail for HTCondor Execute Points"
-  type        = string
+variable "execute_point_roles" {
+  description = "Project-wide roles for HTCondor Execute Point service account"
+  type        = list(string)
+  default = [
+    "roles/monitoring.metricWriter",
+    "roles/logging.logWriter",
+    "roles/storage.objectViewer",
+  ]
 }
