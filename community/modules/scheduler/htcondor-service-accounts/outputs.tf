@@ -17,23 +17,14 @@
 output "access_point_service_account_email" {
   description = "HTCondor Access Point Service Account (e-mail format)"
   value       = module.access_point_service_account.service_account_email
-  depends_on = [
-    module.access_point_service_account
-  ]
 }
 
 output "central_manager_service_account_email" {
   description = "HTCondor Central Manager Service Account (e-mail format)"
   value       = module.central_manager_service_account.service_account_email
-  depends_on = [
-    module.central_manager_service_account
-  ]
 }
 
 output "execute_point_service_account_email" {
   description = "HTCondor Execute Point Service Account (e-mail format)"
   value       = module.execute_point_service_account.service_account_email
-  depends_on = [
-    module.execute_point_service_account
-  ]
 }

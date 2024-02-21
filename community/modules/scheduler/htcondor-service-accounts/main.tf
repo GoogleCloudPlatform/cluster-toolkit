@@ -14,8 +14,14 @@
  * limitations under the License.
  */
 
+# NB: the community/modules/project/service-account module will not output the
+# service account e-mail address until all IAM bindings have been created; if
+# underlying implementation changes, this module should declare explicit
+# depends_on the IAM bindings to prevent race conditions for services that
+# require them
+
 module "access_point_service_account" {
-  source = "github.com/GoogleCloudPlatform/hpc-toolkit//community/modules/project/service-account?ref=v1.27.0&depth=1"
+  source = "github.com/GoogleCloudPlatform/hpc-toolkit//community/modules/project/service-account?ref=v1.28.1&depth=1"
 
   project_id      = var.project_id
   display_name    = "HTCondor Access Point"
@@ -25,7 +31,7 @@ module "access_point_service_account" {
 }
 
 module "execute_point_service_account" {
-  source = "github.com/GoogleCloudPlatform/hpc-toolkit//community/modules/project/service-account?ref=v1.27.0&depth=1"
+  source = "github.com/GoogleCloudPlatform/hpc-toolkit//community/modules/project/service-account?ref=v1.28.1&depth=1"
 
   project_id      = var.project_id
   display_name    = "HTCondor Execute Point"
@@ -35,7 +41,7 @@ module "execute_point_service_account" {
 }
 
 module "central_manager_service_account" {
-  source = "github.com/GoogleCloudPlatform/hpc-toolkit//community/modules/project/service-account?ref=v1.27.0&depth=1"
+  source = "github.com/GoogleCloudPlatform/hpc-toolkit//community/modules/project/service-account?ref=v1.28.1&depth=1"
 
   project_id      = var.project_id
   display_name    = "HTCondor Central Manager"
