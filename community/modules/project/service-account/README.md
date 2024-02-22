@@ -99,7 +99,7 @@ No resources.
 | <a name="input_org_id"></a> [org\_id](#input\_org\_id) | Id of the organization for org-level roles. | `string` | `""` | no |
 | <a name="input_prefix"></a> [prefix](#input\_prefix) | Deprecated; prefix now set using var.deployment\_name | `string` | `null` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | ID of the project | `string` | n/a | yes |
-| <a name="input_project_roles"></a> [project\_roles](#input\_project\_roles) | List of roles to grant to service account | `list(string)` | n/a | yes |
+| <a name="input_project_roles"></a> [project\_roles](#input\_project\_roles) | List of roles to grant to service account (e.g. "storage.objectViewer" or "compute.instanceAdmin.v1" | `list(string)` | n/a | yes |
 
 ## Outputs
 

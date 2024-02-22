@@ -28,10 +28,10 @@ variable "access_point_roles" {
   description = "Project-wide roles for HTCondor Access Point service account"
   type        = list(string)
   default = [
-    "roles/compute.instanceAdmin",
-    "roles/monitoring.metricWriter",
-    "roles/logging.logWriter",
-    "roles/storage.objectViewer",
+    "compute.instanceAdmin.v1",
+    "monitoring.metricWriter",
+    "logging.logWriter",
+    "storage.objectViewer",
   ]
 }
 
@@ -39,9 +39,9 @@ variable "central_manager_roles" {
   description = "Project-wide roles for HTCondor Central Manager service account"
   type        = list(string)
   default = [
-    "roles/monitoring.metricWriter",
-    "roles/logging.logWriter",
-    "roles/storage.objectViewer",
+    "monitoring.metricWriter",
+    "logging.logWriter",
+    "storage.objectViewer",
   ]
 }
 
@@ -49,8 +49,8 @@ variable "execute_point_roles" {
   description = "Project-wide roles for HTCondor Execute Point service account"
   type        = list(string)
   default = [
-    "roles/monitoring.metricWriter",
-    "roles/logging.logWriter",
-    "roles/storage.objectViewer",
+    "monitoring.metricWriter",
+    "logging.logWriter",
+    "storage.objectViewer",
   ]
 }
