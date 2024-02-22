@@ -100,14 +100,6 @@ deployment_groups:
     source: modules/scripts/startup-script
     settings:
       runners:
-      - type: shell
-        destination: remove_lustre_client_repo.sh
-        content: |
-          #!/bin/bash
-          rm -f /etc/yum.repos.d/lustre-client.repo
-          dnf clean all --verbose
-          rm -rf /var/cache/dnf/*
-          dnf makecache
       - type: data
         content: $(daos.daos_agent_yml)
         destination: /etc/daos/daos_agent.yml
