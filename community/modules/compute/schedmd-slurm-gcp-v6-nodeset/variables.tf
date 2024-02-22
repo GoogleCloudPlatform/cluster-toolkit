@@ -76,7 +76,7 @@ variable "instance_image" {
     EOD
   type        = map(string)
   default = {
-    family  = "slurm-gcp-6-3-hpc-rocky-linux-8"
+    family  = "slurm-gcp-6-4-hpc-rocky-linux-8"
     project = "schedmd-slurm-public"
   }
 
@@ -411,6 +411,15 @@ variable "access_config" {
 variable "reservation_name" {
   description = <<-EOD
     Sets reservation affinity for instances created from this nodeset.
+  EOD
+  type        = string
+  default     = null
+}
+
+variable "maintenance_interval" {
+  description = <<-EOD
+    Sets the maintenance interval for instances in this nodeset.
+    See https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_instance#maintenance_interval.
   EOD
   type        = string
   default     = null

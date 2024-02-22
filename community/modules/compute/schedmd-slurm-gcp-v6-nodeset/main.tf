@@ -78,6 +78,7 @@ locals {
     spot                     = var.enable_spot_vm
     termination_action       = try(var.spot_instance_config.termination_action, null)
     reservation_name         = var.reservation_name
+    maintenance_interval     = var.maintenance_interval
 
     zones             = toset(concat([var.zone], tolist(var.zones)))
     zone_target_shape = var.zone_target_shape
