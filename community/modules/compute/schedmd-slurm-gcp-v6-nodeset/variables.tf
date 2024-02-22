@@ -415,3 +415,12 @@ variable "reservation_name" {
   type        = string
   default     = null
 }
+
+variable "maintenance_interval" {
+  description = <<-EOD
+    Sets the maintenance interval for instances in this nodeset.
+    See https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_instance#maintenance_interval.
+  EOD
+  type        = string
+  default     = null
+}
