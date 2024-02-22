@@ -13,9 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import glob
-import json
-
 """
 List build files in `tools/cloud-build/daily-tests/builds/`
 and creates a cron-schedule-string for each of them.
@@ -31,28 +28,44 @@ $ ./list_tests.py | jq
 ...
 ```
 """
-def list_builds(start_time=30, end_time=5*60):
-    """
-    start_time: int, minutes since midnight to run the first test, e.g. 30 = 00:30
-    end_time: int, minutes since midnight to run the last test, e.g. 5*60 = 05:00
-    """
-    builds = glob.glob("*.yaml", root_dir="../daily-tests/builds/")
-    assert builds, "No builds have been found"
-    # Sort and strip ".yaml"
-    builds = [b[:-5] for b in sorted(builds)]
-    interval = (end_time - start_time) // max(1, len(builds) - 1)
-    res = {}
-    for b in builds:
-        # OFE-deployment test is configured to only run as a PR trigger and does
-        # not run on a nightly basis. Refer tools/cloud-build/provision/pr-ofe-test.tf
-        # for the configuration.
-        if b == "ofe-deployment":
-          continue
-        h, m = start_time // 60, start_time % 60
-        res[b] = f"{m} {h} * * MON-FRI"
-        start_time += interval
-    return res
 
+import glob
+import json
+import hashlib
+
+# OFE-deployment test is configured to only run as a PR trigger and does
+# not run on a nightly basis. Refer tools/cloud-build/provision/pr-ofe-test.tf
+# for the configuration.
+TO_SKIP = frozenset(["ofe-deployment"])
+
+# Seed for deterministic order of tests, change to other value to shuffle tests
+ORDER_SEED = b"Hakuna Matata"
+
+def list_builds() -> list[str]:
+    builds = [b[:-5] for b in glob.glob("*.yaml", root_dir="../daily-tests/builds/")]
+    assert builds, "No builds have been found"
+    return list(set(builds) - TO_SKIP)
+
+HASH = lambda s: int(hashlib.md5(s.encode() + ORDER_SEED).hexdigest(), 16)
+
+def schedule_evenly(builds: list[str], start: int, end: int) -> dict[str, str]:
+    """
+    Schedule builds evenly between start and end time.
+    """
+    # use hash instead of names to avoid clustering of similar tests
+    order = sorted(builds, key=HASH)
+    interval = (end - start) / max(1, len(builds) - 1)
+    return {b: int(start + i * interval) for i, b in enumerate(order)}
+
+# DO_NOT_SUBMIT: please review the proposed change
+def schedule_consistently(builds: list[str], start: int, end: int) -> dict[str, str]:
+    duration = max(end - start, 1)
+    coord = lambda b: start + (HASH(b) % duration)
+    return {b: coord(b) for b in sorted(builds, key=coord)}
+
+def crontab(schedule: dict[str, int]) -> dict[str, str]:
+    return { # test: "{minutes} {hours} * * MON-FRI"
+        k: f"{t % 60} {t // 60} * * MON-FRI" for k, t in schedule.items()}
 
 if __name__ == "__main__":
     import argparse
@@ -63,4 +76,8 @@ if __name__ == "__main__":
                         help='minutes since midnight to run the last test, e.g. 300 = 05:00')
     args = parser.parse_args()
 
-    print(json.dumps(list_builds(args.start_time, args.end_time)))
+    assert args.start_time < args.end_time
+    builds = list_builds()
+    schedule = schedule_evenly(builds, args.start_time, args.end_time)
+    #schedule = schedule_consistently(builds, args.start_time, args.end_time)
+    print(json.dumps(crontab(schedule)))
