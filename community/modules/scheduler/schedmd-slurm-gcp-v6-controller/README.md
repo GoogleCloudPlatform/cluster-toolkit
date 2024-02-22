@@ -1,10 +1,10 @@
 ## Description
 
-This module creates a slurm controller node via the [SchedMD/slurm-gcp]
+This module creates a slurm controller node via the [slurm-gcp]
 [slurm\_controller\_instance] and [slurm\_instance\_template] modules.
 
 More information about Slurm On GCP can be found at the
-[project's GitHub page][SchedMD/slurm-gcp] and in the
+[project's GitHub page][slurm-gcp] and in the
 [Slurm on Google Cloud User Guide][slurm-ug].
 
 The [user guide][slurm-ug] provides detailed instructions on customizing and
@@ -17,14 +17,14 @@ controller for optimal performance at different scales.
 >
 > ```shell
 > # Install Python3 and run
-> pip3 install -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/6.3.2/scripts/requirements.txt
+> pip3 install -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/6.4.1/scripts/requirements.txt
 > ```
 
-[SchedMD/slurm-gcp]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.2.0
-[slurm\_controller\_instance]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.2.0/terraform/slurm_cluster/modules/slurm_controller_instance
-[slurm\_instance\_template]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.2.0/terraform/slurm_cluster/modules/slurm_instance_template
+[slurm-gcp]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.4.1
+[slurm\_controller\_instance]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.4.1/terraform/slurm_cluster/modules/slurm_controller_instance
+[slurm\_instance\_template]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.4.1/terraform/slurm_cluster/modules/slurm_instance_template
 [slurm-ug]: https://goo.gle/slurm-gcp-user-guide.
-[requirements.txt]: https://github.com/GoogleCloudPlatform/slurm-gcp/blob/6.2.0/scripts/requirements.txt
+[requirements.txt]: https://github.com/GoogleCloudPlatform/slurm-gcp/blob/6.4.1/scripts/requirements.txt
 [enable\_cleanup\_compute]: #input\_enable\_cleanup\_compute
 [enable\_cleanup\_subscriptions]: #input\_enable\_cleanup\_subscriptions
 [enable\_reconfigure]: #input\_enable\_reconfigure
@@ -134,17 +134,17 @@ limitations under the License.
 | Name | Source | Version |
 |------|--------|---------|
 | <a name="module_bucket"></a> [bucket](#module\_bucket) | terraform-google-modules/cloud-storage/google | ~> 3.0 |
-| <a name="module_cleanup_compute_nodes"></a> [cleanup\_compute\_nodes](#module\_cleanup\_compute\_nodes) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_destroy_nodes | 6.3.4 |
-| <a name="module_cleanup_resource_policies"></a> [cleanup\_resource\_policies](#module\_cleanup\_resource\_policies) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_destroy_resource_policies | 6.3.4 |
-| <a name="module_slurm_controller_instance"></a> [slurm\_controller\_instance](#module\_slurm\_controller\_instance) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/_slurm_instance | 6.3.4 |
-| <a name="module_slurm_controller_template"></a> [slurm\_controller\_template](#module\_slurm\_controller\_template) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template | 6.3.4 |
-| <a name="module_slurm_files"></a> [slurm\_files](#module\_slurm\_files) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_files | 6.3.4 |
-| <a name="module_slurm_login_instance"></a> [slurm\_login\_instance](#module\_slurm\_login\_instance) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_login_instance | 6.3.4 |
-| <a name="module_slurm_login_template"></a> [slurm\_login\_template](#module\_slurm\_login\_template) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template | 6.3.4 |
-| <a name="module_slurm_nodeset"></a> [slurm\_nodeset](#module\_slurm\_nodeset) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_nodeset | 6.3.4 |
-| <a name="module_slurm_nodeset_template"></a> [slurm\_nodeset\_template](#module\_slurm\_nodeset\_template) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template | 6.3.4 |
-| <a name="module_slurm_nodeset_tpu"></a> [slurm\_nodeset\_tpu](#module\_slurm\_nodeset\_tpu) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_nodeset_tpu | 6.3.4 |
-| <a name="module_slurm_partition"></a> [slurm\_partition](#module\_slurm\_partition) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_partition | 6.3.4 |
+| <a name="module_cleanup_compute_nodes"></a> [cleanup\_compute\_nodes](#module\_cleanup\_compute\_nodes) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_destroy_nodes | 6.4.1&depth=1 |
+| <a name="module_cleanup_resource_policies"></a> [cleanup\_resource\_policies](#module\_cleanup\_resource\_policies) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_destroy_resource_policies | 6.4.1&depth=1 |
+| <a name="module_slurm_controller_instance"></a> [slurm\_controller\_instance](#module\_slurm\_controller\_instance) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/_slurm_instance | 6.4.1&depth=1 |
+| <a name="module_slurm_controller_template"></a> [slurm\_controller\_template](#module\_slurm\_controller\_template) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template | 6.4.1&depth=1 |
+| <a name="module_slurm_files"></a> [slurm\_files](#module\_slurm\_files) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_files | 6.4.1&depth=1 |
+| <a name="module_slurm_login_instance"></a> [slurm\_login\_instance](#module\_slurm\_login\_instance) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_login_instance | 6.4.1&depth=1 |
+| <a name="module_slurm_login_template"></a> [slurm\_login\_template](#module\_slurm\_login\_template) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template | 6.4.1&depth=1 |
+| <a name="module_slurm_nodeset"></a> [slurm\_nodeset](#module\_slurm\_nodeset) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_nodeset | 6.4.1&depth=1 |
+| <a name="module_slurm_nodeset_template"></a> [slurm\_nodeset\_template](#module\_slurm\_nodeset\_template) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template | 6.4.1&depth=1 |
+| <a name="module_slurm_nodeset_tpu"></a> [slurm\_nodeset\_tpu](#module\_slurm\_nodeset\_tpu) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_nodeset_tpu | 6.4.1&depth=1 |
+| <a name="module_slurm_partition"></a> [slurm\_partition](#module\_slurm\_partition) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_partition | 6.4.1&depth=1 |
 
 ## Resources
 
@@ -194,7 +194,7 @@ limitations under the License.
 | <a name="input_epilog_scripts"></a> [epilog\_scripts](#input\_epilog\_scripts) | List of scripts to be used for Epilog. Programs for the slurmd to execute<br>on every node when a user's job completes.<br>See https://slurm.schedmd.com/slurm.conf.html#OPT_Epilog. | <pre>list(object({<br>    filename = string<br>    content  = string<br>  }))</pre> | `[]` | no |
 | <a name="input_extra_logging_flags"></a> [extra\_logging\_flags](#input\_extra\_logging\_flags) | The list of extra flags for the logging system to use. See the logging\_flags variable in scripts/util.py to get the list of supported log flags. | `map(bool)` | `{}` | no |
 | <a name="input_guest_accelerator"></a> [guest\_accelerator](#input\_guest\_accelerator) | List of the type and count of accelerator cards attached to the instance. | <pre>list(object({<br>    type  = string,<br>    count = number<br>  }))</pre> | `[]` | no |
-| <a name="input_instance_image"></a> [instance\_image](#input\_instance\_image) | Defines the image that will be used in the Slurm controller VM instance.<br><br>Expected Fields:<br>name: The name of the image. Mutually exclusive with family.<br>family: The image family to use. Mutually exclusive with name.<br>project: The project where the image is hosted.<br><br>For more information on creating custom images that comply with Slurm on GCP<br>see the "Slurm on GCP Custom Images" section in docs/vm-images.md. | `map(string)` | <pre>{<br>  "family": "slurm-gcp-6-3-hpc-rocky-linux-8",<br>  "project": "schedmd-slurm-public"<br>}</pre> | no |
+| <a name="input_instance_image"></a> [instance\_image](#input\_instance\_image) | Defines the image that will be used in the Slurm controller VM instance.<br><br>Expected Fields:<br>name: The name of the image. Mutually exclusive with family.<br>family: The image family to use. Mutually exclusive with name.<br>project: The project where the image is hosted.<br><br>For more information on creating custom images that comply with Slurm on GCP<br>see the "Slurm on GCP Custom Images" section in docs/vm-images.md. | `map(string)` | <pre>{<br>  "family": "slurm-gcp-6-4-hpc-rocky-linux-8",<br>  "project": "schedmd-slurm-public"<br>}</pre> | no |
 | <a name="input_instance_image_custom"></a> [instance\_image\_custom](#input\_instance\_image\_custom) | A flag that designates that the user is aware that they are requesting<br>to use a custom and potentially incompatible image for this Slurm on<br>GCP module.<br><br>If the field is set to false, only the compatible families and project<br>names will be accepted.  The deployment will fail with any other image<br>family or name.  If set to true, no checks will be done.<br><br>See: https://goo.gle/hpc-slurm-images | `bool` | `false` | no |
 | <a name="input_instance_template"></a> [instance\_template](#input\_instance\_template) | Self link to a custom instance template. If set, other VM definition<br>variables such as machine\_type and instance\_image will be ignored in favor<br>of the provided instance template.<br><br>For more information on creating custom images for the instance template<br>that comply with Slurm on GCP see the "Slurm on GCP Custom Images" section<br>in docs/vm-images.md. | `string` | `null` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels, provided as a map. | `map(string)` | `{}` | no |

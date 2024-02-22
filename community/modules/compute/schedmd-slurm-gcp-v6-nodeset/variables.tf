@@ -76,7 +76,7 @@ variable "instance_image" {
     EOD
   type        = map(string)
   default = {
-    family  = "slurm-gcp-6-3-hpc-rocky-linux-8"
+    family  = "slurm-gcp-6-4-hpc-rocky-linux-8"
     project = "schedmd-slurm-public"
   }
 

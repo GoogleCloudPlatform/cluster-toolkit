@@ -119,7 +119,7 @@ the experimental badge (![experimental-badge]).
 >
 > ```shell
 > # Install Python3 and run
-> pip3 install -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/6.2.1/scripts/requirements.txt
+> pip3 install -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/6.4.1/scripts/requirements.txt
 > ```
 
 Creates a basic auto-scaling Slurm cluster with mostly default settings. The
@@ -266,7 +266,7 @@ to 256
 >
 > ```shell
 > # Install Python3 and run
-> pip3 install -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/6.2.1/scripts/requirements.txt
+> pip3 install -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/6.4.1/scripts/requirements.txt
 > ```
 
 Creates an auto-scaling Slurm cluster with TPU nodes.
