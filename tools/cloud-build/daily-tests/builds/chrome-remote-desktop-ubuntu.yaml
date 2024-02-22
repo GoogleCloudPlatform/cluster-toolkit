@@ -34,8 +34,7 @@ steps:
   - -c
   - echo "done fetching builder"
 
-## Test chrome-remote-desktop module
-- id: chrome-remote-desktop
+- id: chrome-remote-desktop-ubuntu
   waitFor: ["fetch_builder", "build_ghpc"]
   name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
   entrypoint: /bin/bash
@@ -50,5 +49,5 @@ steps:
     BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
 
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
-      --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT} os=default" \
+      --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT} os=ubuntu" \
       --extra-vars="@tools/cloud-build/daily-tests/tests/chrome-remote-desktop.yml"
