@@ -236,7 +236,14 @@ func (e BaseExpression) Eval(ctx *hcl.EvalContext) (cty.Value, error) {
 
 // Tokenize returns Tokens to be used for marshalling HCL
 func (e BaseExpression) Tokenize() hclwrite.Tokens {
-	return e.toks
+	// we have to perform deep clone of stored tokens to avoid side effects of hclwrite.
+	// See pkg/modulewriter/hcl_utils_test.go:TestShowcaseDangersOfHclWrite
+	cl := make(hclwrite.Tokens, len(e.toks))
+	for i, t := range e.toks {
+		ct := *t // copy Token
+		cl[i] = &ct
+	}
+	return cl
 }
 
 // References return Reference for all variables used in the expression
