@@ -24,4 +24,12 @@ output "nodeset" {
     ], "${substr(var.machine_type, 0, 3)}:${var.disk_type}")
     error_message = "A disk_type=${var.disk_type} cannot be used with machine_type=${var.machine_type}."
   }
+
+  precondition {
+    condition     = (var.reservation_name == null) || !var.enable_placement
+    error_message = <<-EOD
+      If reservation is specified, `var.enable_placement` must be `false`.
+      If the specified reservation has a placement policy then it will be used automatically.
+    EOD
+  }
 }
