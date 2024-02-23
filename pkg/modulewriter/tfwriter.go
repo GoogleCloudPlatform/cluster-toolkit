@@ -200,7 +200,7 @@ func getProviders(bp config.Blueprint) []provider {
 		"region":  "region",
 		"zone":    "zone"} {
 		if bp.Vars.Has(v) {
-			gglConf.Set(s, config.GlobalRef(v).AsValue())
+			gglConf = gglConf.With(s, config.GlobalRef(v).AsValue())
 		}
 	}
 

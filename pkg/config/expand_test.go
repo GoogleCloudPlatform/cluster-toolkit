@@ -135,8 +135,10 @@ func (s *zeroSuite) TestUseModule(c *C) {
 	}
 
 	{ // Pass: Single Input/Output match - but setting was in blueprint so no-op
-		mod := Module{ID: "lime", Source: "limeTree"}
-		mod.Settings.Set("val1", ref)
+		mod := Module{
+			ID:       "lime",
+			Settings: Dict{}.With("val1", ref),
+			Source:   "limeTree"}
 		setTestModuleInfo(mod, modulereader.ModuleInfo{
 			Inputs: []modulereader.VarInfo{varInfoNumber},
 		})
@@ -150,8 +152,10 @@ func (s *zeroSuite) TestUseModule(c *C) {
 
 	{ // Pass: re-apply used modules, should be a no-op
 		// Assume no settings were in blueprint
-		mod := Module{ID: "lime", Source: "limeTree"}
-		mod.Settings.Set("val1", AsProductOfModuleUse(ref, "UsedModule"))
+		mod := Module{
+			ID:       "lime",
+			Settings: Dict{}.With("val1", AsProductOfModuleUse(ref, "UsedModule")),
+			Source:   "limeTree"}
 		setTestModuleInfo(mod, modulereader.ModuleInfo{
 			Inputs: []modulereader.VarInfo{varInfoNumber},
 		})
@@ -181,8 +185,11 @@ func (s *zeroSuite) TestUseModule(c *C) {
 
 	{ // Pass: Setting exists, Input is List, Output is not a list
 		// Assume setting was not set in blueprint
-		mod := Module{ID: "lime", Source: "limeTree"}
-		mod.Settings.Set("val1", AsProductOfModuleUse(cty.TupleVal([]cty.Value{ref}), "other"))
+		mod := Module{
+			ID:       "lime",
+			Settings: Dict{}.With("val1", AsProductOfModuleUse(cty.TupleVal([]cty.Value{ref}), "other")),
+			Source:   "limeTree"}
+
 		setTestModuleInfo(mod, modulereader.ModuleInfo{
 			Inputs: []modulereader.VarInfo{{Name: "val1", Type: cty.List(cty.Number)}},
 		})
@@ -199,8 +206,10 @@ func (s *zeroSuite) TestUseModule(c *C) {
 
 	{ // Pass: Setting exists, Input is List, Output is not a list
 		// Assume setting was set in blueprint
-		mod := Module{ID: "lime", Source: "limeTree"}
-		mod.Settings.Set("val1", cty.TupleVal([]cty.Value{ref}))
+		mod := Module{
+			ID:       "lime",
+			Settings: Dict{}.With("val1", cty.TupleVal([]cty.Value{ref})),
+			Source:   "limeTree"}
 		setTestModuleInfo(mod, modulereader.ModuleInfo{
 			Inputs: []modulereader.VarInfo{{Name: "val1", Type: cty.List(cty.Number)}},
 		})

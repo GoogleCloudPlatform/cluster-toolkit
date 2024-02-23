@@ -687,10 +687,11 @@ func (s *zeroSuite) TestCheckBackend(c *C) {
 	}
 
 	{ // OK. No variables used
-		b := TerraformBackend{Type: "gcs"}
-		b.Configuration.
-			Set("bucket", cty.StringVal("trenta")).
-			Set("impersonate_service_account", cty.StringVal("who"))
+		b := TerraformBackend{
+			Type: "gcs",
+			Configuration: Dict{}.
+				With("bucket", cty.StringVal("trenta")).
+				With("impersonate_service_account", cty.StringVal("who"))}
 		c.Check(checkBackend(p, b), IsNil)
 	}
 
@@ -838,15 +839,21 @@ func (s *zeroSuite) TestValidateModuleSettingReference(c *C) {
 }
 
 func (s *zeroSuite) TestValidateModuleSettingReferences(c *C) {
-	m := Module{ID: "m"}
-	m.Settings.Set("white", GlobalRef("zebra").AsValue())
-	bp := Blueprint{}
+	m := Module{
+		ID: "m",
+		Settings: Dict{}.
+			With("white", GlobalRef("zebra").AsValue())}
 	p := Root.Groups.At(0).Modules.At(0)
 
-	c.Check(validateModuleSettingReferences(p, m, bp), NotNil)
+	{ // No zebra
+		c.Check(validateModuleSettingReferences(p, m, Blueprint{}), NotNil)
+	}
 
-	bp.Vars.Set("zebra", cty.StringVal("stripes"))
-	c.Check(validateModuleSettingReferences(p, m, bp), IsNil)
+	{ // Got zebra
+		bp := Blueprint{Vars: Dict{}.
+			With("zebra", cty.StringVal("stripes"))}
+		c.Check(validateModuleSettingReferences(p, m, bp), IsNil)
+	}
 }
 
 func (s *zeroSuite) TestGroupNameValidate(c *C) {

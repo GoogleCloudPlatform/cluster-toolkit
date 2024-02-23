@@ -156,13 +156,13 @@ func (bp Blueprint) expandBackend(grp *DeploymentGroup) {
 
 	be := &grp.TerraformBackend
 	if be.Type == "" {
-		be.Type = defaults.Type
-		be.Configuration = NewDict(defaults.Configuration.Items())
+		(*be) = defaults
 	}
+
 	if be.Type == "gcs" && !be.Configuration.Has("prefix") {
 		prefix := MustParseExpression(
 			fmt.Sprintf(`"%s/${var.deployment_name}/%s"`, bp.BlueprintName, grp.Name))
-		be.Configuration.Set("prefix", prefix.AsValue())
+		be.Configuration = be.Configuration.With("prefix", prefix.AsValue())
 	}
 }
 
@@ -176,15 +176,15 @@ func getModuleInputMap(inputs []modulereader.VarInfo) map[string]cty.Type {
 
 // initialize a Toolkit setting that corresponds to a module input of type list
 // create new list if unset, append if already set, error if value not a list
-func (mod *Module) addListValue(settingName string, value cty.Value) {
+func (mod *Module) addListValue(setting string, value cty.Value) {
 	args := []cty.Value{value}
 	mods := map[ModuleID]bool{}
 	for _, mod := range IsProductOfModuleUse(value) {
 		mods[mod] = true
 	}
 
-	if mod.Settings.Has(settingName) {
-		cur := mod.Settings.Get(settingName)
+	if mod.Settings.Has(setting) {
+		cur := mod.Settings.Get(setting)
 		for _, mod := range IsProductOfModuleUse(cur) {
 			mods[mod] = true
 		}
@@ -193,7 +193,7 @@ func (mod *Module) addListValue(settingName string, value cty.Value) {
 
 	exp := FunctionCallExpression("flatten", cty.TupleVal(args))
 	val := AsProductOfModuleUse(exp.AsValue(), maps.Keys(mods)...)
-	mod.Settings.Set(settingName, val)
+	mod.Settings = mod.Settings.With(setting, val)
 }
 
 // useModule matches input variables in a "using" module to output values
@@ -231,7 +231,7 @@ func useModule(mod *Module, use Module) {
 		v := AsProductOfModuleUse(ModuleRef(use.ID, setting).AsValue(), use.ID)
 
 		if !isList {
-			mod.Settings.Set(setting, v)
+			mod.Settings = mod.Settings.With(setting, v)
 		} else {
 			mod.addListValue(setting, v)
 		}
@@ -253,19 +253,18 @@ func (bp Blueprint) applyUseModules(m *Module) error {
 
 // expandGlobalLabels sets defaults for labels based on other variables.
 func (bp *Blueprint) expandGlobalLabels() {
-	vars := &bp.Vars
 	defaults := cty.ObjectVal(map[string]cty.Value{
 		blueprintLabel:  cty.StringVal(bp.BlueprintName),
 		deploymentLabel: GlobalRef("deployment_name").AsValue()})
 
 	labels := "labels"
 	var gl cty.Value
-	if !vars.Has(labels) {
+	if !bp.Vars.Has(labels) {
 		gl = defaults
 	} else {
-		gl = FunctionCallExpression("merge", defaults, vars.Get(labels)).AsValue()
+		gl = FunctionCallExpression("merge", defaults, bp.Vars.Get(labels)).AsValue()
 	}
-	vars.Set(labels, gl)
+	bp.Vars = bp.Vars.With(labels, gl)
 }
 
 func combineModuleLabels(mod Module) cty.Value {
@@ -285,7 +284,7 @@ func (bp Blueprint) applyGlobalVarsInModule(mod *Module) {
 	for _, input := range mi.Inputs {
 		if input.Name == "labels" && bp.Vars.Has("labels") {
 			// labels are special case, always make use of global labels
-			mod.Settings.Set("labels", combineModuleLabels(*mod))
+			mod.Settings = mod.Settings.With("labels", combineModuleLabels(*mod))
 		}
 
 		// Module setting exists? Nothing more needs to be done.
@@ -295,12 +294,12 @@ func (bp Blueprint) applyGlobalVarsInModule(mod *Module) {
 
 		// If it's not set, is there a global we can use?
 		if bp.Vars.Has(input.Name) {
-			mod.Settings.Set(input.Name, GlobalRef(input.Name).AsValue())
+			mod.Settings = mod.Settings.With(input.Name, GlobalRef(input.Name).AsValue())
 			continue
 		}
 
 		if input.Name == mi.Metadata.Ghpc.InjectModuleId {
-			mod.Settings.Set(input.Name, cty.StringVal(string(mod.ID)))
+			mod.Settings = mod.Settings.With(input.Name, cty.StringVal(string(mod.ID)))
 		}
 	}
 }

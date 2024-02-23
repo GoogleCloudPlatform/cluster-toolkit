@@ -178,7 +178,7 @@ func setCLIVariables(ds *config.DeploymentSettings, s []string) error {
 		if err := yaml.Unmarshal([]byte(arr[1]), &v); err != nil {
 			return fmt.Errorf("invalid input: unable to convert '%s' value '%s' to known type", key, arr[1])
 		}
-		ds.Vars.Set(key, v.Unwrap())
+		ds.Vars = ds.Vars.With(key, v.Unwrap())
 	}
 	return nil
 }
@@ -201,7 +201,7 @@ func setBackendConfig(ds *config.DeploymentSettings, s []string) error {
 		case "type":
 			be.Type = value
 		default:
-			be.Configuration.Set(key, cty.StringVal(value))
+			be.Configuration = be.Configuration.With(key, cty.StringVal(value))
 		}
 	}
 	ds.TerraformBackendDefaults = be
@@ -210,7 +210,7 @@ func setBackendConfig(ds *config.DeploymentSettings, s []string) error {
 
 func mergeDeploymentSettings(bp *config.Blueprint, ds config.DeploymentSettings) error {
 	for k, v := range ds.Vars.Items() {
-		bp.Vars.Set(k, v)
+		bp.Vars = bp.Vars.With(k, v)
 	}
 	if ds.TerraformBackendDefaults.Type != "" {
 		bp.TerraformBackendDefaults = ds.TerraformBackendDefaults
