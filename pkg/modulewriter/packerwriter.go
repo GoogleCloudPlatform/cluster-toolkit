@@ -47,9 +47,7 @@ func printPackerInstructions(w io.Writer, groupPath string, subPath string, prin
 }
 
 func writePackerAutovars(vars map[string]cty.Value, dst string) error {
-	packerAutovarsPath := filepath.Join(dst, packerAutoVarFilename)
-	err := WriteHclAttributes(vars, packerAutovarsPath)
-	return err
+	return WriteHclAttributes(vars, filepath.Join(dst, packerAutoVarFilename))
 }
 
 // writeDeploymentGroup writes any needed files to the top and module levels

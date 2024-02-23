@@ -96,15 +96,11 @@ func validateModulesAreUsed(bp Blueprint) error {
 }
 
 func (bp *Blueprint) expandVars() error {
-	var err error
-	if err = validateVars(bp.Vars); err != nil {
+	if err := validateVars(*bp); err != nil {
 		return err
 	}
-
-	bp.origVars = NewDict(bp.Vars.Items()) // copy
 	bp.expandGlobalLabels()
-	bp.Vars, err = bp.evalVars()
-	return err
+	return nil
 }
 
 func (bp *Blueprint) expandGroups() error {

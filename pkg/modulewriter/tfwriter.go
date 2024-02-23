@@ -96,10 +96,7 @@ func writeOutputs(
 }
 
 func writeTfvars(vars map[string]cty.Value, dst string) error {
-	// Create file
-	tfvarsPath := filepath.Join(dst, "terraform.tfvars")
-	err := WriteHclAttributes(vars, tfvarsPath)
-	return err
+	return WriteHclAttributes(vars, filepath.Join(dst, "terraform.tfvars"))
 }
 
 func relaxVarType(t cty.Type) cty.Type {
@@ -263,7 +260,10 @@ func (w TFWriter) writeDeploymentGroup(
 	instructions io.Writer,
 ) error {
 	g := dc.Config.DeploymentGroups[groupIndex]
-	deploymentVars := getUsedDeploymentVars(g, dc.Config)
+	deploymentVars, err := getUsedDeploymentVars(g, dc.Config)
+	if err != nil {
+		return err
+	}
 	intergroupVars := FindIntergroupVariables(g, dc.Config)
 	intergroupInputs := make(map[string]bool)
 	for _, igVar := range intergroupVars {
@@ -348,7 +348,7 @@ func orderKeys[T any](settings map[string]T) []string {
 	return keys
 }
 
-func getUsedDeploymentVars(group config.DeploymentGroup, bp config.Blueprint) map[string]cty.Value {
+func getUsedDeploymentVars(group config.DeploymentGroup, bp config.Blueprint) (map[string]cty.Value, error) {
 	res := map[string]cty.Value{
 		// labels must always be written as a variable as it is implicitly added
 		"labels": bp.Vars.Get("labels"),
@@ -358,7 +358,11 @@ func getUsedDeploymentVars(group config.DeploymentGroup, bp config.Blueprint) ma
 			res[v] = bp.Vars.Get(v)
 		}
 	}
-	return res
+	eres, err := bp.Eval(cty.ObjectVal(res))
+	if err != nil {
+		return nil, err
+	}
+	return eres.AsValueMap(), nil
 }
 
 func substituteIgcReferences(mods []config.Module, igcRefs map[config.Reference]modulereader.VarInfo) ([]config.Module, error) {

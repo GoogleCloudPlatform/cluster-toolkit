@@ -402,8 +402,6 @@ func (s *zeroSuite) TestListUnusedVariables(c *C) {
 			Inputs: NewDict(map[string]cty.Value{
 				"savannah": GlobalRef("zebra").AsValue(),
 			})}}}
-	bp.origVars = NewDict(bp.Vars.Items())
-
 	c.Check(bp.ListUnusedVariables(), DeepEquals, []string{"flathead_screw"})
 }
 
@@ -452,7 +450,7 @@ func (s *zeroSuite) TestValidateDeploymentName(c *C) {
 
 	h := func(val cty.Value) error {
 		vars := NewDict(map[string]cty.Value{"deployment_name": val})
-		return validateDeploymentName(vars)
+		return validateDeploymentName(Blueprint{Vars: vars})
 	}
 
 	// Is deployment_name a valid string?
@@ -484,8 +482,12 @@ func (s *zeroSuite) TestValidateDeploymentName(c *C) {
 	}
 
 	{ // Is deployment_name not set?
-		err := validateDeploymentName(Dict{})
+		err := validateDeploymentName(Blueprint{})
 		c.Check(errors.As(err, &e), Equals, true)
+	}
+
+	{ // Expression
+		c.Check(h(MustParseExpression(`"arbuz-${5}"`).AsValue()), IsNil)
 	}
 }
 
@@ -558,111 +560,108 @@ func (s *MySuite) TestNewDeploymentSettings(c *C) {
 func (s *zeroSuite) TestValidateGlobalLabels(c *C) {
 
 	labelName := "my_test_label_name"
-	labelValue := "my-valid-label-value"
-	invalidLabelName := "my_test_label_name_with_a_bad_char!"
+	labelValue := cty.StringVal("my-valid-label-value")
+	invalidName := "my_test_label_name_with_a_bad_char!"
+	nameErr := ".*invalid label name.*"
 	invalidLabelValue := "some/long/path/with/invalid/characters/and/with/more/than/63/characters!"
 
-	maxLabels := 64
+	h := func(val cty.Value) error {
+		vars := NewDict(map[string]cty.Value{"labels": val})
+		return validateGlobalLabels(Blueprint{Vars: vars})
+	}
 
 	{ // No labels
-		vars := Dict{}
-		c.Check(validateGlobalLabels(vars), IsNil)
+		c.Check(validateGlobalLabels(Blueprint{}), IsNil)
 	}
 
 	{ // Simple success case
-		vars := Dict{}
-		vars.Set("labels", cty.MapVal(map[string]cty.Value{
-			labelName: cty.StringVal(labelValue),
-		}))
-		c.Check(validateGlobalLabels(vars), IsNil)
+		l := cty.MapVal(map[string]cty.Value{
+			labelName: labelValue})
+		c.Check(h(l), IsNil)
 	}
 
 	{ // Succeed on empty value
-		vars := Dict{}
-		vars.Set("labels", cty.MapVal(map[string]cty.Value{
-			labelName: cty.StringVal(""),
-		}))
-		c.Check(validateGlobalLabels(vars), IsNil)
+		l := cty.MapVal(map[string]cty.Value{
+			labelName: cty.StringVal("")})
+		c.Check(h(l), IsNil)
 	}
 
 	{ // Succeed on lowercase international character
-		vars := Dict{}
-		vars.Set("labels", cty.MapVal(map[string]cty.Value{
-			"ñ" + labelName: cty.StringVal("ñ"),
-		}))
-		c.Check(validateGlobalLabels(vars), IsNil)
+		l := cty.MapVal(map[string]cty.Value{
+			"ñ" + labelName: cty.StringVal("ñ")})
+		c.Check(h(l), IsNil)
 	}
 
 	{ // Succeed on case-less international character
-		vars := Dict{}
-		vars.Set("labels", cty.MapVal(map[string]cty.Value{
+		l := cty.MapVal(map[string]cty.Value{
 			"ƿ" + labelName: cty.StringVal("ƿ"), // Unicode 01BF, latin character "wynn"
-		}))
-		c.Check(validateGlobalLabels(vars), IsNil)
+		})
+		c.Check(h(l), IsNil)
 	}
 
 	{ // Succeed on max number of labels
-		vars := Dict{}
 		largeLabelsMap := map[string]cty.Value{}
-		for i := 0; i < maxLabels; i++ {
-			largeLabelsMap[labelName+"_"+fmt.Sprint(i)] = cty.StringVal(labelValue)
+		for i := 0; i < 64; i++ {
+			largeLabelsMap[labelName+"_"+fmt.Sprint(i)] = labelValue
 		}
-		vars.Set("labels", cty.MapVal(largeLabelsMap))
-		c.Check(validateGlobalLabels(vars), IsNil)
+		c.Check(h(cty.MapVal(largeLabelsMap)), IsNil)
 	}
 
 	{ // Invalid label name
-		vars := Dict{}
-		vars.Set("labels", cty.MapVal(map[string]cty.Value{
-			invalidLabelName: cty.StringVal(labelValue),
-		}))
-		err := validateGlobalLabels(vars)
-		c.Check(err, ErrorMatches, fmt.Sprintf(`.*name.*'%s: %s'.*`,
-			regexp.QuoteMeta(invalidLabelName),
-			regexp.QuoteMeta(labelValue)))
+		err := h(cty.MapVal(map[string]cty.Value{
+			invalidName: labelValue}))
+		c.Check(err, ErrorMatches, nameErr)
 	}
 
 	{ // Invalid label value
-		vars := Dict{}
-		vars.Set("labels", cty.MapVal(map[string]cty.Value{
+		err := h(cty.MapVal(map[string]cty.Value{
 			labelName: cty.StringVal(invalidLabelValue),
 		}))
-		err := validateGlobalLabels(vars)
 		c.Check(err, ErrorMatches, fmt.Sprintf(`.*value.*'%s: %s'.*`,
 			regexp.QuoteMeta(labelName),
 			regexp.QuoteMeta(invalidLabelValue)))
 	}
 
 	{ // Too many labels
-		vars := Dict{}
 		tooManyLabelsMap := map[string]cty.Value{}
 		for i := 0; i < maxLabels+1; i++ {
-			tooManyLabelsMap[labelName+"_"+fmt.Sprint(i)] = cty.StringVal(labelValue)
+			tooManyLabelsMap[labelName+"_"+fmt.Sprint(i)] = labelValue
 		}
-		vars.Set("labels", cty.MapVal(tooManyLabelsMap))
-		c.Check(validateGlobalLabels(vars), NotNil)
+		c.Check(h(cty.MapVal(tooManyLabelsMap)), NotNil)
 	}
 
 	{ // Fail on uppercase international character
-		vars := Dict{}
-		vars.Set("labels", cty.MapVal(map[string]cty.Value{
+		err := h(cty.MapVal(map[string]cty.Value{
 			labelName: cty.StringVal("Ñ"),
 		}))
-		err := validateGlobalLabels(vars)
 		c.Check(err, ErrorMatches, fmt.Sprintf(`.*value.*'%s: %s'.*`,
 			regexp.QuoteMeta(labelName),
 			regexp.QuoteMeta("Ñ")))
 	}
 
 	{ // Fail on empty name
-		vars := Dict{}
-		vars.Set("labels", cty.MapVal(map[string]cty.Value{
-			"": cty.StringVal(labelValue),
+		err := h(cty.MapVal(map[string]cty.Value{
+			"": labelValue}))
+		c.Check(err, ErrorMatches, nameErr)
+	}
+
+	{ // OK, big expression
+		err := h(MustParseExpression(`2 + 5`).AsValue())
+		c.Check(err, IsNil)
+	}
+	{ // OK, small expression
+		err := h(cty.ObjectVal(map[string]cty.Value{
+			"alpha": cty.StringVal("a"),
+			"beta":  GlobalRef("boba").AsValue(),
 		}))
-		err := validateGlobalLabels(vars)
-		c.Check(err, ErrorMatches, fmt.Sprintf(`.*name.*'%s: %s'.*`,
-			"",
-			regexp.QuoteMeta(labelValue)))
+		c.Check(err, IsNil)
+	}
+	{ // FAIL, small expression with bad name
+		err := h(cty.ObjectVal(map[string]cty.Value{
+			"alpha":     cty.StringVal("a"),
+			invalidName: GlobalRef("boba").AsValue(),
+		}))
+		c.Check(err, ErrorMatches, nameErr)
 	}
 }
 
