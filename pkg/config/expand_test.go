@@ -360,9 +360,8 @@ func (s *zeroSuite) TestIntersection(c *C) {
 }
 
 func (s *MySuite) TestOutputNamesByGroup(c *C) {
-	dc := s.getMultiGroupDeploymentConfig()
-	c.Assert(dc.ExpandConfig(), IsNil)
-	bp := dc.Config
+	bp := s.getMultiGroupBlueprint()
+	c.Assert(bp.Expand(), IsNil)
 
 	group0 := bp.DeploymentGroups[0]
 	mod0 := group0.Modules[0]

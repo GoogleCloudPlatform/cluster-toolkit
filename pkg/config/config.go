@@ -254,15 +254,8 @@ type DeploymentSettings struct {
 	Vars                     Dict
 }
 
-// DeploymentConfig is a container for the imported YAML data and supporting data for
-// creating the blueprint from it
-type DeploymentConfig struct {
-	Config Blueprint
-}
-
-// ExpandConfig expands the yaml config in place
-func (dc *DeploymentConfig) ExpandConfig() error {
-	bp := &dc.Config
+// Expand expands the config in place
+func (bp *Blueprint) Expand() error {
 	// expand the blueprint in dependency order:
 	// BlueprintName -> DefaultBackend -> Vars -> Groups
 	if err := bp.checkBlueprintName(); err != nil {
@@ -347,18 +340,18 @@ func checkMovedModule(source string) error {
 	return nil
 }
 
-// NewDeploymentConfig is a constructor for DeploymentConfig
-func NewDeploymentConfig(configFilename string) (DeploymentConfig, YamlCtx, error) {
+// NewBlueprint is a constructor for Blueprint
+func NewBlueprint(configFilename string) (Blueprint, YamlCtx, error) {
 	bp, ctx, err := importBlueprint(configFilename)
 	if err != nil {
-		return DeploymentConfig{}, ctx, err
+		return Blueprint{}, ctx, err
 	}
 	// if the validation level has been explicitly set to an invalid value
 	// in YAML blueprint then silently default to validationError
 	if !isValidValidationLevel(bp.ValidationLevel) {
 		bp.ValidationLevel = ValidationError
 	}
-	return DeploymentConfig{Config: bp}, ctx, nil
+	return bp, ctx, nil
 }
 
 func NewDeploymentSettings(deploymentFilename string) (DeploymentSettings, YamlCtx, error) {
@@ -369,14 +362,14 @@ func NewDeploymentSettings(deploymentFilename string) (DeploymentSettings, YamlC
 	return depl, ctx, nil
 }
 
-// ExportBlueprint exports the internal representation of a blueprint config
-func (dc DeploymentConfig) ExportBlueprint(outputFilename string) error {
+// Export exports the internal representation of a blueprint config
+func (bp Blueprint) Export(outputFilename string) error {
 	var buf bytes.Buffer
 	buf.WriteString(YamlLicense)
 	buf.WriteString("\n")
 	encoder := yaml.NewEncoder(&buf)
 	encoder.SetIndent(2)
-	err := encoder.Encode(&dc.Config)
+	err := encoder.Encode(&bp)
 	encoder.Close()
 	d := buf.Bytes()
 
@@ -472,19 +465,19 @@ func checkBackend(bep backendPath, be TerraformBackend) error {
 
 // SkipValidator marks validator(s) as skipped,
 // if no validator is present, adds one, marked as skipped.
-func (dc *DeploymentConfig) SkipValidator(name string) {
-	if dc.Config.Validators == nil {
-		dc.Config.Validators = []Validator{}
+func (bp *Blueprint) SkipValidator(name string) {
+	if bp.Validators == nil {
+		bp.Validators = []Validator{}
 	}
 	skipped := false
-	for i, v := range dc.Config.Validators {
+	for i, v := range bp.Validators {
 		if v.Validator == name {
-			dc.Config.Validators[i].Skip = true
+			bp.Validators[i].Skip = true
 			skipped = true
 		}
 	}
 	if !skipped {
-		dc.Config.Validators = append(dc.Config.Validators, Validator{Validator: name, Skip: true})
+		bp.Validators = append(bp.Validators, Validator{Validator: name, Skip: true})
 	}
 }
 

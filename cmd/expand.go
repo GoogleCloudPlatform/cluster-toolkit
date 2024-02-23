@@ -52,7 +52,7 @@ var (
 )
 
 func runExpandCmd(cmd *cobra.Command, args []string) {
-	dc := expandOrDie(args[0], deploymentFile)
-	checkErr(dc.ExportBlueprint(outputFilename))
+	bp := expandOrDie(args[0], deploymentFile)
+	checkErr(bp.Export(outputFilename))
 	logging.Info(boldGreen("Expanded Environment Definition created successfully, saved as %s."), outputFilename)
 }

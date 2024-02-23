@@ -368,11 +368,10 @@ func gatherUpstreamOutputs(deploymentRoot string, artifactsDir string, g config.
 func ImportInputs(deploymentGroupDir string, artifactsDir string, expandedBlueprintFile string) error {
 	deploymentRoot := filepath.Clean(filepath.Join(deploymentGroupDir, ".."))
 
-	dc, _, err := config.NewDeploymentConfig(expandedBlueprintFile)
+	bp, _, err := config.NewBlueprint(expandedBlueprintFile)
 	if err != nil {
 		return err
 	}
-	bp := dc.Config
 
 	g, err := bp.Group(config.GroupName(filepath.Base(deploymentGroupDir)))
 	if err != nil {

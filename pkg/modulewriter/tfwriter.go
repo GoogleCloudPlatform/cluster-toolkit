@@ -254,17 +254,17 @@ func writeTerraformInstructions(w io.Writer, grpPath string, n config.GroupName,
 
 // writeDeploymentGroup creates and sets up the terraform deployment group
 func (w TFWriter) writeDeploymentGroup(
-	dc config.DeploymentConfig,
+	bp config.Blueprint,
 	groupIndex int,
 	groupPath string,
 	instructions io.Writer,
 ) error {
-	g := dc.Config.DeploymentGroups[groupIndex]
-	deploymentVars, err := getUsedDeploymentVars(g, dc.Config)
+	g := bp.DeploymentGroups[groupIndex]
+	deploymentVars, err := getUsedDeploymentVars(g, bp)
 	if err != nil {
 		return err
 	}
-	intergroupVars := FindIntergroupVariables(g, dc.Config)
+	intergroupVars := FindIntergroupVariables(g, bp)
 	intergroupInputs := make(map[string]bool)
 	for _, igVar := range intergroupVars {
 		intergroupInputs[igVar.Name] = true
@@ -304,9 +304,9 @@ func (w TFWriter) writeDeploymentGroup(
 		return fmt.Errorf("error writing versions.tf file for deployment group %s: %v", g.Name, err)
 	}
 
-	multiGroupDeployment := len(dc.Config.DeploymentGroups) > 1
+	multiGroupDeployment := len(bp.DeploymentGroups) > 1
 	printImportInputs := multiGroupDeployment && groupIndex > 0
-	printExportOutputs := multiGroupDeployment && groupIndex < len(dc.Config.DeploymentGroups)-1
+	printExportOutputs := multiGroupDeployment && groupIndex < len(bp.DeploymentGroups)-1
 
 	writeTerraformInstructions(instructions, groupPath, g.Name, printExportOutputs, printImportInputs)
 

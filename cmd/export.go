@@ -83,16 +83,16 @@ func runExportCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	expandedBlueprintFile := filepath.Join(artifactsDir, modulewriter.ExpandedBlueprintName)
-	dc, _, err := config.NewDeploymentConfig(expandedBlueprintFile)
+	bp, _, err := config.NewBlueprint(expandedBlueprintFile)
 	if err != nil {
 		return err
 	}
 
-	if err := shell.ValidateDeploymentDirectory(dc.Config.DeploymentGroups, deploymentRoot); err != nil {
+	if err := shell.ValidateDeploymentDirectory(bp.DeploymentGroups, deploymentRoot); err != nil {
 		return err
 	}
 
-	group, err := dc.Config.Group(deploymentGroup)
+	group, err := bp.Group(deploymentGroup)
 	if err != nil {
 		return err
 	}

@@ -273,12 +273,11 @@ func (s *MySuite) TestIsOverwriteAllowed_Present(c *C) {
 		c.Fatal(err)
 	}
 
-	prev := config.DeploymentConfig{
-		Config: config.Blueprint{
-			GhpcVersion: "TaleOfBygoneYears",
-			DeploymentGroups: []config.DeploymentGroup{
-				{Name: "isildur"}}}}
-	if err := prev.ExportBlueprint(filepath.Join(artDir, "expanded_blueprint.yaml")); err != nil {
+	prev := config.Blueprint{
+		GhpcVersion: "TaleOfBygoneYears",
+		DeploymentGroups: []config.DeploymentGroup{
+			{Name: "isildur"}}}
+	if err := prev.Export(filepath.Join(artDir, "expanded_blueprint.yaml")); err != nil {
 		c.Fatal(err)
 	}
 	noW, yesW, noForce, yesForce := false, true, false, true
