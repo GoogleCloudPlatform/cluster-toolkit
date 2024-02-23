@@ -14,7 +14,7 @@
 
 locals {
 
-  use_placement = [for ns in var.partition_conf : ns.nodeset_name if ns.enable_placement]
+  use_placement = [for ns in var.nodeset : ns.nodeset_name if ns.enable_placement]
 
   partition = {
     default               = var.is_default
