@@ -11,7 +11,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
 * [Instructions](#instructions)
   * [(Optional) Setting up a remote terraform state](#optional-setting-up-a-remote-terraform-state)
 * [Blueprint Descriptions](#blueprint-descriptions)
-  * [hpc-slurm.yaml](#hpc-slurmyaml-) ![core-badge]
+  * [hpc-slurm.yaml](#hpc-slurmyaml--) [!core-badge] ![experimental-badge]
   * [hpc-enterprise-slurm.yaml](#hpc-enterprise-slurmyaml-) ![core-badge]
   * [hpc-slurm6-tpu.yaml](#hpc-slurm6-tpuyaml--) ![community-badge] ![experimental-badge]
   * [ml-slurm.yaml](#ml-slurmyaml-) ![core-badge]
@@ -20,12 +20,12 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [serverless-batch-mpi.yaml](#serverless-batch-mpiyaml-) ![core-badge]
   * [pfs-lustre.yaml](#pfs-lustreyaml-) ![core-badge]
   * [cae-slurm.yaml](#cae-slurmyaml-) ![core-badge]
-  * [hpc-build-slurm-image.yaml](#hpc-build-slurm-imageyaml-) ![community-badge]
+  * [hpc-build-slurm-image.yaml](#hpc-build-slurm-imageyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-ubuntu2004.yaml](#hpc-slurm-ubuntu2004yaml-) ![community-badge]
   * [pfs-daos.yaml](#pfs-daosyaml-) ![community-badge]
   * [hpc-slurm-daos.yaml](#hpc-slurm-daosyaml-) ![community-badge]
   * [hpc-amd-slurm.yaml](#hpc-amd-slurmyaml-) ![community-badge]
-  * [hpc-slurm-sharedvpc.yaml](#hpc-slurm-sharedvpcyaml-) ![community-badge]
+  * [hpc-slurm-sharedvpc.yaml](#hpc-slurm-sharedvpcyaml--) ![community-badge] ![experimental-badge]
   * [client-google-cloud-storage.yaml](#client-google-cloud-storageyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-gromacs.yaml](#hpc-slurm-gromacsyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-local-ssd.yaml](#hpc-slurm-local-ssdyaml--) ![community-badge] ![experimental-badge]
@@ -113,7 +113,7 @@ Toolkit team, partners, etc.) and are labeled with the community badge
 Blueprints that are still in development and less stable are also labeled with
 the experimental badge (![experimental-badge]).
 
-### [hpc-slurm.yaml] ![core-badge]
+### [hpc-slurm.yaml] ![core-badge] ![experimental-badge]
 
 > **Warning**: Requires additional dependencies **to be installed on the system deploying the infrastructure**.
 >
@@ -578,7 +578,7 @@ For this example the following is needed in the selected region:
 
 [cae-slurm.yaml]: ../examples/cae/cae-slurm.yaml
 
-### [hpc-build-slurm-image.yaml] ![community-badge]
+### [hpc-build-slurm-image.yaml] ![community-badge] ![experimental-badge]
 
 This blueprint demonstrates how to use HPC Toolkit to build a Slurm image on top
 of an existing image, `hpc-rocky-linux-8` in the case of this example.
@@ -979,7 +979,7 @@ See [README](../community/examples/flux-framework/README.md)
 
 [flux-cluster.yaml]: ../community/examples/flux-framework/flux-cluster.yaml
 
-### [hpc-slurm-sharedvpc.yaml] ![community-badge]
+### [hpc-slurm-sharedvpc.yaml] ![community-badge] ![experimental-badge]
 
 This blueprint demonstrates the use of the Slurm and Filestore modules in
 the service project of an existing Shared VPC. Before attempting to deploy the
