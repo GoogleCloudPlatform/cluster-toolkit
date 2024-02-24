@@ -78,6 +78,9 @@ SELECTORS: Dict[str, Selector] = {
     ]),
     "slurm6": selector_by_name([
         "PR-test-slurm-gcp-v6-tpu",
+        "PR-test-slurm-gcp-v6-rocky8",
+        "PR-test-hpc-build-slurm-image",
+        "PR-test-spack-gromacs",
     ]),
     "spack": selector_by_name([
         "PR-test-batch-mpi",
