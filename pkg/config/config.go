@@ -673,15 +673,14 @@ func varsTopologicalOrder(vars Dict) ([]string, error) {
 		used[n] = 1 // put on stack
 		v := vars.Get(n)
 		for ref, rp := range valueReferences(v) {
-			// TODO: instead of ref.Name render as a full reference
-			repr, p := ref.Name, Root.Vars.Dot(n).Cty(rp)
+			p := Root.Vars.Dot(n).Cty(rp)
 
 			if !ref.GlobalVar {
-				return BpError{p, fmt.Errorf("non-global variable %q referenced in expression", repr)}
+				return BpError{p, fmt.Errorf("non-global variable %q referenced in expression", ref.Name)}
 			}
 
 			if used[ref.Name] == 1 {
-				return BpError{p, fmt.Errorf("cyclic dependency detected: %q -> %q", n, repr)}
+				return BpError{p, fmt.Errorf("cyclic dependency detected: %q -> %q", n, ref.Name)}
 			}
 
 			if used[ref.Name] == 0 {
