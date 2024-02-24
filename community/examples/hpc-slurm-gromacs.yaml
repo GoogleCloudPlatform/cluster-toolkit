@@ -89,13 +89,6 @@ deployment_groups:
     source: modules/scripts/startup-script
     settings:
       runners:
-      # remove lustre client temporary to avoid startup failure due to known
-      # issue.
-      - type: shell
-        destination: remove_lustre_client.sh
-        content: |
-          #!/bin/bash
-          rm /etc/yum.repos.d/lustre-client.repo
       - $(spack-execute.spack_runner)
 
   - id: compute_nodeset
