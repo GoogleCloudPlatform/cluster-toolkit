@@ -22,7 +22,7 @@
   become: true
   ansible.builtin.wait_for:
     path: /var/log/messages
-    search_regex: '.*{{ vm_name }}.*startup-script exit status ([0-9]+)'
+    search_regex: '.+startup-script exit status ([0-9]+)'
     timeout: "{{ timeout_seconds }}"
   register: startup_status
 - name: Fail if startup script exited with a non-zero return code
