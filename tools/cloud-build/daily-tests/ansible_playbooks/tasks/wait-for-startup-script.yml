@@ -15,7 +15,6 @@
 - name: Assert variables are defined
   ansible.builtin.assert:
     that:
-    - vm_name is defined
     - timeout_seconds is defined
 
 - name: Wait for startup script to complete
