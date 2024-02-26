@@ -89,10 +89,10 @@ var (
 )
 
 func runCreateCmd(cmd *cobra.Command, args []string) {
-	dc := expandOrDie(args[0], deploymentFile)
-	deplDir := filepath.Join(outputDir, dc.Config.DeploymentName())
-	checkErr(checkOverwriteAllowed(deplDir, dc.Config, overwriteDeployment, forceOverwrite))
-	checkErr(modulewriter.WriteDeployment(dc, deplDir))
+	bp := expandOrDie(args[0], deploymentFile)
+	deplDir := filepath.Join(outputDir, bp.DeploymentName())
+	checkErr(checkOverwriteAllowed(deplDir, bp, overwriteDeployment, forceOverwrite))
+	checkErr(modulewriter.WriteDeployment(bp, deplDir))
 
 	logging.Info("To deploy your infrastructure please run:")
 	logging.Info("")
@@ -108,8 +108,8 @@ func printAdvancedInstructionsMessage(deplDir string) {
 	logging.Info(modulewriter.InstructionsPath(deplDir))
 }
 
-func expandOrDie(path string, dPath string) config.DeploymentConfig {
-	dc, ctx, err := config.NewDeploymentConfig(path)
+func expandOrDie(path string, dPath string) config.Blueprint {
+	bp, ctx, err := config.NewBlueprint(path)
 	if err != nil {
 		logging.Fatal(renderError(err, ctx))
 	}
@@ -129,23 +129,23 @@ func expandOrDie(path string, dPath string) config.DeploymentConfig {
 		logging.Fatal("Failed to set the backend config at CLI: %v", err)
 	}
 
-	mergeDeploymentSettings(&dc.Config, ds)
+	mergeDeploymentSettings(&bp, ds)
 
-	checkErr(setValidationLevel(&dc.Config, validationLevel))
-	skipValidators(&dc)
+	checkErr(setValidationLevel(&bp, validationLevel))
+	skipValidators(&bp)
 
-	if dc.Config.GhpcVersion != "" {
+	if bp.GhpcVersion != "" {
 		logging.Info("ghpc_version setting is ignored.")
 	}
-	dc.Config.GhpcVersion = GitCommitInfo
+	bp.GhpcVersion = GitCommitInfo
 
 	// Expand the blueprint
-	if err := dc.ExpandConfig(); err != nil {
+	if err := bp.Expand(); err != nil {
 		logging.Fatal(renderError(err, ctx))
 	}
 
-	validateMaybeDie(dc.Config, ctx)
-	return dc
+	validateMaybeDie(bp, ctx)
+	return bp
 }
 
 func validateMaybeDie(bp config.Blueprint, ctx config.YamlCtx) {
@@ -248,9 +248,9 @@ func setValidationLevel(bp *config.Blueprint, s string) error {
 	return nil
 }
 
-func skipValidators(dc *config.DeploymentConfig) {
+func skipValidators(bp *config.Blueprint) {
 	for _, v := range validatorsToSkip {
-		dc.SkipValidator(v)
+		bp.SkipValidator(v)
 	}
 }
 
@@ -283,15 +283,15 @@ func checkOverwriteAllowed(depDir string, bp config.Blueprint, overwriteFlag boo
 	if _, err := os.Stat(expPath); os.IsNotExist(err) {
 		return forceErr(fmt.Errorf("expanded blueprint file %q is missing, this could be a result of changing GHPC version between consecutive deployments", expPath))
 	}
-	prev, _, err := config.NewDeploymentConfig(expPath)
+	prev, _, err := config.NewBlueprint(expPath)
 	if err != nil {
 		return forceErr(err)
 	}
 
-	if prev.Config.GhpcVersion != bp.GhpcVersion {
+	if prev.GhpcVersion != bp.GhpcVersion {
 		return forceErr(fmt.Errorf(
 			"ghpc_version has changed from %q to %q, using different versions of GHPC to update a live deployment is not officially supported",
-			prev.Config.GhpcVersion, bp.GhpcVersion))
+			prev.GhpcVersion, bp.GhpcVersion))
 	}
 
 	if !overwriteFlag {
@@ -303,7 +303,7 @@ func checkOverwriteAllowed(depDir string, bp config.Blueprint, overwriteFlag boo
 		newGroups[g.Name] = true
 	}
 
-	for _, g := range prev.Config.DeploymentGroups {
+	for _, g := range prev.DeploymentGroups {
 		if !newGroups[g.Name] {
 			return forceErr(fmt.Errorf("you are attempting to remove a deployment group %q, which is not supported", g.Name))
 		}

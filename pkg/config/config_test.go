@@ -143,7 +143,7 @@ func setTestModuleInfo(mod Module, info modulereader.ModuleInfo) {
 	modulereader.SetModuleInfo(mod.Source, mod.Kind.String(), info)
 }
 
-func (s *MySuite) getDeploymentConfigForTest() DeploymentConfig {
+func (s *MySuite) getBlueprintForTest() Blueprint {
 	testModule := Module{
 		Source: "testSource",
 		Kind:   TerraformKind,
@@ -175,13 +175,12 @@ func (s *MySuite) getDeploymentConfigForTest() DeploymentConfig {
 		},
 	}
 
-	dc := DeploymentConfig{Config: testBlueprint}
 	setTestModuleInfo(testModule, testModuleInfo)
 	setTestModuleInfo(testModuleWithLabels, testModuleInfo)
-	return dc
+	return testBlueprint
 }
 
-func (s *MySuite) getBasicDeploymentConfigWithTestModule() DeploymentConfig {
+func (s *MySuite) getBasicBlueprintWithTestModule() Blueprint {
 	testModuleSource := filepath.Join(s.tmpTestDir, "module")
 	testDeploymentGroup := DeploymentGroup{
 		Name: "primary",
@@ -195,18 +194,16 @@ func (s *MySuite) getBasicDeploymentConfigWithTestModule() DeploymentConfig {
 		},
 	}
 
-	return DeploymentConfig{
-		Config: Blueprint{
-			BlueprintName:    "simple",
-			Vars:             NewDict(map[string]cty.Value{"deployment_name": cty.StringVal("deployment_name")}),
-			DeploymentGroups: []DeploymentGroup{testDeploymentGroup},
-		},
+	return Blueprint{
+		BlueprintName:    "simple",
+		Vars:             NewDict(map[string]cty.Value{"deployment_name": cty.StringVal("deployment_name")}),
+		DeploymentGroups: []DeploymentGroup{testDeploymentGroup},
 	}
 }
 
 // create a simple multigroup deployment with a use keyword that matches
 // one module to another in an earlier group
-func (s *MySuite) getMultiGroupDeploymentConfig() DeploymentConfig {
+func (s *MySuite) getMultiGroupBlueprint() Blueprint {
 	testModuleSource0 := filepath.Join(s.tmpTestDir, "module0")
 	testModuleSource1 := filepath.Join(s.tmpTestDir, "module1")
 	testModuleSource2 := filepath.Join(s.tmpTestDir, "module2")
@@ -304,23 +301,20 @@ func (s *MySuite) getMultiGroupDeploymentConfig() DeploymentConfig {
 		Modules: []Module{mod2},
 	}
 
-	dc := DeploymentConfig{
-		Config: Blueprint{
-			BlueprintName: "simple",
-			Vars: NewDict(map[string]cty.Value{
-				"deployment_name": cty.StringVal("deployment_name"),
-				"project_id":      cty.StringVal("test-project"),
-				"unused_key":      cty.StringVal("unused_value"),
-			}),
-			DeploymentGroups: []DeploymentGroup{grp0, grp1},
-		},
+	return Blueprint{
+		BlueprintName: "simple",
+		Vars: NewDict(map[string]cty.Value{
+			"deployment_name": cty.StringVal("deployment_name"),
+			"project_id":      cty.StringVal("test-project"),
+			"unused_key":      cty.StringVal("unused_value"),
+		}),
+		DeploymentGroups: []DeploymentGroup{grp0, grp1},
 	}
-	return dc
 }
 
-func (s *MySuite) TestExpandConfig(c *C) {
-	dc := s.getBasicDeploymentConfigWithTestModule()
-	c.Check(dc.ExpandConfig(), IsNil)
+func (s *MySuite) TestExpand(c *C) {
+	bp := s.getBasicBlueprintWithTestModule()
+	c.Check(bp.Expand(), IsNil)
 }
 
 func (s *zeroSuite) TestCheckModulesAndGroups(c *C) {
@@ -517,12 +511,12 @@ func (s *zeroSuite) TestCheckBlueprintName(c *C) {
 }
 
 func (s *MySuite) TestNewBlueprint(c *C) {
-	dc := s.getDeploymentConfigForTest()
+	bp := s.getBlueprintForTest()
 	outFile := filepath.Join(s.tmpTestDir, "out_TestNewBlueprint.yaml")
-	c.Assert(dc.ExportBlueprint(outFile), IsNil)
-	newDC, _, err := NewDeploymentConfig(outFile)
+	c.Assert(bp.Export(outFile), IsNil)
+	newBp, _, err := NewBlueprint(outFile)
 	c.Assert(err, IsNil)
-	c.Assert(dc.Config, DeepEquals, newDC.Config)
+	c.Assert(bp, DeepEquals, newBp)
 }
 
 func (s *MySuite) TestImportBlueprint(c *C) {
@@ -681,10 +675,10 @@ dragon: "Lews Therin Telamon"`)
 }
 
 func (s *MySuite) TestExportBlueprint(c *C) {
-	dc := DeploymentConfig{Config: Blueprint{BlueprintName: "goo"}}
+	bp := Blueprint{BlueprintName: "goo"}
 	outFilename := "out_TestExportBlueprint.yaml"
 	outFile := filepath.Join(s.tmpTestDir, outFilename)
-	c.Assert(dc.ExportBlueprint(outFile), IsNil)
+	c.Assert(bp.Export(outFile), IsNil)
 	fileInfo, err := os.Stat(outFile)
 	c.Assert(err, IsNil)
 	c.Assert(fileInfo.Name(), Equals, outFilename)
@@ -762,44 +756,44 @@ func (s *zeroSuite) TestCheckBackend(c *C) {
 
 func (s *zeroSuite) TestSkipValidator(c *C) {
 	{
-		dc := DeploymentConfig{Config: Blueprint{Validators: nil}}
-		dc.SkipValidator("zebra")
-		c.Check(dc.Config.Validators, DeepEquals, []Validator{
+		bp := Blueprint{Validators: nil}
+		bp.SkipValidator("zebra")
+		c.Check(bp.Validators, DeepEquals, []Validator{
 			{Validator: "zebra", Skip: true}})
 	}
 	{
-		dc := DeploymentConfig{Config: Blueprint{Validators: []Validator{
-			{Validator: "pony"}}}}
-		dc.SkipValidator("zebra")
-		c.Check(dc.Config.Validators, DeepEquals, []Validator{
-			{Validator: "pony"},
-			{Validator: "zebra", Skip: true}})
-	}
-	{
-		dc := DeploymentConfig{Config: Blueprint{Validators: []Validator{
-			{Validator: "pony"},
-			{Validator: "zebra"}}}}
-		dc.SkipValidator("zebra")
-		c.Check(dc.Config.Validators, DeepEquals, []Validator{
+		bp := Blueprint{Validators: []Validator{
+			{Validator: "pony"}}}
+		bp.SkipValidator("zebra")
+		c.Check(bp.Validators, DeepEquals, []Validator{
 			{Validator: "pony"},
 			{Validator: "zebra", Skip: true}})
 	}
 	{
-		dc := DeploymentConfig{Config: Blueprint{Validators: []Validator{
+		bp := Blueprint{Validators: []Validator{
 			{Validator: "pony"},
-			{Validator: "zebra", Skip: true}}}}
-		dc.SkipValidator("zebra")
-		c.Check(dc.Config.Validators, DeepEquals, []Validator{
+			{Validator: "zebra"}}}
+		bp.SkipValidator("zebra")
+		c.Check(bp.Validators, DeepEquals, []Validator{
 			{Validator: "pony"},
 			{Validator: "zebra", Skip: true}})
 	}
 	{
-		dc := DeploymentConfig{Config: Blueprint{Validators: []Validator{
+		bp := Blueprint{Validators: []Validator{
+			{Validator: "pony"},
+			{Validator: "zebra", Skip: true}}}
+		bp.SkipValidator("zebra")
+		c.Check(bp.Validators, DeepEquals, []Validator{
+			{Validator: "pony"},
+			{Validator: "zebra", Skip: true}})
+	}
+	{
+		bp := Blueprint{Validators: []Validator{
 			{Validator: "zebra"},
 			{Validator: "pony"},
-			{Validator: "zebra"}}}}
-		dc.SkipValidator("zebra")
-		c.Check(dc.Config.Validators, DeepEquals, []Validator{
+			{Validator: "zebra"}}}
+		bp.SkipValidator("zebra")
+		c.Check(bp.Validators, DeepEquals, []Validator{
 			{Validator: "zebra", Skip: true},
 			{Validator: "pony"},
 			{Validator: "zebra", Skip: true}})
@@ -808,15 +802,15 @@ func (s *zeroSuite) TestSkipValidator(c *C) {
 }
 
 func (s *MySuite) TestModuleGroup(c *C) {
-	dc := s.getDeploymentConfigForTest()
+	bp := s.getBlueprintForTest()
 
-	group := dc.Config.DeploymentGroups[0]
-	modID := dc.Config.DeploymentGroups[0].Modules[0].ID
+	group := bp.DeploymentGroups[0]
+	modID := bp.DeploymentGroups[0].Modules[0].ID
 
-	foundGroup := dc.Config.ModuleGroupOrDie(modID)
+	foundGroup := bp.ModuleGroupOrDie(modID)
 	c.Assert(foundGroup, DeepEquals, group)
 
-	_, err := dc.Config.ModuleGroup("bad_module_id")
+	_, err := bp.ModuleGroup("bad_module_id")
 	c.Assert(err, NotNil)
 }
 

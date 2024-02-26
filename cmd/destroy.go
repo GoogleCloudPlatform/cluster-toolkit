@@ -64,19 +64,19 @@ func parseDestroyArgs(cmd *cobra.Command, args []string) error {
 
 func runDestroyCmd(cmd *cobra.Command, args []string) error {
 	expandedBlueprintFile := filepath.Join(artifactsDir, modulewriter.ExpandedBlueprintName)
-	dc, _, err := config.NewDeploymentConfig(expandedBlueprintFile)
+	bp, _, err := config.NewBlueprint(expandedBlueprintFile)
 	if err != nil {
 		return err
 	}
 
-	if err := shell.ValidateDeploymentDirectory(dc.Config.DeploymentGroups, deploymentRoot); err != nil {
+	if err := shell.ValidateDeploymentDirectory(bp.DeploymentGroups, deploymentRoot); err != nil {
 		return err
 	}
 
 	// destroy in reverse order of creation!
 	packerManifests := []string{}
-	for i := len(dc.Config.DeploymentGroups) - 1; i >= 0; i-- {
-		group := dc.Config.DeploymentGroups[i]
+	for i := len(bp.DeploymentGroups) - 1; i >= 0; i-- {
+		group := bp.DeploymentGroups[i]
 		groupDir := filepath.Join(deploymentRoot, string(group.Name))
 
 		var err error
