@@ -444,23 +444,11 @@ func validateModuleUseReferences(p ModulePath, mod Module, bp Blueprint) error {
 }
 
 func checkBackend(bep backendPath, be TerraformBackend) error {
-	err := errors.New("can not use expressions in terraform_backend block")
 	val, perr := parseYamlString(be.Type)
-
 	if _, is := IsExpressionValue(val); is || perr != nil {
-		return BpError{bep.Type, err}
+		return BpError{bep.Type, errors.New("can not use expression as a terraform_backend type")}
 	}
-	var errs Errors
-	for k, c := range be.Configuration.Items() {
-		cp := bep.Configuration.Dot(k)
-		errs.Add(cty.Walk(c, func(vp cty.Path, v cty.Value) (bool, error) {
-			if _, is := IsExpressionValue(v); is {
-				errs.At(cp.Cty(vp), err)
-			}
-			return true, nil
-		}))
-	}
-	return errs.OrNil()
+	return nil
 }
 
 // SkipValidator marks validator(s) as skipped,

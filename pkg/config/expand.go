@@ -160,8 +160,9 @@ func (bp Blueprint) expandBackend(grp *DeploymentGroup) {
 		be.Configuration = NewDict(defaults.Configuration.Items())
 	}
 	if be.Type == "gcs" && !be.Configuration.Has("prefix") {
-		prefix := fmt.Sprintf("%s/%s/%s", bp.BlueprintName, bp.DeploymentName(), grp.Name)
-		be.Configuration.Set("prefix", cty.StringVal(prefix))
+		prefix := MustParseExpression(
+			fmt.Sprintf(`"%s/${var.deployment_name}/%s"`, bp.BlueprintName, grp.Name))
+		be.Configuration.Set("prefix", prefix.AsValue())
 	}
 }
 

@@ -735,23 +735,6 @@ func (s *zeroSuite) TestCheckBackend(c *C) {
 		b := TerraformBackend{Type: "\\$(vartype)"}
 		c.Check(checkBackend(p, b), IsNil)
 	}
-
-	{ // FAIL. Variable in configuration
-		b := TerraformBackend{Type: "gcs"}
-		b.Configuration.Set("bucket", GlobalRef("trenta").AsValue())
-		c.Check(checkBackend(p, b), NotNil)
-	}
-
-	{ // FAIL. handles nested configuration
-		b := TerraformBackend{Type: "gcs"}
-		b.Configuration.
-			Set("bucket", cty.StringVal("trenta")).
-			Set("complex", cty.ObjectVal(map[string]cty.Value{
-				"alpha": cty.StringVal("a"),
-				"beta":  GlobalRef("boba").AsValue(),
-			}))
-		c.Check(checkBackend(p, b), NotNil)
-	}
 }
 
 func (s *zeroSuite) TestSkipValidator(c *C) {

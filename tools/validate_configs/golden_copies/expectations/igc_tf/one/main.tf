@@ -14,6 +14,13 @@
   * limitations under the License.
   */
 
+terraform {
+  backend "gcs" {
+    bucket = "us-east4-c"
+    prefix = "igc/golden_copy_deployment/one"
+  }
+}
+
 module "homefs" {
   source          = "./modules/embedded/modules/file-system/filestore"
   deployment_name = var.deployment_name

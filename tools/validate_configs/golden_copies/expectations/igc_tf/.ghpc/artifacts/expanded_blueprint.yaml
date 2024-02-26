@@ -35,6 +35,11 @@ vars:
   zone: (("${var.region}-c"))
 deployment_groups:
   - group: zero
+    terraform_backend:
+      type: gcs
+      configuration:
+        bucket: ((var.zone))
+        prefix: (("igc/${var.deployment_name}/zero"))
     modules:
       - source: modules/network/vpc
         kind: terraform
@@ -50,6 +55,11 @@ deployment_groups:
           project_id: ((var.project_id))
           region: ((var.region))
   - group: one
+    terraform_backend:
+      type: gcs
+      configuration:
+        bucket: ((var.zone))
+        prefix: (("igc/${var.deployment_name}/one"))
     modules:
       - source: modules/file-system/filestore
         kind: terraform
@@ -65,3 +75,7 @@ deployment_groups:
           project_id: ((var.project_id))
           region: ((var.region))
           zone: ((var.zone))
+terraform_backend_defaults:
+  type: gcs
+  configuration:
+    bucket: ((var.zone))
