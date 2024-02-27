@@ -1,6 +1,6 @@
 module hpc-toolkit
 
-go 1.20
+go 1.21
 
 require (
 	cloud.google.com/go/compute v1.23.4 // indirect
