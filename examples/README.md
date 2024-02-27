@@ -46,6 +46,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [cae-slurm.yaml](#cae-slurmyaml-) ![core-badge]
   * [hpc-build-slurm-image.yaml](#hpc-build-slurm-imageyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-ubuntu2004.yaml](#hpc-slurm-ubuntu2004yaml-) ![community-badge]
+  * [hpc-slurm-ubuntu2004-v6.yaml](#hpc-slurm-ubuntu2004-v6yaml-) ![community-badge] ![experimental-badge]
   * [pfs-daos.yaml](#pfs-daosyaml-) ![community-badge]
   * [hpc-slurm-daos.yaml](#hpc-slurm-daosyaml-) ![community-badge]
   * [hpc-amd-slurm.yaml](#hpc-amd-slurmyaml-) ![community-badge]
@@ -830,6 +831,46 @@ partition runs on compute optimized nodes of type `cs-standard-60`. The
 [hpc-slurm-ubuntu2004.yaml]: ../community/examples/hpc-slurm-ubuntu2004.yaml
 
 #### Quota Requirements for hpc-slurm-ubuntu2004.yaml
+
+For this example the following is needed in the selected region:
+
+* Cloud Filestore API: Basic HDD (Standard) capacity (GB): **1,024 GB**
+* Compute Engine API: Persistent Disk SSD (GB): **~50 GB**
+* Compute Engine API: Persistent Disk Standard (GB): **~50 GB static + 50
+  GB/node** up to 1,250 GB
+* Compute Engine API: N2 CPUs: **12**
+* Compute Engine API: C2 CPUs: **4** for controller node and **60/node** active
+  in `compute` partition up to 1,204
+* Compute Engine API: Affinity Groups: **one for each job in parallel** - _only
+  needed for `compute` partition_
+* Compute Engine API: Resource policies: **one for each job in parallel** -
+  _only needed for `compute` partition_
+
+### [hpc-slurm-ubuntu2004-v6.yaml] ![community-badge] ![experimental-badge]
+
+> **Warning**: The variables `enable_reconfigure`,
+> `enable_cleanup_compute`, and `enable_cleanup_subscriptions`, if set to
+> `true`, require additional dependencies **to be installed on the system deploying the infrastructure**.
+>
+> ```shell
+> # Install Python3 and run
+> pip3 install -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/6.4.1/scripts/requirements.txt
+> ```
+
+Similar to the [hpc-slurm-v6.yaml] example, but using Ubuntu 20.04 instead of CentOS 7.
+[Other operating systems] are supported by SchedMD for the the Slurm on GCP project and images are listed [here](https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#published-image-family). Only the examples listed in this page been tested by the Cloud HPC Toolkit team.
+
+The cluster will support 2 partitions named `debug` and `compute`.
+The `debug` partition is the default partition and runs on smaller
+`n2-standard-2` nodes. The `compute` partition is not default and requires
+specifying in the `srun` command via the `--partition` flag. The `compute`
+partition runs on compute optimized nodes of type `cs-standard-60`. The
+`compute` partition may require additional quota before using.
+
+[Other operating systems]: https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#supported-operating-systems
+[hpc-slurm-ubuntu2004-v6.yaml]: ../community/examples/hpc-slurm-ubuntu2004-v6.yaml
+
+#### Quota Requirements for hpc-slurm-ubuntu2004-v6.yaml
 
 For this example the following is needed in the selected region:
 
