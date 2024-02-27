@@ -28,7 +28,7 @@ deployment_groups:
     settings:
       install_nvidia_driver: true  # Must be set to true to accept Nvidia ToS for driver install
       instance_image:
-        family: ubuntu-2204-lts
+        name: ubuntu-2204-jammy-v20240126
         project: ubuntu-os-cloud
 
   # This module makes terraform wait until the remote-desktop setup is complete
