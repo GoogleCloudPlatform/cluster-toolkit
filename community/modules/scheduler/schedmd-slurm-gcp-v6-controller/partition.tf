@@ -66,6 +66,7 @@ module "slurm_nodeset" {
   instance_template_self_link = module.slurm_nodeset_template[each.key].self_link
 
   enable_placement       = each.value.enable_placement
+  maintenance_interval   = each.value.maintenance_interval
   network_tier           = each.value.network_tier
   node_count_dynamic_max = each.value.node_count_dynamic_max
   node_count_static      = each.value.node_count_static
