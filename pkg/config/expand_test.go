@@ -24,9 +24,7 @@ import (
 
 func (s *zeroSuite) TestExpandBackend(c *C) {
 	type BE = TerraformBackend // alias for brevity
-	noDefBe := Blueprint{BlueprintName: "tree",
-		Vars: NewDict(map[string]cty.Value{
-			"deployment_name": cty.StringVal("bush")})}
+	noDefBe := Blueprint{BlueprintName: "tree"}
 
 	{ // no def BE, no group BE
 		g := DeploymentGroup{Name: "clown"}
@@ -40,7 +38,6 @@ func (s *zeroSuite) TestExpandBackend(c *C) {
 			TerraformBackend: BE{Type: "gcs"}}
 		noDefBe.expandBackend(&g)
 		c.Check(g.TerraformBackend, DeepEquals, BE{Type: "gcs"})
-		// TODO: shall gcs.prefix be set to "tree/bush/clown"?
 	}
 
 	defBe := noDefBe
@@ -56,7 +53,7 @@ func (s *zeroSuite) TestExpandBackend(c *C) {
 		c.Check(g.TerraformBackend, DeepEquals, BE{ // no change
 			Type: "gcs",
 			Configuration: NewDict(map[string]cty.Value{
-				"prefix": cty.StringVal("tree/bush/clown"),
+				"prefix": MustParseExpression(`"tree/${var.deployment_name}/clown"`).AsValue(),
 				"leave":  cty.StringVal("fall")})})
 	}
 

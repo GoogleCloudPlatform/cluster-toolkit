@@ -21,6 +21,11 @@ vars:
   region: us-east4
   zone: $(vars.region)-c
 
+terraform_backend_defaults:
+ type: gcs
+ configuration:
+   bucket: $(vars.zone)  
+
 deployment_groups:
 - group: zero
   modules:

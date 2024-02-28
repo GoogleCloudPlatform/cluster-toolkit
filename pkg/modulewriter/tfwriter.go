@@ -270,12 +270,17 @@ func (w TFWriter) writeDeploymentGroup(
 		intergroupInputs[igVar.Name] = true
 	}
 
+	be := g.TerraformBackend
+	if be.Configuration, err = be.Configuration.Eval(bp); err != nil {
+		return err
+	}
+
 	// Write main.tf file
 	doctoredModules, err := substituteIgcReferences(g.Modules, intergroupVars)
 	if err != nil {
 		return fmt.Errorf("error substituting intergroup references in deployment group %s: %w", g.Name, err)
 	}
-	if err := writeMain(doctoredModules, g.TerraformBackend, groupPath); err != nil {
+	if err := writeMain(doctoredModules, be, groupPath); err != nil {
 		return fmt.Errorf("error writing main.tf file for deployment group %s: %w", g.Name, err)
 	}
 
