@@ -382,6 +382,7 @@ func (s *zeroSuite) TestListUnusedVariables(c *C) {
 	bp := Blueprint{
 		Vars: NewDict(map[string]cty.Value{
 			"deployment_name": cty.StringVal("green"),
+			"labels":          cty.False,
 			"flathead_screw":  cty.NumberIntVal(1),
 			"pony":            cty.NumberIntVal(2),
 			"stripes":         cty.NumberIntVal(3),

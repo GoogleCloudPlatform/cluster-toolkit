@@ -316,7 +316,8 @@ func (bp Blueprint) ListUnusedVariables() []string {
 	}
 
 	var used = map[string]bool{
-		"deployment_name": true, // required => always used
+		"labels":          true, // automatically added
+		"deployment_name": true, // required
 	}
 	for _, v := range GetUsedDeploymentVars(cty.ObjectVal(ns)) {
 		used[v] = true
