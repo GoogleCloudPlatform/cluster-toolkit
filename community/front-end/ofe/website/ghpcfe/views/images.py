@@ -31,11 +31,14 @@ from django.urls import reverse
 from django.views import generic
 from django.views.generic.edit import CreateView
 from ..models import StartupScript, Image, Credential
-from ..forms import StartupScriptForm, ImageForm
+from ..forms import StartupScriptForm, ImageForm, ImageImportForm
 from ..cluster_manager.image import ImageBackend
 from ..cluster_manager.cloud_info import get_region_zone_info
+from ..cluster_manager.image_import import *
 from ..views.asyncview import BackendAsyncView
 from pathlib import Path
+import json
+from django.contrib import messages
 
 import logging
 
@@ -223,10 +226,14 @@ class ImageDeleteView(UserPassesTestMixin, generic.View):
 
     def post(self, request, *args, **kwargs):
         image = Image.objects.get(pk=self.kwargs['pk'])
-        img_backend = ImageBackend(image)
-        img_backend.delete_image()
-        image.delete()
-        response = {'success': True}
+        if image.source_image_project == "Imported":
+            image.delete()
+            response = {'success': True, 'import': True}
+        else:
+            img_backend = ImageBackend(image)
+            img_backend.delete_image()
+            image.delete()
+            response = {'success': True}
         return JsonResponse(response)
     
     
@@ -285,3 +292,68 @@ class BackendListRegions(LoginRequiredMixin, generic.View):
         credentials = get_object_or_404(Credential, pk=pk)
         regions = get_region_zone_info("GCP", credentials.detail)
         return JsonResponse(regions)
+
+
+class ImageImportView(LoginRequiredMixin, CreateView):
+    """Custom CreateView for Image model"""
+
+    form_class = ImageImportForm
+    template_name = "image/image-import.html"
+
+    def get_success_url(self):
+        success_url = reverse("images")
+        return success_url
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["user"] = self.request.user
+        return kwargs
+
+    def get_image_list(self):
+        prexisting_images_list = []
+        for cred in Credential.objects.all():
+            prexisting_images = list_project_images(cred)
+            prexisting_images_list += prexisting_images
+        return prexisting_images_list
+
+    def get_context_data(self, **kwargs):
+        prexisting_images_list = self.get_image_list()
+        prexisting_images_json = json.dumps(prexisting_images_list)
+        context = super().get_context_data(**kwargs)
+        context["navtab"] = "image"
+        context["image_choice"] = prexisting_images_list
+        context["image_jsonstr"] = prexisting_images_json
+        return context
+    
+    # Set currently logged-in user as owner.
+    def form_valid(self, form):
+        form.instance.owner = self.request.user
+        form.instance.source_image_project = "Imported" #form.cleaned_data['name']
+        form.instance.source_image_family = "Imported" #form.cleaned_data['family']
+        selected_cred_id = int(form.data["cloud_credential"])
+        selected_cred_obj = get_object_or_404(Credential, pk=selected_cred_id)
+        usr_input_select = form.data["inputOption"]
+        if usr_input_select == "text":
+            form_name = form.data["textInputName"]
+            form_family = form.data["textInputFamily"]
+        elif usr_input_select == "dropdown":
+            image_list = form.data["dropdown"].split(",")
+            form_name = image_list[1]
+            form_family = image_list[3]      
+        else:
+            messages.error(self.request, 'Please choose how you want to select an image')
+            return self.form_invalid(form)
+        if form_name != "" and form_family != "":
+            form.instance.name = form_name
+            form.instance.family = form_family
+        else:
+            messages.error(self.request, 'Please enter an image and family name')
+            return self.form_invalid(form)
+        image_isvalid = verify_image(selected_cred_obj,form_name,form_family)
+        if image_isvalid:
+            form.instance.status = "r"
+        else:
+            messages.error(self.request, 'Image name/family does not match any existing images, using given credential')
+            return self.form_invalid(form)    
+        return super().form_valid(form)
+    

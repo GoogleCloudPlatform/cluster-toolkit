@@ -977,3 +977,51 @@ class ImageForm(forms.ModelForm):
         startup_scripts = owned_scripts | authorized_scripts
 
         return startup_scripts
+
+class ImageImportForm(forms.ModelForm):
+    """Custom form for Image model when importing an image"""
+
+    class Meta:
+        model = Image
+
+        fields = (
+            "cloud_credential",
+            #"name", 
+            #"family",
+            "startup_script",
+            "enable_os_login",
+            "block_project_ssh_keys",
+            "authorised_users"
+        )
+
+        widgets = {
+            "cloud_credential": forms.Select(attrs={"class": "form-control"}),
+            #"name": forms.HiddenInput,#TextInput(attrs={"class": "form-control"}),
+            #"family": forms.HiddenInput,#(attrs={"class": "form-control"}),
+            "startup_script": forms.SelectMultiple(attrs={"class": "form-control"}),
+            "enable_os_login": forms.RadioSelect(),
+            "block_project_ssh_keys": forms.RadioSelect(),
+            "authorised_users": forms.SelectMultiple(attrs={"class": "form-control"}),
+        }
+
+        help_texts = {
+            #"name": "Enter the existing image name",
+            #"family": "Enter the family of the existing image"
+        }
+
+    def __init__(self, *args, **kwargs):
+        user = kwargs.pop("user", None)
+        super().__init__(*args, **kwargs)
+        self.fields["startup_script"].queryset = self.get_startup_scripts(user)
+
+    def get_startup_scripts(self, user):
+        # Retrieve startup scripts owned by the user
+        owned_scripts = StartupScript.objects.filter(owner=user)
+
+        # Retrieve startup scripts authorized for the user
+        authorized_scripts = StartupScript.objects.filter(authorised_users=user)
+
+        # Combine the owned and authorized scripts
+        startup_scripts = owned_scripts | authorized_scripts
+
+        return startup_scripts
