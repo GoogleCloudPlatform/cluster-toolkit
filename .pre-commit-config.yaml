@@ -65,6 +65,15 @@ repos:
     args: ['-c', '"Google LLC"', '-l', 'apache']
     exclude: docs/videos/healthcare-and-life-sciences/lysozyme-example/submit.sh
     pass_filenames: true
+  - id: tests-metadata
+    name: tests-metadata
+    entry: python3 tools/cloud-build/daily-tests/validate_tests_metadata.py
+    language: python
+    language_version: python3
+    additional_dependencies: ['pyyaml']
+    files: 'tools/cloud-build/daily-tests/builds/.*\.yaml'
+    pass_filenames: false
+    require_serial: true
 
 - repo: https://github.com/dnephin/pre-commit-golang
   rev: v0.5.1
