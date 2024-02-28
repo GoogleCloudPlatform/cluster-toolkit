@@ -11,7 +11,8 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
 * [Instructions](#instructions)
   * [(Optional) Setting up a remote terraform state](#optional-setting-up-a-remote-terraform-state)
 * [Blueprint Descriptions](#blueprint-descriptions)
-  * [hpc-slurm.yaml](#hpc-slurmyaml--) [!core-badge] ![experimental-badge]
+  * [hpc-slurm.yaml](#hpc-slurmyaml--) ![core-badge] ![experimental-badge]
+  * [hpc-slurm-v5-legacy.yaml](#hpc-slurm-v5-legacyyaml-) ![core-badge]
   * [hpc-enterprise-slurm.yaml](#hpc-enterprise-slurmyaml-) ![core-badge]
   * [hpc-slurm6-tpu.yaml](#hpc-slurm6-tpuyaml--) ![community-badge] ![experimental-badge]
   * [ml-slurm.yaml](#ml-slurmyaml-) ![core-badge]
@@ -148,6 +149,65 @@ There is an `h3` partition that uses compute-optimized `h3-standard-88` machine 
 You can read more about the H3 machine series [here](https://cloud.google.com/compute/docs/compute-optimized-machines#h3_series).
 
 #### Quota Requirements for hpc-slurm.yaml
+
+For this example the following is needed in the selected region:
+
+* Cloud Filestore API: Basic HDD (Standard) capacity (GB): **1,024 GB**
+* Compute Engine API: Persistent Disk SSD (GB): **~50 GB**
+* Compute Engine API: Persistent Disk Standard (GB): **~50 GB static + 50
+  GB/node** up to 1,250 GB
+* Compute Engine API: N2 CPUs: **2** for the login node and **2/node** active
+  in the `debug` partition up to 12
+* Compute Engine API: C2 CPUs: **4** for the controller node and **60/node**
+  active in the `compute` partition up to 1,204
+* Compute Engine API: H3 CPUs: **88/node** active in the `h3` partition up to
+  1760
+  * The H3 CPU quota can be increased on the Cloud Console by navigating to
+  `IAM & Admin`->`Quotas` or searching `All Quotas` and entering `vm_family:H3`
+  into the filter bar.  From there, the quotas for each region may be selected
+  and edited.
+* Compute Engine API: Affinity Groups: **one for each job in parallel** - _only
+  needed for the `compute` partition_
+* Compute Engine API: Resource policies: **one for each job in parallel** -
+  _only needed for the `compute` partition_
+
+### [hpc-slurm-v5-legacy.yaml] ![core-badge]
+
+> **Warning**: The variables `enable_reconfigure`,
+> `enable_cleanup_compute`, and `enable_cleanup_subscriptions`, if set to
+> `true`, require additional dependencies **to be installed on the system deploying the infrastructure**.
+>
+> ```shell
+> # Install Python3 and run
+> pip3 install -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.9.1/scripts/requirements.txt
+> ```
+
+Creates a basic auto-scaling Slurm cluster with mostly default settings. The
+blueprint also creates a new VPC network, and a filestore instance mounted to
+`/home`.
+
+There are 3 partitions in this example: `debug` `compute`, and `h3`. The `debug`
+partition uses `n2-standard-2` VMs, which should work out of the box without
+needing to request additional quota. The purpose of the `debug` partition is to
+make sure that first time users are not immediately blocked by quota
+limitations.
+
+[hpc-slurm-v5-legacy.yaml]: ./hpc-slurm-v5-legacy.yaml
+
+#### Compute Partition
+
+There is a `compute` partition that achieves higher performance. Any
+performance analysis should be done on the `compute` partition. By default it
+uses `c2-standard-60` VMs with placement groups enabled. You may need to request
+additional quota for `C2 CPUs` in the region you are deploying in. You can
+select the compute partition using the `-p compute` argument when running `srun`.
+
+#### H3 Partition
+
+There is an `h3` partition that uses compute-optimized `h3-standard-88` machine type.
+You can read more about the H3 machine series [here](https://cloud.google.com/compute/docs/compute-optimized-machines#h3_series).
+
+#### Quota Requirements for hpc-slurm-v5-legacy.yaml
 
 For this example the following is needed in the selected region:
 
