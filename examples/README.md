@@ -8,6 +8,28 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
 -->
 <!-- TOC -->
 
+## Slurm migration to v6
+
+HPC Toolkit is in the process of transitioning from Slurm v5 to Slurm v6. At this point Slurm v5 is the recommended option, with Slurm v6 being experimental until more testing has been completed.
+
+Slurm v6 modules have been added to the HPC Toolkit. Slurm v6 example blueprints are being developed and will be listed alongside Slurm v5 examples.
+
+Examples will have the following naming conventions:
+
+* Slurm v5: `hpc-slurm.yaml`
+* Slurm v6: `hpc-slurm-v6.yaml`
+
+In a future release, when Slurm v6 becomes the recommended option we will update blueprint naming as follows:
+
+* Slurm v5: `hpc-slurm-v5-legacy.yaml`
+* Slurm v6: `hpc-slurm.yaml`
+
+Initially both sets of modules and examples will receive support.
+
+After ~3 months (~June) Slurm v5 modules will be marked as deprecated
+
+After ~6 months (~September) Slurm v5 modules will be removed from the HPC Toolkit
+
 * [Instructions](#instructions)
   * [(Optional) Setting up a remote terraform state](#optional-setting-up-a-remote-terraform-state)
 * [Blueprint Descriptions](#blueprint-descriptions)
