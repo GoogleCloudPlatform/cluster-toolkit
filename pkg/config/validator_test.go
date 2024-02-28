@@ -48,6 +48,13 @@ func (s *zeroSuite) TestValidateVars(c *C) {
 		vars.Set("labels", cty.StringVal("a_string"))
 		c.Check(validateVars(Blueprint{Vars: vars}), NotNil)
 	}
+
+	{ // Fail: cyclic dependency
+		vars := Dict{base}
+		vars.Set("ar", GlobalRef("buz").AsValue())
+		vars.Set("buz", GlobalRef("ar").AsValue())
+		c.Check(validateVars(Blueprint{Vars: vars}), NotNil)
+	}
 }
 
 func (s *zeroSuite) TestValidateSettings(c *C) {

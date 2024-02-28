@@ -83,6 +83,10 @@ func validateGlobalLabels(bp Blueprint) error {
 
 // validateVars checks the global variables for viable types
 func validateVars(bp Blueprint) error {
+	if _, err := varsTopologicalOrder(bp.Vars); err != nil {
+		return err
+	}
+
 	errs := (&Errors{}).
 		Add(validateDeploymentName(bp)).
 		Add(validateGlobalLabels(bp))
