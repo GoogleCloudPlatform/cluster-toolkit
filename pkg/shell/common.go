@@ -17,6 +17,7 @@
 package shell
 
 import (
+	"bufio"
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
@@ -97,7 +98,7 @@ func CheckWritableDir(path string) error {
 // only if the user responds with "y" or "yes" (case-insensitive)
 func ApplyChangesChoice(c ProposedChanges) bool {
 	logging.Info("Summary of proposed changes: %s", strings.TrimSpace(c.Summary))
-	var userResponse string
+	reader := bufio.NewReader(os.Stdin)
 
 	for {
 		fmt.Print(`(D)isplay full proposed changes,
@@ -106,12 +107,12 @@ func ApplyChangesChoice(c ProposedChanges) bool {
 (C)ontinue without applying
 Please select an option [d,a,s,c]: `)
 
-		_, err := fmt.Scanln(&userResponse)
+		in, err := reader.ReadString('\n')
 		if err != nil {
 			logging.Fatal("%v", err)
 		}
 
-		switch strings.ToLower(strings.TrimSpace(userResponse)) {
+		switch strings.ToLower(strings.TrimSpace(in)) {
 		case "a":
 			return true
 		case "c":
