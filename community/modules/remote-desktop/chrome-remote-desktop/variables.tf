@@ -61,7 +61,7 @@ variable "instance_image" {
     name="debian-12-bookworm-v20240110" and project="debian-cloud". 
     NOTE: uses fixed version of image to avoid NVIDIA driver compatibility issues.
 
-    An alternative image is from family="ubuntu-2204-lts" and project="ubuntu-os-cloud".
+    An alternative image is from name="ubuntu-2204-jammy-v20240126" and project="ubuntu-os-cloud".
 
     Expected Fields:
     name: The name of the image. Mutually exclusive with family.
