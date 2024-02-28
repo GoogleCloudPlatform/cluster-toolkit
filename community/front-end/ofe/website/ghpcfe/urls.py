@@ -504,6 +504,9 @@ urlpatterns += [
         "images/create/image", ImageCreateView.as_view(), name="image-create"
     ),
     path(
+        "images/import", ImageImportView.as_view(), name="image-import"
+    ),
+    path(
         "images/image-view/<int:pk>", ImageDetailView.as_view(), name="image-view"
         ),
     path(
