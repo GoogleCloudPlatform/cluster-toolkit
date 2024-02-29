@@ -17,7 +17,7 @@
 blueprint_name: slurm6-tpu
 
 vars:
-  project_id:
+  project_id: ## Set GCP Project ID Here ##
   deployment_name: slurm6-tpu
   region: us-central1
   zone: us-central1-b
