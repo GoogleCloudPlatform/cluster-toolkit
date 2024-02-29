@@ -33,3 +33,5 @@ deployment_groups:
   - id: wait
     source: community/modules/scripts/wait-for-startup
     use: [crd]
+    settings:
+      timeout: 1500  # bumping to avoid timeout
