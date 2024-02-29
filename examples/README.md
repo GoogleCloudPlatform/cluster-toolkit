@@ -33,8 +33,8 @@ After ~6 months (~September) Slurm v5 modules will be removed from the HPC Toolk
 * [Instructions](#instructions)
   * [(Optional) Setting up a remote terraform state](#optional-setting-up-a-remote-terraform-state)
 * [Blueprint Descriptions](#blueprint-descriptions)
-  * [hpc-slurm.yaml](#hpc-slurmyaml--) ![core-badge] ![experimental-badge]
-  * [hpc-slurm-v5-legacy.yaml](#hpc-slurm-v5-legacyyaml-) ![core-badge]
+  * [hpc-slurm.yaml](#hpc-slurmyaml-) ![core-badge]
+  * [hpc-slurm-v6.yaml](#hpc-slurm-v6yaml--) ![core-badge] ![experimental-badge]
   * [hpc-enterprise-slurm.yaml](#hpc-enterprise-slurmyaml-) ![core-badge]
   * [hpc-slurm6-tpu.yaml](#hpc-slurm6-tpuyaml--) ![community-badge] ![experimental-badge]
   * [ml-slurm.yaml](#ml-slurmyaml-) ![core-badge]
@@ -136,13 +136,15 @@ Toolkit team, partners, etc.) and are labeled with the community badge
 Blueprints that are still in development and less stable are also labeled with
 the experimental badge (![experimental-badge]).
 
-### [hpc-slurm.yaml] ![core-badge] ![experimental-badge]
+### [hpc-slurm.yaml] ![core-badge]
 
-> **Warning**: Requires additional dependencies **to be installed on the system deploying the infrastructure**.
+> **Warning**: The variables `enable_reconfigure`,
+> `enable_cleanup_compute`, and `enable_cleanup_subscriptions`, if set to
+> `true`, require additional dependencies **to be installed on the system deploying the infrastructure**.
 >
 > ```shell
 > # Install Python3 and run
-> pip3 install -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/6.4.2/scripts/requirements.txt
+> pip3 install -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/5.10.4/scripts/requirements.txt
 > ```
 
 Creates a basic auto-scaling Slurm cluster with mostly default settings. The
@@ -193,15 +195,13 @@ For this example the following is needed in the selected region:
 * Compute Engine API: Resource policies: **one for each job in parallel** -
   _only needed for the `compute` partition_
 
-### [hpc-slurm-v5-legacy.yaml] ![core-badge]
+### [hpc-slurm-v6.yaml] ![core-badge] ![experimental-badge]
 
-> **Warning**: The variables `enable_reconfigure`,
-> `enable_cleanup_compute`, and `enable_cleanup_subscriptions`, if set to
-> `true`, require additional dependencies **to be installed on the system deploying the infrastructure**.
+> **Warning**: Requires additional dependencies **to be installed on the system deploying the infrastructure**.
 >
 > ```shell
 > # Install Python3 and run
-> pip3 install -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.9.1/scripts/requirements.txt
+> pip3 install -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/6.4.2/scripts/requirements.txt
 > ```
 
 Creates a basic auto-scaling Slurm cluster with mostly default settings. The
@@ -214,7 +214,7 @@ needing to request additional quota. The purpose of the `debug` partition is to
 make sure that first time users are not immediately blocked by quota
 limitations.
 
-[hpc-slurm-v5-legacy.yaml]: ./hpc-slurm-v5-legacy.yaml
+[hpc-slurm-v6.yaml]: ./hpc-slurm-v6.yaml
 
 #### Compute Partition
 
@@ -229,7 +229,7 @@ select the compute partition using the `-p compute` argument when running `srun`
 There is an `h3` partition that uses compute-optimized `h3-standard-88` machine type.
 You can read more about the H3 machine series [here](https://cloud.google.com/compute/docs/compute-optimized-machines#h3_series).
 
-#### Quota Requirements for hpc-slurm-v5-legacy.yaml
+#### Quota Requirements for hpc-slurm-v6.yaml
 
 For this example the following is needed in the selected region:
 
