@@ -378,3 +378,14 @@ variable "enable_oslogin" {
     error_message = "Allowed string values for var.enable_oslogin are \"ENABLE\", \"DISABLE\", or \"INHERIT\"."
   }
 }
+
+variable "allocate_ip" {
+  description = "If not null, allocate IPs with the given configuration"
+  type = object({
+    address_type = string,
+    purpose      = string,
+    network_tier = string,
+    ip_version   = string,
+  })
+  default = null
+}
