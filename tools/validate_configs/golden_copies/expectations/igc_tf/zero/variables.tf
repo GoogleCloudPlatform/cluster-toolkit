@@ -33,3 +33,8 @@ variable "region" {
   description = "Toolkit deployment variable: region"
   type        = string
 }
+
+variable "zone" {
+  description = "Toolkit deployment variable: zone"
+  type        = string
+}

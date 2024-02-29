@@ -417,34 +417,62 @@ func (s *MySuite) TestWriteVariables(c *C) {
 	c.Assert(err, IsNil)
 }
 
-func (s *MySuite) TestWriteProviders(c *C) {
+func (s *zeroSuite) TestGetProviders(c *C) {
+	// no vars
+	c.Check(
+		getProviders(config.Blueprint{}), DeepEquals, []provider{
+			{alias: "google", source: "hashicorp/google", version: "~> 4.84.0", config: config.Dict{}},
+			{alias: "google-beta", source: "hashicorp/google-beta", version: "~> 4.84.0", config: config.Dict{}}})
+
+	{ // all vars
+		allSet := config.NewDict(map[string]cty.Value{
+			"project": config.GlobalRef("project_id").AsValue(),
+			"region":  config.GlobalRef("region").AsValue(),
+			"zone":    config.GlobalRef("zone").AsValue(),
+		})
+		c.Check(
+			getProviders(config.Blueprint{
+				Vars: config.NewDict(map[string]cty.Value{
+					"project_id": cty.StringVal("some"),
+					"region":     cty.StringVal("some"),
+					"zone":       cty.StringVal("some"),
+				}),
+			}), DeepEquals, []provider{
+				{alias: "google", source: "hashicorp/google", version: "~> 4.84.0", config: allSet},
+				{alias: "google-beta", source: "hashicorp/google-beta", version: "~> 4.84.0", config: allSet}})
+	}
+}
+
+func (s *zeroSuite) TestWriteProviders(c *C) {
 	// Setup
-	testProvDir := c.MkDir()
-	provFilePath := filepath.Join(testProvDir, "providers.tf")
+	dir := c.MkDir()
+	zebra := provider{alias: "zebra", source: "hashicorp/zebra", version: "~> 2", config: config.Dict{}}
+	elephant := provider{
+		alias:   "elephant",
+		source:  "savannah/elephant",
+		version: "~> 8",
+		config: config.NewDict(map[string]cty.Value{
+			"smeller":   config.GlobalRef("long").AsValue(),
+			"listeners": config.GlobalRef("spacious").AsValue()})}
 
-	// Simple success, empty vars
-	testVars := make(map[string]cty.Value)
-	err := writeProviders(testVars, testProvDir)
-	c.Assert(err, IsNil)
-	exists, err := stringExistsInFile("google-beta", provFilePath)
-	c.Assert(err, IsNil)
-	c.Assert(exists, Equals, true)
-	exists, err = stringExistsInFile("project", provFilePath)
-	c.Assert(err, IsNil)
-	c.Assert(exists, Equals, false)
+	{ // FAIL, non existing path
+		c.Check(writeProviders([]provider{zebra}, "not/a/real/path"), NotNil)
+	}
 
-	// Failure: Bad Path
-	c.Assert(writeProviders(testVars, "not/a/real/path"), NotNil)
+	{ // OK
+		c.Check(writeProviders([]provider{zebra, elephant}, dir), IsNil)
+		b, err := os.ReadFile(filepath.Join(dir, "providers.tf"))
+		c.Assert(err, IsNil)
+		c.Check(string(b), Equals, license+`
+provider "zebra" {
+}
 
-	// Success: All vars
-	testVars["project_id"] = cty.StringVal("test_project")
-	testVars["zone"] = cty.StringVal("test_zone")
-	testVars["region"] = cty.StringVal("test_region")
-	err = writeProviders(testVars, testProvDir)
-	c.Assert(err, IsNil)
-	exists, err = stringExistsInFile("var.region", provFilePath)
-	c.Assert(err, IsNil)
-	c.Assert(exists, Equals, true)
+provider "elephant" {
+  listeners = var.spacious
+  smeller   = var.long
+}
+`)
+	}
 }
 
 func (s *zeroSuite) TestKind(c *C) {
