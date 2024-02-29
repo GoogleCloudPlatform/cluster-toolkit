@@ -13,7 +13,13 @@
 # limitations under the License.
 
 ---
-tags: []
+tags:
+- m.filestore
+- m.pbspro-client
+- m.pbspro-execution
+- m.pbspro-server
+- m.pre-existing-vpc
+
 timeout: 14400s  # 4hr
 availableSecrets:
   secretManager:

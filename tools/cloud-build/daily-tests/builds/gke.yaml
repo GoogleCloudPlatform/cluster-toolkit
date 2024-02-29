@@ -13,7 +13,12 @@
 # limitations under the License.
 
 ---
-tags: []
+tags:
+- m.gke-cluster
+- m.gke-job-template
+- m.gke-node-pool
+- m.vpc
+
 timeout: 14400s  # 4hr
 
 steps:

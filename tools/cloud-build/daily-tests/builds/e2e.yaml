@@ -13,7 +13,10 @@
 # limitations under the License.
 
 ---
-tags: []
+tags:
+- m.pre-existing-vpc
+- m.vm-instance
+
 timeout: 3600s  # 1hr
 steps:
 - name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
