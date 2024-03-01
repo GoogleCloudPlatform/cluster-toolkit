@@ -18,6 +18,7 @@ tags:
 - m.gke-job-template
 - m.gke-node-pool
 - m.vpc
+- gke
 
 timeout: 14400s  # 4hr
 

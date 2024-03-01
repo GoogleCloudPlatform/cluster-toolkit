@@ -16,6 +16,7 @@
 tags:
 - m.pre-existing-vpc
 - m.vm-instance
+- vm
 
 timeout: 3600s  # 1hr
 steps:

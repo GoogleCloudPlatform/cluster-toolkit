@@ -20,6 +20,7 @@ tags:
 - m.schedmd-slurm-gcp-v6-partition
 - m.startup-script
 - m.vpc
+- slurm6
 
 timeout: 5400s  # 1.5h
 steps:

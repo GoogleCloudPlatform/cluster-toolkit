@@ -24,6 +24,8 @@ tags:
 - m.htcondor-setup
 - m.startup-script
 - m.vpc
+- htcondor
+- packer
 
 timeout: 14400s  # 4hr
 steps:
