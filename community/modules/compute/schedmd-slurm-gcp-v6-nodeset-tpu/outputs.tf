@@ -15,4 +15,9 @@
 output "nodeset_tpu" {
   description = "Details of the nodeset tpu. Typically used as input to `schedmd-slurm-gcp-v6-partition`."
   value       = local.nodeset_tpu
+
+  precondition {
+    condition     = (var.node_type == null) != (var.accelerator_config == { topology : "", version : "" })
+    error_message = "Either a node_type or an accelerator_config must be provided."
+  }
 }
