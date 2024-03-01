@@ -14,6 +14,7 @@
 # limitations under the License.
 from typing import Sequence, Dict, Callable
 from dataclasses import dataclass
+# pip install google-cloud-build
 from google.cloud.devtools import cloudbuild_v1
 from google.cloud.devtools.cloudbuild_v1.types.cloudbuild import Build, ApproveBuildRequest, ApprovalResult, RetryBuildRequest
 import time
@@ -43,6 +44,12 @@ class BuildAndCount:
 def selector_by_name(names: Sequence[str]) -> Selector:
     def selector(build: Build) -> bool:
         return any(trig_name(build) == n for n in names)
+    return selector
+
+
+def selector_by_tag(tag: str) -> Selector:
+    def selector(build: Build) -> bool:
+        return tag in build.tags
     return selector
 
 
@@ -271,8 +278,9 @@ def get_default_project():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=DESCRIPTION)
     parser.add_argument("pr_sha", type=str, help="Short SHA of target PR")
-    parser.add_argument("test_selector", nargs='+', type=str,
+    parser.add_argument("test_selector", nargs='*', type=str,
                         help="Selector for test, currently support 'all' and exact name match")
+    parser.add_argument("--tags", nargs="*", type=str, help="Filter tests by tags")
     parser.add_argument("--project", type=str,
                         help="GCP ProjectID, if not set will use default one (`gcloud config get-value project`)")
     parser.add_argument("-c", type=int, default=1,
@@ -286,6 +294,7 @@ if __name__ == "__main__":
     else:
         project = args.project
     cb = cloudbuild_v1.services.cloud_build.CloudBuildClient()
-    selectors = [make_selector(s) for s in args.test_selector]
+    selectors = [make_selector(s) for s in args.test_selector] + [selector_by_tag(t) for t in args.tags or []]
+    
     ui = UI()
     Babysitter(ui, cb, project, args.pr_sha, selectors, args.c, args.r).do()
