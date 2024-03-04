@@ -40,7 +40,7 @@ deployment_groups:
           chmod a+rwx /opt/apps/scripts/tpu-test
 
       - type: data
-        destination: /opt/apps/scripts/tpu-test/run_maxtest.sh
+        destination: /opt/apps/scripts/tpu-test/run_maxtext.sh
         content: |
           #!/bin/bash
           # Update the following parameters in the python3 command in this script.
@@ -53,12 +53,12 @@ deployment_groups:
           virtualenv venv
           source venv/bin/activate
 
-          # Clone maxtest repository and install dependencies.
+          # Clone maxtext repository and install dependencies.
           git clone https://github.com/google/maxtext
           cd maxtext/
           bash setup.sh
 
-          # Run maxtest benchmark test.
+          # Run maxtext benchmark test.
           python3 MaxText/train.py MaxText/configs/base.yml run_name=<RUN_NAME> base_output_directory=/opt/apps/scripts/tpu-test/output/ dataset_path=<STORAGE_BUCKET> async_checkpointing=False attention=<ATTENTION> steps=<STEPS>
 
   - id: tpu_nodeset
