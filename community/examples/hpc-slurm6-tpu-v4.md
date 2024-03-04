@@ -1,6 +1,6 @@
 # Run TPU jobs in Slurm Cluster with TPU Partition
 
-This page demonstrates how to run TPU job like [maxtest](https://github.com/google/maxtext)
+This page demonstrates how to run TPU job like [maxtext](https://github.com/google/maxtext)
 performance benchmark test in Slurm Cluster with TPU partition using [hpc-slurm6-tpu-v4.yaml](https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/community/examples/hpc-slurm6-tpu-v4.yaml)
 blueprint.
 
@@ -16,7 +16,7 @@ dataset from GCS bucket in training script.
 ./ghpc deploy slurm6-tpu --auto-approve
 ```
 
-This would deploy slurm cluster with TPU partition, dynamic compute partition. Maxtest benchmark test script
+This would deploy slurm cluster with TPU partition, dynamic compute partition. Maxtext benchmark test script
 will be stored in `/opt/apps/scripts/tpu-test` directory.
 
 ## Connect to the login node
@@ -31,11 +31,11 @@ gcloud compute ssh slurm6tpu-login-v6tpu-001 --zone us-central2-b --project <pro
 You may be prompted to set up SSH. If so follow the prompts and if asked for a
 password, just hit `[enter]` leaving the input blank.
 
-## Run maxtest script
+## Run maxtext script
 
 ```bash
 cd /opt/apps/scripts/tpu-test/
-sbatch -ptpu --mem=50000 run_maxtest.sh
+sbatch -ptpu --mem=50000 run_maxtext.sh
 ```
 
 The `sbatch` command trigger Slurm to auto-scale up nodes to run the job.
