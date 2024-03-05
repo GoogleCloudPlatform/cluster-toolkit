@@ -13,7 +13,14 @@
 # limitations under the License.
 
 ---
-tags: []
+tags:
+- m.custom-image
+- m.schedmd-slurm-gcp-v6-controller
+- m.schedmd-slurm-gcp-v6-nodeset
+- m.schedmd-slurm-gcp-v6-partition
+- m.startup-script
+- m.vpc
+
 timeout: 5400s  # 1.5h
 steps:
 ## Test simple golang build

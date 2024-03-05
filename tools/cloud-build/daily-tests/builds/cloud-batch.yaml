@@ -13,7 +13,12 @@
 # limitations under the License.
 
 ---
-tags: []
+tags:
+- m.batch-job-template
+- m.batch-login-node
+- m.filestore
+- m.pre-existing-vpc
+
 timeout: 14400s  # 4hr
 steps:
 ## Test simple golang build
