@@ -21,10 +21,19 @@ from typing import Optional
 import itertools
 
 CATEGORICAL_TAGS = frozenset([
-    "slurm5", "slurm6", "tpu",  "huy.tam"
-])
-OS_TAGS = frozenset([
-    "rocky8"
+    "batch", 
+    "crd", 
+    "gke",
+    "htcondor", 
+    "monitoring", 
+    "ofe", 
+    "packer", 
+    "pbspro",
+    "slurm5", 
+    "slurm6", 
+    "spack",
+    "tpu", 
+    "vm", 
 ])
 
 def module_tag(src: str) -> Optional[str]:
@@ -45,7 +54,7 @@ MODULE_TAGS = frozenset(
 )
 
 
-ALL_TAGS = CATEGORICAL_TAGS | OS_TAGS | MODULE_TAGS
+ALL_TAGS = CATEGORICAL_TAGS | MODULE_TAGS
 
 BUILDS_DIR="tools/cloud-build/daily-tests/builds"
 
@@ -115,7 +124,7 @@ class TestIntegrationTestsMeta(unittest.TestCase):
             self.fail(msg=f"Some used modules aren't declared\nHINT: add following tags to {build_path}: {hint}")
         self.assertEquals(declared_mod_tags, required_mod_tags)
 
-        # TODO: check that all tests have at least one categorical tag
+        self.assertNotEqual(tags & CATEGORICAL_TAGS, set(), msg=f"No categorical tags, pick/add one: {CATEGORICAL_TAGS}")
 
     def check_metadata(self, path: str) -> None:
         y = read_yaml(path)
@@ -134,7 +143,7 @@ class TestIntegrationTestsMeta(unittest.TestCase):
                 self.check_metadata(it)
 
     def test_sanity_intersections(self) -> None:
-        for (a, b) in itertools.combinations([CATEGORICAL_TAGS, OS_TAGS, MODULE_TAGS], 2):
+        for (a, b) in itertools.combinations([CATEGORICAL_TAGS, MODULE_TAGS], 2):
             self.assertEqual(a & b, set(), msg="tag types intersect")
 
     def test_sanity_tag_limits(self) -> None:

@@ -21,6 +21,7 @@ tags:
 - m.gke-node-pool
 - m.gke-persistent-volume
 - m.vpc
+- gke
 
 timeout: 14400s  # 4hr
 

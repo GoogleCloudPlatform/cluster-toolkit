@@ -19,6 +19,7 @@ tags:
 - m.pbspro-execution
 - m.pbspro-server
 - m.pre-existing-vpc
+- pbspro
 
 timeout: 14400s  # 4hr
 availableSecrets:

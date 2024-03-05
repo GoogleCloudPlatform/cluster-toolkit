@@ -54,6 +54,7 @@ def selector_by_tag(tag: str) -> Selector:
     return selector
 
 
+# IMPORTANT: if you are updating this, please also update the affected build files tags.
 SELECTORS: Dict[str, Selector] = {
     "all": lambda _: True,
     "batch": selector_by_name([

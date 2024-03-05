@@ -17,6 +17,7 @@ tags:
 - m.chrome-remote-desktop
 - m.vpc
 - m.wait-for-startup
+- crd
 
 timeout: 14400s  # 4hr
 steps:

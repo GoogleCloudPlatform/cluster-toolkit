@@ -20,6 +20,7 @@ tags:
 - m.schedmd-slurm-gcp-v5-node-group
 - m.schedmd-slurm-gcp-v5-partition
 - m.vpc
+- slurm5
 
 timeout: 14400s  # 4hr
 steps:

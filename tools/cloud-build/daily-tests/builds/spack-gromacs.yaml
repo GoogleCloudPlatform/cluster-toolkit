@@ -23,6 +23,8 @@ tags:
 - m.spack-setup
 - m.startup-script
 - m.vpc
+- slurm6
+- spack
 
 timeout: 14400s  # 4hr
 availableSecrets:

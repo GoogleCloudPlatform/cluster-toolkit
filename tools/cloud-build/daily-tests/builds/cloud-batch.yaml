@@ -18,6 +18,7 @@ tags:
 - m.batch-login-node
 - m.filestore
 - m.pre-existing-vpc
+- batch
 
 timeout: 14400s  # 4hr
 steps:

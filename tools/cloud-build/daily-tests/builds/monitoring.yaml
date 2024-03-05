@@ -21,6 +21,7 @@ tags:
 - m.vm-instance
 - m.vpc
 - m.wait-for-startup
+- monitoring
 
 timeout: 14400s  # 4hr
 steps:

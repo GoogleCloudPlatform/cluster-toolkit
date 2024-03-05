@@ -22,6 +22,7 @@ tags:
 - m.schedmd-slurm-gcp-v5-partition
 - m.startup-script
 - m.vpc
+- slurm5
 
 timeout: 14400s  # 4hr
 steps:
