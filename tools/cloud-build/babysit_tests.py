@@ -20,6 +20,7 @@ from google.cloud.devtools.cloudbuild_v1.types.cloudbuild import Build, ApproveB
 import time
 import argparse
 import subprocess
+import requests
 
 DESCRIPTION = """
 babysit_tests is a tool to approve & retry CloudBuild tests.
@@ -275,10 +276,17 @@ def get_default_project():
     return res.stdout.decode('ascii').strip()
 
 
+def get_pr(pr_num: int) -> dict:
+    resp = requests.get(f"https://api.github.com/repos/GoogleCloudPlatform/hpc-toolkit/pulls/{pr_num}")
+    resp.raise_for_status()
+    return resp.json()
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=DESCRIPTION)
-    parser.add_argument("pr_sha", type=str, help="Short SHA of target PR")
-    parser.add_argument("test_selector", nargs='*', type=str,
+    parser.add_argument("--sha", type=str, help="Short SHA of target PR")
+    parser.add_argument("--pr", type=int, help="PR number")
+    parser.add_argument("test_selector", nargs='+', type=str,
                         help="Selector for test, currently support 'all' and exact name match")
     parser.add_argument("--tags", nargs="*", type=str, help="Filter tests by tags")
     parser.add_argument("--project", type=str,
@@ -288,13 +296,21 @@ if __name__ == "__main__":
     parser.add_argument("-r", type=int, default=1,
                         help="Number of retries, to disable retries set to 0, default is 1")
     args = parser.parse_args()
+
+    assert (args.sha is None) ^ (args.pr is None), "either --pr or --sha are required"
+    if args.pr:
+        sha = get_pr(args.pr)["head"]["sha"]
+    else:
+        sha = args.sha
+
     if args.project is None:
         project = get_default_project()
         print(f"Using project={project}")
     else:
         project = args.project
+
     cb = cloudbuild_v1.services.cloud_build.CloudBuildClient()
     selectors = [make_selector(s) for s in args.test_selector] + [selector_by_tag(t) for t in args.tags or []]
     
     ui = UI()
-    Babysitter(ui, cb, project, args.pr_sha, selectors, args.c, args.r).do()
+    Babysitter(ui, cb, project, sha, selectors, args.c, args.r).do()
