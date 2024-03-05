@@ -520,19 +520,6 @@ func (s *MySuite) TestNewBlueprint(c *C) {
 	c.Assert(bp, DeepEquals, newBp)
 }
 
-func (s *MySuite) TestImportBlueprint(c *C) {
-	bp, _, err := importBlueprint(s.simpleYamlFilename)
-	c.Assert(err, IsNil)
-	c.Check(bp.BlueprintName, Equals, "simple")
-	c.Check(bp.DeploymentGroups[0].Modules[0].ID, Equals, ModuleID("vpc"))
-
-	_, _, emptyErr := importBlueprint(s.emptyFilename)
-	c.Assert(emptyErr, NotNil)
-
-	_, _, unsupportedErr := importBlueprint(s.unsupportedFilename)
-	c.Assert(unsupportedErr, NotNil)
-}
-
 func (s *MySuite) TestNewDeploymentSettings(c *C) {
 	ds, _, err := NewDeploymentSettings(s.deploymentFilename)
 	c.Assert(err, IsNil)
@@ -660,18 +647,12 @@ func (s *zeroSuite) TestValidateGlobalLabels(c *C) {
 	}
 }
 
-func (s *zeroSuite) TestImportBlueprint_ExtraField_ThrowsError(c *C) {
-	yaml := []byte(`
+func (s *zeroSuite) TestParseBlueprint_ExtraField_ThrowsError(c *C) {
+	// should fail on strict unmarshal as field does not match schema
+	_, _, err := parseYaml[Blueprint]([]byte(`
 blueprint_name: hpc-cluster-high-io
 # line below is not in our schema
-dragon: "Lews Therin Telamon"`)
-	file, _ := os.CreateTemp("", "*.yaml")
-	file.Write(yaml)
-	filename := file.Name()
-	file.Close()
-
-	// should fail on strict unmarshal as field does not match schema
-	_, _, err := importBlueprint(filename)
+dragon: "Lews Therin Telamon"`))
 	c.Check(err, NotNil)
 }
 
@@ -685,15 +666,6 @@ func (s *MySuite) TestExportBlueprint(c *C) {
 	c.Assert(fileInfo.Name(), Equals, outFilename)
 	c.Assert(fileInfo.Size() > 0, Equals, true)
 	c.Assert(fileInfo.IsDir(), Equals, false)
-}
-
-func (s *zeroSuite) TestValidationLevels(c *C) {
-	c.Check(isValidValidationLevel(0), Equals, true)
-	c.Check(isValidValidationLevel(1), Equals, true)
-	c.Check(isValidValidationLevel(2), Equals, true)
-
-	c.Check(isValidValidationLevel(-1), Equals, false)
-	c.Check(isValidValidationLevel(3), Equals, false)
 }
 
 func (s *zeroSuite) TestCheckMovedModules(c *C) {

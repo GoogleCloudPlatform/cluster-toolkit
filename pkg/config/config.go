@@ -195,10 +195,6 @@ const (
 	ValidationIgnore
 )
 
-func isValidValidationLevel(level int) bool {
-	return !(level > ValidationIgnore || level < ValidationError)
-}
-
 // Validator defines a validation step to be run on a blueprint
 type Validator struct {
 	Validator string
@@ -345,25 +341,12 @@ func checkMovedModule(source string) error {
 }
 
 // NewBlueprint is a constructor for Blueprint
-func NewBlueprint(configFilename string) (Blueprint, YamlCtx, error) {
-	bp, ctx, err := importBlueprint(configFilename)
-	if err != nil {
-		return Blueprint{}, ctx, err
-	}
-	// if the validation level has been explicitly set to an invalid value
-	// in YAML blueprint then silently default to validationError
-	if !isValidValidationLevel(bp.ValidationLevel) {
-		bp.ValidationLevel = ValidationError
-	}
-	return bp, ctx, nil
+func NewBlueprint(path string) (Blueprint, YamlCtx, error) {
+	return parseYamlFile[Blueprint](path)
 }
 
 func NewDeploymentSettings(deploymentFilename string) (DeploymentSettings, YamlCtx, error) {
-	depl, ctx, err := importDeploymentFile(deploymentFilename)
-	if err != nil {
-		return DeploymentSettings{}, ctx, err
-	}
-	return depl, ctx, nil
+	return parseYamlFile[DeploymentSettings](deploymentFilename)
 }
 
 // Export exports the internal representation of a blueprint config

@@ -160,7 +160,6 @@ var EmptyGroupName = errors.New("group name must be set for each deployment grou
 
 // Error messages
 const (
-	errMsgFileLoadError    = string("failed to read the input yaml")
 	errMsgYamlMarshalError = string("failed to export the configuration to a blueprint yaml file")
 	errMsgYamlSaveError    = string("failed to write the expanded yaml")
 	errMsgInvalidVar       = string("invalid variable definition in")
