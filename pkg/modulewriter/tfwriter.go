@@ -81,8 +81,8 @@ func writeOutputs(
 				desc = fmt.Sprintf("Generated output from module '%s'", mod.ID)
 			}
 			blockBody.SetAttributeValue("description", cty.StringVal(desc))
-			value := fmt.Sprintf("module.%s.%s", mod.ID, output.Name)
-			blockBody.SetAttributeRaw("value", simpleTokens(value))
+			ref := config.ModuleRef(mod.ID, output.Name).AsValue()
+			blockBody.SetAttributeRaw("value", config.TokensForValue(ref))
 			if output.Sensitive {
 				blockBody.SetAttributeValue("sensitive", cty.BoolVal(output.Sensitive))
 			}
@@ -110,7 +110,9 @@ func relaxVarType(t cty.Type) cty.Type {
 }
 
 func getTypeTokens(ty cty.Type) hclwrite.Tokens {
-	return simpleTokens(typeexpr.TypeString(ty))
+	// TODO: don't use TokensForIdentifier
+	// This is a temporary solution until we have a better way to tokenize types
+	return hclwrite.TokensForIdentifier(typeexpr.TypeString(ty))
 }
 
 func writeVariables(vars map[string]cty.Value, extraVars []modulereader.VarInfo, dst string) error {
@@ -183,8 +185,6 @@ func writeMain(
 
 	return writeHclFile(filepath.Join(dst, "main.tf"), hclFile)
 }
-
-var simpleTokens = hclwrite.TokensForIdentifier
 
 type provider struct {
 	alias   string
