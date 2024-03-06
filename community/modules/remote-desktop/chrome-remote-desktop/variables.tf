@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+# Just a touch
 variable "project_id" {
   description = "Project in which Google Cloud resources will be created"
   type        = string
