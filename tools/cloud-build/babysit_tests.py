@@ -27,9 +27,11 @@ babysit_tests is a tool to approve & retry CloudBuild tests.
 It monitors status of builds referenced by PR commit SHA,
 it will approve and retry tests according to configured concurrency and retry policies.
 The tool will terminate itself once there is no more actions to take or no reasons to wait for status changes.
-The subset of tests to monitor can be configured by using test_selectors, e.g. "all", exact_name_of_test.
+The subset of tests to monitor can be configured by using test selectors --tags, --names, --auto, and --all.
 Usage:
-tools/cloud-build/babysit_tests.py --pr 123 --auto
+$ tools/cloud-build/babysit_tests.py --pr 123 --auto
+
+$ tools/cloud-build/babysit_tests.py --pr 123 --tags slurm5 slurm6
 """
 
 Selector = Callable[[Build], bool]
@@ -42,68 +44,11 @@ class BuildAndCount:
     count: int  # total count of builds for this trigger
 
 
-def selector_by_name(names: Sequence[str]) -> Selector:
-    def selector(build: Build) -> bool:
-        return any(trig_name(build) == n for n in names)
-    return selector
-
+def selector_by_name(name: str) -> Selector:
+    return lambda b: trig_name(b) == name
 
 def selector_by_tag(tag: str) -> Selector:
-    def selector(build: Build) -> bool:
-        return tag in build.tags
-    return selector
-
-
-# IMPORTANT: if you are updating this, please also update the affected build files tags.
-SELECTORS: Dict[str, Selector] = {
-    "all": lambda _: True,
-    "batch": selector_by_name([
-        "PR-test-batch-mpi",
-        "PR-test-cloud-batch",
-    ]),
-    "crd": selector_by_name([
-        "PR-test-chrome-remote-desktop",
-        "PR-test-hpc-slurm-chromedesktop",
-    ]),
-    "gke": selector_by_name([
-        "PR-test-gke",
-        "PR-test-gke-storage",
-    ]),
-    "pr_legacy": selector_by_name([
-        "PR-legacy-test-integration-group-1",
-        "PR-legacy-test-integration-group-2",
-        "PR-legacy-test-integration-group-3",
-        "PR-legacy-test-integration-group-4",
-        "PR-legacy-test-integration-group-5",
-    ]),
-    "slurm5": selector_by_name([
-        "PR-test-hpc-high-io-v5",
-        "PR-test-slurm-gcp-v5-hpc-centos7",
-        "PR-test-slurm-gcp-v5-startup-scripts",
-        "PR-test-slurm-gcp-v5-ubuntu2004",
-        "PR-test-hpc-enterprise-slurm",
-        "PR-test-hpc-slurm-chromedesktop",
-        "PR-test-lustre-slurm",
-    ]),
-    "slurm6": selector_by_name([
-        "PR-test-slurm-gcp-v6-tpu",
-        "PR-test-slurm-gcp-v6-rocky8",
-        "PR-test-hpc-build-slurm-image",
-        "PR-test-spack-gromacs",
-    ]),
-    "spack": selector_by_name([
-        "PR-test-batch-mpi",
-        "PR-test-spack-gromacs",
-    ]),
-    "vm": selector_by_name([
-        "PR-test-lustre-vm",
-    ]),
-}
-
-
-def make_selector(t: str) -> Selector:
-    return SELECTORS.get(t, selector_by_name([t]))
-
+    return lambda b: tag in b.tags
 
 def trig_name(build: Build) -> str:
     return build.substitutions.get("TRIGGER_NAME", "???")
@@ -300,10 +245,10 @@ if __name__ == "__main__":
     parser.add_argument("--sha", type=str, help="Short SHA of target PR")
     parser.add_argument("--pr", type=int, help="PR number")
 
-    parser.add_argument("test_selector", nargs='*', type=str,
-                        help="Selector for test, currently support 'all' and exact name match")
+    parser.add_argument("--names", nargs="*", type=str, help="Match tests by exact name")
     parser.add_argument("--tags", nargs="*", type=str, help="Filter tests by tags")
     parser.add_argument("--auto", action="store_true", help="If true, will inspect changed files and run tests for them")
+    parser.add_argument("--all", action="store_true", help="Run all tests")
     
     parser.add_argument("--project", type=str,
                         help="GCP ProjectID, if not set will use default one (`gcloud config get-value project`)")
@@ -334,18 +279,20 @@ if __name__ == "__main__":
     else:
         sha = args.sha
 
+    if args.head is None:
+        args.head = sha
+
     if args.project is None:
         project = get_default_project()
         print(f"Using project={project}")
     else:
         project = args.project
 
-    
-    selectors = [make_selector(s) for s in args.test_selector] + [selector_by_tag(t) for t in args.tags or []]
-
-    if args.head is None:
-        args.head = sha
-        
+    selectors = []
+    selectors += [selector_by_tag(t) for t in args.tags or []]
+    selectors += [selector_by_name(n) for n in args.names or []]
+    if args.all:
+        selectors.append(lambda _: True)
     if args.auto:
         assert args.base is not None, "--base & [--head] or --pr are required for auto mode"
         auto_tags = get_changed_files_tags(args.base, args.head)
