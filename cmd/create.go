@@ -64,22 +64,26 @@ var (
 		Short:             "Create a new deployment.",
 		Long:              "Create a new deployment based on a provided blueprint.",
 		Run:               runCreateCmd,
-		Args:              cobra.ExactArgs(1),
+		Args:              cobra.MatchAll(cobra.ExactArgs(1), checkExists),
 		ValidArgsFunction: filterYaml,
 	})
 )
 
 func runCreateCmd(cmd *cobra.Command, args []string) {
-	bp := expandOrDie(args[0])
-	deplDir := filepath.Join(createFlags.outputDir, bp.DeploymentName())
-	checkErr(checkOverwriteAllowed(deplDir, bp, createFlags.overwriteDeployment, createFlags.forceOverwrite))
-	checkErr(modulewriter.WriteDeployment(bp, deplDir))
-
+	deplDir := doCreate(args[0])
 	logging.Info("To deploy your infrastructure please run:")
 	logging.Info("")
 	logging.Info(boldGreen("%s deploy %s"), execPath(), deplDir)
 	logging.Info("")
 	printAdvancedInstructionsMessage(deplDir)
+}
+
+func doCreate(path string) string {
+	bp := expandOrDie(path)
+	deplDir := filepath.Join(createFlags.outputDir, bp.DeploymentName())
+	checkErr(checkOverwriteAllowed(deplDir, bp, createFlags.overwriteDeployment, createFlags.forceOverwrite))
+	checkErr(modulewriter.WriteDeployment(bp, deplDir))
+	return deplDir
 }
 
 func printAdvancedInstructionsMessage(deplDir string) {

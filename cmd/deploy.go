@@ -24,11 +24,15 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
-func addDeployFlags(c *cobra.Command) *cobra.Command {
-	return addAutoApproveFlag(
-		addArtifactsDirFlag(c))
+func addDeployFlags(c *cobra.Command, withCreateFlags bool) *cobra.Command {
+	if withCreateFlags {
+		c = addCreateFlags(c)
+	}
+	return addAutoApproveFlag(addArtifactsDirFlag(c))
+
 }
 
 func init() {
@@ -37,18 +41,35 @@ func init() {
 
 var (
 	deployCmd = addDeployFlags(&cobra.Command{
-		Use:               "deploy <DEPLOYMENT_DIRECTORY>",
+		Use:               "deploy (<DEPLOYMENT_DIRECTORY> | <BLUEPRINT_FILE>)",
 		Short:             "deploy all resources in a Toolkit deployment directory.",
 		Long:              "deploy all resources in a Toolkit deployment directory.",
-		Args:              cobra.MatchAll(cobra.ExactArgs(1), checkDir),
+		Args:              cobra.MatchAll(cobra.ExactArgs(1), checkExists),
 		ValidArgsFunction: matchDirs,
 		Run:               runDeployCmd,
 		SilenceUsage:      true,
-	})
+	}, true /* withCreateFlags */)
 )
 
 func runDeployCmd(cmd *cobra.Command, args []string) {
-	deplRoot := args[0]
+	var deplRoot string
+
+	if checkDir(cmd, args) != nil { // arg[0] is BLUEPRINT_FILE
+		deplRoot = doCreate(args[0])
+	} else { // arg[0] is DEPLOYMENT_DIRECTORY
+		deplRoot = args[0]
+		// check that no "create" flags were specified
+		pureCmd := addDeployFlags(&cobra.Command{}, false /* withCreateFlags */)
+		cmd.Flags().VisitAll(func(f *pflag.Flag) {
+			if f.Changed && pureCmd.Flags().Lookup(f.Name) == nil {
+				checkErr(fmt.Errorf("cannot specify flag %q with DEPLOYMENT_DIRECTORY provided", f.Name))
+			}
+		})
+	}
+	doDeploy(deplRoot)
+}
+
+func doDeploy(deplRoot string) {
 	artDir := getArtifactsDir(deplRoot)
 	checkErr(shell.CheckWritableDir(artDir))
 

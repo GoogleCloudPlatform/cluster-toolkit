@@ -22,8 +22,7 @@ vars="project_id=$PROJECT_ID,deployment_name=$depl_name,region=$region,zone=$zon
 
 # Already in a root of the repo
 make
-./ghpc create tools/cloud-build/daily-tests/blueprints/e2e.yaml --vars="$vars" -l ERROR
-./ghpc deploy "$depl_name" --auto-approve
+./ghpc deploy tools/cloud-build/daily-tests/blueprints/e2e.yaml --vars="$vars" -l ERROR --auto-approve
 
 # check instance was created
 gcloud compute instances describe "${depl_name}-0" --project="$PROJECT_ID" --zone="$zone" >/dev/null
