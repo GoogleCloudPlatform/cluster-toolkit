@@ -236,6 +236,9 @@ variable "nodeset" {
     zones              = optional(list(string), [])
     zone_target_shape  = optional(string, "ANY_SINGLE_ZONE")
     reservation_name   = optional(string)
+    startup_script = optional(list(object({
+      filename = string
+    content = string })), [])
   }))
   default = []
 

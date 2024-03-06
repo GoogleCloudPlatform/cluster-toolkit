@@ -35,6 +35,11 @@ locals {
   public_access_config = var.disable_public_ips ? [] : [{ nat_ip = null, network_tier = null }]
   access_config        = length(var.access_config) == 0 ? local.public_access_config : var.access_config
 
+  ghpc_startup_script = [{
+    filename = "ghpc_nodeset_startup.sh"
+    content  = var.startup_script
+  }]
+
   nodeset = {
     node_count_static      = var.node_count_static
     node_count_dynamic_max = var.node_count_dynamic_max
@@ -82,5 +87,6 @@ locals {
 
     zones             = toset(concat([var.zone], tolist(var.zones)))
     zone_target_shape = var.zone_target_shape
+    startup_script    = local.ghpc_startup_script
   }
 }
