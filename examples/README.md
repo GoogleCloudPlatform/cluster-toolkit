@@ -1,26 +1,9 @@
 # Example Blueprints
 
 > [!NOTE]
->
-> ## Ongoing Migration to Slurm v6
->
->HPC Toolkit is in the process of transitioning from Slurm v5 to Slurm v6. At this point Slurm v5 is the recommended option, with Slurm v6 being experimental until more testing has been completed.
->
->Slurm v6 modules have been added to the HPC Toolkit. Slurm v6 example blueprints are being developed and will be listed alongside Slurm v5 examples.
->
->Examples will have the following naming conventions:
->
->* Slurm v5: `hpc-slurm.yaml`
->* Slurm v6: `hpc-slurm-v6.yaml`
->
->In a future release, when Slurm v6 becomes the recommended option we will update blueprint naming as follows:
->
->* Slurm v5: `hpc-slurm-v5-legacy.yaml`
->* Slurm v6: `hpc-slurm.yaml`
->
->Initially both sets of modules and examples will receive support. \
->After ~3 months (~June) Slurm v5 modules will be marked as deprecated \
->After ~6 months (~September) Slurm v5 modules will be removed from the HPC Toolkit
+> Migration to Slurm-GCP v6 is ongoing. See
+> [this update](#ongoing-migration-to-slurm-gcp-v6) for specific recommendations
+> and timelines.
 
 This directory contains a set of example blueprint files that can be fed into
 gHPC to create a deployment.
@@ -32,6 +15,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
 
 * [Instructions](#instructions)
   * [(Optional) Setting up a remote terraform state](#optional-setting-up-a-remote-terraform-state)
+* [Ongoing Migration to Slurm-GCP v6](#ongoing-migration-to-slurm-gcp-v6)
 * [Blueprint Descriptions](#blueprint-descriptions)
   * [hpc-slurm.yaml](#hpc-slurmyaml-) ![core-badge]
   * [hpc-slurm-v6.yaml](#hpc-slurm-v6yaml--) ![core-badge] ![experimental-badge]
@@ -115,6 +99,44 @@ subcommands as well:
 > This feature only supports variables of string type. If you set configuration
 > in both the blueprint and CLI, the tool uses values at CLI. "gcs" is set as
 > type by default.
+
+## Ongoing Migration to Slurm-GCP v6
+
+[Slurm-GCP](https://github.com/GoogleCloudPlatform/slurm-gcp) is the set of
+scripts and tools that automate the installation, deployment, and certain
+operational aspects of [Slurm](https://slurm.schedmd.com/overview.html) on
+Google Cloud Platform. It is recommended to use Slurm-GCP through the HPC
+toolkit where it is exposed as various modules.
+
+The HPC Toolkit team is in the process of transitioning from Slurm-GCP v5 to
+Slurm-GCP v6. At this point Slurm-GCP v5 is the recommended option, with
+Slurm-GCP v6 being experimental until the HPC Toolkit team fully duplicates our
+regression tests and public blueprints, addressing all major issues found in
+this exercise.
+
+Slurm-GCP v6 modules have been added to the HPC Toolkit. Slurm v6 example
+blueprints are being developed and will be listed alongside Slurm v5 examples.
+
+During this phase of development, the example blueprints will have the following
+naming conventions:
+
+* Slurm-GCP v5: hpc-slurm.yaml
+* Slurm-GCP v6: hpc-slurm-v6.yaml
+
+Once all major issues have been addressed and regression tests are at parity
+with V5, Slurm-GCP v6 will become the recommended Slurm-GCP version and we will
+update blueprint naming as follows:
+
+* Slurm v5: hpc-slurm-v5-legacy.yaml
+* Slurm v6: hpc-slurm.yaml
+
+> [!IMPORTANT]
+> Three months after Slurm-gcp V6 becomes the recommended version, Slurm v5
+> modules will be marked as deprecated and will be maintained in our repo for
+> another three months, at which point the modules will be removed from the HPC
+> Toolkit repo and regression tests will no longer run for V5. Those who choose
+> to not upgrade to V6 will still be able to use V5 modules by referencing
+> specific git tags in the module source lines.
 
 ## Blueprint Descriptions
 
