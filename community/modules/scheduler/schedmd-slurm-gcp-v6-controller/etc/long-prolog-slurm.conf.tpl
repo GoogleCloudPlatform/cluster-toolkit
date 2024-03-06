@@ -28,7 +28,7 @@ DebugFlags=Power
 #
 #
 # TIMERS
-MessageTimeout=60
+MessageTimeout=600
 BatchStartTimeout=600
 PrologEpilogTimeout=600
 PrologFlags=Contain
