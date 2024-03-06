@@ -226,12 +226,11 @@ m2:
   mv: $(lime.bloom)
   hl: ((3 + 9))
 `
-	want := Dict{}
-	want.
-		Set("s1", cty.StringVal("red")).
-		Set("s2", cty.StringVal("pink")).
-		Set("m1", cty.EmptyObjectVal).
-		Set("m2", cty.ObjectVal(map[string]cty.Value{
+	want := Dict{}.
+		With("s1", cty.StringVal("red")).
+		With("s2", cty.StringVal("pink")).
+		With("m1", cty.EmptyObjectVal).
+		With("m2", cty.ObjectVal(map[string]cty.Value{
 			"m2f1": cty.StringVal("green"),
 			"m2f2": cty.TupleVal([]cty.Value{
 				cty.NumberIntVal(1),
@@ -266,11 +265,10 @@ func TestDictWrongTypeUnmarshalYAML(t *testing.T) {
 }
 
 func TestDictMarshalYAML(t *testing.T) {
-	d := Dict{}
-	d.
-		Set("s1", cty.StringVal("red")).
-		Set("m1", cty.EmptyObjectVal).
-		Set("m2", cty.ObjectVal(map[string]cty.Value{
+	d := Dict{}.
+		With("s1", cty.StringVal("red")).
+		With("m1", cty.EmptyObjectVal).
+		With("m2", cty.ObjectVal(map[string]cty.Value{
 			"m2f1": cty.StringVal("green"),
 			"m2f2": cty.TupleVal([]cty.Value{
 				cty.NumberIntVal(1),
@@ -298,8 +296,7 @@ func TestDictMarshalYAML(t *testing.T) {
 }
 
 func TestYAMLValueMarshalIntAsInt(t *testing.T) {
-	d := Dict{}
-	d.Set("zebra", cty.NumberIntVal(5))
+	d := Dict{}.With("zebra", cty.NumberIntVal(5))
 	want := "zebra: 5\n"
 	got, err := yaml.Marshal(d)
 	if err != nil {
@@ -317,10 +314,9 @@ pony: &passtime
 - sleep
 zebra: *passtime
 `
-	want := Dict{}
-	want.
-		Set("pony", cty.TupleVal([]cty.Value{cty.StringVal("eat"), cty.StringVal("sleep")})).
-		Set("zebra", cty.TupleVal([]cty.Value{cty.StringVal("eat"), cty.StringVal("sleep")}))
+	want := Dict{}.
+		With("pony", cty.TupleVal([]cty.Value{cty.StringVal("eat"), cty.StringVal("sleep")})).
+		With("zebra", cty.TupleVal([]cty.Value{cty.StringVal("eat"), cty.StringVal("sleep")}))
 	var got Dict
 	if err := yaml.Unmarshal([]byte(yml), &got); err != nil {
 		t.Fatalf("failed to decode: %v", err)

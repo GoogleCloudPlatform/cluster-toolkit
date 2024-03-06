@@ -27,11 +27,7 @@ type Dict struct {
 
 // NewDict constructor
 func NewDict(m map[string]cty.Value) Dict {
-	d := Dict{}
-	for k, v := range m {
-		d.Set(k, v)
-	}
-	return d
+	return Dict{m: maps.Clone(m)}
 }
 
 // Get returns stored value or cty.NilVal.
@@ -51,26 +47,19 @@ func (d *Dict) Has(k string) bool {
 	return ok
 }
 
-// Set adds/overrides value by key.
-// Returns reference to Dict-self.
-func (d *Dict) Set(k string, v cty.Value) *Dict {
-	if d.m == nil {
-		d.m = map[string]cty.Value{k: v}
-	} else {
-		d.m[k] = v
-	}
-	return d
+func (d Dict) With(k string, v cty.Value) Dict {
+	m := d.Items()
+	m[k] = v
+	return Dict{m: m}
 }
 
 // Items returns instance of map[string]cty.Value
 // will same set of key-value pairs as stored in Dict.
 // This map is a copy, changes to returned map have no effect on the Dict.
 func (d *Dict) Items() map[string]cty.Value {
-	m := map[string]cty.Value{}
-	if d.m != nil {
-		for k, v := range d.m {
-			m[k] = v
-		}
+	m := maps.Clone(d.m)
+	if m == nil { // never return nil
+		return map[string]cty.Value{}
 	}
 	return m
 }

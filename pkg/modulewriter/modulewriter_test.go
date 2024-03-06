@@ -138,7 +138,7 @@ func (s *MySuite) TestPrepDepDir(c *C) {
 func (s *MySuite) TestPrepDepDir_OverwriteRealDep(c *C) {
 	// Test with a real deployment previously written
 	bp := s.getBlueprintForTest()
-	bp.Vars.Set("deployment_name", cty.StringVal("test_prep_dir"))
+	bp.Vars = bp.Vars.With("deployment_name", cty.StringVal("test_prep_dir"))
 	depDir := filepath.Join(s.testDir, "test_prep_dir")
 
 	// writes a full deployment w/ actual resource groups
@@ -301,46 +301,48 @@ func (s *MySuite) TestWriteMain(c *C) {
 		c.Fatal("Failed to create test dir for creating main.tf file")
 	}
 
-	// Simple success
-	testModules := []config.Module{}
-	testBackend := config.TerraformBackend{}
-	err := writeMain(testModules, testBackend, testMainDir)
-	c.Assert(err, IsNil)
-
-	// Test with modules
-	testModule := config.Module{
+	mods := []config.Module{{
 		ID:     "test_module",
 		Kind:   config.TerraformKind,
 		Source: "modules/network/vpc",
-		Settings: config.NewDict(map[string]cty.Value{
-			"testSetting": cty.StringVal("testValue"),
-			"passthrough": config.MustParseExpression(`"${var.deployment_name}-allow"`).AsValue(),
-		}),
+		Settings: config.Dict{}.
+			With("testSetting", cty.StringVal("testValue")).
+			With("passthrough", config.MustParseExpression(`"${var.deployment_name}-allow"`).AsValue())}}
+
+	be := config.TerraformBackend{
+		Type:          "gcs",
+		Configuration: config.Dict{}.With("bucket", cty.StringVal("a_bucket"))}
+
+	noMods, noBe := []config.Module{}, config.TerraformBackend{}
+
+	{ // Simple success
+		err := writeMain(noMods, noBe, testMainDir)
+		c.Check(err, IsNil)
 	}
-	testModules = append(testModules, testModule)
-	err = writeMain(testModules, testBackend, testMainDir)
-	c.Assert(err, IsNil)
-	exists, err := stringExistsInFile("testSetting", mainFilePath)
-	c.Assert(err, IsNil)
-	c.Assert(exists, Equals, true)
 
-	exists, err = stringExistsInFile(`"${var.deployment_name}-allow"`, mainFilePath)
-	c.Assert(err, IsNil)
-	c.Assert(exists, Equals, true)
+	{ // Test with modules
+		err := writeMain(mods, noBe, testMainDir)
+		c.Assert(err, IsNil)
+		exists, err := stringExistsInFile("testSetting", mainFilePath)
+		c.Assert(err, IsNil)
+		c.Assert(exists, Equals, true)
 
-	exists, err = stringExistsInFile(`("${var.deployment_name}-allow")`, mainFilePath)
-	c.Assert(err, IsNil)
-	c.Assert(exists, Equals, false)
+		exists, err = stringExistsInFile(`"${var.deployment_name}-allow"`, mainFilePath)
+		c.Assert(err, IsNil)
+		c.Assert(exists, Equals, true)
 
-	// Test with Backend
-	testBackend.Type = "gcs"
-	testBackend.Configuration.Set("bucket", cty.StringVal("a_bucket"))
+		exists, err = stringExistsInFile(`("${var.deployment_name}-allow")`, mainFilePath)
+		c.Assert(err, IsNil)
+		c.Assert(exists, Equals, false)
+	}
 
-	err = writeMain(testModules, testBackend, testMainDir)
-	c.Assert(err, IsNil)
-	exists, err = stringExistsInFile("a_bucket", mainFilePath)
-	c.Assert(err, IsNil)
-	c.Assert(exists, Equals, true)
+	{ // Test with Backend
+		err := writeMain(mods, be, testMainDir)
+		c.Assert(err, IsNil)
+		exists, err := stringExistsInFile("a_bucket", mainFilePath)
+		c.Assert(err, IsNil)
+		c.Assert(exists, Equals, true)
+	}
 }
 
 func (s *MySuite) TestWriteOutputs(c *C) {
@@ -521,10 +523,9 @@ func (s *MySuite) TestWriteDeploymentGroup_PackerWriter(c *C) {
 }
 
 func (s *MySuite) TestWritePackerAutoVars(c *C) {
-	vars := config.Dict{}
-	vars.
-		Set("deployment_name", cty.StringVal("golf")).
-		Set("testkey", cty.False)
+	vars := config.Dict{}.
+		With("deployment_name", cty.StringVal("golf")).
+		With("testkey", cty.False)
 
 	// fail writing to a bad path
 	badDestPath := "not/a/real/path"
@@ -596,8 +597,7 @@ func (s *zeroSuite) TestDeploymentSource(c *C) {
 }
 
 func (s *zeroSuite) TestSubstituteIgcReferencesInModule(c *C) {
-	d := config.Dict{}
-	d.Set("fold", cty.TupleVal([]cty.Value{
+	d := config.Dict{}.With("fold", cty.TupleVal([]cty.Value{
 		cty.StringVal("zebra"),
 		config.MustParseExpression(`module.golf.red + 6 + module.golf.green`).AsValue(),
 		config.MustParseExpression(`module.tennis.brown`).AsValue(),

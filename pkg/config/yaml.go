@@ -323,8 +323,12 @@ func (d *Dict) UnmarshalYAML(n *yaml.Node) error {
 	if !ty.IsObjectType() {
 		return nodeToPosErr(n, fmt.Errorf("must be a mapping, got %s", ty.FriendlyName()))
 	}
+
 	for k, w := range v.Unwrap().AsValueMap() {
-		d.Set(k, w)
+		if d.m == nil {
+			d.m = map[string]cty.Value{}
+		}
+		d.m[k] = w
 	}
 	return nil
 }

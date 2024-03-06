@@ -403,16 +403,16 @@ func ImportInputs(deploymentGroupDir string, artifactsDir string, expandedBluepr
 
 		// evaluate Packer settings that contain intergroup references in the
 		// context of deployment variables and intergroup output values
-		intergroupSettings := config.Dict{}
+		intergroupSettings := map[string]cty.Value{}
 		for setting, value := range mod.Settings.Items() {
 			igcRefs := config.FindIntergroupReferences(value, mod, bp)
 			if len(igcRefs) > 0 {
-				intergroupSettings.Set(setting, value)
+				intergroupSettings[setting] = value
 			}
 		}
 
 		igcVars := modulewriter.FindIntergroupVariables(g, bp)
-		newModule, err := modulewriter.SubstituteIgcReferencesInModule(config.Module{Settings: intergroupSettings}, igcVars)
+		newModule, err := modulewriter.SubstituteIgcReferencesInModule(config.Module{Settings: config.NewDict(intergroupSettings)}, igcVars)
 		if err != nil {
 			return err
 		}
