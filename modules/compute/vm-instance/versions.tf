@@ -37,5 +37,5 @@ terraform {
     module_name = "blueprints/terraform/hpc-toolkit:vm-instance/v1.28.1"
   }
 
-  required_version = ">= 1.2.0"
+  required_version = ">= 1.3.0"
 }
