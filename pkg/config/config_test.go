@@ -40,17 +40,82 @@ func Test(t *testing.T) {
 	TestingT(t) // run all registered suites
 }
 
-func setTestModuleInfo(mod Module, info modulereader.ModuleInfo) {
-	modulereader.SetModuleInfo(mod.Source, mod.Kind.String(), info)
+// TODO: consider making it immutable
+type modBuilder struct {
+	m Module
+	i modulereader.ModuleInfo
+}
+
+func tMod(id ModuleID) *modBuilder {
+	return &modBuilder{m: Module{
+		ID:   id,
+		Kind: TerraformKind,
+	}}
+}
+
+func (b *modBuilder) uses(id ...ModuleID) *modBuilder {
+	b.m.Use = append(b.m.Use, id...)
+	return b
+}
+
+func (b *modBuilder) set(s string, val any) *modBuilder {
+	var tv cty.Value
+	switch v := val.(type) {
+	case string:
+		tv = cty.StringVal(v)
+	case cty.Value:
+		tv = v
+	case Reference:
+		tv = v.AsValue()
+	case Expression:
+		tv = v.AsValue()
+	default:
+		panic(fmt.Sprintf("unsupported type %T", val))
+	}
+	b.m.Settings = b.m.Settings.With(s, tv)
+	return b
+}
+
+func (b *modBuilder) outputs(o ...string) *modBuilder {
+	for _, v := range o {
+		b.i.Outputs = append(b.i.Outputs, modulereader.OutputInfo{Name: v})
+	}
+	return b
+}
+
+func (b *modBuilder) inputs(i ...interface{}) *modBuilder {
+	for _, v := range i {
+		var vi modulereader.VarInfo
+		switch v := v.(type) {
+		case string:
+			vi = modulereader.VarInfo{Name: v, Type: cty.String}
+		case modulereader.VarInfo:
+			vi = v
+		default:
+			panic(fmt.Sprintf("unsupported type %T", v))
+		}
+		b.i.Inputs = append(b.i.Inputs, vi)
+	}
+	return b
+}
+
+func (b *modBuilder) packer() *modBuilder {
+	b.m.Kind = PackerKind
+	return b
+}
+
+var modBuilderCounter = 0
+
+func (b modBuilder) build() Module {
+	b.m.Source = fmt.Sprintf("./test_mods/%s_%d", b.m.ID, modBuilderCounter)
+	modBuilderCounter++
+	modulereader.SetModuleInfo(b.m.Source, b.m.Kind.String(), b.i)
+	return b.m
 }
 
 func (s *zeroSuite) TestExpand(c *C) {
-	mod := Module{
-		ID:       "red",
-		Source:   c.TestName(),
-		Kind:     TerraformKind,
-		Settings: NewDict(map[string]cty.Value{"oval": cty.StringVal("square")}),
-	}
+	mod := tMod("red").inputs("oval").set("oval", "square").build()
+
 	bp := Blueprint{
 		BlueprintName: "smurf",
 		Vars:          NewDict(map[string]cty.Value{"deployment_name": cty.StringVal("green")}),
@@ -59,18 +124,13 @@ func (s *zeroSuite) TestExpand(c *C) {
 			Modules: []Module{mod},
 		}},
 	}
-	setTestModuleInfo(mod, modulereader.ModuleInfo{Inputs: []modulereader.VarInfo{
-		{Name: "oval", Type: cty.String}}})
 
 	c.Check(bp.Expand(), IsNil)
 }
 
 func (s *zeroSuite) TestCheckModulesAndGroups(c *C) {
-	pony := Module{ID: "pony", Kind: TerraformKind, Source: "./ponyshop"}
-	zebra := Module{ID: "zebra", Kind: PackerKind, Source: "./zebrashop"}
-
-	setTestModuleInfo(pony, modulereader.ModuleInfo{})
-	setTestModuleInfo(zebra, modulereader.ModuleInfo{})
+	pony := tMod("pony").build()
+	zebra := tMod("zebra").packer().build()
 
 	{ // Duplicate module id same group
 		g := DeploymentGroup{Name: "ice", Modules: []Module{pony, pony}}
@@ -103,25 +163,21 @@ func (s *zeroSuite) TestCheckModulesAndGroups(c *C) {
 
 func (s *zeroSuite) TestListUnusedModules(c *C) {
 	{ // No modules in "use"
-		m := Module{ID: "m"}
+		m := tMod("m").build()
 		c.Check(m.ListUnusedModules(), DeepEquals, ModuleIDs{})
 	}
 
 	{ // Useful
-		m := Module{
-			ID:  "m",
-			Use: ModuleIDs{"w"},
-			Settings: NewDict(map[string]cty.Value{
-				"x": AsProductOfModuleUse(cty.True, "w")})}
+		m := tMod("m").
+			uses("w").
+			set("x", AsProductOfModuleUse(cty.True, "w")).build()
 		c.Check(m.ListUnusedModules(), DeepEquals, ModuleIDs{})
 	}
 
 	{ // Unused
-		m := Module{
-			ID:  "m",
-			Use: ModuleIDs{"w", "u"},
-			Settings: NewDict(map[string]cty.Value{
-				"x": AsProductOfModuleUse(cty.True, "w")})}
+		m := tMod("m").
+			uses("w", "u").
+			set("x", AsProductOfModuleUse(cty.True, "w")).build()
 		c.Check(m.ListUnusedModules(), DeepEquals, ModuleIDs{"u"})
 	}
 }
@@ -557,10 +613,10 @@ func (s *zeroSuite) TestModuleGroup(c *C) {
 }
 
 func (s *zeroSuite) TestValidateModuleSettingReference(c *C) {
-	mod11 := Module{ID: "mod11", Source: "./mod11", Kind: TerraformKind}
-	mod21 := Module{ID: "mod21", Source: "./mod21", Kind: TerraformKind}
-	mod22 := Module{ID: "mod22", Source: "./mod22", Kind: TerraformKind}
-	pkr := Module{ID: "pkr", Source: "./pkr", Kind: PackerKind}
+	mod11 := tMod("mod11").outputs("out11").build()
+	mod21 := tMod("mod21").outputs("out21").build()
+	mod22 := tMod("mod22").outputs("out22").build()
+	pkr := tMod("pkr").packer().outputs("outPkr").build()
 
 	bp := Blueprint{
 		Vars: NewDict(map[string]cty.Value{
@@ -572,11 +628,6 @@ func (s *zeroSuite) TestValidateModuleSettingReference(c *C) {
 			{Name: "group2", Modules: []Module{mod21, mod22}},
 		},
 	}
-
-	setTestModuleInfo(mod11, modulereader.ModuleInfo{Outputs: []modulereader.OutputInfo{{Name: "out11"}}})
-	setTestModuleInfo(mod21, modulereader.ModuleInfo{Outputs: []modulereader.OutputInfo{{Name: "out21"}}})
-	setTestModuleInfo(mod22, modulereader.ModuleInfo{Outputs: []modulereader.OutputInfo{{Name: "out22"}}})
-	setTestModuleInfo(pkr, modulereader.ModuleInfo{Outputs: []modulereader.OutputInfo{{Name: "outPkr"}}})
 
 	vld := validateModuleSettingReference
 	// OK. deployment var
