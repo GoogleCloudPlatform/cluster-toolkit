@@ -31,14 +31,6 @@ const (
 	deploymentLabel string = "ghpc_deployment"
 )
 
-func validateInputsAllModules(bp Blueprint) error {
-	errs := Errors{}
-	bp.WalkModulesSafe(func(p ModulePath, m *Module) {
-		errs.Add(validateModuleInputs(p, *m, bp))
-	})
-	return errs.OrNil()
-}
-
 func validateModuleInputs(mp ModulePath, m Module, bp Blueprint) error {
 	mi := m.InfoOrDie()
 	errs := Errors{}
@@ -103,31 +95,74 @@ func validateModulesAreUsed(bp Blueprint) error {
 	return errs.OrNil()
 }
 
-func (dc *DeploymentConfig) expandBackends() {
-	// 1. DEFAULT: use TerraformBackend configuration (if supplied) in each
-	//    resource group
+func (bp *Blueprint) expandVars() error {
+	if err := validateVars(*bp); err != nil {
+		return err
+	}
+	bp.expandGlobalLabels()
+	return nil
+}
+
+func (bp *Blueprint) expandGroups() error {
+	bp.addKindToModules()
+
+	if err := checkModulesAndGroups(*bp); err != nil {
+		return err
+	}
+
+	var errs Errors
+	for ig := range bp.DeploymentGroups {
+		errs.Add(bp.expandGroup(Root.Groups.At(ig), &bp.DeploymentGroups[ig]))
+	}
+
+	if errs.Any() {
+		return errs
+	}
+
+	// Following actions depend on whole blueprint being expanded
+	// run it after all groups are expanded
+	if err := validateModulesAreUsed(*bp); err != nil {
+		return err
+	}
+	bp.populateOutputs()
+	return nil
+}
+
+func (bp Blueprint) expandGroup(gp groupPath, g *DeploymentGroup) error {
+	var errs Errors
+	bp.expandBackend(g)
+	for im := range g.Modules {
+		errs.Add(bp.expandModule(gp.Modules.At(im), &g.Modules[im]))
+	}
+	return errs.OrNil()
+}
+
+func (bp Blueprint) expandModule(mp ModulePath, m *Module) error {
+	bp.applyUseModules(m)
+	bp.applyGlobalVarsInModule(m)
+	return validateModuleInputs(mp, *m, bp)
+}
+
+func (bp Blueprint) expandBackend(grp *DeploymentGroup) {
+	// 1. DEFAULT: use TerraformBackend configuration (if supplied)
 	// 2. If top-level TerraformBackendDefaults is defined, insert that
 	//    backend into resource groups which have no explicit
 	//    TerraformBackend
 	// 3. In all cases, add a prefix for GCS backends if one is not defined
-	bp := &dc.Config
 	defaults := bp.TerraformBackendDefaults
-	if defaults.Type != "" {
-		for i := range bp.DeploymentGroups {
-			grp := &bp.DeploymentGroups[i]
-			be := &grp.TerraformBackend
-			if be.Type == "" {
-				be.Type = defaults.Type
-				be.Configuration = Dict{}
-				for k, v := range defaults.Configuration.Items() {
-					be.Configuration.Set(k, v)
-				}
-			}
-			if be.Type == "gcs" && !be.Configuration.Has("prefix") {
-				prefix := fmt.Sprintf("%s/%s/%s", bp.BlueprintName, bp.DeploymentName(), grp.Name)
-				be.Configuration.Set("prefix", cty.StringVal(prefix))
-			}
-		}
+	if defaults.Type == "" {
+		return
+	}
+
+	be := &grp.TerraformBackend
+	if be.Type == "" {
+		be.Type = defaults.Type
+		be.Configuration = NewDict(defaults.Configuration.Items())
+	}
+	if be.Type == "gcs" && !be.Configuration.Has("prefix") {
+		prefix := MustParseExpression(
+			fmt.Sprintf(`"%s/${var.deployment_name}/%s"`, bp.BlueprintName, grp.Name))
+		be.Configuration.Set("prefix", prefix.AsValue())
 	}
 }
 
@@ -177,7 +212,7 @@ func useModule(mod *Module, use Module) {
 
 		// Skip settings that do not have matching module inputs
 		inputType, ok := modInputsMap[setting]
-		if !ok {
+		if !ok || setting == "labels" { // also do not "use" module labels
 			continue
 		}
 
@@ -205,82 +240,54 @@ func useModule(mod *Module, use Module) {
 
 // applyUseModules applies variables from modules listed in the "use" field
 // when/if applicable
-func (dc *DeploymentConfig) applyUseModules() error {
-	return dc.Config.WalkModules(func(_ ModulePath, m *Module) error {
-		for _, u := range m.Use {
-			used, err := dc.Config.Module(u)
-			if err != nil { // should never happen
-				return err
-			}
-			useModule(m, *used)
+func (bp Blueprint) applyUseModules(m *Module) error {
+	for _, u := range m.Use {
+		used, err := bp.Module(u)
+		if err != nil { // should never happen
+			panic(err)
 		}
-		return nil
-	})
+		useModule(m, *used)
+	}
+	return nil
 }
 
-func moduleHasInput(m Module, n string) bool {
-	for _, input := range m.InfoOrDie().Inputs {
-		if input.Name == n {
-			return true
-		}
-	}
-	return false
-}
+// expandGlobalLabels sets defaults for labels based on other variables.
+func (bp *Blueprint) expandGlobalLabels() {
+	vars := &bp.Vars
+	defaults := cty.ObjectVal(map[string]cty.Value{
+		blueprintLabel:  cty.StringVal(bp.BlueprintName),
+		deploymentLabel: GlobalRef("deployment_name").AsValue()})
 
-// combineLabels sets defaults for labels based on other variables and merges
-// the global labels defined in Vars with module setting labels.
-func (dc *DeploymentConfig) combineLabels() {
-	vars := &dc.Config.Vars
-	defaults := map[string]cty.Value{
-		blueprintLabel:  cty.StringVal(dc.Config.BlueprintName),
-		deploymentLabel: vars.Get("deployment_name"),
-	}
 	labels := "labels"
-	if !vars.Has(labels) { // Shouldn't happen if blueprint was properly constructed
-		vars.Set(labels, cty.EmptyObjectVal)
+	var gl cty.Value
+	if !vars.Has(labels) {
+		gl = defaults
+	} else {
+		gl = FunctionCallExpression("merge", defaults, vars.Get(labels)).AsValue()
 	}
-	gl := mergeMaps(defaults, vars.Get(labels).AsValueMap())
-	vars.Set(labels, cty.ObjectVal(gl))
-
-	dc.Config.WalkModulesSafe(func(_ ModulePath, mod *Module) {
-		combineModuleLabels(mod, *dc)
-	})
+	vars.Set(labels, gl)
 }
 
-func combineModuleLabels(mod *Module, dc DeploymentConfig) {
-	labels := "labels"
-	if !moduleHasInput(*mod, labels) {
-		return // no op
-	}
-
-	ref := GlobalRef(labels).AsValue()
-	set := mod.Settings.Get(labels)
+func combineModuleLabels(mod Module) cty.Value {
+	ref := GlobalRef("labels").AsValue()
+	set := mod.Settings.Get("labels")
 
 	if !set.IsNull() {
-		merged := FunctionCallExpression("merge", ref, set).AsValue()
-		mod.Settings.Set(labels, merged) // = merge(vars.labels, {...labels_from_settings...})
-	} else {
-		mod.Settings.Set(labels, ref) // = vars.labels
-	}
-}
+		// = merge(vars.labels, {...labels_from_settings...})
+		return FunctionCallExpression("merge", ref, set).AsValue()
 
-// mergeMaps takes an arbitrary number of maps, and returns a single map that contains
-// a merged set of elements from all arguments.
-// If more than one given map defines the same key, then the one that is later in the argument sequence takes precedence.
-// See https://developer.hashicorp.com/terraform/language/functions/merge
-func mergeMaps(ms ...map[string]cty.Value) map[string]cty.Value {
-	r := map[string]cty.Value{}
-	for _, m := range ms {
-		for k, v := range m {
-			r[k] = v
-		}
 	}
-	return r
+	return ref // = vars.labels
 }
 
 func (bp Blueprint) applyGlobalVarsInModule(mod *Module) {
 	mi := mod.InfoOrDie()
 	for _, input := range mi.Inputs {
+		if input.Name == "labels" && bp.Vars.Has("labels") {
+			// labels are special case, always make use of global labels
+			mod.Settings.Set("labels", combineModuleLabels(*mod))
+		}
+
 		// Module setting exists? Nothing more needs to be done.
 		if mod.Settings.Has(input.Name) {
 			continue
@@ -296,14 +303,6 @@ func (bp Blueprint) applyGlobalVarsInModule(mod *Module) {
 			mod.Settings.Set(input.Name, cty.StringVal(string(mod.ID)))
 		}
 	}
-}
-
-// applyGlobalVariables takes any variables defined at the global level and
-// applies them to module settings if not already set.
-func (dc *DeploymentConfig) applyGlobalVariables() {
-	dc.Config.WalkModulesSafe(func(_ ModulePath, m *Module) {
-		dc.Config.applyGlobalVarsInModule(m)
-	})
 }
 
 // AutomaticOutputName generates unique deployment-group-level output names

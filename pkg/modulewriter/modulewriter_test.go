@@ -52,7 +52,7 @@ func (s *MySuite) SetUpSuite(c *C) {
 }
 
 // Test Data Producers
-func (s *MySuite) getDeploymentConfigForTest() config.DeploymentConfig {
+func (s *MySuite) getBlueprintForTest() config.Blueprint {
 	testModule := config.Module{
 		Source: s.terraformModuleDir,
 		Kind:   config.TerraformKind,
@@ -83,15 +83,13 @@ func (s *MySuite) getDeploymentConfigForTest() config.DeploymentConfig {
 			Modules: []config.Module{testModule, testModuleWithLabels},
 		},
 	}
-	return config.DeploymentConfig{
-		Config: config.Blueprint{
-			BlueprintName: "simple",
-			Vars: config.NewDict(map[string]cty.Value{
-				"deployment_name": cty.StringVal("deployment_name"),
-				"project_id":      cty.StringVal("test-project"),
-			}),
-			DeploymentGroups: testDeploymentGroups,
-		},
+	return config.Blueprint{
+		BlueprintName: "simple",
+		Vars: config.NewDict(map[string]cty.Value{
+			"deployment_name": cty.StringVal("deployment_name"),
+			"project_id":      cty.StringVal("test-project"),
+		}),
+		DeploymentGroups: testDeploymentGroups,
 	}
 }
 
@@ -139,12 +137,12 @@ func (s *MySuite) TestPrepDepDir(c *C) {
 
 func (s *MySuite) TestPrepDepDir_OverwriteRealDep(c *C) {
 	// Test with a real deployment previously written
-	testDC := s.getDeploymentConfigForTest()
-	testDC.Config.Vars.Set("deployment_name", cty.StringVal("test_prep_dir"))
+	bp := s.getBlueprintForTest()
+	bp.Vars.Set("deployment_name", cty.StringVal("test_prep_dir"))
 	depDir := filepath.Join(s.testDir, "test_prep_dir")
 
 	// writes a full deployment w/ actual resource groups
-	WriteDeployment(testDC, depDir)
+	WriteDeployment(bp, depDir)
 
 	// confirm existence of resource groups (beyond .ghpc dir)
 	files, _ := os.ReadDir(depDir)
@@ -172,12 +170,12 @@ func (s *MySuite) TestWriteDeployment(c *C) {
 	afero.WriteFile(aferoFS, "community/modules/green/lime/main.tf", []byte("lime"), 0644)
 	sourcereader.ModuleFS = afero.NewIOFS(aferoFS)
 
-	dc := s.getDeploymentConfigForTest()
+	bp := s.getBlueprintForTest()
 	dir := filepath.Join(s.testDir, "test_write_deployment")
 
-	c.Check(WriteDeployment(dc, dir), IsNil)
+	c.Check(WriteDeployment(bp, dir), IsNil)
 	// Overwriting the deployment succeeds
-	c.Check(WriteDeployment(dc, dir), IsNil)
+	c.Check(WriteDeployment(bp, dir), IsNil)
 }
 
 func (s *MySuite) TestCreateGroupDir(c *C) {
@@ -472,15 +470,13 @@ func (s *MySuite) TestWriteDeploymentGroup_PackerWriter(c *C) {
 		}),
 	}
 
-	dc := config.DeploymentConfig{
-		Config: config.Blueprint{
-			Vars: config.NewDict(map[string]cty.Value{
-				"golf": cty.NumberIntVal(17),
-			}),
-			DeploymentGroups: []config.DeploymentGroup{
-				{Name: "bread", Modules: []config.Module{otherMod}},
-				{Name: "green", Modules: []config.Module{mod}},
-			},
+	bp := config.Blueprint{
+		Vars: config.NewDict(map[string]cty.Value{
+			"golf": cty.NumberIntVal(17),
+		}),
+		DeploymentGroups: []config.DeploymentGroup{
+			{Name: "bread", Modules: []config.Module{otherMod}},
+			{Name: "green", Modules: []config.Module{mod}},
 		},
 	}
 
@@ -491,7 +487,7 @@ func (s *MySuite) TestWriteDeploymentGroup_PackerWriter(c *C) {
 	}
 	instructions := new(strings.Builder)
 
-	c.Assert(testWriter.writeDeploymentGroup(dc, 1, dir, instructions), IsNil)
+	c.Assert(testWriter.writeDeploymentGroup(bp, 1, dir, instructions), IsNil)
 	_, err := os.Stat(filepath.Join(moduleDir, packerAutoVarFilename))
 	c.Assert(err, IsNil)
 }

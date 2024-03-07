@@ -269,6 +269,30 @@
       ansible.builtin.debug:
         var: suspend_output.stdout_lines
 
+    - name: Recover slurmctld.log Log
+      become: true
+      changed_when: false
+      failed_when: false
+      delegate_to: "{{ hostvars['localhost']['controller_ip']['stdout'] }}"
+      ansible.builtin.command: cat /var/log/slurm/slurmctld.log
+      register: slurmctld_output
+
+    - name: Print Slurm slurmctld.log
+      ansible.builtin.debug:
+        var: slurmctld_output.stdout_lines
+
+    - name: Recover slurmsync.log Log
+      become: true
+      changed_when: false
+      failed_when: false
+      delegate_to: "{{ hostvars['localhost']['controller_ip']['stdout'] }}"
+      ansible.builtin.command: cat /var/log/slurm/slurmsync.log
+      register: slurmsync_output
+
+    - name: Print Slurm slurmsync.log
+      ansible.builtin.debug:
+        var: slurmsync_output.stdout_lines
+
     - name: Cleanup firewall and infrastructure
       ansible.builtin.include_tasks:
         file: tasks/rescue_ghpc_failure.yml
@@ -277,12 +301,3 @@
       vars:
         deployment_name: "{{ deployment_name }}"
         workspace: "{{ workspace }}"
-
-    - name: Check for stockout errors
-      ansible.builtin.include_tasks:
-        file: tasks/check_stockout.yml
-        apply:
-          delegate_to: localhost
-      vars:
-        deployment_name: "{{ deployment_name }}"
-        project: "{{ project }}"

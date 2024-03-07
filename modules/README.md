@@ -125,9 +125,12 @@ Modules that are still in development and less stable are labeled with the
   regional subnetworks and firewall rules.
 * **[pre-existing-vpc]** ![core-badge] : Used to connect newly
   built components to a pre-existing VPC network.
+* **[firewall-rules]** ![core-badge] ![experimental-badge]: Add custom firewall
+  rules to existing networks (commonly used with [pre-existing-vpc])
 
 [vpc]: network/vpc/README.md
 [pre-existing-vpc]: network/pre-existing-vpc/README.md
+[firewall-rules]: network/firewall-rules/README.md
 
 ### Packer
 
@@ -209,8 +212,8 @@ Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial][fsi-monteca
 [schedmd-slurm-gcp-v5-controller]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-controller/README.md
 [schedmd-slurm-gcp-v5-login]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-login/README.md
 [schedmd-slurm-gcp-v5-hybrid]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid/README.md
-[slurm-gcp-version-5]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/5.10.2
-[slurm-gcp-version-6]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.2.0
+[slurm-gcp-version-5]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/5.10.4
+[slurm-gcp-version-6]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.4.2
 [pbspro-client]: ../community/modules/scheduler/pbspro-client/README.md
 [pbspro-server]: ../community/modules/scheduler/pbspro-server/README.md
 

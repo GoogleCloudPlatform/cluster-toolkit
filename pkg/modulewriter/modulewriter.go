@@ -55,7 +55,7 @@ func ArtifactsDir(deplDir string) string {
 // ModuleWriter interface for writing modules to a deployment
 type ModuleWriter interface {
 	writeDeploymentGroup(
-		dc config.DeploymentConfig,
+		bp config.Blueprint,
 		grpIdx int,
 		groupPath string,
 		instructionsFile io.Writer,
@@ -73,7 +73,7 @@ var kinds = map[config.ModuleKind]ModuleWriter{
 var templatesFS embed.FS
 
 // WriteDeployment writes a deployment directory using modules defined the environment blueprint.
-func WriteDeployment(dc config.DeploymentConfig, deploymentDir string) error {
+func WriteDeployment(bp config.Blueprint, deploymentDir string) error {
 	if err := prepDepDir(deploymentDir); err != nil {
 		return err
 	}
@@ -86,15 +86,15 @@ func WriteDeployment(dc config.DeploymentConfig, deploymentDir string) error {
 	fmt.Fprintln(instructions, "Advanced Deployment Instructions")
 	fmt.Fprintln(instructions, "================================")
 
-	for ig := range dc.Config.DeploymentGroups {
-		if err := writeGroup(deploymentDir, dc, ig, instructions); err != nil {
+	for ig := range bp.DeploymentGroups {
+		if err := writeGroup(deploymentDir, bp, ig, instructions); err != nil {
 			return err
 		}
 	}
 
-	writeDestroyInstructions(instructions, dc, deploymentDir)
+	writeDestroyInstructions(instructions, bp, deploymentDir)
 
-	if err := writeExpandedBlueprint(deploymentDir, dc); err != nil {
+	if err := writeExpandedBlueprint(deploymentDir, bp); err != nil {
 		return err
 	}
 
@@ -106,8 +106,8 @@ func WriteDeployment(dc config.DeploymentConfig, deploymentDir string) error {
 	return nil
 }
 
-func writeGroup(deplPath string, dc config.DeploymentConfig, gIdx int, instructions io.Writer) error {
-	g := dc.Config.DeploymentGroups[gIdx]
+func writeGroup(deplPath string, bp config.Blueprint, gIdx int, instructions io.Writer) error {
+	g := bp.DeploymentGroups[gIdx]
 	gPath, err := createGroupDir(deplPath, g)
 	if err != nil {
 		return err
@@ -122,7 +122,7 @@ func writeGroup(deplPath string, dc config.DeploymentConfig, gIdx int, instructi
 		return fmt.Errorf("invalid kind in deployment group %q, got %q", g.Name, g.Kind())
 	}
 
-	if err := writer.writeDeploymentGroup(dc, gIdx, gPath, instructions); err != nil {
+	if err := writer.writeDeploymentGroup(bp, gIdx, gPath, instructions); err != nil {
 		return fmt.Errorf("error writing deployment group %s: %w", g.Name, err)
 	}
 	return nil
@@ -336,11 +336,11 @@ func prepArtifactsDir(artifactsDir string) error {
 	return err
 }
 
-func writeExpandedBlueprint(depDir string, dc config.DeploymentConfig) error {
-	return dc.ExportBlueprint(filepath.Join(ArtifactsDir(depDir), ExpandedBlueprintName))
+func writeExpandedBlueprint(depDir string, bp config.Blueprint) error {
+	return bp.Export(filepath.Join(ArtifactsDir(depDir), ExpandedBlueprintName))
 }
 
-func writeDestroyInstructions(w io.Writer, dc config.DeploymentConfig, deploymentDir string) {
+func writeDestroyInstructions(w io.Writer, bp config.Blueprint, deploymentDir string) {
 	packerManifests := []string{}
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Destroying infrastructure when no longer needed")
@@ -355,8 +355,8 @@ func writeDestroyInstructions(w io.Writer, dc config.DeploymentConfig, deploymen
 	fmt.Fprintln(w, "-----------------")
 	fmt.Fprintln(w, "Infrastructure should be destroyed in reverse order of creation:")
 	fmt.Fprintln(w)
-	for grpIdx := len(dc.Config.DeploymentGroups) - 1; grpIdx >= 0; grpIdx-- {
-		grp := dc.Config.DeploymentGroups[grpIdx]
+	for grpIdx := len(bp.DeploymentGroups) - 1; grpIdx >= 0; grpIdx-- {
+		grp := bp.DeploymentGroups[grpIdx]
 		grpPath := filepath.Join(deploymentDir, string(grp.Name))
 		if grp.Kind() == config.TerraformKind {
 			fmt.Fprintf(w, "terraform -chdir=%s destroy\n", grpPath)

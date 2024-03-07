@@ -1,5 +1,10 @@
 # Example Blueprints
 
+> [!NOTE]
+> Migration to Slurm-GCP v6 is ongoing. See
+> [this update](#ongoing-migration-to-slurm-gcp-v6) for specific recommendations
+> and timelines.
+
 This directory contains a set of example blueprint files that can be fed into
 gHPC to create a deployment.
 
@@ -10,8 +15,10 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
 
 * [Instructions](#instructions)
   * [(Optional) Setting up a remote terraform state](#optional-setting-up-a-remote-terraform-state)
+* [Ongoing Migration to Slurm-GCP v6](#ongoing-migration-to-slurm-gcp-v6)
 * [Blueprint Descriptions](#blueprint-descriptions)
   * [hpc-slurm.yaml](#hpc-slurmyaml-) ![core-badge]
+  * [hpc-slurm-v6.yaml](#hpc-slurm-v6yaml--) ![core-badge] ![experimental-badge]
   * [hpc-enterprise-slurm.yaml](#hpc-enterprise-slurmyaml-) ![core-badge]
   * [hpc-slurm6-tpu.yaml](#hpc-slurm6-tpuyaml--) ![community-badge] ![experimental-badge]
   * [ml-slurm.yaml](#ml-slurmyaml-) ![core-badge]
@@ -20,12 +27,12 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [serverless-batch-mpi.yaml](#serverless-batch-mpiyaml-) ![core-badge]
   * [pfs-lustre.yaml](#pfs-lustreyaml-) ![core-badge]
   * [cae-slurm.yaml](#cae-slurmyaml-) ![core-badge]
-  * [hpc-build-slurm-image.yaml](#hpc-build-slurm-imageyaml-) ![community-badge]
+  * [hpc-build-slurm-image.yaml](#hpc-build-slurm-imageyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-ubuntu2004.yaml](#hpc-slurm-ubuntu2004yaml-) ![community-badge]
   * [pfs-daos.yaml](#pfs-daosyaml-) ![community-badge]
   * [hpc-slurm-daos.yaml](#hpc-slurm-daosyaml-) ![community-badge]
   * [hpc-amd-slurm.yaml](#hpc-amd-slurmyaml-) ![community-badge]
-  * [hpc-slurm-sharedvpc.yaml](#hpc-slurm-sharedvpcyaml-) ![community-badge]
+  * [hpc-slurm-sharedvpc.yaml](#hpc-slurm-sharedvpcyaml--) ![community-badge] ![experimental-badge]
   * [client-google-cloud-storage.yaml](#client-google-cloud-storageyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-gromacs.yaml](#hpc-slurm-gromacsyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-local-ssd.yaml](#hpc-slurm-local-ssdyaml--) ![community-badge] ![experimental-badge]
@@ -93,6 +100,44 @@ subcommands as well:
 > in both the blueprint and CLI, the tool uses values at CLI. "gcs" is set as
 > type by default.
 
+## Ongoing Migration to Slurm-GCP v6
+
+[Slurm-GCP](https://github.com/GoogleCloudPlatform/slurm-gcp) is the set of
+scripts and tools that automate the installation, deployment, and certain
+operational aspects of [Slurm](https://slurm.schedmd.com/overview.html) on
+Google Cloud Platform. It is recommended to use Slurm-GCP through the HPC
+toolkit where it is exposed as various modules.
+
+The HPC Toolkit team is in the process of transitioning from Slurm-GCP v5 to
+Slurm-GCP v6. At this point Slurm-GCP v5 is the recommended option, with
+Slurm-GCP v6 being experimental until the HPC Toolkit team fully duplicates our
+regression tests and public blueprints, addressing all major issues found in
+this exercise.
+
+Slurm-GCP v6 modules have been added to the HPC Toolkit. Slurm v6 example
+blueprints are being developed and will be listed alongside Slurm v5 examples.
+
+During this phase of development, the example blueprints will have the following
+naming conventions:
+
+* Slurm-GCP v5: hpc-slurm.yaml
+* Slurm-GCP v6: hpc-slurm-v6.yaml
+
+Once all major issues have been addressed and regression tests are at parity
+with V5, Slurm-GCP v6 will become the recommended Slurm-GCP version and we will
+update blueprint naming as follows:
+
+* Slurm v5: hpc-slurm-v5-legacy.yaml
+* Slurm v6: hpc-slurm.yaml
+
+> [!IMPORTANT]
+> Three months after Slurm-gcp V6 becomes the recommended version, Slurm v5
+> modules will be marked as deprecated and will be maintained in our repo for
+> another three months, at which point the modules will be removed from the HPC
+> Toolkit repo and regression tests will no longer run for V5. Those who choose
+> to not upgrade to V6 will still be able to use V5 modules by referencing
+> specific git tags in the module source lines.
+
 ## Blueprint Descriptions
 
 [core-badge]: https://img.shields.io/badge/-core-blue?style=plastic
@@ -115,11 +160,13 @@ the experimental badge (![experimental-badge]).
 
 ### [hpc-slurm.yaml] ![core-badge]
 
-> **Warning**: Requires additional dependencies **to be installed on the system deploying the infrastructure**.
+> **Warning**: The variables `enable_reconfigure`,
+> `enable_cleanup_compute`, and `enable_cleanup_subscriptions`, if set to
+> `true`, require additional dependencies **to be installed on the system deploying the infrastructure**.
 >
 > ```shell
 > # Install Python3 and run
-> pip3 install -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/6.2.1/scripts/requirements.txt
+> pip3 install -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/5.10.4/scripts/requirements.txt
 > ```
 
 Creates a basic auto-scaling Slurm cluster with mostly default settings. The
@@ -148,6 +195,63 @@ There is an `h3` partition that uses compute-optimized `h3-standard-88` machine 
 You can read more about the H3 machine series [here](https://cloud.google.com/compute/docs/compute-optimized-machines#h3_series).
 
 #### Quota Requirements for hpc-slurm.yaml
+
+For this example the following is needed in the selected region:
+
+* Cloud Filestore API: Basic HDD (Standard) capacity (GB): **1,024 GB**
+* Compute Engine API: Persistent Disk SSD (GB): **~50 GB**
+* Compute Engine API: Persistent Disk Standard (GB): **~50 GB static + 50
+  GB/node** up to 1,250 GB
+* Compute Engine API: N2 CPUs: **2** for the login node and **2/node** active
+  in the `debug` partition up to 12
+* Compute Engine API: C2 CPUs: **4** for the controller node and **60/node**
+  active in the `compute` partition up to 1,204
+* Compute Engine API: H3 CPUs: **88/node** active in the `h3` partition up to
+  1760
+  * The H3 CPU quota can be increased on the Cloud Console by navigating to
+  `IAM & Admin`->`Quotas` or searching `All Quotas` and entering `vm_family:H3`
+  into the filter bar.  From there, the quotas for each region may be selected
+  and edited.
+* Compute Engine API: Affinity Groups: **one for each job in parallel** - _only
+  needed for the `compute` partition_
+* Compute Engine API: Resource policies: **one for each job in parallel** -
+  _only needed for the `compute` partition_
+
+### [hpc-slurm-v6.yaml] ![core-badge] ![experimental-badge]
+
+> **Warning**: Requires additional dependencies **to be installed on the system deploying the infrastructure**.
+>
+> ```shell
+> # Install Python3 and run
+> pip3 install -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/6.4.2/scripts/requirements.txt
+> ```
+
+Creates a basic auto-scaling Slurm cluster with mostly default settings. The
+blueprint also creates a new VPC network, and a filestore instance mounted to
+`/home`.
+
+There are 3 partitions in this example: `debug` `compute`, and `h3`. The `debug`
+partition uses `n2-standard-2` VMs, which should work out of the box without
+needing to request additional quota. The purpose of the `debug` partition is to
+make sure that first time users are not immediately blocked by quota
+limitations.
+
+[hpc-slurm-v6.yaml]: ./hpc-slurm-v6.yaml
+
+#### Compute Partition
+
+There is a `compute` partition that achieves higher performance. Any
+performance analysis should be done on the `compute` partition. By default it
+uses `c2-standard-60` VMs with placement groups enabled. You may need to request
+additional quota for `C2 CPUs` in the region you are deploying in. You can
+select the compute partition using the `-p compute` argument when running `srun`.
+
+#### H3 Partition
+
+There is an `h3` partition that uses compute-optimized `h3-standard-88` machine type.
+You can read more about the H3 machine series [here](https://cloud.google.com/compute/docs/compute-optimized-machines#h3_series).
+
+#### Quota Requirements for hpc-slurm-v6.yaml
 
 For this example the following is needed in the selected region:
 
@@ -266,7 +370,7 @@ to 256
 >
 > ```shell
 > # Install Python3 and run
-> pip3 install -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/6.2.1/scripts/requirements.txt
+> pip3 install -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/6.4.2/scripts/requirements.txt
 > ```
 
 Creates an auto-scaling Slurm cluster with TPU nodes.
@@ -578,7 +682,7 @@ For this example the following is needed in the selected region:
 
 [cae-slurm.yaml]: ../examples/cae/cae-slurm.yaml
 
-### [hpc-build-slurm-image.yaml] ![community-badge]
+### [hpc-build-slurm-image.yaml] ![community-badge] ![experimental-badge]
 
 This blueprint demonstrates how to use HPC Toolkit to build a Slurm image on top
 of an existing image, `hpc-rocky-linux-8` in the case of this example.
@@ -605,7 +709,7 @@ The blueprint contains 3 groups:
 >
 > ```shell
 > # Install Python3 and run
-> pip3 install -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/5.10.2/scripts/requirements.txt
+> pip3 install -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/5.10.4/scripts/requirements.txt
 > ```
 
 Similar to the [hpc-slurm.yaml] example, but using Ubuntu 20.04 instead of CentOS 7.
@@ -979,7 +1083,7 @@ See [README](../community/examples/flux-framework/README.md)
 
 [flux-cluster.yaml]: ../community/examples/flux-framework/flux-cluster.yaml
 
-### [hpc-slurm-sharedvpc.yaml] ![community-badge]
+### [hpc-slurm-sharedvpc.yaml] ![community-badge] ![experimental-badge]
 
 This blueprint demonstrates the use of the Slurm and Filestore modules in
 the service project of an existing Shared VPC. Before attempting to deploy the

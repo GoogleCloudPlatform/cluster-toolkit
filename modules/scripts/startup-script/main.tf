@@ -70,12 +70,24 @@ locals {
     }
   ] : []
 
-  proxy_runner = var.http_proxy == "" ? [] : [{
-    type        = "shell"
-    source      = "${path.module}/files/configure_proxy.sh"
-    destination = "configure_proxy.sh"
-    args        = var.http_proxy
-  }]
+  proxy_runner = var.http_proxy == "" ? [] : [
+    {
+      type        = "data"
+      destination = "/etc/profile.d/http_proxy.sh"
+      content     = <<-EOT
+        #!/bin/bash
+        export http_proxy=${var.http_proxy}
+        export https_proxy=${var.http_proxy}
+        export NO_PROXY=${var.http_no_proxy}
+        EOT
+    },
+    {
+      type        = "shell"
+      source      = "${path.module}/files/configure_proxy.sh"
+      destination = "configure_proxy.sh"
+      args        = var.http_proxy
+    }
+  ]
 
   has_ansible_runners = anytrue([for r in var.runners : r.type == "ansible-local"]) || local.configure_ssh
   install_ansible     = var.install_ansible == null ? local.has_ansible_runners : var.install_ansible
@@ -104,9 +116,11 @@ locals {
   storage_bucket_name       = coalesce(one(google_storage_bucket.configs_bucket[*].name), local.user_provided_bucket_name)
 
   load_runners = templatefile(
-    "${path.module}/templates/startup-script-custom.tpl",
+    "${path.module}/templates/startup-script-custom.tftpl",
     {
-      bucket = local.storage_bucket_name,
+      bucket     = local.storage_bucket_name,
+      http_proxy = var.http_proxy,
+      no_proxy   = var.http_no_proxy,
       runners = [
         for runner in local.runners : {
           object      = google_storage_bucket_object.scripts[basename(runner["destination"])].output_name

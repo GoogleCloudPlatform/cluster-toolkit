@@ -96,10 +96,7 @@ func writeOutputs(
 }
 
 func writeTfvars(vars map[string]cty.Value, dst string) error {
-	// Create file
-	tfvarsPath := filepath.Join(dst, "terraform.tfvars")
-	err := WriteHclAttributes(vars, tfvarsPath)
-	return err
+	return WriteHclAttributes(vars, filepath.Join(dst, "terraform.tfvars"))
 }
 
 func relaxVarType(t cty.Type) cty.Type {
@@ -257,17 +254,25 @@ func writeTerraformInstructions(w io.Writer, grpPath string, n config.GroupName,
 
 // writeDeploymentGroup creates and sets up the terraform deployment group
 func (w TFWriter) writeDeploymentGroup(
-	dc config.DeploymentConfig,
+	bp config.Blueprint,
 	groupIndex int,
 	groupPath string,
 	instructions io.Writer,
 ) error {
-	g := dc.Config.DeploymentGroups[groupIndex]
-	deploymentVars := getUsedDeploymentVars(g, dc.Config)
-	intergroupVars := FindIntergroupVariables(g, dc.Config)
+	g := bp.DeploymentGroups[groupIndex]
+	deploymentVars, err := getUsedDeploymentVars(g, bp)
+	if err != nil {
+		return err
+	}
+	intergroupVars := FindIntergroupVariables(g, bp)
 	intergroupInputs := make(map[string]bool)
 	for _, igVar := range intergroupVars {
 		intergroupInputs[igVar.Name] = true
+	}
+
+	be := g.TerraformBackend
+	if be.Configuration, err = be.Configuration.Eval(bp); err != nil {
+		return err
 	}
 
 	// Write main.tf file
@@ -275,7 +280,7 @@ func (w TFWriter) writeDeploymentGroup(
 	if err != nil {
 		return fmt.Errorf("error substituting intergroup references in deployment group %s: %w", g.Name, err)
 	}
-	if err := writeMain(doctoredModules, g.TerraformBackend, groupPath); err != nil {
+	if err := writeMain(doctoredModules, be, groupPath); err != nil {
 		return fmt.Errorf("error writing main.tf file for deployment group %s: %w", g.Name, err)
 	}
 
@@ -304,9 +309,9 @@ func (w TFWriter) writeDeploymentGroup(
 		return fmt.Errorf("error writing versions.tf file for deployment group %s: %v", g.Name, err)
 	}
 
-	multiGroupDeployment := len(dc.Config.DeploymentGroups) > 1
+	multiGroupDeployment := len(bp.DeploymentGroups) > 1
 	printImportInputs := multiGroupDeployment && groupIndex > 0
-	printExportOutputs := multiGroupDeployment && groupIndex < len(dc.Config.DeploymentGroups)-1
+	printExportOutputs := multiGroupDeployment && groupIndex < len(bp.DeploymentGroups)-1
 
 	writeTerraformInstructions(instructions, groupPath, g.Name, printExportOutputs, printImportInputs)
 
@@ -348,7 +353,7 @@ func orderKeys[T any](settings map[string]T) []string {
 	return keys
 }
 
-func getUsedDeploymentVars(group config.DeploymentGroup, bp config.Blueprint) map[string]cty.Value {
+func getUsedDeploymentVars(group config.DeploymentGroup, bp config.Blueprint) (map[string]cty.Value, error) {
 	res := map[string]cty.Value{
 		// labels must always be written as a variable as it is implicitly added
 		"labels": bp.Vars.Get("labels"),
@@ -358,7 +363,11 @@ func getUsedDeploymentVars(group config.DeploymentGroup, bp config.Blueprint) ma
 			res[v] = bp.Vars.Get(v)
 		}
 	}
-	return res
+	eres, err := bp.Eval(cty.ObjectVal(res))
+	if err != nil {
+		return nil, err
+	}
+	return eres.AsValueMap(), nil
 }
 
 func substituteIgcReferences(mods []config.Module, igcRefs map[config.Reference]modulereader.VarInfo) ([]config.Module, error) {

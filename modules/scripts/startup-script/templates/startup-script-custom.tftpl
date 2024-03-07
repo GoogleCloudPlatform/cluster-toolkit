@@ -49,6 +49,13 @@ stdlib::load_runners(){
   stdlib::debug "=== BEGIN Running runners ==="
   stdlib::announce_runners_start
 
+  %{if http_proxy != "" ~}
+  stdlib::info "=== Setting HTTP_PROXY,HTTPS_PROXY to ${http_proxy} ==="
+  export http_proxy=${http_proxy}
+  export https_proxy=${http_proxy}
+  export NO_PROXY=${no_proxy}
+  %{endif ~}
+
   %{for r in runners ~}
   stdlib::runner "${r.type}" "${r.object}" "${r.destination}" $${tmpdir} "${r.args}"
   %{endfor ~}

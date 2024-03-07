@@ -20,7 +20,6 @@
 - name: Include wait for startup script
   ansible.builtin.include_tasks: "tasks/wait-for-startup-script.yml"
   vars:
-    vm_name: "{{ remote_node }}"
     timeout_seconds: 600
 
 - name: Batch Job Block

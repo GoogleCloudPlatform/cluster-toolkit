@@ -39,33 +39,17 @@ variable "subnetwork_self_link" {
   type        = string
 }
 
-variable "access_point_roles" {
-  description = "Project-wide roles for HTCondor Access Point service account"
-  type        = list(string)
-  default = [
-    "roles/compute.instanceAdmin",
-    "roles/monitoring.metricWriter",
-    "roles/logging.logWriter",
-    "roles/storage.objectViewer",
-  ]
+variable "access_point_service_account_email" {
+  description = "Service account e-mail for HTCondor Access Point"
+  type        = string
 }
 
-variable "central_manager_roles" {
-  description = "Project-wide roles for HTCondor Central Manager service account"
-  type        = list(string)
-  default = [
-    "roles/monitoring.metricWriter",
-    "roles/logging.logWriter",
-    "roles/storage.objectViewer",
-  ]
+variable "central_manager_service_account_email" {
+  description = "Service account e-mail for HTCondor Central Manager"
+  type        = string
 }
 
-variable "execute_point_roles" {
-  description = "Project-wide roles for HTCondor Execute Point service account"
-  type        = list(string)
-  default = [
-    "roles/monitoring.metricWriter",
-    "roles/logging.logWriter",
-    "roles/storage.objectViewer",
-  ]
+variable "execute_point_service_account_email" {
+  description = "Service account e-mail for HTCondor Execute Points"
+  type        = string
 }

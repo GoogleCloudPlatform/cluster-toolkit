@@ -16,5 +16,6 @@
 spec:
   requirements:
     services:
+    - compute.googleapis.com
     - iam.googleapis.com
     - storage.googleapis.com

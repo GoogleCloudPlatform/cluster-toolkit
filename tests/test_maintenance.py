@@ -55,8 +55,8 @@ VERSION_RES = """
 }
 """
 
-def subprocess_replace(cmd, shell, capture_output, text,
-                       check) -> subprocess.CompletedProcess:
+def subprocess_replace(cmd, shell, check, universal_newlines, stdout,
+                       stderr) -> subprocess.CompletedProcess:
     res = subprocess.CompletedProcess("", 0)
     res.stdout = ""
     if cmd == maintenance.VER_CMD:

@@ -26,6 +26,10 @@ func init() {
 	cobra.CheckErr(expandCmd.Flags().MarkDeprecated("config",
 		"please see the command usage for more details."))
 
+	deploymentFileFlag := "deployment-file"
+	expandCmd.Flags().StringVarP(&deploymentFile, deploymentFileFlag, "d", "",
+		"Toolkit Deployment File.")
+	expandCmd.Flags().MarkHidden(deploymentFileFlag)
 	expandCmd.Flags().StringVarP(&outputFilename, "out", "o", "expanded.yaml",
 		"Output file for the expanded HPC Environment Definition.")
 	expandCmd.Flags().StringSliceVar(&cliVariables, "vars", nil, msgCLIVars)
@@ -48,7 +52,7 @@ var (
 )
 
 func runExpandCmd(cmd *cobra.Command, args []string) {
-	dc := expandOrDie(args[0])
-	checkErr(dc.ExportBlueprint(outputFilename))
+	bp := expandOrDie(args[0], deploymentFile)
+	checkErr(bp.Export(outputFilename))
 	logging.Info(boldGreen("Expanded Environment Definition created successfully, saved as %s."), outputFilename)
 }

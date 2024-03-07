@@ -15,7 +15,7 @@
  */
 
 # Most variables have been sourced and modified from the SchedMD/slurm-gcp
-# github repository: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/5.10.2
+# github repository: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/5.10.4
 
 variable "project_id" {
   description = "Project in which the HPC deployment will be created."
@@ -42,7 +42,7 @@ variable "node_conf" {
 }
 
 variable "node_count_dynamic_max" {
-  description = "Maximum number of dynamic nodes allowed in this partition."
+  description = "Maximum number of auto-scaling nodes allowed in this partition."
   type        = number
   default     = 10
 }

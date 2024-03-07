@@ -28,25 +28,32 @@ func (s *zeroSuite) TestValidateVars(c *C) {
 
 	{ // Success
 		vars := Dict{base}
-		c.Check(validateVars(vars), IsNil)
+		c.Check(validateVars(Blueprint{Vars: vars}), IsNil)
 	}
 
 	{ // Fail: Nil value
 		vars := Dict{base}
 		vars.Set("fork", cty.NilVal)
-		c.Check(validateVars(vars), NotNil)
+		c.Check(validateVars(Blueprint{Vars: vars}), NotNil)
 	}
 
 	{ // Fail: Null value
 		vars := Dict{base}
 		vars.Set("fork", cty.NullVal(cty.String))
-		c.Check(validateVars(vars), NotNil)
+		c.Check(validateVars(Blueprint{Vars: vars}), NotNil)
 	}
 
 	{ // Fail: labels not a map
 		vars := Dict{base}
 		vars.Set("labels", cty.StringVal("a_string"))
-		c.Check(validateVars(vars), NotNil)
+		c.Check(validateVars(Blueprint{Vars: vars}), NotNil)
+	}
+
+	{ // Fail: cyclic dependency
+		vars := Dict{base}
+		vars.Set("ar", GlobalRef("buz").AsValue())
+		vars.Set("buz", GlobalRef("ar").AsValue())
+		c.Check(validateVars(Blueprint{Vars: vars}), NotNil)
 	}
 }
 

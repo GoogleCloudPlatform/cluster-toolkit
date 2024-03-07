@@ -246,52 +246,28 @@ type Blueprint struct {
 	Vars                     Dict
 	DeploymentGroups         []DeploymentGroup `yaml:"deployment_groups"`
 	TerraformBackendDefaults TerraformBackend  `yaml:"terraform_backend_defaults,omitempty"`
-
-	// Preserves the original values of `Vars` (as defined by the user),
-	// while `Vars` can mutate (add `labels`, evaluate values).
-	origVars Dict
 }
 
-// DeploymentConfig is a container for the imported YAML data and supporting data for
-// creating the blueprint from it
-type DeploymentConfig struct {
-	Config Blueprint
+// DeploymentSettings are deployment-specific override settings
+type DeploymentSettings struct {
+	TerraformBackendDefaults TerraformBackend `yaml:"terraform_backend_defaults,omitempty"`
+	Vars                     Dict
 }
 
-// ExpandConfig expands the yaml config in place
-func (dc *DeploymentConfig) ExpandConfig() error {
-	dc.Config.origVars = NewDict(dc.Config.Vars.Items()) // copy
-	dc.Config.addKindToModules()
-
-	if vars, err := dc.Config.evalVars(); err != nil {
-		return err
-	} else {
-		dc.Config.Vars = vars
-	}
-
-	dc.expandBackends()
-	dc.combineLabels()
-
-	if err := validateBlueprint(dc.Config); err != nil {
+// Expand expands the config in place
+func (bp *Blueprint) Expand() error {
+	// expand the blueprint in dependency order:
+	// BlueprintName -> DefaultBackend -> Vars -> Groups
+	if err := bp.checkBlueprintName(); err != nil {
 		return err
 	}
-
-	if err := dc.applyUseModules(); err != nil {
+	if err := checkBackend(Root.Backend, bp.TerraformBackendDefaults); err != nil {
 		return err
 	}
-
-	dc.applyGlobalVariables()
-
-	if err := validateInputsAllModules(dc.Config); err != nil {
+	if err := bp.expandVars(); err != nil {
 		return err
 	}
-
-	if err := validateModulesAreUsed(dc.Config); err != nil {
-		return err
-	}
-
-	dc.Config.populateOutputs()
-	return nil
+	return bp.expandGroups()
 }
 
 // ListUnusedModules provides a list modules that are in the
@@ -330,7 +306,7 @@ func GetUsedDeploymentVars(val cty.Value) []string {
 func (bp Blueprint) ListUnusedVariables() []string {
 	// Gather all scopes where variables are used
 	ns := map[string]cty.Value{
-		"vars": bp.origVars.AsObject(),
+		"vars": bp.Vars.AsObject(),
 	}
 	bp.WalkModulesSafe(func(_ ModulePath, m *Module) {
 		ns["module_"+string(m.ID)] = m.Settings.AsObject()
@@ -340,14 +316,15 @@ func (bp Blueprint) ListUnusedVariables() []string {
 	}
 
 	var used = map[string]bool{
-		"deployment_name": true, // required => always used
+		"labels":          true, // automatically added
+		"deployment_name": true, // required
 	}
 	for _, v := range GetUsedDeploymentVars(cty.ObjectVal(ns)) {
 		used[v] = true
 	}
 
 	unused := []string{}
-	for _, k := range bp.origVars.Keys() {
+	for _, k := range bp.Vars.Keys() {
 		if _, ok := used[k]; !ok {
 			unused = append(unused, k)
 		}
@@ -364,28 +341,36 @@ func checkMovedModule(source string) error {
 	return nil
 }
 
-// NewDeploymentConfig is a constructor for DeploymentConfig
-func NewDeploymentConfig(configFilename string) (DeploymentConfig, YamlCtx, error) {
+// NewBlueprint is a constructor for Blueprint
+func NewBlueprint(configFilename string) (Blueprint, YamlCtx, error) {
 	bp, ctx, err := importBlueprint(configFilename)
 	if err != nil {
-		return DeploymentConfig{}, ctx, err
+		return Blueprint{}, ctx, err
 	}
 	// if the validation level has been explicitly set to an invalid value
 	// in YAML blueprint then silently default to validationError
 	if !isValidValidationLevel(bp.ValidationLevel) {
 		bp.ValidationLevel = ValidationError
 	}
-	return DeploymentConfig{Config: bp}, ctx, nil
+	return bp, ctx, nil
 }
 
-// ExportBlueprint exports the internal representation of a blueprint config
-func (dc DeploymentConfig) ExportBlueprint(outputFilename string) error {
+func NewDeploymentSettings(deploymentFilename string) (DeploymentSettings, YamlCtx, error) {
+	depl, ctx, err := importDeploymentFile(deploymentFilename)
+	if err != nil {
+		return DeploymentSettings{}, ctx, err
+	}
+	return depl, ctx, nil
+}
+
+// Export exports the internal representation of a blueprint config
+func (bp Blueprint) Export(outputFilename string) error {
 	var buf bytes.Buffer
 	buf.WriteString(YamlLicense)
 	buf.WriteString("\n")
 	encoder := yaml.NewEncoder(&buf)
 	encoder.SetIndent(2)
-	err := encoder.Encode(&dc.Config)
+	err := encoder.Encode(&bp)
 	encoder.Close()
 	d := buf.Bytes()
 
@@ -429,6 +414,10 @@ func checkModulesAndGroups(bp Blueprint) error {
 			errs.At(pg.Modules, errors.New("deployment group must have at least one module"))
 		} else if grp.Kind() == UnknownKind {
 			errs.At(pg.Modules, errors.New("mixing modules of differing kinds in a deployment group is not supported"))
+		} else if grp.Kind() == PackerKind && len(grp.Modules) > 1 {
+			errs.At(pg, HintError{
+				Err:  fmt.Errorf("packer group %q has more than 1 module", grp.Name),
+				Hint: "separate each packer module into its own deployment group"})
 		}
 
 		for im, mod := range grp.Modules {
@@ -439,6 +428,8 @@ func checkModulesAndGroups(bp Blueprint) error {
 			seenMod[mod.ID] = true
 			errs.Add(validateModule(pm, mod, bp))
 		}
+
+		errs.Add(checkBackend(pg.Backend, grp.TerraformBackend))
 	}
 	return errs.OrNil()
 }
@@ -453,56 +444,29 @@ func validateModuleUseReferences(p ModulePath, mod Module, bp Blueprint) error {
 	return errs.OrNil()
 }
 
-func checkBackend(b TerraformBackend) error {
-	err := errors.New("can not use expressions in terraform_backend block")
-	val, perr := parseYamlString(b.Type)
-
+func checkBackend(bep backendPath, be TerraformBackend) error {
+	val, perr := parseYamlString(be.Type)
 	if _, is := IsExpressionValue(val); is || perr != nil {
-		return err
+		return BpError{bep.Type, errors.New("can not use expression as a terraform_backend type")}
 	}
-	return cty.Walk(b.Configuration.AsObject(), func(p cty.Path, v cty.Value) (bool, error) {
-		if _, is := IsExpressionValue(v); is {
-			return false, err
-		}
-		return true, nil
-	})
-}
-
-func checkBackends(bp Blueprint) error {
-	errs := Errors{}
-	errs.At(Root.Backend, checkBackend(bp.TerraformBackendDefaults))
-	for ig, g := range bp.DeploymentGroups {
-		errs.At(Root.Groups.At(ig).Backend, checkBackend(g.TerraformBackend))
-	}
-	return errs.OrNil()
-}
-
-// validateBlueprint runs a set of simple early checks on the imported input YAML
-func validateBlueprint(bp Blueprint) error {
-	return (&Errors{}).
-		Add(bp.checkBlueprintName()).
-		Add(validateVars(bp.Vars)).
-		Add(checkModulesAndGroups(bp)).
-		Add(checkPackerGroups(bp.DeploymentGroups)).
-		Add(checkBackends(bp)).
-		OrNil()
+	return nil
 }
 
 // SkipValidator marks validator(s) as skipped,
 // if no validator is present, adds one, marked as skipped.
-func (dc *DeploymentConfig) SkipValidator(name string) {
-	if dc.Config.Validators == nil {
-		dc.Config.Validators = []Validator{}
+func (bp *Blueprint) SkipValidator(name string) {
+	if bp.Validators == nil {
+		bp.Validators = []Validator{}
 	}
 	skipped := false
-	for i, v := range dc.Config.Validators {
+	for i, v := range bp.Validators {
 		if v.Validator == name {
-			dc.Config.Validators[i].Skip = true
+			bp.Validators[i].Skip = true
 			skipped = true
 		}
 	}
 	if !skipped {
-		dc.Config.Validators = append(dc.Config.Validators, Validator{Validator: name, Skip: true})
+		bp.Validators = append(bp.Validators, Validator{Validator: name, Skip: true})
 	}
 }
 
@@ -534,20 +498,24 @@ func isValidLabelValue(value string) bool {
 }
 
 func (bp *Blueprint) DeploymentName() string {
-	return bp.Vars.Get("deployment_name").AsString()
+	v, _ := bp.Eval(GlobalRef("deployment_name").AsValue()) // ignore errors as we already validated the blueprint
+	return v.AsString()
 }
 
-func validateDeploymentName(vars Dict) error {
+func validateDeploymentName(bp Blueprint) error {
 	path := Root.Vars.Dot("deployment_name")
 
-	if !vars.Has("deployment_name") {
+	if !bp.Vars.Has("deployment_name") {
 		return BpError{path, InputValueError{
 			inputKey: "deployment_name",
 			cause:    errMsgVarNotFound,
 		}}
 	}
 
-	v := vars.Get("deployment_name")
+	v, err := bp.Eval(GlobalRef("deployment_name").AsValue())
+	if err != nil {
+		return BpError{path, err}
+	}
 	if v.Type() != cty.String || v.IsNull() || !v.IsKnown() {
 		return BpError{path, InputValueError{
 			inputKey: "deployment_name",
@@ -579,7 +547,11 @@ func (bp Blueprint) ProjectID() (string, error) {
 	if !bp.Vars.Has(pid) {
 		return "", BpError{Root.Vars, fmt.Errorf("%q variable is not specified", pid)}
 	}
-	v := bp.Vars.Get(pid)
+
+	v, err := bp.Eval(GlobalRef(pid).AsValue())
+	if err != nil {
+		return "", err
+	}
 	if v.Type() != cty.String {
 		return "", BpError{Root.Vars.Dot(pid), fmt.Errorf("%q variable is not a string", pid)}
 	}
@@ -672,17 +644,6 @@ func validateModuleSettingReferences(p ModulePath, m Module, bp Blueprint) error
 	return errs.OrNil()
 }
 
-func checkPackerGroups(groups []DeploymentGroup) error {
-	errs := Errors{}
-	for ig, group := range groups {
-		if group.Kind() == PackerKind && len(group.Modules) != 1 {
-			errs.At(Root.Groups.At(ig),
-				fmt.Errorf("group %s is \"kind: packer\" but has more than 1 module; separate each packer module into its own deployment group", group.Name))
-		}
-	}
-	return errs.OrNil()
-}
-
 func varsTopologicalOrder(vars Dict) ([]string, error) {
 	// 0, 1, 2 - unvisited, on stack, exited
 	used := map[string]int{} // default is 0 - unvisited
@@ -694,15 +655,14 @@ func varsTopologicalOrder(vars Dict) ([]string, error) {
 		used[n] = 1 // put on stack
 		v := vars.Get(n)
 		for ref, rp := range valueReferences(v) {
-			// TODO: instead of ref.Name render as a full reference
-			repr, p := ref.Name, Root.Vars.Dot(n).Cty(rp)
+			p := Root.Vars.Dot(n).Cty(rp)
 
 			if !ref.GlobalVar {
-				return BpError{p, fmt.Errorf("non-global variable %q referenced in expression", repr)}
+				return BpError{p, fmt.Errorf("non-global variable %q referenced in expression", ref.Name)}
 			}
 
 			if used[ref.Name] == 1 {
-				return BpError{p, fmt.Errorf("cyclic dependency detected: %q -> %q", n, repr)}
+				return BpError{p, fmt.Errorf("cyclic dependency detected: %q -> %q", n, ref.Name)}
 			}
 
 			if used[ref.Name] == 0 {

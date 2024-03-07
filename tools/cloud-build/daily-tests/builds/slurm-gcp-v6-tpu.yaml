@@ -13,7 +13,7 @@
 # limitations under the License.
 
 ---
-
+tags: [slurm6, tpu]
 timeout: 14400s  # 4hr
 steps:
 ## Test simple golang build

@@ -41,6 +41,11 @@ func init() {
 	cobra.CheckErr(createCmd.Flags().MarkDeprecated("config",
 		"please see the command usage for more details."))
 
+	deploymentFileFlag := "deployment-file"
+	createCmd.Flags().StringVarP(&deploymentFile, deploymentFileFlag, "d", "",
+		"Toolkit Deployment File.")
+	createCmd.Flags().MarkHidden(deploymentFileFlag)
+	createCmd.MarkFlagFilename(deploymentFileFlag, "yaml", "yml")
 	createCmd.Flags().StringVarP(&outputDir, "out", "o", "",
 		"Sets the output directory where the HPC deployment directory will be created.")
 	createCmd.Flags().StringSliceVar(&cliVariables, "vars", nil, msgCLIVars)
@@ -61,6 +66,7 @@ func init() {
 
 var (
 	bpFilenameDeprecated string
+	deploymentFile       string
 	outputDir            string
 	cliVariables         []string
 
@@ -83,10 +89,10 @@ var (
 )
 
 func runCreateCmd(cmd *cobra.Command, args []string) {
-	dc := expandOrDie(args[0])
-	deplDir := filepath.Join(outputDir, dc.Config.DeploymentName())
-	checkErr(checkOverwriteAllowed(deplDir, dc.Config, overwriteDeployment, forceOverwrite))
-	checkErr(modulewriter.WriteDeployment(dc, deplDir))
+	bp := expandOrDie(args[0], deploymentFile)
+	deplDir := filepath.Join(outputDir, bp.DeploymentName())
+	checkErr(checkOverwriteAllowed(deplDir, bp, overwriteDeployment, forceOverwrite))
+	checkErr(modulewriter.WriteDeployment(bp, deplDir))
 
 	logging.Info("To deploy your infrastructure please run:")
 	logging.Info("")
@@ -102,33 +108,44 @@ func printAdvancedInstructionsMessage(deplDir string) {
 	logging.Info(modulewriter.InstructionsPath(deplDir))
 }
 
-func expandOrDie(path string) config.DeploymentConfig {
-	dc, ctx, err := config.NewDeploymentConfig(path)
+func expandOrDie(path string, dPath string) config.Blueprint {
+	bp, ctx, err := config.NewBlueprint(path)
 	if err != nil {
 		logging.Fatal(renderError(err, ctx))
 	}
-	// Set properties from CLI
-	if err := setCLIVariables(&dc.Config, cliVariables); err != nil {
+
+	var ds config.DeploymentSettings
+	var dCtx config.YamlCtx
+	if dPath != "" {
+		ds, dCtx, err = config.NewDeploymentSettings(dPath)
+		if err != nil {
+			logging.Fatal(renderError(err, dCtx))
+		}
+	}
+	if err := setCLIVariables(&ds, cliVariables); err != nil {
 		logging.Fatal("Failed to set the variables at CLI: %v", err)
 	}
-	if err := setBackendConfig(&dc.Config, cliBEConfigVars); err != nil {
+	if err := setBackendConfig(&ds, cliBEConfigVars); err != nil {
 		logging.Fatal("Failed to set the backend config at CLI: %v", err)
 	}
-	checkErr(setValidationLevel(&dc.Config, validationLevel))
-	skipValidators(&dc)
 
-	if dc.Config.GhpcVersion != "" {
+	mergeDeploymentSettings(&bp, ds)
+
+	checkErr(setValidationLevel(&bp, validationLevel))
+	skipValidators(&bp)
+
+	if bp.GhpcVersion != "" {
 		logging.Info("ghpc_version setting is ignored.")
 	}
-	dc.Config.GhpcVersion = GitCommitInfo
+	bp.GhpcVersion = GitCommitInfo
 
 	// Expand the blueprint
-	if err := dc.ExpandConfig(); err != nil {
+	if err := bp.Expand(); err != nil {
 		logging.Fatal(renderError(err, ctx))
 	}
 
-	validateMaybeDie(dc.Config, ctx)
-	return dc
+	validateMaybeDie(bp, ctx)
+	return bp
 }
 
 func validateMaybeDie(bp config.Blueprint, ctx config.YamlCtx) {
@@ -164,7 +181,7 @@ func validateMaybeDie(bp config.Blueprint, ctx config.YamlCtx) {
 
 }
 
-func setCLIVariables(bp *config.Blueprint, s []string) error {
+func setCLIVariables(ds *config.DeploymentSettings, s []string) error {
 	for _, cliVar := range s {
 		arr := strings.SplitN(cliVar, "=", 2)
 
@@ -177,12 +194,12 @@ func setCLIVariables(bp *config.Blueprint, s []string) error {
 		if err := yaml.Unmarshal([]byte(arr[1]), &v); err != nil {
 			return fmt.Errorf("invalid input: unable to convert '%s' value '%s' to known type", key, arr[1])
 		}
-		bp.Vars.Set(key, v.Unwrap())
+		ds.Vars.Set(key, v.Unwrap())
 	}
 	return nil
 }
 
-func setBackendConfig(bp *config.Blueprint, s []string) error {
+func setBackendConfig(ds *config.DeploymentSettings, s []string) error {
 	if len(s) == 0 {
 		return nil // no op
 	}
@@ -202,7 +219,17 @@ func setBackendConfig(bp *config.Blueprint, s []string) error {
 			be.Configuration.Set(key, cty.StringVal(value))
 		}
 	}
-	bp.TerraformBackendDefaults = be
+	ds.TerraformBackendDefaults = be
+	return nil
+}
+
+func mergeDeploymentSettings(bp *config.Blueprint, ds config.DeploymentSettings) error {
+	for k, v := range ds.Vars.Items() {
+		bp.Vars.Set(k, v)
+	}
+	if ds.TerraformBackendDefaults.Type != "" {
+		bp.TerraformBackendDefaults = ds.TerraformBackendDefaults
+	}
 	return nil
 }
 
@@ -221,9 +248,9 @@ func setValidationLevel(bp *config.Blueprint, s string) error {
 	return nil
 }
 
-func skipValidators(dc *config.DeploymentConfig) {
+func skipValidators(bp *config.Blueprint) {
 	for _, v := range validatorsToSkip {
-		dc.SkipValidator(v)
+		bp.SkipValidator(v)
 	}
 }
 
@@ -256,15 +283,15 @@ func checkOverwriteAllowed(depDir string, bp config.Blueprint, overwriteFlag boo
 	if _, err := os.Stat(expPath); os.IsNotExist(err) {
 		return forceErr(fmt.Errorf("expanded blueprint file %q is missing, this could be a result of changing GHPC version between consecutive deployments", expPath))
 	}
-	prev, _, err := config.NewDeploymentConfig(expPath)
+	prev, _, err := config.NewBlueprint(expPath)
 	if err != nil {
 		return forceErr(err)
 	}
 
-	if prev.Config.GhpcVersion != bp.GhpcVersion {
+	if prev.GhpcVersion != bp.GhpcVersion {
 		return forceErr(fmt.Errorf(
 			"ghpc_version has changed from %q to %q, using different versions of GHPC to update a live deployment is not officially supported",
-			prev.Config.GhpcVersion, bp.GhpcVersion))
+			prev.GhpcVersion, bp.GhpcVersion))
 	}
 
 	if !overwriteFlag {
@@ -276,7 +303,7 @@ func checkOverwriteAllowed(depDir string, bp config.Blueprint, overwriteFlag boo
 		newGroups[g.Name] = true
 	}
 
-	for _, g := range prev.Config.DeploymentGroups {
+	for _, g := range prev.DeploymentGroups {
 		if !newGroups[g.Name] {
 			return forceErr(fmt.Errorf("you are attempting to remove a deployment group %q, which is not supported", g.Name))
 		}

@@ -23,6 +23,7 @@ vars:
   image_build_machine_type: n2d-standard-16
   build_from_image_family: hpc-rocky-linux-8
   build_from_image_project: cloud-hpc-image-public
+  build_from_git_ref: 6.4.2
   built_image_family: my-custom-slurm
   built_instance_image:
     family: $(vars.built_image_family)
@@ -61,7 +62,6 @@ deployment_groups:
         content: |
           {
             "reboot": false,
-            "slurm_version": "23.02.5",
             "install_cuda": false,
             "nvidia_version": "latest",
             "install_ompi": true,
@@ -74,7 +74,7 @@ deployment_groups:
           #!/bin/bash
           set -e -o pipefail
           ansible-pull \
-              -U https://github.com/GoogleCloudPlatform/slurm-gcp -C master \
+              -U https://github.com/GoogleCloudPlatform/slurm-gcp -C $(vars.build_from_git_ref) \
               -i localhost, --limit localhost --connection=local \
               -e @/var/tmp/slurm_vars.json \
               ansible/playbook.yml

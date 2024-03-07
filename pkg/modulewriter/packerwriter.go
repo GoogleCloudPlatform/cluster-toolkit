@@ -47,29 +47,27 @@ func printPackerInstructions(w io.Writer, groupPath string, subPath string, prin
 }
 
 func writePackerAutovars(vars map[string]cty.Value, dst string) error {
-	packerAutovarsPath := filepath.Join(dst, packerAutoVarFilename)
-	err := WriteHclAttributes(vars, packerAutovarsPath)
-	return err
+	return WriteHclAttributes(vars, filepath.Join(dst, packerAutoVarFilename))
 }
 
 // writeDeploymentGroup writes any needed files to the top and module levels
 // of the blueprint
 func (w PackerWriter) writeDeploymentGroup(
-	dc config.DeploymentConfig,
+	bp config.Blueprint,
 	grpIdx int,
 	groupPath string,
 	instructionsFile io.Writer,
 ) error {
-	depGroup := dc.Config.DeploymentGroups[grpIdx]
+	depGroup := bp.DeploymentGroups[grpIdx]
 
 	for _, mod := range depGroup.Modules {
 		pure := config.Dict{}
 		for setting, v := range mod.Settings.Items() {
-			if len(config.FindIntergroupReferences(v, mod, dc.Config)) == 0 {
+			if len(config.FindIntergroupReferences(v, mod, bp)) == 0 {
 				pure.Set(setting, v)
 			}
 		}
-		av, err := pure.Eval(dc.Config)
+		av, err := pure.Eval(bp)
 		if err != nil {
 			return err
 		}

@@ -12,13 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ---
-test_name: remote-desktop
-deployment_name: chrome-remote-desktop-{{ build }}
+test_name: "crd-{{ os }}"
+deployment_name: "{{ test_name }}-{{ build }}"
+region: us-central1
 zone: us-central1-f
 workspace: /workspace
-blueprint_yaml: "{{ workspace }}/tools/validate_configs/test_configs/remote-desktop.yaml"
+blueprint_yaml: "{{ workspace }}/tools/cloud-build/daily-tests/blueprints/crd-{{ os }}.yaml"
 network: "{{ deployment_name }}-net"
-remote_node: "{{ deployment_name }}-crd-default-0"
+remote_node: "{{ deployment_name }}-0"
 post_deploy_tests: []
-custom_vars:
-  project: "{{ project }}"
+cli_deployment_vars:
+  region: "{{ region }}"
+  zone: "{{ zone }}"

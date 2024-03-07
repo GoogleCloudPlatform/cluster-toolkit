@@ -15,7 +15,6 @@
 package config
 
 import (
-	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/modulereader"
 
@@ -23,31 +22,55 @@ import (
 	. "gopkg.in/check.v1"
 )
 
-func (s *MySuite) TestExpandBackends(c *C) {
-	dc := s.getDeploymentConfigForTest()
-	deplName := dc.Config.Vars.Get("deployment_name").AsString()
+func (s *zeroSuite) TestExpandBackend(c *C) {
+	type BE = TerraformBackend // alias for brevity
+	noDefBe := Blueprint{BlueprintName: "tree"}
 
-	dc.Config.TerraformBackendDefaults = TerraformBackend{Type: "gcs"}
-	dc.expandBackends()
-
-	grp := dc.Config.DeploymentGroups[0]
-	c.Assert(grp.TerraformBackend.Type, Not(Equals), "")
-	gotPrefix := grp.TerraformBackend.Configuration.Get("prefix")
-	expPrefix := fmt.Sprintf("%s/%s/%s", dc.Config.BlueprintName, deplName, grp.Name)
-	c.Assert(gotPrefix, Equals, cty.StringVal(expPrefix))
-
-	// Add a new resource group, ensure each group name is included
-	newGroup := DeploymentGroup{
-		Name: "group2",
+	{ // no def BE, no group BE
+		g := DeploymentGroup{Name: "clown"}
+		noDefBe.expandBackend(&g)
+		c.Check(g.TerraformBackend, DeepEquals, BE{})
 	}
-	dc.Config.DeploymentGroups = append(dc.Config.DeploymentGroups, newGroup)
-	dc.expandBackends()
 
-	newGrp := dc.Config.DeploymentGroups[1]
-	c.Assert(newGrp.TerraformBackend.Type, Not(Equals), "")
-	gotPrefix = newGrp.TerraformBackend.Configuration.Get("prefix")
-	expPrefix = fmt.Sprintf("%s/%s/%s", dc.Config.BlueprintName, deplName, newGrp.Name)
-	c.Assert(gotPrefix, Equals, cty.StringVal(expPrefix))
+	{ // no def BE, group BE
+		g := DeploymentGroup{
+			Name:             "clown",
+			TerraformBackend: BE{Type: "gcs"}}
+		noDefBe.expandBackend(&g)
+		c.Check(g.TerraformBackend, DeepEquals, BE{Type: "gcs"})
+	}
+
+	defBe := noDefBe
+	defBe.TerraformBackendDefaults = BE{
+		Type: "gcs",
+		Configuration: NewDict(map[string]cty.Value{
+			"leave": cty.StringVal("fall")})}
+
+	{ // def BE, no group BE
+		g := DeploymentGroup{Name: "clown"}
+		defBe.expandBackend(&g)
+
+		c.Check(g.TerraformBackend, DeepEquals, BE{ // no change
+			Type: "gcs",
+			Configuration: NewDict(map[string]cty.Value{
+				"prefix": MustParseExpression(`"tree/${var.deployment_name}/clown"`).AsValue(),
+				"leave":  cty.StringVal("fall")})})
+	}
+
+	{ // def BE, group BE non-gcs
+		g := DeploymentGroup{
+			Name: "clown",
+			TerraformBackend: BE{
+				Type: "pure_gold",
+				Configuration: NewDict(map[string]cty.Value{
+					"branch": cty.False})}}
+		defBe.expandBackend(&g)
+
+		c.Check(g.TerraformBackend, DeepEquals, BE{ // no change
+			Type: "pure_gold",
+			Configuration: NewDict(map[string]cty.Value{
+				"branch": cty.False})})
+	}
 }
 
 func (s *zeroSuite) TestAddListValue(c *C) {
@@ -191,146 +214,88 @@ func (s *zeroSuite) TestUseModule(c *C) {
 	}
 }
 
-func (s *MySuite) TestApplyUseModules(c *C) {
+func (s *zeroSuite) TestExpandModule(c *C) {
+	u := Module{ID: "potato", Source: c.TestName() + "/potato"}
+	setTestModuleInfo(u, modulereader.ModuleInfo{
+		Outputs: []modulereader.OutputInfo{
+			{Name: "az"},
+			{Name: "rose"},
+			{Name: "peony"}}})
 
-	{ // Simple Case
-		dc := s.getDeploymentConfigForTest()
-		c.Assert(dc.applyUseModules(), IsNil)
-	}
-	{ // Has Use Modules
-		dc := s.getDeploymentConfigForTest()
-		g := &dc.Config.DeploymentGroups[0]
-
-		using := Module{
-			ID:     "usingModule",
-			Source: "path/using",
-			Use:    ModuleIDs{"usedModule"},
-		}
-		used := Module{ID: "usedModule", Source: "path/used"}
-
-		g.Modules = append(g.Modules, using, used)
-
-		setTestModuleInfo(using, modulereader.ModuleInfo{
-			Inputs: []modulereader.VarInfo{{
-				Name: "potato", Type: cty.Number}}})
-		setTestModuleInfo(used, modulereader.ModuleInfo{
-			Outputs: []modulereader.OutputInfo{
-				{Name: "potato"}}})
-
-		c.Assert(dc.applyUseModules(), IsNil)
-
-		// Use ID doesn't exists (fail)
-		g.Modules[len(g.Modules)-1].ID = "wrongID"
-		err := dc.applyUseModules()
-		unkModErr := UnknownModuleError{used.ID}
-		c.Check(errors.Is(err, unkModErr), Equals, true)
-		c.Check(errors.Is(err, HintError{string(using.ID), unkModErr}), Equals, false)
-	}
-
-	{ // test multigroup deployment with config that has a known good match
-		dc := s.getMultiGroupDeploymentConfig()
-		m := &dc.Config.DeploymentGroups[1].Modules[0]
-		c.Assert(m.Settings, DeepEquals, Dict{})
-		c.Assert(dc.applyUseModules(), IsNil)
-		ref := ModuleRef("TestModule0", "test_inter_0").AsValue()
-		c.Assert(m.Settings.Items(), DeepEquals, map[string]cty.Value{
-			"test_inter_0": AsProductOfModuleUse(ref, "TestModule0")})
-	}
-
-	{ // Deliberately break the match and see that no settings are added
-		dc := s.getMultiGroupDeploymentConfig()
-		mod := &dc.Config.DeploymentGroups[1].Modules[0]
-		c.Assert(mod.Settings, DeepEquals, Dict{})
-
-		// this eliminates the matching output from the used module
-		setTestModuleInfo(*mod, modulereader.ModuleInfo{})
-
-		c.Assert(dc.applyUseModules(), IsNil)
-		c.Assert(mod.Settings, DeepEquals, Dict{})
-	}
-}
-
-func (s *zeroSuite) TestCombineLabels(c *C) {
-	infoWithLabels := modulereader.ModuleInfo{Inputs: []modulereader.VarInfo{{Name: "labels"}}}
-
-	coral := Module{
-		Source: "blue/salmon",
-		ID:     "coral",
+	m := Module{
+		ID:     "yarn",
+		Source: c.TestName() + "/yarn",
+		Use:    ModuleIDs{u.ID},
 		Settings: NewDict(map[string]cty.Value{
-			"labels": cty.ObjectVal(map[string]cty.Value{
-				"magenta": cty.StringVal("orchid"),
-			}),
-		}),
-	}
-	setTestModuleInfo(coral, infoWithLabels)
-
-	// has no labels set
-	khaki := Module{Source: "brown/oak", ID: "khaki"}
-	setTestModuleInfo(khaki, infoWithLabels)
-
-	// has no labels set, also module has no labels input
-	silver := Module{Source: "ivory/black", ID: "silver"}
-	setTestModuleInfo(silver, modulereader.ModuleInfo{Inputs: []modulereader.VarInfo{}})
-
-	dc := DeploymentConfig{
-		Config: Blueprint{
-			BlueprintName: "simple",
-			Vars: NewDict(map[string]cty.Value{
-				"deployment_name": cty.StringVal("golden"),
-			}),
-			DeploymentGroups: []DeploymentGroup{
-				{Name: "lime", Modules: []Module{coral, khaki, silver}},
-			},
+			"az": cty.StringVal("alpha"),
+		})}
+	setTestModuleInfo(m, modulereader.ModuleInfo{
+		Inputs: []modulereader.VarInfo{
+			{Name: "az"},     // set explicitly
+			{Name: "buki"},   // set as global var
+			{Name: "labels"}, // set as global var
+			{Name: "rose", Type: cty.List(cty.String)}, // used from `u`
+			{Name: "peony"},  // used from `u`, global var ignored
+			{Name: "orchid"}, // not present anywhere
 		},
-	}
-	dc.combineLabels()
-
-	// Were global labels created?
-	c.Check(dc.Config.Vars.Get("labels"), DeepEquals, cty.ObjectVal(map[string]cty.Value{
-		"ghpc_blueprint":  cty.StringVal("simple"),
-		"ghpc_deployment": cty.StringVal("golden"),
-	}))
-
-	labelsRef := GlobalRef("labels").AsValue()
-
-	lime := dc.Config.DeploymentGroups[0]
-	// Labels are set
-	coral = lime.Modules[0]
-	c.Check(coral.Settings.Get("labels"), DeepEquals, FunctionCallExpression(
-		"merge",
-		labelsRef,
-		cty.ObjectVal(map[string]cty.Value{"magenta": cty.StringVal("orchid")}),
-	).AsValue())
-
-	// Labels are not set
-	khaki = lime.Modules[1]
-	c.Check(khaki.Settings.Get("labels"), DeepEquals, labelsRef)
-
-	// No labels input
-	silver = lime.Modules[2]
-	c.Check(silver.Settings.Get("labels"), DeepEquals, cty.NilVal)
-}
-
-func (s *MySuite) TestApplyGlobalVariables(c *C) {
-	dc := s.getDeploymentConfigForTest()
-	mod := &dc.Config.DeploymentGroups[0].Modules[0]
-
-	// Test no inputs, one required, doesn't exist in globals
-	setTestModuleInfo(*mod, modulereader.ModuleInfo{
-		Inputs: []modulereader.VarInfo{{
-			Name:     "gold",
-			Type:     cty.String,
-			Required: true,
-		}},
 	})
 
-	// Test no input, one required, exists in globals
-	dc.Config.Vars.Set("gold", cty.StringVal("val"))
-	dc.applyGlobalVariables()
-	c.Assert(
-		mod.Settings.Get("gold"),
-		DeepEquals,
-		GlobalRef("gold").AsValue())
+	bp := Blueprint{
+		Vars: NewDict(map[string]cty.Value{
+			"labels": cty.EmptyObjectVal,
+			"az":     cty.StringVal("za"),   // will be ignored
+			"buki":   cty.StringVal("ikub"), // will be used
+			"vedi":   cty.StringVal("idav"), // not in module inputs
+			"peon":   cty.StringVal("noep"), // will be ignored
+		}),
+		DeploymentGroups: []DeploymentGroup{
+			{Modules: []Module{u, m}}},
+	}
+
+	mp := Root.Groups.At(0).Modules.At(1)
+	c.Assert(bp.expandModule(mp, &m), IsNil)
+	c.Check(m.Settings.Items(), DeepEquals, map[string]cty.Value{
+		"az":    cty.StringVal("alpha"),
+		"peony": AsProductOfModuleUse(ModuleRef(u.ID, "peony").AsValue(), u.ID),
+		"rose": AsProductOfModuleUse(MustParseExpression(
+			`flatten([module.potato.rose])`).AsValue(), u.ID),
+
+		"labels": GlobalRef("labels").AsValue(),
+		"buki":   GlobalRef("buki").AsValue(),
+	})
+}
+
+func (s *zeroSuite) TestApplyGlobalVarsInModule(c *C) {
+	mod := Module{
+		ID:     "carrot",
+		Source: c.TestName() + "/cabbage",
+		Kind:   TerraformKind,
+		Settings: NewDict(map[string]cty.Value{
+			"silver": cty.StringVal("glagol")})}
+
+	vars := NewDict(map[string]cty.Value{
+		"polonium": cty.StringVal("az"),
+		"pyrite":   cty.StringVal("buki"),
+		"silver":   cty.StringVal("vedi"),
+	})
+
+	setTestModuleInfo(mod, modulereader.ModuleInfo{
+		Inputs: []modulereader.VarInfo{
+			{Name: "gold"},   // doesn't exist in vars
+			{Name: "pyrite"}, // exists in vars, not set in module
+			{Name: "silver"}, // exists in vars, set in module
+			{Name: "helium"}, // to be set to ModuleID
+		},
+		Metadata: modulereader.Metadata{
+			Ghpc: modulereader.MetadataGhpc{
+				InjectModuleId: "helium"}}})
+
+	Blueprint{Vars: vars}.applyGlobalVarsInModule(&mod)
+
+	c.Check(mod.Settings.Items(), DeepEquals, map[string]cty.Value{
+		"silver": cty.StringVal("glagol"),
+		"helium": cty.StringVal("carrot"),
+		"pyrite": GlobalRef("pyrite").AsValue()})
 }
 
 func (s *zeroSuite) TestValidateModuleReference(c *C) {
@@ -392,10 +357,8 @@ func (s *zeroSuite) TestIntersection(c *C) {
 }
 
 func (s *MySuite) TestOutputNamesByGroup(c *C) {
-	dc := s.getMultiGroupDeploymentConfig()
-	dc.applyGlobalVariables()
-	dc.applyUseModules()
-	bp := dc.Config
+	bp := s.getMultiGroupBlueprint()
+	c.Assert(bp.Expand(), IsNil)
 
 	group0 := bp.DeploymentGroups[0]
 	mod0 := group0.Modules[0]

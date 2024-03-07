@@ -214,3 +214,9 @@ variable "on_host_maintenance" {
     error_message = "When set, the on_host_maintenance must be set to MIGRATE or TERMINATE."
   }
 }
+
+variable "submit" {
+  description = "When set to true, the generated job file will be submitted automatically to Google Cloud as part of terraform apply."
+  type        = bool
+  default     = false
+}

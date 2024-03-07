@@ -190,15 +190,16 @@ variable "nodeset" {
       count = number
       type  = string
     }))
-    instance_template   = optional(string)
-    labels              = optional(map(string), {})
-    machine_type        = optional(string)
-    metadata            = optional(map(string), {})
-    min_cpu_platform    = optional(string)
-    network_tier        = optional(string, "STANDARD")
-    on_host_maintenance = optional(string)
-    preemptible         = optional(bool, false)
-    region              = optional(string)
+    instance_template    = optional(string)
+    labels               = optional(map(string), {})
+    machine_type         = optional(string)
+    maintenance_interval = optional(string)
+    metadata             = optional(map(string), {})
+    min_cpu_platform     = optional(string)
+    network_tier         = optional(string, "STANDARD")
+    on_host_maintenance  = optional(string)
+    preemptible          = optional(bool, false)
+    region               = optional(string)
     service_account = optional(object({
       email  = optional(string)
       scopes = optional(list(string), ["https://www.googleapis.com/auth/cloud-platform"])
@@ -514,7 +515,6 @@ EOD
 
 variable "cloudsql" {
   description = <<EOD
-NOT SUPPORTED YET.
 Use this database instead of the one on the controller.
   server_ip : Address of the database server.
   user      : The user to access the database as.

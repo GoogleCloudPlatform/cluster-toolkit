@@ -15,8 +15,6 @@
 package config
 
 import (
-	"fmt"
-
 	"github.com/zclconf/go-cty/cty"
 	"golang.org/x/exp/maps"
 )
@@ -95,13 +93,9 @@ func (d Dict) IsZero() bool {
 // Eval returns a copy of this Dict, where all Expressions
 // are evaluated and replaced by result of evaluation.
 func (d Dict) Eval(bp Blueprint) (Dict, error) {
-	var res Dict
-	for k, v := range d.Items() {
-		r, err := bp.Eval(v)
-		if err != nil {
-			return Dict{}, fmt.Errorf("error while trying to evaluate %#v: %w", k, err)
-		}
-		res.Set(k, r)
+	res, err := bp.Eval(d.AsObject())
+	if err != nil {
+		return Dict{}, err
 	}
-	return res, nil
+	return NewDict(res.AsValueMap()), nil
 }

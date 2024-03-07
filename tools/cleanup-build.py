@@ -53,7 +53,7 @@ def unpack_tgz(tar_file: str, destination_folder: str):
   with tarfile.open(tar_file, "r:gz") as tar:
     tar.extractall(destination_folder)
 
-def destroy(deployment_folder: str):
+def destroy(deployment_folder: str) -> bool:
     import subprocess
     import sys
     process = subprocess.Popen(["./ghpc" , "destroy", deployment_folder, "--auto-approve"], stdout=subprocess.PIPE)
@@ -61,14 +61,16 @@ def destroy(deployment_folder: str):
         sys.stdout.buffer.write(line)
     process.wait()
 
-    if process.returncode == 0:
-        print("Deployment destroyed")
-    else:
+    if process.returncode:
         stdout, stderr = process.communicate()
         print(f'stdout: {stdout}')
         print(f'stderr: {stderr}\n\n')
         print("Deployment destroy failed. Command to manually destroy:")
         print(f"./ghpc destroy {deployment_folder} --auto-approve")
+        return False
+
+    print("Deployment destroyed")
+    return True
 
 def main():
     parser = argparse.ArgumentParser()
@@ -84,11 +86,10 @@ def main():
     unpack_tgz(tgz_file, os.path.dirname(tgz_file))
 
     print('Destroying deployment')
-    destroy(deployment_folder)
-
-    print('Cleaning up')
-    os.remove(tgz_file)
-    shutil.rmtree(deployment_folder)
+    if destroy(deployment_folder):
+        print('Cleaning up')
+        os.remove(tgz_file)
+        shutil.rmtree(deployment_folder)
 
 if __name__ == "__main__":
     main()

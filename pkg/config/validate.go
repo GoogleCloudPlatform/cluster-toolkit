@@ -30,12 +30,16 @@ import (
 
 const maxLabels = 64
 
-func validateGlobalLabels(vars Dict) error {
-	if !vars.Has("labels") {
+func validateGlobalLabels(bp Blueprint) error {
+	if !bp.Vars.Has("labels") {
 		return nil
 	}
 	p := Root.Vars.Dot("labels")
-	labels := vars.Get("labels")
+
+	labels := bp.Vars.Get("labels")
+	if _, is := IsExpressionValue(labels); is {
+		return nil // do not inspect expressions
+	}
 	ty := labels.Type()
 
 	if !ty.IsObjectType() && !ty.IsMapType() {
@@ -49,18 +53,26 @@ func validateGlobalLabels(vars Dict) error {
 		// deployment failures.
 		errs.At(p, errors.New("vars.labels cannot have more than 64 labels"))
 	}
+
 	for k, v := range labels.AsValueMap() {
 		vp := p.Cty(cty.Path{}.IndexString(k))
+		// Check that label names are valid
+		if !isValidLabelName(k) {
+			errs.At(vp, HintError{
+				Err:  fmt.Errorf("invalid label name %q", k),
+				Hint: errMsgLabelNameReqs})
+		}
+
+		if _, is := IsExpressionValue(v); is {
+			continue // do not inspect expressions
+		}
+
 		if v.Type() != cty.String {
 			errs.At(vp, errors.New("vars.labels must be a map of strings"))
 			continue
 		}
 		s := v.AsString()
 
-		// Check that label names are valid
-		if !isValidLabelName(k) {
-			errs.At(vp, errors.Errorf("%s: '%s: %s'", errMsgLabelNameReqs, k, s))
-		}
 		// Check that label values are valid
 		if !isValidLabelValue(s) {
 			errs.At(vp, errors.Errorf("%s: '%s: %s'", errMsgLabelValueReqs, k, s))
@@ -70,12 +82,17 @@ func validateGlobalLabels(vars Dict) error {
 }
 
 // validateVars checks the global variables for viable types
-func validateVars(vars Dict) error {
+func validateVars(bp Blueprint) error {
+	if _, err := varsTopologicalOrder(bp.Vars); err != nil {
+		return err
+	}
+
 	errs := (&Errors{}).
-		Add(validateDeploymentName(vars)).
-		Add(validateGlobalLabels(vars))
+		Add(validateDeploymentName(bp)).
+		Add(validateGlobalLabels(bp))
 	// Check for any nil values
-	for key, val := range vars.Items() {
+	// Iterator over non evaluated variables, it's Ok if evaluated value is null
+	for key, val := range bp.Vars.Items() {
 		if val.IsNull() {
 			errs.At(Root.Vars.Dot(key), fmt.Errorf("deployment variable %q was not set", key))
 		}

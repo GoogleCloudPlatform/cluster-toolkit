@@ -108,6 +108,6 @@ variable "project_id" {
 }
 
 variable "project_roles" {
-  description = "List of roles to grant to service account"
+  description = "List of roles to grant to service account (e.g. \"storage.objectViewer\" or \"compute.instanceAdmin.v1\""
   type        = list(string)
 }
