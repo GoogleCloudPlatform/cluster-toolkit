@@ -365,21 +365,34 @@ func (s *zeroSuite) TestIntersection(c *C) {
 	c.Assert(is, DeepEquals, []string{})
 }
 
-func (s *MySuite) TestOutputNamesByGroup(c *C) {
-	bp := s.getMultiGroupBlueprint()
-	c.Assert(bp.Expand(), IsNil)
+func (s *zeroSuite) TestOutputNamesByGroup(c *C) {
+	zebra := DeploymentGroup{
+		Name: "zebra",
+		Modules: []Module{
+			{
+				ID: "stripes",
+				Outputs: []modulereader.OutputInfo{
+					{Name: "length"}}}}}
+	pony := DeploymentGroup{
+		Name: "pony",
+		Modules: []Module{
+			{
+				ID: "bucephalus",
+				Settings: NewDict(map[string]cty.Value{
+					"width": ModuleRef("stripes", "length").AsValue()})}}}
+	bp := Blueprint{DeploymentGroups: []DeploymentGroup{zebra, pony}}
 
-	group0 := bp.DeploymentGroups[0]
-	mod0 := group0.Modules[0]
-	group1 := bp.DeploymentGroups[1]
+	{
+		got, err := OutputNamesByGroup(zebra, bp)
+		c.Check(err, IsNil)
+		c.Check(got, DeepEquals, map[GroupName][]string{})
+	}
 
-	outputNamesGroup0, err := OutputNamesByGroup(group0, bp)
-	c.Assert(err, IsNil)
-	c.Assert(outputNamesGroup0, DeepEquals, map[GroupName][]string{})
-
-	outputNamesGroup1, err := OutputNamesByGroup(group1, bp)
-	c.Assert(err, IsNil)
-	c.Assert(outputNamesGroup1, DeepEquals, map[GroupName][]string{
-		group0.Name: {AutomaticOutputName("test_inter_0", mod0.ID)},
-	})
+	{
+		got, err := OutputNamesByGroup(pony, bp)
+		c.Check(err, IsNil)
+		c.Check(got, DeepEquals, map[GroupName][]string{
+			"zebra": {"length_stripes"},
+		})
+	}
 }

@@ -178,7 +178,7 @@ func (s *MySuite) TestWriteDeployment(c *C) {
 	c.Check(WriteDeployment(bp, dir), IsNil)
 }
 
-func (s *MySuite) TestCreateGroupDir(c *C) {
+func (s *zeroSuite) TestCreateGroupDir(c *C) {
 	deplDir := c.MkDir()
 
 	{ // Ok

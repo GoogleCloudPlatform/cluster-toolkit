@@ -30,290 +30,38 @@ import (
 	. "gopkg.in/check.v1"
 )
 
-// Suite that creates a temporary directory for testing
-type MySuite struct {
-	tmpTestDir          string
-	simpleYamlFilename  string
-	deploymentFilename  string
-	emptyFilename       string
-	unsupportedFilename string
-}
-
 // Suite that does not use any setup
 type zeroSuite struct{}
 
 // register suites
-var _ = Suite(&MySuite{})
 var _ = Suite(&zeroSuite{})
 
 func Test(t *testing.T) {
 	TestingT(t) // run all registered suites
 }
 
-func (s *MySuite) SetUpSuite(c *C) {
-	emptyFile, err := os.CreateTemp(c.MkDir(), "*.yaml")
-	if err != nil {
-		c.Fatal(err)
-	}
-	s.emptyFilename = emptyFile.Name()
-	emptyFile.Close()
-
-	unsupportedFile, err := os.CreateTemp(c.MkDir(), "*.yaml")
-	if err != nil {
-		c.Fatal(err)
-	}
-	_, err = unsupportedFile.Write([]byte(`
-not_a_field: not_a_value
-`))
-	if err != nil {
-		c.Fatal(err)
-	}
-	s.unsupportedFilename = unsupportedFile.Name()
-	unsupportedFile.Close()
-
-	simpleYamlFile, err := os.CreateTemp(c.MkDir(), "*.yaml")
-	if err != nil {
-		c.Fatal(err)
-	}
-	_, err = simpleYamlFile.Write([]byte(`
-blueprint_name: simple
-vars:
-  project_id: test-project
-  labels:
-    ghpc_blueprint: simple
-    deployment_name: deployment_name
-terraform_backend_defaults:
-  type: gcs
-  configuration:
-    bucket: hpc-toolkit-tf-state
-deployment_groups:
-- group: group1
-  modules:
-  - source: ./modules/network/vpc
-    id: "vpc"
-    settings:
-      network_name: $"${var.deployment_name}_net
-`))
-	if err != nil {
-		c.Fatal(err)
-	}
-	s.simpleYamlFilename = simpleYamlFile.Name()
-	simpleYamlFile.Close()
-
-	deploymentYamlFile, err := os.CreateTemp(c.MkDir(), "*.yaml")
-	if err != nil {
-		c.Fatal(err)
-	}
-	_, err = deploymentYamlFile.Write([]byte(`
-vars:
-  project_id: ds-project
-terraform_backend_defaults:
-  type: gcs
-  configuration:
-    bucket: ds-tf-state-bucket
-`))
-	if err != nil {
-		c.Fatal(err)
-	}
-	s.deploymentFilename = deploymentYamlFile.Name()
-	deploymentYamlFile.Close()
-
-	// Create test directory with simple modules
-	s.tmpTestDir = c.MkDir()
-
-	moduleDir := filepath.Join(s.tmpTestDir, "module")
-	if err = os.Mkdir(moduleDir, 0755); err != nil {
-		c.Fatal(err)
-	}
-	varFile, err := os.Create(filepath.Join(moduleDir, "variables.tf"))
-	if err != nil {
-		c.Fatal(err)
-	}
-	testVariablesTF := `
-    variable "test_variable" {
-        description = "Test Variable"
-        type        = string
-    }`
-	if _, err = varFile.WriteString(testVariablesTF); err != nil {
-		c.Fatal(err)
-	}
-}
-
 func setTestModuleInfo(mod Module, info modulereader.ModuleInfo) {
 	modulereader.SetModuleInfo(mod.Source, mod.Kind.String(), info)
 }
 
-func (s *MySuite) getBlueprintForTest() Blueprint {
-	testModule := Module{
-		Source: "testSource",
-		Kind:   TerraformKind,
-		ID:     "testModule",
+func (s *zeroSuite) TestExpand(c *C) {
+	mod := Module{
+		ID:       "red",
+		Source:   c.TestName(),
+		Kind:     TerraformKind,
+		Settings: NewDict(map[string]cty.Value{"oval": cty.StringVal("square")}),
 	}
-	testModuleWithLabels := Module{
-		Source: "./role/source",
-		ID:     "testModuleWithLabels",
-		Kind:   TerraformKind,
-		Settings: NewDict(map[string]cty.Value{
-			"moduleLabel": cty.StringVal("moduleLabelValue"),
-		}),
+	bp := Blueprint{
+		BlueprintName: "smurf",
+		Vars:          NewDict(map[string]cty.Value{"deployment_name": cty.StringVal("green")}),
+		DeploymentGroups: []DeploymentGroup{{
+			Name:    "abel",
+			Modules: []Module{mod},
+		}},
 	}
-	testLabelVarInfo := modulereader.VarInfo{Name: "labels"}
-	testModuleInfo := modulereader.ModuleInfo{
-		Inputs: []modulereader.VarInfo{testLabelVarInfo},
-	}
-	testBlueprint := Blueprint{
-		BlueprintName: "simple",
-		Vars: NewDict(map[string]cty.Value{
-			"deployment_name": cty.StringVal("deployment_name"),
-			"project_id":      cty.StringVal("test-project"),
-		}),
-		DeploymentGroups: []DeploymentGroup{
-			{
-				Name:    "group1",
-				Modules: []Module{testModule, testModuleWithLabels},
-			},
-		},
-	}
+	setTestModuleInfo(mod, modulereader.ModuleInfo{Inputs: []modulereader.VarInfo{
+		{Name: "oval", Type: cty.String}}})
 
-	setTestModuleInfo(testModule, testModuleInfo)
-	setTestModuleInfo(testModuleWithLabels, testModuleInfo)
-	return testBlueprint
-}
-
-func (s *MySuite) getBasicBlueprintWithTestModule() Blueprint {
-	testModuleSource := filepath.Join(s.tmpTestDir, "module")
-	testDeploymentGroup := DeploymentGroup{
-		Name: "primary",
-		Modules: []Module{
-			{
-				ID:       "TestModule",
-				Kind:     TerraformKind,
-				Source:   testModuleSource,
-				Settings: NewDict(map[string]cty.Value{"test_variable": cty.StringVal("test_value")}),
-			},
-		},
-	}
-
-	return Blueprint{
-		BlueprintName:    "simple",
-		Vars:             NewDict(map[string]cty.Value{"deployment_name": cty.StringVal("deployment_name")}),
-		DeploymentGroups: []DeploymentGroup{testDeploymentGroup},
-	}
-}
-
-// create a simple multigroup deployment with a use keyword that matches
-// one module to another in an earlier group
-func (s *MySuite) getMultiGroupBlueprint() Blueprint {
-	testModuleSource0 := filepath.Join(s.tmpTestDir, "module0")
-	testModuleSource1 := filepath.Join(s.tmpTestDir, "module1")
-	testModuleSource2 := filepath.Join(s.tmpTestDir, "module2")
-
-	matchingIntergroupName := "test_inter_0"
-	matchingIntragroupName0 := "test_intra_0"
-	matchingIntragroupName1 := "test_intra_1"
-	matchingIntragroupName2 := "test_intra_2"
-
-	altProjectIDSetting := "host_project_id"
-
-	testModuleInfo0 := modulereader.ModuleInfo{
-		Inputs: []modulereader.VarInfo{
-			{Name: "deployment_name", Type: cty.String},
-			{Name: altProjectIDSetting, Type: cty.String},
-		},
-		Outputs: []modulereader.OutputInfo{
-			{
-				Name: matchingIntergroupName,
-			},
-			{
-				Name: matchingIntragroupName0,
-			},
-			{
-				Name: matchingIntragroupName1,
-			},
-			{
-				Name: matchingIntragroupName2,
-			},
-		},
-	}
-	testModuleInfo1 := modulereader.ModuleInfo{
-		Inputs: []modulereader.VarInfo{
-			{
-				Name: matchingIntragroupName0,
-			},
-			{
-				Name: matchingIntragroupName1,
-			},
-			{
-				Name: matchingIntragroupName2,
-			},
-		},
-		Outputs: []modulereader.OutputInfo{},
-	}
-
-	testModuleInfo2 := modulereader.ModuleInfo{
-		Inputs: []modulereader.VarInfo{
-			{Name: "deployment_name", Type: cty.String},
-			{Name: matchingIntergroupName},
-		},
-		Outputs: []modulereader.OutputInfo{},
-	}
-
-	mod0 := Module{
-		ID:     "TestModule0",
-		Kind:   TerraformKind,
-		Source: testModuleSource0,
-		Settings: NewDict(map[string]cty.Value{
-			altProjectIDSetting: GlobalRef("project_id").AsValue(),
-		}),
-		Outputs: []modulereader.OutputInfo{
-			{Name: matchingIntergroupName},
-		},
-	}
-	setTestModuleInfo(mod0, testModuleInfo0)
-
-	mod1 := Module{
-		ID:     "TestModule1",
-		Kind:   TerraformKind,
-		Source: testModuleSource1,
-		Settings: NewDict(map[string]cty.Value{
-			matchingIntragroupName1: cty.StringVal("explicit-intra-value"),
-			matchingIntragroupName2: ModuleRef(mod0.ID, matchingIntragroupName2).AsValue(),
-		}),
-		Use: ModuleIDs{mod0.ID},
-	}
-	setTestModuleInfo(mod1, testModuleInfo1)
-
-	grp0 := DeploymentGroup{
-		Name:    "primary",
-		Modules: []Module{mod0, mod1},
-	}
-
-	mod2 := Module{
-		ID:     "TestModule2",
-		Kind:   TerraformKind,
-		Source: testModuleSource2,
-		Use:    ModuleIDs{mod0.ID},
-	}
-	setTestModuleInfo(mod2, testModuleInfo2)
-
-	grp1 := DeploymentGroup{
-		Name:    "secondary",
-		Modules: []Module{mod2},
-	}
-
-	return Blueprint{
-		BlueprintName: "simple",
-		Vars: NewDict(map[string]cty.Value{
-			"deployment_name": cty.StringVal("deployment_name"),
-			"project_id":      cty.StringVal("test-project"),
-			"unused_key":      cty.StringVal("unused_value"),
-		}),
-		DeploymentGroups: []DeploymentGroup{grp0, grp1},
-	}
-}
-
-func (s *MySuite) TestExpand(c *C) {
-	bp := s.getBasicBlueprintWithTestModule()
 	c.Check(bp.Expand(), IsNil)
 }
 
@@ -511,34 +259,66 @@ func (s *zeroSuite) TestCheckBlueprintName(c *C) {
 	c.Check(errors.As(bp.checkBlueprintName(), &e), Equals, true)
 }
 
-func (s *MySuite) TestNewBlueprint(c *C) {
-	bp := s.getBlueprintForTest()
-	outFile := filepath.Join(s.tmpTestDir, "out_TestNewBlueprint.yaml")
+func (s *zeroSuite) TestNewBlueprint(c *C) {
+	bp := Blueprint{
+		Vars: NewDict(map[string]cty.Value{
+			"deployment_name": cty.StringVal("zebra")}),
+		DeploymentGroups: []DeploymentGroup{{
+			Modules: []Module{{
+				ID: "pony"}}}},
+	}
+
+	outFile := filepath.Join(c.MkDir(), c.TestName()+".yaml")
 	c.Assert(bp.Export(outFile), IsNil)
 	newBp, _, err := NewBlueprint(outFile)
 	c.Assert(err, IsNil)
 	c.Assert(bp, DeepEquals, newBp)
 }
 
-func (s *MySuite) TestNewDeploymentSettings(c *C) {
-	ds, _, err := NewDeploymentSettings(s.deploymentFilename)
-	c.Assert(err, IsNil)
-	c.Check(ds.Vars.Items(), DeepEquals, map[string]cty.Value{
-		"project_id": cty.StringVal("ds-project"),
-	})
-	c.Check(ds.TerraformBackendDefaults, DeepEquals, TerraformBackend{
-		Type: "gcs",
-		Configuration: NewDict(map[string]cty.Value{
-			"bucket": cty.StringVal("ds-tf-state-bucket"),
-		}),
-	})
+func (s *zeroSuite) TestNewDeploymentSettings(c *C) {
+	dir := c.MkDir()
+	h := func(data string) (DeploymentSettings, YamlCtx, error) {
+		f, err := os.CreateTemp(dir, "*.yaml")
+		c.Assert(err, IsNil)
+		_, err = f.Write([]byte(data))
+		c.Assert(err, IsNil)
+		f.Close()
+		return NewDeploymentSettings(f.Name())
+	}
 
-	_, _, emptyErr := NewDeploymentSettings(s.emptyFilename)
-	c.Assert(emptyErr, NotNil)
+	{ // OK
+		ds, _, err := h(`
+vars:
+  project_id: ds-project
+terraform_backend_defaults:
+  type: gcs
+  configuration:
+    bucket: ds-tf-state-bucket
+`)
+		c.Assert(err, IsNil)
+		c.Check(ds, DeepEquals, DeploymentSettings{
+			Vars: NewDict(map[string]cty.Value{"project_id": cty.StringVal("ds-project")}),
+			TerraformBackendDefaults: TerraformBackend{
+				Type: "gcs",
+				Configuration: NewDict(map[string]cty.Value{
+					"bucket": cty.StringVal("ds-tf-state-bucket"),
+				}),
+			}})
+	}
 
-	_, _, unsupportedErr := NewDeploymentSettings(s.unsupportedFilename)
-	c.Assert(unsupportedErr, NotNil)
+	{ // empty
+		_, _, err := h("")
+		c.Check(err, NotNil)
+	}
+
+	{ // invalid
+		_, _, err := h(`
+not_a_field: not_a_value
+`)
+		c.Check(err, NotNil)
+	}
 }
+
 func (s *zeroSuite) TestValidateGlobalLabels(c *C) {
 
 	labelName := "my_test_label_name"
@@ -656,10 +436,10 @@ dragon: "Lews Therin Telamon"`))
 	c.Check(err, NotNil)
 }
 
-func (s *MySuite) TestExportBlueprint(c *C) {
+func (s *zeroSuite) TestExportBlueprint(c *C) {
 	bp := Blueprint{BlueprintName: "goo"}
-	outFilename := "out_TestExportBlueprint.yaml"
-	outFile := filepath.Join(s.tmpTestDir, outFilename)
+	outFilename := c.TestName() + ".yaml"
+	outFile := filepath.Join(c.MkDir(), outFilename)
 	c.Assert(bp.Export(outFile), IsNil)
 	fileInfo, err := os.Stat(outFile)
 	c.Assert(err, IsNil)
@@ -758,17 +538,22 @@ func (s *zeroSuite) TestSkipValidator(c *C) {
 
 }
 
-func (s *MySuite) TestModuleGroup(c *C) {
-	bp := s.getBlueprintForTest()
+func (s *zeroSuite) TestModuleGroup(c *C) {
+	bp := Blueprint{
+		DeploymentGroups: []DeploymentGroup{
+			{Modules: []Module{
+				{ID: "Waldo"},
+			}}}}
 
-	group := bp.DeploymentGroups[0]
-	modID := bp.DeploymentGroups[0].Modules[0].ID
+	{
+		got := bp.ModuleGroupOrDie("Waldo")
+		c.Check(got, DeepEquals, bp.DeploymentGroups[0])
+	}
 
-	foundGroup := bp.ModuleGroupOrDie(modID)
-	c.Assert(foundGroup, DeepEquals, group)
-
-	_, err := bp.ModuleGroup("bad_module_id")
-	c.Assert(err, NotNil)
+	{
+		_, err := bp.ModuleGroup("Woof")
+		c.Check(err, NotNil)
+	}
 }
 
 func (s *zeroSuite) TestValidateModuleSettingReference(c *C) {
