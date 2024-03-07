@@ -29,7 +29,7 @@ it will approve and retry tests according to configured concurrency and retry po
 The tool will terminate itself once there is no more actions to take or no reasons to wait for status changes.
 The subset of tests to monitor can be configured by using test_selectors, e.g. "all", exact_name_of_test.
 Usage:
-tools/cloud-build/babysit_tests.py fafa333 all
+tools/cloud-build/babysit_tests.py --pr 123 --auto
 """
 
 Selector = Callable[[Build], bool]
