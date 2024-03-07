@@ -117,3 +117,4 @@ deployment_groups:
     settings:
       machine_type: n2d-standard-4
       instance_image: $(vars.built_instance_image)
+      enable_devel: false
