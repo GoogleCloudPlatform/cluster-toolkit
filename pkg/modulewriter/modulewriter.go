@@ -32,6 +32,7 @@ import (
 	"path/filepath"
 
 	"github.com/hashicorp/go-getter"
+	"github.com/otiai10/copy"
 )
 
 // strings that get re-used throughout this package and others
@@ -78,6 +79,10 @@ func WriteDeployment(bp config.Blueprint, deploymentDir string) error {
 		return err
 	}
 
+	if err := stageFiles(bp, deploymentDir); err != nil {
+		return err
+	}
+
 	instructions, err := os.Create(InstructionsPath(deploymentDir))
 	if err != nil {
 		return err
@@ -104,6 +109,28 @@ func WriteDeployment(bp config.Blueprint, deploymentDir string) error {
 		}
 	}
 	return nil
+}
+
+func stageFiles(bp config.Blueprint, deplPath string) error {
+	staged := bp.StagedFiles()
+	if len(staged) == 0 {
+		return nil
+	}
+
+	// create staging directory
+	if err := os.MkdirAll(filepath.Join(deplPath, config.StagingDir), 0700); err != nil {
+		return err
+	}
+
+	errs := config.Errors{}
+	for src, relDst := range staged {
+		// relDst is relative to group folders ("../.ghpc/staged"),
+		// prepend any_group_dir to be "eaten" by ".."
+		absDst := filepath.Join(deplPath, "any_group_dir", relDst)
+		// TODO: attribute error to the position in the blueprint
+		errs.Add(copy.Copy(src, absDst))
+	}
+	return errs.OrNil()
 }
 
 func writeGroup(deplPath string, bp config.Blueprint, gIdx int, instructions io.Writer) error {

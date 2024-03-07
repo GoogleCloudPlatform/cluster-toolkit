@@ -565,3 +565,9 @@ func (s *zeroSuite) TestWritePackerDestroyInstructions(c *C) {
 		c.Check(got, Matches, ".*Aldebaran.*Betelgeuse.*")
 	}
 }
+
+func (s *zeroSuite) TestStagingDirConsistency(c *C) {
+	// pkg/config can't use modulewriter, ensure consistency by testing.
+	want := filepath.Join("..", HiddenGhpcDirName, "staged")
+	c.Check(config.StagingDir, Equals, want)
+}

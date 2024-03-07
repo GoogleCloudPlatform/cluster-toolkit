@@ -14,6 +14,8 @@
   * limitations under the License.
   */
 
+connect_mode_file_path = "../.ghpc/staged/connect_mode.txt_0a3df07f53"
+
 deployment_name = "golden_copy_deployment"
 
 labels = {

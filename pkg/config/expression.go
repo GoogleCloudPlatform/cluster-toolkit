@@ -219,7 +219,7 @@ func handleEvalErr(diag hcl.Diagnostics) error {
 	}
 	err := diag.Errs()[0]
 	if match := regexp.MustCompile(`There is no function named "(\w+)"`).FindStringSubmatch(err.Error()); match != nil {
-		sf := strings.Join(maps.Keys(functions()), ", ")
+		sf := strings.Join(maps.Keys(availableFunctions), ", ")
 		return HintError{
 			Err:  fmt.Errorf("unsupported function %q", match[1]),
 			Hint: fmt.Sprintf("this context only supports following functions: %v", sf)}
@@ -359,7 +359,7 @@ func TokensForValue(val cty.Value) hclwrite.Tokens {
 
 // FunctionCallExpression is a helper to build function call expression.
 func FunctionCallExpression(n string, args ...cty.Value) Expression {
-	if _, ok := functions()[n]; !ok {
+	if _, ok := availableFunctions[n]; !ok {
 		panic("unknown function " + n)
 	}
 	ta := make([]hclwrite.Tokens, len(args))
@@ -370,10 +370,16 @@ func FunctionCallExpression(n string, args ...cty.Value) Expression {
 	return MustParseExpression(string(toks.Bytes()))
 }
 
-func functions() map[string]function.Function {
+var availableFunctions = map[string]struct{}{
+	"flatten":    {},
+	"merge":      {},
+	"ghpc_stage": {}}
+
+func (bp *Blueprint) functions() map[string]function.Function {
 	return map[string]function.Function{
-		"flatten": stdlib.FlattenFunc,
-		"merge":   stdlib.MergeFunc,
+		"flatten":    stdlib.FlattenFunc,
+		"merge":      stdlib.MergeFunc,
+		"ghpc_stage": bp.makeGhpcStageFunc(),
 	}
 }
 
@@ -397,7 +403,7 @@ func (bp *Blueprint) Eval(v cty.Value) (cty.Value, error) {
 	}
 	ctx := hcl.EvalContext{
 		Variables: map[string]cty.Value{"var": vars.AsObject()},
-		Functions: functions()}
+		Functions: bp.functions()}
 	return eval(v, &ctx)
 }
 
