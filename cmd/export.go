@@ -42,7 +42,8 @@ var (
 )
 
 func parseExportImportArgs(args []string) (string, string) {
-	gd := filepath.Clean(args[0])
+	gd, err := filepath.Abs(args[0])
+	checkErr(err)
 	return filepath.Join(gd, ".."), gd
 }
 

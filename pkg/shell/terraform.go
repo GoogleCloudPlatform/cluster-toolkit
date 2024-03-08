@@ -365,13 +365,8 @@ func gatherUpstreamOutputs(deploymentRoot string, artifactsDir string, g config.
 // ImportInputs will search artifactsDir for files produced by ExportOutputs and
 // combine/filter them for the input values needed by the group in the Terraform
 // working directory
-func ImportInputs(deploymentGroupDir string, artifactsDir string, expandedBlueprintFile string) error {
+func ImportInputs(deploymentGroupDir string, artifactsDir string, bp config.Blueprint) error {
 	deploymentRoot := filepath.Clean(filepath.Join(deploymentGroupDir, ".."))
-
-	bp, _, err := config.NewBlueprint(expandedBlueprintFile)
-	if err != nil {
-		return err
-	}
 
 	g, err := bp.Group(config.GroupName(filepath.Base(deploymentGroupDir)))
 	if err != nil {

@@ -61,7 +61,7 @@ func runDeployCmd(cmd *cobra.Command, args []string) {
 
 	for _, group := range groups {
 		groupDir := filepath.Join(deplRoot, string(group.Name))
-		checkErr(shell.ImportInputs(groupDir, artDir, expandedBlueprintFile))
+		checkErr(shell.ImportInputs(groupDir, artDir, bp))
 
 		switch group.Kind() {
 		case config.PackerKind:
