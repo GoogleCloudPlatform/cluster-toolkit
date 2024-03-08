@@ -54,6 +54,7 @@
         chdir: "{{ workspace }}"
       environment:
         TF_IN_AUTOMATION: "TRUE"
+
     - name: Print instance IDs of VMs
       ansible.builtin.include_tasks:
         file: tasks/get_instance_ids.yml
