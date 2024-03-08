@@ -29,5 +29,5 @@ terraform {
     module_name = "blueprints/terraform/hpc-toolkit:htcondor-pool-secrets/v1.28.1"
   }
 
-  required_version = ">= 0.13.0"
+  required_version = ">= 1.3.0"
 }
