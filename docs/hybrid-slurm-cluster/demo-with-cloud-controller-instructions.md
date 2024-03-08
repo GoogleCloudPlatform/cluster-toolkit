@@ -22,7 +22,7 @@ for use with an on-premise slurm-cluster.
 > further testing is done, documentation on applying the hybrid module to
 > on-premise slurm clusters will be added and expanded.
 
-[slurm-gcp]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/5.10.4
+[slurm-gcp]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/5.10.5
 
 ## Definitions
 
