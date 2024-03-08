@@ -27,12 +27,10 @@ import (
 	"github.com/spf13/pflag"
 )
 
-func addDeployFlags(c *cobra.Command, withCreateFlags bool) *cobra.Command {
-	if withCreateFlags {
-		c = addCreateFlags(c)
-	}
-	return addAutoApproveFlag(addArtifactsDirFlag(c))
-
+func addDeployFlags(c *cobra.Command) *cobra.Command {
+	return addAutoApproveFlag(
+		addArtifactsDirFlag(
+			addCreateFlags(c)))
 }
 
 func init() {
@@ -48,7 +46,7 @@ var (
 		ValidArgsFunction: matchDirs,
 		Run:               runDeployCmd,
 		SilenceUsage:      true,
-	}, true /* withCreateFlags */)
+	})
 )
 
 func runDeployCmd(cmd *cobra.Command, args []string) {
@@ -59,9 +57,8 @@ func runDeployCmd(cmd *cobra.Command, args []string) {
 	} else { // arg[0] is DEPLOYMENT_DIRECTORY
 		deplRoot = args[0]
 		// check that no "create" flags were specified
-		pureCmd := addDeployFlags(&cobra.Command{}, false /* withCreateFlags */)
 		cmd.Flags().VisitAll(func(f *pflag.Flag) {
-			if f.Changed && pureCmd.Flags().Lookup(f.Name) == nil {
+			if f.Changed && createCmd.Flag(f.Name) != nil {
 				checkErr(fmt.Errorf("cannot specify flag %q with DEPLOYMENT_DIRECTORY provided", f.Name))
 			}
 		})
