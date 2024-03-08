@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"hpc-toolkit/pkg/modulewriter"
 	"hpc-toolkit/pkg/shell"
+	"os"
 
 	"github.com/spf13/cobra"
 )
@@ -49,6 +50,14 @@ func getApplyBehavior() shell.ApplyBehavior {
 func addAutoApproveFlag(c *cobra.Command) *cobra.Command {
 	c.Flags().BoolVar(&flagAutoApprove, "auto-approve", false, "Automatically approve proposed changes")
 	return c
+}
+
+func checkExists(cmd *cobra.Command, args []string) error {
+	path := args[0]
+	if _, err := os.Lstat(path); err != nil {
+		return fmt.Errorf("%q does not exist", path)
+	}
+	return nil
 }
 
 func checkDir(cmd *cobra.Command, args []string) error {
