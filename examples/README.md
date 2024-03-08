@@ -71,6 +71,13 @@ under `vars` before using an example blueprint.
 
 ### (Optional) Setting up a remote terraform state
 
+There are two ways to specify [terraform backends] in HPC Toolkit: a default setting that propagates all groups and custom per-group configuration:
+
+* `terraform_backend_defaults` at top-level of YAML blueprint
+* `terraform_backend` within a deployment group definition
+
+Examples of each are shown below. If both settings are used, then the custom per-group value is used without modification.
+
 The following block will configure terraform to point to an existing GCS bucket
 to store and manage the terraform state. Add your own bucket name in place of
 `<<BUCKET_NAME>>` and (optionally) a service account in place of
@@ -87,6 +94,22 @@ terraform_backend_defaults:
     impersonate_service_account: <<SERVICE_ACCOUNT>>
 ```
 
+All Terraform-supported backends are supported by the Toolkit. Specify the backend using `type` and its [configuration block] using `configuration`.
+
+For the [gcs] backend, you must minimally supply the `bucket` configuration setting. The `prefix` setting is generated automatically as "blueprint_name/deployment_name/group_name" for each deployment group. This ensures uniqueness.
+
+If you wish to specify a custom prefix, use a unique value for each group following this example:
+
+```yaml
+deployment_groups:
+- group: example_group
+  terraform_backend:
+    type: gcs
+    configuration:
+      bucket: your-bucket
+      prefix: your/object/prefix
+```
+
 You can set the configuration using the CLI in the `create` and `expand`
 subcommands as well:
 
@@ -101,6 +124,10 @@ subcommands as well:
 > This feature only supports variables of string type. If you set configuration
 > in both the blueprint and CLI, the tool uses values at CLI. "gcs" is set as
 > type by default.
+
+[terraform backends]: https://developer.hashicorp.com/terraform/language/settings/backends/configuration
+[configuration block]: https://developer.hashicorp.com/terraform/language/settings/backends/configuration#using-a-backend-block
+[gcs]: https://developer.hashicorp.com/terraform/language/settings/backends/gcs
 
 ## Ongoing Migration to Slurm-GCP v6
 
