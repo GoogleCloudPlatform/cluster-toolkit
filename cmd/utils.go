@@ -53,13 +53,9 @@ func addAutoApproveFlag(c *cobra.Command) *cobra.Command {
 
 func checkDir(cmd *cobra.Command, args []string) error {
 	path := args[0]
-	if path == "" {
-		return nil
-	}
 	if isDir, _ := shell.DirInfo(path); !(isDir) {
-		return fmt.Errorf("%s must be a directory", path)
+		return fmt.Errorf("%q must be a directory", path)
 	}
-
 	return nil
 }
 
