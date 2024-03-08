@@ -20,9 +20,9 @@ locals {
 }
 
 locals {
-  instance_template = var.instance_template != null ? var.instance_template : module.instance_template.self_link
+  instance_template = coalesce(var.instance_template, module.instance_template.self_link)
 
-  tasks_per_node = var.task_count_per_node != null ? var.task_count_per_node : (var.mpi_mode ? 1 : null)
+  tasks_per_node = coalesce(var.task_count_per_node, (var.mpi_mode ? 1 : null))
 
   job_template_contents = templatefile(
     "${path.module}/templates/batch-job-base.yaml.tftpl",
@@ -39,9 +39,9 @@ locals {
     }
   )
 
-  job_id_base              = var.job_id != null ? var.job_id : var.deployment_name
+  job_id_base              = coalesce(var.job_id, var.deployment_name)
   submit_job_id            = "${local.job_id_base}-${random_id.submit_job_suffix.hex}"
-  job_filename             = var.job_filename != null ? var.job_filename : "cloud-batch-${local.job_id_base}.yaml"
+  job_filename             = coalesce(var.job_filename, "cloud-batch-${local.job_id_base}.yaml")
   job_template_output_path = "${path.root}/${local.job_filename}"
 
   submit_script_contents = templatefile(
@@ -74,11 +74,7 @@ locals {
   gpu_attached                = contains(["a2", "g2"], local.machine_family)
   on_host_maintenance_default = local.gpu_attached ? "TERMINATE" : "MIGRATE"
 
-  on_host_maintenance = (
-    var.on_host_maintenance != null
-    ? var.on_host_maintenance
-    : local.on_host_maintenance_default
-  )
+  on_host_maintenance = coalesce(var.on_host_maintenance, local.on_host_maintenance_default)
 }
 
 module "instance_template" {
