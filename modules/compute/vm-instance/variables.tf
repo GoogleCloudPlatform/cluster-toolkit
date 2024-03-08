@@ -380,12 +380,15 @@ variable "enable_oslogin" {
 }
 
 variable "allocate_ip" {
-  description = "If not null, allocate IPs with the given configuration"
+  description = <<-EOT
+  If not null, allocate IPs with the given configuration. See details at
+  https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_address
+  EOT
   type = object({
-    address_type = string,
-    purpose      = string,
-    network_tier = string,
-    ip_version   = string,
+    address_type = optional(string, "INTERNAL")
+    purpose      = optional(string),
+    network_tier = optional(string),
+    ip_version   = optional(string, "IPV4"),
   })
   default = null
 }
