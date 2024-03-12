@@ -15,7 +15,7 @@
  */
 
 # Most variables have been sourced and modified from the SchedMD/slurm-gcp
-# github repository: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/5.10.5
+# github repository: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/5.10.6
 
 variable "project_id" {
   type        = string
