@@ -73,7 +73,7 @@ func doDeploy(deplRoot string) {
 	expandedBlueprintFile := filepath.Join(artDir, modulewriter.ExpandedBlueprintName)
 	bp, _, err := config.NewBlueprint(expandedBlueprintFile)
 	checkErr(err)
-	groups := bp.DeploymentGroups
+	groups := bp.Groups
 	checkErr(validateRuntimeDependencies(deplRoot, groups))
 	checkErr(shell.ValidateDeploymentDirectory(groups, deplRoot))
 
@@ -98,7 +98,7 @@ func doDeploy(deplRoot string) {
 	printAdvancedInstructionsMessage(deplRoot)
 }
 
-func validateRuntimeDependencies(deplDir string, groups []config.DeploymentGroup) error {
+func validateRuntimeDependencies(deplDir string, groups []config.Group) error {
 	for _, group := range groups {
 		var err error
 		switch group.Kind() {

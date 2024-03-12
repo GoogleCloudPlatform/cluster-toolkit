@@ -333,7 +333,7 @@ func ExportOutputs(tf *tfexec.Terraform, artifactsDir string, applyBehavior Appl
 }
 
 // for each prior group, read all output values and filter for those needed as input values to this group
-func gatherUpstreamOutputs(deploymentRoot string, artifactsDir string, g config.DeploymentGroup, bp config.Blueprint) (map[string]cty.Value, error) {
+func gatherUpstreamOutputs(deploymentRoot string, artifactsDir string, g config.Group, bp config.Blueprint) (map[string]cty.Value, error) {
 	outputsByGroup, err := config.OutputNamesByGroup(g, bp)
 	if err != nil {
 		return nil, err
@@ -365,10 +365,10 @@ func gatherUpstreamOutputs(deploymentRoot string, artifactsDir string, g config.
 // ImportInputs will search artifactsDir for files produced by ExportOutputs and
 // combine/filter them for the input values needed by the group in the Terraform
 // working directory
-func ImportInputs(deploymentGroupDir string, artifactsDir string, bp config.Blueprint) error {
-	deploymentRoot := filepath.Clean(filepath.Join(deploymentGroupDir, ".."))
+func ImportInputs(groupDir string, artifactsDir string, bp config.Blueprint) error {
+	deploymentRoot := filepath.Clean(filepath.Join(groupDir, ".."))
 
-	g, err := bp.Group(config.GroupName(filepath.Base(deploymentGroupDir)))
+	g, err := bp.Group(config.GroupName(filepath.Base(groupDir)))
 	if err != nil {
 		return err
 	}
@@ -427,7 +427,7 @@ func ImportInputs(deploymentGroupDir string, artifactsDir string, bp config.Blue
 		return fmt.Errorf("unknown module kind for deployment group %s", g.Name)
 	}
 
-	outPath := filepath.Join(deploymentGroupDir, outFile)
+	outPath := filepath.Join(groupDir, outFile)
 	logging.Info("Writing outputs for deployment group %s to file %s", g.Name, outPath)
 	return modulewriter.WriteHclAttributes(toImport, outPath)
 }

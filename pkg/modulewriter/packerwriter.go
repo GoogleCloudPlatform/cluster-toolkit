@@ -50,17 +50,17 @@ func writePackerAutovars(vars map[string]cty.Value, dst string) error {
 	return WriteHclAttributes(vars, filepath.Join(dst, packerAutoVarFilename))
 }
 
-// writeDeploymentGroup writes any needed files to the top and module levels
+// writeGroup writes any needed files to the top and module levels
 // of the blueprint
-func (w PackerWriter) writeDeploymentGroup(
+func (w PackerWriter) writeGroup(
 	bp config.Blueprint,
 	grpIdx int,
 	groupPath string,
 	instructionsFile io.Writer,
 ) error {
-	depGroup := bp.DeploymentGroups[grpIdx]
+	g := bp.Groups[grpIdx]
 
-	for _, mod := range depGroup.Modules {
+	for _, mod := range g.Modules {
 		pure := map[string]cty.Value{}
 		for setting, v := range mod.Settings.Items() {
 			if len(config.FindIntergroupReferences(v, mod, bp)) == 0 {

@@ -36,12 +36,12 @@ import (
 
 // strings that get re-used throughout this package and others
 const (
-	HiddenGhpcDirName          = ".ghpc"
-	ArtifactsDirName           = "artifacts"
-	ExpandedBlueprintName      = "expanded_blueprint.yaml"
-	prevDeploymentGroupDirName = "previous_deployment_groups"
-	gitignoreTemplate          = "deployment.gitignore.tmpl"
-	artifactsWarningFilename   = "DO_NOT_MODIFY_THIS_DIRECTORY"
+	HiddenGhpcDirName        = ".ghpc"
+	ArtifactsDirName         = "artifacts"
+	ExpandedBlueprintName    = "expanded_blueprint.yaml"
+	prevGroupDirName         = "previous_deployment_groups"
+	gitignoreTemplate        = "deployment.gitignore.tmpl"
+	artifactsWarningFilename = "DO_NOT_MODIFY_THIS_DIRECTORY"
 )
 
 func HiddenGhpcDir(deplDir string) string {
@@ -54,7 +54,7 @@ func ArtifactsDir(deplDir string) string {
 
 // ModuleWriter interface for writing modules to a deployment
 type ModuleWriter interface {
-	writeDeploymentGroup(
+	writeGroup(
 		bp config.Blueprint,
 		grpIdx int,
 		groupPath string,
@@ -86,7 +86,7 @@ func WriteDeployment(bp config.Blueprint, deploymentDir string) error {
 	fmt.Fprintln(instructions, "Advanced Deployment Instructions")
 	fmt.Fprintln(instructions, "================================")
 
-	for ig := range bp.DeploymentGroups {
+	for ig := range bp.Groups {
 		if err := writeGroup(deploymentDir, bp, ig, instructions); err != nil {
 			return err
 		}
@@ -107,7 +107,7 @@ func WriteDeployment(bp config.Blueprint, deploymentDir string) error {
 }
 
 func writeGroup(deplPath string, bp config.Blueprint, gIdx int, instructions io.Writer) error {
-	g := bp.DeploymentGroups[gIdx]
+	g := bp.Groups[gIdx]
 	gPath, err := createGroupDir(deplPath, g)
 	if err != nil {
 		return err
@@ -122,7 +122,7 @@ func writeGroup(deplPath string, bp config.Blueprint, gIdx int, instructions io.
 		return fmt.Errorf("invalid kind in deployment group %q, got %q", g.Name, g.Kind())
 	}
 
-	if err := writer.writeDeploymentGroup(bp, gIdx, gPath, instructions); err != nil {
+	if err := writer.writeGroup(bp, gIdx, gPath, instructions); err != nil {
 		return fmt.Errorf("error writing deployment group %s: %w", g.Name, err)
 	}
 	return nil
@@ -133,7 +133,7 @@ func InstructionsPath(deploymentDir string) string {
 	return filepath.Join(deploymentDir, "instructions.txt")
 }
 
-func createGroupDir(deplPath string, g config.DeploymentGroup) (string, error) {
+func createGroupDir(deplPath string, g config.Group) (string, error) {
 	gPath := filepath.Join(deplPath, string(g.Name))
 	// Create the deployment group directory if not already created.
 	if _, err := os.Stat(gPath); errors.Is(err, os.ErrNotExist) {
@@ -211,7 +211,7 @@ func copyEmbeddedModules(base string) error {
 	return nil
 }
 
-func copyGroupSources(gPath string, g config.DeploymentGroup) error {
+func copyGroupSources(gPath string, g config.Group) error {
 	var copyEmbedded = false
 	for iMod := range g.Modules {
 		mod := &g.Modules[iMod]
@@ -290,7 +290,7 @@ func prepDepDir(depDir string) error {
 	}
 
 	// remove any existing backups of deployment group
-	prevGroupDir := filepath.Join(ghpcDir, prevDeploymentGroupDirName)
+	prevGroupDir := filepath.Join(ghpcDir, prevGroupDirName)
 	os.RemoveAll(prevGroupDir)
 	if err := os.MkdirAll(prevGroupDir, 0755); err != nil {
 		return fmt.Errorf("failed to create directory to save previous deployment groups at %s: %w", prevGroupDir, err)
@@ -355,8 +355,8 @@ func writeDestroyInstructions(w io.Writer, bp config.Blueprint, deploymentDir st
 	fmt.Fprintln(w, "-----------------")
 	fmt.Fprintln(w, "Infrastructure should be destroyed in reverse order of creation:")
 	fmt.Fprintln(w)
-	for grpIdx := len(bp.DeploymentGroups) - 1; grpIdx >= 0; grpIdx-- {
-		grp := bp.DeploymentGroups[grpIdx]
+	for grpIdx := len(bp.Groups) - 1; grpIdx >= 0; grpIdx-- {
+		grp := bp.Groups[grpIdx]
 		grpPath := filepath.Join(deploymentDir, string(grp.Name))
 		if grp.Kind() == config.TerraformKind {
 			fmt.Fprintf(w, "terraform -chdir=%s destroy\n", grpPath)

@@ -27,13 +27,13 @@ func (s *zeroSuite) TestExpandBackend(c *C) {
 	noDefBe := Blueprint{BlueprintName: "tree"}
 
 	{ // no def BE, no group BE
-		g := DeploymentGroup{Name: "clown"}
+		g := Group{Name: "clown"}
 		noDefBe.expandBackend(&g)
 		c.Check(g.TerraformBackend, DeepEquals, BE{})
 	}
 
 	{ // no def BE, group BE
-		g := DeploymentGroup{
+		g := Group{
 			Name:             "clown",
 			TerraformBackend: BE{Type: "gcs"}}
 		noDefBe.expandBackend(&g)
@@ -47,7 +47,7 @@ func (s *zeroSuite) TestExpandBackend(c *C) {
 			"leave": cty.StringVal("fall")})}
 
 	{ // def BE, no group BE
-		g := DeploymentGroup{Name: "clown"}
+		g := Group{Name: "clown"}
 		defBe.expandBackend(&g)
 
 		c.Check(g.TerraformBackend, DeepEquals, BE{ // no change
@@ -58,7 +58,7 @@ func (s *zeroSuite) TestExpandBackend(c *C) {
 	}
 
 	{ // def BE, group BE non-gcs
-		g := DeploymentGroup{
+		g := Group{
 			Name: "clown",
 			TerraformBackend: BE{
 				Type: "pure_gold",
@@ -203,7 +203,7 @@ func (s *zeroSuite) TestExpandModule(c *C) {
 			"vedi":   cty.StringVal("idav"), // not in module inputs
 			"peon":   cty.StringVal("noep"), // will be ignored
 		}),
-		DeploymentGroups: []DeploymentGroup{
+		Groups: []Group{
 			{Modules: []Module{u, m}}},
 	}
 
@@ -252,14 +252,14 @@ func (s *zeroSuite) TestValidateModuleReference(c *C) {
 	y := Module{ID: "moduleY"}
 	pkr := Module{ID: "modulePkr", Kind: PackerKind}
 
-	dg := []DeploymentGroup{
+	dg := []Group{
 		{Name: "zero", Modules: []Module{a, b}},
 		{Name: "half", Modules: []Module{pkr}},
 		{Name: "one", Modules: []Module{y}},
 	}
 
 	bp := Blueprint{
-		DeploymentGroups: dg,
+		Groups: dg,
 	}
 
 	// An intragroup reference from group 0 to module B in 0 (good)
@@ -305,20 +305,20 @@ func (s *zeroSuite) TestIntersection(c *C) {
 }
 
 func (s *zeroSuite) TestOutputNamesByGroup(c *C) {
-	zebra := DeploymentGroup{
+	zebra := Group{
 		Name: "zebra",
 		Modules: []Module{
 			{
 				ID: "stripes",
 				Outputs: []modulereader.OutputInfo{
 					{Name: "length"}}}}}
-	pony := DeploymentGroup{
+	pony := Group{
 		Name: "pony",
 		Modules: []Module{
 
 			tMod("bucephalus").set("width", ModuleRef("stripes", "length")).build(),
 		}}
-	bp := Blueprint{DeploymentGroups: []DeploymentGroup{zebra, pony}}
+	bp := Blueprint{Groups: []Group{zebra, pony}}
 
 	{
 		got, err := OutputNamesByGroup(zebra, bp)

@@ -56,12 +56,12 @@ func runDestroyCmd(cmd *cobra.Command, args []string) {
 	bp, _, err := config.NewBlueprint(expandedBlueprintFile)
 	checkErr(err)
 
-	checkErr(shell.ValidateDeploymentDirectory(bp.DeploymentGroups, deplRoot))
+	checkErr(shell.ValidateDeploymentDirectory(bp.Groups, deplRoot))
 
 	// destroy in reverse order of creation!
 	packerManifests := []string{}
-	for i := len(bp.DeploymentGroups) - 1; i >= 0; i-- {
-		group := bp.DeploymentGroups[i]
+	for i := len(bp.Groups) - 1; i >= 0; i-- {
+		group := bp.Groups[i]
 		groupDir := filepath.Join(deplRoot, string(group.Name))
 
 		var err error
