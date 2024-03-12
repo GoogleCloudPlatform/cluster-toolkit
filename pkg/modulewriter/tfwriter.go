@@ -260,14 +260,14 @@ func writeTerraformInstructions(w io.Writer, grpPath string, n config.GroupName,
 	}
 }
 
-// writeDeploymentGroup creates and sets up the terraform deployment group
-func (w TFWriter) writeDeploymentGroup(
+// writeGroup creates and sets up the terraform deployment group
+func (w TFWriter) writeGroup(
 	bp config.Blueprint,
 	groupIndex int,
 	groupPath string,
 	instructions io.Writer,
 ) error {
-	g := bp.DeploymentGroups[groupIndex]
+	g := bp.Groups[groupIndex]
 	deploymentVars, err := getUsedDeploymentVars(g, bp)
 	if err != nil {
 		return err
@@ -318,9 +318,9 @@ func (w TFWriter) writeDeploymentGroup(
 		return fmt.Errorf("error writing versions.tf file for deployment group %s: %v", g.Name, err)
 	}
 
-	multiGroupDeployment := len(bp.DeploymentGroups) > 1
+	multiGroupDeployment := len(bp.Groups) > 1
 	printImportInputs := multiGroupDeployment && groupIndex > 0
-	printExportOutputs := multiGroupDeployment && groupIndex < len(bp.DeploymentGroups)-1
+	printExportOutputs := multiGroupDeployment && groupIndex < len(bp.Groups)-1
 
 	writeTerraformInstructions(instructions, groupPath, g.Name, printExportOutputs, printImportInputs)
 
@@ -329,16 +329,16 @@ func (w TFWriter) writeDeploymentGroup(
 
 // Transfers state files from previous resource groups (in .ghpc/) to a newly written blueprint
 func (w TFWriter) restoreState(deploymentDir string) error {
-	prevDeploymentGroupPath := filepath.Join(HiddenGhpcDir(deploymentDir), prevDeploymentGroupDirName)
-	files, err := os.ReadDir(prevDeploymentGroupPath)
+	prevGroupPath := filepath.Join(HiddenGhpcDir(deploymentDir), prevGroupDirName)
+	files, err := os.ReadDir(prevGroupPath)
 	if err != nil {
-		return fmt.Errorf("error trying to read previous modules in %s, %w", prevDeploymentGroupPath, err)
+		return fmt.Errorf("error trying to read previous modules in %s, %w", prevGroupPath, err)
 	}
 
 	for _, f := range files {
 		var tfStateFiles = []string{tfStateFileName, tfStateBackupFileName}
 		for _, stateFile := range tfStateFiles {
-			src := filepath.Join(prevDeploymentGroupPath, f.Name(), stateFile)
+			src := filepath.Join(prevGroupPath, f.Name(), stateFile)
 			dest := filepath.Join(deploymentDir, f.Name(), stateFile)
 
 			if bytesRead, err := os.ReadFile(src); err == nil {
@@ -362,7 +362,7 @@ func orderKeys[T any](settings map[string]T) []string {
 	return keys
 }
 
-func getUsedDeploymentVars(group config.DeploymentGroup, bp config.Blueprint) (map[string]cty.Value, error) {
+func getUsedDeploymentVars(group config.Group, bp config.Blueprint) (map[string]cty.Value, error) {
 	res := map[string]cty.Value{
 		// labels must always be written as a variable as it is implicitly added
 		"labels": bp.Vars.Get("labels"),
@@ -430,7 +430,7 @@ func SubstituteIgcReferencesInModule(mod config.Module, igcRefs map[config.Refer
 
 // FindIntergroupVariables returns all unique intergroup references made by
 // each module settings in a group
-func FindIntergroupVariables(group config.DeploymentGroup, bp config.Blueprint) map[config.Reference]modulereader.VarInfo {
+func FindIntergroupVariables(group config.Group, bp config.Blueprint) map[config.Reference]modulereader.VarInfo {
 	res := map[config.Reference]modulereader.VarInfo{}
 	igcRefs := group.FindAllIntergroupReferences(bp)
 	for _, r := range igcRefs {

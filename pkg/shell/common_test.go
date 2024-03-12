@@ -88,7 +88,7 @@ func (s *MySuite) TestMergeMapsWithoutLoss(c *C) {
 
 func (s *MySuite) TestValidateDeploymentDirectory(c *C) {
 	dir := c.MkDir()
-	groups := []config.DeploymentGroup{
+	groups := []config.Group{
 		{
 			Name: "zero",
 		},

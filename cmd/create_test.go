@@ -272,7 +272,7 @@ func (s *MySuite) TestIsOverwriteAllowed_Present(c *C) {
 
 	prev := config.Blueprint{
 		GhpcVersion: "TaleOfBygoneYears",
-		DeploymentGroups: []config.DeploymentGroup{
+		Groups: []config.Group{
 			{Name: "isildur"}}}
 	if err := prev.Export(filepath.Join(artDir, "expanded_blueprint.yaml")); err != nil {
 		c.Fatal(err)
@@ -282,7 +282,7 @@ func (s *MySuite) TestIsOverwriteAllowed_Present(c *C) {
 	{ // Superset
 		bp := config.Blueprint{
 			GhpcVersion: "TaleOfBygoneYears",
-			DeploymentGroups: []config.DeploymentGroup{
+			Groups: []config.Group{
 				{Name: "isildur"},
 				{Name: "elendil"}}}
 		c.Check(checkOverwriteAllowed(p, bp, noW, noForce), ErrorMatches, ".* already exists, use -w to overwrite")
@@ -292,7 +292,7 @@ func (s *MySuite) TestIsOverwriteAllowed_Present(c *C) {
 	{ // Version mismatch
 		bp := config.Blueprint{
 			GhpcVersion: "TheAlloyOfLaw",
-			DeploymentGroups: []config.DeploymentGroup{
+			Groups: []config.Group{
 				{Name: "isildur"}}}
 		c.Check(checkOverwriteAllowed(p, bp, noW, noForce), ErrorMatches, ".*ghpc_version has changed.*")
 		c.Check(checkOverwriteAllowed(p, bp, yesW, noForce), ErrorMatches, ".*ghpc_version has changed.*")
@@ -302,7 +302,7 @@ func (s *MySuite) TestIsOverwriteAllowed_Present(c *C) {
 	{ // Subset
 		bp := config.Blueprint{
 			GhpcVersion: "TaleOfBygoneYears",
-			DeploymentGroups: []config.DeploymentGroup{
+			Groups: []config.Group{
 				{Name: "aragorn"}}}
 		c.Check(checkOverwriteAllowed(p, bp, noW, noForce), ErrorMatches, `.* already exists, use -w to overwrite`)
 		c.Check(checkOverwriteAllowed(p, bp, yesW, noForce), ErrorMatches, `.*remove a deployment group "isildur".*`)

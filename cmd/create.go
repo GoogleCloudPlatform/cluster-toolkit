@@ -283,11 +283,11 @@ func checkOverwriteAllowed(depDir string, bp config.Blueprint, overwriteFlag boo
 	}
 
 	newGroups := map[config.GroupName]bool{}
-	for _, g := range bp.DeploymentGroups {
+	for _, g := range bp.Groups {
 		newGroups[g.Name] = true
 	}
 
-	for _, g := range prev.DeploymentGroups {
+	for _, g := range prev.Groups {
 		if !newGroups[g.Name] {
 			return forceErr(fmt.Errorf("you are attempting to remove a deployment group %q, which is not supported", g.Name))
 		}

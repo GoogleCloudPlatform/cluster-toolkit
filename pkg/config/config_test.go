@@ -119,7 +119,7 @@ func (s *zeroSuite) TestExpand(c *C) {
 	bp := Blueprint{
 		BlueprintName: "smurf",
 		Vars:          NewDict(map[string]cty.Value{"deployment_name": cty.StringVal("green")}),
-		DeploymentGroups: []DeploymentGroup{{
+		Groups: []Group{{
 			Name:    "abel",
 			Modules: []Module{mod},
 		}},
@@ -133,30 +133,30 @@ func (s *zeroSuite) TestCheckModulesAndGroups(c *C) {
 	zebra := tMod("zebra").packer().build()
 
 	{ // Duplicate module id same group
-		g := DeploymentGroup{Name: "ice", Modules: []Module{pony, pony}}
-		err := checkModulesAndGroups(Blueprint{DeploymentGroups: []DeploymentGroup{g}})
+		g := Group{Name: "ice", Modules: []Module{pony, pony}}
+		err := checkModulesAndGroups(Blueprint{Groups: []Group{g}})
 		c.Check(err, ErrorMatches, ".*pony used more than once")
 	}
 	{ // Duplicate module id different groups
-		ice := DeploymentGroup{Name: "ice", Modules: []Module{pony}}
-		fire := DeploymentGroup{Name: "fire", Modules: []Module{pony}}
-		err := checkModulesAndGroups(Blueprint{DeploymentGroups: []DeploymentGroup{ice, fire}})
+		ice := Group{Name: "ice", Modules: []Module{pony}}
+		fire := Group{Name: "fire", Modules: []Module{pony}}
+		err := checkModulesAndGroups(Blueprint{Groups: []Group{ice, fire}})
 		c.Check(err, ErrorMatches, ".*pony used more than once")
 	}
 	{ // Duplicate group name
-		ice := DeploymentGroup{Name: "ice", Modules: []Module{pony}}
-		ice9 := DeploymentGroup{Name: "ice", Modules: []Module{zebra}}
-		err := checkModulesAndGroups(Blueprint{DeploymentGroups: []DeploymentGroup{ice, ice9}})
+		ice := Group{Name: "ice", Modules: []Module{pony}}
+		ice9 := Group{Name: "ice", Modules: []Module{zebra}}
+		err := checkModulesAndGroups(Blueprint{Groups: []Group{ice, ice9}})
 		c.Check(err, ErrorMatches, ".*ice used more than once")
 	}
 	{ // Mixing module kinds
-		g := DeploymentGroup{Name: "ice", Modules: []Module{pony, zebra}}
-		err := checkModulesAndGroups(Blueprint{DeploymentGroups: []DeploymentGroup{g}})
+		g := Group{Name: "ice", Modules: []Module{pony, zebra}}
+		err := checkModulesAndGroups(Blueprint{Groups: []Group{g}})
 		c.Check(err, NotNil)
 	}
 	{ // Empty group
-		g := DeploymentGroup{Name: "ice"}
-		err := checkModulesAndGroups(Blueprint{DeploymentGroups: []DeploymentGroup{g}})
+		g := Group{Name: "ice"}
+		err := checkModulesAndGroups(Blueprint{Groups: []Group{g}})
 		c.Check(err, NotNil)
 	}
 }
@@ -192,7 +192,7 @@ func (s *zeroSuite) TestListUnusedVariables(c *C) {
 			"stripes":         cty.NumberIntVal(3),
 			"zebra":           MustParseExpression("var.pony + var.stripes").AsValue(),
 		}),
-		DeploymentGroups: []DeploymentGroup{{Modules: []Module{{
+		Groups: []Group{{Modules: []Module{{
 			Settings: NewDict(map[string]cty.Value{
 				"circus": GlobalRef("pony").AsValue(),
 			}),
@@ -206,9 +206,9 @@ func (s *zeroSuite) TestListUnusedVariables(c *C) {
 
 func (s *zeroSuite) TestAddKindToModules(c *C) {
 	bp := Blueprint{
-		DeploymentGroups: []DeploymentGroup{
+		Groups: []Group{
 			{Modules: []Module{{ID: "grain"}}}}}
-	mod := &bp.DeploymentGroups[0].Modules[0]
+	mod := &bp.Groups[0].Modules[0]
 
 	mod.Kind = ModuleKind{} // kind is absent, set to terraform
 	bp.addKindToModules()
@@ -229,13 +229,13 @@ func (s *zeroSuite) TestAddKindToModules(c *C) {
 
 func (s *zeroSuite) TestGetModule(c *C) {
 	bp := Blueprint{
-		DeploymentGroups: []DeploymentGroup{{
+		Groups: []Group{{
 			Modules: []Module{{ID: "blue"}}}},
 	}
 	{
 		m, err := bp.Module("blue")
 		c.Check(err, IsNil)
-		c.Check(m, Equals, &bp.DeploymentGroups[0].Modules[0])
+		c.Check(m, Equals, &bp.Groups[0].Modules[0])
 	}
 	{
 		m, err := bp.Module("red")
@@ -319,7 +319,7 @@ func (s *zeroSuite) TestNewBlueprint(c *C) {
 	bp := Blueprint{
 		Vars: NewDict(map[string]cty.Value{
 			"deployment_name": cty.StringVal("zebra")}),
-		DeploymentGroups: []DeploymentGroup{{
+		Groups: []Group{{
 			Modules: []Module{{
 				ID: "pony"}}}},
 	}
@@ -596,14 +596,14 @@ func (s *zeroSuite) TestSkipValidator(c *C) {
 
 func (s *zeroSuite) TestModuleGroup(c *C) {
 	bp := Blueprint{
-		DeploymentGroups: []DeploymentGroup{
+		Groups: []Group{
 			{Modules: []Module{
 				{ID: "Waldo"},
 			}}}}
 
 	{
 		got := bp.ModuleGroupOrDie("Waldo")
-		c.Check(got, DeepEquals, bp.DeploymentGroups[0])
+		c.Check(got, DeepEquals, bp.Groups[0])
 	}
 
 	{
@@ -622,7 +622,7 @@ func (s *zeroSuite) TestValidateModuleSettingReference(c *C) {
 		Vars: NewDict(map[string]cty.Value{
 			"var1": cty.True,
 		}),
-		DeploymentGroups: []DeploymentGroup{
+		Groups: []Group{
 			{Name: "group1", Modules: []Module{mod11}},
 			{Name: "groupP", Modules: []Module{pkr}},
 			{Name: "group2", Modules: []Module{mod21, mod22}},

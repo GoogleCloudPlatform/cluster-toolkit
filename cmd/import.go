@@ -50,6 +50,6 @@ func runImportCmd(cmd *cobra.Command, args []string) {
 	bp, _, err := config.NewBlueprint(expandedBlueprintFile)
 	checkErr(err)
 
-	checkErr(shell.ValidateDeploymentDirectory(bp.DeploymentGroups, deplRoot))
+	checkErr(shell.ValidateDeploymentDirectory(bp.Groups, deplRoot))
 	checkErr(shell.ImportInputs(groupDir, artifactsDir, bp))
 }

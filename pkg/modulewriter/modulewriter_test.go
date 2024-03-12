@@ -77,19 +77,18 @@ func (s *MySuite) getBlueprintForTest() config.Blueprint {
 			"moduleLabel": cty.StringVal("moduleLabelValue"),
 		}),
 	}
-	testDeploymentGroups := []config.DeploymentGroup{
-		{
-			Name:    "test_resource_group",
-			Modules: []config.Module{testModule, testModuleWithLabels},
-		},
-	}
 	return config.Blueprint{
 		BlueprintName: "simple",
 		Vars: config.NewDict(map[string]cty.Value{
 			"deployment_name": cty.StringVal("deployment_name"),
 			"project_id":      cty.StringVal("test-project"),
 		}),
-		DeploymentGroups: testDeploymentGroups,
+		Groups: []config.Group{
+			{
+				Name:    "test_resource_group",
+				Modules: []config.Module{testModule, testModuleWithLabels},
+			},
+		},
 	}
 }
 
@@ -115,7 +114,7 @@ func isDeploymentDirPrepped(depDirectoryPath string) error {
 		return fmt.Errorf(".ghpc working dir does not exist: %s: %w", ghpcDir, err)
 	}
 
-	prevModuleDir := filepath.Join(ghpcDir, prevDeploymentGroupDirName)
+	prevModuleDir := filepath.Join(ghpcDir, prevGroupDirName)
 	if _, err := os.Stat(prevModuleDir); os.IsNotExist(err) {
 		return fmt.Errorf("previous deployment group directory does not exist: %s: %w", prevModuleDir, err)
 	}
@@ -153,7 +152,7 @@ func (s *MySuite) TestPrepDepDir_OverwriteRealDep(c *C) {
 	c.Check(isDeploymentDirPrepped(depDir), IsNil)
 
 	// Check prev resource groups were moved
-	prevModuleDir := filepath.Join(depDir, ".ghpc", prevDeploymentGroupDirName)
+	prevModuleDir := filepath.Join(depDir, ".ghpc", prevGroupDirName)
 	files1, _ := os.ReadDir(prevModuleDir)
 	c.Check(len(files1) > 0, Equals, true)
 
@@ -182,7 +181,7 @@ func (s *zeroSuite) TestCreateGroupDir(c *C) {
 	deplDir := c.MkDir()
 
 	{ // Ok
-		got, err := createGroupDir(deplDir, config.DeploymentGroup{Name: "ukulele"})
+		got, err := createGroupDir(deplDir, config.Group{Name: "ukulele"})
 		c.Check(err, IsNil)
 		c.Check(got, Equals, filepath.Join(deplDir, "ukulele"))
 		stat, err := os.Stat(got)
@@ -193,7 +192,7 @@ func (s *zeroSuite) TestCreateGroupDir(c *C) {
 	{ // Dir already exists
 		dir := filepath.Join(deplDir, "guitar")
 		c.Assert(os.Mkdir(dir, 0755), IsNil)
-		got, err := createGroupDir(deplDir, config.DeploymentGroup{Name: "guitar"})
+		got, err := createGroupDir(deplDir, config.Group{Name: "guitar"})
 		c.Check(err, IsNil)
 		c.Check(got, Equals, dir)
 	}
@@ -211,7 +210,7 @@ func (s *MySuite) TestRestoreTfState(c *C) {
 	depDir := filepath.Join(s.testDir, "test_restore_state")
 	deploymentGroupName := "fake_resource_group"
 
-	prevDeploymentGroup := filepath.Join(HiddenGhpcDir(depDir), prevDeploymentGroupDirName, deploymentGroupName)
+	prevDeploymentGroup := filepath.Join(HiddenGhpcDir(depDir), prevGroupDirName, deploymentGroupName)
 	curDeploymentGroup := filepath.Join(depDir, deploymentGroupName)
 	prevStateFile := filepath.Join(prevDeploymentGroup, tfStateFileName)
 	prevBuStateFile := filepath.Join(prevDeploymentGroup, tfStateBackupFileName)
@@ -504,7 +503,7 @@ func (s *MySuite) TestWriteDeploymentGroup_PackerWriter(c *C) {
 		Vars: config.NewDict(map[string]cty.Value{
 			"golf": cty.NumberIntVal(17),
 		}),
-		DeploymentGroups: []config.DeploymentGroup{
+		Groups: []config.Group{
 			{Name: "bread", Modules: []config.Module{otherMod}},
 			{Name: "green", Modules: []config.Module{mod}},
 		},
@@ -517,7 +516,7 @@ func (s *MySuite) TestWriteDeploymentGroup_PackerWriter(c *C) {
 	}
 	instructions := new(strings.Builder)
 
-	c.Assert(testWriter.writeDeploymentGroup(bp, 1, dir, instructions), IsNil)
+	c.Assert(testWriter.writeGroup(bp, 1, dir, instructions), IsNil)
 	_, err := os.Stat(filepath.Join(moduleDir, packerAutoVarFilename))
 	c.Assert(err, IsNil)
 }

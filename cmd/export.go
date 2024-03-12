@@ -51,7 +51,7 @@ func runExportCmd(cmd *cobra.Command, args []string) {
 	deplRoot, groupDir := parseExportImportArgs(args)
 
 	artifactsDir := getArtifactsDir(deplRoot)
-	deploymentGroup := config.GroupName(filepath.Base(groupDir))
+	groupName := config.GroupName(filepath.Base(groupDir))
 
 	checkErr(shell.CheckWritableDir(artifactsDir))
 
@@ -59,9 +59,9 @@ func runExportCmd(cmd *cobra.Command, args []string) {
 	bp, _, err := config.NewBlueprint(expandedBlueprintFile)
 	checkErr(err)
 
-	checkErr(shell.ValidateDeploymentDirectory(bp.DeploymentGroups, deplRoot))
+	checkErr(shell.ValidateDeploymentDirectory(bp.Groups, deplRoot))
 
-	group, err := bp.Group(deploymentGroup)
+	group, err := bp.Group(groupName)
 	checkErr(err)
 
 	if group.Kind() == config.PackerKind {
