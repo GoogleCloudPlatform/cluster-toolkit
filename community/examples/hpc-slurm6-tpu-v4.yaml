@@ -14,11 +14,11 @@
 
 ---
 
-blueprint_name: slurm6-tpu
+blueprint_name: slurm6-tpu-v4
 
 vars:
   project_id: ## Set GCP Project ID Here ##
-  deployment_name: slurm6-tpu
+  deployment_name: slurm6-tpu-v4
   region: us-central2
   zone: us-central2-b
 
@@ -49,16 +49,21 @@ deployment_groups:
           # ATTENTION: (i.e. dot_product, flash)
           # STEPS: steps to run (i.e. 100, 1000)
 
+          set -e -o pipefail
+
           # Start virtual environment.
           virtualenv venv
-          source venv/bin/activate
+          source venv/local/bin/activate
 
-          # Clone maxtext repository and install dependencies.
+          # Clone maxtext repository, lock version of maxtext and
+          # install dependencies.
           git clone https://github.com/google/maxtext
           cd maxtext/
+          git reset --hard 39a3f19e832016741be803ef5253333e2f434cb8
           bash setup.sh
 
           # Run maxtext benchmark test.
+          # (i.e.) python3 MaxText/train.py MaxText/configs/base.yml run_name=1xv4-128 base_output_directory=/opt/apps/scripts/tpu-test/output/ dataset_path=gs://dataset_tpu/dataset async_checkpointing=False attention=dot_product steps=100
           python3 MaxText/train.py MaxText/configs/base.yml run_name=<RUN_NAME> base_output_directory=/opt/apps/scripts/tpu-test/output/ dataset_path=<STORAGE_BUCKET> async_checkpointing=False attention=<ATTENTION> steps=<STEPS>
 
   - id: tpu_nodeset
