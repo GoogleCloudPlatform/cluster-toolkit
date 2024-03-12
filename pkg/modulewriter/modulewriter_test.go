@@ -21,7 +21,6 @@ import (
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/deploymentio"
 	"hpc-toolkit/pkg/modulereader"
-	"hpc-toolkit/pkg/sourcereader"
 	"os"
 	"path/filepath"
 	"strings"
@@ -30,72 +29,14 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/hashicorp/hcl/v2/ext/typeexpr"
 	"github.com/hashicorp/hcl/v2/hclwrite"
-	"github.com/spf13/afero"
 	"github.com/zclconf/go-cty/cty"
 
 	. "gopkg.in/check.v1"
 )
 
-type MySuite struct {
-	testDir            string
-	terraformModuleDir string
-}
-
-func (s *MySuite) SetUpSuite(c *C) {
-	s.testDir = c.MkDir()
-
-	// Create dummy module in testDir
-	s.terraformModuleDir = filepath.Join(s.testDir, "tfModule")
-	if err := os.Mkdir(s.terraformModuleDir, 0755); err != nil {
-		c.Fatal(err)
-	}
-}
-
-// Test Data Producers
-func (s *MySuite) getBlueprintForTest() config.Blueprint {
-	testModule := config.Module{
-		Source: s.terraformModuleDir,
-		Kind:   config.TerraformKind,
-		ID:     "testModule",
-		Settings: config.NewDict(map[string]cty.Value{
-			"deployment_name": cty.NullVal(cty.String),
-			"project_id":      cty.NullVal(cty.String),
-		}),
-		Outputs: []modulereader.OutputInfo{
-			{
-				Name:        "test-output",
-				Description: "",
-				Sensitive:   false,
-			},
-		},
-	}
-	testModuleWithLabels := config.Module{
-		Source: s.terraformModuleDir,
-		ID:     "testModuleWithLabels",
-		Kind:   config.TerraformKind,
-		Settings: config.NewDict(map[string]cty.Value{
-			"moduleLabel": cty.StringVal("moduleLabelValue"),
-		}),
-	}
-	return config.Blueprint{
-		BlueprintName: "simple",
-		Vars: config.NewDict(map[string]cty.Value{
-			"deployment_name": cty.StringVal("deployment_name"),
-			"project_id":      cty.StringVal("test-project"),
-		}),
-		Groups: []config.Group{
-			{
-				Name:    "test_resource_group",
-				Modules: []config.Module{testModule, testModuleWithLabels},
-			},
-		},
-	}
-}
-
 type zeroSuite struct{}
 
 var _ = []any{ // initialize suites
-	Suite(&MySuite{}),
 	Suite(&zeroSuite{})}
 
 func Test(t *testing.T) {
@@ -122,8 +63,8 @@ func isDeploymentDirPrepped(depDirectoryPath string) error {
 	return nil
 }
 
-func (s *MySuite) TestPrepDepDir(c *C) {
-	depDir := filepath.Join(s.testDir, "dep_prep_test_dir")
+func (s *zeroSuite) TestPrepDepDir(c *C) {
+	depDir := filepath.Join(c.MkDir(), "test_prep_dir")
 
 	// Prep a dir that does not yet exist
 	c.Check(prepDepDir(depDir), IsNil)
@@ -134,11 +75,13 @@ func (s *MySuite) TestPrepDepDir(c *C) {
 	c.Check(isDeploymentDirPrepped(depDir), IsNil)
 }
 
-func (s *MySuite) TestPrepDepDir_OverwriteRealDep(c *C) {
+func (s *zeroSuite) TestPrepDepDir_OverwriteRealDep(c *C) {
 	// Test with a real deployment previously written
-	bp := s.getBlueprintForTest()
-	bp.Vars = bp.Vars.With("deployment_name", cty.StringVal("test_prep_dir"))
-	depDir := filepath.Join(s.testDir, "test_prep_dir")
+	bp := config.Blueprint{
+		Vars:   config.Dict{}.With("deployment_name", cty.StringVal("test_prep_dir")),
+		Groups: []config.Group{{Name: "ozon"}},
+	}
+	depDir := filepath.Join(c.MkDir(), "test_prep_dir")
 
 	// writes a full deployment w/ actual resource groups
 	WriteDeployment(bp, depDir)
@@ -161,16 +104,19 @@ func (s *MySuite) TestPrepDepDir_OverwriteRealDep(c *C) {
 }
 
 // modulewriter.go
-func (s *MySuite) TestWriteDeployment(c *C) {
-	aferoFS := afero.NewMemMapFs()
-	aferoFS.MkdirAll("modules/red/pink", 0755)
-	afero.WriteFile(aferoFS, "modules/red/pink/main.tf", []byte("pink"), 0644)
-	aferoFS.MkdirAll("community/modules/green/lime", 0755)
-	afero.WriteFile(aferoFS, "community/modules/green/lime/main.tf", []byte("lime"), 0644)
-	sourcereader.ModuleFS = afero.NewIOFS(aferoFS)
-
-	bp := s.getBlueprintForTest()
-	dir := filepath.Join(s.testDir, "test_write_deployment")
+func (s *zeroSuite) TestWriteDeployment(c *C) {
+	bp := config.Blueprint{
+		Vars: config.Dict{}.With("deployment_name", cty.StringVal("green")),
+		Groups: []config.Group{{
+			Name: "ozon",
+			Modules: []config.Module{{
+				Source: "some/path",
+				ID:     "whole",
+				Kind:   config.TerraformKind,
+			}},
+		}},
+	}
+	dir := filepath.Join(c.MkDir(), "depl")
 
 	c.Check(WriteDeployment(bp, dir), IsNil)
 	// Overwriting the deployment succeeds
@@ -198,24 +144,24 @@ func (s *zeroSuite) TestCreateGroupDir(c *C) {
 	}
 }
 
-func (s *MySuite) TestRestoreTfState(c *C) {
+func (s *zeroSuite) TestRestoreTfState(c *C) {
 	// set up dir structure
 	//
-	// └── test_restore_state
+	// └── test_dir
 	//    ├── .ghpc
 	//       └── previous_resource_groups
 	//          └── fake_resource_group
 	//             └── terraform.tfstate
 	//    └── fake_resource_group
-	depDir := filepath.Join(s.testDir, "test_restore_state")
-	deploymentGroupName := "fake_resource_group"
+	depDir := c.MkDir()
+	groupName := "fake_resource_group"
 
-	prevDeploymentGroup := filepath.Join(HiddenGhpcDir(depDir), prevGroupDirName, deploymentGroupName)
-	curDeploymentGroup := filepath.Join(depDir, deploymentGroupName)
-	prevStateFile := filepath.Join(prevDeploymentGroup, tfStateFileName)
-	prevBuStateFile := filepath.Join(prevDeploymentGroup, tfStateBackupFileName)
-	os.MkdirAll(prevDeploymentGroup, 0755)
-	os.MkdirAll(curDeploymentGroup, 0755)
+	prevGroup := filepath.Join(HiddenGhpcDir(depDir), prevGroupDirName, groupName)
+	curGroup := filepath.Join(depDir, groupName)
+	prevStateFile := filepath.Join(prevGroup, tfStateFileName)
+	prevBuStateFile := filepath.Join(prevGroup, tfStateBackupFileName)
+	os.MkdirAll(prevGroup, 0755)
+	os.MkdirAll(curGroup, 0755)
 	emptyFile, _ := os.Create(prevStateFile)
 	emptyFile.Close()
 	emptyFile, _ = os.Create(prevBuStateFile)
@@ -225,8 +171,8 @@ func (s *MySuite) TestRestoreTfState(c *C) {
 	testWriter.restoreState(depDir)
 
 	// check state file was moved to current resource group dir
-	curStateFile := filepath.Join(curDeploymentGroup, tfStateFileName)
-	curBuStateFile := filepath.Join(curDeploymentGroup, tfStateBackupFileName)
+	curStateFile := filepath.Join(curGroup, tfStateFileName)
+	curBuStateFile := filepath.Join(curGroup, tfStateBackupFileName)
 	_, err := os.Stat(curStateFile)
 	c.Check(err, IsNil)
 	_, err = os.Stat(curBuStateFile)
@@ -260,13 +206,13 @@ func TestGetTypeTokensRelaxed(t *testing.T) {
 	}
 }
 
-func (s *MySuite) TestWriteHclFile(c *C) {
+func (s *zeroSuite) TestWriteHclFile(c *C) {
 	hclF := hclwrite.NewEmptyFile()
 	hclF.Body().SetAttributeValue("zebra", cty.NumberIntVal(0))
 
 	// Success
 	baseFilename := "main.tf_TestCreateBaseFile"
-	goodPath := filepath.Join(s.testDir, baseFilename)
+	goodPath := filepath.Join(c.MkDir(), baseFilename)
 	c.Assert(writeHclFile(goodPath, hclF), IsNil)
 
 	fi, err := os.Stat(goodPath)
@@ -292,13 +238,10 @@ func stringExistsInFile(str string, filename string) (bool, error) {
 	return strings.Contains(string(b), str), nil
 }
 
-func (s *MySuite) TestWriteMain(c *C) {
+func (s *zeroSuite) TestWriteMain(c *C) {
 	// Setup
-	testMainDir := filepath.Join(s.testDir, "TestWriteMain")
+	testMainDir := c.MkDir()
 	mainFilePath := filepath.Join(testMainDir, "main.tf")
-	if err := os.Mkdir(testMainDir, 0755); err != nil {
-		c.Fatal("Failed to create test dir for creating main.tf file")
-	}
 
 	mods := []config.Module{{
 		ID:     "test_module",
@@ -344,13 +287,10 @@ func (s *MySuite) TestWriteMain(c *C) {
 	}
 }
 
-func (s *MySuite) TestWriteOutputs(c *C) {
+func (s *zeroSuite) TestWriteOutputs(c *C) {
 	// Setup
-	testOutputsDir := filepath.Join(s.testDir, "TestWriteOutputs")
+	testOutputsDir := c.MkDir()
 	outputsFilePath := filepath.Join(testOutputsDir, "outputs.tf")
-	if err := os.Mkdir(testOutputsDir, 0755); err != nil {
-		c.Fatal("Failed to create test directory for creating outputs.tf file")
-	}
 
 	// Simple success, no modules
 	testModules := []config.Module{}
@@ -383,13 +323,10 @@ func (s *MySuite) TestWriteOutputs(c *C) {
 
 }
 
-func (s *MySuite) TestWriteVariables(c *C) {
+func (s *zeroSuite) TestWriteVariables(c *C) {
 	// Setup
-	testVarDir := filepath.Join(s.testDir, "TestWriteVariables")
+	testVarDir := c.MkDir()
 	varsFilePath := filepath.Join(testVarDir, "variables.tf")
-	if err := os.Mkdir(testVarDir, 0755); err != nil {
-		c.Fatal("Failed to create test directory for creating variables.tf file")
-	}
 
 	noIntergroupVars := []modulereader.VarInfo{}
 
@@ -483,7 +420,7 @@ func (s *zeroSuite) TestKind(c *C) {
 	c.Assert(pkrw.kind(), Equals, config.PackerKind)
 }
 
-func (s *MySuite) TestWriteDeploymentGroup_PackerWriter(c *C) {
+func (s *zeroSuite) TestWriteDeploymentGroup_PackerWriter(c *C) {
 	deploymentio := deploymentio.GetDeploymentioLocal()
 	testWriter := PackerWriter{}
 
@@ -521,7 +458,7 @@ func (s *MySuite) TestWriteDeploymentGroup_PackerWriter(c *C) {
 	c.Assert(err, IsNil)
 }
 
-func (s *MySuite) TestWritePackerAutoVars(c *C) {
+func (s *zeroSuite) TestWritePackerAutoVars(c *C) {
 	vars := config.Dict{}.
 		With("deployment_name", cty.StringVal("golf")).
 		With("testkey", cty.False)
