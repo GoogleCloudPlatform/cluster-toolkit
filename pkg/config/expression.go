@@ -61,6 +61,10 @@ func (r Reference) AsValue() cty.Value {
 	return r.AsExpression().AsValue()
 }
 
+func (r Reference) String() string {
+	return string(r.AsExpression().Tokenize().Bytes())
+}
+
 // Takes traversal in "blueprint namespace" (e.g. `vars.zone` or `homefs.mount`)
 // and transforms it to "terraform namespace" (e.g. `var.zone` or `module.homefs.mount`).
 func bpTraversalToTerraform(t hcl.Traversal) (hcl.Traversal, error) {
@@ -396,15 +400,22 @@ func valueReferences(v cty.Value) map[Reference]cty.Path {
 	return r
 }
 
-func (bp *Blueprint) Eval(v cty.Value) (cty.Value, error) {
+func (bp *Blueprint) evalCtx() (*hcl.EvalContext, error) {
 	vars, err := bp.evalVars()
+	if err != nil {
+		return nil, err
+	}
+	return &hcl.EvalContext{
+		Variables: map[string]cty.Value{"var": vars.AsObject()},
+		Functions: bp.functions()}, nil
+}
+
+func (bp *Blueprint) Eval(v cty.Value) (cty.Value, error) {
+	ctx, err := bp.evalCtx()
 	if err != nil {
 		return cty.NilVal, err
 	}
-	ctx := hcl.EvalContext{
-		Variables: map[string]cty.Value{"var": vars.AsObject()},
-		Functions: bp.functions()}
-	return eval(v, &ctx)
+	return eval(v, ctx)
 }
 
 func (bp *Blueprint) EvalDict(d Dict) (Dict, error) {
@@ -432,7 +443,7 @@ type pToken struct {
 func tokenizeBpLine(s string) ([]pToken, error) {
 	line := s // copy
 	toks := []pToken{}
-	var exp Expression
+	var found string
 	var err error
 	bsRe := regexp.MustCompile(`\\*$`) // to count number of backslashes at the end
 
@@ -452,7 +463,11 @@ func tokenizeBpLine(s string) ([]pToken, error) {
 			toks = append(toks, pToken{s: "$("}) // add "$("
 		} else { // found beginning of expression
 			offset := len(line) - len(s)
-			exp, s, err = greedyParseHcl(s) // parse after "$("
+			found, s, err = greedyParseHcl(s) // parse after "$("
+			if err != nil {
+				return nil, prepareParseHclErr(err, line, offset)
+			}
+			exp, err := BlueprintExpressionLiteralToExpression(found)
 			if err != nil {
 				return nil, prepareParseHclErr(err, line, offset)
 			}
@@ -544,7 +559,7 @@ func parseBpLit(s string) (cty.Value, error) {
 // The shortest expression is returned. E.g:
 // "var.hi) $(var.there)" -> "var.hi"
 // "try(var.this) + one(var.time)) tail" -> "try(var.this) + one(var.time)"
-func greedyParseHcl(s string) (Expression, string, error) {
+func greedyParseHcl(s string) (string, string, error) {
 	err := errors.New("no closing parenthesis")
 	for i := 0; i < len(s); i++ {
 		if s[i] != ')' {
@@ -552,12 +567,11 @@ func greedyParseHcl(s string) (Expression, string, error) {
 		}
 		_, diag := hclsyntax.ParseExpression([]byte(s[:i]), "", hcl.Pos{})
 		if !diag.HasErrors() { // found an expression
-			exp, err := BlueprintExpressionLiteralToExpression(s[:i])
-			return exp, s[i+1:], err
+			return s[:i], s[i+1:], nil
 		}
 		err = diag // save error, try to find another closing bracket
 	}
-	return nil, s, err
+	return "", s, err
 }
 
 func buildStringInterpolation(pts []pToken) (Expression, error) {

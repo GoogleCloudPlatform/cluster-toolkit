@@ -71,7 +71,7 @@ deployment_groups:
           connect_mode: ((file(var.connect_mode_file_path)))
           deployment_name: ((var.deployment_name))
           labels: ((var.labels))
-          local_mount: /home
+          local_mount: ((file(ghpc_stage("files/local_mount.txt"))))
           name: ((module.network0.subnetwork_name))
           network_id: ((module.network0.network_id))
           project_id: ((var.project_id))

@@ -289,3 +289,13 @@ func checkOverwriteAllowed(depDir string, bp config.Blueprint, overwriteFlag boo
 
 	return nil
 }
+
+// Reads an expanded blueprint from the artifacts directory
+// IMPORTANT: returned blueprint is "materialized", see config.Blueprint.Materialize
+func artifactBlueprintOrDie(artDir string) (config.Blueprint, *config.YamlCtx) {
+	path := filepath.Join(artDir, modulewriter.ExpandedBlueprintName)
+	bp, ctx, err := config.NewBlueprint(path)
+	checkErr(err, ctx)
+	checkErr(bp.Materialize(), ctx)
+	return bp, ctx
+}

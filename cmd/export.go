@@ -18,7 +18,6 @@ package cmd
 import (
 	"errors"
 	"hpc-toolkit/pkg/config"
-	"hpc-toolkit/pkg/modulewriter"
 	"hpc-toolkit/pkg/shell"
 	"path/filepath"
 
@@ -55,9 +54,7 @@ func runExportCmd(cmd *cobra.Command, args []string) {
 
 	checkErr(shell.CheckWritableDir(artifactsDir), nil)
 
-	expandedBlueprintFile := filepath.Join(artifactsDir, modulewriter.ExpandedBlueprintName)
-	bp, ctx, err := config.NewBlueprint(expandedBlueprintFile)
-	checkErr(err, ctx)
+	bp, ctx := artifactBlueprintOrDie(artifactsDir)
 
 	checkErr(shell.ValidateDeploymentDirectory(bp.Groups, deplRoot), ctx)
 

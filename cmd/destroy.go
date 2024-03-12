@@ -52,9 +52,7 @@ func runDestroyCmd(cmd *cobra.Command, args []string) {
 		checkErr(fmt.Errorf("artifacts path %s is not a directory", artifactsDir), nil)
 	}
 
-	expandedBlueprintFile := filepath.Join(artifactsDir, modulewriter.ExpandedBlueprintName)
-	bp, ctx, err := config.NewBlueprint(expandedBlueprintFile)
-	checkErr(err, ctx)
+	bp, ctx := artifactBlueprintOrDie(artifactsDir)
 
 	checkErr(shell.ValidateDeploymentDirectory(bp.Groups, deplRoot), ctx)
 

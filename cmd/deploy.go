@@ -69,10 +69,7 @@ func runDeployCmd(cmd *cobra.Command, args []string) {
 func doDeploy(deplRoot string) {
 	artDir := getArtifactsDir(deplRoot)
 	checkErr(shell.CheckWritableDir(artDir), nil)
-
-	expandedBlueprintFile := filepath.Join(artDir, modulewriter.ExpandedBlueprintName)
-	bp, ctx, err := config.NewBlueprint(expandedBlueprintFile)
-	checkErr(err, ctx)
+	bp, ctx := artifactBlueprintOrDie(artDir)
 	groups := bp.Groups
 	checkErr(validateRuntimeDependencies(deplRoot, groups), ctx)
 	checkErr(shell.ValidateDeploymentDirectory(groups, deplRoot), ctx)

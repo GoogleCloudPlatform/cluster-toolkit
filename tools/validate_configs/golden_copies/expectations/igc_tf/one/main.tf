@@ -26,7 +26,7 @@ module "homefs" {
   connect_mode    = file(var.connect_mode_file_path)
   deployment_name = var.deployment_name
   labels          = var.labels
-  local_mount     = "/home"
+  local_mount     = file("../.ghpc/staged/local_mount.txt_76c024cd89")
   name            = var.subnetwork_name_network0
   network_id      = var.network_id_network0
   project_id      = var.project_id
