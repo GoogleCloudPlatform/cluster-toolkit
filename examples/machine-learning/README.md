@@ -303,7 +303,7 @@ cd hpc-toolkit/examples/machine-learning/nccl-tests
 ### Import the PyTorch image from the NVIDIA Container Registry
 
 ```shell
-import_pytorch_container.sh
+bash import_pytorch_container.sh
 ```
 
 ### Build NCCL
