@@ -25,8 +25,9 @@ import (
 )
 
 func (s *MySuite) TestSetCLIVariables(c *C) {
-	ds := config.DeploymentSettings{}
-	ds.Vars.Set("deployment_name", cty.StringVal("bush"))
+	ds := config.DeploymentSettings{
+		Vars: config.Dict{}.
+			With("deployment_name", cty.StringVal("bush"))}
 
 	vars := []string{
 		"project_id=cli_test_project_id",
@@ -103,18 +104,14 @@ func (s *MySuite) TestSetBackendConfig(c *C) {
 
 func (s *MySuite) TestMergeDeploymentSettings(c *C) {
 	ds1 := config.DeploymentSettings{
-		Vars: config.NewDict(map[string]cty.Value{
-			"project_id":      cty.StringVal("ds_test_project_id"),
-			"deployment_name": cty.StringVal("ds_deployment_name"),
-		}),
-	}
+		Vars: config.Dict{}.
+			With("project_id", cty.StringVal("ds_test_project_id")).
+			With("deployment_name", cty.StringVal("ds_deployment_name"))}
 
 	bp1 := config.Blueprint{
-		Vars: config.NewDict(map[string]cty.Value{
-			"project_id":  cty.StringVal("bp_test_project_id"),
-			"example_var": cty.StringVal("bp_example_value"),
-		}),
-	}
+		Vars: config.Dict{}.
+			With("project_id", cty.StringVal("bp_test_project_id")).
+			With("example_var", cty.StringVal("bp_example_value"))}
 
 	// test priority-based merging of deployment variables
 	mergeDeploymentSettings(&bp1, ds1)
@@ -275,7 +272,7 @@ func (s *MySuite) TestIsOverwriteAllowed_Present(c *C) {
 
 	prev := config.Blueprint{
 		GhpcVersion: "TaleOfBygoneYears",
-		DeploymentGroups: []config.DeploymentGroup{
+		Groups: []config.Group{
 			{Name: "isildur"}}}
 	if err := prev.Export(filepath.Join(artDir, "expanded_blueprint.yaml")); err != nil {
 		c.Fatal(err)
@@ -285,7 +282,7 @@ func (s *MySuite) TestIsOverwriteAllowed_Present(c *C) {
 	{ // Superset
 		bp := config.Blueprint{
 			GhpcVersion: "TaleOfBygoneYears",
-			DeploymentGroups: []config.DeploymentGroup{
+			Groups: []config.Group{
 				{Name: "isildur"},
 				{Name: "elendil"}}}
 		c.Check(checkOverwriteAllowed(p, bp, noW, noForce), ErrorMatches, ".* already exists, use -w to overwrite")
@@ -295,7 +292,7 @@ func (s *MySuite) TestIsOverwriteAllowed_Present(c *C) {
 	{ // Version mismatch
 		bp := config.Blueprint{
 			GhpcVersion: "TheAlloyOfLaw",
-			DeploymentGroups: []config.DeploymentGroup{
+			Groups: []config.Group{
 				{Name: "isildur"}}}
 		c.Check(checkOverwriteAllowed(p, bp, noW, noForce), ErrorMatches, ".*ghpc_version has changed.*")
 		c.Check(checkOverwriteAllowed(p, bp, yesW, noForce), ErrorMatches, ".*ghpc_version has changed.*")
@@ -305,7 +302,7 @@ func (s *MySuite) TestIsOverwriteAllowed_Present(c *C) {
 	{ // Subset
 		bp := config.Blueprint{
 			GhpcVersion: "TaleOfBygoneYears",
-			DeploymentGroups: []config.DeploymentGroup{
+			Groups: []config.Group{
 				{Name: "aragorn"}}}
 		c.Check(checkOverwriteAllowed(p, bp, noW, noForce), ErrorMatches, `.* already exists, use -w to overwrite`)
 		c.Check(checkOverwriteAllowed(p, bp, yesW, noForce), ErrorMatches, `.*remove a deployment group "isildur".*`)

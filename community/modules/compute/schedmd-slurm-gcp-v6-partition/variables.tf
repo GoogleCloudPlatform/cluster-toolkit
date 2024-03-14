@@ -137,6 +137,9 @@ variable "nodeset" {
     zones                = optional(list(string), [])
     zone_target_shape    = optional(string, "ANY_SINGLE_ZONE")
     reservation_name     = optional(string)
+    startup_script = optional(list(object({
+      filename = string
+    content = string })), [])
   }))
   default = []
 
@@ -150,7 +153,7 @@ variable "nodeset_tpu" {
   description = "Define TPU nodesets, as a list."
   type = list(object({
     node_count_static      = optional(number, 0)
-    node_count_dynamic_max = optional(number, 1)
+    node_count_dynamic_max = optional(number, 5)
     nodeset_name           = string
     enable_public_ip       = optional(bool, false)
     node_type              = string
@@ -163,7 +166,7 @@ variable "nodeset_tpu" {
     })
     tf_version   = string
     preemptible  = optional(bool, false)
-    preserve_tpu = optional(bool, true)
+    preserve_tpu = optional(bool, false)
     zone         = string
     data_disks   = optional(list(string), [])
     docker_image = optional(string, "")
@@ -172,6 +175,8 @@ variable "nodeset_tpu" {
       email  = optional(string)
       scopes = optional(list(string), ["https://www.googleapis.com/auth/cloud-platform"])
     }))
+    project_id = string
+    reserved   = optional(string, false)
   }))
   default = []
 

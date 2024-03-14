@@ -1,0 +1,128 @@
+# Copyright 2024 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: hpc-cluster-slurm-v6
+
+vars:
+  project_id:  ## Set GCP Project ID Here ##
+  deployment_name: hpc-small-v6
+  region: us-west4
+  zone: us-west4-c
+
+deployment_groups:
+- group: primary
+  modules:
+  # Source is an embedded resource, denoted by "resources/*" without ./, ../, /
+  # as a prefix. To refer to a local resource, prefix with ./, ../ or /
+  # Example - ./resources/network/vpc
+  - id: network
+    source: modules/network/vpc
+
+  - id: homefs
+    source: community/modules/file-system/nfs-server
+    use: [network]
+    settings:
+      local_mounts: [/home]
+      auto_delete_disk: true
+
+  - id: bucket
+    source: community/modules/file-system/cloud-storage-bucket
+    settings:
+      name_prefix: input-data
+      local_mount: /data
+      random_suffix: true
+      mount_options: defaults,_netdev,implicit_dirs,allow_other
+
+  # Used by the nodesets, this tests startup scripts that are nodeset specific
+  - id: startup-nodeset
+    source: modules/scripts/startup-script
+    settings:
+      runners:
+      - type: shell
+        destination: startup-test-partition.sh
+        content: |
+          #!/bin/bash
+          set -ex
+          echo "Hello partition! Hostname: \$(hostname)"
+
+  - id: debug_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network]
+    settings:
+      node_count_dynamic_max: 4
+      machine_type: n2-standard-2
+      enable_placement: false
+
+  - id: debug_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use:
+    - homefs
+    - bucket
+    - debug_nodeset
+    settings:
+      partition_name: debug
+      is_default: true
+
+  - id: compute_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use:
+    - network
+    - startup-nodeset
+    settings:
+      node_count_dynamic_max: 20
+
+  - id: compute_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use:
+    - homefs
+    - bucket
+    - compute_nodeset
+    settings:
+      partition_name: compute
+
+  # Used by the login and controller, the controller applies it to all partitions as well.
+  - id: startup-all
+    source: modules/scripts/startup-script
+    settings:
+      runners:
+      - type: shell
+        destination: startup-test-all.sh
+        content: |
+          #!/bin/bash
+          set -ex
+          echo "Hello world! Hostname: \$(hostname)"
+
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    use:
+    - network
+    settings:
+      name_prefix: login
+      disable_login_public_ips: false
+
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    use:
+    - network
+    - debug_partition
+    - compute_partition
+    - homefs
+    - bucket
+    - slurm_login
+    settings:
+      disable_controller_public_ips: false
+      controller_startup_script: $(startup-all.startup_script)
+      login_startup_script: $(startup-all.startup_script)

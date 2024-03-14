@@ -378,3 +378,17 @@ variable "enable_oslogin" {
     error_message = "Allowed string values for var.enable_oslogin are \"ENABLE\", \"DISABLE\", or \"INHERIT\"."
   }
 }
+
+variable "allocate_ip" {
+  description = <<-EOT
+  If not null, allocate IPs with the given configuration. See details at
+  https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_address
+  EOT
+  type = object({
+    address_type = optional(string, "INTERNAL")
+    purpose      = optional(string),
+    network_tier = optional(string),
+    ip_version   = optional(string, "IPV4"),
+  })
+  default = null
+}

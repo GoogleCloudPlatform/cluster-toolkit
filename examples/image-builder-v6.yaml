@@ -1,0 +1,119 @@
+# Copyright 2024 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+# See instructions at
+# https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/examples#image-builderyaml-
+
+blueprint_name: image-builder-v6
+
+vars:
+  project_id:  ## Set GCP Project ID Here ##
+  deployment_name: image-builder-v6-001
+  region: us-central1
+  zone: us-central1-c
+  custom_image:
+    family: my-slurm-image
+    project: $(vars.project_id)
+  disk_size: 32
+
+# Documentation for each of the modules used below can be found at
+# https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: network
+    source: modules/network/vpc
+
+  - id: scripts_for_image
+    source: modules/scripts/startup-script
+    settings:
+      runners:
+      - type: shell
+        destination: generate_hello.sh
+        content: |
+          #!/bin/sh
+          echo "Hello World" > /home/hello.txt
+
+  - id: builder_sa
+    source: community/modules/project/service-account
+    settings:
+      name: pkr
+      project_roles:
+      - compute.instanceAdmin.v1
+      - logging.logWriter
+      - monitoring.metricWriter
+      - storage.objectViewer
+
+- group: packer
+  modules:
+  - id: custom-image
+    source: modules/packer/custom-image
+    kind: packer
+    use:
+    - network
+    - scripts_for_image
+    - builder_sa
+    settings:
+      source_image_project_id: [schedmd-slurm-public]
+      # see latest in https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#published-image-family
+      source_image_family: slurm-gcp-6-4-hpc-rocky-linux-8
+      # You can find size of source image by using following command
+      # gcloud compute images describe-from-family <source_image_family> --project schedmd-slurm-public
+      disk_size: $(vars.disk_size)
+      image_family: $(vars.custom_image.family)
+      state_timeout: 15m
+
+- group: cluster
+  modules:
+  - id: compute_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network]
+    settings:
+      node_count_dynamic_max: 20
+      disk_size_gb: $(vars.disk_size)
+      instance_image: $(vars.custom_image)
+      instance_image_custom: true
+      bandwidth_tier: gvnic_enabled
+
+  - id: compute_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use: [compute_nodeset]
+    settings:
+      partition_name: compute
+      is_default: true
+
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    use: [network]
+    settings:
+      name_prefix: login
+      disable_login_public_ips: false
+      disk_size_gb: $(vars.disk_size)
+      instance_image: $(vars.custom_image)
+      instance_image_custom: true
+
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    use:
+    - network
+    - compute_partition
+    - slurm_login
+    settings:
+      disable_controller_public_ips: false
+      disk_size_gb: $(vars.disk_size)
+      instance_image: $(vars.custom_image)
+      instance_image_custom: true

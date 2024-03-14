@@ -124,6 +124,7 @@ limitations under the License.
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 0.13.0 |
 | <a name="requirement_local"></a> [local](#requirement\_local) | >= 2.0.0 |
 | <a name="requirement_null"></a> [null](#requirement\_null) | ~> 3.0 |
+| <a name="requirement_random"></a> [random](#requirement\_random) | >= 3.0 |
 
 ## Providers
 
@@ -131,13 +132,14 @@ limitations under the License.
 |------|---------|
 | <a name="provider_local"></a> [local](#provider\_local) | >= 2.0.0 |
 | <a name="provider_null"></a> [null](#provider\_null) | ~> 3.0 |
+| <a name="provider_random"></a> [random](#provider\_random) | >= 3.0 |
 
 ## Modules
 
 | Name | Source | Version |
 |------|--------|---------|
 | <a name="module_instance_template"></a> [instance\_template](#module\_instance\_template) | terraform-google-modules/vm/google//modules/instance_template | ~> 8.0 |
-| <a name="module_netstorage_startup_script"></a> [netstorage\_startup\_script](#module\_netstorage\_startup\_script) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | v1.28.1&depth=1 |
+| <a name="module_netstorage_startup_script"></a> [netstorage\_startup\_script](#module\_netstorage\_startup\_script) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | v1.29.0&depth=1 |
 
 ## Resources
 
@@ -146,6 +148,7 @@ limitations under the License.
 | [local_file.job_template](https://registry.terraform.io/providers/hashicorp/local/latest/docs/resources/file) | resource |
 | [local_file.submit_script](https://registry.terraform.io/providers/hashicorp/local/latest/docs/resources/file) | resource |
 | [null_resource.submit_job](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
+| [random_id.submit_job_suffix](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/id) | resource |
 
 ## Inputs
 

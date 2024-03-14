@@ -168,7 +168,7 @@ limitations under the License.
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.2.0 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.3.0 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 4.73.0 |
 | <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 4.73.0 |
 | <a name="requirement_null"></a> [null](#requirement\_null) | >= 3.0 |
@@ -185,7 +185,7 @@ limitations under the License.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_netstorage_startup_script"></a> [netstorage\_startup\_script](#module\_netstorage\_startup\_script) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | v1.28.1&depth=1 |
+| <a name="module_netstorage_startup_script"></a> [netstorage\_startup\_script](#module\_netstorage\_startup\_script) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | v1.29.0&depth=1 |
 
 ## Resources
 
@@ -193,6 +193,7 @@ limitations under the License.
 |------|------|
 | [google-beta_google_compute_instance.compute_vm](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_compute_instance) | resource |
 | [google-beta_google_compute_resource_policy.placement_policy](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_compute_resource_policy) | resource |
+| [google_compute_address.compute_ip](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_address) | resource |
 | [google_compute_disk.boot_disk](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_disk) | resource |
 | [null_resource.image](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
 | [null_resource.replace_vm_trigger_from_placement](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
@@ -203,6 +204,7 @@ limitations under the License.
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | <a name="input_add_deployment_name_before_prefix"></a> [add\_deployment\_name\_before\_prefix](#input\_add\_deployment\_name\_before\_prefix) | If true, the names of VMs and disks will always be prefixed with `deployment_name` to enable uniqueness across deployments.<br>See `name_prefix` for further details on resource naming behavior. | `bool` | `false` | no |
+| <a name="input_allocate_ip"></a> [allocate\_ip](#input\_allocate\_ip) | If not null, allocate IPs with the given configuration. See details at<br>https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_address | <pre>object({<br>    address_type = optional(string, "INTERNAL")<br>    purpose      = optional(string),<br>    network_tier = optional(string),<br>    ip_version   = optional(string, "IPV4"),<br>  })</pre> | `null` | no |
 | <a name="input_auto_delete_boot_disk"></a> [auto\_delete\_boot\_disk](#input\_auto\_delete\_boot\_disk) | Controls if boot disk should be auto-deleted when instance is deleted. | `bool` | `true` | no |
 | <a name="input_automatic_restart"></a> [automatic\_restart](#input\_automatic\_restart) | Specifies if the instance should be restarted if it was terminated by Compute Engine (not a user). | `bool` | `null` | no |
 | <a name="input_bandwidth_tier"></a> [bandwidth\_tier](#input\_bandwidth\_tier) | Tier 1 bandwidth increases the maximum egress bandwidth for VMs.<br>  Using the `tier_1_enabled` setting will enable both gVNIC and TIER\_1 higher bandwidth networking.<br>  Using the `gvnic_enabled` setting will only enable gVNIC and will not enable TIER\_1.<br>  Note that TIER\_1 only works with specific machine families & shapes and must be using an image that supports gVNIC. See [official docs](https://cloud.google.com/compute/docs/networking/configure-vm-with-high-bandwidth-configuration) for more details. | `string` | `"not_enabled"` | no |

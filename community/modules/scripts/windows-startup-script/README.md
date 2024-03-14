@@ -94,7 +94,10 @@ No resources.
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_install_nvidia_driver"></a> [install\_nvidia\_driver](#input\_install\_nvidia\_driver) | Generate a PowerShell script that installs NVIDIA GPU drivers and the CUDA Toolkit | `bool` | `false` | no |
+| <a name="input_http_proxy"></a> [http\_proxy](#input\_http\_proxy) | Set system default web (http and https) proxy for use by Invoke-WebRequest | `string` | `""` | no |
+| <a name="input_install_nvidia_driver"></a> [install\_nvidia\_driver](#input\_install\_nvidia\_driver) | Install NVIDIA GPU drivers and the CUDA Toolkit using script specified by var.install\_nvidia\_driver\_script | `bool` | `false` | no |
+| <a name="input_install_nvidia_driver_args"></a> [install\_nvidia\_driver\_args](#input\_install\_nvidia\_driver\_args) | Arguments to supply to NVIDIA driver install script | `string` | `"/s /n"` | no |
+| <a name="input_install_nvidia_driver_script"></a> [install\_nvidia\_driver\_script](#input\_install\_nvidia\_driver\_script) | Install script for NVIDIA drivers specified by http/https URL | `string` | `"https://developer.download.nvidia.com/compute/cuda/12.1.1/local_installers/cuda_12.1.1_531.14_windows.exe"` | no |
 
 ## Outputs
 

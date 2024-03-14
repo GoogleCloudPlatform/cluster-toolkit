@@ -17,14 +17,14 @@ controller for optimal performance at different scales.
 >
 > ```shell
 > # Install Python3 and run
-> pip3 install -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/5.10.4/scripts/requirements.txt
+> pip3 install -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/5.10.6/scripts/requirements.txt
 > ```
 
-[SchedMD/slurm-gcp]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/5.10.4
-[slurm\_controller\_instance]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/5.10.4/terraform/slurm_cluster/modules/slurm_controller_instance
-[slurm\_instance\_template]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/5.10.4/terraform/slurm_cluster/modules/slurm_instance_template
+[SchedMD/slurm-gcp]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/5.10.6
+[slurm\_controller\_instance]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/5.10.6/terraform/slurm_cluster/modules/slurm_controller_instance
+[slurm\_instance\_template]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/5.10.6/terraform/slurm_cluster/modules/slurm_instance_template
 [slurm-ug]: https://goo.gle/slurm-gcp-user-guide.
-[requirements.txt]: https://github.com/GoogleCloudPlatform/slurm-gcp/blob/5.10.4/scripts/requirements.txt
+[requirements.txt]: https://github.com/GoogleCloudPlatform/slurm-gcp/blob/5.10.6/scripts/requirements.txt
 [enable\_cleanup\_compute]: #input\_enable\_cleanup\_compute
 [enable\_cleanup\_subscriptions]: #input\_enable\_cleanup\_subscriptions
 [enable\_reconfigure]: #input\_enable\_reconfigure
@@ -94,12 +94,12 @@ This option has some additional requirements:
   development environment deploying the cluster. One can use following commands:
 
   ```bash
-  pip3 install -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/5.10.4/scripts/requirements.txt
+  pip3 install -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/5.10.6/scripts/requirements.txt
   ```
 
   For more information, see the [description][optdeps] of this module.
 
-[optdeps]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/5.10.4/terraform/slurm_cluster#optional
+[optdeps]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/5.10.6/terraform/slurm_cluster#optional
 
 ## Custom Images
 
@@ -215,8 +215,8 @@ limitations under the License.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_slurm_controller_instance"></a> [slurm\_controller\_instance](#module\_slurm\_controller\_instance) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_controller_instance | 5.10.4 |
-| <a name="module_slurm_controller_template"></a> [slurm\_controller\_template](#module\_slurm\_controller\_template) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template | 5.10.4 |
+| <a name="module_slurm_controller_instance"></a> [slurm\_controller\_instance](#module\_slurm\_controller\_instance) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_controller_instance | 5.10.6 |
+| <a name="module_slurm_controller_template"></a> [slurm\_controller\_template](#module\_slurm\_controller\_template) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template | 5.10.6 |
 
 ## Resources
 
@@ -252,6 +252,7 @@ limitations under the License.
 | <a name="input_enable_cleanup_subscriptions"></a> [enable\_cleanup\_subscriptions](#input\_enable\_cleanup\_subscriptions) | Enables automatic cleanup of pub/sub subscriptions managed by this module, when<br>cluster is destroyed.<br><br>NOTE: Requires Python and pip packages listed at the following link:<br>https://github.com/GoogleCloudPlatform/slurm-gcp/blob/3979e81fc5e4f021b5533a23baa474490f4f3614/scripts/requirements.txt<br><br>*WARNING*: Toggling this may temporarily impact var.enable\_reconfigure behavior. | `bool` | `false` | no |
 | <a name="input_enable_confidential_vm"></a> [enable\_confidential\_vm](#input\_enable\_confidential\_vm) | Enable the Confidential VM configuration. Note: the instance image must support option. | `bool` | `false` | no |
 | <a name="input_enable_devel"></a> [enable\_devel](#input\_enable\_devel) | Enables development mode. Not for production use. | `bool` | `false` | no |
+| <a name="input_enable_external_prolog_epilog"></a> [enable\_external\_prolog\_epilog](#input\_enable\_external\_prolog\_epilog) | Automatically enable a script that will execute prolog and epilog scripts<br>shared under /opt/apps from the controller to compute nodes. | `bool` | `false` | no |
 | <a name="input_enable_oslogin"></a> [enable\_oslogin](#input\_enable\_oslogin) | Enables Google Cloud os-login for user login and authentication for VMs.<br>See https://cloud.google.com/compute/docs/oslogin | `bool` | `true` | no |
 | <a name="input_enable_reconfigure"></a> [enable\_reconfigure](#input\_enable\_reconfigure) | Enables automatic Slurm reconfiguration when Slurm configuration changes (e.g.<br>slurm.conf.tpl, partition details). Compute instances and resource policies<br>(e.g. placement groups) will be destroyed to align with new configuration.<br>NOTE: Requires Python and Google Pub/Sub API.<br>*WARNING*: Toggling this will impact the running workload. Deployed compute nodes<br>will be destroyed and their jobs will be requeued. | `bool` | `false` | no |
 | <a name="input_enable_shielded_vm"></a> [enable\_shielded\_vm](#input\_enable\_shielded\_vm) | Enable the Shielded VM configuration. Note: the instance image must support option. | `bool` | `false` | no |

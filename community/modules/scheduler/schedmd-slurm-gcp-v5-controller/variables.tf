@@ -15,7 +15,7 @@
  */
 
 # Most variables have been sourced and modified from the SchedMD/slurm-gcp
-# github repository: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/5.10.4
+# github repository: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/5.10.6
 
 variable "access_config" {
   description = "Access configurations, i.e. IPs via which the VM instance can be accessed via the Internet."
@@ -276,6 +276,15 @@ variable "enable_oslogin" {
 variable "enable_confidential_vm" {
   type        = bool
   description = "Enable the Confidential VM configuration. Note: the instance image must support option."
+  default     = false
+}
+
+variable "enable_external_prolog_epilog" {
+  description = <<EOD
+Automatically enable a script that will execute prolog and epilog scripts
+shared under /opt/apps from the controller to compute nodes.
+EOD
+  type        = bool
   default     = false
 }
 

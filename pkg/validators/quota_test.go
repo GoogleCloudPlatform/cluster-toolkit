@@ -210,11 +210,10 @@ requirements:
 	for _, tc := range tests {
 		t.Run(tc.yml, func(t *testing.T) {
 			var in config.Dict
-			bp := config.Blueprint{}
-			bp.Vars.
-				Set("project_id", cty.StringVal("apple")).
-				Set("region", cty.StringVal("narnia")).
-				Set("zone", cty.StringVal("narnia-51"))
+			bp := config.Blueprint{Vars: config.Dict{}.
+				With("project_id", cty.StringVal("apple")).
+				With("region", cty.StringVal("narnia")).
+				With("zone", cty.StringVal("narnia-51"))}
 			if err := yaml.Unmarshal([]byte(tc.yml), &in); err != nil {
 				t.Fatal("failed to unmarshal yaml")
 			}

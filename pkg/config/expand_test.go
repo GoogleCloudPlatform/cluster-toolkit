@@ -27,13 +27,13 @@ func (s *zeroSuite) TestExpandBackend(c *C) {
 	noDefBe := Blueprint{BlueprintName: "tree"}
 
 	{ // no def BE, no group BE
-		g := DeploymentGroup{Name: "clown"}
+		g := Group{Name: "clown"}
 		noDefBe.expandBackend(&g)
 		c.Check(g.TerraformBackend, DeepEquals, BE{})
 	}
 
 	{ // no def BE, group BE
-		g := DeploymentGroup{
+		g := Group{
 			Name:             "clown",
 			TerraformBackend: BE{Type: "gcs"}}
 		noDefBe.expandBackend(&g)
@@ -47,7 +47,7 @@ func (s *zeroSuite) TestExpandBackend(c *C) {
 			"leave": cty.StringVal("fall")})}
 
 	{ // def BE, no group BE
-		g := DeploymentGroup{Name: "clown"}
+		g := Group{Name: "clown"}
 		defBe.expandBackend(&g)
 
 		c.Check(g.TerraformBackend, DeepEquals, BE{ // no change
@@ -58,7 +58,7 @@ func (s *zeroSuite) TestExpandBackend(c *C) {
 	}
 
 	{ // def BE, group BE non-gcs
-		g := DeploymentGroup{
+		g := Group{
 			Name: "clown",
 			TerraformBackend: BE{
 				Type: "pure_gold",
@@ -91,154 +91,109 @@ func (s *zeroSuite) TestAddListValue(c *C) {
 
 func (s *zeroSuite) TestUseModule(c *C) {
 	// Setup
-	used := Module{
-		ID:     "UsedModule",
-		Source: "usedSource",
-	}
-	varInfoNumber := modulereader.VarInfo{Name: "val1", Type: cty.Number}
-	ref := ModuleRef("UsedModule", "val1").AsValue()
+	type VarInfo = modulereader.VarInfo // alias for brevity
 
-	{ // Pass: No Inputs, No Outputs
-		mod := Module{ID: "lime", Source: "modSource"}
-
-		setTestModuleInfo(mod, modulereader.ModuleInfo{})
-		setTestModuleInfo(used, modulereader.ModuleInfo{})
+	{ // No Inputs, No Outputs
+		used := tMod("used").build()
+		mod := tMod("lime").build()
 
 		useModule(&mod, used)
 		c.Check(mod.Settings, DeepEquals, Dict{})
 	}
 
-	{ // Pass: Has Output, no matching input
-		mod := Module{ID: "lime", Source: "limeTree"}
+	{ // Has Output, no matching input
+		used := tMod("used").outputs("mud").build()
+		mod := tMod("lime").build()
 
-		setTestModuleInfo(mod, modulereader.ModuleInfo{})
-		setTestModuleInfo(used, modulereader.ModuleInfo{
-			Outputs: []modulereader.OutputInfo{{Name: "val1"}},
-		})
 		useModule(&mod, used)
 		c.Check(mod.Settings, DeepEquals, Dict{})
 	}
 
-	{ // Pass: Single Input/Output match - no lists
-		mod := Module{ID: "lime", Source: "limeTree"}
-		setTestModuleInfo(mod, modulereader.ModuleInfo{
-			Inputs: []modulereader.VarInfo{varInfoNumber},
-		})
-		setTestModuleInfo(used, modulereader.ModuleInfo{
-			Outputs: []modulereader.OutputInfo{{Name: "val1"}},
-		})
+	{ // Single Input/Output match - no lists
+		used := tMod("used").outputs("mud").build()
+		mod := tMod("lime").inputs("mud").build()
+
+		useModule(&mod, used)
+		ref := AsProductOfModuleUse(ModuleRef("used", "mud").AsValue(), "used")
+		c.Check(mod.Settings, DeepEquals, Dict{}.With("mud", ref))
+	}
+
+	{ // Single Input/Output match - but setting was in blueprint so no-op
+		used := tMod("used").outputs("mud").build()
+		mod := tMod("lime").inputs("mud").set("mud", "alkaline").build()
+
+		useModule(&mod, used)
+		c.Check(mod.Settings, DeepEquals, Dict{}.With("mud", cty.StringVal("alkaline")))
+	}
+
+	{ // re-apply used modules, should be a no-op, no settings were in blueprint
+		used := tMod("used").outputs("mud").build()
+		cur := AsProductOfModuleUse(ModuleRef("used", "mud").AsValue(), "used")
+		mod := tMod("lime").inputs("mud").set("mud", cur).build()
+
+		useModule(&mod, used)
+		c.Check(mod.Settings, DeepEquals, Dict{}.With("mud", cur))
+	}
+
+	{ // Single Input/Output match, input is list, not already set
+		used := tMod("used").outputs("mud").build()
+		mod := tMod("lime").
+			inputs(VarInfo{Name: "mud", Type: cty.List(cty.Number)}).build()
 
 		useModule(&mod, used)
 		c.Check(mod.Settings.Items(), DeepEquals, map[string]cty.Value{
-			"val1": AsProductOfModuleUse(ref, "UsedModule"),
-		})
+			"mud": AsProductOfModuleUse(
+				MustParseExpression(`flatten([module.used.mud])`).AsValue(),
+				"used")})
 	}
 
-	{ // Pass: Single Input/Output match - but setting was in blueprint so no-op
-		mod := Module{ID: "lime", Source: "limeTree"}
-		mod.Settings.Set("val1", ref)
-		setTestModuleInfo(mod, modulereader.ModuleInfo{
-			Inputs: []modulereader.VarInfo{varInfoNumber},
-		})
-		setTestModuleInfo(used, modulereader.ModuleInfo{
-			Outputs: []modulereader.OutputInfo{{Name: "val1"}},
-		})
+	{ // Setting exists, Input is List, was not set in blueprint
+		used := tMod("used").outputs("mud").build()
+
+		cur := AsProductOfModuleUse(
+			MustParseExpression(`[module.other.mud]`).AsValue(), "other")
+
+		mod := tMod("lime").
+			inputs(VarInfo{Name: "mud", Type: cty.List(cty.Number)}).
+			set("mud", cur).build()
 
 		useModule(&mod, used)
-		c.Check(mod.Settings.Items(), DeepEquals, map[string]cty.Value{"val1": ref})
+		c.Check(mod.Settings, DeepEquals, Dict{}.With("mud",
+			AsProductOfModuleUse(
+				MustParseExpression(`flatten([module.used.mud,[module.other.mud]])`).AsValue(),
+				"other", "used")))
 	}
 
-	{ // Pass: re-apply used modules, should be a no-op
-		// Assume no settings were in blueprint
-		mod := Module{ID: "lime", Source: "limeTree"}
-		mod.Settings.Set("val1", AsProductOfModuleUse(ref, "UsedModule"))
-		setTestModuleInfo(mod, modulereader.ModuleInfo{
-			Inputs: []modulereader.VarInfo{varInfoNumber},
-		})
-		setTestModuleInfo(used, modulereader.ModuleInfo{
-			Outputs: []modulereader.OutputInfo{{Name: "val1"}},
-		})
+	{ // Setting exists, Input is List, was set in blueprint
+		used := tMod("used").outputs("mud").build()
+
+		cur := MustParseExpression(`[module.other.mud]`).AsValue() // sic. Not a ProductOfModuleUse
+		mod := tMod("lime").
+			inputs(VarInfo{Name: "mud", Type: cty.List(cty.Number)}).
+			set("mud", cur).build()
 
 		useModule(&mod, used)
-		c.Check(mod.Settings.Items(), DeepEquals, map[string]cty.Value{
-			"val1": AsProductOfModuleUse(ref, "UsedModule")})
-	}
-
-	{ // Pass: Single Input/Output match, input is list, not already set
-		mod := Module{ID: "lime", Source: "limeTree"}
-		setTestModuleInfo(mod, modulereader.ModuleInfo{
-			Inputs: []modulereader.VarInfo{{Name: "val1", Type: cty.List(cty.Number)}},
-		})
-		setTestModuleInfo(used, modulereader.ModuleInfo{
-			Outputs: []modulereader.OutputInfo{{Name: "val1"}},
-		})
-		useModule(&mod, used)
-		c.Check(mod.Settings.Items(), DeepEquals, map[string]cty.Value{
-			"val1": AsProductOfModuleUse(
-				MustParseExpression(`flatten([module.UsedModule.val1])`).AsValue(),
-				"UsedModule")})
-	}
-
-	{ // Pass: Setting exists, Input is List, Output is not a list
-		// Assume setting was not set in blueprint
-		mod := Module{ID: "lime", Source: "limeTree"}
-		mod.Settings.Set("val1", AsProductOfModuleUse(cty.TupleVal([]cty.Value{ref}), "other"))
-		setTestModuleInfo(mod, modulereader.ModuleInfo{
-			Inputs: []modulereader.VarInfo{{Name: "val1", Type: cty.List(cty.Number)}},
-		})
-		setTestModuleInfo(used, modulereader.ModuleInfo{
-			Outputs: []modulereader.OutputInfo{{Name: "val1"}},
-		})
-
-		useModule(&mod, used)
-		c.Check(mod.Settings.Items(), DeepEquals, map[string]cty.Value{
-			"val1": AsProductOfModuleUse(
-				MustParseExpression(`flatten([module.UsedModule.val1,[module.UsedModule.val1]])`).AsValue(),
-				"other", "UsedModule")})
-	}
-
-	{ // Pass: Setting exists, Input is List, Output is not a list
-		// Assume setting was set in blueprint
-		mod := Module{ID: "lime", Source: "limeTree"}
-		mod.Settings.Set("val1", cty.TupleVal([]cty.Value{ref}))
-		setTestModuleInfo(mod, modulereader.ModuleInfo{
-			Inputs: []modulereader.VarInfo{{Name: "val1", Type: cty.List(cty.Number)}},
-		})
-		setTestModuleInfo(used, modulereader.ModuleInfo{
-			Outputs: []modulereader.OutputInfo{{Name: "val1"}},
-		})
-
-		useModule(&mod, used)
-		c.Check(mod.Settings.Items(), DeepEquals, map[string]cty.Value{
-			"val1": cty.TupleVal([]cty.Value{ref})})
+		c.Check(mod.Settings, DeepEquals, Dict{}.With("mud", cur)) // no change
 	}
 }
 
 func (s *zeroSuite) TestExpandModule(c *C) {
-	u := Module{ID: "potato", Source: c.TestName() + "/potato"}
-	setTestModuleInfo(u, modulereader.ModuleInfo{
-		Outputs: []modulereader.OutputInfo{
-			{Name: "az"},
-			{Name: "rose"},
-			{Name: "peony"}}})
+	type VarInfo = modulereader.VarInfo // alias for brevity
 
-	m := Module{
-		ID:     "yarn",
-		Source: c.TestName() + "/yarn",
-		Use:    ModuleIDs{u.ID},
-		Settings: NewDict(map[string]cty.Value{
-			"az": cty.StringVal("alpha"),
-		})}
-	setTestModuleInfo(m, modulereader.ModuleInfo{
-		Inputs: []modulereader.VarInfo{
-			{Name: "az"},     // set explicitly
-			{Name: "buki"},   // set as global var
-			{Name: "labels"}, // set as global var
-			{Name: "rose", Type: cty.List(cty.String)}, // used from `u`
-			{Name: "peony"},  // used from `u`, global var ignored
-			{Name: "orchid"}, // not present anywhere
-		},
-	})
+	u := tMod("potato").outputs("az", "rose", "peony").build()
+
+	m := tMod("yarn").
+		inputs(
+			VarInfo{Name: "az"},                               // set explicitly
+			VarInfo{Name: "buki"},                             // set as global var
+			VarInfo{Name: "labels"},                           // set as global var
+			VarInfo{Name: "rose", Type: cty.List(cty.String)}, // used from `u`
+			VarInfo{Name: "peony"},                            // used from `u`, global var ignored
+			VarInfo{Name: "orchid"},                           // not present anywhere
+		).
+		uses("potato").
+		set("az", "alpha").
+		build()
 
 	bp := Blueprint{
 		Vars: NewDict(map[string]cty.Value{
@@ -248,7 +203,7 @@ func (s *zeroSuite) TestExpandModule(c *C) {
 			"vedi":   cty.StringVal("idav"), // not in module inputs
 			"peon":   cty.StringVal("noep"), // will be ignored
 		}),
-		DeploymentGroups: []DeploymentGroup{
+		Groups: []Group{
 			{Modules: []Module{u, m}}},
 	}
 
@@ -266,29 +221,22 @@ func (s *zeroSuite) TestExpandModule(c *C) {
 }
 
 func (s *zeroSuite) TestApplyGlobalVarsInModule(c *C) {
-	mod := Module{
-		ID:     "carrot",
-		Source: c.TestName() + "/cabbage",
-		Kind:   TerraformKind,
-		Settings: NewDict(map[string]cty.Value{
-			"silver": cty.StringVal("glagol")})}
+	builder := tMod("carrot").
+		inputs(
+			"gold",   // doesn't exist in vars
+			"pyrite", // exists in vars, not set in module
+			"silver", // exists in vars, set in module
+			"helium", // to be set to ModuleID
+		).
+		set("silver", "glagol")
+	builder.i.Metadata.Ghpc.InjectModuleId = "helium"
+	mod := builder.build()
 
 	vars := NewDict(map[string]cty.Value{
 		"polonium": cty.StringVal("az"),
 		"pyrite":   cty.StringVal("buki"),
 		"silver":   cty.StringVal("vedi"),
 	})
-
-	setTestModuleInfo(mod, modulereader.ModuleInfo{
-		Inputs: []modulereader.VarInfo{
-			{Name: "gold"},   // doesn't exist in vars
-			{Name: "pyrite"}, // exists in vars, not set in module
-			{Name: "silver"}, // exists in vars, set in module
-			{Name: "helium"}, // to be set to ModuleID
-		},
-		Metadata: modulereader.Metadata{
-			Ghpc: modulereader.MetadataGhpc{
-				InjectModuleId: "helium"}}})
 
 	Blueprint{Vars: vars}.applyGlobalVarsInModule(&mod)
 
@@ -304,14 +252,14 @@ func (s *zeroSuite) TestValidateModuleReference(c *C) {
 	y := Module{ID: "moduleY"}
 	pkr := Module{ID: "modulePkr", Kind: PackerKind}
 
-	dg := []DeploymentGroup{
+	dg := []Group{
 		{Name: "zero", Modules: []Module{a, b}},
 		{Name: "half", Modules: []Module{pkr}},
 		{Name: "one", Modules: []Module{y}},
 	}
 
 	bp := Blueprint{
-		DeploymentGroups: dg,
+		Groups: dg,
 	}
 
 	// An intragroup reference from group 0 to module B in 0 (good)
@@ -356,21 +304,33 @@ func (s *zeroSuite) TestIntersection(c *C) {
 	c.Assert(is, DeepEquals, []string{})
 }
 
-func (s *MySuite) TestOutputNamesByGroup(c *C) {
-	bp := s.getMultiGroupBlueprint()
-	c.Assert(bp.Expand(), IsNil)
+func (s *zeroSuite) TestOutputNamesByGroup(c *C) {
+	zebra := Group{
+		Name: "zebra",
+		Modules: []Module{
+			{
+				ID: "stripes",
+				Outputs: []modulereader.OutputInfo{
+					{Name: "length"}}}}}
+	pony := Group{
+		Name: "pony",
+		Modules: []Module{
 
-	group0 := bp.DeploymentGroups[0]
-	mod0 := group0.Modules[0]
-	group1 := bp.DeploymentGroups[1]
+			tMod("bucephalus").set("width", ModuleRef("stripes", "length")).build(),
+		}}
+	bp := Blueprint{Groups: []Group{zebra, pony}}
 
-	outputNamesGroup0, err := OutputNamesByGroup(group0, bp)
-	c.Assert(err, IsNil)
-	c.Assert(outputNamesGroup0, DeepEquals, map[GroupName][]string{})
+	{
+		got, err := OutputNamesByGroup(zebra, bp)
+		c.Check(err, IsNil)
+		c.Check(got, DeepEquals, map[GroupName][]string{})
+	}
 
-	outputNamesGroup1, err := OutputNamesByGroup(group1, bp)
-	c.Assert(err, IsNil)
-	c.Assert(outputNamesGroup1, DeepEquals, map[GroupName][]string{
-		group0.Name: {AutomaticOutputName("test_inter_0", mod0.ID)},
-	})
+	{
+		got, err := OutputNamesByGroup(pony, bp)
+		c.Check(err, IsNil)
+		c.Check(got, DeepEquals, map[GroupName][]string{
+			"zebra": {"length_stripes"},
+		})
+	}
 }

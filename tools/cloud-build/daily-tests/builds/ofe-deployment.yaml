@@ -13,6 +13,7 @@
 # limitations under the License.
 
 ---
+tags: [ofe]
 timeout: 14400s  # 4hr
 steps:
 ## Test simple golang build

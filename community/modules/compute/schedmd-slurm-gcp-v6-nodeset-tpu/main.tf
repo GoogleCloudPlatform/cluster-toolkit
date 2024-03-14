@@ -38,5 +38,8 @@ locals {
     subnetwork      = var.subnetwork_self_link
     service_account = var.service_account
     zone            = var.zone
+
+    project_id = var.project_id
+    reserved   = var.reserved
   }
 }

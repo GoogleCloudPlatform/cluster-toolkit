@@ -13,6 +13,15 @@
 # limitations under the License.
 
 ---
+tags:
+- m.DDN-EXAScaler
+- m.pre-existing-vpc
+- m.schedmd-slurm-gcp-v5-controller
+- m.schedmd-slurm-gcp-v5-login
+- m.schedmd-slurm-gcp-v5-node-group
+- m.schedmd-slurm-gcp-v5-partition
+- slurm5
+
 timeout: 14400s  # 4hr
 steps:
 ## Test simple golang build

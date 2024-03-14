@@ -21,13 +21,12 @@ variable "node_count_static" {
 variable "node_count_dynamic_max" {
   description = "Maximum number of auto-scaling nodes allowed in this partition."
   type        = number
-  default     = 1
+  default     = 5
 }
 
 variable "name" {
   description = "Name of the nodeset tpu."
   type        = string
-  default     = "ghpc"
 
   validation {
     condition     = can(regex("^[a-z](?:[a-z0-9]{0,5})$", var.name))
@@ -69,7 +68,7 @@ variable "accelerator_config" {
 variable "tf_version" {
   description = "Nodeset Tensorflow version, see https://cloud.google.com/tpu/docs/supported-tpu-configurations#tpu_vm for details."
   type        = string
-  default     = "2.9.1"
+  default     = "2.14.0"
 }
 
 variable "preemptible" {
@@ -81,7 +80,7 @@ variable "preemptible" {
 variable "preserve_tpu" {
   description = "Specify whether TPU-vms will get preserve on suspend, if set to true, on suspend vm is stopped, on false it gets deleted"
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "zone" {
@@ -114,4 +113,15 @@ variable "service_account" {
 
   description = "Service account to attach to the TPU-vm. If none is given, the default service account and scopes will be used."
   default     = null
+}
+
+variable "project_id" {
+  type        = string
+  description = "Project ID to create resources in."
+}
+
+variable "reserved" {
+  description = "Specify whether TPU-vms in this nodeset are created under a reservation."
+  type        = bool
+  default     = false
 }
