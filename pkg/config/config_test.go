@@ -135,19 +135,19 @@ func (s *zeroSuite) TestCheckModulesAndGroups(c *C) {
 	{ // Duplicate module id same group
 		g := Group{Name: "ice", Modules: []Module{pony, pony}}
 		err := checkModulesAndGroups(Blueprint{Groups: []Group{g}})
-		c.Check(err, ErrorMatches, ".*pony used more than once")
+		c.Check(err, ErrorMatches, ".*pony.* used more than once")
 	}
 	{ // Duplicate module id different groups
 		ice := Group{Name: "ice", Modules: []Module{pony}}
 		fire := Group{Name: "fire", Modules: []Module{pony}}
 		err := checkModulesAndGroups(Blueprint{Groups: []Group{ice, fire}})
-		c.Check(err, ErrorMatches, ".*pony used more than once")
+		c.Check(err, ErrorMatches, ".*pony.* used more than once")
 	}
 	{ // Duplicate group name
 		ice := Group{Name: "ice", Modules: []Module{pony}}
 		ice9 := Group{Name: "ice", Modules: []Module{zebra}}
 		err := checkModulesAndGroups(Blueprint{Groups: []Group{ice, ice9}})
-		c.Check(err, ErrorMatches, ".*ice used more than once")
+		c.Check(err, ErrorMatches, ".*ice.* used more than once")
 	}
 	{ // Mixing module kinds
 		g := Group{Name: "ice", Modules: []Module{pony, zebra}}

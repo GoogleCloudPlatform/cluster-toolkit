@@ -324,7 +324,7 @@ func validateModuleReference(bp Blueprint, from Module, toID ModuleID) error {
 	}
 
 	if to.Kind == PackerKind {
-		return fmt.Errorf("%s: %s", errMsgCannotUsePacker, to.ID)
+		return fmt.Errorf("packer modules cannot be used by other modules: %s", to.ID)
 	}
 
 	fg := bp.ModuleGroupOrDie(from.ID)
@@ -345,7 +345,7 @@ func validateModuleSettingReference(bp Blueprint, mod Module, r Reference) error
 	// simplest case to evaluate is a deployment variable's existence
 	if r.GlobalVar {
 		if !bp.Vars.Has(r.Name) {
-			err := fmt.Errorf("module %#v references unknown global variable %#v", mod.ID, r.Name)
+			err := fmt.Errorf("module %q references unknown global variable %q", mod.ID, r.Name)
 			return hintSpelling(r.Name, bp.Vars.Keys(), err)
 		}
 		return nil
