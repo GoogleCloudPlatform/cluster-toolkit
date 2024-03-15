@@ -1,7 +1,7 @@
 # Run TPU jobs in Slurm Cluster with TPU Partition
 
 This page demonstrates how to run TPU job like [maxtext](https://github.com/google/maxtext)
-performance benchmark test in Slurm Cluster with TPU partition using [hpc-slurm6-tpu-v4.yaml](https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/community/examples/hpc-slurm6-tpu-v4.yaml)
+performance benchmark test in Slurm Cluster with TPU partition using [hpc-slurm6-tpu-maxtext.yaml](https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/community/examples/hpc-slurm6-tpu-maxtext.yaml)
 blueprint.
 
 ## Generate the deployment and deploy the cluster
@@ -12,7 +12,7 @@ the dataset in your GCS. After that you can update the blueprint to use the
 dataset from GCS bucket in training script.
 
 ```bash
-./ghpc create community/examples/hpc-slurm6-tpu-v4.yaml -l ERROR --vars project_id=<project-id>;
+./ghpc create community/examples/hpc-slurm6-tpu-maxtext.yaml -l ERROR --vars project_id=<project-id>;
 ./ghpc deploy slurm6-tpu --auto-approve
 ```
 
