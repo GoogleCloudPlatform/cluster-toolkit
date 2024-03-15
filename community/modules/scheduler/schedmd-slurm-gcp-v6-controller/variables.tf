@@ -158,7 +158,6 @@ variable "login_nodes" {
 ############
 # NODESETS #
 ############
-
 variable "nodeset" {
   description = "Define nodesets, as a list."
   type = list(object({
@@ -248,7 +247,6 @@ variable "nodeset" {
   }
 }
 
-# REVIEWER_NOTE: copied from V6 cluster module as is
 variable "nodeset_tpu" {
   description = "Define TPU nodesets, as a list."
   type = list(object({
@@ -283,6 +281,21 @@ variable "nodeset_tpu" {
   validation {
     condition     = length(distinct([for x in var.nodeset_tpu : x.nodeset_name])) == length(var.nodeset_tpu)
     error_message = "All TPU nodesets must have a unique name."
+  }
+}
+
+
+variable "nodeset_dyn" {
+  description = "Defines dynamic nodesets, as a list."
+  type = list(object({
+    nodeset_name    = string
+    nodeset_feature = string
+  }))
+  default = []
+
+  validation {
+    condition     = length(distinct([for x in var.nodeset_dyn : x.nodeset_name])) == length(var.nodeset_dyn)
+    error_message = "All nodesets must have a unique name."
   }
 }
 

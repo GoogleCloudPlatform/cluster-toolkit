@@ -185,3 +185,17 @@ variable "nodeset_tpu" {
     error_message = "All TPU nodesets must have a unique name."
   }
 }
+
+variable "nodeset_dyn" {
+  description = "Defines dynamic nodesets, as a list."
+  type = list(object({
+    nodeset_name    = string
+    nodeset_feature = string
+  }))
+  default = []
+
+  validation {
+    condition     = length(distinct([for x in var.nodeset_dyn : x.nodeset_name])) == length(var.nodeset_dyn)
+    error_message = "All dynamic nodesets must have a unique name."
+  }
+}
