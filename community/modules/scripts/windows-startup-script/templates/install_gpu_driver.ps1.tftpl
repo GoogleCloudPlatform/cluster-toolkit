@@ -5,7 +5,7 @@
 
 # important for catching exception in Invoke-WebRequest
 Set-StrictMode -Version latest
-$ErrorActionPreference = 'stop'
+$ErrorActionPreference = 'Stop'
 
 %{ if http_proxy != "" }
 [System.Net.WebRequest]::DefaultWebProxy = New-Object System.Net.WebProxy("${http_proxy}")
