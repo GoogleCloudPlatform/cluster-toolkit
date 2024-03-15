@@ -49,11 +49,5 @@ jobs:
         # https://github.com/terraform-linters/tflint/blob/master/docs/user-guide/plugins.md#avoiding-rate-limiting
         GITHUB_TOKEN: ${{ github.token }}
     - uses: pre-commit/action@v3.0.1
-    - uses: pre-commit-ci/lite-action@v1.0.2
-      # this if statement looks funny but it ensures that this step runs
-      # only if: user has applied "pre-commit-autofix" label
-      # even if: job has failed
-      # not if: job is canceled
-      if: |
-        (success() || failure()) &&
-        contains(github.event.pull_request.labels.*.name, 'pre-commit-autofix')
+      with:
+        extra_args: --show-diff-on-failure --all-files
