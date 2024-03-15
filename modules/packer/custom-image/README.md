@@ -75,7 +75,8 @@ buckets. Recommended roles are:
 - `roles/monitoring.metricWriter`
 - `roles/storage.objectViewer`
 
-These roles are demonstrated in the [image builder example][examples readme].
+It is recommended to create this service account as a separate step outside a
+blueprint due to known delay in [IAM bindings propagation][iamprop].
 
 ## Example blueprints
 
@@ -315,6 +316,7 @@ No outputs.
 [cloudnat]: https://cloud.google.com/nat/docs/overview
 [examples readme]: ../../../examples/README.md#image-builderyaml-
 [hpcimage]: https://cloud.google.com/compute/docs/instances/create-hpc-vm
+[iamprop]: https://cloud.google.com/iam/docs/access-change-propagation
 [iaptunnel]: https://cloud.google.com/iap/docs/using-tcp-forwarding
 [image builder]: ../../../examples/image-builder.yaml
 [logging-console]: https://console.cloud.google.com/logs/

@@ -19,7 +19,6 @@ tags:
 - m.schedmd-slurm-gcp-v6-login
 - m.schedmd-slurm-gcp-v6-nodeset
 - m.schedmd-slurm-gcp-v6-partition
-- m.service-account
 - m.startup-script
 - m.vpc
 - packer

@@ -48,16 +48,6 @@ deployment_groups:
           #!/bin/sh
           echo "Hello World" > /home/hello.txt
 
-  - id: builder_sa
-    source: community/modules/project/service-account
-    settings:
-      name: pkr
-      project_roles:
-      - compute.instanceAdmin.v1
-      - logging.logWriter
-      - monitoring.metricWriter
-      - storage.objectViewer
-
 - group: packer
   modules:
   - id: custom-image
@@ -66,7 +56,6 @@ deployment_groups:
     use:
     - network
     - scripts_for_image
-    - builder_sa
     settings:
       source_image_project_id: [schedmd-slurm-public]
       # see latest in https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#published-image-family
