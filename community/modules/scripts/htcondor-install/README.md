@@ -136,6 +136,7 @@ No resources.
 |------|-------------|------|---------|:--------:|
 | <a name="input_condor_version"></a> [condor\_version](#input\_condor\_version) | Yum/DNF-compatible version string; leave unset to use latest 23.0 LTS release (examples: "23.0.0","23.*")) | `string` | `"23.*"` | no |
 | <a name="input_enable_docker"></a> [enable\_docker](#input\_enable\_docker) | Install and enable docker daemon alongside HTCondor | `bool` | `true` | no |
+| <a name="input_http_proxy"></a> [http\_proxy](#input\_http\_proxy) | Set system default web (http and https) proxy for Windows HTCondor installation | `string` | `""` | no |
 
 ## Outputs
 
