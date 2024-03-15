@@ -109,11 +109,22 @@ variable "service_account_email" {
 }
 
 variable "scopes" {
+  description = "DEPRECATED: use var.service_account_scopes"
+  type        = set(string)
+  default     = null
+
+  validation {
+    condition     = var.scopes == null
+    error_message = "DEPRECATED: var.scopes was renamed to var.service_account_scopes with identical format."
+  }
+}
+
+variable "service_account_scopes" {
   description = <<EOD
 Service account scopes to attach to the instance. See
 https://cloud.google.com/compute/docs/access/service-accounts.
 EOD
-  type        = list(string)
+  type        = set(string)
   default = [
     "https://www.googleapis.com/auth/cloud-platform",
   ]
