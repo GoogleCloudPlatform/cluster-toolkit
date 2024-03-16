@@ -21,6 +21,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [hpc-slurm-v6.yaml](#hpc-slurm-v6yaml--) ![core-badge] ![experimental-badge]
   * [hpc-enterprise-slurm.yaml](#hpc-enterprise-slurmyaml-) ![core-badge]
   * [hpc-slurm6-tpu.yaml](#hpc-slurm6-tpuyaml--) ![community-badge] ![experimental-badge]
+  * [hpc-slurm6-tpu-maxtext.yaml](#hpc-slurm6-tpu-maxtextyaml--) ![community-badge] ![experimental-badge]
   * [ml-slurm.yaml](#ml-slurmyaml-) ![core-badge]
   * [image-builder.yaml](#image-builderyaml-) ![core-badge]
   * [image-builder-v6.yaml](#image-builderyaml--) ![core-badge] ![experimental-badge]
@@ -405,6 +406,24 @@ to 256
 Creates an auto-scaling Slurm cluster with TPU nodes.
 
 [hpc-slurm6-tpu.yaml]: ../community/examples/hpc-slurm6-tpu.yaml
+
+### [hpc-slurm6-tpu-maxtext.yaml] ![community-badge] ![experimental-badge]
+
+> **Warning**: Requires additional dependencies **to be installed on the system deploying the infrastructure**.
+>
+> ```shell
+> # Install Python3 and run
+> pip3 install -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/6.4.2/scripts/requirements.txt
+> ```
+
+Creates an auto-scaling Slurm cluster with TPU nodes.
+
+For tutorial on how to run [maxtext] workload on TPU partition using Slurm,
+Follow [hpc-slurm-tpu-maxtext].
+
+[maxtext]: https://github.com/google/maxtext
+[hpc-slurm6-tpu-maxtext.yaml]: ../community/examples/hpc-slurm6-tpu-maxtext.yaml
+[hpc-slurm-tpu-maxtext]: ../docs/hpc-slurm6-tpu-maxtext.md
 
 ### [ml-slurm.yaml] ![core-badge]
 
