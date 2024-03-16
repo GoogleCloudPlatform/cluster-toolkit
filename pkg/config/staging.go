@@ -23,14 +23,32 @@ import (
 	"github.com/pkg/errors"
 	"github.com/zclconf/go-cty/cty"
 	"github.com/zclconf/go-cty/cty/function"
-	"golang.org/x/exp/maps"
 )
 
 // Relative path from deployment group to the staging directory
 const StagingDir = "../.ghpc/staged"
 
-func (bp Blueprint) StagedFiles() map[string]string {
-	return maps.Clone(bp.stagedFiles)
+type StagedFile struct {
+	AbsSrc string // absolute path
+	RelDst string // relative (to deployment group folder) path
+}
+
+func (bp Blueprint) StagedFiles() []StagedFile {
+	if len(bp.stagedFiles) == 0 {
+		return nil
+	}
+
+	if bp.path == "" {
+		panic("blueprint doesn't have known path, can't resolve staged files to absolute paths")
+	}
+	res := []StagedFile{}
+	for src, dst := range bp.stagedFiles {
+		if !filepath.IsAbs(src) { // make it absolute
+			src = filepath.Join(filepath.Dir(bp.path), src)
+		}
+		res = append(res, StagedFile{AbsSrc: src, RelDst: dst})
+	}
+	return res
 }
 
 func (bp *Blueprint) makeGhpcStageImpl() func(src string) string {
@@ -42,7 +60,7 @@ func (bp *Blueprint) makeGhpcStageImpl() func(src string) string {
 		hash := fmt.Sprintf("%x", md5.Sum([]byte(src)))[:10]
 		name := filepath.Base(src)
 		if name == "." || name == ".." || filepath.ToSlash(name) == "/" {
-			name = "file"
+			name = "file" // shouldn't use this as a human readable name, replace with innocuous "file"
 		}
 		dst := filepath.Join(StagingDir, fmt.Sprintf("%s_%s", name, hash))
 
@@ -54,7 +72,8 @@ func (bp *Blueprint) makeGhpcStageImpl() func(src string) string {
 	}
 }
 
-// closure to capture blueprint
+// Makes an `ghpc_stage` function while capturing Blueprint
+// in its closure to updade Blueprint state (stagedFiles)
 func (bp *Blueprint) makeGhpcStageFunc() function.Function {
 	impl := bp.makeGhpcStageImpl()
 	return function.New(&function.Spec{
@@ -69,7 +88,7 @@ func (bp *Blueprint) makeGhpcStageFunc() function.Function {
 	})
 }
 
-// Validate that there `ghpc_stage` is only used in `vars` declarations
+// Validate that the `ghpc_stage` is only used in `vars` declarations
 func (bp Blueprint) validateNoGhpcStageFuncs() error {
 	errs := Errors{}
 	// check modules

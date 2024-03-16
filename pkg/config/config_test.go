@@ -328,6 +328,8 @@ func (s *zeroSuite) TestNewBlueprint(c *C) {
 	c.Assert(bp.Export(outFile), IsNil)
 	newBp, _, err := NewBlueprint(outFile)
 	c.Assert(err, IsNil)
+
+	bp.path = outFile // set expected path
 	c.Assert(bp, DeepEquals, newBp)
 }
 

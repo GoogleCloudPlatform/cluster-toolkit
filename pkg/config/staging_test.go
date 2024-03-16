@@ -15,12 +15,17 @@
 package config
 
 import (
+	"path/filepath"
+	"strings"
+
+	"github.com/google/go-cmp/cmp"
+	"golang.org/x/exp/slices"
 	. "gopkg.in/check.v1"
 )
 
 func (s *zeroSuite) TestValidateNoGhpcStageFuncs(c *C) {
 	bp := Blueprint{
-		DeploymentGroups: []DeploymentGroup{{
+		Groups: []Group{{
 			Modules: []Module{
 				{
 					Settings: Dict{}.
@@ -31,9 +36,11 @@ func (s *zeroSuite) TestValidateNoGhpcStageFuncs(c *C) {
 
 func (s *zeroSuite) TestGhpcStageImpl(c *C) {
 	h := func(path, want string) {
-		bp := Blueprint{}
+		bp := Blueprint{path: "/zebra/greendoodle.yaml"}
 		c.Check(bp.makeGhpcStageImpl()(path), Equals, want)
-		c.Check(bp.StagedFiles(), DeepEquals, map[string]string{path: want})
+		c.Check(bp.StagedFiles(), DeepEquals, []StagedFile{
+			{AbsSrc: filepath.Join("/zebra/", path), RelDst: want},
+		})
 	}
 
 	h("zero", "../.ghpc/staged/zero_d02c4c4cde")
@@ -41,26 +48,31 @@ func (s *zeroSuite) TestGhpcStageImpl(c *C) {
 	h("./../../two.gif", "../.ghpc/staged/two.gif_711b257c4f")
 	h(".", "../.ghpc/staged/file_5058f1af83")
 	h("..", "../.ghpc/staged/file_58b9e70b65")
-	h("/", "../.ghpc/staged/file_6666cd76f9")
 
 	{
-		bp := Blueprint{}
-		wantOne := "../.ghpc/staged/one.txt_08bc3de154"
-		wantZeroOne := "../.ghpc/staged/one.txt_f8669c6c22"
+		bp := Blueprint{path: "/zebra/greendoodle.yaml"}
 
-		c.Check(bp.makeGhpcStageImpl()("one.txt"), Equals, wantOne)
-		c.Check(bp.makeGhpcStageImpl()("zero/one.txt"), Equals, wantZeroOne)
+		c.Check(bp.makeGhpcStageImpl()("one.txt"), Equals, "../.ghpc/staged/one.txt_08bc3de154")
+		c.Check(bp.makeGhpcStageImpl()("zero/one.txt"), Equals, "../.ghpc/staged/one.txt_f8669c6c22")
+		c.Check(bp.makeGhpcStageImpl()("/root/abs.txt"), Equals, "../.ghpc/staged/abs.txt_ffac5d1d6b")
 
-		c.Check(bp.StagedFiles(), DeepEquals, map[string]string{
-			"zero/one.txt": wantZeroOne,
-			"one.txt":      wantOne,
+		got := bp.StagedFiles()
+		slices.SortFunc(got, func(a, b StagedFile) int {
+			return strings.Compare(a.AbsSrc, b.AbsSrc)
 		})
-	}
 
+		if diff := cmp.Diff(got, []StagedFile{
+			{"/root/abs.txt", "../.ghpc/staged/abs.txt_ffac5d1d6b"},
+			{"/zebra/one.txt", "../.ghpc/staged/one.txt_08bc3de154"},
+			{"/zebra/zero/one.txt", "../.ghpc/staged/one.txt_f8669c6c22"},
+		}); diff != "" {
+			c.Errorf("diff (-want +got):\n%s", diff)
+		}
+	}
 }
 
 func (s *zeroSuite) TestGhpcStageFunc(c *C) {
-	bp := Blueprint{}
+	bp := Blueprint{path: "/zebra/greendoodle.yaml"}
 
 	h := func(p string) string {
 		g, err := bp.Eval(MustParseExpression("ghpc_stage(\"" + p + "\")").AsValue())
@@ -72,8 +84,16 @@ func (s *zeroSuite) TestGhpcStageFunc(c *C) {
 
 	c.Check(h("bush"), Equals, "../.ghpc/staged/bush_dbbc546e35")
 	c.Check(h("push"), Equals, "../.ghpc/staged/push_21a361d96e")
-	c.Check(bp.StagedFiles(), DeepEquals, map[string]string{
-		"bush": "../.ghpc/staged/bush_dbbc546e35",
-		"push": "../.ghpc/staged/push_21a361d96e",
+
+	got := bp.StagedFiles()
+	slices.SortFunc(got, func(a, b StagedFile) int {
+		return strings.Compare(a.AbsSrc, b.AbsSrc)
 	})
+
+	if diff := cmp.Diff(got, []StagedFile{
+		{"/zebra/bush", "../.ghpc/staged/bush_dbbc546e35"},
+		{"/zebra/push", "../.ghpc/staged/push_21a361d96e"},
+	}); diff != "" {
+		c.Errorf("diff (-want +got):\n%s", diff)
+	}
 }

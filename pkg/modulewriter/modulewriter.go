@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/deploymentio"
+	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/sourcereader"
 	"io"
 	"os"
@@ -123,14 +124,48 @@ func stageFiles(bp config.Blueprint, deplPath string) error {
 	}
 
 	errs := config.Errors{}
-	for src, relDst := range staged {
-		// relDst is relative to group folders ("../.ghpc/staged"),
-		// prepend any_group_dir to be "eaten" by ".."
-		absDst := filepath.Join(deplPath, "any_group_dir", relDst)
+	for _, f := range staged {
 		// TODO: attribute error to the position in the blueprint
-		errs.Add(copy.Copy(src, absDst))
+		errs.Add(stageFile(deplPath, f))
 	}
 	return errs.OrNil()
+}
+
+func doesExists(path string) (bool, error) {
+	_, err := os.Lstat(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
+func stageFile(deplPath string, f config.StagedFile) error {
+	// RelDst is relative to group folders ("../.ghpc/staged"),
+	// prepend any_group_dir to be "eaten" by ".."
+	dst := filepath.Join(deplPath, "any_group_dir", f.RelDst)
+	dstExists, err := doesExists(dst)
+	if err != nil {
+		return err
+	}
+
+	srcExists, err := doesExists(f.AbsSrc)
+	if err != nil {
+		return err
+	}
+
+	if !srcExists && !dstExists {
+		return fmt.Errorf("file for staging %s does not exists", f.AbsSrc)
+	}
+	if !srcExists && dstExists {
+		// We implement this relaxation for cases where user does not have access to the original blueprint,
+		// and does re-creation using expanded blueprint.
+		logging.Error("WARNING: file %s does not exists, proceeding by using previously staged copy", f.AbsSrc)
+		return nil
+	}
+	return copy.Copy(f.AbsSrc, dst)
 }
 
 func writeGroup(deplPath string, bp config.Blueprint, gIdx int, instructions io.Writer) error {

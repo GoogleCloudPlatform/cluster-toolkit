@@ -19,6 +19,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -244,6 +245,10 @@ type Blueprint struct {
 	TerraformBackendDefaults TerraformBackend `yaml:"terraform_backend_defaults,omitempty"`
 
 	// internal & non-serializable fields
+
+	// absolute path to the blueprint file
+	path string
+	// records of intentions to stage file (populated by ghpc_stage function)
 	stagedFiles map[string]string
 }
 
@@ -348,7 +353,16 @@ func checkMovedModule(source string) error {
 
 // NewBlueprint is a constructor for Blueprint
 func NewBlueprint(path string) (Blueprint, YamlCtx, error) {
-	return parseYamlFile[Blueprint](path)
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return Blueprint{}, YamlCtx{}, err
+	}
+	bp, ctx, err := parseYamlFile[Blueprint](absPath)
+	if err != nil {
+		return Blueprint{}, ctx, err
+	}
+	bp.path = absPath
+	return bp, ctx, nil
 }
 
 func NewDeploymentSettings(deploymentFilename string) (DeploymentSettings, YamlCtx, error) {

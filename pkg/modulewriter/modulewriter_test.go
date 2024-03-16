@@ -571,3 +571,72 @@ func (s *zeroSuite) TestStagingDirConsistency(c *C) {
 	want := filepath.Join("..", HiddenGhpcDirName, "staged")
 	c.Check(config.StagingDir, Equals, want)
 }
+
+func (s *zeroSuite) TestStageFile(c *C) {
+	srcDir := c.MkDir()
+
+	deplDir := c.MkDir()
+	stagedDir := filepath.Join(deplDir, "staged")
+	if err := os.Mkdir(stagedDir, 0755); err != nil {
+		c.Fatal(err)
+	}
+
+	{ // src doesn't exist
+		f := config.StagedFile{
+			AbsSrc: filepath.Join(srcDir, "bush"),
+			RelDst: "../staged/bush_44"}
+		c.Assert(stageFile(deplDir, f), ErrorMatches, ".*bush does not exists.*")
+	}
+
+	{ // src exists, dst doesn't
+		f := config.StagedFile{
+			AbsSrc: filepath.Join(srcDir, "ugg"),
+			RelDst: "../staged/ugg_44"}
+
+		if err := os.WriteFile(f.AbsSrc, []byte("riddle"), 0644); err != nil {
+			c.Fatal(err)
+		}
+
+		c.Assert(stageFile(deplDir, f), IsNil)
+		dat, err := os.ReadFile(filepath.Join(deplDir, "any_group", f.RelDst))
+		c.Assert(err, IsNil)
+		c.Assert(string(dat), Equals, "riddle")
+	}
+
+	{ // src exists, dst exists and get overwritten
+		f := config.StagedFile{
+			AbsSrc: filepath.Join(srcDir, "clement"),
+			RelDst: "../staged/clement_44"}
+
+		if err := os.WriteFile(f.AbsSrc, []byte("barrel"), 0644); err != nil {
+			c.Fatal(err)
+		}
+
+		absDst := filepath.Join(deplDir, "any_group", f.RelDst)
+		if err := os.WriteFile(absDst, []byte("not_barrel"), 0644); err != nil {
+			c.Fatal(err)
+		}
+
+		c.Assert(stageFile(deplDir, f), IsNil)
+		dat, err := os.ReadFile(absDst)
+		c.Assert(err, IsNil)
+		c.Assert(string(dat), Equals, "barrel")
+	}
+
+	{ // src doesn't exists, but dst exists
+		f := config.StagedFile{
+			AbsSrc: filepath.Join(srcDir, "orange"),
+			RelDst: "../staged/orange_44"}
+
+		absDst := filepath.Join(deplDir, "any_group", f.RelDst)
+		if err := os.WriteFile(absDst, []byte("pulp"), 0644); err != nil {
+			c.Fatal(err)
+		}
+
+		c.Assert(stageFile(deplDir, f), IsNil)
+		dat, err := os.ReadFile(absDst)
+		c.Assert(err, IsNil)
+		c.Assert(string(dat), Equals, "pulp")
+	}
+
+}
