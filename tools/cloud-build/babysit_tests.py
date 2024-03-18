@@ -229,7 +229,7 @@ def get_pr(pr_num: int) -> dict:
 
 def get_changed_files_tags(base: str, head: str) -> set[str]:
     res = subprocess.run(["git", "log", f"{base}..{head}", "--name-only", "--format="], stdout=subprocess.PIPE)
-    assert res.returncode == 0
+    assert res.returncode == 0, "Is your local repo up to date?"
     changed_files = res.stdout.decode('ascii').strip().split("\n")
     tags = set()
     for f in changed_files:
@@ -249,17 +249,17 @@ if __name__ == "__main__":
     parser.add_argument("--tags", nargs="*", type=str, help="Filter tests by tags")
     parser.add_argument("--auto", action="store_true", help="If true, will inspect changed files and run tests for them")
     parser.add_argument("--all", action="store_true", help="Run all tests")
-    
+
     parser.add_argument("--project", type=str,
                         help="GCP ProjectID, if not set will use default one (`gcloud config get-value project`)")
     parser.add_argument("-c", type=int, default=1,
                         help="Number of tests to run concurrently, default is 1")
     parser.add_argument("-r", type=int, default=1,
                         help="Number of retries, to disable retries set to 0, default is 1")
-    
+
     parser.add_argument("--base", type=str, help="Revision to inspect diff from")
     parser.add_argument("--head", type=str, help="Revision to inspect diff to, may be different in case of merged PRs")
-    
+
     args = parser.parse_args()
 
     assert (args.sha is None) ^ (args.pr is None), "either --pr or --sha are required"
@@ -272,8 +272,8 @@ if __name__ == "__main__":
             print("PR is already merged")
             if args.head is None:
                 # use merge commit as head, since original PR sha may not be available in Git history.
-                args.head = pr["merge_commit_sha"] 
-            
+                args.head = pr["merge_commit_sha"]
+
         if args.base is None:
             args.base = pr["base"]["sha"]
     else:
@@ -297,7 +297,7 @@ if __name__ == "__main__":
         assert args.base is not None, "--base & [--head] or --pr are required for auto mode"
         auto_tags = get_changed_files_tags(args.base, args.head)
         selectors += [selector_by_tag(t) for t in auto_tags]
-    
+
     ui = UI()
     cb = cloudbuild_v1.services.cloud_build.CloudBuildClient()
     Babysitter(ui, cb, project, sha, selectors, args.c, args.r).do()
