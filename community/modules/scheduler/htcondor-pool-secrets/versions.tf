@@ -26,8 +26,8 @@ terraform {
     }
   }
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:htcondor-pool-secrets/v1.29.0"
+    module_name = "blueprints/terraform/hpc-toolkit:htcondor-pool-secrets/v1.30.0"
   }
 
-  required_version = ">= 0.13.0"
+  required_version = ">= 1.3.0"
 }

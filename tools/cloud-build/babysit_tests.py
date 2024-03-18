@@ -14,20 +14,24 @@
 # limitations under the License.
 from typing import Sequence, Dict, Callable
 from dataclasses import dataclass
+# pip install google-cloud-build
 from google.cloud.devtools import cloudbuild_v1
 from google.cloud.devtools.cloudbuild_v1.types.cloudbuild import Build, ApproveBuildRequest, ApprovalResult, RetryBuildRequest
 import time
 import argparse
 import subprocess
+import requests
 
 DESCRIPTION = """
 babysit_tests is a tool to approve & retry CloudBuild tests.
 It monitors status of builds referenced by PR commit SHA,
 it will approve and retry tests according to configured concurrency and retry policies.
 The tool will terminate itself once there is no more actions to take or no reasons to wait for status changes.
-The subset of tests to monitor can be configured by using test_selectors, e.g. "all", exact_name_of_test.
+The subset of tests to monitor can be configured by using test selectors --tags, --names, --auto, and --all.
 Usage:
-tools/cloud-build/babysit_tests.py fafa333 all
+$ tools/cloud-build/babysit_tests.py --pr 123 --auto
+
+$ tools/cloud-build/babysit_tests.py --pr 123 --tags slurm5 slurm6
 """
 
 Selector = Callable[[Build], bool]
@@ -40,61 +44,11 @@ class BuildAndCount:
     count: int  # total count of builds for this trigger
 
 
-def selector_by_name(names: Sequence[str]) -> Selector:
-    def selector(build: Build) -> bool:
-        return any(trig_name(build) == n for n in names)
-    return selector
+def selector_by_name(name: str) -> Selector:
+    return lambda b: trig_name(b) == name
 
-
-SELECTORS: Dict[str, Selector] = {
-    "all": lambda _: True,
-    "batch": selector_by_name([
-        "PR-test-batch-mpi",
-        "PR-test-cloud-batch",
-    ]),
-    "crd": selector_by_name([
-        "PR-test-chrome-remote-desktop",
-        "PR-test-hpc-slurm-chromedesktop",
-    ]),
-    "gke": selector_by_name([
-        "PR-test-gke",
-        "PR-test-gke-storage",
-    ]),
-    "pr_legacy": selector_by_name([
-        "PR-legacy-test-integration-group-1",
-        "PR-legacy-test-integration-group-2",
-        "PR-legacy-test-integration-group-3",
-        "PR-legacy-test-integration-group-4",
-        "PR-legacy-test-integration-group-5",
-    ]),
-    "slurm5": selector_by_name([
-        "PR-test-hpc-high-io-v5",
-        "PR-test-slurm-gcp-v5-hpc-centos7",
-        "PR-test-slurm-gcp-v5-startup-scripts",
-        "PR-test-slurm-gcp-v5-ubuntu2004",
-        "PR-test-hpc-enterprise-slurm",
-        "PR-test-hpc-slurm-chromedesktop",
-        "PR-test-lustre-slurm",
-    ]),
-    "slurm6": selector_by_name([
-        "PR-test-slurm-gcp-v6-tpu",
-        "PR-test-slurm-gcp-v6-rocky8",
-        "PR-test-hpc-build-slurm-image",
-        "PR-test-spack-gromacs",
-    ]),
-    "spack": selector_by_name([
-        "PR-test-batch-mpi",
-        "PR-test-spack-gromacs",
-    ]),
-    "vm": selector_by_name([
-        "PR-test-lustre-vm",
-    ]),
-}
-
-
-def make_selector(t: str) -> Selector:
-    return SELECTORS.get(t, selector_by_name([t]))
-
+def selector_by_tag(tag: str) -> Selector:
+    return lambda b: tag in b.tags
 
 def trig_name(build: Build) -> str:
     return build.substitutions.get("TRIGGER_NAME", "???")
@@ -268,24 +222,82 @@ def get_default_project():
     return res.stdout.decode('ascii').strip()
 
 
+def get_pr(pr_num: int) -> dict:
+    resp = requests.get(f"https://api.github.com/repos/GoogleCloudPlatform/hpc-toolkit/pulls/{pr_num}")
+    resp.raise_for_status()
+    return resp.json()
+
+def get_changed_files_tags(base: str, head: str) -> set[str]:
+    res = subprocess.run(["git", "log", f"{base}..{head}", "--name-only", "--format="], stdout=subprocess.PIPE)
+    assert res.returncode == 0
+    changed_files = res.stdout.decode('ascii').strip().split("\n")
+    tags = set()
+    for f in changed_files:
+        if f.startswith("community/"): f = f[len("community/"):]
+        if not f.startswith("modules/"): continue
+        parts = f.split("/")
+        if len(parts) < 3: continue
+        tags.add(f"m.{parts[2]}")
+    return tags
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=DESCRIPTION)
-    parser.add_argument("pr_sha", type=str, help="Short SHA of target PR")
-    parser.add_argument("test_selector", nargs='+', type=str,
-                        help="Selector for test, currently support 'all' and exact name match")
+    parser.add_argument("--sha", type=str, help="Short SHA of target PR")
+    parser.add_argument("--pr", type=int, help="PR number")
+
+    parser.add_argument("--names", nargs="*", type=str, help="Match tests by exact name")
+    parser.add_argument("--tags", nargs="*", type=str, help="Filter tests by tags")
+    parser.add_argument("--auto", action="store_true", help="If true, will inspect changed files and run tests for them")
+    parser.add_argument("--all", action="store_true", help="Run all tests")
+    
     parser.add_argument("--project", type=str,
                         help="GCP ProjectID, if not set will use default one (`gcloud config get-value project`)")
     parser.add_argument("-c", type=int, default=1,
                         help="Number of tests to run concurrently, default is 1")
     parser.add_argument("-r", type=int, default=1,
                         help="Number of retries, to disable retries set to 0, default is 1")
+    
+    parser.add_argument("--base", type=str, help="Revision to inspect diff from")
+    parser.add_argument("--head", type=str, help="Revision to inspect diff to, may be different in case of merged PRs")
+    
     args = parser.parse_args()
+
+    assert (args.sha is None) ^ (args.pr is None), "either --pr or --sha are required"
+    if args.pr:
+        pr = get_pr(args.pr)
+        print(f"Using PR#{args.pr}: {pr['title']}")
+        sha = pr["head"]["sha"]
+
+        if pr["merged"]:
+            print("PR is already merged")
+            if args.head is None:
+                # use merge commit as head, since original PR sha may not be available in Git history.
+                args.head = pr["merge_commit_sha"] 
+            
+        if args.base is None:
+            args.base = pr["base"]["sha"]
+    else:
+        sha = args.sha
+
+    if args.head is None:
+        args.head = sha
+
     if args.project is None:
         project = get_default_project()
         print(f"Using project={project}")
     else:
         project = args.project
-    cb = cloudbuild_v1.services.cloud_build.CloudBuildClient()
-    selectors = [make_selector(s) for s in args.test_selector]
+
+    selectors = []
+    selectors += [selector_by_tag(t) for t in args.tags or []]
+    selectors += [selector_by_name(n) for n in args.names or []]
+    if args.all:
+        selectors.append(lambda _: True)
+    if args.auto:
+        assert args.base is not None, "--base & [--head] or --pr are required for auto mode"
+        auto_tags = get_changed_files_tags(args.base, args.head)
+        selectors += [selector_by_tag(t) for t in auto_tags]
+    
     ui = UI()
-    Babysitter(ui, cb, project, args.pr_sha, selectors, args.c, args.r).do()
+    cb = cloudbuild_v1.services.cloud_build.CloudBuildClient()
+    Babysitter(ui, cb, project, sha, selectors, args.c, args.r).do()

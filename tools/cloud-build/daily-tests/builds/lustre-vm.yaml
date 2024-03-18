@@ -13,6 +13,14 @@
 # limitations under the License.
 
 ---
+tags:
+- m.DDN-EXAScaler
+- m.pre-existing-vpc
+- m.startup-script
+- m.vm-instance
+- m.wait-for-startup
+- vm
+
 timeout: 14400s  # 4hr
 steps:
 ## Test simple golang build

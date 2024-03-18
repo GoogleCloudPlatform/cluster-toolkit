@@ -13,6 +13,17 @@
 # limitations under the License.
 
 ---
+tags:
+- m.cloud-storage-bucket
+- m.nfs-server
+- m.schedmd-slurm-gcp-v5-controller
+- m.schedmd-slurm-gcp-v5-login
+- m.schedmd-slurm-gcp-v5-node-group
+- m.schedmd-slurm-gcp-v5-partition
+- m.startup-script
+- m.vpc
+- slurm5
+
 timeout: 14400s  # 4hr
 steps:
 ## Test simple golang build

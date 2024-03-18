@@ -13,6 +13,16 @@
 # limitations under the License.
 
 ---
+tags:
+- m.cloud-storage-bucket
+- m.filestore
+- m.gke-cluster
+- m.gke-job-template
+- m.gke-node-pool
+- m.gke-persistent-volume
+- m.vpc
+- gke
+
 timeout: 14400s  # 4hr
 
 steps:

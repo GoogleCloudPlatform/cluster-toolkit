@@ -111,8 +111,8 @@ func (bp *Blueprint) expandGroups() error {
 	}
 
 	var errs Errors
-	for ig := range bp.DeploymentGroups {
-		errs.Add(bp.expandGroup(Root.Groups.At(ig), &bp.DeploymentGroups[ig]))
+	for ig := range bp.Groups {
+		errs.Add(bp.expandGroup(Root.Groups.At(ig), &bp.Groups[ig]))
 	}
 
 	if errs.Any() {
@@ -128,7 +128,7 @@ func (bp *Blueprint) expandGroups() error {
 	return nil
 }
 
-func (bp Blueprint) expandGroup(gp groupPath, g *DeploymentGroup) error {
+func (bp Blueprint) expandGroup(gp groupPath, g *Group) error {
 	var errs Errors
 	bp.expandBackend(g)
 	for im := range g.Modules {
@@ -143,7 +143,7 @@ func (bp Blueprint) expandModule(mp ModulePath, m *Module) error {
 	return validateModuleInputs(mp, *m, bp)
 }
 
-func (bp Blueprint) expandBackend(grp *DeploymentGroup) {
+func (bp Blueprint) expandBackend(grp *Group) {
 	// 1. DEFAULT: use TerraformBackend configuration (if supplied)
 	// 2. If top-level TerraformBackendDefaults is defined, insert that
 	//    backend into resource groups which have no explicit
@@ -156,13 +156,13 @@ func (bp Blueprint) expandBackend(grp *DeploymentGroup) {
 
 	be := &grp.TerraformBackend
 	if be.Type == "" {
-		be.Type = defaults.Type
-		be.Configuration = NewDict(defaults.Configuration.Items())
+		(*be) = defaults
 	}
+
 	if be.Type == "gcs" && !be.Configuration.Has("prefix") {
 		prefix := MustParseExpression(
 			fmt.Sprintf(`"%s/${var.deployment_name}/%s"`, bp.BlueprintName, grp.Name))
-		be.Configuration.Set("prefix", prefix.AsValue())
+		be.Configuration = be.Configuration.With("prefix", prefix.AsValue())
 	}
 }
 
@@ -176,15 +176,15 @@ func getModuleInputMap(inputs []modulereader.VarInfo) map[string]cty.Type {
 
 // initialize a Toolkit setting that corresponds to a module input of type list
 // create new list if unset, append if already set, error if value not a list
-func (mod *Module) addListValue(settingName string, value cty.Value) {
+func (mod *Module) addListValue(setting string, value cty.Value) {
 	args := []cty.Value{value}
 	mods := map[ModuleID]bool{}
 	for _, mod := range IsProductOfModuleUse(value) {
 		mods[mod] = true
 	}
 
-	if mod.Settings.Has(settingName) {
-		cur := mod.Settings.Get(settingName)
+	if mod.Settings.Has(setting) {
+		cur := mod.Settings.Get(setting)
 		for _, mod := range IsProductOfModuleUse(cur) {
 			mods[mod] = true
 		}
@@ -193,7 +193,7 @@ func (mod *Module) addListValue(settingName string, value cty.Value) {
 
 	exp := FunctionCallExpression("flatten", cty.TupleVal(args))
 	val := AsProductOfModuleUse(exp.AsValue(), maps.Keys(mods)...)
-	mod.Settings.Set(settingName, val)
+	mod.Settings = mod.Settings.With(setting, val)
 }
 
 // useModule matches input variables in a "using" module to output values
@@ -231,7 +231,7 @@ func useModule(mod *Module, use Module) {
 		v := AsProductOfModuleUse(ModuleRef(use.ID, setting).AsValue(), use.ID)
 
 		if !isList {
-			mod.Settings.Set(setting, v)
+			mod.Settings = mod.Settings.With(setting, v)
 		} else {
 			mod.addListValue(setting, v)
 		}
@@ -253,19 +253,18 @@ func (bp Blueprint) applyUseModules(m *Module) error {
 
 // expandGlobalLabels sets defaults for labels based on other variables.
 func (bp *Blueprint) expandGlobalLabels() {
-	vars := &bp.Vars
 	defaults := cty.ObjectVal(map[string]cty.Value{
 		blueprintLabel:  cty.StringVal(bp.BlueprintName),
 		deploymentLabel: GlobalRef("deployment_name").AsValue()})
 
 	labels := "labels"
 	var gl cty.Value
-	if !vars.Has(labels) {
+	if !bp.Vars.Has(labels) {
 		gl = defaults
 	} else {
-		gl = FunctionCallExpression("merge", defaults, vars.Get(labels)).AsValue()
+		gl = FunctionCallExpression("merge", defaults, bp.Vars.Get(labels)).AsValue()
 	}
-	vars.Set(labels, gl)
+	bp.Vars = bp.Vars.With(labels, gl)
 }
 
 func combineModuleLabels(mod Module) cty.Value {
@@ -285,7 +284,7 @@ func (bp Blueprint) applyGlobalVarsInModule(mod *Module) {
 	for _, input := range mi.Inputs {
 		if input.Name == "labels" && bp.Vars.Has("labels") {
 			// labels are special case, always make use of global labels
-			mod.Settings.Set("labels", combineModuleLabels(*mod))
+			mod.Settings = mod.Settings.With("labels", combineModuleLabels(*mod))
 		}
 
 		// Module setting exists? Nothing more needs to be done.
@@ -295,12 +294,12 @@ func (bp Blueprint) applyGlobalVarsInModule(mod *Module) {
 
 		// If it's not set, is there a global we can use?
 		if bp.Vars.Has(input.Name) {
-			mod.Settings.Set(input.Name, GlobalRef(input.Name).AsValue())
+			mod.Settings = mod.Settings.With(input.Name, GlobalRef(input.Name).AsValue())
 			continue
 		}
 
 		if input.Name == mi.Metadata.Ghpc.InjectModuleId {
-			mod.Settings.Set(input.Name, cty.StringVal(string(mod.ID)))
+			mod.Settings = mod.Settings.With(input.Name, cty.StringVal(string(mod.ID)))
 		}
 	}
 }
@@ -330,8 +329,8 @@ func validateModuleReference(bp Blueprint, from Module, toID ModuleID) error {
 
 	fg := bp.ModuleGroupOrDie(from.ID)
 	tg := bp.ModuleGroupOrDie(to.ID)
-	fgi := slices.IndexFunc(bp.DeploymentGroups, func(g DeploymentGroup) bool { return g.Name == fg.Name })
-	tgi := slices.IndexFunc(bp.DeploymentGroups, func(g DeploymentGroup) bool { return g.Name == tg.Name })
+	fgi := slices.IndexFunc(bp.Groups, func(g Group) bool { return g.Name == fg.Name })
+	tgi := slices.IndexFunc(bp.Groups, func(g Group) bool { return g.Name == tg.Name })
 	if tgi > fgi {
 		return fmt.Errorf("%s: %s is in a later group", errMsgIntergroupOrder, to.ID)
 	}
@@ -382,9 +381,9 @@ func validateModuleSettingReference(bp Blueprint, mod Module, r Reference) error
 }
 
 // FindAllIntergroupReferences finds all intergroup references within the group
-func (dg DeploymentGroup) FindAllIntergroupReferences(bp Blueprint) []Reference {
+func (g Group) FindAllIntergroupReferences(bp Blueprint) []Reference {
 	igcRefs := map[Reference]bool{}
-	for _, mod := range dg.Modules {
+	for _, mod := range g.Modules {
 		for _, ref := range FindIntergroupReferences(mod.Settings.AsObject(), mod, bp) {
 			igcRefs[ref] = true
 		}
@@ -434,7 +433,7 @@ func (bp *Blueprint) populateOutputs() {
 
 // OutputNames returns the group-level output names constructed from module ID
 // and module-level output name; by construction, all elements are unique
-func (dg DeploymentGroup) OutputNames() []string {
+func (dg Group) OutputNames() []string {
 	outputs := []string{}
 	for _, mod := range dg.Modules {
 		for _, output := range mod.Outputs {
@@ -446,7 +445,7 @@ func (dg DeploymentGroup) OutputNames() []string {
 
 // OutputNamesByGroup returns the outputs from prior groups that match input
 // names for this group as a map
-func OutputNamesByGroup(g DeploymentGroup, bp Blueprint) (map[GroupName][]string, error) {
+func OutputNamesByGroup(g Group, bp Blueprint) (map[GroupName][]string, error) {
 	refs := g.FindAllIntergroupReferences(bp)
 	inputs := make([]string, len(refs))
 	for i, ref := range refs {
@@ -459,7 +458,7 @@ func OutputNamesByGroup(g DeploymentGroup, bp Blueprint) (map[GroupName][]string
 	}
 
 	res := make(map[GroupName][]string)
-	for _, pg := range bp.DeploymentGroups[:i] {
+	for _, pg := range bp.Groups[:i] {
 		res[pg.Name] = intersection(inputs, pg.OutputNames())
 	}
 	return res, nil

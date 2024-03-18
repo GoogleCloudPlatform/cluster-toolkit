@@ -13,6 +13,20 @@
 # limitations under the License.
 
 ---
+tags:
+- m.custom-image
+- m.htcondor-access-point
+- m.htcondor-central-manager
+- m.htcondor-execute-point
+- m.htcondor-install
+- m.htcondor-pool-secrets
+- m.htcondor-service-accounts
+- m.htcondor-setup
+- m.startup-script
+- m.vpc
+- htcondor
+- packer
+
 timeout: 14400s  # 4hr
 steps:
 ## Test simple golang build

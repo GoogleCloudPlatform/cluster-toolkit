@@ -25,45 +25,31 @@ import (
 )
 
 func init() {
-	artifactsFlag := "artifacts"
-	importCmd.Flags().StringVarP(&artifactsDir, artifactsFlag, "a", "", "Artifacts directory (automatically configured if unset)")
-	importCmd.MarkFlagDirname(artifactsFlag)
 	rootCmd.AddCommand(importCmd)
 }
 
 var (
-	importCmd = &cobra.Command{
+	importCmd = addArtifactsDirFlag(&cobra.Command{
 		Use:               "import-inputs DEPLOYMENT_GROUP_DIRECTORY",
 		Short:             "Import input values from previous deployment groups.",
 		Long:              "Import input values from previous deployment groups upon which this group depends.",
 		Args:              cobra.MatchAll(cobra.ExactArgs(1), checkDir),
 		ValidArgsFunction: matchDirs,
-		PreRun:            parseExportImportArgs,
-		RunE:              runImportCmd,
+		Run:               runImportCmd,
 		SilenceUsage:      true,
-	}
+	})
 )
 
-func runImportCmd(cmd *cobra.Command, args []string) error {
-	groupDir := filepath.Clean(args[0])
+func runImportCmd(cmd *cobra.Command, args []string) {
+	deplRoot, groupDir := parseExportImportArgs(args)
+	artifactsDir := getArtifactsDir(deplRoot)
 
-	if err := shell.CheckWritableDir(groupDir); err != nil {
-		return err
-	}
+	checkErr(shell.CheckWritableDir(groupDir))
 
 	expandedBlueprintFile := filepath.Join(artifactsDir, modulewriter.ExpandedBlueprintName)
 	bp, _, err := config.NewBlueprint(expandedBlueprintFile)
-	if err != nil {
-		return err
-	}
+	checkErr(err)
 
-	if err := shell.ValidateDeploymentDirectory(bp.DeploymentGroups, deploymentRoot); err != nil {
-		return err
-	}
-
-	if err := shell.ImportInputs(groupDir, artifactsDir, expandedBlueprintFile); err != nil {
-		return err
-	}
-
-	return nil
+	checkErr(shell.ValidateDeploymentDirectory(bp.Groups, deplRoot))
+	checkErr(shell.ImportInputs(groupDir, artifactsDir, bp))
 }

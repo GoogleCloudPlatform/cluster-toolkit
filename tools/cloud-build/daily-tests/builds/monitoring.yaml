@@ -13,6 +13,16 @@
 # limitations under the License.
 
 ---
+tags:
+- m.cloud-storage-bucket
+- m.dashboard
+- m.nfs-server
+- m.startup-script
+- m.vm-instance
+- m.vpc
+- m.wait-for-startup
+- monitoring
+
 timeout: 14400s  # 4hr
 steps:
 ## Test simple golang build

@@ -21,14 +21,17 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [hpc-slurm-v6.yaml](#hpc-slurm-v6yaml--) ![core-badge] ![experimental-badge]
   * [hpc-enterprise-slurm.yaml](#hpc-enterprise-slurmyaml-) ![core-badge]
   * [hpc-slurm6-tpu.yaml](#hpc-slurm6-tpuyaml--) ![community-badge] ![experimental-badge]
+  * [hpc-slurm6-tpu-maxtext.yaml](#hpc-slurm6-tpu-maxtextyaml--) ![community-badge] ![experimental-badge]
   * [ml-slurm.yaml](#ml-slurmyaml-) ![core-badge]
   * [image-builder.yaml](#image-builderyaml-) ![core-badge]
+  * [image-builder-v6.yaml](#image-builderyaml--) ![core-badge] ![experimental-badge]
   * [serverless-batch.yaml](#serverless-batchyaml-) ![core-badge]
   * [serverless-batch-mpi.yaml](#serverless-batch-mpiyaml-) ![core-badge]
   * [pfs-lustre.yaml](#pfs-lustreyaml-) ![core-badge]
   * [cae-slurm.yaml](#cae-slurmyaml-) ![core-badge]
   * [hpc-build-slurm-image.yaml](#hpc-build-slurm-imageyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-ubuntu2004.yaml](#hpc-slurm-ubuntu2004yaml-) ![community-badge]
+  * [hpc-slurm-ubuntu2004-v6.yaml](#hpc-slurm-ubuntu2004-v6yaml-) ![community-badge] ![experimental-badge]
   * [pfs-daos.yaml](#pfs-daosyaml-) ![community-badge]
   * [hpc-slurm-daos.yaml](#hpc-slurm-daosyaml-) ![community-badge]
   * [hpc-amd-slurm.yaml](#hpc-amd-slurmyaml-) ![community-badge]
@@ -69,6 +72,13 @@ under `vars` before using an example blueprint.
 
 ### (Optional) Setting up a remote terraform state
 
+There are two ways to specify [terraform backends] in HPC Toolkit: a default setting that propagates all groups and custom per-group configuration:
+
+* `terraform_backend_defaults` at top-level of YAML blueprint
+* `terraform_backend` within a deployment group definition
+
+Examples of each are shown below. If both settings are used, then the custom per-group value is used without modification.
+
 The following block will configure terraform to point to an existing GCS bucket
 to store and manage the terraform state. Add your own bucket name in place of
 `<<BUCKET_NAME>>` and (optionally) a service account in place of
@@ -85,6 +95,22 @@ terraform_backend_defaults:
     impersonate_service_account: <<SERVICE_ACCOUNT>>
 ```
 
+All Terraform-supported backends are supported by the Toolkit. Specify the backend using `type` and its [configuration block] using `configuration`.
+
+For the [gcs] backend, you must minimally supply the `bucket` configuration setting. The `prefix` setting is generated automatically as "blueprint_name/deployment_name/group_name" for each deployment group. This ensures uniqueness.
+
+If you wish to specify a custom prefix, use a unique value for each group following this example:
+
+```yaml
+deployment_groups:
+- group: example_group
+  terraform_backend:
+    type: gcs
+    configuration:
+      bucket: your-bucket
+      prefix: your/object/prefix
+```
+
 You can set the configuration using the CLI in the `create` and `expand`
 subcommands as well:
 
@@ -99,6 +125,10 @@ subcommands as well:
 > This feature only supports variables of string type. If you set configuration
 > in both the blueprint and CLI, the tool uses values at CLI. "gcs" is set as
 > type by default.
+
+[terraform backends]: https://developer.hashicorp.com/terraform/language/settings/backends/configuration
+[configuration block]: https://developer.hashicorp.com/terraform/language/settings/backends/configuration#using-a-backend-block
+[gcs]: https://developer.hashicorp.com/terraform/language/settings/backends/gcs
 
 ## Ongoing Migration to Slurm-GCP v6
 
@@ -166,7 +196,7 @@ the experimental badge (![experimental-badge]).
 >
 > ```shell
 > # Install Python3 and run
-> pip3 install -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/5.10.4/scripts/requirements.txt
+> pip3 install -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/5.10.6/scripts/requirements.txt
 > ```
 
 Creates a basic auto-scaling Slurm cluster with mostly default settings. The
@@ -377,6 +407,24 @@ Creates an auto-scaling Slurm cluster with TPU nodes.
 
 [hpc-slurm6-tpu.yaml]: ../community/examples/hpc-slurm6-tpu.yaml
 
+### [hpc-slurm6-tpu-maxtext.yaml] ![community-badge] ![experimental-badge]
+
+> **Warning**: Requires additional dependencies **to be installed on the system deploying the infrastructure**.
+>
+> ```shell
+> # Install Python3 and run
+> pip3 install -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/6.4.2/scripts/requirements.txt
+> ```
+
+Creates an auto-scaling Slurm cluster with TPU nodes.
+
+For tutorial on how to run [maxtext] workload on TPU partition using Slurm,
+Follow [hpc-slurm-tpu-maxtext].
+
+[maxtext]: https://github.com/google/maxtext
+[hpc-slurm6-tpu-maxtext.yaml]: ../community/examples/hpc-slurm6-tpu-maxtext.yaml
+[hpc-slurm-tpu-maxtext]: ../docs/hpc-slurm6-tpu-maxtext.md
+
 ### [ml-slurm.yaml] ![core-badge]
 
 This blueprint provisions an HPC cluster running the Slurm scheduler with the
@@ -551,6 +599,131 @@ For this example the following is needed in the selected region:
 * Compute Engine API: Resource policies: **one for each job in parallel** -
   _only needed for `compute` partition_
 
+### [image-builder-v6.yaml] ![core-badge] ![experimental-badge]
+
+This blueprint uses the [Packer template module][pkr] to create a custom VM
+image and uses it to provision an HPC cluster using the Slurm scheduler. By
+using a custom image, the cluster is able to begin running jobs sooner and more
+reliably because there is no need to install applications as VMs boot. This
+example takes the following steps:
+
+1. Creates a network with outbound internet access in which to build the image (see
+[Custom Network](#custom-network-deployment-group-1)).
+2. Creates a script that will be used to customize the image (see
+[Toolkit Runners](#toolkit-runners-deployment-group-1)).
+3. Builds a custom Slurm image by executing the script on a standard Slurm image
+(see [Packer Template](#packer-template-deployment-group-2)).
+4. Deploys a Slurm cluster using the custom image (see
+[Slurm Cluster Based on Custom Image](#slurm-cluster-based-on-custom-image-deployment-group-3)).
+
+#### Building and using the custom image
+
+Create the deployment folder from the blueprint:
+
+```text
+./ghpc create examples/image-builder-v6.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
+./ghpc deploy image-builder-v6-001"
+```
+
+Follow the on-screen prompts to approve the creation of each deployment group.
+For example, the network is created in the first deployment group, the VM image
+is created in the second group, and the third group uses the image to create an
+HPC cluster using the Slurm scheduler.
+
+When you are done, clean up the resources in reverse order of creation:
+
+```text
+terraform -chdir=image-builder-v6-001/cluster destroy --auto-approve
+terraform -chdir=image-builder-v6-001/primary destroy --auto-approve
+```
+
+Finally, browse to the [Cloud Console][console-images] to delete your custom
+image. It will be named beginning with `my-slurm-image` followed by a date and
+timestamp for uniqueness.
+
+[console-images]: https://console.cloud.google.com/compute/images
+
+#### Why use a custom image?
+
+Using a custom VM image can be more scalable and reliable than installing
+software using boot-time startup scripts because:
+
+* it avoids reliance on continued availability of package repositories
+* VMs will join an HPC cluster and execute workloads more rapidly due to reduced
+  boot-time configuration
+* machines are guaranteed to boot with a static software configuration chosen
+  when the custom image was created. No potential for some machines to have
+  different software versions installed due to `apt`/`yum`/`pip` installations
+  executed after remote repositories have been updated.
+
+[hpcimage]: https://cloud.google.com/compute/docs/instances/create-hpc-vm
+[pkr]: ../modules/packer/custom-image/README.md
+[image-builder-v6.yaml]: ./image-builder-v6.yaml
+
+#### Custom Network (deployment group 1)
+
+A tool called [Packer](https://packer.io) builds custom VM images by creating
+short-lived VMs, executing scripts on them, and saving the boot disk as an
+image that can be used by future VMs. The short-lived VM typically operates in a
+network that has outbound access to the internet for downloading software.
+
+This deployment group creates a network using [Cloud Nat][cloudnat] and
+[Identity-Aware Proxy (IAP)][iap] to allow outbound traffic and inbound SSH
+connections without exposing the machine to the internet on a public IP address.
+
+[cloudnat]: https://cloud.google.com/nat/docs/overview
+[iap]: https://cloud.google.com/iap/docs/using-tcp-forwarding
+
+#### Toolkit Runners (deployment group 1)
+
+The Toolkit [startup-script](../modules/scripts/startup-script/README.md)
+module supports boot-time configuration of VMs using "runners". Runners are
+configured as a series of scripts uploaded to Cloud Storage. A simple, standard
+[VM startup script][vmstartup] runs at boot-time, downloads the scripts from
+Cloud Storage and executes them in sequence.
+
+The script in this example performs the trivial task of creating a file as a
+simple demonstration of functionality. You can use the startup-script module
+to address more complex scenarios.
+
+[vmstartup]: https://cloud.google.com/compute/docs/instances/startup-scripts/linux
+
+#### Packer Template (deployment group 2)
+
+The Packer module uses the startup-script module from the first deployment group
+and executes the script to produce a custom image.
+
+#### Slurm Cluster Based on Custom Image (deployment group 3)
+
+Once the Slurm cluster has been deployed we can test that our Slurm compute
+partition is using the custom image. Each compute node should contain the
+`hello.txt` file added by the startup-script.
+
+1. SSH into the login node `imagebuild-login-login-001`.
+2. Run a job that prints the contents of the added file:
+
+  ```bash
+  $ srun -N 2 cat /home/hello.txt
+  Hello World
+  Hello World
+  ```
+
+#### Quota Requirements for image-builder-v6.yaml
+
+For this example the following is needed in the selected region:
+
+* Compute Engine API: Images (global, not regional quota): 1 image per invocation of `packer build`
+* Compute Engine API: Persistent Disk SSD (GB): **~50 GB**
+* Compute Engine API: Persistent Disk Standard (GB): **~64 GB static + 32
+  GB/node** up to 704 GB
+* Compute Engine API: N2 CPUs: **4** (for short-lived Packer VM and Slurm login node)
+* Compute Engine API: C2 CPUs: **4** for controller node and **60/node** active
+  in `compute` partition up to 1,204
+* Compute Engine API: Affinity Groups: **one for each job in parallel** - _only
+  needed for `compute` partition_
+* Compute Engine API: Resource policies: **one for each job in parallel** -
+  _only needed for `compute` partition_
+
 ### [serverless-batch.yaml] ![core-badge]
 
 This example demonstrates how to use the HPC Toolkit to set up a Google Cloud Batch job
@@ -709,7 +882,7 @@ The blueprint contains 3 groups:
 >
 > ```shell
 > # Install Python3 and run
-> pip3 install -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/5.10.4/scripts/requirements.txt
+> pip3 install -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/5.10.6/scripts/requirements.txt
 > ```
 
 Similar to the [hpc-slurm.yaml] example, but using Ubuntu 20.04 instead of CentOS 7.
@@ -726,6 +899,46 @@ partition runs on compute optimized nodes of type `cs-standard-60`. The
 [hpc-slurm-ubuntu2004.yaml]: ../community/examples/hpc-slurm-ubuntu2004.yaml
 
 #### Quota Requirements for hpc-slurm-ubuntu2004.yaml
+
+For this example the following is needed in the selected region:
+
+* Cloud Filestore API: Basic HDD (Standard) capacity (GB): **1,024 GB**
+* Compute Engine API: Persistent Disk SSD (GB): **~50 GB**
+* Compute Engine API: Persistent Disk Standard (GB): **~50 GB static + 50
+  GB/node** up to 1,250 GB
+* Compute Engine API: N2 CPUs: **12**
+* Compute Engine API: C2 CPUs: **4** for controller node and **60/node** active
+  in `compute` partition up to 1,204
+* Compute Engine API: Affinity Groups: **one for each job in parallel** - _only
+  needed for `compute` partition_
+* Compute Engine API: Resource policies: **one for each job in parallel** -
+  _only needed for `compute` partition_
+
+### [hpc-slurm-ubuntu2004-v6.yaml] ![community-badge] ![experimental-badge]
+
+> **Warning**: The variables `enable_reconfigure`,
+> `enable_cleanup_compute`, and `enable_cleanup_subscriptions`, if set to
+> `true`, require additional dependencies **to be installed on the system deploying the infrastructure**.
+>
+> ```shell
+> # Install Python3 and run
+> pip3 install -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/6.4.1/scripts/requirements.txt
+> ```
+
+Similar to the [hpc-slurm-v6.yaml] example, but using Ubuntu 20.04 instead of CentOS 7.
+[Other operating systems] are supported by SchedMD for the the Slurm on GCP project and images are listed [here](https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#published-image-family). Only the examples listed in this page been tested by the Cloud HPC Toolkit team.
+
+The cluster will support 2 partitions named `debug` and `compute`.
+The `debug` partition is the default partition and runs on smaller
+`n2-standard-2` nodes. The `compute` partition is not default and requires
+specifying in the `srun` command via the `--partition` flag. The `compute`
+partition runs on compute optimized nodes of type `cs-standard-60`. The
+`compute` partition may require additional quota before using.
+
+[Other operating systems]: https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#supported-operating-systems
+[hpc-slurm-ubuntu2004-v6.yaml]: ../community/examples/hpc-slurm-ubuntu2004-v6.yaml
+
+#### Quota Requirements for hpc-slurm-ubuntu2004-v6.yaml
 
 For this example the following is needed in the selected region:
 

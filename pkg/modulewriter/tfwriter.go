@@ -81,8 +81,8 @@ func writeOutputs(
 				desc = fmt.Sprintf("Generated output from module '%s'", mod.ID)
 			}
 			blockBody.SetAttributeValue("description", cty.StringVal(desc))
-			value := fmt.Sprintf("module.%s.%s", mod.ID, output.Name)
-			blockBody.SetAttributeRaw("value", simpleTokens(value))
+			ref := config.ModuleRef(mod.ID, output.Name).AsValue()
+			blockBody.SetAttributeRaw("value", config.TokensForValue(ref))
 			if output.Sensitive {
 				blockBody.SetAttributeValue("sensitive", cty.BoolVal(output.Sensitive))
 			}
@@ -110,7 +110,9 @@ func relaxVarType(t cty.Type) cty.Type {
 }
 
 func getTypeTokens(ty cty.Type) hclwrite.Tokens {
-	return simpleTokens(typeexpr.TypeString(ty))
+	// TODO: don't use TokensForIdentifier
+	// This is a temporary solution until we have a better way to tokenize types
+	return hclwrite.TokensForIdentifier(typeexpr.TypeString(ty))
 }
 
 func writeVariables(vars map[string]cty.Value, extraVars []modulereader.VarInfo, dst string) error {
@@ -184,46 +186,52 @@ func writeMain(
 	return writeHclFile(filepath.Join(dst, "main.tf"), hclFile)
 }
 
-var simpleTokens = hclwrite.TokensForIdentifier
+type provider struct {
+	alias   string
+	source  string
+	version string
+	config  config.Dict
+}
 
-func writeProviders(vars map[string]cty.Value, dst string) error {
+func getProviders(bp config.Blueprint) []provider {
+	gglConf := config.Dict{}
+	for s, v := range map[string]string{
+		"project": "project_id",
+		"region":  "region",
+		"zone":    "zone"} {
+		if bp.Vars.Has(v) {
+			gglConf = gglConf.With(s, config.GlobalRef(v).AsValue())
+		}
+	}
+
+	return []provider{
+		{"google", "hashicorp/google", "~> 4.84.0", gglConf},
+		{"google-beta", "hashicorp/google-beta", "~> 4.84.0", gglConf},
+	}
+}
+
+func writeProviders(providers []provider, dst string) error {
 	hclFile := hclwrite.NewEmptyFile()
 	hclBody := hclFile.Body()
 
-	for _, prov := range []string{"google", "google-beta"} {
+	for _, prov := range providers {
 		hclBody.AppendNewline()
-		provBlock := hclBody.AppendNewBlock("provider", []string{prov})
-		provBody := provBlock.Body()
-		if _, ok := vars["project_id"]; ok {
-			provBody.SetAttributeRaw("project", simpleTokens("var.project_id"))
-		}
-		if _, ok := vars["zone"]; ok {
-			provBody.SetAttributeRaw("zone", simpleTokens("var.zone"))
-		}
-		if _, ok := vars["region"]; ok {
-			provBody.SetAttributeRaw("region", simpleTokens("var.region"))
+		pb := hclBody.AppendNewBlock("provider", []string{prov.alias}).Body()
+
+		for _, s := range orderKeys(prov.config.Items()) {
+			pb.SetAttributeRaw(s, config.TokensForValue(prov.config.Get(s)))
 		}
 	}
 	return writeHclFile(filepath.Join(dst, "providers.tf"), hclFile)
 }
 
-func writeVersions(dst string) error {
+func writeVersions(providers []provider, dst string) error {
 	f := hclwrite.NewEmptyFile()
 	body := f.Body()
 	body.AppendNewline()
 	tfb := body.AppendNewBlock("terraform", []string{}).Body()
 	tfb.SetAttributeValue("required_version", cty.StringVal(">= 1.2"))
 	tfb.AppendNewline()
-
-	type provider struct {
-		alias   string
-		source  string
-		version string
-	}
-	providers := []provider{
-		{"google", "hashicorp/google", "~> 4.84.0"},
-		{"google-beta", "hashicorp/google-beta", "~> 4.84.0"},
-	}
 
 	pb := tfb.AppendNewBlock("required_providers", []string{}).Body()
 
@@ -252,14 +260,14 @@ func writeTerraformInstructions(w io.Writer, grpPath string, n config.GroupName,
 	}
 }
 
-// writeDeploymentGroup creates and sets up the terraform deployment group
-func (w TFWriter) writeDeploymentGroup(
+// writeGroup creates and sets up the terraform deployment group
+func (w TFWriter) writeGroup(
 	bp config.Blueprint,
 	groupIndex int,
 	groupPath string,
 	instructions io.Writer,
 ) error {
-	g := bp.DeploymentGroups[groupIndex]
+	g := bp.Groups[groupIndex]
 	deploymentVars, err := getUsedDeploymentVars(g, bp)
 	if err != nil {
 		return err
@@ -299,19 +307,20 @@ func (w TFWriter) writeDeploymentGroup(
 		return fmt.Errorf("error writing terraform.tfvars file for deployment group %s: %w", g.Name, err)
 	}
 
+	providers := getProviders(bp)
 	// Write providers.tf file
-	if err := writeProviders(deploymentVars, groupPath); err != nil {
+	if err := writeProviders(providers, groupPath); err != nil {
 		return fmt.Errorf("error writing providers.tf file for deployment group %s: %w", g.Name, err)
 	}
 
 	// Write versions.tf file
-	if err := writeVersions(groupPath); err != nil {
+	if err := writeVersions(providers, groupPath); err != nil {
 		return fmt.Errorf("error writing versions.tf file for deployment group %s: %v", g.Name, err)
 	}
 
-	multiGroupDeployment := len(bp.DeploymentGroups) > 1
+	multiGroupDeployment := len(bp.Groups) > 1
 	printImportInputs := multiGroupDeployment && groupIndex > 0
-	printExportOutputs := multiGroupDeployment && groupIndex < len(bp.DeploymentGroups)-1
+	printExportOutputs := multiGroupDeployment && groupIndex < len(bp.Groups)-1
 
 	writeTerraformInstructions(instructions, groupPath, g.Name, printExportOutputs, printImportInputs)
 
@@ -320,16 +329,16 @@ func (w TFWriter) writeDeploymentGroup(
 
 // Transfers state files from previous resource groups (in .ghpc/) to a newly written blueprint
 func (w TFWriter) restoreState(deploymentDir string) error {
-	prevDeploymentGroupPath := filepath.Join(HiddenGhpcDir(deploymentDir), prevDeploymentGroupDirName)
-	files, err := os.ReadDir(prevDeploymentGroupPath)
+	prevGroupPath := filepath.Join(HiddenGhpcDir(deploymentDir), prevGroupDirName)
+	files, err := os.ReadDir(prevGroupPath)
 	if err != nil {
-		return fmt.Errorf("error trying to read previous modules in %s, %w", prevDeploymentGroupPath, err)
+		return fmt.Errorf("error trying to read previous modules in %s, %w", prevGroupPath, err)
 	}
 
 	for _, f := range files {
 		var tfStateFiles = []string{tfStateFileName, tfStateBackupFileName}
 		for _, stateFile := range tfStateFiles {
-			src := filepath.Join(prevDeploymentGroupPath, f.Name(), stateFile)
+			src := filepath.Join(prevGroupPath, f.Name(), stateFile)
 			dest := filepath.Join(deploymentDir, f.Name(), stateFile)
 
 			if bytesRead, err := os.ReadFile(src); err == nil {
@@ -353,16 +362,23 @@ func orderKeys[T any](settings map[string]T) []string {
 	return keys
 }
 
-func getUsedDeploymentVars(group config.DeploymentGroup, bp config.Blueprint) (map[string]cty.Value, error) {
+func getUsedDeploymentVars(group config.Group, bp config.Blueprint) (map[string]cty.Value, error) {
 	res := map[string]cty.Value{
 		// labels must always be written as a variable as it is implicitly added
 		"labels": bp.Vars.Get("labels"),
 	}
-	for _, mod := range group.Modules {
-		for _, v := range config.GetUsedDeploymentVars(mod.Settings.AsObject()) {
-			res[v] = bp.Vars.Get(v)
-		}
+
+	used := []string{}
+	for _, m := range group.Modules {
+		used = append(used, config.GetUsedDeploymentVars(m.Settings.AsObject())...)
 	}
+	for _, p := range getProviders(bp) {
+		used = append(used, config.GetUsedDeploymentVars(p.config.AsObject())...)
+	}
+	for _, v := range used {
+		res[v] = bp.Vars.Get(v)
+	}
+
 	eres, err := bp.Eval(cty.ObjectVal(res))
 	if err != nil {
 		return nil, err
@@ -414,7 +430,7 @@ func SubstituteIgcReferencesInModule(mod config.Module, igcRefs map[config.Refer
 
 // FindIntergroupVariables returns all unique intergroup references made by
 // each module settings in a group
-func FindIntergroupVariables(group config.DeploymentGroup, bp config.Blueprint) map[config.Reference]modulereader.VarInfo {
+func FindIntergroupVariables(group config.Group, bp config.Blueprint) map[config.Reference]modulereader.VarInfo {
 	res := map[config.Reference]modulereader.VarInfo{}
 	igcRefs := group.FindAllIntergroupReferences(bp)
 	for _, r := range igcRefs {

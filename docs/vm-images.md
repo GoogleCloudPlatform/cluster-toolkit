@@ -191,9 +191,9 @@ description of our support for Windows images.
 <tr>
   <th>Lustre</th>
   <th></th>
-  <td><a href="../tools/validate_configs/os_compatibility_tests/slurm-lustre.yaml">✓</a></td>
+  <td><a href="../examples/hpc-enterprise-slurm.yaml">✓</a></td>
   <td></td>
-  <td><a href="../tools/validate_configs/os_compatibility_tests/slurm-lustre.yaml">✓</a></td>
+  <td>✓</td>
   <td></td>
 </tr>
 <tr>
@@ -207,10 +207,10 @@ description of our support for Windows images.
 <tr>
   <th>Startup script</th>
   <th></th>
-  <td><a href="../tools/validate_configs/os_compatibility_tests/slurm-startup.yaml">✓</a></td>
-  <td><a href="../tools/validate_configs/os_compatibility_tests/slurm-startup.yaml">✓</a></td>
-  <td><a href="../tools/validate_configs/os_compatibility_tests/slurm-startup.yaml">✓</a></td>
-  <td><a href="../tools/validate_configs/os_compatibility_tests/slurm-startup.yaml">✓</a></td>
+  <td><a href="../community/examples/hpc-slurm-ramble-gromacs.yaml">✓</a></td>
+  <td>✓</td>
+  <td>✓</td>
+  <td>✓</td>
 </tr>
 
 <tr>
@@ -336,9 +336,7 @@ These instructions apply to the following modules:
 [vm-crd.yaml]: ../tools/validate_configs/os_compatibility_tests/vm-crd.yaml
 [vm-filestore.yaml]: ../tools/validate_configs/os_compatibility_tests/vm-filestore.yaml
 [vm-lustre.yaml]: ../tools/validate_configs/os_compatibility_tests/vm-lustre.yaml
-[slurm-startup.yaml]: ../tools/validate_configs/os_compatibility_tests/slurm-startup.yaml
 [hpc-slurm-chromedesktop.yaml]: ../community/examples/hpc-slurm-chromedesktop.yaml
 [slurm-filestore.yaml]: ../tools/validate_configs/os_compatibility_tests/slurm-filestore.yaml
-[slurm-lustre.yaml]: ../tools/validate_configs/os_compatibility_tests/slurm-lustre.yaml
 [batch-startup.yaml]: ../tools/validate_configs/os_compatibility_tests/batch-startup.yaml
 [batch-filestore.yaml]: ../tools/validate_configs/os_compatibility_tests/batch-filestore.yaml

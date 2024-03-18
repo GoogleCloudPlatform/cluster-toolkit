@@ -13,6 +13,17 @@
 # limitations under the License.
 
 ---
+tags:
+- m.chrome-remote-desktop
+- m.filestore
+- m.schedmd-slurm-gcp-v5-controller
+- m.schedmd-slurm-gcp-v5-login
+- m.schedmd-slurm-gcp-v5-node-group
+- m.schedmd-slurm-gcp-v5-partition
+- m.vpc
+- crd
+- slurm5
+
 timeout: 14400s  # 4hr
 steps:
 ## Test simple golang build

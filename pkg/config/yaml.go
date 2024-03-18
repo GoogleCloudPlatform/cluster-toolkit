@@ -54,45 +54,29 @@ type Pos struct {
 	Column int
 }
 
-func readYaml(f string) (*yaml.Decoder, YamlCtx, error) {
-	data, err := os.ReadFile(f)
-	if err != nil {
-		return &yaml.Decoder{}, YamlCtx{}, fmt.Errorf("%s, filename=%s: %v", errMsgFileLoadError, f, err)
-	}
-	decoder := yaml.NewDecoder(bytes.NewReader(data))
-	decoder.KnownFields(true)
+func parseYaml[T any](y []byte) (T, YamlCtx, error) {
+	var s T
 
-	yamlCtx, err := NewYamlCtx(data)
+	yamlCtx, err := NewYamlCtx(y)
 	if err != nil { // YAML parsing error
-		return &yaml.Decoder{}, yamlCtx, err
+		return s, yamlCtx, err
 	}
-	return decoder, yamlCtx, nil
+
+	decoder := yaml.NewDecoder(bytes.NewReader(y))
+	decoder.KnownFields(true)
+	if err = decoder.Decode(&s); err != nil {
+		return s, yamlCtx, parseYamlV3Error(err)
+	}
+	return s, yamlCtx, nil
 }
 
-func importBlueprint(f string) (Blueprint, YamlCtx, error) {
-	decoder, yamlCtx, err := readYaml(f)
+func parseYamlFile[T any](path string) (T, YamlCtx, error) {
+	y, err := os.ReadFile(path)
 	if err != nil {
-		return Blueprint{}, YamlCtx{}, err
+		var s T
+		return s, YamlCtx{}, fmt.Errorf("failed to read the input yaml, filename=%s: %v", path, err)
 	}
-
-	var bp Blueprint
-	if err = decoder.Decode(&bp); err != nil {
-		return Blueprint{}, yamlCtx, parseYamlV3Error(err)
-	}
-	return bp, yamlCtx, nil
-}
-
-func importDeploymentFile(f string) (DeploymentSettings, YamlCtx, error) {
-	decoder, yamlCtx, err := readYaml(f)
-	if err != nil {
-		return DeploymentSettings{}, YamlCtx{}, err
-	}
-
-	var depl DeploymentSettings
-	if err = decoder.Decode(&depl); err != nil {
-		return DeploymentSettings{}, yamlCtx, parseYamlV3Error(err)
-	}
-	return depl, yamlCtx, nil
+	return parseYaml[T](y)
 }
 
 // YamlCtx is a contextual information to render errors.
@@ -339,8 +323,12 @@ func (d *Dict) UnmarshalYAML(n *yaml.Node) error {
 	if !ty.IsObjectType() {
 		return nodeToPosErr(n, fmt.Errorf("must be a mapping, got %s", ty.FriendlyName()))
 	}
+
 	for k, w := range v.Unwrap().AsValueMap() {
-		d.Set(k, w)
+		if d.m == nil {
+			d.m = map[string]cty.Value{}
+		}
+		d.m[k] = w
 	}
 	return nil
 }

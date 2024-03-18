@@ -13,6 +13,18 @@
 # limitations under the License.
 
 ---
+tags:
+- m.batch-job-template
+- m.batch-login-node
+- m.filestore
+- m.pre-existing-vpc
+- m.spack-execute
+- m.spack-setup
+- m.startup-script
+- m.vm-instance
+- batch
+- spack
+
 timeout: 14400s  # 4hr
 availableSecrets:
   secretManager:

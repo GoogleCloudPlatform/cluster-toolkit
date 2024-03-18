@@ -13,6 +13,19 @@
 # limitations under the License.
 
 ---
+tags:
+- m.filestore
+- m.schedmd-slurm-gcp-v6-controller
+- m.schedmd-slurm-gcp-v6-login
+- m.schedmd-slurm-gcp-v6-nodeset
+- m.schedmd-slurm-gcp-v6-partition
+- m.spack-execute
+- m.spack-setup
+- m.startup-script
+- m.vpc
+- slurm6
+- spack
+
 timeout: 14400s  # 4hr
 availableSecrets:
   secretManager:

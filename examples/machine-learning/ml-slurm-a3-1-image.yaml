@@ -1,0 +1,297 @@
+# Copyright 2024 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+blueprint_name: slurm-a3-image
+
+terraform_backend_defaults:
+  type: gcs
+  configuration:
+    bucket: customer-tf-state-bucket
+
+vars:
+  project_id:  ## Set GCP Project ID Here ##
+  deployment_name: slurm-a3-image
+  region: customer-region
+  zone: customer-zone
+  disk_size: 200
+  final_image_family: slurm-dlvm
+  network_name_system: slurm-sys-net
+  subnetwork_name_system: slurm-sys-subnet
+  slurm_cluster_name: slurm0
+  source_image_project_id: source-image-project-id # use value supplied by Google Cloud staff
+  source_image: source-image-name                  # use value supplied by Google Cloud staff
+
+deployment_groups:
+- group: build_script
+  modules:
+  - id: sysnet
+    source: modules/network/pre-existing-vpc
+    settings:
+      network_name: $(vars.network_name_system)
+      subnetwork_name: $(vars.subnetwork_name_system)
+
+  - id: image_build_script
+    source: modules/scripts/startup-script
+    settings:
+      install_ansible: true
+      configure_ssh_host_patterns:
+      - 10.0.0.*
+      - 10.1.0.*
+      - 10.2.0.*
+      - 10.3.0.*
+      - $(vars.slurm_cluster_name)*
+      runners:
+      - type: shell
+        destination: workaround_apt_change.sh
+        content: |
+          #!/bin/bash
+          set -e -o pipefail
+          rm -f /etc/apt/sources.list.d/kubernetes.list
+          apt-get update --allow-releaseinfo-change
+      - type: shell
+        destination: disable_dlvm_builtin_services.sh
+        content: |
+          #!/bin/bash
+          # many extra services are being started via /etc/rc.local; disable
+          # them on future boots of image
+          echo -e '#!/bin/bash\n/usr/bin/nvidia-persistenced --user root\nexit 0' > /etc/rc.local
+          # disable jupyter and notebooks-collection-agent services
+          systemctl stop jupyter.service notebooks-collection-agent.service
+          systemctl disable jupyter.service notebooks-collection-agent.service
+      - type: data
+        destination: /var/tmp/slurm_vars.json
+        content: |
+          {
+            "reboot": false,
+            "slurm_version": "23.02.7",
+            "install_cuda": false,
+            "nvidia_version": "latest",
+            "install_ompi": true,
+            "install_lustre": true,
+            "install_gcsfuse": true,
+            "monitoring_agent": "cloud-ops"
+          }
+      - type: shell
+        destination: install_slurm.sh
+        content: |
+          #!/bin/bash
+          set -e -o pipefail
+          ansible-galaxy role install googlecloudplatform.google_cloud_ops_agents
+          ansible-pull \
+              -U https://github.com/GoogleCloudPlatform/slurm-gcp -C 5.10.6 \
+              -i localhost, --limit localhost --connection=local \
+              -e @/var/tmp/slurm_vars.json \
+              ansible/playbook.yml
+      # this duplicates the ulimits configuration of the HPC VM Image
+      - type: data
+        destination: /etc/security/limits.d/99-unlimited.conf
+        content: |
+          * - memlock unlimited
+          * - nproc unlimited
+          * - stack unlimited
+          * - nofile 1048576
+          * - cpu unlimited
+          * - rtprio unlimited
+      - type: data
+        destination: /etc/systemd/system/slurmd.service.d/file_ulimit.conf
+        content: |
+          [Service]
+          LimitNOFILE=infinity
+      - type: data
+        destination: /etc/systemd/system/delay-a3.service
+        content: |
+          [Unit]
+          Description=Delay A3 boot until all network interfaces are routable
+          After=network-online.target
+          Wants=network-online.target
+          Before=google-startup-scripts.service
+
+          [Service]
+          ExecCondition=/bin/bash -c '/usr/bin/curl -s -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/machine-type | grep -q "/a3-highgpu-8g$"'
+          ExecStart=/usr/lib/systemd/systemd-networkd-wait-online -i enp6s0 -i enp12s0 -i enp134s0 -i enp140s0 -o routable --timeout=120
+          ExecStartPost=/bin/sleep 60
+
+          [Install]
+          WantedBy=multi-user.target
+      - type: shell
+        destination: configure_docker.sh
+        content: |
+          #!/bin/bash
+          set -e -o pipefail
+          # allow any user to use Docker
+          DOCKER_SOCKET_DROPIN_DIR="/etc/systemd/system/docker.socket.d"
+          if [ ! -d "${DOCKER_SOCKET_DROPIN_DIR}" ]; then
+              mkdir "${DOCKER_SOCKET_DROPIN_DIR}"
+          fi
+          DOCKER_SOCKET_DROPIN_FILE="group-override.conf"
+          if [ ! -f "${DOCKER_SOCKET_DROPIN_DIR}/${DOCKER_SOCKET_DROPIN_FILE}" ]; then
+              # indentation matters in EOT below; do not blindly edit!
+              cat <<EOT > "${DOCKER_SOCKET_DROPIN_DIR}/${DOCKER_SOCKET_DROPIN_FILE}"
+          [Socket]
+          SocketMode=0666
+          EOT
+          fi
+      - type: shell
+        destination: install_enroot_pyxis.sh
+        content: |
+          #!/bin/bash
+          set -e -o pipefail
+          ### Setting up Enroot
+          if ! dpkg -l enroot &>/dev/null; then
+              arch=\$(dpkg --print-architecture)
+              curl -fSsL -O https://github.com/NVIDIA/enroot/releases/download/v3.4.1/enroot_3.4.1-1_${arch}.deb
+              curl -fSsL -O https://github.com/NVIDIA/enroot/releases/download/v3.4.1/enroot+caps_3.4.1-1_${arch}.deb # optional
+              apt-get update
+              apt-get install --assume-yes ./*.deb
+              rm enroot*.deb
+          fi
+          # configure enroot
+          # use single quotes around EOT to avoid shell interpolation
+          cat <<'EOT' > /etc/enroot/enroot.conf
+          ENROOT_RUNTIME_PATH    /mnt/localssd/${UID}/enroot/runtime
+          ENROOT_CACHE_PATH      /mnt/localssd/${UID}/enroot/cache
+          ENROOT_DATA_PATH       /mnt/localssd/${UID}/enroot/data
+          EOT
+          ### Install Pyxis
+          if [ ! -f "/usr/local/lib/slurm/spank_pyxis.so" ]; then
+              git clone --depth 1 https://github.com/NVIDIA/pyxis.git
+              cd pyxis && make install && cd -
+              rm -rf pyxis
+              echo "required /usr/local/lib/slurm/spank_pyxis.so" > /etc/slurm/plugstack.conf
+          fi
+      - type: shell
+        destination: install_mdadm.sh
+        content: |
+          #!/bin/bash
+          apt-get update
+          apt-get install mdadm --no-install-recommends --assume-yes
+      - type: data
+        destination: /usr/local/ghpc/mount_localssd.sh
+        content: |
+          #!/bin/bash
+          set -e -o pipefail
+
+          RAID_DEVICE=/dev/md0
+          DST_MNT=/mnt/localssd
+          DISK_LABEL=LOCALSSD
+          OPTIONS=discard,defaults
+
+          # if mount is successful, do nothing
+          if mount --source LABEL="$DISK_LABEL" --target="$DST_MNT" -o "$OPTIONS"; then
+                  exit 0
+          fi
+
+          # Create new RAID, format ext4 and mount
+          # TODO: handle case of zero or 1 local SSD disk
+          # TODO: handle case when /dev/md0 exists but was not mountable for
+          # some reason
+          DEVICES=`nvme list | grep nvme_ | grep -v nvme_card-pd | awk '{print $1}' | paste -sd ' '`
+          NB_DEVICES=`nvme list | grep nvme_ | grep -v nvme_card-pd | awk '{print $1}' | wc -l`
+          mdadm --create "$RAID_DEVICE" --level=0 --raid-devices=$NB_DEVICES $DEVICES
+          mkfs.ext4 -F "$RAID_DEVICE"
+          tune2fs "$RAID_DEVICE" -r 131072
+          e2label "$RAID_DEVICE" "$DISK_LABEL"
+          mkdir -p "$DST_MNT"
+          mount --source LABEL="$DISK_LABEL" --target="$DST_MNT" -o "$OPTIONS"
+          chmod 1777 "$DST_MNT"
+      - type: data
+        destination: /etc/systemd/system/mount-local-ssd.service
+        content: |
+          [Unit]
+          Description=Assemble local SSDs as software RAID; then format and mount
+
+          [Service]
+          ExecCondition=bash -c '/usr/bin/curl -s -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/machine-type | grep -q "/a3-highgpu-8g$"'
+          ExecStart=/bin/bash /usr/local/ghpc/mount_localssd.sh
+
+          [Install]
+          WantedBy=local-fs.target
+      - type: shell
+        destination: install_dcgm.sh
+        content: |
+          #!/bin/bash
+          set -e -o pipefail
+          apt-key del 7fa2af80
+          distribution=\$(. /etc/os-release;echo $ID$VERSION_ID | sed -e 's/\.//g')
+          wget https://developer.download.nvidia.com/compute/cuda/repos/$distribution/x86_64/cuda-keyring_1.0-1_all.deb
+          dpkg -i cuda-keyring_1.0-1_all.deb
+          apt-get update
+          apt-get install -y datacenter-gpu-manager
+          # libnvidia-nscq needed for A100/A800 and H100/H800 systems
+          apt-get install -y libnvidia-nscq-550
+      - type: shell
+        destination: add_dcgm_to_op_config.sh
+        content: |
+          #!/bin/bash
+          tee -a /etc/google-cloud-ops-agent/config.yaml > /dev/null << EOF
+          metrics:
+            receivers:
+              dcgm:
+                type: dcgm
+            service:
+              pipelines:
+                dcgm:
+                  receivers:
+                    - dcgm
+          EOF
+      - type: shell
+        destination: systemctl_services.sh
+        content: |
+          #!/bin/bash
+          set -e -o pipefail
+          # workaround b/309016676 (systemd-resolved restarts 4 times causing DNS
+          # resolution failures during google-startup-scripts.service)
+          systemctl daemon-reload
+          systemctl enable delay-a3.service
+          systemctl enable mount-local-ssd.service
+          systemctl enable nvidia-dcgm
+      - type: shell
+        destination: remove_snap_gcloud.sh
+        content: |
+          #!/bin/bash
+          # THIS RUNNER MUST BE THE LAST RUNNER BECAUSE IT WILL BREAK GSUTIL IN
+          # PARENT SCRIPT OF STARTUP-SCRIPT MODULE
+          set -e -o pipefail
+          # Remove original DLVM gcloud, lxds install due to conflict with snapd and NFS
+          snap remove google-cloud-cli lxd
+          # Install key and google-cloud-cli from apt repo
+          GCLOUD_APT_SOURCE="/etc/apt/sources.list.d/google-cloud-sdk.list"
+          if [ ! -f "${GCLOUD_APT_SOURCE}" ]; then
+              # indentation matters in EOT below; do not blindly edit!
+              cat <<EOT > "${GCLOUD_APT_SOURCE}"
+          deb [signed-by=/usr/share/keyrings/cloud.google.asc] https://packages.cloud.google.com/apt cloud-sdk main
+          EOT
+          fi
+          curl -o /usr/share/keyrings/cloud.google.asc https://packages.cloud.google.com/apt/doc/apt-key.gpg
+          apt-get update
+          apt-get install --assume-yes google-cloud-cli
+          # Clean up the bash executable hash for subsequent steps using gsutil
+          hash -r
+
+- group: slurm-build
+  modules:
+  - id: slurm-image
+    source: modules/packer/custom-image
+    kind: packer
+    use:
+    - image_build_script
+    - sysnet
+    settings:
+      # building this image does not require a GPU-enabled VM but must *not* be
+      # run on a N-series VM otherwise, the "open" drivers will not install
+      machine_type: c2d-standard-32
+      source_image_project_id: [$(vars.source_image_project_id)]
+      source_image: $(vars.source_image)
+      image_family: $(vars.final_image_family)

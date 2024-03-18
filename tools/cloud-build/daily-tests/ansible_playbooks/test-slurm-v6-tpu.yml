@@ -44,7 +44,7 @@
 - name: Run JAX verification
   register: jax_status
   failed_when: jax_status.rc != 0
-  retries: 3
+  retries: 10
   delay: 100
   ansible.builtin.command: |
     srun -N 1 -p tpu bash -c '

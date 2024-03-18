@@ -38,7 +38,7 @@ type ProposedChanges struct {
 // ValidateDeploymentDirectory ensures that the deployment directory structure
 // appears valid given a mapping of group names to module kinds
 // TODO: verify kind fully by auto-detecting type from group directory
-func ValidateDeploymentDirectory(groups []config.DeploymentGroup, deploymentRoot string) error {
+func ValidateDeploymentDirectory(groups []config.Group, deploymentRoot string) error {
 	for _, group := range groups {
 		groupPath := filepath.Join(deploymentRoot, string(group.Name))
 		if isDir, _ := DirInfo(groupPath); !isDir {

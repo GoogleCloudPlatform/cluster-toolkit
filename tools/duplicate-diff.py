@@ -70,6 +70,10 @@ duplicates = [
     [
         "community/modules/scripts/spack-setup/scripts/install_spack_deps.yml",
         "community/modules/scripts/ramble-setup/scripts/install_ramble_deps.yml",
+    ],
+    [
+        "community/modules/scheduler/schedmd-slurm-gcp-v5-controller/etc/long-prolog-slurm.conf.tpl",
+        "community/modules/scheduler/schedmd-slurm-gcp-v6-controller/etc/long-prolog-slurm.conf.tpl",
     ]
 ]
 

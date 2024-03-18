@@ -118,7 +118,7 @@ limitations under the License.
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 0.13.0 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.3.0 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 4.84 |
 | <a name="requirement_random"></a> [random](#requirement\_random) | >= 3.0 |
 
@@ -158,6 +158,7 @@ No modules.
 | <a name="input_pool_password"></a> [pool\_password](#input\_pool\_password) | HTCondor Pool Password | `string` | `null` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which HTCondor pool will be created | `string` | n/a | yes |
 | <a name="input_trust_domain"></a> [trust\_domain](#input\_trust\_domain) | Trust domain for HTCondor pool (if not supplied, will be set based on project\_id) | `string` | `""` | no |
+| <a name="input_user_managed_replication"></a> [user\_managed\_replication](#input\_user\_managed\_replication) | Replication parameters that will be used for defined secrets | <pre>list(object({<br>    location     = string<br>    kms_key_name = optional(string)<br>  }))</pre> | `[]` | no |
 
 ## Outputs
 

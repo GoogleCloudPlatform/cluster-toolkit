@@ -23,6 +23,7 @@
       path: "/builder/home/.ssh"
       state: directory
       mode: 0700
+
   - name: Create SSH Key
     community.crypto.openssh_keypair:
       path: "/builder/home/.ssh/id_rsa"
@@ -42,23 +43,22 @@
   - name: Create Deployment Directory
     ansible.builtin.include_tasks:
       file: tasks/create_deployment_directory.yml
+
   - name: Create Infrastructure and test
     block:
-    - name: Create Cluster with Terraform
-      ansible.builtin.command:
-        cmd: "{{ item }}"
-        chdir: "{{ workspace }}/{{ deployment_name }}/primary"
+    - name: Create Cluster with GHPC
+      register: deployment
+      changed_when: deployment.changed
+      ansible.builtin.command: ./ghpc deploy {{ deployment_name }} --auto-approve
       args:
-        creates: "{{ workspace }}/{{ deployment_name }}/.terraform"
+        chdir: "{{ workspace }}"
       environment:
         TF_IN_AUTOMATION: "TRUE"
-      register: terraform_output
-      with_items:
-      - "terraform init"
-      - "terraform apply -auto-approve -no-color"
+
     - name: Print instance IDs of VMs
       ansible.builtin.include_tasks:
         file: tasks/get_instance_ids.yml
+
     - name: Get IP of the remote node - Exact name provided
       changed_when: false
       register: get_remote_ip
@@ -66,6 +66,7 @@
         gcloud compute instances describe --zone={{ zone }} {{ remote_node }}
         --format='get(networkInterfaces[0].accessConfigs[0].natIP)'
       when: '"*" not in remote_node'
+
     # Setting a fact is needed because the variable will overwrite itself even
     # if a task is skipped, leading to an undefined variable when the exact name
     # is provided.
@@ -73,6 +74,7 @@
       ansible.builtin.set_fact:
         remote_ip: "{{ get_remote_ip.stdout }}"
       when: '"*" not in remote_node'
+
     - name: Get IP of the remote node - Name pattern provided
       changed_when: false
       register: get_remote_ip
@@ -81,10 +83,12 @@
           --format='get(networkInterfaces[0].accessConfigs[0].natIP)' --limit=1 \
           --filter=NAME:{{ remote_node }}
       when: '"*" in remote_node'
+
     - name: Set remote_ip variable - Name pattern provided
       ansible.builtin.set_fact:
         remote_ip: "{{ get_remote_ip.stdout }}"
       when: '"*" in remote_node'
+
     - name: Print remote node's public IP
       ansible.builtin.debug:
         var: remote_ip
@@ -107,6 +111,7 @@
         - --action=ALLOW
         - --rules=tcp:22
         - --source-ranges={{ build_ip.stdout }}
+
     - name: 'Add SSH Keys to OS-Login'
       register: key_result
       changed_when: key_result.rc == 0
@@ -120,11 +125,13 @@
         - --ttl
         - 2h
         - "--key-file=/builder/home/.ssh/id_rsa.pub"
+
     - name: Add Remote node as host
       ansible.builtin.add_host:
         hostname: "{{ remote_ip }}"
         groups: [remote_host]
       when: remote_ip | ansible.utils.ipaddr
+
     - name: Wait for cluster
       ansible.builtin.wait_for_connection:
 
@@ -133,11 +140,13 @@
     - name: Capture terraform stderr
       ansible.builtin.set_fact:
         terraform_apply_stderr_one_line: "{{ terraform_output.results.1.stderr | replace('\n',' ') }}"
+
     - name: Gather logs
       ansible.builtin.include_tasks:
         file: tasks/gather_startup_script_logs.yml
         apply:
           delegate_to: localhost
+
     - name: Cleanup firewall and infrastructure
       ansible.builtin.include_tasks:
         file: tasks/rescue_ghpc_failure.yml
@@ -146,6 +155,7 @@
       vars:
         deployment_name: "{{ deployment_name }}"
         workspace: "{{ workspace }}"
+
     - name: Trigger failure (rescue blocks otherwise revert failures)
       ansible.builtin.fail:
         msg: "Failed while setting up test infrastructure"
@@ -158,10 +168,12 @@
   - name: Remote Test Block
     vars:
       ansible_ssh_private_key_file: "/builder/home/.ssh/id_rsa"
+
     block:
     - name: Pause for 2 minutes to allow cluster setup
       ansible.builtin.pause:
         minutes: 2
+
     - name: Run Integration tests for HPC toolkit
       ansible.builtin.include_tasks: "{{ test }}"
       vars:
@@ -171,6 +183,7 @@
       loop: "{{ post_deploy_tests }}"
       loop_control:
         loop_var: test
+
     always:
     - name: Cleanup firewall and infrastructure
       ansible.builtin.include_tasks:

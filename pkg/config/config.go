@@ -63,8 +63,8 @@ func (n GroupName) Validate() error {
 	return nil
 }
 
-// DeploymentGroup defines a group of Modules that are all executed together
-type DeploymentGroup struct {
+// Group defines a group of Modules that are all executed together
+type Group struct {
 	Name             GroupName        `yaml:"group"`
 	TerraformBackend TerraformBackend `yaml:"terraform_backend,omitempty"`
 	Modules          []Module         `yaml:"modules"`
@@ -74,7 +74,7 @@ type DeploymentGroup struct {
 
 // Kind returns the kind of all the modules in the group.
 // If the group contains modules of different kinds, it returns UnknownKind
-func (g DeploymentGroup) Kind() ModuleKind {
+func (g Group) Kind() ModuleKind {
 	if len(g.Modules) == 0 {
 		return UnknownKind
 	}
@@ -117,19 +117,19 @@ func hintSpelling(s string, dict []string, err error) error {
 }
 
 // ModuleGroup returns the group containing the module
-func (bp Blueprint) ModuleGroup(mod ModuleID) (DeploymentGroup, error) {
-	for _, g := range bp.DeploymentGroups {
+func (bp Blueprint) ModuleGroup(mod ModuleID) (Group, error) {
+	for _, g := range bp.Groups {
 		for _, m := range g.Modules {
 			if m.ID == mod {
 				return g, nil
 			}
 		}
 	}
-	return DeploymentGroup{}, UnknownModuleError{mod}
+	return Group{}, UnknownModuleError{mod}
 }
 
 // ModuleGroupOrDie returns the group containing the module; panics if unfound
-func (bp Blueprint) ModuleGroupOrDie(mod ModuleID) DeploymentGroup {
+func (bp Blueprint) ModuleGroupOrDie(mod ModuleID) Group {
 	g, err := bp.ModuleGroup(mod)
 	if err != nil {
 		panic(fmt.Errorf("module %s not found in blueprint: %s", mod, err))
@@ -140,7 +140,7 @@ func (bp Blueprint) ModuleGroupOrDie(mod ModuleID) DeploymentGroup {
 // GroupIndex returns the index of the input group in the blueprint
 // return -1 if not found
 func (bp Blueprint) GroupIndex(n GroupName) int {
-	for i, g := range bp.DeploymentGroups {
+	for i, g := range bp.Groups {
 		if g.Name == n {
 			return i
 		}
@@ -149,12 +149,12 @@ func (bp Blueprint) GroupIndex(n GroupName) int {
 }
 
 // Group returns the deployment group with a given name
-func (bp Blueprint) Group(n GroupName) (DeploymentGroup, error) {
+func (bp Blueprint) Group(n GroupName) (Group, error) {
 	idx := bp.GroupIndex(n)
 	if idx == -1 {
-		return DeploymentGroup{}, fmt.Errorf("could not find group %s in blueprint", n)
+		return Group{}, fmt.Errorf("could not find group %s in blueprint", n)
 	}
-	return bp.DeploymentGroups[idx], nil
+	return bp.Groups[idx], nil
 }
 
 // TerraformBackend defines the configuration for the terraform state backend
@@ -194,10 +194,6 @@ const (
 	ValidationWarning
 	ValidationIgnore
 )
-
-func isValidValidationLevel(level int) bool {
-	return !(level > ValidationIgnore || level < ValidationError)
-}
 
 // Validator defines a validation step to be run on a blueprint
 type Validator struct {
@@ -244,8 +240,8 @@ type Blueprint struct {
 	Validators               []Validator `yaml:"validators,omitempty"`
 	ValidationLevel          int         `yaml:"validation_level,omitempty"`
 	Vars                     Dict
-	DeploymentGroups         []DeploymentGroup `yaml:"deployment_groups"`
-	TerraformBackendDefaults TerraformBackend  `yaml:"terraform_backend_defaults,omitempty"`
+	Groups                   []Group          `yaml:"deployment_groups"`
+	TerraformBackendDefaults TerraformBackend `yaml:"terraform_backend_defaults,omitempty"`
 }
 
 // DeploymentSettings are deployment-specific override settings
@@ -318,6 +314,9 @@ func (bp Blueprint) ListUnusedVariables() []string {
 	var used = map[string]bool{
 		"labels":          true, // automatically added
 		"deployment_name": true, // required
+		"project_id":      true, // by google provider
+		"region":          true, // by google provider
+		"zone":            true, // by google provider
 	}
 	for _, v := range GetUsedDeploymentVars(cty.ObjectVal(ns)) {
 		used[v] = true
@@ -342,25 +341,12 @@ func checkMovedModule(source string) error {
 }
 
 // NewBlueprint is a constructor for Blueprint
-func NewBlueprint(configFilename string) (Blueprint, YamlCtx, error) {
-	bp, ctx, err := importBlueprint(configFilename)
-	if err != nil {
-		return Blueprint{}, ctx, err
-	}
-	// if the validation level has been explicitly set to an invalid value
-	// in YAML blueprint then silently default to validationError
-	if !isValidValidationLevel(bp.ValidationLevel) {
-		bp.ValidationLevel = ValidationError
-	}
-	return bp, ctx, nil
+func NewBlueprint(path string) (Blueprint, YamlCtx, error) {
+	return parseYamlFile[Blueprint](path)
 }
 
 func NewDeploymentSettings(deploymentFilename string) (DeploymentSettings, YamlCtx, error) {
-	depl, ctx, err := importDeploymentFile(deploymentFilename)
-	if err != nil {
-		return DeploymentSettings{}, ctx, err
-	}
-	return depl, ctx, nil
+	return parseYamlFile[DeploymentSettings](deploymentFilename)
 }
 
 // Export exports the internal representation of a blueprint config
@@ -401,7 +387,7 @@ func checkModulesAndGroups(bp Blueprint) error {
 	seenGrp := map[GroupName]bool{}
 	errs := Errors{}
 
-	for ig, grp := range bp.DeploymentGroups {
+	for ig, grp := range bp.Groups {
 		pg := Root.Groups.At(ig)
 		errs.At(pg.Name, grp.Name.Validate())
 
@@ -611,8 +597,8 @@ func IsProductOfModuleUse(v cty.Value) []ModuleID {
 
 // WalkModules walks all modules in the blueprint and calls the walker function
 func (bp *Blueprint) WalkModules(walker func(ModulePath, *Module) error) error {
-	for ig := range bp.DeploymentGroups {
-		g := &bp.DeploymentGroups[ig]
+	for ig := range bp.Groups {
+		g := &bp.Groups[ig]
 		for im := range g.Modules {
 			p := Root.Groups.At(ig).Modules.At(im)
 			m := &g.Modules[im]

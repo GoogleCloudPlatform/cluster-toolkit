@@ -21,6 +21,7 @@ locals {
 
 locals {
   pool_password                             = coalesce(var.pool_password, random_password.pool.result)
+  auto                                      = length(var.user_managed_replication) == 0 ? "" : "-user"
   access_point_service_account_iam_email    = "serviceAccount:${var.access_point_service_account_email}"
   central_manager_service_account_iam_email = "serviceAccount:${var.central_manager_service_account_email}"
   execute_point_service_account_iam_email   = "serviceAccount:${var.execute_point_service_account_email}"
@@ -77,12 +78,32 @@ resource "random_password" "pool" {
 }
 
 resource "google_secret_manager_secret" "pool_password" {
-  secret_id = "${var.deployment_name}-pool-password"
+  secret_id = "${var.deployment_name}-pool-password${local.auto}"
 
   labels = local.labels
 
   replication {
-    auto {}
+    dynamic "auto" {
+      for_each = length(var.user_managed_replication) == 0 ? [1] : []
+      content {}
+    }
+    dynamic "user_managed" {
+      for_each = length(var.user_managed_replication) == 0 ? [] : [1]
+      content {
+        dynamic "replicas" {
+          for_each = var.user_managed_replication
+          content {
+            location = replicas.value.location
+            dynamic "customer_managed_encryption" {
+              for_each = compact([replicas.value.kms_key_name])
+              content {
+                kms_key_name = customer_managed_encryption.value
+              }
+            }
+          }
+        }
+      }
+    }
   }
 }
 
@@ -93,12 +114,32 @@ resource "google_secret_manager_secret_version" "pool_password" {
 
 # this secret will be populated by the Central Manager
 resource "google_secret_manager_secret" "execute_point_idtoken" {
-  secret_id = "${var.deployment_name}-execute-point-idtoken"
+  secret_id = "${var.deployment_name}-execute-point-idtoken${local.auto}"
 
   labels = local.labels
 
   replication {
-    auto {}
+    dynamic "auto" {
+      for_each = length(var.user_managed_replication) == 0 ? [1] : []
+      content {}
+    }
+    dynamic "user_managed" {
+      for_each = length(var.user_managed_replication) == 0 ? [] : [1]
+      content {
+        dynamic "replicas" {
+          for_each = var.user_managed_replication
+          content {
+            location = replicas.value.location
+            dynamic "customer_managed_encryption" {
+              for_each = compact([replicas.value.kms_key_name])
+              content {
+                kms_key_name = customer_managed_encryption.value
+              }
+            }
+          }
+        }
+      }
+    }
   }
 }
 
