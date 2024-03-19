@@ -1,0 +1,195 @@
+# Copyright 2024 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: gpu-vm-v6
+
+vars:
+  project_id:  ## Set GCP Project ID Here ##
+  deployment_name: gpu-vm-v6
+  region: us-central1
+  zone: us-central1-c
+  instance_image_vm:
+    family: common-dl-gpu-debian-10
+    project: ml-images
+
+# Broken into 3 groups to better manage GPU quotas
+deployment_groups:
+- group: high-count-auto
+  modules:
+  - id: network-hca
+    source: modules/network/pre-existing-vpc
+
+  - id: auto-megagpu
+    source: modules/compute/vm-instance
+    use:
+    - network-hca
+    settings:
+      name_prefix: auto-megagpu
+      machine_type: a2-megagpu-16g
+      instance_image: $(vars.instance_image_vm)
+
+- group: high-count-manual
+  modules:
+  - id: network-hcm
+    source: modules/network/pre-existing-vpc
+
+  - id: manual-megagpu
+    source: modules/compute/vm-instance
+    use:
+    - network-hcm
+    settings:
+      name_prefix: manual-megagpu
+      machine_type: a2-megagpu-16g
+      instance_image: $(vars.instance_image_vm)
+      guest_accelerator:
+      - type: nvidia-tesla-a100
+        count: 16
+
+- group: low-count
+  modules:
+  # Source is an embedded module, denoted by "modules/*" without ./, ../, /
+  # as a prefix. To refer to a local or community module, prefix with ./, ../ or /
+  # Example - ./modules/network/vpc
+  - id: network
+    source: modules/network/pre-existing-vpc
+
+  - id: nogpu-n1
+    source: ./modules/compute/vm-instance
+    use:
+    - network
+    settings:
+      name_prefix: nogpu-n1
+      machine_type: n1-standard-8
+      instance_image: $(vars.instance_image_vm)
+
+  - id: manual-n1
+    source: ./modules/compute/vm-instance
+    use:
+    - network
+    settings:
+      name_prefix: manual-n1
+      machine_type: n1-standard-32
+      on_host_maintenance: TERMINATE
+      instance_image: $(vars.instance_image_vm)
+      guest_accelerator:
+      - type: nvidia-tesla-t4
+        count: 1
+
+  - id: auto-highgpu
+    source: modules/compute/vm-instance
+    use:
+    - network
+    settings:
+      name_prefix: auto-highgpu
+      machine_type: a2-highgpu-1g
+      instance_image: $(vars.instance_image_vm)
+
+  - id: manual-highgpu
+    source: modules/compute/vm-instance
+    use:
+    - network
+    settings:
+      name_prefix: manual-highgpu
+      machine_type: a2-highgpu-2g
+      instance_image: $(vars.instance_image_vm)
+      guest_accelerator:
+      - type: nvidia-tesla-a100
+        count: 2
+
+  - id: auto-ultragpu
+    source: modules/compute/vm-instance
+    use:
+    - network
+    settings:
+      name_prefix: auto-ultragpu
+      machine_type: a2-ultragpu-2g
+      instance_image: $(vars.instance_image_vm)
+
+  - id: manual-ultragpu
+    source: modules/compute/vm-instance
+    use:
+    - network
+    settings:
+      name_prefix: manual-ultragpu
+      machine_type: a2-ultragpu-2g
+      instance_image: $(vars.instance_image_vm)
+      guest_accelerator:
+      - type: nvidia-a100-80gb
+        count: 2
+
+- group: slurm-gcp-v6
+  modules:
+  - id: network_slurm
+    source: modules/network/pre-existing-vpc
+
+  - id: nogpu_nodegroup
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network_slurm]
+    settings:
+      name: nogpu
+      enable_placement: false
+      node_count_dynamic_max: 4
+      machine_type: n2-standard-2
+
+  - id: manual_nodegroup
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network_slurm]
+    settings:
+      name: man
+      enable_placement: false
+      node_count_dynamic_max: 4
+      machine_type: a2-ultragpu-2g
+      guest_accelerator:
+      - type: nvidia-a100-80gb
+        count: 2
+
+  - id: auto_nodegroup
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network_slurm]
+    settings:
+      name: auto
+      enable_placement: false
+      node_count_dynamic_max: 4
+      machine_type: a2-ultragpu-2g
+
+  - id: partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use:
+    - nogpu_nodegroup
+    - manual_nodegroup
+    - auto_nodegroup
+    settings:
+      partition_name: debug
+      is_default: true
+
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    use:
+    - network_slurm
+    settings:
+      name_prefix: login
+      disable_login_public_ips: false
+      machine_type: a2-highgpu-1g
+
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    use:
+    - network_slurm
+    - slurm_login
+    - partition
+    settings:
+      disable_controller_public_ips: false
+      machine_type: a2-highgpu-2g
