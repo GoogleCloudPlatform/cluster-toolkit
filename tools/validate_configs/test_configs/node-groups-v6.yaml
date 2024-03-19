@@ -52,7 +52,6 @@ deployment_groups:
   - id: single_nodeset_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
     use:
-    - homefs
     - default_nodeset
     settings:
       partition_name: simple
@@ -101,7 +100,6 @@ deployment_groups:
   - id: multiple_nodesets
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
     use:
-    - homefs
     - nodeset_1
     - nodeset_2
     - nodeset_3
@@ -112,8 +110,6 @@ deployment_groups:
   ## Explicitly set node partition with one nodeset
   - id: single_nodeset_explicit_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
-    use:
-    - homefs
     settings:
       partition_name: explns
       is_default: true

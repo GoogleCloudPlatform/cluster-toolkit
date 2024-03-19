@@ -46,20 +46,6 @@ variable "exclusive" {
   default     = true
 }
 
-variable "network_storage" {
-  description = "An array of network attached storage mounts to be configured on the partition compute nodes."
-  type = list(object({
-    server_ip             = string,
-    remote_mount          = string,
-    local_mount           = string,
-    fs_type               = string,
-    mount_options         = string,
-    client_install_runner = map(string)
-    mount_runner          = map(string)
-  }))
-  default = []
-}
-
 variable "nodeset" {
   description = "Define nodesets, as a list."
   type = list(object({
@@ -197,5 +183,16 @@ variable "nodeset_dyn" {
   validation {
     condition     = length(distinct([for x in var.nodeset_dyn : x.nodeset_name])) == length(var.nodeset_dyn)
     error_message = "All dynamic nodesets must have a unique name."
+  }
+}
+
+# tflint-ignore: terraform_unused_declarations
+variable "network_storage" {
+  description = "DEPRECATED"
+  type        = any
+  default     = null
+  validation {
+    condition     = var.network_storage == null
+    error_message = "network_storage in partition module is deprecated and should be removed."
   }
 }

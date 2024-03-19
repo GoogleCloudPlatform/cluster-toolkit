@@ -65,7 +65,7 @@ deployment_groups:
 
   - id: debug_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
-    use: [debug_nodeset, homefs]
+    use: [debug_nodeset]
     settings:
       partition_name: debug
       exclusive: false  # allows nodes to stay up after jobs are done
@@ -80,7 +80,7 @@ deployment_groups:
 
   - id: compute_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
-    use: [compute_nodeset, homefs]
+    use: [compute_nodeset]
     settings:
       partition_name: compute
 

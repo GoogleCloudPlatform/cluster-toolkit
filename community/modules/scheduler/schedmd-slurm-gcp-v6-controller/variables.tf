@@ -308,15 +308,8 @@ variable "partitions" {
 Cluster partitions as a list. See module slurm_partition.
 EOD
   type = list(object({
-    default              = optional(bool, false)
-    enable_job_exclusive = optional(bool, false)
-    network_storage = optional(list(object({
-      server_ip     = string
-      remote_mount  = string
-      local_mount   = string
-      fs_type       = string
-      mount_options = string
-    })), [])
+    default               = optional(bool, false)
+    enable_job_exclusive  = optional(bool, false)
     partition_conf        = optional(map(string), {})
     partition_name        = string
     partition_nodeset     = optional(list(string), [])
