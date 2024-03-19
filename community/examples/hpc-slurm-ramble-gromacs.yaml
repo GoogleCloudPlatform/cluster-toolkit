@@ -29,9 +29,9 @@ vars:
 deployment_groups:
 - group: primary
   modules:
-  # Source is an embedded resource, denoted by "resources/*" without ./, ../, /
-  # as a prefix. To refer to a local resource, prefix with ./, ../ or /
-  # Example - ./resources/network/vpc
+  # Source is an embedded module, denoted by "modules/*" without ./, ../, /
+  # as a prefix. To refer to a local module, prefix with ./, ../ or /
+  # Example - ./modules/network/vpc
   - id: network1
     source: modules/network/vpc
 
