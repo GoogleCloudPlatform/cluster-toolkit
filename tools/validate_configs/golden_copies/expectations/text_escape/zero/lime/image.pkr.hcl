@@ -108,7 +108,7 @@ source "googlecompute" "toolkit_image" {
   subnetwork                  = var.subnetwork_name
   network_project_id          = var.network_project_id
   service_account_email       = var.service_account_email
-  scopes                      = var.scopes
+  scopes                      = var.service_account_scopes
   source_image                = var.source_image
   source_image_family         = var.source_image_family
   source_image_project_id     = var.source_image_project_id
