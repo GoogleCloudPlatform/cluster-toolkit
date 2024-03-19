@@ -81,6 +81,7 @@ func runCreateCmd(cmd *cobra.Command, args []string) {
 func doCreate(path string) string {
 	bp := expandOrDie(path)
 	deplDir := filepath.Join(createFlags.outputDir, bp.DeploymentName())
+	logging.Info("Creating deployment folder %q ...", deplDir)
 	checkErr(checkOverwriteAllowed(deplDir, bp, createFlags.overwriteDeployment, createFlags.forceOverwrite))
 	checkErr(modulewriter.WriteDeployment(bp, deplDir))
 	return deplDir
