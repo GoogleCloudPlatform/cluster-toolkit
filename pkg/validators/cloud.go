@@ -180,10 +180,10 @@ func TestZoneInRegion(projectID string, zone string, region string) error {
 }
 
 func testApisEnabled(bp config.Blueprint, inputs config.Dict) error {
-	if err := checkInputs(inputs, []string{}); err != nil {
+	if err := checkInputs(inputs, []string{"project_id"}); err != nil {
 		return err
 	}
-	p, err := bp.ProjectID()
+	m, err := inputsAsStrings(inputs)
 	if err != nil {
 		return err
 	}
@@ -194,7 +194,7 @@ func testApisEnabled(bp config.Blueprint, inputs config.Dict) error {
 			apis[api] = true
 		}
 	})
-	return TestApisEnabled(p, maps.Keys(apis))
+	return TestApisEnabled(m["project_id"], maps.Keys(apis))
 }
 
 func testProjectExists(bp config.Blueprint, inputs config.Dict) error {

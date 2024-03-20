@@ -47,7 +47,6 @@ const (
 	testZoneInRegionName              = "test_zone_in_region"
 	testModuleNotUsedName             = "test_module_not_used"
 	testDeploymentVariableNotUsedName = "test_deployment_variable_not_used"
-	testResourceRequirementsName      = "test_resource_requirements"
 )
 
 func implementations() map[string]func(config.Blueprint, config.Dict) error {
@@ -59,7 +58,6 @@ func implementations() map[string]func(config.Blueprint, config.Dict) error {
 		testZoneInRegionName:              testZoneInRegion,
 		testModuleNotUsedName:             testModuleNotUsed,
 		testDeploymentVariableNotUsedName: testDeploymentVariableNotUsed,
-		testResourceRequirementsName:      testResourceRequirements,
 	}
 }
 
@@ -166,16 +164,16 @@ func defaults(bp config.Blueprint) []config.Validator {
 	// only succeed if credentials can access the project. If the project ID
 	// validator fails, all remaining validators are not executed.
 	if projectIDExists {
+		inputs := config.Dict{}.With("project_id", projectRef)
 		defaults = append(defaults, config.Validator{
 			Validator: testProjectExistsName,
-			Inputs:    config.NewDict(map[string]cty.Value{"project_id": projectRef}),
-		})
+			Inputs:    inputs,
+		}, config.Validator{
+			Validator: testApisEnabledName,
+			Inputs:    inputs,
+		},
+		)
 	}
-
-	// it is safe to run this validator even if vars.project_id is undefined;
-	// it will likely fail but will do so helpfully to the user
-	defaults = append(defaults,
-		config.Validator{Validator: testApisEnabledName})
 
 	if projectIDExists && regionExists {
 		defaults = append(defaults, config.Validator{

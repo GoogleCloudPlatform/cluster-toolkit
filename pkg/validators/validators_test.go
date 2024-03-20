@@ -73,36 +73,27 @@ func (s *MySuite) TestCheckInputs(c *C) {
 func (s *MySuite) TestDefaultValidators(c *C) {
 	unusedMods := config.Validator{Validator: "test_module_not_used"}
 	unusedVars := config.Validator{Validator: "test_deployment_variable_not_used"}
-	apisEnabled := config.Validator{Validator: "test_apis_enabled"}
 
-	projectRef := config.GlobalRef("project_id").AsValue()
-	regionRef := config.GlobalRef("region").AsValue()
-	zoneRef := config.GlobalRef("zone").AsValue()
+	prjInp := config.Dict{}.With("project_id", config.GlobalRef("project_id").AsValue())
+	regInp := prjInp.With("region", config.GlobalRef("region").AsValue())
+	zoneInp := prjInp.With("zone", config.GlobalRef("zone").AsValue())
+	regZoneInp := regInp.With("zone", config.GlobalRef("zone").AsValue())
 
 	projectExists := config.Validator{
-		Validator: testProjectExistsName,
-		Inputs:    config.NewDict(map[string]cty.Value{"project_id": projectRef})}
+		Validator: "test_project_exists", Inputs: prjInp}
+	apisEnabled := config.Validator{
+		Validator: "test_apis_enabled", Inputs: prjInp}
 	regionExists := config.Validator{
-		Validator: testRegionExistsName,
-		Inputs: config.NewDict(map[string]cty.Value{
-			"project_id": projectRef,
-			"region":     regionRef})}
+		Validator: testRegionExistsName, Inputs: regInp}
 	zoneExists := config.Validator{
-		Validator: testZoneExistsName,
-		Inputs: config.NewDict(map[string]cty.Value{
-			"project_id": projectRef,
-			"zone":       zoneRef})}
+		Validator: testZoneExistsName, Inputs: zoneInp}
 	zoneInRegion := config.Validator{
-		Validator: testZoneInRegionName,
-		Inputs: config.NewDict(map[string]cty.Value{
-			"project_id": projectRef,
-			"region":     regionRef,
-			"zone":       zoneRef})}
+		Validator: testZoneInRegionName, Inputs: regZoneInp}
 
 	{
 		bp := config.Blueprint{}
 		c.Check(defaults(bp), DeepEquals, []config.Validator{
-			unusedMods, unusedVars, apisEnabled})
+			unusedMods, unusedVars})
 	}
 
 	{
