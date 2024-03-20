@@ -41,6 +41,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [client-google-cloud-storage.yaml](#client-google-cloud-storageyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-gromacs.yaml](#hpc-slurm-gromacsyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-local-ssd.yaml](#hpc-slurm-local-ssdyaml--) ![community-badge] ![experimental-badge]
+  * [hpc-slurm-local-ssd-v6.yaml](#hpc-slurm-local-ssd-v6yaml--) ![community-badge] ![experimental-badge]
   * [hpc-gke.yaml](#hpc-gkeyaml--) ![community-badge] ![experimental-badge]
   * [ml-gke](#ml-gkeyaml--) ![community-badge] ![experimental-badge]
   * [storage-gke](#storage-gkeyaml--) ![community-badge] ![experimental-badge]
@@ -1221,6 +1222,13 @@ machine communications, for NFS and also for communications between the Slurm
 nodes)
 
 [hpc-slurm-local-ssd.yaml]: ../community/examples/hpc-slurm-local-ssd.yaml
+
+### [hpc-slurm-local-ssd-v6.yaml] ![community-badge] ![experimental-badge]
+
+This blueprint demonstrates the use of Slurm and Filestore, with compute nodes
+that have local ssd drives deployed.
+
+[hpc-slurm-local-ssd-v6.yaml]: ../community/examples/hpc-slurm-local-ssd-v6.yaml
 
 ### [hpc-gke.yaml] ![community-badge] ![experimental-badge]
 
