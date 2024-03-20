@@ -121,7 +121,6 @@ module "slurm_partition" {
 
   default              = each.value.default
   enable_job_exclusive = each.value.enable_job_exclusive
-  network_storage      = each.value.network_storage
   partition_name       = each.value.partition_name
   partition_conf       = each.value.partition_conf
   resume_timeout       = each.value.resume_timeout

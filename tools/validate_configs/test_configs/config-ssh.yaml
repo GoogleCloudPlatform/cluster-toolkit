@@ -53,7 +53,6 @@ deployment_groups:
   - id: debug_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
     use:
-    - homefs
     - debug_node_group
     settings:
       partition_name: debug
@@ -69,7 +68,6 @@ deployment_groups:
   - id: compute_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
     use:
-    - homefs
     - compute_node_group
     settings:
       partition_name: compute

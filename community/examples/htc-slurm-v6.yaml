@@ -90,9 +90,6 @@ deployment_groups:
   - id: compute_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
     use:
-    - homefs
-    - scratchfs
-    - projectsfs
     - compute_nodeset_c2s60
     - compute_nodeset_c2s30
     settings:
@@ -126,9 +123,6 @@ deployment_groups:
   - id: low_cost_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
     use:
-    - homefs
-    - scratchfs
-    - projectsfs
     - low_cost_nodeset_n2s2
     - low_cost_nodeset_n2s4
     settings:
