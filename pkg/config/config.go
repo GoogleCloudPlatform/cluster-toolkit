@@ -525,23 +525,6 @@ func validateDeploymentName(bp Blueprint) error {
 	return nil
 }
 
-// ProjectID returns the project_id
-func (bp Blueprint) ProjectID() (string, error) {
-	pid := "project_id"
-	if !bp.Vars.Has(pid) {
-		return "", BpError{Root.Vars, fmt.Errorf("%q variable is not specified", pid)}
-	}
-
-	v, err := bp.Eval(GlobalRef(pid).AsValue())
-	if err != nil {
-		return "", err
-	}
-	if v.Type() != cty.String {
-		return "", BpError{Root.Vars.Dot(pid), fmt.Errorf("%q variable is not a string", pid)}
-	}
-	return v.AsString(), nil
-}
-
 // checkBlueprintName returns an error if blueprint_name does not comply with
 // requirements for correct GCP label values.
 func (bp *Blueprint) checkBlueprintName() error {
