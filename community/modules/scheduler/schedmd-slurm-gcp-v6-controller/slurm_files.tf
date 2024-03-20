@@ -84,8 +84,7 @@ locals {
     filename = "ghpc_startup.sh"
     content  = var.compute_startup_script
   }]
-  nodeset_startup_scripts = {
-  for ns in var.nodeset : ns.nodeset_name => ns.startup_script }
+  nodeset_startup_scripts = { for k, v in local.nodeset_map : k => v.startup_script }
 }
 
 module "slurm_files" {
