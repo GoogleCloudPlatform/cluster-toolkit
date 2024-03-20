@@ -12,7 +12,7 @@ the dataset in your GCS. After that you can update the blueprint to use the
 dataset from GCS bucket in training script.
 
 ```bash
-./ghpc create community/examples/hpc-slurm6-tpu-maxtext.yaml -l ERROR --vars project_id=<project-id>;
+./ghpc create community/examples/hpc-slurm6-tpu-maxtext.yaml --vars project_id=<project-id>;
 ./ghpc deploy slurm6-tpu --auto-approve
 ```
 

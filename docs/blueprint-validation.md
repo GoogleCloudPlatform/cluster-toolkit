@@ -120,12 +120,12 @@ validators:
 ### Validation levels
 
 They can also be set to 3 differing levels of behavior using the command-line
-`--validation-level` flag for the `create` and `expand` commands:
+`--validation-level` flag:
 
-* `"ERROR"`: If any validator fails, the deployment directory will not be
+* `"ERROR"` (default): If any validator fails, the deployment directory will not be
   written. Error messages will be printed to the screen that indicate which
   validator(s) failed and how.
-* `"WARNING"` (default): The deployment directory will be written even if any
+* `"WARNING"`: The deployment directory will be written even if any
   validators fail. Warning messages will be printed to the screen that indicate
   which validator(s) failed and how.
 * `"IGNORE"`: Do not execute any validators, even if they are explicitly defined
