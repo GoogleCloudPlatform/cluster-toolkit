@@ -19,6 +19,7 @@ run_test() {
 	bp=$1
 	gc=$2
 	tmpdir="$(mktemp -d)"
+	debugInfo="DEBUG: blueprint: ${bp} ; golden copy: ${gc} ; tmpdir: ${tmpdir} "
 	bpFile=$(basename "$bp")
 	DEPLOYMENT="golden_copy_deployment"
 	PROJECT="invalid-project"
@@ -38,6 +39,7 @@ run_test() {
 		exit 1
 	fi
 	cp "${bp}" "${tmpdir}/"
+	cp -r tools/validate_configs/golden_copies/configs/files "${tmpdir}/"
 
 	# Only run from the repo directory if there are local modules, otherwise
 	# run the test from the test directory using the installed ghpc binary.
@@ -52,6 +54,7 @@ run_test() {
 		"${tmpdir}"/"${bpFile}" >/dev/null ||
 		{
 			echo "*** ERROR: error creating deployment with ghpc for ${bpFile}"
+			printf '%s' "$debugInfo"
 			exit 1
 		}
 	if grep -q "${LOCAL_SOURCE_PATTERN}" "${cwd}/${bp}"; then
@@ -59,6 +62,7 @@ run_test() {
 	fi
 	cd "${tmpdir}"/"${DEPLOYMENT}" || {
 		echo "*** ERROR: can't cd into the deployment folder ${DEPLOYMENT}"
+		echo "$debugInfo"
 		exit 1
 	}
 
@@ -74,11 +78,13 @@ run_test() {
 	diff --recursive --exclude="previous_deployment_groups" \
 		"$(pwd)" "${cwd}/${gc}" || {
 		echo "*** ERROR: ${tmpdir}/${DEPLOYMENT} does not match ${gc}"
+		echo "$debugInfo"
 		exit 1
 	}
 
 	rm -rf "${DEPLOYMENT}" || {
 		echo "*** ERROR: could not remove deployment folder from $(pwd)"
+		echo "$debugInfo"
 		exit 1
 	}
 	cd "${cwd}"

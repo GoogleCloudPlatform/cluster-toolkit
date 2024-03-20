@@ -19,6 +19,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -242,6 +243,13 @@ type Blueprint struct {
 	Vars                     Dict
 	Groups                   []Group          `yaml:"deployment_groups"`
 	TerraformBackendDefaults TerraformBackend `yaml:"terraform_backend_defaults,omitempty"`
+
+	// internal & non-serializable fields
+
+	// absolute path to the blueprint file
+	path string
+	// records of intentions to stage file (populated by ghpc_stage function)
+	stagedFiles map[string]string
 }
 
 // DeploymentSettings are deployment-specific override settings
@@ -261,6 +269,9 @@ func (bp *Blueprint) Expand() error {
 		return err
 	}
 	if err := bp.expandVars(); err != nil {
+		return err
+	}
+	if err := bp.validateNoGhpcStageFuncs(); err != nil {
 		return err
 	}
 	return bp.expandGroups()
@@ -342,7 +353,16 @@ func checkMovedModule(source string) error {
 
 // NewBlueprint is a constructor for Blueprint
 func NewBlueprint(path string) (Blueprint, YamlCtx, error) {
-	return parseYamlFile[Blueprint](path)
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return Blueprint{}, YamlCtx{}, err
+	}
+	bp, ctx, err := parseYamlFile[Blueprint](absPath)
+	if err != nil {
+		return Blueprint{}, ctx, err
+	}
+	bp.path = absPath
+	return bp, ctx, nil
 }
 
 func NewDeploymentSettings(deploymentFilename string) (DeploymentSettings, YamlCtx, error) {
@@ -662,7 +682,7 @@ func (bp *Blueprint) evalVars() (Dict, error) {
 	res := map[string]cty.Value{}
 	ctx := hcl.EvalContext{
 		Variables: map[string]cty.Value{},
-		Functions: functions()}
+		Functions: bp.functions()}
 	for _, n := range order {
 		ctx.Variables["var"] = cty.ObjectVal(res)
 		ev, err := eval(bp.Vars.Get(n), &ctx)
