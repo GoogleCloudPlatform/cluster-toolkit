@@ -32,7 +32,6 @@ deployment_groups:
     source: ./community/modules/compute/schedmd-slurm-gcp-v6-nodeset-tpu
     use: [network]
     settings:
-      name: v3x8
       node_type: v3-8
       tf_version: 2.14.0
       # Preemptible TPUs cost much less than non-preemptible TPUs.

@@ -13,7 +13,10 @@
 # limitations under the License.
 
 variable "name" {
-  description = "Name of the nodeset. Automatically populated by the module id if not set"
+  description = <<-EOD
+    Name of the nodeset. Automatically populated by the module id if not set. 
+    If setting manually, ensure a unique value across all nodesets.
+    EOD
   type        = string
 }
 

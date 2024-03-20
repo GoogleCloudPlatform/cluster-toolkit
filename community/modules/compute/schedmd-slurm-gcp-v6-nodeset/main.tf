@@ -18,7 +18,7 @@ locals {
 }
 
 locals {
-  name = substr(replace(var.name, "/[^a-z0-9]/", ""), 0, 6)
+  name = substr(replace(var.name, "/[^a-z0-9]/", ""), 0, 14)
 
   additional_disks = [
     for ad in var.additional_disks : {
