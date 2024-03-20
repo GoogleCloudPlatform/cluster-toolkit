@@ -240,11 +240,6 @@ variable "nodeset" {
     content = string })), [])
   }))
   default = []
-
-  validation {
-    condition     = length(distinct([for x in var.nodeset : x.nodeset_name])) == length(var.nodeset)
-    error_message = "All nodesets must have a unique name."
-  }
 }
 
 variable "nodeset_tpu" {
@@ -277,11 +272,6 @@ variable "nodeset_tpu" {
     reserved   = optional(string, false)
   }))
   default = []
-
-  validation {
-    condition     = length(distinct([for x in var.nodeset_tpu : x.nodeset_name])) == length(var.nodeset_tpu)
-    error_message = "All TPU nodesets must have a unique name."
-  }
 }
 
 
@@ -292,11 +282,6 @@ variable "nodeset_dyn" {
     nodeset_feature = string
   }))
   default = []
-
-  validation {
-    condition     = length(distinct([for x in var.nodeset_dyn : x.nodeset_name])) == length(var.nodeset_dyn)
-    error_message = "All nodesets must have a unique name."
-  }
 }
 
 #############

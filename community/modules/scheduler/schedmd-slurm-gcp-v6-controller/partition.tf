@@ -13,9 +13,14 @@
 # limitations under the License.
 
 locals {
-  nodeset_map     = { for x in var.nodeset : x.nodeset_name => x }
-  nodeset_tpu_map = { for x in var.nodeset_tpu : x.nodeset_name => x }
-  nodeset_dyn_map = { for x in var.nodeset_dyn : x.nodeset_name => x }
+  nodeset_map_ell = { for x in var.nodeset : x.nodeset_name => x... }
+  nodeset_map     = { for k, vs in local.nodeset_map_ell : k => vs[0] }
+
+  nodeset_tpu_map_ell = { for x in var.nodeset_tpu : x.nodeset_name => x... }
+  nodeset_tpu_map     = { for k, vs in local.nodeset_tpu_map_ell : k => vs[0] }
+
+  nodeset_dyn_map_ell = { for x in var.nodeset_dyn : x.nodeset_name => x... }
+  nodeset_dyn_map     = { for k, vs in local.nodeset_dyn_map_ell : k => vs[0] }
 
   partition_map = { for x in var.partitions : x.partition_name => x }
 }
