@@ -18,11 +18,12 @@
 # }
 
 locals {
+  name = substr(replace(var.name, "/[^a-z0-9]/", ""), 0, 14)
 
   nodeset_tpu = {
     node_count_static      = var.node_count_static
     node_count_dynamic_max = var.node_count_dynamic_max
-    nodeset_name           = var.name
+    nodeset_name           = local.name
     node_type              = var.node_type
 
     accelerator_config = var.accelerator_config

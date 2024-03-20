@@ -178,7 +178,7 @@ No modules.
 | <a name="input_maintenance_interval"></a> [maintenance\_interval](#input\_maintenance\_interval) | Sets the maintenance interval for instances in this nodeset.<br>See https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_instance#maintenance_interval. | `string` | `null` | no |
 | <a name="input_metadata"></a> [metadata](#input\_metadata) | Metadata, provided as a map. | `map(string)` | `{}` | no |
 | <a name="input_min_cpu_platform"></a> [min\_cpu\_platform](#input\_min\_cpu\_platform) | The name of the minimum CPU platform that you want the instance to use. | `string` | `null` | no |
-| <a name="input_name"></a> [name](#input\_name) | Name of the nodeset. Automatically populated by the module id if not set | `string` | n/a | yes |
+| <a name="input_name"></a> [name](#input\_name) | Name of the nodeset. Automatically populated by the module id if not set. <br>If setting manually, ensure a unique value across all nodesets. | `string` | n/a | yes |
 | <a name="input_node_conf"></a> [node\_conf](#input\_node\_conf) | Map of Slurm node line configuration. | `map(any)` | `{}` | no |
 | <a name="input_node_count_dynamic_max"></a> [node\_count\_dynamic\_max](#input\_node\_count\_dynamic\_max) | Maximum number of auto-scaling nodes allowed in this partition. | `number` | `10` | no |
 | <a name="input_node_count_static"></a> [node\_count\_static](#input\_node\_count\_static) | Number of nodes to be statically created. | `number` | `0` | no |
