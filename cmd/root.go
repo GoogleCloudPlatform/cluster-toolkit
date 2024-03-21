@@ -248,8 +248,11 @@ func execPath() string {
 
 // checkErr is similar to cobra.CheckErr, but with renderError and logging.Fatal
 // NOTE: this function uses empty YamlCtx, so if you have one, use renderError directly.
-func checkErr(err error) {
+func checkErr(err error, ctx *config.YamlCtx) {
+	if ctx == nil {
+		ctx = &config.YamlCtx{}
+	}
 	if err != nil {
-		logging.Fatal(renderError(err, config.YamlCtx{}))
+		logging.Fatal(renderError(err, *ctx))
 	}
 }

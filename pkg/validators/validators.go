@@ -94,7 +94,7 @@ func Execute(bp config.Blueprint) error {
 			continue
 		}
 
-		inp, err := v.Inputs.Eval(bp)
+		inp, err := bp.EvalDict(v.Inputs)
 		if err != nil {
 			errs.At(p.Inputs, err)
 			continue

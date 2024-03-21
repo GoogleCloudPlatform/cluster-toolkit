@@ -407,6 +407,14 @@ func (bp *Blueprint) Eval(v cty.Value) (cty.Value, error) {
 	return eval(v, &ctx)
 }
 
+func (bp *Blueprint) EvalDict(d Dict) (Dict, error) {
+	res, err := bp.Eval(d.AsObject())
+	if err != nil {
+		return Dict{}, err
+	}
+	return NewDict(res.AsValueMap()), nil
+}
+
 func eval(v cty.Value, ctx *hcl.EvalContext) (cty.Value, error) {
 	return cty.Transform(v, func(p cty.Path, v cty.Value) (cty.Value, error) {
 		if e, is := IsExpressionValue(v); is {

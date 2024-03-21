@@ -66,7 +66,7 @@ var (
 )
 
 func runExpandCmd(cmd *cobra.Command, args []string) {
-	bp := expandOrDie(args[0])
-	checkErr(bp.Export(expandFlags.outputPath))
+	bp, ctx := expandOrDie(args[0])
+	checkErr(bp.Export(expandFlags.outputPath), ctx)
 	logging.Info(boldGreen("Expanded Environment Definition created successfully, saved as %s."), expandFlags.outputPath)
 }

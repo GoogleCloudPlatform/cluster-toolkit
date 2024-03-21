@@ -76,6 +76,13 @@ var templatesFS embed.FS
 
 // WriteDeployment writes a deployment directory using modules defined the environment blueprint.
 func WriteDeployment(bp config.Blueprint, deploymentDir string) error {
+	expanded := bp.Clone() // clone to avoid modifying the original blueprint
+
+	// TODO: probably not a right place to do "materialize". Consider bubbling it up.
+	if err := bp.Materialize(); err != nil {
+		return err
+	}
+
 	if err := prepDepDir(deploymentDir); err != nil {
 		return err
 	}
@@ -100,7 +107,7 @@ func WriteDeployment(bp config.Blueprint, deploymentDir string) error {
 
 	writeDestroyInstructions(instructions, bp, deploymentDir)
 
-	if err := writeExpandedBlueprint(deploymentDir, bp); err != nil {
+	if err := writeExpandedBlueprint(deploymentDir, expanded); err != nil {
 		return err
 	}
 
@@ -228,6 +235,7 @@ func DeploymentSource(mod config.Module) (string, error) {
 	}
 }
 
+// TODO: attribute error to Blueprint position
 func tfDeploymentSource(mod config.Module) (string, error) {
 	switch {
 	case sourcereader.IsEmbeddedPath(mod.Source):
