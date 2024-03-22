@@ -130,6 +130,7 @@ source "googlecompute" "toolkit_image" {
   enable_vtpm                 = local.enable_vtpm
   enable_integrity_monitoring = local.enable_integrity_monitoring
   image_licenses              = local.image_licenses
+  service_account_email       = var.service_account_email
 }
 
 build {
