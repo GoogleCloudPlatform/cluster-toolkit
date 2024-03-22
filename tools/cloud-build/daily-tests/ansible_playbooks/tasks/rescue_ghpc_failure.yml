@@ -39,3 +39,9 @@
     chdir: "{{ workspace }}"
   environment:
     TF_IN_AUTOMATION: "TRUE"
+
+- name: Run post destroy tasks
+  ansible.builtin.include_tasks: "{{ post_destroy_task }}"
+  loop: "{{ post_destroy_tasks }}"
+  loop_control:
+    loop_var: post_destroy_task
