@@ -24,5 +24,18 @@ steps:
   automapSubstitutions: true
   script: |
     #!/usr/bin/env bash
+    set -ex
+
+    depl_name="e2e-${BUILD_ID:0:6}"
+    region="us-central1"
+    zone="us-central1-a"
+    vars="project_id=$PROJECT_ID,deployment_name=$depl_name,region=$region,zone=$zone"
+
     cd /workspace
-    tools/cloud-build/daily-tests/e2e.sh
+    make
+    ./ghpc deploy tools/cloud-build/daily-tests/blueprints/e2e.yaml --vars="$vars" --auto-approve
+
+    # check instance was created
+    gcloud compute instances describe "${depl_name}-0" --project="$PROJECT_ID" --zone="$zone" >/dev/null
+
+    ./ghpc destroy "$depl_name" --auto-approve
