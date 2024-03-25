@@ -19,7 +19,7 @@
     - zone is defined
     - custom_vars.reservation_name is defined
 
-- name: Create Reservation
-  register: create_reservation_result
-  changed_when: create_reservation_result.rc == 0
+- name: Delete Reservation
+  register: delete_reservation_result
+  changed_when: delete_reservation_result.rc == 0
   ansible.builtin.command: gcloud compute reservations delete {{ custom_vars.reservation_name }} --project={{ project }}  --zone={{ zone }} --quiet

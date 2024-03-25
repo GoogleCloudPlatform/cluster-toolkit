@@ -18,4 +18,3 @@ spec:
     services: []
 ghpc:
   has_to_be_used: true
-  # inject_module_id: name_prefix

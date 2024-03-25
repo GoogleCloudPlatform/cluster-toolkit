@@ -21,11 +21,12 @@ vars:
   region: us-central1
   zone: us-central1-a
 
+  ## EDIT THE BLOCK BELOW ##
   # For instructions on creating a reservation see:
   # http://cloud/hpc-toolkit/docs/slurm/static-nodes-best-practices
-  static_reservation_name:  ## Set your reservation name here ##
-  static_reservation_machine_type: ## Machine must match reservation above ##
-  static_node_count: ## Must be <= number of reserved machines ##
+  static_reservation_name: <reservation_name> ## Set your reservation name here ##
+  static_reservation_machine_type: <machine_type> ## Machine must match reservation above ##
+  static_node_count: 2 ## Must be <= number of reserved machines ##
 
   slurm_instance_image:
     family: slurm-gcp-6-4-hpc-rocky-linux-8
