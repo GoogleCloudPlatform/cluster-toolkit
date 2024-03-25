@@ -35,7 +35,7 @@ func addExpandFlags(c *cobra.Command, addOutFlag bool) *cobra.Command {
 		"Comma-separated list of name=value variables to override YAML configuration. Can be used multiple times.")
 	c.Flags().StringSliceVar(&expandFlags.cliBEConfigVars, "backend-config", nil,
 		"Comma-separated list of name=value variables to set Terraform backend configuration. Can be used multiple times.")
-	c.Flags().StringVarP(&expandFlags.validationLevel, "validation-level", "l", "WARNING",
+	c.Flags().StringVarP(&expandFlags.validationLevel, "validation-level", "l", "ERROR",
 		"Set validation level to one of (\"ERROR\", \"WARNING\", \"IGNORE\")")
 	c.Flags().StringSliceVar(&expandFlags.validatorsToSkip, "skip-validators", nil, "Validators to skip")
 	return c
