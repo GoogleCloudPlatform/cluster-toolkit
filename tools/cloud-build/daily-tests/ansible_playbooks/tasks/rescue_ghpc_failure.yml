@@ -30,12 +30,22 @@
     - delete
     - "{{ deployment_name }}"
 
-- name: Destroy deployment
-  register: ghpc_destroy
-  changed_when: ghpc_destroy.changed
-  run_once: true
-  ansible.builtin.command: ./ghpc destroy {{ deployment_name }} --auto-approve
-  args:
-    chdir: "{{ workspace }}"
-  environment:
-    TF_IN_AUTOMATION: "TRUE"
+- name: Destroy block
+  block:
+
+  - name: Destroy deployment
+    register: ghpc_destroy
+    changed_when: ghpc_destroy.changed
+    run_once: true
+    ansible.builtin.command: ./ghpc destroy {{ deployment_name }} --auto-approve
+    args:
+      chdir: "{{ workspace }}"
+    environment:
+      TF_IN_AUTOMATION: "TRUE"
+
+  always:
+  - name: Run post destroy tasks
+    ansible.builtin.include_tasks: "{{ post_destroy_task }}"
+    loop: "{{ post_destroy_tasks }}"
+    loop_control:
+      loop_var: post_destroy_task
