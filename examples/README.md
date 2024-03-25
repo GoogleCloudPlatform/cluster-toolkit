@@ -24,6 +24,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [hpc-slurm6-tpu.yaml](#hpc-slurm6-tpuyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm6-tpu-maxtext.yaml](#hpc-slurm6-tpu-maxtextyaml--) ![community-badge] ![experimental-badge]
   * [ml-slurm.yaml](#ml-slurmyaml-) ![core-badge]
+  * [ml-slurm-v6.yaml](#ml-slurm-v6yaml--) ![core-badge] ![experimental-badge]
   * [image-builder.yaml](#image-builderyaml-) ![core-badge]
   * [image-builder-v6.yaml](#image-builderyaml--) ![core-badge] ![experimental-badge]
   * [serverless-batch.yaml](#serverless-batchyaml-) ![core-badge]
@@ -511,6 +512,55 @@ image. It will be named beginning with `ml-slurm` followed by a date and
 timestamp for uniqueness.
 
 [ml-slurm.yaml]: ../examples/ml-slurm.yaml
+
+### [ml-slurm-v6.yaml] ![core-badge] ![experimental-badge]
+
+This blueprint provisions an HPC cluster running the Slurm scheduler with the
+machine learning frameworks PyTorch and TensorFlow pre-installed on every
+VM. The cluster has 2 partitions:
+
+* [A2 family VMs][a2] with the NVIDIA A100 GPU accelerator
+* [G2 family VMs][g2] with the NVIDIA L4 GPU accelerator
+
+[a2]: https://cloud.google.com/compute/docs/gpus#a100-gpus
+[g2]: https://cloud.google.com/compute/docs/gpus#l4-gpus
+
+To provision the cluster, please run:
+
+```text
+./ghpc create examples/ml-slurm-v6.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
+./ghpc deploy ml-example-v6
+```
+
+After accessing the login node, you can activate the conda environment for each
+library with:
+
+```shell
+source /etc/profile.d/conda.sh
+# to activate PyTorch
+conda activate pytorch
+# to activate TensorFlow
+conda activate tf
+```
+
+An example benchmarking job for PyTorch can be run under Slurm:
+
+```shell
+cp /var/tmp/torch_test.* .
+sbatch -N 1 torch_test.sh
+```
+
+When you are done, clean up the resources in reverse order of creation:
+
+```text
+./ghpc destroy ml-example-v6
+```
+
+Finally, browse to the [Cloud Console][console-images] to delete your custom
+image. It will be named beginning with `ml-slurm` followed by a date and
+timestamp for uniqueness.
+
+[ml-slurm-v6.yaml]: ../examples/ml-slurm-v6.yaml
 
 ### [image-builder.yaml] ![core-badge]
 
