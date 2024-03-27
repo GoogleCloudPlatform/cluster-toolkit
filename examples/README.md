@@ -54,7 +54,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [fsi-montecarlo-on-batch.yaml](#fsi-montecarlo-on-batchyaml-) ![community-badge] ![experimental-badge]
   * [tutorial-starccm-slurm.yaml](#tutorial-starccm-slurmyaml--) ![community-badge] ![experimental-badge]
   * [tutorial-starccm.yaml](#tutorial-starccmyaml--) ![community-badge] ![experimental-badge]
-  * [hpc-slurm-ramble-gromacs.yaml](#hpc-slurm-ramble-gromacsyaml--) ![community-badge] ![experimental-badge]
+  * [hpc-slurm-ramble-gromacs-v6.yaml](#hpc-slurm-ramble-gromacs-v6yaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-chromedesktop.yaml](#hpc-slurm-chromedesktopyaml--) ![community-badge] ![experimental-badge]
   * [flux-cluster](#flux-clusteryaml--) ![community-badge] ![experimental-badge]
   * [tutorial-fluent.yaml](#tutorial-fluentyaml--) ![community-badge] ![experimental-badge]
@@ -1286,7 +1286,7 @@ spack load gromacs
 
 [hpc-slurm-gromacs.yaml]: ../community/examples/hpc-slurm-gromacs.yaml
 
-### [hpc-slurm-ramble-gromacs.yaml] ![community-badge] ![experimental-badge]
+### [hpc-slurm-ramble-gromacs-v6.yaml] ![community-badge] ![experimental-badge]
 
 Ramble is an experimentation framework which can drive the installation of
 software with Spack and create, execute, and analyze experiments using the
@@ -1294,6 +1294,9 @@ installed software.
 
 This example blueprint will deploy a Slurm cluster, install Spack and Ramble on
 it, and create a Ramble workspace (named gromacs). This workspace can be setup using:
+
+> **_NOTE:_** Since in this example installation of ramble is owned by
+> `spack-ramble` user, you may consider running `sudo -i -u spack-ramble` first.
 
 ```shell
 ramble workspace activate
@@ -1317,7 +1320,7 @@ ramble workspace analyze
 The experiments defined by the workspace configuration are a 1, 2, 4, 8, and 16
 node scaling study of the Lignocellulose benchmark for Gromacs.
 
-[hpc-slurm-ramble-gromacs.yaml]: ../community/examples/hpc-slurm-ramble-gromacs.yaml
+[hpc-slurm-ramble-gromacs-v6.yaml]: ../community/examples/hpc-slurm-ramble-gromacs-v6.yaml
 
 ### [omnia-cluster.yaml] ![community-badge] ![experimental-badge] ![deprecated-badge]
 

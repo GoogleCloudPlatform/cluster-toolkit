@@ -1,4 +1,4 @@
-# Copyright 2022 Google LLC
+# Copyright 2024 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -32,7 +32,7 @@ deployment_groups:
   # Source is an embedded module, denoted by "modules/*" without ./, ../, /
   # as a prefix. To refer to a local module, prefix with ./, ../ or /
   # Example - ./modules/network/vpc
-  - id: network1
+  - id: network
     source: modules/network/vpc
 
   ## Install Scripts
@@ -68,6 +68,7 @@ deployment_groups:
       commands: |
         ramble workspace create gromacs -c /opt/apps/gromacs_scaling.yaml -t /opt/apps/execute_experiment.tpl
         ramble workspace activate gromacs
+        ramble workspace concretize -f
         ramble workspace info -v
 
   - id: login-startup
@@ -81,7 +82,7 @@ deployment_groups:
           ramble:
             variables:
               mpi_command: 'mpirun -n {n_ranks} -ppn {processes_per_node}'
-              batch_submit: 'sbatch {execute_experiment}'
+              batch_submit: '{execute_experiment}'
               processes_per_node: 30
             applications:
               gromacs:
@@ -92,7 +93,6 @@ deployment_groups:
                         variables:
                           n_nodes: [1, 2, 4, 8, 16]
             spack:
-              concretized: false
               packages: {}
               environments: {}
       - type: data
@@ -109,37 +109,39 @@ deployment_groups:
     source: modules/scripts/startup-script
     settings:
       runners:
+      - $(spack-install.spack_runner)
       - $(ramble-setup.ramble_runner)
 
-  - id: compute_node_group
-    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
+  - id: compute_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network]
     settings:
       node_count_dynamic_max: 20
       bandwidth_tier: gvnic_enabled
 
   - id: compute_partition
-    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
-    use:
-    - network1
-    - compute_node_group
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use: [compute_nodeset]
     settings:
       partition_name: compute
 
-  - id: slurm_controller
-    source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
-    use:
-    - network1
-    - compute_partition
-    - access-startup
-    settings:
-      disable_controller_public_ips: false
-
   - id: slurm_login
-    source: community/modules/scheduler/schedmd-slurm-gcp-v5-login
-    use:
-    - network1
-    - slurm_controller
-    - login-startup
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    use: [network]
     settings:
+      name_prefix: login
       machine_type: n2-standard-4
       disable_login_public_ips: false
+
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    use:
+    - network
+    - compute_partition
+    - slurm_login
+    settings:
+      disable_controller_public_ips: false
+      login_startup_script: $(login-startup.startup_script)
+      controller_startup_script: $(access-startup.startup_script)
+      controller_startup_scripts_timeout: 1000
+      login_startup_scripts_timeout: 1000
