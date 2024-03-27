@@ -78,13 +78,3 @@ func (d *Dict) AsObject() cty.Value {
 func (d Dict) IsZero() bool {
 	return len(d.m) == 0
 }
-
-// Eval returns a copy of this Dict, where all Expressions
-// are evaluated and replaced by result of evaluation.
-func (d Dict) Eval(bp Blueprint) (Dict, error) {
-	res, err := bp.Eval(d.AsObject())
-	if err != nil {
-		return Dict{}, err
-	}
-	return NewDict(res.AsValueMap()), nil
-}

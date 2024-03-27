@@ -43,7 +43,7 @@ var (
 
 func parseExportImportArgs(args []string) (string, string) {
 	gd, err := filepath.Abs(args[0])
-	checkErr(err)
+	checkErr(err, nil)
 	return filepath.Join(gd, ".."), gd
 }
 
@@ -53,26 +53,26 @@ func runExportCmd(cmd *cobra.Command, args []string) {
 	artifactsDir := getArtifactsDir(deplRoot)
 	groupName := config.GroupName(filepath.Base(groupDir))
 
-	checkErr(shell.CheckWritableDir(artifactsDir))
+	checkErr(shell.CheckWritableDir(artifactsDir), nil)
 
 	expandedBlueprintFile := filepath.Join(artifactsDir, modulewriter.ExpandedBlueprintName)
-	bp, _, err := config.NewBlueprint(expandedBlueprintFile)
-	checkErr(err)
+	bp, ctx, err := config.NewBlueprint(expandedBlueprintFile)
+	checkErr(err, ctx)
 
-	checkErr(shell.ValidateDeploymentDirectory(bp.Groups, deplRoot))
+	checkErr(shell.ValidateDeploymentDirectory(bp.Groups, deplRoot), ctx)
 
 	group, err := bp.Group(groupName)
-	checkErr(err)
+	checkErr(err, ctx)
 
 	if group.Kind() == config.PackerKind {
-		checkErr(errors.New("export command is unsupported on Packer modules because they do not have outputs"))
+		checkErr(errors.New("export command is unsupported on Packer modules because they do not have outputs"), ctx)
 	}
 	if group.Kind() != config.TerraformKind {
-		checkErr(errors.New("export command is supported for Terraform modules only"))
+		checkErr(errors.New("export command is supported for Terraform modules only"), ctx)
 	}
 
 	tf, err := shell.ConfigureTerraform(groupDir)
-	checkErr(err)
+	checkErr(err, ctx)
 
-	checkErr(shell.ExportOutputs(tf, artifactsDir, shell.NeverApply))
+	checkErr(shell.ExportOutputs(tf, artifactsDir, shell.NeverApply), ctx)
 }

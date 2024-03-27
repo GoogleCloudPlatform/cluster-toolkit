@@ -416,7 +416,8 @@ func ImportInputs(groupDir string, artifactsDir string, bp config.Blueprint) err
 			return err
 		}
 
-		evaluatedSettings, err := newModule.Settings.Eval(config.Blueprint{Vars: config.NewDict(inputs)})
+		fakeBP := config.Blueprint{Vars: config.NewDict(inputs)}
+		evaluatedSettings, err := fakeBP.EvalDict(newModule.Settings)
 		if err != nil {
 			return err
 		}

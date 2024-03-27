@@ -44,12 +44,12 @@ func runImportCmd(cmd *cobra.Command, args []string) {
 	deplRoot, groupDir := parseExportImportArgs(args)
 	artifactsDir := getArtifactsDir(deplRoot)
 
-	checkErr(shell.CheckWritableDir(groupDir))
+	checkErr(shell.CheckWritableDir(groupDir), nil)
 
 	expandedBlueprintFile := filepath.Join(artifactsDir, modulewriter.ExpandedBlueprintName)
-	bp, _, err := config.NewBlueprint(expandedBlueprintFile)
-	checkErr(err)
+	bp, ctx, err := config.NewBlueprint(expandedBlueprintFile)
+	checkErr(err, ctx)
 
-	checkErr(shell.ValidateDeploymentDirectory(bp.Groups, deplRoot))
-	checkErr(shell.ImportInputs(groupDir, artifactsDir, bp))
+	checkErr(shell.ValidateDeploymentDirectory(bp.Groups, deplRoot), ctx)
+	checkErr(shell.ImportInputs(groupDir, artifactsDir, bp), ctx)
 }

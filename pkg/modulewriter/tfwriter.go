@@ -268,19 +268,12 @@ func (w TFWriter) writeGroup(
 	instructions io.Writer,
 ) error {
 	g := bp.Groups[groupIndex]
-	deploymentVars, err := getUsedDeploymentVars(g, bp)
-	if err != nil {
-		return err
-	}
+	deploymentVars := getUsedDeploymentVars(g, bp)
+
 	intergroupVars := FindIntergroupVariables(g, bp)
 	intergroupInputs := make(map[string]bool)
 	for _, igVar := range intergroupVars {
 		intergroupInputs[igVar.Name] = true
-	}
-
-	be := g.TerraformBackend
-	if be.Configuration, err = be.Configuration.Eval(bp); err != nil {
-		return err
 	}
 
 	// Write main.tf file
@@ -288,7 +281,7 @@ func (w TFWriter) writeGroup(
 	if err != nil {
 		return fmt.Errorf("error substituting intergroup references in deployment group %s: %w", g.Name, err)
 	}
-	if err := writeMain(doctoredModules, be, groupPath); err != nil {
+	if err := writeMain(doctoredModules, g.TerraformBackend, groupPath); err != nil {
 		return fmt.Errorf("error writing main.tf file for deployment group %s: %w", g.Name, err)
 	}
 
@@ -362,7 +355,7 @@ func orderKeys[T any](settings map[string]T) []string {
 	return keys
 }
 
-func getUsedDeploymentVars(group config.Group, bp config.Blueprint) (map[string]cty.Value, error) {
+func getUsedDeploymentVars(group config.Group, bp config.Blueprint) map[string]cty.Value {
 	res := map[string]cty.Value{
 		// labels must always be written as a variable as it is implicitly added
 		"labels": bp.Vars.Get("labels"),
@@ -378,12 +371,7 @@ func getUsedDeploymentVars(group config.Group, bp config.Blueprint) (map[string]
 	for _, v := range used {
 		res[v] = bp.Vars.Get(v)
 	}
-
-	eres, err := bp.Eval(cty.ObjectVal(res))
-	if err != nil {
-		return nil, err
-	}
-	return eres.AsValueMap(), nil
+	return res
 }
 
 func substituteIgcReferences(mods []config.Module, igcRefs map[config.Reference]modulereader.VarInfo) ([]config.Module, error) {
