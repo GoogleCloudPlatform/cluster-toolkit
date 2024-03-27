@@ -42,7 +42,8 @@ deployment_groups:
       # If set to true, suspended VM will be stopped.
       # If set to false, suspended VM will be deleted.
       preserve_tpu: false
-      node_count_dynamic_max: 1
+      node_count_static: 1
+      node_count_dynamic_max: 0
 
   - id: tpu_partition
     source: ./community/modules/compute/schedmd-slurm-gcp-v6-partition
