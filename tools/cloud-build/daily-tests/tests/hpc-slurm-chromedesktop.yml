@@ -26,7 +26,6 @@ cli_deployment_vars:
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/community/examples/hpc-slurm-chromedesktop.yaml"
 network: "{{ deployment_name }}-net"
-max_nodes: 5
 # Note: Pattern matching in gcloud only supports 1 wildcard.
 login_node: "{{ slurm_cluster_name }}-login-*"
 controller_node: "{{ slurm_cluster_name }}-controller"
