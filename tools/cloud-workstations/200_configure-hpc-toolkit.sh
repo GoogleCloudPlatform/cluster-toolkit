@@ -16,4 +16,4 @@
 # The docker script moves this to /etc/workstation-startup.d to run
 # the hpc toolkit configuration when the workstation is brought up for
 # the first time.
-sudo -i -b -u user bash /bin/configure-hpc-toolkit.sh
+runuser user /usr/local/bin/configure-hpc-toolkit.sh &
