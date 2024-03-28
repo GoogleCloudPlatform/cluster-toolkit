@@ -13,15 +13,14 @@ Please follow the initial instructions for:
 [tkdeps]: https://cloud.google.com/hpc-toolkit/docs/setup/install-dependencies
 [tkinstall]: https://github.com/GoogleCloudPlatform/hpc-toolkit/#quickstart
 
-Verify that your release of the HPC Toolkit is 1.29.0 or later.
+Verify that your release of the HPC Toolkit is 1.31.1 or later.
 
 ```shell
 ghpc --version
 ```
 
-Additional features of the solution require several Python packages to be
-installed in your execution environment. We recommend using a Python virtual
-environment to manage them as shown below
+The solution requires several Python packages to be available. We recommend
+installing them in a Python virtual environment:
 
 ```shell
 python3 -m venv toolkit-a3
@@ -37,18 +36,12 @@ deploy or destroy.
 source /absolute/path/to/toolkit-a3/bin/activate
 ```
 
-Install the beta gcloud components to enable beta APIs:
-
-```shell
-gcloud components install beta
-```
-
 ## Top-Level Design of Solution
 
 The solution is split into 3 HPC Toolkit blueprints:
 
 1. Provision 5 VPCs (1 system network, 4 GPU networks) and 1 Filestore for
-mounting /home across the cluster
+mounting `/home` across the cluster
 2. Build a custom image installing Slurm in an Ubuntu 20.04 image. The image
 runs a kernel patched with performance enhancements for the A3 VM family.
 3. Provision a Slurm cluster using the custom image
@@ -64,15 +57,12 @@ frequently updated and re-provisioned as discussed below.
 _These steps do not need to be repeated when a cluster is re-provisioned. They
 are initial setup steps in a project._
 
-The following steps create a compact placement policy and VM reservation that
-improves the performance of tightly-coupled workloads and ensures capacity for
-A3 VMs. Values in the blueprint must be modified as shown below.
-
 Replace the values for `PROJECT_ID`, `REGION`, and `ZONE` with the project,
 region, and zone in which you have an A3 VM family allocation. The value for
 `BUCKET` must be unique and will be used to create a new bucket. After replacing
 the values, execute them so that they automatically populate parameters in the
-commands shown below.
+commands shown below. Note that each A3 VM (`N_VMS`) contains 8 NVIDIA H100
+GPUs.
 
 ```shell
 export PROJECT_ID=customer-project-id
@@ -80,12 +70,10 @@ export BUCKET=customer-bucket
 export REGION=customer-region
 export ZONE=customer-zone
 export N_VMS=32
-export POLICY=policy-compact-0
-export RESERVATION=slurm-res-0
 ```
 
-Each A3 VM (`N_VMS`) contains 8 NVIDIA H100 GPUs.  Create a bucket with
-versioning enabled to store Terraform state:
+### Saving Terraform state
+Create a bucket with versioning enabled to store Terraform state:
 
 ```shell
 gcloud storage buckets create gs://${BUCKET} --project=${PROJECT_ID} \
@@ -94,59 +82,8 @@ gcloud storage buckets create gs://${BUCKET} --project=${PROJECT_ID} \
 gcloud storage buckets update gs://${BUCKET} --versioning
 ```
 
-If Google Cloud staff have created a reservation for you, then skip this step
-and use the reservation name visible in the Cloud Console.  Otherwise, create
-a compact placement policy attached to a reservation of A3 VMs.
-
-First, create a compact placement policy:
-
-```shell
-gcloud beta compute resource-policies create group-placement ${POLICY} \
-    --region=${REGION} \
-    --collocation=COLLOCATED \
-    --project=${PROJECT_ID}
-```
-
-And then create the reservation with the policy attached:
-
-```shell
-gcloud compute reservations create ${RESERVATION} \
-    --project=${PROJECT_ID} \
-    --machine-type=a3-highgpu-8g \
-    --vm-count=${N_VMS} \
-    --zone=${ZONE} \
-    --require-specific-reservation \
-    --resource-policies=placement=${POLICY} \
-    --log-http
-```
-
-Modify the the blueprint deployment variables `project_id`, `region`, `zone`,
-and `zones` in the `vars` block of `ml-slurm-a3-0-base.yaml`,
-`ml-slurm-a3-1-image.yaml` and `ml-slurm-h100-2-cluster.yaml`:
-
-```yaml
-  project_id: customer-project
-  region: customer-region
-  zone: customer-zone
-```
-
-Obtain values for `source_image_project_id` and `source_image` from your Google
-Cloud representative. Set them at approximately lines 33 and 34 of
-`ml-slurm-a3-1-image.yaml`. Set the reservation name in the blueprint
-deployment variable `a3_reservation_name` at approximately line 39 of
-`ml-slurm-a3-2-cluster.yaml`. If the reservation has been supplied to you
-by Google Cloud staff, use its name below.
-
-```yaml
-  a3_reservation_name: slurm-res-0
-```
-
-## Cluster creation
-
-The blueprint `ml-slurm-a3-0-base.yaml` will create 5 VPCs (1 system, 4 GPU)
-and a Filestore `/home` filesystem. This should take approximately 5 minutes. We
-recommend the use of Cloud Storage for storing Terraform state. This should be
-set directly in the blueprint:
+Modify all 3 blueprints to configure the new bucket to serve as a Terraform
+remote backend:
 
 ```yaml
 terraform_backend_defaults:
@@ -155,11 +92,93 @@ terraform_backend_defaults:
     bucket: customer-bucket # modify to bucket created above
 ```
 
-Then run the standard Toolkit workflow at the command line:
+### Set default values
+
+Modify the the blueprint deployment variables `project_id`, `region`, `zone`, in
+the `vars` block of all 3 blueprints:
+
+```yaml
+  project_id: customer-project
+  region: customer-region
+  zone: customer-zone
+```
+
+### Set kernel-patched OS image
+
+Obtain values for `source_image_project_id` and `source_image` from your Google
+Cloud representative. Set them at approximately lines 33 and 34 of
+`ml-slurm-a3-1-image.yaml`. 
+
+```yaml
+  source_image_project_id: source-image-project-id # use value supplied by Google Cloud staff
+  source_image: source-image-name                  # use value supplied by Google Cloud staff
+```
+
+### Reservation created by Google
+
+If Google Cloud staff have created a reservation for you, then skip this step
+and proceed to [manual reservation creation](#manual-creation-of-reservation).
+
+In this scenario, you must alter the blueprint deployment variables
+`a3_reservation_name` and `a3_maintenance_interval` beginnning at approximately
+line 38 of `ml-slurm-a3-2-cluster.yaml`. Use the reservation name provided by
+Google and set the maintenance interval parameter to `PERIODIC`.
+
+```yaml
+  # a3_reservation_name should be empty string by default; if Google staff
+  # have provided you with a reservation, supply it here
+  a3_reservation_name: reservation-name-provided-by-google
+  # a3_maintenance_interval should be empty string by default; if Google staff
+  # have provided you with a reservation, set it to PERIODIC
+  a3_maintenance_interval: PERIODIC
+```
+
+### Manual creation of reservation
+
+If Google staff have not created a reservation for you, we recommend creating
+one to ensure reliable access to re-create VMs if you need to redeploy or
+otherwise maintain your cluster.
 
 ```shell
-ghpc create -l ERROR ml-slurm-a3-0-base.yaml
-ghpc deploy slurm-a3-base --auto-approve
+gcloud compute reservations create a3-reservation-0 \
+    --project=${PROJECT_ID} \
+    --machine-type=a3-highgpu-8g \
+    --vm-count=${N_VMS} \
+    --zone=${ZONE} \
+    --log-http
+```
+
+This reservation will be [automatically consumed by VMs][consume] created
+with matching parameters (e.g. A3 VM type in configured zone). In this
+scenario, you may leave `a3_reservation_name` and `a3_maintenance_interval`
+at their default values in `ml-slurm-a3-2-cluster.yaml`.
+
+```yaml
+  # a3_reservation_name should be empty string by default; if Google staff
+  # have provided you with a reservation, supply it here
+  a3_reservation_name: ""
+  # a3_maintenance_interval should be empty string by default; if Google staff
+  # have provided you with a reservation, set it to PERIODIC
+  a3_maintenance_interval: ""
+```
+
+### Set cluster size
+
+At approximately line 37 of `ml-slurm-a3-2-cluster.yaml`, set the static cluster
+size. Recall that there are 8 NVIDIA H100 GPUs per A3 VM.
+
+```yaml
+  a3_static_cluster_size: 32
+```
+
+## Cluster creation
+
+The blueprint `ml-slurm-a3-0-base.yaml` will create 5 VPCs (1 system, 4 GPU)
+and a Filestore `/home` filesystem. Run the standard Toolkit workflow at the
+command line (approx. 5 minutes):
+
+```shell
+ghpc deploy ml-slurm-a3-0-base.yaml --auto-approve
 ```
 
 Several values will be output to the screen. The output will be similar to:
@@ -192,21 +211,10 @@ subnetwork_self_link_gpunet3 = "https://www.googleapis.com/compute/v1/projects/c
 ```
 
 Build the custom image using ml-slurm-a3-1-image.yaml and the same workflow
-as above. We recommend using Terraform state in Cloud Storage by modifying the
-blueprint to include:
-
-```yaml
-terraform_backend_defaults:
-  type: gcs
-  configuration:
-    bucket: customer-bucket
-```
-
-And run at the command line:
+as above. Run at the command line:
 
 ```shell
-ghpc create -l ERROR ml-slurm-a3-1-image.yaml
-ghpc deploy slurm-a3-image --auto-approve
+ghpc deploy ml-slurm-a3-1-image.yaml --auto-approve
 ```
 
 The image will take approximately 30 minutes to build. If you made no
@@ -218,21 +226,10 @@ the IP address of the Filestore instance for `/home`:
   server_ip_homefs: 10.224.153.226 # replace with IP address from output from slurm-a3-base!
 ```
 
-Provision the cluster blueprint. Again, we recommend the use of Cloud Storage
-for Terraform state.
-
-```yaml
-terraform_backend_defaults:
-  type: gcs
-  configuration:
-    bucket: customer-bucket
-```
-
-It will take approximately 5-10 minutes to provision the cluster.
+Provision the cluster blueprint (approximately 5-10 minutes):
 
 ```shell
-ghpc create -w -l ERROR ml-slurm-a3-2-cluster.yaml
-ghpc deploy slurm-a3-cluster --auto-approve
+ghpc deploy ml-slurm-a3-2-cluster.yaml --auto-approve
 ```
 
 ## Receive Data Path Manager (RxDM)
@@ -317,3 +314,5 @@ sbatch build-nccl-tests.sh
 ```shell
 sbatch run-nccl-tests.sh
 ```
+
+[consume]: https://cloud.google.com/compute/docs/instances/reservations-consume#consuming_instances_from_any_matching_reservation

@@ -35,10 +35,11 @@ vars:
   enable_cleanup_subscriptions: true
   a3_partition_name: a3
   a3_static_cluster_size: 32
-  # reservation name provided by Google
-  a3_reservation_name: slurm-res-0
-  # a3_maintenance_interval should be empty string by default; may be set to
-  # PERIODIC by direction of Google Cloud staff
+  # a3_reservation_name should be empty string by default; if Google staff
+  # have provided you with a reservation, supply it here
+  a3_reservation_name: ""
+  # a3_maintenance_interval should be empty string by default; if Google staff
+  # have provided you with a reservation, set it to PERIODIC
   a3_maintenance_interval: ""
   # network parameters should match base blueprint unless network names were modified
   network_name_system: slurm-sys-net
