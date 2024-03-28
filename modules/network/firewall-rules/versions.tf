@@ -22,7 +22,7 @@ terraform {
     }
   }
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:firewall-rules/v1.30.0"
+    module_name = "blueprints/terraform/hpc-toolkit:firewall-rules/v"
   }
 
   required_version = ">= 1.3"
