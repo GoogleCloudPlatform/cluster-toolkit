@@ -52,7 +52,6 @@ deployment_groups:
   - id: compute-partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
     use:
-    - homefs
     - compute-nodeset
     settings:
       partition_name: compute

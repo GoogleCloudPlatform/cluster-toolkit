@@ -100,7 +100,7 @@ deployment_groups:
 
   - id: compute_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
-    use: [compute_nodeset, homefs, appsfs]
+    use: [compute_nodeset]
     settings:
       partition_name: compute
       is_default: true

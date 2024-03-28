@@ -19,6 +19,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -132,7 +133,7 @@ func (bp Blueprint) ModuleGroup(mod ModuleID) (Group, error) {
 func (bp Blueprint) ModuleGroupOrDie(mod ModuleID) Group {
 	g, err := bp.ModuleGroup(mod)
 	if err != nil {
-		panic(fmt.Errorf("module %s not found in blueprint: %s", mod, err))
+		panic(err)
 	}
 	return g
 }
@@ -242,6 +243,13 @@ type Blueprint struct {
 	Vars                     Dict
 	Groups                   []Group          `yaml:"deployment_groups"`
 	TerraformBackendDefaults TerraformBackend `yaml:"terraform_backend_defaults,omitempty"`
+
+	// internal & non-serializable fields
+
+	// absolute path to the blueprint file
+	path string
+	// records of intentions to stage file (populated by ghpc_stage function)
+	stagedFiles map[string]string
 }
 
 // DeploymentSettings are deployment-specific override settings
@@ -261,6 +269,9 @@ func (bp *Blueprint) Expand() error {
 		return err
 	}
 	if err := bp.expandVars(); err != nil {
+		return err
+	}
+	if err := bp.validateNoGhpcStageFuncs(); err != nil {
 		return err
 	}
 	return bp.expandGroups()
@@ -342,7 +353,16 @@ func checkMovedModule(source string) error {
 
 // NewBlueprint is a constructor for Blueprint
 func NewBlueprint(path string) (Blueprint, YamlCtx, error) {
-	return parseYamlFile[Blueprint](path)
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return Blueprint{}, YamlCtx{}, err
+	}
+	bp, ctx, err := parseYamlFile[Blueprint](absPath)
+	if err != nil {
+		return Blueprint{}, ctx, err
+	}
+	bp.path = absPath
+	return bp, ctx, nil
 }
 
 func NewDeploymentSettings(deploymentFilename string) (DeploymentSettings, YamlCtx, error) {
@@ -361,14 +381,12 @@ func (bp Blueprint) Export(outputFilename string) error {
 	d := buf.Bytes()
 
 	if err != nil {
-		return fmt.Errorf("%s: %w", errMsgYamlMarshalError, err)
+		return fmt.Errorf("failed to export the configuration to a blueprint yaml file: %w", err)
 	}
 
 	err = os.WriteFile(outputFilename, d, 0644)
 	if err != nil {
-		// hitting this error writing yaml
-		return fmt.Errorf("%s, Filename: %s: %w",
-			errMsgYamlSaveError, outputFilename, err)
+		return fmt.Errorf("failed to write the expanded yaml %s: %w", outputFilename, err)
 	}
 	return nil
 }
@@ -392,7 +410,7 @@ func checkModulesAndGroups(bp Blueprint) error {
 		errs.At(pg.Name, grp.Name.Validate())
 
 		if seenGrp[grp.Name] {
-			errs.At(pg.Name, fmt.Errorf("%s: %s used more than once", errMsgDuplicateGroup, grp.Name))
+			errs.At(pg.Name, fmt.Errorf("group names must be unique, %q used more than once", grp.Name))
 		}
 		seenGrp[grp.Name] = true
 
@@ -409,7 +427,7 @@ func checkModulesAndGroups(bp Blueprint) error {
 		for im, mod := range grp.Modules {
 			pm := pg.Modules.At(im)
 			if seenMod[mod.ID] {
-				errs.At(pm.ID, fmt.Errorf("%s: %s used more than once", errMsgDuplicateID, mod.ID))
+				errs.At(pm.ID, fmt.Errorf("module IDs must be unique, %q used more than once", mod.ID))
 			}
 			seenMod[mod.ID] = true
 			errs.Add(validateModule(pm, mod, bp))
@@ -494,7 +512,7 @@ func validateDeploymentName(bp Blueprint) error {
 	if !bp.Vars.Has("deployment_name") {
 		return BpError{path, InputValueError{
 			inputKey: "deployment_name",
-			cause:    errMsgVarNotFound,
+			cause:    "could not find source of variable",
 		}}
 	}
 
@@ -525,23 +543,6 @@ func validateDeploymentName(bp Blueprint) error {
 		}}
 	}
 	return nil
-}
-
-// ProjectID returns the project_id
-func (bp Blueprint) ProjectID() (string, error) {
-	pid := "project_id"
-	if !bp.Vars.Has(pid) {
-		return "", BpError{Root.Vars, fmt.Errorf("%q variable is not specified", pid)}
-	}
-
-	v, err := bp.Eval(GlobalRef(pid).AsValue())
-	if err != nil {
-		return "", err
-	}
-	if v.Type() != cty.String {
-		return "", BpError{Root.Vars.Dot(pid), fmt.Errorf("%q variable is not a string", pid)}
-	}
-	return v.AsString(), nil
 }
 
 // checkBlueprintName returns an error if blueprint_name does not comply with
@@ -681,7 +682,7 @@ func (bp *Blueprint) evalVars() (Dict, error) {
 	res := map[string]cty.Value{}
 	ctx := hcl.EvalContext{
 		Variables: map[string]cty.Value{},
-		Functions: functions()}
+		Functions: bp.functions()}
 	for _, n := range order {
 		ctx.Variables["var"] = cty.ObjectVal(res)
 		ev, err := eval(bp.Vars.Get(n), &ctx)

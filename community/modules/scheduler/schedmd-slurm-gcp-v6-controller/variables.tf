@@ -158,7 +158,6 @@ variable "login_nodes" {
 ############
 # NODESETS #
 ############
-
 variable "nodeset" {
   description = "Define nodesets, as a list."
   type = list(object({
@@ -241,14 +240,8 @@ variable "nodeset" {
     content = string })), [])
   }))
   default = []
-
-  validation {
-    condition     = length(distinct([for x in var.nodeset : x.nodeset_name])) == length(var.nodeset)
-    error_message = "All nodesets must have a unique name."
-  }
 }
 
-# REVIEWER_NOTE: copied from V6 cluster module as is
 variable "nodeset_tpu" {
   description = "Define TPU nodesets, as a list."
   type = list(object({
@@ -279,11 +272,16 @@ variable "nodeset_tpu" {
     reserved   = optional(string, false)
   }))
   default = []
+}
 
-  validation {
-    condition     = length(distinct([for x in var.nodeset_tpu : x.nodeset_name])) == length(var.nodeset_tpu)
-    error_message = "All TPU nodesets must have a unique name."
-  }
+
+variable "nodeset_dyn" {
+  description = "Defines dynamic nodesets, as a list."
+  type = list(object({
+    nodeset_name    = string
+    nodeset_feature = string
+  }))
+  default = []
 }
 
 #############
@@ -295,15 +293,8 @@ variable "partitions" {
 Cluster partitions as a list. See module slurm_partition.
 EOD
   type = list(object({
-    default              = optional(bool, false)
-    enable_job_exclusive = optional(bool, false)
-    network_storage = optional(list(object({
-      server_ip     = string
-      remote_mount  = string
-      local_mount   = string
-      fs_type       = string
-      mount_options = string
-    })), [])
+    default               = optional(bool, false)
+    enable_job_exclusive  = optional(bool, false)
     partition_conf        = optional(map(string), {})
     partition_name        = string
     partition_nodeset     = optional(list(string), [])

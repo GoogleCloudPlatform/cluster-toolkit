@@ -35,3 +35,10 @@ variable "condor_version" {
     )
   }
 }
+
+variable "http_proxy" {
+  description = "Set system default web (http and https) proxy for Windows HTCondor installation"
+  type        = string
+  default     = ""
+  nullable    = false
+}

@@ -25,9 +25,6 @@ vars:
 deployment_groups:
 - group: primary
   modules:
-  # Source is an embedded resource, denoted by "resources/*" without ./, ../, /
-  # as a prefix. To refer to a local resource, prefix with ./, ../ or /
-  # Example - ./resources/network/vpc
   - id: network
     source: modules/network/vpc
 
@@ -69,8 +66,6 @@ deployment_groups:
   - id: debug_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
     use:
-    - homefs
-    - bucket
     - debug_nodeset
     settings:
       partition_name: debug
@@ -87,8 +82,6 @@ deployment_groups:
   - id: compute_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
     use:
-    - homefs
-    - bucket
     - compute_nodeset
     settings:
       partition_name: compute

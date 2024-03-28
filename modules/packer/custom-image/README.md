@@ -75,7 +75,8 @@ buckets. Recommended roles are:
 - `roles/monitoring.metricWriter`
 - `roles/storage.objectViewer`
 
-These roles are demonstrated in the [image builder example][examples readme].
+It is recommended to create this service account as a separate step outside a
+blueprint due to known delay in [IAM bindings propagation][iamprop].
 
 ## Example blueprints
 
@@ -286,8 +287,9 @@ No resources.
 | <a name="input_omit_external_ip"></a> [omit\_external\_ip](#input\_omit\_external\_ip) | Provision the image building VM without a public IP address | `bool` | `true` | no |
 | <a name="input_on_host_maintenance"></a> [on\_host\_maintenance](#input\_on\_host\_maintenance) | Describes maintenance behavior for the instance. If left blank this will default to `MIGRATE` except the use of GPUs requires it to be `TERMINATE` | `string` | `null` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which to create VM and image | `string` | n/a | yes |
-| <a name="input_scopes"></a> [scopes](#input\_scopes) | Service account scopes to attach to the instance. See<br>https://cloud.google.com/compute/docs/access/service-accounts. | `list(string)` | <pre>[<br>  "https://www.googleapis.com/auth/cloud-platform"<br>]</pre> | no |
+| <a name="input_scopes"></a> [scopes](#input\_scopes) | DEPRECATED: use var.service\_account\_scopes | `set(string)` | `null` | no |
 | <a name="input_service_account_email"></a> [service\_account\_email](#input\_service\_account\_email) | The service account email to use. If null or 'default', then the default Compute Engine service account will be used. | `string` | `null` | no |
+| <a name="input_service_account_scopes"></a> [service\_account\_scopes](#input\_service\_account\_scopes) | Service account scopes to attach to the instance. See<br>https://cloud.google.com/compute/docs/access/service-accounts. | `set(string)` | <pre>[<br>  "https://www.googleapis.com/auth/cloud-platform"<br>]</pre> | no |
 | <a name="input_shell_scripts"></a> [shell\_scripts](#input\_shell\_scripts) | A list of paths to local shell scripts which will be uploaded to customize the VM image | `list(string)` | `[]` | no |
 | <a name="input_shielded_instance_config"></a> [shielded\_instance\_config](#input\_shielded\_instance\_config) | Shielded VM configuration for the instance (must set var.enabled\_shielded\_vm) | <pre>object({<br>    enable_secure_boot          = bool<br>    enable_vtpm                 = bool<br>    enable_integrity_monitoring = bool<br>  })</pre> | <pre>{<br>  "enable_integrity_monitoring": true,<br>  "enable_secure_boot": true,<br>  "enable_vtpm": true<br>}</pre> | no |
 | <a name="input_source_image"></a> [source\_image](#input\_source\_image) | Source OS image to build from | `string` | `null` | no |
@@ -314,6 +316,7 @@ No outputs.
 [cloudnat]: https://cloud.google.com/nat/docs/overview
 [examples readme]: ../../../examples/README.md#image-builderyaml-
 [hpcimage]: https://cloud.google.com/compute/docs/instances/create-hpc-vm
+[iamprop]: https://cloud.google.com/iam/docs/access-change-propagation
 [iaptunnel]: https://cloud.google.com/iap/docs/using-tcp-forwarding
 [image builder]: ../../../examples/image-builder.yaml
 [logging-console]: https://console.cloud.google.com/logs/

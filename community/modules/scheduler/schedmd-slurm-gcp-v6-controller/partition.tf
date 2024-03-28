@@ -13,8 +13,14 @@
 # limitations under the License.
 
 locals {
-  nodeset_map     = { for x in var.nodeset : x.nodeset_name => x }
-  nodeset_tpu_map = { for x in var.nodeset_tpu : x.nodeset_name => x }
+  nodeset_map_ell = { for x in var.nodeset : x.nodeset_name => x... }
+  nodeset_map     = { for k, vs in local.nodeset_map_ell : k => vs[0] }
+
+  nodeset_tpu_map_ell = { for x in var.nodeset_tpu : x.nodeset_name => x... }
+  nodeset_tpu_map     = { for k, vs in local.nodeset_tpu_map_ell : k => vs[0] }
+
+  nodeset_dyn_map_ell = { for x in var.nodeset_dyn : x.nodeset_name => x... }
+  nodeset_dyn_map     = { for k, vs in local.nodeset_dyn_map_ell : k => vs[0] }
 
   partition_map = { for x in var.partitions : x.partition_name => x }
 }
@@ -100,6 +106,15 @@ module "slurm_nodeset_tpu" {
   subnetwork             = each.value.subnetwork
 }
 
+# NODESET DYNAMIC
+module "slurm_nodeset_dyn" {
+  source   = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_nodeset_dyn?ref=6.2.0"
+  for_each = local.nodeset_dyn_map
+
+  nodeset_name    = each.value.nodeset_name
+  nodeset_feature = each.value.nodeset_feature
+}
+
 # PARTITION
 module "slurm_partition" {
   source   = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_partition?ref=6.4.3&depth=1"
@@ -107,10 +122,10 @@ module "slurm_partition" {
 
   partition_nodeset     = [for x in each.value.partition_nodeset : module.slurm_nodeset[x].nodeset_name if try(module.slurm_nodeset[x], null) != null]
   partition_nodeset_tpu = [for x in each.value.partition_nodeset_tpu : module.slurm_nodeset_tpu[x].nodeset_name if try(module.slurm_nodeset_tpu[x], null) != null]
+  partition_nodeset_dyn = [for x in each.value.partition_nodeset_dyn : module.slurm_nodeset_dyn[x].nodeset_name if try(module.slurm_nodeset_dyn[x], null) != null]
 
   default              = each.value.default
   enable_job_exclusive = each.value.enable_job_exclusive
-  network_storage      = each.value.network_storage
   partition_name       = each.value.partition_name
   partition_conf       = each.value.partition_conf
   resume_timeout       = each.value.resume_timeout

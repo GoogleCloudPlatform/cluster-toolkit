@@ -1,4 +1,4 @@
-# Copyright 2023 Google LLC
+# Copyright 2024 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -28,15 +28,12 @@ vars:
 deployment_groups:
 - group: primary
   modules:
-  # Source is an embedded resource, denoted by "resources/*" without ./, ../, /
-  # as a prefix. To refer to a local resource, prefix with ./, ../ or /
-  # Example - ./resources/network/vpc
-  - id: network1
+  - id: network
     source: modules/network/vpc
 
   - id: homefs
     source: modules/file-system/filestore
-    use: [network1]
+    use: [network]
     settings:
       local_mount: /home
 
@@ -46,54 +43,51 @@ deployment_groups:
       configure_ssh_host_patterns: ['10.182.0.*', 'hpcsm*']
 
   - id: debug_node_group
-    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network]
     settings:
       node_count_dynamic_max: 4
       machine_type: n2-standard-2
+      enable_placement: false # the default is: true
 
   - id: debug_partition
-    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
     use:
-    - network1
-    - homefs
     - debug_node_group
     settings:
       partition_name: debug
       exclusive: false # allows nodes to stay up after jobs are done
-      enable_placement: false # the default is: true
       is_default: true
 
   - id: compute_node_group
-    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network]
     settings:
       node_count_dynamic_max: 20
 
   - id: compute_partition
-    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
     use:
-    - network1
-    - homefs
     - compute_node_group
     settings:
       partition_name: compute
 
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    use: [network]
+    settings:
+      name_prefix: login
+      machine_type: n2-standard-4
+      disable_login_public_ips: false
+
   - id: slurm_controller
-    source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     use:
-    - network1
+    - network
+    - slurm_login
     - debug_partition
     - compute_partition
     - homefs
     - script
     settings:
       disable_controller_public_ips: false
-
-  - id: slurm_login
-    source: community/modules/scheduler/schedmd-slurm-gcp-v5-login
-    use:
-    - network1
-    - slurm_controller
-    - script
-    settings:
-      machine_type: n2-standard-4
-      disable_login_public_ips: false

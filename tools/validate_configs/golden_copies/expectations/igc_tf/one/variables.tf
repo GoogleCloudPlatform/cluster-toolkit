@@ -14,6 +14,11 @@
   * limitations under the License.
   */
 
+variable "connect_mode_file_path" {
+  description = "Toolkit deployment variable: connect_mode_file_path"
+  type        = string
+}
+
 variable "deployment_name" {
   description = "Toolkit deployment variable: deployment_name"
   type        = string

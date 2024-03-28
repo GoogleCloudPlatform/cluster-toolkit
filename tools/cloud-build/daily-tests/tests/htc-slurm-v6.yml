@@ -1,4 +1,4 @@
-# Copyright 2022 Google LLC
+# Copyright 2024 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,24 +14,29 @@
 
 ---
 
-test_name: hpc-cluster-high-io-v5
-deployment_name: "io-v5-{{ build }}"
-slurm_cluster_name: "iov5{{ build[0:6] }}"
+test_name: htc-slurm-v6
+deployment_name: htcv6{{ build }}
+slurm_cluster_name: "htcv6{{ build[0:5] }}"
 zone: us-west4-c
+
+cli_deployment_vars:
+   region: us-west4
+   zone: us-west4-c
+
 workspace: /workspace
-blueprint_yaml: "{{ workspace }}/tools/cloud-build/daily-tests/blueprints/slurm-gcp-v5-high-io.yaml"
+blueprint_yaml: "{{ workspace }}/community/examples/htc-slurm-v6.yaml"
 network: "{{ deployment_name }}-net"
-max_nodes: 5
+# Note: Pattern matching in gcloud only supports 1 wildcard, a*-login-* won't work.
 login_node: "{{ slurm_cluster_name }}-login-*"
 controller_node: "{{ slurm_cluster_name }}-controller"
 post_deploy_tests:
 - test-validation/test-mounts.yml
 - test-validation/test-partitions.yml
 custom_vars:
-  partitions:
-  - compute
-  - lowcost
-  mounts:
-  - /home
-  - /scratch
-  - /projects
+   partitions:
+   - compute
+   - lowcost
+   mounts:
+   - /home
+   - /projects
+   - /scratch

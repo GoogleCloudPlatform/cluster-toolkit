@@ -84,8 +84,7 @@ locals {
     filename = "ghpc_startup.sh"
     content  = var.compute_startup_script
   }]
-  nodeset_startup_scripts = {
-  for ns in var.nodeset : ns.nodeset_name => ns.startup_script }
+  nodeset_startup_scripts = { for k, v in local.nodeset_map : k => v.startup_script }
 }
 
 module "slurm_files" {
@@ -128,6 +127,7 @@ module "slurm_files" {
   partitions  = values(module.slurm_partition)[*]
   nodeset     = values(module.slurm_nodeset)[*]
   nodeset_tpu = values(module.slurm_nodeset_tpu)[*]
+  nodeset_dyn = values(module.slurm_nodeset_dyn)[*]
 
   depends_on = [module.bucket]
 }

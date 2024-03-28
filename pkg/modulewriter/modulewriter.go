@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/deploymentio"
+	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/sourcereader"
 	"io"
 	"os"
@@ -32,6 +33,7 @@ import (
 	"path/filepath"
 
 	"github.com/hashicorp/go-getter"
+	"github.com/otiai10/copy"
 )
 
 // strings that get re-used throughout this package and others
@@ -78,6 +80,10 @@ func WriteDeployment(bp config.Blueprint, deploymentDir string) error {
 		return err
 	}
 
+	if err := stageFiles(bp, deploymentDir); err != nil {
+		return err
+	}
+
 	instructions, err := os.Create(InstructionsPath(deploymentDir))
 	if err != nil {
 		return err
@@ -104,6 +110,62 @@ func WriteDeployment(bp config.Blueprint, deploymentDir string) error {
 		}
 	}
 	return nil
+}
+
+func stageFiles(bp config.Blueprint, deplPath string) error {
+	staged := bp.StagedFiles()
+	if len(staged) == 0 {
+		return nil
+	}
+
+	// create staging directory
+	if err := os.MkdirAll(filepath.Join(deplPath, config.StagingDir), 0700); err != nil {
+		return err
+	}
+
+	errs := config.Errors{}
+	for _, f := range staged {
+		// TODO: attribute error to the position in the blueprint
+		errs.Add(stageFile(deplPath, f))
+	}
+	return errs.OrNil()
+}
+
+func doesExists(path string) (bool, error) {
+	_, err := os.Lstat(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
+func stageFile(deplPath string, f config.StagedFile) error {
+	// RelDst is relative to group folders ("../.ghpc/staged"),
+	// prepend any_group_dir to be "eaten" by ".."
+	dst := filepath.Join(deplPath, "any_group_dir", f.RelDst)
+	dstExists, err := doesExists(dst)
+	if err != nil {
+		return err
+	}
+
+	srcExists, err := doesExists(f.AbsSrc)
+	if err != nil {
+		return err
+	}
+
+	if !srcExists && !dstExists {
+		return fmt.Errorf("file for staging %s does not exists", f.AbsSrc)
+	}
+	if !srcExists && dstExists {
+		// We implement this relaxation for cases where user does not have access to the original blueprint,
+		// and does re-creation using expanded blueprint.
+		logging.Error("WARNING: file %s does not exists, proceeding by using previously staged copy", f.AbsSrc)
+		return nil
+	}
+	return copy.Copy(f.AbsSrc, dst)
 }
 
 func writeGroup(deplPath string, bp config.Blueprint, gIdx int, instructions io.Writer) error {

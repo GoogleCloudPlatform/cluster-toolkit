@@ -31,9 +31,9 @@ vars:
 deployment_groups:
 - group: primary
   modules:
-  # Source is an embedded resource, denoted by "resources/*" without ./, ../, /
-  # as a prefix. To refer to a local resource, prefix with ./, ../ or /
-  # Example - ./resources/network/vpc
+  # Source is an embedded module, denoted by "modules/*" without ./, ../, /
+  # as a prefix. To refer to a local module, prefix with ./, ../ or /
+  # Example - ./modules/network/vpc
   - id: network1
     source: modules/network/vpc
 
@@ -43,7 +43,7 @@ deployment_groups:
     settings:
       local_mount: /home
 
-  - id: debug_node_group
+  - id: debug_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [network1]
     settings:
@@ -54,15 +54,13 @@ deployment_groups:
 
   - id: debug_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
-    use:
-    - homefs
-    - debug_node_group
+    use: [debug_nodeset]
     settings:
       partition_name: debug
       exclusive: false # allows nodes to stay up after jobs are done
       is_default: true
 
-  - id: compute_node_group
+  - id: compute_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [network1]
     settings:
@@ -72,9 +70,7 @@ deployment_groups:
 
   - id: compute_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
-    use:
-    - homefs
-    - compute_node_group
+    use: [compute_nodeset]
     settings:
       partition_name: compute
 

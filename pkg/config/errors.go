@@ -82,7 +82,7 @@ type UnknownModuleError struct {
 }
 
 func (e UnknownModuleError) Error() string {
-	return fmt.Sprintf("invalid module id: \"%s\"", e.ID)
+	return fmt.Sprintf("unknown module id: %q", e.ID)
 }
 
 // Errors is an error wrapper to combine multiple errors
@@ -160,17 +160,9 @@ var EmptyGroupName = errors.New("group name must be set for each deployment grou
 
 // Error messages
 const (
-	errMsgYamlMarshalError = string("failed to export the configuration to a blueprint yaml file")
-	errMsgYamlSaveError    = string("failed to write the expanded yaml")
-	errMsgInvalidVar       = string("invalid variable definition in")
-	errMsgVarNotFound      = string("could not find source of variable")
-	errMsgIntergroupOrder  = string("references to outputs from other groups must be to earlier groups")
-	errMsgCannotUsePacker  = string("Packer modules cannot be used by other modules")
-	errMsgDuplicateGroup   = string("group names must be unique")
-	errMsgDuplicateID      = string("module IDs must be unique")
-	errMsgInvalidOutput    = string("requested output was not found in the module")
+	errMsgIntergroupOrder = string("references to outputs from other groups must be to earlier groups")
+
 	errMsgValueNotString   = string("value was not of type string")
 	errMsgValueEmptyString = string("value is an empty string")
-	errMsgLabelNameReqs    = string("name must begin with a lowercase letter, can only contain lowercase letters, numeric characters, underscores and dashes, and must be between 1 and 63 characters long")
 	errMsgLabelValueReqs   = string("value can only contain lowercase letters, numeric characters, underscores and dashes, and must be between 0 and 63 characters long")
 )

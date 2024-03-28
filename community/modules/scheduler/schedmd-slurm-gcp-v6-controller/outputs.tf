@@ -1,4 +1,4 @@
-# Copyright 2023 Google LLC
+# Copyright 2024 "Google LLC"
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,23 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
----
-blueprint_name: quota-check
+output "slurm_cluster_name" {
+  description = "Slurm cluster name."
+  value       = local.slurm_cluster_name
+}
 
-vars:
-  deployment_name: quota-check
-  project_id:  # Provided by check.py
-  region:      # Provided by check.py
-  zone:        # Provided by check.py
-
-deployment_groups: # Need to have at least one module to have a valid blueprint
-- group: noop
-  modules: [{id: noop, source: modules/network/pre-existing-vpc}]
-
-validators:
-- validator: test_resource_requirements
-  inputs:
-    ignore_usage: true
-    requirements:
-    - metric: compute.googleapis.com/n2_cpus
-      required: 750
+output "slurm_bucket_path" {
+  description = "Bucket path used by cluster."
+  value       = module.slurm_files.slurm_bucket_path
+}

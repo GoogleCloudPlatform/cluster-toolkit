@@ -1,0 +1,173 @@
+# Copyright 2024 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: node-group-test-v6
+
+vars:
+  project_id:  ## Set GCP Project ID Here ##
+  deployment_name: slurm-gcp-v6
+  region: us-central1
+  zone: us-central1-c
+
+# Documentation for each of the modules used below can be found at
+# https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
+
+deployment_groups:
+- group: primary
+  modules:
+  # Source is an embedded resource, denoted by "resources/*" without ./, ../, /
+  # as a prefix. To refer to a local resource, prefix with ./, ../ or /
+  # Example - ./resources/network/vpc
+  - id: network
+    source: modules/network/vpc
+
+  - id: homefs
+    source: community/modules/file-system/nfs-server
+    use: [network]
+    settings:
+      local_mounts: [/home]
+      auto_delete_disk: true
+
+  ## Single node group, use defaults where appropriate
+  - id: default_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network]
+    settings:
+      name: simple
+      machine_type: c2-standard-30
+
+  - id: single_nodeset_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use:
+    - default_nodeset
+    settings:
+      partition_name: simple
+
+  ## Complex partition using node groups
+  - id: nodeset_1
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network]
+    settings:
+      name: c30
+      machine_type: c2-standard-30
+      instance_image:
+        family: slurm-gcp-6-4-debian-11
+        project: schedmd-slurm-public
+      instance_image_custom: true
+
+  - id: nodeset_2
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network]
+    settings:
+      name: c60
+      machine_type: c2-standard-60
+      instance_image:
+        family: slurm-gcp-6-4-hpc-centos-7
+        project: schedmd-slurm-public
+
+  - id: nodeset_3
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network]
+    settings:
+      name: cd112
+      machine_type: c2d-standard-112
+      instance_image:
+        family: slurm-gcp-6-4-hpc-centos-7
+        project: schedmd-slurm-public
+      instance_image_custom: true
+      enable_smt: true
+
+  - id: nodeset_4
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network]
+    settings:
+      name: cd56
+      machine_type: c2d-standard-56
+
+  - id: multiple_nodesets
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use:
+    - nodeset_1
+    - nodeset_2
+    - nodeset_3
+    - nodeset_4
+    settings:
+      partition_name: multns
+
+  ## Explicitly set node partition with one nodeset
+  - id: single_nodeset_explicit_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    settings:
+      partition_name: explns
+      is_default: true
+      nodeset:
+      - nodeset_name: expl
+        node_count_static: 0
+        node_count_dynamic_max: 4
+        enable_placement: false
+        node_conf: {}
+        additional_disks: []
+        additional_networks: []
+        bandwidth_tier: null
+        can_ip_forward: false
+        disable_smt: false
+        disk_auto_delete: true
+        disk_labels: {}
+        disk_size_gb: 50
+        disk_type: pd-standard
+        enable_confidential_vm: false
+        enable_oslogin: true
+        enable_shielded_vm: false
+        enable_spot_vm: false
+        gpu: null
+        instance_template: null
+        labels: $(vars.labels)
+        machine_type: n2-standard-16
+        maintenance_interval: ""
+        metadata: {}
+        min_cpu_platform: null
+        on_host_maintenance: TERMINATE
+        preemptible: false
+        reservation_name: null # will be replaced by default value empty string
+        service_account: null
+        shielded_instance_config: null
+        subnetwork_self_link: $(network.subnetwork_self_link)
+        spot_instance_config: null
+        source_image_family: null
+        source_image_project: null
+        source_image: null
+        tags: []
+        access_config: []
+
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    use: [network]
+    settings:
+      name_prefix: login
+      machine_type: n2-standard-4
+      disable_login_public_ips: false
+
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    use:
+    - network
+    - single_nodeset_partition
+    - multiple_nodesets
+    - single_nodeset_explicit_partition
+    - homefs
+    - slurm_login
+    settings:
+      disable_controller_public_ips: false

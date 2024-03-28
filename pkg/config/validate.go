@@ -60,7 +60,7 @@ func validateGlobalLabels(bp Blueprint) error {
 		if !isValidLabelName(k) {
 			errs.At(vp, HintError{
 				Err:  fmt.Errorf("invalid label name %q", k),
-				Hint: errMsgLabelNameReqs})
+				Hint: "name must begin with a lowercase letter, can only contain lowercase letters, numeric characters, underscores and dashes, and must be between 1 and 63 characters long"})
 		}
 
 		if _, is := IsExpressionValue(v); is {
@@ -138,7 +138,7 @@ func validateOutputs(p ModulePath, mod Module, info modulereader.ModuleInfo) err
 	// Ensure output exists in the underlying modules
 	for io, output := range mod.Outputs {
 		if _, ok := outputs[output.Name]; !ok {
-			err := fmt.Errorf("%s, module: %s output: %s", errMsgInvalidOutput, mod.ID, output.Name)
+			err := fmt.Errorf("requested output %q was not found in the module %q", output.Name, mod.ID)
 			errs.At(p.Outputs.At(io), err)
 		}
 	}

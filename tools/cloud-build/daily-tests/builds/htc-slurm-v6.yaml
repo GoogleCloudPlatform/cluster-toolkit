@@ -1,4 +1,4 @@
-# Copyright 2023 Google LLC
+# Copyright 2024 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,15 +14,15 @@
 
 ---
 tags:
-- m.DDN-EXAScaler
-- m.dashboard
 - m.filestore
-- m.schedmd-slurm-gcp-v5-controller
-- m.schedmd-slurm-gcp-v5-login
-- m.schedmd-slurm-gcp-v5-node-group
-- m.schedmd-slurm-gcp-v5-partition
+- m.DDN-EXAScaler
+- m.schedmd-slurm-gcp-v6-controller
+- m.schedmd-slurm-gcp-v6-login
+- m.schedmd-slurm-gcp-v6-nodeset
+- m.schedmd-slurm-gcp-v6-partition
 - m.vpc
-- slurm5
+- m.dashboard
+- slurm6
 
 timeout: 14400s  # 4hr
 steps:
@@ -44,8 +44,9 @@ steps:
   args:
   - -c
   - echo "done fetching builder"
-## Test Slurm High IO v5 Example (Slurm on GCP v5)
-- id: hpc-high-io-v5
+
+# Test htc-slurm deployment.
+- id: htc-slurm-v6
   waitFor: ["fetch_builder", "build_ghpc"]
   name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
   entrypoint: /bin/bash
@@ -61,4 +62,4 @@ steps:
 
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
       --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
-      --extra-vars="@tools/cloud-build/daily-tests/tests/high-io-slurm-gcp-v5.yml"
+      --extra-vars="@tools/cloud-build/daily-tests/tests/htc-slurm-v6.yml"

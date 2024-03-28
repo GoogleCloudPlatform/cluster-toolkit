@@ -19,10 +19,10 @@ locals {
   partition = {
     default               = var.is_default
     enable_job_exclusive  = var.exclusive
-    network_storage       = var.network_storage
     partition_conf        = var.partition_conf
     partition_name        = var.partition_name
     partition_nodeset     = [for ns in var.nodeset : ns.nodeset_name]
     partition_nodeset_tpu = [for ns in var.nodeset_tpu : ns.nodeset_name]
+    partition_nodeset_dyn = [for ns in var.nodeset_dyn : ns.nodeset_name]
   }
 }

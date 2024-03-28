@@ -174,7 +174,6 @@ deployment_groups:
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
     use:
     - compute_nodeset
-    - nfs
     settings:
       partition_name: compute
       exclusive: false
