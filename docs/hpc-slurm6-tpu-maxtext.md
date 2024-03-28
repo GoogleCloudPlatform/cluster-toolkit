@@ -1,5 +1,8 @@
 # Run TPU jobs in Slurm Cluster with TPU Partition
 
+> **_NOTE:_** This tutorial will require to have TPU v4 quota. You can request
+> this using [TPUv4](https://cloud.google.com/tpu/docs/quota).
+
 This page demonstrates how to run TPU job like [maxtext](https://github.com/google/maxtext)
 performance benchmark test in Slurm Cluster with TPU partition using [hpc-slurm6-tpu-maxtext.yaml](https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/community/examples/hpc-slurm6-tpu-maxtext.yaml)
 blueprint.
@@ -8,12 +11,12 @@ blueprint.
 
 In order to deploy and run this blueprint, you need to download dataset in your
 cloud storage bucket. You need follow steps mentioned in [download dataset](https://github.com/google/maxtext?tab=readme-ov-file#getting-started-download-dataset-and-configure) to download
-the dataset in your GCS. After that you can update the blueprint to use the
+the dataset in your GCS bucket. After that you can update the blueprint to use the
 dataset from GCS bucket in training script.
 
 ```bash
 ./ghpc create community/examples/hpc-slurm6-tpu-maxtext.yaml --vars project_id=<project-id>;
-./ghpc deploy slurm6-tpu --auto-approve
+./ghpc deploy slurm6-tpu-v4 --auto-approve
 ```
 
 This would deploy slurm cluster with TPU partition, dynamic compute partition. Maxtext benchmark test script
@@ -25,7 +28,7 @@ Once the startup script has completed, connect to the login node.
 Use the following command to ssh into the login node from cloud shell:
 
 ```bash
-gcloud compute ssh slurm6tpu-login-v6tpu-001 --zone us-central2-b --project <project-id>
+gcloud compute ssh slurm6tpuv-login-v6tpu-001 --zone us-central2-b --project <project-id>
 ```
 
 You may be prompted to set up SSH. If so follow the prompts and if asked for a
@@ -38,10 +41,10 @@ cd /opt/apps/scripts/tpu-test/
 sbatch -ptpu --mem=50000 run_maxtext.sh
 ```
 
-The `sbatch` command trigger Slurm to auto-scale up nodes to run the job.
+The sbatch command submits a batch script to the tpu partition, which makes Slurm auto-scale up nodes to run the job
 
 You can refresh the TPU instances page and see that TPU is being/has been created.
-These will be named something like `slurm6tpu-v4x8-0`.
+These will be named something like `slurm6tpuv-tpunodeset-0`.
 
 When running `squeue`, observe the job status start as `CF` (configuring), change to
 `R` (running) once the compute VMs have been created, and finally `CG` (completing)
@@ -74,7 +77,7 @@ For this we need to return to our cloud shell terminal. Run exit in the terminal
 Run the following command in the cloud shell terminal to destroy the cluster:
 
 ```bash
-./ghpc destroy slurm6-tpu --auto-approve
+./ghpc destroy slurm6-tpu-v4 --auto-approve
 ```
 
 When complete you should see something like:
