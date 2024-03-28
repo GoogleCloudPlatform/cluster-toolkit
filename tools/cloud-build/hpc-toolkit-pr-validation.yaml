@@ -19,17 +19,12 @@ steps:
   name: gcr.io/cloud-builders/git
   args: ['fetch', '--unshallow']
 - id: make-tests
-  waitFor:
-  - git-fetch-unshallow
-  name: >-
-    us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
-  entrypoint: /bin/bash
-  args:
-  - '-c'
-  - |
+  waitFor: [git-fetch-unshallow]
+  name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
+  script: |
     set -e
-    export PROJECT=build-project
-    time make tests
-timeout: "1200s"
+    cd /workspace
+    PROJECT=build-project make tests
+timeout: 1200s
 options:
   machineType: N1_HIGHCPU_8
