@@ -14,7 +14,7 @@
 
 # TEMPLATE
 module "slurm_login_template" {
-  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=6.4.3&depth=1"
+  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=6.4.4&depth=1"
 
   for_each = {
     for x in var.login_nodes : x.name_prefix => x
@@ -59,26 +59,30 @@ module "slurm_login_template" {
 
 # INSTANCE
 module "slurm_login_instance" {
-  source   = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_login_instance?ref=6.4.3&depth=1"
+  source   = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/_slurm_instance?ref=6.4.4&depth=1"
   for_each = { for x in var.login_nodes : x.name_prefix => x }
+
+  access_config       = each.value.access_config
+  add_hostname_suffix = true
+  hostname            = "${local.slurm_cluster_name}-login-${each.key}"
+  slurm_instance_role = "login"
 
   project_id         = var.project_id
   slurm_cluster_name = local.slurm_cluster_name
 
-  enable_public_ip = each.value.enable_public_ip
   instance_template = (
     each.value.instance_template != null && each.value.instance_template != ""
     ? each.value.instance_template
     : module.slurm_login_template[each.key].self_link
   )
-  network_tier  = each.value.network_tier
+  labels        = merge(each.value.labels, local.files_cs_labels)
   num_instances = each.value.num_instances
 
   region     = each.value.region
   static_ips = each.value.static_ips
   subnetwork = each.value.subnetwork
-  suffix     = each.key
   zone       = each.value.zone
 
-  depends_on = [module.slurm_controller_instance]
+  # trigger replacement of login nodes when the controller instance is replaced
+  replace_trigger = module.slurm_controller_instance.instances_self_links[0]
 }

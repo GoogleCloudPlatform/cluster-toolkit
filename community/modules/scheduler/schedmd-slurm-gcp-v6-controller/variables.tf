@@ -95,6 +95,10 @@ variable "login_nodes" {
   description = "List of slurm login instance definitions."
   type = list(object({
     name_prefix = string
+    access_config = optional(list(object({
+      nat_ip       = string
+      network_tier = string
+    })))
     additional_disks = optional(list(object({
       disk_name    = optional(string)
       device_name  = optional(string)
@@ -112,7 +116,6 @@ variable "login_nodes" {
     disk_size_gb           = optional(number)
     disk_type              = optional(string, "n1-standard-1")
     enable_confidential_vm = optional(bool, false)
-    enable_public_ip       = optional(bool, false)
     enable_oslogin         = optional(bool, true)
     enable_shielded_vm     = optional(bool, false)
     gpu = optional(object({
@@ -124,7 +127,6 @@ variable "login_nodes" {
     machine_type        = optional(string)
     metadata            = optional(map(string), {})
     min_cpu_platform    = optional(string)
-    network_tier        = optional(string, "STANDARD")
     num_instances       = optional(number, 1)
     on_host_maintenance = optional(string)
     preemptible         = optional(bool, false)
