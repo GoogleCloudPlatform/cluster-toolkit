@@ -64,7 +64,7 @@ func handleServiceUsageError(err error, pid string) error {
 	case "SERVICE_CONFIG_NOT_FOUND_OR_PERMISSION_DENIED":
 		return fmt.Errorf("service %s does not exist in project %s", metadata["services"], pid)
 	case "USER_PROJECT_DENIED":
-		return fmt.Errorf(projectError, pid)
+		return projectError(pid)
 	case "SU_MISSING_NAMES":
 		return nil // occurs if API list is empty and 0 APIs to validate
 	}
@@ -117,7 +117,7 @@ func TestProjectExists(projectID string) error {
 		if strings.Contains(err.Error(), "Compute Engine API has not been used in project") {
 			return newDisabledServiceError("Compute Engine API", "compute.googleapis.com", projectID)
 		}
-		return fmt.Errorf(projectError, projectID)
+		return projectError(projectID)
 	}
 
 	return nil

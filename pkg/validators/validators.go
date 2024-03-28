@@ -23,7 +23,14 @@ import (
 	"github.com/zclconf/go-cty/cty"
 )
 
-const projectError = "project ID %s does not exist or your credentials do not have permission to access it"
+func projectError(p string) error {
+	return config.HintError{
+		Err: fmt.Errorf("project %q does not exist or your credentials do not have permission to access it", p),
+		Hint: "It is possible the machine you are working on has not been authenticated.\n" +
+			"Try to run `gcloud auth application-default login`",
+	}
+}
+
 const regionError = "region %s is not available in project ID %s or your credentials do not have permission to access it"
 const zoneError = "zone %s is not available in project ID %s or your credentials do not have permission to access it"
 const zoneInRegionError = "zone %s is not in region %s in project ID %s or your credentials do not have permissions to access it"
