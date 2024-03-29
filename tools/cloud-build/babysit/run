@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2023 Google LLC
+# Copyright 2024 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,11 +13,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 if __name__ == "__main__":
-    print("="*50)
-    print("\nTO BE DEPRECATED: use tools/cloud-build/babysit/run instead.\n")
-    print("="*50)
+    """
+    I'm -1 on this and on any other proposed twiddlings of the __main__ machinery. 
+    The only use case seems to be running scripts that happen to be living inside a 
+    module's directory, which I've always seen as an antipattern. 
+    To make me change my mind you'd have to convince me that it isn't.
+                            Probably Guido van Rossum
+    """
+    import os
+    import sys
+
+    SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+    sys.path.append(os.path.dirname(SCRIPT_DIR))
 
     from babysit.runner import run_from_cli
     run_from_cli()
