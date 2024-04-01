@@ -10,9 +10,6 @@ Please follow the initial instructions for:
 - Installing Cloud HPC Toolkit [dependencies][tkdeps] (Go, Terraform, Packer)
 - Installing the Cloud HPC [Toolkit][tkinstall]
 
-[tkdeps]: https://cloud.google.com/hpc-toolkit/docs/setup/install-dependencies
-[tkinstall]: https://github.com/GoogleCloudPlatform/hpc-toolkit/#quickstart
-
 Verify that your release of the HPC Toolkit is 1.31.1 or later.
 
 ```shell
@@ -54,8 +51,9 @@ frequently updated and re-provisioned as discussed below.
 
 ## First time considerations
 
-_These steps do not need to be repeated when a cluster is re-provisioned. They
-are initial setup steps in a project._
+> [!IMPORTANT]
+> These steps do not need to be repeated when a cluster is re-provisioned. They
+> are initial setup steps in a project.
 
 Replace the values for `PROJECT_ID`, `REGION`, and `ZONE` with the project,
 region, and zone in which you have an A3 VM family allocation. The value for
@@ -94,8 +92,8 @@ terraform_backend_defaults:
 
 ### Set default values
 
-Modify the the blueprint deployment variables `project_id`, `region`, `zone`, in
-the `vars` block of all 3 blueprints:
+Modify the the deployment variables `project_id`, `region`, `zone`, in the
+`vars` block of all 3 blueprints:
 
 ```yaml
   project_id: customer-project
@@ -107,7 +105,7 @@ the `vars` block of all 3 blueprints:
 
 Obtain values for `source_image_project_id` and `source_image` from your Google
 Cloud representative. Set them at approximately lines 33 and 34 of
-`ml-slurm-a3-1-image.yaml`. 
+`ml-slurm-a3-1-image.yaml`.
 
 ```yaml
   source_image_project_id: source-image-project-id # use value supplied by Google Cloud staff
@@ -116,28 +114,34 @@ Cloud representative. Set them at approximately lines 33 and 34 of
 
 ### Reservation created by Google
 
-If Google Cloud staff have created a reservation for you, then skip this step
-and proceed to [manual reservation creation](#manual-creation-of-reservation).
+> [!IMPORTANT]
+> If you have ***not*** received a VM reservation from Google Cloud staff, then
+> skip this step and proceed to [manual reservation creation](#manual-creation-of-reservation).
 
-In this scenario, you must alter the blueprint deployment variables
-`a3_reservation_name` and `a3_maintenance_interval` beginnning at approximately
-line 38 of `ml-slurm-a3-2-cluster.yaml`. Use the reservation name provided by
-Google and set the maintenance interval parameter to `PERIODIC`.
+Set the deployment variable `a3_reservation_name` at approximately line 38 of
+`ml-slurm-a3-2-cluster.yaml` to the reservation name provided by Google. The
+value for `a3_maintenance_interval` should also be set as directed by Google
+staff. A common setting is `PERIODIC`, shown below, but this value must be
+confirmed with Google staff.
 
 ```yaml
   # a3_reservation_name should be empty string by default; if Google staff
   # have provided you with a reservation, supply it here
   a3_reservation_name: reservation-name-provided-by-google
   # a3_maintenance_interval should be empty string by default; if Google staff
-  # have provided you with a reservation, set it to PERIODIC
+  # have created a reservation, they will also provide a3_maintenance_interval
   a3_maintenance_interval: PERIODIC
 ```
 
 ### Manual creation of reservation
 
-If Google staff have not created a reservation for you, we recommend creating
-one to ensure reliable access to re-create VMs if you need to redeploy or
-otherwise maintain your cluster.
+> [!IMPORTANT]
+> If you received a VM reservation from Google Cloud staff, then skip this step
+> after confirming that you followed the instructions in [reservation created by
+> Google](#reservation-created-by-google).
+
+We recommend creating a reservation to ensure reliable access to re-create VMs
+if you need to redeploy or otherwise maintain your cluster.
 
 ```shell
 gcloud compute reservations create a3-reservation-0 \
@@ -151,14 +155,14 @@ gcloud compute reservations create a3-reservation-0 \
 This reservation will be [automatically consumed by VMs][consume] created
 with matching parameters (e.g. A3 VM type in configured zone). In this
 scenario, you may leave `a3_reservation_name` and `a3_maintenance_interval`
-at their default values in `ml-slurm-a3-2-cluster.yaml`.
+at their default empty values in `ml-slurm-a3-2-cluster.yaml`.
 
 ```yaml
   # a3_reservation_name should be empty string by default; if Google staff
   # have provided you with a reservation, supply it here
   a3_reservation_name: ""
   # a3_maintenance_interval should be empty string by default; if Google staff
-  # have provided you with a reservation, set it to PERIODIC
+  # have created a reservation, they will also provide a3_maintenance_interval
   a3_maintenance_interval: ""
 ```
 
@@ -316,3 +320,5 @@ sbatch run-nccl-tests.sh
 ```
 
 [consume]: https://cloud.google.com/compute/docs/instances/reservations-consume#consuming_instances_from_any_matching_reservation
+[tkdeps]: https://cloud.google.com/hpc-toolkit/docs/setup/install-dependencies
+[tkinstall]: https://github.com/GoogleCloudPlatform/hpc-toolkit/#quickstart

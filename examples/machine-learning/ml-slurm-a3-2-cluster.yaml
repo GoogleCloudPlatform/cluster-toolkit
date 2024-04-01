@@ -39,7 +39,7 @@ vars:
   # have provided you with a reservation, supply it here
   a3_reservation_name: ""
   # a3_maintenance_interval should be empty string by default; if Google staff
-  # have provided you with a reservation, set it to PERIODIC
+  # have created a reservation, they will also provide a3_maintenance_interval
   a3_maintenance_interval: ""
   # network parameters should match base blueprint unless network names were modified
   network_name_system: slurm-sys-net
