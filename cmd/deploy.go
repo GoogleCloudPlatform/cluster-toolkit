@@ -43,7 +43,7 @@ var (
 		Short:             "deploy all resources in a Toolkit deployment directory.",
 		Long:              "deploy all resources in a Toolkit deployment directory.",
 		Args:              cobra.MatchAll(cobra.ExactArgs(1), checkExists),
-		ValidArgsFunction: matchDirs,
+		ValidArgsFunction: filterYaml,
 		Run:               runDeployCmd,
 		SilenceUsage:      true,
 	})
