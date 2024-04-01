@@ -50,14 +50,18 @@ RUN pip install --no-cache-dir --upgrade pip && \
 
 # Get the HPC config files and store them in the correct locations for startup
 ARG CW_DIR=tools/cloud-workstations
-ARG HPC_FILE=configure-hpc-toolkit.sh
-ARG HPC_CONF_FILE=030_configure-hpc-toolkit.sh 
+ARG HPC_WORK_FILE=200_configure-hpc-toolkit.sh
+ARG HPC_CONF_FILE=configure-hpc-toolkit.sh
+ARG CODE_REQS=code_oss_requirements.txt
+ARG HPC_CONFIG_DIR=/etc/hpc-toolkit-config
+ARG START_DIR=/etc/workstation-startup.d
+ARG INSTALL_DIR=/usr/local
 
-COPY $CW_DIR/$HPC_FILE /bin/
-COPY $CW_DIR/$HPC_CONF_FILE /etc/workstation-startup.d/
+COPY $CW_DIR/$HPC_CONF_FILE $INSTALL_DIR/bin/$HPC_CONF_FILE
+RUN chmod a+rx $INSTALL_DIR/bin/$HPC_CONF_FILE
 
-RUN chmod a+x /bin/$HPC_FILE && \
-    chmod a+x /etc/workstation-startup.d/$HPC_CONF_FILE
+COPY $CW_DIR/$HPC_WORK_FILE $START_DIR/$HPC_WORK_FILE
+RUN chmod a+rx $START_DIR/$HPC_WORK_FILE
 
-RUN mkdir /etc/hpc-toolkit-config
-COPY $CW_DIR/code_oss_requirements.txt /etc/hpc-toolkit-config
+COPY $CW_DIR/$CODE_REQS $HPC_CONFIG_DIR/$CODE_REQS
+RUN chmod a+r $HPC_CONFIG_DIR/$CODE_REQS
