@@ -1,5 +1,4 @@
-#!/usr/bin/env python3
-# Copyright 2023 Google LLC
+# Copyright 2024 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,12 +11,3 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-
-if __name__ == "__main__":
-    print("="*50)
-    print("\nTO BE DEPRECATED: use tools/cloud-build/babysit/run instead.\n")
-    print("="*50)
-
-    from babysit.runner import run_from_cli
-    run_from_cli()
