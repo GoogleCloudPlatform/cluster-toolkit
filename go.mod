@@ -28,7 +28,7 @@ require (
 	github.com/hashicorp/terraform-exec v0.20.0
 	github.com/mattn/go-isatty v0.0.20
 	github.com/zclconf/go-cty-debug v0.0.0-20191215020915-b22d67c1ba0b
-	google.golang.org/api v0.171.0
+	google.golang.org/api v0.172.0
 )
 
 require (
@@ -54,7 +54,7 @@ require (
 	golang.org/x/time v0.5.0 // indirect
 	golang.org/x/tools v0.15.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20240311132316-a219d84964c2 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20240314234333-6e1732d8331c // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20240318140521-94a12d6c2237 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
 
