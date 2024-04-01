@@ -15,7 +15,7 @@
 blueprint_name: two-clusters
 
 vars:
-  project_id: hpc-toolkit-demo
+  project_id: ## Set GCP Project ID Here ##
   deployment_name: clstr2
   region: us-east1
   zone: us-east1-b

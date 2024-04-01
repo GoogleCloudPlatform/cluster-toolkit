@@ -71,7 +71,7 @@ deployment_groups:
     settings:
       disable_controller_public_ips: true
 
-  - id: slurm-login
+  - id: slurm_login
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
     use:
     - network1
