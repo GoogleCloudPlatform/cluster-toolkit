@@ -1,0 +1,155 @@
+# Copyright 2024 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+blueprint_name: two-clusters
+
+vars:
+  project_id: hpc-toolkit-demo
+  deployment_name: clstr2
+  region: us-east1
+  zone: us-east1-b
+  enable_reconfigure: True
+  enable_cleanup_compute: False
+  enable_cleanup_subscriptions: True
+  enable_bigquery_load: True
+  instance_image_custom: True
+
+deployment_groups:
+- group: net
+  modules:
+  - source: modules/network/vpc
+    id: hpc_network
+
+  - source: community/modules/network/private-service-access
+    id: ps_connect
+    use: [hpc_network]
+
+- group: cluster1
+  modules:
+  - source: community/modules/compute/schedmd-slurm-gcp-v5-partition
+    kind: terraform
+    id: c1partition_0
+    use:
+    - c1partition_0_group
+    - hpc_network
+    settings:
+      partition_name: c1batch
+      enable_placement: False
+      exclusive: False
+
+  - source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
+    id: c1partition_0_group
+    use:
+    settings:
+      enable_smt: False
+      machine_type: c2-standard-60
+      node_count_dynamic_max: 4
+      node_count_static: 0
+      disk_size_gb: 50
+      disk_type: pd-standard
+
+  - source: community/modules/database/slurm-cloudsql-federation
+    kind: terraform
+    id: c1slurm_sql
+    use: [hpc_network, ps_connect]
+    settings:
+      sql_instance_name: sql-cluster-1
+      tier: "db-g1-small"
+
+
+  - source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
+    kind: terraform
+    id: c1slurm_controller
+    settings:
+      cloud_parameters:
+        resume_rate: 0
+        resume_timeout: 500
+        suspend_rate: 0
+        suspend_timeout: 300
+        no_comma_params: false
+      machine_type: n2-standard-2
+      disk_type: pd-standard
+      disk_size_gb: 50
+      slurm_cluster_name: cluster1
+    use:
+    - hpc_network
+    - c1partition_0
+    - c1slurm_sql
+
+  - source: community/modules/scheduler/schedmd-slurm-gcp-v5-login
+    kind: terraform
+    id: c1slurm_login
+    use: [c1slurm_controller, hpc_network]
+    settings:
+      num_instances: 1
+      machine_type: n2-standard-2
+      disk_type: pd-standard
+      disk_size_gb: 50
+
+- group: cluster2
+  modules:
+  - source: community/modules/compute/schedmd-slurm-gcp-v5-partition
+    kind: terraform
+    id: c2partition_0
+    use: [c2partition_0_group, hpc_network]
+    settings:
+      partition_name: c2batch
+      enable_placement: False
+      exclusive: False
+
+  - source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
+    id: c2partition_0_group
+    settings:
+      enable_smt: False
+      machine_type: c2-standard-60
+      node_count_dynamic_max: 4
+      node_count_static: 0
+      disk_size_gb: 50
+      disk_type: pd-standard
+
+  - source: community/modules/database/slurm-cloudsql-federation
+    kind: terraform
+    id: c2slurm_sql
+    use: [hpc_network, ps_connect]
+    settings:
+      sql_instance_name: sql-cluster-2
+      tier: "db-g1-small"
+
+
+  - source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
+    kind: terraform
+    id: c2slurm_controller
+    use: [hpc_network, c2partition_0, c2slurm_sql]
+    settings:
+      cloud_parameters:
+        resume_rate: 0
+        resume_timeout: 500
+        suspend_rate: 0
+        suspend_timeout: 300
+        no_comma_params: false
+      machine_type: n2-standard-2
+      disk_type: pd-standard
+      disk_size_gb: 50
+      slurm_cluster_name: cluster2
+
+
+  - source: community/modules/scheduler/schedmd-slurm-gcp-v5-login
+    kind: terraform
+    id: c2slurm_login
+    use: [c2slurm_controller, hpc_network]
+    settings:
+      num_instances: 1
+      machine_type: n2-standard-2
+      disk_type: pd-standard
+      disk_size_gb: 50
