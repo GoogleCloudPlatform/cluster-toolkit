@@ -23,7 +23,6 @@ zone: us-west4-c
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/tools/validate_configs/test_configs/slurm-gcp-v5-startup-scripts.yaml"
 network: "{{ deployment_name }}-net"
-max_nodes: 5
 # Note: Pattern matching in gcloud only supports 1 wildcard, centv5*-login-* won't work.
 login_node: "{{ slurm_cluster_name }}-login-*"
 controller_node: "{{ slurm_cluster_name }}-controller"
