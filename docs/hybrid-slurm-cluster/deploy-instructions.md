@@ -264,8 +264,8 @@ sudo systemctl restart slurmctld
 If the restart did not succeed, the logs at `/var/log/slurm/slurmctld.log`
 should point you in the right direction.
 
-[slurm-gcp]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/5.10.6
-[slurm-gcp-hybrid]: https://github.com/GoogleCloudPlatform/slurm-gcp/blob/5.10.6/docs/hybrid.md
+[slurm-gcp]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/pub_sub_client_lifecycle_v2
+[slurm-gcp-hybrid]: https://github.com/GoogleCloudPlatform/slurm-gcp/blob/pub_sub_client_lifecycle_v2/docs/hybrid.md
 [demo-with-cloud-controller-instructions.md]: ./demo-with-cloud-controller-instructions.md
 
 ## Validate the Hybrid Cluster

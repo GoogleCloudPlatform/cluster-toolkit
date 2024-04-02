@@ -27,7 +27,7 @@ environment to manage them as shown below
 python3 -m venv toolkit-a3
 source toolkit-a3/bin/activate
 pip3 install -r \
-    https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/5.10.6/scripts/requirements.txt
+    https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/pub_sub_client_lifecycle_v2/scripts/requirements.txt
 ```
 
 **Always** activate the environment before running any ghpc commands such as

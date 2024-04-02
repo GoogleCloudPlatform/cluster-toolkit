@@ -5,9 +5,9 @@ This module creates a login node for a Slurm cluster based on the
 terraform modules. The login node is used in conjunction with the
 [Slurm controller](../schedmd-slurm-gcp-v5-controller/README.md).
 
-[SchedMD/slurm-gcp]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/5.10.6
-[slurm\_login\_instance]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/5.10.6/terraform/slurm_cluster/modules/slurm_login_instance
-[slurm\_instance\_template]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/5.10.6/terraform/slurm_cluster/modules/slurm_instance_template
+[SchedMD/slurm-gcp]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/pub_sub_client_lifecycle_v2
+[slurm\_login\_instance]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/pub_sub_client_lifecycle_v2/terraform/slurm_cluster/modules/slurm_login_instance
+[slurm\_instance\_template]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/pub_sub_client_lifecycle_v2/terraform/slurm_cluster/modules/slurm_instance_template
 
 ### Example
 
@@ -46,8 +46,8 @@ The HPC Toolkit team maintains the wrapper around the [slurm-on-gcp] terraform
 modules. For support with the underlying modules, see the instructions in the
 [slurm-gcp README][slurm-gcp-readme].
 
-[slurm-on-gcp]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/5.10.6
-[slurm-gcp-readme]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/5.10.6#slurm-on-google-cloud-platform
+[slurm-on-gcp]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/pub_sub_client_lifecycle_v2
+[slurm-gcp-readme]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/pub_sub_client_lifecycle_v2#slurm-on-google-cloud-platform
 
 ## License
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
@@ -82,8 +82,8 @@ limitations under the License.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_slurm_login_instance"></a> [slurm\_login\_instance](#module\_slurm\_login\_instance) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_login_instance | 5.10.6 |
-| <a name="module_slurm_login_template"></a> [slurm\_login\_template](#module\_slurm\_login\_template) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template | 5.10.6 |
+| <a name="module_slurm_login_instance"></a> [slurm\_login\_instance](#module\_slurm\_login\_instance) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_login_instance | pub_sub_client_lifecycle_v2 |
+| <a name="module_slurm_login_template"></a> [slurm\_login\_template](#module\_slurm\_login\_template) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template | pub_sub_client_lifecycle_v2 |
 
 ## Resources
 
