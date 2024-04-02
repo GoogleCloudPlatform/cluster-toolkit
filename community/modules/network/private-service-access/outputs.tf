@@ -1,5 +1,5 @@
 /**
- * Copyright 2022 Google LLC
+ * Copyright 2024 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,23 +14,8 @@
  * limitations under the License.
 */
 
-terraform {
-  required_providers {
-    google = {
-      source  = "hashicorp/google"
-      version = ">= 3.83"
-    }
-    random = {
-      source  = "hashicorp/random"
-      version = "~> 3.0"
-    }
-  }
-  provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:slurm-cloudsql-federation/v1.31.1"
-  }
-  provider_meta "google-beta" {
-    module_name = "blueprints/terraform/hpc-toolkit:slurm-cloudsql-federation/v1.31.1"
-  }
-
-  required_version = ">= 0.13.0"
+output "private_vpc_connection_peering" {
+  description = "The name of the VPC Network peering connection that was created by the service provider."
+  sensitive   = true
+  value       = google_service_networking_connection.private_vpc_connection.peering
 }

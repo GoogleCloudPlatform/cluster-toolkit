@@ -33,27 +33,10 @@ locals {
   sql_password      = var.sql_password == null ? random_password.password.result : var.sql_password
 }
 
-resource "google_compute_global_address" "private_ip_address" {
-  provider = google-beta
-
-  name          = "slurm-cloudsql-private-ip-${random_id.resource_name_suffix.hex}"
-  purpose       = "VPC_PEERING"
-  address_type  = "INTERNAL"
-  prefix_length = 16
-  network       = var.network_id
-}
-
-resource "google_service_networking_connection" "private_vpc_connection" {
-  provider = google-beta
-
-  network                 = var.network_id
-  service                 = "servicenetworking.googleapis.com"
-  reserved_peering_ranges = google_compute_global_address.private_ip_address[*].name
-}
 
 resource "google_sql_database_instance" "instance" {
   project             = var.project_id
-  depends_on          = [google_service_networking_connection.private_vpc_connection]
+  depends_on          = [var.private_vpc_connection_peering]
   name                = local.sql_instance_name
   region              = var.region
   deletion_protection = var.deletion_protection
