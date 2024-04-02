@@ -413,10 +413,13 @@ variable "access_config" {
 
 variable "reservation_name" {
   description = <<-EOD
-    Sets reservation affinity for instances created from this nodeset.
+    Name of the reservation to use for VM resources
+    - Must be a "SPECIFIC" reservation
+    - Set to empty string if using no reservation or automatically-consumed reservations
   EOD
   type        = string
-  default     = null
+  default     = ""
+  nullable    = false
 }
 
 variable "maintenance_interval" {
