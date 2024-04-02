@@ -12,12 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import argparse
+from typing import Optional, Collection
+
 import subprocess
 import requests
+from dataclasses import dataclass
 
-from .core import Babysitter, Selector, cloudbuild_v1, trig_name
-from .ui import UI
+from .core import Babysitter, Selector, cloudbuild_v1, trig_name, UIProto
 
 DESCRIPTION = """
 babysit_tests is a tool to approve & retry CloudBuild tests.
@@ -30,7 +31,6 @@ $ tools/cloud-build/babysit_tests.py --pr 123 --auto
 
 $ tools/cloud-build/babysit_tests.py --pr 123 --tags slurm5 slurm6
 """
-
 
 def selector_by_name(name: str) -> Selector:
     return lambda b: trig_name(b) == name
@@ -49,12 +49,14 @@ def get_pr(pr_num: int) -> dict:
     resp.raise_for_status()
     return resp.json()
 
-def get_changed_files_tags(base: str, head: str) -> set[str]:
-    res = subprocess.run(["git", "log", f"{base}..{head}", "--name-only", "--format="], stdout=subprocess.PIPE)
-    assert res.returncode == 0, "Is your local repo up to date?"
-    changed_files = res.stdout.decode('ascii').strip().split("\n")
+def get_pr_files(pr_num: int) -> list[str]:
+    resp = requests.get(f"https://api.github.com/repos/GoogleCloudPlatform/hpc-toolkit/pulls/{pr_num}/files")
+    resp.raise_for_status()
+    return [f['filename'] for f in resp.json()]
+
+def get_changed_files_tags(files: Collection[str]) -> set[str]:
     tags = set()
-    for f in changed_files:
+    for f in files:
         if f.startswith("community/"): f = f[len("community/"):]
         if not f.startswith("modules/"): continue
         parts = f.split("/")
@@ -62,52 +64,31 @@ def get_changed_files_tags(base: str, head: str) -> set[str]:
         tags.add(f"m.{parts[2]}")
     return tags
 
+@dataclass
+class RunnerArgs:
+    pr: int
+    # Test selectors, at least one is required
+    names: Optional[list[str]] = None
+    tags: Optional[list[str]] = None
+    auto: Optional[bool] = None
+    all: Optional[bool] = None
+    
+    # Optional project, if not set will use default one
+    project: Optional[str] = None
+    
+    concurrency: int = 1
+    retries: int = 1
 
-def run_from_cli():
-    parser = argparse.ArgumentParser(description=DESCRIPTION)
-    parser.add_argument("--sha", type=str, help="Short SHA of target PR")
-    parser.add_argument("--pr", type=int, help="PR number")
 
-    parser.add_argument("--names", nargs="*", type=str, help="Match tests by exact name")
-    parser.add_argument("--tags", nargs="*", type=str, help="Filter tests by tags")
-    parser.add_argument("--auto", action="store_true", help="If true, will inspect changed files and run tests for them")
-    parser.add_argument("--all", action="store_true", help="Run all tests")
-
-    parser.add_argument("--project", type=str,
-                        help="GCP ProjectID, if not set will use default one (`gcloud config get-value project`)")
-    parser.add_argument("-c", type=int, default=1,
-                        help="Number of tests to run concurrently, default is 1")
-    parser.add_argument("-r", type=int, default=1,
-                        help="Number of retries, to disable retries set to 0, default is 1")
-
-    parser.add_argument("--base", type=str, help="Revision to inspect diff from")
-    parser.add_argument("--head", type=str, help="Revision to inspect diff to, may be different in case of merged PRs")
-
-    args = parser.parse_args()
-
-    assert (args.sha is None) ^ (args.pr is None), "either --pr or --sha are required"
-    if args.pr:
-        pr = get_pr(args.pr)
-        print(f"Using PR#{args.pr}: {pr['title']}")
-        sha = pr["head"]["sha"]
-
-        if pr["merged"]:
-            print("PR is already merged")
-            if args.head is None:
-                # use merge commit as head, since original PR sha may not be available in Git history.
-                args.head = pr["merge_commit_sha"]
-
-        if args.base is None:
-            args.base = pr["base"]["sha"]
-    else:
-        sha = args.sha
-
-    if args.head is None:
-        args.head = sha
-
+def run(args: RunnerArgs, ui: UIProto) -> None:
+    assert args.names or args.tags or args.auto or args.all, "At least one test selector is required"
+    pr = get_pr(args.pr)
+    print(f"Using PR#{args.pr}: {pr['title']}") # TODO: use UI to log
+    sha = pr["head"]["sha"]
+    
     if args.project is None:
         project = get_default_project()
-        print(f"Using project={project}")
+        print(f"Using project={project}") # TODO: use UI to log
     else:
         project = args.project
 
@@ -117,10 +98,47 @@ def run_from_cli():
     if args.all:
         selectors.append(lambda _: True)
     if args.auto:
-        assert args.base is not None, "--base & [--head] or --pr are required for auto mode"
-        auto_tags = get_changed_files_tags(args.base, args.head)
+        auto_tags = get_changed_files_tags(get_pr_files(args.pr))
         selectors += [selector_by_tag(t) for t in auto_tags]
+    if not selectors:
+        print("No test selectors found, nothing to do.") # TODO: use UI to log
+        return
 
-    ui = UI()
     cb = cloudbuild_v1.services.cloud_build.CloudBuildClient()
-    Babysitter(ui, cb, project, sha, selectors, args.c, args.r).do()
+    Babysitter(ui, cb, project, sha, selectors, args.concurrency, args.retries).do()
+
+def run_from_notebook(
+        pr: int,
+        auto: Optional[bool] = None,
+        all: Optional[bool] = None,
+        names: Optional[list[str]] = None,
+        tags: Optional[list[str]] = None,
+        concurrency: int = 1,
+        retries: int = 1,
+        project: str = "hpc-toolkit-dev"):
+    
+    args = RunnerArgs(pr, auto=auto, all=all, names=names, tags=tags, project=project, concurrency=concurrency, retries=retries)
+    from .notebook_ui import NotebookUI
+    run(args, NotebookUI())
+
+def run_from_cli():
+    import argparse
+    from .cli_ui import CliUI
+
+    parser = argparse.ArgumentParser(description=DESCRIPTION)
+    parser.add_argument("--pr", type=int, required=True, help="PR number")
+
+    parser.add_argument("--names", nargs="*", type=str, help="Match tests by exact name")
+    parser.add_argument("--tags", nargs="*", type=str, help="Filter tests by tags")
+    parser.add_argument("--auto", action="store_true", help="If true, will inspect changed files and run tests for them")
+    parser.add_argument("--all", action="store_true", help="Run all tests")
+
+    parser.add_argument("--project", type=str,
+                        help="GCP ProjectID, if not set will use default one (`gcloud config get-value project`)")
+    parser.add_argument("-c", "--concurrency", type=int, default=1,
+                        help="Number of tests to run concurrently, default is 1")
+    parser.add_argument("-r", "--retries", type=int, default=1,
+                        help="Number of retries, to disable retries set to 0, default is 1")
+
+    args = RunnerArgs(**vars(parser.parse_args()))
+    run(args, CliUI())

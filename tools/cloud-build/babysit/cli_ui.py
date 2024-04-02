@@ -18,7 +18,7 @@ import time
 from .core import Status, Build, latest_by_trigger, trig_name
 
 
-class UI: # implements UIProto
+class CliUI: # implements UIProto
     def __init__(self) -> None:
         self._status: Dict[str, Status] = {}
         self._change = False
