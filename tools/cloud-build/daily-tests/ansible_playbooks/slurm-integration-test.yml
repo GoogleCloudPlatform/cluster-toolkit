@@ -49,7 +49,7 @@
 
     - name: Run Pre Deploy Tasks
       ansible.builtin.include_tasks: "{{ pre_deploy_task }}"
-      loop: "{{ pre_deploy_tasks }}"
+      loop: "{{ pre_deploy_tasks | default([]) }}"
       loop_control:
         loop_var: pre_deploy_task
 
