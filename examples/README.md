@@ -20,6 +20,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [hpc-slurm.yaml](#hpc-slurmyaml-) ![core-badge]
   * [hpc-slurm-v6.yaml](#hpc-slurm-v6yaml--) ![core-badge] ![experimental-badge]
   * [hpc-enterprise-slurm.yaml](#hpc-enterprise-slurmyaml-) ![core-badge]
+  * [hpc-slurm-static-v6.yaml](#hpc-slurm-static-v6yaml--) ![core-badge] ![experimental-badge]
   * [hpc-slurm6-tpu.yaml](#hpc-slurm6-tpuyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm6-tpu-maxtext.yaml](#hpc-slurm6-tpu-maxtextyaml--) ![community-badge] ![experimental-badge]
   * [ml-slurm.yaml](#ml-slurmyaml-) ![core-badge]
@@ -397,6 +398,42 @@ to 256
   _not needed for `n2` partition_
 
 [hpc-enterprise-slurm.yaml]: ./hpc-enterprise-slurm.yaml
+
+### [hpc-slurm-static-v6.yaml] ![core-badge] ![experimental-badge]
+
+> **Warning**: Requires additional dependencies **to be installed on the system deploying the infrastructure**.
+>
+> ```shell
+> # Install Python3 and run
+> pip3 install -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/6.4.2/scripts/requirements.txt
+> ```
+
+This example demonstrates how to create a partition with static compute nodes.
+See [Best practices for static compute nodes] for instructions on setting up a
+reservation and compact placement policy.
+
+Before deploying this example the following fields must be populated in the bluerpint:
+
+```yaml
+  project_id: ## Set GCP Project ID Here ##
+  static_reservation_name:  ## Set your reservation name here ##
+  static_reservation_machine_type: ## Machine must match reservation above ##
+  static_node_count: ## Must be <= number of reserved machines ##
+```
+
+For more resources on static compute nodes see the following cloud docs pages:
+
+* [About [Slurm] node types](https://cloud.google.com/hpc-toolkit/docs/slurm/node-types)
+* [Best practices for static compute nodes]
+* [Reconfigure a running cluster](http://cloud/hpc-toolkit/docs/slurm/reconfigure-cluster)
+* [Manage static compute nodes](http://cloud/hpc-toolkit/docs/slurm/manage-static-nodes)
+
+For a similar, more advanced, example which demonstrates static node
+functionality with GPUs, see the
+[ML Slurm A3 example](./machine-learning/README.md).
+
+[Best practices for static compute nodes]: http://cloud/hpc-toolkit/docs/slurm/static-nodes-best-practices
+[hpc-slurm-static-v6.yaml]: ./hpc-slurm-static-v6.yaml
 
 ### [hpc-slurm6-tpu.yaml] ![community-badge] ![experimental-badge]
 
