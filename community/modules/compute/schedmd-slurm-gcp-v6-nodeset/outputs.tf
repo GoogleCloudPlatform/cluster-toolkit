@@ -26,9 +26,9 @@ output "nodeset" {
   }
 
   precondition {
-    condition     = (var.reservation_name == null) || !var.enable_placement
+    condition     = var.reservation_name == "" || !var.enable_placement
     error_message = <<-EOD
-      If reservation is specified, `var.enable_placement` must be `false`.
+      If a reservation is specified, `var.enable_placement` must be `false`.
       If the specified reservation has a placement policy then it will be used automatically.
     EOD
   }
