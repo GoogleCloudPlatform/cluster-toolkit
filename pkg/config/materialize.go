@@ -17,12 +17,17 @@ package config
 // Performs "materialization" of the blueprint, which means:
 // * evaluate Vars
 // * evaluate TerraformBackens
+// * partially evaluate `ghpc_stage` in module settings
 // TODO:
 // * perform substitution of IGC references with synthetic vars
 // * perform evaluation of module settings for packer group
 func (bp *Blueprint) Materialize() error {
 	var err error
 	if bp.Vars, err = bp.evalVars(); err != nil {
+		return err
+	}
+
+	if err := bp.evalGhpcStageInModuleSettings(); err != nil {
 		return err
 	}
 

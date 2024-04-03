@@ -18,21 +18,16 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/google/go-cmp/cmp"
+	"testing"
+
 	"golang.org/x/exp/slices"
+
+	"github.com/google/go-cmp/cmp"
+	"github.com/hashicorp/hcl/v2"
+	"github.com/zclconf/go-cty/cty/function"
+	"github.com/zclconf/go-cty/cty/function/stdlib"
 	. "gopkg.in/check.v1"
 )
-
-func (s *zeroSuite) TestValidateNoGhpcStageFuncs(c *C) {
-	bp := Blueprint{
-		Groups: []Group{{
-			Modules: []Module{
-				{
-					Settings: Dict{}.
-						With("tree", MustParseExpression("ghpc_stage(\"bush\")").AsValue()),
-				}}}}}
-	c.Check(bp.validateNoGhpcStageFuncs(), NotNil)
-}
 
 func (s *zeroSuite) TestGhpcStageImpl(c *C) {
 	h := func(path, want string) {
@@ -95,5 +90,93 @@ func (s *zeroSuite) TestGhpcStageFunc(c *C) {
 		{"/zebra/push", "../.ghpc/staged/push_21a361d96e"},
 	}); diff != "" {
 		c.Errorf("diff (-want +got):\n%s", diff)
+	}
+}
+
+func TestPartialEval(t *testing.T) {
+	type test struct {
+		input string
+		want  string
+	}
+
+	// testing partial evaluation of `upper`
+	tests := []test{
+		{`upper("a")`, `"A"`},
+		{`file(upper("a"))`, `file("A")`},
+		{`lower("A") + upper("b")`, `lower("A")+"B"`},
+		{`upper(lower("A"))`, `"A"`},
+		{`upper("hello ${upper("world")}") + 7`, `"HELLO WORLD"+7`},
+		{`upper("a") + upper("b")`, `"A"+"B"`},
+		{`"hello ${upper("World")}"`, `"hello ${"WORLD"}"`},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.input, func(t *testing.T) {
+			in := MustParseExpression(tc.input)
+			ctx := hcl.EvalContext{Functions: map[string]function.Function{
+				"upper": stdlib.UpperFunc,
+				"lower": stdlib.LowerFunc,
+			}}
+
+			got, err := partialEval(in, "upper", &ctx)
+			if err != nil {
+				t.Errorf("got unexpected error: %s", err)
+			}
+
+			if diff := cmp.Diff(tc.want, string(got.Tokenize().Bytes())); diff != "" {
+				t.Errorf("diff (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestEvalModuleSettings(t *testing.T) {
+	mod := Module{
+		Settings: Dict{}.
+			With("war", MustParseExpression(`never("changes")`).AsValue()).
+			With("aqua", MustParseExpression(`ghpc_stage("cola")`).AsValue()).
+			With("guzz", MustParseExpression(`"${ghpc_stage("oline")}/hello.sh"`).AsValue()),
+	}
+	bp := Blueprint{
+		path:   "/zebra/greendoodle.yaml",
+		Groups: []Group{{Modules: []Module{mod}}},
+	}
+
+	if err := bp.evalGhpcStageInModuleSettings(); err != nil {
+		t.Errorf("got unexpected error: %v", err)
+	}
+
+	updated := bp.Groups[0].Modules[0].Settings
+	{ // No changes
+		want := `never("changes")`
+		got := string(TokensForValue(updated.Get("war")).Bytes())
+		if diff := cmp.Diff(want, got); diff != "" {
+			t.Errorf("diff (-want +got):\n%s", diff)
+		}
+	}
+	{ // Simple case
+		want := `"../.ghpc/staged/cola_a1e05ee256"`
+		got := string(TokensForValue(updated.Get("aqua")).Bytes())
+
+		if diff := cmp.Diff(want, got); diff != "" {
+			t.Errorf("diff (-want +got):\n%s", diff)
+		}
+	}
+	{ // Partial evaluation
+		want := `"${"../.ghpc/staged/oline_99878776f5"}/hello.sh"`
+		got := string(TokensForValue(updated.Get("guzz")).Bytes())
+
+		if diff := cmp.Diff(want, got); diff != "" {
+			t.Errorf("diff (-want +got):\n%s", diff)
+		}
+	}
+	{ // check that bp.stageFiles are updated
+		want := map[string]string{
+			"cola":  "../.ghpc/staged/cola_a1e05ee256",
+			"oline": "../.ghpc/staged/oline_99878776f5",
+		}
+		if diff := cmp.Diff(want, bp.stagedFiles); diff != "" {
+			t.Errorf("diff (-want +got):\n%s", diff)
+		}
 	}
 }

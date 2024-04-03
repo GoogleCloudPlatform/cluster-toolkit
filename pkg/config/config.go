@@ -304,9 +304,6 @@ func (bp *Blueprint) Expand() error {
 	if err := bp.expandVars(); err != nil {
 		return err
 	}
-	if err := bp.validateNoGhpcStageFuncs(); err != nil {
-		return err
-	}
 	return bp.expandGroups()
 }
 
@@ -678,11 +675,11 @@ func varsTopologicalOrder(vars Dict) ([]string, error) {
 			p := Root.Vars.Dot(n).Cty(rp)
 
 			if !ref.GlobalVar {
-				return BpError{p, fmt.Errorf("non-global variable %q referenced in expression", ref.Name)}
+				return BpError{p, fmt.Errorf("non-global variable %q referenced in expression", ref)}
 			}
 
 			if used[ref.Name] == 1 {
-				return BpError{p, fmt.Errorf("cyclic dependency detected: %q -> %q", n, ref.Name)}
+				return BpError{p, fmt.Errorf("cyclic dependency detected: %q -> %q", v, ref)}
 			}
 
 			if used[ref.Name] == 0 {
