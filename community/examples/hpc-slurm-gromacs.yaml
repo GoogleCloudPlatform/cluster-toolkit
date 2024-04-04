@@ -78,12 +78,12 @@ deployment_groups:
         spack config --scope defaults add config:build_stage:/sw/spack/spack-stage
         spack config --scope defaults add -f /tmp/projections-config.yaml
 
-        spack install gcc@10.3.0 target=x86_64
-        spack load gcc@10.3.0 target=x86_64
+        spack install gcc@13.1.0 target=x86_64
+        spack load gcc@13.1.0 target=x86_64
         spack compiler find --scope site
 
-        spack install intel-mpi@2018.4.274%gcc@10.3.0
-        spack install gromacs@2023.1 %gcc@10.3.0 ^intel-mpi@2018.4.274 ^cmake@3.26.3 %gcc@8.5.0
+        spack install intel-mpi@2018.4.274%gcc@13.1.0
+        spack install gromacs@2023.1 %gcc@13.1.0 ^intel-mpi@2018.4.274 ^cmake@3.26.3 %gcc@8.5.0
 
   - id: script
     source: modules/scripts/startup-script
@@ -110,7 +110,6 @@ deployment_groups:
     use: [network1]
     settings:
       name_prefix: login
-      machine_type: n2-standard-4
       disable_login_public_ips: false
 
   - id: slurm_controller
