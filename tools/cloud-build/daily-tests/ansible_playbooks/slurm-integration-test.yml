@@ -156,9 +156,12 @@
     ## Cleanup and fail gracefully
     rescue:
     - name: Capture ghpc stderr
+      failed_when: false
       ansible.builtin.set_fact:
-        terraform_apply_stderr_one_line: "{{ deployment.stderr }}"
+        ghpc_stderr: "{{ deployment.stderr }}"
+
     - name: Gather logs
+      failed_when: false
       ansible.builtin.include_tasks:
         file: tasks/gather_startup_script_logs.yml
         apply:

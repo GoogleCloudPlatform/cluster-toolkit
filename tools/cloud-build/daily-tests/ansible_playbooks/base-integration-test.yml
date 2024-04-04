@@ -137,17 +137,19 @@
 
     ## Cleanup and fail gracefully
     rescue:
-    - name: Capture terraform stderr
+    - name: Capture ghpc stderr
+      failed_when: false
       ansible.builtin.set_fact:
-        terraform_apply_stderr_one_line: "{{ terraform_output.results.1.stderr | replace('\n',' ') }}"
+        ghpc_stderr: "{{ deployment.stderr | replace('\n',' ') }}"
 
     - name: Gather logs
+      failed_when: false
       ansible.builtin.include_tasks:
         file: tasks/gather_startup_script_logs.yml
         apply:
           delegate_to: localhost
 
-    - name: Cleanup firewall and infrastructure
+    - name: Include rescue from ghpc failure
       ansible.builtin.include_tasks:
         file: tasks/rescue_ghpc_failure.yml
         apply:
@@ -159,7 +161,6 @@
     - name: Trigger failure (rescue blocks otherwise revert failures)
       ansible.builtin.fail:
         msg: "Failed while setting up test infrastructure"
-      when: true
 
 - name: Run Integration Tests
   hosts: remote_host

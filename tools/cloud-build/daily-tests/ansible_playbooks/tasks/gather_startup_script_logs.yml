@@ -16,18 +16,28 @@
 - name: Assert variables are defined
   ansible.builtin.assert:
     that:
-    - terraform_apply_stderr_one_line is defined
+    - ghpc_stderr is defined
 
-- name: Get Startup Script Logs
-  when: 'terraform_apply_stderr_one_line | regex_findall("please run: (.+)", "\\1") | list | length > 0'
-  changed_when: false
+- name: Get serial port command
   failed_when: false
-  ansible.builtin.command: '{{ terraform_apply_stderr_one_line | regex_findall("please run: (.+)", "\\1") | first }}'
+  ansible.builtin.set_fact:
+    serial_port_cmd: '{{ ghpc_stderr | regex_findall("please run:\s+(.+?\s+--project\s+\S+)", "\\1") | first }}'
+
+- name: Print serial port command
+  ansible.builtin.debug:
+    msg: '{{ serial_port_cmd }}'
+  when: serial_port_cmd is defined
+
+# Searches the ghpc stderr for a command that to run to get stdout from the deployed VM
+- name: Get Startup Script Logs
+  failed_when: false
+  ansible.builtin.command: "{{ serial_port_cmd }}"
   register: serial_port_1_output
+  when: serial_port_cmd is defined
 
 - name: Log Startup Script Failure
   changed_when: false
   failed_when: false
   ansible.builtin.debug:
-    var: serial_port_1_output
+    var: serial_port_1_output | ansible.utils.remove_keys(target=['stdout'])
   when: serial_port_1_output is defined
