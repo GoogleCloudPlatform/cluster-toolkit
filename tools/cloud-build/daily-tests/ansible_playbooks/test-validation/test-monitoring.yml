@@ -14,11 +14,6 @@
 
 ---
 
-- name: Include wait for startup script
-  ansible.builtin.include_tasks: "tasks/wait-for-startup-script.yml"
-  vars:
-    timeout_seconds: 600
-
 - name: Gather service facts
   become: true
   ansible.builtin.service_facts:

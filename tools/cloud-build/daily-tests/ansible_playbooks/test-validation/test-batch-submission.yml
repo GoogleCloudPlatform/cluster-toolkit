@@ -17,11 +17,6 @@
     that:
     - cli_deployment_vars.region is defined
 
-- name: Include wait for startup script
-  ansible.builtin.include_tasks: "tasks/wait-for-startup-script.yml"
-  vars:
-    timeout_seconds: 600
-
 - name: Batch Job Block
   block:
   - name: Submit batch job
