@@ -29,12 +29,13 @@ network: "{{ deployment_name }}-net"
 # Note: Pattern matching in gcloud only supports 1 wildcard.
 login_node: "{{ slurm_cluster_name }}-login-*"
 controller_node: "{{ slurm_cluster_name }}-controller"
+pre_deploy_tasks:
+- pre-deploy-tasks/remove-modules.yml
 post_deploy_tests:
-- test-validation/test-mounts.yml
 - test-validation/test-crd.yml
 custom_vars:
-  mounts:
-  - /home
   partitions:
   - desktop
   - compute
+  modules_to_remove:
+  - homefs

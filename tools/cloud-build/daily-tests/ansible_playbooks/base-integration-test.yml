@@ -39,6 +39,14 @@
       dig TXT +short o-o.myaddr.l.google.com @ns1.google.com | \
           awk -F'"' '{print $2}'
 
+  - name: Run Pre Deploy Tasks
+    vars:
+      pre_deploy_tasks: []
+    ansible.builtin.include_tasks: "{{ pre_deploy_task }}"
+    loop: "{{ pre_deploy_tasks }}"
+    loop_control:
+      loop_var: pre_deploy_task
+
   ## Create cluster
   - name: Create Deployment Directory
     ansible.builtin.include_tasks:
