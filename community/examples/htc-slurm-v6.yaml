@@ -30,6 +30,9 @@ vars:
   # By default, public IPs are set in the login and controller to allow easier
   # SSH access. To turn this behavior off, set this to true.
   disable_public_ips: false
+  # Stage `community/modules/scheduler/schedmd-slurm-gcp-v6-controller/etc/*` into the deployment folder.
+  # If you move the blueprint, make sure the relative path is correct.
+  staged_configs: $(ghpc_stage("../modules/scheduler/schedmd-slurm-gcp-v6-controller/etc"))
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
@@ -151,8 +154,8 @@ deployment_groups:
     settings:
       machine_type: c2-standard-8
       disable_controller_public_ips: $(vars.disable_public_ips)
-      slurm_conf_tpl: modules/embedded/community/modules/scheduler/schedmd-slurm-gcp-v6-controller/etc/htc-slurm.conf.tpl
-      slurmdbd_conf_tpl: modules/embedded/community/modules/scheduler/schedmd-slurm-gcp-v6-controller/etc/htc-slurmdbd.conf.tpl
+      slurm_conf_tpl: $(vars.staged_configs)/htc-slurm.conf.tpl
+      slurmdbd_conf_tpl: $(vars.staged_configs)/htc-slurmdbd.conf.tpl
 
   - id: hpc_dashboard
     source: modules/monitoring/dashboard

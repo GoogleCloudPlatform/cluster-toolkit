@@ -23,11 +23,11 @@ run_test() {
 	PROJECT="invalid-project"
 	VALIDATORS_TO_SKIP="test_project_exists,test_apis_enabled,test_region_exists,test_zone_exists,test_zone_in_region"
 	GHPC_PATH="${cwd}/ghpc"
+	BP_PATH="${cwd}/${example}"
 	# Cover the three possible starting sequences for local sources: ./ ../ /
 	LOCAL_SOURCE_PATTERN='source:\s\+\(\./\|\.\./\|/\)'
 
 	echo "testing ${example} in ${tmpdir}"
-	cp "${example}" "${tmpdir}/"
 
 	# Only run from the repo directory if there are local modules, otherwise
 	# run the test from the test directory using the installed ghpc binary.
@@ -36,10 +36,9 @@ run_test() {
 	else
 		cd "${tmpdir}"
 	fi
-	${GHPC_PATH} create -l ERROR \
+	${GHPC_PATH} create "${BP_PATH}" -l ERROR \
 		--skip-validators="${VALIDATORS_TO_SKIP}" \
-		--vars="project_id=${PROJECT},deployment_name=${DEPLOYMENT}" \
-		"${tmpdir}"/"${exampleFile}" >/dev/null ||
+		--vars="project_id=${PROJECT},deployment_name=${DEPLOYMENT}" >/dev/null ||
 		{
 			echo "*** ERROR: error creating deployment with ghpc for ${exampleFile}"
 			exit 1
