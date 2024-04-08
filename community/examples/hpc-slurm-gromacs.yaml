@@ -82,8 +82,8 @@ deployment_groups:
         spack load gcc@13.1.0 target=x86_64
         spack compiler find --scope site
 
-        spack install intel-mpi@2018.4.274%gcc@13.1.0
-        spack install gromacs@2023.1 %gcc@13.1.0 ^intel-mpi@2018.4.274 ^cmake@3.26.3 %gcc@8.5.0
+        spack install intel-oneapi-mpi@2021.9.0%gcc@13.1.0
+        spack install gromacs@2020.6 %gcc@13.1.0 ^intel-oneapi-mpi@2021.9.0
 
   - id: script
     source: modules/scripts/startup-script
