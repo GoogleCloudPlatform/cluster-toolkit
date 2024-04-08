@@ -28,8 +28,7 @@ func addExpandFlags(c *cobra.Command, addOutFlag bool) *cobra.Command {
 	}
 
 	c.Flags().StringVarP(&expandFlags.deploymentFile, "deployment-file", "d", "",
-		"Toolkit Deployment File.")
-	c.Flags().MarkHidden("deployment-file")
+		"Deployment file to override blueprint variables and backend configuration")
 
 	c.Flags().StringSliceVar(&expandFlags.cliVariables, "vars", nil,
 		"Comma-separated list of name=value variables to override YAML configuration. Can be used multiple times.")
