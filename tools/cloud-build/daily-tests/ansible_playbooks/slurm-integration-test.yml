@@ -161,7 +161,6 @@
         ghpc_stderr: "{{ deployment.stderr }}"
 
     - name: Gather logs
-      failed_when: false
       ansible.builtin.include_tasks:
         file: tasks/gather_startup_script_logs.yml
         apply:
