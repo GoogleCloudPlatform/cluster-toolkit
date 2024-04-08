@@ -221,14 +221,16 @@ as above. Run at the command line:
 ghpc deploy ml-slurm-a3-1-image.yaml --auto-approve
 ```
 
-The image will take approximately 30 minutes to build. If you made no
-modifications to `ml-slurm-a3-0-base.yaml` or `ml-slurm-h100-1-image.yaml`,
-you must make only 1 modification to `ml-slurm-a3-2-cluster.yaml` to update
-the IP address of the Filestore instance for `/home`:
+The image will take approximately 30 minutes to build.
 
-```yaml
-  server_ip_homefs: 10.224.153.226 # replace with IP address from output from slurm-a3-base!
-```
+> [!IMPORTANT]
+> You must modify `ml-slurm-a3-2-cluster.yaml` to update the IP address of the
+> Filestore instance for `/home`. Your IP address will differ from that shown
+> below and must match the output from deploying the base blueprint above:
+>
+> ```yaml
+>   server_ip_homefs: 10.224.153.226
+> ```
 
 Provision the cluster blueprint (approximately 5-10 minutes):
 
