@@ -36,9 +36,11 @@ password, just hit `[enter]` leaving the input blank.
 
 ## Run maxtext script
 
+Create maxtext directory in home directory and run maxtext script.
+
 ```bash
-cd /opt/apps/scripts/tpu-test/
-sbatch -ptpu --mem=50000 run_maxtext.sh
+mkdir maxtext && cd maxtext
+sbatch /opt/apps/scripts/tpu-test/run_maxtext.sh
 ```
 
 The sbatch command submits a batch script to the tpu partition, which makes Slurm auto-scale up nodes to run the job
@@ -52,7 +54,7 @@ when job has finished and nodes are spooling down.
 
 ## Review the output
 
-The `/opt/apps/scripts/tpu-test` directory will have several files and directories generated.
+The `${HOME}/maxtext/output` directory will have several files and directories generated.
 `slurm-<job-id>.out` file contains standard output for the TPU job.
 
 ```bash
