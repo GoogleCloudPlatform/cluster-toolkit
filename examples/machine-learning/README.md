@@ -3,7 +3,16 @@
 This document will guide you to successfully provisioning a Slurm cluster with
 A3 VM family compute nodes running NVIDIA H100 GPUs.
 
-## Required initial setup
+## Before starting
+
+> [!IMPORTANT]
+> Before beginning, submit a request to your Google Cloud representative for
+> access to the Deep Learning VM Image for the A3 VM family. It is currently
+> available only by Private Preview request. This image contains patches that
+> significantly enhance the network performance of workloads that span multiple
+> A3 VMs. You will use the image ID in the steps shown below.
+
+## Required setup
 
 Please follow the initial instructions for:
 
