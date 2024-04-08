@@ -13,8 +13,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+locals {
+  joined_instance_names = concat(var.instance_names, [var.instance_name])
+}
+
 data "google_compute_instance" "vm_instance" {
-  name    = var.instance_name
+  count = length(local.joined_instance_names)
+
+  name    = local.joined_instance_names[count.index]
   zone    = var.zone
   project = var.project_id
 }
@@ -23,12 +30,10 @@ resource "null_resource" "wait_for_startup" {
   provisioner "local-exec" {
     command = "/bin/bash ${path.module}/scripts/wait-for-startup-status.sh"
     environment = {
-      INSTANCE_NAME = var.instance_name
-      ZONE          = var.zone
-      PROJECT_ID    = var.project_id
-      TIMEOUT       = var.timeout
+      INSTANCE_NAMES = join(" ", distinct(compact(data.google_compute_instance.vm_instance[*].name)))
+      ZONE           = var.zone
+      PROJECT_ID     = var.project_id
+      TIMEOUT        = var.timeout
     }
   }
-
-  triggers = { instance_id_changes = data.google_compute_instance.vm_instance.instance_id }
 }

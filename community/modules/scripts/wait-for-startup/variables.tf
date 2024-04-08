@@ -19,6 +19,16 @@ variable "instance_name" {
   type        = string
 }
 
+variable "instance_names" {
+  description = "Names of the instances we are waiting for"
+  type        = list(string)
+  default     = []
+  validation {
+    condition     = var.instance_names != null
+    error_message = "The list of instances cannot be null (empty list is ok)"
+  }
+}
+
 variable "zone" {
   description = "The GCP zone where the instance is running"
   type        = string
