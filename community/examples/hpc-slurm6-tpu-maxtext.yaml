@@ -49,6 +49,11 @@ deployment_groups:
           # ATTENTION: (i.e. dot_product, flash)
           # STEPS: steps to run (i.e. 100, 1000)
 
+          #SBATCH --nodes=1
+          #SBATCH --ntasks-per-node=1
+          #SBATCH --mem=50000
+          #SBATCH --partition=tpu
+
           set -e -o pipefail
 
           # Start virtual environment.
@@ -63,8 +68,8 @@ deployment_groups:
           bash setup.sh
 
           # Run maxtext benchmark test.
-          # (i.e.) python3 MaxText/train.py MaxText/configs/base.yml run_name=1xv4-128 base_output_directory=/opt/apps/scripts/tpu-test/output/ dataset_path=gs://dataset_tpu/dataset async_checkpointing=False attention=dot_product steps=100
-          python3 MaxText/train.py MaxText/configs/base.yml run_name=<RUN_NAME> base_output_directory=/opt/apps/scripts/tpu-test/output/ dataset_path=<STORAGE_BUCKET> async_checkpointing=False attention=<ATTENTION> steps=<STEPS>
+          # (i.e.) python3 MaxText/train.py MaxText/configs/base.yml run_name=1xv4-128 base_output_directory=${PWD}/output/ dataset_path=gs://dataset_tpu/dataset async_checkpointing=False attention=dot_product steps=100
+          python3 MaxText/train.py MaxText/configs/base.yml run_name=<RUN_NAME> base_output_directory=${PWD}/output/ dataset_path=<STORAGE_BUCKET> async_checkpointing=False attention=<ATTENTION> steps=<STEPS>
 
   - id: tpu_nodeset
     source: ./community/modules/compute/schedmd-slurm-gcp-v6-nodeset-tpu
