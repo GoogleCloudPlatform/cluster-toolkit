@@ -15,8 +15,13 @@
  */
 
 output "name" {
-  description = "Name of any instance created"
+  description = "Names of instances created"
   value       = google_compute_instance.compute_vm[*].name
+}
+
+output "self_link" {
+  description = "The tuple URIs of the created instances"
+  value       = google_compute_instance.compute_vm[*].self_link
 }
 
 output "external_ip" {
@@ -30,17 +35,16 @@ output "internal_ip" {
 }
 
 locals {
-  no_instance_instructions = "No instances were created."
-  first_instance_name      = try(google_compute_instance.compute_vm[0].name, "no-instance")
-  ssh_instructions         = <<-EOT
+  first_instance_link = try(google_compute_instance.compute_vm[0].self_link, "no-instance")
+  ssh_instructions    = <<-EOT
     Use the following commands to SSH into the first VM created:
-      gcloud compute ssh --zone ${var.zone} ${local.first_instance_name} --project ${var.project_id}
+      gcloud compute ssh ${local.first_instance_link}
     If not accessible from the public internet, use an SSH tunnel through IAP:
-      gcloud compute ssh --zone ${var.zone} ${local.first_instance_name} --project ${var.project_id} --tunnel-through-iap
+      gcloud compute ssh ${local.first_instance_link} --tunnel-through-iap
   EOT
 }
 
 output "instructions" {
   description = "Instructions on how to SSH into the created VM. Commands may fail depending on VM configuration and IAM permissions."
-  value       = var.instance_count > 0 ? local.ssh_instructions : local.no_instance_instructions
+  value       = var.instance_count > 0 ? local.ssh_instructions : "No instances were created."
 }
