@@ -52,12 +52,6 @@ steps:
     sed -i "s/#   spack mirror add .*/spack mirror add --scope site gcs_cache $${SPACK_CACHE_WRF//\//\\\/}/" $${SG_EXAMPLE}
     sed -i "s/# spack buildcache keys .*/spack buildcache keys --install --trust/" $${SG_EXAMPLE}
 
-    echo '  - id: wait'                                           >> $${SG_EXAMPLE}
-    echo '    source: community/modules/scripts/wait-for-startup' >> $${SG_EXAMPLE}
-    echo '    settings:'                                          >> $${SG_EXAMPLE}
-    echo '      instance_name: $(spack-builder.name[0])'          >> $${SG_EXAMPLE}
-    echo '      timeout: 2400'                                    >> $${SG_EXAMPLE}
-
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
       --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
       --extra-vars="@tools/cloud-build/daily-tests/tests/batch-mpi.yml"
