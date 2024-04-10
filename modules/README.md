@@ -124,7 +124,7 @@ Modules that are still in development and less stable are labeled with the
   [Virtual Private Cloud (VPC)](https://cloud.google.com/vpc) network with
   regional subnetworks and firewall rules.
 * **[multivpc]** ![core-badge] ![experimental-badge]: Creates a variable
-  number of vpcs using the [vpc] module.
+  number of VPC networks using the [vpc] module.
 * **[pre-existing-vpc]** ![core-badge] : Used to connect newly
   built components to a pre-existing VPC network.
 * **[firewall-rules]** ![core-badge] ![experimental-badge]: Add custom firewall

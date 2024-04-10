@@ -19,7 +19,7 @@ output "network_names" {
   value       = module.vpcs[*].network_name
 }
 
-output "network_id" {
+output "network_ids" {
   description = "IDs of the new VPC network"
   value       = module.vpcs[*].network_id
 }
@@ -34,18 +34,17 @@ output "additional_networks" {
   value       = local.additional_networks
 }
 
-# output "subnetwork_names" {
-#   description = "Names of the subnetwork created in each network"
-#   value       = local.output_primary_subnetwork_name
-# }
-#
-# output "subnetwork_self_links" {
-#   description = "Self link of the primary subnetwork"
-#   value       = local.output_primary_subnetwork_self_link
-# }
-#
-# output "subnetwork_address" {
-#   description = "IP address range of the primary subnetwork"
-#   value       = local.output_primary_subnetwork_ip_cidr_range
-# }
-#
+output "subnetwork_names" {
+  description = "Names of the subnetwork created in each network"
+  value       = module.vpcs[*].subnetwork_name
+}
+
+output "subnetwork_self_links" {
+  description = "Self link of the primary subnetwork"
+  value       = module.vpcs[*].subnetwork_self_link
+}
+
+output "subnetwork_addresses" {
+  description = "IP address range of the primary subnetwork"
+  value       = module.vpcs[*].subnetwork_address
+}

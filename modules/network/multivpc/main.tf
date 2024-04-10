@@ -16,31 +16,29 @@
 
 locals {
   # this input variable is validated to be in CIDR format
-  super_global_ip_cidr_prefix = split("/", var.super_global_ip_address_range)[1]
-  network_new_bits            = var.network_cidr_prefix - local.super_global_ip_cidr_prefix
-  subnetwork_bits             = ceil(log(var.network_count, 2))
+  network_name          = coalesce(replace(var.network_name_prefix, "_", "-"), replace(var.deployment_name, "_", "-"))
+  global_ip_cidr_prefix = split("/", var.global_ip_address_range)[0]
+  global_ip_cidr_suffix = split("/", var.global_ip_address_range)[1]
+  global_ip_cidr_valid  = "${local.global_ip_cidr_prefix}/${terraform_data.global_ip_cidr_suffix.output}"
+  subnetwork_new_bits   = var.subnetwork_cidr_suffix - local.global_ip_cidr_suffix
+  maximum_subnetworks   = pow(2, local.subnetwork_new_bits)
   additional_networks = [
     for vpc in module.vpcs :
-    {
-      network            = null
-      subnetwork         = vpc.subnetwork_name
-      subnetwork_project = var.project_id
-      network_ip         = ""
-      nic_type           = "GVNIC"
-      stack_type         = "IPV4_ONLY"
-      queue_count        = null
-      access_config      = []
-      ipv6_access_config = []
-      alias_ip_range     = []
-    }
+    merge(var.network_interface_defaults, { subnetwork = vpc.subnetwork_name, subnetwork_project = var.project_id })
   ]
 }
 
-resource "null_resource" "vpc_validation" {
+resource "terraform_data" "global_ip_cidr_suffix" {
+  input = local.global_ip_cidr_suffix
   lifecycle {
     precondition {
-      condition     = local.network_new_bits >= local.subnetwork_bits
-      error_message = "network_cidr_prefix must be greater than super_global_ip_address_range's CIDR prefix by enough to accommodate the network_count"
+      condition     = local.maximum_subnetworks >= var.network_count
+      error_message = <<EOT
+      Global IP range ${var.global_ip_address_range} and subnetwork CIDR suffix
+      ${var.subnetwork_cidr_suffix} are incompatible with the VPC count
+      ${var.network_count}. The subnetwork CIDR suffix must be at least
+      ${ceil(log(var.network_count, 2))} greater than the global CIDR suffix.
+      EOT
     }
   }
 }
@@ -53,10 +51,13 @@ module "vpcs" {
   project_id            = var.project_id
   deployment_name       = var.deployment_name
   region                = var.region
-  network_address_range = cidrsubnet(var.super_global_ip_address_range, local.network_new_bits, count.index)
+  network_address_range = cidrsubnet(local.global_ip_cidr_valid, local.subnetwork_new_bits, count.index)
+  # the value 0 creates a single subnetwork that spans the entire range above
+  # consider changing to explicit var.subnetworks implementation
+  default_primary_subnetwork_size = 0
 
-  network_name                           = "${replace(var.deployment_name, "_", "-")}-${count.index}"
-  subnetwork_name                        = "${replace(var.deployment_name, "_", "-")}-subnet-${count.index}"
+  network_name                           = "${local.network_name}-${count.index}"
+  subnetwork_name                        = "${local.network_name}-${count.index}-subnet"
   allowed_ssh_ip_ranges                  = var.allowed_ssh_ip_ranges
   delete_default_internet_gateway_routes = var.delete_default_internet_gateway_routes
   enable_iap_rdp_ingress                 = var.enable_iap_rdp_ingress
@@ -69,6 +70,4 @@ module "vpcs" {
   mtu                                    = var.mtu
   network_description                    = var.network_description
   network_routing_mode                   = var.network_routing_mode
-  secondary_ranges                       = var.secondary_ranges
-  default_primary_subnetwork_size        = 0
 }

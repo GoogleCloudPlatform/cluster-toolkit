@@ -29,6 +29,12 @@ variable "region" {
   type        = string
 }
 
+variable "network_name_prefix" {
+  description = "The base name of the vpcs and their subnets, will be appended with a sequence number"
+  type        = string
+  default     = null
+}
+
 variable "network_count" {
   description = "The number of vpc nettworks to create"
   type        = number
@@ -39,24 +45,24 @@ variable "network_count" {
     error_message = "The minimum VPCs able to be created by this module is 2. Use the standard Toolkit module at modules/network/vpc for count = 1"
   }
   validation {
-    condition     = var.network_count < 9
+    condition     = var.network_count <= 8
     error_message = "The maximum VPCs able to be created by this module is 8"
   }
 }
 
-variable "super_global_ip_address_range" {
+variable "global_ip_address_range" {
   description = "IP address range (CIDR) that will span entire set of VPC networks"
   type        = string
-  default     = "172.16.0.0"
+  default     = "172.16.0.0/12"
 
   validation {
-    condition     = can(cidrhost(var.super_global_ip_address_range, 0))
-    error_message = "var.super_global_ip_address_range must be an IPv4 CIDR range (e.g. \"172.16.0.0/9\")."
+    condition     = can(cidrhost(var.global_ip_address_range, 0))
+    error_message = "var.global_ip_address_range must be an IPv4 CIDR range (e.g. \"172.16.0.0/12\")."
   }
 }
 
-variable "network_cidr_prefix" {
-  description = "The size, in CIDR prefix notation, for each network (e.g. 24 for 172.16.0.0/24); changing this will destroy every network."
+variable "subnetwork_cidr_suffix" {
+  description = "The size, in CIDR suffix notation, for each network (e.g. 24 for 172.16.0.0/24); changing this will destroy every network."
   type        = number
   default     = 16
 }
@@ -65,12 +71,6 @@ variable "mtu" {
   type        = number
   description = "The network MTU (default: 8896). Recommended values: 0 (use Compute Engine default), 1460 (default outside HPC environments), 1500 (Internet default), or 8896 (for Jumbo packets). Allowed are all values in the range 1300 to 8896, inclusively."
   default     = 8896
-}
-
-variable "secondary_ranges" {
-  type        = map(list(object({ range_name = string, ip_cidr_range = string })))
-  description = "Secondary ranges that will be used in some of the subnets. Please see https://goo.gle/hpc-toolkit-vpc-deprecation for migration instructions."
-  default     = {}
 }
 
 variable "network_routing_mode" {
@@ -147,4 +147,42 @@ variable "firewall_rules" {
   type        = any
   description = "List of firewall rules"
   default     = []
+}
+
+variable "network_interface_defaults" {
+  type = object({
+    network            = optional(string)
+    subnetwork         = optional(string)
+    subnetwork_project = optional(string)
+    network_ip         = optional(string, "")
+    nic_type           = optional(string, "GVNIC")
+    stack_type         = optional(string, "IPV4_ONLY")
+    queue_count        = optional(string)
+    access_config = optional(list(object({
+      nat_ip                 = string
+      network_tier           = string
+      public_ptr_domain_name = string
+    })), [])
+    ipv6_access_config = optional(list(object({
+      network_tier           = string
+      public_ptr_domain_name = string
+    })), [])
+    alias_ip_range = optional(list(object({
+      ip_cidr_range         = string
+      subnetwork_range_name = string
+    })), [])
+  })
+  description = "The template of the network settings to be used on all vpcs."
+  default = {
+    network            = null
+    subnetwork         = null
+    subnetwork_project = null
+    network_ip         = ""
+    nic_type           = "GVNIC"
+    stack_type         = "IPV4_ONLY"
+    queue_count        = null
+    access_config      = []
+    ipv6_access_config = []
+    alias_ip_range     = []
+  }
 }
