@@ -1,5 +1,10 @@
 # AMD solutions for the HPC Toolkit
 
+> [!NOTE]
+> This document uses Slurm-GCP v5. A newer [blueprint](./hpc-amd-slurm-v6.yaml)
+> using v6 has been published. This documentation will be updated and the v5
+> blueprint deprecated.
+
 ## AMD-Optimized Slurm Cluster
 
 This example provisions a Slurm cluster using the AMD-based Computed Optimized
