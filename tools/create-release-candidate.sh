@@ -40,11 +40,6 @@ if ! type -P gh 1>/dev/null; then
 	exit 1
 fi
 
-if ! type -P jq 1>/dev/null; then
-	echo "Must install jq"
-	exit 1
-fi
-
 if ! gh auth status; then
 	echo 'Must authenticate using "gh auth login"'
 	exit 1
@@ -61,7 +56,7 @@ while getopts "t:" opt; do
 done
 TYPE="${ARG_TYPE:-minor}"
 
-OLD_VERSION=$(gh release list -R GoogleCloudPlatform/hpc-toolkit -L 1 --json tagName | jq -r '.[] | .tagName')
+OLD_VERSION=$(gh release list -R GoogleCloudPlatform/hpc-toolkit -L 1 --json tagName --jq '.[] | .tagName')
 OLD_MAJOR=$(echo "${OLD_VERSION}" | cut -f1 -d. | sed 's,v,,')
 OLD_MINOR=$(echo "${OLD_VERSION}" | cut -f2 -d.)
 OLD_PATCH=$(echo "${OLD_VERSION}" | cut -f3 -d.)
