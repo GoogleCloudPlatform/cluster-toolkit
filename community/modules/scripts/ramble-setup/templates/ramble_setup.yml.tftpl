@@ -103,6 +103,7 @@
       owner: "{{ system_user.name }}"
       group: "{{ system_user.group }}"
       recurse: true
+      follow: false
     when: lock_out.rc == 0
 
   - name: Finalize setup
@@ -116,6 +117,7 @@
       path: "{{ install_dir }}"
       mode: "{{ chmod_mode | default(omit, true)  }}"
       recurse: true
+      follow: false
     when: (lock_out.rc == 0) and (chmod_mode != None)
 
   - name: Release lock
