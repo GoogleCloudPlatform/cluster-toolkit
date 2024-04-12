@@ -7,9 +7,9 @@
 Set-StrictMode -Version latest
 $ErrorActionPreference = 'Stop'
 
-%{ if http_proxy != "" }
+%{ if http_proxy != "" ~}
 [System.Net.WebRequest]::DefaultWebProxy = New-Object System.Net.WebProxy("${http_proxy}")
-%{ endif }
+%{ endif ~}
 
 # do not show progress bar when running Invoke-WebRequest
 $ProgressPreference = 'SilentlyContinue'
