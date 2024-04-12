@@ -33,8 +33,22 @@ variable "install_nvidia_driver_args" {
 }
 
 variable "http_proxy" {
-  description = "Set system default web (http and https) proxy for use by Invoke-WebRequest"
+  description = "Set http and https proxy for use by Invoke-WebRequest commands"
   type        = string
   default     = ""
+  nullable    = false
+}
+
+variable "http_proxy_set_environment" {
+  description = "Set system default environment variables http_proxy and https_proxy for all commands"
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
+variable "no_proxy" {
+  description = "Environment variables no_proxy (only used if var.http_proxy_set_environment is enabled)"
+  type        = string
+  default     = "169.254.169.254,metadata,metadata.google.internal,.googleapis.com"
   nullable    = false
 }
