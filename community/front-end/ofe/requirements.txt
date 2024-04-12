@@ -43,7 +43,7 @@ grpcio-status==1.56.0
 h11==0.14.0
 httplib2==0.22.0
 identify==2.5.24
-idna==3.4
+idna==3.7
 importlib-resources==6.1.1
 isort==5.12.0
 Jinja2==3.1.3
