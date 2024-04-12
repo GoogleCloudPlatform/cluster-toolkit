@@ -94,10 +94,12 @@ No resources.
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_http_proxy"></a> [http\_proxy](#input\_http\_proxy) | Set system default web (http and https) proxy for use by Invoke-WebRequest | `string` | `""` | no |
+| <a name="input_http_proxy"></a> [http\_proxy](#input\_http\_proxy) | Set http and https proxy for use by Invoke-WebRequest commands | `string` | `""` | no |
+| <a name="input_http_proxy_set_environment"></a> [http\_proxy\_set\_environment](#input\_http\_proxy\_set\_environment) | Set system default environment variables http\_proxy and https\_proxy for all commands | `bool` | `false` | no |
 | <a name="input_install_nvidia_driver"></a> [install\_nvidia\_driver](#input\_install\_nvidia\_driver) | Install NVIDIA GPU drivers and the CUDA Toolkit using script specified by var.install\_nvidia\_driver\_script | `bool` | `false` | no |
 | <a name="input_install_nvidia_driver_args"></a> [install\_nvidia\_driver\_args](#input\_install\_nvidia\_driver\_args) | Arguments to supply to NVIDIA driver install script | `string` | `"/s /n"` | no |
 | <a name="input_install_nvidia_driver_script"></a> [install\_nvidia\_driver\_script](#input\_install\_nvidia\_driver\_script) | Install script for NVIDIA drivers specified by http/https URL | `string` | `"https://developer.download.nvidia.com/compute/cuda/12.1.1/local_installers/cuda_12.1.1_531.14_windows.exe"` | no |
+| <a name="input_no_proxy"></a> [no\_proxy](#input\_no\_proxy) | Environment variables no\_proxy (only used if var.http\_proxy\_set\_environment is enabled) | `string` | `"169.254.169.254,metadata,metadata.google.internal,.googleapis.com"` | no |
 
 ## Outputs
 
