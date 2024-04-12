@@ -159,6 +159,10 @@ EOF
 # Install go version specified in go.mod file
 #
 GO_VERSION=$(awk '/^go/ {print $2}' "/opt/gcluster/hpc-toolkit/go.mod")
+# Check if the version string has only two numbers separated by dots
+if [[ $GO_VERSION =~ ^([0-9]+\.[0-9]+)$ ]]; then
+	GO_VERSION="$GO_VERSION.0" # Append .0 if missing patch version
+fi
 GO_DOWNLOAD_URL="https://golang.org/dl/go${GO_VERSION}.linux-amd64.tar.gz"
 curl --silent --show-error --location "${GO_DOWNLOAD_URL}" --output "/tmp/go${GO_VERSION}.linux-amd64.tar.gz"
 rm -rf /usr/local/go && tar -C /usr/local -xzf "/tmp/go${GO_VERSION}.linux-amd64.tar.gz"
