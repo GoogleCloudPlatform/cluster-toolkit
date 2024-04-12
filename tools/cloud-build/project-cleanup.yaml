@@ -30,7 +30,7 @@ steps:
     /workspace/tools/clean-resource-policies.sh
     echo
     echo "Cleaning Filestore"
-    /workspace/tools/clean-filestore-limit.sh
+    /workspace/tools/clean-filestore-limit.py
     echo
     echo "Cleaning Metadata"
     /workspace/tools/clean-metadata.sh
