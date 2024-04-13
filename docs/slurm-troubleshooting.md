@@ -65,6 +65,7 @@ srun: error: Job allocation 2 has been revoked
 ```
 
 Possible causes could be [insufficient quota](#insufficient-quota),
+[insufficient capacity](#insufficient-capacity),
 [placement groups](#placement-groups-slurm), or
 [insufficient permissions](#insufficient-service-account-permissions)
 for the service account attached to the controller. Also see the
@@ -89,6 +90,23 @@ The solution here is to [request more of the specified quota](#gcp-quotas),
 [machine type][partition-machine-type], to one which has sufficient quota.
 
 [partition-machine-type]: community/modules/compute/schedmd-slurm-gcp-v6-nodeset/README.md#input_machine_type
+
+#### Insufficient Capacity
+
+It may be that the zone the partition is deployed in has no remaining capacity to create the
+compute nodes required to run your submitted job.
+
+You can confirm this by SSHing into the `controller` VM and checking the
+`resume.log` file:
+
+```shell
+$ cat /var/log/slurm/resume.log
+... bulkInsert operation errors: VM_MIN_COUNT_NOT_REACHED ...
+```
+
+When this happens, the the output of `sacct` will show the job's status as `NODE_FAIL`.
+
+Jobs submitted via `srun` will not be retried, however jobs submitted via `sbatch` will be retried.
 
 #### Placement Groups (Slurm)
 
