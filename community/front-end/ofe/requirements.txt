@@ -85,7 +85,7 @@ ruamel.yaml.clib==0.2.8
 semantic-version==2.10.0
 setuptools-rust==1.6.0
 six==1.16.0
-sqlparse==0.4.4
+sqlparse==0.5.0
 toml==0.10.2
 tomli==2.0.1
 tomlkit==0.11.8
