@@ -46,13 +46,8 @@ variable "num_instances" {
 
 variable "disk_type" {
   type        = string
-  description = "Boot disk type, can be either pd-ssd, pd-standard, pd-balanced, or pd-extreme."
+  description = "Boot disk type, can be either hyperdisk-balanced, hyperdisk-extreme, pd-ssd, pd-standard, pd-balanced, or pd-extreme."
   default     = "pd-ssd"
-
-  validation {
-    condition     = contains(["pd-ssd", "pd-standard", "pd-balanced", "pd-extreme"], var.disk_type)
-    error_message = "Variable disk_type must be one of pd-ssd, pd-standard, pd-balanced, or pd-extreme."
-  }
 }
 
 variable "disk_size_gb" {
