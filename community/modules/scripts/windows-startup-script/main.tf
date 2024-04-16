@@ -15,6 +15,13 @@
  */
 
 locals {
+  setx_http_proxy_ps1 = !var.http_proxy_set_environment ? [] : [
+    templatefile("${path.module}/templates/setx_http_proxy.ps1", {
+      "http_proxy" : var.http_proxy,
+      "no_proxy" : var.no_proxy,
+    })
+  ]
+
   nvidia_ps1 = !var.install_nvidia_driver ? [] : [
     templatefile("${path.module}/templates/install_gpu_driver.ps1.tftpl", {
       "url" : var.install_nvidia_driver_script
@@ -23,5 +30,5 @@ locals {
     })
   ]
 
-  startup_ps1 = local.nvidia_ps1
+  startup_ps1 = concat(local.setx_http_proxy_ps1, local.nvidia_ps1)
 }

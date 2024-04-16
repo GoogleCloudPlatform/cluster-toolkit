@@ -7,9 +7,9 @@
 Set-StrictMode -Version latest
 $ErrorActionPreference = 'Stop'
 
-%{ if http_proxy != "" }
+%{ if http_proxy != "" ~}
 [System.Net.WebRequest]::DefaultWebProxy = New-Object System.Net.WebProxy("${http_proxy}")
-%{ endif }
+%{ endif ~}
 
 # do not show progress bar when running Invoke-WebRequest
 $ProgressPreference = 'SilentlyContinue'
@@ -48,8 +48,12 @@ Set-Content -Path "C:\Condor\condor_config" -Value (Get-Content -Path "C:\Condor
 
 # install Python so that custom ClassAd hooks can execute
 $python_installer = 'C:\python-installer.exe'
-Invoke-WebRequest -Uri "https://www.python.org/ftp/python/3.11.4/python-3.11.4-amd64.exe" -OutFile "$python_installer"
+Invoke-WebRequest -Uri "${python_windows_installer_url}" -OutFile "$python_installer"
 Start-Process -FilePath "$python_installer" -Wait -ArgumentList '/quiet InstallAllUsers=1 PrependPath=1 Include_test=0'
+%{ if http_proxy == "" ~}
 Start-Process "py.exe" -Wait -ArgumentList "-3.11 -m pip install --no-warn-script-location requests"
+%{ else ~}
+Start-Process "py.exe" -Wait -ArgumentList "-3.11 -m pip install --proxy ${http_proxy} --no-warn-script-location requests"
+%{ endif ~}
 Invoke-WebRequest -Uri "https://raw.githubusercontent.com/htcondor/htcondor/main/src/condor_scripts/common-cloud-attributes-google.py" -OutFile "C:\Condor\bin\common-cloud-attributes-google.py"
 Remove-Item "$python_installer"
