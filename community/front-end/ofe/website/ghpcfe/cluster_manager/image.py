@@ -98,7 +98,9 @@ class ImageBackend:
             self.update_image_status("e")
             logger.error(f"Error occurred while writing to the credentials file: {e}")
 
-   
+    def _get_credentials_file(self):
+        return self.image_ / "cloud_credentials"
+  
     def _create_blueprint(self):
         """
         Create HPC Toolkit blueprint that will build the image.
@@ -127,7 +129,6 @@ vars:
   subnetwork_name: {"image" + str(self.image.id) + "-subnetwork"}
   image_name: {"image-" + self.image.name}
   image_family: {"image-" + self.image.family}
-  tag: ofe-created
 
 deployment_groups:
 - group: builder-env
@@ -174,6 +175,10 @@ deployment_groups:
             logger.info(f"Invoking ghpc create for the image {self.image.id}")
             log_out_fn = target_dir / "ghpc_create_log.stdout"
             log_err_fn = target_dir / "ghpc_create_log.stderr"
+
+            env = os.environ.copy()
+            env['GOOGLE_APPLICATION_CREDENTIALS'] = self._get_credentials_file()
+
             with log_out_fn.open("wb") as log_out:
                 with log_err_fn.open("wb") as log_err:
                     subprocess.run(
@@ -182,6 +187,7 @@ deployment_groups:
                         stdout=log_out,
                         stderr=log_err,
                         check=True,
+                        env=env,
                     )
         except subprocess.CalledProcessError as cpe:
             self.update_image_status("e")
