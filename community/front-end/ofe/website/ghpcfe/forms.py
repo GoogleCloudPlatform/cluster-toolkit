@@ -307,7 +307,7 @@ class ClusterPartitionForm(forms.ModelForm):
         cleaned_data = super().clean()
         if cleaned_data["enable_placement"] and cleaned_data[
             "machine_type"
-        ].split("-")[0] not in ["c2", "c2d", "c3"]:
+        ].split("-")[0] not in ["a2", "a3", "c2", "c3", "c2d", "c3d", "g2", "h3", "n2", "n2d"]:
             raise ValidationError(
                 "SlurmGCP does not support Placement Groups for selected instance type"  # pylint: disable=line-too-long
             )
