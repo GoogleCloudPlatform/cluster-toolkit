@@ -340,12 +340,11 @@ variable "enable_cleanup_compute" {
 Enables automatic cleanup of compute nodes and resource policies (e.g.
 placement groups) managed by this module, when cluster is destroyed.
 
-NOTE: Requires Python and script dependencies.
-*WARNING*: Toggling this may impact the running workload. Deployed compute nodes
-may be destroyed and their jobs will be requeued.
+*WARNING*: Toggling this off will impact the running workload. 
+Deployed compute nodes will be destroyed.
 EOD
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "enable_bigquery_load" {
