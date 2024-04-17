@@ -112,7 +112,7 @@ deployment_groups:
     source: ./community/modules/scheduler/schedmd-slurm-gcp-v6-login
     use: [network]
     settings:
-      disable_login_public_ips: false
+      enable_login_public_ips: true
       name_prefix: "v6tpu"
       machine_type: n2-standard-16
 
@@ -124,6 +124,6 @@ deployment_groups:
     - slurm_login
     - network
     settings:
-      disable_controller_public_ips: false
+      enable_controller_public_ips: true
       machine_type: n2-standard-16
       login_startup_script: $(script.startup_script)

@@ -164,7 +164,6 @@ deployment_groups:
     settings:
       name_prefix: spack-builder
       machine_type: c2d-standard-16
-      disable_public_ips: true
       instance_image:
         # these images must match the images used by Slurm modules below because
         # we are building OpenMPI with PMI support in libraries contained in

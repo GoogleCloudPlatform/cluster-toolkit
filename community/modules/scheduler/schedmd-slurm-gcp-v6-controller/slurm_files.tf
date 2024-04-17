@@ -120,7 +120,7 @@ module "slurm_files" {
   prolog_scripts           = var.prolog_scripts
   enable_slurm_gcp_plugins = var.enable_slurm_gcp_plugins
 
-  disable_default_mounts = var.disable_default_mounts
+  disable_default_mounts = !var.enable_default_mounts
   network_storage        = var.network_storage
   login_network_storage  = var.login_network_storage
 

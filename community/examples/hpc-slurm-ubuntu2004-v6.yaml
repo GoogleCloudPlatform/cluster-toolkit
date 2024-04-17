@@ -84,7 +84,7 @@ deployment_groups:
     - homefs
     settings:
       instance_image: $(vars.slurm_image)
-      disable_controller_public_ips: false
+      enable_controller_public_ips: true
 
   - id: slurm_login
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
@@ -93,4 +93,4 @@ deployment_groups:
       name_prefix: login
       instance_image: $(vars.slurm_image)
       machine_type: n2-standard-4
-      disable_login_public_ips: false
+      enable_login_public_ips: true

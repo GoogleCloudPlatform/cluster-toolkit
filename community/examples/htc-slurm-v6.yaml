@@ -28,8 +28,8 @@ vars:
   region: us-west4
   zone: us-west4-c
   # By default, public IPs are set in the login and controller to allow easier
-  # SSH access. To turn this behavior off, set this to true.
-  disable_public_ips: false
+  # SSH access. To turn this behavior off, set this to false.
+  enable_public_ips: true
   # Stage `community/modules/scheduler/schedmd-slurm-gcp-v6-controller/etc/*` into the deployment folder.
   # If you move the blueprint, make sure the relative path is correct.
   staged_configs: $(ghpc_stage("../modules/scheduler/schedmd-slurm-gcp-v6-controller/etc"))
@@ -139,7 +139,7 @@ deployment_groups:
     settings:
       name_prefix: login
       machine_type: n2-standard-4
-      disable_login_public_ips: $(vars.disable_public_ips)
+      enable_login_public_ips: $(vars.enable_public_ips)
 
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
@@ -153,7 +153,7 @@ deployment_groups:
     - slurm_login
     settings:
       machine_type: c2-standard-8
-      disable_controller_public_ips: $(vars.disable_public_ips)
+      enable_controller_public_ips: $(vars.enable_public_ips)
       slurm_conf_tpl: $(vars.staged_configs)/htc-slurm.conf.tpl
       slurmdbd_conf_tpl: $(vars.staged_configs)/htc-slurmdbd.conf.tpl
 

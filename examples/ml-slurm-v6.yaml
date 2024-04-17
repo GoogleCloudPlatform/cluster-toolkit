@@ -236,7 +236,7 @@ deployment_groups:
     use: [network]
     settings:
       name_prefix: "login"
-      disable_login_public_ips: false
+      enable_login_public_ips: true
       instance_image: $(vars.new_image)
       instance_image_custom: true
 
@@ -249,7 +249,7 @@ deployment_groups:
     - homefs
     - slurm_login
     settings:
-      disable_controller_public_ips: false
+      enable_controller_public_ips: true
       instance_image: $(vars.new_image)
       instance_image_custom: true
       login_startup_script: $(examples.startup_script)

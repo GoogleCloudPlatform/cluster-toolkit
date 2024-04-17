@@ -103,7 +103,7 @@ deployment_groups:
     settings:
       name_prefix: login
       machine_type: n1-standard-4
-      disable_login_public_ips: false
+      enable_login_public_ips: true
 
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
@@ -116,4 +116,4 @@ deployment_groups:
         suspend_timeout: 300
         no_comma_params: false
       machine_type: n1-standard-4
-      disable_controller_public_ips: false
+      enable_controller_public_ips: true
