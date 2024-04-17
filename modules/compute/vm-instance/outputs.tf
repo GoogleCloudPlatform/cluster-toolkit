@@ -38,9 +38,9 @@ locals {
   first_instance_link = try(google_compute_instance.compute_vm[0].self_link, "no-instance")
   ssh_instructions    = <<-EOT
     Use the following commands to SSH into the first VM created:
-      gcloud compute ssh ${local.first_instance_link}
+      gcloud compute ssh ${local.first_instance_link} --project ${var.project_id}
     If not accessible from the public internet, use an SSH tunnel through IAP:
-      gcloud compute ssh ${local.first_instance_link} --tunnel-through-iap
+      gcloud compute ssh ${local.first_instance_link} --tunnel-through-iap --project ${var.project_id}
   EOT
 }
 
