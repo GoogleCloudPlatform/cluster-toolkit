@@ -99,7 +99,7 @@ class ImageBackend:
             logger.error(f"Error occurred while writing to the credentials file: {e}")
 
     def _get_credentials_file(self):
-        return self.image_ / "cloud_credentials"
+        return self.image_dir / "cloud_credentials"
   
     def _create_blueprint(self):
         """
