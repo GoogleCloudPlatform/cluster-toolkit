@@ -15,7 +15,7 @@ steps:
 * Prepare the client side environment and secure sufficient IAM permissions for
   the system deployment.
 * When ready, clone this repository and run the deployment script at
-  `hpc-toolkit/community/front-end/deploy.sh` from a client machine or a Cloud
+  `hpc-toolkit/community/front-end/ofe/deploy.sh` from a client machine or a Cloud
   Shell. Follow instructions to complete the deployment. The whole process is
   automated via Terraform and should complete within 15 minutes.
 * Perform post-deployment configurations.
