@@ -13,6 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+'''
+This is a backend part needed for importing existing images into
+Frontend views will talk with functions here to perform real actions.
+'''
 
 def get_credentials(credential_info):
     '''
@@ -78,4 +82,3 @@ def verify_image(credential_info,image_name, image_family):
          if image_name == cloud_img_name and image_family == cloud_img_fam:
               found_img = True
     return found_img
-
