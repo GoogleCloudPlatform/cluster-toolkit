@@ -16,10 +16,7 @@
 package cmd
 
 import (
-	"hpc-toolkit/pkg/config"
-	"hpc-toolkit/pkg/modulewriter"
 	"hpc-toolkit/pkg/shell"
-	"path/filepath"
 
 	"github.com/spf13/cobra"
 )
@@ -43,13 +40,10 @@ var (
 func runImportCmd(cmd *cobra.Command, args []string) {
 	deplRoot, groupDir := parseExportImportArgs(args)
 	artifactsDir := getArtifactsDir(deplRoot)
+	checkErr(shell.CheckWritableDir(groupDir), nil)
 
-	checkErr(shell.CheckWritableDir(groupDir))
+	bp, ctx := artifactBlueprintOrDie(artifactsDir)
 
-	expandedBlueprintFile := filepath.Join(artifactsDir, modulewriter.ExpandedBlueprintName)
-	bp, _, err := config.NewBlueprint(expandedBlueprintFile)
-	checkErr(err)
-
-	checkErr(shell.ValidateDeploymentDirectory(bp.Groups, deplRoot))
-	checkErr(shell.ImportInputs(groupDir, artifactsDir, bp))
+	checkErr(shell.ValidateDeploymentDirectory(bp.Groups, deplRoot), ctx)
+	checkErr(shell.ImportInputs(groupDir, artifactsDir, bp), ctx)
 }

@@ -28,14 +28,13 @@ func addExpandFlags(c *cobra.Command, addOutFlag bool) *cobra.Command {
 	}
 
 	c.Flags().StringVarP(&expandFlags.deploymentFile, "deployment-file", "d", "",
-		"Toolkit Deployment File.")
-	c.Flags().MarkHidden("deployment-file")
+		"Deployment file to override blueprint variables and backend configuration")
 
 	c.Flags().StringSliceVar(&expandFlags.cliVariables, "vars", nil,
 		"Comma-separated list of name=value variables to override YAML configuration. Can be used multiple times.")
 	c.Flags().StringSliceVar(&expandFlags.cliBEConfigVars, "backend-config", nil,
 		"Comma-separated list of name=value variables to set Terraform backend configuration. Can be used multiple times.")
-	c.Flags().StringVarP(&expandFlags.validationLevel, "validation-level", "l", "WARNING",
+	c.Flags().StringVarP(&expandFlags.validationLevel, "validation-level", "l", "ERROR",
 		"Set validation level to one of (\"ERROR\", \"WARNING\", \"IGNORE\")")
 	c.Flags().StringSliceVar(&expandFlags.validatorsToSkip, "skip-validators", nil, "Validators to skip")
 	return c
@@ -66,7 +65,7 @@ var (
 )
 
 func runExpandCmd(cmd *cobra.Command, args []string) {
-	bp := expandOrDie(args[0])
-	checkErr(bp.Export(expandFlags.outputPath))
+	bp, ctx := expandOrDie(args[0])
+	checkErr(bp.Export(expandFlags.outputPath), ctx)
 	logging.Info(boldGreen("Expanded Environment Definition created successfully, saved as %s."), expandFlags.outputPath)
 }

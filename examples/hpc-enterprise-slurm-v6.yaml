@@ -1,0 +1,330 @@
+# Copyright 2024 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: hpc-enterprise-slurm-v6
+
+vars:
+  project_id:  ## Set GCP Project ID Here ##
+  deployment_name: hpc01
+  region: us-central1
+  zone: us-central1-a
+  gpu_zones: [us-central1-a, us-central1-b, us-central1-c, us-central1-f]
+  slurm_image:
+    # Visit https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#published-image-family
+    # for a list of valid family options with Slurm
+    family: slurm-gcp-6-4-hpc-rocky-linux-8
+    project: schedmd-slurm-public
+  # If image above is changed to use custom image, then setting below must be set to true
+  instance_image_custom: false
+  # When set, active compute nodes will be cleaned up on destroy.
+  # Note that setting this option requires additional dependencies to be installed locally.
+  # https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/scheduler/schedmd-slurm-gcp-v6-controller#description
+  enable_cleanup_compute: true
+
+# Recommended to use GCS backend for Terraform state
+# See https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/examples#optional-setting-up-a-remote-terraform-state
+#
+# terraform_backend_defaults:
+#  type: gcs
+#  configuration:
+#    bucket: <<BUCKET_NAME>>
+
+# Documentation for each of the modules used below can be found at
+# https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
+
+deployment_groups:
+- group: primary
+  modules:
+  # Source is an embedded module, denoted by "modules/*" without ./, ../, /
+  # as a prefix. To refer to a local or community module, prefix with ./, ../ or /
+  # Example - ./modules/network/vpc
+  - id: network
+    source: modules/network/vpc
+
+  - id: controller_sa
+    source: community/modules/project/service-account
+    settings:
+      name: controller
+      project_roles:
+      - compute.instanceAdmin.v1
+      - iam.serviceAccountUser
+      - logging.logWriter
+      - monitoring.metricWriter
+      - pubsub.admin
+      - storage.objectViewer
+
+  - id: login_sa
+    source: community/modules/project/service-account
+    settings:
+      name: login
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
+      - storage.objectViewer
+
+  - id: compute_sa
+    source: community/modules/project/service-account
+    settings:
+      name: compute
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
+      - storage.objectCreator
+
+  - id: homefs
+    source: modules/file-system/filestore
+    use: [network]
+    settings:
+      local_mount: /home
+
+  - id: projectsfs
+    source: modules/file-system/filestore
+    use: [network]
+    settings:
+      local_mount: /projects
+
+  # This file system has an associated license cost.
+  # https://console.developers.google.com/marketplace/product/ddnstorage/exascaler-cloud
+  - id: scratchfs
+    source: community/modules/file-system/DDN-EXAScaler
+    use: [network]
+    settings:
+      local_mount: /scratch
+
+  - id: n2_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network]
+    settings:
+      node_count_dynamic_max: 4
+      machine_type: n2-standard-2
+      instance_image: $(vars.slurm_image)
+      enable_placement: false  # the default is: true
+      service_account:
+        email: $(compute_sa.service_account_email)
+        scopes:
+        - https://www.googleapis.com/auth/cloud-platform
+
+  - id: n2_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use: [n2_nodeset]
+    settings:
+      partition_name: n2
+      exclusive: false  # allows nodes to stay up after jobs are done
+      is_default: true
+      partition_conf:
+        SuspendTime: 300 # time (in secs) the nodes in this partition stay active after their tasks have completed
+
+  - id: c2_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network]
+    settings:
+      node_count_dynamic_max: 20
+      machine_type: c2-standard-60  # this is the default
+      instance_image: $(vars.slurm_image)
+      enable_placement: true
+      bandwidth_tier: tier_1_enabled
+      disk_type: pd-ssd
+      disk_size_gb: 100
+      service_account:
+        email: $(compute_sa.service_account_email)
+        scopes:
+        - https://www.googleapis.com/auth/cloud-platform
+
+  # use `-p c2` to submit jobs to this partition:
+  # ex: `srun -p c2 -N 1 hostname`
+  - id: c2_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use: [c2_nodeset]
+    settings:
+      partition_name: c2
+      # the following two are true by default
+      exclusive: true  # this must be true if nodeset.enable_placement is true
+
+  - id: c2d_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network]
+    settings:
+      node_count_dynamic_max: 20
+      machine_type: c2d-standard-112
+      instance_image: $(vars.slurm_image)
+      bandwidth_tier: tier_1_enabled
+      disk_type: pd-ssd
+      disk_size_gb: 100
+      service_account:
+        email: $(compute_sa.service_account_email)
+        scopes:
+        - https://www.googleapis.com/auth/cloud-platform
+
+  - id: c2d_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use: [c2d_nodeset]
+    settings:
+      partition_name: c2d
+
+  - id: c3_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network]
+    settings:
+      node_count_dynamic_max: 20
+      machine_type: c3-highcpu-176
+      instance_image: $(vars.slurm_image)
+      bandwidth_tier: tier_1_enabled
+      disk_type: pd-ssd
+      disk_size_gb: 100
+      service_account:
+        email: $(compute_sa.service_account_email)
+        scopes:
+        - https://www.googleapis.com/auth/cloud-platform
+
+  - id: c3_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use: [c3_nodeset]
+    settings:
+      partition_name: c3
+
+  - id: a2_8_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network]
+    settings:
+      node_count_dynamic_max: 16
+      machine_type: a2-ultragpu-8g
+      # This makes this nodeset look for machines in any of the following zones
+      # https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/develop/community/modules/compute/schedmd-slurm-gcp-v6-nodeset#compute-vm-zone-policies
+      zones: $(vars.gpu_zones)
+      bandwidth_tier: gvnic_enabled
+      instance_image: $(vars.slurm_image)
+      disk_type: pd-ssd
+      disk_size_gb: 100
+      node_conf:
+        Sockets: 2
+        CoresPerSocket: 24
+      service_account:
+        email: $(compute_sa.service_account_email)
+        scopes:
+        - https://www.googleapis.com/auth/cloud-platform
+
+  # use `-p a208` to submit jobs to this partition:
+  # ex: `srun -p a208 --gpus-per-node=8 -N 1 nvidia-smi`
+  - id: a2_8_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use: [a2_8_nodeset]
+    settings:
+      partition_name: a208
+      # The following allows users to use more host memory without specifying cpus on a job
+      partition_conf:
+        DefMemPerGPU: 160000
+        DefMemPerCPU: null
+
+  - id: a2_16_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network]
+    settings:
+      node_count_dynamic_max: 16
+      machine_type: a2-megagpu-16g
+      # This makes this nodeset look for machines in any of the following zones
+      # https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/develop/community/modules/compute/schedmd-slurm-gcp-v5-partition#compute-vm-zone-policies // !!!
+      zones: $(vars.gpu_zones)
+      bandwidth_tier: gvnic_enabled
+      instance_image: $(vars.slurm_image)
+      disk_type: pd-ssd
+      disk_size_gb: 100
+      node_conf:
+        Sockets: 2
+        CoresPerSocket: 24
+      service_account:
+        email: $(compute_sa.service_account_email)
+        scopes:
+        - https://www.googleapis.com/auth/cloud-platform
+
+  # use `-p a216` to submit jobs to this partition:
+  # ex: `srun -p a216 --gpus-per-node=16 -N 1 nvidia-smi`
+  - id: a2_16_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use: [a2_16_nodeset]
+    settings:
+      partition_name: a216
+      # The following allows users to use more host memory without specifying cpus on a job
+      partition_conf:
+        DefMemPerGPU: 160000
+        DefMemPerCPU: null
+
+  - id: h3_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network]
+    settings:
+      node_count_dynamic_max: 16
+      machine_type: h3-standard-88
+      bandwidth_tier: gvnic_enabled  # https://cloud.google.com/compute/docs/compute-optimized-machines#h3_network
+      instance_image: $(vars.slurm_image)
+      service_account:
+        email: $(compute_sa.service_account_email)
+        scopes:
+        - https://www.googleapis.com/auth/cloud-platform
+      # H3 does not support pd-ssd and pd-standard
+      # https://cloud.google.com/compute/docs/compute-optimized-machines#h3_disks
+      disk_type: pd-balanced
+      disk_size_gb: 100
+
+  # use `-p h3` to submit jobs to this partition:
+  # ex: `srun -p h3  -N 1 hostname`
+  - id: h3_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use: [h3_nodeset]
+    settings:
+      partition_name: h3
+
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    use: [network]
+    settings:
+      name_prefix: login
+      instance_image: $(vars.slurm_image)
+      machine_type: n2-standard-4
+      # we recommend disabling public IPs if possible
+      # but that requires your network to have a NAT or
+      # private access configured
+      disable_login_public_ips: false
+      service_account:
+        email: $(login_sa.service_account_email)
+        scopes:
+        - https://www.googleapis.com/auth/cloud-platform
+
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    use: [network, homefs, projectsfs, scratchfs, slurm_login,
+          n2_partition, c2_partition, c2d_partition, c3_partition, a2_8_partition, a2_16_partition, h3_partition]
+    settings:
+      instance_image: $(vars.slurm_image)
+      # the following allow for longer boot time
+      # which is useful for large GPU nodes
+      cloud_parameters:
+        no_comma_params: false
+        resume_rate: 0
+        resume_timeout: 600
+        suspend_rate: 0
+        suspend_timeout: 600
+      # we recommend disabling public IPs if possible
+      # but that requires your network to have a NAT or
+      # private access configured
+      disable_controller_public_ips: false
+      service_account:
+        email: $(controller_sa.service_account_email)
+        scopes:
+        - https://www.googleapis.com/auth/cloud-platform
+
+  - id: hpc_dashboard
+    source: modules/monitoring/dashboard
+    outputs: [instructions]

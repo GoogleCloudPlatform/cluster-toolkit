@@ -32,5 +32,5 @@
 - name: Print Cloud Logging command
   when: instances is defined and instances.stdout | list
   ansible.builtin.debug:
-    msg: gcloud logging --project {{ project }} read 'logName="projects/{{ project }}/logs/GCEMetadataScripts" AND resource.labels.instance_id="{{ item.id }}"' --format="table(timestamp, jsonPayload.message)" --freshness 24h | tac
+    msg: gcloud logging --project {{ project }} read 'logName="projects/{{ project }}/logs/google_metadata_script_runner" AND resource.labels.instance_id="{{ item.id }}"' --format="table(timestamp, jsonPayload.message)" --freshness 24h | tac
   loop: "{{ instances.stdout }}"

@@ -58,31 +58,29 @@ func (w PackerWriter) writeGroup(
 	groupPath string,
 	instructionsFile io.Writer,
 ) error {
-	g := bp.Groups[grpIdx]
+	mod := bp.Groups[grpIdx].Modules[0] // packer groups only have one module
 
-	for _, mod := range g.Modules {
-		pure := map[string]cty.Value{}
-		for setting, v := range mod.Settings.Items() {
-			if len(config.FindIntergroupReferences(v, mod, bp)) == 0 {
-				pure[setting] = v
-			}
+	pure := map[string]cty.Value{}
+	for setting, v := range mod.Settings.Items() {
+		if len(config.FindIntergroupReferences(v, mod, bp)) == 0 {
+			pure[setting] = v
 		}
-		av, err := config.NewDict(pure).Eval(bp)
-		if err != nil {
-			return err
-		}
-
-		ds, err := DeploymentSource(mod)
-		if err != nil {
-			return err
-		}
-		modPath := filepath.Join(groupPath, ds)
-		if err = writePackerAutovars(av.Items(), modPath); err != nil {
-			return err
-		}
-		hasIgc := len(pure) < len(mod.Settings.Items())
-		printPackerInstructions(instructionsFile, groupPath, ds, hasIgc)
 	}
+	av, err := bp.EvalDict(config.NewDict(pure))
+	if err != nil {
+		return err
+	}
+
+	ds, err := DeploymentSource(mod)
+	if err != nil {
+		return err
+	}
+	modPath := filepath.Join(groupPath, ds)
+	if err = writePackerAutovars(av.Items(), modPath); err != nil {
+		return err
+	}
+	hasIgc := len(pure) < len(mod.Settings.Items())
+	printPackerInstructions(instructionsFile, groupPath, ds, hasIgc)
 
 	return nil
 }

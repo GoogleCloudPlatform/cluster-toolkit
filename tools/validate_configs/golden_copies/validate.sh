@@ -75,8 +75,8 @@ run_test() {
 	sed -i -E 's/(ghpc_version: )(.*)/\1golden/' .ghpc/artifacts/expanded_blueprint.yaml
 
 	# Compare the deployment folder with the golden copy
-	diff --recursive --exclude="previous_deployment_groups" \
-		"$(pwd)" "${cwd}/${gc}" || {
+	diff --recursive --color='auto' --exclude="previous_deployment_groups" \
+		"${cwd}/${gc}" "$(pwd)" || {
 		echo "*** ERROR: ${tmpdir}/${DEPLOYMENT} does not match ${gc}"
 		echo "$debugInfo"
 		exit 1

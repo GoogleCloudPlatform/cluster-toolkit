@@ -74,6 +74,9 @@ Once this is complete, the cloud console can be used to start and launch the wor
 
 ## Using the Cloud Workstation
 
+> [!IMPORTANT]
+> When the workstation is launched for the first time, the system will clone hpc-toolkit and install a number of useful code-oss extensions for working with the toolkit.  This will be done in the background.  Please allow 4-5 min for installation.
+
 Once built and upon initial launch (assuming no changes were made to the files used to build the workstation image), the workstation should have a clean version of the main branch HPC Toolkit in the user's home directory, as well as all of the prerequisites required to build and run pre-commit (see [Development](../../README.md#development)).
 
 The final setup steps are:

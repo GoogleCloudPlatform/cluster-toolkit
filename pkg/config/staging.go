@@ -19,7 +19,9 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
+	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/pkg/errors"
 	"github.com/zclconf/go-cty/cty"
 	"github.com/zclconf/go-cty/cty/function"
@@ -88,38 +90,106 @@ func (bp *Blueprint) makeGhpcStageFunc() function.Function {
 	})
 }
 
-// Validate that the `ghpc_stage` is only used in `vars` declarations
-func (bp Blueprint) validateNoGhpcStageFuncs() error {
+// Update module settings in place, evaluating `ghpc_stage` expressions
+func (bp *Blueprint) evalGhpcStageInModuleSettings() error {
 	errs := Errors{}
-	// check modules
-	bp.WalkModules(func(mp ModulePath, m *Module) error {
+	ctx, err := bp.evalCtx()
+	if err != nil {
+		return err
+	}
+	bp.WalkModulesSafe(func(mp ModulePath, m *Module) {
+		us := map[string]cty.Value{}
 		for k, v := range m.Settings.Items() {
-			errs.Add(validateNoGhpcStageFuncsInValue(mp.Settings.Dot(k), v))
+			uv, err := evalGhpcStageInValue(mp.Settings.Dot(k), v, ctx)
+			if err != nil {
+				errs.Add(err)
+				break
+			}
+			us[k] = uv
 		}
-		return nil
+		m.Settings = NewDict(us)
 	})
-	// TODO: check terraform backends and validators inputs
+
 	return errs.OrNil()
 }
 
-func validateNoGhpcStageFuncsInValue(vp ctyPath, val cty.Value) error {
-	err := HintError{
-		Err:  errors.New("ghpc_stage function can only be used in deployment Vars declarations"),
-		Hint: "declare dedicated deployment variable and reference it here"}
-
-	errs := Errors{}
-	cty.Walk(val, func(p cty.Path, v cty.Value) (bool, error) {
-		exp, is := IsExpressionValue(v)
-		if !is { // not an expression
-			return true, nil
+func evalGhpcStageInValue(pPref ctyPath, v cty.Value, ctx *hcl.EvalContext) (cty.Value, error) {
+	return cty.Transform(v, func(pSuf cty.Path, v cty.Value) (cty.Value, error) {
+		if e, is := IsExpressionValue(v); is {
+			pe, err := partialEval(e, "ghpc_stage", ctx)
+			if err != nil {
+				return cty.NilVal, BpError{pPref.Cty(pSuf), err}
+			}
+			return pe.AsValue(), nil
 		}
-		// naive check for `ghpc_stage` identity tokens
-		for _, tok := range exp.Tokenize() {
-			if tok.Type == hclsyntax.TokenIdent && string(tok.Bytes) == "ghpc_stage" {
-				errs.At(vp.Cty(p), err)
+		return v, nil
+	})
+}
+
+func partialEval(exp Expression, fn string, ctx *hcl.EvalContext) (Expression, error) {
+	tail := exp.Tokenize()
+	line := string(tail.Bytes())
+	mutated := false
+	acc := hclwrite.Tokens{}
+
+	for len(tail) > 0 {
+		tok := tail[0]
+		if tok.Type != hclsyntax.TokenIdent || string(tok.Bytes) != fn {
+			acc = append(acc, tok)
+			tail = tail[1:]
+			continue
+		}
+
+		var sub Expression
+		var err error
+		offset := len(line) - len(string(tail.Bytes()))
+		sub, tail, err = trimFunctionCall(tail)
+		if err != nil {
+			return nil, prepareParseHclErr(err, line, offset)
+		}
+
+		for _, ref := range sub.References() {
+			if !ref.GlobalVar {
+				err = fmt.Errorf("function %q can only reference deployment variables, got %q", fn, ref)
+				return nil, prepareParseHclErr(err, line, offset)
 			}
 		}
-		return true, nil
-	})
-	return errs.OrNil()
+
+		v, err := sub.Eval(ctx)
+		if err != nil {
+			return nil, prepareParseHclErr(err, line, offset)
+		}
+
+		acc = append(acc, TokensForValue(v)...)
+		mutated = true
+	}
+
+	if !mutated { // Not strictly necessary, but to avoid risky transformations, check if expression doesn't contain `ghpc_stage`, return as is
+		return exp, nil
+	}
+
+	return ParseExpression(string(acc.Bytes()))
+}
+
+// Takes toks in form `fn(...)<TAIL>` and returns `fn(...)` and `<TAIL>`
+func trimFunctionCall(toks hclwrite.Tokens) (Expression, hclwrite.Tokens, error) {
+	if len(toks) < 3 {
+		return nil, nil, errors.New("expected 'function_name(...)...'")
+	}
+	if toks[0].Type != hclsyntax.TokenIdent || toks[1].Type != hclsyntax.TokenOParen {
+		return nil, nil, errors.New("expected 'function_name('")
+	}
+
+	// skip function name and opening parenthesis
+	found, tail, err := greedyParseHcl(string(toks[2:].Bytes()))
+	if err != nil {
+		return nil, nil, err
+	}
+
+	exp, err := ParseExpression(fmt.Sprintf("%s(%s)", toks[0].Bytes, found))
+	if err != nil {
+		return nil, nil, err
+	}
+	tailToks, err := parseHcl(tail)
+	return exp, tailToks, err
 }

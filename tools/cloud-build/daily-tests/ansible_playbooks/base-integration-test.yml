@@ -137,9 +137,10 @@
 
     ## Cleanup and fail gracefully
     rescue:
-    - name: Capture terraform stderr
+    - name: Capture ghpc stderr
+      failed_when: false
       ansible.builtin.set_fact:
-        terraform_apply_stderr_one_line: "{{ terraform_output.results.1.stderr | replace('\n',' ') }}"
+        ghpc_stderr: "{{ deployment.stderr | replace('\n',' ') }}"
 
     - name: Gather logs
       ansible.builtin.include_tasks:
@@ -147,7 +148,7 @@
         apply:
           delegate_to: localhost
 
-    - name: Cleanup firewall and infrastructure
+    - name: Include rescue from ghpc failure
       ansible.builtin.include_tasks:
         file: tasks/rescue_ghpc_failure.yml
         apply:
@@ -159,10 +160,11 @@
     - name: Trigger failure (rescue blocks otherwise revert failures)
       ansible.builtin.fail:
         msg: "Failed while setting up test infrastructure"
-      when: true
 
 - name: Run Integration Tests
   hosts: remote_host
+  vars:
+    startup_timeout_seconds: 600  # 10 minutes
   gather_facts: false
   tasks:
   - name: Remote Test Block
@@ -170,9 +172,10 @@
       ansible_ssh_private_key_file: "/builder/home/.ssh/id_rsa"
 
     block:
-    - name: Pause for 2 minutes to allow cluster setup
-      ansible.builtin.pause:
-        minutes: 2
+    - name: Include wait for startup script
+      ansible.builtin.include_tasks: "tasks/wait-for-startup-script.yml"
+      vars:
+        timeout_seconds: "{{ startup_timeout_seconds }}"
 
     - name: Run Integration tests for HPC toolkit
       ansible.builtin.include_tasks: "{{ test }}"

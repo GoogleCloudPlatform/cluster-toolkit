@@ -185,7 +185,7 @@ limitations under the License.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_netstorage_startup_script"></a> [netstorage\_startup\_script](#module\_netstorage\_startup\_script) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | v1.30.0&depth=1 |
+| <a name="module_netstorage_startup_script"></a> [netstorage\_startup\_script](#module\_netstorage\_startup\_script) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | v1.31.1&depth=1 |
 
 ## Resources
 
@@ -246,5 +246,6 @@ limitations under the License.
 | <a name="output_external_ip"></a> [external\_ip](#output\_external\_ip) | External IP of the instances (if enabled) |
 | <a name="output_instructions"></a> [instructions](#output\_instructions) | Instructions on how to SSH into the created VM. Commands may fail depending on VM configuration and IAM permissions. |
 | <a name="output_internal_ip"></a> [internal\_ip](#output\_internal\_ip) | Internal IP of the instances |
-| <a name="output_name"></a> [name](#output\_name) | Name of any instance created |
+| <a name="output_name"></a> [name](#output\_name) | Names of instances created |
+| <a name="output_self_link"></a> [self\_link](#output\_self\_link) | The tuple URIs of the created instances |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

@@ -43,7 +43,7 @@ var (
 		Short:             "deploy all resources in a Toolkit deployment directory.",
 		Long:              "deploy all resources in a Toolkit deployment directory.",
 		Args:              cobra.MatchAll(cobra.ExactArgs(1), checkExists),
-		ValidArgsFunction: matchDirs,
+		ValidArgsFunction: filterYaml,
 		Run:               runDeployCmd,
 		SilenceUsage:      true,
 	})
@@ -59,7 +59,7 @@ func runDeployCmd(cmd *cobra.Command, args []string) {
 		// check that no "create" flags were specified
 		cmd.Flags().VisitAll(func(f *pflag.Flag) {
 			if f.Changed && createCmd.Flag(f.Name) != nil {
-				checkErr(fmt.Errorf("cannot specify flag %q with DEPLOYMENT_DIRECTORY provided", f.Name))
+				checkErr(fmt.Errorf("cannot specify flag %q with DEPLOYMENT_DIRECTORY provided", f.Name), nil)
 			}
 		})
 	}
@@ -68,30 +68,30 @@ func runDeployCmd(cmd *cobra.Command, args []string) {
 
 func doDeploy(deplRoot string) {
 	artDir := getArtifactsDir(deplRoot)
-	checkErr(shell.CheckWritableDir(artDir))
-
-	expandedBlueprintFile := filepath.Join(artDir, modulewriter.ExpandedBlueprintName)
-	bp, _, err := config.NewBlueprint(expandedBlueprintFile)
-	checkErr(err)
+	checkErr(shell.CheckWritableDir(artDir), nil)
+	bp, ctx := artifactBlueprintOrDie(artDir)
 	groups := bp.Groups
-	checkErr(validateRuntimeDependencies(deplRoot, groups))
-	checkErr(shell.ValidateDeploymentDirectory(groups, deplRoot))
+	checkErr(validateRuntimeDependencies(deplRoot, groups), ctx)
+	checkErr(shell.ValidateDeploymentDirectory(groups, deplRoot), ctx)
 
-	for _, group := range groups {
+	for ig, group := range groups {
 		groupDir := filepath.Join(deplRoot, string(group.Name))
-		checkErr(shell.ImportInputs(groupDir, artDir, bp))
+		checkErr(shell.ImportInputs(groupDir, artDir, bp), ctx)
 
 		switch group.Kind() {
 		case config.PackerKind:
 			// Packer groups are enforced to have length 1
 			subPath, e := modulewriter.DeploymentSource(group.Modules[0])
-			checkErr(e)
+			checkErr(e, ctx)
 			moduleDir := filepath.Join(groupDir, subPath)
-			checkErr(deployPackerGroup(moduleDir, getApplyBehavior()))
+			checkErr(deployPackerGroup(moduleDir, getApplyBehavior()), ctx)
 		case config.TerraformKind:
-			checkErr(deployTerraformGroup(groupDir, artDir, getApplyBehavior()))
+			checkErr(deployTerraformGroup(groupDir, artDir, getApplyBehavior()), ctx)
 		default:
-			checkErr(fmt.Errorf("group %s is an unsupported kind %s", groupDir, group.Kind().String()))
+			checkErr(
+				config.BpError{
+					Err:  fmt.Errorf("group %q is an unsupported kind %q", groupDir, group.Kind()),
+					Path: config.Root.Groups.At(ig).Name}, ctx)
 		}
 	}
 	logging.Info("\n###############################")
@@ -99,7 +99,7 @@ func doDeploy(deplRoot string) {
 }
 
 func validateRuntimeDependencies(deplDir string, groups []config.Group) error {
-	for _, group := range groups {
+	for ig, group := range groups {
 		var err error
 		switch group.Kind() {
 		case config.PackerKind:
@@ -108,7 +108,9 @@ func validateRuntimeDependencies(deplDir string, groups []config.Group) error {
 			groupDir := filepath.Join(deplDir, string(group.Name))
 			_, err = shell.ConfigureTerraform(groupDir)
 		default:
-			err = fmt.Errorf("group %s is an unsupported kind %q", group.Name, group.Kind().String())
+			err = config.BpError{
+				Path: config.Root.Groups.At(ig).Name,
+				Err:  fmt.Errorf("group %s is an unsupported kind %q", group.Name, group.Kind().String())}
 		}
 		if err != nil {
 			return err

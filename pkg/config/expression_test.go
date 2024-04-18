@@ -270,3 +270,28 @@ func TestReplaceTokens(t *testing.T) {
 		})
 	}
 }
+
+func TestEvalDict(t *testing.T) {
+	bp := Blueprint{
+		Vars: NewDict(map[string]cty.Value{
+			"zebra": cty.StringVal("stripes"),
+		}),
+	}
+	d := NewDict(map[string]cty.Value{
+		"abyss": cty.ObjectVal(map[string]cty.Value{
+			"white": GlobalRef("zebra").AsValue(),
+			"green": cty.StringVal("grass"),
+		})})
+	want := NewDict(map[string]cty.Value{
+		"abyss": cty.ObjectVal(map[string]cty.Value{
+			"white": cty.StringVal("stripes"),
+			"green": cty.StringVal("grass"),
+		})})
+	got, err := bp.EvalDict(d)
+	if err != nil {
+		t.Fatalf("failed to eval: %v", err)
+	}
+	if diff := cmp.Diff(want.Items(), got.Items(), ctydebug.CmpOptions); diff != "" {
+		t.Errorf("diff (-want +got):\n%s", diff)
+	}
+}

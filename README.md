@@ -169,6 +169,10 @@ In the right side, expand the Filters view and then filter by label, specifying 
 
 ## Troubleshooting
 
+### Authentication
+
+Confirm that you have [properly setup Google Cloud credentials](#gcp-credentials)
+
 ### Slurm Clusters
 
 Please see the dedicated [troubleshooting guide for Slurm](docs/slurm-troubleshooting.md).

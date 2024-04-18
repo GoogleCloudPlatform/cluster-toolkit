@@ -49,14 +49,12 @@ func runDestroyCmd(cmd *cobra.Command, args []string) {
 	artifactsDir := getArtifactsDir(deplRoot)
 
 	if isDir, _ := shell.DirInfo(artifactsDir); !isDir {
-		checkErr(fmt.Errorf("artifacts path %s is not a directory", artifactsDir))
+		checkErr(fmt.Errorf("artifacts path %s is not a directory", artifactsDir), nil)
 	}
 
-	expandedBlueprintFile := filepath.Join(artifactsDir, modulewriter.ExpandedBlueprintName)
-	bp, _, err := config.NewBlueprint(expandedBlueprintFile)
-	checkErr(err)
+	bp, ctx := artifactBlueprintOrDie(artifactsDir)
 
-	checkErr(shell.ValidateDeploymentDirectory(bp.Groups, deplRoot))
+	checkErr(shell.ValidateDeploymentDirectory(bp.Groups, deplRoot), ctx)
 
 	// destroy in reverse order of creation!
 	packerManifests := []string{}
@@ -76,7 +74,7 @@ func runDestroyCmd(cmd *cobra.Command, args []string) {
 		default:
 			err = fmt.Errorf("group %s is an unsupported kind %s", groupDir, group.Kind().String())
 		}
-		checkErr(err)
+		checkErr(err, ctx)
 	}
 
 	modulewriter.WritePackerDestroyInstructions(os.Stdout, packerManifests)

@@ -79,11 +79,11 @@ func runCreateCmd(cmd *cobra.Command, args []string) {
 }
 
 func doCreate(path string) string {
-	bp := expandOrDie(path)
+	bp, ctx := expandOrDie(path)
 	deplDir := filepath.Join(createFlags.outputDir, bp.DeploymentName())
 	logging.Info("Creating deployment folder %q ...", deplDir)
-	checkErr(checkOverwriteAllowed(deplDir, bp, createFlags.overwriteDeployment, createFlags.forceOverwrite))
-	checkErr(modulewriter.WriteDeployment(bp, deplDir))
+	checkErr(checkOverwriteAllowed(deplDir, bp, createFlags.overwriteDeployment, createFlags.forceOverwrite), ctx)
+	checkErr(modulewriter.WriteDeployment(bp, deplDir), ctx)
 	return deplDir
 }
 
@@ -95,19 +95,15 @@ func printAdvancedInstructionsMessage(deplDir string) {
 }
 
 // TODO: move to expand.go
-func expandOrDie(path string) config.Blueprint {
+func expandOrDie(path string) (config.Blueprint, *config.YamlCtx) {
 	bp, ctx, err := config.NewBlueprint(path)
-	if err != nil {
-		logging.Fatal(renderError(err, ctx))
-	}
+	checkErr(err, ctx)
 
 	var ds config.DeploymentSettings
 	var dCtx config.YamlCtx
 	if expandFlags.deploymentFile != "" {
 		ds, dCtx, err = config.NewDeploymentSettings(expandFlags.deploymentFile)
-		if err != nil {
-			logging.Fatal(renderError(err, dCtx))
-		}
+		checkErr(err, &dCtx)
 	}
 	if err := setCLIVariables(&ds, expandFlags.cliVariables); err != nil {
 		logging.Fatal("Failed to set the variables at CLI: %v", err)
@@ -118,7 +114,7 @@ func expandOrDie(path string) config.Blueprint {
 
 	mergeDeploymentSettings(&bp, ds)
 
-	checkErr(setValidationLevel(&bp, expandFlags.validationLevel))
+	checkErr(setValidationLevel(&bp, expandFlags.validationLevel), ctx)
 	skipValidators(&bp)
 
 	if bp.GhpcVersion != "" {
@@ -127,12 +123,9 @@ func expandOrDie(path string) config.Blueprint {
 	bp.GhpcVersion = GitCommitInfo
 
 	// Expand the blueprint
-	if err := bp.Expand(); err != nil {
-		logging.Fatal(renderError(err, ctx))
-	}
-
-	validateMaybeDie(bp, ctx)
-	return bp
+	checkErr(bp.Expand(), ctx)
+	validateMaybeDie(bp, *ctx)
+	return bp, ctx
 }
 
 // TODO: move to expand.go
@@ -295,4 +288,14 @@ func checkOverwriteAllowed(depDir string, bp config.Blueprint, overwriteFlag boo
 	}
 
 	return nil
+}
+
+// Reads an expanded blueprint from the artifacts directory
+// IMPORTANT: returned blueprint is "materialized", see config.Blueprint.Materialize
+func artifactBlueprintOrDie(artDir string) (config.Blueprint, *config.YamlCtx) {
+	path := filepath.Join(artDir, modulewriter.ExpandedBlueprintName)
+	bp, ctx, err := config.NewBlueprint(path)
+	checkErr(err, ctx)
+	checkErr(bp.Materialize(), ctx)
+	return bp, ctx
 }

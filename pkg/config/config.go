@@ -21,6 +21,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -28,6 +29,7 @@ import (
 	"github.com/hashicorp/hcl/v2"
 	"github.com/pkg/errors"
 	"github.com/zclconf/go-cty/cty"
+	"golang.org/x/exp/maps"
 	"gopkg.in/yaml.v3"
 
 	"hpc-toolkit/pkg/modulereader"
@@ -71,6 +73,16 @@ type Group struct {
 	Modules          []Module         `yaml:"modules"`
 	// DEPRECATED fields
 	deprecatedKind interface{} `yaml:"kind,omitempty"` //lint:ignore U1000 keep in the struct for backwards compatibility
+}
+
+func (g *Group) Clone() Group {
+	c := *g // copy immutable fields
+	// modules require deep copy
+	c.Modules = make([]Module, len(g.Modules))
+	for i, m := range g.Modules {
+		c.Modules[i] = m.Clone()
+	}
+	return c
 }
 
 // Kind returns the kind of all the modules in the group.
@@ -222,6 +234,14 @@ type Module struct {
 	WrapSettingsWith interface{} `yaml:"wrapsettingswith,omitempty"`
 }
 
+func (m *Module) Clone() Module {
+	c := *m // copy immutable fields
+	// copy slices
+	c.Use = slices.Clone(m.Use)
+	c.Outputs = slices.Clone(m.Outputs)
+	return c
+}
+
 // InfoOrDie returns the ModuleInfo for the module or panics
 func (m Module) InfoOrDie() modulereader.ModuleInfo {
 	mi, err := modulereader.GetModuleInfo(m.Source, m.Kind.String())
@@ -252,6 +272,19 @@ type Blueprint struct {
 	stagedFiles map[string]string
 }
 
+func (bp *Blueprint) Clone() Blueprint {
+	c := *bp // copy immutable fields
+	// copy slices & maps of immutable types
+	c.Validators = slices.Clone(bp.Validators)
+	c.stagedFiles = maps.Clone(bp.stagedFiles)
+	// groups require deep copy
+	c.Groups = make([]Group, len(bp.Groups))
+	for i, g := range bp.Groups {
+		c.Groups[i] = g.Clone()
+	}
+	return c
+}
+
 // DeploymentSettings are deployment-specific override settings
 type DeploymentSettings struct {
 	TerraformBackendDefaults TerraformBackend `yaml:"terraform_backend_defaults,omitempty"`
@@ -269,9 +302,6 @@ func (bp *Blueprint) Expand() error {
 		return err
 	}
 	if err := bp.expandVars(); err != nil {
-		return err
-	}
-	if err := bp.validateNoGhpcStageFuncs(); err != nil {
 		return err
 	}
 	return bp.expandGroups()
@@ -352,17 +382,17 @@ func checkMovedModule(source string) error {
 }
 
 // NewBlueprint is a constructor for Blueprint
-func NewBlueprint(path string) (Blueprint, YamlCtx, error) {
+func NewBlueprint(path string) (Blueprint, *YamlCtx, error) {
 	absPath, err := filepath.Abs(path)
 	if err != nil {
-		return Blueprint{}, YamlCtx{}, err
+		return Blueprint{}, &YamlCtx{}, err
 	}
 	bp, ctx, err := parseYamlFile[Blueprint](absPath)
 	if err != nil {
-		return Blueprint{}, ctx, err
+		return Blueprint{}, &ctx, err
 	}
 	bp.path = absPath
-	return bp, ctx, nil
+	return bp, &ctx, nil
 }
 
 func NewDeploymentSettings(deploymentFilename string) (DeploymentSettings, YamlCtx, error) {
@@ -645,11 +675,11 @@ func varsTopologicalOrder(vars Dict) ([]string, error) {
 			p := Root.Vars.Dot(n).Cty(rp)
 
 			if !ref.GlobalVar {
-				return BpError{p, fmt.Errorf("non-global variable %q referenced in expression", ref.Name)}
+				return BpError{p, fmt.Errorf("non-global variable %q referenced in expression", ref)}
 			}
 
 			if used[ref.Name] == 1 {
-				return BpError{p, fmt.Errorf("cyclic dependency detected: %q -> %q", n, ref.Name)}
+				return BpError{p, fmt.Errorf("cyclic dependency detected: %q -> %q", v, ref)}
 			}
 
 			if used[ref.Name] == 0 {

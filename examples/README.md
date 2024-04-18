@@ -20,15 +20,19 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [hpc-slurm.yaml](#hpc-slurmyaml-) ![core-badge]
   * [hpc-slurm-v6.yaml](#hpc-slurm-v6yaml--) ![core-badge] ![experimental-badge]
   * [hpc-enterprise-slurm.yaml](#hpc-enterprise-slurmyaml-) ![core-badge]
+  * [hpc-enterprise-slurm-v6.yaml](#hpc-enterprise-slurm-v6yaml--) ![core-badge] ![experimental-badge]
+  * [hpc-slurm-static-v6.yaml](#hpc-slurm-static-v6yaml--) ![core-badge] ![experimental-badge]
   * [hpc-slurm6-tpu.yaml](#hpc-slurm6-tpuyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm6-tpu-maxtext.yaml](#hpc-slurm6-tpu-maxtextyaml--) ![community-badge] ![experimental-badge]
   * [ml-slurm.yaml](#ml-slurmyaml-) ![core-badge]
+  * [ml-slurm-v6.yaml](#ml-slurm-v6yaml--) ![core-badge] ![experimental-badge]
   * [image-builder.yaml](#image-builderyaml-) ![core-badge]
   * [image-builder-v6.yaml](#image-builderyaml--) ![core-badge] ![experimental-badge]
   * [serverless-batch.yaml](#serverless-batchyaml-) ![core-badge]
   * [serverless-batch-mpi.yaml](#serverless-batch-mpiyaml-) ![core-badge]
   * [pfs-lustre.yaml](#pfs-lustreyaml-) ![core-badge]
   * [cae-slurm.yaml](#cae-slurmyaml-) ![core-badge]
+  * [cae-slurm-v6.yaml](#cae-slurm-v6yaml--) ![core-badge] ![experimental-badge]
   * [hpc-build-slurm-image.yaml](#hpc-build-slurm-imageyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-ubuntu2004.yaml](#hpc-slurm-ubuntu2004yaml-) ![community-badge]
   * [hpc-slurm-ubuntu2004-v6.yaml](#hpc-slurm-ubuntu2004-v6yaml-) ![community-badge] ![experimental-badge]
@@ -39,6 +43,8 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [client-google-cloud-storage.yaml](#client-google-cloud-storageyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-gromacs.yaml](#hpc-slurm-gromacsyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-local-ssd.yaml](#hpc-slurm-local-ssdyaml--) ![community-badge] ![experimental-badge]
+  * [hpc-slurm-local-ssd-v6.yaml](#hpc-slurm-local-ssd-v6yaml--) ![community-badge] ![experimental-badge]
+  * [hcls-blueprint-v6.yaml](#hcls-blueprint-v6yaml--) ![core-badge] ![experimental-badge]
   * [hpc-gke.yaml](#hpc-gkeyaml--) ![community-badge] ![experimental-badge]
   * [ml-gke](#ml-gkeyaml--) ![community-badge] ![experimental-badge]
   * [storage-gke](#storage-gkeyaml--) ![community-badge] ![experimental-badge]
@@ -395,6 +401,132 @@ to 256
 
 [hpc-enterprise-slurm.yaml]: ./hpc-enterprise-slurm.yaml
 
+### [hpc-enterprise-slurm-v6.yaml] ![core-badge] ![experimental-badge]
+
+This advanced blueprint creates a cluster with Slurm with several performance
+tunings enabled, along with tiered file systems for higher performance. Some of
+these features come with additional cost and required additional quotas.
+
+The Slurm system deployed here connects to the default VPC of the project and
+creates a  login node and the following seven partitions:
+
+* `n2` with general-purpose [`n2-stardard-2` nodes][n2]. Placement policies and
+exclusive usage are disabled, which means the nodes can be used for multiple jobs.
+Nodes will remain idle for 5 minutes before Slurm deletes them. This partition can
+be used for debugging and workloads that do not require high performance.
+* `c2` with compute-optimized [`c2-standard-60` nodes][c2] based on Intel 3.9 GHz
+Cascade Lake processors.
+* `c2d` with compute optimized [`c2d-standard-112` nodes][c2d] base on the third
+generation AMD EPYC Milan.
+* `c3` with compute-optimized [`c3-highcpu-176` nodes][c3] based on Intel Sapphire
+Rapids processors. When configured with Tier_1 networking, C3 nodes feature 200 Gbps
+low-latency networking.
+* `h3` with compute-optimized [`h3-standard-88` nodes][h3]  based on Intel Sapphire
+Rapids processors. H3 VMs can use the entire host network bandwidth and come with a default network bandwidth rate of up to 200 Gbps.
+* `a208` with [`a2-ultragpu-8g` nodes][a2] with 8 of the NVIDIA A100 GPU accelerators
+with 80GB of GPU memory each.
+* `a216` with [`a2-megagpu-16g` nodes][a2] with 16 of the NVIDIA A100 GPU accelerators
+with 40GB of GPU memory each.
+
+For all partitions other than `n2`, [compact placement] policies are enabled by default
+and nodes are created and destroyed on a per-job basis. Furthermore, these partitions
+are configured with:
+
+* Faster networking: Google Virtual NIC ([GVNIC]) is used for the GPU partitions and
+[Tier_1] is selected when available. Selecting Tier_1 automatically enables GVNIC.
+* SSD PDs disks for compute nodes. See the [Storage options] page for more details.
+
+[n2]: https://cloud.google.com/compute/docs/general-purpose-machines#n2_series
+[c2]: https://cloud.google.com/compute/docs/compute-optimized-machines#c2_machine_types
+[c2d]: https://cloud.google.com/compute/docs/compute-optimized-machines#c2d_machine_types
+[c3]: https://cloud.google.com/blog/products/compute/introducing-c3-machines-with-googles-custom-intel-ipu
+[h3]: https://cloud.google.com/compute/docs/compute-optimized-machines#h3_series
+[a2]: https://cloud.google.com/compute/docs/gpus#a100-gpus
+[g2]: https://cloud.google.com/compute/docs/gpus#l4-gpus
+[compact placement]: https://cloud.google.com/compute/docs/instances/define-instance-placement
+[GVNIC]: https://cloud.google.com/compute/docs/networking/using-gvnic
+[Tier_1]: https://cloud.google.com/compute/docs/networking/configure-vm-with-high-bandwidth-configuration
+[Storage options]: https://cloud.google.com/compute/docs/disks
+
+File systems:
+
+* The homefs mounted at `/home` uses the "BASIC_SSD" tier filestore with
+  2.5 TiB of capacity
+* The projectsfs is mounted at `/projects` and is a high scale SSD filestore
+  instance with 10TiB of capacity.
+* The scratchfs is mounted at `/scratch` and is a
+  [DDN Exascaler Lustre](../community/modules/file-system/DDN-EXAScaler/README.md)
+  file system designed for high IO performance. The capacity is ~10TiB.
+
+> **Warning**: The DDN Exascaler Lustre file system has a license cost as
+> described in the pricing section of the
+> [DDN EXAScaler Cloud Marketplace Solution](https://console.developers.google.com/marketplace/product/ddnstorage/).
+
+#### Quota Requirements for hpc-enterprise-slurm-v6.yaml
+
+For this example the following is needed in the selected region:
+
+* Cloud Filestore API: Basic SSD capacity (GB) per region: **2,560 GB**
+* Cloud Filestore API: High Scale SSD capacity (GB) per region: **10,240 GiB** -
+  _min quota request is 61,440 GiB_
+* Compute Engine API: Persistent Disk SSD (GB): **~14,050 GB** static +
+  **100 GB/node** up to 23,250 GB
+* Compute Engine API: Persistent Disk Standard (GB): **~396 GB** static +
+  **50 GB/node** up to 596 GB
+* Compute Engine API: N2 CPUs: **116** for login and lustre and **2/node** active
+ in `n2` partition up to 124.
+* Compute Engine API: C2 CPUs: **4** for controller node and **60/node** active
+  in `c2` partition up to 1,204
+* Compute Engine API: C2D CPUs: **112/node** active in `c2d` partition up to 2,240
+* Compute Engine API: C3 CPUs: **176/node** active in `c3` partition up to 3,520
+* Compute Engine API: H3 CPUs: **88/node** active in `h3` partition up to 1,408
+* Compute Engine API: A2 CPUs: **96/node** active in `a208` and `a216` partitions
+up to 3,072
+* Compute Engine API: NVIDIA A100 80GB GPUs: **8/node** active in `a208` partition
+ up to 128
+* Compute Engine API: NVIDIA A100 GPUs: **8/node** active in `a216` partition up
+to 256
+* Compute Engine API: Resource policies: **one for each job in parallel** -
+  _not needed for `n2` partition_
+
+[hpc-enterprise-slurm-v6.yaml]: ./hpc-enterprise-slurm-v6.yaml
+
+### [hpc-slurm-static-v6.yaml] ![core-badge] ![experimental-badge]
+
+> **Warning**: Requires additional dependencies **to be installed on the system deploying the infrastructure**.
+>
+> ```shell
+> # Install Python3 and run
+> pip3 install -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/6.4.2/scripts/requirements.txt
+> ```
+
+This example demonstrates how to create a partition with static compute nodes.
+See [Best practices for static compute nodes] for instructions on setting up a
+reservation and compact placement policy.
+
+Before deploying this example the following fields must be populated in the bluerpint:
+
+```yaml
+  project_id: ## Set GCP Project ID Here ##
+  static_reservation_name:  ## Set your reservation name here ##
+  static_reservation_machine_type: ## Machine must match reservation above ##
+  static_node_count: ## Must be <= number of reserved machines ##
+```
+
+For more resources on static compute nodes see the following cloud docs pages:
+
+* [About [Slurm] node types](https://cloud.google.com/hpc-toolkit/docs/slurm/node-types)
+* [Best practices for static compute nodes]
+* [Reconfigure a running cluster](http://cloud/hpc-toolkit/docs/slurm/reconfigure-cluster)
+* [Manage static compute nodes](http://cloud/hpc-toolkit/docs/slurm/manage-static-nodes)
+
+For a similar, more advanced, example which demonstrates static node
+functionality with GPUs, see the
+[ML Slurm A3 example](./machine-learning/README.md).
+
+[Best practices for static compute nodes]: http://cloud/hpc-toolkit/docs/slurm/static-nodes-best-practices
+[hpc-slurm-static-v6.yaml]: ./hpc-slurm-static-v6.yaml
+
 ### [hpc-slurm6-tpu.yaml] ![community-badge] ![experimental-badge]
 
 > **Warning**: Requires additional dependencies **to be installed on the system deploying the infrastructure**.
@@ -474,6 +606,55 @@ image. It will be named beginning with `ml-slurm` followed by a date and
 timestamp for uniqueness.
 
 [ml-slurm.yaml]: ../examples/ml-slurm.yaml
+
+### [ml-slurm-v6.yaml] ![core-badge] ![experimental-badge]
+
+This blueprint provisions an HPC cluster running the Slurm scheduler with the
+machine learning frameworks PyTorch and TensorFlow pre-installed on every
+VM. The cluster has 2 partitions:
+
+* [A2 family VMs][a2] with the NVIDIA A100 GPU accelerator
+* [G2 family VMs][g2] with the NVIDIA L4 GPU accelerator
+
+[a2]: https://cloud.google.com/compute/docs/gpus#a100-gpus
+[g2]: https://cloud.google.com/compute/docs/gpus#l4-gpus
+
+To provision the cluster, please run:
+
+```text
+./ghpc create examples/ml-slurm-v6.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
+./ghpc deploy ml-example-v6
+```
+
+After accessing the login node, you can activate the conda environment for each
+library with:
+
+```shell
+source /etc/profile.d/conda.sh
+# to activate PyTorch
+conda activate pytorch
+# to activate TensorFlow
+conda activate tf
+```
+
+An example benchmarking job for PyTorch can be run under Slurm:
+
+```shell
+cp /var/tmp/torch_test.* .
+sbatch -N 1 torch_test.sh
+```
+
+When you are done, clean up the resources in reverse order of creation:
+
+```text
+./ghpc destroy ml-example-v6
+```
+
+Finally, browse to the [Cloud Console][console-images] to delete your custom
+image. It will be named beginning with `ml-slurm` followed by a date and
+timestamp for uniqueness.
+
+[ml-slurm-v6.yaml]: ../examples/ml-slurm-v6.yaml
 
 ### [image-builder.yaml] ![core-badge]
 
@@ -856,6 +1037,39 @@ For this example the following is needed in the selected region:
 
 [cae-slurm.yaml]: ../examples/cae/cae-slurm.yaml
 
+### [cae-slurm-v6.yaml] ![core-badge] ![experimental-badge]
+
+The Computer Aided Engineering (CAE) blueprint captures a reference architecture
+where the right cloud components are assembled to optimally cater to the
+requirements of computationally-intensive CAE workloads. Specifically, it is
+architected around Google Cloud’s VM families that provide a high memory bandwidth
+and a balanced memory/flop ratio, which is particularly useful for per-core licensed
+CAE software. The solution caters also to large CAE use cases, requiring multiple nodes
+that are tightly-coupled via MPI. Special high-memory shapes support even very
+memory-demanding workloads with up to 16GB/core. For file IO, different Google managed
+high performance NFS storage services are available. For very IO demanding workloads,
+third party parallel file systems can be integrated. The scheduling of the workloads
+is done by a workload manager.
+
+The CAE blueprint is intended to be a starting point for more tailored explorations
+or installations of specific CAE codes, as provided by ISVs separately.
+
+A detailed documentation is provided in this [README](cae/README.md).
+
+#### Quota Requirements for cae-slurm-v6.yaml
+
+For this example the following is needed in the selected region:
+
+* Cloud Filestore API: Basic SSD capacity (GB) per region: **5,120 GB**
+* Cloud Filestore API: High Scale SSD capacity (GB) per region: **10,240 GB**
+* Compute Engine API: H3 CPUs: **88/node** active in `balance` partition up to 880
+* Compute Engine API: C3-highmem CPUs: **176/node** active in `highmem` partition up to 1,760
+* Compute Engine API: N1 CPUs: **8/node** active in `desktop` node.
+* Compute Engine API: T4 GPUs: **1/node** active in `desktop` node.
+* Compute Engine API: N2 CPUs: **8** for login and **16** for controller
+
+[cae-slurm-v6.yaml]: ../examples/cae/cae-slurm-v6.yaml
+
 ### [hpc-build-slurm-image.yaml] ![community-badge] ![experimental-badge]
 
 This blueprint demonstrates how to use HPC Toolkit to build a Slurm image on top
@@ -1134,6 +1348,22 @@ machine communications, for NFS and also for communications between the Slurm
 nodes)
 
 [hpc-slurm-local-ssd.yaml]: ../community/examples/hpc-slurm-local-ssd.yaml
+
+### [hpc-slurm-local-ssd-v6.yaml] ![community-badge] ![experimental-badge]
+
+This blueprint demonstrates the use of Slurm and Filestore, with compute nodes
+that have local ssd drives deployed.
+
+[hpc-slurm-local-ssd-v6.yaml]: ../community/examples/hpc-slurm-local-ssd-v6.yaml
+
+### [hcls-blueprint-v6.yaml]: ![core-badge] ![experimental-badge]
+
+This blueprint demonstrates an advanced architecture that can be used to run
+GROMACS with GPUs and CPUs on Google Cloud. For full documentation, refer
+[document].
+
+[document]: ../docs/videos/healthcare-and-life-sciences/README.md
+[hcls-blueprint-v6.yaml]:  ../example/hcls-blueprint-v6.yaml
 
 ### [hpc-gke.yaml] ![community-badge] ![experimental-badge]
 

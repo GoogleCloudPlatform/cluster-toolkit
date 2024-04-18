@@ -199,10 +199,10 @@ description of our support for Windows images.
 <tr>
   <th>Shared filestore</th>
   <th></th>
-  <td><a href="../tools/validate_configs/os_compatibility_tests/slurm-filestore.yaml">✓</a></td>
-  <td><a href="../tools/validate_configs/os_compatibility_tests/slurm-filestore.yaml">✓</a></td>
-  <td><a href="../tools/validate_configs/os_compatibility_tests/slurm-filestore.yaml">✓</a></td>
-  <td><a href="../tools/validate_configs/os_compatibility_tests/slurm-filestore.yaml">✓</a></td>
+  <td>✓</td>
+  <td>✓</td>
+  <td><a href="../examples/hpc-slurm-v6.yaml">✓</a></td>
+  <td><a href="../community/examples/hpc-slurm-ubuntu2004-v6.yaml">✓</a></td>
 </tr>
 <tr>
   <th>Startup script</th>

@@ -20,20 +20,16 @@ terraform {
       source  = "hashicorp/google"
       version = ">= 3.83"
     }
-    google-beta = {
-      source  = "hashicorp/google-beta"
-      version = ">= 3.83"
-    }
     random = {
       source  = "hashicorp/random"
       version = "~> 3.0"
     }
   }
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:slurm-cloudsql-federation/v1.31.1"
+    module_name = "blueprints/terraform/hpc-toolkit:slurm-cloudsql-federation/vv1.32.0"
   }
   provider_meta "google-beta" {
-    module_name = "blueprints/terraform/hpc-toolkit:slurm-cloudsql-federation/v1.31.1"
+    module_name = "blueprints/terraform/hpc-toolkit:slurm-cloudsql-federation/vv1.32.0"
   }
 
   required_version = ">= 0.13.0"

@@ -46,6 +46,13 @@
 
   - name: Create Infrastructure and test
     block:
+
+    - name: Run Pre Deploy Tasks
+      ansible.builtin.include_tasks: "{{ pre_deploy_task }}"
+      loop: "{{ pre_deploy_tasks | default([]) }}"
+      loop_control:
+        loop_var: pre_deploy_task
+
     - name: Create Cluster with GHPC
       register: deployment
       changed_when: deployment.changed
@@ -149,8 +156,10 @@
     ## Cleanup and fail gracefully
     rescue:
     - name: Capture ghpc stderr
+      failed_when: false
       ansible.builtin.set_fact:
-        terraform_apply_stderr_one_line: "{{ deployment.stderr }}"
+        ghpc_stderr: "{{ deployment.stderr }}"
+
     - name: Gather logs
       ansible.builtin.include_tasks:
         file: tasks/gather_startup_script_logs.yml

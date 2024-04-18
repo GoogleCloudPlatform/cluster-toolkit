@@ -302,7 +302,11 @@ variable "preemptible" {
 }
 
 variable "reservation_name" {
-  description = "Name of the reservation to use for VM resources; set to empty string if no reservation is used."
+  description = <<-EOD
+    Name of the reservation to use for VM resources
+    - Must be a "SPECIFIC" reservation
+    - Set to empty string if using no reservation or automatically-consumed reservations
+  EOD
   type        = string
   default     = ""
   nullable    = false

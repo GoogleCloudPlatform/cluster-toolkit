@@ -159,12 +159,11 @@ validate_golden_copy: ghpc
 terraform-format:
 	$(info *********** cleaning terraform files syntax and generating terraform documentation ***********)
 	@for folder in ${TERRAFORM_FOLDERS}; do \
-	  echo "cleaning syntax for $${folder}";\
+	  echo "checking syntax for $${folder}";\
 		terraform fmt -list=true $${folder};\
 	done
 	@for folder in ${TERRAFORM_FOLDERS}; do \
 		terraform-docs markdown $${folder} --config .tfdocs-markdown.yaml;\
-		terraform-docs json $${folder} --config .tfdocs-json.yaml;\
 	done
 
 endif
