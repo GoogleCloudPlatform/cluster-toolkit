@@ -112,6 +112,20 @@ EOT
   default = []
 }
 
+variable "enable_docker_world_writable" {
+  description = "Configure Docker daemon to be writable by all users (if var.install_docker is set to true)."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
+variable "install_docker" {
+  description = "Install Docker command line tool and daemon."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
 variable "install_cloud_ops_agent" {
   description = "Warning: Consider using `install_stackdriver_agent` for better performance. Run Google Ops Agent installation script if set to true."
   type        = bool
