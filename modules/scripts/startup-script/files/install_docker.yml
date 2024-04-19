@@ -27,14 +27,22 @@
     ansible.builtin.get_url:
       url: https://get.docker.com
       dest: /tmp/get-docker.sh
+      owner: root
+      group: root
+      mode: 0644
     when: not docker_binary.stat.exists
   - name: Install Docker
     ansible.builtin.command: sh /tmp/get-docker.sh
+    register: docker_installed
+    changed_when: docker_installed.rc != 0
     when: not docker_binary.stat.exists
   - name: Create Docker socket override directory
     ansible.builtin.file:
       path: /etc/systemd/system/docker.socket.d
       state: directory
+      owner: root
+      group: root
+      mode: 0755
     when: enable_docker_world_writable
   - name: Create Docker socket override configuration
     ansible.builtin.copy:

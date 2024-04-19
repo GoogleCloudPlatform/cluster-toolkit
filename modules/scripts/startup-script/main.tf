@@ -203,6 +203,10 @@ resource "google_storage_bucket_object" "scripts" {
       condition     = !(var.install_cloud_ops_agent && var.install_stackdriver_agent)
       error_message = "Only one of var.install_stackdriver_agent or var.install_cloud_ops_agent can be set. Stackdriver is recommended for best performance."
     }
+    precondition {
+      condition     = !var.enable_docker_world_writable || var.install_docker
+      error_message = "If var.enable_docker_world_writable is set to true, var.install_docker must also be set to true."
+    }
   }
 }
 
