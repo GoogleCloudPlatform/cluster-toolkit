@@ -34,6 +34,6 @@ resource "google_cloudbuild_trigger" "daily_project_cleanup" {
 module "daily_project_cleanup_schedule" {
   source      = "./trigger-schedule"
   trigger     = google_cloudbuild_trigger.daily_project_cleanup
-  schedule    = "0,30 22,23 * * MON-FRI"
+  schedule    = "0,30 22,23 * * *"
   retry_count = 4
 }
