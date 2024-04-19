@@ -142,7 +142,7 @@ deployment_groups:
         on_host_maintenance: TERMINATE
         preemptible: false
         reservation_name: null # will be replaced by default value empty string
-        service_account: null
+        service_account_email: null
         shielded_instance_config: null
         subnetwork_self_link: $(network.subnetwork_self_link)
         spot_instance_config: null

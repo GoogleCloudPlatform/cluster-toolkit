@@ -13,7 +13,7 @@
 # limitations under the License.
 
 
-variable "project_id" {
+variable "project_id" { # tflint-ignore: terraform_unused_declarations
   type        = string
   description = "Project ID to create resources in."
 }
@@ -230,17 +230,29 @@ variable "on_host_maintenance" {
   default     = "MIGRATE"
 }
 
-variable "service_account" {
+variable "service_account_email" {
+  description = "Service account e-mail address to attach to the login instances."
+  type        = string
+  default     = null
+}
+
+variable "service_account_scopes" {
+  description = "Scopes to attach to the login instances."
+  type        = set(string)
+  default     = ["https://www.googleapis.com/auth/cloud-platform"]
+}
+
+variable "service_account" { # tflint-ignore: terraform_unused_declarations
+  description = "DEPRECATED: Use `service_account_email` and `service_account_scopes` instead."
   type = object({
     email  = string
     scopes = set(string)
   })
-  description = <<-EOD
-    Service account to attach to the controller instance. If not set, the
-    default compute service account for the given project will be used with the
-    "https://www.googleapis.com/auth/cloud-platform" scope.
-    EOD
-  default     = null
+  default = null
+  validation {
+    condition     = var.service_account == null
+    error_message = "DEPRECATED: Use `service_account_email` and `service_account_scopes` instead."
+  }
 }
 
 variable "instance_template" {

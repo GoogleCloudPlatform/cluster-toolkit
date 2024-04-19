@@ -103,14 +103,29 @@ variable "subnetwork_self_link" {
   description = "The name of the subnetwork to attach the TPU-vm of this nodeset to."
 }
 
-variable "service_account" {
+variable "service_account_email" {
+  description = "Service account e-mail address to attach to the TPU-vm."
+  type        = string
+  default     = null
+}
+
+variable "service_account_scopes" {
+  description = "Scopes to attach to the TPU-vm."
+  type        = set(string)
+  default     = ["https://www.googleapis.com/auth/cloud-platform"]
+}
+
+variable "service_account" { # tflint-ignore: terraform_unused_declarations
+  description = "DEPRECATED: Use `service_account_email` and `service_account_scopes` instead."
   type = object({
     email  = string
     scopes = set(string)
   })
-
-  description = "Service account to attach to the TPU-vm. If none is given, the default service account and scopes will be used."
-  default     = null
+  default = null
+  validation {
+    condition     = var.service_account == null
+    error_message = "DEPRECATED: Use `service_account_email` and `service_account_scopes` instead."
+  }
 }
 
 variable "project_id" {
