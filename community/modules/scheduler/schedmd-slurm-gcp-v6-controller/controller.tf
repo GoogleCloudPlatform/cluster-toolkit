@@ -27,10 +27,13 @@ locals {
 
   have_template = var.instance_template != null && var.instance_template != ""
 
-  service_account = coalesce(var.service_account, {
-    email  = data.google_compute_default_service_account.default.email
-    scopes = ["https://www.googleapis.com/auth/cloud-platform"]
-  })
+  service_account_email = coalesce(var.service_account_email, data.google_compute_default_service_account.default.email)
+
+  # can't rely on `email=null` as it's used to instantiate `cloudsql_secret_accessor`
+  service_account = {
+    email  = local.service_account_email
+    scopes = var.service_account_scopes
+  }
 }
 
 # INSTANCE TEMPLATE

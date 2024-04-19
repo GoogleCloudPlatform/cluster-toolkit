@@ -17,10 +17,6 @@ locals {
   labels = merge(var.labels, { ghpc_module = "schedmd-slurm-gcp-v6-login", ghpc_role = "scheduler" })
 }
 
-data "google_compute_default_service_account" "default" {
-  project = var.project_id
-}
-
 locals {
 
   additional_disks = [
@@ -65,10 +61,10 @@ locals {
     region              = var.region
     zone                = var.zone
 
-    service_account = coalesce(var.service_account, {
-      email  = data.google_compute_default_service_account.default.email
-      scopes = ["https://www.googleapis.com/auth/cloud-platform"]
-    })
+    service_account = {
+      email  = var.service_account_email
+      scopes = var.service_account_scopes
+    }
 
     source_image_family  = local.source_image_family             # requires source_image_logic.tf
     source_image_project = local.source_image_project_normalized # requires source_image_logic.tf

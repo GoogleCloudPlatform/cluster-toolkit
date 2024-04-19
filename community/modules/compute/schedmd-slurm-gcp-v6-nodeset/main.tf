@@ -35,6 +35,11 @@ locals {
   public_access_config = var.disable_public_ips ? [] : [{ nat_ip = null, network_tier = null }]
   access_config        = length(var.access_config) == 0 ? local.public_access_config : var.access_config
 
+  service_account = {
+    email  = var.service_account_email
+    scopes = var.service_account_scopes
+  }
+
   ghpc_startup_script = [{
     filename = "ghpc_nodeset_startup.sh"
     content  = var.startup_script
@@ -71,7 +76,7 @@ locals {
     on_host_maintenance      = var.on_host_maintenance
     preemptible              = var.preemptible
     region                   = var.region
-    service_account          = var.service_account
+    service_account          = local.service_account
     shielded_instance_config = var.shielded_instance_config
     source_image_family      = local.source_image_family             # requires source_image_logic.tf
     source_image_project     = local.source_image_project_normalized # requires source_image_logic.tf
