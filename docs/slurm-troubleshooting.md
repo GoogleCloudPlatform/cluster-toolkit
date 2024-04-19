@@ -96,17 +96,21 @@ The solution here is to [request more of the specified quota](#gcp-quotas),
 It may be that the zone the partition is deployed in has no remaining capacity to create the
 compute nodes required to run your submitted job.
 
-You can confirm this by SSHing into the `controller` VM and checking the
-`resume.log` file:
+Check the `resume.log` file for possible errors by SSH-ing into the controller VM and running the following:
 
 ```shell
-$ cat /var/log/slurm/resume.log
-... bulkInsert operation errors: VM_MIN_COUNT_NOT_REACHED ...
+sudo cat /var/log/slurm/resume.log
+```
+
+One example of an error message which appears in `resume.log` due to insufficient capacity is:
+
+```text
+bulkInsert operation errors: VM_MIN_COUNT_NOT_REACHED
 ```
 
 When this happens, the the output of `sacct` will show the job's status as `NODE_FAIL`.
 
-Jobs submitted via `srun` will not be retried, however jobs submitted via `sbatch` will be retried.
+Jobs submitted via `srun` will not be requeued, however jobs submitted via `sbatch` will be requeued.
 
 #### Placement Groups (Slurm)
 
