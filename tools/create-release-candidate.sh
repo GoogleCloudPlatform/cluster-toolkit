@@ -56,10 +56,10 @@ while getopts "t:" opt; do
 done
 TYPE="${ARG_TYPE:-minor}"
 
-OLD_VERSION=$(gh release list -R GoogleCloudPlatform/hpc-toolkit -L 1 --json tagName --jq '.[] | .tagName')
-OLD_MAJOR=$(echo "${OLD_VERSION}" | cut -f1 -d. | sed 's,v,,')
-OLD_MINOR=$(echo "${OLD_VERSION}" | cut -f2 -d.)
-OLD_PATCH=$(echo "${OLD_VERSION}" | cut -f3 -d.)
+OLD_TAG=$(gh release list -R GoogleCloudPlatform/hpc-toolkit -L 1 --json tagName --jq '.[] | .tagName')
+OLD_MAJOR=$(echo "${OLD_TAG}" | cut -f1 -d. | sed 's,v,,')
+OLD_MINOR=$(echo "${OLD_TAG}" | cut -f2 -d.)
+OLD_PATCH=$(echo "${OLD_TAG}" | cut -f3 -d.)
 
 case "${TYPE}" in
 major)
@@ -83,10 +83,11 @@ patch)
 	;;
 esac
 
-NEW_VERSION="v${NEW_MAJOR}.${NEW_MINOR}.${NEW_PATCH}"
+NEW_VERSION="${NEW_MAJOR}.${NEW_MINOR}.${NEW_PATCH}"
+NEW_TAG="v${NEW_VERSION}"
 
 RC_BRANCH=release-candidate
-V_BRANCH="version/${NEW_VERSION}"
+V_BRANCH="version/${NEW_TAG}"
 REMOTE_NAME=origin
 
 gh repo clone GoogleCloudPlatform/hpc-toolkit "${GITDIR}" -- --single-branch --branch develop --depth 1 --origin "${REMOTE_NAME}"
@@ -95,14 +96,14 @@ git switch -c "${RC_BRANCH}" develop
 echo "Creating new Toolkit release-candidate branch"
 git push -u "${REMOTE_NAME}" "${RC_BRANCH}"
 git switch -c "${V_BRANCH}" "${RC_BRANCH}"
-git sed "v${OLD_MAJOR}\.${OLD_MINOR}\.${OLD_PATCH}" "v${NEW_VERSION}" -- **/*.go **/versions.tf
+git sed "v${OLD_MAJOR}\.${OLD_MINOR}\.${OLD_PATCH}" "${NEW_TAG}" -- **/*.go **/versions.tf
 git add -u
 echo "Creating new branch with version update to ${NEW_VERSION}"
 git commit -m "Increase version to ${NEW_VERSION}"
 git push -u "${REMOTE_NAME}" "${V_BRANCH}"
 echo "Opening pull request to update release-candidate to version ${NEW_VERSION}"
 gh pr create --base "${RC_BRANCH}" --head "${V_BRANCH}" \
-	--title "Update Toolkit release to ${NEW_VERSION}" \
+	--title "Update Toolkit release to ${NEW_TAG}" \
 	--body "Set release-candidate to version ${NEW_VERSION}"
 echo
 echo
