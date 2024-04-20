@@ -14,7 +14,6 @@
 
 from typing import Optional, Collection
 
-import subprocess
 import requests
 from dataclasses import dataclass
 
@@ -38,12 +37,6 @@ def selector_by_name(name: str) -> Selector:
 def selector_by_tag(tag: str) -> Selector:
     return lambda b: tag in b.tags
 
-def get_default_project():
-    res = subprocess.run(["gcloud", "config", "get-value",
-                         "project"], stdout=subprocess.PIPE)
-    assert res.returncode == 0
-    return res.stdout.decode('ascii').strip()
-
 def get_pr(pr_num: int) -> dict:
     resp = requests.get(f"https://api.github.com/repos/GoogleCloudPlatform/hpc-toolkit/pulls/{pr_num}")
     resp.raise_for_status()
@@ -62,6 +55,7 @@ def get_changed_files_tags(files: Collection[str]) -> set[str]:
         parts = f.split("/")
         if len(parts) < 3: continue
         tags.add(f"m.{parts[2]}")
+    print(f"Auto tags: {tags}") # TODO: use UI to log
     return tags
 
 @dataclass
@@ -86,12 +80,6 @@ def run(args: RunnerArgs, ui: UIProto) -> None:
     print(f"Using PR#{args.pr}: {pr['title']}") # TODO: use UI to log
     sha = pr["head"]["sha"]
     
-    if args.project is None:
-        project = get_default_project()
-        print(f"Using project={project}") # TODO: use UI to log
-    else:
-        project = args.project
-
     selectors = []
     selectors += [selector_by_tag(t) for t in args.tags or []]
     selectors += [selector_by_name(n) for n in args.names or []]
@@ -105,7 +93,7 @@ def run(args: RunnerArgs, ui: UIProto) -> None:
         return
 
     cb = cloudbuild_v1.services.cloud_build.CloudBuildClient()
-    Babysitter(ui, cb, project, sha, selectors, args.concurrency, args.retries).do()
+    Babysitter(ui, cb, args.project, sha, selectors, args.concurrency, args.retries).do()
 
 def run_from_notebook(
         pr: int,
@@ -133,8 +121,7 @@ def run_from_cli():
     parser.add_argument("--auto", action="store_true", help="If true, will inspect changed files and run tests for them")
     parser.add_argument("--all", action="store_true", help="Run all tests")
 
-    parser.add_argument("--project", type=str,
-                        help="GCP ProjectID, if not set will use default one (`gcloud config get-value project`)")
+    parser.add_argument("--project", type=str, default="hpc-toolkit-dev", help="GCP ProjectID")
     parser.add_argument("-c", "--concurrency", type=int, default=1,
                         help="Number of tests to run concurrently, default is 1")
     parser.add_argument("-r", "--retries", type=int, default=1,
