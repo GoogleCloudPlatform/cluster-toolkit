@@ -47,6 +47,7 @@ fi
 echo "Disabling Filestore API..."
 trap enable_filestore_api EXIT
 gcloud services disable file.googleapis.com --force --project "${PROJECT_ID}"
+sleep 120
 
 echo "Deleting all Filestore peering networks"
 # the output of this command matches
