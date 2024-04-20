@@ -71,11 +71,11 @@ variable "chgrp_group" {
 
 variable "chmod_mode" {
   description = <<-EOT
-    `chmod` to apply to the Spack installation. Adds group write by default. Set to `""` (empty string) to prevent modification.
+    `chmod` to apply to the Spack installation. Adds group permissions by default. Set to `""` (empty string) to prevent modification.
     For usage information see:
     https://docs.ansible.com/ansible/latest/collections/ansible/builtin/file_module.html#parameter-mode
     EOT
-  default     = "g+w"
+  default     = "g+rwx"
   type        = string
   nullable    = false
 }
