@@ -82,10 +82,20 @@ variable "additional_disks" {
   default     = []
 }
 
-variable "disable_smt" {
+variable "enable_smt" {
   type        = bool
-  description = "Disables Simultaneous Multi-Threading (SMT) on instance."
-  default     = true
+  description = "Enables Simultaneous Multi-Threading (SMT) on instance."
+  default     = false
+}
+
+variable "disable_smt" { # tflint-ignore: terraform_unused_declarations
+  description = "DEPRECATED: Use `enable_smt` instead."
+  type        = bool
+  default     = null
+  validation {
+    condition     = var.disable_smt == null
+    error_message = "DEPRECATED: Use `enable_smt` instead."
+  }
 }
 
 variable "static_ips" {
@@ -123,10 +133,21 @@ variable "can_ip_forward" {
   default     = false
 }
 
-variable "disable_login_public_ips" {
-  description = "If set to false. The login node will have a random public IP assigned to it."
+variable "enable_login_public_ips" {
+  description = "If set to true. The login node will have a random public IP assigned to it."
   type        = bool
-  default     = true
+  default     = false
+}
+
+
+variable "disable_login_public_ips" { # tflint-ignore: terraform_unused_declarations
+  description = "DEPRECATED: Use `enable_login_public_ips` instead."
+  type        = bool
+  default     = null
+  validation {
+    condition     = var.disable_login_public_ips == null
+    error_message = "DEPRECATED: Use `enable_login_public_ips` instead."
+  }
 }
 
 variable "enable_oslogin" {

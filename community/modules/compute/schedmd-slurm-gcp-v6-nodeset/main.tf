@@ -32,7 +32,7 @@ locals {
     }
   ]
 
-  public_access_config = var.disable_public_ips ? [] : [{ nat_ip = null, network_tier = null }]
+  public_access_config = var.enable_public_ips ? [{ nat_ip = null, network_tier = null }] : []
   access_config        = length(var.access_config) == 0 ? local.public_access_config : var.access_config
 
   service_account = {

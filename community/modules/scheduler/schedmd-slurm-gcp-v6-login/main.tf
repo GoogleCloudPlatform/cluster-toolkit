@@ -41,10 +41,10 @@ locals {
     additional_disks = local.additional_disks
 
     can_ip_forward = var.can_ip_forward
-    disable_smt    = var.disable_smt
+    disable_smt    = !var.enable_smt
 
     enable_confidential_vm   = var.enable_confidential_vm
-    enable_public_ip         = !var.disable_login_public_ips
+    enable_public_ip         = var.enable_login_public_ips
     enable_oslogin           = var.enable_oslogin
     enable_shielded_vm       = var.enable_shielded_vm
     shielded_instance_config = var.shielded_instance_config

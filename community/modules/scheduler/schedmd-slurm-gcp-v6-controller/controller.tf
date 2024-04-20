@@ -56,7 +56,7 @@ module "slurm_controller_template" {
   bandwidth_tier    = var.bandwidth_tier
   slurm_bucket_path = module.slurm_files.slurm_bucket_path
   can_ip_forward    = var.can_ip_forward
-  disable_smt       = var.disable_smt
+  disable_smt       = !var.enable_smt
 
   enable_confidential_vm   = var.enable_confidential_vm
   enable_oslogin           = var.enable_oslogin
@@ -97,7 +97,7 @@ locals {
 module "slurm_controller_instance" {
   source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/_slurm_instance?ref=6.4.3&depth=1"
 
-  access_config       = !var.disable_controller_public_ips ? [local.access_config] : []
+  access_config       = var.enable_controller_public_ips ? [local.access_config] : []
   add_hostname_suffix = false
   hostname            = "${local.slurm_cluster_name}-controller"
   instance_template   = local.have_template ? var.instance_template : module.slurm_controller_template[0].self_link

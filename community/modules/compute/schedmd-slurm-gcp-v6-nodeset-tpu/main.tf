@@ -39,7 +39,7 @@ locals {
     data_disks   = var.data_disks
     docker_image = var.docker_image
 
-    enable_public_ip = !var.disable_public_ips
+    enable_public_ip = var.enable_public_ips
     # TODO: rename to subnetwork_self_link, requires changes to the scripts
     subnetwork      = var.subnetwork_self_link
     service_account = local.service_account

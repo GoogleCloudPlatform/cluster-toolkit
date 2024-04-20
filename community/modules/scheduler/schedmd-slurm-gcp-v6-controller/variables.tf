@@ -368,9 +368,9 @@ variable "cloud_parameters" {
   default = {}
 }
 
-variable "disable_default_mounts" {
+variable "enable_default_mounts" {
   description = <<-EOD
-    Disable default global network storage from the controller
+    Enable default global network storage from the controller
     - /usr/local/etc/slurm
     - /etc/munge
     - /home
@@ -380,7 +380,17 @@ variable "disable_default_mounts" {
     files and the munge key across the cluster.
     EOD
   type        = bool
-  default     = false
+  default     = true
+}
+
+variable "disable_default_mounts" { # tflint-ignore: terraform_unused_declarations
+  description = "DEPRECATED: Use `enable_default_mounts` instead."
+  type        = bool
+  default     = null
+  validation {
+    condition     = var.disable_default_mounts == null
+    error_message = "DEPRECATED: Use `enable_default_mounts` instead."
+  }
 }
 
 variable "network_storage" {

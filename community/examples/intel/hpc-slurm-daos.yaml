@@ -160,7 +160,7 @@ deployment_groups:
     settings:
       name_prefix: login
       machine_type: n2-standard-4
-      disable_login_public_ips: false
+      enable_login_public_ips: true
       tags: $(vars.tags)
       service_account_scopes:
       - "https://www.googleapis.com/auth/monitoring.write"
@@ -178,7 +178,7 @@ deployment_groups:
     - homefs
     - daos-client-script
     settings:
-      disable_controller_public_ips: false
+      enable_controller_public_ips: true
       compute_startup_script: $(daos-client-script.startup_script)
       controller_startup_script: $(daos-client-script.startup_script)
       login_startup_script: $(daos-client-script.startup_script)
