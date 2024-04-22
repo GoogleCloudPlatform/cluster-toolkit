@@ -12,13 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-resource "google_cloudbuild_trigger" "daily_project_cleanup" {
+resource "google_cloudbuild_trigger" "daily_project_cleanup_filestore" {
   name        = "DAILY-project-cleanup"
-  description = "A cleanup script to run periodically"
+  description = "A filestore cleanup script to run periodically"
   tags        = [local.notify_chat_tag]
 
   git_file_source {
-    path      = "tools/cloud-build/project-cleanup.yaml"
+    path      = "tools/cloud-build/project-cleanup-filestore.yaml"
     revision  = local.ref_develop
     uri       = var.repo_uri
     repo_type = "GITHUB"
@@ -31,9 +31,35 @@ resource "google_cloudbuild_trigger" "daily_project_cleanup" {
   }
 }
 
-module "daily_project_cleanup_schedule" {
+module "daily_project_cleanup_filestore_schedule" {
   source      = "./trigger-schedule"
-  trigger     = google_cloudbuild_trigger.daily_project_cleanup
+  trigger     = google_cloudbuild_trigger.daily_project_cleanup_filestore
   schedule    = "0,30 22,23 * * *"
+  retry_count = 4
+}
+
+resource "google_cloudbuild_trigger" "daily_project_cleanup_slurm" {
+  name        = "DAILY-project-cleanup"
+  description = "A metadata & resource policies cleanup script to run periodically"
+  tags        = [local.notify_chat_tag]
+
+  git_file_source {
+    path      = "tools/cloud-build/project-cleanup-slurm.yaml"
+    revision  = local.ref_develop
+    uri       = var.repo_uri
+    repo_type = "GITHUB"
+  }
+
+  source_to_build {
+    uri       = var.repo_uri
+    ref       = local.ref_develop
+    repo_type = "GITHUB"
+  }
+}
+
+module "daily_project_cleanup_slurm_schedule" {
+  source      = "./trigger-schedule"
+  trigger     = google_cloudbuild_trigger.daily_project_cleanup_slurm
+  schedule    = "0 0 * * MON-FRI"
   retry_count = 4
 }
