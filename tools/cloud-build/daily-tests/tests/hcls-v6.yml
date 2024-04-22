@@ -28,8 +28,8 @@ controller_node: "{{ slurm_cluster_name }}-controller"
 cli_deployment_vars:
   region: us-central1
   zone: "{{ zone }}"
-  disable_login_public_ips: "false"
-  disable_controller_public_ips: "false"
+  enable_login_public_ips: "true"
+  enable_controller_public_ips: "true"
 post_deploy_tests:
 - test-validation/test-mounts.yml
 - test-validation/test-partitions.yml
