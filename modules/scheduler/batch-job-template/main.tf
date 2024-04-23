@@ -28,7 +28,7 @@ locals {
     "${path.module}/templates/batch-job-base.yaml.tftpl",
     {
       synchronized       = var.mpi_mode
-      runnable           = var.runnable
+      runnables          = var.runnables
       task_count         = var.task_count
       tasks_per_node     = local.tasks_per_node
       require_hosts_file = var.mpi_mode

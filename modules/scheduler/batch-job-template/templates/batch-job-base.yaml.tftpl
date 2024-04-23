@@ -5,12 +5,14 @@ taskGroups:
         - barrier:
             name: "wait-for-node-startup"
         %{~ endif ~}
+        %{~ for runnable in runnables ~}
         - script:
-            text: ${indent(12, chomp(yamlencode(runnable)))}
+            text: ${indent(12, chomp(yamlencode(runnable.script)))}
         %{~ if synchronized ~}
         - barrier:
-            name: "wait-for-workload-to-complete"
+            name: "wait-for-script-to-complete"
         %{~ endif ~}
+        %{~ endfor ~}
         %{~ if length(nfs_volumes) > 0 ~}
         volumes:
         %{~ for index, vol in nfs_volumes ~}

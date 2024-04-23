@@ -39,9 +39,11 @@ deployment_groups:
     source: modules/scheduler/batch-job-template
     use: [network1, appfs]
     settings:
-      runnable: |
-        mkdir -p /sw/$BATCH_JOB_UID
-        echo "Hello World from task $BATCH_TASK_INDEX" > /sw/$BATCH_JOB_UID/$BATCH_TASK_INDEX.txt
+      runnables:
+      - id: step 1
+        script: |
+          mkdir -p /sw/$BATCH_JOB_UID
+          echo "Hello World from task $BATCH_TASK_INDEX" > /sw/$BATCH_JOB_UID/$BATCH_TASK_INDEX.txt
       machine_type: n2-standard-4
       task_count: 8
       task_count_per_node: 4

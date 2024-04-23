@@ -91,10 +91,16 @@ variable "log_policy" {
   }
 }
 
-variable "runnable" {
-  description = "A string to be executed as the main workload of the Google Cloud Batch job. This will be used to populate the generated template."
-  type        = string
-  default     = "## Add your workload here"
+variable "runnables" {
+  description = "A list of shell scripts to be executed in sequence as the main workload of the Google Cloud Batch job. These will be used to populate the generated template."
+  type = list(object({
+    script = string
+  }))
+  default = [
+    {
+      script: "## Add your workload here"
+    }
+  ]
 }
 
 variable "instance_template" {
