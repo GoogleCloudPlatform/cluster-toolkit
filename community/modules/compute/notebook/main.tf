@@ -48,6 +48,12 @@ resource "random_id" "resource_name_suffix" {
   byte_length = 4
 }
 
+resource "google_storage_bucket_object" "mount_script" {
+  name    = local.post_script_filename
+  content = local.content5
+  bucket  = local.bucket
+}
+
 resource "google_notebooks_instance" "instance" {
   name                = local.name
   location            = var.zone
@@ -55,14 +61,9 @@ resource "google_notebooks_instance" "instance" {
   project             = var.project_id
   post_startup_script = "${var.gcs_bucket_path}/${local.post_script_filename}"
   labels              = local.labels
+  depends_on = [google_storage_bucket_object.mount_script]
   vm_image {
     project      = var.instance_image.project
     image_family = var.instance_image.family
   }
-}
-
-resource "google_storage_bucket_object" "mount_script" {
-  name    = local.post_script_filename
-  content = local.content5
-  bucket  = local.bucket
 }
