@@ -36,6 +36,7 @@ locals {
       log_policy         = var.log_policy
       instance_template  = local.instance_template
       nfs_volumes        = local.native_batch_network_storage
+      labels             = local.labels
     }
   )
 
