@@ -17,6 +17,7 @@
 package shell
 
 import (
+	"bufio"
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
@@ -37,7 +38,7 @@ type ProposedChanges struct {
 // ValidateDeploymentDirectory ensures that the deployment directory structure
 // appears valid given a mapping of group names to module kinds
 // TODO: verify kind fully by auto-detecting type from group directory
-func ValidateDeploymentDirectory(groups []config.DeploymentGroup, deploymentRoot string) error {
+func ValidateDeploymentDirectory(groups []config.Group, deploymentRoot string) error {
 	for _, group := range groups {
 		groupPath := filepath.Join(deploymentRoot, string(group.Name))
 		if isDir, _ := DirInfo(groupPath); !isDir {
@@ -97,7 +98,7 @@ func CheckWritableDir(path string) error {
 // only if the user responds with "y" or "yes" (case-insensitive)
 func ApplyChangesChoice(c ProposedChanges) bool {
 	logging.Info("Summary of proposed changes: %s", strings.TrimSpace(c.Summary))
-	var userResponse string
+	reader := bufio.NewReader(os.Stdin)
 
 	for {
 		fmt.Print(`(D)isplay full proposed changes,
@@ -106,12 +107,12 @@ func ApplyChangesChoice(c ProposedChanges) bool {
 (C)ontinue without applying
 Please select an option [d,a,s,c]: `)
 
-		_, err := fmt.Scanln(&userResponse)
+		in, err := reader.ReadString('\n')
 		if err != nil {
 			logging.Fatal("%v", err)
 		}
 
-		switch strings.ToLower(strings.TrimSpace(userResponse)) {
+		switch strings.ToLower(strings.TrimSpace(in)) {
 		case "a":
 			return true
 		case "c":

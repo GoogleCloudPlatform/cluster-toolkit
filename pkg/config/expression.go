@@ -27,6 +27,7 @@ import (
 	"github.com/zclconf/go-cty/cty"
 	"github.com/zclconf/go-cty/cty/function"
 	"github.com/zclconf/go-cty/cty/function/stdlib"
+	"golang.org/x/exp/maps"
 )
 
 // Reference is data struct that represents a reference to a variable.
@@ -54,6 +55,14 @@ func (r Reference) AsExpression() Expression {
 		return MustParseExpression(fmt.Sprintf("var.%s", r.Name))
 	}
 	return MustParseExpression(fmt.Sprintf("module.%s.%s", r.Module, r.Name))
+}
+
+func (r Reference) AsValue() cty.Value {
+	return r.AsExpression().AsValue()
+}
+
+func (r Reference) String() string {
+	return string(r.AsExpression().Tokenize().Bytes())
 }
 
 // Takes traversal in "blueprint namespace" (e.g. `vars.zone` or `homefs.mount`)
@@ -140,8 +149,8 @@ func TraversalToReference(t hcl.Traversal) (Reference, error) {
 
 // Expression is a representation of expressions in Blueprint
 type Expression interface {
-	// Eval evaluates the expression in the context of Blueprint
-	Eval(bp Blueprint) (cty.Value, error)
+	// Eval evaluates the expression in the given context
+	Eval(ctx *hcl.EvalContext) (cty.Value, error)
 	// Tokenize returns Tokens to be used for marshalling HCL
 	Tokenize() hclwrite.Tokens
 	// References return Reference for all variables used in the expression
@@ -208,22 +217,37 @@ type BaseExpression struct {
 	rs   []Reference
 }
 
+func handleEvalErr(diag hcl.Diagnostics) error {
+	if !diag.HasErrors() {
+		return nil
+	}
+	err := diag.Errs()[0]
+	if match := regexp.MustCompile(`There is no function named "(\w+)"`).FindStringSubmatch(err.Error()); match != nil {
+		sf := strings.Join(maps.Keys(availableFunctions), ", ")
+		return HintError{
+			Err:  fmt.Errorf("unsupported function %q", match[1]),
+			Hint: fmt.Sprintf("this context only supports following functions: %v", sf)}
+	}
+	return err
+
+}
+
 // Eval evaluates the expression in the context of Blueprint
-func (e BaseExpression) Eval(bp Blueprint) (cty.Value, error) {
-	ctx := hcl.EvalContext{
-		Variables: map[string]cty.Value{"var": bp.Vars.AsObject()},
-		Functions: functions(),
-	}
-	v, diag := e.e.Value(&ctx)
-	if diag.HasErrors() {
-		return cty.NilVal, diag
-	}
-	return v, nil
+func (e BaseExpression) Eval(ctx *hcl.EvalContext) (cty.Value, error) {
+	v, diag := e.e.Value(ctx)
+	return v, handleEvalErr(diag)
 }
 
 // Tokenize returns Tokens to be used for marshalling HCL
 func (e BaseExpression) Tokenize() hclwrite.Tokens {
-	return e.toks
+	// we have to perform deep clone of stored tokens to avoid side effects of hclwrite.
+	// See pkg/modulewriter/hcl_utils_test.go:TestShowcaseDangersOfHclWrite
+	cl := make(hclwrite.Tokens, len(e.toks))
+	for i, t := range e.toks {
+		ct := *t // copy Token
+		cl[i] = &ct
+	}
+	return cl
 }
 
 // References return Reference for all variables used in the expression
@@ -339,7 +363,7 @@ func TokensForValue(val cty.Value) hclwrite.Tokens {
 
 // FunctionCallExpression is a helper to build function call expression.
 func FunctionCallExpression(n string, args ...cty.Value) Expression {
-	if _, ok := functions()[n]; !ok {
+	if _, ok := availableFunctions[n]; !ok {
 		panic("unknown function " + n)
 	}
 	ta := make([]hclwrite.Tokens, len(args))
@@ -350,10 +374,16 @@ func FunctionCallExpression(n string, args ...cty.Value) Expression {
 	return MustParseExpression(string(toks.Bytes()))
 }
 
-func functions() map[string]function.Function {
+var availableFunctions = map[string]struct{}{
+	"flatten":    {},
+	"merge":      {},
+	"ghpc_stage": {}}
+
+func (bp *Blueprint) functions() map[string]function.Function {
 	return map[string]function.Function{
-		"flatten": stdlib.FlattenFunc,
-		"merge":   stdlib.MergeFunc,
+		"flatten":    stdlib.FlattenFunc,
+		"merge":      stdlib.MergeFunc,
+		"ghpc_stage": bp.makeGhpcStageFunc(),
 	}
 }
 
@@ -370,10 +400,36 @@ func valueReferences(v cty.Value) map[Reference]cty.Path {
 	return r
 }
 
-func evalValue(v cty.Value, bp Blueprint) (cty.Value, error) {
+func (bp *Blueprint) evalCtx() (*hcl.EvalContext, error) {
+	vars, err := bp.evalVars()
+	if err != nil {
+		return nil, err
+	}
+	return &hcl.EvalContext{
+		Variables: map[string]cty.Value{"var": vars.AsObject()},
+		Functions: bp.functions()}, nil
+}
+
+func (bp *Blueprint) Eval(v cty.Value) (cty.Value, error) {
+	ctx, err := bp.evalCtx()
+	if err != nil {
+		return cty.NilVal, err
+	}
+	return eval(v, ctx)
+}
+
+func (bp *Blueprint) EvalDict(d Dict) (Dict, error) {
+	res, err := bp.Eval(d.AsObject())
+	if err != nil {
+		return Dict{}, err
+	}
+	return NewDict(res.AsValueMap()), nil
+}
+
+func eval(v cty.Value, ctx *hcl.EvalContext) (cty.Value, error) {
 	return cty.Transform(v, func(p cty.Path, v cty.Value) (cty.Value, error) {
 		if e, is := IsExpressionValue(v); is {
-			return e.Eval(bp)
+			return e.Eval(ctx)
 		}
 		return v, nil
 	})
@@ -384,9 +440,10 @@ type pToken struct {
 	e Expression
 }
 
-func tokenizeBpString(s string) ([]pToken, error) {
+func tokenizeBpLine(s string) ([]pToken, error) {
+	line := s // copy
 	toks := []pToken{}
-	var exp Expression
+	var found string
 	var err error
 	bsRe := regexp.MustCompile(`\\*$`) // to count number of backslashes at the end
 
@@ -405,12 +462,51 @@ func tokenizeBpString(s string) ([]pToken, error) {
 		if bs%2 == 1 { // escaped $(
 			toks = append(toks, pToken{s: "$("}) // add "$("
 		} else { // found beginning of expression
-			exp, s, err = greedyParseHcl(s) // parse after "$("
+			offset := len(line) - len(s)
+			found, s, err = greedyParseHcl(s) // parse after "$("
 			if err != nil {
-				return nil, err
+				return nil, prepareParseHclErr(err, line, offset)
+			}
+			exp, err := BlueprintExpressionLiteralToExpression(found)
+			if err != nil {
+				return nil, prepareParseHclErr(err, line, offset)
 			}
 			toks = append(toks, pToken{e: exp}) // add expression
 		}
+	}
+	return toks, nil
+}
+
+// One can't translate HCL diagnostics position to the global YAML position,
+// due to lack of information about YAML string-style (e.g. double quoted, plain, folded etc),
+// therefore start position of the string in YAML document and indentation.
+// Render error in a scope of a single line of the string instead.
+func prepareParseHclErr(err error, line string, offset int) error {
+	var col int
+	if diag, is := err.(hcl.Diagnostics); is {
+		derr, _ := diag.Errs()[0].(*hcl.Diagnostic)
+		col = offset + derr.Subject.Start.Column
+		err = fmt.Errorf("%s; %s", derr.Summary, derr.Detail)
+	} else {
+		col = offset // point at the beginning of expression
+	}
+	return fmt.Errorf("%s\n  %s\n  %s^", err, line, strings.Repeat(" ", col))
+}
+
+func tokenizeBpString(s string) ([]pToken, error) {
+	toks := []pToken{}
+
+	// can't use `bufio.NewScanner` as it doesn't preserve trailing empty lines
+	lines := regexp.MustCompile("\r?\n").Split(s, -1)
+	for _, line := range lines {
+		if len(toks) > 0 {
+			toks = append(toks, pToken{s: "\n"})
+		}
+		ltoks, err := tokenizeBpLine(line)
+		if err != nil {
+			return nil, err
+		}
+		toks = append(toks, ltoks...)
 	}
 	return toks, nil
 }
@@ -463,7 +559,7 @@ func parseBpLit(s string) (cty.Value, error) {
 // The shortest expression is returned. E.g:
 // "var.hi) $(var.there)" -> "var.hi"
 // "try(var.this) + one(var.time)) tail" -> "try(var.this) + one(var.time)"
-func greedyParseHcl(s string) (Expression, string, error) {
+func greedyParseHcl(s string) (string, string, error) {
 	err := errors.New("no closing parenthesis")
 	for i := 0; i < len(s); i++ {
 		if s[i] != ')' {
@@ -471,12 +567,11 @@ func greedyParseHcl(s string) (Expression, string, error) {
 		}
 		_, diag := hclsyntax.ParseExpression([]byte(s[:i]), "", hcl.Pos{})
 		if !diag.HasErrors() { // found an expression
-			exp, err := BlueprintExpressionLiteralToExpression(s[:i])
-			return exp, s[i+1:], err
+			return s[:i], s[i+1:], nil
 		}
 		err = diag // save error, try to find another closing bracket
 	}
-	return nil, s, err
+	return "", s, err
 }
 
 func buildStringInterpolation(pts []pToken) (Expression, error) {

@@ -40,7 +40,7 @@
 
   - name: Look up user to use for install
     block:
-    
+
     - name: Check if user already exists
       ansible.builtin.getent:
         database: passwd
@@ -52,7 +52,7 @@
       register: system_user
 
     rescue:
-    - name: User did not exist, create group for system user 
+    - name: User did not exist, create group for system user
       ansible.builtin.group:
         name: "{{ system_user_name }}"
         gid: "{{ system_user_gid }}"
@@ -103,6 +103,7 @@
       owner: "{{ system_user.name }}"
       group: "{{ system_user.group }}"
       recurse: true
+      follow: false
     when: lock_out.rc == 0
 
   - name: Finalize setup
@@ -111,11 +112,12 @@
     become: true
     become_user: "{{ system_user.name }}"
 
-  - name: Apply chmod 
+  - name: Apply chmod
     ansible.builtin.file:
       path: "{{ install_dir }}"
       mode: "{{ chmod_mode | default(omit, true)  }}"
       recurse: true
+      follow: false
     when: (lock_out.rc == 0) and (chmod_mode != None)
 
   - name: Release lock

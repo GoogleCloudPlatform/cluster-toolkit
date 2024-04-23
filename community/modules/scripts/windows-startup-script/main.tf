@@ -14,10 +14,21 @@
  * limitations under the License.
  */
 
-
 locals {
-  nvidia_ps1 = var.install_nvidia_driver ? [file("${path.module}/files/install_gpu_driver.ps1")] : []
+  setx_http_proxy_ps1 = !var.http_proxy_set_environment ? [] : [
+    templatefile("${path.module}/templates/setx_http_proxy.ps1", {
+      "http_proxy" : var.http_proxy,
+      "no_proxy" : var.no_proxy,
+    })
+  ]
 
-  # anticipate concat multiple solutions over time
-  startup_ps1 = local.nvidia_ps1
+  nvidia_ps1 = !var.install_nvidia_driver ? [] : [
+    templatefile("${path.module}/templates/install_gpu_driver.ps1.tftpl", {
+      "url" : var.install_nvidia_driver_script
+      "args" : var.install_nvidia_driver_args
+      "http_proxy" : var.http_proxy,
+    })
+  ]
+
+  startup_ps1 = concat(local.setx_http_proxy_ps1, local.nvidia_ps1)
 }

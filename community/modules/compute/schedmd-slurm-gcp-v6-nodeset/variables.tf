@@ -13,7 +13,10 @@
 # limitations under the License.
 
 variable "name" {
-  description = "Name of the nodeset. Automatically populated by the module id if not set"
+  description = <<-EOD
+    Name of the nodeset. Automatically populated by the module id if not set.
+    If setting manually, ensure a unique value across all nodesets.
+    EOD
   type        = string
 }
 
@@ -30,7 +33,7 @@ variable "node_count_static" {
 }
 
 variable "node_count_dynamic_max" {
-  description = "Maximum number of dynamic nodes allowed in this partition."
+  description = "Maximum number of auto-scaling nodes allowed in this partition."
   type        = number
   default     = 10
 }
@@ -76,7 +79,7 @@ variable "instance_image" {
     EOD
   type        = map(string)
   default = {
-    family  = "slurm-gcp-6-1-hpc-rocky-linux-8"
+    family  = "slurm-gcp-6-4-hpc-rocky-linux-8"
     project = "schedmd-slurm-public"
   }
 
@@ -114,14 +117,9 @@ variable "tags" {
 }
 
 variable "disk_type" {
-  description = "Boot disk type, can be either pd-ssd, pd-standard, pd-balanced, or pd-extreme."
+  description = "Boot disk type, can be either hyperdisk-balanced, hyperdisk-extreme, pd-ssd, pd-standard, pd-balanced, or pd-extreme."
   type        = string
   default     = "pd-standard"
-
-  validation {
-    condition     = contains(["pd-ssd", "pd-standard", "pd-balanced", "pd-extreme"], var.disk_type)
-    error_message = "Variable disk_type must be one of pd-ssd, pd-standard, pd-balanced, or pd-extreme."
-  }
 }
 
 variable "disk_size_gb" {
@@ -261,17 +259,30 @@ variable "preemptible" {
   default     = false
 }
 
-variable "service_account" {
+
+variable "service_account_email" {
+  description = "Service account e-mail address to attach to the compute instances."
+  type        = string
+  default     = null
+}
+
+variable "service_account_scopes" {
+  description = "Scopes to attach to the compute instances."
+  type        = set(string)
+  default     = ["https://www.googleapis.com/auth/cloud-platform"]
+}
+
+variable "service_account" { # tflint-ignore: terraform_unused_declarations
+  description = "DEPRECATED: Use `service_account_email` and `service_account_scopes` instead."
   type = object({
     email  = string
     scopes = set(string)
   })
-  description = <<-EOD
-    Service account to attach to the compute instances. If not set, the
-    default compute service account for the given project will be used with the
-    "https://www.googleapis.com/auth/cloud-platform" scope.
-    EOD
-  default     = null
+  default = null
+  validation {
+    condition     = var.service_account == null
+    error_message = "DEPRECATED: Use `service_account_email` and `service_account_scopes` instead."
+  }
 }
 
 variable "enable_spot_vm" {
@@ -307,11 +318,22 @@ variable "bandwidth_tier" {
   }
 }
 
-variable "disable_public_ips" {
-  description = "If set to false. The node group VMs will have a random public IP assigned to it. Ignored if access_config is set."
+variable "enable_public_ips" {
+  description = "If set to true. The node group VMs will have a random public IP assigned to it. Ignored if access_config is set."
   type        = bool
-  default     = true
+  default     = false
 }
+
+variable "disable_public_ips" { # tflint-ignore: terraform_unused_declarations
+  description = "DEPRECATED: Use `enable_public_ips` instead."
+  type        = bool
+  default     = null
+  validation {
+    condition     = var.disable_public_ips == null
+    error_message = "DEPRECATED: Use `enable_public_ips` instead."
+  }
+}
+
 
 variable "enable_placement" {
   description = "Enable placement groups."
@@ -410,8 +432,29 @@ variable "access_config" {
 
 variable "reservation_name" {
   description = <<-EOD
-    Sets reservation affinity for instances created from this nodeset.
+    Name of the reservation to use for VM resources
+    - Must be a "SPECIFIC" reservation
+    - Set to empty string if using no reservation or automatically-consumed reservations
+  EOD
+  type        = string
+  default     = ""
+  nullable    = false
+}
+
+variable "maintenance_interval" {
+  description = <<-EOD
+    Sets the maintenance interval for instances in this nodeset.
+    See https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_instance#maintenance_interval.
   EOD
   type        = string
   default     = null
+}
+
+variable "startup_script" {
+  description = <<-EOD
+    Startup script used by VMs in this nodeset.
+    NOTE: will be executed after `compute_startup_script` defined on controller module.
+  EOD
+  type        = string
+  default     = "# no-op"
 }

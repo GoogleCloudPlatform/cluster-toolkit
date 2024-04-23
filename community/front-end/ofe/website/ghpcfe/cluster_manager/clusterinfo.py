@@ -531,7 +531,7 @@ deployment_groups:
             with log_out_fn.open("wb") as log_out:
                 with log_err_fn.open("wb") as log_err:
                     subprocess.run(
-                        [self.ghpc_path, "create", "cluster.yaml","-w"],
+                        [self.ghpc_path, "create", "cluster.yaml", "-w", "--validation-level", "WARNING"],
                         cwd=target_dir,
                         stdout=log_out,
                         stderr=log_err,

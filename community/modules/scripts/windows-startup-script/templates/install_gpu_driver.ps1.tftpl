@@ -1,0 +1,38 @@
+#Requires -RunAsAdministrator
+
+# Windows 2016 needs forced upgrade to TLS 1.2
+[Net.ServicePointManager]::SecurityProtocol = 'Tls12'
+
+# important for catching exception in Invoke-WebRequest
+Set-StrictMode -Version latest
+$ErrorActionPreference = 'Stop'
+
+%{ if http_proxy != "" }
+[System.Net.WebRequest]::DefaultWebProxy = New-Object System.Net.WebProxy("${http_proxy}")
+%{ endif }
+
+# Create the folder for the driver download
+$file_dir = 'C:\NVIDIA-Driver\nvidia_installer_windows.exe'
+if (!(Test-Path -Path 'C:\NVIDIA-Driver')) {
+    New-Item -Path 'C:\' -Name 'NVIDIA-Driver' -ItemType 'directory' | Out-Null
+}
+
+# Download the file to a specified directory
+Write-Output "Downloading ${url} to $file_dir"
+# Disabling progress bar has surprising large (10-100x) impact on speed
+$ProgressPreference = 'SilentlyContinue'
+try {
+    Invoke-WebRequest -Uri "${url}" -OutFile "$file_dir"
+} catch {
+    Write-Output "$_"
+    throw "Failed to download ${url}; exiting startup script"
+}
+
+# Install the file with the specified path from earlier as well as the RunAs admin option
+Write-Output "Executing $file_dir with arguments '${args}'"
+try {
+    Start-Process -FilePath "$file_dir" -ArgumentList '${args}' -Wait
+} catch {
+    Write-Output "$_"
+    throw "Could not install NVIDIA driver; exiting startup script"
+}

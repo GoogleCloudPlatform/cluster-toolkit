@@ -28,9 +28,6 @@ vars:
 deployment_groups:
 - group: primary
   modules:
-  # Source is an embedded resource, denoted by "resources/*" without ./, ../, /
-  # as a prefix. To refer to a local resource, prefix with ./, ../ or /
-  # Example - ./resources/network/vpc
   - id: network1
     source: modules/network/vpc
 
@@ -64,7 +61,7 @@ deployment_groups:
       name: c30
       machine_type: c2-standard-30
       instance_image:
-        family: slurm-gcp-5-9-debian-11
+        family: slurm-gcp-5-10-debian-11
         project: schedmd-slurm-public
       instance_image_custom: true
 
@@ -83,7 +80,7 @@ deployment_groups:
       name: cd112
       machine_type: c2d-standard-112
       instance_image:
-        family: slurm-gcp-5-9-hpc-centos-7
+        family: slurm-gcp-5-10-hpc-centos-7
         project: schedmd-slurm-public
       instance_image_custom: true
       enable_smt: true
@@ -139,6 +136,7 @@ deployment_groups:
         instance_template: null
         labels: $(vars.labels)
         machine_type: n2-standard-16
+        maintenance_interval: ""
         metadata: {}
         min_cpu_platform: null
         on_host_maintenance: TERMINATE

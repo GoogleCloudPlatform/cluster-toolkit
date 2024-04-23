@@ -49,7 +49,7 @@
         set -e -o pipefail
         gcloud compute images delete --project={{ project }} --quiet $(jq -r '.builds[-1].artifact_id' packer-manifest.json | cut -d ":" -f2)
       args:
-        chdir: "{{ workspace }}/{{ deployment_name }}/packer/custom-image"
+        chdir: "{{ workspace }}/{{ deployment_name }}/{{ packer_group_name }}/{{ packer_module_id }}"
         executable: /bin/bash
     - name: Trigger Cloud Build failure
       when: ghpc_destroy.failed or image_deletion.failed

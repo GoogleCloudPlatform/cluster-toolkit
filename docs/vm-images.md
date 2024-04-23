@@ -191,26 +191,26 @@ description of our support for Windows images.
 <tr>
   <th>Lustre</th>
   <th></th>
-  <td><a href="../tools/validate_configs/os_compatibility_tests/slurm-lustre.yaml">✓</a></td>
+  <td><a href="../examples/hpc-enterprise-slurm.yaml">✓</a></td>
   <td></td>
-  <td><a href="../tools/validate_configs/os_compatibility_tests/slurm-lustre.yaml">✓</a></td>
+  <td>✓</td>
   <td></td>
 </tr>
 <tr>
   <th>Shared filestore</th>
   <th></th>
-  <td><a href="../tools/validate_configs/os_compatibility_tests/slurm-filestore.yaml">✓</a></td>
-  <td><a href="../tools/validate_configs/os_compatibility_tests/slurm-filestore.yaml">✓</a></td>
-  <td><a href="../tools/validate_configs/os_compatibility_tests/slurm-filestore.yaml">✓</a></td>
-  <td><a href="../tools/validate_configs/os_compatibility_tests/slurm-filestore.yaml">✓</a></td>
+  <td>✓</td>
+  <td>✓</td>
+  <td><a href="../examples/hpc-slurm-v6.yaml">✓</a></td>
+  <td><a href="../community/examples/hpc-slurm-ubuntu2004-v6.yaml">✓</a></td>
 </tr>
 <tr>
   <th>Startup script</th>
   <th></th>
-  <td><a href="../tools/validate_configs/os_compatibility_tests/slurm-startup.yaml">✓</a></td>
-  <td><a href="../tools/validate_configs/os_compatibility_tests/slurm-startup.yaml">✓</a></td>
-  <td><a href="../tools/validate_configs/os_compatibility_tests/slurm-startup.yaml">✓</a></td>
-  <td><a href="../tools/validate_configs/os_compatibility_tests/slurm-startup.yaml">✓</a></td>
+  <td><a href="../community/examples/hpc-slurm-ramble-gromacs.yaml">✓</a></td>
+  <td>✓</td>
+  <td>✓</td>
+  <td>✓</td>
 </tr>
 
 <tr>
@@ -250,8 +250,8 @@ description of our support for Windows images.
   <th rowspan="1">HTCondor</th>
   <th></th>
   <th></th>
-  <td></td>
   <td>✓</td>
+  <td></td>
   <td>✓</td>
   <td></td>
 </tr>
@@ -313,10 +313,10 @@ These instructions apply to the following modules:
 * [schedmd-slurm-gcp-v5-login]
 * [schedmd-slurm-gcp-v5-node-group]
 
-[slurm-gcp]: https://github.com/SchedMD/slurm-gcp/tree/v5
-[slurm-gcp-packer]: https://github.com/SchedMD/slurm-gcp/tree/v5/packer
-[slurm-gcp-images]: https://github.com/SchedMD/slurm-gcp/blob/v5/docs/images.md
-[slurm-gcp-published-images]: https://github.com/SchedMD/slurm-gcp/blob/5.9.1/docs/images.md#published-image-family
+[slurm-gcp]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/v5
+[slurm-gcp-packer]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/v5/packer
+[slurm-gcp-images]: https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md
+[slurm-gcp-published-images]: https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#published-image-family
 [gcloud-compute-images]: https://cloud.google.com/sdk/gcloud/reference/compute/images/create
 
 [vm-instance]: ../modules/compute/vm-instance
@@ -336,9 +336,7 @@ These instructions apply to the following modules:
 [vm-crd.yaml]: ../tools/validate_configs/os_compatibility_tests/vm-crd.yaml
 [vm-filestore.yaml]: ../tools/validate_configs/os_compatibility_tests/vm-filestore.yaml
 [vm-lustre.yaml]: ../tools/validate_configs/os_compatibility_tests/vm-lustre.yaml
-[slurm-startup.yaml]: ../tools/validate_configs/os_compatibility_tests/slurm-startup.yaml
 [hpc-slurm-chromedesktop.yaml]: ../community/examples/hpc-slurm-chromedesktop.yaml
 [slurm-filestore.yaml]: ../tools/validate_configs/os_compatibility_tests/slurm-filestore.yaml
-[slurm-lustre.yaml]: ../tools/validate_configs/os_compatibility_tests/slurm-lustre.yaml
 [batch-startup.yaml]: ../tools/validate_configs/os_compatibility_tests/batch-startup.yaml
 [batch-filestore.yaml]: ../tools/validate_configs/os_compatibility_tests/batch-filestore.yaml

@@ -14,31 +14,14 @@
  * limitations under the License.
  */
 
-output "access_point_service_account_email" {
-  description = "HTCondor Access Point Service Account (e-mail format)"
-  value       = module.access_point_service_account.email
-  depends_on = [
-    module.access_point_service_account
-  ]
-}
-
-output "central_manager_service_account_email" {
-  description = "HTCondor Central Manager Service Account (e-mail format)"
-  value       = module.central_manager_service_account.email
-  depends_on = [
-    module.central_manager_service_account
-  ]
-}
-
-output "execute_point_service_account_email" {
-  description = "HTCondor Execute Point Service Account (e-mail format)"
-  value       = module.execute_point_service_account.email
-  depends_on = [
-    module.execute_point_service_account
-  ]
-}
-
 output "htcondor_bucket_name" {
   description = "Name of the HTCondor configuration bucket"
-  value       = module.htcondor_bucket.name
+  value       = module.htcondor_bucket.gcs_bucket_name
+
+  # ensure that all IAM bindings to the bucket and firewall rules are active
+  # before this modules output is allowed to propagate
+  depends_on = [
+    module.htcondor_bucket,
+    module.health_check_firewall_rule
+  ]
 }

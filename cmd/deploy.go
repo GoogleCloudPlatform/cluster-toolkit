@@ -24,95 +24,93 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
+func addDeployFlags(c *cobra.Command) *cobra.Command {
+	return addAutoApproveFlag(
+		addArtifactsDirFlag(
+			addCreateFlags(c)))
+}
+
 func init() {
-	artifactsFlag := "artifacts"
-
-	deployCmd.Flags().StringVarP(&artifactsDir, artifactsFlag, "a", "", "Artifacts output directory (automatically configured if unset)")
-	deployCmd.MarkFlagDirname(artifactsFlag)
-
-	autoApproveFlag := "auto-approve"
-	deployCmd.Flags().BoolVarP(&autoApprove, autoApproveFlag, "", false, "Automatically approve proposed changes")
-
 	rootCmd.AddCommand(deployCmd)
 }
 
 var (
-	deploymentRoot string
-	autoApprove    bool
-	applyBehavior  shell.ApplyBehavior
-	deployCmd      = &cobra.Command{
-		Use:               "deploy DEPLOYMENT_DIRECTORY",
+	deployCmd = addDeployFlags(&cobra.Command{
+		Use:               "deploy (<DEPLOYMENT_DIRECTORY> | <BLUEPRINT_FILE>)",
 		Short:             "deploy all resources in a Toolkit deployment directory.",
 		Long:              "deploy all resources in a Toolkit deployment directory.",
-		Args:              cobra.MatchAll(cobra.ExactArgs(1), checkDir),
-		ValidArgsFunction: matchDirs,
-		PreRunE:           parseDeployArgs,
+		Args:              cobra.MatchAll(cobra.ExactArgs(1), checkExists),
+		ValidArgsFunction: filterYaml,
 		Run:               runDeployCmd,
 		SilenceUsage:      true,
-	}
+	})
 )
 
-func parseDeployArgs(cmd *cobra.Command, args []string) error {
-	applyBehavior = getApplyBehavior(autoApprove)
-
-	deploymentRoot = args[0]
-	artifactsDir = getArtifactsDir(deploymentRoot)
-	if err := shell.CheckWritableDir(artifactsDir); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func getApplyBehavior(autoApprove bool) shell.ApplyBehavior {
-	if autoApprove {
-		return shell.AutomaticApply
-	}
-	return shell.PromptBeforeApply
-}
-
 func runDeployCmd(cmd *cobra.Command, args []string) {
-	expandedBlueprintFile := filepath.Join(artifactsDir, modulewriter.ExpandedBlueprintName)
-	dc, _, err := config.NewDeploymentConfig(expandedBlueprintFile)
-	checkErr(err)
-	groups := dc.Config.DeploymentGroups
-	checkErr(validateRuntimeDependencies(groups))
-	checkErr(shell.ValidateDeploymentDirectory(groups, deploymentRoot))
+	var deplRoot string
 
-	for _, group := range groups {
-		groupDir := filepath.Join(deploymentRoot, string(group.Name))
-		checkErr(shell.ImportInputs(groupDir, artifactsDir, expandedBlueprintFile))
+	if checkDir(cmd, args) != nil { // arg[0] is BLUEPRINT_FILE
+		deplRoot = doCreate(args[0])
+	} else { // arg[0] is DEPLOYMENT_DIRECTORY
+		deplRoot = args[0]
+		// check that no "create" flags were specified
+		cmd.Flags().VisitAll(func(f *pflag.Flag) {
+			if f.Changed && createCmd.Flag(f.Name) != nil {
+				checkErr(fmt.Errorf("cannot specify flag %q with DEPLOYMENT_DIRECTORY provided", f.Name), nil)
+			}
+		})
+	}
+	doDeploy(deplRoot)
+}
+
+func doDeploy(deplRoot string) {
+	artDir := getArtifactsDir(deplRoot)
+	checkErr(shell.CheckWritableDir(artDir), nil)
+	bp, ctx := artifactBlueprintOrDie(artDir)
+	groups := bp.Groups
+	checkErr(validateRuntimeDependencies(deplRoot, groups), ctx)
+	checkErr(shell.ValidateDeploymentDirectory(groups, deplRoot), ctx)
+
+	for ig, group := range groups {
+		groupDir := filepath.Join(deplRoot, string(group.Name))
+		checkErr(shell.ImportInputs(groupDir, artDir, bp), ctx)
 
 		switch group.Kind() {
 		case config.PackerKind:
 			// Packer groups are enforced to have length 1
 			subPath, e := modulewriter.DeploymentSource(group.Modules[0])
-			checkErr(e)
+			checkErr(e, ctx)
 			moduleDir := filepath.Join(groupDir, subPath)
-			checkErr(deployPackerGroup(moduleDir))
+			checkErr(deployPackerGroup(moduleDir, getApplyBehavior()), ctx)
 		case config.TerraformKind:
-			checkErr(deployTerraformGroup(groupDir))
+			checkErr(deployTerraformGroup(groupDir, artDir, getApplyBehavior()), ctx)
 		default:
-			checkErr(fmt.Errorf("group %s is an unsupported kind %s", groupDir, group.Kind().String()))
+			checkErr(
+				config.BpError{
+					Err:  fmt.Errorf("group %q is an unsupported kind %q", groupDir, group.Kind()),
+					Path: config.Root.Groups.At(ig).Name}, ctx)
 		}
 	}
 	logging.Info("\n###############################")
-	printAdvancedInstructionsMessage(deploymentRoot)
+	printAdvancedInstructionsMessage(deplRoot)
 }
 
-func validateRuntimeDependencies(groups []config.DeploymentGroup) error {
-	for _, group := range groups {
+func validateRuntimeDependencies(deplDir string, groups []config.Group) error {
+	for ig, group := range groups {
 		var err error
 		switch group.Kind() {
 		case config.PackerKind:
 			err = shell.ConfigurePacker()
 		case config.TerraformKind:
-			groupDir := filepath.Join(deploymentRoot, string(group.Name))
+			groupDir := filepath.Join(deplDir, string(group.Name))
 			_, err = shell.ConfigureTerraform(groupDir)
 		default:
-			err = fmt.Errorf("group %s is an unsupported kind %q", group.Name, group.Kind().String())
+			err = config.BpError{
+				Path: config.Root.Groups.At(ig).Name,
+				Err:  fmt.Errorf("group %s is an unsupported kind %q", group.Name, group.Kind().String())}
 		}
 		if err != nil {
 			return err
@@ -121,7 +119,7 @@ func validateRuntimeDependencies(groups []config.DeploymentGroup) error {
 	return nil
 }
 
-func deployPackerGroup(moduleDir string) error {
+func deployPackerGroup(moduleDir string, applyBehavior shell.ApplyBehavior) error {
 	if err := shell.ConfigurePacker(); err != nil {
 		return err
 	}
@@ -147,7 +145,7 @@ func deployPackerGroup(moduleDir string) error {
 	return nil
 }
 
-func deployTerraformGroup(groupDir string) error {
+func deployTerraformGroup(groupDir string, artifactsDir string, applyBehavior shell.ApplyBehavior) error {
 	tf, err := shell.ConfigureTerraform(groupDir)
 	if err != nil {
 		return err

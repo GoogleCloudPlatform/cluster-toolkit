@@ -265,3 +265,8 @@ func (s *zeroSuite) TestUnmarshalOutputInfo(c *C) {
 	y = "{ name: foo, description: bar, sensitive: contingent }"
 	c.Check(yaml.Unmarshal([]byte(y), &oinfo), NotNil)
 }
+
+func (s *zeroSuite) TestLegacyMetadata(c *C) { // dummy test for sake of coverage
+	mi := legacyMetadata("modules/arbuz/velikan")
+	c.Check(mi.Spec.Requirements.Services, DeepEquals, []string{})
+}

@@ -20,102 +20,49 @@ locals {
 }
 
 locals {
-  execute_point_display_name   = "HTCondor Execute Point (${var.deployment_name})"
-  execute_point_roles          = [for role in var.execute_point_roles : "${var.project_id}=>${role}"]
-  access_point_display_name    = "HTCondor Access Point (${var.deployment_name})"
-  access_point_roles           = [for role in var.access_point_roles : "${var.project_id}=>${role}"]
-  central_manager_display_name = "HTCondor Central Manager (${var.deployment_name})"
-  central_manager_roles        = [for role in var.central_manager_roles : "${var.project_id}=>${role}"]
-}
-
-module "htcondor_bucket" {
-  source  = "terraform-google-modules/cloud-storage/google"
-  version = "~> 4.0"
-
-  project_id       = var.project_id
-  location         = var.region
-  prefix           = var.deployment_name
-  names            = ["htcondor-config"]
-  randomize_suffix = true
-  labels           = local.labels
-
-  bucket_viewers = {
-    "htcondor-config" = join(",", [
-      module.access_point_service_account.iam_email,
-      module.central_manager_service_account.iam_email,
-      module.execute_point_service_account.iam_email,
-    ])
-  }
-  set_viewer_roles = true
-}
-
-module "access_point_service_account" {
-  source     = "terraform-google-modules/service-accounts/google"
-  version    = "~> 4.2"
-  project_id = var.project_id
-  prefix     = var.deployment_name
-
-  names         = ["access"]
-  display_name  = local.access_point_display_name
-  project_roles = local.access_point_roles
-}
-
-module "execute_point_service_account" {
-  source     = "terraform-google-modules/service-accounts/google"
-  version    = "~> 4.2"
-  project_id = var.project_id
-  prefix     = var.deployment_name
-
-  names         = ["execute"]
-  display_name  = local.execute_point_display_name
-  project_roles = local.execute_point_roles
-}
-
-module "central_manager_service_account" {
-  source     = "terraform-google-modules/service-accounts/google"
-  version    = "~> 4.2"
-  project_id = var.project_id
-  prefix     = var.deployment_name
-
-  names         = ["cm"]
-  display_name  = local.central_manager_display_name
-  project_roles = local.central_manager_roles
-}
-
-data "google_compute_subnetwork" "htcondor" {
-  self_link = var.subnetwork_self_link
+  service_account_iam_email = [
+    "serviceAccount:${var.access_point_service_account_email}",
+    "serviceAccount:${var.central_manager_service_account_email}",
+    "serviceAccount:${var.execute_point_service_account_email}",
+  ]
+  service_account_email = [
+    var.access_point_service_account_email,
+    var.central_manager_service_account_email,
+    var.execute_point_service_account_email,
+  ]
 }
 
 module "health_check_firewall_rule" {
-  source       = "terraform-google-modules/network/google//modules/firewall-rules"
-  version      = "~> 6.0"
-  project_id   = data.google_compute_subnetwork.htcondor.project
-  network_name = data.google_compute_subnetwork.htcondor.network
+  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/network/firewall-rules?ref=9e695aab"
 
-  rules = [{
+  subnetwork_self_link = var.subnetwork_self_link
+
+  ingress_rules = [{
     name        = "allow-health-check-${var.deployment_name}"
     description = "Allow Managed Instance Group Health Checks for HTCondor VMs"
     direction   = "INGRESS"
-    priority    = null
-    ranges = [
+    source_ranges = [
       "130.211.0.0/22",
       "35.191.0.0/16",
     ]
-    source_tags             = null
-    source_service_accounts = null
-    target_tags             = null
-    target_service_accounts = [
-      module.access_point_service_account.email,
-      module.central_manager_service_account.email,
-      module.execute_point_service_account.email,
-    ]
+    target_service_accounts = local.service_account_email
     allow = [{
       protocol = "tcp"
       ports    = ["9618"]
     }]
-    deny = []
-    log_config = {
-      metadata = "INCLUDE_ALL_METADATA"
-    }
   }]
+}
+
+module "htcondor_bucket" {
+  source = "github.com/GoogleCloudPlatform/hpc-toolkit//community/modules/file-system/cloud-storage-bucket/?ref=9e695aab"
+
+  project_id      = var.project_id
+  deployment_name = var.deployment_name
+  region          = var.region
+  name_prefix     = "${var.deployment_name}-htcondor-config"
+  random_suffix   = true
+  labels          = local.labels
+  viewers         = local.service_account_iam_email
+
+  use_deployment_name_in_bucket_name = false
 }

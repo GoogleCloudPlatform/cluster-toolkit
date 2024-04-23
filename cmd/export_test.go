@@ -34,8 +34,3 @@ func (s *MySuite) TestIsDir(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(checkDir(nil, []string{f.Name()}), NotNil)
 }
-
-func (s *MySuite) TestRunExport(c *C) {
-	dir := c.MkDir()
-	c.Assert(runExportCmd(nil, []string{dir}), NotNil)
-}

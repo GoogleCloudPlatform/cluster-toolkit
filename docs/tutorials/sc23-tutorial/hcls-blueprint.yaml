@@ -174,7 +174,6 @@ deployment_groups:
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
     use:
     - compute_nodeset
-    - nfs
     settings:
       partition_name: compute
       exclusive: false
@@ -187,7 +186,7 @@ deployment_groups:
     - nfs
     settings:
       machine_type: n2-standard-4
-      disable_controller_public_ips: false
+      enable_controller_public_ips: true
       controller_startup_script: $(controller-startup.controller_startup_script)
       controller_startup_scripts_timeout: 0
 

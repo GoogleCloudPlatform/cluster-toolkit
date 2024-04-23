@@ -15,17 +15,17 @@
 - name: Assert variables are defined
   ansible.builtin.assert:
     that:
-    - vm_name is defined
     - timeout_seconds is defined
 
 - name: Wait for startup script to complete
   become: true
-  ansible.builtin.wait_for:
-    path: /var/log/messages
-    search_regex: '.*{{ vm_name }}.*startup-script exit status ([0-9]+)'
-    timeout: "{{ timeout_seconds }}"
-  register: startup_status
+  ansible.builtin.shell: journalctl -u google-startup-scripts.service -b | grep -oP "startup-script exit status \K\d+"
+  register: result
+  until: result.rc == 0
+  retries: "{{ (timeout_seconds/5)|int }}"
+  delay: 5
+
 - name: Fail if startup script exited with a non-zero return code
   ansible.builtin.fail:
     msg: There was a failure in the startup script
-  when: startup_status['match_groups'][0] != "0"
+  when: result.stdout != "0"

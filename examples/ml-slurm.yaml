@@ -40,16 +40,51 @@ vars:
 deployment_groups:
 - group: primary
   modules:
-  - id: network1
+  - id: network
     source: modules/network/pre-existing-vpc
+
+  # this example anticipates that the VPC default network has internal traffic
+  # allowed and IAP tunneling for SSH connections
+  - id: firewall_rule
+    source: modules/network/firewall-rules
+    use:
+    - network
+    settings:
+      ingress_rules:
+      - name: $(vars.deployment_name)-allow-internal-traffic
+        description: Allow internal traffic
+        destination_ranges:
+        - $(network.subnetwork_address)
+        source_ranges:
+        - $(network.subnetwork_address)
+        allow:
+        - protocol: tcp
+          ports:
+          - 0-65535
+        - protocol: udp
+          ports:
+          - 0-65535
+        - protocol: icmp
+      - name: $(vars.deployment_name)-allow-iap-ssh
+        description: Allow IAP-tunneled SSH connections
+        destination_ranges:
+        - $(network.subnetwork_address)
+        source_ranges:
+        - 35.235.240.0/20
+        allow:
+        - protocol: tcp
+          ports:
+          - 22
+
   - id: homefs
     source: modules/file-system/filestore
     use:
-    - network1
+    - network
     settings:
       local_mount: /home
       size_gb: 2560
       filestore_tier: BASIC_SSD
+
   - id: script
     source: modules/scripts/startup-script
     settings:
@@ -128,15 +163,15 @@ deployment_groups:
     source: modules/packer/custom-image
     kind: packer
     use:
-    - network1
+    - network
     - script
     settings:
       # give VM a public IP to ensure startup script can reach public internet
       # w/o new VPC
       omit_external_ip: false
       source_image_project_id: [schedmd-slurm-public]
-      # see latest in https://github.com/SchedMD/slurm-gcp/blob/master/docs/images.md#published-image-family
-      source_image_family: slurm-gcp-5-9-debian-11
+      # see latest in https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#published-image-family
+      source_image_family: slurm-gcp-5-10-debian-11
       # You can find size of source image by using following command
       # gcloud compute images describe-from-family <source_image_family> --project schedmd-slurm-public
       disk_size: $(vars.disk_size_gb)
@@ -207,7 +242,7 @@ deployment_groups:
     use:
     - a2_node_group
     - homefs
-    - network1
+    - network
     settings:
       partition_name: a2
       is_default: true
@@ -226,7 +261,7 @@ deployment_groups:
     use:
     - g2_node_group
     - homefs
-    - network1
+    - network
     settings:
       partition_name: g2
       enable_placement: false
@@ -235,7 +270,7 @@ deployment_groups:
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
     use:
-    - network1
+    - network
     - a2_partition
     - g2_partition
     - homefs
@@ -248,7 +283,7 @@ deployment_groups:
     source: community/modules/scheduler/schedmd-slurm-gcp-v5-login
     use:
     - examples
-    - network1
+    - network
     - slurm_controller
     settings:
       disable_login_public_ips: false

@@ -54,7 +54,7 @@ locals {
 }
 
 module "startup_script" {
-  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=50644b2"
+  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=v1.32.1&depth=1"
 
   labels          = local.labels
   project_id      = var.project_id

@@ -42,3 +42,9 @@ resource "google_storage_bucket" "bucket" {
   labels                      = local.labels
   force_destroy               = var.force_destroy
 }
+
+resource "google_storage_bucket_iam_binding" "viewers" {
+  bucket  = google_storage_bucket.bucket.name
+  role    = "roles/storage.objectViewer"
+  members = var.viewers
+}

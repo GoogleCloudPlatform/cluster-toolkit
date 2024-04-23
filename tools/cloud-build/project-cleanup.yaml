@@ -23,18 +23,51 @@ steps:
   args:
   - -c
   - |
-    failures=0
     trap 'failures=$((failures+1))' ERR
-    echo
-    echo "Cleaning Resource Policies"
-    /workspace/tools/clean-resource-policies.sh
-    echo
-    echo "Cleaning Filestore"
-    /workspace/tools/clean-filestore-limit.sh
-    echo
-    echo "Cleaning Metadata"
-    /workspace/tools/clean-metadata.sh
+    # retry for up to 2047 seconds (34 minutes)
+    attempt=0
+    max_retries=10
+    while [[ $attempt -le $max_retries ]]; do
+        failures=0
+        if [[ $attempt -gt 0 ]]; then
+            wait=$((2 ** attempt))
+            echo "Retry attempt ${attempt} of ${max_retries} with exponential backoff: ${wait} seconds."
+            sleep $wait
+        fi
+
+        # look only for tests that either use Slurm5, Slurm6 or Filestore
+        builds_filter="tags=m.schedmd-slurm-gcp-v6-controller OR tags=m.schedmd-slurm-gcp-v5-controller OR tags=m.filestore"
+        builds_format="value(substitutions.TRIGGER_NAME,logUrl)"
+        active_builds=$(gcloud builds list --project "${PROJECT_ID}" --filter="${builds_filter}" --format="${builds_format}" --ongoing 2>/dev/null)
+        if [[ -n "$active_builds" ]]; then
+            echo "There are active Cloud Build jobs."
+            echo "$active_builds"
+            echo "Skipping cleanup."
+            # set failures to non-0 in case this is last retry
+            ((failures++))
+            ((attempt++))
+            continue
+        fi
+
+        echo
+        echo "Cleaning Resource Policies"
+        /workspace/tools/clean-resource-policies.sh
+        echo
+        echo "Cleaning Filestore"
+        /workspace/tools/clean-filestore-limit.sh
+        echo
+        echo "Cleaning Metadata"
+        /workspace/tools/clean-metadata.sh
+
+        if [[ $failures -eq 0 ]]; then
+            break
+        else
+            echo "At least one failure occurred during cleanup."
+            ((attempt++))
+        fi
+    done
+
     if [[ $failures -ne 0 ]]; then
-      echo "Failures during cleanup, check above"
-      exit 1
+        echo "Cleanup did not succeed despite retrying."
+        exit 1
     fi

@@ -21,7 +21,7 @@ deployment_name: "debi-v5-{{ build }}"
 slurm_cluster_name: "debiv5{{ build[0:4] }}"
 
 cli_deployment_vars:
-   instance_image: "{family: slurm-gcp-5-9-debian-11, project: schedmd-slurm-public}"
+   instance_image: "{family: slurm-gcp-5-10-debian-11, project: schedmd-slurm-public}"
    region: us-west4
    zone: us-west4-c
 
@@ -29,7 +29,6 @@ zone: us-west4-c
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/community/examples/hpc-slurm-ubuntu2004.yaml"
 network: "{{ deployment_name }}-net"
-max_nodes: 5
 # Note: Pattern matching in gcloud only supports 1 wildcard, centv5*-login-* won't work.
 login_node: "{{ slurm_cluster_name }}-login-*"
 controller_node: "{{ slurm_cluster_name }}-controller"

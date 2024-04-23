@@ -17,10 +17,6 @@ locals {
   labels = merge(var.labels, { ghpc_module = "schedmd-slurm-gcp-v6-login", ghpc_role = "scheduler" })
 }
 
-data "google_compute_default_service_account" "default" {
-  project = var.project_id
-}
-
 locals {
 
   additional_disks = [
@@ -35,6 +31,7 @@ locals {
     }
   ]
 
+  public_access_config = [{ nat_ip = null, network_tier = null }]
 
   login_node = {
     name_prefix      = var.name_prefix
@@ -45,10 +42,10 @@ locals {
     additional_disks = local.additional_disks
 
     can_ip_forward = var.can_ip_forward
-    disable_smt    = var.disable_smt
+    disable_smt    = !var.enable_smt
 
     enable_confidential_vm   = var.enable_confidential_vm
-    enable_public_ip         = !var.disable_login_public_ips
+    access_config            = var.enable_login_public_ips ? local.public_access_config : []
     enable_oslogin           = var.enable_oslogin
     enable_shielded_vm       = var.enable_shielded_vm
     shielded_instance_config = var.shielded_instance_config
@@ -65,10 +62,10 @@ locals {
     region              = var.region
     zone                = var.zone
 
-    service_account = coalesce(var.service_account, {
-      email  = data.google_compute_default_service_account.default.email
-      scopes = ["https://www.googleapis.com/auth/cloud-platform"]
-    })
+    service_account = {
+      email  = var.service_account_email
+      scopes = var.service_account_scopes
+    }
 
     source_image_family  = local.source_image_family             # requires source_image_logic.tf
     source_image_project = local.source_image_project_normalized # requires source_image_logic.tf

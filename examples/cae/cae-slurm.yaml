@@ -36,14 +36,14 @@ vars:
   # zone: europe-west4-b
   region: us-central1
   zone: us-central1-a
-  # Visit https://github.com/SchedMD/slurm-gcp/blob/master/docs/images.md#published-image-family
+  # Visit https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#published-image-family
   # for a list of valid family options with Slurm; note: the image types for the compute nodes
   # and the Chrome Remote Desktop (CRD) need to have the same Slurm base.
   instance_image:
-    family: slurm-gcp-5-9-hpc-centos-7
+    family: slurm-gcp-5-10-hpc-centos-7
     project: schedmd-slurm-public
   crd_instance_image:
-    family: slurm-gcp-5-9-debian-11   # must be Debian for CRD
+    family: slurm-gcp-5-10-debian-11   # must be Debian for CRD
     project: schedmd-slurm-public
 
 # Documentation for each of the modules used below can be found at

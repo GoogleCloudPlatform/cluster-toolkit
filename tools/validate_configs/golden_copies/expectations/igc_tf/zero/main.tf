@@ -14,6 +14,13 @@
   * limitations under the License.
   */
 
+terraform {
+  backend "gcs" {
+    bucket = "us-east4-c"
+    prefix = "igc/golden_copy_deployment/zero"
+  }
+}
+
 module "network0" {
   source          = "./modules/embedded/modules/network/vpc"
   deployment_name = var.deployment_name

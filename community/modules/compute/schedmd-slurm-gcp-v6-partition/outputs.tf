@@ -18,18 +18,16 @@ output "partitions" {
   value = [local.partition]
 
   precondition {
-    condition     = (length(local.use_placement) == 0) || var.exclusive
-    error_message = "If any nodeset `enable_placement`, `var.exclusive` must be set true"
+    condition     = (length(local.non_static_ns_with_placement) == 0) || var.exclusive
+    error_message = "If any non-static nodesets has `enable_placement`, `var.exclusive` must be set true"
   }
 
   precondition {
-    condition     = (length(local.use_placement) == 0) || contains(["NO", "Exclusive"], lookup(var.partition_conf, "Oversubscribe", "NO"))
-    error_message = "If any nodeset `enable_placement`, var.partition_conf[\"Oversubscribe\"] should be either undefined, \"NO\", or \"Exclusive\"."
-  }
-
-  precondition {
-    condition     = (length(local.use_placement) == 0) || (lookup(var.partition_conf, "SuspendTime", null) == null)
-    error_message = "If any nodeset `enable_placement`, var.partition_conf[\"SuspendTime\"] should be undefined."
+    condition     = (length(local.use_static) == 0) || !var.exclusive
+    error_message = <<-EOD
+    Can't use static nodes within partition with `var.exclusive` set to `true`.
+    NOTE: Partition's `var.exclusive` is set to `true` by default. Set it to `false` explicitly to use static nodes.
+    EOD
   }
 }
 
@@ -40,7 +38,14 @@ output "nodeset" {
 }
 
 output "nodeset_tpu" {
-  description = "Details of a nodesets tpu in this partition"
+  description = "Details of a TPU nodesets in this partition"
 
   value = var.nodeset_tpu
+}
+
+
+output "nodeset_dyn" {
+  description = "Details of a dynamic nodesets in this partition"
+
+  value = var.nodeset_dyn
 }

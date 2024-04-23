@@ -1,0 +1,37 @@
+# Copyright 2022 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: crd-default
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: network
+    source: modules/network/vpc
+
+  - id: crd
+    source: community/modules/remote-desktop/chrome-remote-desktop
+    use: [network]
+    settings:
+      install_nvidia_driver: true  # Must be set to true to accept Nvidia ToS for driver install
+      # instance_image defaults to some debian
+
+  # This module makes terraform wait until the remote-desktop setup is complete
+  - id: wait
+    source: community/modules/scripts/wait-for-startup
+    use: [crd]
+    settings:
+      timeout: 1500  # bumping to avoid timeout

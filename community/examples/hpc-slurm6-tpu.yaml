@@ -17,33 +17,32 @@
 blueprint_name: slurm6-tpu
 
 vars:
-  project_id:
+  project_id: ## Set GCP Project ID Here ##
   deployment_name: slurm6-tpu
   region: us-central1
-  zone: us-central1-b
+  zone: us-central1-a
 
 deployment_groups:
 - group: primary
   modules:
   - id: network
-    source: modules/network/pre-existing-vpc
+    source: modules/network/vpc
 
   - id: tpu_nodeset
     source: ./community/modules/compute/schedmd-slurm-gcp-v6-nodeset-tpu
     use: [network]
     settings:
-      name: v2x8
-      node_type: v2-8
-      tf_version: 2.10.0
-      disable_public_ips: false
-      # To specify if TPU nodes are preemptible. The nodes will be shut down if
-      # it requires additional resources.
+      node_type: v3-8
+      tf_version: 2.14.0
+      # Preemptible TPUs cost much less than non-preemptible TPUs.
+      # The Cloud TPU service might preempt (shut down) these TPUs at any time.
       # https://cloud.google.com/tpu/docs/preemptible
-      preemptible: true
+      preemptible: false
       # Specify whether to preserve TPU on suspend.
       # If set to true, suspended VM will be stopped.
       # If set to false, suspended VM will be deleted.
       preserve_tpu: false
+      node_count_dynamic_max: 1
 
   - id: tpu_partition
     source: ./community/modules/compute/schedmd-slurm-gcp-v6-partition
@@ -57,7 +56,7 @@ deployment_groups:
     settings:
       name_prefix: "v6tpu"
       machine_type: n2-standard-4
-      disable_login_public_ips: false
+      enable_login_public_ips: true
 
   - id: slurm_controller
     source: ./community/modules/scheduler/schedmd-slurm-gcp-v6-controller
@@ -66,4 +65,4 @@ deployment_groups:
     - slurm_login
     - network
     settings:
-      disable_controller_public_ips: false
+      enable_controller_public_ips: true

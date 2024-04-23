@@ -35,28 +35,21 @@ deployment_groups:
     use: [network1]
     settings: {local_mount: /sw}
 
-  - id: load-data-startup
-    source: modules/scripts/startup-script
-    settings:
-      runners:
-      - type: shell
-        destination: generate_hello.sh
-        content: |
-          #!/bin/sh
-          echo "Hello World" > /sw/hello.txt
-
   - id: batch-job
     source: modules/scheduler/batch-job-template
     use: [network1, appfs]
     settings:
-      runnable: "cat /sw/hello.txt"
+      runnable: |
+        mkdir -p /sw/$BATCH_JOB_UID
+        echo "Hello World from task $BATCH_TASK_INDEX" > /sw/$BATCH_JOB_UID/$BATCH_TASK_INDEX.txt
       machine_type: n2-standard-4
+      task_count: 8
+      task_count_per_node: 4
       instance_image:
-        family: hpc-rocky-linux-8
-        project: cloud-hpc-image-public
+        family: batch-centos-7-official
+        project: batch-custom-image
 
   - id: batch-login
     source: modules/scheduler/batch-login-node
     use: [batch-job]
-    settings: {startup_script: $(load-data-startup.startup_script)}
     outputs: [instructions]

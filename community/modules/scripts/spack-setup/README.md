@@ -135,6 +135,10 @@ sudo usermod -a -G spack <username>
 Log out and back in so the group change will take effect, then `<username>` will
 be able to call `spack install <package>`.
 
+> [!NOTE]
+> A background persistent SSH connections may prevent the group change from
+> taking effect.
+
 You can use the `system_user_name`, `system_user_uid`, and `system_user_gid` to
 customize the name and ids of the system user. While unlikely, it is possible
 that the default `system_user_uid` or `system_user_gid` could conflict with
@@ -336,7 +340,7 @@ limitations under the License.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_startup_script"></a> [startup\_script](#module\_startup\_script) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | 50644b2 |
+| <a name="module_startup_script"></a> [startup\_script](#module\_startup\_script) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | v1.32.1&depth=1 |
 
 ## Resources
 

@@ -65,6 +65,7 @@ srun: error: Job allocation 2 has been revoked
 ```
 
 Possible causes could be [insufficient quota](#insufficient-quota),
+[insufficient capacity](#insufficient-capacity),
 [placement groups](#placement-groups-slurm), or
 [insufficient permissions](#insufficient-service-account-permissions)
 for the service account attached to the controller. Also see the
@@ -88,7 +89,28 @@ The solution here is to [request more of the specified quota](#gcp-quotas),
 `C2 CPUs` in the example above. Alternatively, you could switch the partition's
 [machine type][partition-machine-type], to one which has sufficient quota.
 
-[partition-machine-type]: community/modules/compute/SchedMD-slurm-on-gcp-partition/README.md#input_machine_type
+[partition-machine-type]: community/modules/compute/schedmd-slurm-gcp-v6-nodeset/README.md#input_machine_type
+
+#### Insufficient Capacity
+
+It may be that the zone the partition is deployed in has no remaining capacity to create the
+compute nodes required to run your submitted job.
+
+Check the `resume.log` file for possible errors by SSH-ing into the controller VM and running the following:
+
+```shell
+sudo cat /var/log/slurm/resume.log
+```
+
+One example of an error message which appears in `resume.log` due to insufficient capacity is:
+
+```text
+bulkInsert operation errors: VM_MIN_COUNT_NOT_REACHED
+```
+
+When this happens, the the output of `sacct` will show the job's status as `NODE_FAIL`.
+
+Jobs submitted via `srun` will not be requeued, however jobs submitted via `sbatch` will be requeued.
 
 #### Placement Groups (Slurm)
 
@@ -109,7 +131,7 @@ resume.py ERROR: group operation failed: Requested minimum count of 6 VMs could 
 One way to resolve this is to set [enable_placement][partition-enable-placement]
 to `false` on the partition in question.
 
-[partition-enable-placement]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/compute/SchedMD-slurm-on-gcp-partition#input_enable_placement
+[partition-enable-placement]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/compute/schedmd-slurm-gcp-v6-nodeset#input_enable_placement
 
 #### VMs Get Stuck in Status Staging When Using Placement Groups With vm-instance
 
@@ -188,8 +210,8 @@ After creating the service account, it can be set via the
 
 [def-compute-sa]: https://cloud.google.com/compute/docs/access/service-accounts#default_service_account
 [slurm-on-gcp-ug]: https://goo.gle/slurm-gcp-user-guide
-[slurm-on-gcp-con]: community/modules/scheduler/SchedMD-slurm-on-gcp-controller/README.md
-[slurm-on-gcp-login]: community/modules/scheduler/SchedMD-slurm-on-gcp-login-node/README.md
+[slurm-on-gcp-con]: community/modules/scheduler/schedmd-slurm-gcp-v6-controller/README.md
+[slurm-on-gcp-login]: community/modules/scheduler/schedmd-slurm-gcp-v6-login/README.md
 
 ### Timeout Error / Startup Script Failure (Slurm V5)
 

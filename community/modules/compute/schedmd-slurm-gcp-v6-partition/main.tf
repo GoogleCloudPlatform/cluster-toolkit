@@ -13,16 +13,16 @@
 # limitations under the License.
 
 locals {
-
-  use_placement = [for ns in var.partition_conf : ns.nodeset_name if ns.enable_placement]
+  non_static_ns_with_placement = [for ns in var.nodeset : ns.nodeset_name if ns.enable_placement && ns.node_count_static == 0]
+  use_static                   = [for ns in concat(var.nodeset, var.nodeset_tpu) : ns.nodeset_name if ns.node_count_static > 0]
 
   partition = {
     default               = var.is_default
     enable_job_exclusive  = var.exclusive
-    network_storage       = var.network_storage
     partition_conf        = var.partition_conf
     partition_name        = var.partition_name
     partition_nodeset     = [for ns in var.nodeset : ns.nodeset_name]
     partition_nodeset_tpu = [for ns in var.nodeset_tpu : ns.nodeset_name]
+    partition_nodeset_dyn = [for ns in var.nodeset_dyn : ns.nodeset_name]
   }
 }

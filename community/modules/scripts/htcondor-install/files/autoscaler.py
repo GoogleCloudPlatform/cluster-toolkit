@@ -253,17 +253,17 @@ class AutoScaler:
         current_target = responseGroupInfo["targetSize"]
         print(f"Current MIG target size: {current_target}")
 
-        being_born_states = ["CREATING", "RECREATING", "VERIFYING"]
-        being_born_filters = [ f"currentAction = \"{state}\"" for state in being_born_states ]
-        being_born_combined_filter = ' OR '.join(being_born_filters)
-        reqCreatingInstances = self.instanceGroupManagers.listManagedInstances(
+        # Find instances that are being modified by the MIG (currentAction is
+        # any value other than "NONE"). A common reason an instance is modified
+        # is it because it has failed a health check.
+        reqModifyingInstances = self.instanceGroupManagers.listManagedInstances(
             project=self.project,
             **self.zoneargs,
             instanceGroupManager=self.instance_group_manager,
-            filter=being_born_combined_filter,
+            filter="currentAction != \"NONE\"",
             orderBy="creationTimestamp desc"
         )
-        respCreatingInstances = reqCreatingInstances.execute()
+        respModifyingInstances = reqModifyingInstances.execute()
 
         # Find VMs that are idle (no dynamic slots created from partitionable
         # slots) in the MIG handled by this autoscaler
@@ -287,17 +287,19 @@ class AutoScaler:
         # their readiness to join pool (creating, unhealthy, healthy+idle)
         idle_nodes = OrderedDict()
         try:
-            creatingInstances = respCreatingInstances["managedInstances"]
+            modifyingInstances = respModifyingInstances["managedInstances"]
         except KeyError:
-            creatingInstances = []
+            modifyingInstances = []
+
+        print(f"There are {len(modifyingInstances)} VMs being modified by the managed instance group")
 
         # there is potential for nodes in MIG health check "VERIFYING" state
         # to have already joined the pool and be running jobs
-        for instance in creatingInstances:
+        for instance in modifyingInstances:
             self_link = instance["instance"]
             node_name = self_link.rsplit("/", 1)[-1]
             if node_name not in claimed_nodes:
-                idle_nodes[self_link] = "creating"
+                idle_nodes[self_link] = "modifying"
 
         for ad in idle_node_ads:
             node = ad["Machine"].split(".")[0]
@@ -311,7 +313,7 @@ class AutoScaler:
             idle_nodes[self_link] = "idle"
         n_idle = len(idle_nodes)
 
-        print(f"There are {n_idle} VMs being created or idle in the pool")
+        print(f"There are {n_idle} VMs being modified or idle in the pool")
         if self.debug > 1:
             print("Listing idle nodes:")
             pprint(idle_nodes)

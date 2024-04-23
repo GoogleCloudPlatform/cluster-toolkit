@@ -78,24 +78,17 @@ deployment_groups:
         spack config --scope defaults add config:build_stage:/sw/spack/spack-stage
         spack config --scope defaults add -f /tmp/projections-config.yaml
 
-        spack install gcc@10.3.0 target=x86_64
-        spack load gcc@10.3.0 target=x86_64
+        spack install gcc@13.1.0 target=x86_64
+        spack load gcc@13.1.0 target=x86_64
         spack compiler find --scope site
 
-        spack install intel-mpi@2018.4.274%gcc@10.3.0
-        spack install gromacs@2023.1 %gcc@10.3.0 ^intel-mpi@2018.4.274 ^cmake@3.26.3 %gcc@8.5.0
+        spack install intel-oneapi-mpi@2021.9.0%gcc@13.1.0
+        spack install gromacs@2020.6 %gcc@13.1.0 ^intel-oneapi-mpi@2021.9.0
 
   - id: script
     source: modules/scripts/startup-script
     settings:
       runners:
-      # remove lustre client temporary to avoid startup failure due to known
-      # issue.
-      - type: shell
-        destination: remove_lustre_client.sh
-        content: |
-          #!/bin/bash
-          rm /etc/yum.repos.d/lustre-client.repo
       - $(spack-execute.spack_runner)
 
   - id: compute_nodeset
@@ -107,7 +100,7 @@ deployment_groups:
 
   - id: compute_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
-    use: [compute_nodeset, homefs, appsfs]
+    use: [compute_nodeset]
     settings:
       partition_name: compute
       is_default: true
@@ -117,8 +110,7 @@ deployment_groups:
     use: [network1]
     settings:
       name_prefix: login
-      machine_type: n2-standard-4
-      disable_login_public_ips: false
+      enable_login_public_ips: true
 
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
@@ -129,6 +121,6 @@ deployment_groups:
     - homefs
     - appsfs
     settings:
-      disable_controller_public_ips: false
+      enable_controller_public_ips: true
       login_startup_script: $(script.startup_script)
       login_startup_scripts_timeout: 21600

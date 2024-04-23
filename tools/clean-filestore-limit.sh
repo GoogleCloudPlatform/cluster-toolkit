@@ -13,7 +13,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# shellcheck disable=SC2317
+# known issue that shellcheck wrongly detects trap function as unreachable
+
 set -e -o pipefail
+
+function enable_filestore_api() {
+	status=$?
+	echo "Re-enabling Filestore API..."
+	gcloud services enable file.googleapis.com --project "${PROJECT_ID}"
+	exit "$status"
+}
 
 BUILD_ID=${BUILD_ID:-non-existent-build}
 PROJECT_ID=${PROJECT_ID:-$(gcloud config get-value project)}
@@ -35,7 +45,9 @@ fi
 
 # See https://cloud.google.com/filestore/docs/troubleshooting#system_limit_for_internal_resources_has_been_reached_error_when_creating_an_instance
 echo "Disabling Filestore API..."
+trap enable_filestore_api EXIT
 gcloud services disable file.googleapis.com --force --project "${PROJECT_ID}"
+sleep 120
 
 echo "Deleting all Filestore peering networks"
 # the output of this command matches
@@ -58,8 +70,5 @@ while read -r peering; do
 		fi
 	done
 done <<<"$peerings"
-
-echo "Re-enabling Filestore API..."
-gcloud services enable file.googleapis.com --project "${PROJECT_ID}"
 
 exit 0

@@ -25,8 +25,9 @@ import (
 )
 
 func (s *MySuite) TestSetCLIVariables(c *C) {
-	bp := config.Blueprint{}
-	bp.Vars.Set("deployment_name", cty.StringVal("bush"))
+	ds := config.DeploymentSettings{
+		Vars: config.Dict{}.
+			With("deployment_name", cty.StringVal("bush"))}
 
 	vars := []string{
 		"project_id=cli_test_project_id",
@@ -42,9 +43,9 @@ func (s *MySuite) TestSetCLIVariables(c *C) {
 		"keyArrayOfMaps=[foo, {bar: baz, qux: 1}]",
 		"keyMapOfArrays={foo: [1, 2, 3], bar: [a, b, c]}",
 	}
-	c.Assert(setCLIVariables(&bp, vars), IsNil)
+	c.Assert(setCLIVariables(&ds, vars), IsNil)
 	c.Check(
-		bp.Vars.Items(), DeepEquals, map[string]cty.Value{
+		ds.Vars.Items(), DeepEquals, map[string]cty.Value{
 			"project_id":      cty.StringVal("cli_test_project_id"),
 			"deployment_name": cty.StringVal("cli_deployment_name"),
 			"region":          cty.StringVal("cli_region"),
@@ -72,11 +73,14 @@ func (s *MySuite) TestSetCLIVariables(c *C) {
 		})
 
 	// Failure: Variable without '='
-	bp = config.Blueprint{}
+	ds = config.DeploymentSettings{}
 	inv := []string{"project_idcli_test_project_id"}
+	c.Check(setCLIVariables(&ds, inv), ErrorMatches, "invalid format: .*")
 
-	c.Assert(setCLIVariables(&bp, inv), ErrorMatches, "invalid format: .*")
-	c.Check(bp.Vars, DeepEquals, config.Dict{})
+	// Failure: Unmarshalable value
+	ds = config.DeploymentSettings{}
+	inv = []string{"pyrite={gold"}
+	c.Check(setCLIVariables(&ds, inv), ErrorMatches, ".*unable to convert.*pyrite.*gold.*")
 }
 
 func (s *MySuite) TestSetBackendConfig(c *C) {
@@ -87,14 +91,78 @@ func (s *MySuite) TestSetBackendConfig(c *C) {
 		"odor=strong",
 	}
 
-	bp := config.Blueprint{}
-	c.Assert(setBackendConfig(&bp, vars), IsNil)
+	ds := config.DeploymentSettings{}
+	c.Assert(setBackendConfig(&ds, vars), IsNil)
 
-	be := bp.TerraformBackendDefaults
+	be := ds.TerraformBackendDefaults
 	c.Check(be.Type, Equals, "green")
 	c.Check(be.Configuration.Items(), DeepEquals, map[string]cty.Value{
 		"taste": cty.StringVal("sweet"),
 		"odor":  cty.StringVal("strong"),
+	})
+}
+
+func (s *MySuite) TestMergeDeploymentSettings(c *C) {
+	ds1 := config.DeploymentSettings{
+		Vars: config.Dict{}.
+			With("project_id", cty.StringVal("ds_test_project_id")).
+			With("deployment_name", cty.StringVal("ds_deployment_name"))}
+
+	bp1 := config.Blueprint{
+		Vars: config.Dict{}.
+			With("project_id", cty.StringVal("bp_test_project_id")).
+			With("example_var", cty.StringVal("bp_example_value"))}
+
+	// test priority-based merging of deployment variables
+	mergeDeploymentSettings(&bp1, ds1)
+	c.Check(bp1.Vars.Items(), DeepEquals, map[string]cty.Value{
+		"project_id":      cty.StringVal("ds_test_project_id"),
+		"deployment_name": cty.StringVal("ds_deployment_name"),
+		"example_var":     cty.StringVal("bp_example_value"),
+	})
+
+	// check merging zero-value backends
+	ds2 := config.DeploymentSettings{
+		TerraformBackendDefaults: config.TerraformBackend{},
+	}
+	bp2 := config.Blueprint{
+		TerraformBackendDefaults: config.TerraformBackend{},
+	}
+	mergeDeploymentSettings(&bp2, ds2)
+	c.Check(bp2.TerraformBackendDefaults, DeepEquals, config.TerraformBackend{})
+
+	// check keeping blueprint defined backend with no backend in deployment file
+	bp3 := config.Blueprint{
+		TerraformBackendDefaults: config.TerraformBackend{
+			Type: "gsc",
+			Configuration: config.NewDict(map[string]cty.Value{
+				"bucket": cty.StringVal("bp_bucket"),
+			}),
+		},
+	}
+	mergeDeploymentSettings(&bp3, ds2)
+	c.Check(bp3.TerraformBackendDefaults, DeepEquals, config.TerraformBackend{
+		Type: "gsc",
+		Configuration: config.NewDict(map[string]cty.Value{
+			"bucket": cty.StringVal("bp_bucket"),
+		}),
+	})
+
+	// check overriding blueprint defined backend with deployment file
+	ds3 := config.DeploymentSettings{
+		TerraformBackendDefaults: config.TerraformBackend{
+			Type: "gsc",
+			Configuration: config.NewDict(map[string]cty.Value{
+				"bucket": cty.StringVal("ds_bucket"),
+			}),
+		},
+	}
+	mergeDeploymentSettings(&bp3, ds3)
+	c.Check(bp3.TerraformBackendDefaults, DeepEquals, config.TerraformBackend{
+		Type: "gsc",
+		Configuration: config.NewDict(map[string]cty.Value{
+			"bucket": cty.StringVal("ds_bucket"),
+		}),
 	})
 }
 
@@ -103,17 +171,17 @@ func (s *MySuite) TestSetBackendConfig_Invalid(c *C) {
 	vars := []string{
 		"typegreen",
 	}
-	bp := config.Blueprint{}
-	c.Assert(setBackendConfig(&bp, vars), ErrorMatches, "invalid format: .*")
+	ds := config.DeploymentSettings{}
+	c.Assert(setBackendConfig(&ds, vars), ErrorMatches, "invalid format: .*")
 }
 
 func (s *MySuite) TestSetBackendConfig_NoOp(c *C) {
-	bp := config.Blueprint{
+	ds := config.DeploymentSettings{
 		TerraformBackendDefaults: config.TerraformBackend{
 			Type: "green"}}
 
-	c.Assert(setBackendConfig(&bp, []string{}), IsNil)
-	c.Check(bp.TerraformBackendDefaults, DeepEquals, config.TerraformBackend{
+	c.Assert(setBackendConfig(&ds, []string{}), IsNil)
+	c.Check(ds.TerraformBackendDefaults, DeepEquals, config.TerraformBackend{
 		Type: "green"})
 }
 
@@ -146,16 +214,20 @@ func (s *MySuite) TestIsOverwriteAllowed_Absent(c *C) {
 	depDir := filepath.Join(testDir, "casper")
 
 	bp := config.Blueprint{}
-	c.Check(checkOverwriteAllowed(depDir, bp, false /*overwriteFlag*/), IsNil)
-	c.Check(checkOverwriteAllowed(depDir, bp, true /*overwriteFlag*/), IsNil)
+	c.Check(checkOverwriteAllowed(depDir, bp, false /*overwriteFlag*/, false /*forceOverwrite*/), IsNil)
+	c.Check(checkOverwriteAllowed(depDir, bp, true /*overwriteFlag*/, false /*forceOverwrite*/), IsNil)
 }
 
 func (s *MySuite) TestIsOverwriteAllowed_NotGHPC(c *C) {
 	depDir := c.MkDir() // empty deployment folder considered malformed
 
 	bp := config.Blueprint{}
-	c.Check(checkOverwriteAllowed(depDir, bp, false /*overwriteFlag*/), ErrorMatches, ".* not a valid GHPC deployment folder")
-	c.Check(checkOverwriteAllowed(depDir, bp, true /*overwriteFlag*/), ErrorMatches, ".* not a valid GHPC deployment folder")
+	c.Check(checkOverwriteAllowed(depDir, bp, false /*overwriteFlag*/, false /*forceOverwrite*/),
+		ErrorMatches, ".* not a valid GHPC deployment folder.*")
+	c.Check(checkOverwriteAllowed(depDir, bp, true /*overwriteFlag*/, false /*forceOverwrite*/),
+		ErrorMatches, ".* not a valid GHPC deployment folder.*")
+
+	c.Check(checkOverwriteAllowed(depDir, bp, false /*overwriteFlag*/, true /*forceOverwrite*/), IsNil)
 }
 
 func (s *MySuite) TestIsOverwriteAllowed_NoExpanded(c *C) {
@@ -165,8 +237,12 @@ func (s *MySuite) TestIsOverwriteAllowed_NoExpanded(c *C) {
 	}
 
 	bp := config.Blueprint{}
-	c.Check(checkOverwriteAllowed(depDir, bp, false /*overwriteFlag*/), ErrorMatches, ".* changing GHPC version.*")
-	c.Check(checkOverwriteAllowed(depDir, bp, true /*overwriteFlag*/), ErrorMatches, ".* changing GHPC version.*")
+	c.Check(checkOverwriteAllowed(depDir, bp, false /*overwriteFlag*/, false /*forceOverwrite*/),
+		ErrorMatches, ".* changing GHPC version.*")
+	c.Check(checkOverwriteAllowed(depDir, bp, true /*overwriteFlag*/, false /*forceOverwrite*/),
+		ErrorMatches, ".* changing GHPC version.*")
+
+	c.Check(checkOverwriteAllowed(depDir, bp, false /*overwriteFlag*/, true /*forceOverwrite*/), IsNil)
 }
 
 func (s *MySuite) TestIsOverwriteAllowed_Malformed(c *C) {
@@ -180,36 +256,56 @@ func (s *MySuite) TestIsOverwriteAllowed_Malformed(c *C) {
 	}
 
 	bp := config.Blueprint{}
-	c.Check(checkOverwriteAllowed(depDir, bp, false /*overwriteFlag*/), NotNil)
-	c.Check(checkOverwriteAllowed(depDir, bp, true /*overwriteFlag*/), NotNil)
+	c.Check(checkOverwriteAllowed(depDir, bp, false /*overwriteFlag*/, false /*forceOverwrite*/), NotNil)
+	c.Check(checkOverwriteAllowed(depDir, bp, true /*overwriteFlag*/, false /*forceOverwrite*/), NotNil)
+	// force
+	c.Check(checkOverwriteAllowed(depDir, bp, false /*overwriteFlag*/, true /*forceOverwrite*/), IsNil)
+	c.Check(checkOverwriteAllowed(depDir, bp, true /*overwriteFlag*/, true /*forceOverwrite*/), IsNil)
 }
 
 func (s *MySuite) TestIsOverwriteAllowed_Present(c *C) {
-	depDir := c.MkDir()
-	artDir := modulewriter.ArtifactsDir(depDir)
+	p := c.MkDir()
+	artDir := modulewriter.ArtifactsDir(p)
 	if err := os.MkdirAll(artDir, 0755); err != nil {
 		c.Fatal(err)
 	}
 
-	prev := config.DeploymentConfig{
-		Config: config.Blueprint{
-			GhpcVersion: "TaleOdBygoneYears",
-			DeploymentGroups: []config.DeploymentGroup{
-				{Name: "isildur"}}}}
-	if err := prev.ExportBlueprint(filepath.Join(artDir, "expanded_blueprint.yaml")); err != nil {
+	prev := config.Blueprint{
+		GhpcVersion: "TaleOfBygoneYears",
+		Groups: []config.Group{
+			{Name: "isildur"}}}
+	if err := prev.Export(filepath.Join(artDir, "expanded_blueprint.yaml")); err != nil {
 		c.Fatal(err)
 	}
+	noW, yesW, noForce, yesForce := false, true, false, true
 
-	super := config.Blueprint{
-		DeploymentGroups: []config.DeploymentGroup{
-			{Name: "isildur"},
-			{Name: "elendil"}}}
-	c.Check(checkOverwriteAllowed(depDir, super, false /*overwriteFlag*/), ErrorMatches, ".* already exists, use -w to overwrite")
-	c.Check(checkOverwriteAllowed(depDir, super, true /*overwriteFlag*/), IsNil)
+	{ // Superset
+		bp := config.Blueprint{
+			GhpcVersion: "TaleOfBygoneYears",
+			Groups: []config.Group{
+				{Name: "isildur"},
+				{Name: "elendil"}}}
+		c.Check(checkOverwriteAllowed(p, bp, noW, noForce), ErrorMatches, ".* already exists, use -w to overwrite")
+		c.Check(checkOverwriteAllowed(p, bp, yesW, noForce), IsNil)
+	}
 
-	sub := config.Blueprint{
-		DeploymentGroups: []config.DeploymentGroup{
-			{Name: "aragorn"}}}
-	c.Check(checkOverwriteAllowed(depDir, sub, false /*overwriteFlag*/), ErrorMatches, `.* already exists, use -w to overwrite`)
-	c.Check(checkOverwriteAllowed(depDir, sub, true /*overwriteFlag*/), ErrorMatches, `.*remove a deployment group "isildur".*`)
+	{ // Version mismatch
+		bp := config.Blueprint{
+			GhpcVersion: "TheAlloyOfLaw",
+			Groups: []config.Group{
+				{Name: "isildur"}}}
+		c.Check(checkOverwriteAllowed(p, bp, noW, noForce), ErrorMatches, ".*ghpc_version has changed.*")
+		c.Check(checkOverwriteAllowed(p, bp, yesW, noForce), ErrorMatches, ".*ghpc_version has changed.*")
+		c.Check(checkOverwriteAllowed(p, bp, noW, yesForce), IsNil)
+	}
+
+	{ // Subset
+		bp := config.Blueprint{
+			GhpcVersion: "TaleOfBygoneYears",
+			Groups: []config.Group{
+				{Name: "aragorn"}}}
+		c.Check(checkOverwriteAllowed(p, bp, noW, noForce), ErrorMatches, `.* already exists, use -w to overwrite`)
+		c.Check(checkOverwriteAllowed(p, bp, yesW, noForce), ErrorMatches, `.*remove a deployment group "isildur".*`)
+		c.Check(checkOverwriteAllowed(p, bp, noW, yesForce), IsNil)
+	}
 }

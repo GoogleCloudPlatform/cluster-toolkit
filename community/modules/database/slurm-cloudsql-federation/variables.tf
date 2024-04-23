@@ -73,3 +73,9 @@ variable "network_id" {
     error_message = "The network id must be provided in the following format: projects/<project_id>/global/networks/<network_name>."
   }
 }
+
+variable "private_vpc_connection_peering" {
+  description = "The name of the VPC Network peering connection, used only as dependency for Cloud SQL creation."
+  type        = string
+  default     = null
+}

@@ -16,54 +16,34 @@
 package cmd
 
 import (
-	"hpc-toolkit/pkg/config"
-	"hpc-toolkit/pkg/modulewriter"
 	"hpc-toolkit/pkg/shell"
-	"path/filepath"
 
 	"github.com/spf13/cobra"
 )
 
 func init() {
-	artifactsFlag := "artifacts"
-	importCmd.Flags().StringVarP(&artifactsDir, artifactsFlag, "a", "", "Artifacts directory (automatically configured if unset)")
-	importCmd.MarkFlagDirname(artifactsFlag)
 	rootCmd.AddCommand(importCmd)
 }
 
 var (
-	importCmd = &cobra.Command{
+	importCmd = addArtifactsDirFlag(&cobra.Command{
 		Use:               "import-inputs DEPLOYMENT_GROUP_DIRECTORY",
 		Short:             "Import input values from previous deployment groups.",
 		Long:              "Import input values from previous deployment groups upon which this group depends.",
 		Args:              cobra.MatchAll(cobra.ExactArgs(1), checkDir),
 		ValidArgsFunction: matchDirs,
-		PreRun:            parseExportImportArgs,
-		RunE:              runImportCmd,
+		Run:               runImportCmd,
 		SilenceUsage:      true,
-	}
+	})
 )
 
-func runImportCmd(cmd *cobra.Command, args []string) error {
-	groupDir := filepath.Clean(args[0])
+func runImportCmd(cmd *cobra.Command, args []string) {
+	deplRoot, groupDir := parseExportImportArgs(args)
+	artifactsDir := getArtifactsDir(deplRoot)
+	checkErr(shell.CheckWritableDir(groupDir), nil)
 
-	if err := shell.CheckWritableDir(groupDir); err != nil {
-		return err
-	}
+	bp, ctx := artifactBlueprintOrDie(artifactsDir)
 
-	expandedBlueprintFile := filepath.Join(artifactsDir, modulewriter.ExpandedBlueprintName)
-	dc, _, err := config.NewDeploymentConfig(expandedBlueprintFile)
-	if err != nil {
-		return err
-	}
-
-	if err := shell.ValidateDeploymentDirectory(dc.Config.DeploymentGroups, deploymentRoot); err != nil {
-		return err
-	}
-
-	if err := shell.ImportInputs(groupDir, artifactsDir, expandedBlueprintFile); err != nil {
-		return err
-	}
-
-	return nil
+	checkErr(shell.ValidateDeploymentDirectory(bp.Groups, deplRoot), ctx)
+	checkErr(shell.ImportInputs(groupDir, artifactsDir, bp), ctx)
 }

@@ -103,15 +103,10 @@ deployment_groups:
           spack install
         fi
 
-  - id: controller-setup
+  - id: login-setup
     source: modules/scripts/startup-script
     settings:
       runners:
-      - type: shell
-        destination: remove_lustre_client.sh
-        content: |
-          #!/bin/bash
-          rm /etc/yum.repos.d/lustre-client.repo
       - $(spack-execute.spack_runner)
       - type: shell
         destination: wrfv3_setup.sh
@@ -156,13 +151,21 @@ deployment_groups:
     use: [compute_nodeset]
     settings:
       partition_name: compute
+      is_default: true
+
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    use: [network1]
+    settings:
+      name_prefix: login
 
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     use:
     - network1
     - compute_partition
+    - slurm_login
     settings:
-      disable_controller_public_ips: false
-      controller_startup_scripts_timeout: 21600
-      controller_startup_script: $(controller-setup.startup_script)
+      enable_controller_public_ips: true
+      login_startup_scripts_timeout: 21600
+      login_startup_script: $(login-setup.startup_script)

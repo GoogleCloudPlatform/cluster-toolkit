@@ -22,31 +22,33 @@ import (
 )
 
 func (s *zeroSuite) TestValidateVars(c *C) {
-	base := map[string]cty.Value{
-		"deployment_name": cty.StringVal("serengeti"),
-	}
+	base := Dict{}.With("deployment_name", cty.StringVal("serengeti"))
 
 	{ // Success
-		vars := Dict{base}
-		c.Check(validateVars(vars), IsNil)
+		vars := base
+		c.Check(validateVars(Blueprint{Vars: vars}), IsNil)
 	}
 
 	{ // Fail: Nil value
-		vars := Dict{base}
-		vars.Set("fork", cty.NilVal)
-		c.Check(validateVars(vars), NotNil)
+		vars := base.With("fork", cty.NilVal)
+		c.Check(validateVars(Blueprint{Vars: vars}), NotNil)
 	}
 
 	{ // Fail: Null value
-		vars := Dict{base}
-		vars.Set("fork", cty.NullVal(cty.String))
-		c.Check(validateVars(vars), NotNil)
+		vars := base.With("fork", cty.NullVal(cty.String))
+		c.Check(validateVars(Blueprint{Vars: vars}), NotNil)
 	}
 
 	{ // Fail: labels not a map
-		vars := Dict{base}
-		vars.Set("labels", cty.StringVal("a_string"))
-		c.Check(validateVars(vars), NotNil)
+		vars := base.With("labels", cty.StringVal("a_string"))
+		c.Check(validateVars(Blueprint{Vars: vars}), NotNil)
+	}
+
+	{ // Fail: cyclic dependency
+		vars := base.
+			With("ar", GlobalRef("buz").AsValue()).
+			With("buz", GlobalRef("ar").AsValue())
+		c.Check(validateVars(Blueprint{Vars: vars}), NotNil)
 	}
 }
 

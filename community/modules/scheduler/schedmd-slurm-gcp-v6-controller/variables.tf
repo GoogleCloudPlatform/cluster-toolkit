@@ -95,6 +95,10 @@ variable "login_nodes" {
   description = "List of slurm login instance definitions."
   type = list(object({
     name_prefix = string
+    access_config = optional(list(object({
+      nat_ip       = string
+      network_tier = string
+    })))
     additional_disks = optional(list(object({
       disk_name    = optional(string)
       device_name  = optional(string)
@@ -112,7 +116,6 @@ variable "login_nodes" {
     disk_size_gb           = optional(number)
     disk_type              = optional(string, "n1-standard-1")
     enable_confidential_vm = optional(bool, false)
-    enable_public_ip       = optional(bool, false)
     enable_oslogin         = optional(bool, true)
     enable_shielded_vm     = optional(bool, false)
     gpu = optional(object({
@@ -124,7 +127,6 @@ variable "login_nodes" {
     machine_type        = optional(string)
     metadata            = optional(map(string), {})
     min_cpu_platform    = optional(string)
-    network_tier        = optional(string, "STANDARD")
     num_instances       = optional(number, 1)
     on_host_maintenance = optional(string)
     preemptible         = optional(bool, false)
@@ -158,7 +160,6 @@ variable "login_nodes" {
 ############
 # NODESETS #
 ############
-
 variable "nodeset" {
   description = "Define nodesets, as a list."
   type = list(object({
@@ -190,15 +191,16 @@ variable "nodeset" {
       count = number
       type  = string
     }))
-    instance_template   = optional(string)
-    labels              = optional(map(string), {})
-    machine_type        = optional(string)
-    metadata            = optional(map(string), {})
-    min_cpu_platform    = optional(string)
-    network_tier        = optional(string, "STANDARD")
-    on_host_maintenance = optional(string)
-    preemptible         = optional(bool, false)
-    region              = optional(string)
+    instance_template    = optional(string)
+    labels               = optional(map(string), {})
+    machine_type         = optional(string)
+    maintenance_interval = optional(string)
+    metadata             = optional(map(string), {})
+    min_cpu_platform     = optional(string)
+    network_tier         = optional(string, "STANDARD")
+    on_host_maintenance  = optional(string)
+    preemptible          = optional(bool, false)
+    region               = optional(string)
     service_account = optional(object({
       email  = optional(string)
       scopes = optional(list(string), ["https://www.googleapis.com/auth/cloud-platform"])
@@ -235,21 +237,18 @@ variable "nodeset" {
     zones              = optional(list(string), [])
     zone_target_shape  = optional(string, "ANY_SINGLE_ZONE")
     reservation_name   = optional(string)
+    startup_script = optional(list(object({
+      filename = string
+    content = string })), [])
   }))
   default = []
-
-  validation {
-    condition     = length(distinct([for x in var.nodeset : x.nodeset_name])) == length(var.nodeset)
-    error_message = "All nodesets must have a unique name."
-  }
 }
 
-# REVIEWER_NOTE: copied from V6 cluster module as is
 variable "nodeset_tpu" {
   description = "Define TPU nodesets, as a list."
   type = list(object({
     node_count_static      = optional(number, 0)
-    node_count_dynamic_max = optional(number, 1)
+    node_count_dynamic_max = optional(number, 5)
     nodeset_name           = string
     enable_public_ip       = optional(bool, false)
     node_type              = string
@@ -262,7 +261,7 @@ variable "nodeset_tpu" {
     })
     tf_version   = string
     preemptible  = optional(bool, false)
-    preserve_tpu = optional(bool, true)
+    preserve_tpu = optional(bool, false)
     zone         = string
     data_disks   = optional(list(string), [])
     docker_image = optional(string, "")
@@ -271,13 +270,20 @@ variable "nodeset_tpu" {
       email  = optional(string)
       scopes = optional(list(string), ["https://www.googleapis.com/auth/cloud-platform"])
     }))
+    project_id = string
+    reserved   = optional(string, false)
   }))
   default = []
+}
 
-  validation {
-    condition     = length(distinct([for x in var.nodeset_tpu : x.nodeset_name])) == length(var.nodeset_tpu)
-    error_message = "All TPU nodesets must have a unique name."
-  }
+
+variable "nodeset_dyn" {
+  description = "Defines dynamic nodesets, as a list."
+  type = list(object({
+    nodeset_name    = string
+    nodeset_feature = string
+  }))
+  default = []
 }
 
 #############
@@ -289,15 +295,8 @@ variable "partitions" {
 Cluster partitions as a list. See module slurm_partition.
 EOD
   type = list(object({
-    default              = optional(bool, false)
-    enable_job_exclusive = optional(bool, false)
-    network_storage = optional(list(object({
-      server_ip     = string
-      remote_mount  = string
-      local_mount   = string
-      fs_type       = string
-      mount_options = string
-    })), [])
+    default               = optional(bool, false)
+    enable_job_exclusive  = optional(bool, false)
     partition_conf        = optional(map(string), {})
     partition_name        = string
     partition_nodeset     = optional(list(string), [])
@@ -371,9 +370,9 @@ variable "cloud_parameters" {
   default = {}
 }
 
-variable "disable_default_mounts" {
+variable "enable_default_mounts" {
   description = <<-EOD
-    Disable default global network storage from the controller
+    Enable default global network storage from the controller
     - /usr/local/etc/slurm
     - /etc/munge
     - /home
@@ -383,7 +382,17 @@ variable "disable_default_mounts" {
     files and the munge key across the cluster.
     EOD
   type        = bool
-  default     = false
+  default     = true
+}
+
+variable "disable_default_mounts" { # tflint-ignore: terraform_unused_declarations
+  description = "DEPRECATED: Use `enable_default_mounts` instead."
+  type        = bool
+  default     = null
+  validation {
+    condition     = var.disable_default_mounts == null
+    error_message = "DEPRECATED: Use `enable_default_mounts` instead."
+  }
 }
 
 variable "network_storage" {
@@ -514,7 +523,6 @@ EOD
 
 variable "cloudsql" {
   description = <<EOD
-NOT SUPPORTED YET.
 Use this database instead of the one on the controller.
   server_ip : Address of the database server.
   user      : The user to access the database as.

@@ -154,6 +154,9 @@ deployment_groups:
       machine_type: c2-standard-60
       task_count: 2
       mpi_mode: true
+      instance_image:
+        family: batch-centos-7-official
+        project: batch-custom-image
 
   - id: batch-login
     source: modules/scheduler/batch-login-node

@@ -22,13 +22,12 @@ slurm_cluster_name: "v6tpu{{ build[0:5] }}"
 
 cli_deployment_vars:
    region: us-central1
-   zone: us-central1-b
+   zone: us-central1-a
 
-zone: us-central1-b
+zone: us-central1-a
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/community/examples/hpc-slurm6-tpu.yaml"
-network: "default"
-max_nodes: 5
+network: "{{ deployment_name }}-net"
 # Note: Pattern matching in gcloud only supports 1 wildcard, a*-login-* won't work.
 login_node: "{{ slurm_cluster_name }}-login-*"
 controller_node: "{{ slurm_cluster_name }}-controller"

@@ -84,6 +84,12 @@ locals {
     alias_ip_range     = []
   }
   network_interfaces = coalescelist(var.network_interfaces, [local.default_network_interface])
+  network_interfaces_with_ips = var.allocate_ip == null ? local.network_interfaces : [
+    for i, interface in local.network_interfaces :
+    merge(interface, {
+      network_ip = google_compute_address.compute_ip[i].address
+    })
+  ]
 }
 
 data "google_compute_image" "compute_image" {
@@ -144,6 +150,23 @@ resource "null_resource" "replace_vm_trigger_from_placement" {
   }
 }
 
+resource "google_compute_address" "compute_ip" {
+  project = var.project_id
+
+  count = var.allocate_ip != null ? length(local.network_interfaces) : 0
+
+  name = "${local.resource_prefix}-${count.index}"
+
+  address      = local.network_interfaces[count.index].network_ip
+  region       = var.region
+  network      = can(coalesce(local.network_interfaces[count.index].subnetwork)) ? null : local.network_interfaces[count.index].network
+  subnetwork   = local.network_interfaces[count.index].subnetwork
+  address_type = var.allocate_ip.address_type
+  purpose      = var.allocate_ip.purpose
+  network_tier = var.allocate_ip.network_tier
+  ip_version   = var.allocate_ip.ip_version
+}
+
 resource "google_compute_instance" "compute_vm" {
   project  = var.project_id
   provider = google-beta
@@ -175,7 +198,7 @@ resource "google_compute_instance" "compute_vm" {
   }
 
   dynamic "network_interface" {
-    for_each = local.network_interfaces
+    for_each = local.network_interfaces_with_ips
 
     content {
       network            = network_interface.value.network

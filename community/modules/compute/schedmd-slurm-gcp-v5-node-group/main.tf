@@ -58,6 +58,7 @@ locals {
     gpu                      = one(local.guest_accelerator)
     labels                   = local.labels
     machine_type             = var.machine_type
+    maintenance_interval     = var.maintenance_interval
     metadata                 = var.metadata
     min_cpu_platform         = var.min_cpu_platform
     on_host_maintenance      = var.on_host_maintenance

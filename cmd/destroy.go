@@ -27,13 +27,9 @@ import (
 )
 
 func init() {
-	artifactsFlag := "artifacts"
-	destroyCmd.Flags().StringVarP(&artifactsDir, artifactsFlag, "a", "", "Artifacts output directory (automatically configured if unset)")
-	destroyCmd.MarkFlagDirname(artifactsFlag)
-
-	destroyCmd.Flags().BoolVar(&autoApprove, "auto-approve", false, "Automatically approve proposed changes")
-
-	rootCmd.AddCommand(destroyCmd)
+	rootCmd.AddCommand(
+		addAutoApproveFlag(
+			addArtifactsDirFlag(destroyCmd)))
 }
 
 var (
@@ -43,41 +39,28 @@ var (
 		Long:              "destroy all resources in a Toolkit deployment directory.",
 		Args:              cobra.MatchAll(cobra.ExactArgs(1), checkDir),
 		ValidArgsFunction: matchDirs,
-		PreRunE:           parseDestroyArgs,
-		RunE:              runDestroyCmd,
+		Run:               runDestroyCmd,
 		SilenceUsage:      true,
 	}
 )
 
-func parseDestroyArgs(cmd *cobra.Command, args []string) error {
-	applyBehavior = getApplyBehavior(autoApprove)
-
-	deploymentRoot = args[0]
-	artifactsDir = getArtifactsDir(deploymentRoot)
+func runDestroyCmd(cmd *cobra.Command, args []string) {
+	deplRoot := args[0]
+	artifactsDir := getArtifactsDir(deplRoot)
 
 	if isDir, _ := shell.DirInfo(artifactsDir); !isDir {
-		return fmt.Errorf("artifacts path %s is not a directory", artifactsDir)
+		checkErr(fmt.Errorf("artifacts path %s is not a directory", artifactsDir), nil)
 	}
 
-	return nil
-}
+	bp, ctx := artifactBlueprintOrDie(artifactsDir)
 
-func runDestroyCmd(cmd *cobra.Command, args []string) error {
-	expandedBlueprintFile := filepath.Join(artifactsDir, modulewriter.ExpandedBlueprintName)
-	dc, _, err := config.NewDeploymentConfig(expandedBlueprintFile)
-	if err != nil {
-		return err
-	}
-
-	if err := shell.ValidateDeploymentDirectory(dc.Config.DeploymentGroups, deploymentRoot); err != nil {
-		return err
-	}
+	checkErr(shell.ValidateDeploymentDirectory(bp.Groups, deplRoot), ctx)
 
 	// destroy in reverse order of creation!
 	packerManifests := []string{}
-	for i := len(dc.Config.DeploymentGroups) - 1; i >= 0; i-- {
-		group := dc.Config.DeploymentGroups[i]
-		groupDir := filepath.Join(deploymentRoot, string(group.Name))
+	for i := len(bp.Groups) - 1; i >= 0; i-- {
+		group := bp.Groups[i]
+		groupDir := filepath.Join(deplRoot, string(group.Name))
 
 		var err error
 		switch group.Kind() {
@@ -91,13 +74,10 @@ func runDestroyCmd(cmd *cobra.Command, args []string) error {
 		default:
 			err = fmt.Errorf("group %s is an unsupported kind %s", groupDir, group.Kind().String())
 		}
-		if err != nil {
-			return err
-		}
+		checkErr(err, ctx)
 	}
 
 	modulewriter.WritePackerDestroyInstructions(os.Stdout, packerManifests)
-	return nil
 }
 
 func destroyTerraformGroup(groupDir string) error {
@@ -106,5 +86,5 @@ func destroyTerraformGroup(groupDir string) error {
 		return err
 	}
 
-	return shell.Destroy(tf, applyBehavior)
+	return shell.Destroy(tf, getApplyBehavior())
 }

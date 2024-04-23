@@ -20,12 +20,12 @@ locals {
 }
 
 locals {
-  instance_template = var.instance_template != null ? var.instance_template : module.instance_template.self_link
+  instance_template = coalesce(var.instance_template, module.instance_template.self_link)
 
-  tasks_per_node = var.task_count_per_node != null ? var.task_count_per_node : (var.mpi_mode ? 1 : null)
+  tasks_per_node = coalesce(var.task_count_per_node, (var.mpi_mode ? 1 : null))
 
   job_template_contents = templatefile(
-    "${path.module}/templates/batch-job-base.json.tftpl",
+    "${path.module}/templates/batch-job-base.yaml.tftpl",
     {
       synchronized       = var.mpi_mode
       runnable           = var.runnable
@@ -39,9 +39,21 @@ locals {
     }
   )
 
-  job_id                   = var.job_id != null ? var.job_id : var.deployment_name
-  job_filename             = var.job_filename != null ? var.job_filename : "cloud-batch-${local.job_id}.json"
+  job_id_base              = coalesce(var.job_id, var.deployment_name)
+  submit_job_id            = "${local.job_id_base}-${random_id.submit_job_suffix.hex}"
+  job_filename             = coalesce(var.job_filename, "cloud-batch-${local.job_id_base}.yaml")
   job_template_output_path = "${path.root}/${local.job_filename}"
+
+  submit_script_contents = templatefile(
+    "${path.module}/templates/batch-submit.sh.tftpl",
+    {
+      project       = var.project_id
+      location      = var.region
+      config        = local_file.job_template.filename
+      submit_job_id = local.submit_job_id
+    }
+  )
+  submit_script_output_path = "${path.root}/submit-job.sh"
 
   subnetwork_name    = var.subnetwork != null ? var.subnetwork.name : "default"
   subnetwork_project = var.subnetwork != null ? var.subnetwork.project : var.project_id
@@ -62,18 +74,14 @@ locals {
   gpu_attached                = contains(["a2", "g2"], local.machine_family)
   on_host_maintenance_default = local.gpu_attached ? "TERMINATE" : "MIGRATE"
 
-  on_host_maintenance = (
-    var.on_host_maintenance != null
-    ? var.on_host_maintenance
-    : local.on_host_maintenance_default
-  )
+  on_host_maintenance = coalesce(var.on_host_maintenance, local.on_host_maintenance_default)
 }
 
 module "instance_template" {
   source  = "terraform-google-modules/vm/google//modules/instance_template"
   version = "~> 8.0"
 
-  name_prefix        = var.instance_template == null ? "${local.job_id}-instance-template" : "unused-template"
+  name_prefix        = var.instance_template == null ? "${local.job_id_base}-instance-template" : "unused-template"
   project_id         = var.project_id
   subnetwork         = local.subnetwork_name
   subnetwork_project = local.subnetwork_project
@@ -93,4 +101,31 @@ module "instance_template" {
 resource "local_file" "job_template" {
   content  = local.job_template_contents
   filename = local.job_template_output_path
+}
+
+resource "random_id" "submit_job_suffix" {
+  byte_length = 4
+  keepers = {
+    always_run = timestamp()
+  }
+}
+
+resource "local_file" "submit_script" {
+  content  = local.submit_script_contents
+  filename = local.submit_script_output_path
+}
+
+resource "null_resource" "submit_job" {
+  depends_on = [local_file.job_template]
+  count      = var.submit ? 1 : 0
+
+  # A new deployment should always submit a new job. Old finished jobs aren't persistent parts of
+  # Cloud infrastructure.
+  triggers = {
+    always_run = timestamp()
+  }
+
+  provisioner "local-exec" {
+    command = local.submit_script_output_path
+  }
 }

@@ -20,6 +20,8 @@ zone: us-central1-c
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/examples/image-builder.yaml"
 network: "{{ deployment_name }}-net"
+packer_group_name: packer
+packer_module_id: custom-image
 cli_deployment_vars:
   network_name: "{{ network }}"
   subnetwork_name: "{{ network }}-sub"

@@ -333,7 +333,7 @@ func ExportOutputs(tf *tfexec.Terraform, artifactsDir string, applyBehavior Appl
 }
 
 // for each prior group, read all output values and filter for those needed as input values to this group
-func gatherUpstreamOutputs(deploymentRoot string, artifactsDir string, g config.DeploymentGroup, bp config.Blueprint) (map[string]cty.Value, error) {
+func gatherUpstreamOutputs(deploymentRoot string, artifactsDir string, g config.Group, bp config.Blueprint) (map[string]cty.Value, error) {
 	outputsByGroup, err := config.OutputNamesByGroup(g, bp)
 	if err != nil {
 		return nil, err
@@ -365,16 +365,10 @@ func gatherUpstreamOutputs(deploymentRoot string, artifactsDir string, g config.
 // ImportInputs will search artifactsDir for files produced by ExportOutputs and
 // combine/filter them for the input values needed by the group in the Terraform
 // working directory
-func ImportInputs(deploymentGroupDir string, artifactsDir string, expandedBlueprintFile string) error {
-	deploymentRoot := filepath.Clean(filepath.Join(deploymentGroupDir, ".."))
+func ImportInputs(groupDir string, artifactsDir string, bp config.Blueprint) error {
+	deploymentRoot := filepath.Clean(filepath.Join(groupDir, ".."))
 
-	dc, _, err := config.NewDeploymentConfig(expandedBlueprintFile)
-	if err != nil {
-		return err
-	}
-	bp := dc.Config
-
-	g, err := bp.Group(config.GroupName(filepath.Base(deploymentGroupDir)))
+	g, err := bp.Group(config.GroupName(filepath.Base(groupDir)))
 	if err != nil {
 		return err
 	}
@@ -404,16 +398,16 @@ func ImportInputs(deploymentGroupDir string, artifactsDir string, expandedBluepr
 
 		// evaluate Packer settings that contain intergroup references in the
 		// context of deployment variables and intergroup output values
-		intergroupSettings := config.Dict{}
+		intergroupSettings := map[string]cty.Value{}
 		for setting, value := range mod.Settings.Items() {
 			igcRefs := config.FindIntergroupReferences(value, mod, bp)
 			if len(igcRefs) > 0 {
-				intergroupSettings.Set(setting, value)
+				intergroupSettings[setting] = value
 			}
 		}
 
 		igcVars := modulewriter.FindIntergroupVariables(g, bp)
-		newModule, err := modulewriter.SubstituteIgcReferencesInModule(config.Module{Settings: intergroupSettings}, igcVars)
+		newModule, err := modulewriter.SubstituteIgcReferencesInModule(config.Module{Settings: config.NewDict(intergroupSettings)}, igcVars)
 		if err != nil {
 			return err
 		}
@@ -422,7 +416,8 @@ func ImportInputs(deploymentGroupDir string, artifactsDir string, expandedBluepr
 			return err
 		}
 
-		evaluatedSettings, err := newModule.Settings.Eval(config.Blueprint{Vars: config.NewDict(inputs)})
+		fakeBP := config.Blueprint{Vars: config.NewDict(inputs)}
+		evaluatedSettings, err := fakeBP.EvalDict(newModule.Settings)
 		if err != nil {
 			return err
 		}
@@ -433,7 +428,7 @@ func ImportInputs(deploymentGroupDir string, artifactsDir string, expandedBluepr
 		return fmt.Errorf("unknown module kind for deployment group %s", g.Name)
 	}
 
-	outPath := filepath.Join(deploymentGroupDir, outFile)
+	outPath := filepath.Join(groupDir, outFile)
 	logging.Info("Writing outputs for deployment group %s to file %s", g.Name, outPath)
 	return modulewriter.WriteHclAttributes(toImport, outPath)
 }

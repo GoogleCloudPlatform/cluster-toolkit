@@ -46,20 +46,6 @@ variable "exclusive" {
   default     = true
 }
 
-variable "network_storage" {
-  description = "An array of network attached storage mounts to be configured on the partition compute nodes."
-  type = list(object({
-    server_ip             = string,
-    remote_mount          = string,
-    local_mount           = string,
-    fs_type               = string,
-    mount_options         = string,
-    client_install_runner = map(string)
-    mount_runner          = map(string)
-  }))
-  default = []
-}
-
 variable "nodeset" {
   description = "Define nodesets, as a list."
   type = list(object({
@@ -91,15 +77,16 @@ variable "nodeset" {
       count = number
       type  = string
     }))
-    instance_template   = optional(string)
-    labels              = optional(map(string), {})
-    machine_type        = optional(string)
-    metadata            = optional(map(string), {})
-    min_cpu_platform    = optional(string)
-    network_tier        = optional(string, "STANDARD")
-    on_host_maintenance = optional(string)
-    preemptible         = optional(bool, false)
-    region              = optional(string)
+    instance_template    = optional(string)
+    labels               = optional(map(string), {})
+    machine_type         = optional(string)
+    maintenance_interval = optional(string)
+    metadata             = optional(map(string), {})
+    min_cpu_platform     = optional(string)
+    network_tier         = optional(string, "STANDARD")
+    on_host_maintenance  = optional(string)
+    preemptible          = optional(bool, false)
+    region               = optional(string)
     service_account = optional(object({
       email  = optional(string)
       scopes = optional(list(string), ["https://www.googleapis.com/auth/cloud-platform"])
@@ -136,6 +123,9 @@ variable "nodeset" {
     zones                = optional(list(string), [])
     zone_target_shape    = optional(string, "ANY_SINGLE_ZONE")
     reservation_name     = optional(string)
+    startup_script = optional(list(object({
+      filename = string
+    content = string })), [])
   }))
   default = []
 
@@ -149,7 +139,7 @@ variable "nodeset_tpu" {
   description = "Define TPU nodesets, as a list."
   type = list(object({
     node_count_static      = optional(number, 0)
-    node_count_dynamic_max = optional(number, 1)
+    node_count_dynamic_max = optional(number, 5)
     nodeset_name           = string
     enable_public_ip       = optional(bool, false)
     node_type              = string
@@ -162,7 +152,7 @@ variable "nodeset_tpu" {
     })
     tf_version   = string
     preemptible  = optional(bool, false)
-    preserve_tpu = optional(bool, true)
+    preserve_tpu = optional(bool, false)
     zone         = string
     data_disks   = optional(list(string), [])
     docker_image = optional(string, "")
@@ -171,11 +161,49 @@ variable "nodeset_tpu" {
       email  = optional(string)
       scopes = optional(list(string), ["https://www.googleapis.com/auth/cloud-platform"])
     }))
+    project_id = string
+    reserved   = optional(string, false)
   }))
   default = []
 
   validation {
     condition     = length(distinct([for x in var.nodeset_tpu : x.nodeset_name])) == length(var.nodeset_tpu)
     error_message = "All TPU nodesets must have a unique name."
+  }
+}
+
+variable "nodeset_dyn" {
+  description = "Defines dynamic nodesets, as a list."
+  type = list(object({
+    nodeset_name    = string
+    nodeset_feature = string
+  }))
+  default = []
+
+  validation {
+    condition     = length(distinct([for x in var.nodeset_dyn : x.nodeset_name])) == length(var.nodeset_dyn)
+    error_message = "All dynamic nodesets must have a unique name."
+  }
+}
+
+# tflint-ignore: terraform_unused_declarations
+variable "network_storage" {
+  description = "DEPRECATED"
+  type = list(object({
+    server_ip             = string,
+    remote_mount          = string,
+    local_mount           = string,
+    fs_type               = string,
+    mount_options         = string,
+    client_install_runner = map(string)
+    mount_runner          = map(string)
+  }))
+  default = []
+  validation {
+    condition     = length(var.network_storage) == 0
+    error_message = <<-EOD
+      network_storage in partition module is deprecated and should not be set.
+      To add network storage to compute nodes, use network_storage of controller module instead.
+    EOD
   }
 }

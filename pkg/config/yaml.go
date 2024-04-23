@@ -54,24 +54,29 @@ type Pos struct {
 	Column int
 }
 
-func importBlueprint(f string) (Blueprint, YamlCtx, error) {
-	data, err := os.ReadFile(f)
-	if err != nil {
-		return Blueprint{}, YamlCtx{}, fmt.Errorf("%s, filename=%s: %v", errMsgFileLoadError, f, err)
-	}
-	decoder := yaml.NewDecoder(bytes.NewReader(data))
-	decoder.KnownFields(true)
+func parseYaml[T any](y []byte) (T, YamlCtx, error) {
+	var s T
 
-	yamlCtx, err := NewYamlCtx(data)
+	yamlCtx, err := NewYamlCtx(y)
 	if err != nil { // YAML parsing error
-		return Blueprint{}, yamlCtx, err
+		return s, yamlCtx, err
 	}
 
-	var bp Blueprint
-	if err = decoder.Decode(&bp); err != nil {
-		return Blueprint{}, yamlCtx, parseYamlV3Error(err)
+	decoder := yaml.NewDecoder(bytes.NewReader(y))
+	decoder.KnownFields(true)
+	if err = decoder.Decode(&s); err != nil {
+		return s, yamlCtx, parseYamlV3Error(err)
 	}
-	return bp, yamlCtx, nil
+	return s, yamlCtx, nil
+}
+
+func parseYamlFile[T any](path string) (T, YamlCtx, error) {
+	y, err := os.ReadFile(path)
+	if err != nil {
+		var s T
+		return s, YamlCtx{}, fmt.Errorf("failed to read the input yaml, filename=%s: %v", path, err)
+	}
+	return parseYaml[T](y)
 }
 
 // YamlCtx is a contextual information to render errors.
@@ -318,8 +323,12 @@ func (d *Dict) UnmarshalYAML(n *yaml.Node) error {
 	if !ty.IsObjectType() {
 		return nodeToPosErr(n, fmt.Errorf("must be a mapping, got %s", ty.FriendlyName()))
 	}
+
 	for k, w := range v.Unwrap().AsValueMap() {
-		d.Set(k, w)
+		if d.m == nil {
+			d.m = map[string]cty.Value{}
+		}
+		d.m[k] = w
 	}
 	return nil
 }
@@ -388,7 +397,7 @@ func parseYamlV3Error(err error) error {
 // If no position can be extracted, returns error without position.
 // Else returns PosError{Pos{Line: line_number}, error_message}.
 func parseYamlV3ErrorString(s string) error {
-	match := regexp.MustCompile(`^(yaml: )?(line (\d+): )?(.*)$`).FindStringSubmatch(s)
+	match := regexp.MustCompile(`^(yaml: )?(line (\d+): )?((.|\n)*)$`).FindStringSubmatch(s)
 	if match == nil {
 		return errors.New(s)
 	}

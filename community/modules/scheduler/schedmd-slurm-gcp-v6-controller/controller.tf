@@ -27,15 +27,18 @@ locals {
 
   have_template = var.instance_template != null && var.instance_template != ""
 
-  service_account = coalesce(var.service_account, {
-    email  = data.google_compute_default_service_account.default.email
-    scopes = ["https://www.googleapis.com/auth/cloud-platform"]
-  })
+  service_account_email = coalesce(var.service_account_email, data.google_compute_default_service_account.default.email)
+
+  # can't rely on `email=null` as it's used to instantiate `cloudsql_secret_accessor`
+  service_account = {
+    email  = local.service_account_email
+    scopes = var.service_account_scopes
+  }
 }
 
 # INSTANCE TEMPLATE
 module "slurm_controller_template" {
-  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=6.3.1_20240118"
+  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=6.4.4&depth=1"
   count  = local.have_template ? 0 : 1
 
   project_id          = var.project_id
@@ -53,7 +56,7 @@ module "slurm_controller_template" {
   bandwidth_tier    = var.bandwidth_tier
   slurm_bucket_path = module.slurm_files.slurm_bucket_path
   can_ip_forward    = var.can_ip_forward
-  disable_smt       = var.disable_smt
+  disable_smt       = !var.enable_smt
 
   enable_confidential_vm   = var.enable_confidential_vm
   enable_oslogin           = var.enable_oslogin
@@ -87,14 +90,14 @@ locals {
   # TODO: add support for proper access_config
   access_config = {
     nat_ip       = null
-    network_tier = "STANDARD"
+    network_tier = null
   }
 }
 
 module "slurm_controller_instance" {
-  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/_slurm_instance?ref=6.3.1_20240118"
+  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/_slurm_instance?ref=6.4.4&depth=1"
 
-  access_config       = !var.disable_controller_public_ips ? [local.access_config] : []
+  access_config       = var.enable_controller_public_ips ? [local.access_config] : []
   add_hostname_suffix = false
   hostname            = "${local.slurm_cluster_name}-controller"
   instance_template   = local.have_template ? var.instance_template : module.slurm_controller_template[0].self_link
@@ -108,11 +111,7 @@ module "slurm_controller_instance" {
   zone                = var.zone
   metadata            = var.metadata
 
-  depends_on = [
-    module.slurm_files,
-    # Ensure nodes are destroyed before controller is
-    module.cleanup_compute_nodes[0],
-  ]
+  labels = merge(local.labels, local.files_cs_labels)
 }
 
 # SECRETS: CLOUDSQL
@@ -142,29 +141,34 @@ resource "google_secret_manager_secret_iam_member" "cloudsql_secret_accessor" {
 
   secret_id = google_secret_manager_secret.cloudsql[0].id
   role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${local.service_account[0].email}"
+  member    = "serviceAccount:${local.service_account.email}"
 }
 
 
 # Destroy all compute nodes on `terraform destroy`
 module "cleanup_compute_nodes" {
-  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_destroy_nodes?ref=6.3.1_20240118"
+  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_destroy_nodes?ref=6.4.4&depth=1"
   count  = var.enable_cleanup_compute ? 1 : 0
 
   slurm_cluster_name = local.slurm_cluster_name
   project_id         = var.project_id
   when_destroy       = true
 
-  # Depend on controller network, as a best effort to avoid
-  # subnetwork resourceInUseByAnotherResource error
-  # NOTE: Can not use nodeset subnetworks as "A static list expression is required"
-  depends_on = [var.subnetwork_self_link]
+
+  depends_on = [
+    # Depend on controller network, as a best effort to avoid
+    # subnetwork resourceInUseByAnotherResource error
+    # NOTE: Can not use nodeset subnetworks as "A static list expression is required"
+    var.subnetwork_self_link,
+    # Ensure VMs are destroyed before resource policies
+    module.cleanup_resource_policies[0],
+  ]
 }
 
 
 # Destroy all resource policies on `terraform destroy`
 module "cleanup_resource_policies" {
-  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_destroy_resource_policies?ref=6.3.1_20240118"
+  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_destroy_resource_policies?ref=6.4.4&depth=1"
   count  = var.enable_cleanup_compute ? 1 : 0
 
   slurm_cluster_name = local.slurm_cluster_name

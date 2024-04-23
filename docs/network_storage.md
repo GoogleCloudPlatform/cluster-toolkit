@@ -98,19 +98,19 @@ The following is an example setting up a filestore using startup script:
 The following matrix shows the best method by which each type of network storage
 device should be mounted to each mount capable module.
 
-&nbsp; | Slurm V4 | Slurm V5 | Batch | vm-instance | Packer (client install) | HTCondor\* | PBS Pro\*
--- | -- | -- | -- | -- | -- | -- | --
-filestore | via USE | via USE | via USE | via USE | via STARTUP | via USE | via USE
-nfs-server | via USE | via USE | via USE | via USE | via STARTUP | via USE | via USE
-cloud-storage-bucket (GCS) | via USE | via USE | via USE | via USE | via STARTUP | via USE | via USE
-DDN EXAScaler lustre | via USE | via USE | via USE | via USE | Needs Testing | via USE | via USE
-Intel DAOS** | via STARTUP | Needs Testing | Needs Testing | Needs Testing | Needs Testing | Needs Testing | Needs Testing
-  |   |   |   |   |   |   |  
-filestore (pre-existing) | via USE | via USE | via USE | via USE | via STARTUP | via USE | via USE
-nfs-server (pre-existing) | via USE | via USE | via USE | via USE | via STARTUP | via USE | via USE
-DDN EXAScaler lustre (pre-existing) | via USE | via USE | via USE | via USE | Needs Testing | via USE | via USE
-Intel DAOS (pre-existing) | Planned Development | Planned Development | Planned Development | Planned Development | Planned Development | Planned Development | Planned Development
-GCS FUSE (pre-existing) | via USE | via USE | via USE | via USE | via STARTUP | via USE | Needs Testing
+&nbsp; | Slurm V5 | Batch | vm-instance | Packer (client install) | HTCondor\* | PBS Pro\*
+-- | -- | -- | -- | -- | -- | --
+filestore | via USE | via USE | via USE | via STARTUP | via USE | via USE
+nfs-server | via USE | via USE | via USE | via STARTUP | via USE | via USE
+cloud-storage-bucket (GCS)| via USE | via USE | via USE | via STARTUP | via USE | via USE
+DDN EXAScaler lustre | via USE | via USE | via USE | Needs Testing | via USE | via USE
+Intel DAOS** | Needs Testing | Needs Testing | Needs Testing | Needs Testing | Needs Testing | Needs Testing
+  |   |   |   |   |   |  
+filestore (pre-existing) | via USE | via USE | via USE | via STARTUP | via USE | via USE
+nfs-server (pre-existing) | via USE | via USE | via USE | via STARTUP | via USE | via USE
+DDN EXAScaler lustre (pre-existing) | via USE | via USE | via USE | Needs Testing | via USE | via USE
+Intel DAOS (pre-existing) | Planned Development | Planned Development | Planned Development | Planned Development | Planned Development | Planned Development
+GCS FUSE (pre-existing) | via USE | via USE | via USE | via STARTUP | via USE | Needs Testing
 
 - **via USE:** Client installation and mounting occur automatically when
   connected with the use field. See

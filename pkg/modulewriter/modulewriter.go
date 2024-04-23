@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/deploymentio"
+	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/sourcereader"
 	"io"
 	"os"
@@ -32,16 +33,17 @@ import (
 	"path/filepath"
 
 	"github.com/hashicorp/go-getter"
+	"github.com/otiai10/copy"
 )
 
 // strings that get re-used throughout this package and others
 const (
-	HiddenGhpcDirName          = ".ghpc"
-	ArtifactsDirName           = "artifacts"
-	ExpandedBlueprintName      = "expanded_blueprint.yaml"
-	prevDeploymentGroupDirName = "previous_deployment_groups"
-	gitignoreTemplate          = "deployment.gitignore.tmpl"
-	artifactsWarningFilename   = "DO_NOT_MODIFY_THIS_DIRECTORY"
+	HiddenGhpcDirName        = ".ghpc"
+	ArtifactsDirName         = "artifacts"
+	ExpandedBlueprintName    = "expanded_blueprint.yaml"
+	prevGroupDirName         = "previous_deployment_groups"
+	gitignoreTemplate        = "deployment.gitignore.tmpl"
+	artifactsWarningFilename = "DO_NOT_MODIFY_THIS_DIRECTORY"
 )
 
 func HiddenGhpcDir(deplDir string) string {
@@ -54,8 +56,8 @@ func ArtifactsDir(deplDir string) string {
 
 // ModuleWriter interface for writing modules to a deployment
 type ModuleWriter interface {
-	writeDeploymentGroup(
-		dc config.DeploymentConfig,
+	writeGroup(
+		bp config.Blueprint,
 		grpIdx int,
 		groupPath string,
 		instructionsFile io.Writer,
@@ -73,8 +75,19 @@ var kinds = map[config.ModuleKind]ModuleWriter{
 var templatesFS embed.FS
 
 // WriteDeployment writes a deployment directory using modules defined the environment blueprint.
-func WriteDeployment(dc config.DeploymentConfig, deploymentDir string) error {
+func WriteDeployment(bp config.Blueprint, deploymentDir string) error {
+	expanded := bp.Clone() // clone to avoid modifying the original blueprint
+
+	// TODO: probably not a right place to do "materialize". Consider bubbling it up.
+	if err := bp.Materialize(); err != nil {
+		return err
+	}
+
 	if err := prepDepDir(deploymentDir); err != nil {
+		return err
+	}
+
+	if err := stageFiles(bp, deploymentDir); err != nil {
 		return err
 	}
 
@@ -86,15 +99,15 @@ func WriteDeployment(dc config.DeploymentConfig, deploymentDir string) error {
 	fmt.Fprintln(instructions, "Advanced Deployment Instructions")
 	fmt.Fprintln(instructions, "================================")
 
-	for ig := range dc.Config.DeploymentGroups {
-		if err := writeGroup(deploymentDir, dc, ig, instructions); err != nil {
+	for ig := range bp.Groups {
+		if err := writeGroup(deploymentDir, bp, ig, instructions); err != nil {
 			return err
 		}
 	}
 
-	writeDestroyInstructions(instructions, dc, deploymentDir)
+	writeDestroyInstructions(instructions, bp, deploymentDir)
 
-	if err := writeExpandedBlueprint(deploymentDir, dc); err != nil {
+	if err := writeExpandedBlueprint(deploymentDir, expanded); err != nil {
 		return err
 	}
 
@@ -106,8 +119,64 @@ func WriteDeployment(dc config.DeploymentConfig, deploymentDir string) error {
 	return nil
 }
 
-func writeGroup(deplPath string, dc config.DeploymentConfig, gIdx int, instructions io.Writer) error {
-	g := dc.Config.DeploymentGroups[gIdx]
+func stageFiles(bp config.Blueprint, deplPath string) error {
+	staged := bp.StagedFiles()
+	if len(staged) == 0 {
+		return nil
+	}
+
+	// create staging directory
+	if err := os.MkdirAll(filepath.Join(deplPath, config.StagingDir), 0700); err != nil {
+		return err
+	}
+
+	errs := config.Errors{}
+	for _, f := range staged {
+		// TODO: attribute error to the position in the blueprint
+		errs.Add(stageFile(deplPath, f))
+	}
+	return errs.OrNil()
+}
+
+func doesExists(path string) (bool, error) {
+	_, err := os.Lstat(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
+func stageFile(deplPath string, f config.StagedFile) error {
+	// RelDst is relative to group folders ("../.ghpc/staged"),
+	// prepend any_group_dir to be "eaten" by ".."
+	dst := filepath.Join(deplPath, "any_group_dir", f.RelDst)
+	dstExists, err := doesExists(dst)
+	if err != nil {
+		return err
+	}
+
+	srcExists, err := doesExists(f.AbsSrc)
+	if err != nil {
+		return err
+	}
+
+	if !srcExists && !dstExists {
+		return fmt.Errorf("file for staging %s does not exists", f.AbsSrc)
+	}
+	if !srcExists && dstExists {
+		// We implement this relaxation for cases where user does not have access to the original blueprint,
+		// and does re-creation using expanded blueprint.
+		logging.Error("WARNING: file %s does not exists, proceeding by using previously staged copy", f.AbsSrc)
+		return nil
+	}
+	return copy.Copy(f.AbsSrc, dst)
+}
+
+func writeGroup(deplPath string, bp config.Blueprint, gIdx int, instructions io.Writer) error {
+	g := bp.Groups[gIdx]
 	gPath, err := createGroupDir(deplPath, g)
 	if err != nil {
 		return err
@@ -122,7 +191,7 @@ func writeGroup(deplPath string, dc config.DeploymentConfig, gIdx int, instructi
 		return fmt.Errorf("invalid kind in deployment group %q, got %q", g.Name, g.Kind())
 	}
 
-	if err := writer.writeDeploymentGroup(dc, gIdx, gPath, instructions); err != nil {
+	if err := writer.writeGroup(bp, gIdx, gPath, instructions); err != nil {
 		return fmt.Errorf("error writing deployment group %s: %w", g.Name, err)
 	}
 	return nil
@@ -133,7 +202,7 @@ func InstructionsPath(deploymentDir string) string {
 	return filepath.Join(deploymentDir, "instructions.txt")
 }
 
-func createGroupDir(deplPath string, g config.DeploymentGroup) (string, error) {
+func createGroupDir(deplPath string, g config.Group) (string, error) {
 	gPath := filepath.Join(deplPath, string(g.Name))
 	// Create the deployment group directory if not already created.
 	if _, err := os.Stat(gPath); errors.Is(err, os.ErrNotExist) {
@@ -166,6 +235,7 @@ func DeploymentSource(mod config.Module) (string, error) {
 	}
 }
 
+// TODO: attribute error to Blueprint position
 func tfDeploymentSource(mod config.Module) (string, error) {
 	switch {
 	case sourcereader.IsEmbeddedPath(mod.Source):
@@ -211,7 +281,7 @@ func copyEmbeddedModules(base string) error {
 	return nil
 }
 
-func copyGroupSources(gPath string, g config.DeploymentGroup) error {
+func copyGroupSources(gPath string, g config.Group) error {
 	var copyEmbedded = false
 	for iMod := range g.Modules {
 		mod := &g.Modules[iMod]
@@ -290,7 +360,7 @@ func prepDepDir(depDir string) error {
 	}
 
 	// remove any existing backups of deployment group
-	prevGroupDir := filepath.Join(ghpcDir, prevDeploymentGroupDirName)
+	prevGroupDir := filepath.Join(ghpcDir, prevGroupDirName)
 	os.RemoveAll(prevGroupDir)
 	if err := os.MkdirAll(prevGroupDir, 0755); err != nil {
 		return fmt.Errorf("failed to create directory to save previous deployment groups at %s: %w", prevGroupDir, err)
@@ -333,17 +403,14 @@ func prepArtifactsDir(artifactsDir string) error {
 	defer f.Close()
 
 	_, err = f.WriteString(artifactsWarning)
-	if err != nil {
-		return err
-	}
-	return nil
+	return err
 }
 
-func writeExpandedBlueprint(depDir string, dc config.DeploymentConfig) error {
-	return dc.ExportBlueprint(filepath.Join(ArtifactsDir(depDir), ExpandedBlueprintName))
+func writeExpandedBlueprint(depDir string, bp config.Blueprint) error {
+	return bp.Export(filepath.Join(ArtifactsDir(depDir), ExpandedBlueprintName))
 }
 
-func writeDestroyInstructions(w io.Writer, dc config.DeploymentConfig, deploymentDir string) {
+func writeDestroyInstructions(w io.Writer, bp config.Blueprint, deploymentDir string) {
 	packerManifests := []string{}
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Destroying infrastructure when no longer needed")
@@ -358,15 +425,14 @@ func writeDestroyInstructions(w io.Writer, dc config.DeploymentConfig, deploymen
 	fmt.Fprintln(w, "-----------------")
 	fmt.Fprintln(w, "Infrastructure should be destroyed in reverse order of creation:")
 	fmt.Fprintln(w)
-	for grpIdx := len(dc.Config.DeploymentGroups) - 1; grpIdx >= 0; grpIdx-- {
-		grp := dc.Config.DeploymentGroups[grpIdx]
+	for grpIdx := len(bp.Groups) - 1; grpIdx >= 0; grpIdx-- {
+		grp := bp.Groups[grpIdx]
 		grpPath := filepath.Join(deploymentDir, string(grp.Name))
 		if grp.Kind() == config.TerraformKind {
 			fmt.Fprintf(w, "terraform -chdir=%s destroy\n", grpPath)
 		}
 		if grp.Kind() == config.PackerKind {
 			packerManifests = append(packerManifests, filepath.Join(grpPath, string(grp.Modules[0].ID), "packer-manifest.json"))
-
 		}
 	}
 

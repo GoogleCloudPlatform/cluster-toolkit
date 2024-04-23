@@ -29,10 +29,11 @@ vars:
   deployment_name: golden_copy_deployment
   labels:
     ghpc_blueprint: merge_flatten
-    ghpc_deployment: golden_copy_deployment
+    ghpc_deployment: ((var.deployment_name))
   project_id: invalid-project
-  region: us-east4
-  zone: us-east4-c
+  region: (("us-east${var.region_number}"))
+  region_number: 4
+  zone: (("${var.region}-c"))
 deployment_groups:
   - group: zero
     modules:
@@ -40,50 +41,50 @@ deployment_groups:
         kind: terraform
         id: network
         settings:
-          deployment_name: ((var.deployment_name ))
-          project_id: ((var.project_id ))
-          region: ((var.region ))
+          deployment_name: ((var.deployment_name))
+          project_id: ((var.project_id))
+          region: ((var.region))
       - source: modules/file-system/filestore
         kind: terraform
         id: first-fs
         use:
           - network
         settings:
-          deployment_name: ((var.deployment_name ))
-          labels: ((var.labels ))
+          deployment_name: ((var.deployment_name))
+          labels: ((var.labels))
           local_mount: /first
-          network_id: ((module.network.network_id ))
-          project_id: ((var.project_id ))
-          region: ((var.region ))
-          zone: ((var.zone ))
+          network_id: ((module.network.network_id))
+          project_id: ((var.project_id))
+          region: ((var.region))
+          zone: ((var.zone))
       - source: modules/file-system/filestore
         kind: terraform
         id: second-fs
         use:
           - network
         settings:
-          deployment_name: ((var.deployment_name ))
-          labels: ((var.labels ))
+          deployment_name: ((var.deployment_name))
+          labels: ((var.labels))
           local_mount: /first
-          network_id: ((module.network.network_id ))
-          project_id: ((var.project_id ))
-          region: ((var.region ))
-          zone: ((var.zone ))
+          network_id: ((module.network.network_id))
+          project_id: ((var.project_id))
+          region: ((var.region))
+          zone: ((var.zone))
       - source: modules/compute/vm-instance
         kind: terraform
         id: first-vm
         use:
           - first-fs
         settings:
-          deployment_name: ((var.deployment_name ))
+          deployment_name: ((var.deployment_name))
           labels: |-
             ((merge(var.labels, {
               green = "sleeves"
-            }) ))
-          network_storage: ((flatten([module.first-fs.network_storage]) ))
-          project_id: ((var.project_id ))
-          region: ((var.region ))
-          zone: ((var.zone ))
+            })))
+          network_storage: ((flatten([module.first-fs.network_storage])))
+          project_id: ((var.project_id))
+          region: ((var.region))
+          zone: ((var.zone))
       - source: modules/compute/vm-instance
         kind: terraform
         id: second-vm
@@ -91,9 +92,9 @@ deployment_groups:
           - first-fs
           - second-fs
         settings:
-          deployment_name: ((var.deployment_name ))
-          labels: ((var.labels ))
-          network_storage: ((flatten([module.second-fs.network_storage, flatten([module.first-fs.network_storage])]) ))
-          project_id: ((var.project_id ))
-          region: ((var.region ))
-          zone: ((var.zone ))
+          deployment_name: ((var.deployment_name))
+          labels: ((var.labels))
+          network_storage: ((flatten([module.second-fs.network_storage, flatten([module.first-fs.network_storage])])))
+          project_id: ((var.project_id))
+          region: ((var.region))
+          zone: ((var.zone))

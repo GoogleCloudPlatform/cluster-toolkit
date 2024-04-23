@@ -19,26 +19,33 @@ variable "node_count_static" {
 }
 
 variable "node_count_dynamic_max" {
-  description = "Maximum number of dynamic nodes allowed in this partition."
+  description = "Maximum number of auto-scaling nodes allowed in this partition."
   type        = number
-  default     = 1
+  default     = 5
 }
 
 variable "name" {
-  description = "Name of the nodeset tpu."
+  description = <<-EOD
+    Name of the nodeset. Automatically populated by the module id if not set. 
+    If setting manually, ensure a unique value across all nodesets.
+    EOD
   type        = string
-  default     = "ghpc"
-
-  validation {
-    condition     = can(regex("^[a-z](?:[a-z0-9]{0,5})$", var.name))
-    error_message = "Nodeset TPU name (var.name) must begin with a letter, be fully alphanumeric and be 6 characters or less. Regexp: '^[a-z](?:[a-z0-9]{0,5})$'."
-  }
 }
 
-variable "disable_public_ips" {
-  description = "If set to false. The node group VMs will have a random public IP assigned to it. Ignored if access_config is set."
+variable "enable_public_ips" {
+  description = "If set to true. The node group VMs will have a random public IP assigned to it. Ignored if access_config is set."
   type        = bool
-  default     = true
+  default     = false
+}
+
+variable "disable_public_ips" { # tflint-ignore: terraform_unused_declarations
+  description = "DEPRECATED: Use `enable_public_ips` instead."
+  type        = bool
+  default     = null
+  validation {
+    condition     = var.disable_public_ips == null
+    error_message = "DEPRECATED: Use `enable_public_ips` instead."
+  }
 }
 
 variable "node_type" {
@@ -69,7 +76,7 @@ variable "accelerator_config" {
 variable "tf_version" {
   description = "Nodeset Tensorflow version, see https://cloud.google.com/tpu/docs/supported-tpu-configurations#tpu_vm for details."
   type        = string
-  default     = "2.9.1"
+  default     = "2.14.0"
 }
 
 variable "preemptible" {
@@ -81,7 +88,7 @@ variable "preemptible" {
 variable "preserve_tpu" {
   description = "Specify whether TPU-vms will get preserve on suspend, if set to true, on suspend vm is stopped, on false it gets deleted"
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "zone" {
@@ -96,7 +103,7 @@ variable "data_disks" {
 }
 
 variable "docker_image" {
-  description = "The gcp container registry id docker image to use in the TPU vms, it defaults to gcr.io/schedmd-slurm-public/tpu:slurm-gcp-6-1-tf-<var.tf_version>"
+  description = "The gcp container registry id docker image to use in the TPU vms, it defaults to gcr.io/schedmd-slurm-public/tpu:slurm-gcp-6-4-tf-<var.tf_version>"
   type        = string
   default     = null
 }
@@ -106,12 +113,38 @@ variable "subnetwork_self_link" {
   description = "The name of the subnetwork to attach the TPU-vm of this nodeset to."
 }
 
-variable "service_account" {
+variable "service_account_email" {
+  description = "Service account e-mail address to attach to the TPU-vm."
+  type        = string
+  default     = null
+}
+
+variable "service_account_scopes" {
+  description = "Scopes to attach to the TPU-vm."
+  type        = set(string)
+  default     = ["https://www.googleapis.com/auth/cloud-platform"]
+}
+
+variable "service_account" { # tflint-ignore: terraform_unused_declarations
+  description = "DEPRECATED: Use `service_account_email` and `service_account_scopes` instead."
   type = object({
     email  = string
     scopes = set(string)
   })
+  default = null
+  validation {
+    condition     = var.service_account == null
+    error_message = "DEPRECATED: Use `service_account_email` and `service_account_scopes` instead."
+  }
+}
 
-  description = "Service account to attach to the TPU-vm. If none is given, the default service account and scopes will be used."
-  default     = null
+variable "project_id" {
+  type        = string
+  description = "Project ID to create resources in."
+}
+
+variable "reserved" {
+  description = "Specify whether TPU-vms in this nodeset are created under a reservation."
+  type        = bool
+  default     = false
 }

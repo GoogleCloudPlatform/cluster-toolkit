@@ -106,6 +106,9 @@ was here`, `"5gold\nwas here"`, false},
 
 		{`#!/bin/bash
 echo "Hello $(vars.project_id) from $(vars.region)"`, `"#!/bin/bash\necho \"Hello ${var.project_id} from ${var.region}\""`, false},
+		{`#!/bin/bash
+echo "Hello $(vars.project_id)"
+`, `"#!/bin/bash\necho \"Hello ${var.project_id}\"\n"`, false},
 		{"", `""`, false},
 		{`$(try(vars.this) + one(vars.time))`, "try(var.this)+one(var.time)", false},
 
@@ -187,7 +190,7 @@ func TestFlattenFunctionCallExpression(t *testing.T) {
 	})}
 	expr := FunctionCallExpression("flatten", cty.TupleVal([]cty.Value{
 		cty.TupleVal([]cty.Value{cty.NumberIntVal(1), cty.NumberIntVal(2)}),
-		GlobalRef("three").AsExpression().AsValue(),
+		GlobalRef("three").AsValue(),
 	}))
 
 	want := cty.TupleVal([]cty.Value{
@@ -195,7 +198,7 @@ func TestFlattenFunctionCallExpression(t *testing.T) {
 		cty.NumberIntVal(2),
 		cty.NumberIntVal(3)})
 
-	got, err := expr.Eval(bp)
+	got, err := bp.Eval(expr.AsValue())
 	if err != nil {
 		t.Errorf("got unexpected error: %s", err)
 	}
@@ -215,7 +218,7 @@ func TestMergeFunctionCallExpression(t *testing.T) {
 			"one": cty.NumberIntVal(1),
 			"two": cty.NumberIntVal(3),
 		}),
-		GlobalRef("fix").AsExpression().AsValue(),
+		GlobalRef("fix").AsValue(),
 	)
 
 	want := cty.ObjectVal(map[string]cty.Value{
@@ -223,7 +226,7 @@ func TestMergeFunctionCallExpression(t *testing.T) {
 		"two": cty.NumberIntVal(2),
 	})
 
-	got, err := expr.Eval(bp)
+	got, err := bp.Eval(expr.AsValue())
 	if err != nil {
 		t.Errorf("got unexpected error: %s", err)
 	}
@@ -265,5 +268,30 @@ func TestReplaceTokens(t *testing.T) {
 				t.Errorf("diff (-want +got):\n%s", diff)
 			}
 		})
+	}
+}
+
+func TestEvalDict(t *testing.T) {
+	bp := Blueprint{
+		Vars: NewDict(map[string]cty.Value{
+			"zebra": cty.StringVal("stripes"),
+		}),
+	}
+	d := NewDict(map[string]cty.Value{
+		"abyss": cty.ObjectVal(map[string]cty.Value{
+			"white": GlobalRef("zebra").AsValue(),
+			"green": cty.StringVal("grass"),
+		})})
+	want := NewDict(map[string]cty.Value{
+		"abyss": cty.ObjectVal(map[string]cty.Value{
+			"white": cty.StringVal("stripes"),
+			"green": cty.StringVal("grass"),
+		})})
+	got, err := bp.EvalDict(d)
+	if err != nil {
+		t.Fatalf("failed to eval: %v", err)
+	}
+	if diff := cmp.Diff(want.Items(), got.Items(), ctydebug.CmpOptions); diff != "" {
+		t.Errorf("diff (-want +got):\n%s", diff)
 	}
 }

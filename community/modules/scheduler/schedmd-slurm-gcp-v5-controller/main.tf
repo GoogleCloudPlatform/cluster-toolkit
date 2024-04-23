@@ -55,7 +55,7 @@ data "google_compute_default_service_account" "default" {
 }
 
 module "slurm_controller_instance" {
-  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_controller_instance?ref=5.9.1"
+  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_controller_instance?ref=5.10.6"
 
   access_config                      = local.access_config
   slurm_cluster_name                 = local.slurm_cluster_name
@@ -78,6 +78,7 @@ module "slurm_controller_instance" {
   enable_devel                       = var.enable_devel
   enable_cleanup_compute             = var.enable_cleanup_compute
   enable_cleanup_subscriptions       = var.enable_cleanup_subscriptions
+  enable_external_prolog_epilog      = var.enable_external_prolog_epilog
   enable_reconfigure                 = var.enable_reconfigure
   enable_bigquery_load               = var.enable_bigquery_load
   enable_slurm_gcp_plugins           = var.enable_slurm_gcp_plugins
@@ -92,7 +93,7 @@ module "slurm_controller_instance" {
 }
 
 module "slurm_controller_template" {
-  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=5.9.1"
+  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=5.10.6"
 
   additional_disks         = local.additional_disks
   can_ip_forward           = var.can_ip_forward

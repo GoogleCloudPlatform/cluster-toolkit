@@ -15,7 +15,7 @@
 ---
 repos:
 - repo: https://github.com/antonbabenko/pre-commit-terraform
-  rev: v1.82.0
+  rev: v1.86.0
   hooks:
   - id: terraform_fmt
   - id: terraform_tflint
@@ -47,7 +47,7 @@ repos:
     entry: python3 tools/duplicate-diff.py
     language: python
     language_version: python3
-    files: '.*(\.sh|\.tf|\.tftpl)$'
+    files: '.*(\.sh|\.tf|\.tftpl|\.tpl)$'
     pass_filenames: true
     require_serial: true
   - id: module-label-check
@@ -65,6 +65,15 @@ repos:
     args: ['-c', '"Google LLC"', '-l', 'apache']
     exclude: docs/videos/healthcare-and-life-sciences/lysozyme-example/submit.sh
     pass_filenames: true
+  - id: tests-metadata
+    name: tests-metadata
+    entry: python3 tools/cloud-build/daily-tests/validate_tests_metadata.py
+    language: python
+    language_version: python3
+    additional_dependencies: ['pyyaml']
+    files: 'tools/cloud-build/daily-tests/builds/.*\.yaml'
+    pass_filenames: false
+    require_serial: true
 
 - repo: https://github.com/dnephin/pre-commit-golang
   rev: v0.5.1
@@ -82,16 +91,16 @@ repos:
 #   hooks:
 #   - id: go-critic
 - repo: https://github.com/Bahjat/pre-commit-golang
-  rev: v1.0.2
+  rev: v1.0.3
   hooks:
   - id: go-static-check
 - repo: https://github.com/adrienverge/yamllint
-  rev: v1.32.0
+  rev: v1.34.0
   hooks:
   - id: yamllint
     args: [-c=.yamllint, --no-warnings]
 - repo: https://github.com/jackdewinter/pymarkdown
-  rev: v0.9.12
+  rev: v0.9.17
   hooks:
   - id: pymarkdown
     # Rules at https://github.com/jackdewinter/pymarkdown/tree/main/docs/rules
@@ -111,7 +120,7 @@ repos:
   - id: shfmt
     exclude: ".*tpl"
 - repo: https://github.com/pre-commit/pre-commit-hooks
-  rev: v4.4.0
+  rev: v4.5.0
   hooks:
   - id: end-of-file-fixer
 - repo: https://github.com/codespell-project/codespell

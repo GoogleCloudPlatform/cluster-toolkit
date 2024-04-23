@@ -39,7 +39,9 @@ locals {
 
   install_htcondor_ps1 = templatefile(
     "${path.module}/templates/install-htcondor.ps1.tftpl", {
-      condor_version = var.condor_version
+      condor_version               = var.condor_version,
+      http_proxy                   = var.http_proxy,
+      python_windows_installer_url = var.python_windows_installer_url,
   })
 
   required_apis = [

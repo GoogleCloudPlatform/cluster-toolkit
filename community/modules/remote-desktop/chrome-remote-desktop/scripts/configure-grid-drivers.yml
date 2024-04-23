@@ -26,6 +26,14 @@
         - gdm3
         grid_fn: NVIDIA-Linux-x86_64-510.85.02-grid.run
         grid_ver: vGPU14.2
+      bookworm:
+        packages:
+        - build-essential
+        - gdebi-core
+        - mesa-utils
+        - gdm3
+        grid_fn: NVIDIA-Linux-x86_64-535.154.05-grid.run
+        grid_ver: vGPU16.3
       jammy:
         packages:
         - build-essential

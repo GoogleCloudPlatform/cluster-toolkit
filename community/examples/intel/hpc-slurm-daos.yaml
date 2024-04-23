@@ -100,14 +100,6 @@ deployment_groups:
     source: modules/scripts/startup-script
     settings:
       runners:
-      - type: shell
-        destination: remove_lustre_client_repo.sh
-        content: |
-          #!/bin/bash
-          rm -f /etc/yum.repos.d/lustre-client.repo
-          dnf clean all --verbose
-          rm -rf /var/cache/dnf/*
-          dnf makecache
       - type: data
         content: $(daos.daos_agent_yml)
         destination: /etc/daos/daos_agent.yml
@@ -129,17 +121,15 @@ deployment_groups:
       node_count_dynamic_max: 4
       machine_type: n2-standard-2
       enable_placement: false  # the default is: true
-      service_account:
-        email: null
-        scopes:
-        - "https://www.googleapis.com/auth/monitoring.write"
-        - "https://www.googleapis.com/auth/logging.write"
-        - "https://www.googleapis.com/auth/devstorage.read_only"
-        - "https://www.googleapis.com/auth/cloud-platform"
+      service_account_scopes:
+      - "https://www.googleapis.com/auth/monitoring.write"
+      - "https://www.googleapis.com/auth/logging.write"
+      - "https://www.googleapis.com/auth/devstorage.read_only"
+      - "https://www.googleapis.com/auth/cloud-platform"
 
   - id: debug_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
-    use: [debug_nodeset, homefs]
+    use: [debug_nodeset]
     settings:
       partition_name: debug
       exclusive: false  # allows nodes to stay up after jobs are done
@@ -152,17 +142,15 @@ deployment_groups:
       name: ns2
       node_count_dynamic_max: 20
       bandwidth_tier: gvnic_enabled
-      service_account:
-        email: null
-        scopes:
-        - "https://www.googleapis.com/auth/monitoring.write"
-        - "https://www.googleapis.com/auth/logging.write"
-        - "https://www.googleapis.com/auth/devstorage.read_only"
-        - "https://www.googleapis.com/auth/cloud-platform"
+      service_account_scopes:
+      - "https://www.googleapis.com/auth/monitoring.write"
+      - "https://www.googleapis.com/auth/logging.write"
+      - "https://www.googleapis.com/auth/devstorage.read_only"
+      - "https://www.googleapis.com/auth/cloud-platform"
 
   - id: compute_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
-    use: [compute_nodeset, homefs]
+    use: [compute_nodeset]
     settings:
       partition_name: compute
 
@@ -172,15 +160,13 @@ deployment_groups:
     settings:
       name_prefix: login
       machine_type: n2-standard-4
-      disable_login_public_ips: false
+      enable_login_public_ips: true
       tags: $(vars.tags)
-      service_account:
-        email: null
-        scopes:
-        - "https://www.googleapis.com/auth/monitoring.write"
-        - "https://www.googleapis.com/auth/logging.write"
-        - "https://www.googleapis.com/auth/devstorage.read_only"
-        - "https://www.googleapis.com/auth/cloud-platform"
+      service_account_scopes:
+      - "https://www.googleapis.com/auth/monitoring.write"
+      - "https://www.googleapis.com/auth/logging.write"
+      - "https://www.googleapis.com/auth/devstorage.read_only"
+      - "https://www.googleapis.com/auth/cloud-platform"
 
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
@@ -192,7 +178,7 @@ deployment_groups:
     - homefs
     - daos-client-script
     settings:
-      disable_controller_public_ips: false
+      enable_controller_public_ips: true
       compute_startup_script: $(daos-client-script.startup_script)
       controller_startup_script: $(daos-client-script.startup_script)
       login_startup_script: $(daos-client-script.startup_script)

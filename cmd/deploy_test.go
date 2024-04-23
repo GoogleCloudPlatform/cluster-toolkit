@@ -24,13 +24,15 @@ import (
 )
 
 func (s *MySuite) TestDeployGroups(c *C) {
-	applyBehavior = shell.NeverApply
 	var err error
 	pathEnv := os.Getenv("PATH")
 	os.Setenv("PATH", "")
-	err = deployTerraformGroup(".")
-	c.Assert(err, NotNil)
-	err = deployPackerGroup(".")
-	c.Assert(err, NotNil)
+
+	err = deployTerraformGroup(".", getArtifactsDir("."), shell.NeverApply)
+	c.Check(err, NotNil)
+
+	err = deployPackerGroup(".", shell.NeverApply)
+	c.Check(err, NotNil)
+
 	os.Setenv("PATH", pathEnv)
 }

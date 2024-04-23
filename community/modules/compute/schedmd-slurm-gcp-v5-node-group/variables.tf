@@ -15,7 +15,7 @@
  */
 
 # Most variables have been sourced and modified from the SchedMD/slurm-gcp
-# github repository: https://github.com/SchedMD/slurm-gcp/tree/5.9.1
+# github repository: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/5.10.6
 
 variable "project_id" {
   description = "Project in which the HPC deployment will be created."
@@ -42,7 +42,7 @@ variable "node_conf" {
 }
 
 variable "node_count_dynamic_max" {
-  description = "Maximum number of dynamic nodes allowed in this partition."
+  description = "Maximum number of auto-scaling nodes allowed in this partition."
   type        = number
   default     = 10
 }
@@ -96,7 +96,7 @@ variable "instance_image" {
   type        = map(string)
   default = {
     project = "schedmd-slurm-public"
-    family  = "slurm-gcp-5-9-hpc-centos-7"
+    family  = "slurm-gcp-5-10-hpc-centos-7"
   }
 
   validation {
@@ -302,7 +302,11 @@ variable "preemptible" {
 }
 
 variable "reservation_name" {
-  description = "Name of the reservation to use for VM resources; set to empty string if no reservation is used."
+  description = <<-EOD
+    Name of the reservation to use for VM resources
+    - Must be a "SPECIFIC" reservation
+    - Set to empty string if using no reservation or automatically-consumed reservations
+  EOD
   type        = string
   default     = ""
   nullable    = false
@@ -411,6 +415,18 @@ variable "additional_networks" {
       subnetwork_range_name = string
     }))
   }))
+}
+
+variable "maintenance_interval" {
+  description = "Specifies the frequency of planned maintenance events. Must be \"PERIODIC\" or empty string to not use this feature."
+  default     = ""
+  type        = string
+  nullable    = false
+
+  validation {
+    condition     = contains(["", "PERIODIC"], var.maintenance_interval)
+    error_message = "var.maintenance_interval must be the empty string or \"PERIODIC\""
+  }
 }
 
 variable "disable_public_ips" {

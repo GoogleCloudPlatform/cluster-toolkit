@@ -13,32 +13,21 @@
 # limitations under the License.
 
 ---
+tags:
+- m.cloud-storage-bucket
+- m.nfs-server
+- m.schedmd-slurm-gcp-v5-controller
+- m.schedmd-slurm-gcp-v5-login
+- m.schedmd-slurm-gcp-v5-node-group
+- m.schedmd-slurm-gcp-v5-partition
+- m.startup-script
+- m.vpc
+- slurm5
+
 timeout: 14400s  # 4hr
 steps:
-## Test simple golang build
-- id: build_ghpc
-  waitFor: ["-"]
-  name: "golang:bullseye"
-  entrypoint: /bin/bash
-  args:
-  - -c
-  - |
-    cd /workspace
-    make
-- id: fetch_builder
-  waitFor: ["-"]
-  name: >-
-    us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
-  entrypoint: /bin/bash
-  args:
-  - -c
-  - echo "done fetching builder"
-
-## Test Slurm on GCP v5 with Startup Scripts
 - id: slurm-gcp-v5-startup-scripts
-  waitFor: ["fetch_builder", "build_ghpc"]
-  name: >-
-    us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
+  name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
   entrypoint: /bin/bash
   env:
   - "ANSIBLE_HOST_KEY_CHECKING=false"
@@ -47,6 +36,7 @@ steps:
   - -c
   - |
     set -x -e
+    cd /workspace && make
     BUILD_ID_FULL=$BUILD_ID
     BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
 

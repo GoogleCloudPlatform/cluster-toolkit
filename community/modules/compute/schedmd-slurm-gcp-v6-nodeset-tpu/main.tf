@@ -18,11 +18,17 @@
 # }
 
 locals {
+  name = substr(replace(var.name, "/[^a-z0-9]/", ""), 0, 14)
+
+  service_account = {
+    email  = var.service_account_email
+    scopes = var.service_account_scopes
+  }
 
   nodeset_tpu = {
     node_count_static      = var.node_count_static
     node_count_dynamic_max = var.node_count_dynamic_max
-    nodeset_name           = var.name
+    nodeset_name           = local.name
     node_type              = var.node_type
 
     accelerator_config = var.accelerator_config
@@ -33,10 +39,13 @@ locals {
     data_disks   = var.data_disks
     docker_image = var.docker_image
 
-    enable_public_ip = !var.disable_public_ips
+    enable_public_ip = var.enable_public_ips
     # TODO: rename to subnetwork_self_link, requires changes to the scripts
     subnetwork      = var.subnetwork_self_link
-    service_account = var.service_account
+    service_account = local.service_account
     zone            = var.zone
+
+    project_id = var.project_id
+    reserved   = var.reserved
   }
 }

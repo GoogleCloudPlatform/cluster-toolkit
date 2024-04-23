@@ -29,7 +29,7 @@ vars:
   deployment_name: golden_copy_deployment
   labels:
     ghpc_blueprint: igc
-    ghpc_deployment: golden_copy_deployment
+    ghpc_deployment: ((var.deployment_name))
   project_id: invalid-project
   region: us-east4
   zone: us-east4-c
@@ -44,37 +44,37 @@ deployment_groups:
             description: Automatically-generated output exported for use by later deployment groups
             sensitive: true
         settings:
-          deployment_name: ((var.deployment_name ))
+          deployment_name: ((var.deployment_name))
           enable_iap_rdp_ingress: true
           enable_iap_winrm_ingress: true
-          project_id: ((var.project_id ))
-          region: ((var.region ))
+          project_id: ((var.project_id))
+          region: ((var.region))
       - source: modules/file-system/filestore
         kind: terraform
         id: homefs
         use:
           - network0
         settings:
-          deployment_name: ((var.deployment_name ))
-          labels: ((var.labels ))
+          deployment_name: ((var.deployment_name))
+          labels: ((var.labels))
           local_mount: /home
-          network_id: ((module.network0.network_id ))
-          project_id: ((var.project_id ))
-          region: ((var.region ))
-          zone: ((var.zone ))
+          network_id: ((module.network0.network_id))
+          project_id: ((var.project_id))
+          region: ((var.region))
+          zone: ((var.zone))
       - source: modules/file-system/filestore
         kind: terraform
         id: projectsfs
         use:
           - network0
         settings:
-          deployment_name: ((var.deployment_name ))
-          labels: ((var.labels ))
+          deployment_name: ((var.deployment_name))
+          labels: ((var.labels))
           local_mount: /projects
-          network_id: ((module.network0.network_id ))
-          project_id: ((var.project_id ))
-          region: ((var.region ))
-          zone: ((var.zone ))
+          network_id: ((module.network0.network_id))
+          project_id: ((var.project_id))
+          region: ((var.region))
+          zone: ((var.zone))
       - source: modules/scripts/startup-script
         kind: terraform
         id: script
@@ -83,10 +83,10 @@ deployment_groups:
             description: Automatically-generated output exported for use by later deployment groups
             sensitive: true
         settings:
-          deployment_name: ((var.deployment_name ))
-          labels: ((var.labels ))
-          project_id: ((var.project_id ))
-          region: ((var.region ))
+          deployment_name: ((var.deployment_name))
+          labels: ((var.labels))
+          project_id: ((var.project_id))
+          region: ((var.region))
           runners:
             - content: |
                 #!/bin/bash
@@ -112,10 +112,10 @@ deployment_groups:
           - script
           - windows_startup
         settings:
-          deployment_name: ((var.deployment_name ))
-          labels: ((var.labels ))
-          project_id: ((var.project_id ))
+          deployment_name: ((var.deployment_name))
+          labels: ((var.labels))
+          project_id: ((var.project_id))
           startup_script: ((module.script.startup_script))
           subnetwork_name: ((module.network0.subnetwork_name))
           windows_startup_ps1: ((flatten([module.windows_startup.windows_startup_ps1])))
-          zone: ((var.zone ))
+          zone: ((var.zone))

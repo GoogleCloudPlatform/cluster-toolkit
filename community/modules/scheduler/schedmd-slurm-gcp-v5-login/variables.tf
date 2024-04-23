@@ -15,7 +15,7 @@
  */
 
 # Most variables have been sourced and modified from the SchedMD/slurm-gcp
-# github repository: https://github.com/SchedMD/slurm-gcp/tree/5.9.1
+# github repository: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/5.10.6
 
 variable "project_id" {
   type        = string
@@ -296,7 +296,7 @@ variable "instance_image" {
   type        = map(string)
   default = {
     project = "schedmd-slurm-public"
-    family  = "slurm-gcp-5-9-hpc-centos-7"
+    family  = "slurm-gcp-5-10-hpc-centos-7"
   }
 
   validation {

@@ -15,7 +15,7 @@
  */
 
 # Most variables have been sourced and modified from the SchedMD/slurm-gcp
-# github repository: https://github.com/SchedMD/slurm-gcp/tree/5.9.1
+# github repository: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/5.10.6
 
 variable "deployment_name" {
   description = "Name of the deployment."
@@ -240,14 +240,15 @@ variable "node_groups" {
       count = number
       type  = string
     })
-    instance_template   = string
-    labels              = map(string)
-    machine_type        = string
-    metadata            = map(string)
-    min_cpu_platform    = string
-    on_host_maintenance = string
-    preemptible         = bool
-    reservation_name    = string
+    instance_template    = string
+    labels               = map(string)
+    machine_type         = string
+    maintenance_interval = string
+    metadata             = map(string)
+    min_cpu_platform     = string
+    on_host_maintenance  = string
+    preemptible          = bool
+    reservation_name     = string
     service_account = object({
       email  = string
       scopes = list(string)

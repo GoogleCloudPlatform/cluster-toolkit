@@ -18,7 +18,7 @@ locals {
 }
 
 locals {
-  name = substr(replace(var.name, "/[^a-z0-9]/", ""), 0, 6)
+  name = substr(replace(var.name, "/[^a-z0-9]/", ""), 0, 14)
 
   additional_disks = [
     for ad in var.additional_disks : {
@@ -32,8 +32,18 @@ locals {
     }
   ]
 
-  public_access_config = var.disable_public_ips ? [] : [{ nat_ip = null, network_tier = null }]
+  public_access_config = var.enable_public_ips ? [{ nat_ip = null, network_tier = null }] : []
   access_config        = length(var.access_config) == 0 ? local.public_access_config : var.access_config
+
+  service_account = {
+    email  = var.service_account_email
+    scopes = var.service_account_scopes
+  }
+
+  ghpc_startup_script = [{
+    filename = "ghpc_nodeset_startup.sh"
+    content  = var.startup_script
+  }]
 
   nodeset = {
     node_count_static      = var.node_count_static
@@ -66,7 +76,7 @@ locals {
     on_host_maintenance      = var.on_host_maintenance
     preemptible              = var.preemptible
     region                   = var.region
-    service_account          = var.service_account
+    service_account          = local.service_account
     shielded_instance_config = var.shielded_instance_config
     source_image_family      = local.source_image_family             # requires source_image_logic.tf
     source_image_project     = local.source_image_project_normalized # requires source_image_logic.tf
@@ -78,8 +88,10 @@ locals {
     spot                     = var.enable_spot_vm
     termination_action       = try(var.spot_instance_config.termination_action, null)
     reservation_name         = var.reservation_name
+    maintenance_interval     = var.maintenance_interval
 
     zones             = toset(concat([var.zone], tolist(var.zones)))
     zone_target_shape = var.zone_target_shape
+    startup_script    = local.ghpc_startup_script
   }
 }

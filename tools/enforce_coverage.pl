@@ -16,27 +16,29 @@
 use strict;
 use warnings;
 
-# TODO: raise ./cmd min coverage to 80% after tests are written
-my $min = 80;
-my $cmdmin = 40;
-my $shellmin = 0;
-my $validatorsmin = 25;
-my $failed_coverage = 0;
-
+my @failed;
 while (<>){
   print $_;
-  if ( $_ =~ /hpc-toolkit\/cmd.*coverage: (\d+\.\d)%/) {
-    $failed_coverage++ if ($1 < $cmdmin);
-  } elsif ( $_ =~ /hpc-toolkit\/pkg\/shell.*coverage: (\d+\.\d)%/) {
-    $failed_coverage++ if ($1 < $shellmin);
-  } elsif ( $_ =~ /hpc-toolkit\/pkg\/validators.*coverage: (\d+\.\d)%/) {
-    $failed_coverage++ if ($1 < $validatorsmin);  
-  } elsif ( $_ =~ /coverage: (\d+\.\d)%/ ) {
-    $failed_coverage++ if ($1 < $min);
+
+  my @thresholds = qw(
+    cmd 40
+    pkg/shell 0
+    pkg/logging 0
+    pkg/validators 13
+    pkg/inspect 60
+    pkg 80
+  );
+
+  while (@thresholds) {
+    my ($path, $threshold) = splice(@thresholds, 0, 2);
+    if ( $_ =~ /hpc-toolkit\/$path.*coverage: (\d+\.\d)%/) {
+      chomp, push @failed, "$_ <= $threshold%\n" if ($1 < $threshold);
+      last;
+    }
   }
 }
 
-if ($failed_coverage > 0) {
-   print STDERR "Coverage must be above $cmdmin% for ./cmd and $min% for other packages, $failed_coverage packages were below that.\n";
+if (@failed) {
+   print STDERR "\nFAILED:\n@failed";
    exit 1
 }

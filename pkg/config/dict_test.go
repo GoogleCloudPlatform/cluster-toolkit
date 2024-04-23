@@ -47,17 +47,11 @@ func TestZeroValueValid(t *testing.T) {
 			t.Errorf("diff (-want +got):\n%s", diff)
 		}
 	}
-
-	{ // Set
-		d := Dict{}
-		d.Set("lizard", cty.True) // no panic
-	}
 }
 
 func TestSetAndGet(t *testing.T) {
-	d := Dict{}
 	want := cty.StringVal("guava")
-	d.Set("hare", want)
+	d := Dict{}.With("hare", want)
 	got := d.Get("hare")
 	if diff := cmp.Diff(want, got, ctydebug.CmpOptions); diff != "" {
 		t.Errorf("diff (-want +got):\n%s", diff)
@@ -68,8 +62,7 @@ func TestSetAndGet(t *testing.T) {
 }
 
 func TestItemsAreCopy(t *testing.T) {
-	d := Dict{}
-	d.Set("apple", cty.StringVal("fuji"))
+	d := Dict{}.With("apple", cty.StringVal("fuji"))
 
 	items := d.Items()
 	items["apple"] = cty.StringVal("opal")
@@ -77,31 +70,6 @@ func TestItemsAreCopy(t *testing.T) {
 	want := cty.StringVal("fuji")
 	got := d.Get("apple")
 	if diff := cmp.Diff(want, got, ctydebug.CmpOptions); diff != "" {
-		t.Errorf("diff (-want +got):\n%s", diff)
-	}
-}
-
-func TestEval(t *testing.T) {
-	bp := Blueprint{
-		Vars: NewDict(map[string]cty.Value{
-			"zebra": cty.StringVal("stripes"),
-		}),
-	}
-	d := NewDict(map[string]cty.Value{
-		"abyss": cty.ObjectVal(map[string]cty.Value{
-			"white": GlobalRef("zebra").AsExpression().AsValue(),
-			"green": cty.StringVal("grass"),
-		})})
-	want := NewDict(map[string]cty.Value{
-		"abyss": cty.ObjectVal(map[string]cty.Value{
-			"white": cty.StringVal("stripes"),
-			"green": cty.StringVal("grass"),
-		})})
-	got, err := d.Eval(bp)
-	if err != nil {
-		t.Fatalf("failed to eval: %v", err)
-	}
-	if diff := cmp.Diff(want.Items(), got.Items(), ctydebug.CmpOptions); diff != "" {
 		t.Errorf("diff (-want +got):\n%s", diff)
 	}
 }

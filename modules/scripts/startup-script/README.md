@@ -104,12 +104,12 @@ and therefore must have access to GCS.
 > `https://www.googleapis.com/auth/devstorage.read_only`.
 >
 > This is set as a default scope in the [vm-instance],
-> [SchedMD-slurm-on-gcp-login-node] and [SchedMD-slurm-on-gcp-controller]
+> [schedMD-slurm-on-gcp-login-node] and [schedMD-slurm-on-gcp-controller]
 > modules
 
 [vm-instance]: ../../compute/vm-instance/README.md
-[SchedMD-slurm-on-gcp-login-node]: ../../../community/modules/scheduler/SchedMD-slurm-on-gcp-login-node/README.md
-[SchedMD-slurm-on-gcp-controller]: ../../../community/modules/scheduler/SchedMD-slurm-on-gcp-controller/README.md
+[schedMD-slurm-on-gcp-login-node]: ../../../community/modules/scheduler/schedmd-slurm-gcp-v6-login/README.md
+[schedMD-slurm-on-gcp-controller]: ../../../community/modules/scheduler/schedmd-slurm-gcp-v6-controller/README.md
 
 ### Tracking startup script execution
 
@@ -255,7 +255,7 @@ limitations under the License.
 |------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 0.14.0 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 3.83 |
-| <a name="requirement_local"></a> [local](#requirement\_local) | >= 2.0.0, < 2.2.0 |
+| <a name="requirement_local"></a> [local](#requirement\_local) | >= 2.0.0 |
 | <a name="requirement_random"></a> [random](#requirement\_random) | ~> 3.0 |
 
 ## Providers
@@ -263,7 +263,7 @@ limitations under the License.
 | Name | Version |
 |------|---------|
 | <a name="provider_google"></a> [google](#provider\_google) | >= 3.83 |
-| <a name="provider_local"></a> [local](#provider\_local) | >= 2.0.0, < 2.2.0 |
+| <a name="provider_local"></a> [local](#provider\_local) | >= 2.0.0 |
 | <a name="provider_random"></a> [random](#provider\_random) | ~> 3.0 |
 
 ## Modules
@@ -289,10 +289,13 @@ No modules.
 | <a name="input_configure_ssh_host_patterns"></a> [configure\_ssh\_host\_patterns](#input\_configure\_ssh\_host\_patterns) | If specified, it will automate ssh configuration by:<br>  - Defining a Host block for every element of this variable and setting StrictHostKeyChecking to 'No'.<br>  Ex: "hpc*", "hpc01*", "ml*"<br>  - The first time users log-in, it will create ssh keys that are added to the authorized keys list<br>  This requires a shared /home filesystem and relies on specifying the right prefix. | `list(string)` | `[]` | no |
 | <a name="input_debug_file"></a> [debug\_file](#input\_debug\_file) | Path to an optional local to be written with 'startup\_script'. | `string` | `null` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the HPC deployment, used to name GCS bucket for startup scripts. | `string` | n/a | yes |
+| <a name="input_enable_docker_world_writable"></a> [enable\_docker\_world\_writable](#input\_enable\_docker\_world\_writable) | Configure Docker daemon to be writable by all users (if var.install\_docker is set to true). | `bool` | `false` | no |
 | <a name="input_gcs_bucket_path"></a> [gcs\_bucket\_path](#input\_gcs\_bucket\_path) | The GCS path for storage bucket and the object, starting with `gs://`. | `string` | `null` | no |
-| <a name="input_http_proxy"></a> [http\_proxy](#input\_http\_proxy) | Web (http and https) proxy configuration for pip, apt, and yum/dnf | `string` | `""` | no |
+| <a name="input_http_no_proxy"></a> [http\_no\_proxy](#input\_http\_no\_proxy) | Domains for which to disable http\_proxy behavior. Honored only if var.http\_proxy is set | `string` | `".google.com,.googleapis.com,metadata.google.internal,localhost,127.0.0.1"` | no |
+| <a name="input_http_proxy"></a> [http\_proxy](#input\_http\_proxy) | Web (http and https) proxy configuration for pip, apt, and yum/dnf and interactive shells | `string` | `""` | no |
 | <a name="input_install_ansible"></a> [install\_ansible](#input\_install\_ansible) | Run Ansible installation script if either set to true or unset and runner of type 'ansible-local' are used. | `bool` | `null` | no |
 | <a name="input_install_cloud_ops_agent"></a> [install\_cloud\_ops\_agent](#input\_install\_cloud\_ops\_agent) | Warning: Consider using `install_stackdriver_agent` for better performance. Run Google Ops Agent installation script if set to true. | `bool` | `false` | no |
+| <a name="input_install_docker"></a> [install\_docker](#input\_install\_docker) | Install Docker command line tool and daemon. | `bool` | `false` | no |
 | <a name="input_install_stackdriver_agent"></a> [install\_stackdriver\_agent](#input\_install\_stackdriver\_agent) | Run Google Stackdriver Agent installation script if set to true. Preferred over ops agent for performance. | `bool` | `false` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels for the created GCS bucket. Key-value pairs. | `map(string)` | n/a | yes |
 | <a name="input_prepend_ansible_installer"></a> [prepend\_ansible\_installer](#input\_prepend\_ansible\_installer) | DEPRECATED. Use `install_ansible=false` to prevent ansible installation. | `bool` | `null` | no |

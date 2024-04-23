@@ -17,8 +17,9 @@ blueprint_name: merge_flatten
 vars:
   project_id:  #
   deployment_name: merge_flatten
-  region: us-east4
-  zone: us-east4-c
+  region_number: 4
+  region: us-east$(vars.region_number)
+  zone: $(vars.region)-c
 
 deployment_groups:
 - group: zero
