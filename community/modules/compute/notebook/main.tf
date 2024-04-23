@@ -61,7 +61,7 @@ resource "google_notebooks_instance" "instance" {
   project             = var.project_id
   post_startup_script = "${var.gcs_bucket_path}/${local.post_script_filename}"
   labels              = local.labels
-  depends_on = [google_storage_bucket_object.mount_script]
+  depends_on          = [google_storage_bucket_object.mount_script]
   vm_image {
     project      = var.instance_image.project
     image_family = var.instance_image.family
