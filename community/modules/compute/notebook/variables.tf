@@ -71,6 +71,6 @@ variable "mount_runner" {
 
   validation {
     condition     = (length(split(" ", var.mount_runner.args)) == 5)
-    error_message = "There must be 4 elements in the Mount Runner Arguments: ${var.mount_runner.args} \n "
+    error_message = "There must be 5 elements in the Mount Runner Arguments: ${var.mount_runner.args} \n "
   }
 }
