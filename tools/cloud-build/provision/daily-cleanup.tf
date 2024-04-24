@@ -13,7 +13,7 @@
 # limitations under the License.
 
 resource "google_cloudbuild_trigger" "daily_project_cleanup_filestore" {
-  name        = "DAILY-project-cleanup"
+  name        = "DAILY-project-cleanup-filestore"
   description = "A filestore cleanup script to run periodically"
   tags        = [local.notify_chat_tag]
 
@@ -39,7 +39,7 @@ module "daily_project_cleanup_filestore_schedule" {
 }
 
 resource "google_cloudbuild_trigger" "daily_project_cleanup_slurm" {
-  name        = "DAILY-project-cleanup"
+  name        = "DAILY-project-cleanup-slurm"
   description = "A metadata & resource policies cleanup script to run periodically"
   tags        = [local.notify_chat_tag]
 

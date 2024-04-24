@@ -17,6 +17,7 @@
 variable "project_id" {
   description = "GCP project ID"
   type        = string
+  default     = "hpc-toolkit-dev"
 }
 
 variable "region" {
