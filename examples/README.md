@@ -255,13 +255,6 @@ For this example the following is needed in the selected region:
 
 ### [hpc-slurm-v6.yaml] ![core-badge] ![experimental-badge]
 
-> **Warning**: Requires additional dependencies **to be installed on the system deploying the infrastructure**.
->
-> ```shell
-> # Install Python3 and run
-> pip3 install -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/6.4.2/scripts/requirements.txt
-> ```
-
 Creates a basic auto-scaling Slurm cluster with mostly default settings. The
 blueprint also creates a new VPC network, and a filestore instance mounted to
 `/home`.
@@ -492,13 +485,6 @@ to 256
 
 ### [hpc-slurm-static-v6.yaml] ![core-badge] ![experimental-badge]
 
-> **Warning**: Requires additional dependencies **to be installed on the system deploying the infrastructure**.
->
-> ```shell
-> # Install Python3 and run
-> pip3 install -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/6.4.2/scripts/requirements.txt
-> ```
-
 This example demonstrates how to create a partition with static compute nodes.
 See [Best practices for static compute nodes] for instructions on setting up a
 reservation and compact placement policy.
@@ -528,25 +514,11 @@ functionality with GPUs, see the
 
 ### [hpc-slurm6-tpu.yaml] ![community-badge] ![experimental-badge]
 
-> **Warning**: Requires additional dependencies **to be installed on the system deploying the infrastructure**.
->
-> ```shell
-> # Install Python3 and run
-> pip3 install -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/6.4.2/scripts/requirements.txt
-> ```
-
 Creates an auto-scaling Slurm cluster with TPU nodes.
 
 [hpc-slurm6-tpu.yaml]: ../community/examples/hpc-slurm6-tpu.yaml
 
 ### [hpc-slurm6-tpu-maxtext.yaml] ![community-badge] ![experimental-badge]
-
-> **Warning**: Requires additional dependencies **to be installed on the system deploying the infrastructure**.
->
-> ```shell
-> # Install Python3 and run
-> pip3 install -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/6.4.2/scripts/requirements.txt
-> ```
 
 Creates an auto-scaling Slurm cluster with TPU nodes.
 
@@ -1129,15 +1101,6 @@ For this example the following is needed in the selected region:
   _only needed for `compute` partition_
 
 ### [hpc-slurm-ubuntu2004-v6.yaml] ![community-badge] ![experimental-badge]
-
-> **Warning**: The variables `enable_reconfigure`,
-> `enable_cleanup_compute`, and `enable_cleanup_subscriptions`, if set to
-> `true`, require additional dependencies **to be installed on the system deploying the infrastructure**.
->
-> ```shell
-> # Install Python3 and run
-> pip3 install -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/6.4.1/scripts/requirements.txt
-> ```
 
 Similar to the [hpc-slurm-v6.yaml] example, but using Ubuntu 20.04 instead of CentOS 7.
 [Other operating systems] are supported by SchedMD for the the Slurm on GCP project and images are listed [here](https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#published-image-family). Only the examples listed in this page been tested by the Cloud HPC Toolkit team.
