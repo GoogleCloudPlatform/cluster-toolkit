@@ -45,7 +45,8 @@ locals {
     service_account = local.service_account
     zone            = var.zone
 
-    project_id = var.project_id
-    reserved   = var.reserved
+    project_id      = var.project_id
+    reserved        = var.reserved
+    network_storage = var.network_storage
   }
 }
