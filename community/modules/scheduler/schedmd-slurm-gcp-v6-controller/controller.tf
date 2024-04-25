@@ -143,35 +143,3 @@ resource "google_secret_manager_secret_iam_member" "cloudsql_secret_accessor" {
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${local.service_account.email}"
 }
-
-
-# Destroy all compute nodes on `terraform destroy`
-module "cleanup_compute_nodes" {
-  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_destroy_nodes?ref=6.4.4&depth=1"
-  count  = var.enable_cleanup_compute ? 1 : 0
-
-  slurm_cluster_name = local.slurm_cluster_name
-  project_id         = var.project_id
-  when_destroy       = true
-
-
-  depends_on = [
-    # Depend on controller network, as a best effort to avoid
-    # subnetwork resourceInUseByAnotherResource error
-    # NOTE: Can not use nodeset subnetworks as "A static list expression is required"
-    var.subnetwork_self_link,
-    # Ensure VMs are destroyed before resource policies
-    module.cleanup_resource_policies[0],
-  ]
-}
-
-
-# Destroy all resource policies on `terraform destroy`
-module "cleanup_resource_policies" {
-  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_destroy_resource_policies?ref=6.4.4&depth=1"
-  count  = var.enable_cleanup_compute ? 1 : 0
-
-  slurm_cluster_name = local.slurm_cluster_name
-  project_id         = var.project_id
-  when_destroy       = true
-}
