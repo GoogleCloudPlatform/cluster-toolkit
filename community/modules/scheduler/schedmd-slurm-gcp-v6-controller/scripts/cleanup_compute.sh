@@ -36,7 +36,10 @@ while true; do
 	if [[ -z "${policies}" ]]; then
 		break
 	fi
-	gcloud compute resource-policies delete --quiet "${policies}"
+	# The lack of quotes is intentional and causes each new space-separated "word" to
+	# be treated as independent arguments. See PR#2523
+	# shellcheck disable=SC2086
+	gcloud compute resource-policies delete --quiet ${policies}
 done
 
 echo "Deleting compute nodes"
@@ -46,5 +49,8 @@ while true; do
 	if [[ -z "${nodes}" ]]; then
 		break
 	fi
-	gcloud compute instances delete --quiet "${nodes}"
+	# The lack of quotes is intentional and causes each new space-separated "word" to
+	# be treated as independent arguments. See PR#2523
+	# shellcheck disable=SC2086
+	gcloud compute instances delete --quiet ${nodes}
 done
