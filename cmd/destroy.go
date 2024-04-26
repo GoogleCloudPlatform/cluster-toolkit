@@ -86,5 +86,6 @@ func destroyTerraformGroup(groupDir string) error {
 		return err
 	}
 
-	return shell.Destroy(tf, getApplyBehavior())
+	_, err = shell.Destroy(tf, getApplyBehavior())
+	return err
 }

@@ -107,11 +107,11 @@ func initModule(tf *tfexec.Terraform) error {
 	return err
 }
 
-func outputModule(tf *tfexec.Terraform) (map[string]cty.Value, error) {
+func doOutput(tf *tfexec.Terraform) (map[string]cty.Value, error) {
 	logging.Info("Collecting terraform outputs from %s", tf.WorkingDir())
 	output, err := tf.Output(context.Background())
 	if err != nil {
-		return map[string]cty.Value{}, &TfError{
+		return nil, &TfError{
 			help: fmt.Sprintf("collecting terraform outputs from deployment group %s failed; manually resolve errors below", tf.WorkingDir()),
 			err:  err,
 		}
@@ -121,16 +121,16 @@ func outputModule(tf *tfexec.Terraform) (map[string]cty.Value, error) {
 	for k, v := range output {
 		ov := outputValue{Name: k, Sensitive: v.Sensitive}
 		if err := json.Unmarshal(v.Type, &ov.Type); err != nil {
-			return map[string]cty.Value{}, err
+			return nil, err
 		}
 
 		var s interface{}
 		if err := json.Unmarshal(v.Value, &s); err != nil {
-			return map[string]cty.Value{}, err
+			return nil, err
 		}
 
 		if ov.Value, err = gocty.ToCtyValue(s, ov.Type); err != nil {
-			return map[string]cty.Value{}, err
+			return nil, err
 		}
 		outputValues[ov.Name] = ov.Value
 	}
@@ -244,74 +244,53 @@ func applyPlanConsoleOutput(tf *tfexec.Terraform, path string) error {
 
 // generate a Terraform plan to apply or destroy a module
 // recall "destroy" is just an alias for "apply -destroy"!
-// apply the plan automatically or after prompting the user
-func applyOrDestroy(tf *tfexec.Terraform, b ApplyBehavior, destroy bool) error {
-	action := "adding or changing"
-	pastTense := "applied"
+// apply the plan automatically or after prompting the user.
+// Returns true if changes were made (or not needed), false otherwise
+func applyOrDestroy(tf *tfexec.Terraform, b ApplyBehavior, destroy bool) (bool, error) {
+	action, pastTense := "adding or changing", "applied"
 	if destroy {
-		action = "destroying"
-		pastTense = "destroyed"
+		action, pastTense = "destroying", "destroyed"
 	}
 
 	if err := initModule(tf); err != nil {
-		return err
+		return false, err
 	}
 
 	logging.Info("Testing if deployment group %s requires %s cloud infrastructure", tf.WorkingDir(), action)
 	// capture Terraform plan in a file
 	f, err := os.CreateTemp("", "plan-)")
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer os.Remove(f.Name())
+
 	wantsChange, err := planModule(tf, f.Name(), destroy)
 	if err != nil {
-		return err
+		return false, err
 	}
-
-	var apply bool
-	if wantsChange {
-		logging.Info("Deployment group %s requires %s cloud infrastructure", tf.WorkingDir(), action)
-		apply = b == AutomaticApply || promptForApply(tf, f.Name(), b)
-	} else {
+	if !wantsChange {
 		logging.Info("Cloud infrastructure in deployment group %s is already %s", tf.WorkingDir(), pastTense)
+		return true, nil
 	}
 
-	if !apply {
-		return nil
-	}
+	logging.Info("Deployment group %s requires %s cloud infrastructure", tf.WorkingDir(), action)
 
-	if err := applyPlanConsoleOutput(tf, f.Name()); err != nil {
-		return err
+	if !promptForApply(tf, f.Name(), b) {
+		return false, nil
 	}
-
-	return nil
-}
-
-func getOutputs(tf *tfexec.Terraform, b ApplyBehavior) (map[string]cty.Value, error) {
-	err := applyOrDestroy(tf, b, false)
-	if err != nil {
-		return nil, err
-	}
-
-	outputValues, err := outputModule(tf)
-	if err != nil {
-		return nil, err
-	}
-	return outputValues, nil
+	return true, applyPlanConsoleOutput(tf, f.Name())
 }
 
 func outputsFile(artifactsDir string, group config.GroupName) string {
 	return filepath.Join(artifactsDir, fmt.Sprintf("%s_outputs.tfvars", string(group)))
 }
 
-// ExportOutputs will run terraform output and capture data needed for
-// subsequent deployment groups
-func ExportOutputs(tf *tfexec.Terraform, artifactsDir string, applyBehavior ApplyBehavior) error {
+// ExportOutputs will run terraform output and capture data needed for subsequent deployment groups
+func ExportOutputs(tf *tfexec.Terraform, artifactsDir string) error {
 	thisGroup := config.GroupName(filepath.Base(tf.WorkingDir()))
 	filepath := outputsFile(artifactsDir, thisGroup)
 
-	outputValues, err := getOutputs(tf, applyBehavior)
+	outputValues, err := doOutput(tf)
 	if err != nil {
 		return err
 	}
@@ -325,11 +304,7 @@ func ExportOutputs(tf *tfexec.Terraform, artifactsDir string, applyBehavior Appl
 	}
 
 	logging.Info("Writing outputs artifact from deployment group %s to file %s", thisGroup, filepath)
-	if err := modulewriter.WriteHclAttributes(outputValues, filepath); err != nil {
-		return err
-	}
-
-	return nil
+	return modulewriter.WriteHclAttributes(outputValues, filepath)
 }
 
 // for each prior group, read all output values and filter for those needed as input values to this group
@@ -433,7 +408,11 @@ func ImportInputs(groupDir string, artifactsDir string, bp config.Blueprint) err
 	return modulewriter.WriteHclAttributes(toImport, outPath)
 }
 
+func Apply(tf *tfexec.Terraform, b ApplyBehavior) (bool, error) {
+	return applyOrDestroy(tf, b, false)
+}
+
 // Destroy destroys all infrastructure in the module working directory
-func Destroy(tf *tfexec.Terraform, b ApplyBehavior) error {
+func Destroy(tf *tfexec.Terraform, b ApplyBehavior) (bool, error) {
 	return applyOrDestroy(tf, b, true)
 }

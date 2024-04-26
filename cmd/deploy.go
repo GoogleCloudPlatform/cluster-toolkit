@@ -127,22 +127,20 @@ func deployPackerGroup(moduleDir string, applyBehavior shell.ApplyBehavior) erro
 		Summary: fmt.Sprintf("Proposed change: use packer to build image in %s", moduleDir),
 		Full:    fmt.Sprintf("Proposed change: use packer to build image in %s", moduleDir),
 	}
-	buildImage := applyBehavior == shell.AutomaticApply || shell.ApplyChangesChoice(c)
-	if buildImage {
-		logging.Info("initializing packer module at %s", moduleDir)
-		if err := shell.ExecPackerCmd(moduleDir, false, "init", "."); err != nil {
-			return err
-		}
-		logging.Info("validating packer module at %s", moduleDir)
-		if err := shell.ExecPackerCmd(moduleDir, false, "validate", "."); err != nil {
-			return err
-		}
-		logging.Info("building image using packer module at %s", moduleDir)
-		if err := shell.ExecPackerCmd(moduleDir, true, "build", "."); err != nil {
-			return err
-		}
+	if !(applyBehavior == shell.AutomaticApply || shell.ApplyChangesChoice(c)) {
+		return nil
 	}
-	return nil
+
+	logging.Info("initializing packer module at %s", moduleDir)
+	if err := shell.ExecPackerCmd(moduleDir, false, "init", "."); err != nil {
+		return err
+	}
+	logging.Info("validating packer module at %s", moduleDir)
+	if err := shell.ExecPackerCmd(moduleDir, false, "validate", "."); err != nil {
+		return err
+	}
+	logging.Info("building image using packer module at %s", moduleDir)
+	return shell.ExecPackerCmd(moduleDir, true, "build", ".")
 }
 
 func deployTerraformGroup(groupDir string, artifactsDir string, applyBehavior shell.ApplyBehavior) error {
@@ -150,5 +148,9 @@ func deployTerraformGroup(groupDir string, artifactsDir string, applyBehavior sh
 	if err != nil {
 		return err
 	}
-	return shell.ExportOutputs(tf, artifactsDir, applyBehavior)
+	_, err = shell.Apply(tf, applyBehavior)
+	if err != nil {
+		return err
+	}
+	return shell.ExportOutputs(tf, artifactsDir)
 }
