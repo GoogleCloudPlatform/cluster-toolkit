@@ -42,3 +42,4 @@ custom_vars:
   - debug
   mounts:
   - /home
+wait_for_compute_nodes_to_go_down: true

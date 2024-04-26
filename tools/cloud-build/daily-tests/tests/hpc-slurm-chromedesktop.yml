@@ -39,3 +39,4 @@ custom_vars:
   partitions:
   - desktop
   - compute
+wait_for_compute_nodes_to_go_down: true
