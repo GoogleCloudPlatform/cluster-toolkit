@@ -15,6 +15,7 @@
 resource "google_cloudbuild_trigger" "zebug_fast_build_failure" {
   name        = "ZEBUG-fast-build-failure"
   description = "A build that always fails fast"
+  tags        = [local.notify_chat_tag]
 
   build {
     step {
