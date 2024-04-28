@@ -43,3 +43,9 @@ logsPolicy:
     destination: "PATH"
     logsPath: ## Add logging path here
 %{ endif }
+%{~ if length(labels) > 0 ~}
+labels:
+%{ for k, v in labels ~}
+    ${k}: "${v}"
+%{ endfor }
+%{~ endif ~}
