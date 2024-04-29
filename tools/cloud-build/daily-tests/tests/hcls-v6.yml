@@ -22,10 +22,11 @@ slurm_cluster_name: "hclsv6{{ build[0:4] }}"
 zone: us-central1-c
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/examples/hcls-blueprint-v6.yaml"
-network: "{{ deployment_name }}-net"
+network: "{{ test_name }}-net"
 login_node: "{{ slurm_cluster_name }}-login-*"
 controller_node: "{{ slurm_cluster_name }}-controller"
 cli_deployment_vars:
+  network_name: "{{ network }}"
   region: us-central1
   zone: "{{ zone }}"
   enable_login_public_ips: "true"
