@@ -192,7 +192,7 @@ class ClusterInfo:
         for (count, mp) in enumerate(
             self.cluster.mount_points.order_by("mount_order")
         ):
-            storage_id = f"mount_num_{count}"
+            storage_id = f"mount_num_{mp.id}"
             ip = (
                 "'$controller'"
                 if mp.export in self.cluster.shared_fs.exports.all()
@@ -220,7 +220,7 @@ class ClusterInfo:
         refs = []
         uses_str = self._yaml_refs_to_uses(part_uses)
         for (count, part) in enumerate(self.cluster.partitions.all()):
-            part_id = f"partition_{count}"
+            part_id = f"partition_{part.id}"
             if part.image is not None:
                 if part.image.source_image_family == "Imported":
                     instance_image_yaml = f"""instance_image:
@@ -327,7 +327,6 @@ class ClusterInfo:
             # for now, just use the singular access, and only create a single acct
             # compute_sa = controller_sa
             # login_sa = controller_sa
-            
             # pylint: disable=line-too-long
             startup_bucket = self.config["server"]["gcs_bucket"]
             if self.cluster.login_node_image is not None:

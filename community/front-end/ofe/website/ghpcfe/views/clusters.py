@@ -421,13 +421,26 @@ class ClusterUpdateView(LoginRequiredMixin, UpdateView):
         existing_partitions = ClusterPartition.objects.filter(cluster=self.object)
 
         # Iterate through the existing partitions and check if they are in the updated formset
+        # for partition in existing_partitions:
+        #     if not any(partition_form.instance == partition for partition_form in partitions.forms):
+        #         # The partition is not in the updated formset, so delete it
+        #         partition_name = partition.name
+        #         partition_id = partition.pk
+        #         logger.info(f"Deleting partition: {partition_name}, ID: {partition_id}")
+        #         partition.delete()
         for partition in existing_partitions:
-            if not any(partition_form.instance == partition for partition_form in partitions.forms):
-                # The partition is not in the updated formset, so delete it
-                partition_name = partition.name
-                partition_id = partition.pk
-                logger.info(f"Deleting partition: {partition_name}, ID: {partition_id}")
-                partition.delete()
+            found = False
+            for partition_form in partitions.forms:
+                if partition_form.instance == partition:
+                    found = True
+                    break
+            if not found:
+                logger.info(f"Deleting partition: {partition.name}, ID: {partition.pk}")
+                # Original function above - seems broken / unnecessary. Stuff works with
+                # the below commented out..?
+                #partition.delete()
+            else:
+                logger.info(f"Keeping partition: {partition.name}, ID: {partition.pk}")
 
         try:
             with transaction.atomic():
