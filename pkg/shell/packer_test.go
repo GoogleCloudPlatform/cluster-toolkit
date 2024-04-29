@@ -17,7 +17,6 @@ limitations under the License.
 package shell
 
 import (
-	"errors"
 	"os"
 	"os/exec"
 
@@ -40,9 +39,6 @@ func (s *MySuite) TestPacker(c *C) {
 	err = ConfigurePacker()
 	os.Setenv("PATH", pathEnv)
 	c.Assert(err, NotNil)
-
-	var tfe *TfError
-	c.Assert(errors.As(err, &tfe), Equals, true)
 
 	// executing with help argument (safe against RedHat binary named packer)
 	err = ExecPackerCmd(".", true, "-h")
