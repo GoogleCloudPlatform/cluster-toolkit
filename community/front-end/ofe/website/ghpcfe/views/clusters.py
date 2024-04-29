@@ -318,6 +318,7 @@ class ClusterUpdateView(LoginRequiredMixin, UpdateView):
         context = self.get_context_data()
         mountpoints = context["mountpoints_formset"]
         partitions = context["cluster_partitions_formset"]
+        logger.info(partitions)
 
         if self.object.status == "n":
             # If creating a new cluster generate unique cloud id.
@@ -420,28 +421,26 @@ class ClusterUpdateView(LoginRequiredMixin, UpdateView):
        # Get the existing ClusterPartition objects associated with the cluster
         existing_partitions = ClusterPartition.objects.filter(cluster=self.object)
 
-        # Iterate through the existing partitions and check if they are in the updated formset
-        # for partition in existing_partitions:
-        #     if not any(partition_form.instance == partition for partition_form in partitions.forms):
-        #         # The partition is not in the updated formset, so delete it
-        #         partition_name = partition.name
-        #         partition_id = partition.pk
-        #         logger.info(f"Deleting partition: {partition_name}, ID: {partition_id}")
-        #         partition.delete()
+        logger.info(f"Processing total {len(partitions.forms)} partition forms.")
+
         for partition in existing_partitions:
+            logger.info(f"Checking existing partition: {partition.name}")
             found = False
             for partition_form in partitions.forms:
+                logger.info(f"Checking form for partition: {partition_form.instance.name}")
                 if partition_form.instance == partition:
                     found = True
-                    break
+                    delete_status = partition_form.cleaned_data.get('DELETE', False)
+                    if delete_status:
+                        # Log the intent to delete then delete the partition
+                        logger.info(f"Partition: {partition.name} (ID: {partition.pk}) marked for deletion.")
+                        partition.delete()
+                    else:
+                        logger.info(f"No deletion requested for existing partition: {partition.name}.")
             if not found:
-                logger.info(f"Deleting partition: {partition.name}, ID: {partition.pk}")
-                # Original function above - seems broken / unnecessary. Stuff works with
-                # the below commented out..?
-                #partition.delete()
-            else:
-                logger.info(f"Keeping partition: {partition.name}, ID: {partition.pk}")
-
+                # Log if no corresponding form was found for the partition
+                logger.info(f"No form found for Partition: {partition.name}.")
+                
         try:
             with transaction.atomic():
                 # Save the modified Cluster object
