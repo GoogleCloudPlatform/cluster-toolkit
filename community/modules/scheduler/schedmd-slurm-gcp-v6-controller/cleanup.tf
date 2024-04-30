@@ -12,18 +12,30 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+locals {
+  cleanup_compute_cmd = (
+    var.enable_cleanup_compute ?
+    "/bin/bash ${path.module}/scripts/cleanup_compute.sh ${var.project_id} ${local.slurm_cluster_name}" :
+    "echo noop"
+  )
+}
 
 resource "null_resource" "cleanup_compute" {
-  count = var.enable_cleanup_compute ? 1 : 0
-
   triggers = {
-    project_id   = var.project_id
-    cluster_name = local.slurm_cluster_name
+    cmd = local.cleanup_compute_cmd
   }
 
   provisioner "local-exec" {
-    command = "/bin/bash ${path.module}/scripts/cleanup_compute.sh ${self.triggers.project_id} ${self.triggers.cluster_name}"
+    command = self.triggers.cmd
     when    = destroy
+  }
+
+  lifecycle {
+    # IMPORTANT: we make use of terraform bug https://github.com/hashicorp/terraform/issues/13549
+    # Without this `create_before_destroy`, the provisioner would be executed on any change to 
+    # `var.enable_cleanup_compute`, even (true -> false).
+    # With this `create_before_destroy` the provisioner will be only executed during `destroy`.
+    create_before_destroy = true
   }
 
   depends_on = [

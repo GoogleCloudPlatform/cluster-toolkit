@@ -340,8 +340,8 @@ variable "enable_cleanup_compute" {
 Enables automatic cleanup of compute nodes and resource policies (e.g.
 placement groups) managed by this module, when cluster is destroyed.
 
-*WARNING*: Toggling this off will impact the running workload. 
-Deployed compute nodes will be destroyed.
+*WARNING*: Toggling this off may impact the running workload. 
+Deployed compute nodes may be destroyed.
 EOD
   type        = bool
   default     = true
