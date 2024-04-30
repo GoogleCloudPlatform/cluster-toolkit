@@ -64,7 +64,7 @@ module "slurm_login_instance" {
 
   access_config       = each.value.access_config
   add_hostname_suffix = true
-  hostname            = "${local.slurm_cluster_name}-login-${each.key}"
+  hostname            = "${local.slurm_cluster_name}-${each.key}"
   slurm_instance_role = "login"
 
   project_id         = var.project_id

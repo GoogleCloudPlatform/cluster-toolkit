@@ -180,7 +180,6 @@ deployment_groups:
     use:
     - network_slurm
     settings:
-      name_prefix: login
       enable_login_public_ips: true
       machine_type: a2-highgpu-1g
 

@@ -103,7 +103,6 @@ deployment_groups:
     use:
     - network
     settings:
-      name_prefix: login
       enable_login_public_ips: true
 
   - id: slurm_controller
