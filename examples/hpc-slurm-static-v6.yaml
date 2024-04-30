@@ -33,9 +33,6 @@ vars:
     project: schedmd-slurm-public
   instance_image_custom: false  # true if using custom image in lines above
   bandwidth_tier: gvnic_enabled
-  # Follow steps to setup environment to allow for reconfiguration
-  # https://cloud.google.com/hpc-toolkit/docs/slurm/reconfigure-cluster#setup-environment
-  enable_cleanup_compute: true
 
 
 deployment_groups:
