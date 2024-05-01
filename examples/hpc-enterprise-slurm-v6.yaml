@@ -258,7 +258,6 @@ deployment_groups:
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
     use: [network, login_sa]
     settings:
-      name_prefix: login
       instance_image: $(vars.slurm_image)
       machine_type: n2-standard-4
       # we recommend disabling public IPs if possible

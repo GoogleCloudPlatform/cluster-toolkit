@@ -25,7 +25,7 @@ cli_deployment_vars:
   region: "{{ region }}"
   zone: "{{ zone }}"
 # Note: Pattern matching in gcloud only supports 1 wildcard.
-login_node: "{{ slurm_cluster_name }}-login-*"
+login_node: "{{ slurm_cluster_name }}-slurm-login-*"
 controller_node: "{{ slurm_cluster_name }}-controller"
 post_deploy_tests:
 - test-validation/test-mounts.yml

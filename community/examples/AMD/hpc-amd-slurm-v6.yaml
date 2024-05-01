@@ -210,7 +210,6 @@ deployment_groups:
     settings:
       # need at least 8 physical cores to run OpenFOAM test
       machine_type: c2d-standard-16
-      name_prefix: login
 
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
