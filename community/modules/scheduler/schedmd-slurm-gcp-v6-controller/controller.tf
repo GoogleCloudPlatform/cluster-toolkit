@@ -112,6 +112,11 @@ module "slurm_controller_instance" {
   metadata            = var.metadata
 
   labels = merge(local.labels, local.files_cs_labels)
+
+  depends_on = [
+    # Ensure that controller is destroyed BEFORE doing cleanup
+    null_resource.cleanup_compute[0],
+  ]
 }
 
 # SECRETS: CLOUDSQL

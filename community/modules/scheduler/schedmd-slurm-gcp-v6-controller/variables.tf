@@ -341,7 +341,7 @@ Enables automatic cleanup of compute nodes and resource policies (e.g.
 placement groups) managed by this module, when cluster is destroyed.
 
 *WARNING*: Toggling this off will impact the running workload. 
-Deployed compute nodes will be destroyed.
+Deployed compute nodes and controller will be destroyed.
 EOD
   type        = bool
   default     = true
