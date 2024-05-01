@@ -294,6 +294,21 @@
 {% endblock %}
 
 {% block tailscript %}
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+      const form = document.getElementById('clusterForm'); // Make sure this is the correct ID for your form
+      form.addEventListener('submit', function(event) {
+          const formData = new FormData(this);
+          const formDataArray = Array.from(formData.entries()).map(entry => {
+              return { [entry[0]]: entry[1] };
+          });
+          console.log('Form Data:', formDataArray);
+          // Uncomment the next line if you want to prevent the form from actually submitting for debugging
+          // event.preventDefault();
+      });
+  });
+</script>
+
 <script src="{% static 'js/jquery.formset.js' %}"></script>
 <script>
   function updateMachineAvailability() {

@@ -318,7 +318,6 @@ class ClusterUpdateView(LoginRequiredMixin, UpdateView):
         context = self.get_context_data()
         mountpoints = context["mountpoints_formset"]
         partitions = context["cluster_partitions_formset"]
-        logger.info(partitions)
 
         if self.object.status == "n":
             # If creating a new cluster generate unique cloud id.
@@ -422,12 +421,13 @@ class ClusterUpdateView(LoginRequiredMixin, UpdateView):
         existing_partitions = ClusterPartition.objects.filter(cluster=self.object)
 
         logger.info(f"Processing total {len(partitions.forms)} partition forms.")
+        logger.info(f"Existing number of partitions is {len(partitions.forms)}.")
 
         for partition in existing_partitions:
-            logger.info(f"Checking existing partition: {partition.name}")
+            #logger.info(f"Checking existing partition: {partition.name}")
             found = False
             for partition_form in partitions.forms:
-                logger.info(f"Checking form for partition: {partition_form.instance.name}")
+                #logger.info(f"Checking form for partition: {partition_form.instance.name}")
                 if partition_form.instance == partition:
                     found = True
                     delete_status = partition_form.cleaned_data.get('DELETE', False)
