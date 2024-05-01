@@ -42,7 +42,7 @@ locals {
 
   job_id_base              = coalesce(var.job_id, var.deployment_name)
   submit_job_id            = "${local.job_id_base}-${random_id.submit_job_suffix.hex}"
-  job_filename             = coalesce(var.job_filename, "cloud-batch-${local.job_id_base}.yaml")
+  job_filename             = coalesce(var.job_filename, "cloud-batch-${local.submit_job_id}.yaml")
   job_template_output_path = "${path.root}/${local.job_filename}"
 
   submit_script_contents = templatefile(
@@ -54,7 +54,7 @@ locals {
       submit_job_id = local.submit_job_id
     }
   )
-  submit_script_output_path = "${path.root}/submit-job.sh"
+  submit_script_output_path = "${path.root}/submit-${local.submit_job_id}.sh"
 
   subnetwork_name    = var.subnetwork != null ? var.subnetwork.name : "default"
   subnetwork_project = var.subnetwork != null ? var.subnetwork.project : var.project_id
@@ -117,7 +117,7 @@ resource "local_file" "submit_script" {
 }
 
 resource "null_resource" "submit_job" {
-  depends_on = [local_file.job_template]
+  depends_on = [local_file.job_template, local_file.submit_script]
   count      = var.submit ? 1 : 0
 
   # A new deployment should always submit a new job. Old finished jobs aren't persistent parts of
