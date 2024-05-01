@@ -22,10 +22,11 @@ slurm_cluster_name: "hcls{{ build[0:6] }}"
 zone: europe-west1-d
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/docs/videos/healthcare-and-life-sciences/hcls-blueprint.yaml"
-network: "{{ deployment_name }}-net"
+network: "{{ test_name }}-net"
 login_node: "{{ slurm_cluster_name }}-login-*"
 controller_node: "{{ slurm_cluster_name }}-controller"
 cli_deployment_vars:
+  network_name: "{{ network }}"
   region: europe-west1
   zone: "{{ zone }}"
   disable_login_public_ips: "false"
