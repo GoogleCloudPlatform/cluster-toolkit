@@ -136,16 +136,16 @@ limitations under the License.
 | Name | Source | Version |
 |------|--------|---------|
 | <a name="module_bucket"></a> [bucket](#module\_bucket) | terraform-google-modules/cloud-storage/google | ~> 3.0 |
-| <a name="module_slurm_controller_instance"></a> [slurm\_controller\_instance](#module\_slurm\_controller\_instance) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/_slurm_instance | 6.4.4&depth=1 |
-| <a name="module_slurm_controller_template"></a> [slurm\_controller\_template](#module\_slurm\_controller\_template) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template | 6.4.4&depth=1 |
-| <a name="module_slurm_files"></a> [slurm\_files](#module\_slurm\_files) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_files | 6.4.4&depth=1 |
-| <a name="module_slurm_login_instance"></a> [slurm\_login\_instance](#module\_slurm\_login\_instance) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/_slurm_instance | 6.4.4&depth=1 |
-| <a name="module_slurm_login_template"></a> [slurm\_login\_template](#module\_slurm\_login\_template) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template | 6.4.4&depth=1 |
-| <a name="module_slurm_nodeset"></a> [slurm\_nodeset](#module\_slurm\_nodeset) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_nodeset | 6.4.4&depth=1 |
+| <a name="module_slurm_controller_instance"></a> [slurm\_controller\_instance](#module\_slurm\_controller\_instance) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/_slurm_instance | 6.4.6&depth=1 |
+| <a name="module_slurm_controller_template"></a> [slurm\_controller\_template](#module\_slurm\_controller\_template) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template | 6.4.6&depth=1 |
+| <a name="module_slurm_files"></a> [slurm\_files](#module\_slurm\_files) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_files | 6.4.6&depth=1 |
+| <a name="module_slurm_login_instance"></a> [slurm\_login\_instance](#module\_slurm\_login\_instance) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/_slurm_instance | 6.4.6&depth=1 |
+| <a name="module_slurm_login_template"></a> [slurm\_login\_template](#module\_slurm\_login\_template) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template | 6.4.6&depth=1 |
+| <a name="module_slurm_nodeset"></a> [slurm\_nodeset](#module\_slurm\_nodeset) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_nodeset | 6.4.6&depth=1 |
 | <a name="module_slurm_nodeset_dyn"></a> [slurm\_nodeset\_dyn](#module\_slurm\_nodeset\_dyn) | github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_nodeset_dyn | 6.2.0 |
-| <a name="module_slurm_nodeset_template"></a> [slurm\_nodeset\_template](#module\_slurm\_nodeset\_template) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template | 6.4.4&depth=1 |
-| <a name="module_slurm_nodeset_tpu"></a> [slurm\_nodeset\_tpu](#module\_slurm\_nodeset\_tpu) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_nodeset_tpu | 6.4.4&depth=1 |
-| <a name="module_slurm_partition"></a> [slurm\_partition](#module\_slurm\_partition) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_partition | 6.4.4&depth=1 |
+| <a name="module_slurm_nodeset_template"></a> [slurm\_nodeset\_template](#module\_slurm\_nodeset\_template) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template | 6.4.6&depth=1 |
+| <a name="module_slurm_nodeset_tpu"></a> [slurm\_nodeset\_tpu](#module\_slurm\_nodeset\_tpu) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_nodeset_tpu | 6.4.6&depth=1 |
+| <a name="module_slurm_partition"></a> [slurm\_partition](#module\_slurm\_partition) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_partition | 6.4.6&depth=1 |
 
 ## Resources
 
@@ -192,6 +192,7 @@ limitations under the License.
 | <a name="input_enable_debug_logging"></a> [enable\_debug\_logging](#input\_enable\_debug\_logging) | Enables debug logging mode. | `bool` | `false` | no |
 | <a name="input_enable_default_mounts"></a> [enable\_default\_mounts](#input\_enable\_default\_mounts) | Enable default global network storage from the controller<br>- /usr/local/etc/slurm<br>- /etc/munge<br>- /home<br>- /apps<br>Warning: If these are disabled, the slurm etc and munge dirs must be added<br>manually, or some other mechanism must be used to synchronize the slurm conf<br>files and the munge key across the cluster. | `bool` | `true` | no |
 | <a name="input_enable_devel"></a> [enable\_devel](#input\_enable\_devel) | Enables development mode. | `bool` | `true` | no |
+| <a name="input_enable_external_prolog_epilog"></a> [enable\_external\_prolog\_epilog](#input\_enable\_external\_prolog\_epilog) | Automatically enable a script that will execute prolog and epilog scripts<br>shared by NFS from the controller to compute nodes. Find more details at:<br>https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/tools/prologs-epilogs/README.md | `bool` | `null` | no |
 | <a name="input_enable_oslogin"></a> [enable\_oslogin](#input\_enable\_oslogin) | Enables Google Cloud os-login for user login and authentication for VMs.<br>See https://cloud.google.com/compute/docs/oslogin | `bool` | `true` | no |
 | <a name="input_enable_shielded_vm"></a> [enable\_shielded\_vm](#input\_enable\_shielded\_vm) | Enable the Shielded VM configuration. Note: the instance image must support option. | `bool` | `false` | no |
 | <a name="input_enable_slurm_gcp_plugins"></a> [enable\_slurm\_gcp\_plugins](#input\_enable\_slurm\_gcp\_plugins) | Enables calling hooks in scripts/slurm\_gcp\_plugins during cluster resume and suspend. | `any` | `false` | no |

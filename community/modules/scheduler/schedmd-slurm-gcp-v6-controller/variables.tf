@@ -520,6 +520,16 @@ EOD
   default = []
 }
 
+variable "enable_external_prolog_epilog" {
+  description = <<EOD
+Automatically enable a script that will execute prolog and epilog scripts
+shared by NFS from the controller to compute nodes. Find more details at:
+https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/tools/prologs-epilogs/README.md
+EOD
+  type        = bool
+  default     = null
+}
+
 variable "cloudsql" {
   description = <<EOD
 Use this database instead of the one on the controller.
