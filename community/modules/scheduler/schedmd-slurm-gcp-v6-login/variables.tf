@@ -35,10 +35,7 @@ variable "zone" {
 
 variable "name_prefix" {
   type        = string
-  description = <<-EOD
-    Unique name prefix for login nodes. Automatically populated by the module id if not set.
-    If setting manually, ensure a unique value across all login groups.
-    EOD
+  description = "Unique name prefix for login nodes"
 }
 
 variable "num_instances" {

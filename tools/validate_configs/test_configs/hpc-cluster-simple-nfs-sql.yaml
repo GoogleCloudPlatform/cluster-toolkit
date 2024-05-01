@@ -76,4 +76,5 @@ deployment_groups:
     use:
     - network1
     settings:
+      name_prefix: login
       enable_login_public_ips: true
