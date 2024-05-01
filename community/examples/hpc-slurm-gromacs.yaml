@@ -109,6 +109,7 @@ deployment_groups:
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
     use: [network1]
     settings:
+      name_prefix: login
       enable_login_public_ips: true
 
   - id: slurm_controller

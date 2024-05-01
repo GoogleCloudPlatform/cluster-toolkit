@@ -169,6 +169,7 @@ deployment_groups:
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
     use: [network1]
     settings:
+      name_prefix: login
       machine_type: n2-standard-4
       enable_login_public_ips: true
 
