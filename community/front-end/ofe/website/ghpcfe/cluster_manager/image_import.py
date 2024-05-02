@@ -50,10 +50,7 @@ def get_images_info(credentials, project,cred_id=False):
     image_response = client.list(request)
     existing_image_list = []
     for image in image_response.items:
-        if cred_id == False:
-            existing_image_list.append([image.name, image.description, image.family])
-        else:
-            existing_image_list.append([cred_id,image.name, image.description, image.family])
+        existing_image_list.append([cred_id,image.name, image.description, image.family])
     return existing_image_list
 
 
@@ -77,8 +74,8 @@ def verify_image(credential_info,image_name, image_family):
     images_list = get_images_info(credentials,project)
     found_img = False
     for img in images_list:
-         cloud_img_name = img[0]
-         cloud_img_fam = img[2]
+         cloud_img_name = img[1]
+         cloud_img_fam = img[3]
          if image_name == cloud_img_name and image_family == cloud_img_fam:
               found_img = True
     return found_img
