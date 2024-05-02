@@ -222,13 +222,11 @@ class ClusterInfo:
         for (count, part) in enumerate(self.cluster.partitions.all()):
             part_id = f"partition_{count}"
             if part.image is not None:
-                if part.image.source_image_family == "Imported":
-                    instance_image_yaml = f"""instance_image:
-            family: {part.image.family}
-            project: {self.cluster.project_id}"""
-                else:
-                    instance_image_yaml = f"""instance_image:
-            family: image-{part.image.family}
+                imported_image_fam = part.image.family
+                regular_image_fam = f"image-{part.image.family}"
+                image_family = imported_image_fam if part.image.source_image_family == "Imported" else regular_image_fam
+                instance_image_yaml = f"""instance_image:
+            family: {image_family}
             project: {self.cluster.project_id}"""
             else:
                 instance_image_yaml = ""
