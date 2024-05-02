@@ -21,13 +21,14 @@ deployment_name: "cent-v5-{{ build }}"
 slurm_cluster_name: "centv5{{ build[0:4] }}"
 zone: us-west4-c
 cli_deployment_vars:
+  network_name: "{{ network }}"
   enable_cleanup_compute: true
   region: us-west4
   zone: "{{ zone }}"
   zones: "[us-west4-a,us-west4-b,us-west4-c]"
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/examples/hpc-slurm.yaml"
-network: "{{ deployment_name }}-net"
+network: "{{ test_name }}-net"
 # Note: Pattern matching in gcloud only supports 1 wildcard, centv5*-login-* won't work.
 login_node: "{{ slurm_cluster_name }}-login-*"
 controller_node: "{{ slurm_cluster_name }}-controller"

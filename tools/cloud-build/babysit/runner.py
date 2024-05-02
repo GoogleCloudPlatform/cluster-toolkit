@@ -25,10 +25,9 @@ It monitors status of builds referenced by PR commit SHA,
 it will approve and retry tests according to configured concurrency and retry policies.
 The tool will terminate itself once there is no more actions to take or no reasons to wait for status changes.
 The subset of tests to monitor can be configured by using test selectors --tags, --names, --auto, and --all.
-Usage:
-$ tools/cloud-build/babysit_tests.py --pr 123 --auto
 
-$ tools/cloud-build/babysit_tests.py --pr 123 --tags slurm5 slurm6
+Usage:
+$ tools/cloud-build/babysit/run --pr #### --auto --project <project id>
 """
 
 def selector_by_name(name: str) -> Selector:

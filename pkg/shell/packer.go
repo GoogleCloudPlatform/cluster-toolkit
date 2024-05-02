@@ -18,6 +18,7 @@ package shell
 
 import (
 	"bytes"
+	"hpc-toolkit/pkg/config"
 	"io"
 	"os"
 	"os/exec"
@@ -28,10 +29,9 @@ import (
 func ConfigurePacker() error {
 	_, err := exec.LookPath("packer")
 	if err != nil {
-		return &TfError{
-			help: "must have a copy of packer installed in PATH (obtain at https://packer.io)",
-			err:  err,
-		}
+		return config.HintError{
+			Hint: "must have a copy of packer installed in PATH (obtain at https://packer.io)",
+			Err:  err}
 	}
 	return nil
 }

@@ -68,4 +68,9 @@ variable "gcs_bucket_path" {
 variable "mount_runner" {
   description = "mount content from the google-cloud-storage module"
   type        = map(string)
+
+  validation {
+    condition     = (length(split(" ", var.mount_runner.args)) == 5)
+    error_message = "There must be 5 elements in the Mount Runner Arguments: ${var.mount_runner.args} \n "
+  }
 }

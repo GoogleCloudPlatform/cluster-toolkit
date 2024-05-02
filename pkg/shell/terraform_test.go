@@ -17,7 +17,6 @@ limitations under the License.
 package shell
 
 import (
-	"errors"
 	"os"
 	"os/exec"
 	"testing"
@@ -50,7 +49,4 @@ func (s *MySuite) TestFindTerraform(c *C) {
 	_, err = ConfigureTerraform(".")
 	os.Setenv("PATH", pathEnv)
 	c.Assert(err, NotNil)
-
-	var tfe *TfError
-	c.Assert(errors.As(err, &tfe), Equals, true)
 }

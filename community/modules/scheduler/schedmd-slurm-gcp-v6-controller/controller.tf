@@ -38,7 +38,7 @@ locals {
 
 # INSTANCE TEMPLATE
 module "slurm_controller_template" {
-  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=6.4.4&depth=1"
+  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=6.4.6&depth=1"
   count  = local.have_template ? 0 : 1
 
   project_id          = var.project_id
@@ -95,7 +95,7 @@ locals {
 }
 
 module "slurm_controller_instance" {
-  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/_slurm_instance?ref=6.4.4&depth=1"
+  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/_slurm_instance?ref=6.4.6&depth=1"
 
   access_config       = var.enable_controller_public_ips ? [local.access_config] : []
   add_hostname_suffix = false
@@ -142,36 +142,4 @@ resource "google_secret_manager_secret_iam_member" "cloudsql_secret_accessor" {
   secret_id = google_secret_manager_secret.cloudsql[0].id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${local.service_account.email}"
-}
-
-
-# Destroy all compute nodes on `terraform destroy`
-module "cleanup_compute_nodes" {
-  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_destroy_nodes?ref=6.4.4&depth=1"
-  count  = var.enable_cleanup_compute ? 1 : 0
-
-  slurm_cluster_name = local.slurm_cluster_name
-  project_id         = var.project_id
-  when_destroy       = true
-
-
-  depends_on = [
-    # Depend on controller network, as a best effort to avoid
-    # subnetwork resourceInUseByAnotherResource error
-    # NOTE: Can not use nodeset subnetworks as "A static list expression is required"
-    var.subnetwork_self_link,
-    # Ensure VMs are destroyed before resource policies
-    module.cleanup_resource_policies[0],
-  ]
-}
-
-
-# Destroy all resource policies on `terraform destroy`
-module "cleanup_resource_policies" {
-  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_destroy_resource_policies?ref=6.4.4&depth=1"
-  count  = var.enable_cleanup_compute ? 1 : 0
-
-  slurm_cluster_name = local.slurm_cluster_name
-  project_id         = var.project_id
-  when_destroy       = true
 }
