@@ -37,3 +37,4 @@ custom_vars:
   - /home
 cli_deployment_vars:
   network_name: "{{ network }}"
+wait_for_compute_nodes_to_go_down: true

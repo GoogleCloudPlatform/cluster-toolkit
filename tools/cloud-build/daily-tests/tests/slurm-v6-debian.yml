@@ -42,3 +42,6 @@ custom_vars:
   - debug
   mounts:
   - /home
+# Assert that machines are getting shut down eventually
+# This is the only SlurmV6 test that checks this.
+wait_for_compute_nodes_to_go_down: true
