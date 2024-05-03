@@ -74,6 +74,49 @@ page.
 More information on GPU support in Slurm on GCP and other HPC Toolkit modules
 can be found at [docs/gpu-support.md](../../../../docs/gpu-support.md)
 
+## Placement Max Distance
+
+When using
+[enable_placement](../../../../community/modules/compute/schedmd-slurm-gcp-v6-nodeset/README.md#input_enable_placement)
+with Slurm, Google Compute Engine will attempt to place VMs as physically close
+together as possible. Capacity constraints at the time of VM creation may still
+force VMs to be spread across multiple racks. Google provides the `max-distance`
+flag which can used to control the maximum spreading allowed. Read more about
+`max-distance` in the
+[official docs](https://cloud.google.com/compute/docs/instances/use-compact-placement-policies
+).
+
+You can use the `enable_slurm_gcp_plugins.max_hops.max_hops` setting on the
+controller module to control the `max-distance` behavior. See the following
+example:
+
+```yaml
+  - id: controller
+    source: ./community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    use: [ network, partition ]
+    settings:
+      enable_slurm_gcp_plugins:
+        max_hops:
+          max_hops: 1
+```
+
+> [!NOTE]  
+> `schedmd-slurm-gcp-v6-nodeset.settings.enable_placement: true` must also be
+> set for max-distance to take effect.
+
+In the above case using a value of 1 will restrict VM to be placed on the same
+rack. You can confirm that the `max-distance` was applied by calling the
+following command while jobs are running:
+
+```shell
+gcloud beta compute resource-policies list \
+  --format='yaml(name,groupPlacementPolicy.maxDistance)'
+```
+
+> [!WARNING]
+> If a zone lacks capacity, using a lower `max-distance` value (such as 1) is
+> more likely to cause VMs creation to fail.
+
 ## Hybrid Slurm Clusters
 For more information on how to configure an on premise slurm cluster with hybrid
 cloud partitions, see the [schedmd-slurm-gcp-v5-hybrid] module and our
