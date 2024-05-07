@@ -40,7 +40,6 @@ When prompted for project, use integration test project.
 | <a name="module_daily_project_cleanup_slurm_schedule"></a> [daily\_project\_cleanup\_slurm\_schedule](#module\_daily\_project\_cleanup\_slurm\_schedule) | ./trigger-schedule | n/a |
 | <a name="module_daily_test_schedule"></a> [daily\_test\_schedule](#module\_daily\_test\_schedule) | ./trigger-schedule | n/a |
 | <a name="module_weekly_build_dependency_check_schedule"></a> [weekly\_build\_dependency\_check\_schedule](#module\_weekly\_build\_dependency\_check\_schedule) | ./trigger-schedule | n/a |
-| <a name="module_weekly_builder_image_schedule"></a> [weekly\_builder\_image\_schedule](#module\_weekly\_builder\_image\_schedule) | ./trigger-schedule | n/a |
 
 ## Resources
 
@@ -56,7 +55,6 @@ When prompted for project, use integration test project.
 | [google_cloudbuild_trigger.pr_test](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/cloudbuild_trigger) | resource |
 | [google_cloudbuild_trigger.pr_validation](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/cloudbuild_trigger) | resource |
 | [google_cloudbuild_trigger.weekly_build_dependency_check](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/cloudbuild_trigger) | resource |
-| [google_cloudbuild_trigger.weekly_builder_image](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/cloudbuild_trigger) | resource |
 | [google_cloudbuild_trigger.zebug_fast_build_failure](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/cloudbuild_trigger) | resource |
 | [google_cloudbuild_trigger.zebug_fast_build_success](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/cloudbuild_trigger) | resource |
 | [google_compute_reservation.c2standard60_us_west4_c](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_reservation) | resource |

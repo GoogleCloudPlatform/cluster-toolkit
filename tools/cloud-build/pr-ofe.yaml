@@ -15,18 +15,15 @@
 ---
 
 steps:
-- id: git-fetch-unshallow
-  name: gcr.io/cloud-builders/git
-  args: ['fetch', '--unshallow']
 - id: ofe-virtual-env
-  waitFor: [git-fetch-unshallow]
-  name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
+  name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
   entrypoint: /bin/bash
   args:
   - '-c'
   - |
-    set -e
-    python3 -m venv /opt/ofe
+    set -ex
+    python3 -m pip install virtualenv
+    virtualenv /opt/ofe
     source /opt/ofe/bin/activate
     pip install --upgrade pip
     pip install --dry-run --no-cache-dir -r community/front-end/ofe/requirements.txt
