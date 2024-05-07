@@ -33,8 +33,16 @@ locals {
 
   public_access_config = [{ nat_ip = null, network_tier = null }]
 
+  # lower, replace `_` with `-`, and remove any non-alphanumeric characters
+  name_prefix = replace(
+    replace(
+      lower(var.name_prefix),
+    "_", "-"),
+  "/[^-a-z0-9]/", "")
+
+
   login_node = {
-    name_prefix      = var.name_prefix
+    name_prefix      = local.name_prefix
     disk_auto_delete = var.disk_auto_delete
     disk_labels      = merge(var.disk_labels, local.labels)
     disk_size_gb     = var.disk_size_gb
