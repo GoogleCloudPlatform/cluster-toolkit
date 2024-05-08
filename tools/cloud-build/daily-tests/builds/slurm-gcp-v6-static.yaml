@@ -24,7 +24,6 @@ tags:
 timeout: 14400s  # 4hr
 steps:
 - id: slurm-gcp-v6-static
-  waitFor: ["fetch_builder", "build_ghpc"]
   name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
   entrypoint: /bin/bash
   env:
