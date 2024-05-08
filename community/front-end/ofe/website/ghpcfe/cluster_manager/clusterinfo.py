@@ -24,6 +24,7 @@
 import json
 import logging
 import subprocess
+import os
 
 from django.template import engines as template_engines
 from google.api_core.exceptions import PermissionDenied as GCPPermissionDenied
@@ -221,9 +222,12 @@ class ClusterInfo:
         for (count, part) in enumerate(self.cluster.partitions.all()):
             part_id = f"partition_{count}"
             if part.image is not None:
+                imported_image_fam = part.image.family
+                regular_image_fam = f"image-{part.image.family}"
+                image_family = imported_image_fam if part.image.source_image_family == "Imported" else regular_image_fam
                 instance_image_yaml = f"""instance_image:
-        family: image-{part.image.family}
-        project: {self.cluster.project_id}"""
+            family: {image_family}
+            project: {self.cluster.project_id}"""
             else:
                 instance_image_yaml = ""
 
@@ -257,7 +261,6 @@ class ClusterInfo:
   - source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
     id: {part_id}-group
     use:
-{uses_str}
     settings:
       enable_smt: {part.enable_hyperthreads}
       machine_type: {part.machine_type}
@@ -307,13 +310,13 @@ class ClusterInfo:
                 partitions_yaml,
                 partitions_references,
             ) = self._prepare_ghpc_partitions(
-                ["hpc_network"] + filesystems_references
+                filesystems_references
             )
             controller_uses = self._yaml_refs_to_uses(
                 ["hpc_network"] + partitions_references + filesystems_references
             )
             login_uses = self._yaml_refs_to_uses(
-                ["hpc_network"] + filesystems_references
+                filesystems_references
             )
             controller_sa = "sa"
             # TODO: Determine if these all should be different, and if so, add to
@@ -347,7 +350,7 @@ class ClusterInfo:
                 slurmdbd_cloudsql_yaml = f"""  - source: community/modules/database/slurm-cloudsql-federation
     kind: terraform
     id: slurm-sql
-    use: [hpc_network]
+    use: [hpc_network, ps-connect]
     settings:
       sql_instance_name: sql-{self.cluster.cloud_id}
       tier: "db-g1-small"
@@ -382,6 +385,10 @@ deployment_groups:
       network_name: {self.cluster.subnet.vpc.cloud_id}
       subnetwork_name: {self.cluster.subnet.cloud_id}
     id: hpc_network
+
+  - source: community/modules/network/private-service-access
+    id: ps-connect
+    use: [ hpc_network ]    
 
 {filesystems_yaml}
 
@@ -462,7 +469,6 @@ deployment_groups:
         gsutil cp gs://{startup_bucket}/clusters/{self.cluster.id}/bootstrap_login.sh - | bash
     use:
     - slurm_controller
-{login_uses}
 
     """
                 )
@@ -528,6 +534,10 @@ deployment_groups:
             logger.info("Invoking ghpc create")
             log_out_fn = target_dir / "ghpc_create_log.stdout"
             log_err_fn = target_dir / "ghpc_create_log.stderr"
+
+            env = os.environ.copy()
+            env['GOOGLE_APPLICATION_CREDENTIALS'] = self._get_credentials_file()
+
             with log_out_fn.open("wb") as log_out:
                 with log_err_fn.open("wb") as log_err:
                     subprocess.run(
@@ -536,6 +546,7 @@ deployment_groups:
                         stdout=log_out,
                         stderr=log_err,
                         check=True,
+                        env=env,
                     )
         except subprocess.CalledProcessError as cpe:
             logger.error("ghpc exec failed", exc_info=cpe)

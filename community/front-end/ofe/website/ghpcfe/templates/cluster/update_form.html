@@ -428,14 +428,26 @@
       $(".disk_type_select").each(function (pos, selObj) {
         var curVal = selObj.value;
         $(selObj).empty();
-        $.each(data.disks, function (i, disk_info) {
-          if (disk_info.name.startsWith("pd-")) { // Only Persistent Disks
+
+        // This bit lets us restrict the disk types listed in the drop down menu for primary partitions
+        var additionalDisk = selObj.id.slice(0, selObj.id.lastIndexOf("_disk_type"));
+        if (additionalDisk.endsWith("additional")) {
+          $.each(data.disks, function (i, disk_info) {
             var option = document.createElement("option");
             option.text = disk_info.description;
             option.setAttribute("value", disk_info.name);
             selObj.appendChild(option);
-          }
-        });
+          });
+        } else {
+          $.each(data.disks, function (i, disk_info) {
+            if (disk_info.name === 'local-ssd' || disk_info.name.startsWith("pd-")) { // Only Persistent Disks
+              var option = document.createElement("option");
+              option.text = disk_info.description;
+              option.setAttribute("value", disk_info.name);
+              selObj.appendChild(option);
+            }
+          });
+        };
         var id_prefix = selObj.id.slice(0, selObj.id.lastIndexOf("_disk_type"));
         var disk_size_sel = $(selObj).parentsUntil("tbody").find("#" + id_prefix + "_disk_size")[0];
         selObj.onchange = function () {

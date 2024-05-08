@@ -50,7 +50,7 @@ dnf update -y --security
 dnf config-manager --add-repo https://rpm.releases.hashicorp.com/RHEL/hashicorp.repo
 dnf install --best -y google-cloud-sdk nano make gcc python38-devel unzip git \
 	rsync wget nginx bind-utils policycoreutils-python-utils \
-	terraform packer supervisor python3-certbot-nginx
+	terraform packer supervisor python3-certbot-nginx jq
 curl --silent --show-error --location https://github.com/mikefarah/yq/releases/download/v4.13.4/yq_linux_amd64 --output /usr/local/bin/yq
 chmod +x /usr/local/bin/yq
 curl --silent --show-error --location https://github.com/koalaman/shellcheck/releases/download/stable/shellcheck-stable.linux.x86_64.tar.xz --output /tmp/shellcheck.tar.xz
@@ -158,14 +158,13 @@ EOF
 
 # Install go version specified in go.mod file
 #
-GO_VERSION=$(awk '/^go/ {print $2}' "/opt/gcluster/hpc-toolkit/go.mod")
-# Check if the version string has only two numbers separated by dots
-if [[ $GO_VERSION =~ ^([0-9]+\.[0-9]+)$ ]]; then
-	GO_VERSION="$GO_VERSION.0" # Append .0 if missing patch version
-fi
-GO_DOWNLOAD_URL="https://golang.org/dl/go${GO_VERSION}.linux-amd64.tar.gz"
-curl --silent --show-error --location "${GO_DOWNLOAD_URL}" --output "/tmp/go${GO_VERSION}.linux-amd64.tar.gz"
-rm -rf /usr/local/go && tar -C /usr/local -xzf "/tmp/go${GO_VERSION}.linux-amd64.tar.gz"
+# Note: go.mod doesn't reference minor version so we need to capture the latest
+GO_MAJOR_VERSION=$(awk '/^go/ {print $2}' "/opt/gcluster/hpc-toolkit/go.mod")
+GO_API_RESPONSE=$(curl --silent "https://go.dev/dl/?mode=json")
+GO_VERSION=$(echo "$GO_API_RESPONSE" | jq -r --arg major "go$GO_MAJOR_VERSION" '.[] | select(.version | startswith($major)).version' | sort -V | tail -n 1)
+GO_DOWNLOAD_URL="https://golang.org/dl/${GO_VERSION}.linux-amd64.tar.gz"
+curl --silent --show-error --location "${GO_DOWNLOAD_URL}" --output "/tmp/${GO_VERSION}.linux-amd64.tar.gz"
+rm -rf /usr/local/go && tar -C /usr/local -xzf "/tmp/${GO_VERSION}.linux-amd64.tar.gz"
 
 # Add path entry for Go binaries to bashrc for all users (only works on future logins)
 # shellcheck disable=SC2016

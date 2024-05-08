@@ -1,0 +1,128 @@
+<!--
+ Copyright 2022 Google LLC
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+{% extends "base_generic.html" %}
+
+{% block extrameta %}
+  <script>
+    function showImportField(choice) {
+      let textInput = document.getElementById("textInputContiner");
+      let dropdown = document.getElementById("dropdownContainer");
+      if (choice == "text") {
+        textInput.style.display = "block";
+        dropdown.style.display = "none";
+      }
+      else if (choice == "dropdown") {
+        textInput.style.display = "none";
+        dropdown.style.display = "block";
+      }
+      else{
+        textInput.style.display = "block";
+        dropdown.style.display = "none";    
+      }
+    }
+    </script>
+
+{% endblock %}
+
+
+
+{% block content %}
+  {{ prexisting_images_json }}
+  <h2>Import an existing image</h2>  
+
+  {% if form.non_field_errors %}
+  <div class="alert alert-danger" role="alert">{{ form.non_field_errors.as_text }}</div>
+  {% endif %}
+
+
+
+  <form action="" method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+  
+  {% for field in form.visible_fields %}
+      <div class="form-group">
+        {{ field.label_tag }}
+        {{ field.errors }}
+        {{ field }}
+        {% if field.help_text %}
+          <small class="form-text text-muted">{{ field.help_text }}</small>
+        {% endif %}
+
+        {% if field.name == 'cloud_credential' %}
+        <br>
+        <h5>Select image to import:</h5>
+        <div class="form-group">
+          <input type="radio" id="textOption" name="inputOption" value="text" onclick="showImportField('text')" checked>
+          <label for="textOption">Input image name manually</label>
+          <input type="radio" id="dropdownOption" name="inputOption" value="dropdown" onclick="showImportField('dropdown')">
+          <label for="dropdownOption">Select from uploaded images</label>
+        </div>
+        <div id="textInputContiner" class="form-group" style="display:block;" >
+          <label for="textInputName">Name:</label>
+          <input type="text" id="textInputName" name="textInputName" class="form-control">
+          <small class="form-text text-muted">Enter the existing image name</small>
+          <label for="textInputFamily">Family:</label>
+          <input type="text" id="textInputFamily" name="textInputFamily" class="form-control">
+          <small class="form-text text-muted">Enter the family of the existing image
+          </small>
+        </div>
+        <div id = "dropdownContainer" class="form-group" class="form-control" style="display:none;">
+          <label for="dropdown">Select an option:</label>
+          <select id="dropdown" name="dropdown" class="form-control">
+            <option value="NULL">------</option>
+          </select>
+        </div>
+        {% endif %}
+      </div>
+
+  {% endfor %}
+  
+
+    <br/>  
+    <input type="submit" value="Save" class="btn btn-primary"/>
+  </form>
+
+
+  <script>
+    var image_list_str = '{{ image_jsonstr|safe }}';
+    var image_list_json = JSON.parse(image_list_str);
+
+    function updateImageDrop(json_list, credential_id){
+      var dropdown_img_obj = document.getElementById('dropdown');
+      dropdown_img_obj.innerHTML = "";
+      for (var i = 0; i < json_list.length; i++) {
+        var [cred_id, image_name, image_desc, image_fam] = json_list[i]
+        if (parseInt(cred_id) == parseInt(credential_id)){
+          var option = document.createElement("option");
+          option.value = json_list[i]; 
+          option.text = image_name + " (" + image_fam + ")"; 
+          dropdown_img_obj.appendChild(option);
+        }
+      }
+    }
+  
+    function credChange(){
+      var selectedCredential = document.getElementById('id_cloud_credential').value;
+      updateImageDrop(image_list_json,selectedCredential)
+    }
+
+    document.getElementById("id_cloud_credential").addEventListener("change", credChange);
+
+</script>
+  
+  
+{% endblock %}
