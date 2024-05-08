@@ -40,6 +40,7 @@ from django.http import (
 from django.urls import reverse
 from django.forms import inlineformset_factory
 from django.views import generic
+from django.views import View
 from django.views.generic.edit import CreateView, UpdateView, DeleteView
 from django.contrib import messages
 from ..models import (
@@ -69,6 +70,20 @@ import logging
 import secrets
 
 logger = logging.getLogger(__name__)
+
+class ClusterPartitionDeleteView(LoginRequiredMixin, View):
+    def post(self, request, *args, **kwargs):
+        partition_id = kwargs.get('partition_id')
+        #logger.info(partition_id)
+        try:
+            partition = ClusterPartition.objects.get(pk=partition_id)
+            logger.info(f"Deleting partition point: {partition}, ID: {partition_id}")
+            partition.delete()
+            return JsonResponse({'success': True})
+        except ClusterPartition.DoesNotExist:
+            return JsonResponse({'success': False, 'error': 'Partition not found.'}, status=404)
+        except Exception as e:
+            return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
 
 class ClusterListView(LoginRequiredMixin, generic.ListView):
