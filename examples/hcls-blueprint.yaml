@@ -14,11 +14,11 @@
 
 ---
 
-blueprint_name: hcls-cluster-v6
+blueprint_name: hcls-cluster
 
 vars:
   project_id:  ## Set GCP Project ID Here ##
-  deployment_name: hcls-cluster-v6
+  deployment_name: hcls-cluster
   region: asia-southeast1
   zone: asia-southeast1-b
   bucket_force_destroy: false
