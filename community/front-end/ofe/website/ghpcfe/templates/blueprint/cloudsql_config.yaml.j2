@@ -1,0 +1,7 @@
+- source: community/modules/database/slurm-cloudsql-federation
+  kind: terraform
+  id: slurm-sql
+  use: [hpc_network, ps-connect]
+  settings:
+    sql_instance_name: sql-{{ cluster_id }}
+    tier: "db-g1-small"
