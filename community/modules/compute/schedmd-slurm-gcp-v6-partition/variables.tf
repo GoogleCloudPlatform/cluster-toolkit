@@ -200,6 +200,55 @@ variable "nodeset_dyn" {
   }
 }
 
+variable "resume_timeout" {
+  description = <<-EOD
+    Maximum time permitted (in seconds) between when a node resume request is issued and when the node is actually available for use.
+    If null is given, then a smart default will be chosen depending on nodesets in partition.
+    This sets 'ResumeTimeout' in partition_conf.
+    See https://slurm.schedmd.com/slurm.conf.html#OPT_ResumeTimeout_1 for details.
+  EOD
+  type        = number
+  default     = 300
+
+  validation {
+    condition     = var.resume_timeout == null ? true : var.resume_timeout > 0
+    error_message = "Value must be > 0."
+  }
+}
+
+variable "suspend_time" {
+  description = <<-EOD
+    Nodes which remain idle or down for this number of seconds will be placed into power save mode by SuspendProgram.
+    This sets 'SuspendTime' in partition_conf.
+    See https://slurm.schedmd.com/slurm.conf.html#OPT_SuspendTime_1 for details.
+    NOTE: use value -1 to exclude partition from suspend.
+  EOD
+  type        = number
+  default     = 300
+
+  validation {
+    condition     = var.suspend_time >= -1
+    error_message = "Value must be >= -1."
+  }
+}
+
+variable "suspend_timeout" {
+  description = <<-EOD
+    Maximum time permitted (in seconds) between when a node suspend request is issued and when the node is shutdown.
+    If null is given, then a smart default will be chosen depending on nodesets in partition.
+    This sets 'SuspendTimeout' in partition_conf.
+    See https://slurm.schedmd.com/slurm.conf.html#OPT_SuspendTimeout_1 for details.
+  EOD
+  type        = number
+  default     = null
+
+  validation {
+    condition     = var.suspend_timeout == null ? true : var.suspend_timeout > 0
+    error_message = "Value must be > 0."
+  }
+}
+
+
 # tflint-ignore: terraform_unused_declarations
 variable "network_storage" {
   description = "DEPRECATED"

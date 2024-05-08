@@ -125,10 +125,10 @@ module "slurm_files" {
   network_storage        = var.network_storage
   login_network_storage  = var.login_network_storage
 
-  partitions  = values(module.slurm_partition)[*]
+  partitions  = [for p in var.partitions : { partition : p }]
   nodeset     = values(module.slurm_nodeset)[*]
   nodeset_tpu = values(module.slurm_nodeset_tpu)[*]
-  nodeset_dyn = values(module.slurm_nodeset_dyn)[*]
+  nodeset_dyn = values(local.nodeset_dyn_map)[*]
 
   depends_on = [module.bucket]
 }
