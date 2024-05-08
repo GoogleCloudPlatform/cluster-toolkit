@@ -1,4 +1,4 @@
-# Copyright 2024 Google LLC
+# Copyright 2023 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,20 +14,20 @@
 
 ---
 tags:
-- slurm6
 - m.DDN-EXAScaler
 - m.dashboard
 - m.filestore
-- m.schedmd-slurm-gcp-v6-controller
-- m.schedmd-slurm-gcp-v6-login
-- m.schedmd-slurm-gcp-v6-nodeset
-- m.schedmd-slurm-gcp-v6-partition
+- m.pre-existing-vpc
+- m.schedmd-slurm-gcp-v5-controller
+- m.schedmd-slurm-gcp-v5-login
+- m.schedmd-slurm-gcp-v5-node-group
+- m.schedmd-slurm-gcp-v5-partition
 - m.service-account
-- m.vpc
+- slurm5
 
 timeout: 14400s  # 4hr
 steps:
-- id: hpc-enterprise-slurm-v6
+- id: hpc-enterprise-slurm
   name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
   entrypoint: /bin/bash
   env:
@@ -43,4 +43,4 @@ steps:
 
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
       --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
-      --extra-vars="@tools/cloud-build/daily-tests/tests/hpc-enterprise-slurm-v6.yml"
+      --extra-vars="@tools/cloud-build/daily-tests/tests/hpc-enterprise-slurm-v5-legacy.yml"
