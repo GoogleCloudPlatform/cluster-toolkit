@@ -1,4 +1,4 @@
-# Copyright 2024 Google LLC
+# Copyright 2023 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,19 +13,19 @@
 # limitations under the License.
 ---
 
-test_name: test-slurm-lustre-v6
-deployment_name: "lustr-v6-{{ build }}"
+test_name: test-slurm-lustre
+deployment_name: "lustr-{{ build }}"
 region: us-central1
 zone: us-central1-c
 workspace: /workspace
-blueprint_yaml: "{{ workspace }}/tools/cloud-build/daily-tests/blueprints/lustre-slurm-v6.yaml"
+blueprint_yaml: "{{ workspace }}/tools/cloud-build/daily-tests/blueprints/lustre-slurm-v5-legacy.yaml"
 network: "default"
-slurm_cluster_name: "lustrv6{{ build[0:3] }}"
+slurm_cluster_name: "lustr{{ build[0:5] }}"
 cli_deployment_vars:
   region: "{{ region }}"
   zone: "{{ zone }}"
 # Note: Pattern matching in gcloud only supports 1 wildcard.
-login_node: "{{ slurm_cluster_name }}-slurm-login-*"
+login_node: "{{ slurm_cluster_name }}-login-*"
 controller_node: "{{ slurm_cluster_name }}-controller"
 post_deploy_tests:
 - test-validation/test-mounts.yml
@@ -40,3 +40,4 @@ custom_vars:
   - centos
   - rocky
   # - ubuntu
+wait_for_compute_nodes_to_go_down: true
