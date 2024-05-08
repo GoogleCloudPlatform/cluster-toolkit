@@ -1,4 +1,4 @@
-# Copyright 2024 Google LLC
+# Copyright 2022 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
 
 ---
 
-blueprint_name: hpc-slurm-local-ssd-v6
+blueprint_name: hpc-slurm-local-ssd
 
 vars:
   project_id:  ## Set GCP Project ID Here ##
@@ -28,18 +28,17 @@ vars:
 deployment_groups:
 - group: primary
   modules:
-  - id: network
-    source: modules/network/vpc
+  - id: network1
+    source: modules/network/pre-existing-vpc
 
   - id: homefs
     source: modules/file-system/filestore
-    use: [network]
+    use: [network1]
     settings:
       local_mount: /home
 
-  - id: nodeset
-    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [network]
+  - id: compute_node_group
+    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
     settings:
       additional_disks:
       - device_name: test-disk-1
@@ -60,6 +59,17 @@ deployment_groups:
       machine_type: c2-standard-4
       node_count_dynamic_max: 5
       node_count_static: 0
+
+  - id: compute_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
+    use:
+    - network1
+    - homefs
+    - compute_node_group
+    settings:
+      is_default: true
+      partition_name: ssdcomp
+      region: us-central1
       startup_script: |
         #!/bin/bash
         set -e -o pipefail
@@ -90,23 +100,12 @@ deployment_groups:
         mount --source LABEL="$DISK_LABEL" --target="$DST_MNT" -o "$OPTIONS"
         chmod 1777 "$DST_MNT"
 
-  - id: partition
-    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
-    use: [nodeset]
-    settings:
-      is_default: true
-      partition_name: ssdcomp
-
-  - id: slurm_login
-    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
-    use: [network]
-    settings:
-      machine_type: n1-standard-4
-      enable_login_public_ips: true
-
   - id: slurm_controller
-    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
-    use: [network, homefs, partition, slurm_login]
+    source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
+    use:
+    - network1
+    - homefs
+    - compute_partition
     settings:
       cloud_parameters:
         resume_rate: 0
@@ -115,4 +114,11 @@ deployment_groups:
         suspend_timeout: 300
         no_comma_params: false
       machine_type: n1-standard-4
-      enable_controller_public_ips: true
+
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v5-login
+    use:
+    - network1
+    - slurm_controller
+    settings:
+      machine_type: n1-standard-4
