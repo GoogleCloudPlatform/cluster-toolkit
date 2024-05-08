@@ -19,3 +19,8 @@ output "private_vpc_connection_peering" {
   sensitive   = true
   value       = google_service_networking_connection.private_vpc_connection.peering
 }
+
+output "network_id" {
+  description = "The id of the network that the private-service-access has been set up on."
+  value       = var.network_id
+}
