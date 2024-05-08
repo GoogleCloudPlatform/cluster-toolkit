@@ -1,4 +1,4 @@
-# Copyright 2023 Google LLC
+# Copyright 2024 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -40,10 +40,7 @@ vars:
   # for a list of valid family options with Slurm; note: the image types for the compute nodes
   # and the Chrome Remote Desktop (CRD) need to have the same Slurm base.
   instance_image:
-    family: slurm-gcp-5-10-hpc-centos-7
-    project: schedmd-slurm-public
-  crd_instance_image:
-    family: slurm-gcp-5-10-debian-11   # must be Debian for CRD
+    family: slurm-gcp-6-4-hpc-rocky-linux-8
     project: schedmd-slurm-public
 
 # Documentation for each of the modules used below can be found at
@@ -62,7 +59,7 @@ deployment_groups:
 
   ####### Virtual Private Cloud Setup #######
   # This creates a virtual private network for your cloud setup
-  - id: network1
+  - id: network
     source: modules/network/vpc
     settings:
       network_name: cae-slurm-net
@@ -72,7 +69,7 @@ deployment_groups:
   # This block creates an NFS file share for /home
   - id: homefs
     source: modules/file-system/filestore
-    use: [network1]
+    use: [network]
     settings:
       filestore_tier: BASIC_SSD
       size_gb: 2560
@@ -83,7 +80,7 @@ deployment_groups:
   # This block creates NFS file share for shared software installations
   - id: appsfs
     source: modules/file-system/filestore
-    use: [network1]
+    use: [network]
     settings:
       filestore_tier: BASIC_SSD
       size_gb: 2560
@@ -126,7 +123,7 @@ deployment_groups:
   # consider to use the more performant version HIGH_SCALE_SSD with the following settings:
   - id: scratchfs
     source: modules/file-system/filestore
-    use: [network1]
+    use: [network]
     settings:
       filestore_tier: HIGH_SCALE_SSD
       size_gb: 10240    # smallest size for HIGH_SSD_SCALE
@@ -143,45 +140,24 @@ deployment_groups:
   # - Intel DAOS: https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/community/modules/file-system/Intel-DAOS/README.md
 
   ######## Remote Desktop(s) #######
-  # This block enables a partition for nodes that support Chrome Remote Desktop
-  # see here for use: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/examples#hpc-slurm-chromedesktopyaml--
+  # This block creates chrome remote desktop.
+  # For more info: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/remote-desktop/chrome-remote-desktop
   - id: remotedesktop
     source: community/modules/remote-desktop/chrome-remote-desktop
-    use: [network1]
+    use: [network]
     settings:
       install_nvidia_driver: true
-      # instance_count: 0 will create installation scripts only
-      # which can be used with slurm node provisioning
-      instance_count: 0
-
-  - id: remotedesktop_node_group
-    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
-    settings:
-      machine_type: n1-standard-8
-      node_count_dynamic_max: 5
-      instance_image: $(vars.crd_instance_image)
+      add_deployment_name_before_prefix: true
+      name_prefix: chrome-remote-desktop
       guest_accelerator:
       - type: nvidia-tesla-t4-vws
         count: 1
 
-  - id: remotedesktop_partition
-    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
-    use:
-    - network1
-    - homefs
-    - appsfs
-    - scratchfs
-    - remotedesktop
-    - remotedesktop_node_group
-    settings:
-      partition_name: desktop
-      enable_placement: false
-      partition_startup_scripts_timeout: 900
-
   ####### Balanced partition #######
   # this block creates a partition uses GCP H3-standard VM for regular jobs with 4GB/core
-  - id: h3_node_group
-    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
+  - id: h3_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network]
     settings:
       node_count_dynamic_max: 10
       machine_type: h3-standard-88
@@ -189,21 +165,17 @@ deployment_groups:
       bandwidth_tier: gvnic_enabled
 
   - id: h3_partition
-    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
-    use:
-    - network1
-    - homefs
-    - appsfs
-    - scratchfs
-    - h3_node_group
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use: [h3_nodeset]
     settings:
       partition_name: balance
       is_default: true
 
   ####### High-Mem partition #######
   #  this block creates partition uses GCP C3-highmem VM for jobs with 16GB/core requirement
-  - id: c3_node_group
-    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
+  - id: c3_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network]
     settings:
       node_count_dynamic_max: 10
       machine_type: c3-highmem-176
@@ -211,28 +183,31 @@ deployment_groups:
       bandwidth_tier: tier_1_enabled
 
   - id: c3_partition
-    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
-    use:
-    - network1
-    - homefs
-    - appsfs
-    - scratchfs
-    - c3_node_group
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use: [c3_nodeset]
     settings:
       partition_name: highmem
 
   ####### Scheduler: SLURM #######
+  # This block creates a SLURM login node
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    use: [network]
+    settings:
+      machine_type: n2-standard-8
+
+  ####### Scheduler: SLURM #######
   # This block creates a SLURM controller
   - id: slurm_controller
-    source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     use:
-    - network1
+    - network
     - homefs
     - appsfs
     - scratchfs
     - h3_partition
     - c3_partition
-    - remotedesktop_partition
+    - slurm_login
     settings:
       machine_type: n2-standard-16
       compute_startup_scripts_timeout: 900
@@ -242,13 +217,3 @@ deployment_groups:
         suspend_rate: 0
         suspend_timeout: 300
         no_comma_params: false
-
-  ####### Scheduler: SLURM #######
-  # This block creates a SLURM login node
-  - id: slurm_login
-    source: community/modules/scheduler/schedmd-slurm-gcp-v5-login
-    use:
-    - network1
-    - slurm_controller
-    settings:
-      machine_type: n2-standard-8
