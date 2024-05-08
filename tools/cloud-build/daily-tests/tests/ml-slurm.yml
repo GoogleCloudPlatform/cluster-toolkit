@@ -20,3 +20,4 @@ workspace: /workspace
 blueprint_yaml: "{{ workspace }}/examples/ml-slurm.yaml"
 packer_group_name: packer
 packer_module_id: custom-image
+wait_for_compute_nodes_to_go_down: true

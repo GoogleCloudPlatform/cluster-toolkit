@@ -5,9 +5,9 @@ This module creates a login node for a Slurm cluster based on the
 terraform modules. The login node is used in conjunction with the
 [Slurm controller](../schedmd-slurm-gcp-v5-controller/README.md).
 
-[slurm-gcp]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.4.2
-[slurm\_login\_instance]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.4.2/terraform/slurm_cluster/modules/slurm_login_instance
-[slurm\_instance\_template]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.4.2/terraform/slurm_cluster/modules/slurm_instance_template
+[slurm-gcp]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.4.7
+[slurm\_login\_instance]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.4.7/terraform/slurm_cluster/modules/slurm_login_instance
+[slurm\_instance\_template]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.4.7/terraform/slurm_cluster/modules/slurm_instance_template
 
 ### Example
 
@@ -52,8 +52,8 @@ The HPC Toolkit team maintains the wrapper around the [slurm-on-gcp] terraform
 modules. For support with the underlying modules, see the instructions in the
 [slurm-gcp README][slurm-gcp-readme].
 
-[slurm-on-gcp]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.4.2
-[slurm-gcp-readme]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.4.2#slurm-on-google-cloud-platform
+[slurm-on-gcp]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/7
+[slurm-gcp-readme]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.4.7#slurm-on-google-cloud-platform
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 ## Requirements
@@ -105,7 +105,7 @@ No modules.
 | <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | Machine type to create. | `string` | `"c2-standard-4"` | no |
 | <a name="input_metadata"></a> [metadata](#input\_metadata) | Metadata, provided as a map. | `map(string)` | `{}` | no |
 | <a name="input_min_cpu_platform"></a> [min\_cpu\_platform](#input\_min\_cpu\_platform) | Specifies a minimum CPU platform. Applicable values are the friendly names of<br>CPU platforms, such as Intel Haswell or Intel Skylake. See the complete list:<br>https://cloud.google.com/compute/docs/instances/specify-min-cpu-platform | `string` | `null` | no |
-| <a name="input_name_prefix"></a> [name\_prefix](#input\_name\_prefix) | Unique name prefix for login nodes | `string` | n/a | yes |
+| <a name="input_name_prefix"></a> [name\_prefix](#input\_name\_prefix) | Unique name prefix for login nodes. Automatically populated by the module id if not set.<br>If setting manually, ensure a unique value across all login groups. | `string` | n/a | yes |
 | <a name="input_num_instances"></a> [num\_instances](#input\_num\_instances) | Number of instances to create. This value is ignored if static\_ips is provided. | `number` | `1` | no |
 | <a name="input_on_host_maintenance"></a> [on\_host\_maintenance](#input\_on\_host\_maintenance) | Instance availability Policy. | `string` | `"MIGRATE"` | no |
 | <a name="input_preemptible"></a> [preemptible](#input\_preemptible) | Allow the instance to be preempted. | `bool` | `false` | no |

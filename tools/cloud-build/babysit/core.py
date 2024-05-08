@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import random
 from typing import Sequence, Dict, Callable, Protocol
 from dataclasses import dataclass
 from google.cloud.devtools import cloudbuild_v1 # pip install google-cloud-build
@@ -116,8 +117,7 @@ class Babysitter:
         if not active:
             return False  # all builds are in terminal state, done
 
-        not_running = [b for b in active if b.status not in (
-            Status.QUEUED, Status.WORKING)]
+        not_running = [b for b in active if b.status not in (Status.QUEUED, Status.WORKING)]
         num_running = len(active) - len(not_running)
 
         if num_running == len(active):
@@ -125,16 +125,14 @@ class Babysitter:
         if num_running >= self.concurrency:
             return True  # waiting for "opening"
 
-        pend = next(
-            (b for b in not_running if b.status == Status.PENDING), None)
-        if pend is not None:  # approve one of pending builds
-            self._approve(pend)
+        pending = [b for b in not_running if b.status == Status.PENDING]
+        if pending:  # approve one of pending builds
+            self._approve(random.choice(pending))
             return True
 
         assert not_running  # sanity check
-        failed = not_running[0]
-        assert failed.status in [
-            Status.FAILURE, Status.INTERNAL_ERROR, Status.TIMEOUT]  # sanity check
+        failed = random.choice(not_running)
+        assert failed.status in [Status.FAILURE, Status.INTERNAL_ERROR, Status.TIMEOUT]  # sanity check
         self._retry(failed)  # retry failed build
         return True
 

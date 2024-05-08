@@ -18,6 +18,7 @@ package cmd
 import (
 	"fmt"
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/modulewriter"
 	"hpc-toolkit/pkg/shell"
 	"os"
@@ -61,6 +62,11 @@ func runDestroyCmd(cmd *cobra.Command, args []string) {
 	for i := len(bp.Groups) - 1; i >= 0; i-- {
 		group := bp.Groups[i]
 		groupDir := filepath.Join(deplRoot, string(group.Name))
+
+		if err := shell.ImportInputs(groupDir, artifactsDir, bp); err != nil {
+			logging.Error("failed to import inputs for group %q: %v", group.Name, err)
+			// still proceed with destroying the group
+		}
 
 		var err error
 		switch group.Kind() {

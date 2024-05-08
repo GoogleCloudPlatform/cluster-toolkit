@@ -8,9 +8,6 @@
   environments.
 * `ansible.cfg`: Ansible config used to set common ansible setting for running
   the test suite.
-* `Dockerfile`: Defines the HPC Toolkit docker image used in testing.
-* `hpc-toolkit-builder.yaml`: Cloud build config for running regular builds of
-  the HPC Toolkit docker image.
 * `hpc-toolkit-pr-validation.yaml`: Cloud build config for the PR validation
   tests. The PR validation run `make tests` and validates against all
   pre-commits on all files.

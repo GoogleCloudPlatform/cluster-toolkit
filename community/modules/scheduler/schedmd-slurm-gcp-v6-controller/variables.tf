@@ -198,9 +198,16 @@ variable "nodeset" {
     metadata             = optional(map(string), {})
     min_cpu_platform     = optional(string)
     network_tier         = optional(string, "STANDARD")
-    on_host_maintenance  = optional(string)
-    preemptible          = optional(bool, false)
-    region               = optional(string)
+    network_storage = optional(list(object({
+      server_ip     = string
+      remote_mount  = string
+      local_mount   = string
+      fs_type       = string
+      mount_options = string
+    })), [])
+    on_host_maintenance = optional(string)
+    preemptible         = optional(bool, false)
+    region              = optional(string)
     service_account = optional(object({
       email  = optional(string)
       scopes = optional(list(string), ["https://www.googleapis.com/auth/cloud-platform"])
@@ -265,7 +272,14 @@ variable "nodeset_tpu" {
     zone         = string
     data_disks   = optional(list(string), [])
     docker_image = optional(string, "")
-    subnetwork   = string
+    network_storage = optional(list(object({
+      server_ip     = string
+      remote_mount  = string
+      local_mount   = string
+      fs_type       = string
+      mount_options = string
+    })), [])
+    subnetwork = string
     service_account = optional(object({
       email  = optional(string)
       scopes = optional(list(string), ["https://www.googleapis.com/auth/cloud-platform"])
@@ -341,7 +355,7 @@ Enables automatic cleanup of compute nodes and resource policies (e.g.
 placement groups) managed by this module, when cluster is destroyed.
 
 *WARNING*: Toggling this off will impact the running workload. 
-Deployed compute nodes will be destroyed.
+Deployed compute nodes and controller will be destroyed.
 EOD
   type        = bool
   default     = true
@@ -397,13 +411,11 @@ variable "disable_default_mounts" { # tflint-ignore: terraform_unused_declaratio
 variable "network_storage" {
   description = "An array of network attached storage mounts to be configured on all instances."
   type = list(object({
-    server_ip             = string,
-    remote_mount          = string,
-    local_mount           = string,
-    fs_type               = string,
-    mount_options         = string,
-    client_install_runner = map(string) # TODO: is it used? should remove it?
-    mount_runner          = map(string)
+    server_ip     = string,
+    remote_mount  = string,
+    local_mount   = string,
+    fs_type       = string,
+    mount_options = string,
   }))
   default = []
 }
@@ -411,13 +423,11 @@ variable "network_storage" {
 variable "login_network_storage" {
   description = "An array of network attached storage mounts to be configured on all login nodes."
   type = list(object({
-    server_ip             = string,
-    remote_mount          = string,
-    local_mount           = string,
-    fs_type               = string,
-    mount_options         = string,
-    client_install_runner = map(string) # TODO: is it used? should remove it?
-    mount_runner          = map(string)
+    server_ip     = string,
+    remote_mount  = string,
+    local_mount   = string,
+    fs_type       = string,
+    mount_options = string,
   }))
   default = []
 }

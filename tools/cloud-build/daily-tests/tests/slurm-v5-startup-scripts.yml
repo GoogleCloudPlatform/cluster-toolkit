@@ -35,3 +35,4 @@ custom_vars:
   mounts:
   - /home
   - /data
+wait_for_compute_nodes_to_go_down: true

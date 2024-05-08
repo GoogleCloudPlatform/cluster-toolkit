@@ -83,10 +83,17 @@ variable "nodeset" {
     maintenance_interval = optional(string)
     metadata             = optional(map(string), {})
     min_cpu_platform     = optional(string)
-    network_tier         = optional(string, "STANDARD")
-    on_host_maintenance  = optional(string)
-    preemptible          = optional(bool, false)
-    region               = optional(string)
+    network_storage = optional(list(object({
+      server_ip     = string
+      remote_mount  = string
+      local_mount   = string
+      fs_type       = string
+      mount_options = string
+    })), [])
+    network_tier        = optional(string, "STANDARD")
+    on_host_maintenance = optional(string)
+    preemptible         = optional(bool, false)
+    region              = optional(string)
     service_account = optional(object({
       email  = optional(string)
       scopes = optional(list(string), ["https://www.googleapis.com/auth/cloud-platform"])
@@ -156,7 +163,14 @@ variable "nodeset_tpu" {
     zone         = string
     data_disks   = optional(list(string), [])
     docker_image = optional(string, "")
-    subnetwork   = string
+    network_storage = optional(list(object({
+      server_ip     = string
+      remote_mount  = string
+      local_mount   = string
+      fs_type       = string
+      mount_options = string
+    })), [])
+    subnetwork = string
     service_account = optional(object({
       email  = optional(string)
       scopes = optional(list(string), ["https://www.googleapis.com/auth/cloud-platform"])
@@ -203,7 +217,7 @@ variable "network_storage" {
     condition     = length(var.network_storage) == 0
     error_message = <<-EOD
       network_storage in partition module is deprecated and should not be set.
-      To add network storage to compute nodes, use network_storage of controller module instead.
+      To add network storage to compute nodes, use network_storage of nodeset module instead.
     EOD
   }
 }

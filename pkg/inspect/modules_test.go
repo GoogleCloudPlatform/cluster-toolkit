@@ -148,12 +148,21 @@ func TestNetworkStorage(t *testing.T) {
 	  })`)
 	lst := modulereader.NormalizeType(fmt.Sprintf("list(%s)", obj))
 
+	// short form (without runners) is used by Slurm6
+	objShort := modulereader.NormalizeType(`object({
+		server_ip             = string
+		remote_mount          = string
+		local_mount           = string
+		fs_type               = string
+		mount_options         = string
+	})`)
+	lstShort := modulereader.NormalizeType(fmt.Sprintf("list(%s)", objShort))
+
 	for _, mod := range notEmpty(query(hasInput("network_storage")), t) {
 		i, _ := mod.Input("network_storage")
 		got := typeexpr.TypeString(i.Type)
-		if got != obj && got != lst {
-			t.Errorf("%s `network_storage` has unexpected type expected:\n%#v\nor\n%#v\ngot:\n%#v",
-				mod.Source, obj, lst, got)
+		if got != obj && got != lst && got != objShort && got != lstShort {
+			t.Errorf("%s `network_storage` has unexpected type expected, got:\n%#v", mod.Source, got)
 		}
 	}
 }

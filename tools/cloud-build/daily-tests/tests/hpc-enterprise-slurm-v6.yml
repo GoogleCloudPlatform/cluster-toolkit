@@ -29,7 +29,7 @@ blueprint_yaml: "{{ workspace }}/examples/hpc-enterprise-slurm-v6.yaml"
 network: "{{ test_name }}-net"
 
 # Note: Pattern matching in gcloud only supports 1 wildcard.
-login_node: "{{ slurm_cluster_name }}-login-*"
+login_node: "{{ slurm_cluster_name }}-slurm-login-*"
 controller_node: "{{ slurm_cluster_name }}-controller"
 post_deploy_tests:
 - test-validation/test-mounts.yml

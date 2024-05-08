@@ -34,29 +34,26 @@ tags:
 
 timeout: 14400s  # 4hr
 steps:
-## Test simple golang build
-- id: build_ghpc
-  waitFor: ["-"]
-  name: "golang:bullseye"
+
+# While using static network names we are gaurding against more than 1 instance running at a time (for multi-group tests)
+- id: check_for_running_build
+  name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
   entrypoint: /bin/bash
   args:
   - -c
   - |
-    cd /workspace
-    make
-- id: fetch_builder
-  waitFor: ["-"]
-  name: >-
-    us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
-  entrypoint: /bin/bash
-  args:
-  - -c
-  - echo "done fetching builder"
-
-# Test hcls-v6
+    set -x -e
+    echo $TRIGGER_BUILD_CONFIG_PATH
+    MATCHING_BUILDS=$(gcloud builds list --ongoing --format 'value(id)' --filter='substitutions.TRIGGER_BUILD_CONFIG_PATH="$TRIGGER_BUILD_CONFIG_PATH"')
+    MATCHING_COUNT=$(echo $$MATCHING_BUILDS | wc -w)
+    if [ "$$MATCHING_COUNT" -gt 1 ]; then
+        echo "Found more than 1 matching running builds"
+        echo "$$MATCHING_BUILDS"
+        exit 1
+    fi
 - id: hcls-v6
-  waitFor: ["fetch_builder", "build_ghpc"]
-  name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/hpc-toolkit-builder
+  waitFor: ["check_for_running_build"]
+  name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
   entrypoint: /bin/bash
   env:
   - "ANSIBLE_HOST_KEY_CHECKING=false"
@@ -65,6 +62,7 @@ steps:
   - -c
   - |
     set -x -e
+    cd /workspace && make
     BUILD_ID_FULL=$BUILD_ID
     BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
 

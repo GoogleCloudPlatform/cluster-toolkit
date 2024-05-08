@@ -38,7 +38,7 @@ locals {
 
 # INSTANCE TEMPLATE
 module "slurm_controller_template" {
-  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=6.4.6&depth=1"
+  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=6.4.7&depth=1"
   count  = local.have_template ? 0 : 1
 
   project_id          = var.project_id
@@ -95,7 +95,7 @@ locals {
 }
 
 module "slurm_controller_instance" {
-  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/_slurm_instance?ref=6.4.6&depth=1"
+  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/_slurm_instance?ref=6.4.7&depth=1"
 
   access_config       = var.enable_controller_public_ips ? [local.access_config] : []
   add_hostname_suffix = false
@@ -112,6 +112,11 @@ module "slurm_controller_instance" {
   metadata            = var.metadata
 
   labels = merge(local.labels, local.files_cs_labels)
+
+  depends_on = [
+    # Ensure that controller is destroyed BEFORE doing cleanup
+    null_resource.cleanup_compute[0],
+  ]
 }
 
 # SECRETS: CLOUDSQL
