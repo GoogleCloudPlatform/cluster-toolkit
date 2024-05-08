@@ -23,4 +23,9 @@ output "private_vpc_connection_peering" {
 output "network_id" {
   description = "The id of the network that the private-service-access has been set up on."
   value       = var.network_id
+
+  precondition {
+    condition     = try(google_service_networking_connection.private_vpc_connection.peering, false)
+    error_message = "No private service access setup."
+  }
 }
