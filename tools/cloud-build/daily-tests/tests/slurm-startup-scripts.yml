@@ -21,7 +21,7 @@ deployment_name: "ss-v6-{{ build }}"
 slurm_cluster_name: "ssv6{{ build[0:6] }}"
 zone: us-west4-c
 workspace: /workspace
-blueprint_yaml: "{{ workspace }}/tools/validate_configs/test_configs/slurm-gcp-v6-startup-scripts.yaml"
+blueprint_yaml: "{{ workspace }}/tools/validate_configs/test_configs/slurm-gcp-startup-scripts.yaml"
 network: "{{ deployment_name }}-net"
 # Note: Pattern matching in gcloud only supports 1 wildcard, centv5*-login-* won't work.
 login_node: "{{ slurm_cluster_name }}-slurm-login-*"

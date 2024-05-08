@@ -14,11 +14,11 @@
 
 ---
 
-blueprint_name: hpc-cluster-slurm-v6
+blueprint_name: hpc-cluster-slurm
 
 vars:
   project_id:  ## Set GCP Project ID Here ##
-  deployment_name: hpc-small-v6
+  deployment_name: hpc-small
   region: us-west4
   zone: us-west4-c
 
