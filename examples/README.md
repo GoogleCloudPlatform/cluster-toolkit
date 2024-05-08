@@ -50,7 +50,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [ml-gke](#ml-gkeyaml--) ![community-badge] ![experimental-badge]
   * [storage-gke](#storage-gkeyaml--) ![community-badge] ![experimental-badge]
   * [htc-slurm.yaml](#htc-slurmyaml--) ![community-badge] ![experimental-badge]
-  * [htc-slurm-v6.yaml](#htc-slurm-v6yaml--) ![community-badge] ![experimental-badge]
+  * [htc-slurm-v5-legacy.yaml](#htc-slurm-v5-legacyyaml--) ![community-badge] ![experimental-badge]
   * [htc-htcondor.yaml](#htc-htcondoryaml--) ![community-badge] ![experimental-badge]
   * [fsi-montecarlo-on-batch.yaml](#fsi-montecarlo-on-batchyaml-) ![community-badge] ![experimental-badge]
   * [tutorial-starccm-slurm.yaml](#tutorial-starccm-slurmyaml--) ![community-badge] ![experimental-badge]
@@ -1440,7 +1440,7 @@ For more information see:
 
 [htc-slurm.yaml]: ../community/examples/htc-slurm.yaml
 
-### [htc-slurm-v6.yaml] ![community-badge] ![experimental-badge]
+### [htc-slurm-v5-legacy.yaml] ![community-badge] ![experimental-badge]
 
 This blueprint provisions a cluster using the Slurm scheduler in a configuration
 tuned for the execution of many short-duration, loosely-coupled (non-MPI) jobs.
@@ -1450,7 +1450,7 @@ For more information see:
 * [Slurm on Google Cloud High Throughput documentation](https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/htc.md)
 * [General Slurm High Throughput documentation](https://slurm.schedmd.com/high_throughput.html)
 
-[htc-slurm-v6.yaml]: ../community/examples/htc-slurm-v6.yaml
+[htc-slurm-v5-legacy.yaml]: ../community/examples/htc-slurm-v5-legacy.yaml
 
 ### [fsi-montecarlo-on-batch.yaml](../community/examples/fsi-montecarlo-on-batch.yaml) ![community-badge] ![experimental-badge]
 
