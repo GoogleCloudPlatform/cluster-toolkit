@@ -18,7 +18,6 @@ locals {
 }
 
 locals {
-
   additional_disks = [
     for ad in var.additional_disks : {
       disk_name    = ad.disk_name
@@ -32,6 +31,13 @@ locals {
   ]
 
   public_access_config = [{ nat_ip = null, network_tier = null }]
+
+  service_account_email = coalesce(var.service_account_email, data.google_compute_default_service_account.default.email)
+
+  service_account = {
+    email  = local.service_account_email
+    scopes = var.service_account_scopes
+  }
 
   # lower, replace `_` with `-`, and remove any non-alphanumeric characters
   name_prefix = replace(
@@ -70,10 +76,7 @@ locals {
     region              = var.region
     zone                = var.zone
 
-    service_account = {
-      email  = var.service_account_email
-      scopes = var.service_account_scopes
-    }
+    service_account = local.service_account
 
     source_image_family  = local.source_image_family             # requires source_image_logic.tf
     source_image_project = local.source_image_project_normalized # requires source_image_logic.tf
@@ -85,4 +88,8 @@ locals {
     subnetwork = var.subnetwork_self_link
     tags       = var.tags
   }
+}
+
+data "google_compute_default_service_account" "default" {
+  project = var.project_id
 }
