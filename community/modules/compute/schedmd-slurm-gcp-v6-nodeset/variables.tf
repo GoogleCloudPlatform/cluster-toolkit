@@ -20,6 +20,11 @@ variable "name" {
   type        = string
 }
 
+variable "project_id" {
+  type        = string
+  description = "Project ID to create resources in."
+}
+
 variable "node_conf" {
   description = "Map of Slurm node line configuration."
   type        = map(any)
