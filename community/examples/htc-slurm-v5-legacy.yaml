@@ -20,11 +20,11 @@
 # https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/htc.md
 # https://slurm.schedmd.com/high_throughput.html
 
-blueprint_name: htc-slurm
+blueprint_name: htc-slurm-v5
 
 vars:
   project_id:  ## Set GCP Project ID Here ##
-  deployment_name: htc-slurm
+  deployment_name: htc-slurm-v5
   region: us-west4
   zone: us-west4-c
   # By default, public IPs are set in the login and controller to allow easier
