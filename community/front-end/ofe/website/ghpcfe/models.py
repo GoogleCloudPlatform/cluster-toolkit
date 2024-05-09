@@ -919,6 +919,13 @@ class ClusterPartition(models.Model):
     enable_hyperthreads = models.BooleanField(
         default=False, help_text="Enable Hyperthreads (SMT)"
     )
+    enable_tier1_networking = models.BooleanField(
+        default=False,
+        help_text=(
+            "Select Tier 1 networking (currently only valid for N2, N2D, C2,"
+            "C2D, C3, C3d, M3 and Z3 VMs that have at least 30 vCPUs.)"
+        ),
+    )
     enable_node_reuse = models.BooleanField(
         default=True,
         help_text=(

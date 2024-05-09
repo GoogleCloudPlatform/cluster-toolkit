@@ -470,6 +470,15 @@ class ClusterUpdateView(LoginRequiredMixin, UpdateView):
                 try:
                     for part in parts:
                         part.vCPU_per_node = machine_info[part.machine_type]["vCPU"] // (1 if part.enable_hyperthreads else 2)
+
+                        cpu_count_str = part.machine_type.split('-')[-1]
+                        if cpu_count_str.isdigit():
+                            cpu_count = int(cpu_count_str)
+                        else:
+                            raise ValidationError(f"Cannot extract vCPU count from machine type {part.machine_type}")
+                        tier_1_supported_prefixes = ["n2-", "n2d-", "c2-", "c2d-", "c3-", "c3d-", "m3-", "z3-"]
+                        part.enable_tier1_networking = any(part.machine_type.startswith(prefix) for prefix in tier_1_supported_prefixes) and cpu_count >= 30
+
                         # Validate GPU choice
                         if part.GPU_type:
                             try:
