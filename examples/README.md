@@ -26,7 +26,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [hpc-slurm6-tpu-maxtext.yaml](#hpc-slurm6-tpu-maxtextyaml--) ![community-badge] ![experimental-badge]
   * [ml-slurm.yaml](#ml-slurmyaml-) ![core-badge]
   * [ml-slurm-v6.yaml](#ml-slurm-v6yaml--) ![core-badge] ![experimental-badge]
-  * [image-builder.yaml](#image-builderyaml-) ![core-badge]
+  * [image-builder-v5-legacy.yaml](#image-builder-v5-legacyyaml--) ![core-badge] ![deprecated-badge]
   * [image-builder-v6.yaml](#image-builderyaml--) ![core-badge] ![experimental-badge]
   * [serverless-batch.yaml](#serverless-batchyaml-) ![core-badge]
   * [serverless-batch-mpi.yaml](#serverless-batch-mpiyaml-) ![core-badge]
@@ -627,7 +627,7 @@ timestamp for uniqueness.
 
 [ml-slurm-v6.yaml]: ../examples/ml-slurm-v6.yaml
 
-### [image-builder.yaml] ![core-badge]
+### [image-builder-v5-legacy.yaml] ![core-badge] ![deprecated-badge]
 
 This blueprint uses the [Packer template module][pkr] to create a custom VM
 image and uses it to provision an HPC cluster using the Slurm scheduler. By
@@ -649,7 +649,7 @@ example takes the following steps:
 Create the deployment folder from the blueprint:
 
 ```text
-./ghpc create examples/image-builder.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
+./ghpc create examples/image-builder-v5-legacy.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
 ./ghpc deploy image-builder-001"
 ```
 
@@ -686,7 +686,7 @@ software using boot-time startup scripts because:
 
 [hpcimage]: https://cloud.google.com/compute/docs/instances/create-hpc-vm
 [pkr]: ../modules/packer/custom-image/README.md
-[image-builder.yaml]: ./image-builder.yaml
+[image-builder-v5-legacy.yaml]: ./image-builder-v5-legacy.yaml
 
 #### Custom Network (deployment group 1)
 
@@ -736,7 +736,7 @@ partition is using the custom image. Each compute node should contain the
   Hello World
   ```
 
-#### Quota Requirements for image-builder.yaml
+#### Quota Requirements for image-builder-v5-legacy.yaml
 
 For this example the following is needed in the selected region:
 
