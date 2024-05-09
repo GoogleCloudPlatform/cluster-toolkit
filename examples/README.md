@@ -13,60 +13,97 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
 -->
 <!-- TOC -->
 
-* [Instructions](#instructions)
-  * [(Optional) Setting up a remote terraform state](#optional-setting-up-a-remote-terraform-state)
-* [Ongoing Migration to Slurm-GCP v6](#ongoing-migration-to-slurm-gcp-v6)
-* [Blueprint Descriptions](#blueprint-descriptions)
-  * [hpc-slurm.yaml](#hpc-slurmyaml-) ![core-badge]
-  * [hpc-slurm-v6.yaml](#hpc-slurm-v6yaml--) ![core-badge] ![experimental-badge]
-  * [hpc-enterprise-slurm.yaml](#hpc-enterprise-slurmyaml-) ![core-badge]
-  * [hpc-enterprise-slurm-v6.yaml](#hpc-enterprise-slurm-v6yaml--) ![core-badge] ![experimental-badge]
-  * [hpc-slurm-static-v6.yaml](#hpc-slurm-static-v6yaml--) ![core-badge] ![experimental-badge]
-  * [hpc-slurm6-tpu.yaml](#hpc-slurm6-tpuyaml--) ![community-badge] ![experimental-badge]
-  * [hpc-slurm6-tpu-maxtext.yaml](#hpc-slurm6-tpu-maxtextyaml--) ![community-badge] ![experimental-badge]
-  * [ml-slurm.yaml](#ml-slurmyaml-) ![core-badge]
-  * [ml-slurm-v6.yaml](#ml-slurm-v6yaml--) ![core-badge] ![experimental-badge]
-  * [image-builder.yaml](#image-builderyaml-) ![core-badge]
-  * [image-builder-v6.yaml](#image-builderyaml--) ![core-badge] ![experimental-badge]
-  * [serverless-batch.yaml](#serverless-batchyaml-) ![core-badge]
-  * [serverless-batch-mpi.yaml](#serverless-batch-mpiyaml-) ![core-badge]
-  * [pfs-lustre.yaml](#pfs-lustreyaml-) ![core-badge]
-  * [cae-slurm.yaml](#cae-slurmyaml-) ![core-badge]
-  * [cae-slurm-v6.yaml](#cae-slurm-v6yaml--) ![core-badge] ![experimental-badge]
-  * [hpc-build-slurm-image.yaml](#hpc-build-slurm-imageyaml--) ![community-badge] ![experimental-badge]
-  * [hpc-slurm-ubuntu2004.yaml](#hpc-slurm-ubuntu2004yaml-) ![community-badge]
-  * [hpc-slurm-ubuntu2004-v6.yaml](#hpc-slurm-ubuntu2004-v6yaml-) ![community-badge] ![experimental-badge]
-  * [pfs-daos.yaml](#pfs-daosyaml-) ![community-badge]
-  * [hpc-slurm-daos.yaml](#hpc-slurm-daosyaml-) ![community-badge]
-  * [hpc-amd-slurm.yaml](#hpc-amd-slurmyaml-) ![community-badge]
-  * [hpc-amd-slurm-v6.yaml](#hpc-amd-slurm-v6yaml--) ![community-badge] ![experimental-badge]
-  * [hpc-slurm-sharedvpc.yaml](#hpc-slurm-sharedvpcyaml--) ![community-badge] ![experimental-badge]
-  * [client-google-cloud-storage.yaml](#client-google-cloud-storageyaml--) ![community-badge] ![experimental-badge]
-  * [hpc-slurm-gromacs.yaml](#hpc-slurm-gromacsyaml--) ![community-badge] ![experimental-badge]
-  * [hpc-slurm-local-ssd.yaml](#hpc-slurm-local-ssdyaml--) ![community-badge] ![experimental-badge]
-  * [hpc-slurm-local-ssd-v6.yaml](#hpc-slurm-local-ssd-v6yaml--) ![community-badge] ![experimental-badge]
-  * [hcls-blueprint-v6.yaml](#hcls-blueprint-v6yaml--) ![core-badge] ![experimental-badge]
-  * [hpc-gke.yaml](#hpc-gkeyaml--) ![community-badge] ![experimental-badge]
-  * [ml-gke](#ml-gkeyaml--) ![community-badge] ![experimental-badge]
-  * [storage-gke](#storage-gkeyaml--) ![community-badge] ![experimental-badge]
-  * [htc-slurm.yaml](#htc-slurmyaml--) ![community-badge] ![experimental-badge]
-  * [htc-slurm-v6.yaml](#htc-slurm-v6yaml--) ![community-badge] ![experimental-badge]
-  * [htc-htcondor.yaml](#htc-htcondoryaml--) ![community-badge] ![experimental-badge]
-  * [fsi-montecarlo-on-batch.yaml](#fsi-montecarlo-on-batchyaml-) ![community-badge] ![experimental-badge]
-  * [tutorial-starccm-slurm.yaml](#tutorial-starccm-slurmyaml--) ![community-badge] ![experimental-badge]
-  * [tutorial-starccm.yaml](#tutorial-starccmyaml--) ![community-badge] ![experimental-badge]
-  * [hpc-slurm-ramble-gromacs-v6.yaml](#hpc-slurm-ramble-gromacs-v6yaml--) ![community-badge] ![experimental-badge]
-  * [hpc-slurm-chromedesktop.yaml](#hpc-slurm-chromedesktopyaml--) ![community-badge] ![experimental-badge]
-  * [flux-cluster](#flux-clusteryaml--) ![community-badge] ![experimental-badge]
-  * [tutorial-fluent.yaml](#tutorial-fluentyaml--) ![community-badge] ![experimental-badge]
-  * [omnia-cluster.yaml](#omnia-clusteryaml---) ![community-badge] ![experimental-badge] ![deprecated-badge]
-* [Blueprint Schema](#blueprint-schema)
-* [Writing an HPC Blueprint](#writing-an-hpc-blueprint)
-  * [Blueprint Boilerplate](#blueprint-boilerplate)
-  * [Top Level Parameters](#top-level-parameters)
-  * [Deployment Variables](#deployment-variables)
-  * [Deployment Groups](#deployment-groups)
-* [Variables and expressions](#variables-and-expressions)
+- [Example Blueprints](#example-blueprints)
+  - [Instructions](#instructions)
+    - [(Optional) Setting up a remote terraform state](#optional-setting-up-a-remote-terraform-state)
+  - [Ongoing Migration to Slurm-GCP v6](#ongoing-migration-to-slurm-gcp-v6)
+  - [Blueprint Descriptions](#blueprint-descriptions)
+    - [hpc-slurm.yaml ](#hpc-slurmyaml-)
+      - [Compute Partition](#compute-partition)
+      - [H3 Partition](#h3-partition)
+      - [Quota Requirements for hpc-slurm.yaml](#quota-requirements-for-hpc-slurmyaml)
+    - [hpc-slurm-v6.yaml  ](#hpc-slurm-v6yaml--)
+      - [Compute Partition](#compute-partition-1)
+      - [H3 Partition](#h3-partition-1)
+      - [Quota Requirements for hpc-slurm-v6.yaml](#quota-requirements-for-hpc-slurm-v6yaml)
+    - [hpc-enterprise-slurm.yaml ](#hpc-enterprise-slurmyaml-)
+      - [Quota Requirements for hpc-enterprise-slurm.yaml](#quota-requirements-for-hpc-enterprise-slurmyaml)
+    - [hpc-enterprise-slurm-v6.yaml  ](#hpc-enterprise-slurm-v6yaml--)
+      - [Quota Requirements for hpc-enterprise-slurm-v6.yaml](#quota-requirements-for-hpc-enterprise-slurm-v6yaml)
+    - [hpc-slurm-static-v6.yaml  ](#hpc-slurm-static-v6yaml--)
+    - [hpc-slurm6-tpu.yaml  ](#hpc-slurm6-tpuyaml--)
+    - [hpc-slurm6-tpu-maxtext.yaml  ](#hpc-slurm6-tpu-maxtextyaml--)
+    - [hpc-slurm6-apptainer.yaml  ](#hpc-slurm6-apptaineryaml--)
+    - [ml-slurm.yaml ](#ml-slurmyaml-)
+    - [ml-slurm-v6.yaml  ](#ml-slurm-v6yaml--)
+    - [image-builder.yaml ](#image-builderyaml-)
+      - [Building and using the custom image](#building-and-using-the-custom-image)
+      - [Why use a custom image?](#why-use-a-custom-image)
+      - [Custom Network (deployment group 1)](#custom-network-deployment-group-1)
+      - [Toolkit Runners (deployment group 1)](#toolkit-runners-deployment-group-1)
+      - [Packer Template (deployment group 2)](#packer-template-deployment-group-2)
+      - [Slurm Cluster Based on Custom Image (deployment group 3)](#slurm-cluster-based-on-custom-image-deployment-group-3)
+      - [Quota Requirements for image-builder.yaml](#quota-requirements-for-image-builderyaml)
+    - [image-builder-v6.yaml  ](#image-builder-v6yaml--)
+      - [Building and using the custom image](#building-and-using-the-custom-image-1)
+      - [Why use a custom image?](#why-use-a-custom-image-1)
+      - [Custom Network (deployment group 1)](#custom-network-deployment-group-1-1)
+      - [Toolkit Runners (deployment group 1)](#toolkit-runners-deployment-group-1-1)
+      - [Packer Template (deployment group 2)](#packer-template-deployment-group-2-1)
+      - [Slurm Cluster Based on Custom Image (deployment group 3)](#slurm-cluster-based-on-custom-image-deployment-group-3-1)
+      - [Quota Requirements for image-builder-v6.yaml](#quota-requirements-for-image-builder-v6yaml)
+    - [serverless-batch.yaml ](#serverless-batchyaml-)
+    - [serverless-batch-mpi.yaml ](#serverless-batch-mpiyaml-)
+    - [pfs-lustre.yaml ](#pfs-lustreyaml-)
+      - [Quota Requirements for pfs-lustre.yaml](#quota-requirements-for-pfs-lustreyaml)
+    - [cae-slurm.yaml ](#cae-slurmyaml-)
+      - [Quota Requirements for cae-slurm.yaml](#quota-requirements-for-cae-slurmyaml)
+    - [cae-slurm-v6.yaml  ](#cae-slurm-v6yaml--)
+      - [Quota Requirements for cae-slurm-v6.yaml](#quota-requirements-for-cae-slurm-v6yaml)
+    - [hpc-build-slurm-image.yaml  ](#hpc-build-slurm-imageyaml--)
+    - [hpc-slurm-ubuntu2004.yaml ](#hpc-slurm-ubuntu2004yaml-)
+      - [Quota Requirements for hpc-slurm-ubuntu2004.yaml](#quota-requirements-for-hpc-slurm-ubuntu2004yaml)
+    - [hpc-slurm-ubuntu2004-v6.yaml  ](#hpc-slurm-ubuntu2004-v6yaml--)
+      - [Quota Requirements for hpc-slurm-ubuntu2004-v6.yaml](#quota-requirements-for-hpc-slurm-ubuntu2004-v6yaml)
+    - [pfs-daos.yaml ](#pfs-daosyaml-)
+    - [hpc-slurm-daos.yaml ](#hpc-slurm-daosyaml-)
+    - [hpc-amd-slurm.yaml ](#hpc-amd-slurmyaml-)
+    - [hpc-amd-slurm-v6.yaml  ](#hpc-amd-slurm-v6yaml--)
+    - [client-google-cloud-storage.yaml  ](#client-google-cloud-storageyaml--)
+    - [hpc-slurm-gromacs.yaml  ](#hpc-slurm-gromacsyaml--)
+    - [hpc-slurm-ramble-gromacs-v6.yaml  ](#hpc-slurm-ramble-gromacs-v6yaml--)
+    - [omnia-cluster.yaml   ](#omnia-clusteryaml---)
+    - [hpc-slurm-local-ssd.yaml  ](#hpc-slurm-local-ssdyaml--)
+    - [hpc-slurm-local-ssd-v6.yaml  ](#hpc-slurm-local-ssd-v6yaml--)
+    - [hcls-blueprint-v6.yaml:  ](#hcls-blueprint-v6yaml--)
+    - [hpc-gke.yaml  ](#hpc-gkeyaml--)
+    - [ml-gke.yaml  ](#ml-gkeyaml--)
+    - [storage-gke.yaml  ](#storage-gkeyaml--)
+    - [htc-htcondor.yaml  ](#htc-htcondoryaml--)
+    - [htc-slurm.yaml  ](#htc-slurmyaml--)
+    - [htc-slurm-v6.yaml  ](#htc-slurm-v6yaml--)
+    - [fsi-montecarlo-on-batch.yaml  ](#fsi-montecarlo-on-batchyaml--)
+  - [Monte Carlo Simulations for Value at Risk](#monte-carlo-simulations-for-value-at-risk)
+    - [tutorial-starccm-slurm.yaml  ](#tutorial-starccm-slurmyaml--)
+    - [tutorial-starccm.yaml  ](#tutorial-starccmyaml--)
+    - [tutorial-fluent.yaml  ](#tutorial-fluentyaml--)
+    - [hpc-slurm-chromedesktop.yaml  ](#hpc-slurm-chromedesktopyaml--)
+    - [flux-cluster.yaml  ](#flux-clusteryaml--)
+    - [hpc-slurm-sharedvpc.yaml  ](#hpc-slurm-sharedvpcyaml--)
+  - [Blueprint Schema](#blueprint-schema)
+  - [Writing an HPC Blueprint](#writing-an-hpc-blueprint)
+    - [Blueprint Boilerplate](#blueprint-boilerplate)
+    - [Top Level Parameters](#top-level-parameters)
+    - [Deployment Variables](#deployment-variables)
+      - [Deployment Variable "labels"](#deployment-variable-labels)
+    - [Deployment Groups](#deployment-groups)
+      - [Group](#group)
+      - [Modules](#modules)
+  - [Variables, expressions and functions](#variables-expressions-and-functions)
+    - [Blueprint expressions](#blueprint-expressions)
+      - [Escape expressions](#escape-expressions)
+    - [Functions](#functions)
+      - [`ghpc_stage`](#ghpc_stage)
 
 ## Instructions
 
@@ -528,6 +565,12 @@ Follow [hpc-slurm-tpu-maxtext].
 [maxtext]: https://github.com/google/maxtext
 [hpc-slurm6-tpu-maxtext.yaml]: ../community/examples/hpc-slurm6-tpu-maxtext.yaml
 [hpc-slurm-tpu-maxtext]: ../docs/hpc-slurm6-tpu-maxtext.md
+
+### [hpc-slurm6-apptainer.yaml] ![community-badge] ![experimental-badge]
+
+This blueprint creates a custom [Apptainer](https:https://apptainer.org) enabled image and builds an auto-scaling Slurm cluster using that image. You can deploy containerized workloads on that cluster as described [here](https://github.com/GoogleCloudPlatform/scientific-computing-examples/tree/main/apptainer).
+
+[hpc-slurm6-apptainer.yaml]: ../community/examples/hpc-slurm6-apptainer.yaml
 
 ### [ml-slurm.yaml] ![core-badge]
 
