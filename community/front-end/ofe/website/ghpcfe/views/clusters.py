@@ -471,13 +471,22 @@ class ClusterUpdateView(LoginRequiredMixin, UpdateView):
                     for part in parts:
                         part.vCPU_per_node = machine_info[part.machine_type]["vCPU"] // (1 if part.enable_hyperthreads else 2)
 
+                        tier_1_supported_prefixes = ["n2-", "n2d-", "c2-", "c2d-", "c3-", "c3d-", "m3-", "z3-"]
                         cpu_count_str = part.machine_type.split('-')[-1]
+                        lssd_cpu_count_str = part.machine_type.split('-')[-2]
                         if cpu_count_str.isdigit():
                             cpu_count = int(cpu_count_str)
+                            logger.info(f"CPU count: {cpu_count}, VM type: {part.machine_type}.")
+                        elif lssd_cpu_count_str.isdigit():
+                            cpu_count = int(lssd_cpu_count_str)
+                            logger.info(f"CPU count: {cpu_count}, VM type: {part.machine_type}.")
                         else:
                             raise ValidationError(f"Cannot extract vCPU count from machine type {part.machine_type}")
-                        tier_1_supported_prefixes = ["n2-", "n2d-", "c2-", "c2d-", "c3-", "c3d-", "m3-", "z3-"]
-                        part.enable_tier1_networking = any(part.machine_type.startswith(prefix) for prefix in tier_1_supported_prefixes) and cpu_count >= 30
+                        is_tier_1_compatible = any(part.machine_type.startswith(prefix) for prefix in tier_1_supported_prefixes)
+                        if cpu_count >= 30 and is_tier_1_compatible:
+                            part.enable_tier1_networking = True
+                        else:
+                            raise ValidationError(f"VM type {part.machine_type} is not compatible with Tier 1 networking.")
 
                         # Validate GPU choice
                         if part.GPU_type:
