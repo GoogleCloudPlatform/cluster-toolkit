@@ -81,6 +81,5 @@ No modules.
 
 | Name | Description |
 |------|-------------|
-| <a name="output_network_id"></a> [network\_id](#output\_network\_id) | The id of the network that the private-service-access has been set up on. |
 | <a name="output_private_vpc_connection_peering"></a> [private\_vpc\_connection\_peering](#output\_private\_vpc\_connection\_peering) | The name of the VPC Network peering connection that was created by the service provider. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

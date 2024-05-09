@@ -47,6 +47,7 @@ locals {
   network_name     = local.split_network_id[4]
   network_project  = local.split_network_id[1]
   shared_vpc       = local.network_project != var.project_id
+  connect_mode     = var.private_vpc_connection_peering == null ? var.connect_mode : "PRIVATE_SERVICE_ACCESS"
 }
 
 resource "google_filestore_instance" "filestore_instance" {
@@ -65,7 +66,7 @@ resource "google_filestore_instance" "filestore_instance" {
 
   networks {
     network           = local.shared_vpc ? var.network_id : local.network_name
-    connect_mode      = var.connect_mode
+    connect_mode      = local.connect_mode
     modes             = ["MODE_IPV4"]
     reserved_ip_range = var.reserved_ip_range
   }
@@ -78,5 +79,4 @@ resource "google_filestore_instance" "filestore_instance" {
       delete = "1h"
     }
   }
-
 }
