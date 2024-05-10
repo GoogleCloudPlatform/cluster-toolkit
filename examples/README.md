@@ -38,7 +38,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [hpc-slurm-ubuntu2004-v6.yaml](#hpc-slurm-ubuntu2004-v6yaml-) ![community-badge] ![experimental-badge]
   * [pfs-daos.yaml](#pfs-daosyaml-) ![community-badge]
   * [hpc-slurm-daos.yaml](#hpc-slurm-daosyaml-) ![community-badge]
-  * [hpc-amd-slurm.yaml](#hpc-amd-slurmyaml-) ![community-badge]
+  * [hpc-amd-slurm-v5-legacy.yaml](#hpc-amd-slurm-v5-legacyyaml--) ![community-badge] ![deprecated-badge]
   * [hpc-amd-slurm-v6.yaml](#hpc-amd-slurm-v6yaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-sharedvpc.yaml](#hpc-slurm-sharedvpcyaml--) ![community-badge] ![experimental-badge]
   * [client-google-cloud-storage.yaml](#client-google-cloud-storageyaml--) ![community-badge] ![experimental-badge]
@@ -1147,7 +1147,7 @@ examples][intel-examples-readme].
 
 [hpc-slurm-daos.yaml]: ../community/examples/intel/hpc-slurm-daos.yaml
 
-### [hpc-amd-slurm.yaml] ![community-badge]
+### [hpc-amd-slurm-v5-legacy.yaml] ![community-badge] ![deprecated-badge]
 
 This example provisions a Slurm cluster using AMD VM machine types. It
 automates the initial setup of Spack, including a script that can be used to
@@ -1155,7 +1155,7 @@ install the AMD Optimizing C/C++ Compiler ([AOCC]) and compile OpenMPI with
 AOCC. It is more extensively discussed in a dedicated [README for AMD
 examples][amd-examples-readme].
 
-[hpc-amd-slurm.yaml]: ../community/examples/AMD/hpc-amd-slurm.yaml
+[hpc-amd-slurm-v5-legacy.yaml]: ../community/examples/AMD/hpc-amd-slurm-v5-legacy.yaml
 [AOCC]: https://developer.amd.com/amd-aocc/
 [amd-examples-readme]: ../community/examples/AMD/README.md
 
