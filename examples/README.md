@@ -34,7 +34,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [cae-slurm-v5-legacy.yaml](#cae-slurm-v5-legacyyaml--) ![core-badge] ![deprecated-badge]
   * [cae-slurm-v6.yaml](#cae-slurm-v6yaml--) ![core-badge] ![experimental-badge]
   * [hpc-build-slurm-image.yaml](#hpc-build-slurm-imageyaml--) ![community-badge] ![experimental-badge]
-  * [hpc-slurm-ubuntu2004.yaml](#hpc-slurm-ubuntu2004yaml-) ![community-badge]
+  * [hpc-slurm-ubuntu2004-v5-legacy.yaml](#hpc-slurm-ubuntu2004-v5-legacyyaml--) ![community-badge] ![deprecated-badge]
   * [hpc-slurm-ubuntu2004-v6.yaml](#hpc-slurm-ubuntu2004-v6yaml-) ![community-badge] ![experimental-badge]
   * [pfs-daos.yaml](#pfs-daosyaml-) ![community-badge]
   * [hpc-slurm-daos.yaml](#hpc-slurm-daosyaml-) ![community-badge]
@@ -1060,7 +1060,7 @@ The blueprint contains 3 groups:
 
 [hpc-build-slurm-image.yaml]: ../community/examples/hpc-build-slurm-image.yaml
 
-### [hpc-slurm-ubuntu2004.yaml] ![community-badge]
+### [hpc-slurm-ubuntu2004-v5-legacy.yaml] ![community-badge] ![deprecated-badge]
 
 > **Warning**: The variables `enable_reconfigure`,
 > `enable_cleanup_compute`, and `enable_cleanup_subscriptions`, if set to
@@ -1082,9 +1082,9 @@ partition runs on compute optimized nodes of type `cs-standard-60`. The
 `compute` partition may require additional quota before using.
 
 [Other operating systems]: https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#supported-operating-systems
-[hpc-slurm-ubuntu2004.yaml]: ../community/examples/hpc-slurm-ubuntu2004.yaml
+[hpc-slurm-ubuntu2004-v5-legacy.yaml]: ../community/examples/hpc-slurm-ubuntu2004-v5-legacy.yaml
 
-#### Quota Requirements for hpc-slurm-ubuntu2004.yaml
+#### Quota Requirements for hpc-slurm-ubuntu2004-v5-legacy.yaml
 
 For this example the following is needed in the selected region:
 
