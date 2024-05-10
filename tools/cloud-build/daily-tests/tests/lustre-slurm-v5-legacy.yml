@@ -18,7 +18,7 @@ deployment_name: "lustr-{{ build }}"
 region: us-central1
 zone: us-central1-c
 workspace: /workspace
-blueprint_yaml: "{{ workspace }}/tools/cloud-build/daily-tests/blueprints/lustre-slurm.yaml"
+blueprint_yaml: "{{ workspace }}/tools/cloud-build/daily-tests/blueprints/lustre-slurm-v5-legacy.yaml"
 network: "default"
 slurm_cluster_name: "lustr{{ build[0:5] }}"
 cli_deployment_vars:
