@@ -45,4 +45,4 @@ steps:
 
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/multigroup-integration-test.yml \
       --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
-      --extra-vars="@tools/cloud-build/daily-tests/tests/ml-slurm.yml"
+      --extra-vars="@tools/cloud-build/daily-tests/tests/ml-slurm-v5-legacy.yml"

@@ -24,7 +24,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [hpc-slurm-static-v6.yaml](#hpc-slurm-static-v6yaml--) ![core-badge] ![experimental-badge]
   * [hpc-slurm6-tpu.yaml](#hpc-slurm6-tpuyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm6-tpu-maxtext.yaml](#hpc-slurm6-tpu-maxtextyaml--) ![community-badge] ![experimental-badge]
-  * [ml-slurm.yaml](#ml-slurmyaml-) ![core-badge]
+  * [ml-slurm-v5-legacy.yaml](#ml-slurm-v5-legacyyaml--) ![core-badge] ![deprecated-badge]
   * [ml-slurm-v6.yaml](#ml-slurm-v6yaml--) ![core-badge] ![experimental-badge]
   * [image-builder-v5-legacy.yaml](#image-builder-v5-legacyyaml--) ![core-badge] ![deprecated-badge]
   * [image-builder-v6.yaml](#image-builderyaml--) ![core-badge] ![experimental-badge]
@@ -529,7 +529,7 @@ Follow [hpc-slurm-tpu-maxtext].
 [hpc-slurm6-tpu-maxtext.yaml]: ../community/examples/hpc-slurm6-tpu-maxtext.yaml
 [hpc-slurm-tpu-maxtext]: ../docs/hpc-slurm6-tpu-maxtext.md
 
-### [ml-slurm.yaml] ![core-badge]
+### [ml-slurm-v5-legacy.yaml] ![core-badge] ![deprecated-badge]
 
 This blueprint provisions an HPC cluster running the Slurm scheduler with the
 machine learning frameworks PyTorch and TensorFlow pre-installed on every
@@ -544,7 +544,7 @@ VM. The cluster has 2 partitions:
 To provision the cluster, please run:
 
 ```text
-./ghpc create examples/ml-slurm.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
+./ghpc create examples/ml-slurm-v5-legacy.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
 ./ghpc deploy ml-example
 ```
 
@@ -576,7 +576,7 @@ Finally, browse to the [Cloud Console][console-images] to delete your custom
 image. It will be named beginning with `ml-slurm` followed by a date and
 timestamp for uniqueness.
 
-[ml-slurm.yaml]: ../examples/ml-slurm.yaml
+[ml-slurm-v5-legacy.yaml]: ../examples/ml-slurm-v5-legacy.yaml
 
 ### [ml-slurm-v6.yaml] ![core-badge] ![experimental-badge]
 
