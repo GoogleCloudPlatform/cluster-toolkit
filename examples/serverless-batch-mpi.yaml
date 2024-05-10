@@ -151,8 +151,7 @@ deployment_groups:
     use: [network1, sharefs]
     settings:
       runnables:
-      - id: run WRF
-        script: . /share/wrfv3/submit_wrfv3.sh;
+      - script: . /share/wrfv3/submit_wrfv3.sh;
       machine_type: c2-standard-60
       task_count: 2
       mpi_mode: true

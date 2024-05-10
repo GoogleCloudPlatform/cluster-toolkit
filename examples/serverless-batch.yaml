@@ -40,8 +40,7 @@ deployment_groups:
     use: [network1, appfs]
     settings:
       runnables:
-      - id: step 1
-        script: |
+      - script: |
           mkdir -p /sw/$BATCH_JOB_UID
           echo "Hello World from task $BATCH_TASK_INDEX" > /sw/$BATCH_JOB_UID/$BATCH_TASK_INDEX.txt
       machine_type: n2-standard-4
