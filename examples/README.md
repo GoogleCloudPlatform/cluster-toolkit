@@ -56,7 +56,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [tutorial-starccm-slurm.yaml](#tutorial-starccm-slurmyaml--) ![community-badge] ![experimental-badge]
   * [tutorial-starccm.yaml](#tutorial-starccmyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-ramble-gromacs-v6.yaml](#hpc-slurm-ramble-gromacs-v6yaml--) ![community-badge] ![experimental-badge]
-  * [hpc-slurm-chromedesktop.yaml](#hpc-slurm-chromedesktopyaml--) ![community-badge] ![experimental-badge]
+  * [hpc-slurm-chromedesktop-v5-legacy.yaml](#hpc-slurm-chromedesktop-v5-legacyyaml--) ![community-badge] ![experimental-badge]
   * [flux-cluster](#flux-clusteryaml--) ![community-badge] ![experimental-badge]
   * [tutorial-fluent.yaml](#tutorial-fluentyaml--) ![community-badge] ![experimental-badge]
   * [omnia-cluster.yaml](#omnia-clusteryaml---) ![community-badge] ![experimental-badge] ![deprecated-badge]
@@ -1493,7 +1493,7 @@ tutorial.
 
 [tutorial-fluent.yaml]: ../community/examples/tutorial-fluent.yaml
 
-### [hpc-slurm-chromedesktop.yaml] ![community-badge] ![experimental-badge]
+### [hpc-slurm-chromedesktop-v5-legacy.yaml] ![community-badge] ![experimental-badge]
 
 This example shows how to use the `chrome-remote-desktop` module with a Slurm
 partition to be able to `salloc` a GPU accelerated remote desktop.
@@ -1506,7 +1506,7 @@ After deploying the blueprint perform the following actions:
    follow the [instructions to set up the remote desktop][crd-instructions].
 
 [crd-instructions]: ../community/modules/remote-desktop/chrome-remote-desktop/README.md#setting-up-the-remote-desktop
-[hpc-slurm-chromedesktop.yaml]: ../community/examples/hpc-slurm-chromedesktop.yaml
+[hpc-slurm-chromedesktop-v5-legacy.yaml]: ../community/examples/hpc-slurm-chromedesktop-v5-legacy.yaml
 ### [flux-cluster.yaml] ![community-badge] ![experimental-badge]
 
 The [flux-cluster.yaml] blueprint describes a flux-framework cluster where flux
