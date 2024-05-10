@@ -219,7 +219,8 @@
       {% endif %}
       <tr class="part_formset_row">
         {% for field in form.visible_fields %}
-        <td style="min-width: 100px;">
+        <td style="min-width: 100px;"
+            data-partition-id="{% if object.status == 'n' %}new-cluster{% else %}{{ form.instance.pk }}{% endif %}">
           {% if forloop.first %}
           {% for hidden in form.hidden_fields %}
           {{ hidden }}
@@ -235,7 +236,7 @@
     </table>
     {{ cluster_partitions_formset.management_form }}
   </div>
-  <hr>
+  <hr>  
   <p style="text-decoration: underline; font-size: large;">Additional features</p>
   <div class="form-group">
     {{ form.use_cloudsql.errors }}
@@ -294,6 +295,21 @@
 {% endblock %}
 
 {% block tailscript %}
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+      const form = document.getElementById('clusterForm'); // Make sure this is the correct ID for your form
+      form.addEventListener('submit', function(event) {
+          const formData = new FormData(this);
+          const formDataArray = Array.from(formData.entries()).map(entry => {
+              return { [entry[0]]: entry[1] };
+          });
+          console.log('Form Data:', formDataArray);
+          // Uncomment the next line if you want to prevent the form from actually submitting for debugging
+          // event.preventDefault();
+      });
+  });
+</script>
+
 <script src="{% static 'js/jquery.formset.js' %}"></script>
 <script>
   function updateMachineAvailability() {
@@ -536,7 +552,29 @@
   var subnetSelect = document.getElementById('id_subnet');
   subnetSelect.addEventListener('change', populateRegionsAndZones);
 
+  function deletePartition(partitionId, row) {
+    $.ajax({
+      url: '/clusters/partition-delete/' + partitionId,
+      type: 'POST',
+      data: {
+        'csrfmiddlewaretoken': '{{ csrf_token }}',
+        'partition_id': partitionId
+      },
+      success: function(result) {
+        if (result.success) {
+          //alert('Partition deleted successfully.');
+          //$(parentRow).remove(); // Remove the entire row
+        } else {
+          alert('Error: ' + result.error);
+        }
+      },
+      error: function(xhr, status, error) {
+        alert('Error: ' + error.message);
+      }
+    });
+  }
 
+  
   $('.mp_formset_row').formset({
     addText: 'add mount point',
     /*addCssClass: 'add-row btn btn-info',*/
@@ -548,12 +586,20 @@
   $('.part_formset_row').formset({
     addText: 'add partition',
     deleteText: 'remove',
+    deleteCssClass: 'btn btn-danger delete-partition',
     prefix: 'partitions',
     formCssClass: 'dynamic-part',
-    added: function () {
+    added: function(row) {
       updateMachineAvailability();
       updateDiskAvailability();
     }, // Called each time a new form is added
+    removed: function(row) {
+      var partitionId = $(row).children('td').eq(0).data('partition-id');
+      console.log("partitionId: ", partitionId);
+      if (partitionId !== 'new-cluster') {
+        deletePartition(partitionId, $(row));
+      }
+    }
   });
 </script>
 

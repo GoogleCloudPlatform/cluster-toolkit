@@ -1,0 +1,9 @@
+- source: modules/file-system/pre-existing-network-storage
+  kind: terraform
+  id: {{ storage_id }}
+  settings:
+    server_ip: {{ server_ip | safe }}
+    remote_mount: {{ remote_mount }}
+    local_mount: {{ local_mount }}
+    mount_options: {{ mount_options }}
+    fs_type: {{ fs_type }}
