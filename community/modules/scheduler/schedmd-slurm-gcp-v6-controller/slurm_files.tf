@@ -24,7 +24,7 @@ locals {
 
 module "bucket" {
   source  = "terraform-google-modules/cloud-storage/google"
-  version = "~> 3.0"
+  version = "~> 5.0"
 
   count = var.create_bucket ? 1 : 0
 
@@ -88,7 +88,7 @@ locals {
 }
 
 module "slurm_files" {
-  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_files?ref=6.4.7&depth=1"
+  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_files?ref=f1fbe7e"
 
   project_id         = var.project_id
   slurm_cluster_name = local.slurm_cluster_name

@@ -103,7 +103,7 @@ limitations under the License.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_pbspro_bucket"></a> [pbspro\_bucket](#module\_pbspro\_bucket) | terraform-google-modules/cloud-storage/google | ~> 3.4 |
+| <a name="module_pbspro_bucket"></a> [pbspro\_bucket](#module\_pbspro\_bucket) | terraform-google-modules/cloud-storage/google | ~> 5.0 |
 
 ## Resources
 
