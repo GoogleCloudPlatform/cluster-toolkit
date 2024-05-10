@@ -19,7 +19,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
 * [Blueprint Descriptions](#blueprint-descriptions)
   * [hpc-slurm.yaml](#hpc-slurmyaml-) ![core-badge]
   * [hpc-slurm-v6.yaml](#hpc-slurm-v6yaml--) ![core-badge] ![experimental-badge]
-  * [hpc-enterprise-slurm.yaml](#hpc-enterprise-slurmyaml-) ![core-badge]
+  * [hpc-enterprise-slurm-v5-legacy.yaml](#hpc-enterprise-slurm-v5-legacyyaml--) ![core-badge] ![deprecated-badge]
   * [hpc-enterprise-slurm-v6.yaml](#hpc-enterprise-slurm-v6yaml--) ![core-badge] ![experimental-badge]
   * [hpc-slurm-static-v6.yaml](#hpc-slurm-static-v6yaml--) ![core-badge] ![experimental-badge]
   * [hpc-slurm6-tpu.yaml](#hpc-slurm6-tpuyaml--) ![community-badge] ![experimental-badge]
@@ -303,7 +303,7 @@ For this example the following is needed in the selected region:
 * Compute Engine API: Resource policies: **one for each job in parallel** -
   _only needed for the `compute` partition_
 
-### [hpc-enterprise-slurm.yaml] ![core-badge]
+### [hpc-enterprise-slurm-v5-legacy.yaml] ![core-badge] ![deprecated-badge]
 
 This advanced blueprint creates a cluster with Slurm with several performance
 tunings enabled, along with tiered file systems for higher performance. Some of
@@ -364,7 +364,7 @@ File systems:
 > described in the pricing section of the
 > [DDN EXAScaler Cloud Marketplace Solution](https://console.developers.google.com/marketplace/product/ddnstorage/).
 
-#### Quota Requirements for hpc-enterprise-slurm.yaml
+#### Quota Requirements for hpc-enterprise-slurm-v5-legacy.yaml
 
 For this example the following is needed in the selected region:
 
@@ -391,7 +391,7 @@ to 256
 * Compute Engine API: Resource policies: **one for each job in parallel** -
   _not needed for `n2` partition_
 
-[hpc-enterprise-slurm.yaml]: ./hpc-enterprise-slurm.yaml
+[hpc-enterprise-slurm-v5-legacy.yaml]: ./hpc-enterprise-slurm-v5-legacy.yaml
 
 ### [hpc-enterprise-slurm-v6.yaml] ![core-badge] ![experimental-badge]
 

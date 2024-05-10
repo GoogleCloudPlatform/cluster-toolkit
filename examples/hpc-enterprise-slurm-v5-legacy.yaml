@@ -14,7 +14,7 @@
 
 ---
 
-blueprint_name: hpc-enterprise-slurm
+blueprint_name: hpc-enterprise-slurm-v5
 
 vars:
   project_id:  ## Set GCP Project ID Here ##
