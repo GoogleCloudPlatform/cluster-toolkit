@@ -84,6 +84,12 @@
     changed_when: lock_out.rc == 0
     failed_when: false
 
+  - name: Add hostname to lock_dir
+    ansible.builtin.file:
+      path:  "{{ lock_dir }}/{{ ansible_hostname }}"
+      state: touch
+    when: lock_out.rc == 0
+
   - name: Clone branch or tag into installation directory
     ansible.builtin.command: git clone --branch {{ git_ref }} {{ git_url }} {{ install_dir }}
     failed_when: false
@@ -127,9 +133,24 @@
     when: lock_out.rc == 0
 
   - name: Wait for lock
-    ansible.builtin.wait_for:
-      path: "{{ lock_dir }}/done"
-      state: present
-      timeout: 600
-      sleep: 10
-    when: lock_out.rc != 0
+    block: 
+    - name: Wait for lock
+      ansible.builtin.wait_for:
+        path: "{{ lock_dir }}/done"
+        state: present
+        timeout: 600
+        sleep: 10
+      when: lock_out.rc != 0
+
+    rescue:
+    - name: Timed out on lock, get install directory contents
+      ansible.builtin.command: "ls -ltra {{ lock_dir }}"
+      register: lock_dir_contents
+
+    - name: Print install directory contents with host that failed to install spack
+      ansible.builtin.debug:
+        msg: "{{ lock_dir_contents.stdout }}"
+      
+    - name: Failed to get lock
+      ansible.builtin.fail:
+        msg: "Failed to get lock, exiting"
