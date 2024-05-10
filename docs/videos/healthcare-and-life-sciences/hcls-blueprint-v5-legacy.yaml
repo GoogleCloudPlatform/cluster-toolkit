@@ -14,7 +14,7 @@
 
 ---
 
-blueprint_name: hcls-cluster
+blueprint_name: hcls-cluster-v5
 
 vars:
   project_id:  ## Set GCP Project ID Here ##

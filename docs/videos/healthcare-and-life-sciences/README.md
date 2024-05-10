@@ -1,11 +1,10 @@
 # Healthcare and Life Science Blueprint
 
 > [!NOTE]
-> This document uses SlurmGCP v5 version of hcls blueprint. If you want to
-> use SlurmGCP v6 version, please refer to this [blueprint](../examples/hcls-blueprint.yaml).
+> This document uses SlurmGCP v6 version of hcls blueprint. If you want to
+> use SlurmGCP v5 version, please refer to this [blueprint](./hcls-blueprint-v5-legacy.yaml).
 
-The Healthcare and Life Science (HCLS) [blueprint](./hcls-blueprint.yaml) in
-this folder captures an advanced architecture that can be used to run GROMACS
+This folder captures an advanced architecture that can be used to run GROMACS
 with GPUs or CPUs on Google Cloud.
 
 ## Getting Started
