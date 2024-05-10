@@ -14,7 +14,7 @@
 
 ---
 
-blueprint_name: node-group-test
+blueprint_name: node-group-test-v5
 
 vars:
   project_id:  ## Set GCP Project ID Here ##
