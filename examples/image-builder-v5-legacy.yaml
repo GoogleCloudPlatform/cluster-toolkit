@@ -18,7 +18,7 @@
 # available at the following link:
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/examples#image-builderyaml-
 
-blueprint_name: image-builder-v5
+blueprint_name: image-builder
 
 vars:
   project_id:  ## Set GCP Project ID Here ##

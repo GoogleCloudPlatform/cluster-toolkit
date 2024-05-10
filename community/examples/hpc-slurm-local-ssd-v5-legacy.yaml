@@ -14,11 +14,11 @@
 
 ---
 
-blueprint_name: hpc-slurm-local-ssd-v5
+blueprint_name: hpc-slurm-local-ssd
 
 vars:
   project_id:  ## Set GCP Project ID Here ##
-  deployment_name: hpc-localssd-v5
+  deployment_name: hpc-localssd
   region: us-central1
   zone: us-central1-a
 

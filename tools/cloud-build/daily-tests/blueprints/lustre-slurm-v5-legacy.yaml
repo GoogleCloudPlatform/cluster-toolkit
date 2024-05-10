@@ -14,11 +14,11 @@
 
 ---
 
-blueprint_name: test-slurm-lustre-v5
+blueprint_name: test-slurm-lustre
 
 vars:
   project_id:  ## Set GCP Project ID Here ##
-  deployment_name: test-slurm-lustre-v5
+  deployment_name: test-slurm-lustre
   region: us-central1
   zone: us-central1-a
   machine_type: n2-standard-2

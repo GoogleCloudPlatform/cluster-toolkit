@@ -26,10 +26,10 @@
 #   * Google's Chrome Remote Desktop
 #   * SLURM workload scheduler
 #
-blueprint_name: cae-slurm-v5
+blueprint_name: cae-slurm
 vars:
   project_id: ## Set GCP Project ID Here ##
-  deployment_name: cae-slurm-v5
+  deployment_name: cae-slurm
   # check here for other regions with H3 deployments: https://cloud.google.com/compute/docs/regions-zones
   # For example
   # region: europe-west4
