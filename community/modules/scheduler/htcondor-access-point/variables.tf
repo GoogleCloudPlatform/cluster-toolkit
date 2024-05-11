@@ -35,10 +35,15 @@ variable "region" {
 }
 
 variable "zones" {
-  description = "Zone(s) in which access point may be created. If not supplied, will default to all zones in var.region."
+  description = "Zone(s) in which access point may be created. If not supplied, defaults to 2 randomly-selected zones in var.region."
   type        = list(string)
   default     = []
   nullable    = false
+
+  validation {
+    condition     = length(var.zones) <= 2
+    error_message = "Set var.zones to the empty list or up to 2 zones in var.region"
+  }
 }
 
 variable "distribution_policy_target_shape" {
@@ -83,7 +88,29 @@ variable "network_storage" {
 variable "disk_size_gb" {
   description = "Boot disk size in GB"
   type        = number
-  default     = null
+  default     = 32
+  nullable    = false
+}
+
+variable "disk_type" {
+  description = "Boot disk size in GB"
+  type        = string
+  default     = "pd-balanced"
+  nullable    = false
+}
+
+variable "spool_disk_size_gb" {
+  description = "Boot disk size in GB"
+  type        = number
+  default     = 32
+  nullable    = false
+}
+
+variable "spool_disk_type" {
+  description = "Boot disk size in GB"
+  type        = string
+  default     = "pd-ssd"
+  nullable    = false
 }
 
 variable "metadata" {
@@ -140,7 +167,7 @@ variable "instance_image" {
 variable "machine_type" {
   description = "Machine type to use for HTCondor central managers"
   type        = string
-  default     = "c2-standard-4"
+  default     = "n2-standard-4"
 }
 
 variable "access_point_runner" {
