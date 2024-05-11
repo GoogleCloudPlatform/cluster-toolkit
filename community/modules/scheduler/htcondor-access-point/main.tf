@@ -137,7 +137,7 @@ resource "random_shuffle" "zones" {
 }
 
 data "google_compute_region_instance_group" "ap" {
-  self_link = time_sleep.mig_warmup.triggers.self_link
+  self_link = module.htcondor_ap.self_link
   lifecycle {
     postcondition {
       condition     = length(self.instances) == local.host_count
@@ -298,12 +298,12 @@ module "htcondor_ap" {
     delete_rule    = "ON_PERMANENT_INSTANCE_DELETION"
     is_external    = var.enable_public_ips
   }]
-}
 
-resource "time_sleep" "mig_warmup" {
-  create_duration = "120s"
-
-  triggers = {
-    self_link = module.htcondor_ap.self_link
+  # the timeouts below are default for resource
+  wait_for_instances = true
+  mig_timeouts = {
+    create = "15m"
+    delete = "15m"
+    update = "15m"
   }
 }

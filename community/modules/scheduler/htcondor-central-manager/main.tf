@@ -90,7 +90,7 @@ data "google_compute_zones" "available" {
 }
 
 data "google_compute_region_instance_group" "cm" {
-  self_link = time_sleep.mig_warmup.triggers.self_link
+  self_link = module.htcondor_cm.self_link
   lifecycle {
     postcondition {
       condition     = length(self.instances) == 1
@@ -192,12 +192,12 @@ module "htcondor_cm" {
     delete_rule    = "ON_PERMANENT_INSTANCE_DELETION"
     is_external    = false
   }]
-}
 
-resource "time_sleep" "mig_warmup" {
-  create_duration = "120s"
-
-  triggers = {
-    self_link = module.htcondor_cm.self_link
+  # the timeouts below are default for resource
+  wait_for_instances = true
+  mig_timeouts = {
+    create = "15m"
+    delete = "15m"
+    update = "15m"
   }
 }
