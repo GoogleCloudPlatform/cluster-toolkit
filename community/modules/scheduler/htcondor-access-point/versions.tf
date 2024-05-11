@@ -20,9 +20,9 @@ terraform {
       source  = "hashicorp/google"
       version = ">= 3.83"
     }
-    time = {
-      source  = "hashicorp/time"
-      version = "~> 0.9"
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.6"
     }
   }
   provider_meta "google" {

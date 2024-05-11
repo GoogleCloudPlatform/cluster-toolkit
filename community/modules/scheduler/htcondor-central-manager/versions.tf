@@ -20,10 +20,6 @@ terraform {
       source  = "hashicorp/google"
       version = ">= 3.83"
     }
-    time = {
-      source  = "hashicorp/time"
-      version = "~> 0.9"
-    }
   }
   provider_meta "google" {
     module_name = "blueprints/terraform/hpc-toolkit:htcondor-central-manager/v1.33.0"
