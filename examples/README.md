@@ -13,6 +13,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
 -->
 <!-- TOC -->
 
+- [Example Blueprints](#example-blueprints)
   - [Instructions](#instructions)
     - [(Optional) Setting up a remote terraform state](#optional-setting-up-a-remote-terraform-state)
   - [Ongoing Migration to Slurm-GCP v6](#ongoing-migration-to-slurm-gcp-v6)
