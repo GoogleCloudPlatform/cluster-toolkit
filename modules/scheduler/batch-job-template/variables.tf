@@ -70,7 +70,7 @@ variable "task_count_per_node" {
 }
 
 variable "mpi_mode" {
-  description = "Sets up barriers before and after runnable. In addition, sets `permissiveSsh=true`, `requireHostsFile=true`, and `taskCountPerNode=1`. `taskCountPerNode` can be overridden by `task_count_per_node`."
+  description = "Sets up barriers before and after each runnable. In addition, sets `permissiveSsh=true`, `requireHostsFile=true`, and `taskCountPerNode=1`. `taskCountPerNode` can be overridden by `task_count_per_node`."
   type        = bool
   default     = false
 }
@@ -91,10 +91,18 @@ variable "log_policy" {
   }
 }
 
+variable "runnables" {
+  description = "A list of shell scripts to be executed in sequence as the main workload of the Google Batch job. These will be used to populate the generated template."
+  type = list(object({
+    script = string
+  }))
+  default = null
+}
+
 variable "runnable" {
-  description = "A string to be executed as the main workload of the Google Cloud Batch job. This will be used to populate the generated template."
+  description = "A simplified form of `var.runnables` that only takes a single script. Use either `runnables` or `runnable`."
   type        = string
-  default     = "## Add your workload here"
+  default     = null
 }
 
 variable "instance_template" {

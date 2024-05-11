@@ -24,11 +24,14 @@ locals {
 
   tasks_per_node = coalesce(var.task_count_per_node, (var.mpi_mode ? 1 : null))
 
+  one_line_runnable = coalesce(var.runnable, "## Add your workload here ##")
+  runnables         = coalesce(var.runnables, [{ script = local.one_line_runnable }])
+
   job_template_contents = templatefile(
     "${path.module}/templates/batch-job-base.yaml.tftpl",
     {
       synchronized       = var.mpi_mode
-      runnable           = var.runnable
+      runnables          = local.runnables
       task_count         = var.task_count
       tasks_per_node     = local.tasks_per_node
       require_hosts_file = var.mpi_mode
@@ -102,6 +105,13 @@ module "instance_template" {
 resource "local_file" "job_template" {
   content  = local.job_template_contents
   filename = local.job_template_output_path
+
+  lifecycle {
+    precondition {
+      condition     = var.runnable == null || var.runnables == null
+      error_message = "var.runnable and var.runnables (plural) cannot both be set."
+    }
+  }
 }
 
 resource "random_id" "submit_job_suffix" {

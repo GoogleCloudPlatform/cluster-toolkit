@@ -150,7 +150,8 @@ deployment_groups:
     source: modules/scheduler/batch-job-template
     use: [network1, sharefs]
     settings:
-      runnable: . /share/wrfv3/submit_wrfv3.sh;
+      runnables:
+      - script: . /share/wrfv3/submit_wrfv3.sh;
       machine_type: c2-standard-60
       task_count: 2
       mpi_mode: true
