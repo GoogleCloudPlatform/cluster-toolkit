@@ -22,7 +22,7 @@ locals {
 locals {
   instance_template = coalesce(var.instance_template, module.instance_template.self_link)
 
-  tasks_per_node = coalesce(var.task_count_per_node, (var.mpi_mode ? 1 : null))
+  tasks_per_node = var.task_count_per_node != null ? var.task_count_per_node : (var.mpi_mode ? 1 : null)
 
   job_template_contents = templatefile(
     "${path.module}/templates/batch-job-base.yaml.tftpl",
