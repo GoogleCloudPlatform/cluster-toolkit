@@ -134,8 +134,8 @@ staff. A common setting is `PERIODIC`, shown below, but this value must be
 confirmed with Google staff.
 
 ```yaml
-  # a3_reservation_name should be empty string by default; if Google staff
-  # have provided you with a reservation, supply it here
+  # a3_reservation_name must be specified; if Google staff have provided you
+  # with a reservation name, use it. Otherwise supply user-created reservation.
   a3_reservation_name: reservation-name-provided-by-google
   # a3_maintenance_interval should be empty string by default; if Google staff
   # have created a reservation, they will also provide a3_maintenance_interval
@@ -158,18 +158,21 @@ gcloud compute reservations create a3-reservation-0 \
     --machine-type=a3-highgpu-8g \
     --vm-count=${N_VMS} \
     --zone=${ZONE} \
+    --require-specific-reservation \
     --log-http
 ```
 
-This reservation will be [automatically consumed by VMs][consume] created
-with matching parameters (e.g. A3 VM type in configured zone). In this
-scenario, you may leave `a3_reservation_name` and `a3_maintenance_interval`
-at their default empty values in `ml-slurm-a3-2-cluster.yaml`.
+This reservation be must be specified when creating VMs with matching parameters
+(e.g. A3 VM type in configured zone). If you executed the command above without
+modification, you may leave `a3_reservation_name` and `a3_maintenance_interval`
+at their default values in `ml-slurm-a3-2-cluster.yaml`. Otherwise, ensure that
+the reservation name in the blueprint matches the name of the user-created
+reservation.
 
 ```yaml
-  # a3_reservation_name should be empty string by default; if Google staff
-  # have provided you with a reservation, supply it here
-  a3_reservation_name: ""
+  # a3_reservation_name must be specified; if Google staff have provided you
+  # with a reservation name, use it. Otherwise supply user-created reservation.
+  a3_reservation_name: a3-reservation-0
   # a3_maintenance_interval should be empty string by default; if Google staff
   # have created a reservation, they will also provide a3_maintenance_interval
   a3_maintenance_interval: ""
