@@ -529,6 +529,12 @@ Follow [hpc-slurm-tpu-maxtext].
 [hpc-slurm6-tpu-maxtext.yaml]: ../community/examples/hpc-slurm6-tpu-maxtext.yaml
 [hpc-slurm-tpu-maxtext]: ../docs/hpc-slurm6-tpu-maxtext.md
 
+### [hpc-slurm6-apptainer.yaml] ![community-badge] ![experimental-badge]
+
+This blueprint creates a custom [Apptainer](https:https://apptainer.org) enabled image and builds an auto-scaling Slurm cluster using that image. You can deploy containerized workloads on that cluster as described [here](https://github.com/GoogleCloudPlatform/scientific-computing-examples/tree/main/apptainer).
+
+[hpc-slurm6-apptainer.yaml]: ../community/examples/hpc-slurm6-apptainer.yaml
+
 ### [ml-slurm.yaml] ![core-badge]
 
 This blueprint provisions an HPC cluster running the Slurm scheduler with the
