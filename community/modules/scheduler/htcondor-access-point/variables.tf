@@ -49,7 +49,7 @@ variable "zones" {
 variable "distribution_policy_target_shape" {
   description = "Target shape acoss zones for instance group managing high availability of access point"
   type        = string
-  default     = "BALANCED"
+  default     = "ANY_SINGLE_ZONE"
 }
 
 variable "network_self_link" {

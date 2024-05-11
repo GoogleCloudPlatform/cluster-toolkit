@@ -44,7 +44,7 @@ variable "zones" {
 variable "distribution_policy_target_shape" {
   description = "Target shape for instance group managing high availability of central manager"
   type        = string
-  default     = "BALANCED"
+  default     = "ANY_SINGLE_ZONE"
 }
 
 variable "network_self_link" {
@@ -135,7 +135,7 @@ variable "instance_image" {
 variable "machine_type" {
   description = "Machine type to use for HTCondor central managers"
   type        = string
-  default     = "c2-standard-4"
+  default     = "n2-standard-4"
 }
 
 variable "central_manager_runner" {
