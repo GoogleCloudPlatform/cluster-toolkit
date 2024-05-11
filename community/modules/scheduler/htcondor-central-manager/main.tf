@@ -121,8 +121,8 @@ module "startup_script" {
 }
 
 module "central_manager_instance_template" {
-  # tflint-ignore: terraform_module_pinned_source
-  source = "github.com/terraform-google-modules/terraform-google-vm//modules/instance_template?ref=84d7959"
+  source  = "terraform-google-modules/vm/google//modules/instance_template"
+  version = "10.1.1"
 
   name_prefix = local.name_prefix
   project_id  = var.project_id
@@ -147,8 +147,8 @@ module "central_manager_instance_template" {
 }
 
 module "htcondor_cm" {
-  # tflint-ignore: terraform_module_pinned_source
-  source = "github.com/terraform-google-modules/terraform-google-vm//modules/mig?ref=aea74d1"
+  source  = "terraform-google-modules/vm/google//modules/mig"
+  version = "10.1.1"
 
   project_id                       = var.project_id
   region                           = var.region
