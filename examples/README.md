@@ -21,7 +21,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [hpc-slurm.yaml](#hpc-slurmyaml-) ![core-badge]
   * [hpc-enterprise-slurm-v5-legacy.yaml](#hpc-enterprise-slurm-v5-legacyyaml-) ![core-badge]
   * [hpc-enterprise-slurm.yaml](#hpc-enterprise-slurmyaml-) ![core-badge]
-  * [hpc-slurm-static-v6.yaml](#hpc-slurm-static-v6yaml--) ![core-badge] ![experimental-badge]
+  * [hpc-slurm-static.yaml](#hpc-slurm-staticyaml-) ![core-badge]
   * [hpc-slurm6-tpu.yaml](#hpc-slurm6-tpuyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm6-tpu-maxtext.yaml](#hpc-slurm6-tpu-maxtextyaml--) ![community-badge] ![experimental-badge]
   * [ml-slurm-v5-legacy.yaml](#ml-slurm-v5-legacyyaml-) ![core-badge]
@@ -35,17 +35,17 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [cae-slurm.yaml](#cae-slurmyaml-) ![core-badge]
   * [hpc-build-slurm-image.yaml](#hpc-build-slurm-imageyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-ubuntu2004-v5-legacy.yaml](#hpc-slurm-ubuntu2004-v5-legacyyaml-) ![community-badge]
-  * [hpc-slurm-ubuntu2004.yaml](#hpc-slurm-ubuntu2004yaml--) ![community-badge] ![experimental-badge]
+  * [hpc-slurm-ubuntu2004.yaml](#hpc-slurm-ubuntu2004yaml--) ![community-badge]
   * [pfs-daos.yaml](#pfs-daosyaml-) ![community-badge]
   * [hpc-slurm-daos.yaml](#hpc-slurm-daosyaml-) ![community-badge]
   * [hpc-amd-slurm-v5-legacy.yaml](#hpc-amd-slurm-v5-legacyyaml-) ![community-badge]
-  * [hpc-amd-slurm.yaml](#hpc-amd-slurmyaml--) ![community-badge] ![experimental-badge]
+  * [hpc-amd-slurm.yaml](#hpc-amd-slurmyaml-) ![community-badge]
   * [hpc-slurm-sharedvpc.yaml](#hpc-slurm-sharedvpcyaml--) ![community-badge] ![experimental-badge]
   * [client-google-cloud-storage.yaml](#client-google-cloud-storageyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-gromacs.yaml](#hpc-slurm-gromacsyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-local-ssd-v5-legacy.yaml](#hpc-slurm-local-ssd-v5-legacyyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-local-ssd.yaml](#hpc-slurm-local-ssdyaml--) ![community-badge] ![experimental-badge]
-  * [hcls-blueprint.yaml](#hcls-blueprintyaml--) ![core-badge] ![experimental-badge]
+  * [hcls-blueprint.yaml](#hcls-blueprintyaml-) ![core-badge]
   * [hpc-gke.yaml](#hpc-gkeyaml--) ![community-badge] ![experimental-badge]
   * [ml-gke](#ml-gkeyaml--) ![community-badge] ![experimental-badge]
   * [storage-gke](#storage-gkeyaml--) ![community-badge] ![experimental-badge]
@@ -468,7 +468,7 @@ to 256
 
 [hpc-enterprise-slurm.yaml]: ./hpc-enterprise-slurm.yaml
 
-### [hpc-slurm-static-v6.yaml] ![core-badge] ![experimental-badge]
+### [hpc-slurm-static.yaml] ![core-badge]
 
 This example demonstrates how to create a partition with static compute nodes.
 See [Best practices for static compute nodes] for instructions on setting up a
@@ -495,7 +495,7 @@ functionality with GPUs, see the
 [ML Slurm A3 example](./machine-learning/README.md).
 
 [Best practices for static compute nodes]: http://cloud/hpc-toolkit/docs/slurm/static-nodes-best-practices
-[hpc-slurm-static-v6.yaml]: ./hpc-slurm-static-v6.yaml
+[hpc-slurm-static.yaml]: ./hpc-slurm-static.yaml
 
 ### [hpc-slurm6-tpu.yaml] ![community-badge] ![experimental-badge]
 
@@ -1085,7 +1085,7 @@ For this example the following is needed in the selected region:
 * Compute Engine API: Resource policies: **one for each job in parallel** -
   _only needed for `compute` partition_
 
-### [hpc-slurm-ubuntu2004.yaml] ![community-badge] ![experimental-badge]
+### [hpc-slurm-ubuntu2004.yaml] ![community-badge]
 
 Similar to the [hpc-slurm.yaml] example, but using Ubuntu 20.04 instead of CentOS 7.
 [Other operating systems] are supported by SchedMD for the the Slurm on GCP project and images are listed [here](https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#published-image-family). Only the examples listed in this page been tested by the Cloud HPC Toolkit team.
@@ -1144,7 +1144,7 @@ examples][amd-examples-readme].
 [AOCC]: https://developer.amd.com/amd-aocc/
 [amd-examples-readme]: ../community/examples/AMD/README.md
 
-### [hpc-amd-slurm.yaml] ![community-badge] ![experimental-badge]
+### [hpc-amd-slurm.yaml] ![community-badge]
 
 This example provisions a Slurm cluster using AMD VM machine types. It
 automates the initial setup of Spack, including a script that can be used to
@@ -1318,7 +1318,7 @@ that have local ssd drives deployed.
 
 [hpc-slurm-local-ssd.yaml]: ../community/examples/hpc-slurm-local-ssd.yaml
 
-### [hcls-blueprint.yaml]: ![core-badge] ![experimental-badge]
+### [hcls-blueprint.yaml]: ![core-badge]
 
 This blueprint demonstrates an advanced architecture that can be used to run
 GROMACS with GPUs and CPUs on Google Cloud. For full documentation, refer
