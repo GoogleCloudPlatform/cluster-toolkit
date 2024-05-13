@@ -471,7 +471,6 @@ class ClusterUpdateView(LoginRequiredMixin, UpdateView):
                     for part in parts:
                         part.vCPU_per_node = machine_info[part.machine_type]["vCPU"] // (1 if part.enable_hyperthreads else 2)
 
-                        tier_1_supported_prefixes = ["n2-", "n2d-", "c2-", "c2d-", "c3-", "c3d-", "m3-", "z3-"]
                         cpu_count_str = part.machine_type.split('-')[-1]
                         lssd_cpu_count_str = part.machine_type.split('-')[-2]
                         if cpu_count_str.isdigit():
@@ -482,11 +481,15 @@ class ClusterUpdateView(LoginRequiredMixin, UpdateView):
                             logger.info(f"CPU count: {cpu_count}, VM type: {part.machine_type}.")
                         else:
                             raise ValidationError(f"Cannot extract vCPU count from machine type {part.machine_type}")
-                        is_tier_1_compatible = any(part.machine_type.startswith(prefix) for prefix in tier_1_supported_prefixes)
-                        if cpu_count >= 30 and is_tier_1_compatible:
-                            part.enable_tier1_networking = True
-                        else:
-                            raise ValidationError(f"VM type {part.machine_type} is not compatible with Tier 1 networking.")
+
+                        # Tier1 networking validation
+                        if part.enable_tier1_networking == True:
+                            logger.info("User selected Tier1 networking, checking if nodes in partition are compatible.")
+                            tier_1_supported_prefixes = ["n2-", "n2d-", "c2-", "c2d-", "c3-", "c3d-", "m3-", "z3-"]
+                            is_tier_1_compatible = any(part.machine_type.startswith(prefix) for prefix in tier_1_supported_prefixes)
+
+                            if not(cpu_count >= 30 and is_tier_1_compatible):
+                                raise ValidationError(f"VM type {part.machine_type} is not compatible with Tier 1 networking.")
 
                         # Validate GPU choice
                         if part.GPU_type:
