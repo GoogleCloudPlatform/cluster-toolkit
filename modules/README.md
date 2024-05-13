@@ -127,13 +127,16 @@ Modules that are still in development and less stable are labeled with the
   number of VPC networks using the [vpc] module.
 * **[pre-existing-vpc]** ![core-badge] : Used to connect newly
   built components to a pre-existing VPC network.
-* **[firewall-rules]** ![core-badge] ![experimental-badge]: Add custom firewall
-  rules to existing networks (commonly used with [pre-existing-vpc])
+* **[firewall-rules]** ![core-badge] ![experimental-badge] : Add custom firewall
+  rules to existing networks (commonly used with [pre-existing-vpc]).
+* **[private-service-access]** ![community-badge] ![experimental-badge] :
+  Configures Private Services Access for a VPC network (commonly used with [filestore] and [slurm-cloudsql-federation]).
 
 [vpc]: network/vpc/README.md
 [multivpc]: network/multivpc/README.md
 [pre-existing-vpc]: network/pre-existing-vpc/README.md
 [firewall-rules]: network/firewall-rules/README.md
+[private-service-access]: ../community/modules/network/private-service-access/README.md
 
 ### Packer
 
