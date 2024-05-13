@@ -25,7 +25,7 @@ cli_deployment_vars:
   zone: "{{ zone }}"
   zones: "[europe-west1-b,europe-west1-c,europe-west1-d]"
 workspace: /workspace
-blueprint_yaml: "{{ workspace }}/examples/hpc-enterprise-slurm-v6.yaml"
+blueprint_yaml: "{{ workspace }}/examples/hpc-enterprise-slurm.yaml"
 network: "{{ test_name }}-net"
 
 # Note: Pattern matching in gcloud only supports 1 wildcard.
