@@ -201,7 +201,7 @@ description of our support for Windows images.
   <th></th>
   <td>✓</td>
   <td>✓</td>
-  <td><a href="../examples/hpc-slurm-v6.yaml">✓</a></td>
+  <td><a href="../examples/hpc-slurm.yaml">✓</a></td>
   <td><a href="../community/examples/hpc-slurm-ubuntu2004.yaml">✓</a></td>
 </tr>
 <tr>

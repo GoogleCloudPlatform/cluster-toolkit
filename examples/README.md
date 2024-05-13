@@ -18,7 +18,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
 * [Ongoing Migration to Slurm-GCP v6](#ongoing-migration-to-slurm-gcp-v6)
 * [Blueprint Descriptions](#blueprint-descriptions)
   * [hpc-slurm-v5-legacy.yaml](#hpc-slurm-v5-legacyyaml-) ![core-badge]
-  * [hpc-slurm-v6.yaml](#hpc-slurm-v6yaml--) ![core-badge] ![experimental-badge]
+  * [hpc-slurm.yaml](#hpc-slurmyaml-) ![core-badge]
   * [hpc-enterprise-slurm-v5-legacy.yaml](#hpc-enterprise-slurm-v5-legacyyaml-) ![core-badge]
   * [hpc-enterprise-slurm.yaml](#hpc-enterprise-slurmyaml-) ![core-badge]
   * [hpc-slurm-static-v6.yaml](#hpc-slurm-static-v6yaml--) ![core-badge] ![experimental-badge]
@@ -238,7 +238,7 @@ For this example the following is needed in the selected region:
 * Compute Engine API: Resource policies: **one for each job in parallel** -
   _only needed for the `compute` partition_
 
-### [hpc-slurm-v6.yaml] ![core-badge] ![experimental-badge]
+### [hpc-slurm.yaml] ![core-badge]
 
 Creates a basic auto-scaling Slurm cluster with mostly default settings. The
 blueprint also creates a new VPC network, and a filestore instance mounted to
@@ -250,7 +250,7 @@ needing to request additional quota. The purpose of the `debug` partition is to
 make sure that first time users are not immediately blocked by quota
 limitations.
 
-[hpc-slurm-v6.yaml]: ./hpc-slurm-v6.yaml
+[hpc-slurm.yaml]: ./hpc-slurm.yaml
 
 #### Compute Partition
 
@@ -265,7 +265,7 @@ select the compute partition using the `-p compute` argument when running `srun`
 There is an `h3` partition that uses compute-optimized `h3-standard-88` machine type.
 You can read more about the H3 machine series [here](https://cloud.google.com/compute/docs/compute-optimized-machines#h3_series).
 
-#### Quota Requirements for hpc-slurm-v6.yaml
+#### Quota Requirements for hpc-slurm.yaml
 
 For this example the following is needed in the selected region:
 
@@ -1087,7 +1087,7 @@ For this example the following is needed in the selected region:
 
 ### [hpc-slurm-ubuntu2004.yaml] ![community-badge] ![experimental-badge]
 
-Similar to the [hpc-slurm-v6.yaml] example, but using Ubuntu 20.04 instead of CentOS 7.
+Similar to the [hpc-slurm.yaml] example, but using Ubuntu 20.04 instead of CentOS 7.
 [Other operating systems] are supported by SchedMD for the the Slurm on GCP project and images are listed [here](https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#published-image-family). Only the examples listed in this page been tested by the Cloud HPC Toolkit team.
 
 The cluster will support 2 partitions named `debug` and `compute`.
