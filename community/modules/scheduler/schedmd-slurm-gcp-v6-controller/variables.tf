@@ -303,27 +303,27 @@ variable "nodeset_dyn" {
 #############
 # PARTITION #
 #############
-# REVIEWER_NOTE: copied from V6 cluster module as is
 variable "partitions" {
   description = <<EOD
 Cluster partitions as a list. See module slurm_partition.
 EOD
   type = list(object({
-    default               = optional(bool, false)
-    enable_job_exclusive  = optional(bool, false)
-    partition_conf        = optional(map(string), {})
     partition_name        = string
+    partition_conf        = optional(map(string), {})
     partition_nodeset     = optional(list(string), [])
     partition_nodeset_dyn = optional(list(string), [])
     partition_nodeset_tpu = optional(list(string), [])
-    resume_timeout        = optional(number)
-    suspend_time          = optional(number, 300)
-    suspend_timeout       = optional(number)
+    enable_job_exclusive  = optional(bool, false)
   }))
 
   validation {
     condition     = length(var.partitions) > 0
     error_message = "Partitions cannot be empty."
+  }
+
+  validation {
+    condition     = length(distinct([for x in var.partitions : x.partition_name])) == length(var.partitions)
+    error_message = "All partitions must have a unique partition_name."
   }
 }
 

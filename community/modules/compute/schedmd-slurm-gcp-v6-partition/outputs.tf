@@ -29,6 +29,16 @@ output "partitions" {
     NOTE: Partition's `var.exclusive` is set to `true` by default. Set it to `false` explicitly to use static nodes.
     EOD
   }
+
+  precondition {
+    condition     = local.has_node || local.has_dyn || local.has_tpu
+    error_message = "Partition must contain at least one type of nodeset."
+  }
+
+  precondition {
+    condition     = ((!local.has_node || !local.has_dyn) && local.has_tpu) || ((local.has_node || local.has_dyn) && !local.has_tpu)
+    error_message = "Partition cannot contain TPU and non-TPU nodesets."
+  }
 }
 
 output "nodeset" {
