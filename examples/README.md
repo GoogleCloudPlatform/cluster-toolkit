@@ -35,7 +35,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [cae-slurm.yaml](#cae-slurmyaml-) ![core-badge]
   * [hpc-build-slurm-image.yaml](#hpc-build-slurm-imageyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-ubuntu2004-v5-legacy.yaml](#hpc-slurm-ubuntu2004-v5-legacyyaml-) ![community-badge]
-  * [hpc-slurm-ubuntu2004-v6.yaml](#hpc-slurm-ubuntu2004-v6yaml-) ![community-badge] ![experimental-badge]
+  * [hpc-slurm-ubuntu2004.yaml](#hpc-slurm-ubuntu2004yaml--) ![community-badge] ![experimental-badge]
   * [pfs-daos.yaml](#pfs-daosyaml-) ![community-badge]
   * [hpc-slurm-daos.yaml](#hpc-slurm-daosyaml-) ![community-badge]
   * [hpc-amd-slurm-v5-legacy.yaml](#hpc-amd-slurm-v5-legacyyaml-) ![community-badge]
@@ -1085,7 +1085,7 @@ For this example the following is needed in the selected region:
 * Compute Engine API: Resource policies: **one for each job in parallel** -
   _only needed for `compute` partition_
 
-### [hpc-slurm-ubuntu2004-v6.yaml] ![community-badge] ![experimental-badge]
+### [hpc-slurm-ubuntu2004.yaml] ![community-badge] ![experimental-badge]
 
 Similar to the [hpc-slurm-v6.yaml] example, but using Ubuntu 20.04 instead of CentOS 7.
 [Other operating systems] are supported by SchedMD for the the Slurm on GCP project and images are listed [here](https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#published-image-family). Only the examples listed in this page been tested by the Cloud HPC Toolkit team.
@@ -1098,9 +1098,9 @@ partition runs on compute optimized nodes of type `cs-standard-60`. The
 `compute` partition may require additional quota before using.
 
 [Other operating systems]: https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#supported-operating-systems
-[hpc-slurm-ubuntu2004-v6.yaml]: ../community/examples/hpc-slurm-ubuntu2004-v6.yaml
+[hpc-slurm-ubuntu2004.yaml]: ../community/examples/hpc-slurm-ubuntu2004.yaml
 
-#### Quota Requirements for hpc-slurm-ubuntu2004-v6.yaml
+#### Quota Requirements for hpc-slurm-ubuntu2004.yaml
 
 For this example the following is needed in the selected region:
 
