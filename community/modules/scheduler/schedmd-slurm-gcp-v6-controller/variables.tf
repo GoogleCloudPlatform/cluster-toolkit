@@ -108,6 +108,19 @@ variable "login_nodes" {
       auto_delete  = optional(bool, true)
       boot         = optional(bool, false)
     })), [])
+    additional_networks = optional(list(object({
+      network            = string
+      subnetwork         = string
+      subnetwork_project = optional(string)
+      network_ip         = optional(string, "")
+      access_config = optional(list(object({
+        nat_ip       = string
+        network_tier = string
+      })), [])
+      ipv6_access_config = optional(list(object({
+        network_tier = string
+      })), [])
+    })), [])
     bandwidth_tier         = optional(string, "platform_default")
     can_ip_forward         = optional(bool, false)
     disable_smt            = optional(bool, false)

@@ -28,6 +28,7 @@ module "slurm_login_template" {
   name_prefix         = each.value.name_prefix
 
   additional_disks         = each.value.additional_disks
+  additional_networks      = each.value.additional_networks
   bandwidth_tier           = each.value.bandwidth_tier
   can_ip_forward           = each.value.can_ip_forward
   disable_smt              = each.value.disable_smt
