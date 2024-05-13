@@ -27,7 +27,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [ml-slurm-v5-legacy.yaml](#ml-slurm-v5-legacyyaml-) ![core-badge]
   * [ml-slurm-v6.yaml](#ml-slurm-v6yaml--) ![core-badge] ![experimental-badge]
   * [image-builder-v5-legacy.yaml](#image-builder-v5-legacyyaml-) ![core-badge]
-  * [image-builder-v6.yaml](#image-builderyaml--) ![core-badge] ![experimental-badge]
+  * [image-builder.yaml](#image-builderyaml--) ![core-badge]
   * [serverless-batch.yaml](#serverless-batchyaml-) ![core-badge]
   * [serverless-batch-mpi.yaml](#serverless-batch-mpiyaml-) ![core-badge]
   * [pfs-lustre.yaml](#pfs-lustreyaml-) ![core-badge]
@@ -737,7 +737,7 @@ For this example the following is needed in the selected region:
 * Compute Engine API: Resource policies: **one for each job in parallel** -
   _only needed for `compute` partition_
 
-### [image-builder-v6.yaml] ![core-badge] ![experimental-badge]
+### [image-builder.yaml] ![core-badge]
 
 This blueprint uses the [Packer template module][pkr] to create a custom VM
 image and uses it to provision an HPC cluster using the Slurm scheduler. By
@@ -759,7 +759,7 @@ example takes the following steps:
 Create the deployment folder from the blueprint:
 
 ```text
-./ghpc create examples/image-builder-v6.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
+./ghpc create examples/image-builder.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
 ./ghpc deploy image-builder-v6-001"
 ```
 
@@ -796,7 +796,7 @@ software using boot-time startup scripts because:
 
 [hpcimage]: https://cloud.google.com/compute/docs/instances/create-hpc-vm
 [pkr]: ../modules/packer/custom-image/README.md
-[image-builder-v6.yaml]: ./image-builder-v6.yaml
+[image-builder.yaml]: ./image-builder.yaml
 
 #### Custom Network (deployment group 1)
 
@@ -846,7 +846,7 @@ partition is using the custom image. Each compute node should contain the
   Hello World
   ```
 
-#### Quota Requirements for image-builder-v6.yaml
+#### Quota Requirements for image-builder.yaml
 
 For this example the following is needed in the selected region:
 
