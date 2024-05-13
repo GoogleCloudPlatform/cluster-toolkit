@@ -32,7 +32,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [serverless-batch-mpi.yaml](#serverless-batch-mpiyaml-) ![core-badge]
   * [pfs-lustre.yaml](#pfs-lustreyaml-) ![core-badge]
   * [cae-slurm-v5-legacy.yaml](#cae-slurm-v5-legacyyaml-) ![core-badge]
-  * [cae-slurm-v6.yaml](#cae-slurm-v6yaml--) ![core-badge] ![experimental-badge]
+  * [cae-slurm.yaml](#cae-slurmyaml-) ![core-badge]
   * [hpc-build-slurm-image.yaml](#hpc-build-slurm-imageyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-ubuntu2004-v5-legacy.yaml](#hpc-slurm-ubuntu2004-v5-legacyyaml-) ![community-badge]
   * [hpc-slurm-ubuntu2004-v6.yaml](#hpc-slurm-ubuntu2004-v6yaml-) ![community-badge] ![experimental-badge]
@@ -993,7 +993,7 @@ For this example the following is needed in the selected region:
 
 [cae-slurm-v5-legacy.yaml]: ../examples/cae/cae-slurm-v5-lgacy.yaml
 
-### [cae-slurm-v6.yaml] ![core-badge] ![experimental-badge]
+### [cae-slurm.yaml] ![core-badge]
 
 The Computer Aided Engineering (CAE) blueprint captures a reference architecture
 where the right cloud components are assembled to optimally cater to the
@@ -1012,7 +1012,7 @@ or installations of specific CAE codes, as provided by ISVs separately.
 
 A detailed documentation is provided in this [README](cae/README.md).
 
-#### Quota Requirements for cae-slurm-v6.yaml
+#### Quota Requirements for cae-slurm.yaml
 
 For this example the following is needed in the selected region:
 
@@ -1024,7 +1024,7 @@ For this example the following is needed in the selected region:
 * Compute Engine API: T4 GPUs: **1/node** active in `desktop` node.
 * Compute Engine API: N2 CPUs: **8** for login and **16** for controller
 
-[cae-slurm-v6.yaml]: ../examples/cae/cae-slurm-v6.yaml
+[cae-slurm.yaml]: ../examples/cae/cae-slurm.yaml
 
 ### [hpc-build-slurm-image.yaml] ![community-badge] ![experimental-badge]
 
