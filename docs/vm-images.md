@@ -184,7 +184,7 @@ description of our support for Windows images.
   <th>Chrome Remote Desktop</th>
   <th></th>
   <td></td>
-  <td><a href="../community/examples/hpc-slurm-chromedesktop.yaml">✓</a></td>
+  <td><a href="../community/examples/hpc-slurm-chromedesktop-v5-legacy.yaml">✓</a></td>
   <td></td>
   <td></td>
 </tr>
@@ -336,7 +336,7 @@ These instructions apply to the following modules:
 [vm-crd.yaml]: ../tools/validate_configs/os_compatibility_tests/vm-crd.yaml
 [vm-filestore.yaml]: ../tools/validate_configs/os_compatibility_tests/vm-filestore.yaml
 [vm-lustre.yaml]: ../tools/validate_configs/os_compatibility_tests/vm-lustre.yaml
-[hpc-slurm-chromedesktop.yaml]: ../community/examples/hpc-slurm-chromedesktop.yaml
+[hpc-slurm-chromedesktop-v5-legacy.yaml]: ../community/examples/hpc-slurm-chromedesktop.yaml
 [slurm-filestore.yaml]: ../tools/validate_configs/os_compatibility_tests/slurm-filestore.yaml
 [batch-startup.yaml]: ../tools/validate_configs/os_compatibility_tests/batch-startup.yaml
 [batch-filestore.yaml]: ../tools/validate_configs/os_compatibility_tests/batch-filestore.yaml
