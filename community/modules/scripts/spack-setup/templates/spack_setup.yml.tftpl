@@ -143,14 +143,15 @@
       when: lock_out.rc != 0
 
     rescue:
-    - name: Timed out on lock, get install directory contents
-      ansible.builtin.command: "ls -ltra {{ lock_dir }}"
+    - name: Timed out on waiting for lock, get lock directory contents
+      ansible.builtin.find: 
+        paths: "{{ lock_dir }}"
       register: lock_dir_contents
 
-    - name: Print install directory contents with host that failed to install spack
+    - name: Print lock directory contents, it should contain name of host that is holding lock
       ansible.builtin.debug:
-        msg: "{{ lock_dir_contents.stdout }}"
+        msg: "{{ lock_dir_contents.files|map(attribute='path')|map('basename')|list }}"
       
     - name: Failed to get lock
       ansible.builtin.fail:
-        msg: "Failed to get lock, exiting"
+        msg: "Timeout waiting on lock for ${sw_name}, exiting"
