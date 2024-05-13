@@ -57,10 +57,6 @@ deployment_groups:
   - id: network1
     source: modules/network/pre-existing-vpc
 
-  - id: private-service-access
-    source: community/modules/network/private-service-access
-    use: [network1]
-
   - id: controller_sa
     source: community/modules/project/service-account
     settings:
@@ -99,10 +95,9 @@ deployment_groups:
 
   - id: projectsfs
     source: modules/file-system/filestore
-    use: [network1, private-service-access]
+    use: [network1]
     settings:
       local_mount: /projects
-      connect_mode: PRIVATE_SERVICE_ACCESS
 
   # This file system has an associated license cost.
   # https://console.developers.google.com/marketplace/product/ddnstorage/exascaler-cloud
