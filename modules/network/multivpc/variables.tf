@@ -32,7 +32,7 @@ variable "region" {
 variable "network_name_prefix" {
   description = "The base name of the vpcs and their subnets, will be appended with a sequence number"
   type        = string
-  default     = null
+  default     = ""
 }
 
 variable "network_count" {
