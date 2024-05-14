@@ -20,7 +20,6 @@ import (
 	"hpc-toolkit/pkg/modulereader"
 	"log"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/hashicorp/hcl/v2/ext/typeexpr"
@@ -42,11 +41,6 @@ func (m *modInfo) Input(name string) (varInfo, bool) {
 		return varInfo{}, false
 	}
 	return m.Inputs[ind], true
-}
-
-func (m *modInfo) Role() string {
-	split := strings.Split(m.Source, "/")
-	return split[len(split)-2]
 }
 
 var allMods []modInfo = nil
@@ -97,11 +91,20 @@ func all(ps ...predicate) predicate {
 	}
 }
 
-func hasInput(name string) predicate {
+func hasInputField(name string) predicate {
 	return func(mod modInfo) bool {
-		_, ok := mod.Input(name)
-		return ok
+		return len(inspect.FindField(mod.Inputs, name)) > 0
 	}
+}
+
+func queryInputFields(field string, t *testing.T) map[string]cty.Type {
+	ret := map[string]cty.Type{}
+	for _, mod := range notEmpty(query(hasInputField("additional_networks")), t) {
+		for p, ty := range inspect.FindField(mod.Inputs, field) {
+			ret[mod.Source+"@"+p] = ty
+		}
+	}
+	return ret
 }
 
 // Fails test if slice is empty, returns not empty slice as is.
@@ -117,22 +120,13 @@ func TestSanity(t *testing.T) {
 	notEmpty(query(all()), t)
 }
 
-func checkInputType(t *testing.T, mod modInfo, input string, expected string) {
-	i, ok := mod.Input(input)
-	if !ok {
-		t.Errorf("%s does not have input %s", mod.Source, input)
-	}
-	expected = modulereader.NormalizeType(expected)
-	got := typeexpr.TypeString(i.Type)
-	if expected != got {
-		t.Errorf("%s %s has unexpected type expected:\n%#v\ngot:\n%#v",
-			mod.Source, input, expected, got)
-	}
-}
-
 func TestLabelsType(t *testing.T) {
-	for _, mod := range notEmpty(query(hasInput("labels")), t) {
-		checkInputType(t, mod, "labels", "map(string)")
+	want := "map(string)"
+	for p, ty := range queryInputFields("labels", t) {
+		got := typeexpr.TypeString(ty)
+		if got != want {
+			t.Errorf("%s has unexpected type expected, got:\n%#v\nwant:\n%#v", p, got, want)
+		}
 	}
 }
 
@@ -158,11 +152,10 @@ func TestNetworkStorage(t *testing.T) {
 	})`)
 	lstShort := modulereader.NormalizeType(fmt.Sprintf("list(%s)", objShort))
 
-	for _, mod := range notEmpty(query(hasInput("network_storage")), t) {
-		i, _ := mod.Input("network_storage")
-		got := typeexpr.TypeString(i.Type)
+	for p, ty := range queryInputFields("network_storage", t) {
+		got := typeexpr.TypeString(ty)
 		if got != obj && got != lst && got != objShort && got != lstShort {
-			t.Errorf("%s `network_storage` has unexpected type expected, got:\n%#v", mod.Source, got)
+			t.Errorf("%s has unexpected type, got:\n%#v", p, got)
 		}
 	}
 }
@@ -189,11 +182,10 @@ func TestAdditionalNetworks(t *testing.T) {
 		}))
 	  }))`)
 
-	for _, mod := range notEmpty(query(hasInput("additional_networks")), t) {
-		i, _ := mod.Input("additional_networks")
-		got := typeexpr.TypeString(i.Type)
+	for p, ty := range queryInputFields("additional_networks", t) {
+		got := typeexpr.TypeString(ty)
 		if got != want {
-			t.Errorf("%s `additional_networks` has unexpected type expected, got:\n%#v\nwant:\n%#v", mod.Source, got, want)
+			t.Errorf("%s has unexpected type expected, got:\n%#v\nwant:\n%#v", p, got, want)
 		}
 	}
 }
