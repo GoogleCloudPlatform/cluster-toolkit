@@ -35,9 +35,8 @@ variable "labels" {
 }
 
 variable "job_id" {
-  description = "An id for the Google Cloud Batch job. Used for output instructions and file naming. Defaults to deployment name."
+  description = "An id for the Google Cloud Batch job. Used for output instructions and file naming. Automatically populated by the module id if not set. If setting manually, ensure a unique value across all jobs."
   type        = string
-  default     = null
 }
 
 variable "job_filename" {
