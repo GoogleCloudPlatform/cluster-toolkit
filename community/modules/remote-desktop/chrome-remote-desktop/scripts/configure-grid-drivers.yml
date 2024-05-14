@@ -32,8 +32,8 @@
         - gdebi-core
         - mesa-utils
         - gdm3
-        grid_fn: NVIDIA-Linux-x86_64-535.154.05-grid.run
-        grid_ver: vGPU16.3
+        grid_fn: NVIDIA-Linux-x86_64-550.54.15-grid.run
+        grid_ver: vGPU17.1
       jammy:
         packages:
         - build-essential
