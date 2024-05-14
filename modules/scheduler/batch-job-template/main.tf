@@ -22,7 +22,7 @@ locals {
 locals {
   instance_template = coalesce(var.instance_template, module.instance_template.self_link)
 
-  tasks_per_node = coalesce(var.task_count_per_node, (var.mpi_mode ? 1 : null))
+  tasks_per_node = var.task_count_per_node != null ? var.task_count_per_node : (var.mpi_mode ? 1 : null)
 
   one_line_runnable = coalesce(var.runnable, "## Add your workload here ##")
   runnables         = coalesce(var.runnables, [{ script = local.one_line_runnable }])
