@@ -89,17 +89,24 @@ variable "additional_networks" {
   description = "Additional network interface details for GCE, if any."
   default     = []
   type = list(object({
-    network            = string
-    subnetwork         = optional(string)
-    subnetwork_project = optional(string)
-    network_ip         = optional(string, "")
     access_config = optional(list(object({
       nat_ip       = string
       network_tier = string
     })), [])
+    alias_ip_range = optional(list(object({
+      ip_cidr_range         = string
+      subnetwork_range_name = string
+    })), [])
     ipv6_access_config = optional(list(object({
       network_tier = string
     })), [])
+    network            = optional(string)
+    network_ip         = optional(string, "")
+    nic_type           = optional(string)
+    queue_count        = optional(number)
+    stack_type         = optional(string)
+    subnetwork         = optional(string)
+    subnetwork_project = optional(string)
   }))
   nullable = false
 }
