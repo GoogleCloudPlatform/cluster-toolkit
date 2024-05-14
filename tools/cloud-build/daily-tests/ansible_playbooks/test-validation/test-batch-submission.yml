@@ -24,20 +24,20 @@
   - name: Submit batch job
     register: batch_submission
     changed_when: batch_submission.rc == 0
-    ansible.builtin.command: gcloud alpha batch jobs submit {{ deployment_name }} --config=/home/batch-jobs/{{ custom_vars.batch_job_id }}.yaml --location={{ cli_deployment_vars.region }} --project={{ custom_vars.project }}
+    ansible.builtin.command: gcloud batch jobs submit {{ deployment_name }} --config=/home/batch-jobs/{{ custom_vars.batch_job_id }}.yaml --location={{ cli_deployment_vars.region }} --project={{ custom_vars.project }}
   - name: Wait for job to run
     changed_when: false
-    ansible.builtin.command: gcloud alpha batch jobs describe {{ deployment_name }} --location={{ cli_deployment_vars.region }} --project={{ custom_vars.project }}
+    ansible.builtin.command: gcloud batch jobs describe {{ deployment_name }} --location={{ cli_deployment_vars.region }} --project={{ custom_vars.project }}
     register: result
     until: result.stdout.find("SUCCEEDED") != -1
     retries: 60
     delay: 10
   - name: Call batch list command printed in instructions
     changed_when: false
-    ansible.builtin.command: gcloud alpha batch jobs list --project={{ custom_vars.project }}
+    ansible.builtin.command: gcloud batch jobs list --project={{ custom_vars.project }}
 
   always:
   - name: Delete job
     register: batch_deletion
     changed_when: batch_deletion.rc == 0
-    ansible.builtin.command: gcloud alpha batch jobs delete {{ deployment_name }} --location={{ cli_deployment_vars.region }} --project={{ custom_vars.project }}
+    ansible.builtin.command: gcloud batch jobs delete {{ deployment_name }} --location={{ cli_deployment_vars.region }} --project={{ custom_vars.project }}
