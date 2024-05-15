@@ -24,6 +24,7 @@
         - gdebi-core
         - mesa-utils
         - gdm3
+        - linux-headers-{{ ansible_kernel }}
         grid_fn: NVIDIA-Linux-x86_64-510.85.02-grid.run
         grid_ver: vGPU14.2
       bookworm:
@@ -32,8 +33,9 @@
         - gdebi-core
         - mesa-utils
         - gdm3
-        grid_fn: NVIDIA-Linux-x86_64-535.154.05-grid.run
-        grid_ver: vGPU16.3
+        - linux-headers-{{ ansible_kernel }}
+        grid_fn: NVIDIA-Linux-x86_64-550.54.15-grid.run
+        grid_ver: vGPU17.1
       jammy:
         packages:
         - build-essential
@@ -43,6 +45,7 @@
         - gcc-12 # must match compiler used to build kernel on latest Ubuntu 22
         - pkg-config # observed to be necessary for GRID driver installation on latest Ubuntu 22
         - libglvnd-dev # observed to be necessary for GRID driver installation on latest Ubuntu 22
+        - linux-headers-{{ ansible_kernel }}
         grid_fn: NVIDIA-Linux-x86_64-525.125.06-grid.run
         grid_ver: vGPU15.3
   tasks:
@@ -59,18 +62,9 @@
     ignore_errors: true
     changed_when: false
 
-  - name: Get kernel release
-    ansible.builtin.command: uname -r
-    register: uname_result
-    changed_when: false
-
-  - name: Set all packages
-    ansible.builtin.set_fact:
-      all_packages: '{{ dist_settings[ansible_distribution_release]["packages"] + ["linux-headers-" + uname_result.stdout] }}'
-
   - name: Install binaries for GRID drivers
     ansible.builtin.apt:
-      name: "{{ all_packages }}"
+      name: '{{ dist_settings[ansible_distribution_release]["packages"] }}'
       state: present
       update_cache: true
     register: apt_result
