@@ -40,6 +40,7 @@ from django.http import (
 from django.urls import reverse
 from django.forms import inlineformset_factory
 from django.views import generic
+from django.views import View
 from django.views.generic.edit import CreateView, UpdateView, DeleteView
 from django.contrib import messages
 from ..models import (
@@ -69,6 +70,20 @@ import logging
 import secrets
 
 logger = logging.getLogger(__name__)
+
+class ClusterPartitionDeleteView(LoginRequiredMixin, View):
+    def post(self, request, *args, **kwargs):
+        partition_id = kwargs.get('partition_id')
+        #logger.info(partition_id)
+        try:
+            partition = ClusterPartition.objects.get(pk=partition_id)
+            logger.info(f"Deleting partition point: {partition}, ID: {partition_id}")
+            partition.delete()
+            return JsonResponse({'success': True})
+        except ClusterPartition.DoesNotExist:
+            return JsonResponse({'success': False, 'error': 'Partition not found.'}, status=404)
+        except Exception as e:
+            return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
 
 class ClusterListView(LoginRequiredMixin, generic.ListView):
@@ -420,15 +435,27 @@ class ClusterUpdateView(LoginRequiredMixin, UpdateView):
        # Get the existing ClusterPartition objects associated with the cluster
         existing_partitions = ClusterPartition.objects.filter(cluster=self.object)
 
-        # Iterate through the existing partitions and check if they are in the updated formset
-        for partition in existing_partitions:
-            if not any(partition_form.instance == partition for partition_form in partitions.forms):
-                # The partition is not in the updated formset, so delete it
-                partition_name = partition.name
-                partition_id = partition.pk
-                logger.info(f"Deleting partition: {partition_name}, ID: {partition_id}")
-                partition.delete()
+        logger.info(f"Processing total {len(partitions.forms)} partition forms.")
+        logger.info(f"Existing number of partitions is {len(partitions.forms)}.")
 
+        for partition in existing_partitions:
+            #logger.info(f"Checking existing partition: {partition.name}")
+            found = False
+            for partition_form in partitions.forms:
+                #logger.info(f"Checking form for partition: {partition_form.instance.name}")
+                if partition_form.instance == partition:
+                    found = True
+                    delete_status = partition_form.cleaned_data.get('DELETE', False)
+                    if delete_status:
+                        # Log the intent to delete then delete the partition
+                        logger.info(f"Partition: {partition.name} (ID: {partition.pk}) marked for deletion.")
+                        partition.delete()
+                    else:
+                        logger.info(f"No deletion requested for existing partition: {partition.name}.")
+            if not found:
+                # Log if no corresponding form was found for the partition
+                logger.info(f"No form found for Partition: {partition.name}.")
+                
         try:
             with transaction.atomic():
                 # Save the modified Cluster object

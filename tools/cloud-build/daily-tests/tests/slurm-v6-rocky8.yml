@@ -27,7 +27,7 @@ cli_deployment_vars:
 
 zone: us-west4-c
 workspace: /workspace
-blueprint_yaml: "{{ workspace }}/examples/hpc-slurm-v6.yaml"
+blueprint_yaml: "{{ workspace }}/examples/hpc-slurm.yaml"
 network: "{{ test_name }}-net"
 # Note: Pattern matching in gcloud only supports 1 wildcard, a*-login-* won't work.
 login_node: "{{ slurm_cluster_name }}-slurm-login-*"

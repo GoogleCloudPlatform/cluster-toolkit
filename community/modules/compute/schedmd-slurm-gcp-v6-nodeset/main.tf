@@ -35,8 +35,10 @@ locals {
   public_access_config = var.enable_public_ips ? [{ nat_ip = null, network_tier = null }] : []
   access_config        = length(var.access_config) == 0 ? local.public_access_config : var.access_config
 
+  service_account_email = coalesce(var.service_account_email, data.google_compute_default_service_account.default.email)
+
   service_account = {
-    email  = var.service_account_email
+    email  = local.service_account_email
     scopes = var.service_account_scopes
   }
 
@@ -95,4 +97,8 @@ locals {
     startup_script    = local.ghpc_startup_script
     network_storage   = var.network_storage
   }
+}
+
+data "google_compute_default_service_account" "default" {
+  project = var.project_id
 }

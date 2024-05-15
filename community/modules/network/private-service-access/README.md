@@ -1,16 +1,21 @@
 ## Description
 
-This module configures [private service access][psa] for the VPC specified by the `network_id` variable. It can be used by the  [Cloud SQL Federation module][sql].
+This module configures [private service access][psa] for the VPC specified by
+the `network_id` variable. It can be used by the
+[Cloud SQL Federation module][sql].
 
-It will automatically perform the following steps, as described in the [Private Service Access][psa-creation] creation page:
+It will automatically perform the following steps, as described in the
+[Private Service Access][psa-creation] creation page:
 
-* Create an IP Allocation with the prefix_length specified by the `ip_alloc_prefix_length` variable.
-* Create a private connection that establishes a [VPC Network Peering][vpcnp] connection between your VPC network and the service producer's network
+* Create an IP Allocation with the prefix_length specified by the
+  `ip_alloc_prefix_length` variable.
+* Create a private connection that establishes a [VPC Network Peering][vpcnp]
+  connection between your VPC network and the service producer's network
 
-[sql](https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/database/slurm-cloudsql-federation)
-[psa](https://cloud.google.com/vpc/docs/configure-private-services-access)
-[psa-creation](https://cloud.google.com/vpc/docs/configure-private-services-access#procedure)
-[vpcnp](https://cloud.google.com/vpc/docs/vpc-peering)
+[sql]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/database/slurm-cloudsql-federation
+[psa]: https://cloud.google.com/vpc/docs/configure-private-services-access
+[psa-creation]: https://cloud.google.com/vpc/docs/configure-private-services-access#procedure
+[vpcnp]: https://cloud.google.com/vpc/docs/vpc-peering
 
 ### Example
 

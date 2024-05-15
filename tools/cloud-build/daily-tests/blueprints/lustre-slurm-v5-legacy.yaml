@@ -1,4 +1,4 @@
-# Copyright 2024 Google LLC
+# Copyright 2023 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,11 +14,11 @@
 
 ---
 
-blueprint_name: test-slurm-lustre-v6
+blueprint_name: test-slurm-lustre
 
 vars:
   project_id:  ## Set GCP Project ID Here ##
-  deployment_name: test-slurm-lustre-v6
+  deployment_name: test-slurm-lustre
   region: us-central1
   zone: us-central1-a
   machine_type: n2-standard-2
@@ -27,17 +27,17 @@ vars:
   # on_host_maintenance: MIGRATE
   num_nodes: 1
   centos_image:
-    family: slurm-gcp-6-4-hpc-centos-7
+    family: slurm-gcp-5-10-hpc-centos-7
     project: schedmd-slurm-public
   rocky_image:
-    family: slurm-gcp-6-4-hpc-rocky-linux-8
+    family: slurm-gcp-5-10-hpc-rocky-linux-8
     project: schedmd-slurm-public
 
 deployment_groups:
 - group: primary
   modules:
 
-  - id: network
+  - id: network1
     source: modules/network/pre-existing-vpc
 
   ###########
@@ -48,7 +48,7 @@ deployment_groups:
   # https://console.developers.google.com/marketplace/product/ddnstorage/exascaler-cloud
   - id: lustre
     source: community/modules/file-system/DDN-EXAScaler
-    use: [network]
+    use: [network1]
     settings:
       local_mount: /lustre
       waiter: deploymentmanager
@@ -76,67 +76,76 @@ deployment_groups:
   #############
 
   # # Ubuntu 20.04 LTS
-  # - id: ubuntu_nodeset
-  #   source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-  #   use: [network]
+  # - id: ubuntu_node_group
+  #   source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
   #   settings:
   #     node_count_dynamic_max: $(vars.num_nodes)
   #     instance_image:
-  #       family: slurm-gcp-6-4-ubuntu-2004-lts
+  #       family: slurm-gcp-5-10-ubuntu-2004-lts
   #       project: schedmd-slurm-public
 
   # - id: ubuntu_partition
-  #   source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+  #   source: community/modules/compute/schedmd-slurm-gcp-v5-partition
   #   use:
-  #   - ubuntu_nodeset
+  #   - network1
+  #   - ubuntu_node_group
   #   - lustre
   #   settings:
   #     partition_name: ubuntu
 
   # Rocky Linux 8
-  - id: rocky_nodeset
-    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [network]
+  - id: rocky_node_group
+    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
     settings:
       node_count_dynamic_max: $(vars.num_nodes)
       instance_image: $(vars.rocky_image)
 
   - id: rocky_partition
-    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
     use:
-    - rocky_nodeset
+    - network1
+    - rocky_node_group
+    - lustre
     settings:
       partition_name: rocky
 
   # CentOS 7
-  - id: centos_nodeset
-    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [network]
+  - id: centos_node_group
+    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
     settings:
       node_count_dynamic_max: $(vars.num_nodes)
       instance_image: $(vars.centos_image)
 
   - id: centos_partition
-    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
     use:
-    - centos_nodeset
+    - network1
+    - centos_node_group
+    - lustre
     settings:
       partition_name: centos
 
-  - id: slurm_login
-    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
-    use: [network]
-    settings:
-      enable_login_public_ips: true
-
   - id: slurm_controller
-    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
     use:
-    - network
+    - network1
     # - ubuntu_partition
     - rocky_partition
     - centos_partition
     - lustre
-    - slurm_login
     settings:
-      enable_controller_public_ips: true
+      disable_controller_public_ips: false
+      # cloud_parameters:
+      #   no_comma_params: false
+      #   resume_rate: 0
+      #   resume_timeout: 1200
+      #   suspend_rate: 0
+      #   suspend_timeout: 1200
+
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v5-login
+    use:
+    - network1
+    - slurm_controller
+    settings:
+      disable_login_public_ips: false

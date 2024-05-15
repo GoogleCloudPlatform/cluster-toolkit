@@ -1,4 +1,4 @@
-# Copyright 2024 Google LLC
+# Copyright 2023 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,35 +16,20 @@
 tags:
 - m.custom-image
 - m.filestore
-- m.vpc
-- m.schedmd-slurm-gcp-v6-controller
-- m.schedmd-slurm-gcp-v6-login
-- m.schedmd-slurm-gcp-v6-nodeset
-- m.schedmd-slurm-gcp-v6-partition
+- m.firewall-rules
+- m.pre-existing-vpc
+- m.schedmd-slurm-gcp-v5-controller
+- m.schedmd-slurm-gcp-v5-login
+- m.schedmd-slurm-gcp-v5-node-group
+- m.schedmd-slurm-gcp-v5-partition
 - m.startup-script
-- slurm6
+- slurm5
 
 timeout: 14400s  # 4hr
 steps:
-# While using static network names we are gaurding against more than 1 instance running at a time (for multi-group tests)
-- id: check_for_running_build
-  name: gcr.io/cloud-builders/gcloud
-  entrypoint: /bin/bash
-  args:
-  - -c
-  - |
-    set -x -e
-    echo $TRIGGER_BUILD_CONFIG_PATH
-    MATCHING_BUILDS=$(gcloud builds list --ongoing --format 'value(id)' --filter='substitutions.TRIGGER_BUILD_CONFIG_PATH="$TRIGGER_BUILD_CONFIG_PATH"')
-    MATCHING_COUNT=$(echo $$MATCHING_BUILDS | wc -w)
-    if [ "$$MATCHING_COUNT" -gt 1 ]; then
-        echo "Found more than 1 matching running builds"
-        echo "$$MATCHING_BUILDS"
-        exit 1
-    fi
 # test image creation by provisioning a new VPC and using Packer to build an
 # image in it
-- id: ml-slurm-v6
+- id: ml-slurm
   name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
   entrypoint: /bin/bash
   env:
@@ -60,4 +45,4 @@ steps:
 
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/multigroup-integration-test.yml \
       --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
-      --extra-vars="@tools/cloud-build/daily-tests/tests/ml-slurm-v6.yml"
+      --extra-vars="@tools/cloud-build/daily-tests/tests/ml-slurm-v5-legacy.yml"

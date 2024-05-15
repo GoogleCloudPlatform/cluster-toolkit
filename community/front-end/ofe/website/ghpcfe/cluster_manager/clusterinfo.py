@@ -62,6 +62,8 @@ class ClusterInfo:
             self.config["baseDir"] / "clusters" / f"cluster_{self.cluster.id}"
         )
 
+        self.env = template_engines["django"]
+
     def prepare(self, credentials):
         """Prepares the cluster for deployment.
 
@@ -186,297 +188,104 @@ class ClusterInfo:
             # Directory already exists, no need to create it again
             pass
 
-    def _prepare_ghpc_filesystems(self):
-        yaml = []
-        refs = []
-        for (count, mp) in enumerate(
-            self.cluster.mount_points.order_by("mount_order")
-        ):
-            storage_id = f"mount_num_{count}"
-            ip = (
-                "'$controller'"
-                if mp.export in self.cluster.shared_fs.exports.all()
-                else mp.export.server_name
-            )
-            yaml.append(
-                f"""
-  - source: modules/file-system/pre-existing-network-storage
-    kind: terraform
-    id: {storage_id}
-    settings:
-      server_ip: {ip}
-      remote_mount: {mp.export.export_name}
-      local_mount: {mp.mount_path}
-      mount_options: {mp.mount_options}
-      fs_type: {mp.fstype_name}
-"""
-            )
-            refs.append(storage_id)
+    def indent_text(self, text, indent_level):
+        indent = '  ' * indent_level  # 2 spaces per indent level, adjust as needed
+        return '\n'.join(indent + line if line else line for line in text.split('\n'))
 
-        return ("\n\n".join(yaml), refs)
+    def _prepare_ghpc_filesystems(self):
+        filesystems_yaml = []
+        refs = []
+        template = self.env.get_template('blueprint/filesystem_config.yaml.j2')
+        
+        for (count, mp) in enumerate(self.cluster.mount_points.order_by("mount_order")):
+            storage_id = f"mount_num_{mp.id}"
+            server_ip = "'$controller'" if mp.export in self.cluster.shared_fs.exports.all() else mp.export.server_name
+            context = {
+                'storage_id': storage_id,
+                'server_ip': server_ip,
+                'remote_mount': mp.export.export_name,
+                'local_mount': mp.mount_path,
+                'mount_options': mp.mount_options,
+                'fs_type': mp.fstype_name
+            }
+            rendered_yaml = template.render(context)
+            indented_yaml = self.indent_text(rendered_yaml, 1) # Indent as necessary...
+            filesystems_yaml.append(indented_yaml)
+            refs.append(context['storage_id'])
+        
+        return ("\n\n".join(filesystems_yaml), refs)
 
     def _prepare_ghpc_partitions(self, part_uses):
-        yaml = []
+        partitions_yaml = []
         refs = []
-        uses_str = self._yaml_refs_to_uses(part_uses)
-        for (count, part) in enumerate(self.cluster.partitions.all()):
-            part_id = f"partition_{count}"
-            if part.image is not None:
-                imported_image_fam = part.image.family
-                regular_image_fam = f"image-{part.image.family}"
-                image_family = imported_image_fam if part.image.source_image_family == "Imported" else regular_image_fam
-                instance_image_yaml = f"""instance_image:
-            family: {image_family}
-            project: {self.cluster.project_id}"""
-            else:
-                instance_image_yaml = ""
+        template = self.env.get_template('blueprint/partition_config.yaml.j2')
+        uses_str = self._yaml_refs_to_uses(part_uses, indent_level=1)
 
-            if part.additional_disk_count > 0 and part.additional_disk_count is not None:
-                additional_disks_yaml = f"""additional_disks:
-"""
-                for disk in range(part.additional_disk_count):
-                    additional_disks_yaml += f"""      - device_name: disk{disk}
-        disk_name: null
-        disk_size_gb: {part.additional_disk_size}
-        disk_type: {part.additional_disk_type}
-        disk_labels: {{}}
-        auto_delete: {part.additional_disk_auto_delete}
-        boot: false\n"""
-            else:
-                additional_disks_yaml = ""
+        for part in self.cluster.partitions.all():
+            disk_range = list(range(part.additional_disk_count))
+            exclusive = 'True' if part.enable_placement or not part.enable_node_reuse else 'False'
+            context = {
+                'part': part,
+                'part_id': f"partition_{part.id}",
+                'uses_str': uses_str,
+                'cluster': self.cluster,
+                'disk_range': disk_range,
+                'exclusive': exclusive
+            }
+            rendered_yaml = template.render(context)
+            indented_yaml = self.indent_text(rendered_yaml, 1)   # Same here
+            partitions_yaml.append(indented_yaml)
+            refs.append(context['part_id'])
 
-            yaml.append(
-                f"""
-  - source: community/modules/compute/schedmd-slurm-gcp-v5-partition
-    kind: terraform
-    id: {part_id}
-    use:
-    - {part_id}-group
-{uses_str}
-    settings:
-      partition_name: {part.name}
-      subnetwork_self_link: {self.cluster.subnet.cloud_id}
-      enable_placement: {part.enable_placement}
-      exclusive: {part.enable_placement or not part.enable_node_reuse}
-  - source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
-    id: {part_id}-group
-    use:
-    settings:
-      enable_smt: {part.enable_hyperthreads}
-      machine_type: {part.machine_type}
-      node_count_dynamic_max: {part.dynamic_node_count}
-      node_count_static: {part.static_node_count}
-      disk_size_gb: {part.boot_disk_size}
-      disk_type: {part.boot_disk_type}
-      {instance_image_yaml}
-      {additional_disks_yaml}
-"""
-            )
+        return ("\n\n".join(partitions_yaml), refs)
 
-            if part.image:
-                yaml[-1] += (
-                    f"""\
-"""
-                )
+    def _prepare_cloudsql_yaml(self):
+        if not self.cluster.use_cloudsql:
+            return "", []
+        template = self.env.get_template('blueprint/cloudsql_config.yaml.j2')
+        context = {
+            'cluster_id': self.cluster.cloud_id
+        }
+        rendered_yaml = template.render(context)
+        indented_yaml = self.indent_text(rendered_yaml, 1)  # Adjust indent as necessary
 
-            # Temporarily hack in some A100 support
-            if part.GPU_per_node > 0:
-                yaml[-1] += (
-                    f"""\
-      guest_accelerator:
-        - type: {part.GPU_type}
-          count: {part.GPU_per_node}
-"""
-                )
-            refs.append(part_id)
+        return indented_yaml, ['slurm-sql']
 
-        return ("\n\n".join(yaml), refs)
-
-    def _yaml_refs_to_uses(self, use_list):
-        return "\n".join([f"    - {x}" for x in use_list])
-    
+    def _yaml_refs_to_uses(self, use_list, indent_level=0):
+        indent = '  ' * indent_level
+        use_lines = [f"{indent}- {item}" for item in use_list]
+        return "\n".join(use_lines) 
 
     def _prepare_ghpc_yaml(self):
         try:
             yaml_file = self.cluster_dir / "cluster.yaml"
-            project_id = json.loads(self.cluster.cloud_credential.detail)[
-                "project_id"
-            ]
-            (
-                filesystems_yaml,
-                filesystems_references,
-            ) = self._prepare_ghpc_filesystems()
-            (
-                partitions_yaml,
-                partitions_references,
-            ) = self._prepare_ghpc_partitions(
-                filesystems_references
-            )
-            controller_uses = self._yaml_refs_to_uses(
-                ["hpc_network"] + partitions_references + filesystems_references
-            )
-            login_uses = self._yaml_refs_to_uses(
-                filesystems_references
-            )
-            controller_sa = "sa"
-            # TODO: Determine if these all should be different, and if so, add to
-            # resource to be created. NOTE though, that at the moment, GHPC won't
-            # let us unpack output variables, so we can't index properly.
-            # for now, just use the singular access, and only create a single acct
-            # compute_sa = controller_sa
-            # login_sa = controller_sa
-            
-            # pylint: disable=line-too-long
-            startup_bucket = self.config["server"]["gcs_bucket"]
-            if self.cluster.login_node_image is not None:
-                login_image_yaml = f"""instance_image:
-            family: image-{self.cluster.login_node_image.family}
-            project: {self.cluster.project_id}"""
-            else:
-                login_image_yaml = ""
-            
-            if self.cluster.controller_node_image is not None:
-                controller_image_yaml = f"""instance_image:
-            family: image-{self.cluster.controller_node_image.family}
-            project: {self.cluster.project_id}
-            """
-            else:
-                controller_image_yaml = ""
+            project_id = json.loads(self.cluster.cloud_credential.detail)["project_id"]
+            filesystems_yaml, filesystems_refs = self._prepare_ghpc_filesystems()
+            partitions_yaml, partitions_refs = self._prepare_ghpc_partitions(filesystems_refs)
+            cloudsql_yaml, cloudsql_refs = self._prepare_cloudsql_yaml()  # Incorporate CloudSQL YAML
 
-            if self.cluster.use_cloudsql:
-                controller_uses = self._yaml_refs_to_uses(
-                ["hpc_network"] + partitions_references + filesystems_references + ["slurm-sql"]
-                )
-                slurmdbd_cloudsql_yaml = f"""  - source: community/modules/database/slurm-cloudsql-federation
-    kind: terraform
-    id: slurm-sql
-    use: [hpc_network, ps-connect]
-    settings:
-      sql_instance_name: sql-{self.cluster.cloud_id}
-      tier: "db-g1-small"
-    """
-            else:
-                slurmdbd_cloudsql_yaml = ""
+            # Use a template to generate the final YAML configuration
+            template = self.env.get_template('blueprint/cluster_config.yaml.j2')
+            controller_uses_refs = ["hpc_network"] + partitions_refs + filesystems_refs + cloudsql_refs
+            context = {
+                "project_id": project_id,
+                "site_name": SITE_NAME,
+                "filesystems_yaml": filesystems_yaml,
+                "partitions_yaml": partitions_yaml,
+                "cloudsql_yaml": cloudsql_yaml,
+                "cluster": self.cluster,
+                "controller_uses": self._yaml_refs_to_uses(controller_uses_refs, indent_level=2),
+                "login_uses": self._yaml_refs_to_uses(filesystems_refs, indent_level=2),
+                "controller_sa": "sa",
+                "startup_bucket": self.config["server"]["gcs_bucket"]
+            }
+            rendered_yaml = template.render(context)
 
             with yaml_file.open("w") as f:
-                f.write(
-            f"""
-blueprint_name: {self.cluster.cloud_id}
+                f.write(rendered_yaml)
 
-vars:
-  project_id: {project_id}
-  deployment_name: {self.cluster.cloud_id}
-  region: {self.cluster.cloud_region}
-  zone: {self.cluster.cloud_zone}
-  enable_reconfigure: True
-  enable_cleanup_compute: False
-  enable_cleanup_subscriptions: True
-  enable_bigquery_load: {self.cluster.use_bigquery}
-  instance_image_custom: True
-  labels:
-    created_by: {SITE_NAME}
-
-deployment_groups:
-- group: primary
-  modules:
-  - source: modules/network/pre-existing-vpc
-    kind: terraform
-    settings:
-      network_name: {self.cluster.subnet.vpc.cloud_id}
-      subnetwork_name: {self.cluster.subnet.cloud_id}
-    id: hpc_network
-
-  - source: community/modules/network/private-service-access
-    id: ps-connect
-    use: [ hpc_network ]    
-
-{filesystems_yaml}
-
-  - source: community/modules/project/service-account
-    kind: terraform
-    id: hpc_service_account
-    settings:
-      project_id: {project_id}
-      name: {controller_sa}
-      project_roles:
-      - compute.instanceAdmin.v1
-      - iam.serviceAccountUser
-      - monitoring.metricWriter
-      - logging.logWriter
-      - storage.objectAdmin
-      - pubsub.admin
-      - compute.securityAdmin
-      - iam.serviceAccountAdmin
-      - resourcemanager.projectIamAdmin
-      - compute.networkAdmin
-
-{partitions_yaml}
-
-{slurmdbd_cloudsql_yaml}
-
-  - source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
-    kind: terraform
-    id: slurm_controller
-    settings:
-      cloud_parameters:
-        resume_rate: 0
-        resume_timeout: 500
-        suspend_rate: 0
-        suspend_timeout: 300
-        no_comma_params: false
-      machine_type: {self.cluster.controller_instance_type}
-      disk_type: {self.cluster.controller_disk_type}
-      disk_size_gb: {self.cluster.controller_disk_size}
-      {controller_image_yaml}
-      service_account:
-        email: $(hpc_service_account.service_account_email)
-        scopes:
-        - https://www.googleapis.com/auth/cloud-platform
-        - https://www.googleapis.com/auth/monitoring.write
-        - https://www.googleapis.com/auth/logging.write
-        - https://www.googleapis.com/auth/devstorage.read_write
-        - https://www.googleapis.com/auth/pubsub
-      controller_startup_script: |
-        #!/bin/bash
-        echo "******************************************** CALLING CONTROLLER STARTUP"
-        gsutil cp gs://{startup_bucket}/clusters/{self.cluster.id}/bootstrap_controller.sh - | bash
-      compute_startup_script: |
-        #!/bin/bash
-        gsutil cp gs://{startup_bucket}/clusters/{self.cluster.id}/bootstrap_compute.sh - | bash
-    use:
-{controller_uses}
-
-  - source: community/modules/scheduler/schedmd-slurm-gcp-v5-login
-    kind: terraform
-    id: slurm_login
-    settings:
-      num_instances: {self.cluster.num_login_nodes}
-      subnetwork_self_link: {self.cluster.subnet.cloud_id}
-      machine_type: {self.cluster.login_node_instance_type}
-      disk_type: {self.cluster.login_node_disk_type}
-      disk_size_gb: {self.cluster.login_node_disk_size}
-      {login_image_yaml}
-      service_account:
-        email: $(hpc_service_account.service_account_email)
-        scopes:
-        - https://www.googleapis.com/auth/cloud-platform
-        - https://www.googleapis.com/auth/monitoring.write
-        - https://www.googleapis.com/auth/logging.write
-        - https://www.googleapis.com/auth/devstorage.read_write
-      startup_script: |
-        #!/bin/bash
-        echo "******************************************** CALLING LOGIN STARTUP"
-        gsutil cp gs://{startup_bucket}/clusters/{self.cluster.id}/bootstrap_login.sh - | bash
-    use:
-    - slurm_controller
-
-    """
-                )
-        # pylint: enable=line-too-long
-        
         except Exception as e:
             logger.exception(f"Exception happened creating blueprint for cluster {self.cluster.name} - {e}")
-
 
     def _prepare_bootstrap_gcs(self):
         template_dir = (

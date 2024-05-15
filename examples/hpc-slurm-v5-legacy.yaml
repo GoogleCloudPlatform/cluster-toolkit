@@ -18,7 +18,7 @@ blueprint_name: hpc-slurm
 
 vars:
   project_id:  ## Set GCP Project ID Here ##
-  deployment_name: hpc-slurm
+  deployment_name: hpc-small
   region: us-central1
   zone: us-central1-a
 
@@ -31,49 +31,50 @@ deployment_groups:
   # Source is an embedded module, denoted by "modules/*" without ./, ../, /
   # as a prefix. To refer to a local module, prefix with ./, ../ or /
   # Example - ./modules/network/vpc
-  - id: network
+  - id: network1
     source: modules/network/vpc
 
   - id: homefs
     source: modules/file-system/filestore
-    use: [network]
+    use: [network1]
     settings:
       local_mount: /home
 
-  - id: debug_nodeset
-    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [network]
+  - id: debug_node_group
+    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
     settings:
       node_count_dynamic_max: 4
       machine_type: n2-standard-2
-      enable_placement: false # the default is: true
 
   - id: debug_partition
-    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
     use:
-    - debug_nodeset
+    - network1
+    - homefs
+    - debug_node_group
     settings:
       partition_name: debug
       exclusive: false # allows nodes to stay up after jobs are done
+      enable_placement: false # the default is: true
       is_default: true
 
-  - id: compute_nodeset
-    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [network]
+  - id: compute_node_group
+    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
     settings:
       node_count_dynamic_max: 20
       bandwidth_tier: gvnic_enabled
 
   - id: compute_partition
-    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
     use:
-    - compute_nodeset
+    - network1
+    - homefs
+    - compute_node_group
     settings:
       partition_name: compute
 
-  - id: h3_nodeset
-    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [network]
+  - id: h3_node_group
+    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
     settings:
       node_count_dynamic_max: 20
       machine_type: h3-standard-88
@@ -83,27 +84,30 @@ deployment_groups:
       bandwidth_tier: gvnic_enabled
 
   - id: h3_partition
-    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
     use:
-    - h3_nodeset
+    - network1
+    - homefs
+    - h3_node_group
     settings:
       partition_name: h3
 
-  - id: slurm_login
-    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
-    use: [network]
-    settings:
-      machine_type: n2-standard-4
-      enable_login_public_ips: true
-
   - id: slurm_controller
-    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
     use:
-    - network
+    - network1
     - debug_partition
     - compute_partition
     - h3_partition
     - homefs
-    - slurm_login
     settings:
-      enable_controller_public_ips: true
+      disable_controller_public_ips: false
+
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v5-login
+    use:
+    - network1
+    - slurm_controller
+    settings:
+      machine_type: n2-standard-4
+      disable_login_public_ips: false

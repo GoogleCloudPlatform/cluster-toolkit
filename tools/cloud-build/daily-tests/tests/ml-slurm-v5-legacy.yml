@@ -14,14 +14,10 @@
 
 ---
 
-test_name: image-builder-v6
-deployment_name: pkrv6{{ build }}
-zone: us-central1-c
+test_name: ml-slurm
+deployment_name: ml-slurm-{{ build }}
 workspace: /workspace
-blueprint_yaml: "{{ workspace }}/examples/image-builder-v6.yaml"
-network: "{{ deployment_name }}-net"
+blueprint_yaml: "{{ workspace }}/examples/ml-slurm-v5-legacy.yaml"
 packer_group_name: packer
 packer_module_id: custom-image
-cli_deployment_vars:
-  network_name: "{{ network }}"
-  subnetwork_name: "{{ network }}-sub"
+wait_for_compute_nodes_to_go_down: true

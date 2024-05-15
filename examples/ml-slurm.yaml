@@ -1,4 +1,4 @@
-# Copyright 2022 Google LLC
+# Copyright 2024 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,11 +13,12 @@
 # limitations under the License.
 
 ---
-blueprint_name: ml-slurm
+
+blueprint_name: ml-slurm-v6
 
 vars:
   project_id:  ## Set project id here
-  deployment_name: ml-example
+  deployment_name: ml-example-v6
   region: asia-southeast1
   zone: asia-southeast1-b
   zones:
@@ -41,40 +42,7 @@ deployment_groups:
 - group: primary
   modules:
   - id: network
-    source: modules/network/pre-existing-vpc
-
-  # this example anticipates that the VPC default network has internal traffic
-  # allowed and IAP tunneling for SSH connections
-  - id: firewall_rule
-    source: modules/network/firewall-rules
-    use:
-    - network
-    settings:
-      ingress_rules:
-      - name: $(vars.deployment_name)-allow-internal-traffic
-        description: Allow internal traffic
-        destination_ranges:
-        - $(network.subnetwork_address)
-        source_ranges:
-        - $(network.subnetwork_address)
-        allow:
-        - protocol: tcp
-          ports:
-          - 0-65535
-        - protocol: udp
-          ports:
-          - 0-65535
-        - protocol: icmp
-      - name: $(vars.deployment_name)-allow-iap-ssh
-        description: Allow IAP-tunneled SSH connections
-        destination_ranges:
-        - $(network.subnetwork_address)
-        source_ranges:
-        - 35.235.240.0/20
-        allow:
-        - protocol: tcp
-          ports:
-          - 22
+    source: modules/network/vpc
 
   - id: homefs
     source: modules/file-system/filestore
@@ -171,7 +139,7 @@ deployment_groups:
       omit_external_ip: false
       source_image_project_id: [schedmd-slurm-public]
       # see latest in https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#published-image-family
-      source_image_family: slurm-gcp-5-10-debian-11
+      source_image_family: slurm-gcp-6-4-debian-11
       # You can find size of source image by using following command
       # gcloud compute images describe-from-family <source_image_family> --project schedmd-slurm-public
       disk_size: $(vars.disk_size_gb)
@@ -228,8 +196,9 @@ deployment_groups:
           print(t0.timeit(100))
           print(t1.timeit(100))
 
-  - id: a2_node_group
-    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
+  - id: a2_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network]
     settings:
       node_count_dynamic_max: 20
       bandwidth_tier: gvnic_enabled
@@ -238,54 +207,48 @@ deployment_groups:
       instance_image_custom: true
 
   - id: a2_partition
-    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
-    use:
-    - a2_node_group
-    - homefs
-    - network
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use: [a2_nodeset]
     settings:
       partition_name: a2
       is_default: true
 
-  - id: g2_node_group
-    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
+  - id: g2_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network]
     settings:
       node_count_dynamic_max: 20
+      enable_placement: false
       bandwidth_tier: gvnic_enabled
       machine_type: g2-standard-4
       instance_image: $(vars.new_image)
       instance_image_custom: true
 
   - id: g2_partition
-    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
-    use:
-    - g2_node_group
-    - homefs
-    - network
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use: [g2_nodeset]
     settings:
       partition_name: g2
-      enable_placement: false
       exclusive: false
 
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    use: [network]
+    settings:
+      enable_login_public_ips: true
+      instance_image: $(vars.new_image)
+      instance_image_custom: true
+
   - id: slurm_controller
-    source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     use:
     - network
     - a2_partition
     - g2_partition
     - homefs
+    - slurm_login
     settings:
-      disable_controller_public_ips: false
+      enable_controller_public_ips: true
       instance_image: $(vars.new_image)
       instance_image_custom: true
-
-  - id: slurm_login
-    source: community/modules/scheduler/schedmd-slurm-gcp-v5-login
-    use:
-    - examples
-    - network
-    - slurm_controller
-    settings:
-      disable_login_public_ips: false
-      instance_image: $(vars.new_image)
-      instance_image_custom: true
+      login_startup_script: $(examples.startup_script)

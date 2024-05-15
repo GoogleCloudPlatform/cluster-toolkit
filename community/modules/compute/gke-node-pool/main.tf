@@ -81,9 +81,17 @@ resource "google_container_node_pool" "node_pool" {
     oauth_scopes      = var.service_account_scopes
     machine_type      = var.machine_type
     spot              = var.spot
-    taint             = concat(var.taints, local.gpu_taint)
     image_type        = var.image_type
     guest_accelerator = var.guest_accelerator
+
+    dynamic "taint" {
+      for_each = concat(var.taints, local.gpu_taint)
+      content {
+        key    = taint.value.key
+        value  = taint.value.value
+        effect = taint.value.effect
+      }
+    }
 
     ephemeral_storage_local_ssd_config {
       local_ssd_count = var.local_ssd_count_ephemeral_storage

@@ -1,4 +1,4 @@
-# Copyright 2024 Google LLC
+# Copyright 2022 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,29 +13,29 @@
 # limitations under the License.
 
 ---
-blueprint_name: hpc-amd-slurm-v6
+blueprint_name: hpc-amd-slurm
 
 vars:
   project_id:  ## Set GCP Project ID Here ##
-  deployment_name: amd-v6
+  deployment_name: amd-v5
   region: us-east4
   zone: us-east4-c
 
 deployment_groups:
 - group: primary
   modules:
-  - id: network
+  - id: network1
     source: modules/network/vpc
 
   - id: homefs
     source: modules/file-system/filestore
-    use: [network]
+    use: [network1]
     settings:
       local_mount: /home
 
   - id: swfs
     source: modules/file-system/filestore
-    use: [network]
+    use: [network1]
     settings:
       local_mount: /sw
 
@@ -43,6 +43,7 @@ deployment_groups:
     source: community/modules/scripts/spack-setup
     settings:
       install_dir: /sw/spack
+      spack_ref: v0.18.1
 
   - id: spack-execute
     source: community/modules/scripts/spack-execute
@@ -66,7 +67,7 @@ deployment_groups:
           packages:
             slurm:
               externals:
-                - spec: slurm@23-11-3
+                - spec: slurm@22-05-8
                   prefix: /usr/local
               buildable: False
       - destination: /sw/spack/openfoam_env.yaml
@@ -74,7 +75,7 @@ deployment_groups:
           spack:
             definitions:
             - compilers:
-              - gcc@13.1.0
+              - gcc@10.3.0
             - mpis:
               - openmpi@4.1.3+legacylaunchers+pmi fabrics=none schedulers=slurm
             - packages:
@@ -101,8 +102,9 @@ deployment_groups:
         spack config --scope site add concretizer:targets:host_compatible:false
 
         # gcc 12.1.0 is known to have runtime failures with OpenFOAM 8
-        spack install gcc@13.1.0 %gcc@8.5.0 target=x86_64
-        spack load gcc@13.1.0 %gcc@8.5.0 target=x86_64
+        # gcc 10.3.0 is the earliest copy of gcc with Zen 3 support
+        spack install gcc@10.3.0 %gcc@4.8.5 target=x86_64
+        spack load gcc@10.3.0 %gcc@4.8.5 target=x86_64
         spack compiler find --scope site
 
         if ! spack env list | grep -q openfoam; then
@@ -160,67 +162,70 @@ deployment_groups:
 
   - id: spack_builder
     source: modules/compute/vm-instance
-    use: [network, swfs, spack-startup]
+    use: [network1, swfs, spack-startup]
     settings:
       name_prefix: spack-builder
       machine_type: c2d-standard-16
+      disable_public_ips: true
       instance_image:
         # these images must match the images used by Slurm modules below because
         # we are building OpenMPI with PMI support in libraries contained in
         # Slurm installation
-        family: slurm-gcp-6-4-hpc-rocky-linux-8
+        family: slurm-gcp-5-10-hpc-centos-7
         project: schedmd-slurm-public
 
-  - id: low_cost_nodeset
-    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [network]
+  - id: low_cost_node_group
+    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
     settings:
       machine_type: c2d-standard-4
       node_count_dynamic_max: 10
       bandwidth_tier: gvnic_enabled
-      enable_placement: false
 
   - id: low_cost_partition
-    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
-    use: [low_cost_nodeset]
+    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
+    use:
+    - network1
+    - low_cost_node_group
     settings:
       partition_name: lowcost
+      enable_placement: false
 
-  - id: compute_nodeset
-    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [network]
+  - id: compute_node_group
+    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
     settings:
       machine_type: c2d-standard-112
       node_count_dynamic_max: 50
       bandwidth_tier: gvnic_enabled
-      enable_placement: true
 
-  # Because is_default is set to true, jobs will run on this partition unless an
+  # because is_default is set to true, jobs will run on this partition unless an
   # alternative partition is specified using, for example, "srun -p lowcost"
   - id: compute_partition
-    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
-    use: [compute_nodeset]
+    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
+    use:
+    - network1
+    - compute_node_group
     settings:
       partition_name: compute
+      enable_placement: true
       is_default: true
 
-  - id: slurm_login
-    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
-    use: [network]
-    settings:
-      # need at least 8 physical cores to run OpenFOAM test
-      machine_type: c2d-standard-16
-
   - id: slurm_controller
-    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
     use:
-    - network
+    - network1
     - homefs
     - swfs
     - low_cost_partition
     - compute_partition
-    - slurm_login
     settings:
       machine_type: c2d-standard-4
-      login_startup_script: $(slurm_startup.startup_script)
-      login_startup_scripts_timeout: 21600
+
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v5-login
+    use:
+    - network1
+    - slurm_controller
+    - slurm_startup
+    settings:
+      # need at least 8 physical cores to run OpenFOAM test
+      machine_type: c2d-standard-16

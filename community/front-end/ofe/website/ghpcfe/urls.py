@@ -57,6 +57,11 @@ urlpatterns = [
     path(
         "cluster/<int:pk>", ClusterDetailView.as_view(), name="cluster-detail"
     ),
+    path(
+        "clusters/partition-delete/<int:partition_id>",
+        ClusterPartitionDeleteView.as_view(),
+        name='partition-delete'
+    ),
     path("vpc/<int:pk>", VPCDetailView.as_view(), name="vpc-detail"),
     path(
         "application/<int:pk>",

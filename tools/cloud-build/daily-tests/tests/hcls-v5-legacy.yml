@@ -1,4 +1,4 @@
-# Copyright 2024 Google LLC
+# Copyright 2023 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,30 +14,32 @@
 
 ---
 
-test_name: htc-slurm-v6
-deployment_name: htcv6{{ build }}
-slurm_cluster_name: "htcv6{{ build[0:5] }}"
-zone: us-west4-c
-
+test_name: hcls-cluster
+deployment_name: "hcls-{{ build }}"
+# No non-alphanumerical characters in the slurm cluster name - they will be
+# removed by HPC Toolkit slurm wrappers, which will break the playbook
+slurm_cluster_name: "hcls{{ build[0:6] }}"
+zone: europe-west1-d
+workspace: /workspace
+blueprint_yaml: "{{ workspace }}/docs/videos/healthcare-and-life-sciences/hcls-blueprint-v5-legacy.yaml"
+network: "{{ test_name }}-net"
+login_node: "{{ slurm_cluster_name }}-login-*"
+controller_node: "{{ slurm_cluster_name }}-controller"
 cli_deployment_vars:
   network_name: "{{ network }}"
-  region: us-west4
-  zone: us-west4-c
-
-workspace: /workspace
-blueprint_yaml: "{{ workspace }}/community/examples/htc-slurm-v6.yaml"
-network: "{{ test_name }}-net"
-# Note: Pattern matching in gcloud only supports 1 wildcard, a*-login-* won't work.
-login_node: "{{ slurm_cluster_name }}-slurm-login-*"
-controller_node: "{{ slurm_cluster_name }}-controller"
+  region: europe-west1
+  zone: "{{ zone }}"
+  disable_login_public_ips: "false"
+  disable_controller_public_ips: "false"
 post_deploy_tests:
 - test-validation/test-mounts.yml
 - test-validation/test-partitions.yml
 custom_vars:
   partitions:
   - compute
-  - lowcost
   mounts:
   - /home
-  - /projects
-  - /scratch
+  - /apps
+  - /data_input
+  - /data_output
+wait_for_compute_nodes_to_go_down: true

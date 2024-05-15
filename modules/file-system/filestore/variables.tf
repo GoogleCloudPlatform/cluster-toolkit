@@ -126,3 +126,9 @@ variable "mount_options" {
   type        = string
   default     = "defaults,_netdev"
 }
+
+variable "private_vpc_connection_peering" {
+  description = "Peering name for private access service on VPC"
+  type        = string
+  default     = null
+}

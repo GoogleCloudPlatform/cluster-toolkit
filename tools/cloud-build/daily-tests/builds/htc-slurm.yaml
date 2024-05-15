@@ -14,21 +14,19 @@
 
 ---
 tags:
-- m.custom-image
+- m.filestore
+- m.DDN-EXAScaler
 - m.schedmd-slurm-gcp-v6-controller
 - m.schedmd-slurm-gcp-v6-login
 - m.schedmd-slurm-gcp-v6-nodeset
 - m.schedmd-slurm-gcp-v6-partition
-- m.startup-script
 - m.vpc
-- packer
+- m.dashboard
 - slurm6
 
 timeout: 14400s  # 4hr
 steps:
-# test image creation by provisioning a new VPC and using Packer to build an
-# image in it
-- id: packer-v6
+- id: htc-slurm-v6
   name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
   entrypoint: /bin/bash
   env:
@@ -42,6 +40,6 @@ steps:
     BUILD_ID_FULL=$BUILD_ID
     BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
 
-    ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/multigroup-integration-test.yml \
+    ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
       --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
-      --extra-vars="@tools/cloud-build/daily-tests/tests/packer-v6.yml"
+      --extra-vars="@tools/cloud-build/daily-tests/tests/htc-slurm.yml"
