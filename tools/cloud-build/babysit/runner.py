@@ -92,7 +92,10 @@ def run(args: RunnerArgs, ui: UIProto) -> None:
         return
 
     cb = cloudbuild_v1.services.cloud_build.CloudBuildClient()
-    Babysitter(ui, cb, args.project, sha, selectors, args.concurrency, args.retries).do()
+    try:
+        Babysitter(ui, cb, args.project, sha, selectors, args.concurrency, args.retries).do()
+    except KeyboardInterrupt:
+        print("User interrupted") # TODO: use UI to log
 
 def run_from_notebook(
         pr: int,
