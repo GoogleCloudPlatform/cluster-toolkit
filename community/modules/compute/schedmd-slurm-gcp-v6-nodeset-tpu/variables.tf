@@ -103,7 +103,7 @@ variable "data_disks" {
 }
 
 variable "docker_image" {
-  description = "The gcp container registry id docker image to use in the TPU vms, it defaults to gcr.io/schedmd-slurm-public/tpu:slurm-gcp-6-4-tf-<var.tf_version>"
+  description = "The gcp container registry id docker image to use in the TPU vms, it defaults to gcr.io/schedmd-slurm-public/tpu:slurm-gcp-6-5-tf-<var.tf_version>"
   type        = string
   default     = null
 }
