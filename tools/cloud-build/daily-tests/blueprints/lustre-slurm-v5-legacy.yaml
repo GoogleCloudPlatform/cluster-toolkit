@@ -27,10 +27,10 @@ vars:
   # on_host_maintenance: MIGRATE
   num_nodes: 1
   centos_image:
-    family: slurm-gcp-5-10-hpc-centos-7
+    family: slurm-gcp-5-11-hpc-centos-7
     project: schedmd-slurm-public
   rocky_image:
-    family: slurm-gcp-5-10-hpc-rocky-linux-8
+    family: slurm-gcp-5-11-hpc-rocky-linux-8
     project: schedmd-slurm-public
 
 deployment_groups:
@@ -81,7 +81,7 @@ deployment_groups:
   #   settings:
   #     node_count_dynamic_max: $(vars.num_nodes)
   #     instance_image:
-  #       family: slurm-gcp-5-10-ubuntu-2004-lts
+  #       family: slurm-gcp-5-11-ubuntu-2004-lts
   #       project: schedmd-slurm-public
 
   # - id: ubuntu_partition
