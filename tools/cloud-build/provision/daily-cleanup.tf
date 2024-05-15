@@ -15,7 +15,7 @@
 resource "google_cloudbuild_trigger" "daily_project_cleanup_filestore" {
   name        = "DAILY-project-cleanup-filestore"
   description = "A filestore cleanup script to run periodically"
-  tags        = [local.notify_chat_tag]
+  tags        = []
 
   git_file_source {
     path      = "tools/cloud-build/project-cleanup-filestore.yaml"
@@ -34,7 +34,7 @@ resource "google_cloudbuild_trigger" "daily_project_cleanup_filestore" {
 module "daily_project_cleanup_filestore_schedule" {
   source      = "./trigger-schedule"
   trigger     = google_cloudbuild_trigger.daily_project_cleanup_filestore
-  schedule    = "0,30 22,23 * * *"
+  schedule    = "50 23 * * *"
   retry_count = 4
 }
 
