@@ -128,7 +128,7 @@ module "slurm_files" {
   partitions  = [for p in var.partitions : { partition : p }]
   nodeset     = values(module.slurm_nodeset)[*]
   nodeset_tpu = values(module.slurm_nodeset_tpu)[*]
-  nodeset_dyn = values(local.nodeset_dyn_map)[*]
+  nodeset_dyn = [for ns in values(local.nodeset_dyn_map) : { nodeset : ns }]
 
   depends_on = [module.bucket]
 }
