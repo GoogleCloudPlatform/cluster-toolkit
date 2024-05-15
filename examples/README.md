@@ -18,44 +18,44 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
 * [Ongoing Migration to Slurm-GCP v6](#ongoing-migration-to-slurm-gcp-v6)
 * [Blueprint Descriptions](#blueprint-descriptions)
   * [hpc-slurm-v5-legacy.yaml](#hpc-slurm-v5-legacyyaml-) ![core-badge]
-  * [hpc-slurm-v6.yaml](#hpc-slurm-v6yaml--) ![core-badge] ![experimental-badge]
+  * [hpc-slurm.yaml](#hpc-slurmyaml-) ![core-badge]
   * [hpc-enterprise-slurm-v5-legacy.yaml](#hpc-enterprise-slurm-v5-legacyyaml-) ![core-badge]
-  * [hpc-enterprise-slurm-v6.yaml](#hpc-enterprise-slurm-v6yaml--) ![core-badge] ![experimental-badge]
-  * [hpc-slurm-static-v6.yaml](#hpc-slurm-static-v6yaml--) ![core-badge] ![experimental-badge]
+  * [hpc-enterprise-slurm.yaml](#hpc-enterprise-slurmyaml-) ![core-badge]
+  * [hpc-slurm-static.yaml](#hpc-slurm-staticyaml-) ![core-badge]
   * [hpc-slurm6-tpu.yaml](#hpc-slurm6-tpuyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm6-tpu-maxtext.yaml](#hpc-slurm6-tpu-maxtextyaml--) ![community-badge] ![experimental-badge]
   * [ml-slurm-v5-legacy.yaml](#ml-slurm-v5-legacyyaml-) ![core-badge]
-  * [ml-slurm-v6.yaml](#ml-slurm-v6yaml--) ![core-badge] ![experimental-badge]
+  * [ml-slurm.yaml](#ml-slurmyaml-) ![core-badge]
   * [image-builder-v5-legacy.yaml](#image-builder-v5-legacyyaml-) ![core-badge]
-  * [image-builder-v6.yaml](#image-builderyaml--) ![core-badge] ![experimental-badge]
+  * [image-builder.yaml](#image-builderyaml--) ![core-badge]
   * [serverless-batch.yaml](#serverless-batchyaml-) ![core-badge]
   * [serverless-batch-mpi.yaml](#serverless-batch-mpiyaml-) ![core-badge]
   * [pfs-lustre.yaml](#pfs-lustreyaml-) ![core-badge]
   * [cae-slurm-v5-legacy.yaml](#cae-slurm-v5-legacyyaml-) ![core-badge]
-  * [cae-slurm-v6.yaml](#cae-slurm-v6yaml--) ![core-badge] ![experimental-badge]
+  * [cae-slurm.yaml](#cae-slurmyaml-) ![core-badge]
   * [hpc-build-slurm-image.yaml](#hpc-build-slurm-imageyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-ubuntu2004-v5-legacy.yaml](#hpc-slurm-ubuntu2004-v5-legacyyaml-) ![community-badge]
-  * [hpc-slurm-ubuntu2004-v6.yaml](#hpc-slurm-ubuntu2004-v6yaml-) ![community-badge] ![experimental-badge]
+  * [hpc-slurm-ubuntu2004.yaml](#hpc-slurm-ubuntu2004yaml--) ![community-badge]
   * [pfs-daos.yaml](#pfs-daosyaml-) ![community-badge]
   * [hpc-slurm-daos.yaml](#hpc-slurm-daosyaml-) ![community-badge]
   * [hpc-amd-slurm-v5-legacy.yaml](#hpc-amd-slurm-v5-legacyyaml-) ![community-badge]
-  * [hpc-amd-slurm-v6.yaml](#hpc-amd-slurm-v6yaml--) ![community-badge] ![experimental-badge]
+  * [hpc-amd-slurm.yaml](#hpc-amd-slurmyaml-) ![community-badge]
   * [hpc-slurm-sharedvpc.yaml](#hpc-slurm-sharedvpcyaml--) ![community-badge] ![experimental-badge]
   * [client-google-cloud-storage.yaml](#client-google-cloud-storageyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-gromacs.yaml](#hpc-slurm-gromacsyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-local-ssd-v5-legacy.yaml](#hpc-slurm-local-ssd-v5-legacyyaml--) ![community-badge] ![experimental-badge]
-  * [hpc-slurm-local-ssd-v6.yaml](#hpc-slurm-local-ssd-v6yaml--) ![community-badge] ![experimental-badge]
-  * [hcls-blueprint-v6.yaml](#hcls-blueprint-v6yaml--) ![core-badge] ![experimental-badge]
+  * [hpc-slurm-local-ssd.yaml](#hpc-slurm-local-ssdyaml--) ![community-badge] ![experimental-badge]
+  * [hcls-blueprint.yaml](#hcls-blueprintyaml-) ![core-badge]
   * [hpc-gke.yaml](#hpc-gkeyaml--) ![community-badge] ![experimental-badge]
   * [ml-gke](#ml-gkeyaml--) ![community-badge] ![experimental-badge]
   * [storage-gke](#storage-gkeyaml--) ![community-badge] ![experimental-badge]
   * [htc-slurm-v5-legacy.yaml](#htc-slurm-v5-legacyyaml--) ![community-badge] ![experimental-badge]
-  * [htc-slurm-v6.yaml](#htc-slurm-v6yaml--) ![community-badge] ![experimental-badge]
+  * [htc-slurm.yaml](#htc-slurmyaml-) ![community-badge]
   * [htc-htcondor.yaml](#htc-htcondoryaml--) ![community-badge] ![experimental-badge]
   * [fsi-montecarlo-on-batch.yaml](#fsi-montecarlo-on-batchyaml-) ![community-badge] ![experimental-badge]
   * [tutorial-starccm-slurm.yaml](#tutorial-starccm-slurmyaml--) ![community-badge] ![experimental-badge]
   * [tutorial-starccm.yaml](#tutorial-starccmyaml--) ![community-badge] ![experimental-badge]
-  * [hpc-slurm-ramble-gromacs-v6.yaml](#hpc-slurm-ramble-gromacs-v6yaml--) ![community-badge] ![experimental-badge]
+  * [hpc-slurm-ramble-gromacs.yaml](#hpc-slurm-ramble-gromacsyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-chromedesktop-v5-legacy.yaml](#hpc-slurm-chromedesktop-v5-legacyyaml--) ![community-badge] ![experimental-badge]
   * [flux-cluster](#flux-clusteryaml--) ![community-badge] ![experimental-badge]
   * [tutorial-fluent.yaml](#tutorial-fluentyaml--) ![community-badge] ![experimental-badge]
@@ -238,7 +238,7 @@ For this example the following is needed in the selected region:
 * Compute Engine API: Resource policies: **one for each job in parallel** -
   _only needed for the `compute` partition_
 
-### [hpc-slurm-v6.yaml] ![core-badge] ![experimental-badge]
+### [hpc-slurm.yaml] ![core-badge]
 
 Creates a basic auto-scaling Slurm cluster with mostly default settings. The
 blueprint also creates a new VPC network, and a filestore instance mounted to
@@ -250,7 +250,7 @@ needing to request additional quota. The purpose of the `debug` partition is to
 make sure that first time users are not immediately blocked by quota
 limitations.
 
-[hpc-slurm-v6.yaml]: ./hpc-slurm-v6.yaml
+[hpc-slurm.yaml]: ./hpc-slurm.yaml
 
 #### Compute Partition
 
@@ -265,7 +265,7 @@ select the compute partition using the `-p compute` argument when running `srun`
 There is an `h3` partition that uses compute-optimized `h3-standard-88` machine type.
 You can read more about the H3 machine series [here](https://cloud.google.com/compute/docs/compute-optimized-machines#h3_series).
 
-#### Quota Requirements for hpc-slurm-v6.yaml
+#### Quota Requirements for hpc-slurm.yaml
 
 For this example the following is needed in the selected region:
 
@@ -378,7 +378,7 @@ to 256
 
 [hpc-enterprise-slurm-v5-legacy.yaml]: ./hpc-enterprise-slurm-v5-legacy.yaml
 
-### [hpc-enterprise-slurm-v6.yaml] ![core-badge] ![experimental-badge]
+### [hpc-enterprise-slurm.yaml] ![core-badge]
 
 This advanced blueprint creates a cluster with Slurm with several performance
 tunings enabled, along with tiered file systems for higher performance. Some of
@@ -439,7 +439,7 @@ File systems:
 > described in the pricing section of the
 > [DDN EXAScaler Cloud Marketplace Solution](https://console.developers.google.com/marketplace/product/ddnstorage/).
 
-#### Quota Requirements for hpc-enterprise-slurm-v6.yaml
+#### Quota Requirements for hpc-enterprise-slurm.yaml
 
 For this example the following is needed in the selected region:
 
@@ -466,9 +466,9 @@ to 256
 * Compute Engine API: Resource policies: **one for each job in parallel** -
   _not needed for `n2` partition_
 
-[hpc-enterprise-slurm-v6.yaml]: ./hpc-enterprise-slurm-v6.yaml
+[hpc-enterprise-slurm.yaml]: ./hpc-enterprise-slurm.yaml
 
-### [hpc-slurm-static-v6.yaml] ![core-badge] ![experimental-badge]
+### [hpc-slurm-static.yaml] ![core-badge]
 
 This example demonstrates how to create a partition with static compute nodes.
 See [Best practices for static compute nodes] for instructions on setting up a
@@ -495,7 +495,7 @@ functionality with GPUs, see the
 [ML Slurm A3 example](./machine-learning/README.md).
 
 [Best practices for static compute nodes]: http://cloud/hpc-toolkit/docs/slurm/static-nodes-best-practices
-[hpc-slurm-static-v6.yaml]: ./hpc-slurm-static-v6.yaml
+[hpc-slurm-static.yaml]: ./hpc-slurm-static.yaml
 
 ### [hpc-slurm6-tpu.yaml] ![community-badge] ![experimental-badge]
 
@@ -563,7 +563,7 @@ timestamp for uniqueness.
 
 [ml-slurm-v5-legacy.yaml]: ../examples/ml-slurm-v5-legacy.yaml
 
-### [ml-slurm-v6.yaml] ![core-badge] ![experimental-badge]
+### [ml-slurm.yaml] ![core-badge]
 
 This blueprint provisions an HPC cluster running the Slurm scheduler with the
 machine learning frameworks PyTorch and TensorFlow pre-installed on every
@@ -578,7 +578,7 @@ VM. The cluster has 2 partitions:
 To provision the cluster, please run:
 
 ```text
-./ghpc create examples/ml-slurm-v6.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
+./ghpc create examples/ml-slurm.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
 ./ghpc deploy ml-example-v6
 ```
 
@@ -610,7 +610,7 @@ Finally, browse to the [Cloud Console][console-images] to delete your custom
 image. It will be named beginning with `ml-slurm` followed by a date and
 timestamp for uniqueness.
 
-[ml-slurm-v6.yaml]: ../examples/ml-slurm-v6.yaml
+[ml-slurm.yaml]: ../examples/ml-slurm.yaml
 
 ### [image-builder-v5-legacy.yaml] ![core-badge]
 
@@ -737,7 +737,7 @@ For this example the following is needed in the selected region:
 * Compute Engine API: Resource policies: **one for each job in parallel** -
   _only needed for `compute` partition_
 
-### [image-builder-v6.yaml] ![core-badge] ![experimental-badge]
+### [image-builder.yaml] ![core-badge]
 
 This blueprint uses the [Packer template module][pkr] to create a custom VM
 image and uses it to provision an HPC cluster using the Slurm scheduler. By
@@ -759,7 +759,7 @@ example takes the following steps:
 Create the deployment folder from the blueprint:
 
 ```text
-./ghpc create examples/image-builder-v6.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
+./ghpc create examples/image-builder.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
 ./ghpc deploy image-builder-v6-001"
 ```
 
@@ -796,7 +796,7 @@ software using boot-time startup scripts because:
 
 [hpcimage]: https://cloud.google.com/compute/docs/instances/create-hpc-vm
 [pkr]: ../modules/packer/custom-image/README.md
-[image-builder-v6.yaml]: ./image-builder-v6.yaml
+[image-builder.yaml]: ./image-builder.yaml
 
 #### Custom Network (deployment group 1)
 
@@ -846,7 +846,7 @@ partition is using the custom image. Each compute node should contain the
   Hello World
   ```
 
-#### Quota Requirements for image-builder-v6.yaml
+#### Quota Requirements for image-builder.yaml
 
 For this example the following is needed in the selected region:
 
@@ -993,7 +993,7 @@ For this example the following is needed in the selected region:
 
 [cae-slurm-v5-legacy.yaml]: ../examples/cae/cae-slurm-v5-lgacy.yaml
 
-### [cae-slurm-v6.yaml] ![core-badge] ![experimental-badge]
+### [cae-slurm.yaml] ![core-badge]
 
 The Computer Aided Engineering (CAE) blueprint captures a reference architecture
 where the right cloud components are assembled to optimally cater to the
@@ -1012,7 +1012,7 @@ or installations of specific CAE codes, as provided by ISVs separately.
 
 A detailed documentation is provided in this [README](cae/README.md).
 
-#### Quota Requirements for cae-slurm-v6.yaml
+#### Quota Requirements for cae-slurm.yaml
 
 For this example the following is needed in the selected region:
 
@@ -1024,7 +1024,7 @@ For this example the following is needed in the selected region:
 * Compute Engine API: T4 GPUs: **1/node** active in `desktop` node.
 * Compute Engine API: N2 CPUs: **8** for login and **16** for controller
 
-[cae-slurm-v6.yaml]: ../examples/cae/cae-slurm-v6.yaml
+[cae-slurm.yaml]: ../examples/cae/cae-slurm.yaml
 
 ### [hpc-build-slurm-image.yaml] ![community-badge] ![experimental-badge]
 
@@ -1085,9 +1085,9 @@ For this example the following is needed in the selected region:
 * Compute Engine API: Resource policies: **one for each job in parallel** -
   _only needed for `compute` partition_
 
-### [hpc-slurm-ubuntu2004-v6.yaml] ![community-badge] ![experimental-badge]
+### [hpc-slurm-ubuntu2004.yaml] ![community-badge]
 
-Similar to the [hpc-slurm-v6.yaml] example, but using Ubuntu 20.04 instead of CentOS 7.
+Similar to the [hpc-slurm.yaml] example, but using Ubuntu 20.04 instead of CentOS 7.
 [Other operating systems] are supported by SchedMD for the the Slurm on GCP project and images are listed [here](https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#published-image-family). Only the examples listed in this page been tested by the Cloud HPC Toolkit team.
 
 The cluster will support 2 partitions named `debug` and `compute`.
@@ -1098,9 +1098,9 @@ partition runs on compute optimized nodes of type `cs-standard-60`. The
 `compute` partition may require additional quota before using.
 
 [Other operating systems]: https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#supported-operating-systems
-[hpc-slurm-ubuntu2004-v6.yaml]: ../community/examples/hpc-slurm-ubuntu2004-v6.yaml
+[hpc-slurm-ubuntu2004.yaml]: ../community/examples/hpc-slurm-ubuntu2004.yaml
 
-#### Quota Requirements for hpc-slurm-ubuntu2004-v6.yaml
+#### Quota Requirements for hpc-slurm-ubuntu2004.yaml
 
 For this example the following is needed in the selected region:
 
@@ -1144,7 +1144,7 @@ examples][amd-examples-readme].
 [AOCC]: https://developer.amd.com/amd-aocc/
 [amd-examples-readme]: ../community/examples/AMD/README.md
 
-### [hpc-amd-slurm-v6.yaml] ![community-badge] ![experimental-badge]
+### [hpc-amd-slurm.yaml] ![community-badge]
 
 This example provisions a Slurm cluster using AMD VM machine types. It
 automates the initial setup of Spack, including a script that can be used to
@@ -1152,7 +1152,7 @@ install the AMD Optimizing C/C++ Compiler ([AOCC]) and compile OpenMPI with
 AOCC. It is more extensively discussed in a dedicated [README for AMD
 examples][amd-examples-readme].
 
-[hpc-amd-slurm-v6.yaml]: ../community/examples/AMD/hpc-amd-slurm-v6.yaml
+[hpc-amd-slurm.yaml]: ../community/examples/AMD/hpc-amd-slurm.yaml
 [AOCC]: https://developer.amd.com/amd-aocc/
 [amd-examples-readme]: ../community/examples/AMD/README.md
 
@@ -1245,7 +1245,7 @@ spack load gromacs
 
 [hpc-slurm-gromacs.yaml]: ../community/examples/hpc-slurm-gromacs.yaml
 
-### [hpc-slurm-ramble-gromacs-v6.yaml] ![community-badge] ![experimental-badge]
+### [hpc-slurm-ramble-gromacs.yaml] ![community-badge] ![experimental-badge]
 
 Ramble is an experimentation framework which can drive the installation of
 software with Spack and create, execute, and analyze experiments using the
@@ -1279,7 +1279,7 @@ ramble workspace analyze
 The experiments defined by the workspace configuration are a 1, 2, 4, 8, and 16
 node scaling study of the Lignocellulose benchmark for Gromacs.
 
-[hpc-slurm-ramble-gromacs-v6.yaml]: ../community/examples/hpc-slurm-ramble-gromacs-v6.yaml
+[hpc-slurm-ramble-gromacs.yaml]: ../community/examples/hpc-slurm-ramble-gromacs.yaml
 
 ### [omnia-cluster.yaml] ![community-badge] ![experimental-badge] ![deprecated-badge]
 
@@ -1311,21 +1311,21 @@ nodes)
 
 [hpc-slurm-local-ssd-v5-legacy.yaml]: ../community/examples/hpc-slurm-local-ssd-v5-legacy.yaml
 
-### [hpc-slurm-local-ssd-v6.yaml] ![community-badge] ![experimental-badge]
+### [hpc-slurm-local-ssd.yaml] ![community-badge] ![experimental-badge]
 
 This blueprint demonstrates the use of Slurm and Filestore, with compute nodes
 that have local ssd drives deployed.
 
-[hpc-slurm-local-ssd-v6.yaml]: ../community/examples/hpc-slurm-local-ssd-v6.yaml
+[hpc-slurm-local-ssd.yaml]: ../community/examples/hpc-slurm-local-ssd.yaml
 
-### [hcls-blueprint-v6.yaml]: ![core-badge] ![experimental-badge]
+### [hcls-blueprint.yaml]: ![core-badge]
 
 This blueprint demonstrates an advanced architecture that can be used to run
 GROMACS with GPUs and CPUs on Google Cloud. For full documentation, refer
 [document].
 
 [document]: ../docs/videos/healthcare-and-life-sciences/README.md
-[hcls-blueprint-v6.yaml]:  ../example/hcls-blueprint-v6.yaml
+[hcls-blueprint.yaml]:  ../example/hcls-blueprint.yaml
 
 ### [hpc-gke.yaml] ![community-badge] ![experimental-badge]
 
@@ -1425,7 +1425,7 @@ For more information see:
 
 [htc-slurm-v5-legacy.yaml]: ../community/examples/htc-slurm-v5-legacy.yaml
 
-### [htc-slurm-v6.yaml] ![community-badge] ![experimental-badge]
+### [htc-slurm.yaml] ![community-badge]
 
 This blueprint provisions a cluster using the Slurm scheduler in a configuration
 tuned for the execution of many short-duration, loosely-coupled (non-MPI) jobs.
@@ -1435,7 +1435,7 @@ For more information see:
 * [Slurm on Google Cloud High Throughput documentation](https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/htc.md)
 * [General Slurm High Throughput documentation](https://slurm.schedmd.com/high_throughput.html)
 
-[htc-slurm-v6.yaml]: ../community/examples/htc-slurm-v6.yaml
+[htc-slurm.yaml]: ../community/examples/htc-slurm.yaml
 
 ### [fsi-montecarlo-on-batch.yaml](../community/examples/fsi-montecarlo-on-batch.yaml) ![community-badge] ![experimental-badge]
 

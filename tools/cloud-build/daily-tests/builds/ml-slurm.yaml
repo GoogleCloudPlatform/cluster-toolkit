@@ -14,30 +14,21 @@
 
 ---
 tags:
-- m.chrome-remote-desktop
-- m.cloud-storage-bucket
-- m.dashboard
+- m.custom-image
 - m.filestore
+- m.vpc
 - m.schedmd-slurm-gcp-v6-controller
 - m.schedmd-slurm-gcp-v6-login
 - m.schedmd-slurm-gcp-v6-nodeset
 - m.schedmd-slurm-gcp-v6-partition
-- m.service-enablement
-- m.spack-execute
-- m.spack-setup
 - m.startup-script
-- m.vm-instance
-- m.vpc
-- spack
-- crd
 - slurm6
 
 timeout: 14400s  # 4hr
 steps:
-
 # While using static network names we are gaurding against more than 1 instance running at a time (for multi-group tests)
 - id: check_for_running_build
-  name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
+  name: gcr.io/cloud-builders/gcloud
   entrypoint: /bin/bash
   args:
   - -c
@@ -51,8 +42,9 @@ steps:
         echo "$$MATCHING_BUILDS"
         exit 1
     fi
-- id: hcls-v6
-  waitFor: ["check_for_running_build"]
+# test image creation by provisioning a new VPC and using Packer to build an
+# image in it
+- id: ml-slurm-v6
   name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
   entrypoint: /bin/bash
   env:
@@ -66,6 +58,6 @@ steps:
     BUILD_ID_FULL=$BUILD_ID
     BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
 
-    ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
+    ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/multigroup-integration-test.yml \
       --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
-      --extra-vars="@tools/cloud-build/daily-tests/tests/hcls-v6.yml"
+      --extra-vars="@tools/cloud-build/daily-tests/tests/ml-slurm.yml"

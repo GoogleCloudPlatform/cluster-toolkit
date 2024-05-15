@@ -14,19 +14,17 @@
 
 ---
 tags:
-- m.filestore
 - m.DDN-EXAScaler
+- m.pre-existing-vpc
 - m.schedmd-slurm-gcp-v6-controller
 - m.schedmd-slurm-gcp-v6-login
 - m.schedmd-slurm-gcp-v6-nodeset
 - m.schedmd-slurm-gcp-v6-partition
-- m.vpc
-- m.dashboard
 - slurm6
 
 timeout: 14400s  # 4hr
 steps:
-- id: htc-slurm-v6
+- id: lustre-slurm-v6
   name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
   entrypoint: /bin/bash
   env:
@@ -42,4 +40,4 @@ steps:
 
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
       --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
-      --extra-vars="@tools/cloud-build/daily-tests/tests/htc-slurm-v6.yml"
+      --extra-vars="@tools/cloud-build/daily-tests/tests/lustre-slurm.yml"

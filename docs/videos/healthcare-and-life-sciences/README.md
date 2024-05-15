@@ -114,7 +114,7 @@ storage intact and b) you can build software before you deploy your cluster.
    the cloud buckets being destroyed, it is recommended you run:
 
    ```bash
-   ./ghpc create examples/hcls-blueprint-v6.yaml -w --vars project_id=<project> --vars bucket_force_delete=true
+   ./ghpc create examples/hcls-blueprint.yaml -w --vars project_id=<project> --vars bucket_force_delete=true
    ```
 
    The `bucket_force_delete` variable makes it easier to tear down the

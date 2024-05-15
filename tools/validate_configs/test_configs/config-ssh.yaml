@@ -14,7 +14,7 @@
 
 ---
 
-blueprint_name: config-ssh-v5
+blueprint_name: config-ssh
 
 vars:
   project_id:  ## Set GCP Project ID Here ##
