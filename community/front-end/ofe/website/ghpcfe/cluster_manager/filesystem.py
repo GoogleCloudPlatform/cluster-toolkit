@@ -18,6 +18,7 @@
 import json
 import logging
 import subprocess
+import os
 from pathlib import Path
 
 from ..models import GCPFilestoreFilesystem, Filesystem, FilesystemImpl
@@ -34,7 +35,21 @@ def write_filestore_yaml(fs: GCPFilestoreFilesystem, target_dir: Path) -> None:
     project_id = json.loads(fs.cloud_credential.detail)["project_id"]
     # Get first (only) export
     export_name = fs.exports.first().export_name
+    private_service_access = False
 
+    if fs.vpc.cloud_id.startswith("https://www.googleapis.com/compute/v1/"):
+        network_id = fs.vpc.cloud_id.replace("https://www.googleapis.com/compute/v1/","")
+        network_project = network_id.split("/")[-4]
+        if network_project != project_id:
+            private_service_access = True
+    else:
+        network_id = f"projects/{project_id}/global/networks/{fs.vpc.cloud_id}"
+
+    if private_service_access:
+        connect_mode = "PRIVATE_SERVICE_ACCESS"
+    else:
+        connect_mode = "DIRECT_PEERING"
+       
     with yaml_file.open("w") as f:
         f.write(
             f"""
@@ -56,7 +71,8 @@ deployment_groups:
     id: {fs.name}
     settings:
       filestore_share_name: {export_name[1:]}
-      network_id: projects/{project_id}/global/networks/{fs.vpc.cloud_id}
+      network_id: {network_id}
+      connect_mode: {connect_mode}
       zone: {fs.cloud_zone}
       size_gb: {fs.capacity}
       filestore_tier: {fs.get_performance_tier_display()}
@@ -89,7 +105,7 @@ def create_filesystem(fs: Filesystem) -> None:
         raise NotImplementedError("No support yet for this filesystem")
 
 
-def _run_ghpc(target_dir: Path) -> None:
+def _run_ghpc(target_dir: Path, env: dict) -> None:
     ghpc_path = "/opt/gcluster/hpc-toolkit/ghpc"
 
     try:
@@ -104,6 +120,7 @@ def _run_ghpc(target_dir: Path) -> None:
                     stdout=log_out,
                     stderr=log_err,
                     check=True,
+                    env=env
                 )
     except subprocess.CalledProcessError as cpe:
         logger.error("ghpc exec failed", exc_info=cpe)
@@ -116,10 +133,10 @@ def start_filesystem(fs: Filesystem) -> None:
     fs.cloud_state = "cm"
     fs.save()
     try:
-        _run_ghpc(_base_dir_for_fs(fs))
         extra_env = {
             "GOOGLE_APPLICATION_CREDENTIALS": _get_credentials_file(fs)
         }
+        _run_ghpc(_base_dir_for_fs(fs),extra_env)
         target_dir = _tf_dir_for_fs(fs)
         utils.run_terraform(target_dir, "init")
         utils.run_terraform(target_dir, "plan", extra_env=extra_env)

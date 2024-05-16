@@ -254,22 +254,36 @@ def get_region_zone_info(cloud_provider, credentials):
 
 def _get_gcp_subnets(credentials):
     (project, client) = _get_gcp_client(credentials)
-
+    entries = []
     req = client.subnetworks().listUsable(project=project)
     results = req.execute()
-    entries = results["items"]
+    if "items" in results:
+        entries = results["items"]
     subnets = []
+    req = client.projects().getXpnHost(project=project)
+    results = req.execute()
+    if "name" in results:
+        host_project = results['name']
+        logger.debug("Found host project %s looking for additional subnets.", host_project)
+        req = client.subnetworks().listUsable(project=host_project)
+        results = req.execute()
+        entries_from_host_project = results["items"]
+        entries = entries + entries_from_host_project
+
     for entry in entries:
         # subnet in the form of https://www.googleapis.com/compute/v1/projects/<project>/regions/<region>/subnetworks/<name>
         tokens = entry["subnetwork"].split("/")
         region = tokens[8]
         subnet = tokens[10]
+        subnet_self_link = entry["subnetwork"]
         # vpc in the form of https://www.googleapis.com/compute/v1/projects/<project>/global/networks/<name>
         tokens = entry["network"].split("/")
         vpc = tokens[9]
+        vpc_self_link = entry["network"]
         # cidr in standard form xxx.xxx.xxx.xxx/yy
         cidr = entry["ipCidrRange"]
-        subnets.append([vpc, region, subnet, cidr])
+        subnets.append([vpc, region, subnet, cidr, vpc_self_link, subnet_self_link])
+
     return subnets
 
 

@@ -89,8 +89,8 @@ class VPCDetailView(SuperUserRequiredMixin, generic.DetailView):
         used_in_filesystems = []
         used_in_workbenches = []
 
-        for c in Cluster.objects.exclude(status="d"):
-            if vpc == c.subnet.vpc:
+        for c in Cluster.objects.exclude(status__in=["d","n"]):
+            if c.subnet is not None and vpc == c.subnet.vpc:
                 used_in_clusters.append(c)
 
         for fs in Filesystem.objects.exclude(cloud_state__in=["cm", "m", "dm"]):
@@ -195,10 +195,19 @@ class VPCImportView2(SuperUserRequiredMixin, CreateView):
     form_class = VPCImportForm
 
     def get_initial(self):
+
+        vpc = []
+        for vpc_self_link in self.vpc_sub_map.keys():
+            vpc_split = vpc_self_link.split("/")
+            vpc_name = vpc_split[-1]
+            vpc_project = vpc_split[-4]
+            vpc_friendly_name = f"{vpc_name}@{vpc_project}"
+            vpc.append((vpc_self_link,vpc_friendly_name))
+
         return {
             "cloud_credential": self.cloud_credential,
-            "subnets": [(x[2], x[2]) for x in self.subnet_info],
-            "vpc": [(x, x) for x in self.vpc_sub_map.keys()],
+            "subnets": [(x[5], x[5]) for x in self.subnet_info],
+            "vpc":  vpc,
         }
 
     def _setup_data(self, cred_id):
@@ -207,8 +216,8 @@ class VPCImportView2(SuperUserRequiredMixin, CreateView):
             "GCP", self.cloud_credential.detail
         )
         self.vpc_sub_map = defaultdict(list)
-        for (vpc, region, subnet, cidr) in self.subnet_info:
-            self.vpc_sub_map[vpc].append((subnet, region, cidr))
+        for (vpc, region, subnet, cidr, network_self_link, subnet_self_link) in self.subnet_info:
+            self.vpc_sub_map[network_self_link].append((subnet, region, cidr, network_self_link, subnet_self_link))
 
     def get(self, request, *args, **kwargs):
         self._setup_data(kwargs["credential"])
@@ -226,12 +235,14 @@ class VPCImportView2(SuperUserRequiredMixin, CreateView):
         self.object.save()
         form_subnets = form.cleaned_data["subnets"]
 
-        def add_subnet(unused_vpc_name, region, subnet, cidr):
+        def add_subnet(unused_vpc_name, region, subnet, cidr, unused_network_self_link, subnet_self_link):
+            subnet_split = subnet_self_link.split("/")
+            subnet_name = subnet_split[-1]
             vs = VirtualSubnet(
-                name=subnet,
+                name=subnet_name,
                 vpc=self.object,
                 cidr=cidr,
-                cloud_id=subnet,
+                cloud_id=subnet_self_link,
                 cloud_region=region,
                 cloud_state="i",
                 cloud_credential=self.cloud_credential,
@@ -239,7 +250,7 @@ class VPCImportView2(SuperUserRequiredMixin, CreateView):
             vs.save()
 
         for subnet in self.subnet_info:
-            if subnet[2] in form_subnets:
+            if subnet[5] in form_subnets:
                 add_subnet(*subnet)
 
         return HttpResponseRedirect(self.get_success_url())
@@ -276,7 +287,7 @@ class VPCUpdateView(SuperUserRequiredMixin, UpdateView):
             initial["available_subnets"] = [
                 (x[2], x[2])
                 for x in subnet_info
-                if x[0] == self.get_object().cloud_id
+                if ((x[0] == self.get_object().cloud_id) or (x[4] == self.get_object().cloud_id))
             ]
             initial["subnets"] = [
                 x.cloud_id for x in self.get_object().subnets.all()
@@ -289,12 +300,14 @@ class VPCUpdateView(SuperUserRequiredMixin, UpdateView):
 
         form_subnets = form.cleaned_data["subnets"]
 
-        def add_subnet(unused_vpc_name, region, subnet, cidr):
+        def add_subnet(unused_vpc_name, region, subnet, cidr, unused_network_self_link, subnet_self_link):
+            subnet_split = subnet_self_link.split("/")
+            subnet_name = subnet_split[-1]
             vs = VirtualSubnet(
-                name=subnet,
+                name=subnet_name,
                 vpc=self.object,
                 cidr=cidr,
-                cloud_id=subnet,
+                cloud_id=subnet_self_link,
                 cloud_region=region,
                 cloud_state="i",
                 cloud_credential=self.object.cloud_credential,

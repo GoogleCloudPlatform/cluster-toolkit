@@ -191,6 +191,37 @@ class ClusterInfo:
     def indent_text(self, text, indent_level):
         indent = '  ' * indent_level  # 2 spaces per indent level, adjust as needed
         return '\n'.join(indent + line if line else line for line in text.split('\n'))
+    
+    def _prepare_subnetwork(self):
+        network_yaml = []
+        refs = []
+        if self.cluster.subnet.cloud_id.startswith("https://www.googleapis.com/compute/v1/projects"):
+            split_helper = self.cluster.subnet.vpc.cloud_id.split("/")
+            host_project = split_helper[len(split_helper)-4]
+            network_name = split_helper[len(split_helper)-1]
+            region = 'null'
+            subnetwork_name = 'null'
+            subnetwork_self_link = self.cluster.subnet.cloud_id
+        else:
+            subnetwork_name = self.cluster.subnet.cloud_id
+            region = self.cluster.subnet.cloud_region
+            host_project = self.cluster.project_id
+            subnetwork_self_link = 'null'
+
+        template = self.env.get_template('blueprint/network_config.yaml.j2')
+        context = {
+            'subnetwork_name': subnetwork_name,
+            'region': region,
+            'host_project': host_project,
+            'subnetwork_self_link': subnetwork_self_link
+
+        }
+        rendered_yaml = template.render(context)
+        indented_yaml = self.indent_text(rendered_yaml, 1) # Indent as necessary...
+        network_yaml.append(indented_yaml)
+
+        return ("\n\n".join(network_yaml), refs)
+
 
     def _prepare_ghpc_filesystems(self):
         filesystems_yaml = []
@@ -260,6 +291,7 @@ class ClusterInfo:
         try:
             yaml_file = self.cluster_dir / "cluster.yaml"
             project_id = json.loads(self.cluster.cloud_credential.detail)["project_id"]
+            network_yaml, network_refs = self._prepare_subnetwork()
             filesystems_yaml, filesystems_refs = self._prepare_ghpc_filesystems()
             partitions_yaml, partitions_refs = self._prepare_ghpc_partitions(filesystems_refs)
             cloudsql_yaml, cloudsql_refs = self._prepare_cloudsql_yaml()  # Incorporate CloudSQL YAML
@@ -270,6 +302,7 @@ class ClusterInfo:
             context = {
                 "project_id": project_id,
                 "site_name": SITE_NAME,
+                "network_yaml": network_yaml,
                 "filesystems_yaml": filesystems_yaml,
                 "partitions_yaml": partitions_yaml,
                 "cloudsql_yaml": cloudsql_yaml,

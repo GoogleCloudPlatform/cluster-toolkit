@@ -29,7 +29,7 @@
     subnets_info[vpc_component.value].forEach(function (item) {
       var el = document.createElement("option");
       el.text = item[0] + ' [CIDR: ' + item[2] + '] [region: ' + item[1] + ']';
-      el.setAttribute("value", item[0]);
+      el.setAttribute("value", item[4]);
       subnet_element.appendChild(el);
     });
   }

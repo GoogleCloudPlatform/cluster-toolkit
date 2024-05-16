@@ -1,0 +1,8 @@
+- source: modules/network/pre-existing-subnetwork
+  kind: terraform
+  settings:
+    subnetwork_name: {{ subnetwork_name }}
+    region: {{ region }}
+    host_project: {{ host_project_id }}
+    subnetwork_self_link: {{ subnetwork_self_link }}
+  id: hpc_network

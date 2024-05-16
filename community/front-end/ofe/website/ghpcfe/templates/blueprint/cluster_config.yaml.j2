@@ -16,16 +16,7 @@ vars:
 deployment_groups:
 - group: primary
   modules:
-  - source: modules/network/pre-existing-vpc
-    kind: terraform
-    settings:
-      network_name: {{ cluster.subnet.vpc.cloud_id }}
-      subnetwork_name: {{ cluster.subnet.cloud_id }}
-    id: hpc_network
-
-  - source: community/modules/network/private-service-access
-    id: ps-connect
-    use: [ hpc_network ]    
+{{ network_yaml | safe }}
 
 {{ filesystems_yaml | safe }}
 
