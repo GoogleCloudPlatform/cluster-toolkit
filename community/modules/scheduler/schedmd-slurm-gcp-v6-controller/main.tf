@@ -24,6 +24,8 @@ locals {
   # Also, slurm imposed a lot of restrictions to this name, so we format it to an acceptable string
   tmp_cluster_name   = substr(replace(lower(var.deployment_name), "/^[^a-z]*|[^a-z0-9]/", ""), 0, 10)
   slurm_cluster_name = coalesce(var.slurm_cluster_name, local.tmp_cluster_name)
+
+  files_cs_labels = { slurm_files_checksum = module.slurm_files.checksum }
 }
 
 data "google_compute_default_service_account" "default" {

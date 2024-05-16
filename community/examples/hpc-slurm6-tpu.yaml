@@ -56,7 +56,7 @@ deployment_groups:
     settings:
       name_prefix: "v6tpu"
       machine_type: n2-standard-4
-      disable_login_public_ips: false
+      enable_login_public_ips: true
 
   - id: slurm_controller
     source: ./community/modules/scheduler/schedmd-slurm-gcp-v6-controller
@@ -65,4 +65,4 @@ deployment_groups:
     - slurm_login
     - network
     settings:
-      disable_controller_public_ips: false
+      enable_controller_public_ips: true

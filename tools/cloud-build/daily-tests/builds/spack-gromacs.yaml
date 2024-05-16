@@ -27,10 +27,6 @@ tags:
 - spack
 
 timeout: 14400s  # 4hr
-availableSecrets:
-  secretManager:
-  - versionName: projects/$PROJECT_ID/secrets/spack_cache_url/versions/2
-    env: SPACK_CACHE
 
 steps:
 - id: spack-gromacs
@@ -39,7 +35,6 @@ steps:
   env:
   - "ANSIBLE_HOST_KEY_CHECKING=false"
   - "ANSIBLE_CONFIG=/workspace/tools/cloud-build/ansible.cfg"
-  secretEnv: ['SPACK_CACHE']
   args:
   - -c
   - |
@@ -47,10 +42,6 @@ steps:
     cd /workspace && make
     BUILD_ID_FULL=$BUILD_ID
     BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
-    SG_EXAMPLE=community/examples/hpc-slurm-gromacs.yaml
-
-    sed -i "s/#   spack mirror add .*/spack mirror add --scope site gcs_cache $${SPACK_CACHE_WRF//\//\\\/}/" $${SG_EXAMPLE}
-    sed -i "s/# spack buildcache keys .*/spack buildcache keys --install --trust/" $${SG_EXAMPLE}
 
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
       --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \

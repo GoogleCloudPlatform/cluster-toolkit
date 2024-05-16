@@ -29,10 +29,6 @@ vars:
     project: schedmd-slurm-public
   # If image above is changed to use custom image, then setting below must be set to true
   instance_image_custom: false
-  # When set, active compute nodes will be cleaned up on destroy.
-  # Note that setting this option requires additional dependencies to be installed locally.
-  # https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/scheduler/schedmd-slurm-gcp-v6-controller#description
-  enable_cleanup_compute: true
 
 # Recommended to use GCS backend for Terraform state
 # See https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/examples#optional-setting-up-a-remote-terraform-state
@@ -106,16 +102,12 @@ deployment_groups:
 
   - id: n2_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [network]
+    use: [network, compute_sa]
     settings:
       node_count_dynamic_max: 4
       machine_type: n2-standard-2
       instance_image: $(vars.slurm_image)
       enable_placement: false  # the default is: true
-      service_account:
-        email: $(compute_sa.service_account_email)
-        scopes:
-        - https://www.googleapis.com/auth/cloud-platform
 
   - id: n2_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
@@ -129,7 +121,7 @@ deployment_groups:
 
   - id: c2_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [network]
+    use: [network, compute_sa]
     settings:
       node_count_dynamic_max: 20
       machine_type: c2-standard-60  # this is the default
@@ -138,10 +130,6 @@ deployment_groups:
       bandwidth_tier: tier_1_enabled
       disk_type: pd-ssd
       disk_size_gb: 100
-      service_account:
-        email: $(compute_sa.service_account_email)
-        scopes:
-        - https://www.googleapis.com/auth/cloud-platform
 
   # use `-p c2` to submit jobs to this partition:
   # ex: `srun -p c2 -N 1 hostname`
@@ -155,7 +143,7 @@ deployment_groups:
 
   - id: c2d_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [network]
+    use: [network, compute_sa]
     settings:
       node_count_dynamic_max: 20
       machine_type: c2d-standard-112
@@ -163,10 +151,6 @@ deployment_groups:
       bandwidth_tier: tier_1_enabled
       disk_type: pd-ssd
       disk_size_gb: 100
-      service_account:
-        email: $(compute_sa.service_account_email)
-        scopes:
-        - https://www.googleapis.com/auth/cloud-platform
 
   - id: c2d_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
@@ -176,7 +160,7 @@ deployment_groups:
 
   - id: c3_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [network]
+    use: [network, compute_sa]
     settings:
       node_count_dynamic_max: 20
       machine_type: c3-highcpu-176
@@ -184,10 +168,6 @@ deployment_groups:
       bandwidth_tier: tier_1_enabled
       disk_type: pd-ssd
       disk_size_gb: 100
-      service_account:
-        email: $(compute_sa.service_account_email)
-        scopes:
-        - https://www.googleapis.com/auth/cloud-platform
 
   - id: c3_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
@@ -197,7 +177,7 @@ deployment_groups:
 
   - id: a2_8_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [network]
+    use: [network, compute_sa]
     settings:
       node_count_dynamic_max: 16
       machine_type: a2-ultragpu-8g
@@ -211,10 +191,6 @@ deployment_groups:
       node_conf:
         Sockets: 2
         CoresPerSocket: 24
-      service_account:
-        email: $(compute_sa.service_account_email)
-        scopes:
-        - https://www.googleapis.com/auth/cloud-platform
 
   # use `-p a208` to submit jobs to this partition:
   # ex: `srun -p a208 --gpus-per-node=8 -N 1 nvidia-smi`
@@ -230,7 +206,7 @@ deployment_groups:
 
   - id: a2_16_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [network]
+    use: [network, compute_sa]
     settings:
       node_count_dynamic_max: 16
       machine_type: a2-megagpu-16g
@@ -244,10 +220,6 @@ deployment_groups:
       node_conf:
         Sockets: 2
         CoresPerSocket: 24
-      service_account:
-        email: $(compute_sa.service_account_email)
-        scopes:
-        - https://www.googleapis.com/auth/cloud-platform
 
   # use `-p a216` to submit jobs to this partition:
   # ex: `srun -p a216 --gpus-per-node=16 -N 1 nvidia-smi`
@@ -263,16 +235,12 @@ deployment_groups:
 
   - id: h3_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [network]
+    use: [network, compute_sa]
     settings:
       node_count_dynamic_max: 16
       machine_type: h3-standard-88
       bandwidth_tier: gvnic_enabled  # https://cloud.google.com/compute/docs/compute-optimized-machines#h3_network
       instance_image: $(vars.slurm_image)
-      service_account:
-        email: $(compute_sa.service_account_email)
-        scopes:
-        - https://www.googleapis.com/auth/cloud-platform
       # H3 does not support pd-ssd and pd-standard
       # https://cloud.google.com/compute/docs/compute-optimized-machines#h3_disks
       disk_type: pd-balanced
@@ -288,7 +256,7 @@ deployment_groups:
 
   - id: slurm_login
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
-    use: [network]
+    use: [network, login_sa]
     settings:
       name_prefix: login
       instance_image: $(vars.slurm_image)
@@ -296,15 +264,11 @@ deployment_groups:
       # we recommend disabling public IPs if possible
       # but that requires your network to have a NAT or
       # private access configured
-      disable_login_public_ips: false
-      service_account:
-        email: $(login_sa.service_account_email)
-        scopes:
-        - https://www.googleapis.com/auth/cloud-platform
+      enable_login_public_ips: true
 
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
-    use: [network, homefs, projectsfs, scratchfs, slurm_login,
+    use: [network, controller_sa, homefs, projectsfs, scratchfs, slurm_login,
           n2_partition, c2_partition, c2d_partition, c3_partition, a2_8_partition, a2_16_partition, h3_partition]
     settings:
       instance_image: $(vars.slurm_image)
@@ -319,11 +283,7 @@ deployment_groups:
       # we recommend disabling public IPs if possible
       # but that requires your network to have a NAT or
       # private access configured
-      disable_controller_public_ips: false
-      service_account:
-        email: $(controller_sa.service_account_email)
-        scopes:
-        - https://www.googleapis.com/auth/cloud-platform
+      enable_controller_public_ips: true
 
   - id: hpc_dashboard
     source: modules/monitoring/dashboard

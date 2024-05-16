@@ -14,7 +14,7 @@
 
 variable "name" {
   description = <<-EOD
-    Name of the nodeset. Automatically populated by the module id if not set. 
+    Name of the nodeset. Automatically populated by the module id if not set.
     If setting manually, ensure a unique value across all nodesets.
     EOD
   type        = string
@@ -117,14 +117,9 @@ variable "tags" {
 }
 
 variable "disk_type" {
-  description = "Boot disk type, can be either pd-ssd, pd-standard, pd-balanced, or pd-extreme."
+  description = "Boot disk type, can be either hyperdisk-balanced, hyperdisk-extreme, pd-ssd, pd-standard, pd-balanced, or pd-extreme."
   type        = string
   default     = "pd-standard"
-
-  validation {
-    condition     = contains(["pd-ssd", "pd-standard", "pd-balanced", "pd-extreme"], var.disk_type)
-    error_message = "Variable disk_type must be one of pd-ssd, pd-standard, pd-balanced, or pd-extreme."
-  }
 }
 
 variable "disk_size_gb" {
@@ -264,17 +259,30 @@ variable "preemptible" {
   default     = false
 }
 
-variable "service_account" {
+
+variable "service_account_email" {
+  description = "Service account e-mail address to attach to the compute instances."
+  type        = string
+  default     = null
+}
+
+variable "service_account_scopes" {
+  description = "Scopes to attach to the compute instances."
+  type        = set(string)
+  default     = ["https://www.googleapis.com/auth/cloud-platform"]
+}
+
+variable "service_account" { # tflint-ignore: terraform_unused_declarations
+  description = "DEPRECATED: Use `service_account_email` and `service_account_scopes` instead."
   type = object({
     email  = string
     scopes = set(string)
   })
-  description = <<-EOD
-    Service account to attach to the compute instances. If not set, the
-    default compute service account for the given project will be used with the
-    "https://www.googleapis.com/auth/cloud-platform" scope.
-    EOD
-  default     = null
+  default = null
+  validation {
+    condition     = var.service_account == null
+    error_message = "DEPRECATED: Use `service_account_email` and `service_account_scopes` instead."
+  }
 }
 
 variable "enable_spot_vm" {
@@ -310,11 +318,22 @@ variable "bandwidth_tier" {
   }
 }
 
-variable "disable_public_ips" {
-  description = "If set to false. The node group VMs will have a random public IP assigned to it. Ignored if access_config is set."
+variable "enable_public_ips" {
+  description = "If set to true. The node group VMs will have a random public IP assigned to it. Ignored if access_config is set."
   type        = bool
-  default     = true
+  default     = false
 }
+
+variable "disable_public_ips" { # tflint-ignore: terraform_unused_declarations
+  description = "DEPRECATED: Use `enable_public_ips` instead."
+  type        = bool
+  default     = null
+  validation {
+    condition     = var.disable_public_ips == null
+    error_message = "DEPRECATED: Use `enable_public_ips` instead."
+  }
+}
+
 
 variable "enable_placement" {
   description = "Enable placement groups."

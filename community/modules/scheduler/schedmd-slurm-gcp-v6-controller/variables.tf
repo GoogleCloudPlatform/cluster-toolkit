@@ -95,6 +95,10 @@ variable "login_nodes" {
   description = "List of slurm login instance definitions."
   type = list(object({
     name_prefix = string
+    access_config = optional(list(object({
+      nat_ip       = string
+      network_tier = string
+    })))
     additional_disks = optional(list(object({
       disk_name    = optional(string)
       device_name  = optional(string)
@@ -112,7 +116,6 @@ variable "login_nodes" {
     disk_size_gb           = optional(number)
     disk_type              = optional(string, "n1-standard-1")
     enable_confidential_vm = optional(bool, false)
-    enable_public_ip       = optional(bool, false)
     enable_oslogin         = optional(bool, true)
     enable_shielded_vm     = optional(bool, false)
     gpu = optional(object({
@@ -124,7 +127,6 @@ variable "login_nodes" {
     machine_type        = optional(string)
     metadata            = optional(map(string), {})
     min_cpu_platform    = optional(string)
-    network_tier        = optional(string, "STANDARD")
     num_instances       = optional(number, 1)
     on_host_maintenance = optional(string)
     preemptible         = optional(bool, false)
@@ -338,12 +340,11 @@ variable "enable_cleanup_compute" {
 Enables automatic cleanup of compute nodes and resource policies (e.g.
 placement groups) managed by this module, when cluster is destroyed.
 
-NOTE: Requires Python and script dependencies.
-*WARNING*: Toggling this may impact the running workload. Deployed compute nodes
-may be destroyed and their jobs will be requeued.
+*WARNING*: Toggling this off will impact the running workload. 
+Deployed compute nodes will be destroyed.
 EOD
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "enable_bigquery_load" {
@@ -368,9 +369,9 @@ variable "cloud_parameters" {
   default = {}
 }
 
-variable "disable_default_mounts" {
+variable "enable_default_mounts" {
   description = <<-EOD
-    Disable default global network storage from the controller
+    Enable default global network storage from the controller
     - /usr/local/etc/slurm
     - /etc/munge
     - /home
@@ -380,7 +381,17 @@ variable "disable_default_mounts" {
     files and the munge key across the cluster.
     EOD
   type        = bool
-  default     = false
+  default     = true
+}
+
+variable "disable_default_mounts" { # tflint-ignore: terraform_unused_declarations
+  description = "DEPRECATED: Use `enable_default_mounts` instead."
+  type        = bool
+  default     = null
+  validation {
+    condition     = var.disable_default_mounts == null
+    error_message = "DEPRECATED: Use `enable_default_mounts` instead."
+  }
 }
 
 variable "network_storage" {
@@ -507,6 +518,16 @@ EOD
     content  = string
   }))
   default = []
+}
+
+variable "enable_external_prolog_epilog" {
+  description = <<EOD
+Automatically enable a script that will execute prolog and epilog scripts
+shared by NFS from the controller to compute nodes. Find more details at:
+https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/tools/prologs-epilogs/README.md
+EOD
+  type        = bool
+  default     = null
 }
 
 variable "cloudsql" {

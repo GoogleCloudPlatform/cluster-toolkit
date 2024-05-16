@@ -47,16 +47,6 @@ const (
 	PromptBeforeApply
 )
 
-// TfError captures Terraform errors while improving helpfulness of message
-type TfError struct {
-	help string
-	err  error
-}
-
-func (se *TfError) Error() string {
-	return fmt.Sprintf("%s\n%s", se.help, se.err)
-}
-
 type outputValue struct {
 	Name      string
 	Sensitive bool
@@ -68,9 +58,9 @@ type outputValue struct {
 func ConfigureTerraform(workingDir string) (*tfexec.Terraform, error) {
 	path, err := exec.LookPath("terraform")
 	if err != nil {
-		return nil, &TfError{
-			help: "must have a copy of terraform installed in PATH (obtain at https://terraform.io)",
-			err:  err,
+		return nil, config.HintError{
+			Hint: "must have a copy of terraform installed in PATH (obtain at https://terraform.io)",
+			Err:  err,
 		}
 	}
 	return tfexec.NewTerraform(workingDir, path)
@@ -98,10 +88,9 @@ func initModule(tf *tfexec.Terraform) error {
 	}
 
 	if err != nil {
-		return &TfError{
-			help: fmt.Sprintf("initialization of deployment group %s failed; manually resolve errors below", tf.WorkingDir()),
-			err:  err,
-		}
+		return config.HintError{
+			Hint: fmt.Sprintf("initialization of deployment group %s failed; manually resolve errors", tf.WorkingDir()),
+			Err:  err}
 	}
 
 	return err
@@ -111,10 +100,9 @@ func outputModule(tf *tfexec.Terraform) (map[string]cty.Value, error) {
 	logging.Info("Collecting terraform outputs from %s", tf.WorkingDir())
 	output, err := tf.Output(context.Background())
 	if err != nil {
-		return map[string]cty.Value{}, &TfError{
-			help: fmt.Sprintf("collecting terraform outputs from deployment group %s failed; manually resolve errors below", tf.WorkingDir()),
-			err:  err,
-		}
+		return map[string]cty.Value{}, config.HintError{
+			Hint: fmt.Sprintf("collecting terraform outputs from deployment group %s failed; manually resolve errors", tf.WorkingDir()),
+			Err:  err}
 	}
 
 	outputValues := make(map[string]cty.Value, len(output))
@@ -195,7 +183,7 @@ func planModule(tf *tfexec.Terraform, path string, destroy bool) (bool, error) {
 		if len(help) > 0 {
 			msg = fmt.Sprintf("%s; %s", msg, help)
 		}
-		return false, &TfError{msg, plainError}
+		return false, config.HintError{Hint: msg, Err: plainError}
 	}
 
 	return wantsChange, nil
@@ -348,10 +336,9 @@ func gatherUpstreamOutputs(deploymentRoot string, artifactsDir string, g config.
 		filepath := outputsFile(artifactsDir, pg)
 		gVals, err := modulereader.ReadHclAttributes(filepath)
 		if err != nil {
-			return nil, &TfError{
-				help: fmt.Sprintf("consider running \"ghpc export-outputs %s/%s\"", deploymentRoot, pg),
-				err:  err,
-			}
+			return nil, config.HintError{
+				Hint: fmt.Sprintf("consider running \"ghpc export-outputs %s/%s\"", deploymentRoot, pg),
+				Err:  err}
 		}
 		vals := intersectMapKeys(outputs, gVals) // filter for needed outputs
 		if err := mergeMapsWithoutLoss(res, vals); err != nil {

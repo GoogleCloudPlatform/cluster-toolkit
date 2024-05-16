@@ -39,6 +39,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [pfs-daos.yaml](#pfs-daosyaml-) ![community-badge]
   * [hpc-slurm-daos.yaml](#hpc-slurm-daosyaml-) ![community-badge]
   * [hpc-amd-slurm.yaml](#hpc-amd-slurmyaml-) ![community-badge]
+  * [hpc-amd-slurm-v6.yaml](#hpc-amd-slurm-v6yaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-sharedvpc.yaml](#hpc-slurm-sharedvpcyaml--) ![community-badge] ![experimental-badge]
   * [client-google-cloud-storage.yaml](#client-google-cloud-storageyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-gromacs.yaml](#hpc-slurm-gromacsyaml--) ![community-badge] ![experimental-badge]
@@ -54,7 +55,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [fsi-montecarlo-on-batch.yaml](#fsi-montecarlo-on-batchyaml-) ![community-badge] ![experimental-badge]
   * [tutorial-starccm-slurm.yaml](#tutorial-starccm-slurmyaml--) ![community-badge] ![experimental-badge]
   * [tutorial-starccm.yaml](#tutorial-starccmyaml--) ![community-badge] ![experimental-badge]
-  * [hpc-slurm-ramble-gromacs.yaml](#hpc-slurm-ramble-gromacsyaml--) ![community-badge] ![experimental-badge]
+  * [hpc-slurm-ramble-gromacs-v6.yaml](#hpc-slurm-ramble-gromacs-v6yaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-chromedesktop.yaml](#hpc-slurm-chromedesktopyaml--) ![community-badge] ![experimental-badge]
   * [flux-cluster](#flux-clusteryaml--) ![community-badge] ![experimental-badge]
   * [tutorial-fluent.yaml](#tutorial-fluentyaml--) ![community-badge] ![experimental-badge]
@@ -66,8 +67,6 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [Deployment Variables](#deployment-variables)
   * [Deployment Groups](#deployment-groups)
 * [Variables and expressions](#variables-and-expressions)
-  * [Blueprint expressions](#blueprint-expressions)
-  * [Escape expressions](#escape-expressions)
 
 ## Instructions
 
@@ -1197,6 +1196,18 @@ examples][amd-examples-readme].
 [AOCC]: https://developer.amd.com/amd-aocc/
 [amd-examples-readme]: ../community/examples/AMD/README.md
 
+### [hpc-amd-slurm-v6.yaml] ![community-badge] ![experimental-badge]
+
+This example provisions a Slurm cluster using AMD VM machine types. It
+automates the initial setup of Spack, including a script that can be used to
+install the AMD Optimizing C/C++ Compiler ([AOCC]) and compile OpenMPI with
+AOCC. It is more extensively discussed in a dedicated [README for AMD
+examples][amd-examples-readme].
+
+[hpc-amd-slurm-v6.yaml]: ../community/examples/AMD/hpc-amd-slurm-v6.yaml
+[AOCC]: https://developer.amd.com/amd-aocc/
+[amd-examples-readme]: ../community/examples/AMD/README.md
+
 ### [client-google-cloud-storage.yaml] ![community-badge] ![experimental-badge]
 
 [client-google-cloud-storage.yaml]: ../community/examples/client-google-cloud-storage.yaml
@@ -1286,7 +1297,7 @@ spack load gromacs
 
 [hpc-slurm-gromacs.yaml]: ../community/examples/hpc-slurm-gromacs.yaml
 
-### [hpc-slurm-ramble-gromacs.yaml] ![community-badge] ![experimental-badge]
+### [hpc-slurm-ramble-gromacs-v6.yaml] ![community-badge] ![experimental-badge]
 
 Ramble is an experimentation framework which can drive the installation of
 software with Spack and create, execute, and analyze experiments using the
@@ -1294,6 +1305,9 @@ installed software.
 
 This example blueprint will deploy a Slurm cluster, install Spack and Ramble on
 it, and create a Ramble workspace (named gromacs). This workspace can be setup using:
+
+> **_NOTE:_** Since in this example installation of ramble is owned by
+> `spack-ramble` user, you may consider running `sudo -i -u spack-ramble` first.
 
 ```shell
 ramble workspace activate
@@ -1317,7 +1331,7 @@ ramble workspace analyze
 The experiments defined by the workspace configuration are a 1, 2, 4, 8, and 16
 node scaling study of the Lignocellulose benchmark for Gromacs.
 
-[hpc-slurm-ramble-gromacs.yaml]: ../community/examples/hpc-slurm-ramble-gromacs.yaml
+[hpc-slurm-ramble-gromacs-v6.yaml]: ../community/examples/hpc-slurm-ramble-gromacs-v6.yaml
 
 ### [omnia-cluster.yaml] ![community-badge] ![experimental-badge] ![deprecated-badge]
 
@@ -1757,7 +1771,7 @@ default in the [modules](../modules/README.md) folder.
 To learn more about how to refer to a module in a blueprint file, please consult the
 [modules README file.](../modules/README.md)
 
-## Variables and expressions
+## Variables, expressions and functions
 
 Variables can be used to refer both to values defined elsewhere in the blueprint
 and to the output and structure of other modules.
@@ -1765,7 +1779,8 @@ and to the output and structure of other modules.
 ### Blueprint expressions
 
 Expressions in a blueprint file can refer to deployment variables or the outputs
-of other modules. The entire expression is wrapped in `$()`. The syntax is as follows:
+of other modules. The expressions can only be used within `vars`, module `settings`, and `terraform_backend` blocks.
+The entire expression is wrapped in `$()`, the syntax is as follows:
 
 ```yaml
 vars:
@@ -1798,7 +1813,7 @@ deployment_groups:
             key7: $(jsonencode(resource1.config))
 ```
 
-### Escape expressions
+#### Escape expressions
 
 Under circumstances where the expression notation conflicts with the content of a setting or string, for instance when defining a startup-script runner that uses a subshell like in the example below, a non-quoted backslash (`\`) can be used as an escape character. It preserves the literal value of the next character that follows:  `\$(not.bp_var)` evaluates to `$(not.bp_var)`.
 
@@ -1813,3 +1828,37 @@ deployment_groups:
               #!/bin/bash
               echo \$(cat /tmp/file1)    ## Evaluates to "echo $(cat /tmp/file1)"
 ```
+
+### Functions
+
+Blueprint supports a number of functions that can be used within expressions to manipulate variables:
+
+* `merge`, `flatten` - same as Terraform's functions with the same name;
+* `ghpc_stage` - copy referenced file to the deployment directory;
+
+The expressions in `settings`-block of Terraform modules can additionally use any functions available in Terraform.
+
+#### `ghpc_stage`
+
+Using local files in the blueprint can be challenging, relative paths may become invalid relatevly to deployment directory, or
+deployment directory can get moved to another machine.
+
+To avoid these issues, the `ghpc_stage` function can be used to copy a file (or whole directory) to the deployment directory. The returned value is the path to the staged file relative to the root of deployment group directory.
+
+```yaml
+  ...
+  - id: script
+    source: modules/scripts/startup-script
+    settings:
+      runners:
+      - type: shell
+        destination: hi.sh
+        source: $(ghpc_stage("path/relative/to/blueprint/hi.sh"))
+        # or stage the whole directory
+        source: $(ghpc_stage("path"))/hi.sh
+        # or use it as input to another function
+        content: $(file(ghpc_stage("path/hi.sh")))
+```
+
+The `ghpc_stage` function will always look first in the path specified in the blueprint. If the file is not found at this path then `ghpc_stage` will look for the staged file in the deployment folder, if a deployment folder exists.
+This means that you can redeploy a blueprint (`ghpc deploy <blueprint> -w`) so long as you have the deployment folder from the original deployment, even if locally referenced files are not available.

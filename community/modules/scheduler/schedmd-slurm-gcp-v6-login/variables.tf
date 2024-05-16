@@ -13,7 +13,7 @@
 # limitations under the License.
 
 
-variable "project_id" {
+variable "project_id" { # tflint-ignore: terraform_unused_declarations
   type        = string
   description = "Project ID to create resources in."
 }
@@ -46,13 +46,8 @@ variable "num_instances" {
 
 variable "disk_type" {
   type        = string
-  description = "Boot disk type, can be either pd-ssd, pd-standard, pd-balanced, or pd-extreme."
+  description = "Boot disk type, can be either hyperdisk-balanced, hyperdisk-extreme, pd-ssd, pd-standard, pd-balanced, or pd-extreme."
   default     = "pd-ssd"
-
-  validation {
-    condition     = contains(["pd-ssd", "pd-standard", "pd-balanced", "pd-extreme"], var.disk_type)
-    error_message = "Variable disk_type must be one of pd-ssd, pd-standard, pd-balanced, or pd-extreme."
-  }
 }
 
 variable "disk_size_gb" {
@@ -87,10 +82,20 @@ variable "additional_disks" {
   default     = []
 }
 
-variable "disable_smt" {
+variable "enable_smt" {
   type        = bool
-  description = "Disables Simultaneous Multi-Threading (SMT) on instance."
-  default     = true
+  description = "Enables Simultaneous Multi-Threading (SMT) on instance."
+  default     = false
+}
+
+variable "disable_smt" { # tflint-ignore: terraform_unused_declarations
+  description = "DEPRECATED: Use `enable_smt` instead."
+  type        = bool
+  default     = null
+  validation {
+    condition     = var.disable_smt == null
+    error_message = "DEPRECATED: Use `enable_smt` instead."
+  }
 }
 
 variable "static_ips" {
@@ -128,10 +133,21 @@ variable "can_ip_forward" {
   default     = false
 }
 
-variable "disable_login_public_ips" {
-  description = "If set to false. The login node will have a random public IP assigned to it."
+variable "enable_login_public_ips" {
+  description = "If set to true. The login node will have a random public IP assigned to it."
   type        = bool
-  default     = true
+  default     = false
+}
+
+
+variable "disable_login_public_ips" { # tflint-ignore: terraform_unused_declarations
+  description = "DEPRECATED: Use `enable_login_public_ips` instead."
+  type        = bool
+  default     = null
+  validation {
+    condition     = var.disable_login_public_ips == null
+    error_message = "DEPRECATED: Use `enable_login_public_ips` instead."
+  }
 }
 
 variable "enable_oslogin" {
@@ -235,17 +251,29 @@ variable "on_host_maintenance" {
   default     = "MIGRATE"
 }
 
-variable "service_account" {
+variable "service_account_email" {
+  description = "Service account e-mail address to attach to the login instances."
+  type        = string
+  default     = null
+}
+
+variable "service_account_scopes" {
+  description = "Scopes to attach to the login instances."
+  type        = set(string)
+  default     = ["https://www.googleapis.com/auth/cloud-platform"]
+}
+
+variable "service_account" { # tflint-ignore: terraform_unused_declarations
+  description = "DEPRECATED: Use `service_account_email` and `service_account_scopes` instead."
   type = object({
     email  = string
     scopes = set(string)
   })
-  description = <<-EOD
-    Service account to attach to the controller instance. If not set, the
-    default compute service account for the given project will be used with the
-    "https://www.googleapis.com/auth/cloud-platform" scope.
-    EOD
-  default     = null
+  default = null
+  validation {
+    condition     = var.service_account == null
+    error_message = "DEPRECATED: Use `service_account_email` and `service_account_scopes` instead."
+  }
 }
 
 variable "instance_template" {

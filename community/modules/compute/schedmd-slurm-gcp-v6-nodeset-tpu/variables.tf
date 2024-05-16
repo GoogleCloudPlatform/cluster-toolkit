@@ -32,10 +32,20 @@ variable "name" {
   type        = string
 }
 
-variable "disable_public_ips" {
-  description = "If set to false. The node group VMs will have a random public IP assigned to it. Ignored if access_config is set."
+variable "enable_public_ips" {
+  description = "If set to true. The node group VMs will have a random public IP assigned to it. Ignored if access_config is set."
   type        = bool
-  default     = true
+  default     = false
+}
+
+variable "disable_public_ips" { # tflint-ignore: terraform_unused_declarations
+  description = "DEPRECATED: Use `enable_public_ips` instead."
+  type        = bool
+  default     = null
+  validation {
+    condition     = var.disable_public_ips == null
+    error_message = "DEPRECATED: Use `enable_public_ips` instead."
+  }
 }
 
 variable "node_type" {
@@ -103,14 +113,29 @@ variable "subnetwork_self_link" {
   description = "The name of the subnetwork to attach the TPU-vm of this nodeset to."
 }
 
-variable "service_account" {
+variable "service_account_email" {
+  description = "Service account e-mail address to attach to the TPU-vm."
+  type        = string
+  default     = null
+}
+
+variable "service_account_scopes" {
+  description = "Scopes to attach to the TPU-vm."
+  type        = set(string)
+  default     = ["https://www.googleapis.com/auth/cloud-platform"]
+}
+
+variable "service_account" { # tflint-ignore: terraform_unused_declarations
+  description = "DEPRECATED: Use `service_account_email` and `service_account_scopes` instead."
   type = object({
     email  = string
     scopes = set(string)
   })
-
-  description = "Service account to attach to the TPU-vm. If none is given, the default service account and scopes will be used."
-  default     = null
+  default = null
+  validation {
+    condition     = var.service_account == null
+    error_message = "DEPRECATED: Use `service_account_email` and `service_account_scopes` instead."
+  }
 }
 
 variable "project_id" {

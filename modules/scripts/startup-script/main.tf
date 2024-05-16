@@ -89,8 +89,18 @@ locals {
     }
   ]
 
-  has_ansible_runners = anytrue([for r in var.runners : r.type == "ansible-local"]) || local.configure_ssh
-  install_ansible     = var.install_ansible == null ? local.has_ansible_runners : var.install_ansible
+  docker_runner = !var.install_docker ? [] : [
+    {
+      type        = "ansible-local"
+      destination = "install_docker.yml"
+      content     = file("${path.module}/files/install_docker.yml")
+      args        = "-e enable_docker_world_writable=${var.enable_docker_world_writable}"
+    },
+  ]
+
+  supplied_ansible_runners = anytrue([for r in var.runners : r.type == "ansible-local"])
+  has_ansible_runners      = anytrue([local.supplied_ansible_runners, local.configure_ssh, var.install_docker])
+  install_ansible          = coalesce(var.install_ansible, local.has_ansible_runners)
   ansible_installer = local.install_ansible ? [{
     type        = "shell"
     source      = "${path.module}/files/install_ansible.sh"
@@ -104,6 +114,7 @@ locals {
     local.monitoring_agent_installer,
     local.ansible_installer,
     local.configure_ssh_runners,
+    local.docker_runner,
     var.runners
   )
 
@@ -191,6 +202,10 @@ resource "google_storage_bucket_object" "scripts" {
     precondition {
       condition     = !(var.install_cloud_ops_agent && var.install_stackdriver_agent)
       error_message = "Only one of var.install_stackdriver_agent or var.install_cloud_ops_agent can be set. Stackdriver is recommended for best performance."
+    }
+    precondition {
+      condition     = !var.enable_docker_world_writable || var.install_docker
+      error_message = "If var.enable_docker_world_writable is set to true, var.install_docker must also be set to true."
     }
   }
 }

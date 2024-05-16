@@ -42,3 +42,10 @@ variable "http_proxy" {
   default     = ""
   nullable    = false
 }
+
+variable "python_windows_installer_url" {
+  description = "URL of Python installer for Windows"
+  type        = string
+  default     = "https://www.python.org/ftp/python/3.11.9/python-3.11.9-amd64.exe"
+  nullable    = false
+}

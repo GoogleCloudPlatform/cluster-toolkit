@@ -104,15 +104,6 @@ func hasInput(name string) predicate {
 	}
 }
 
-func hasInputNotDeprecated(name string) predicate {
-	return func(mod modInfo) bool {
-		if vi, ok := mod.Input(name); ok {
-			return !strings.HasPrefix(vi.Description, "DEPRECATED")
-		}
-		return false
-	}
-}
-
 // Fails test if slice is empty, returns not empty slice as is.
 func notEmpty[E any](l []E, t *testing.T) []E {
 	if len(l) == 0 {
@@ -157,7 +148,7 @@ func TestNetworkStorage(t *testing.T) {
 	  })`)
 	lst := modulereader.NormalizeType(fmt.Sprintf("list(%s)", obj))
 
-	for _, mod := range notEmpty(query(hasInputNotDeprecated("network_storage")), t) {
+	for _, mod := range notEmpty(query(hasInput("network_storage")), t) {
 		i, _ := mod.Input("network_storage")
 		got := typeexpr.TypeString(i.Type)
 		if got != obj && got != lst {

@@ -20,6 +20,9 @@ if __name__ == "__main__":
     module's directory, which I've always seen as an antipattern. 
     To make me change my mind you'd have to convince me that it isn't.
                             Probably Guido van Rossum
+
+    Usage:
+    $ tools/cloud-build/babysit/run --pr #### --auto --project <project id>
     """
     import os
     import sys

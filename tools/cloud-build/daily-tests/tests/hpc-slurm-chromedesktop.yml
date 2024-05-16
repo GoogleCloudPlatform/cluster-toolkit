@@ -21,11 +21,12 @@ deployment_name: "slm-crd-{{ build }}"
 slurm_cluster_name: "slmcrd{{ build[0:4] }}"
 zone: europe-west1-d
 cli_deployment_vars:
+  network_name: "{{ network }}"
   region: europe-west1
   zone: "{{ zone }}"
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/community/examples/hpc-slurm-chromedesktop.yaml"
-network: "{{ deployment_name }}-net"
+network: "{{ test_name }}-net"
 # Note: Pattern matching in gcloud only supports 1 wildcard.
 login_node: "{{ slurm_cluster_name }}-login-*"
 controller_node: "{{ slurm_cluster_name }}-controller"

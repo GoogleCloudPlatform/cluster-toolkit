@@ -1,0 +1,67 @@
+# Copyright 2022 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+steps:
+- name: gcr.io/cloud-builders/gcloud
+  entrypoint: /bin/bash
+  env:
+  - "BUILD_ID=${BUILD_ID}"
+  - "PROJECT_ID=${PROJECT_ID}"
+  args:
+  - -c
+  - |
+    trap 'failures=$((failures+1))' ERR
+    # retry for up to 2047 seconds (34 minutes)
+    attempt=0
+    max_retries=10
+    while [[ $attempt -le $max_retries ]]; do
+        failures=0
+        if [[ $attempt -gt 0 ]]; then
+            wait=$((2 ** attempt))
+            echo "Retry attempt ${attempt} of ${max_retries} with exponential backoff: ${wait} seconds."
+            sleep $wait
+        fi
+
+        # look only for tests that use Filestore
+        builds_filter="tags=m.filestore"
+        builds_format="value(substitutions.TRIGGER_NAME,logUrl)"
+        active_builds=$(gcloud builds list --project "${PROJECT_ID}" --filter="${builds_filter}" --format="${builds_format}" --ongoing 2>/dev/null)
+        if [[ -n "$active_builds" ]]; then
+            echo "There are active Cloud Build jobs."
+            echo "$active_builds"
+            echo "Skipping cleanup."
+            # set failures to non-0 in case this is last retry
+            ((failures++))
+            ((attempt++))
+            continue
+        fi
+
+        echo
+        echo "Cleaning Filestore"
+        /workspace/tools/clean-filestore-limit.sh
+
+        if [[ $failures -eq 0 ]]; then
+            break
+        else
+            echo "At least one failure occurred during cleanup."
+            ((attempt++))
+        fi
+    done
+
+    if [[ $failures -ne 0 ]]; then
+        echo "Cleanup did not succeed despite retrying."
+        exit 1
+    fi

@@ -98,19 +98,19 @@ The following is an example setting up a filestore using startup script:
 The following matrix shows the best method by which each type of network storage
 device should be mounted to each mount capable module.
 
-&nbsp; | Slurm V5 | Batch | vm-instance | Packer (client install) | HTCondor\* | PBS Pro\*
--- | -- | -- | -- | -- | -- | --
-filestore | via USE | via USE | via USE | via STARTUP | via USE | via USE
-nfs-server | via USE | via USE | via USE | via STARTUP | via USE | via USE
-cloud-storage-bucket (GCS)| via USE | via USE | via USE | via STARTUP | via USE | via USE
-DDN EXAScaler lustre | via USE | via USE | via USE | Needs Testing | via USE | via USE
-Intel DAOS** | Needs Testing | Needs Testing | Needs Testing | Needs Testing | Needs Testing | Needs Testing
-  |   |   |   |   |   |  
-filestore (pre-existing) | via USE | via USE | via USE | via STARTUP | via USE | via USE
-nfs-server (pre-existing) | via USE | via USE | via USE | via STARTUP | via USE | via USE
-DDN EXAScaler lustre (pre-existing) | via USE | via USE | via USE | Needs Testing | via USE | via USE
-Intel DAOS (pre-existing) | Planned Development | Planned Development | Planned Development | Planned Development | Planned Development | Planned Development
-GCS FUSE (pre-existing) | via USE | via USE | via USE | via STARTUP | via USE | Needs Testing
+&nbsp; | Slurm V6 | Slurm V5 | Batch | vm-instance | Packer (client install) | HTCondor\* | PBS Pro\*
+-- | -- | -- | -- | -- | -- | -- | --
+filestore | via USE | via USE | via USE | via USE | via STARTUP | via USE | via USE
+nfs-server | via USE | via USE | via USE | via USE | via STARTUP | via USE | via USE
+cloud-storage-bucket (GCS)| via USE | via USE | via USE | via USE | via STARTUP | via USE | via USE
+DDN EXAScaler lustre | via USE | via USE | via USE | via USE | Needs Testing | via USE | via USE
+Intel DAOS** | Needs Testing | Needs Testing | Needs Testing | Needs Testing | Needs Testing | Needs Testing | Needs Testing
+  |  |   |   |   |   |   |  
+filestore (pre-existing) | via USE | via USE | via USE | via USE | via STARTUP | via USE | via USE
+nfs-server (pre-existing) | via USE | via USE | via USE | via USE | via STARTUP | via USE | via USE
+DDN EXAScaler lustre (pre-existing) | via USE | via USE | via USE | via USE | Needs Testing | via USE | via USE
+Intel DAOS (pre-existing) | Not Supported | Not Supported | Not Supported | Not Supported | Not Supported | Not Supported | Not Supported
+GCS FUSE (pre-existing) | via USE | via USE | via USE | via USE | via STARTUP | via USE | Needs Testing
 
 - **via USE:** Client installation and mounting occur automatically when
   connected with the use field. See
@@ -119,7 +119,7 @@ GCS FUSE (pre-existing) | via USE | via USE | via USE | via STARTUP | via USE | 
   `startup-script` module to install clients and mount. See
   [mounting via startup section](#mounting-via-startup).
 - **Needs Testing:** May currently work but has not yet been fully tested.
-- **Planned Development:** Development to support this feature has been planned.
+- **Not Supported:** This feature is not supported right now.
 
 \* only supported on CentOS 7\
 ** DAOS has additional pre-req steps and does not yet support automatic mounting

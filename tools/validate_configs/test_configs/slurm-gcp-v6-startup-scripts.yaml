@@ -104,7 +104,7 @@ deployment_groups:
     - network
     settings:
       name_prefix: login
-      disable_login_public_ips: false
+      enable_login_public_ips: true
 
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
@@ -116,6 +116,6 @@ deployment_groups:
     - bucket
     - slurm_login
     settings:
-      disable_controller_public_ips: false
+      enable_controller_public_ips: true
       controller_startup_script: $(startup-all.startup_script)
       login_startup_script: $(startup-all.startup_script)
