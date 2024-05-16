@@ -218,7 +218,7 @@ Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial][fsi-monteca
 [schedmd-slurm-gcp-v5-controller]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-controller/README.md
 [schedmd-slurm-gcp-v5-login]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-login/README.md
 [schedmd-slurm-gcp-v5-hybrid]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid/README.md
-[slurm-gcp-version-5]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/5.10.6
+[slurm-gcp-version-5]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/5.11.1
 [slurm-gcp-version-6]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.4.7
 [pbspro-client]: ../community/modules/scheduler/pbspro-client/README.md
 [pbspro-server]: ../community/modules/scheduler/pbspro-server/README.md
