@@ -19,3 +19,20 @@ output "private_vpc_connection_peering" {
   sensitive   = true
   value       = google_service_networking_connection.private_vpc_connection.peering
 }
+
+output "connect_mode" {
+  description = <<-EOT
+    Services that use Private Service Access typically specify connect_mode
+    "PRIVATE_SERVICE_ACCESS". This output value sets connect_mode and additionally
+    blocks terraform actions until the VPC connection has been created.
+    EOT
+  value       = "PRIVATE_SERVICE_ACCESS"
+  depends_on = [
+    google_service_networking_connection.private_vpc_connection,
+  ]
+}
+
+output "reserved_ip_range" {
+  description = "Named IP range to be used by services connected with Private Service Access."
+  value       = google_compute_global_address.private_ip_alloc.name
+}
