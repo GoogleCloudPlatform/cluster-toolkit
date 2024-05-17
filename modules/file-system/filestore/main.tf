@@ -47,7 +47,6 @@ locals {
   network_name     = local.split_network_id[4]
   network_project  = local.split_network_id[1]
   shared_vpc       = local.network_project != var.project_id
-  connect_mode     = var.private_vpc_connection_peering == null ? var.connect_mode : "PRIVATE_SERVICE_ACCESS"
 }
 
 resource "google_filestore_instance" "filestore_instance" {
@@ -66,7 +65,7 @@ resource "google_filestore_instance" "filestore_instance" {
 
   networks {
     network           = local.shared_vpc ? var.network_id : local.network_name
-    connect_mode      = local.connect_mode
+    connect_mode      = var.connect_mode
     modes             = ["MODE_IPV4"]
     reserved_ip_range = var.reserved_ip_range
   }
@@ -77,6 +76,21 @@ resource "google_filestore_instance" "filestore_instance" {
       create = "1h"
       update = "1h"
       delete = "1h"
+    }
+  }
+
+  lifecycle {
+    precondition {
+      condition = (
+        var.reserved_ip_range == null ||
+        var.connect_mode == "PRIVATE_SERVICE_ACCESS" ||
+        var.connect_mode == "DIRECT_PEERING" && can(cidrhost(var.reserved_ip_range, 0)) && contains(["24", "29"], try(split("/", var.reserved_ip_range)[1], ""))
+      )
+      error_message = <<-EOT
+        If connect_mode is set to DIRECT_PEERING and reserved_ip_range is
+        specified then it must be a CIDR IP range with suffix range size 29 for
+        BASIC_HDD or BASIC_SSD tiers. Otherwise the range size must be 24.
+        EOT
     }
   }
 }
