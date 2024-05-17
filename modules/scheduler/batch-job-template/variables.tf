@@ -48,7 +48,7 @@ variable "job_filename" {
 variable "gcloud_version" {
   description = "The version of the gcloud cli being used. Used for output instructions. Valid inputs are `\"alpha\"`, `\"beta\"` and \"\" (empty string for default version)"
   type        = string
-  default     = "alpha"
+  default     = ""
 
   validation {
     condition     = contains(["alpha", "beta", ""], var.gcloud_version)
