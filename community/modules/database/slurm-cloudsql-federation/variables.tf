@@ -14,6 +14,16 @@
  * limitations under the License.
 */
 
+variable "database_version" {
+  description = "The version of the database to be created."
+  type        = string
+  default     = "MYSQL_5_7"
+  validation {
+    condition     = var.database_version == "MYSQL_5_7" || var.database_version == "MYSQL_8_0"
+    error_message = "The database version must be either MYSQL_5_7 or MYSQL_8_0."
+  }
+}
+
 variable "deployment_name" {
   description = "The name of the current deployment"
   type        = string
