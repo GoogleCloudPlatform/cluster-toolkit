@@ -268,6 +268,7 @@ limitations under the License.
 
 | Name | Description |
 |------|-------------|
+| <a name="output_instructions"></a> [instructions](#output\_instructions) | Post deployment instructions. |
 | <a name="output_slurm_bucket_path"></a> [slurm\_bucket\_path](#output\_slurm\_bucket\_path) | Bucket path used by cluster. |
 | <a name="output_slurm_cluster_name"></a> [slurm\_cluster\_name](#output\_slurm\_cluster\_name) | Slurm cluster name. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

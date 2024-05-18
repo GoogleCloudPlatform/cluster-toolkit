@@ -21,3 +21,11 @@ output "slurm_bucket_path" {
   description = "Bucket path used by cluster."
   value       = module.slurm_files.slurm_bucket_path
 }
+
+output "instructions" {
+  description = "Post deployment instructions."
+  value       = <<-EOT
+    To SSH to the controller (may need to add '--tunnel-through-iap'):
+      gcloud compute ssh ${module.slurm_controller_instance.instances_self_links[0]}
+  EOT
+}
