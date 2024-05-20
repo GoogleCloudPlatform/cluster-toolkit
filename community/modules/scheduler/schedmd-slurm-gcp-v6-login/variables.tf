@@ -105,10 +105,6 @@ variable "static_ips" {
   type        = list(string)
   description = "List of static IPs for VM instances."
   default     = []
-  validation {
-    condition     = length(var.static_ips) <= 1
-    error_message = "The Slurm modules supports 0 or 1 static IPs on controller instance."
-  }
 }
 
 variable "bandwidth_tier" {
