@@ -59,6 +59,14 @@ resource "google_filestore_instance" "filestore_instance" {
   file_shares {
     capacity_gb = var.size_gb
     name        = var.filestore_share_name
+    dynamic "nfs_export_options" {
+      for_each = var.nfs_export_options == null ? [] : [""]
+      content {
+        access_mode = var.nfs_export_options.access_mode
+        ip_ranges   = var.nfs_export_options.ip_ranges
+        squash_mode = var.nfs_export_options.squash_mode
+      }
+    }
   }
 
   labels = local.labels

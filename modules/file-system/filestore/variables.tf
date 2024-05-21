@@ -114,6 +114,16 @@ variable "connect_mode" {
   }
 }
 
+variable "nfs_export_options" {
+  description = "Define NFS export options."
+  type = object({
+    access_mode = optional(string)
+    ip_ranges   = optional(list(string))
+    squash_mode = optional(string)
+  })
+  default = null
+}
+
 variable "reserved_ip_range" {
   description = <<-EOT
     Reserved IP range for Filestore instance. Users are encouraged to set to null
