@@ -30,6 +30,8 @@ locals {
 
   all_zones      = toset(concat([var.zone], tolist(var.zones)))
   excluded_zones = [for z in data.google_compute_zones.available.names : z if !contains(local.all_zones, z)]
+
+  reservation_map = { for x in var.node_groups : x.reservation_name => x }
 }
 
 data "google_compute_zones" "available" {
@@ -57,4 +59,30 @@ module "slurm_partition" {
   partition_conf                    = local.partition_conf
   partition_startup_scripts         = local.ghpc_startup_script
   partition_startup_scripts_timeout = var.partition_startup_scripts_timeout
+}
+
+# tflint-ignore: terraform_unused_declarations
+data "google_compute_reservation" "reservation" {
+  project = var.project_id
+  zone    = var.zone
+
+  for_each = local.reservation_map
+  name     = each.value.reservation_name
+
+  lifecycle {
+    postcondition {
+      condition     = self.self_link != null
+      error_message = "couldn't find the reservation ${each.value.reservation_name}}"
+    }
+
+    postcondition {
+      condition     = coalesce(self.specific_reservation_required, true)
+      error_message = <<EOT
+      your reservation has to be specific,
+      see https://cloud.google.com/compute/docs/instances/reservations-overview#how-reservations-work
+      for more information. if it's intentionally automatic, don't specify
+      it in the blueprint.
+      EOT
+    }
+  }
 }
