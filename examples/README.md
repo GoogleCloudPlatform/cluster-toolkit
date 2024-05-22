@@ -160,6 +160,33 @@ as follows:
 > to not upgrade to V6 will still be able to use V5 modules by referencing
 > specific git tags in the module source lines.
 
+### Major Changes in from Slurm GCP v5 to v6
+
+* Robust reconfiguration
+
+  Reconfiguration is now managed by a service that runs on each instance. This has removed the dependency on the Pub/Sub Google cloud service, and provides a more consistent reconfiguration experience (when calling `ghpc deploy blueprint.yaml -w`). Reconfiguration has also been enabled by default.
+
+* Faster deployments
+
+  Simple cluster deploys up to 3x faster.
+
+* Lift the restriction on the number of deployments in a single project.
+
+  Slurm GCP v6 has eliminated the use of project metadata to store cluster configuration. Project metadata was both slow to update and had an absolute storage limit. This restricted the number of clusters that could be deployed in a single project. Configs are now stored in a Google Storage Bucket.
+
+* Fewer dependencies in the deployment environment
+
+  Reconfiguration and compute node cleanup no longer require users to install local python dependencies in the deployment environment (where ghpc is called). This has allowed for these features to be enabled by default.
+
+* Flexible node to partition relation
+
+  The v5 concept of "node-group" was replaced by "nodeset" to align with Slurm naming convention. Nodeset can be attributed to multiple partitions, as well as partitions can include multiple nodesets.
+
+* Upgrade Slurm to 23.11
+* TPU v3, v4 support
+
+_For a full accounting of changes, see the changelog._
+
 ## Blueprint Descriptions
 
 [core-badge]: https://img.shields.io/badge/-core-blue?style=plastic
