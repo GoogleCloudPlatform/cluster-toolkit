@@ -61,7 +61,7 @@ deployment_groups:
     source: modules/network/multivpc
     settings:
       global_ip_address_range: 10.0.0.0/9
-      network_name_prefix: gpunet
+      network_name_prefix: $(vars.deployment_name)-gpunet
       network_count: 4
       subnetwork_cidr_suffix: 20
 

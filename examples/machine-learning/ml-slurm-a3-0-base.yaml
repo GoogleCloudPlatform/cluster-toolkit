@@ -33,17 +33,17 @@ deployment_groups:
   - id: sysnet
     source: modules/network/vpc
     settings:
-      network_name: slurm-sys-net
+      network_name: $(vars.deployment_name)-sysnet
       network_address_range: $(vars.sys_net_range)
       mtu: 8244
       # using explicit var.subnetworks to allow for easier addition
       # of multiple system subnetworks in other regions
       subnetworks:
-      - subnet_name: slurm-sys-subnet
+      - subnet_name: $(vars.deployment_name)-sysnet-subnet
         subnet_region: $(vars.region)
         new_bits: 4
         subnet_private_access: true
-        description: primary subnetwork in slurm-sys-net
+        description: primary subnetwork in $(vars.deployment_name)-sysnet
     outputs:
     - network_name
     - subnetwork_name
