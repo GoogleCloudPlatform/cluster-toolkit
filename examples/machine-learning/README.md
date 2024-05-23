@@ -220,10 +220,6 @@ network_storage_homefs = {
   "server_ip" = "10.224.153.226"
 }
 subnetwork_name_sysnet = "sys-subnet"
-subnetwork_self_link_gpunet0 = "https://www.googleapis.com/compute/v1/projects/customer-project/regions/customer-region/subnetworks/gpu-subnet0"
-subnetwork_self_link_gpunet1 = "https://www.googleapis.com/compute/v1/projects/customer-project/regions/customer-region/subnetworks/gpu-subnet1"
-subnetwork_self_link_gpunet2 = "https://www.googleapis.com/compute/v1/projects/customer-project/regions/customer-region/subnetworks/gpu-subnet2"
-subnetwork_self_link_gpunet3 = "https://www.googleapis.com/compute/v1/projects/customer-project/regions/customer-region/subnetworks/gpu-subnet3"
 ```
 
 Build the custom image using ml-slurm-a3-1-image.yaml and the same workflow
