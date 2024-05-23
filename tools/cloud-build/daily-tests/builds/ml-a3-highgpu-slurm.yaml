@@ -21,8 +21,7 @@ tags:
 
 timeout: 14400s  # 4hr
 steps:
-# test A3 custom image creation by using Packer to build image in default VPC
-- id: ml-a3-highgpu-slurm
+- id: ml-a3-highgpu-slurm-image
   name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
   entrypoint: /bin/bash
   env:
@@ -37,5 +36,54 @@ steps:
     BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
 
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/multigroup-integration-test.yml \
-      --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
-      --extra-vars="@tools/cloud-build/daily-tests/tests/ml-a3-highgpu-slurm.yml"
+        --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
+        --extra-vars="@tools/cloud-build/daily-tests/tests/ml-a3-highgpu-slurm-image.yml"
+    IMAGE_NAME=$(gcloud compute images list --project "${PROJECT_ID}" \
+        --no-standard-images --filter="labels.ghpc_deployment~$${BUILD_ID_SHORT}" \
+        --format='get(name)' --limit=1)
+
+    echo $${IMAGE_NAME} > /persistent_volume/image_name
+  volumes:
+  - name: 'persistent_volume'
+    path: '/persistent_volume'
+- id: ml-a3-highgpu-slurm-cluster
+  name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
+  entrypoint: /bin/bash
+  env:
+  - "ANSIBLE_HOST_KEY_CHECKING=false"
+  - "ANSIBLE_CONFIG=/workspace/tools/cloud-build/ansible.cfg"
+  args:
+  - -c
+  - |
+    set -x -e
+    cd /workspace && make
+    BUILD_ID_FULL=$BUILD_ID
+    BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
+    NFS_DEPLOYMENT_NAME="a3hnfs$${BUILD_ID_SHORT}"
+
+    destroy_on_exit() {
+        ./ghpc destroy "$${NFS_DEPLOYMENT_NAME}" --auto-approve
+        cat /persistent_volume/image_name | xargs -L1 gcloud compute images delete --project "${PROJECT_ID}" --quiet
+    }
+
+    trap 'destroy_on_exit' EXIT
+    ./ghpc deploy \
+        --vars region=us-east4 \
+        --vars zone=us-east4-a \
+        --vars project_id="${PROJECT_ID}" \
+        --vars deployment_name="$${NFS_DEPLOYMENT_NAME}" \
+        tools/cloud-build/daily-tests/blueprints/nfs-server-homefs.yaml \
+        --auto-approve
+
+    NFS_IP=$(gcloud compute instances list --project "${PROJECT_ID}" \
+        --filter="labels.ghpc_module=nfs-server and labels.ghpc_deployment=$${NFS_DEPLOYMENT_NAME}" \
+        --format='get(networkInterfaces[0].networkIP)')
+
+    ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
+      --user=sa_106486320838376751393 \
+      --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT} nfs_ip=$${NFS_IP}" \
+      --extra-vars="remote_mount_homefs=/exports/home" \
+      --extra-vars="@tools/cloud-build/daily-tests/tests/ml-a3-highgpu-slurm-cluster.yml"
+  volumes:
+  - name: 'persistent_volume'
+    path: '/persistent_volume'
