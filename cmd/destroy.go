@@ -16,12 +16,15 @@
 package cmd
 
 import (
+	"bufio"
 	"fmt"
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/modulewriter"
 	"hpc-toolkit/pkg/shell"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -62,6 +65,11 @@ func runDestroyCmd(cmd *cobra.Command, args []string) {
 		group := bp.Groups[i]
 		groupDir := filepath.Join(deplRoot, string(group.Name))
 
+		if err := shell.ImportInputs(groupDir, artifactsDir, bp); err != nil {
+			logging.Error("failed to import inputs for group %q: %v", group.Name, err)
+			// still proceed with destroying the group
+		}
+
 		var err error
 		switch group.Kind() {
 		case config.PackerKind:
@@ -72,9 +80,16 @@ func runDestroyCmd(cmd *cobra.Command, args []string) {
 		case config.TerraformKind:
 			err = destroyTerraformGroup(groupDir)
 		default:
-			err = fmt.Errorf("group %s is an unsupported kind %s", groupDir, group.Kind().String())
+			err = fmt.Errorf("group %q is an unsupported kind %q", groupDir, group.Kind().String())
 		}
-		checkErr(err, ctx)
+
+		if err != nil {
+			logging.Error("failed to destroy group %q:\n%s", group.Name, renderError(err, *ctx))
+			if i == 0 || !destroyChoice(bp.Groups[i-1].Name) {
+				logging.Fatal("destruction of %q failed", deplRoot)
+			}
+		}
+
 	}
 
 	modulewriter.WritePackerDestroyInstructions(os.Stdout, packerManifests)
@@ -87,4 +102,32 @@ func destroyTerraformGroup(groupDir string) error {
 	}
 
 	return shell.Destroy(tf, getApplyBehavior())
+}
+
+func destroyChoice(nextGroup config.GroupName) bool {
+	switch getApplyBehavior() {
+	case shell.AutomaticApply:
+		return true
+	case shell.PromptBeforeApply:
+		// pass; proceed with prompt
+	default:
+		return false
+	}
+
+	reader := bufio.NewReader(os.Stdin)
+	for {
+		fmt.Printf("Do you want to delete the next group %q [y/n]?: ", nextGroup)
+
+		in, err := reader.ReadString('\n')
+		if err != nil {
+			logging.Fatal("%v", err)
+		}
+
+		switch strings.ToLower(strings.TrimSpace(in)) {
+		case "y":
+			return true
+		case "n":
+			return false
+		}
+	}
 }

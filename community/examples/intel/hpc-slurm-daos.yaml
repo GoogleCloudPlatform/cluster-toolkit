@@ -37,10 +37,10 @@ deployment_groups:
 - group: primary
   modules:
   - id: network1
-    source: modules/network/vpc
+    source: github.com/GoogleCloudPlatform/hpc-toolkit//modules/network/vpc?ref=v1.33.0&depth=1
 
   - id: homefs
-    source: modules/file-system/filestore
+    source: github.com/GoogleCloudPlatform/hpc-toolkit//modules/file-system/filestore?ref=v1.33.0&depth=1
     use: [network1]
     settings:
       local_mount: /home
@@ -97,7 +97,7 @@ deployment_groups:
         containers: []
 
   - id: daos-client-script
-    source: modules/scripts/startup-script
+    source: github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=v1.33.0&depth=1
     settings:
       runners:
       - type: data
@@ -114,7 +114,7 @@ deployment_groups:
         destination: /tmp/daos_client_config.sh
 
   - id: debug_nodeset
-    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    source: github.com/GoogleCloudPlatform/hpc-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-nodeset?ref=v1.33.0&depth=1
     use: [network1]
     settings:
       name: ns1
@@ -128,7 +128,7 @@ deployment_groups:
       - "https://www.googleapis.com/auth/cloud-platform"
 
   - id: debug_partition
-    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    source: github.com/GoogleCloudPlatform/hpc-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-partition?ref=v1.33.0&depth=1
     use: [debug_nodeset]
     settings:
       partition_name: debug
@@ -136,7 +136,7 @@ deployment_groups:
       is_default: true
 
   - id: compute_nodeset
-    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    source: github.com/GoogleCloudPlatform/hpc-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-nodeset?ref=v1.33.0&depth=1
     use: [network1]
     settings:
       name: ns2
@@ -149,13 +149,13 @@ deployment_groups:
       - "https://www.googleapis.com/auth/cloud-platform"
 
   - id: compute_partition
-    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    source: github.com/GoogleCloudPlatform/hpc-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-partition?ref=v1.33.0&depth=1
     use: [compute_nodeset]
     settings:
       partition_name: compute
 
   - id: slurm_login
-    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    source: github.com/GoogleCloudPlatform/hpc-toolkit//community/modules/scheduler/schedmd-slurm-gcp-v6-login?ref=v1.33.0&depth=1
     use: [network1]
     settings:
       name_prefix: login
@@ -169,7 +169,7 @@ deployment_groups:
       - "https://www.googleapis.com/auth/cloud-platform"
 
   - id: slurm_controller
-    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    source: github.com/GoogleCloudPlatform/hpc-toolkit//community/modules/scheduler/schedmd-slurm-gcp-v6-controller?ref=v1.33.0&depth=1
     use:
     - network1
     - debug_partition

@@ -90,7 +90,7 @@ data "google_compute_zones" "available" {
 }
 
 data "google_compute_region_instance_group" "cm" {
-  self_link = time_sleep.mig_warmup.triggers.self_link
+  self_link = module.htcondor_cm.self_link
   lifecycle {
     postcondition {
       condition     = length(self.instances) == 1
@@ -110,7 +110,7 @@ resource "google_storage_bucket_object" "cm_config" {
 }
 
 module "startup_script" {
-  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=v1.32.1&depth=1"
+  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=v1.33.0&depth=1"
 
   project_id      = var.project_id
   region          = var.region
@@ -121,8 +121,8 @@ module "startup_script" {
 }
 
 module "central_manager_instance_template" {
-  # tflint-ignore: terraform_module_pinned_source
-  source = "github.com/terraform-google-modules/terraform-google-vm//modules/instance_template?ref=84d7959"
+  source  = "terraform-google-modules/vm/google//modules/instance_template"
+  version = "10.1.1"
 
   name_prefix = local.name_prefix
   project_id  = var.project_id
@@ -147,8 +147,8 @@ module "central_manager_instance_template" {
 }
 
 module "htcondor_cm" {
-  # tflint-ignore: terraform_module_pinned_source
-  source = "github.com/terraform-google-modules/terraform-google-vm//modules/mig?ref=aea74d1"
+  source  = "terraform-google-modules/vm/google//modules/mig"
+  version = "10.1.1"
 
   project_id                       = var.project_id
   region                           = var.region
@@ -192,12 +192,12 @@ module "htcondor_cm" {
     delete_rule    = "ON_PERMANENT_INSTANCE_DELETION"
     is_external    = false
   }]
-}
 
-resource "time_sleep" "mig_warmup" {
-  create_duration = "120s"
-
-  triggers = {
-    self_link = module.htcondor_cm.self_link
+  # the timeouts below are default for resource
+  wait_for_instances = true
+  mig_timeouts = {
+    create = "15m"
+    delete = "15m"
+    update = "15m"
   }
 }

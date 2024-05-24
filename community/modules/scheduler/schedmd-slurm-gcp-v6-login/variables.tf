@@ -35,7 +35,10 @@ variable "zone" {
 
 variable "name_prefix" {
   type        = string
-  description = "Unique name prefix for login nodes"
+  description = <<-EOD
+    Unique name prefix for login nodes. Automatically populated by the module id if not set.
+    If setting manually, ensure a unique value across all login groups.
+    EOD
 }
 
 variable "num_instances" {
@@ -304,7 +307,7 @@ variable "instance_image" {
     EOD
   type        = map(string)
   default = {
-    family  = "slurm-gcp-6-4-hpc-rocky-linux-8"
+    family  = "slurm-gcp-6-5-hpc-rocky-linux-8"
     project = "schedmd-slurm-public"
   }
 

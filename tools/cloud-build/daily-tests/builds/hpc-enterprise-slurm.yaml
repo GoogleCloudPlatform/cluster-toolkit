@@ -1,4 +1,4 @@
-# Copyright 2023 Google LLC
+# Copyright 2024 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,20 +14,20 @@
 
 ---
 tags:
+- slurm6
 - m.DDN-EXAScaler
 - m.dashboard
 - m.filestore
-- m.pre-existing-vpc
-- m.schedmd-slurm-gcp-v5-controller
-- m.schedmd-slurm-gcp-v5-login
-- m.schedmd-slurm-gcp-v5-node-group
-- m.schedmd-slurm-gcp-v5-partition
+- m.schedmd-slurm-gcp-v6-controller
+- m.schedmd-slurm-gcp-v6-login
+- m.schedmd-slurm-gcp-v6-nodeset
+- m.schedmd-slurm-gcp-v6-partition
 - m.service-account
-- slurm5
+- m.vpc
 
 timeout: 14400s  # 4hr
 steps:
-- id: hpc-enterprise-slurm
+- id: hpc-enterprise-slurm-v6
   name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
   entrypoint: /bin/bash
   env:

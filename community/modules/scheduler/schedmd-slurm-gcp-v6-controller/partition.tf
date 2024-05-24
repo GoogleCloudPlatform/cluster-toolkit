@@ -21,13 +21,12 @@ locals {
 
   nodeset_dyn_map_ell = { for x in var.nodeset_dyn : x.nodeset_name => x... }
   nodeset_dyn_map     = { for k, vs in local.nodeset_dyn_map_ell : k => vs[0] }
-
-  partition_map = { for x in var.partitions : x.partition_name => x }
 }
 
 # NODESET
+# TODO: remove dependency on slurm-gcp repo, move to local nodeset module
 module "slurm_nodeset_template" {
-  source   = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=6.4.6&depth=1"
+  source   = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=6.5.2"
   for_each = local.nodeset_map
 
   project_id          = var.project_id
@@ -66,7 +65,7 @@ module "slurm_nodeset_template" {
 }
 
 module "slurm_nodeset" {
-  source   = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_nodeset?ref=6.4.6&depth=1"
+  source   = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_nodeset?ref=6.5.2"
   for_each = local.nodeset_map
 
   instance_template_self_link = module.slurm_nodeset_template[each.key].self_link
@@ -86,7 +85,7 @@ module "slurm_nodeset" {
 
 # NODESET TPU
 module "slurm_nodeset_tpu" {
-  source   = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_nodeset_tpu?ref=6.4.6&depth=1"
+  source   = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_nodeset_tpu?ref=6.5.2"
   for_each = local.nodeset_tpu_map
 
   project_id             = var.project_id
@@ -104,31 +103,4 @@ module "slurm_nodeset_tpu" {
   data_disks             = each.value.data_disks
   docker_image           = each.value.docker_image
   subnetwork             = each.value.subnetwork
-}
-
-# NODESET DYNAMIC
-module "slurm_nodeset_dyn" {
-  source   = "github.com/SchedMD/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_nodeset_dyn?ref=6.2.0"
-  for_each = local.nodeset_dyn_map
-
-  nodeset_name    = each.value.nodeset_name
-  nodeset_feature = each.value.nodeset_feature
-}
-
-# PARTITION
-module "slurm_partition" {
-  source   = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_partition?ref=6.4.6&depth=1"
-  for_each = local.partition_map
-
-  partition_nodeset     = [for x in each.value.partition_nodeset : module.slurm_nodeset[x].nodeset_name if try(module.slurm_nodeset[x], null) != null]
-  partition_nodeset_tpu = [for x in each.value.partition_nodeset_tpu : module.slurm_nodeset_tpu[x].nodeset_name if try(module.slurm_nodeset_tpu[x], null) != null]
-  partition_nodeset_dyn = [for x in each.value.partition_nodeset_dyn : module.slurm_nodeset_dyn[x].nodeset_name if try(module.slurm_nodeset_dyn[x], null) != null]
-
-  default              = each.value.default
-  enable_job_exclusive = each.value.enable_job_exclusive
-  partition_name       = each.value.partition_name
-  partition_conf       = each.value.partition_conf
-  resume_timeout       = each.value.resume_timeout
-  suspend_time         = each.value.suspend_time
-  suspend_timeout      = each.value.suspend_timeout
 }

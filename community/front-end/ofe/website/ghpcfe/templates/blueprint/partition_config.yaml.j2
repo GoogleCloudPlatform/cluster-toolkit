@@ -1,0 +1,44 @@
+- source: community/modules/compute/schedmd-slurm-gcp-v5-partition
+  kind: terraform
+  id: {{ part_id }}
+  use:
+  - {{ part_id }}-group
+{{ uses_str }}
+  settings:
+    partition_name: {{ part.name }}
+    subnetwork_self_link: {{ cluster.subnet.cloud_id }}
+    enable_placement: {{ part.enable_placement }}
+    exclusive: {{ exclusive }}
+
+- source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
+  id: {{ part_id }}-group
+  use:
+  settings:
+    enable_smt: {{ part.enable_hyperthreads }}
+    machine_type: {{ part.machine_type }}
+    node_count_dynamic_max: {{ part.dynamic_node_count }}
+    node_count_static: {{ part.static_node_count }}
+    disk_size_gb: {{ part.boot_disk_size }}
+    disk_type: {{ part.boot_disk_type }}
+    {% if part.image %}
+    instance_image:
+      family: {% if part.image.source_image_family == "Imported" %}{{ part.image.family }}{% else %}image-{{ part.image.family }}{% endif %}
+      project: {{ cluster.project_id }}
+    {% endif %}
+    {% if part.additional_disk_count > 0 %}
+    additional_disks:
+      {% for disk_index in disk_range %}
+      - device_name: disk{{ disk_index }}
+        disk_name: null
+        disk_size_gb: {{ part.additional_disk_size }}
+        disk_type: {{ part.additional_disk_type }}
+        disk_labels: {}
+        auto_delete: {{ part.additional_disk_auto_delete }}
+        boot: false
+      {% endfor %}
+    {% endif %}
+    {% if part.GPU_per_node > 0 %}
+    guest_accelerator:
+      - type: {{ part.GPU_type }}
+        count: {{ part.GPU_per_node }}
+    {% endif %}

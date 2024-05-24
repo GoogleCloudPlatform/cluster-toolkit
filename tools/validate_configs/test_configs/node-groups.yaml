@@ -1,4 +1,4 @@
-# Copyright 2022 Google LLC
+# Copyright 2024 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,11 +14,11 @@
 
 ---
 
-blueprint_name: node-group-test
+blueprint_name: node-group-test-v6
 
 vars:
   project_id:  ## Set GCP Project ID Here ##
-  deployment_name: slurm-gcp-v5
+  deployment_name: slurm-gcp-v6
   region: us-central1
   zone: us-central1-c
 
@@ -28,102 +28,102 @@ vars:
 deployment_groups:
 - group: primary
   modules:
-  - id: network1
+  # Source is an embedded resource, denoted by "resources/*" without ./, ../, /
+  # as a prefix. To refer to a local resource, prefix with ./, ../ or /
+  # Example - ./resources/network/vpc
+  - id: network
     source: modules/network/vpc
 
   - id: homefs
     source: community/modules/file-system/nfs-server
-    use: [network1]
+    use: [network]
     settings:
       local_mounts: [/home]
       auto_delete_disk: true
 
   ## Single node group, use defaults where appropriate
-  - id: default_node_group
-    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
+  - id: default_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network]
     settings:
       name: simple
       machine_type: c2-standard-30
 
-  - id: one_node_group
-    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
+  - id: single_nodeset_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
     use:
-    - network1
-    - homefs
-    - default_node_group
+    - default_nodeset
     settings:
       partition_name: simple
 
   ## Complex partition using node groups
-  - id: node_group1
-    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
+  - id: nodeset_1
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network]
     settings:
       name: c30
       machine_type: c2-standard-30
       instance_image:
-        family: slurm-gcp-5-10-debian-11
+        family: slurm-gcp-6-5-debian-11
         project: schedmd-slurm-public
       instance_image_custom: true
 
-  - id: node_group2
-    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
+  - id: nodeset_2
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network]
     settings:
       name: c60
       machine_type: c2-standard-60
       instance_image:
-        name: slurm-gcp-dev-hpc-centos-7-1684970018
+        family: slurm-gcp-6-5-hpc-centos-7
         project: schedmd-slurm-public
 
-  - id: node_group3
-    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
+  - id: nodeset_3
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network]
     settings:
       name: cd112
       machine_type: c2d-standard-112
       instance_image:
-        family: slurm-gcp-5-10-hpc-centos-7
+        family: slurm-gcp-6-5-hpc-centos-7
         project: schedmd-slurm-public
       instance_image_custom: true
       enable_smt: true
 
-  - id: node_group4
-    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
+  - id: nodeset_4
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network]
     settings:
       name: cd56
       machine_type: c2d-standard-56
 
-  - id: multiple_node_groups
-    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
+  - id: multiple_nodesets
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
     use:
-    - network1
-    - homefs
-    - node_group1
-    - node_group2
-    - node_group3
-    - node_group4
+    - nodeset_1
+    - nodeset_2
+    - nodeset_3
+    - nodeset_4
     settings:
-      partition_name: multng
-      enable_reconfigure: true
+      partition_name: multns
 
-  ## Explicitly set node partition with one node group
-  - id: one_node_group_explicit
-    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
-    use:
-    - network1
-    - homefs
+  ## Explicitly set node partition with one nodeset
+  - id: single_nodeset_explicit_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
     settings:
-      partition_name: explng
-      enable_placement: false
+      partition_name: explns
       is_default: true
-      node_groups:
-      - node_count_static: 0
+      nodeset:
+      - nodeset_name: expl
+        node_count_static: 0
         node_count_dynamic_max: 4
-        group_name: expl
+        enable_placement: false
         node_conf: {}
         additional_disks: []
         additional_networks: []
         bandwidth_tier: null
         can_ip_forward: false
-        disable_smt: false
+        enable_smt: true
         disk_auto_delete: true
         disk_labels: {}
         disk_size_gb: 50
@@ -142,8 +142,9 @@ deployment_groups:
         on_host_maintenance: TERMINATE
         preemptible: false
         reservation_name: null # will be replaced by default value empty string
-        service_account: null
+        service_account_email: null
         shielded_instance_config: null
+        subnetwork_self_link: $(network.subnetwork_self_link)
         spot_instance_config: null
         source_image_family: null
         source_image_project: null
@@ -151,23 +152,21 @@ deployment_groups:
         tags: []
         access_config: []
 
-  - id: slurm_controller
-    source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
-    use:
-    - network1
-    - one_node_group
-    - multiple_node_groups
-    - one_node_group_explicit
-    - homefs
-    settings:
-      disable_controller_public_ips: false
-      enable_reconfigure: true
-
   - id: slurm_login
-    source: community/modules/scheduler/schedmd-slurm-gcp-v5-login
-    use:
-    - network1
-    - slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    use: [network]
     settings:
       machine_type: n2-standard-4
-      disable_login_public_ips: false
+      enable_login_public_ips: true
+
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    use:
+    - network
+    - single_nodeset_partition
+    - multiple_nodesets
+    - single_nodeset_explicit_partition
+    - homefs
+    - slurm_login
+    settings:
+      enable_controller_public_ips: true

@@ -1,4 +1,4 @@
-# Copyright 2022 Google LLC
+# Copyright 2024 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,9 +14,12 @@
 
 ---
 
-test_name: ml-slurm
-deployment_name: ml-slurm-{{ build }}
+test_name: ml-slurm-v6
+deployment_name: ml-slurm-v6-{{ build }}
+network: "{{ test_name }}-net"
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/examples/ml-slurm.yaml"
 packer_group_name: packer
 packer_module_id: custom-image
+cli_deployment_vars:
+  network_name: "{{ network }}"

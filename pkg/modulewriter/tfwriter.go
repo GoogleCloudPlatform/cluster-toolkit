@@ -205,8 +205,8 @@ func getProviders(bp config.Blueprint) []provider {
 	}
 
 	return []provider{
-		{"google", "hashicorp/google", "~> 4.84.0", gglConf},
-		{"google-beta", "hashicorp/google-beta", "~> 4.84.0", gglConf},
+		{"google", "hashicorp/google", ">= 4.84.0, < 5.30.0", gglConf},
+		{"google-beta", "hashicorp/google-beta", ">= 4.84.0, < 5.30.0", gglConf},
 	}
 }
 

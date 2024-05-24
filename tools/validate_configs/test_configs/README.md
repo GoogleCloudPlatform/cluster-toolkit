@@ -33,4 +33,4 @@ VPC network, a filestore instance mounted to `/home` and a workstation VM.
 vm-instance and filestore using the startup-script module to setup and
 mount the filestore instance.
 
-**packer.yaml**: Creates a network for Packer to create a custom VM image.
+**packer-v5-legacy.yaml**: Creates a network for Packer to create a custom VM image.

@@ -22,16 +22,16 @@ slurm_cluster_name: "cent7{{ build[0:5] }}"
 
 cli_deployment_vars:
   network_name: "{{ network }}"
-  slurm_image: "{family: slurm-gcp-6-4-hpc-centos-7, project: schedmd-slurm-public}"
+  slurm_image: "{family: slurm-gcp-6-5-hpc-centos-7, project: schedmd-slurm-public}"
   region: us-west4
   zone: us-west4-c
 
 zone: us-west4-c
 workspace: /workspace
-blueprint_yaml: "{{ workspace }}/community/examples/hpc-slurm-ubuntu2004-v6.yaml"
+blueprint_yaml: "{{ workspace }}/community/examples/hpc-slurm-ubuntu2004.yaml"
 network: "{{ test_name }}-net"
 # Note: Pattern matching in gcloud only supports 1 wildcard, centv5*-login-* won't work.
-login_node: "{{ slurm_cluster_name }}-login-*"
+login_node: "{{ slurm_cluster_name }}-slurm-login-*"
 controller_node: "{{ slurm_cluster_name }}-controller"
 post_deploy_tests:
 - test-validation/test-mounts.yml

@@ -20,6 +20,9 @@ vars:
   deployment_name: htcondor-pool
   region: us-central1
   zone: us-central1-c
+  zones:
+  - $(vars.zone)
+  - us-central1-f
   disk_size_gb: 100
   new_image:
     family: htcondor-10x
@@ -129,6 +132,8 @@ deployment_groups:
       default_mig_id: $(htcondor_execute_point.mig_id)
       enable_public_ips: true
       instance_image: $(vars.new_image)
+      enable_high_availability: true
+      spool_disk_size_gb: 200 # required for regional HA
     outputs:
     - access_point_ips
     - access_point_name

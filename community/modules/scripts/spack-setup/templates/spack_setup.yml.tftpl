@@ -84,6 +84,12 @@
     changed_when: lock_out.rc == 0
     failed_when: false
 
+  - name: Add hostname to lock_dir
+    ansible.builtin.file:
+      path:  "{{ lock_dir }}/{{ ansible_hostname }}"
+      state: touch
+    when: lock_out.rc == 0
+
   - name: Clone branch or tag into installation directory
     ansible.builtin.command: git clone --branch {{ git_ref }} {{ git_url }} {{ install_dir }}
     failed_when: false
@@ -127,9 +133,25 @@
     when: lock_out.rc == 0
 
   - name: Wait for lock
-    ansible.builtin.wait_for:
-      path: "{{ lock_dir }}/done"
-      state: present
-      timeout: 600
-      sleep: 10
-    when: lock_out.rc != 0
+    block: 
+    - name: Wait for lock
+      ansible.builtin.wait_for:
+        path: "{{ lock_dir }}/done"
+        state: present
+        timeout: 600
+        sleep: 10
+      when: lock_out.rc != 0
+
+    rescue:
+    - name: Timed out on waiting for lock, get lock directory contents
+      ansible.builtin.find: 
+        paths: "{{ lock_dir }}"
+      register: lock_dir_contents
+
+    - name: Print lock directory contents, it should contain name of host that is holding lock
+      ansible.builtin.debug:
+        msg: "{{ lock_dir_contents.files|map(attribute='path')|map('basename')|list }}"
+      
+    - name: Failed to get lock
+      ansible.builtin.fail:
+        msg: "Timeout waiting on lock for ${sw_name}, exiting"

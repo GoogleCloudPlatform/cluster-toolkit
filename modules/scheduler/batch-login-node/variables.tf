@@ -126,7 +126,7 @@ variable "gcloud_version" {
     batch-job-template modules supply the gcloud_version, only the first will be used.
     EOT
   type        = string
-  default     = "alpha"
+  default     = ""
 
   validation {
     condition     = contains(["alpha", "beta", ""], var.gcloud_version)

@@ -151,7 +151,7 @@ locals {
 
 module "vpc" {
   source  = "terraform-google-modules/network/google"
-  version = "~> 5.0"
+  version = "~> 9.0"
 
   network_name                           = local.network_name
   project_id                             = var.project_id
@@ -189,7 +189,7 @@ module "nat_ip_addresses" {
 
 module "cloud_router" {
   source  = "terraform-google-modules/cloud-router/google"
-  version = "~> 2.0"
+  version = "~> 6.0"
 
   for_each = toset(local.regions)
 

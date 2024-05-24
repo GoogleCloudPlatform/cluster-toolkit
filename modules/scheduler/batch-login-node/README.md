@@ -89,7 +89,7 @@ limitations under the License.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_login_startup_script"></a> [login\_startup\_script](#module\_login\_startup\_script) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | v1.32.1&depth=1 |
+| <a name="module_login_startup_script"></a> [login\_startup\_script](#module\_login\_startup\_script) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | v1.33.0&depth=1 |
 
 ## Resources
 
@@ -105,7 +105,7 @@ limitations under the License.
 | <a name="input_batch_job_directory"></a> [batch\_job\_directory](#input\_batch\_job\_directory) | The path of the directory on the login node in which to place the Google Cloud Batch job template | `string` | `"/home/batch-jobs"` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the deployment, also used for the job\_id | `string` | n/a | yes |
 | <a name="input_enable_oslogin"></a> [enable\_oslogin](#input\_enable\_oslogin) | Enable or Disable OS Login with "ENABLE" or "DISABLE". Set to "INHERIT" to inherit project OS Login setting. | `string` | `"ENABLE"` | no |
-| <a name="input_gcloud_version"></a> [gcloud\_version](#input\_gcloud\_version) | The version of the gcloud cli being used. Used for output instructions.<br>Valid inputs are `\"alpha\"`, `\"beta\"` and \"\" (empty string for default<br>version). Typically supplied by a batch-job-template module. If multiple<br>batch-job-template modules supply the gcloud\_version, only the first will be used. | `string` | `"alpha"` | no |
+| <a name="input_gcloud_version"></a> [gcloud\_version](#input\_gcloud\_version) | The version of the gcloud cli being used. Used for output instructions.<br>Valid inputs are `\"alpha\"`, `\"beta\"` and \"\" (empty string for default<br>version). Typically supplied by a batch-job-template module. If multiple<br>batch-job-template modules supply the gcloud\_version, only the first will be used. | `string` | `""` | no |
 | <a name="input_instance_template"></a> [instance\_template](#input\_instance\_template) | Login VM instance template self-link. Typically supplied by a<br>batch-job-template module. If multiple batch-job-template modules supply the<br>instance\_template, the first will be used. | `string` | n/a | yes |
 | <a name="input_job_data"></a> [job\_data](#input\_job\_data) | List of jobs and supporting data for each, typically provided via "use" from the batch-job-template module. | <pre>list(object({<br>    template_contents = string,<br>    filename          = string,<br>    id                = string<br>  }))</pre> | n/a | yes |
 | <a name="input_job_filename"></a> [job\_filename](#input\_job\_filename) | Deprecated (use `job_data`): The filename of the generated job template file. Typically supplied by a batch-job-template module. | `string` | `null` | no |

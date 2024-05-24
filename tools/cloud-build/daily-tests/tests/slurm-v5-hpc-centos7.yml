@@ -27,7 +27,7 @@ cli_deployment_vars:
   zone: "{{ zone }}"
   zones: "[us-west4-a,us-west4-b,us-west4-c]"
 workspace: /workspace
-blueprint_yaml: "{{ workspace }}/examples/hpc-slurm.yaml"
+blueprint_yaml: "{{ workspace }}/examples/hpc-slurm-v5-legacy.yaml"
 network: "{{ test_name }}-net"
 # Note: Pattern matching in gcloud only supports 1 wildcard, centv5*-login-* won't work.
 login_node: "{{ slurm_cluster_name }}-login-*"
@@ -41,3 +41,4 @@ custom_vars:
   - debug
   mounts:
   - /home
+wait_for_compute_nodes_to_go_down: true

@@ -16,13 +16,27 @@ locals {
   non_static_ns_with_placement = [for ns in var.nodeset : ns.nodeset_name if ns.enable_placement && ns.node_count_static == 0]
   use_static                   = [for ns in concat(var.nodeset, var.nodeset_tpu) : ns.nodeset_name if ns.node_count_static > 0]
 
+  has_node = length(var.nodeset) > 0
+  has_dyn  = length(var.nodeset_dyn) > 0
+  has_tpu  = length(var.nodeset_tpu) > 0
+}
+
+locals {
+  partition_conf = merge({
+    "Default"        = var.is_default ? "YES" : null
+    "ResumeTimeout"  = var.resume_timeout != null ? var.resume_timeout : (local.has_tpu ? 600 : 300)
+    "SuspendTime"    = var.suspend_time < 0 ? "INFINITE" : var.suspend_time
+    "SuspendTimeout" = var.suspend_timeout != null ? var.suspend_timeout : (local.has_tpu ? 240 : 120)
+  }, var.partition_conf)
+
   partition = {
-    default               = var.is_default
-    enable_job_exclusive  = var.exclusive
-    partition_conf        = var.partition_conf
-    partition_name        = var.partition_name
+    partition_name = var.partition_name
+    partition_conf = local.partition_conf
+
     partition_nodeset     = [for ns in var.nodeset : ns.nodeset_name]
     partition_nodeset_tpu = [for ns in var.nodeset_tpu : ns.nodeset_name]
     partition_nodeset_dyn = [for ns in var.nodeset_dyn : ns.nodeset_name]
+    # Options
+    enable_job_exclusive = var.exclusive
   }
 }

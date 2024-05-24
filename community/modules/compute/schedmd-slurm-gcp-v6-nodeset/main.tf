@@ -35,8 +35,10 @@ locals {
   public_access_config = var.enable_public_ips ? [{ nat_ip = null, network_tier = null }] : []
   access_config        = length(var.access_config) == 0 ? local.public_access_config : var.access_config
 
+  service_account_email = coalesce(var.service_account_email, data.google_compute_default_service_account.default.email)
+
   service_account = {
-    email  = var.service_account_email
+    email  = local.service_account_email
     scopes = var.service_account_scopes
   }
 
@@ -93,5 +95,35 @@ locals {
     zones             = toset(concat([var.zone], tolist(var.zones)))
     zone_target_shape = var.zone_target_shape
     startup_script    = local.ghpc_startup_script
+    network_storage   = var.network_storage
+  }
+}
+
+data "google_compute_default_service_account" "default" {
+  project = var.project_id
+}
+
+# tflint-ignore: terraform_unused_declarations
+data "google_compute_reservation" "reservation" {
+  count   = var.reservation_name != "" ? 1 : 0
+  name    = var.reservation_name
+  project = var.project_id
+  zone    = var.zone
+
+  lifecycle {
+    postcondition {
+      condition     = self.self_link != null
+      error_message = "couldn't find the reservation ${var.reservation_name}}"
+    }
+
+    postcondition {
+      condition     = coalesce(self.specific_reservation_required, true)
+      error_message = <<EOT
+      your reservation has to be specific,
+      see https://cloud.google.com/compute/docs/instances/reservations-overview#how-reservations-work
+      for more information. if it's intentionally automatic, don't specify
+      it in the blueprint.
+      EOT
+    }
   }
 }

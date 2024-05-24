@@ -1,4 +1,4 @@
-# Copyright 2022 Google LLC
+# Copyright 2024 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,16 +13,15 @@
 # limitations under the License.
 
 ---
-# Deploying the various groups of this blueprint requires passing the output of
-# the primary group to the packer group. Instructions for how to do that are
-# available at the following link:
+
+# See instructions at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/examples#image-builderyaml-
 
-blueprint_name: image-builder
+blueprint_name: image-builder-v6
 
 vars:
   project_id:  ## Set GCP Project ID Here ##
-  deployment_name: image-builder-001
+  deployment_name: image-builder-v6-001
   region: us-central1
   zone: us-central1-c
   custom_image:
@@ -36,7 +35,7 @@ vars:
 deployment_groups:
 - group: primary
   modules:
-  - id: network1
+  - id: network
     source: modules/network/vpc
 
   - id: scripts_for_image
@@ -55,12 +54,12 @@ deployment_groups:
     source: modules/packer/custom-image
     kind: packer
     use:
-    - network1
+    - network
     - scripts_for_image
     settings:
       source_image_project_id: [schedmd-slurm-public]
       # see latest in https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#published-image-family
-      source_image_family: slurm-gcp-5-10-hpc-centos-7
+      source_image_family: slurm-gcp-6-5-hpc-rocky-linux-8
       # You can find size of source image by using following command
       # gcloud compute images describe-from-family <source_image_family> --project schedmd-slurm-public
       disk_size: $(vars.disk_size)
@@ -69,8 +68,9 @@ deployment_groups:
 
 - group: cluster
   modules:
-  - id: compute_node_group
-    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
+  - id: compute_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network]
     settings:
       node_count_dynamic_max: 20
       disk_size_gb: $(vars.disk_size)
@@ -79,32 +79,29 @@ deployment_groups:
       bandwidth_tier: gvnic_enabled
 
   - id: compute_partition
-    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
-    use:
-    - network1
-    - compute_node_group
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use: [compute_nodeset]
     settings:
       partition_name: compute
       is_default: true
 
-  - id: slurm_controller
-    source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
-    use:
-    - network1
-    - compute_partition
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    use: [network]
     settings:
-      disable_controller_public_ips: false
+      enable_login_public_ips: true
       disk_size_gb: $(vars.disk_size)
       instance_image: $(vars.custom_image)
       instance_image_custom: true
 
-  - id: slurm_login
-    source: community/modules/scheduler/schedmd-slurm-gcp-v5-login
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     use:
-    - network1
-    - slurm_controller
+    - network
+    - compute_partition
+    - slurm_login
     settings:
-      disable_login_public_ips: false
+      enable_controller_public_ips: true
       disk_size_gb: $(vars.disk_size)
       instance_image: $(vars.custom_image)
       instance_image_custom: true

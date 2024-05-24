@@ -198,9 +198,16 @@ variable "nodeset" {
     metadata             = optional(map(string), {})
     min_cpu_platform     = optional(string)
     network_tier         = optional(string, "STANDARD")
-    on_host_maintenance  = optional(string)
-    preemptible          = optional(bool, false)
-    region               = optional(string)
+    network_storage = optional(list(object({
+      server_ip     = string
+      remote_mount  = string
+      local_mount   = string
+      fs_type       = string
+      mount_options = string
+    })), [])
+    on_host_maintenance = optional(string)
+    preemptible         = optional(bool, false)
+    region              = optional(string)
     service_account = optional(object({
       email  = optional(string)
       scopes = optional(list(string), ["https://www.googleapis.com/auth/cloud-platform"])
@@ -219,12 +226,19 @@ variable "nodeset" {
       subnetwork         = string
       subnetwork_project = string
       network_ip         = string
+      nic_type           = string
+      stack_type         = string
+      queue_count        = number
       access_config = list(object({
         nat_ip       = string
         network_tier = string
       }))
       ipv6_access_config = list(object({
         network_tier = string
+      }))
+      alias_ip_range = list(object({
+        ip_cidr_range         = string
+        subnetwork_range_name = string
       }))
     })))
     access_config = optional(list(object({
@@ -265,7 +279,14 @@ variable "nodeset_tpu" {
     zone         = string
     data_disks   = optional(list(string), [])
     docker_image = optional(string, "")
-    subnetwork   = string
+    network_storage = optional(list(object({
+      server_ip     = string
+      remote_mount  = string
+      local_mount   = string
+      fs_type       = string
+      mount_options = string
+    })), [])
+    subnetwork = string
     service_account = optional(object({
       email  = optional(string)
       scopes = optional(list(string), ["https://www.googleapis.com/auth/cloud-platform"])
@@ -289,27 +310,27 @@ variable "nodeset_dyn" {
 #############
 # PARTITION #
 #############
-# REVIEWER_NOTE: copied from V6 cluster module as is
 variable "partitions" {
   description = <<EOD
 Cluster partitions as a list. See module slurm_partition.
 EOD
   type = list(object({
-    default               = optional(bool, false)
-    enable_job_exclusive  = optional(bool, false)
-    partition_conf        = optional(map(string), {})
     partition_name        = string
+    partition_conf        = optional(map(string), {})
     partition_nodeset     = optional(list(string), [])
     partition_nodeset_dyn = optional(list(string), [])
     partition_nodeset_tpu = optional(list(string), [])
-    resume_timeout        = optional(number)
-    suspend_time          = optional(number, 300)
-    suspend_timeout       = optional(number)
+    enable_job_exclusive  = optional(bool, false)
   }))
 
   validation {
     condition     = length(var.partitions) > 0
     error_message = "Partitions cannot be empty."
+  }
+
+  validation {
+    condition     = length(distinct([for x in var.partitions : x.partition_name])) == length(var.partitions)
+    error_message = "All partitions must have a unique partition_name."
   }
 }
 
@@ -341,7 +362,7 @@ Enables automatic cleanup of compute nodes and resource policies (e.g.
 placement groups) managed by this module, when cluster is destroyed.
 
 *WARNING*: Toggling this off will impact the running workload. 
-Deployed compute nodes will be destroyed.
+Deployed compute nodes and controller will be destroyed.
 EOD
   type        = bool
   default     = true
@@ -397,13 +418,11 @@ variable "disable_default_mounts" { # tflint-ignore: terraform_unused_declaratio
 variable "network_storage" {
   description = "An array of network attached storage mounts to be configured on all instances."
   type = list(object({
-    server_ip             = string,
-    remote_mount          = string,
-    local_mount           = string,
-    fs_type               = string,
-    mount_options         = string,
-    client_install_runner = map(string) # TODO: is it used? should remove it?
-    mount_runner          = map(string)
+    server_ip     = string,
+    remote_mount  = string,
+    local_mount   = string,
+    fs_type       = string,
+    mount_options = string,
   }))
   default = []
 }
@@ -411,13 +430,11 @@ variable "network_storage" {
 variable "login_network_storage" {
   description = "An array of network attached storage mounts to be configured on all login nodes."
   type = list(object({
-    server_ip             = string,
-    remote_mount          = string,
-    local_mount           = string,
-    fs_type               = string,
-    mount_options         = string,
-    client_install_runner = map(string) # TODO: is it used? should remove it?
-    mount_runner          = map(string)
+    server_ip     = string,
+    remote_mount  = string,
+    local_mount   = string,
+    fs_type       = string,
+    mount_options = string,
   }))
   default = []
 }

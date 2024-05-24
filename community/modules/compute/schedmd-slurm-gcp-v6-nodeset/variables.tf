@@ -20,6 +20,11 @@ variable "name" {
   type        = string
 }
 
+variable "project_id" {
+  type        = string
+  description = "Project ID to create resources in."
+}
+
 variable "node_conf" {
   description = "Map of Slurm node line configuration."
   type        = map(any)
@@ -79,7 +84,7 @@ variable "instance_image" {
     EOD
   type        = map(string)
   default = {
-    family  = "slurm-gcp-6-4-hpc-rocky-linux-8"
+    family  = "slurm-gcp-6-5-hpc-rocky-linux-8"
     project = "schedmd-slurm-public"
   }
 
@@ -457,4 +462,16 @@ variable "startup_script" {
   EOD
   type        = string
   default     = "# no-op"
+}
+
+variable "network_storage" {
+  description = "An array of network attached storage mounts to be configured on nodes."
+  type = list(object({
+    server_ip     = string,
+    remote_mount  = string,
+    local_mount   = string,
+    fs_type       = string,
+    mount_options = string,
+  }))
+  default = []
 }

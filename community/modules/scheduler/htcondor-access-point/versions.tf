@@ -20,13 +20,13 @@ terraform {
       source  = "hashicorp/google"
       version = ">= 3.83"
     }
-    time = {
-      source  = "hashicorp/time"
-      version = "~> 0.9"
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.6"
     }
   }
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:htcondor-access-point/v1.33.0"
+    module_name = "blueprints/terraform/hpc-toolkit:htcondor-access-point/v1.34.0"
   }
 
   required_version = ">= 1.1"

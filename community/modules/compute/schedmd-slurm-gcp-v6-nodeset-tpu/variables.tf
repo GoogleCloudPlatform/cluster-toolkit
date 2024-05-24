@@ -103,7 +103,7 @@ variable "data_disks" {
 }
 
 variable "docker_image" {
-  description = "The gcp container registry id docker image to use in the TPU vms, it defaults to gcr.io/schedmd-slurm-public/tpu:slurm-gcp-6-4-tf-<var.tf_version>"
+  description = "The gcp container registry id docker image to use in the TPU vms, it defaults to gcr.io/schedmd-slurm-public/tpu:slurm-gcp-6-5-tf-<var.tf_version>"
   type        = string
   default     = null
 }
@@ -147,4 +147,16 @@ variable "reserved" {
   description = "Specify whether TPU-vms in this nodeset are created under a reservation."
   type        = bool
   default     = false
+}
+
+variable "network_storage" {
+  description = "An array of network attached storage mounts to be configured on nodes."
+  type = list(object({
+    server_ip     = string,
+    remote_mount  = string,
+    local_mount   = string,
+    fs_type       = string,
+    mount_options = string,
+  }))
+  default = []
 }

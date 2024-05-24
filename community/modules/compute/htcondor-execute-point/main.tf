@@ -125,7 +125,7 @@ resource "google_storage_bucket_object" "execute_config" {
 }
 
 module "startup_script" {
-  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=v1.32.1&depth=1"
+  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=v1.33.0&depth=1"
 
   project_id      = var.project_id
   region          = var.region
@@ -137,7 +137,7 @@ module "startup_script" {
 
 module "execute_point_instance_template" {
   source  = "terraform-google-modules/vm/google//modules/instance_template"
-  version = "~> 8.0"
+  version = "10.1.1"
 
   name_prefix = local.name_prefix
   project_id  = var.project_id
@@ -163,7 +163,9 @@ module "execute_point_instance_template" {
 }
 
 module "mig" {
-  source                           = "github.com/terraform-google-modules/terraform-google-vm//modules/mig?ref=aea74d1"
+  source  = "terraform-google-modules/vm/google//modules/mig"
+  version = "10.1.1"
+
   project_id                       = var.project_id
   region                           = var.region
   distribution_policy_target_shape = var.distribution_policy_target_shape

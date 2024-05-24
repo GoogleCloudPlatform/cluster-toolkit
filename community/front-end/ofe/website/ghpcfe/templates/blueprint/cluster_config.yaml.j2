@@ -1,0 +1,108 @@
+blueprint_name: {{ cluster.cloud_id }}
+
+vars:
+  project_id: {{ project_id }}
+  deployment_name: {{ cluster.cloud_id }}
+  region: {{ cluster.cloud_region }}
+  zone: {{ cluster.cloud_zone }}
+  enable_reconfigure: True
+  enable_cleanup_compute: False
+  enable_cleanup_subscriptions: True
+  enable_bigquery_load: {{ cluster.use_bigquery }}
+  instance_image_custom: True
+  labels:
+    created_by: {{ site_name }}
+
+deployment_groups:
+- group: primary
+  modules:
+  - source: modules/network/pre-existing-vpc
+    kind: terraform
+    settings:
+      network_name: {{ cluster.subnet.vpc.cloud_id }}
+      subnetwork_name: {{ cluster.subnet.cloud_id }}
+    id: hpc_network
+
+  - source: community/modules/network/private-service-access
+    id: ps-connect
+    use: [ hpc_network ]    
+
+{{ filesystems_yaml | safe }}
+
+  - source: community/modules/project/service-account
+    kind: terraform
+    id: hpc_service_account
+    settings:
+      project_id: {{ project_id }}
+      name: {{ controller_sa }}
+      project_roles:
+      - compute.instanceAdmin.v1
+      - iam.serviceAccountUser
+      - monitoring.metricWriter
+      - logging.logWriter
+      - storage.objectAdmin
+      - pubsub.admin
+      - compute.securityAdmin
+      - iam.serviceAccountAdmin
+      - resourcemanager.projectIamAdmin
+      - compute.networkAdmin
+
+{{ partitions_yaml | safe }}
+
+{{ cloudsql_yaml | safe }}
+
+  - source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
+    kind: terraform
+    id: slurm_controller
+    settings:
+      cloud_parameters:
+        resume_rate: 0
+        resume_timeout: 500
+        suspend_rate: 0
+        suspend_timeout: 300
+        no_comma_params: false
+      machine_type: {{ cluster.controller_instance_type }}
+      disk_type: {{ cluster.controller_disk_type }}
+      disk_size_gb: {{ cluster.controller_disk_size }}
+      {{ controller_image_yaml | safe }}
+      service_account:
+        email: $(hpc_service_account.service_account_email)
+        scopes:
+        - https://www.googleapis.com/auth/cloud-platform
+        - https://www.googleapis.com/auth/monitoring.write
+        - https://www.googleapis.com/auth/logging.write
+        - https://www.googleapis.com/auth/devstorage.read_write
+        - https://www.googleapis.com/auth/pubsub
+      controller_startup_script: |
+        #!/bin/bash
+        echo "******************************************** CALLING CONTROLLER STARTUP"
+        gsutil cp gs://{{ startup_bucket }}/clusters/{{ cluster.id }}/bootstrap_controller.sh - | bash
+      compute_startup_script: |
+        #!/bin/bash
+        gsutil cp gs://{{ startup_bucket }}/clusters/{{ cluster.id }}/bootstrap_compute.sh - | bash
+    use:
+{{ controller_uses | safe }}
+
+  - source: community/modules/scheduler/schedmd-slurm-gcp-v5-login
+    kind: terraform
+    id: slurm_login
+    settings:
+      num_instances: {{ cluster.num_login_nodes }}
+      subnetwork_self_link: {{ cluster.subnet.cloud_id }}
+      machine_type: {{ cluster.login_node_instance_type }}
+      disk_type: {{ cluster.login_node_disk_type }}
+      disk_size_gb: {{ cluster.login_node_disk_size }}
+      {{ login_image_yaml | safe }}
+      service_account:
+        email: $(hpc_service_account.service_account_email)
+        scopes:
+        - https://www.googleapis.com/auth/cloud-platform
+        - https://www.googleapis.com/auth/monitoring.write
+        - https://www.googleapis.com/auth/logging.write
+        - https://www.googleapis.com/auth/devstorage.read_write
+      startup_script: |
+        #!/bin/bash
+        echo "******************************************** CALLING LOGIN STARTUP"
+        gsutil cp gs://{{ startup_bucket }}/clusters/{{ cluster.id }}/bootstrap_login.sh - | bash
+    use:
+    - slurm_controller

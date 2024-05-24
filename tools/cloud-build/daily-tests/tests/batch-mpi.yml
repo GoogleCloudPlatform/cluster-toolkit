@@ -25,6 +25,7 @@ post_deploy_tests:
 custom_vars:
   project: "{{ project }}"
   mounts: [/share]
+  batch_job_id: batch-job  # batch-job-template ID
 cli_deployment_vars:
   region: us-west4
   zone: "{{ zone }}"

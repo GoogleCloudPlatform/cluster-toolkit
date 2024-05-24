@@ -107,18 +107,28 @@ variable "connect_mode" {
   description = "Used to select mode - supported values DIRECT_PEERING and PRIVATE_SERVICE_ACCESS."
   type        = string
   default     = "DIRECT_PEERING"
+  nullable    = false
+  validation {
+    condition     = contains(["DIRECT_PEERING", "PRIVATE_SERVICE_ACCESS"], var.connect_mode)
+    error_message = "Allowed values for connect_mode are \"DIRECT_PEERING\" or \"PRIVATE_SERVICE_ACCESS\"."
+  }
 }
 
 variable "reserved_ip_range" {
-  description = "Reserved IP range for Filestore instance (set to null to enable automatic selection)"
+  description = <<-EOT
+    Reserved IP range for Filestore instance. Users are encouraged to set to null
+    for automatic selection. If supplied, it must be:
+
+    CIDR format when var.connect_mode == "DIRECT_PEERING"
+    Named IP Range when var.connect_mode == "PRIVATE_SERVICE_ACCESS"
+
+    See Cloud documentation for more details:
+
+    https://cloud.google.com/filestore/docs/creating-instances#configure_a_reserved_ip_address_range
+  EOT
   type        = string
   default     = null
   nullable    = true
-
-  validation {
-    condition     = var.reserved_ip_range == null || can(cidrhost(var.reserved_ip_range, 0))
-    error_message = "IP address range must be in CIDR format."
-  }
 }
 
 variable "mount_options" {

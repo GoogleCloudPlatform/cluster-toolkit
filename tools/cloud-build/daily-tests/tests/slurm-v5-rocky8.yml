@@ -22,13 +22,13 @@ slurm_cluster_name: "rock8{{ build[0:5] }}"
 
 cli_deployment_vars:
   network_name: "{{ network }}"
-  instance_image: "{family: slurm-gcp-5-10-hpc-rocky-linux-8, project: schedmd-slurm-public}"
+  instance_image: "{family: slurm-gcp-5-11-hpc-rocky-linux-8, project: schedmd-slurm-public}"
   region: us-west4
   zone: us-west4-c
 
 zone: us-west4-c
 workspace: /workspace
-blueprint_yaml: "{{ workspace }}/community/examples/hpc-slurm-ubuntu2004.yaml"
+blueprint_yaml: "{{ workspace }}/community/examples/hpc-slurm-ubuntu2004-v5-legacy.yaml"
 network: "{{ test_name }}-net"
 # Note: Pattern matching in gcloud only supports 1 wildcard, centv5*-login-* won't work.
 login_node: "{{ slurm_cluster_name }}-login-*"
@@ -42,3 +42,4 @@ custom_vars:
   - debug
   mounts:
   - /home
+wait_for_compute_nodes_to_go_down: true

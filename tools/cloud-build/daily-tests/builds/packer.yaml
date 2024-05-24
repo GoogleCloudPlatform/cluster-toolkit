@@ -1,4 +1,4 @@
-# Copyright 2023 Google LLC
+# Copyright 2024 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,19 +15,20 @@
 ---
 tags:
 - m.custom-image
-- m.schedmd-slurm-gcp-v5-controller
-- m.schedmd-slurm-gcp-v5-login
-- m.schedmd-slurm-gcp-v5-node-group
-- m.schedmd-slurm-gcp-v5-partition
+- m.schedmd-slurm-gcp-v6-controller
+- m.schedmd-slurm-gcp-v6-login
+- m.schedmd-slurm-gcp-v6-nodeset
+- m.schedmd-slurm-gcp-v6-partition
 - m.startup-script
 - m.vpc
 - packer
+- slurm6
 
 timeout: 14400s  # 4hr
 steps:
 # test image creation by provisioning a new VPC and using Packer to build an
 # image in it
-- id: packer
+- id: packer-v6
   name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
   entrypoint: /bin/bash
   env:

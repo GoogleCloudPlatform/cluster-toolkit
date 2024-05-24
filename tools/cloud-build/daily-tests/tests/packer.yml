@@ -14,8 +14,8 @@
 
 ---
 
-test_name: image-builder
-deployment_name: pkr{{ build }}
+test_name: image-builder-v6
+deployment_name: pkrv6{{ build }}
 zone: us-central1-c
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/examples/image-builder.yaml"

@@ -28,7 +28,7 @@ locals {
   enable_oslogin_metadata = var.enable_oslogin == "INHERIT" ? {} : { enable-oslogin = lookup(local.oslogin_api_values, var.enable_oslogin, "") }
   metadata                = merge(local.network_storage_metadata, local.enable_oslogin_metadata, var.metadata)
 
-  host_count  = var.enable_high_availability ? 2 : 1
+  host_count  = 1
   name_prefix = "${var.deployment_name}-ap"
 
   example_runner = {
@@ -86,15 +86,22 @@ locals {
     args = join(" ", [
       "-e htcondor_role=get_htcondor_submit",
       "-e config_object=${local.ap_object}",
-      "-e job_queue_ha=${var.enable_high_availability}",
       "-e spool_dir=${var.spool_parent_dir}/spool",
+      "-e htcondor_spool_disk_device=/dev/disk/by-id/google-${local.spool_disk_device_name}",
     ])
   }
 
   access_point_ips  = [data.google_compute_instance.ap.network_interface[0].network_ip]
   access_point_name = data.google_compute_instance.ap.name
 
-  zones = coalescelist(var.zones, data.google_compute_zones.available.names)
+  spool_disk_resource_name = "${var.deployment_name}-spool-disk"
+  spool_disk_device_name   = "htcondor-spool-disk"
+  spool_disk_source        = try(google_compute_disk.spool[0].name, google_compute_region_disk.spool[0].self_link)
+
+  zones = coalescelist(var.zones, random_shuffle.zones.result)
+
+  vm_family            = split("-", var.machine_type)[0]
+  regional_pd_families = ["e2", "n1", "n2", "n2d"]
 }
 
 data "google_compute_image" "htcondor" {
@@ -113,10 +120,24 @@ data "google_compute_image" "htcondor" {
 data "google_compute_zones" "available" {
   project = var.project_id
   region  = var.region
+
+  lifecycle {
+    postcondition {
+      condition = alltrue([
+        for z in var.zones : contains(self.names, z)
+      ])
+      error_message = "Each entry in var.zones must be a zone in var.region: ${var.region}"
+    }
+  }
+}
+
+resource "random_shuffle" "zones" {
+  input        = data.google_compute_zones.available.names
+  result_count = var.enable_high_availability ? 2 : 1
 }
 
 data "google_compute_region_instance_group" "ap" {
-  self_link = time_sleep.mig_warmup.triggers.self_link
+  self_link = module.htcondor_ap.self_link
   lifecycle {
     postcondition {
       condition     = length(self.instances) == local.host_count
@@ -139,11 +160,18 @@ resource "google_storage_bucket_object" "ap_config" {
       condition     = var.default_mig_id == "" || contains(var.mig_id, var.default_mig_id)
       error_message = "If set, var.default_mig_id must be an element in var.mig_id"
     }
+
+    # by construction, this precondition only fails when the user has set
+    # var.zones to a non-empty list of length not equal to 2
+    precondition {
+      condition     = !var.enable_high_availability || length(local.zones) == 2
+      error_message = "When using HTCondor access point high availability, var.zones must be of length 2."
+    }
   }
 }
 
 module "startup_script" {
-  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=v1.32.1&depth=1"
+  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=v1.33.0&depth=1"
 
   project_id      = var.project_id
   region          = var.region
@@ -153,9 +181,40 @@ module "startup_script" {
   runners = local.all_runners
 }
 
+resource "google_compute_region_disk" "spool" {
+  count  = var.enable_high_availability ? 1 : 0
+  name   = local.spool_disk_resource_name
+  labels = local.labels
+  type   = var.spool_disk_type
+  region = var.region
+  size   = var.spool_disk_size_gb
+
+  replica_zones = local.zones
+
+  lifecycle {
+    precondition {
+      condition     = var.spool_disk_size_gb >= 200
+      error_message = "When using HTCondor access point high availability, var.spool_disk_size_gb must be set to 200 or greater."
+    }
+
+    precondition {
+      condition     = contains(local.regional_pd_families, local.vm_family)
+      error_message = "When using HTCondor access point high availability, var.machine_type must be one of ${jsonencode(local.regional_pd_families)}."
+    }
+  }
+}
+
+resource "google_compute_disk" "spool" {
+  count  = var.enable_high_availability ? 0 : 1
+  name   = local.spool_disk_resource_name
+  labels = local.labels
+  type   = var.spool_disk_type
+  zone   = local.zones[0]
+  size   = var.spool_disk_size_gb
+}
+
 module "access_point_instance_template" {
-  # tflint-ignore: terraform_module_pinned_source
-  source = "github.com/terraform-google-modules/terraform-google-vm//modules/instance_template?ref=84d7959"
+  source = "github.com/terraform-google-modules/terraform-google-vm//modules/instance_template?ref=73dc845"
 
   name_prefix = local.name_prefix
   project_id  = var.project_id
@@ -169,6 +228,7 @@ module "access_point_instance_template" {
 
   machine_type   = var.machine_type
   disk_size_gb   = var.disk_size_gb
+  disk_type      = var.disk_type
   preemptible    = false
   startup_script = module.startup_script.startup_script
   metadata       = local.metadata
@@ -177,11 +237,19 @@ module "access_point_instance_template" {
   # secure boot
   enable_shielded_vm       = var.enable_shielded_vm
   shielded_instance_config = var.shielded_instance_config
+
+  # spool disk
+  additional_disks = [
+    {
+      source      = local.spool_disk_source
+      device_name = local.spool_disk_device_name
+    }
+  ]
 }
 
 module "htcondor_ap" {
-  # tflint-ignore: terraform_module_pinned_source
-  source = "github.com/terraform-google-modules/terraform-google-vm//modules/mig?ref=aea74d1"
+  source  = "terraform-google-modules/vm/google//modules/mig"
+  version = "10.1.1"
 
   project_id                       = var.project_id
   region                           = var.region
@@ -220,17 +288,22 @@ module "htcondor_ap" {
     type                         = var.update_policy
   }]
 
+  stateful_disks = [{
+    device_name = local.spool_disk_device_name
+    delete_rule = "ON_PERMANENT_INSTANCE_DELETION"
+  }]
+
   stateful_ips = [{
     interface_name = "nic0"
     delete_rule    = "ON_PERMANENT_INSTANCE_DELETION"
     is_external    = var.enable_public_ips
   }]
-}
 
-resource "time_sleep" "mig_warmup" {
-  create_duration = "120s"
-
-  triggers = {
-    self_link = module.htcondor_ap.self_link
+  # the timeouts below are default for resource
+  wait_for_instances = true
+  mig_timeouts = {
+    create = "15m"
+    delete = "15m"
+    update = "15m"
   }
 }

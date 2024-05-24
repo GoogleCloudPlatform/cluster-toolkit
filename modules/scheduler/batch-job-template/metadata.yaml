@@ -18,3 +18,5 @@ spec:
     services:
     - batch.googleapis.com
     - compute.googleapis.com
+ghpc:
+  inject_module_id: job_id

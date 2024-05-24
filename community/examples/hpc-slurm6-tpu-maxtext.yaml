@@ -113,7 +113,6 @@ deployment_groups:
     use: [network]
     settings:
       enable_login_public_ips: true
-      name_prefix: "v6tpu"
       machine_type: n2-standard-16
 
   - id: slurm_controller

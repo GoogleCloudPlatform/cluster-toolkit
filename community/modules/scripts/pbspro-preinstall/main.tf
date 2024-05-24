@@ -47,7 +47,7 @@ locals {
 
 module "pbspro_bucket" {
   source  = "terraform-google-modules/cloud-storage/google"
-  version = "~> 3.4"
+  version = "~> 5.0"
 
   project_id       = var.project_id
   location         = local.location
