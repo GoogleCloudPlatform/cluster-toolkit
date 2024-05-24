@@ -47,10 +47,6 @@ vars:
   # network parameters should match base blueprint unless network names were modified
   network_name_system: slurm-sys-net
   subnetwork_name_system: slurm-sys-subnet
-  subnetwork_self_link_gpunet0: https://www.googleapis.com/compute/v1/projects/$(vars.project_id)/regions/$(vars.region)/subnetworks/slurm-gpu-subnet0
-  subnetwork_self_link_gpunet1: https://www.googleapis.com/compute/v1/projects/$(vars.project_id)/regions/$(vars.region)/subnetworks/slurm-gpu-subnet1
-  subnetwork_self_link_gpunet2: https://www.googleapis.com/compute/v1/projects/$(vars.project_id)/regions/$(vars.region)/subnetworks/slurm-gpu-subnet2
-  subnetwork_self_link_gpunet3: https://www.googleapis.com/compute/v1/projects/$(vars.project_id)/regions/$(vars.region)/subnetworks/slurm-gpu-subnet3
 
 deployment_groups:
 - group: cluster
@@ -60,6 +56,14 @@ deployment_groups:
     settings:
       network_name: $(vars.network_name_system)
       subnetwork_name: $(vars.subnetwork_name_system)
+
+  - id: gpunets
+    source: modules/network/multivpc
+    settings:
+      global_ip_address_range: 10.0.0.0/9
+      network_name_prefix: $(vars.deployment_name)-gpunet
+      network_count: 4
+      subnetwork_cidr_suffix: 20
 
   - id: homefs
     source: modules/file-system/pre-existing-network-storage
@@ -102,6 +106,8 @@ deployment_groups:
 
   - id: a3_node_group
     source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
+    use:
+    - gpunets
     settings:
       reservation_name: $(vars.a3_reservation_name)
       maintenance_interval: $(vars.a3_maintenance_interval)
@@ -124,47 +130,6 @@ deployment_groups:
         scopes:
         - cloud-platform
       bandwidth_tier: gvnic_enabled
-      additional_networks:
-      - network: null
-        subnetwork: $(vars.subnetwork_self_link_gpunet0)
-        subnetwork_project: $(vars.project_id)
-        network_ip: ""
-        nic_type: GVNIC
-        stack_type: IPV4_ONLY
-        queue_count: null
-        access_config: []
-        ipv6_access_config: []
-        alias_ip_range: []
-      - network: null
-        subnetwork: $(vars.subnetwork_self_link_gpunet1)
-        subnetwork_project: $(vars.project_id)
-        network_ip: ""
-        nic_type: GVNIC
-        stack_type: IPV4_ONLY
-        queue_count: null
-        access_config: []
-        ipv6_access_config: []
-        alias_ip_range: []
-      - network: null
-        subnetwork: $(vars.subnetwork_self_link_gpunet2)
-        subnetwork_project: $(vars.project_id)
-        network_ip: ""
-        nic_type: GVNIC
-        stack_type: IPV4_ONLY
-        queue_count: null
-        access_config: []
-        ipv6_access_config: []
-        alias_ip_range: []
-      - network: null
-        subnetwork: $(vars.subnetwork_self_link_gpunet3)
-        subnetwork_project: $(vars.project_id)
-        network_ip: ""
-        nic_type: GVNIC
-        stack_type: IPV4_ONLY
-        queue_count: null
-        access_config: []
-        ipv6_access_config: []
-        alias_ip_range: []
 
   - id: a3_partition
     source: community/modules/compute/schedmd-slurm-gcp-v5-partition

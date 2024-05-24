@@ -25,10 +25,6 @@ vars:
   region: customer-region
   zone: customer-zone
   sys_net_range: 172.16.0.0/16
-  gpu_net0_range: 10.0.0.0/16
-  gpu_net1_range: 10.1.0.0/16
-  gpu_net2_range: 10.2.0.0/16
-  gpu_net3_range: 10.3.0.0/16
   filestore_ip_range: 192.168.0.0/29
 
 deployment_groups:
@@ -37,64 +33,20 @@ deployment_groups:
   - id: sysnet
     source: modules/network/vpc
     settings:
-      network_name: slurm-sys-net
+      network_name: $(vars.deployment_name)-sysnet
       network_address_range: $(vars.sys_net_range)
       mtu: 8244
       # using explicit var.subnetworks to allow for easier addition
       # of multiple system subnetworks in other regions
       subnetworks:
-      - subnet_name: slurm-sys-subnet
+      - subnet_name: $(vars.deployment_name)-sysnet-subnet
         subnet_region: $(vars.region)
         new_bits: 4
         subnet_private_access: true
-        description: primary subnetwork in slurm-sys-net
+        description: primary subnetwork in $(vars.deployment_name)-sysnet
     outputs:
     - network_name
     - subnetwork_name
-
-  - id: gpunet0
-    source: modules/network/vpc
-    settings:
-      network_name: slurm-gpu-net0
-      subnetwork_name: slurm-gpu-subnet0
-      network_address_range: $(vars.gpu_net0_range)
-      default_primary_subnetwork_size: 4
-      mtu: 8244
-    outputs:
-    - subnetwork_self_link
-
-  - id: gpunet1
-    source: modules/network/vpc
-    settings:
-      network_name: slurm-gpu-net1
-      subnetwork_name: slurm-gpu-subnet1
-      network_address_range: $(vars.gpu_net1_range)
-      default_primary_subnetwork_size: 4
-      mtu: 8244
-    outputs:
-    - subnetwork_self_link
-
-  - id: gpunet2
-    source: modules/network/vpc
-    settings:
-      network_name: slurm-gpu-net2
-      subnetwork_name: slurm-gpu-subnet2
-      network_address_range: $(vars.gpu_net2_range)
-      default_primary_subnetwork_size: 4
-      mtu: 8244
-    outputs:
-    - subnetwork_self_link
-
-  - id: gpunet3
-    source: modules/network/vpc
-    settings:
-      network_name: slurm-gpu-net3
-      subnetwork_name: slurm-gpu-subnet3
-      network_address_range: $(vars.gpu_net3_range)
-      default_primary_subnetwork_size: 4
-      mtu: 8244
-    outputs:
-    - subnetwork_self_link
 
   - id: homefs
     source: modules/file-system/filestore
