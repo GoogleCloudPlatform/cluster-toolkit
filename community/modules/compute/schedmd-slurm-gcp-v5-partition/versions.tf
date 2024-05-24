@@ -18,11 +18,11 @@ terraform {
   required_providers {
     google = {
       source  = "hashicorp/google"
-      version = ">= 3.83"
+      version = ">= 5.11"
     }
   }
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:schedmd-slurm-gcp-v5-partition/v1.33.0"
+    module_name = "blueprints/terraform/hpc-toolkit:schedmd-slurm-gcp-v5-partition/v1.34.0"
   }
   required_version = ">= 0.13.0"
 }

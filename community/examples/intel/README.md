@@ -1,5 +1,8 @@
 # Intel Solutions for the HPC Toolkit
 
+> **_NOTE:_** The [hpc-slurm-daos.yaml](hpc-slurm-daos.yaml) will not be compatible
+> for newer version of slurm-gcp v6.
+
 <!-- TOC generated with: md_toc github community/examples/intel/README.md | sed -e "s/\s-\s/ * /"-->
 <!-- TOC -->
 
