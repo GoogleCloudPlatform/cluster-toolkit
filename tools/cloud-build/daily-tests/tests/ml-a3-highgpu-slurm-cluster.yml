@@ -1,4 +1,4 @@
-# Copyright 2022 Google LLC
+# Copyright 2024 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,6 +14,8 @@
 
 ---
 
+# region, zone, nfs_ip, remote_mount_homefs, must be defined in build file
+# with --extra-vars flag!
 test_name: a3h-cluster
 deployment_name: a3hc-{{ build }}
 slurm_cluster_name: "a3hc{{ build[0:4] }}"
@@ -21,8 +23,6 @@ workspace: /workspace
 blueprint_yaml: "{{ workspace }}/examples/machine-learning/ml-slurm-a3-2-cluster.yaml"
 login_node: "{{ slurm_cluster_name }}-login-*"
 controller_node: "{{ slurm_cluster_name }}-controller"
-region: us-east4
-zone: us-east4-a
 network: default
 post_deploy_tests:
 - test-validation/test-mounts.yml

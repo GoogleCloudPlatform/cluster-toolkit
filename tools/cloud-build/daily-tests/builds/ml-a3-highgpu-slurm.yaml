@@ -66,10 +66,13 @@ steps:
         cat /persistent_volume/image_name | xargs -L1 gcloud compute images delete --project "${PROJECT_ID}" --quiet
     }
 
+    REGION=us-east4
+    ZONE=us-east4-a
+
     trap 'destroy_on_exit' EXIT
     ./ghpc deploy \
-        --vars region=us-east4 \
-        --vars zone=us-east4-a \
+        --vars region="$${REGION}" \
+        --vars zone="$${ZONE}" \
         --vars project_id="${PROJECT_ID}" \
         --vars deployment_name="$${NFS_DEPLOYMENT_NAME}" \
         tools/cloud-build/daily-tests/blueprints/nfs-server-homefs.yaml \
@@ -82,7 +85,7 @@ steps:
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
       --user=sa_106486320838376751393 \
       --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT} nfs_ip=$${NFS_IP}" \
-      --extra-vars="remote_mount_homefs=/exports/home" \
+      --extra-vars="region=$${REGION} zone=$${ZONE} remote_mount_homefs=/exports/home" \
       --extra-vars="@tools/cloud-build/daily-tests/tests/ml-a3-highgpu-slurm-cluster.yml"
   volumes:
   - name: 'persistent_volume'
