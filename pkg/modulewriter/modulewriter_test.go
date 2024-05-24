@@ -358,9 +358,9 @@ func (s *zeroSuite) TestWriteVariables(c *C) {
 func (s *zeroSuite) TestGetProviders(c *C) {
 	// no vars
 	c.Check(
-		getProviders(config.Blueprint{}), DeepEquals, []provider{
-			{alias: "google", source: "hashicorp/google", version: ">= 4.84.0, < 5.32.0", config: config.Dict{}},
-			{alias: "google-beta", source: "hashicorp/google-beta", version: ">= 4.84.0, < 5.32.0", config: config.Dict{}}})
+		getProviders(config.Blueprint{}, config.Group{}), DeepEquals, []provider{
+			{alias: "google", source: "hashicorp/google", version: ">= 4.84.0, < 5.30.0", config: config.Dict{}},
+			{alias: "google-beta", source: "hashicorp/google-beta", version: ">= 4.84.0, < 5.30.0", config: config.Dict{}}})
 
 	{ // all vars
 		allSet := config.NewDict(map[string]cty.Value{
@@ -374,10 +374,10 @@ func (s *zeroSuite) TestGetProviders(c *C) {
 					"project_id": cty.StringVal("some"),
 					"region":     cty.StringVal("some"),
 					"zone":       cty.StringVal("some"),
-				}),
-			}), DeepEquals, []provider{
-				{alias: "google", source: "hashicorp/google", version: ">= 4.84.0, < 5.32.0", config: allSet},
-				{alias: "google-beta", source: "hashicorp/google-beta", version: ">= 4.84.0, < 5.32.0", config: allSet}})
+				})}, config.Group{},
+			), DeepEquals, []provider{
+				{alias: "google", source: "hashicorp/google", version: ">= 4.84.0, < 5.30.0", config: allSet},
+				{alias: "google-beta", source: "hashicorp/google-beta", version: ">= 4.84.0, < 5.30.0", config: allSet}})
 	}
 }
 

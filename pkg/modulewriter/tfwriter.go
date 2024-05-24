@@ -193,21 +193,37 @@ type provider struct {
 	config  config.Dict
 }
 
-func getProviders(bp config.Blueprint) []provider {
+func getProviders(bp config.Blueprint, g config.Group) []provider {
 	gglConf := config.Dict{}
-	for s, v := range map[string]string{
-		"project": "project_id",
-		"region":  "region",
-		"zone":    "zone"} {
-		if bp.Vars.Has(v) {
-			gglConf = gglConf.With(s, config.GlobalRef(v).AsValue())
+	if len(g.TerraformProviders) == 0 {
+		for s, v := range map[string]string{
+			"project": "project_id",
+			"region":  "region",
+			"zone":    "zone"} {
+			if bp.Vars.Has(v) {
+				gglConf = gglConf.With(s, config.GlobalRef(v).AsValue())
+			}
+		}
+		return []provider{
+			{"google", "hashicorp/google", ">= 4.84.0, < 5.30.0", gglConf},
+			{"google-beta", "hashicorp/google-beta", ">= 4.84.0, < 5.30.0", gglConf},
 		}
 	}
-
-	return []provider{
-		{"google", "hashicorp/google", ">= 4.84.0, < 5.32.0", gglConf},
-		{"google-beta", "hashicorp/google-beta", ">= 4.84.0, < 5.32.0", gglConf},
+	var providers []provider
+	for k, v := range g.TerraformProviders {
+		pv := v.Providers.Items()
+		delete(pv, "source")
+		delete(pv, "version")
+		gglConf = config.NewDict(pv)
+		if k == "google" {
+			providers = append(providers, provider{"google", "hashicorp/google", ">= 4.84.0, < 5.30.0", gglConf})
+		} else if k == "google-beta" {
+			providers = append(providers, provider{"google-beta", "hashicorp/google-beta", ">= 4.84.0, < 5.30.0", gglConf})
+		} else {
+			providers = append(providers, provider{k, v.Providers.Get("source").AsString(), v.Providers.Get("version").AsString(), gglConf})
+		}
 	}
+	return providers
 }
 
 func writeProviders(providers []provider, dst string) error {
@@ -300,7 +316,7 @@ func (w TFWriter) writeGroup(
 		return fmt.Errorf("error writing terraform.tfvars file for deployment group %s: %w", g.Name, err)
 	}
 
-	providers := getProviders(bp)
+	providers := getProviders(bp, g)
 	// Write providers.tf file
 	if err := writeProviders(providers, groupPath); err != nil {
 		return fmt.Errorf("error writing providers.tf file for deployment group %s: %w", g.Name, err)
@@ -365,7 +381,7 @@ func getUsedDeploymentVars(group config.Group, bp config.Blueprint) map[string]c
 	for _, m := range group.Modules {
 		used = append(used, config.GetUsedDeploymentVars(m.Settings.AsObject())...)
 	}
-	for _, p := range getProviders(bp) {
+	for _, p := range getProviders(bp, group) {
 		used = append(used, config.GetUsedDeploymentVars(p.config.AsObject())...)
 	}
 	for _, v := range used {

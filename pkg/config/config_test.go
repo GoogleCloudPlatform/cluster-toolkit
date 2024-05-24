@@ -549,6 +549,8 @@ func (s *zeroSuite) TestCheckBackend(c *C) {
 	}
 }
 
+// TODO: Add CheckProviders
+
 func (s *zeroSuite) TestSkipValidator(c *C) {
 	{
 		bp := Blueprint{Validators: nil}

@@ -131,6 +131,7 @@ func (bp *Blueprint) expandGroups() error {
 func (bp Blueprint) expandGroup(gp groupPath, g *Group) error {
 	var errs Errors
 	bp.expandBackend(g)
+	bp.expandProviders(g)
 	for im := range g.Modules {
 		errs.Add(bp.expandModule(gp.Modules.At(im), &g.Modules[im]))
 	}
@@ -163,6 +164,24 @@ func (bp Blueprint) expandBackend(grp *Group) {
 		prefix := MustParseExpression(
 			fmt.Sprintf(`"%s/${var.deployment_name}/%s"`, bp.BlueprintName, grp.Name))
 		be.Configuration = be.Configuration.With("prefix", prefix.AsValue())
+	}
+}
+
+func (bp Blueprint) expandProviders(grp *Group) {
+	// 1. DEFAULT: use TerraformProviders provider dictionary (if supplied)
+	// 2. If top-level TerraformProviders is defined, insert that
+	//    provider dictionary into resource groups which have no explicit
+	//    TerraformProviders
+	// 3. In all cases, add a prefix for GCS backends if one is not defined
+	defaults := bp.TerraformProviders
+	for k, v := range defaults {
+		if _, in := grp.TerraformProviders[k]; !in {
+			pv := &grp.TerraformProviders
+			if (*pv) == nil {
+				(*pv) = map[string]TerraformProviders{}
+			}
+			(*pv)[k] = v
+		}
 	}
 }
 
