@@ -46,6 +46,8 @@ deployment_groups:
     source: modules/scripts/startup-script
     settings:
       install_ansible: true
+      install_docker: true
+      enable_docker_world_writable: true
       configure_ssh_host_patterns:
       - 10.0.0.*
       - 10.1.0.*
@@ -125,24 +127,6 @@ deployment_groups:
 
           [Install]
           WantedBy=multi-user.target
-      - type: shell
-        destination: configure_docker.sh
-        content: |
-          #!/bin/bash
-          set -e -o pipefail
-          # allow any user to use Docker
-          DOCKER_SOCKET_DROPIN_DIR="/etc/systemd/system/docker.socket.d"
-          if [ ! -d "${DOCKER_SOCKET_DROPIN_DIR}" ]; then
-              mkdir "${DOCKER_SOCKET_DROPIN_DIR}"
-          fi
-          DOCKER_SOCKET_DROPIN_FILE="group-override.conf"
-          if [ ! -f "${DOCKER_SOCKET_DROPIN_DIR}/${DOCKER_SOCKET_DROPIN_FILE}" ]; then
-              # indentation matters in EOT below; do not blindly edit!
-              cat <<EOT > "${DOCKER_SOCKET_DROPIN_DIR}/${DOCKER_SOCKET_DROPIN_FILE}"
-          [Socket]
-          SocketMode=0666
-          EOT
-          fi
       - type: shell
         destination: install_enroot_pyxis.sh
         content: |
