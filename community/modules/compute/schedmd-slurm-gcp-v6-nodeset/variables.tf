@@ -359,8 +359,9 @@ variable "zone" {
 
 variable "zones" {
   description = <<-EOD
-    Additional nodes in which to allow creation of partition nodes. Google Cloud
+    Additional zones in which to allow creation of partition nodes. Google Cloud
     will find zone based on availability, quota and reservations.
+    Should not be set if SPECIFIC reservation is used.
     EOD
   type        = set(string)
   default     = []
@@ -437,13 +438,21 @@ variable "access_config" {
 
 variable "reservation_name" {
   description = <<-EOD
-    Name of the reservation to use for VM resources
-    - Must be a "SPECIFIC" reservation
-    - Set to empty string if using no reservation or automatically-consumed reservations
+    Name of the reservation to use for VM resources, should be in one of the following formats:
+    - projects/PROJECT_ID/reservations/RESERVATION_NAME
+    - RESERVATION_NAME
+
+    Must be a "SPECIFIC" reservation
+    Set to empty string if using no reservation or automatically-consumed reservations
   EOD
   type        = string
   default     = ""
   nullable    = false
+
+  validation {
+    condition     = var.reservation_name == "" || length(regexall("^projects/[a-z0-9-]+/reservations/[a-z0-9-]+$", var.reservation_name)) > 0 || length(regexall("^[a-z0-9-]+$", var.reservation_name)) > 0
+    error_message = "Reservation name must be in the format 'projects/PROJECT_ID/reservations/RESERVATION_NAME' or 'RESERVATION_NAME'."
+  }
 }
 
 variable "maintenance_interval" {

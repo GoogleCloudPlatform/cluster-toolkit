@@ -190,7 +190,7 @@ No modules.
 | <a name="input_preemptible"></a> [preemptible](#input\_preemptible) | Should use preemptibles to burst. | `bool` | `false` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project ID to create resources in. | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | The default region for Cloud resources. | `string` | n/a | yes |
-| <a name="input_reservation_name"></a> [reservation\_name](#input\_reservation\_name) | Name of the reservation to use for VM resources<br>- Must be a "SPECIFIC" reservation<br>- Set to empty string if using no reservation or automatically-consumed reservations | `string` | `""` | no |
+| <a name="input_reservation_name"></a> [reservation\_name](#input\_reservation\_name) | Name of the reservation to use for VM resources, should be in one of the following formats:<br>- projects/PROJECT\_ID/reservations/RESERVATION\_NAME<br>- RESERVATION\_NAME<br><br>Must be a "SPECIFIC" reservation<br>Set to empty string if using no reservation or automatically-consumed reservations | `string` | `""` | no |
 | <a name="input_service_account"></a> [service\_account](#input\_service\_account) | DEPRECATED: Use `service_account_email` and `service_account_scopes` instead. | <pre>object({<br>    email  = string<br>    scopes = set(string)<br>  })</pre> | `null` | no |
 | <a name="input_service_account_email"></a> [service\_account\_email](#input\_service\_account\_email) | Service account e-mail address to attach to the compute instances. | `string` | `null` | no |
 | <a name="input_service_account_scopes"></a> [service\_account\_scopes](#input\_service\_account\_scopes) | Scopes to attach to the compute instances. | `set(string)` | <pre>[<br>  "https://www.googleapis.com/auth/cloud-platform"<br>]</pre> | no |
@@ -201,7 +201,7 @@ No modules.
 | <a name="input_tags"></a> [tags](#input\_tags) | Network tag list. | `list(string)` | `[]` | no |
 | <a name="input_zone"></a> [zone](#input\_zone) | Zone in which to create compute VMs. Additional zones in the same region can be specified in var.zones. | `string` | n/a | yes |
 | <a name="input_zone_target_shape"></a> [zone\_target\_shape](#input\_zone\_target\_shape) | Strategy for distributing VMs across zones in a region.<br>ANY<br>  GCE picks zones for creating VM instances to fulfill the requested number of VMs<br>  within present resource constraints and to maximize utilization of unused zonal<br>  reservations.<br>ANY\_SINGLE\_ZONE (default)<br>  GCE always selects a single zone for all the VMs, optimizing for resource quotas,<br>  available reservations and general capacity.<br>BALANCED<br>  GCE prioritizes acquisition of resources, scheduling VMs in zones where resources<br>  are available while distributing VMs as evenly as possible across allowed zones<br>  to minimize the impact of zonal failure. | `string` | `"ANY_SINGLE_ZONE"` | no |
-| <a name="input_zones"></a> [zones](#input\_zones) | Additional nodes in which to allow creation of partition nodes. Google Cloud<br>will find zone based on availability, quota and reservations. | `set(string)` | `[]` | no |
+| <a name="input_zones"></a> [zones](#input\_zones) | Additional zones in which to allow creation of partition nodes. Google Cloud<br>will find zone based on availability, quota and reservations.<br>Should not be set if SPECIFIC reservation is used. | `set(string)` | `[]` | no |
 
 ## Outputs
 

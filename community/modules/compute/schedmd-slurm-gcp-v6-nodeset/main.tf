@@ -89,7 +89,7 @@ locals {
     tags                     = var.tags
     spot                     = var.enable_spot_vm
     termination_action       = try(var.spot_instance_config.termination_action, null)
-    reservation_name         = var.reservation_name
+    reservation_name         = local.reservation_name
     maintenance_interval     = var.maintenance_interval
 
     zones             = toset(concat([var.zone], tolist(var.zones)))
@@ -103,17 +103,33 @@ data "google_compute_default_service_account" "default" {
   project = var.project_id
 }
 
+locals {
+  res_name_split = split("/", var.reservation_name)
+  reservation = var.reservation_name == "" ? null : (
+    length(local.res_name_split) == 4 ? {
+      project : local.res_name_split[1],
+      name : local.res_name_split[3]
+      } : {
+      project : var.project_id,
+      name : var.reservation_name
+    }
+  )
+
+  reservation_name = local.reservation == null ? "" : "projects/${local.reservation.project}/reservations/${local.reservation.name}"
+}
+
 # tflint-ignore: terraform_unused_declarations
 data "google_compute_reservation" "reservation" {
-  count   = var.reservation_name != "" ? 1 : 0
-  name    = var.reservation_name
-  project = var.project_id
+  count = local.reservation != null ? 1 : 0
+
+  name    = local.reservation.name
+  project = local.reservation.project
   zone    = var.zone
 
   lifecycle {
     postcondition {
       condition     = self.self_link != null
-      error_message = "couldn't find the reservation ${var.reservation_name}}"
+      error_message = "Couldn't find the reservation ${var.reservation_name}"
     }
 
     postcondition {
@@ -125,5 +141,8 @@ data "google_compute_reservation" "reservation" {
       it in the blueprint.
       EOT
     }
+
+    # TODO: wait for https://github.com/hashicorp/terraform-provider-google/issues/18248
+    # Add a validation that if reservation.project != var.project_id it should be a shared reservation
   }
 }
