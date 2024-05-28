@@ -2,7 +2,7 @@
 
 This module is inspired by pre-existing-vpc, but is changed with the objective of supporting Shared VPCs.
 
-For example, the blueprint below discovers the referred to subnetwork. 
+For example, the blueprint below discovers the referred to subnetwork.
 With the `use` keyword, the [vm-instance] module accepts the `subnetwork_self_link`
 input variables that uniquely identify the subnetwork in which the VM will be created.
 
@@ -14,18 +14,15 @@ input variables that uniquely identify the subnetwork in which the VM will be cr
 ### Example
 
 ```yaml
-- id: network1
+- id: network
   source: modules/network/pre-existing-subnetwork
   settings:
-    subnetwork_name: name-of-subnetwork
-    region: name-of-region
-    host_project: name-of-host-project
-    subnetwork_self_link: https://www.googleapis.com/compute/v1/projects/name-of-host-project/regions/REGION/subnetworks/SUBNETNAME	
+    subnetwork_self_link: https://www.googleapis.com/compute/v1/projects/name-of-host-project/regions/REGION/subnetworks/SUBNETNAME
 
 - id: example_vm
   source: modules/compute/vm-instance
   use:
-  - network1
+  - network
   settings:
     name_prefix: example
     machine_type: c2-standard-4
@@ -35,7 +32,6 @@ As described in documentation:
 [https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_subnetwork]
 
 If subnetwork_self_link is provided then name,region,project is ignored.
-
 
 ## License
 
@@ -81,7 +77,7 @@ No modules.
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_host_project"></a> [host\_project](#input\_host\_project) | Name of the project that owns the subnetwork | `string` | `null` | no |
+| <a name="input_project"></a> [project](#input\_project) | Name of the project that owns the subnetwork | `string` | `null` | no |
 | <a name="input_region"></a> [region](#input\_region) | Region in which to search for primary subnetwork | `string` | `null` | no |
 | <a name="input_subnetwork_name"></a> [subnetwork\_name](#input\_subnetwork\_name) | Name of the pre-existing VPC subnetwork; defaults to var.network\_name if set to null. | `string` | `null` | no |
 | <a name="input_subnetwork_self_link"></a> [subnetwork\_self\_link](#input\_subnetwork\_self\_link) | Self-link of the subnet in the Shared VPC | `string` | `null` | no |

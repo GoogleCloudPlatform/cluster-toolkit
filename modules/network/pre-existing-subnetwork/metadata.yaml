@@ -17,3 +17,5 @@ spec:
   requirements:
     services:
     - compute.googleapis.com
+ghpc:
+  has_to_be_used: true
