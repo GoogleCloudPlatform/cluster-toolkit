@@ -15,16 +15,20 @@
 */
 
 
+locals {
+  subnetwork_name = var.subnetwork_name != null ? var.subnetwork_name : var.subnetwork_self_link
+}
+
 data "google_compute_subnetwork" "primary_subnetwork" {
-  name      = try(var.subnetwork_name, null)
-  region    = try(var.region, null)
-  project   = try(var.host_project, null)
-  self_link = try(var.subnetwork_self_link, null)
+  name      = var.subnetwork_name
+  region    = var.region
+  project   = var.project
+  self_link = var.subnetwork_self_link
 
   lifecycle {
     postcondition {
       condition     = self.self_link != null
-      error_message = "The subnetwork: ${self.self_link} could not be found."
+      error_message = "The subnetwork: ${local.subnetwork_name} could not be found."
     }
   }
 }

@@ -14,23 +14,13 @@
  * limitations under the License.
 */
 
-# variable "host_project_id" {
-#   description = "Project id of the host project"
-#   type        = string
-# }
-
-# variable "network_name" {
-#   description = "Name of the existing Shared VPC network"
-#   type        = string
-# }
-
 variable "subnetwork_self_link" {
   description = "Self-link of the subnet in the Shared VPC"
   type        = string
   default     = null
 }
 
-variable "host_project" {
+variable "project" {
   description = "Name of the project that owns the subnetwork"
   type        = string
   default     = null
