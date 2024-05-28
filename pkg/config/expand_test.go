@@ -73,6 +73,64 @@ func (s *zeroSuite) TestExpandBackend(c *C) {
 	}
 }
 
+func (s *zeroSuite) TestExpandProviders(c *C) {
+	type PR = TerraformProviders // alias for brevity
+	noDefPr := Blueprint{BlueprintName: "tree"}
+
+	testProvider := map[string]PR{
+		"test-provider": TerraformProviders{
+			Source:  "test-src",
+			Version: "test-vers",
+			Configuration: Dict{}.
+				With("project", cty.StringVal("test-prj")).
+				With("region", cty.StringVal("reg1")).
+				With("zone", cty.StringVal("zone1")).
+				With("universe_domain", cty.StringVal("test-universe.com"))}}
+
+	{ // no def PR, no group PR
+		g := Group{Name: "clown"}
+		noDefPr.expandProviders(&g)
+		c.Check(g.TerraformProviders, DeepEquals, map[string]PR(nil))
+	}
+
+	{ // no def PR, group PR
+		g := Group{
+			Name:               "clown",
+			TerraformProviders: testProvider}
+		noDefPr.expandProviders(&g)
+		c.Check(g.TerraformProviders, DeepEquals, testProvider)
+	}
+
+	defBe := noDefPr
+	defBe.TerraformProviders = testProvider
+
+	{ // def PR, no group PR
+		g := Group{Name: "clown"}
+		defBe.expandProviders(&g)
+
+		c.Check(g.TerraformProviders, DeepEquals, testProvider)
+	}
+
+	group_provider := map[string]PR{
+		"test-provider": TerraformProviders{
+			Source:  "test-source",
+			Version: "test-versions",
+			Configuration: Dict{}.
+				With("project", cty.StringVal("test-prj")).
+				With("region", cty.StringVal("reg2")).
+				With("zone", cty.StringVal("zone2s")).
+				With("universe_domain", cty.StringVal("fake-universe.com"))}}
+
+	{ // def BE, group BE non-gcs
+		g := Group{
+			Name:               "clown",
+			TerraformProviders: group_provider}
+		defBe.expandProviders(&g)
+
+		c.Check(g.TerraformProviders, DeepEquals, group_provider)
+	}
+}
+
 func (s *zeroSuite) TestAddListValue(c *C) {
 	mod := Module{ID: "TestModule"}
 

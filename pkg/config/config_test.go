@@ -549,7 +549,62 @@ func (s *zeroSuite) TestCheckBackend(c *C) {
 	}
 }
 
-// TODO: Add CheckProviders
+func (s *zeroSuite) TestCheckProviders(c *C) {
+	p := Root.Groups.At(173).Provider
+
+	{ // OK. Absent
+		c.Check(checkProviders(p, map[string]TerraformProviders{}), IsNil)
+	}
+
+	{ // OK. All required values used
+		tp := map[string]TerraformProviders{
+			"test-provider": TerraformProviders{
+				Source:  "test-src",
+				Version: "test-ver",
+				Configuration: Dict{}.
+					With("project", cty.StringVal("test-prj")).
+					With("region", cty.StringVal("reg1")).
+					With("zone", cty.StringVal("zone1")).
+					With("universe_domain", cty.StringVal("test-universe.com"))}}
+		c.Check(checkProviders(p, tp), IsNil)
+	}
+
+	{ // FAIL. Missing Source
+		tp := map[string]TerraformProviders{
+			"test-provider": TerraformProviders{
+				Version: "test-ver",
+				Configuration: Dict{}.
+					With("project", cty.StringVal("test-prj")).
+					With("region", cty.StringVal("reg1")).
+					With("zone", cty.StringVal("zone1")).
+					With("universe_domain", cty.StringVal("test-universe.com"))}}
+		c.Check(checkProviders(p, tp), NotNil)
+	}
+
+	{ // FAIL. Missing Version
+		tp := map[string]TerraformProviders{
+			"test-provider": TerraformProviders{
+				Source: "test-src",
+				Configuration: Dict{}.
+					With("project", cty.StringVal("test-prj")).
+					With("region", cty.StringVal("reg1")).
+					With("zone", cty.StringVal("zone1")).
+					With("universe_domain", cty.StringVal("test-universe.com"))}}
+		c.Check(checkProviders(p, tp), NotNil)
+	}
+
+	{ // FAIL. Missing required Dict entry
+		tp := map[string]TerraformProviders{
+			"test-provider": TerraformProviders{
+				Source:  "test-src",
+				Version: "test-ver",
+				Configuration: Dict{}.
+					With("region", cty.StringVal("reg1")).
+					With("zone", cty.StringVal("zone1")).
+					With("universe_domain", cty.StringVal("test-universe.com"))}}
+		c.Check(checkProviders(p, tp), NotNil)
+	}
+}
 
 func (s *zeroSuite) TestSkipValidator(c *C) {
 	{

@@ -211,17 +211,7 @@ func getProviders(bp config.Blueprint, g config.Group) []provider {
 	}
 	var providers []provider
 	for k, v := range g.TerraformProviders {
-		pv := v.Providers.Items()
-		delete(pv, "source")
-		delete(pv, "version")
-		gglConf = config.NewDict(pv)
-		if k == "google" {
-			providers = append(providers, provider{"google", "hashicorp/google", ">= 4.84.0, < 5.30.0", gglConf})
-		} else if k == "google-beta" {
-			providers = append(providers, provider{"google-beta", "hashicorp/google-beta", ">= 4.84.0, < 5.30.0", gglConf})
-		} else {
-			providers = append(providers, provider{k, v.Providers.Get("source").AsString(), v.Providers.Get("version").AsString(), gglConf})
-		}
+		providers = append(providers, provider{k, v.Source, v.Version, v.Configuration})
 	}
 	return providers
 }

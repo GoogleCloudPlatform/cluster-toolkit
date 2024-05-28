@@ -179,7 +179,9 @@ type TerraformBackend struct {
 
 // TerraformProvider defines the configuration for the terraform providers
 type TerraformProviders struct {
-	Providers Dict
+	Source        string
+	Version       string
+	Configuration Dict
 }
 
 // ModuleKind abstracts Toolkit module kinds (presently: packer/terraform)
@@ -499,21 +501,16 @@ func checkBackend(bep backendPath, be TerraformBackend) error {
 
 func checkProviders(pp providerPath, tp map[string]TerraformProviders) error {
 	for k, v := range tp {
-		if k != "google" && k != "google-beta" {
-			if !v.Providers.Has("source") {
-				return BpError{pp.Type, errors.New(
-					fmt.Sprintf("non-google or google-beta provider, %s, is missing source", k))}
-			} else if !v.Providers.Has("version") {
-				return BpError{pp.Type, errors.New(
-					fmt.Sprintf("non-google or google-beta provider, %s, is missing version", k))}
-			}
-		} else {
-			if v.Providers.Has("source") {
-				return BpError{pp.Type, errors.New(
-					fmt.Sprintf("%s provider was specified, do not include source", k))}
-			} else if v.Providers.Has("version") {
-				return BpError{pp.Type, errors.New(
-					fmt.Sprintf("%s provider was specified, do not include version", k))}
+		if v.Source == "" {
+			return BpError{pp.Type, errors.New(fmt.Sprintf("provider, %s, is missing source", k))}
+		}
+		if v.Version == "" {
+			return BpError{pp.Type, errors.New(fmt.Sprintf("provider, %s, is missing version", k))}
+		}
+		req_ps := [...]string{"project", "region", "zone"}
+		for _, req := range req_ps {
+			if !v.Configuration.Has(req) {
+				return BpError{pp.Type, errors.New(fmt.Sprintf("provider %s is missing configuration: %s", k, req))}
 			}
 		}
 	}
