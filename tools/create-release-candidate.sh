@@ -103,6 +103,7 @@ git commit -m "Increase version to ${NEW_VERSION}"
 git push -u "${REMOTE_NAME}" "${V_BRANCH}"
 echo "Opening pull request to update release-candidate to version ${NEW_VERSION}"
 gh pr create --base "${RC_BRANCH}" --head "${V_BRANCH}" \
+	--label "release-chore" \
 	--title "Update Toolkit release to ${NEW_TAG}" \
 	--body "Set release-candidate to version ${NEW_VERSION}"
 echo
