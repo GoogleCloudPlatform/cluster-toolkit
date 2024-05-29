@@ -25,6 +25,7 @@ on:
     - synchronize
     branches:
     - develop
+    - release-candidate
 
 jobs:
   pre-commit:
