@@ -68,10 +68,10 @@ func (n GroupName) Validate() error {
 
 // Group defines a group of Modules that are all executed together
 type Group struct {
-	Name               GroupName                     `yaml:"group"`
-	TerraformBackend   TerraformBackend              `yaml:"terraform_backend,omitempty"`
-	TerraformProviders map[string]TerraformProviders `yaml:"terraform_providers,omitempty"`
-	Modules            []Module                      `yaml:"modules"`
+	Name               GroupName                    `yaml:"group"`
+	TerraformBackend   TerraformBackend             `yaml:"terraform_backend,omitempty"`
+	TerraformProviders map[string]TerraformProvider `yaml:"terraform_providers,omitempty"`
+	Modules            []Module                     `yaml:"modules"`
 	// DEPRECATED fields
 	deprecatedKind interface{} `yaml:"kind,omitempty"` //lint:ignore U1000 keep in the struct for backwards compatibility
 }
@@ -178,7 +178,7 @@ type TerraformBackend struct {
 }
 
 // TerraformProvider defines the configuration for the terraform providers
-type TerraformProviders struct {
+type TerraformProvider struct {
 	Source        string
 	Version       string
 	Configuration Dict
@@ -269,9 +269,9 @@ type Blueprint struct {
 	Validators               []Validator `yaml:"validators,omitempty"`
 	ValidationLevel          int         `yaml:"validation_level,omitempty"`
 	Vars                     Dict
-	Groups                   []Group                       `yaml:"deployment_groups"`
-	TerraformBackendDefaults TerraformBackend              `yaml:"terraform_backend_defaults,omitempty"`
-	TerraformProviders       map[string]TerraformProviders `yaml:"terraform_providers,omitempty"`
+	Groups                   []Group                      `yaml:"deployment_groups"`
+	TerraformBackendDefaults TerraformBackend             `yaml:"terraform_backend_defaults,omitempty"`
+	TerraformProviders       map[string]TerraformProvider `yaml:"terraform_providers,omitempty"`
 
 	// internal & non-serializable fields
 
@@ -499,19 +499,13 @@ func checkBackend(bep backendPath, be TerraformBackend) error {
 	return nil
 }
 
-func checkProviders(pp providerPath, tp map[string]TerraformProviders) error {
+func checkProviders(pp mapPath[providerPath], tp map[string]TerraformProvider) error {
 	for k, v := range tp {
 		if v.Source == "" {
-			return BpError{pp.Type, errors.New(fmt.Sprintf("provider, %s, is missing source", k))}
+			return BpError{pp.Dot(k).Source, errors.New(fmt.Sprintf("provider, %q, is missing source", k))}
 		}
 		if v.Version == "" {
-			return BpError{pp.Type, errors.New(fmt.Sprintf("provider, %s, is missing version", k))}
-		}
-		req_ps := [...]string{"project", "region", "zone"}
-		for _, req := range req_ps {
-			if !v.Configuration.Has(req) {
-				return BpError{pp.Type, errors.New(fmt.Sprintf("provider %s is missing configuration: %s", k, req))}
-			}
+			return BpError{pp.Dot(k).Version, errors.New(fmt.Sprintf("provider, %q, is missing version", k))}
 		}
 	}
 	return nil

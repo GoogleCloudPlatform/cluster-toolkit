@@ -553,12 +553,12 @@ func (s *zeroSuite) TestCheckProviders(c *C) {
 	p := Root.Groups.At(173).Provider
 
 	{ // OK. Absent
-		c.Check(checkProviders(p, map[string]TerraformProviders{}), IsNil)
+		c.Check(checkProviders(p, map[string]TerraformProvider{}), IsNil)
 	}
 
 	{ // OK. All required values used
-		tp := map[string]TerraformProviders{
-			"test-provider": TerraformProviders{
+		tp := map[string]TerraformProvider{
+			"test-provider": TerraformProvider{
 				Source:  "test-src",
 				Version: "test-ver",
 				Configuration: Dict{}.
@@ -570,8 +570,8 @@ func (s *zeroSuite) TestCheckProviders(c *C) {
 	}
 
 	{ // FAIL. Missing Source
-		tp := map[string]TerraformProviders{
-			"test-provider": TerraformProviders{
+		tp := map[string]TerraformProvider{
+			"test-provider": TerraformProvider{
 				Version: "test-ver",
 				Configuration: Dict{}.
 					With("project", cty.StringVal("test-prj")).
@@ -582,23 +582,11 @@ func (s *zeroSuite) TestCheckProviders(c *C) {
 	}
 
 	{ // FAIL. Missing Version
-		tp := map[string]TerraformProviders{
-			"test-provider": TerraformProviders{
+		tp := map[string]TerraformProvider{
+			"test-provider": TerraformProvider{
 				Source: "test-src",
 				Configuration: Dict{}.
 					With("project", cty.StringVal("test-prj")).
-					With("region", cty.StringVal("reg1")).
-					With("zone", cty.StringVal("zone1")).
-					With("universe_domain", cty.StringVal("test-universe.com"))}}
-		c.Check(checkProviders(p, tp), NotNil)
-	}
-
-	{ // FAIL. Missing required Dict entry
-		tp := map[string]TerraformProviders{
-			"test-provider": TerraformProviders{
-				Source:  "test-src",
-				Version: "test-ver",
-				Configuration: Dict{}.
 					With("region", cty.StringVal("reg1")).
 					With("zone", cty.StringVal("zone1")).
 					With("universe_domain", cty.StringVal("test-universe.com"))}}

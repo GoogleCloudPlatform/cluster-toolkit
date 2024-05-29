@@ -135,7 +135,7 @@ type rootPath struct {
 	Vars            dictPath                    `path:"vars"`
 	Groups          arrayPath[groupPath]        `path:"deployment_groups"`
 	Backend         backendPath                 `path:"terraform_backend_defaults"`
-	Provider        providerPath                `path:"terraform_providers"`
+	Provider        mapPath[providerPath]       `path:"terraform_providers"`
 }
 
 type validatorCfgPath struct {
@@ -155,15 +155,16 @@ type backendPath struct {
 
 type providerPath struct {
 	basePath
-	Type          basePath `path:".type"`
-	Configuration dictPath `path:".provider_configuration"`
+	Source        basePath `path:".source"`
+	Version       basePath `path:".version"`
+	Configuration dictPath `path:".configuration"`
 }
 
 type groupPath struct {
 	basePath
 	Name     basePath              `path:".group"`
 	Backend  backendPath           `path:".terraform_backend"`
-	Provider providerPath          `path:".terraform_provider"`
+	Provider mapPath[providerPath] `path:".terraform_provider"`
 	Modules  arrayPath[ModulePath] `path:".modules"`
 }
 
