@@ -244,6 +244,7 @@ class ClusterPartitionForm(forms.ModelForm):
         fields = (
             "name",
             "machine_type",
+            "reservation_name",
             "image",
             "dynamic_node_count",
             "static_node_count",

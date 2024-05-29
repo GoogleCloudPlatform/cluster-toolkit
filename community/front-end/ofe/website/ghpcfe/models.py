@@ -739,9 +739,9 @@ class Cluster(CloudResource):
         default="pd-standard",
     )
     controller_disk_size = models.PositiveIntegerField(
-        validators=[MinValueValidator(10)],
+        validators=[MinValueValidator(120)],
         help_text="Boot disk size (in GB)",
-        default=50,
+        default=120,
         blank=True,
     )
     num_login_nodes = models.PositiveIntegerField(
@@ -762,9 +762,9 @@ class Cluster(CloudResource):
     login_node_disk_size = models.PositiveIntegerField(
         # login node disk must be large enough to hold the SlurmGCP
         # image: >=50GB
-        validators=[MinValueValidator(50)],
+        validators=[MinValueValidator(120)],
         help_text="Boot disk size (in GB)",
-        default=50,
+        default=120,
         blank=True,
     )
     grafana_dashboard_url = models.CharField(
@@ -944,9 +944,9 @@ class ClusterPartition(models.Model):
         default="pd-standard",
     )
     boot_disk_size = models.PositiveIntegerField(
-        validators=[MinValueValidator(49)],
+        validators=[MinValueValidator(120)],
         help_text="Boot disk size (in GB)",
-        default=50,
+        default=120,
         blank=True,
     )
     GPU_per_node = models.PositiveIntegerField(  # pylint: disable=invalid-name
@@ -979,7 +979,11 @@ class ClusterPartition(models.Model):
             "Automatically delete additional disk when node is deleted?"
         ),
     )
-
+    reservation_name = models.CharField(
+        blank=True,
+        max_length=30,
+        help_text="Name of the reservation to use for VM resources"
+    )
     def __str__(self):
         return self.name
 
@@ -1579,9 +1583,9 @@ class Workbench(CloudResource):
         help_text="Type of storage to be required for notebook boot disk",
     )
     boot_disk_capacity = models.PositiveIntegerField(
-        validators=[MinValueValidator(100)],
+        validators=[MinValueValidator(120)],
         help_text="Capacity (in GB) of the filesystem (min of 1024)",
-        default=100,
+        default=120,
     )
     proxy_uri = models.CharField(max_length=150, blank=True, null=True)
     trusted_user = models.ForeignKey(
