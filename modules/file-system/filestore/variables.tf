@@ -116,12 +116,13 @@ variable "connect_mode" {
 
 variable "nfs_export_options" {
   description = "Define NFS export options."
-  type = object({
+  type = list(object({
     access_mode = optional(string)
     ip_ranges   = optional(list(string))
     squash_mode = optional(string)
-  })
-  default = null
+  }))
+  default  = []
+  nullable = false
 }
 
 variable "reserved_ip_range" {

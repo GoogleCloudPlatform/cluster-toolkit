@@ -60,11 +60,11 @@ resource "google_filestore_instance" "filestore_instance" {
     capacity_gb = var.size_gb
     name        = var.filestore_share_name
     dynamic "nfs_export_options" {
-      for_each = var.nfs_export_options == null ? [] : [""]
+      for_each = var.nfs_export_options
       content {
-        access_mode = var.nfs_export_options.access_mode
-        ip_ranges   = var.nfs_export_options.ip_ranges
-        squash_mode = var.nfs_export_options.squash_mode
+        access_mode = nfs_export_options.value.access_mode
+        ip_ranges   = nfs_export_options.value.ip_ranges
+        squash_mode = nfs_export_options.value.squash_mode
       }
     }
   }
