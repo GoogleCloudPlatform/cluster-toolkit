@@ -1,16 +1,16 @@
 # Objective
 
 This document will guide you to successfully provisioning a Slurm cluster with
-A3 VM family compute nodes running NVIDIA H100 GPUs.
+a3-highgpu-8g compute nodes running NVIDIA H100 GPUs.
 
 ## Before starting
 
 > [!IMPORTANT]
 > Before beginning, submit a request to your Google Cloud representative for
-> access to the Deep Learning VM Image for the A3 VM family. It is currently
+> access to the Deep Learning VM Image for a3-highgpu-8g. It is currently
 > available only by Private Preview request. This image contains patches that
 > significantly enhance the network performance of workloads that span multiple
-> A3 VMs. You will use the image ID in the steps shown below.
+> a3-highgpu-8g VMs. You will use the image ID in the steps shown below.
 
 ## Required setup
 
@@ -49,7 +49,7 @@ The solution is split into 3 HPC Toolkit blueprints:
 1. Provision 5 VPCs (1 system network, 4 GPU networks) and 1 Filestore for
 mounting `/home` across the cluster
 2. Build a custom image installing Slurm in an Ubuntu 20.04 image. The image
-runs a kernel patched with performance enhancements for the A3 VM family.
+runs a kernel patched with performance enhancements for the a3-highgpu-8g VM.
 3. Provision a Slurm cluster using the custom image
 
 The 1st and 2nd blueprints should be provisioned once and rarely need further
@@ -65,11 +65,11 @@ frequently updated and re-provisioned as discussed below.
 > are initial setup steps in a project.
 
 Replace the values for `PROJECT_ID`, `REGION`, and `ZONE` with the project,
-region, and zone in which you have an A3 VM family allocation. The value for
+region, and zone in which you have an a3-highgpu-8g allocation. The value for
 `BUCKET` must be unique and will be used to create a new bucket. After replacing
 the values, execute them so that they automatically populate parameters in the
-commands shown below. Note that each A3 VM (`N_VMS`) contains 8 NVIDIA H100
-GPUs.
+commands shown below. Note that each a3-highgpu-8g VM (`N_VMS`) contains 8 NVIDIA
+H100 GPUs.
 
 ```shell
 export PROJECT_ID=customer-project-id
@@ -163,11 +163,11 @@ gcloud compute reservations create a3-reservation-0 \
 ```
 
 This reservation be must be specified when creating VMs with matching parameters
-(e.g. A3 VM type in configured zone). If you executed the command above without
-modification, you may leave `a3_reservation_name` and `a3_maintenance_interval`
-at their default values in `ml-slurm-a3-2-cluster.yaml`. Otherwise, ensure that
-the reservation name in the blueprint matches the name of the user-created
-reservation.
+(e.g. a3-highgpu-8g VM in configured zone). If you executed the command above
+without modification, you may leave `a3_reservation_name` and
+`a3_maintenance_interval` at their default values in
+`ml-slurm-a3-2-cluster.yaml`. Otherwise, ensure that the reservation name in the
+blueprint matches the name of the user-created reservation.
 
 ```yaml
   # a3_reservation_name must be specified; if Google staff have provided you
@@ -181,7 +181,7 @@ reservation.
 ### Set cluster size
 
 At approximately line 37 of `ml-slurm-a3-2-cluster.yaml`, set the static cluster
-size. Recall that there are 8 NVIDIA H100 GPUs per A3 VM.
+size. Recall that there are 8 NVIDIA H100 GPUs per a3-highgpu-8g VM.
 
 ```yaml
   a3_static_cluster_size: 32
@@ -255,8 +255,8 @@ the workload. Both the RxDM and plugin are distributed by Docker container
 images.
 
 This blueprint includes a Slurm "Prolog" and "Epilog" script that will run
-before and after every job running on more than 1 A3 compute node. The Prolog
-will perform the following actions:
+before and after every job running on more than 1 a3-highgpu-8g compute node.
+The Prolog will perform the following actions:
 
 - Install the NCCL plugin into /var/lib of the host
 - Run the RxDM service
@@ -280,8 +280,8 @@ The Epilog will
 
 ## Jobs using the RxDM / TCPx
 
-Jobs that are running across multiple A3 VMs will benefit from using the RxDM
-and the NCCL plugin. An example containerized job is located at
+Jobs that are running across multiple a3-highgpu-8g VMs will benefit from using
+the RxDM and the NCCL plugin. An example containerized job is located at
 `/opt/apps/scripts/run-nccl-tests.sh`. In addition to setting standard NCCL
 configuration values, a job must:
 
