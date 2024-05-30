@@ -244,11 +244,13 @@ class ClusterPartitionForm(forms.ModelForm):
         fields = (
             "name",
             "machine_type",
+            "reservation_name",
             "image",
             "dynamic_node_count",
             "static_node_count",
             "enable_placement",
             "enable_hyperthreads",
+            "enable_tier1_networking",
             "enable_node_reuse",
             "GPU_type",
             "GPU_per_node",
