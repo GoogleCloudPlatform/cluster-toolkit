@@ -39,6 +39,7 @@ gcp_machine_table = defaultdict(
         "n1": defaultdict(lambda: "x86_64"),
         "c3": defaultdict(lambda: "sapphirerapids"),
         "c3d": defaultdict(lambda: "zen2"),
+        "c4": defaultdict(lambda: "emeraldrapids"),
         # Compute Optimized
         "c2": defaultdict(lambda: "cascadelake"),
         "c2d": defaultdict(
