@@ -17,6 +17,8 @@
 - name: "Multigroup integration test for ghpc deploy command"
   hosts: localhost
   force_handlers: true
+  vars:
+    delete_image: true
   tasks:
   - name: Create Deployment Directory
     ansible.builtin.include_tasks:
@@ -51,7 +53,11 @@
       args:
         chdir: "{{ workspace }}/{{ deployment_name }}/{{ packer_group_name }}/{{ packer_module_id }}"
         executable: /bin/bash
+      when:
+      - delete_image | bool
+      - packer_group_name is defined
+      - packer_module_id is defined
     - name: Trigger Cloud Build failure
-      when: ghpc_destroy.failed or image_deletion.failed
+      when: ghpc_destroy is failed or image_deletion is failed
       ansible.builtin.fail:
-        msg: "Failed while setting up test infrastructure"
+        msg: "Failed while destroying deployment or deleting custom VM image"

@@ -31,7 +31,7 @@ locals {
   all_zones      = toset(concat([var.zone], tolist(var.zones)))
   excluded_zones = [for z in data.google_compute_zones.available.names : z if !contains(local.all_zones, z)]
 
-  reservation_map = { for x in var.node_groups : x.reservation_name => x if x.reservation_name != ""}
+  reservation_map = { for x in var.node_groups : x.reservation_name => x if x.reservation_name != "" }
 }
 
 data "google_compute_zones" "available" {

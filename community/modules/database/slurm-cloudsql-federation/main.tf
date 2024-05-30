@@ -40,7 +40,7 @@ resource "google_sql_database_instance" "instance" {
   name                = local.sql_instance_name
   region              = var.region
   deletion_protection = var.deletion_protection
-  database_version    = "MYSQL_5_7"
+  database_version    = var.database_version
 
   settings {
     user_labels = local.labels

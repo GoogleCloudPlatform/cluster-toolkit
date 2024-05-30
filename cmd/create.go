@@ -273,7 +273,9 @@ func checkOverwriteAllowed(depDir string, bp config.Blueprint, overwriteFlag boo
 	}
 
 	if !overwriteFlag {
-		return fmt.Errorf("deployment folder %q already exists, use -w to overwrite", depDir)
+		return config.HintError{
+			Err:  fmt.Errorf("deployment folder %q already exists", depDir),
+			Hint: "use -w to overwrite"}
 	}
 
 	newGroups := map[config.GroupName]bool{}

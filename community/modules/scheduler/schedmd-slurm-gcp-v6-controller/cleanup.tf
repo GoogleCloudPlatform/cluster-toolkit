@@ -12,6 +12,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+locals {
+  cleanup_dependencies_agg = flatten([
+    [
+      for ns in var.nodeset : [
+        ns.subnetwork_self_link,
+        [for an in ns.additional_networks : an.subnetwork]
+      ]
+    ],
+    [for ns in var.nodeset_tpu : ns.subnetwork],
+  ])
+}
+
+resource "null_resource" "cleanup_compute_depenencies" {
+  count = length(local.cleanup_dependencies_agg)
+}
 
 resource "null_resource" "cleanup_compute" {
   count = var.enable_cleanup_compute ? 1 : 0
@@ -26,10 +41,6 @@ resource "null_resource" "cleanup_compute" {
     when    = destroy
   }
 
-  depends_on = [
-    # Depend on controller network, as a best effort to avoid
-    # subnetwork resourceInUseByAnotherResource error
-    # NOTE: Can not use nodeset subnetworks as "A static list expression is required"
-    var.subnetwork_self_link,
-  ]
+  # Ensure that clean up is done before attempt to delete the networks
+  depends_on = [null_resource.cleanup_compute_depenencies]
 }

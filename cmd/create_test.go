@@ -285,7 +285,7 @@ func (s *MySuite) TestIsOverwriteAllowed_Present(c *C) {
 			Groups: []config.Group{
 				{Name: "isildur"},
 				{Name: "elendil"}}}
-		c.Check(checkOverwriteAllowed(p, bp, noW, noForce), ErrorMatches, ".* already exists, use -w to overwrite")
+		c.Check(checkOverwriteAllowed(p, bp, noW, noForce), ErrorMatches, ".* already exists.*")
 		c.Check(checkOverwriteAllowed(p, bp, yesW, noForce), IsNil)
 	}
 
@@ -304,7 +304,7 @@ func (s *MySuite) TestIsOverwriteAllowed_Present(c *C) {
 			GhpcVersion: "TaleOfBygoneYears",
 			Groups: []config.Group{
 				{Name: "aragorn"}}}
-		c.Check(checkOverwriteAllowed(p, bp, noW, noForce), ErrorMatches, `.* already exists, use -w to overwrite`)
+		c.Check(checkOverwriteAllowed(p, bp, noW, noForce), ErrorMatches, `.* already exists.*`)
 		c.Check(checkOverwriteAllowed(p, bp, yesW, noForce), ErrorMatches, `.*remove a deployment group "isildur".*`)
 		c.Check(checkOverwriteAllowed(p, bp, noW, yesForce), IsNil)
 	}
