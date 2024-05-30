@@ -363,6 +363,7 @@ def _get_gcp_instance_pricing(
             "c2": "Compute optimized Core",
             "c2d": "C2D AMD Instance Core",
             "c3d": "C3D AMD Instance Core",
+            "c4": "C4 Intel Emerald Rapids",
             "t2d": "T2D AMD Instance Core",
             "a2": "A2 Instance Core",
             "m1": "Memory-optimized Instance Core",  # ??
@@ -412,6 +413,7 @@ def _get_gcp_instance_pricing(
             "h3": "Compute optimized Ram",
             "c2d": "C2D AMD Instance Ram",
             "c3d": "C3D AMD Instance Ram",
+            "c4": "C4 Instance RAM"
             "t2d": "T2D AMD Instance Ram",
             "a2": "A2 Instance Ram",
             "m1": "Memory-optimized Instance Ram",
