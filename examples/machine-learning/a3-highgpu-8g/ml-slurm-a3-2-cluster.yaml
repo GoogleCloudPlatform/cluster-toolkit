@@ -44,9 +44,10 @@ vars:
   # a3_maintenance_interval should be empty string by default; if Google staff
   # have created a reservation, they will also provide a3_maintenance_interval
   a3_maintenance_interval: ""
-  # network parameters should match base blueprint unless network names were modified
-  network_name_system: slurm-sys-net
-  subnetwork_name_system: slurm-sys-subnet
+  # network parameters must match base blueprint deployment_name!
+  # these values are accurate if deployment_name was not modified from example
+  network_name_system: slurm-a3-base-sysnet
+  subnetwork_name_system: slurm-a3-base-sysnet-subnet
 
 deployment_groups:
 - group: cluster

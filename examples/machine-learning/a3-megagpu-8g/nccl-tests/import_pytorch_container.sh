@@ -1,4 +1,5 @@
-# Copyright 2023 Google LLC
+#!/bin/bash
+# Copyright 2024 "Google LLC"
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,23 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-terraform {
-  required_version = ">= 1.0"
-  required_providers {
-    google = {
-      source  = "hashicorp/google"
-      version = ">= 4.42"
-    }
-    kubectl = {
-      source  = "gavinbunney/kubectl"
-      version = ">= 1.7.0"
-    }
-    local = {
-      source  = "hashicorp/local"
-      version = ">= 2.0.0"
-    }
-  }
-  provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:gke-persistent-volume/v1.34.1"
-  }
-}
+# This creates a file named "nvidia+pytorch+21.10-py3.sqsh", which
+# uses ~18 GB of disk space. This should be run on a filesystem that
+# can be seen by all worker nodes
+enroot import docker://nvcr.io#nvidia/pytorch:24.04-py3
