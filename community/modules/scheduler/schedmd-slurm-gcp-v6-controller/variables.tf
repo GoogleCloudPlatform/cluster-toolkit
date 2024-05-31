@@ -612,3 +612,15 @@ EOD
   type        = any
   default     = false
 }
+
+variable "universe_domain" {
+  description = "Domain address for alternate API universe"
+  type        = string
+  default     = null
+}
+
+variable "custom_endpoints" {
+  description = "Alternate set of API endpoints"
+  type        = map(string)
+  default     = null
+}
