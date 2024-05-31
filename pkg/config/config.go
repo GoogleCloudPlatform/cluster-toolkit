@@ -114,7 +114,7 @@ func (bp *Blueprint) Module(id ModuleID) (*Module, error) {
 	return mod, nil
 }
 
-func hintSpelling(s string, dict []string, err error) error {
+func HintSpelling(s string, dict []string, err error) error {
 	best, minDist := "", maxHintDist+1
 	for _, w := range dict {
 		d := levenshtein.Distance(s, w, nil)

@@ -15,10 +15,13 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
+	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/modulewriter"
 	"hpc-toolkit/pkg/shell"
 	"os"
+	"slices"
 
 	"github.com/spf13/cobra"
 )
@@ -77,4 +80,42 @@ func filterYaml(cmd *cobra.Command, args []string, toComplete string) ([]string,
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
 	return []string{"yaml", "yml"}, cobra.ShellCompDirectiveFilterFileExt
+}
+
+var flagSkipGroups []string
+var flagOnlyGroups []string
+
+func addGroupSelectionFlags(c *cobra.Command) *cobra.Command {
+	c.Flags().StringSliceVar(&flagSkipGroups, "skip", nil, "Skip groups with the given names")
+	c.Flags().StringSliceVar(&flagOnlyGroups, "only", nil, "Only apply to groups with the given names")
+	return c
+}
+
+func validateGroupSelectionFlags(bp config.Blueprint) error {
+	if flagOnlyGroups != nil && flagSkipGroups != nil {
+		return errors.New("cannot specify both --only and --skip")
+	}
+
+	dict := []string{}
+	for _, group := range bp.Groups {
+		dict = append(dict, string(group.Name))
+	}
+
+	for _, g := range append(flagOnlyGroups, flagSkipGroups...) {
+		if !slices.Contains(dict, g) {
+			return config.HintSpelling(g, dict, fmt.Errorf("group %q not found", g))
+		}
+	}
+
+	return nil
+}
+
+func isGroupSelected(g config.GroupName) bool {
+	if flagOnlyGroups != nil {
+		return slices.Contains(flagOnlyGroups, string(g))
+	}
+	if flagSkipGroups != nil {
+		return !slices.Contains(flagSkipGroups, string(g))
+	}
+	return true
 }
