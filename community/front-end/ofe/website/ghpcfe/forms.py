@@ -244,10 +244,10 @@ class ClusterPartitionForm(forms.ModelForm):
         fields = (
             "name",
             "machine_type",
-            "reservation_name",
             "image",
             "dynamic_node_count",
             "static_node_count",
+            "reservation_name",
             "enable_placement",
             "enable_hyperthreads",
             "enable_tier1_networking",
@@ -304,6 +304,9 @@ class ClusterPartitionForm(forms.ModelForm):
             "GPU_type",
             self.instance.GPU_type
         )
+
+        # Mark 'reservation_name' as optional
+        self.fields["reservation_name"].widget.attrs.update({"placeholder": "Optional"})
 
     def clean(self):
         cleaned_data = super().clean()

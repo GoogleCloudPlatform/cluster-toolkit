@@ -307,11 +307,18 @@
           // Uncomment the next line if you want to prevent the form from actually submitting for debugging
           // event.preventDefault();
       });
-  });
-</script>
 
-<script src="{% static 'js/jquery.formset.js' %}"></script>
-<script>
+      // Ensure machine and disk availability is updated on zone change
+      const cloudZoneInput = document.getElementById('id_cloud_zone');
+      cloudZoneInput.addEventListener('change', function() {
+          updateMachineAvailability();
+          updateDiskAvailability();
+      });
+
+      // Trigger initial population of regions and zones
+      populateRegionsAndZones();
+  });
+
   function updateMachineAvailability() {
     // Get machine Info
     // For each select of class 'machine_type_select'...
@@ -574,7 +581,7 @@
     });
   }
 
-  
+
   $('.mp_formset_row').formset({
     addText: 'add mount point',
     /*addCssClass: 'add-row btn btn-info',*/
@@ -615,9 +622,8 @@
       elements[i].style.display = 'none';
     }
 
-    updateDiskAvailability()
-    updateMachineAvailability()
-
+    updateDiskAvailability();
+    updateMachineAvailability();
   });
 </script>
 {% endif %}
