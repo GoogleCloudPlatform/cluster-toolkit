@@ -31,6 +31,7 @@ resource "google_compute_global_address" "private_ip_alloc" {
   network       = var.network_id
   prefix_length = var.prefix_length
   labels        = local.labels
+  address       = var.address
 }
 
 resource "google_service_networking_connection" "private_vpc_connection" {
