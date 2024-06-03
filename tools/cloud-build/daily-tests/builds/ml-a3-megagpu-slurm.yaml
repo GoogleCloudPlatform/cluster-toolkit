@@ -41,3 +41,24 @@ steps:
     IMAGE_NAME=$(gcloud compute images list --project "${PROJECT_ID}" \
         --no-standard-images --filter="labels.ghpc_deployment~$${BUILD_ID_SHORT}" \
         --format='get(name)' --limit=1)
+
+    echo $${IMAGE_NAME} > /persistent_volume/image_name
+  volumes:
+  - name: 'persistent_volume'
+    path: '/persistent_volume'
+- id: ml-a3-megagpu-slurm-cluster
+  name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
+  entrypoint: /bin/bash
+  env:
+  - "ANSIBLE_HOST_KEY_CHECKING=false"
+  - "ANSIBLE_CONFIG=/workspace/tools/cloud-build/ansible.cfg"
+  args:
+  - -c
+  - |
+    set -x -e
+    cd /workspace && make
+
+    cat /persistent_volume/image_name | xargs -L1 gcloud compute images delete --project "${PROJECT_ID}" --quiet
+  volumes:
+  - name: 'persistent_volume'
+    path: '/persistent_volume'
