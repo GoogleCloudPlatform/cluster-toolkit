@@ -295,6 +295,7 @@
 {% endblock %}
 
 {% block tailscript %}
+<script src="{% static 'js/jquery.formset.js' %}"></script>
 <script>
   document.addEventListener('DOMContentLoaded', function() {
       const form = document.getElementById('clusterForm'); // Make sure this is the correct ID for your form
