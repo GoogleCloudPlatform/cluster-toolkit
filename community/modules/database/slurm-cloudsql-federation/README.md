@@ -73,6 +73,7 @@ No modules.
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
+| <a name="input_authorized_networks"></a> [authorized\_networks](#input\_authorized\_networks) | IP address ranges as authorized networks of the Cloud SQL for MySQL instances | `list(string)` | `[]` | no |
 | <a name="input_database_version"></a> [database\_version](#input\_database\_version) | The version of the database to be created. | `string` | `"MYSQL_5_7"` | no |
 | <a name="input_deletion_protection"></a> [deletion\_protection](#input\_deletion\_protection) | Whether or not to allow Terraform to destroy the instance. | `string` | `false` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | The name of the current deployment | `string` | n/a | yes |
