@@ -13,10 +13,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-set -e
+set -e -o pipefail
 
 run_test() {
 	example=$1
+	if [ -n "$2" ]; then
+		deployment_args=("-d" "${cwd}/$2")
+	else
+		deployment_args=()
+	fi
 	tmpdir="$(mktemp -d)"
 	exampleFile=$(basename "$example")
 	DEPLOYMENT=$(echo "${exampleFile%.yaml}-$(basename "${tmpdir##*.}")" | sed -e 's/\(.*\)/\L\1/')
@@ -37,7 +42,7 @@ run_test() {
 		cd "${tmpdir}"
 	fi
 	${GHPC_PATH} create "${BP_PATH}" -l ERROR \
-		--skip-validators="${VALIDATORS_TO_SKIP}" \
+		--skip-validators="${VALIDATORS_TO_SKIP}" "${deployment_args[@]}" \
 		--vars="project_id=${PROJECT},deployment_name=${DEPLOYMENT}" >/dev/null ||
 		{
 			echo "*** ERROR: error creating deployment with ghpc for ${exampleFile}"
@@ -115,7 +120,7 @@ check_background() {
 	fi
 }
 
-CONFIGS=$(find examples/ community/examples/ tools/validate_configs/test_configs/ docs/tutorials/ docs/videos/build-your-own-blueprint/ -name "*.yaml" -type f)
+CONFIGS=$(find examples/ community/examples/ tools/validate_configs/test_configs/ docs/tutorials/ docs/videos/build-your-own-blueprint/ -name "*.yaml" -type f -not -path 'examples/machine-learning/a3-megagpu-8g/*')
 cwd=$(pwd)
 NPROCS=${NPROCS:-$(nproc)}
 echo "Running tests in $NPROCS processes"
@@ -134,4 +139,9 @@ while [ "$JNUM" -gt 0 ]; do
 	check_background
 	JNUM=$(jobs | wc -l)
 done
+
+run_test "examples/machine-learning/a3-megagpu-8g/slurm-a3mega-base.yaml" "examples/machine-learning/a3-megagpu-8g/deployment-base.yaml"
+run_test "examples/machine-learning/a3-megagpu-8g/slurm-a3mega-image.yaml" "examples/machine-learning/a3-megagpu-8g/deployment-image-cluster.yaml"
+run_test "examples/machine-learning/a3-megagpu-8g/slurm-a3mega-cluster.yaml" "examples/machine-learning/a3-megagpu-8g/deployment-image-cluster.yaml"
+
 echo "All configs have been validated successfully (passed)."
