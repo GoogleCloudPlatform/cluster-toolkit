@@ -363,6 +363,14 @@ func (bp Blueprint) ListUnusedVariables() []string {
 	for _, v := range bp.Validators {
 		ns["validator_"+v.Validator] = v.Inputs.AsObject()
 	}
+	for k, v := range bp.TerraformProviders {
+		ns["bp_provider_"+k] = v.Configuration.AsObject()
+	}
+	for _, grp := range bp.Groups {
+		for k, v := range grp.TerraformProviders {
+			ns["grp_"+string(grp.Name)+"_provider_"+k] = v.Configuration.AsObject()
+		}
+	}
 
 	var used = map[string]bool{
 		"labels":          true, // automatically added
