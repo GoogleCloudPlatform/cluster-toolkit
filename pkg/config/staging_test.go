@@ -146,6 +146,10 @@ func TestEvalModuleSettings(t *testing.T) {
 		t.Errorf("got unexpected error: %v", err)
 	}
 
+	if err := bp.evalGhpcStageInTerraformProviderConfiguration(); err != nil {
+		t.Errorf("got unexpected error: %v", err)
+	}
+
 	updated := bp.Groups[0].Modules[0].Settings
 	{ // No changes
 		want := `never("changes")`

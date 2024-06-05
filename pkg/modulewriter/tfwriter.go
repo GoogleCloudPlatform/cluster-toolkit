@@ -186,46 +186,23 @@ func writeMain(
 	return writeHclFile(filepath.Join(dst, "main.tf"), hclFile)
 }
 
-type provider struct {
-	alias   string
-	source  string
-	version string
-	config  config.Dict
-}
-
-func getProviders(bp config.Blueprint) []provider {
-	gglConf := config.Dict{}
-	for s, v := range map[string]string{
-		"project": "project_id",
-		"region":  "region",
-		"zone":    "zone"} {
-		if bp.Vars.Has(v) {
-			gglConf = gglConf.With(s, config.GlobalRef(v).AsValue())
-		}
-	}
-
-	return []provider{
-		{"google", "hashicorp/google", ">= 4.84.0, < 5.32.0", gglConf},
-		{"google-beta", "hashicorp/google-beta", ">= 4.84.0, < 5.32.0", gglConf},
-	}
-}
-
-func writeProviders(providers []provider, dst string) error {
+func writeProviders(providers map[string]config.TerraformProvider, dst string) error {
 	hclFile := hclwrite.NewEmptyFile()
 	hclBody := hclFile.Body()
 
-	for _, prov := range providers {
+	for _, k := range orderKeys(providers) {
 		hclBody.AppendNewline()
-		pb := hclBody.AppendNewBlock("provider", []string{prov.alias}).Body()
+		v := providers[k]
+		pb := hclBody.AppendNewBlock("provider", []string{k}).Body()
 
-		for _, s := range orderKeys(prov.config.Items()) {
-			pb.SetAttributeRaw(s, config.TokensForValue(prov.config.Get(s)))
+		for _, s := range orderKeys(v.Configuration.Items()) {
+			pb.SetAttributeRaw(s, config.TokensForValue(v.Configuration.Get(s)))
 		}
 	}
 	return writeHclFile(filepath.Join(dst, "providers.tf"), hclFile)
 }
 
-func writeVersions(providers []provider, dst string) error {
+func writeVersions(providers map[string]config.TerraformProvider, dst string) error {
 	f := hclwrite.NewEmptyFile()
 	body := f.Body()
 	body.AppendNewline()
@@ -235,10 +212,11 @@ func writeVersions(providers []provider, dst string) error {
 
 	pb := tfb.AppendNewBlock("required_providers", []string{}).Body()
 
-	for _, p := range providers {
-		pb.SetAttributeValue(p.alias, cty.ObjectVal(map[string]cty.Value{
-			"source":  cty.StringVal(p.source),
-			"version": cty.StringVal(p.version),
+	for _, k := range orderKeys(providers) {
+		v := providers[k]
+		pb.SetAttributeValue(k, cty.ObjectVal(map[string]cty.Value{
+			"source":  cty.StringVal(v.Source),
+			"version": cty.StringVal(v.Version),
 		}))
 	}
 	return writeHclFile(filepath.Join(dst, "versions.tf"), f)
@@ -276,6 +254,8 @@ func (w TFWriter) writeGroup(
 		intergroupInputs[igVar.Name] = true
 	}
 
+	tp := g.TerraformProviders
+
 	// Write main.tf file
 	doctoredModules, err := substituteIgcReferences(g.Modules, intergroupVars)
 	if err != nil {
@@ -300,14 +280,13 @@ func (w TFWriter) writeGroup(
 		return fmt.Errorf("error writing terraform.tfvars file for deployment group %s: %w", g.Name, err)
 	}
 
-	providers := getProviders(bp)
 	// Write providers.tf file
-	if err := writeProviders(providers, groupPath); err != nil {
+	if err := writeProviders(tp, groupPath); err != nil {
 		return fmt.Errorf("error writing providers.tf file for deployment group %s: %w", g.Name, err)
 	}
 
 	// Write versions.tf file
-	if err := writeVersions(providers, groupPath); err != nil {
+	if err := writeVersions(tp, groupPath); err != nil {
 		return fmt.Errorf("error writing versions.tf file for deployment group %s: %v", g.Name, err)
 	}
 
@@ -365,8 +344,8 @@ func getUsedDeploymentVars(group config.Group, bp config.Blueprint) map[string]c
 	for _, m := range group.Modules {
 		used = append(used, config.GetUsedDeploymentVars(m.Settings.AsObject())...)
 	}
-	for _, p := range getProviders(bp) {
-		used = append(used, config.GetUsedDeploymentVars(p.config.AsObject())...)
+	for _, v := range group.TerraformProviders {
+		used = append(used, config.GetUsedDeploymentVars(v.Configuration.AsObject())...)
 	}
 	for _, v := range used {
 		res[v] = bp.Vars.Get(v)

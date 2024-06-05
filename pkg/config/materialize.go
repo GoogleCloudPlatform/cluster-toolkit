@@ -31,6 +31,10 @@ func (bp *Blueprint) Materialize() error {
 		return err
 	}
 
+	if err := bp.evalGhpcStageInTerraformProviderConfiguration(); err != nil {
+		return err
+	}
+
 	for ig := range bp.Groups {
 		if err := materizalizeGroup(bp, &bp.Groups[ig]); err != nil {
 			return err

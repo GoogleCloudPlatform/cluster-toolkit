@@ -131,6 +131,9 @@ func (bp *Blueprint) expandGroups() error {
 func (bp Blueprint) expandGroup(gp groupPath, g *Group) error {
 	var errs Errors
 	bp.expandBackend(g)
+	if g.Kind() == TerraformKind {
+		bp.expandProviders(g)
+	}
 	for im := range g.Modules {
 		errs.Add(bp.expandModule(gp.Modules.At(im), &g.Modules[im]))
 	}
@@ -163,6 +166,42 @@ func (bp Blueprint) expandBackend(grp *Group) {
 		prefix := MustParseExpression(
 			fmt.Sprintf(`"%s/${var.deployment_name}/%s"`, bp.BlueprintName, grp.Name))
 		be.Configuration = be.Configuration.With("prefix", prefix.AsValue())
+	}
+}
+
+func getDefaultGoogleProviders(bp Blueprint) map[string]TerraformProvider {
+	gglConf := Dict{}
+	for s, v := range map[string]string{
+		"project": "project_id",
+		"region":  "region",
+		"zone":    "zone"} {
+		if bp.Vars.Has(v) {
+			gglConf = gglConf.With(s, GlobalRef(v).AsValue())
+		}
+	}
+	return map[string]TerraformProvider{
+		"google": TerraformProvider{
+			Source:        "hashicorp/google",
+			Version:       ">= 4.84.0, < 5.32.0",
+			Configuration: gglConf},
+		"google-beta": TerraformProvider{
+			Source:        "hashicorp/google-beta",
+			Version:       ">= 4.84.0, < 5.32.0",
+			Configuration: gglConf}}
+}
+
+func (bp Blueprint) expandProviders(grp *Group) {
+	// 1. DEFAULT: use TerraformProviders provider dictionary (if supplied)
+	// 2. If top-level TerraformProviders is defined, insert that
+	//    provider dictionary into resource groups which have no explicit
+	//    TerraformProviders
+	defaults := bp.TerraformProviders
+	pv := &grp.TerraformProviders
+	if defaults == nil {
+		defaults = getDefaultGoogleProviders(bp)
+	}
+	if (*pv) == nil {
+		(*pv) = maps.Clone(defaults)
 	}
 }
 

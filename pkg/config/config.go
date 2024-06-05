@@ -68,9 +68,10 @@ func (n GroupName) Validate() error {
 
 // Group defines a group of Modules that are all executed together
 type Group struct {
-	Name             GroupName        `yaml:"group"`
-	TerraformBackend TerraformBackend `yaml:"terraform_backend,omitempty"`
-	Modules          []Module         `yaml:"modules"`
+	Name               GroupName                    `yaml:"group"`
+	TerraformBackend   TerraformBackend             `yaml:"terraform_backend,omitempty"`
+	TerraformProviders map[string]TerraformProvider `yaml:"terraform_providers,omitempty"`
+	Modules            []Module                     `yaml:"modules"`
 	// DEPRECATED fields
 	deprecatedKind interface{} `yaml:"kind,omitempty"` //lint:ignore U1000 keep in the struct for backwards compatibility
 }
@@ -176,6 +177,13 @@ type TerraformBackend struct {
 	Configuration Dict
 }
 
+// TerraformProvider defines the configuration for the terraform providers
+type TerraformProvider struct {
+	Source        string
+	Version       string
+	Configuration Dict
+}
+
 // ModuleKind abstracts Toolkit module kinds (presently: packer/terraform)
 type ModuleKind struct {
 	kind string
@@ -261,8 +269,9 @@ type Blueprint struct {
 	Validators               []Validator `yaml:"validators,omitempty"`
 	ValidationLevel          int         `yaml:"validation_level,omitempty"`
 	Vars                     Dict
-	Groups                   []Group          `yaml:"deployment_groups"`
-	TerraformBackendDefaults TerraformBackend `yaml:"terraform_backend_defaults,omitempty"`
+	Groups                   []Group                      `yaml:"deployment_groups"`
+	TerraformBackendDefaults TerraformBackend             `yaml:"terraform_backend_defaults,omitempty"`
+	TerraformProviders       map[string]TerraformProvider `yaml:"terraform_providers,omitempty"`
 
 	// internal & non-serializable fields
 
@@ -299,6 +308,9 @@ func (bp *Blueprint) Expand() error {
 		return err
 	}
 	if err := checkBackend(Root.Backend, bp.TerraformBackendDefaults); err != nil {
+		return err
+	}
+	if err := checkProviders(Root.Provider, bp.TerraformProviders); err != nil {
 		return err
 	}
 	if err := bp.expandVars(); err != nil {
@@ -350,6 +362,14 @@ func (bp Blueprint) ListUnusedVariables() []string {
 	})
 	for _, v := range bp.Validators {
 		ns["validator_"+v.Validator] = v.Inputs.AsObject()
+	}
+	for k, v := range bp.TerraformProviders {
+		ns["bp_provider_"+k] = v.Configuration.AsObject()
+	}
+	for _, grp := range bp.Groups {
+		for k, v := range grp.TerraformProviders {
+			ns["grp_"+string(grp.Name)+"_provider_"+k] = v.Configuration.AsObject()
+		}
 	}
 
 	var used = map[string]bool{
@@ -464,6 +484,7 @@ func checkModulesAndGroups(bp Blueprint) error {
 		}
 
 		errs.Add(checkBackend(pg.Backend, grp.TerraformBackend))
+		errs.Add(checkProviders(pg.Provider, grp.TerraformProviders))
 	}
 	return errs.OrNil()
 }
@@ -482,6 +503,18 @@ func checkBackend(bep backendPath, be TerraformBackend) error {
 	val, perr := parseYamlString(be.Type)
 	if _, is := IsExpressionValue(val); is || perr != nil {
 		return BpError{bep.Type, errors.New("can not use expression as a terraform_backend type")}
+	}
+	return nil
+}
+
+func checkProviders(pp mapPath[providerPath], tp map[string]TerraformProvider) error {
+	for k, v := range tp {
+		if v.Source == "" {
+			return BpError{pp.Dot(k).Source, errors.New(fmt.Sprintf("provider, %q, is missing source", k))}
+		}
+		if v.Version == "" {
+			return BpError{pp.Dot(k).Version, errors.New(fmt.Sprintf("provider, %q, is missing version", k))}
+		}
 	}
 	return nil
 }
