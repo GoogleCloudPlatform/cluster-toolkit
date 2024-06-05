@@ -142,7 +142,6 @@ variable "login_nodes" {
       count = number
       type  = string
     }))
-    instance_template   = optional(string)
     labels              = optional(map(string), {})
     machine_type        = optional(string)
     metadata            = optional(map(string), {})
@@ -211,7 +210,6 @@ variable "nodeset" {
       count = number
       type  = string
     }))
-    instance_template    = optional(string)
     labels               = optional(map(string), {})
     machine_type         = optional(string)
     maintenance_interval = optional(string)
