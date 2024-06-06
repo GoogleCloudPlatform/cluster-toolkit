@@ -31,6 +31,7 @@ RUN curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add -  && \
     curl https://packages.cloud.google.com/apt/doc/apt-key.gpg \
       | apt-key --keyring /usr/share/keyrings/cloud.google.gpg add - && \
     apt-get -y update && apt-get -y install google-cloud-sdk && \
+    apt-get -y install tmux && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 RUN wget https://github.com/koalaman/shellcheck/releases/download/v0.9.0/shellcheck-$SHELLCHECK_VER.linux.x86_64.tar.xz && \
