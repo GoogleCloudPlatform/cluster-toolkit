@@ -66,6 +66,7 @@ locals {
     shielded_instance_config = var.shielded_instance_config
 
     gpu                 = one(local.guest_accelerator)
+    instance_template   = var.instance_template
     labels              = local.labels
     machine_type        = var.machine_type
     metadata            = var.metadata
