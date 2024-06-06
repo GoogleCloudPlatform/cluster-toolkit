@@ -25,8 +25,6 @@ locals {
     }
   ]
 
-  have_template = var.instance_template != null && var.instance_template != ""
-
   service_account_email = coalesce(var.service_account_email, data.google_compute_default_service_account.default.email)
 
   # can't rely on `email=null` as it's used to instantiate `cloudsql_secret_accessor`
@@ -39,7 +37,6 @@ locals {
 # INSTANCE TEMPLATE
 module "slurm_controller_template" {
   source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=6.5.7"
-  count  = local.have_template ? 0 : 1
 
   project_id          = var.project_id
   region              = var.region
@@ -100,7 +97,7 @@ module "slurm_controller_instance" {
   access_config       = var.enable_controller_public_ips ? [local.access_config] : []
   add_hostname_suffix = false
   hostname            = "${local.slurm_cluster_name}-controller"
-  instance_template   = local.have_template ? var.instance_template : module.slurm_controller_template[0].self_link
+  instance_template   = module.slurm_controller_template.self_link
 
   project_id          = var.project_id
   region              = var.region
