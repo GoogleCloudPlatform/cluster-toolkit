@@ -71,9 +71,13 @@ module "slurm_login_instance" {
   project_id         = var.project_id
   slurm_cluster_name = local.slurm_cluster_name
 
-  instance_template = module.slurm_login_template[each.key].self_link
-  labels            = merge(each.value.labels, local.files_cs_labels)
-  num_instances     = each.value.num_instances
+  instance_template = (
+    each.value.instance_template != null && each.value.instance_template != ""
+    ? each.value.instance_template
+    : module.slurm_login_template[each.key].self_link
+  )
+  labels        = merge(each.value.labels, local.files_cs_labels)
+  num_instances = each.value.num_instances
 
   region     = each.value.region
   static_ips = each.value.static_ips
