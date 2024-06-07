@@ -31,8 +31,9 @@ import (
 
 func init() {
 	rootCmd.AddCommand(
-		addAutoApproveFlag(
-			addArtifactsDirFlag(destroyCmd)))
+		addGroupSelectionFlags(
+			addAutoApproveFlag(
+				addArtifactsDirFlag(destroyCmd))))
 }
 
 var (
@@ -56,13 +57,17 @@ func runDestroyCmd(cmd *cobra.Command, args []string) {
 	}
 
 	bp, ctx := artifactBlueprintOrDie(artifactsDir)
-
+	checkErr(validateGroupSelectionFlags(bp), ctx)
 	checkErr(shell.ValidateDeploymentDirectory(bp.Groups, deplRoot), ctx)
 
 	// destroy in reverse order of creation!
 	packerManifests := []string{}
 	for i := len(bp.Groups) - 1; i >= 0; i-- {
 		group := bp.Groups[i]
+		if !isGroupSelected(group.Name) {
+			logging.Info("skipping group %q", group.Name)
+			continue
+		}
 		groupDir := filepath.Join(deplRoot, string(group.Name))
 
 		if err := shell.ImportInputs(groupDir, artifactsDir, bp); err != nil {

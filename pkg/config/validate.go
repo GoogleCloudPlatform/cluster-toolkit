@@ -181,7 +181,7 @@ func validateSettings(
 		}
 		// Setting not found
 		if _, ok := cVars.Inputs[k]; !ok {
-			err := hintSpelling(k, maps.Keys(cVars.Inputs), UnknownModuleSetting)
+			err := HintSpelling(k, maps.Keys(cVars.Inputs), UnknownModuleSetting)
 			errs.At(sp, err)
 			continue // do not perform other validations
 		}

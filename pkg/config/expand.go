@@ -359,7 +359,7 @@ func validateModuleReference(bp Blueprint, from Module, toID ModuleID) error {
 		bp.WalkModulesSafe(func(_ ModulePath, m *Module) {
 			mods = append(mods, string(m.ID))
 		})
-		return hintSpelling(string(toID), mods, err)
+		return HintSpelling(string(toID), mods, err)
 	}
 
 	if to.Kind == PackerKind {
@@ -385,7 +385,7 @@ func validateModuleSettingReference(bp Blueprint, mod Module, r Reference) error
 	if r.GlobalVar {
 		if !bp.Vars.Has(r.Name) {
 			err := fmt.Errorf("module %q references unknown global variable %q", mod.ID, r.Name)
-			return hintSpelling(r.Name, bp.Vars.Keys(), err)
+			return HintSpelling(r.Name, bp.Vars.Keys(), err)
 		}
 		return nil
 	}
@@ -397,7 +397,7 @@ func validateModuleSettingReference(bp Blueprint, mod Module, r Reference) error
 			bp.WalkModulesSafe(func(_ ModulePath, m *Module) {
 				hints = append(hints, string(m.ID))
 			})
-			return hintSpelling(string(unkModErr.ID), hints, unkModErr)
+			return HintSpelling(string(unkModErr.ID), hints, unkModErr)
 		}
 		return err
 	}
@@ -414,7 +414,7 @@ func validateModuleSettingReference(bp Blueprint, mod Module, r Reference) error
 
 	if !slices.Contains(outputs, r.Name) {
 		err := fmt.Errorf("module %q does not have output %q", tm.ID, r.Name)
-		return hintSpelling(r.Name, outputs, err)
+		return HintSpelling(r.Name, outputs, err)
 	}
 	return nil
 }
