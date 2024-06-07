@@ -539,9 +539,19 @@ See https://slurm.schedmd.com/slurm.conf.html#OPT_Prolog.
 EOD
   type = list(object({
     filename = string
-    content  = string
+    content  = optional(string)
+    source   = optional(string)
   }))
   default = []
+
+  validation {
+    condition = alltrue([
+      for script in var.prolog_scripts :
+      (script.content != null && script.source == null) ||
+      (script.content == null && script.source != null)
+    ])
+    error_message = "Either 'content' or 'source' must be defined, but not both."
+  }
 }
 
 variable "epilog_scripts" {
@@ -552,9 +562,19 @@ See https://slurm.schedmd.com/slurm.conf.html#OPT_Epilog.
 EOD
   type = list(object({
     filename = string
-    content  = string
+    content  = optional(string)
+    source   = optional(string)
   }))
   default = []
+
+  validation {
+    condition = alltrue([
+      for script in var.epilog_scripts :
+      (script.content != null && script.source == null) ||
+      (script.content == null && script.source != null)
+    ])
+    error_message = "Either 'content' or 'source' must be defined, but not both."
+  }
 }
 
 variable "enable_external_prolog_epilog" {
