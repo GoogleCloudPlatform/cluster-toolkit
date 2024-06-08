@@ -69,11 +69,10 @@ locals {
     enable_shielded_vm     = var.enable_shielded_vm
     gpu                    = one(local.guest_accelerator)
 
-    instance_template = var.instance_template
-    labels            = local.labels
-    machine_type      = var.machine_type
-    metadata          = var.metadata
-    min_cpu_platform  = var.min_cpu_platform
+    labels           = local.labels
+    machine_type     = var.machine_type
+    metadata         = var.metadata
+    min_cpu_platform = var.min_cpu_platform
 
     on_host_maintenance      = var.on_host_maintenance
     preemptible              = var.preemptible

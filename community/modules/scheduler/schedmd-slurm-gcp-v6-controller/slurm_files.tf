@@ -44,13 +44,12 @@ module "bucket" {
 
 # BUCKET IAMs
 locals {
-  controller_sa  = toset(flatten([for x in module.slurm_controller_template : x.service_account]))
   compute_sa     = toset(flatten([for x in module.slurm_nodeset_template : x.service_account]))
   compute_tpu_sa = toset(flatten([for x in module.slurm_nodeset_tpu : x.service_account]))
   login_sa       = toset(flatten([for x in module.slurm_login_template : x.service_account]))
 
   viewers = toset(flatten([
-    formatlist("serviceAccount:%s", [for x in local.controller_sa : x.email]),
+    "serviceAccount:${module.slurm_controller_template.service_account.email}",
     formatlist("serviceAccount:%s", [for x in local.compute_sa : x.email]),
     formatlist("serviceAccount:%s", [for x in local.compute_tpu_sa : x.email]),
     formatlist("serviceAccount:%s", [for x in local.login_sa : x.email]),
