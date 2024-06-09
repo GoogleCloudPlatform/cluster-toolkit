@@ -294,6 +294,46 @@ func (bp *Blueprint) Clone() Blueprint {
 	return c
 }
 
+func (bp *Blueprint) mutateDicts(cb func(dictPath, *Dict) Dict) {
+	bp.Vars = cb(Root.Vars, &bp.Vars)
+
+	bp.TerraformBackendDefaults.Configuration = cb(Root.Backend.Configuration, &bp.TerraformBackendDefaults.Configuration)
+
+	for k, p := range bp.TerraformProviders {
+		p.Configuration = cb(Root.Provider.Dot(k).Configuration, &p.Configuration)
+		bp.TerraformProviders[k] = p
+	}
+
+	for ig := range bp.Groups {
+		g := &bp.Groups[ig]
+		gp := Root.Groups.At(ig)
+
+		g.TerraformBackend.Configuration = cb(gp.Backend.Configuration, &g.TerraformBackend.Configuration)
+
+		for k, p := range g.TerraformProviders {
+			p.Configuration = cb(gp.Provider.Dot(k).Configuration, &p.Configuration)
+			g.TerraformProviders[k] = p
+		}
+
+		for im := range g.Modules {
+			m := &g.Modules[im]
+			m.Settings = cb(gp.Modules.At(im).Settings, &m.Settings)
+		}
+	}
+
+	for i := range bp.Validators {
+		v := &bp.Validators[i]
+		v.Inputs = cb(Root.Validators.At(i).Inputs, &v.Inputs)
+	}
+}
+
+func (bp *Blueprint) visitDicts(cb func(dictPath, *Dict)) {
+	bp.mutateDicts(func(p dictPath, d *Dict) Dict {
+		cb(p, d)
+		return *d
+	})
+}
+
 // DeploymentSettings are deployment-specific override settings
 type DeploymentSettings struct {
 	TerraformBackendDefaults TerraformBackend `yaml:"terraform_backend_defaults,omitempty"`
@@ -314,6 +354,9 @@ func (bp *Blueprint) Expand() error {
 		return err
 	}
 	if err := bp.expandVars(); err != nil {
+		return err
+	}
+	if err := bp.checkReferences(); err != nil {
 		return err
 	}
 	return bp.expandGroups()
@@ -510,10 +553,10 @@ func checkBackend(bep backendPath, be TerraformBackend) error {
 func checkProviders(pp mapPath[providerPath], tp map[string]TerraformProvider) error {
 	for k, v := range tp {
 		if v.Source == "" {
-			return BpError{pp.Dot(k).Source, errors.New(fmt.Sprintf("provider, %q, is missing source", k))}
+			return BpError{pp.Dot(k).Source, errors.New(fmt.Sprintf("provider %q is missing source", k))}
 		}
 		if v.Version == "" {
-			return BpError{pp.Dot(k).Version, errors.New(fmt.Sprintf("provider, %q, is missing version", k))}
+			return BpError{pp.Dot(k).Version, errors.New(fmt.Sprintf("provider %q is missing version", k))}
 		}
 	}
 	return nil
@@ -628,6 +671,30 @@ func (bp *Blueprint) checkBlueprintName() error {
 	return nil
 }
 
+// Check that all references in expressions are valid
+func (bp *Blueprint) checkReferences() error {
+	errs := Errors{}
+	bp.visitDicts(func(dp dictPath, d *Dict) {
+		isModSettings := IsModuleSettingsPath(dp)
+		for k, v := range d.Items() {
+			for ref, rp := range valueReferences(v) {
+				path := dp.Dot(k).Cty(rp)
+				if !ref.GlobalVar {
+					if !isModSettings {
+						errs.At(path, fmt.Errorf("module output %q can only be referenced in other module settings", ref))
+					}
+					// module to module references are checked by validateModuleSettingReferences later
+					return
+				}
+				if !bp.Vars.Has(ref.Name) {
+					errs.At(path, fmt.Errorf("variable %q not found", ref.Name))
+				}
+			}
+		}
+	})
+	return errs.OrNil()
+}
+
 // productOfModuleUseMark is a "mark" applied to values that are result of `use`.
 // Should not be used directly, use AsProductOfModuleUse and IsProductOfModuleUse instead.
 type productOfModuleUseMark struct {
@@ -708,7 +775,7 @@ func varsTopologicalOrder(vars Dict) ([]string, error) {
 			p := Root.Vars.Dot(n).Cty(rp)
 
 			if !ref.GlobalVar {
-				return BpError{p, fmt.Errorf("non-global variable %q referenced in expression", ref)}
+				continue
 			}
 
 			if used[ref.Name] == 1 {
