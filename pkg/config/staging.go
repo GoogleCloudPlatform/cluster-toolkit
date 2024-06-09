@@ -90,60 +90,23 @@ func (bp *Blueprint) makeGhpcStageFunc() function.Function {
 	})
 }
 
-func evalGhpcStageInDict(items map[string]cty.Value, paths dictPath, ctx *hcl.EvalContext) (map[string]cty.Value, error) {
-	errs := Errors{}
-	us := map[string]cty.Value{}
-	for k, v := range items {
-		uv, err := evalGhpcStageInValue(paths.Dot(k), v, ctx)
-		errs.Add(err)
-		us[k] = uv
-	}
-	return us, errs.OrNil()
-}
-
-// Update module settings in place, evaluating `ghpc_stage` expressions
-func (bp *Blueprint) evalGhpcStageInModuleSettings() error {
+// Partially evaluate all `ghpc_stage` expressions in the blueprint
+func (bp *Blueprint) evalGhpcStage() error {
 	errs := Errors{}
 	ctx, err := bp.evalCtx()
 	if err != nil {
 		return err
 	}
-	bp.WalkModulesSafe(func(mp ModulePath, m *Module) {
-		us, e := evalGhpcStageInDict(m.Settings.Items(), mp.Settings, ctx)
-		m.Settings = NewDict(us)
-		errs.Add(e)
+
+	bp.mutateDicts(func(dp dictPath, d *Dict) Dict {
+		us := map[string]cty.Value{}
+		for k, v := range d.Items() {
+			uv, err := evalGhpcStageInValue(dp.Dot(k), v, ctx)
+			errs.Add(err)
+			us[k] = uv
+		}
+		return NewDict(us)
 	})
-
-	return errs.OrNil()
-}
-
-// Evaluate a terraform provider as an intermediate step
-func evalGhpcStageInProvider(providers map[string]TerraformProvider, path mapPath[providerPath], ctx *hcl.EvalContext) error {
-	errs := Errors{}
-	for k1, v1 := range providers {
-		us, e := evalGhpcStageInDict(v1.Configuration.Items(), path.Dot(k1).Configuration, ctx)
-		v1.Configuration = NewDict(us)
-		errs.Add(e)
-	}
-	return errs.OrNil()
-}
-
-// Update terraform_providers settings in place, evaluating `ghpc_stage` expressions
-func (bp *Blueprint) evalGhpcStageInTerraformProviderConfiguration() error {
-	errs := Errors{}
-	ctx, err := bp.evalCtx()
-	if err != nil {
-		return err
-	}
-
-	// Evaluate default providers
-	errs.Add(evalGhpcStageInProvider(bp.TerraformProviders, Root.Provider, ctx))
-
-	// Evaluate group providers
-	for idx, grp := range bp.Groups {
-		errs.Add(evalGhpcStageInProvider(grp.TerraformProviders, Root.Groups.At(idx).Provider, ctx))
-	}
-
 	return errs.OrNil()
 }
 
