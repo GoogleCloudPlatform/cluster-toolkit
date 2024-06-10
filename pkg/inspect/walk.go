@@ -17,38 +17,40 @@ package inspect
 import (
 	"fmt"
 	"hpc-toolkit/pkg/modulereader"
+	"regexp"
 
 	"github.com/zclconf/go-cty/cty"
 )
 
-func walkFields(p string, ty cty.Type, field string, cb func(string, cty.Type)) {
+func walkFields(p string, ty cty.Type, pattern *regexp.Regexp, cb func(string, cty.Type)) {
 	if ty.IsObjectType() {
 		for key, ety := range ty.AttributeTypes() {
 			pref := fmt.Sprintf("%s.%s", p, key)
-			walkFields(pref, ety, field, cb)
-			if key == field {
+			walkFields(pref, ety, pattern, cb)
+			if pattern.MatchString(key) {
 				cb(pref, ety)
 			}
 		}
 	}
 	if ty.IsListType() || ty.IsMapType() || ty.IsSetType() {
-		walkFields(p+"[*]", ty.ElementType(), field, cb)
+		walkFields(p+"[*]", ty.ElementType(), pattern, cb)
 	}
 	if ty.IsTupleType() {
 		for i, ety := range ty.TupleElementTypes() {
-			walkFields(fmt.Sprintf("%s[%d]", p, i), ety, field, cb)
+			walkFields(fmt.Sprintf("%s[%d]", p, i), ety, pattern, cb)
 		}
 	}
 }
 
 func FindField(inputs []modulereader.VarInfo, field string) map[string]cty.Type {
+	pattern := regexp.MustCompile(field)
 	res := map[string]cty.Type{}
 	for _, input := range inputs {
 		pref := input.Name
-		walkFields(pref, input.Type, field, func(p string, ty cty.Type) {
+		walkFields(pref, input.Type, pattern, func(p string, ty cty.Type) {
 			res[p] = ty
 		})
-		if input.Name == field {
+		if pattern.MatchString(input.Name) {
 			res[pref] = input.Type
 		}
 	}

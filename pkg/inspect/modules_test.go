@@ -99,7 +99,7 @@ func hasInputField(name string) predicate {
 
 func queryInputFields(field string, t *testing.T) map[string]cty.Type {
 	ret := map[string]cty.Type{}
-	for _, mod := range notEmpty(query(hasInputField("additional_networks")), t) {
+	for _, mod := range notEmpty(query(hasInputField(field)), t) {
 		for p, ty := range inspect.FindField(mod.Inputs, field) {
 			ret[mod.Source+"@"+p] = ty
 		}
@@ -188,6 +188,31 @@ func TestAdditionalNetworks(t *testing.T) {
 			t.Errorf("%s has unexpected type expected, got:\n%#v\nwant:\n%#v", p, got, want)
 		}
 	}
+}
+
+func TestRunner(t *testing.T) {
+	want := modulereader.NormalizeType(`object({
+		type=string,
+		destination=string,
+		source=optional(string, null),
+		content=optional(string, null),
+		args=optional(string, null)
+	})`)
+
+	wantLst := modulereader.NormalizeType(fmt.Sprintf("list(%s)", want))
+
+	for p, ty := range queryInputFields("runner", t) {
+		if p != "modules/scripts/startup-script@runners" {
+			// apply test to a single case only
+			// TODO: increase coverage
+			continue
+		}
+		got := typeexpr.TypeString(ty)
+		if got != want && got != wantLst {
+			t.Errorf("%s has unexpected type expected, got:\n%#v\nwant:\n%#v", p, got, want)
+		}
+	}
+
 }
 
 func TestMetadataIsObtainable(t *testing.T) {

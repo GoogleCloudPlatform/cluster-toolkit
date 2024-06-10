@@ -68,46 +68,33 @@ variable "runners" {
     path, it will be copied in a temporary folder and deleted after running.
     Runners may also pass 'args', which will be passed as argument to shell runners only.
 EOT
-  type        = list(map(string))
+  type = list(object({
+    type        = string,
+    destination = string,
+    source      = optional(string, null),
+    content     = optional(string, null),
+    args        = optional(string, null)
+  }))
+
+
   validation {
-    condition = alltrue([
-      for r in var.runners : contains(keys(r), "type")
-    ])
-    error_message = "All runners must declare a type."
-  }
-  validation {
-    condition = alltrue([
-      for r in var.runners : contains(keys(r), "destination")
-    ])
-    error_message = "All runners must declare a destination name (even without a path)."
-  }
-  validation {
-    condition     = length(distinct([for r in var.runners : r["destination"]])) == length(var.runners)
+    condition     = length(distinct(var.runners[*].destination)) == length(var.runners)
     error_message = "All startup-script runners must have a unique destination."
   }
+
   validation {
     condition = alltrue([
-      for r in var.runners : r["type"] == "ansible-local" || r["type"] == "shell" || r["type"] == "data"
+      for r in var.runners : contains(["ansible-local", "shell", "data"], r.type)
     ])
     error_message = "The 'type' must be 'ansible-local', 'shell' or 'data'."
   }
-  # this validation tests that exactly 1 or other of source/content have been
-  # set to anything (including null)
+
   validation {
     condition = alltrue([
       for r in var.runners :
-      can(r["content"]) != can(r["source"])
+      (r.content == null) != can(r.source == null)
     ])
-    error_message = "A runner must specify either 'content' or 'source', but never both."
-  }
-  # this validation tests that at least 1 of source/content are non-null
-  # can fail either by not having been set all or by being set to null
-  validation {
-    condition = alltrue([
-      for r in var.runners :
-      lookup(r, "content", lookup(r, "source", null)) != null
-    ])
-    error_message = "A runner must specify a non-null 'content' or 'source'."
+    error_message = "A runner must specify exactly one of 'content' or 'source'"
   }
   default = []
 }
