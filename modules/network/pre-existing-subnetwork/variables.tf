@@ -15,7 +15,7 @@
 */
 
 variable "subnetwork_self_link" {
-  description = "Self-link of the subnet in the Shared VPC"
+  description = "Self-link of the subnet in the VPC"
   type        = string
   default     = null
 }
@@ -27,7 +27,7 @@ variable "project" {
 }
 
 variable "subnetwork_name" {
-  description = "Name of the pre-existing VPC subnetwork; defaults to var.network_name if set to null."
+  description = "Name of the pre-existing VPC subnetwork"
   type        = string
   default     = null
 }
