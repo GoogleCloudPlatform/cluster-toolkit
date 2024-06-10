@@ -232,8 +232,6 @@ Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial][fsi-monteca
   and VM images.
 * **[htcondor-install]** ![community-badge] ![experimental-badge] : Creates
   a startup script to install HTCondor and exports a list of required APIs
-* **[kubernetes-operations]** ![community-badge] ![experimental-badge] :
-  Performs pre-defined operations on Kubernetes resources.
 * **[omnia-install]** ![community-badge] ![experimental-badge] ![deprecated-badge] :
   Installs Slurm via [Dell Omnia](https://github.com/dellhpc/omnia) onto a
   cluster of VM instances. _This module has been deprecated and will be removed
