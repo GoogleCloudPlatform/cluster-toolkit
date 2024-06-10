@@ -1,5 +1,5 @@
 /**
- * Copyright 2022 Google LLC
+ * Copyright 2024 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 
 
 locals {
-  subnetwork_name = var.subnetwork_name != null ? var.subnetwork_name : var.subnetwork_self_link
+  display_name = var.subnetwork_name != null ? var.subnetwork_name : var.subnetwork_self_link
 }
 
 data "google_compute_subnetwork" "primary_subnetwork" {
@@ -28,7 +28,7 @@ data "google_compute_subnetwork" "primary_subnetwork" {
   lifecycle {
     postcondition {
       condition     = self.self_link != null
-      error_message = "The subnetwork: ${local.subnetwork_name} could not be found."
+      error_message = "The subnetwork: ${local.display_name} could not be found."
     }
   }
 }
