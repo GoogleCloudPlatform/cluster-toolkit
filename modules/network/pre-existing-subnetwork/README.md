@@ -79,8 +79,8 @@ No modules.
 |------|-------------|------|---------|:--------:|
 | <a name="input_project"></a> [project](#input\_project) | Name of the project that owns the subnetwork | `string` | `null` | no |
 | <a name="input_region"></a> [region](#input\_region) | Region in which to search for primary subnetwork | `string` | `null` | no |
-| <a name="input_subnetwork_name"></a> [subnetwork\_name](#input\_subnetwork\_name) | Name of the pre-existing VPC subnetwork; defaults to var.network\_name if set to null. | `string` | `null` | no |
-| <a name="input_subnetwork_self_link"></a> [subnetwork\_self\_link](#input\_subnetwork\_self\_link) | Self-link of the subnet in the Shared VPC | `string` | `null` | no |
+| <a name="input_subnetwork_name"></a> [subnetwork\_name](#input\_subnetwork\_name) | Name of the pre-existing VPC subnetwork | `string` | `null` | no |
+| <a name="input_subnetwork_self_link"></a> [subnetwork\_self\_link](#input\_subnetwork\_self\_link) | Self-link of the subnet in the VPC | `string` | `null` | no |
 
 ## Outputs
 
