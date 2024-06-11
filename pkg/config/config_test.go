@@ -558,7 +558,7 @@ func (s *zeroSuite) TestCheckProviders(c *C) {
 
 	{ // OK. All required values used
 		tp := map[string]TerraformProvider{
-			"test-provider": TerraformProvider{
+			"test-provider": {
 				Source:  "test-src",
 				Version: "test-ver",
 				Configuration: Dict{}.
@@ -571,7 +571,7 @@ func (s *zeroSuite) TestCheckProviders(c *C) {
 
 	{ // FAIL. Missing Source
 		tp := map[string]TerraformProvider{
-			"test-provider": TerraformProvider{
+			"test-provider": {
 				Version: "test-ver",
 				Configuration: Dict{}.
 					With("project", cty.StringVal("test-prj")).
@@ -583,7 +583,7 @@ func (s *zeroSuite) TestCheckProviders(c *C) {
 
 	{ // FAIL. Missing Version
 		tp := map[string]TerraformProvider{
-			"test-provider": TerraformProvider{
+			"test-provider": {
 				Source: "test-src",
 				Configuration: Dict{}.
 					With("project", cty.StringVal("test-prj")).

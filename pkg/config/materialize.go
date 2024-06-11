@@ -27,11 +27,7 @@ func (bp *Blueprint) Materialize() error {
 		return err
 	}
 
-	if err := bp.evalGhpcStageInModuleSettings(); err != nil {
-		return err
-	}
-
-	if err := bp.evalGhpcStageInTerraformProviderConfiguration(); err != nil {
+	if err := bp.evalGhpcStage(); err != nil {
 		return err
 	}
 
