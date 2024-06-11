@@ -944,9 +944,9 @@ class ClusterPartition(models.Model):
         default="pd-standard",
     )
     boot_disk_size = models.PositiveIntegerField(
-        validators=[MinValueValidator(120)],
+        validators=[MinValueValidator(50)],
         help_text="Boot disk size (in GB)",
-        default=120,
+        default=50,
         blank=True,
     )
     GPU_per_node = models.PositiveIntegerField(  # pylint: disable=invalid-name
