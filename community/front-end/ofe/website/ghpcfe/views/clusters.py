@@ -470,17 +470,8 @@ class ClusterUpdateView(LoginRequiredMixin, UpdateView):
                 try:
                     for part in parts:
                         part.vCPU_per_node = machine_info[part.machine_type]["vCPU"] // (1 if part.enable_hyperthreads else 2)
-
-                        cpu_count_str = part.machine_type.split('-')[-1]
-                        lssd_cpu_count_str = part.machine_type.split('-')[-2]
-                        if cpu_count_str.isdigit():
-                            cpu_count = int(cpu_count_str)
-                            logger.info(f"CPU count: {cpu_count}, VM type: {part.machine_type}.")
-                        elif lssd_cpu_count_str.isdigit():
-                            cpu_count = int(lssd_cpu_count_str)
-                            logger.info(f"CPU count: {cpu_count}, VM type: {part.machine_type}.")
-                        else:
-                            raise ValidationError(f"Cannot extract vCPU count from machine type {part.machine_type}")
+                        cpu_count = machine_info[part.machine_type]["vCPU"]
+                        logger.info(f"{part.machine_type} CPU Count: {cpu_count}")
 
                         # Tier1 networking validation
                         if part.enable_tier1_networking == True:
@@ -489,7 +480,7 @@ class ClusterUpdateView(LoginRequiredMixin, UpdateView):
                             is_tier_1_compatible = any(part.machine_type.startswith(prefix) for prefix in tier_1_supported_prefixes)
 
                             if not(cpu_count >= 30 and is_tier_1_compatible):
-                                raise ValidationError(f"VM type {part.machine_type} is not compatible with Tier 1 networking.")
+                                raise ValidationError(f"VM type {part.machine_type} is not compatible with Tier 1 networking. CPU count: {cpu_count} (<30 not valid)")
 
                         # Validate GPU choice
                         if part.GPU_type:
@@ -1201,3 +1192,4 @@ class AuthUserGCP(LoginRequiredMixin, generic.View):
             "cluster/user_auth_gcp.html",
             context={"cluster": cluster, "navtab": "cluster"},
         )
+
