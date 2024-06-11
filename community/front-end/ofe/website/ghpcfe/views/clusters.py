@@ -480,7 +480,7 @@ class ClusterUpdateView(LoginRequiredMixin, UpdateView):
                             is_tier_1_compatible = any(part.machine_type.startswith(prefix) for prefix in tier_1_supported_prefixes)
 
                             if not(cpu_count >= 30 and is_tier_1_compatible):
-                                raise ValidationError(f"VM type {part.machine_type} is not compatible with Tier 1 networking. CPU count: {cpu_count} (<30 not valid)")
+                                raise ValidationError(f"VM type {part.machine_type} is not compatible with Tier 1 networking.")
 
                         # Validate GPU choice
                         if part.GPU_type:
