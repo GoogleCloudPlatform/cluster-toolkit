@@ -364,7 +364,6 @@ def _get_gcp_instance_pricing(
             "c2": "Compute optimized Core",
             "c2d": "C2D AMD Instance Core",
             "c3d": "C3D AMD Instance Core",
-            "c4": "C4 Intel Emerald Rapids",
             "t2d": "T2D AMD Instance Core",
             "a2": "A2 Instance Core",
             "m1": "Memory-optimized Instance Core",  # ??
