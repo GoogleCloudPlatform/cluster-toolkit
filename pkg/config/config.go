@@ -344,15 +344,14 @@ type DeploymentSettings struct {
 func (bp *Blueprint) Expand() error {
 	// expand the blueprint in dependency order:
 	// BlueprintName -> DefaultBackend -> Vars -> Groups
-	if err := bp.checkBlueprintName(); err != nil {
-		return err
+	errs := (&Errors{}).
+		Add(checkStringLiterals(bp)).
+		Add(bp.checkBlueprintName()).
+		Add(checkProviders(Root.Provider, bp.TerraformProviders))
+	if errs.Any() {
+		return *errs
 	}
-	if err := checkBackend(Root.Backend, bp.TerraformBackendDefaults); err != nil {
-		return err
-	}
-	if err := checkProviders(Root.Provider, bp.TerraformProviders); err != nil {
-		return err
-	}
+
 	if err := bp.expandVars(); err != nil {
 		return err
 	}
@@ -526,7 +525,6 @@ func checkModulesAndGroups(bp Blueprint) error {
 			errs.Add(validateModule(pm, mod, bp))
 		}
 
-		errs.Add(checkBackend(pg.Backend, grp.TerraformBackend))
 		errs.Add(checkProviders(pg.Provider, grp.TerraformProviders))
 	}
 	return errs.OrNil()
@@ -542,10 +540,18 @@ func validateModuleUseReferences(p ModulePath, mod Module, bp Blueprint) error {
 	return errs.OrNil()
 }
 
-func checkBackend(bep backendPath, be TerraformBackend) error {
-	val, perr := parseYamlString(be.Type)
+func checkStringLiterals(bp *Blueprint) error {
+	errs := Errors{}
+	bp.visitStringLiterals(func(p Path, s string) {
+		errs.Add(checkStringLiteral(p, s))
+	})
+	return errs.OrNil()
+}
+
+func checkStringLiteral(p Path, s string) error {
+	val, perr := parseYamlString(s)
 	if _, is := IsExpressionValue(val); is || perr != nil {
-		return BpError{bep.Type, errors.New("can not use expression as a terraform_backend type")}
+		return BpError{p, errors.New("can not use expression here")}
 	}
 	return nil
 }
@@ -745,6 +751,55 @@ func (bp *Blueprint) WalkModulesSafe(walker func(ModulePath, *Module)) {
 	bp.WalkModules(func(p ModulePath, m *Module) error {
 		walker(p, m)
 		return nil
+	})
+}
+
+func (bp *Blueprint) visitStringLiterals(cb func(Path, string)) {
+	cb(Root.BlueprintName, bp.BlueprintName)
+	cb(Root.GhpcVersion, bp.GhpcVersion)
+	for iv, v := range bp.Validators {
+		cb(Root.Validators.At(iv).Validator, v.Validator)
+	}
+
+	vBackend := func(pbe backendPath, be *TerraformBackend) {
+		cb(pbe.Type, be.Type)
+	}
+	vProviders := func(pps mapPath[providerPath], ps map[string]TerraformProvider) {
+		for k, p := range ps {
+			pp := pps.Dot(k)
+			cb(pp, k)
+			cb(pp.Source, p.Source)
+			cb(pp.Version, p.Version)
+		}
+	}
+
+	vBackend(Root.Backend, &bp.TerraformBackendDefaults)
+	vProviders(Root.Provider, bp.TerraformProviders)
+
+	for ig, g := range bp.Groups {
+		pg := Root.Groups.At(ig)
+		cb(pg.Name, string(g.Name))
+		vBackend(pg.Backend, &g.TerraformBackend)
+		vProviders(pg.Provider, g.TerraformProviders)
+		for im, m := range g.Modules {
+			pm := pg.Modules.At(im)
+			cb(pm.Source, m.Source)
+			cb(pm.Kind, m.Kind.String())
+			cb(pm.ID, string(m.ID))
+			for iu, u := range m.Use {
+				cb(pm.Use.At(iu), string(u))
+			}
+			for io, o := range m.Outputs {
+				po := pm.Outputs.At(io)
+				cb(po.Name, o.Name)
+				cb(po.Description, o.Description)
+			}
+		}
+	}
+	bp.visitDicts(func(dp dictPath, d *Dict) {
+		for _, k := range d.Keys() {
+			cb(dp.Dot(k), k)
+		}
 	})
 }
 
