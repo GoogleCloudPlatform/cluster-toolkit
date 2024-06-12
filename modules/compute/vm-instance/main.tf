@@ -39,6 +39,8 @@ locals {
   # compact_placement : true when placement policy is provided and collocation set; false if unset
   compact_placement = try(var.placement_policy.collocation, null) != null
 
+  reservation = var.reservation_name == null ? [] : [var.reservation_name]
+
   gpu_attached = contains(["a2", "g2"], local.machine_family) || length(local.guest_accelerator) > 0
 
   # both of these must be false if either compact placement or preemptible/spot instances are used
@@ -131,7 +133,7 @@ resource "google_compute_resource_policy" "placement_policy" {
   project  = var.project_id
   provider = google-beta
 
-  count = var.placement_policy != null ? 1 : 0
+  count = var.resource_policy_name == null && var.placement_policy != null ? 1 : 0
   name  = "${local.resource_prefix}-vm-instance-placement"
   group_placement_policy {
     vm_count                  = try(var.placement_policy.vm_count, null)
@@ -139,6 +141,14 @@ resource "google_compute_resource_policy" "placement_policy" {
     collocation               = try(var.placement_policy.collocation, null)
     max_distance              = try(var.placement_policy.max_distance, null)
   }
+}
+
+data "google_compute_resource_policy" "resource_policy" {
+  count = var.resource_policy_name != null ? 1 : 0
+
+  name    = var.resource_policy_name
+  project = var.project_id
+  region  = var.region
 }
 
 resource "null_resource" "replace_vm_trigger_from_placement" {
@@ -179,7 +189,18 @@ resource "google_compute_instance" "compute_vm" {
   machine_type = var.machine_type
   zone         = var.zone
 
-  resource_policies = google_compute_resource_policy.placement_policy[*].self_link
+  resource_policies = var.resource_policy_name != null ? data.google_compute_resource_policy.resource_policy[*].self_link : google_compute_resource_policy.placement_policy[*].self_link
+
+  dynamic "reservation_affinity" {
+    for_each = local.reservation
+    content {
+      type = "SPECIFIC_RESERVATION"
+      specific_reservation {
+        key    = "compute.googleapis.com/reservation-name"
+        values = [reservation_affinity.value]
+      }
+    }
+  }
 
   tags   = var.tags
   labels = local.labels

@@ -76,9 +76,9 @@ variable "local_ssd_interface" {
 
 variable "name_prefix" {
   description = <<-EOT
-    An optional name for all VM and disk resources. 
-    If not supplied, `deployment_name` will be used. 
-    When `name_prefix` is supplied, and `add_deployment_name_before_prefix` is set, 
+    An optional name for all VM and disk resources.
+    If not supplied, `deployment_name` will be used.
+    When `name_prefix` is supplied, and `add_deployment_name_before_prefix` is set,
     then resources are named by "<`deployment_name`>-<`name_prefix`>-<#>".
     EOT
   type        = string
@@ -299,10 +299,28 @@ variable "bandwidth_tier" {
   }
 }
 
+variable "reservation_name" {
+  description = <<-EOT
+  If not null, use the reservation with this name.
+  EOT
+  type        = string
+  default     = null
+}
+
+variable "resource_policy_name" {
+  description = <<-EOT
+  The name of a resource policy to use.  If set, the "placement_policy" argument will be ignored.
+  EOT
+  type        = string
+  default     = null
+}
+
 variable "placement_policy" {
   description = <<-EOT
   Control where your VM instances are physically located relative to each other within a zone.
   See https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_resource_policy#nested_group_placement_policy
+
+  This argument will be ignored if "resource_policy_name" is set.
   EOT
 
   type    = any # It's a workaround of lack of `optional` in Terraform 1.2
@@ -310,7 +328,7 @@ variable "placement_policy" {
   validation {
     condition     = var.placement_policy == null ? true : try(keys(var.placement_policy), null) != null
     error_message = <<-EOT
-    The var.placement_policy should be either unset/null or be a map/object with 
+    The var.placement_policy should be either unset/null or be a map/object with
     fields: vm_count (number), availability_domain_count (number), collocation (string), max_distance (number).
     EOT
   }
