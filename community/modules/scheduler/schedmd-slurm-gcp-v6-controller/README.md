@@ -117,6 +117,32 @@ gcloud beta compute resource-policies list \
 > If a zone lacks capacity, using a lower `max-distance` value (such as 1) is
 > more likely to cause VMs creation to fail.
 
+## TreeWidth and Node Communication
+
+Slurm uses a fan out mechanism to communicate large groups of nodes. The shape
+of this fan out tree is determined by the
+[TreeWidth](https://slurm.schedmd.com/slurm.conf.html#OPT_TreeWidth)
+configuration variable.
+
+In the cloud, this fan out mechanism can become unstable when nodes restart with
+new IP addresses. You can enforce that all nodes communicate directly with the
+controller by setting TreeWidth to a value >= largest partition.
+
+If the largest partition was 200 nodes, configure the blueprint as follows:
+
+```yaml
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
+    ...
+    settings:
+      cloud_parameters:
+        tree_width: 200
+```
+
+The default has been set to 128. Values above this have not been fully tested
+and may cause congestion on the controller. A more scalable solution is under
+way.
+
 ## Hybrid Slurm Clusters
 For more information on how to configure an on premise slurm cluster with hybrid
 cloud partitions, see the [schedmd-slurm-gcp-v5-hybrid] module and our

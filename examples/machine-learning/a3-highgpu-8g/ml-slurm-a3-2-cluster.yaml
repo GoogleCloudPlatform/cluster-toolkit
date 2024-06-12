@@ -184,6 +184,7 @@ deployment_groups:
         suspend_rate: 0
         suspend_timeout: 600
         no_comma_params: false
+        tree_width: $(vars.a3_static_cluster_size)
       instance_image_custom: true
       instance_image:
         family: $(vars.final_image_family)
