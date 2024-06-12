@@ -22,7 +22,7 @@ vars:
 
   # Cidr block containing the IP of the machine calling terraform.
   # The following line must be updated for this example to work.
-  authorized_cidr: <your-ip-address>/32
+  # authorized_cidr: <your-ip-address>/32
 
 deployment_groups:
 - group: primary
@@ -43,9 +43,9 @@ deployment_groups:
     use: [network1]
     settings:
       enable_private_endpoint: false  # Allows for access from authorized public IPs
-      master_authorized_networks:
-      - display_name: deployment-machine
-        cidr_block: $(vars.authorized_cidr)
+#      master_authorized_networks:
+#      - display_name: deployment-machine
+#        cidr_block: $(vars.authorized_cidr)
     outputs: [instructions]
 
   # Docs at https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/scripts/kubernetes-operations
