@@ -1,6 +1,7 @@
 ## Description
 
-This module is inspired by pre-existing-vpc, but is changed with the objective of supporting Shared VPCs.
+This module discovers a subnetwork that already exists in Google Cloud and
+outputs subnetwork attributes that uniquely identify it for use by other modules.
 
 For example, the blueprint below discovers the referred to subnetwork.
 With the `use` keyword, the [vm-instance] module accepts the `subnetwork_self_link`
