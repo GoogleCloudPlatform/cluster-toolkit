@@ -22,7 +22,7 @@ if __name__ == "__main__":
                             Probably Guido van Rossum
 
     Usage:
-    $ tools/cloud-build/babysit/run --pr #### --auto --project <project id>
+    $ tools/cloud-build/babysit/run --pr #### --auto
     """
     import os
     import sys
