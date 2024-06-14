@@ -23,10 +23,6 @@ deployment_groups:
       subnetwork_name: {{ cluster.subnet.cloud_id }}
     id: hpc_network
 
-  - source: community/modules/network/private-service-access
-    id: ps-connect
-    use: [ hpc_network ]    
-
 {{ filesystems_yaml | safe }}
 
   - source: community/modules/project/service-account
