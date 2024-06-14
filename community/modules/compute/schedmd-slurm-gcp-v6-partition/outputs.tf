@@ -31,13 +31,11 @@ output "partitions" {
   }
 
   precondition {
-    condition     = local.has_node || local.has_dyn || local.has_tpu
-    error_message = "Partition must contain at least one type of nodeset."
-  }
-
-  precondition {
-    condition     = ((!local.has_node || !local.has_dyn) && local.has_tpu) || ((local.has_node || local.has_dyn) && !local.has_tpu)
-    error_message = "Partition cannot contain TPU and non-TPU nodesets."
+    # Can not mix TPU with other non-TPU nodesets due to SlurmGCP specific limitations;
+    # Can not mix dynamic with non-dynamic nodesets due to Slurms inability to 
+    # turn off "power management" at nodeset level (can only do it at partition or node level).
+    condition     = sum([for b in [local.has_node, local.has_dyn, local.has_tpu] : b ? 1 : 0]) == 1
+    error_message = "Partition must contain exactly one type of nodeset."
   }
 }
 
