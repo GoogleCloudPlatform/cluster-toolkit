@@ -1192,4 +1192,3 @@ class AuthUserGCP(LoginRequiredMixin, generic.View):
             "cluster/user_auth_gcp.html",
             context={"cluster": cluster, "navtab": "cluster"},
         )
-
