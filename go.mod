@@ -12,7 +12,7 @@ require (
 	github.com/otiai10/copy v1.14.0
 	github.com/pkg/errors v0.9.1
 	github.com/spf13/afero v1.11.0
-	github.com/spf13/cobra v1.8.0
+	github.com/spf13/cobra v1.8.1
 	github.com/zclconf/go-cty v1.14.4
 	golang.org/x/exp v0.0.0-20231110203233-9a3e6036ecaa
 	google.golang.org/genproto v0.0.0-20240528184218-531527333157 // indirect
