@@ -28,9 +28,10 @@ import (
 )
 
 func addDeployFlags(c *cobra.Command) *cobra.Command {
-	return addAutoApproveFlag(
-		addArtifactsDirFlag(
-			addCreateFlags(c)))
+	return addGroupSelectionFlags(
+		addAutoApproveFlag(
+			addArtifactsDirFlag(
+				addCreateFlags(c))))
 }
 
 func init() {
@@ -71,10 +72,16 @@ func doDeploy(deplRoot string) {
 	checkErr(shell.CheckWritableDir(artDir), nil)
 	bp, ctx := artifactBlueprintOrDie(artDir)
 	groups := bp.Groups
+	checkErr(validateGroupSelectionFlags(bp), ctx)
 	checkErr(validateRuntimeDependencies(deplRoot, groups), ctx)
 	checkErr(shell.ValidateDeploymentDirectory(groups, deplRoot), ctx)
 
 	for ig, group := range groups {
+		if !isGroupSelected(group.Name) {
+			logging.Info("skipping group %q", group.Name)
+			continue
+		}
+
 		groupDir := filepath.Join(deplRoot, string(group.Name))
 		checkErr(shell.ImportInputs(groupDir, artDir, bp), ctx)
 

@@ -301,18 +301,14 @@ variable "service_account" { # tflint-ignore: terraform_unused_declarations
   }
 }
 
-variable "instance_template" {
-  description = <<-EOD
-    Self link to a custom instance template. If set, other VM definition
-    variables such as machine_type and instance_image will be ignored in favor
-    of the provided instance template.
-
-    For more information on creating custom images for the instance template
-    that comply with Slurm on GCP see the "Slurm on GCP Custom Images" section
-    in docs/vm-images.md.
-    EOD
+variable "instance_template" { # tflint-ignore: terraform_unused_declarations
+  description = "DEPRECATED: Instance template can not be specified for login nodes."
   type        = string
   default     = null
+  validation {
+    condition     = var.instance_template == null
+    error_message = "DEPRECATED: Instance template can not be specified for login nodes."
+  }
 }
 
 variable "instance_image" {

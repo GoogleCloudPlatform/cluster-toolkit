@@ -355,59 +355,77 @@ func (s *zeroSuite) TestWriteVariables(c *C) {
 	c.Assert(err, IsNil)
 }
 
-func (s *zeroSuite) TestGetProviders(c *C) {
-	// no vars
-	c.Check(
-		getProviders(config.Blueprint{}), DeepEquals, []provider{
-			{alias: "google", source: "hashicorp/google", version: ">= 4.84.0, < 5.32.0", config: config.Dict{}},
-			{alias: "google-beta", source: "hashicorp/google-beta", version: ">= 4.84.0, < 5.32.0", config: config.Dict{}}})
-
-	{ // all vars
-		allSet := config.NewDict(map[string]cty.Value{
-			"project": config.GlobalRef("project_id").AsValue(),
-			"region":  config.GlobalRef("region").AsValue(),
-			"zone":    config.GlobalRef("zone").AsValue(),
-		})
-		c.Check(
-			getProviders(config.Blueprint{
-				Vars: config.NewDict(map[string]cty.Value{
-					"project_id": cty.StringVal("some"),
-					"region":     cty.StringVal("some"),
-					"zone":       cty.StringVal("some"),
-				}),
-			}), DeepEquals, []provider{
-				{alias: "google", source: "hashicorp/google", version: ">= 4.84.0, < 5.32.0", config: allSet},
-				{alias: "google-beta", source: "hashicorp/google-beta", version: ">= 4.84.0, < 5.32.0", config: allSet}})
-	}
-}
-
 func (s *zeroSuite) TestWriteProviders(c *C) {
 	// Setup
 	dir := c.MkDir()
-	zebra := provider{alias: "zebra", source: "hashicorp/zebra", version: "~> 2", config: config.Dict{}}
-	elephant := provider{
-		alias:   "elephant",
-		source:  "savannah/elephant",
-		version: "~> 8",
-		config: config.NewDict(map[string]cty.Value{
-			"smeller":   config.GlobalRef("long").AsValue(),
-			"listeners": config.GlobalRef("spacious").AsValue()})}
-
+	providers := map[string]config.TerraformProvider{
+		"elephant": config.TerraformProvider{
+			Source:  "savannah/elephant",
+			Version: "~> 8",
+			Configuration: config.NewDict(map[string]cty.Value{
+				"smeller":   config.GlobalRef("long").AsValue(),
+				"listeners": config.GlobalRef("spacious").AsValue()})},
+		"zebra": config.TerraformProvider{
+			Source:        "hashicorp/zebra",
+			Version:       "~> 2",
+			Configuration: config.Dict{}}}
 	{ // FAIL, non existing path
-		c.Check(writeProviders([]provider{zebra}, "not/a/real/path"), NotNil)
+		c.Check(writeProviders(providers, "not/a/real/path"), NotNil)
 	}
 
 	{ // OK
-		c.Check(writeProviders([]provider{zebra, elephant}, dir), IsNil)
+		c.Check(writeProviders(providers, dir), IsNil)
 		b, err := os.ReadFile(filepath.Join(dir, "providers.tf"))
 		c.Assert(err, IsNil)
 		c.Check(string(b), Equals, license+`
-provider "zebra" {
-}
-
 provider "elephant" {
   listeners = var.spacious
   smeller   = var.long
+}
+
+provider "zebra" {
+}
+`)
+	}
+}
+
+func (s *zeroSuite) TestWriteVersions(c *C) {
+	// Setup
+	dir := c.MkDir()
+	providers := map[string]config.TerraformProvider{
+		"elephant": config.TerraformProvider{
+			Source:  "savannah/elephant",
+			Version: "~> 8",
+			Configuration: config.NewDict(map[string]cty.Value{
+				"smeller":   config.GlobalRef("long").AsValue(),
+				"listeners": config.GlobalRef("spacious").AsValue()})},
+		"zebra": config.TerraformProvider{
+			Source:        "hashicorp/zebra",
+			Version:       "~> 2",
+			Configuration: config.Dict{}}}
+
+	{ // FAIL, non existing path
+		c.Check(writeVersions(providers, "not/a/real/path"), NotNil)
+	}
+
+	{ // OK
+		c.Check(writeVersions(providers, dir), IsNil)
+		b, err := os.ReadFile(filepath.Join(dir, "versions.tf"))
+		c.Assert(err, IsNil)
+		c.Check(string(b), Equals, license+`
+terraform {
+  required_version = ">= 1.2"
+
+  required_providers {
+    elephant = {
+      source  = "savannah/elephant"
+      version = "~> 8"
+    }
+    zebra = {
+      source  = "hashicorp/zebra"
+      version = "~> 2"
+    }
+  }
 }
 `)
 	}

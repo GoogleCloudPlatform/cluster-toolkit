@@ -19,7 +19,7 @@ deployment_name: "hcls-v6-{{ build }}"
 # No non-alphanumerical characters in the slurm cluster name - they will be
 # removed by HPC Toolkit slurm wrappers, which will break the playbook
 slurm_cluster_name: "hclsv6{{ build[0:4] }}"
-zone: us-central1-c
+zone: europe-west1-d
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/examples/hcls-blueprint.yaml"
 network: "{{ test_name }}-net"
@@ -27,7 +27,7 @@ login_node: "{{ slurm_cluster_name }}-slurm-login-*"
 controller_node: "{{ slurm_cluster_name }}-controller"
 cli_deployment_vars:
   network_name: "{{ network }}"
-  region: us-central1
+  region: europe-west1
   zone: "{{ zone }}"
   enable_login_public_ips: "true"
   enable_controller_public_ips: "true"

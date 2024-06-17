@@ -135,6 +135,7 @@ type rootPath struct {
 	Vars            dictPath                    `path:"vars"`
 	Groups          arrayPath[groupPath]        `path:"deployment_groups"`
 	Backend         backendPath                 `path:"terraform_backend_defaults"`
+	Provider        mapPath[providerPath]       `path:"terraform_providers"`
 }
 
 type validatorCfgPath struct {
@@ -152,11 +153,19 @@ type backendPath struct {
 	Configuration dictPath `path:".configuration"`
 }
 
+type providerPath struct {
+	basePath
+	Source        basePath `path:".source"`
+	Version       basePath `path:".version"`
+	Configuration dictPath `path:".configuration"`
+}
+
 type groupPath struct {
 	basePath
-	Name    basePath              `path:".group"`
-	Backend backendPath           `path:".terraform_backend"`
-	Modules arrayPath[ModulePath] `path:".modules"`
+	Name     basePath              `path:".group"`
+	Backend  backendPath           `path:".terraform_backend"`
+	Provider mapPath[providerPath] `path:".terraform_provider"`
+	Modules  arrayPath[ModulePath] `path:".modules"`
 }
 
 type ModulePath struct {
@@ -181,4 +190,16 @@ var Root rootPath
 
 func init() {
 	initPath(&Root, nil, "")
+}
+
+func IsModuleSettingsPath(p Path) bool {
+	parent := p.Parent()
+	if parent == nil {
+		return false
+	}
+	mp, ok := parent.(*ModulePath)
+	if !ok {
+		return false
+	}
+	return p == mp.Settings
 }

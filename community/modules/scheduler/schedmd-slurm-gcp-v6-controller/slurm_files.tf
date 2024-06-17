@@ -44,13 +44,12 @@ module "bucket" {
 
 # BUCKET IAMs
 locals {
-  controller_sa  = toset(flatten([for x in module.slurm_controller_template : x.service_account]))
   compute_sa     = toset(flatten([for x in module.slurm_nodeset_template : x.service_account]))
   compute_tpu_sa = toset(flatten([for x in module.slurm_nodeset_tpu : x.service_account]))
   login_sa       = toset(flatten([for x in module.slurm_login_template : x.service_account]))
 
   viewers = toset(flatten([
-    formatlist("serviceAccount:%s", [for x in local.controller_sa : x.email]),
+    "serviceAccount:${module.slurm_controller_template.service_account.email}",
     formatlist("serviceAccount:%s", [for x in local.compute_sa : x.email]),
     formatlist("serviceAccount:%s", [for x in local.compute_tpu_sa : x.email]),
     formatlist("serviceAccount:%s", [for x in local.login_sa : x.email]),
@@ -88,7 +87,7 @@ locals {
 }
 
 module "slurm_files" {
-  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_files?ref=6.5.6"
+  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_files?ref=6.5.8"
 
   project_id         = var.project_id
   slurm_cluster_name = local.slurm_cluster_name

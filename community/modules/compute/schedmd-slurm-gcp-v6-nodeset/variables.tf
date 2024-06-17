@@ -44,18 +44,14 @@ variable "node_count_dynamic_max" {
 }
 
 ## VM Definition
-variable "instance_template" {
-  description = <<-EOD
-    Self link to a custom instance template. If set, other VM definition
-    variables such as machine_type and instance_image will be ignored in favor
-    of the provided instance template.
-
-    For more information on creating custom images for the instance template
-    that comply with Slurm on GCP see the "Slurm on GCP Custom Images" section
-    in docs/vm-images.md.
-    EOD
+variable "instance_template" { # tflint-ignore: terraform_unused_declarations
+  description = "DEPRECATED: Instance template can not be specified for compute nodes."
   type        = string
   default     = null
+  validation {
+    condition     = var.instance_template == null
+    error_message = "DEPRECATED: Instance template can not be specified for compute nodes."
+  }
 }
 
 variable "machine_type" {
@@ -359,8 +355,9 @@ variable "zone" {
 
 variable "zones" {
   description = <<-EOD
-    Additional nodes in which to allow creation of partition nodes. Google Cloud
+    Additional zones in which to allow creation of partition nodes. Google Cloud
     will find zone based on availability, quota and reservations.
+    Should not be set if SPECIFIC reservation is used.
     EOD
   type        = set(string)
   default     = []
@@ -437,13 +434,21 @@ variable "access_config" {
 
 variable "reservation_name" {
   description = <<-EOD
-    Name of the reservation to use for VM resources
-    - Must be a "SPECIFIC" reservation
-    - Set to empty string if using no reservation or automatically-consumed reservations
+    Name of the reservation to use for VM resources, should be in one of the following formats:
+    - projects/PROJECT_ID/reservations/RESERVATION_NAME
+    - RESERVATION_NAME
+
+    Must be a "SPECIFIC" reservation
+    Set to empty string if using no reservation or automatically-consumed reservations
   EOD
   type        = string
   default     = ""
   nullable    = false
+
+  validation {
+    condition     = var.reservation_name == "" || length(regexall("^projects/[a-z0-9-]+/reservations/[a-z0-9-]+$", var.reservation_name)) > 0 || length(regexall("^[a-z0-9-]+$", var.reservation_name)) > 0
+    error_message = "Reservation name must be in the format 'projects/PROJECT_ID/reservations/RESERVATION_NAME' or 'RESERVATION_NAME'."
+  }
 }
 
 variable "maintenance_interval" {

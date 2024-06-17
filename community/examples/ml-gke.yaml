@@ -18,7 +18,9 @@ blueprint_name: ml-gke
 vars:
   project_id:  ## Set GCP Project ID Here ##
   deployment_name: ml-01
-  region: us-central1
+  region: asia-southeast1
+  zones:
+  - asia-southeast1-b  # g2 machine has better availability in this zone
 
   # Cidr block containing the IP of the machine calling terraform.
   # The following line must be updated for this example to work.
@@ -48,22 +50,23 @@ deployment_groups:
         cidr_block: $(vars.authorized_cidr)
     outputs: [instructions]
 
-  # Docs at https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/scripts/kubernetes-operations
-  - id: install-nvidia-drivers
-    source: github.com/GoogleCloudPlatform/ai-infra-cluster-provisioning//aiinfra-cluster/modules/kubernetes-operations?ref=v0.6.0
-    use: [gke_cluster]
-    settings:
-      install_nvidia_driver: true
-
-  - id: a2-pool
+  - id: g2-pool
     source: community/modules/compute/gke-node-pool
     use: [gke_cluster]
     settings:
-      machine_type: a2-highgpu-8g
+      disk_type: pd-balanced
+      machine_type: g2-standard-4
+      guest_accelerator:
+      - type: nvidia-l4
+        count: 1
+        gpu_partition_size: null
+        gpu_sharing_config: null
+        gpu_driver_installation_config:
+        - gpu_driver_version: "DEFAULT"
 
   - id: job-template
     source: community/modules/compute/gke-job-template
-    use: [a2-pool]
+    use: [g2-pool]
     settings:
       image: nvidia/cuda:11.0.3-runtime-ubuntu20.04
       command:
