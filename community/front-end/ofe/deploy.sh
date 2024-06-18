@@ -57,6 +57,8 @@ PRJ_API['bigqueryconnection.googleapis.com']='BigQuery Connection API'
 PRJ_API['sqladmin.googleapis.com']='Cloud SQL Admin API'
 PRJ_API['servicenetworking.googleapis.com']='Service Networking API'
 PRJ_API['secretmanager.googleapis.com']='Secret Manager API'
+PRJ_API['serviceusage.googleapis.com']='Service Usage API'
+PRJ_API['storage.googleapis.com']='Cloud Storage API'
 
 # Location for output credential file = pwd/credential.json
 #

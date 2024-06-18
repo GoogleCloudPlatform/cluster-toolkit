@@ -85,6 +85,34 @@ resource "google_compute_firewall" "firewall_internal" {
   allow { protocol = "icmp" }
 }
 
+locals {
+  # This label allows for billing report tracking based on module.
+  labels = {
+    created_by = "ofe"
+  }
+}
+
+resource "random_id" "resource_name_suffix" {
+  byte_length = 4
+}
+
+resource "google_compute_global_address" "private_ip_alloc" {
+  provider      = google-beta
+  project       = var.project
+  name          = "global-psconnect-ip-${random_id.resource_name_suffix.hex}"
+  purpose       = "VPC_PEERING"
+  address_type  = "INTERNAL"
+  network       = google_compute_network.network.self_link
+  prefix_length = 16
+  labels        = local.labels
+}
+
+resource "google_service_networking_connection" "private_vpc_connection" {
+  network                 = google_compute_network.network.self_link
+  service                 = "servicenetworking.googleapis.com"
+  reserved_peering_ranges = [google_compute_global_address.private_ip_alloc.name]
+}
+
 output "vpc_id" {
   value       = google_compute_network.network.name
   description = "Name of the created VPC"
