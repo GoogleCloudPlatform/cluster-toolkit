@@ -26,6 +26,7 @@ while (<>){
     pkg/logging 0
     pkg/validators 13
     pkg/inspect 60
+    pkg/modulewriter 79
     pkg 80
   );
 

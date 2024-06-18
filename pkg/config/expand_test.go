@@ -73,6 +73,81 @@ func (s *zeroSuite) TestExpandBackend(c *C) {
 	}
 }
 
+func (s *zeroSuite) TestExpandProviders(c *C) {
+	type PR = TerraformProvider // alias for brevity
+	noDefPr := Blueprint{BlueprintName: "tree"}
+
+	testProvider := map[string]PR{
+		"test-provider": TerraformProvider{
+			Source:  "test-src",
+			Version: "test-vers",
+			Configuration: Dict{}.
+				With("project", cty.StringVal("test-prj")).
+				With("region", cty.StringVal("reg1")).
+				With("zone", cty.StringVal("zone1")).
+				With("universe_domain", cty.StringVal("test-universe.com"))}}
+
+	{ // no def PR, no group PR - match default values
+		g := Group{Name: "clown"}
+		noDefPr.expandProviders(&g)
+		c.Check(g.TerraformProviders, DeepEquals, map[string]PR{
+			"google": TerraformProvider{
+				Source:  "hashicorp/google",
+				Version: ">= 4.84.0, < 5.32.0"},
+			"google-beta": TerraformProvider{
+				Source:  "hashicorp/google-beta",
+				Version: ">= 4.84.0, < 5.32.0"}})
+	}
+
+	{ // no def PR, group PR
+		g := Group{
+			Name:               "clown",
+			TerraformProviders: testProvider}
+		noDefPr.expandProviders(&g)
+		c.Check(g.TerraformProviders, DeepEquals, testProvider)
+	}
+
+	defBe := noDefPr
+	defBe.TerraformProviders = testProvider
+
+	{ // def PR, no group PR
+		g := Group{Name: "clown"}
+		defBe.expandProviders(&g)
+
+		c.Check(g.TerraformProviders, DeepEquals, testProvider)
+	}
+
+	group_provider := map[string]PR{
+		"test-provider": TerraformProvider{
+			Source:  "test-source",
+			Version: "test-versions",
+			Configuration: Dict{}.
+				With("project", cty.StringVal("test-prj")).
+				With("region", cty.StringVal("reg2")).
+				With("zone", cty.StringVal("zone2s")).
+				With("universe_domain", cty.StringVal("fake-universe.com"))}}
+
+	{ // def PR, group PR set
+		g := Group{
+			Name:               "clown",
+			TerraformProviders: group_provider}
+		defBe.expandProviders(&g)
+
+		c.Check(g.TerraformProviders, DeepEquals, group_provider)
+	}
+
+	empty_provider := map[string]PR{}
+
+	{ // No def PR, group (nil PR != PR w/ len == 0) (nil PR results in default PR values, empty PR remains empty)
+		g := Group{Name: "clown"}
+		g2 := Group{Name: "bear",
+			TerraformProviders: empty_provider}
+		noDefPr.expandProviders(&g)
+		noDefPr.expandProviders(&g2)
+		c.Check(g.TerraformProviders, Not(DeepEquals), g2.TerraformProviders)
+	}
+}
+
 func (s *zeroSuite) TestAddListValue(c *C) {
 	mod := Module{ID: "TestModule"}
 

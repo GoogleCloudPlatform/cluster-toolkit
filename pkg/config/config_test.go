@@ -517,35 +517,71 @@ func (s *zeroSuite) TestCheckMovedModules(c *C) {
 	c.Assert(checkMovedModule("./community/modules/scheduler/cloud-batch-job"), NotNil)
 }
 
-func (s *zeroSuite) TestCheckBackend(c *C) {
-	p := Root.Groups.At(173).Backend
+func (s *zeroSuite) TestCheckStringLiteral(c *C) {
+	p := Root.BlueprintName // some path
 
 	{ // OK. Absent
-		c.Check(checkBackend(p, TerraformBackend{}), IsNil)
+		c.Check(checkStringLiteral(p, ""), IsNil)
 	}
-
-	{ // OK. No variables used
-		b := TerraformBackend{
-			Type: "gcs",
-			Configuration: Dict{}.
-				With("bucket", cty.StringVal("trenta")).
-				With("impersonate_service_account", cty.StringVal("who"))}
-		c.Check(checkBackend(p, b), IsNil)
+	{ // OK. No expressions
+		c.Check(checkStringLiteral(p, "who"), IsNil)
 	}
 
 	{ // FAIL. Expression in type
-		b := TerraformBackend{Type: "$(vartype)"}
-		c.Check(checkBackend(p, b), NotNil)
+		c.Check(checkStringLiteral(p, "$(vartype)"), NotNil)
 	}
 
 	{ // FAIL. HCL literal
-		b := TerraformBackend{Type: "((var.zen))"}
-		c.Check(checkBackend(p, b), NotNil)
+		c.Check(checkStringLiteral(p, "((var.zen))"), NotNil)
 	}
 
-	{ // OK. Not a variable
-		b := TerraformBackend{Type: "\\$(vartype)"}
-		c.Check(checkBackend(p, b), IsNil)
+	{ // OK. Not an expression
+		c.Check(checkStringLiteral(p, "\\$(vartype)"), IsNil)
+	}
+}
+
+func (s *zeroSuite) TestCheckProviders(c *C) {
+	p := Root.Groups.At(173).Provider
+
+	{ // OK. Absent
+		c.Check(checkProviders(p, map[string]TerraformProvider{}), IsNil)
+	}
+
+	{ // OK. All required values used
+		tp := map[string]TerraformProvider{
+			"test-provider": {
+				Source:  "test-src",
+				Version: "test-ver",
+				Configuration: Dict{}.
+					With("project", cty.StringVal("test-prj")).
+					With("region", cty.StringVal("reg1")).
+					With("zone", cty.StringVal("zone1")).
+					With("universe_domain", cty.StringVal("test-universe.com"))}}
+		c.Check(checkProviders(p, tp), IsNil)
+	}
+
+	{ // FAIL. Missing Source
+		tp := map[string]TerraformProvider{
+			"test-provider": {
+				Version: "test-ver",
+				Configuration: Dict{}.
+					With("project", cty.StringVal("test-prj")).
+					With("region", cty.StringVal("reg1")).
+					With("zone", cty.StringVal("zone1")).
+					With("universe_domain", cty.StringVal("test-universe.com"))}}
+		c.Check(checkProviders(p, tp), NotNil)
+	}
+
+	{ // FAIL. Missing Version
+		tp := map[string]TerraformProvider{
+			"test-provider": {
+				Source: "test-src",
+				Configuration: Dict{}.
+					With("project", cty.StringVal("test-prj")).
+					With("region", cty.StringVal("reg1")).
+					With("zone", cty.StringVal("zone1")).
+					With("universe_domain", cty.StringVal("test-universe.com"))}}
+		c.Check(checkProviders(p, tp), NotNil)
 	}
 }
 

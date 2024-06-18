@@ -36,6 +36,7 @@ func TestPath(t *testing.T) {
 		{r.Vars, "vars"},
 		{r.Groups, "deployment_groups"},
 		{r.Backend, "terraform_backend_defaults"},
+		{r.Provider, "terraform_providers"},
 
 		{r.Validators.At(2), "validators[2]"},
 		{r.Validators.At(2).Validator, "validators[2].validator"},
@@ -72,6 +73,12 @@ func TestPath(t *testing.T) {
 		{r.Backend.Type, "terraform_backend_defaults.type"},
 		{r.Backend.Configuration, "terraform_backend_defaults.configuration"},
 		{r.Backend.Configuration.Dot("goo"), "terraform_backend_defaults.configuration.goo"},
+
+		{r.Provider.Dot("goo"), "terraform_providers.goo"},
+		{r.Provider.Dot("goo").Source, "terraform_providers.goo.source"},
+		{r.Provider.Dot("goo").Version, "terraform_providers.goo.version"},
+		{r.Provider.Dot("goo").Configuration, "terraform_providers.goo.configuration"},
+		{r.Provider.Dot("goo").Configuration.Dot("googoo"), "terraform_providers.goo.configuration.googoo"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.want, func(t *testing.T) {

@@ -166,14 +166,9 @@ variable "tags" {
 }
 
 variable "disk_type" {
-  description = "Boot disk type, can be either pd-ssd, pd-standard, pd-balanced, or pd-extreme."
+  description = "Boot disk type."
   type        = string
   default     = "pd-standard"
-
-  validation {
-    condition     = contains(["pd-ssd", "pd-standard", "pd-balanced", "pd-extreme"], var.disk_type)
-    error_message = "Variable disk_type must be one of pd-ssd, pd-standard, pd-balanced, or pd-extreme."
-  }
 }
 
 variable "disk_size_gb" {

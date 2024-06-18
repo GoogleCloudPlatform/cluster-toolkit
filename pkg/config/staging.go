@@ -90,26 +90,23 @@ func (bp *Blueprint) makeGhpcStageFunc() function.Function {
 	})
 }
 
-// Update module settings in place, evaluating `ghpc_stage` expressions
-func (bp *Blueprint) evalGhpcStageInModuleSettings() error {
+// Partially evaluate all `ghpc_stage` expressions in the blueprint
+func (bp *Blueprint) evalGhpcStage() error {
 	errs := Errors{}
 	ctx, err := bp.evalCtx()
 	if err != nil {
 		return err
 	}
-	bp.WalkModulesSafe(func(mp ModulePath, m *Module) {
+
+	bp.mutateDicts(func(dp dictPath, d *Dict) Dict {
 		us := map[string]cty.Value{}
-		for k, v := range m.Settings.Items() {
-			uv, err := evalGhpcStageInValue(mp.Settings.Dot(k), v, ctx)
-			if err != nil {
-				errs.Add(err)
-				break
-			}
+		for k, v := range d.Items() {
+			uv, err := evalGhpcStageInValue(dp.Dot(k), v, ctx)
+			errs.Add(err)
 			us[k] = uv
 		}
-		m.Settings = NewDict(us)
+		return NewDict(us)
 	})
-
 	return errs.OrNil()
 }
 

@@ -14,6 +14,13 @@
  * limitations under the License.
 */
 
+variable "authorized_networks" {
+  description = "IP address ranges as authorized networks of the Cloud SQL for MySQL instances"
+  type        = list(string)
+  default     = []
+  nullable    = false
+}
+
 variable "database_version" {
   description = "The version of the database to be created."
   type        = string

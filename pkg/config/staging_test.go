@@ -130,7 +130,7 @@ func TestPartialEval(t *testing.T) {
 	}
 }
 
-func TestEvalModuleSettings(t *testing.T) {
+func TestEvalGhpcStage(t *testing.T) {
 	mod := Module{
 		Settings: Dict{}.
 			With("war", MustParseExpression(`never("changes")`).AsValue()).
@@ -142,7 +142,7 @@ func TestEvalModuleSettings(t *testing.T) {
 		Groups: []Group{{Modules: []Module{mod}}},
 	}
 
-	if err := bp.evalGhpcStageInModuleSettings(); err != nil {
+	if err := bp.evalGhpcStage(); err != nil {
 		t.Errorf("got unexpected error: %v", err)
 	}
 
