@@ -739,9 +739,9 @@ class Cluster(CloudResource):
         default="pd-standard",
     )
     controller_disk_size = models.PositiveIntegerField(
-        validators=[MinValueValidator(10)],
+        validators=[MinValueValidator(120)],
         help_text="Boot disk size (in GB)",
-        default=50,
+        default=120,
         blank=True,
     )
     num_login_nodes = models.PositiveIntegerField(
@@ -762,9 +762,9 @@ class Cluster(CloudResource):
     login_node_disk_size = models.PositiveIntegerField(
         # login node disk must be large enough to hold the SlurmGCP
         # image: >=50GB
-        validators=[MinValueValidator(50)],
+        validators=[MinValueValidator(120)],
         help_text="Boot disk size (in GB)",
-        default=50,
+        default=120,
         blank=True,
     )
     grafana_dashboard_url = models.CharField(
@@ -919,6 +919,13 @@ class ClusterPartition(models.Model):
     enable_hyperthreads = models.BooleanField(
         default=False, help_text="Enable Hyperthreads (SMT)"
     )
+    enable_tier1_networking = models.BooleanField(
+        default=False,
+        help_text=(
+            "Select Tier 1 networking (currently only valid for N2, N2D, C2,"
+            "C2D, C3, C3d, M3 and Z3 VMs that have at least 30 vCPUs.)"
+        ),
+    )
     enable_node_reuse = models.BooleanField(
         default=True,
         help_text=(
@@ -937,7 +944,7 @@ class ClusterPartition(models.Model):
         default="pd-standard",
     )
     boot_disk_size = models.PositiveIntegerField(
-        validators=[MinValueValidator(49)],
+        validators=[MinValueValidator(50)],
         help_text="Boot disk size (in GB)",
         default=50,
         blank=True,
@@ -972,7 +979,11 @@ class ClusterPartition(models.Model):
             "Automatically delete additional disk when node is deleted?"
         ),
     )
-
+    reservation_name = models.CharField(
+        blank=True,
+        max_length=30,
+        help_text="Name of the reservation to use for VM resources"
+    )
     def __str__(self):
         return self.name
 
@@ -1572,9 +1583,9 @@ class Workbench(CloudResource):
         help_text="Type of storage to be required for notebook boot disk",
     )
     boot_disk_capacity = models.PositiveIntegerField(
-        validators=[MinValueValidator(100)],
+        validators=[MinValueValidator(120)],
         help_text="Capacity (in GB) of the filesystem (min of 1024)",
-        default=100,
+        default=120,
     )
     proxy_uri = models.CharField(max_length=150, blank=True, null=True)
     trusted_user = models.ForeignKey(

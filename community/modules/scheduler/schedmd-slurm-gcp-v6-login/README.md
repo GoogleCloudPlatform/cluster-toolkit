@@ -5,9 +5,9 @@ This module creates a login node for a Slurm cluster based on the
 terraform modules. The login node is used in conjunction with the
 [Slurm controller](../schedmd-slurm-gcp-v5-controller/README.md).
 
-[slurm-gcp]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.5.6
-[slurm\_login\_instance]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.5.6/terraform/slurm_cluster/modules/slurm_login_instance
-[slurm\_instance\_template]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.5.6/terraform/slurm_cluster/modules/slurm_instance_template
+[slurm-gcp]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.5.8
+[slurm\_login\_instance]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.5.8/terraform/slurm_cluster/modules/slurm_login_instance
+[slurm\_instance\_template]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.5.8/terraform/slurm_cluster/modules/slurm_instance_template
 
 ### Example
 
@@ -53,7 +53,7 @@ modules. For support with the underlying modules, see the instructions in the
 [slurm-gcp README][slurm-gcp-readme].
 
 [slurm-on-gcp]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/7
-[slurm-gcp-readme]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.5.6#slurm-on-google-cloud-platform
+[slurm-gcp-readme]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.5.8#slurm-on-google-cloud-platform
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 ## Requirements
@@ -85,6 +85,7 @@ No modules.
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | <a name="input_additional_disks"></a> [additional\_disks](#input\_additional\_disks) | List of maps of disks. | <pre>list(object({<br>    disk_name    = string<br>    device_name  = string<br>    disk_type    = string<br>    disk_size_gb = number<br>    disk_labels  = map(string)<br>    auto_delete  = bool<br>    boot         = bool<br>  }))</pre> | `[]` | no |
+| <a name="input_additional_networks"></a> [additional\_networks](#input\_additional\_networks) | Additional network interface details for GCE, if any. | <pre>list(object({<br>    access_config = optional(list(object({<br>      nat_ip       = string<br>      network_tier = string<br>    })), [])<br>    alias_ip_range = optional(list(object({<br>      ip_cidr_range         = string<br>      subnetwork_range_name = string<br>    })), [])<br>    ipv6_access_config = optional(list(object({<br>      network_tier = string<br>    })), [])<br>    network            = optional(string)<br>    network_ip         = optional(string, "")<br>    nic_type           = optional(string)<br>    queue_count        = optional(number)<br>    stack_type         = optional(string)<br>    subnetwork         = optional(string)<br>    subnetwork_project = optional(string)<br>  }))</pre> | `[]` | no |
 | <a name="input_bandwidth_tier"></a> [bandwidth\_tier](#input\_bandwidth\_tier) | Configures the network interface card and the maximum egress bandwidth for VMs.<br>  - Setting `platform_default` respects the Google Cloud Platform API default values for networking.<br>  - Setting `virtio_enabled` explicitly selects the VirtioNet network adapter.<br>  - Setting `gvnic_enabled` selects the gVNIC network adapter (without Tier 1 high bandwidth).<br>  - Setting `tier_1_enabled` selects both the gVNIC adapter and Tier 1 high bandwidth networking.<br>  - Note: both gVNIC and Tier 1 networking require a VM image with gVNIC support as well as specific VM families and shapes.<br>  - See [official docs](https://cloud.google.com/compute/docs/networking/configure-vm-with-high-bandwidth-configuration) for more details. | `string` | `"platform_default"` | no |
 | <a name="input_can_ip_forward"></a> [can\_ip\_forward](#input\_can\_ip\_forward) | Enable IP forwarding, for NAT instances for example. | `bool` | `false` | no |
 | <a name="input_disable_login_public_ips"></a> [disable\_login\_public\_ips](#input\_disable\_login\_public\_ips) | DEPRECATED: Use `enable_login_public_ips` instead. | `bool` | `null` | no |
@@ -101,7 +102,7 @@ No modules.
 | <a name="input_guest_accelerator"></a> [guest\_accelerator](#input\_guest\_accelerator) | List of the type and count of accelerator cards attached to the instance. | <pre>list(object({<br>    type  = string,<br>    count = number<br>  }))</pre> | `[]` | no |
 | <a name="input_instance_image"></a> [instance\_image](#input\_instance\_image) | Defines the image that will be used in the Slurm controller VM instance.<br><br>Expected Fields:<br>name: The name of the image. Mutually exclusive with family.<br>family: The image family to use. Mutually exclusive with name.<br>project: The project where the image is hosted.<br><br>For more information on creating custom images that comply with Slurm on GCP<br>see the "Slurm on GCP Custom Images" section in docs/vm-images.md. | `map(string)` | <pre>{<br>  "family": "slurm-gcp-6-5-hpc-rocky-linux-8",<br>  "project": "schedmd-slurm-public"<br>}</pre> | no |
 | <a name="input_instance_image_custom"></a> [instance\_image\_custom](#input\_instance\_image\_custom) | A flag that designates that the user is aware that they are requesting<br>to use a custom and potentially incompatible image for this Slurm on<br>GCP module.<br><br>If the field is set to false, only the compatible families and project<br>names will be accepted.  The deployment will fail with any other image<br>family or name.  If set to true, no checks will be done.<br><br>See: https://goo.gle/hpc-slurm-images | `bool` | `false` | no |
-| <a name="input_instance_template"></a> [instance\_template](#input\_instance\_template) | Self link to a custom instance template. If set, other VM definition<br>variables such as machine\_type and instance\_image will be ignored in favor<br>of the provided instance template.<br><br>For more information on creating custom images for the instance template<br>that comply with Slurm on GCP see the "Slurm on GCP Custom Images" section<br>in docs/vm-images.md. | `string` | `null` | no |
+| <a name="input_instance_template"></a> [instance\_template](#input\_instance\_template) | DEPRECATED: Instance template can not be specified for login nodes. | `string` | `null` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels, provided as a map. | `map(string)` | `{}` | no |
 | <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | Machine type to create. | `string` | `"c2-standard-4"` | no |
 | <a name="input_metadata"></a> [metadata](#input\_metadata) | Metadata, provided as a map. | `map(string)` | `{}` | no |

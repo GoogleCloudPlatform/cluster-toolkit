@@ -308,7 +308,7 @@ using an alternative image.
 
 ```shell
 git clone https://github.com/GoogleCloudPlatform/hpc-toolkit
-cd hpc-toolkit/examples/machine-learning/nccl-tests
+cd hpc-toolkit/examples/machine-learning/a3-highgpu-8g/nccl-tests
 ```
 
 ### Import the PyTorch image from the NVIDIA Container Registry

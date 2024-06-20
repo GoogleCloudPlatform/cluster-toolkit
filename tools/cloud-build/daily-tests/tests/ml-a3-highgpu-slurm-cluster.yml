@@ -20,7 +20,7 @@ test_name: a3h-cluster
 deployment_name: a3hc-{{ build }}
 slurm_cluster_name: "a3hc{{ build[0:4] }}"
 workspace: /workspace
-blueprint_yaml: "{{ workspace }}/examples/machine-learning/ml-slurm-a3-2-cluster.yaml"
+blueprint_yaml: "{{ workspace }}/examples/machine-learning/a3-highgpu-8g/ml-slurm-a3-2-cluster.yaml"
 login_node: "{{ slurm_cluster_name }}-login-*"
 controller_node: "{{ slurm_cluster_name }}-controller"
 network: default

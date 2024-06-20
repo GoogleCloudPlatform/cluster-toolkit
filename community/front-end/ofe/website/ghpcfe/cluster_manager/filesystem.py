@@ -89,7 +89,7 @@ def create_filesystem(fs: Filesystem) -> None:
         raise NotImplementedError("No support yet for this filesystem")
 
 
-def _run_ghpc(target_dir: Path) -> None:
+def _run_ghpc(target_dir: Path, cred_env: dict) -> None:
     ghpc_path = "/opt/gcluster/hpc-toolkit/ghpc"
 
     try:
@@ -104,6 +104,7 @@ def _run_ghpc(target_dir: Path) -> None:
                     stdout=log_out,
                     stderr=log_err,
                     check=True,
+                    env=cred_env
                 )
     except subprocess.CalledProcessError as cpe:
         logger.error("ghpc exec failed", exc_info=cpe)
@@ -116,10 +117,11 @@ def start_filesystem(fs: Filesystem) -> None:
     fs.cloud_state = "cm"
     fs.save()
     try:
-        _run_ghpc(_base_dir_for_fs(fs))
         extra_env = {
             "GOOGLE_APPLICATION_CREDENTIALS": _get_credentials_file(fs)
         }
+        _run_ghpc(_base_dir_for_fs(fs), extra_env)
+
         target_dir = _tf_dir_for_fs(fs)
         utils.run_terraform(target_dir, "init")
         utils.run_terraform(target_dir, "plan", extra_env=extra_env)

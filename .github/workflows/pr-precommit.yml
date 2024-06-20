@@ -24,7 +24,9 @@ on:
     - labeled
     - synchronize
     branches:
+    - main
     - develop
+    - release-candidate
 
 jobs:
   pre-commit:

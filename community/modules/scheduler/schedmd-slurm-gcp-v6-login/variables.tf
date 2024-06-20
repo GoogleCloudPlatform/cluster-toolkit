@@ -85,6 +85,32 @@ variable "additional_disks" {
   default     = []
 }
 
+variable "additional_networks" {
+  description = "Additional network interface details for GCE, if any."
+  default     = []
+  type = list(object({
+    access_config = optional(list(object({
+      nat_ip       = string
+      network_tier = string
+    })), [])
+    alias_ip_range = optional(list(object({
+      ip_cidr_range         = string
+      subnetwork_range_name = string
+    })), [])
+    ipv6_access_config = optional(list(object({
+      network_tier = string
+    })), [])
+    network            = optional(string)
+    network_ip         = optional(string, "")
+    nic_type           = optional(string)
+    queue_count        = optional(number)
+    stack_type         = optional(string)
+    subnetwork         = optional(string)
+    subnetwork_project = optional(string)
+  }))
+  nullable = false
+}
+
 variable "enable_smt" {
   type        = bool
   description = "Enables Simultaneous Multi-Threading (SMT) on instance."
@@ -275,18 +301,14 @@ variable "service_account" { # tflint-ignore: terraform_unused_declarations
   }
 }
 
-variable "instance_template" {
-  description = <<-EOD
-    Self link to a custom instance template. If set, other VM definition
-    variables such as machine_type and instance_image will be ignored in favor
-    of the provided instance template.
-
-    For more information on creating custom images for the instance template
-    that comply with Slurm on GCP see the "Slurm on GCP Custom Images" section
-    in docs/vm-images.md.
-    EOD
+variable "instance_template" { # tflint-ignore: terraform_unused_declarations
+  description = "DEPRECATED: Instance template can not be specified for login nodes."
   type        = string
   default     = null
+  validation {
+    condition     = var.instance_template == null
+    error_message = "DEPRECATED: Instance template can not be specified for login nodes."
+  }
 }
 
 variable "instance_image" {

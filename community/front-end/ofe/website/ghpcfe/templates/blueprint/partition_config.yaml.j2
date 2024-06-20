@@ -14,8 +14,12 @@
   id: {{ part_id }}-group
   use:
   settings:
+    bandwidth_tier: {% if part.enable_tier1_networking %}tier_1_enabled{% else %}platform_default{% endif %}
     enable_smt: {{ part.enable_hyperthreads }}
     machine_type: {{ part.machine_type }}
+    {% if part.reservation_name %}
+    reservation_name: {{ part.reservation_name }}
+    {% endif %}
     node_count_dynamic_max: {{ part.dynamic_node_count }}
     node_count_static: {{ part.static_node_count }}
     disk_size_gb: {{ part.boot_disk_size }}

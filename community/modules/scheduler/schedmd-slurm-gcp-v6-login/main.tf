@@ -48,12 +48,13 @@ locals {
 
 
   login_node = {
-    name_prefix      = local.name_prefix
-    disk_auto_delete = var.disk_auto_delete
-    disk_labels      = merge(var.disk_labels, local.labels)
-    disk_size_gb     = var.disk_size_gb
-    disk_type        = var.disk_type
-    additional_disks = local.additional_disks
+    name_prefix         = local.name_prefix
+    disk_auto_delete    = var.disk_auto_delete
+    disk_labels         = merge(var.disk_labels, local.labels)
+    disk_size_gb        = var.disk_size_gb
+    disk_type           = var.disk_type
+    additional_disks    = local.additional_disks
+    additional_networks = var.additional_networks
 
     can_ip_forward = var.can_ip_forward
     disable_smt    = !var.enable_smt
@@ -65,7 +66,6 @@ locals {
     shielded_instance_config = var.shielded_instance_config
 
     gpu                 = one(local.guest_accelerator)
-    instance_template   = var.instance_template
     labels              = local.labels
     machine_type        = var.machine_type
     metadata            = var.metadata

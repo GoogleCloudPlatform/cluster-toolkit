@@ -49,6 +49,15 @@ resource "google_sql_database_instance" "instance" {
       ipv4_enabled                                  = false
       private_network                               = var.network_id
       enable_private_path_for_google_cloud_services = true
+
+      dynamic "authorized_networks" {
+        for_each = var.authorized_networks
+        iterator = ip_range
+
+        content {
+          value = ip_range.value
+        }
+      }
     }
   }
 }

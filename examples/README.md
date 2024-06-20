@@ -1382,10 +1382,29 @@ Toolkit. It includes:
 > work. See note below.
 
 * Creation of a regional GKE cluster.
-* Creation of an autoscaling GKE node pool with `a2` machines each with 8
-  attached A100 GPUs.
-* Configuration of the cluster using the [`kubernetes-operations`] module to
-  install nvidia drivers.
+* Creation of an autoscaling GKE node pool with `g2` machines each with 1
+  attached L4 GPUs. Note: This blueprint has also been tested with `a2` machines,
+  but as capacity is hard to find the example uses `g2` machines which have better obtainability.
+  If using with `a2` machines it is recommended to first obtain an automatic reservation.
+  
+  Example settings for a2 look like:
+  
+  ```yaml
+  source: community/modules/compute/gke-node-pool
+    use: [gke_cluster]
+    settings:
+      disk_type: pd-balanced
+      machine_type: a2-highgpu-2g
+      guest_accelerator:
+      - type: nvidia-tesla-a100
+        count: 2
+        gpu_partition_size: null
+        gpu_sharing_config: null
+        gpu_driver_installation_config:
+        - gpu_driver_version: "DEFAULT"
+  ```
+
+* Configuration of the cluster using default drivers provided by GKE.
 * Creation of a job template yaml file that can be used to submit jobs to the
   GPU node pool.
 

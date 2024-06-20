@@ -14,12 +14,9 @@
 
 # TEMPLATE
 module "slurm_login_template" {
-  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=6.5.6"
+  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=6.5.8"
 
-  for_each = {
-    for x in var.login_nodes : x.name_prefix => x
-    if(x.instance_template == null || x.instance_template == "")
-  }
+  for_each = { for x in var.login_nodes : x.name_prefix => x }
 
   project_id          = var.project_id
   slurm_cluster_name  = local.slurm_cluster_name
@@ -28,6 +25,7 @@ module "slurm_login_template" {
   name_prefix         = each.value.name_prefix
 
   additional_disks         = each.value.additional_disks
+  additional_networks      = each.value.additional_networks
   bandwidth_tier           = each.value.bandwidth_tier
   can_ip_forward           = each.value.can_ip_forward
   disable_smt              = each.value.disable_smt
@@ -59,7 +57,7 @@ module "slurm_login_template" {
 
 # INSTANCE
 module "slurm_login_instance" {
-  source   = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/_slurm_instance?ref=6.5.6"
+  source   = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/_slurm_instance?ref=6.5.8"
   for_each = { for x in var.login_nodes : x.name_prefix => x }
 
   access_config       = each.value.access_config
@@ -70,13 +68,9 @@ module "slurm_login_instance" {
   project_id         = var.project_id
   slurm_cluster_name = local.slurm_cluster_name
 
-  instance_template = (
-    each.value.instance_template != null && each.value.instance_template != ""
-    ? each.value.instance_template
-    : module.slurm_login_template[each.key].self_link
-  )
-  labels        = merge(each.value.labels, local.files_cs_labels)
-  num_instances = each.value.num_instances
+  instance_template = module.slurm_login_template[each.key].self_link
+  labels            = merge(each.value.labels, local.files_cs_labels)
+  num_instances     = each.value.num_instances
 
   region     = each.value.region
   static_ips = each.value.static_ips

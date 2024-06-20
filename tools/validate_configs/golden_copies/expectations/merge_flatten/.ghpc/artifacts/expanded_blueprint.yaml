@@ -36,6 +36,21 @@ vars:
   zone: (("${var.region}-c"))
 deployment_groups:
   - group: zero
+    terraform_providers:
+      google:
+        source: hashicorp/google
+        version: '>= 4.84.0, < 5.32.0'
+        configuration:
+          project: ((var.project_id))
+          region: ((var.region))
+          zone: ((var.zone))
+      google-beta:
+        source: hashicorp/google-beta
+        version: '>= 4.84.0, < 5.32.0'
+        configuration:
+          project: ((var.project_id))
+          region: ((var.region))
+          zone: ((var.zone))
     modules:
       - source: modules/network/vpc
         kind: terraform

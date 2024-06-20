@@ -108,6 +108,26 @@ variable "login_nodes" {
       auto_delete  = optional(bool, true)
       boot         = optional(bool, false)
     })), [])
+    additional_networks = optional(list(object({
+      access_config = optional(list(object({
+        nat_ip       = string
+        network_tier = string
+      })), [])
+      alias_ip_range = optional(list(object({
+        ip_cidr_range         = string
+        subnetwork_range_name = string
+      })), [])
+      ipv6_access_config = optional(list(object({
+        network_tier = string
+      })), [])
+      network            = optional(string)
+      network_ip         = optional(string, "")
+      nic_type           = optional(string)
+      queue_count        = optional(number)
+      stack_type         = optional(string)
+      subnetwork         = optional(string)
+      subnetwork_project = optional(string)
+    })), [])
     bandwidth_tier         = optional(string, "platform_default")
     can_ip_forward         = optional(bool, false)
     disable_smt            = optional(bool, false)
@@ -122,7 +142,6 @@ variable "login_nodes" {
       count = number
       type  = string
     }))
-    instance_template   = optional(string)
     labels              = optional(map(string), {})
     machine_type        = optional(string)
     metadata            = optional(map(string), {})
@@ -191,7 +210,6 @@ variable "nodeset" {
       count = number
       type  = string
     }))
-    instance_template    = optional(string)
     labels               = optional(map(string), {})
     machine_type         = optional(string)
     maintenance_interval = optional(string)
@@ -379,13 +397,15 @@ EOD
 }
 
 variable "cloud_parameters" {
-  description = "cloud.conf options."
+  description = "cloud.conf options. Defaults inherited from [Slurm GCP repo](https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/terraform/slurm_cluster/modules/slurm_files/README_TF.md#input_cloud_parameters)"
   type = object({
-    no_comma_params = optional(bool, false)
-    resume_rate     = optional(number, 0)
-    resume_timeout  = optional(number, 300)
-    suspend_rate    = optional(number, 0)
-    suspend_timeout = optional(number, 300)
+    no_comma_params = optional(bool)
+    resume_rate     = optional(number)
+    resume_timeout  = optional(number)
+    suspend_rate    = optional(number)
+    suspend_timeout = optional(number)
+    topology_plugin = optional(string)
+    tree_width      = optional(number, 128)
   })
   default = {}
 }

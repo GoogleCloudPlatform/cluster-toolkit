@@ -68,9 +68,10 @@ func (n GroupName) Validate() error {
 
 // Group defines a group of Modules that are all executed together
 type Group struct {
-	Name             GroupName        `yaml:"group"`
-	TerraformBackend TerraformBackend `yaml:"terraform_backend,omitempty"`
-	Modules          []Module         `yaml:"modules"`
+	Name               GroupName                    `yaml:"group"`
+	TerraformBackend   TerraformBackend             `yaml:"terraform_backend,omitempty"`
+	TerraformProviders map[string]TerraformProvider `yaml:"terraform_providers,omitempty"`
+	Modules            []Module                     `yaml:"modules"`
 	// DEPRECATED fields
 	deprecatedKind interface{} `yaml:"kind,omitempty"` //lint:ignore U1000 keep in the struct for backwards compatibility
 }
@@ -114,7 +115,7 @@ func (bp *Blueprint) Module(id ModuleID) (*Module, error) {
 	return mod, nil
 }
 
-func hintSpelling(s string, dict []string, err error) error {
+func HintSpelling(s string, dict []string, err error) error {
 	best, minDist := "", maxHintDist+1
 	for _, w := range dict {
 		d := levenshtein.Distance(s, w, nil)
@@ -173,6 +174,13 @@ func (bp Blueprint) Group(n GroupName) (Group, error) {
 // TerraformBackend defines the configuration for the terraform state backend
 type TerraformBackend struct {
 	Type          string
+	Configuration Dict
+}
+
+// TerraformProvider defines the configuration for the terraform providers
+type TerraformProvider struct {
+	Source        string
+	Version       string
 	Configuration Dict
 }
 
@@ -261,8 +269,9 @@ type Blueprint struct {
 	Validators               []Validator `yaml:"validators,omitempty"`
 	ValidationLevel          int         `yaml:"validation_level,omitempty"`
 	Vars                     Dict
-	Groups                   []Group          `yaml:"deployment_groups"`
-	TerraformBackendDefaults TerraformBackend `yaml:"terraform_backend_defaults,omitempty"`
+	Groups                   []Group                      `yaml:"deployment_groups"`
+	TerraformBackendDefaults TerraformBackend             `yaml:"terraform_backend_defaults,omitempty"`
+	TerraformProviders       map[string]TerraformProvider `yaml:"terraform_providers,omitempty"`
 
 	// internal & non-serializable fields
 
@@ -285,6 +294,46 @@ func (bp *Blueprint) Clone() Blueprint {
 	return c
 }
 
+func (bp *Blueprint) mutateDicts(cb func(dictPath, *Dict) Dict) {
+	bp.Vars = cb(Root.Vars, &bp.Vars)
+
+	bp.TerraformBackendDefaults.Configuration = cb(Root.Backend.Configuration, &bp.TerraformBackendDefaults.Configuration)
+
+	for k, p := range bp.TerraformProviders {
+		p.Configuration = cb(Root.Provider.Dot(k).Configuration, &p.Configuration)
+		bp.TerraformProviders[k] = p
+	}
+
+	for ig := range bp.Groups {
+		g := &bp.Groups[ig]
+		gp := Root.Groups.At(ig)
+
+		g.TerraformBackend.Configuration = cb(gp.Backend.Configuration, &g.TerraformBackend.Configuration)
+
+		for k, p := range g.TerraformProviders {
+			p.Configuration = cb(gp.Provider.Dot(k).Configuration, &p.Configuration)
+			g.TerraformProviders[k] = p
+		}
+
+		for im := range g.Modules {
+			m := &g.Modules[im]
+			m.Settings = cb(gp.Modules.At(im).Settings, &m.Settings)
+		}
+	}
+
+	for i := range bp.Validators {
+		v := &bp.Validators[i]
+		v.Inputs = cb(Root.Validators.At(i).Inputs, &v.Inputs)
+	}
+}
+
+func (bp *Blueprint) visitDicts(cb func(dictPath, *Dict)) {
+	bp.mutateDicts(func(p dictPath, d *Dict) Dict {
+		cb(p, d)
+		return *d
+	})
+}
+
 // DeploymentSettings are deployment-specific override settings
 type DeploymentSettings struct {
 	TerraformBackendDefaults TerraformBackend `yaml:"terraform_backend_defaults,omitempty"`
@@ -295,13 +344,18 @@ type DeploymentSettings struct {
 func (bp *Blueprint) Expand() error {
 	// expand the blueprint in dependency order:
 	// BlueprintName -> DefaultBackend -> Vars -> Groups
-	if err := bp.checkBlueprintName(); err != nil {
-		return err
+	errs := (&Errors{}).
+		Add(checkStringLiterals(bp)).
+		Add(bp.checkBlueprintName()).
+		Add(checkProviders(Root.Provider, bp.TerraformProviders))
+	if errs.Any() {
+		return *errs
 	}
-	if err := checkBackend(Root.Backend, bp.TerraformBackendDefaults); err != nil {
-		return err
-	}
+
 	if err := bp.expandVars(); err != nil {
+		return err
+	}
+	if err := bp.checkReferences(); err != nil {
 		return err
 	}
 	return bp.expandGroups()
@@ -350,6 +404,14 @@ func (bp Blueprint) ListUnusedVariables() []string {
 	})
 	for _, v := range bp.Validators {
 		ns["validator_"+v.Validator] = v.Inputs.AsObject()
+	}
+	for k, v := range bp.TerraformProviders {
+		ns["bp_provider_"+k] = v.Configuration.AsObject()
+	}
+	for _, grp := range bp.Groups {
+		for k, v := range grp.TerraformProviders {
+			ns["grp_"+string(grp.Name)+"_provider_"+k] = v.Configuration.AsObject()
+		}
 	}
 
 	var used = map[string]bool{
@@ -463,7 +525,7 @@ func checkModulesAndGroups(bp Blueprint) error {
 			errs.Add(validateModule(pm, mod, bp))
 		}
 
-		errs.Add(checkBackend(pg.Backend, grp.TerraformBackend))
+		errs.Add(checkProviders(pg.Provider, grp.TerraformProviders))
 	}
 	return errs.OrNil()
 }
@@ -478,10 +540,30 @@ func validateModuleUseReferences(p ModulePath, mod Module, bp Blueprint) error {
 	return errs.OrNil()
 }
 
-func checkBackend(bep backendPath, be TerraformBackend) error {
-	val, perr := parseYamlString(be.Type)
+func checkStringLiterals(bp *Blueprint) error {
+	errs := Errors{}
+	bp.visitStringLiterals(func(p Path, s string) {
+		errs.Add(checkStringLiteral(p, s))
+	})
+	return errs.OrNil()
+}
+
+func checkStringLiteral(p Path, s string) error {
+	val, perr := parseYamlString(s)
 	if _, is := IsExpressionValue(val); is || perr != nil {
-		return BpError{bep.Type, errors.New("can not use expression as a terraform_backend type")}
+		return BpError{p, errors.New("can not use expression here")}
+	}
+	return nil
+}
+
+func checkProviders(pp mapPath[providerPath], tp map[string]TerraformProvider) error {
+	for k, v := range tp {
+		if v.Source == "" {
+			return BpError{pp.Dot(k).Source, errors.New(fmt.Sprintf("provider %q is missing source", k))}
+		}
+		if v.Version == "" {
+			return BpError{pp.Dot(k).Version, errors.New(fmt.Sprintf("provider %q is missing version", k))}
+		}
 	}
 	return nil
 }
@@ -595,6 +677,30 @@ func (bp *Blueprint) checkBlueprintName() error {
 	return nil
 }
 
+// Check that all references in expressions are valid
+func (bp *Blueprint) checkReferences() error {
+	errs := Errors{}
+	bp.visitDicts(func(dp dictPath, d *Dict) {
+		isModSettings := IsModuleSettingsPath(dp)
+		for k, v := range d.Items() {
+			for ref, rp := range valueReferences(v) {
+				path := dp.Dot(k).Cty(rp)
+				if !ref.GlobalVar {
+					if !isModSettings {
+						errs.At(path, fmt.Errorf("module output %q can only be referenced in other module settings", ref))
+					}
+					// module to module references are checked by validateModuleSettingReferences later
+					return
+				}
+				if !bp.Vars.Has(ref.Name) {
+					errs.At(path, fmt.Errorf("variable %q not found", ref.Name))
+				}
+			}
+		}
+	})
+	return errs.OrNil()
+}
+
 // productOfModuleUseMark is a "mark" applied to values that are result of `use`.
 // Should not be used directly, use AsProductOfModuleUse and IsProductOfModuleUse instead.
 type productOfModuleUseMark struct {
@@ -648,6 +754,55 @@ func (bp *Blueprint) WalkModulesSafe(walker func(ModulePath, *Module)) {
 	})
 }
 
+func (bp *Blueprint) visitStringLiterals(cb func(Path, string)) {
+	cb(Root.BlueprintName, bp.BlueprintName)
+	cb(Root.GhpcVersion, bp.GhpcVersion)
+	for iv, v := range bp.Validators {
+		cb(Root.Validators.At(iv).Validator, v.Validator)
+	}
+
+	vBackend := func(pbe backendPath, be *TerraformBackend) {
+		cb(pbe.Type, be.Type)
+	}
+	vProviders := func(pps mapPath[providerPath], ps map[string]TerraformProvider) {
+		for k, p := range ps {
+			pp := pps.Dot(k)
+			cb(pp, k)
+			cb(pp.Source, p.Source)
+			cb(pp.Version, p.Version)
+		}
+	}
+
+	vBackend(Root.Backend, &bp.TerraformBackendDefaults)
+	vProviders(Root.Provider, bp.TerraformProviders)
+
+	for ig, g := range bp.Groups {
+		pg := Root.Groups.At(ig)
+		cb(pg.Name, string(g.Name))
+		vBackend(pg.Backend, &g.TerraformBackend)
+		vProviders(pg.Provider, g.TerraformProviders)
+		for im, m := range g.Modules {
+			pm := pg.Modules.At(im)
+			cb(pm.Source, m.Source)
+			cb(pm.Kind, m.Kind.String())
+			cb(pm.ID, string(m.ID))
+			for iu, u := range m.Use {
+				cb(pm.Use.At(iu), string(u))
+			}
+			for io, o := range m.Outputs {
+				po := pm.Outputs.At(io)
+				cb(po.Name, o.Name)
+				cb(po.Description, o.Description)
+			}
+		}
+	}
+	bp.visitDicts(func(dp dictPath, d *Dict) {
+		for _, k := range d.Keys() {
+			cb(dp.Dot(k), k)
+		}
+	})
+}
+
 // validate every module setting in the blueprint containing a reference
 func validateModuleSettingReferences(p ModulePath, m Module, bp Blueprint) error {
 	errs := Errors{}
@@ -675,7 +830,7 @@ func varsTopologicalOrder(vars Dict) ([]string, error) {
 			p := Root.Vars.Dot(n).Cty(rp)
 
 			if !ref.GlobalVar {
-				return BpError{p, fmt.Errorf("non-global variable %q referenced in expression", ref)}
+				continue
 			}
 
 			if used[ref.Name] == 1 {

@@ -12,6 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+variable "address" {
+  description = "The IP address or beginning of the address range allocated for the private service access."
+  type        = string
+  default     = null
+}
+
 variable "network_id" {
   description = <<-EOT
     The ID of the GCE VPC network to configure private service Access.:

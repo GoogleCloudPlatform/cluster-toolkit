@@ -249,6 +249,7 @@ autostart=true
 autorestart=true
 user=gcluster
 redirect_stderr=true
+environment=HOME=/opt/gcluster
 stdout_logfile=/opt/gcluster/run/supvisor.log" >/etc/supervisord.d/gcluster.ini
 
 printf "Creating systemd service..."
