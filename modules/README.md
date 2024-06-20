@@ -54,6 +54,7 @@ Modules that are still in development and less stable are labeled with the
   pool][htcondor-setup].
 * **[pbspro-execution]** ![community-badge] ![experimental-badge] :
   Creates execution hosts for use in a PBS Professional cluster.
+* **[mig]** ![community-badge] ![experimental-badge] : Creates a Managed Instance Group.
 * **[notebook]** ![community-badge] ![experimental-badge] : Creates a Vertex AI
   Notebook. Primarily used for [FSI - MonteCarlo Tutorial][fsi-montecarlo-on-batch-tutorial].
 
@@ -67,6 +68,7 @@ Modules that are still in development and less stable are labeled with the
 [schedmd-slurm-gcp-v6-nodeset-tpu]: ../community/modules/compute/schedmd-slurm-gcp-v6-nodeset-tpu/README.md
 [htcondor-execute-point]: ../community/modules/compute/htcondor-execute-point/README.md
 [pbspro-execution]: ../community/modules/compute/pbspro-execution/README.md
+[mig]: ../community/modules/compute/mig/README.md
 [notebook]: ../community/modules/compute/notebook/README.md
 [fsi-montecarlo-on-batch-tutorial]: ../docs/tutorials/fsi-montecarlo-on-batch/README.md
 
