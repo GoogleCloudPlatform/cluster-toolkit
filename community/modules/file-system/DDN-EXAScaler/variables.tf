@@ -231,7 +231,7 @@ variable "instance_image" {
   type        = map(string)
   default = {
     project = "ddn-public"
-    family  = "exascaler-cloud-6-2-rocky-linux-8-optimized-gcp"
+    family  = "exascaler-cloud-6-3-rocky-linux-8-optimized-gcp"
   }
 
   validation {
@@ -280,7 +280,9 @@ variable "mgs" {
 # Management target properties
 # https://cloud.google.com/compute/docs/disks
 # disk_bus: type of management target interface, SCSI or NVME (NVME is for scratch disks only)
-# disk_type: type of management target, pd-standard, pd-ssd, pd-balanced or scratch
+# disk_type: type of management target, pd-standard, pd-balanced, pd-ssd, pd-extreme, hyperdisk-balanced, hyperdisk-extreme, hyperdisk-throughput or scratch
+# disk_iops: provisioned IOPS, only for use with disks of type pd-extreme, hyperdisk-balanced or hyperdisk-extreme
+# disk_mbps: provisioned throughput in MB per second, only for use with disks of type hyperdisk-balanced or hyperdisk-throughput
 # disk_size: size of management target in GB (scratch disk size must be exactly 375)
 # disk_count: number of management targets
 # disk_raid: create striped management target, true or false
@@ -289,6 +291,8 @@ variable "mgt" {
   type = object({
     disk_bus   = string
     disk_type  = string
+    disk_iops  = number
+    disk_mbps  = number
     disk_size  = number
     disk_count = number
     disk_raid  = bool
@@ -296,6 +300,8 @@ variable "mgt" {
   default = {
     disk_bus   = "SCSI"
     disk_type  = "pd-standard"
+    disk_iops  = null
+    disk_mbps  = null
     disk_size  = 128
     disk_count = 1
     disk_raid  = false
@@ -306,7 +312,9 @@ variable "mgt" {
 # Monitoring target properties
 # https://cloud.google.com/compute/docs/disks
 # disk_bus: type of monitoring target interface, SCSI or NVME (NVME is for scratch disks only)
-# disk_type: type of monitoring target, pd-standard, pd-ssd, pd-balanced or scratch
+# disk_type: type of monitoring target, pd-standard, pd-balanced, pd-ssd, pd-extreme, hyperdisk-balanced, hyperdisk-extreme, hyperdisk-throughput or scratch
+# disk_iops: provisioned IOPS, only for use with disks of type pd-extreme, hyperdisk-balanced or hyperdisk-extreme
+# disk_mbps: provisioned throughput in MB per second, only for use with disks of type hyperdisk-balanced or hyperdisk-throughput
 # disk_size: size of monitoring target in GB (scratch disk size must be exactly 375)
 # disk_count: number of monitoring targets
 # disk_raid: create striped monitoring target, true or false
@@ -315,6 +323,8 @@ variable "mnt" {
   type = object({
     disk_bus   = string
     disk_type  = string
+    disk_iops  = number
+    disk_mbps  = number
     disk_size  = number
     disk_count = number
     disk_raid  = bool
@@ -322,6 +332,8 @@ variable "mnt" {
   default = {
     disk_bus   = "SCSI"
     disk_type  = "pd-standard"
+    disk_iops  = null
+    disk_mbps  = null
     disk_size  = 128
     disk_count = 1
     disk_raid  = false
@@ -358,7 +370,9 @@ variable "mds" {
 # Metadata target properties
 # https://cloud.google.com/compute/docs/disks
 # disk_bus: type of metadata target interface, SCSI or NVME (NVME is for scratch disks only)
-# disk_type: type of metadata target, pd-standard, pd-ssd, pd-balanced or scratch
+# disk_type: type of metadata target, pd-standard, pd-balanced, pd-ssd, pd-extreme, hyperdisk-balanced, hyperdisk-extreme, hyperdisk-throughput or scratch
+# disk_iops: provisioned IOPS, only for use with disks of type pd-extreme, hyperdisk-balanced or hyperdisk-extreme
+# disk_mbps: provisioned throughput in MB per second, only for use with disks of type hyperdisk-balanced or hyperdisk-throughput
 # disk_size: size of metadata target in GB (scratch disk size must be exactly 375)
 # disk_count: number of metadata targets
 # disk_raid: create striped metadata target, true or false
@@ -367,6 +381,8 @@ variable "mdt" {
   type = object({
     disk_bus   = string
     disk_type  = string
+    disk_iops  = number
+    disk_mbps  = number
     disk_size  = number
     disk_count = number
     disk_raid  = bool
@@ -374,6 +390,8 @@ variable "mdt" {
   default = {
     disk_bus   = "SCSI"
     disk_type  = "pd-ssd"
+    disk_iops  = null
+    disk_mbps  = null
     disk_size  = 3500
     disk_count = 1
     disk_raid  = false
@@ -410,7 +428,9 @@ variable "oss" {
 # Object Storage target properties
 # https://cloud.google.com/compute/docs/disks
 # disk_bus: type of storage target interface, SCSI or NVME (NVME is for scratch disks only)
-# disk_type: type of storage target, pd-standard, pd-ssd, pd-balanced or scratch
+# disk_type: type of storage target, pd-standard, pd-balanced, pd-ssd, pd-extreme, hyperdisk-balanced, hyperdisk-extreme, hyperdisk-throughput or scratch
+# disk_iops: provisioned IOPS, only for use with disks of type pd-extreme, hyperdisk-balanced or hyperdisk-extreme
+# disk_mbps: provisioned throughput in MB per second, only for use with disks of type hyperdisk-balanced or hyperdisk-throughput
 # disk_size: size of storage target in GB (scratch disk size must be exactly 375)
 # disk_count: number of storage targets
 # disk_raid: create striped storage target, true or false
@@ -419,6 +439,8 @@ variable "ost" {
   type = object({
     disk_bus   = string
     disk_type  = string
+    disk_iops  = number
+    disk_mbps  = number
     disk_size  = number
     disk_count = number
     disk_raid  = bool
@@ -426,6 +448,8 @@ variable "ost" {
   default = {
     disk_bus   = "SCSI"
     disk_type  = "pd-ssd"
+    disk_iops  = null
+    disk_mbps  = null
     disk_size  = 3500
     disk_count = 1
     disk_raid  = false
@@ -461,7 +485,9 @@ variable "cls" {
 # Compute client target properties
 # https://cloud.google.com/compute/docs/disks
 # disk_bus: type of compute target interface, SCSI or NVME (NVME is for scratch disks only)
-# disk_type: type of compute target, pd-standard, pd-ssd, pd-balanced or scratch
+# disk_type: type of compute target, pd-standard, pd-balanced, pd-ssd, pd-extreme, hyperdisk-balanced, hyperdisk-extreme, hyperdisk-throughput or scratch
+# disk_iops: provisioned IOPS, only for use with disks of type pd-extreme, hyperdisk-balanced or hyperdisk-extreme
+# disk_mbps: provisioned throughput in MB per second, only for use with disks of type hyperdisk-balanced or hyperdisk-throughput
 # disk_size: size of compute target in GB (scratch disk size must be exactly 375)
 # disk_count: number of compute targets
 variable "clt" {
@@ -469,12 +495,16 @@ variable "clt" {
   type = object({
     disk_bus   = string
     disk_type  = string
+    disk_iops  = number
+    disk_mbps  = number
     disk_size  = number
     disk_count = number
   })
   default = {
     disk_bus   = "SCSI"
     disk_type  = "pd-standard"
+    disk_iops  = null
+    disk_mbps  = null
     disk_size  = 256
     disk_count = 0
   }

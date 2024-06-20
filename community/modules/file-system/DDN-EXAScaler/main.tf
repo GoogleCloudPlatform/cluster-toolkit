@@ -42,7 +42,7 @@ locals {
 }
 
 module "ddn_exascaler" {
-  source          = "github.com/DDNStorage/exascaler-cloud-terraform//gcp?ref=a3355d50deebe45c0556b45bd599059b7c06988d"
+  source          = "github.com/DDNStorage/exascaler-cloud-terraform//gcp?ref=fafd923" # tag = scripts/2.2.0
   fsname          = var.fsname
   zone            = var.zone
   project         = var.project_id
