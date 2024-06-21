@@ -106,7 +106,7 @@ limitations under the License.
 |------|--------|---------|
 | <a name="module_central_manager_instance_template"></a> [central\_manager\_instance\_template](#module\_central\_manager\_instance\_template) | terraform-google-modules/vm/google//modules/instance_template | 10.1.1 |
 | <a name="module_htcondor_cm"></a> [htcondor\_cm](#module\_htcondor\_cm) | terraform-google-modules/vm/google//modules/mig | 10.1.1 |
-| <a name="module_startup_script"></a> [startup\_script](#module\_startup\_script) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | v1.34.0&depth=1 |
+| <a name="module_startup_script"></a> [startup\_script](#module\_startup\_script) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | v1.35.0&depth=1 |
 
 ## Resources
 
