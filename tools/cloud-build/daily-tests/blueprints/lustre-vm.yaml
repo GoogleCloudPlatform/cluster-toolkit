@@ -116,7 +116,7 @@ deployment_groups:
       name_prefix: rocky
       add_deployment_name_before_prefix: true
       instance_image:
-        name: rocky-linux-8-optimized-gcp-v20231115
+        name: rocky-linux-8-optimized-gcp-v20231212
         project: rocky-linux-cloud
   - id: wait-rocky
     source: community/modules/scripts/wait-for-startup
