@@ -1888,3 +1888,38 @@ To avoid these issues, the `ghpc_stage` function can be used to copy a file (or 
 
 The `ghpc_stage` function will always look first in the path specified in the blueprint. If the file is not found at this path then `ghpc_stage` will look for the staged file in the deployment folder, if a deployment folder exists.
 This means that you can redeploy a blueprint (`ghpc deploy <blueprint> -w`) so long as you have the deployment folder from the original deployment, even if locally referenced files are not available.
+
+<!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
+## Requirements
+
+No requirements.
+
+## Providers
+
+| Name | Version |
+|------|---------|
+| <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | n/a |
+
+## Modules
+
+No modules.
+
+## Resources
+
+| Name | Type |
+|------|------|
+| [google-beta_google_compute_global_address.private_ip_alloc](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_compute_global_address) | resource |
+| [google-beta_google_compute_network.network](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_compute_network) | resource |
+| [google-beta_google_parallelstore_instance.instance](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_parallelstore_instance) | resource |
+| [google-beta_google_service_networking_connection.default](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_service_networking_connection) | resource |
+
+## Inputs
+
+No inputs.
+
+## Outputs
+
+| Name | Description |
+|------|-------------|
+| <a name="output_access_points"></a> [access\_points](#output\_access\_points) | Output access points |
+<!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

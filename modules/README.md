@@ -91,6 +91,7 @@ Modules that are still in development and less stable are labeled with the
 ### File System
 
 * **[filestore]** ![core-badge] : Creates a [filestore](https://cloud.google.com/filestore) file system.
+* **[parallelstore]** ![core-badge] ![experimental-badge]: Creates a [parallelstore](https://cloud.google.com/parallelstore) file system.
 * **[pre-existing-network-storage]** ![core-badge] : Specifies a
   pre-existing file system that can be mounted on a VM.
 * **[DDN-EXAScaler]** ![community-badge] : Creates
@@ -105,6 +106,7 @@ Modules that are still in development and less stable are labeled with the
   configures an NFS server that can be mounted by other VM.
 
 [filestore]: file-system/filestore/README.md
+[parallelstore]: file-system/parallelstore/README.md
 [pre-existing-network-storage]: file-system/pre-existing-network-storage/README.md
 [ddn-exascaler]: ../community/modules/file-system/DDN-EXAScaler/README.md
 [intel-daos]: ../community/modules/file-system/Intel-DAOS/README.md
