@@ -613,20 +613,20 @@ EOD
   default     = false
 }
 
-variable "universe_information" {
-  description = "Domain address and credentials for alternate API universe"
-  type = object({
-    domain      = string
-    credentials = string
-  })
-  default = {
-    domain      = null
-    credentials = null
-  }
+variable "universe_domain" {
+  description = "Domain address for alternate API universe"
+  type        = string
+  default     = "googleapis.com"
+  nullable    = false
 }
 
-variable "custom_endpoints" {
-  description = "Alternate set of API endpoints"
-  type        = map(string)
-  default     = null
+variable "endpoint_versions" {
+  description = "Version of the API to use (The compute service is the only API currently supported)"
+  type = object({
+    compute = string
+  })
+  default = {
+    compute = "beta"
+  }
+  nullable = false
 }
