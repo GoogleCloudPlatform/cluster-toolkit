@@ -26,5 +26,5 @@ terraform {
     module_name = "blueprints/terraform/hpc-toolkit:pre-existing-gke-cluster/v1.35.0"
   }
 
-  required_version = ">= 0.14.0"
+  required_version = ">= 1.0.0"
 }
