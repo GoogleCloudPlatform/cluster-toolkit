@@ -1397,8 +1397,11 @@ Toolkit. It includes:
       machine_type: a2-highgpu-2g
   ```
 
-Users only need to provide machine type for standard ["a2", "a3" and "g2"] machine families however for
-other and custom machine families users need to provide the entire configuration as follows:
+  Users only need to provide machine type for standard ["a2", "a3" and "g2"] machine families,
+  while the other settings like `type`, `count` , `gpu_driver_installation_config` will default to
+  machine family specific values.
+  However, for other standard or custom machine families users will need to provide
+  the entire configuration as follows:
 
 ```yaml
 machine_type: n1-standard-1

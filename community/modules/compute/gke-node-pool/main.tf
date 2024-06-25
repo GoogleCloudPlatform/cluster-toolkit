@@ -169,12 +169,6 @@ resource "google_container_node_pool" "node_pool" {
       condition     = !(var.local_ssd_count_ephemeral_storage > 0 && var.local_ssd_count_nvme_block > 0)
       error_message = "Only one of local_ssd_count_ephemeral_storage or local_ssd_count_nvme_block can be set to a non-zero value."
     }
-
-    # non preattached gpu machine type should always have guest_accelerator config defined
-    precondition {
-      condition     = (local.preattached_gpu_machine_family && length(var.guest_accelerator != null ? var.guest_accelerator : []) >= 0) || (!local.preattached_gpu_machine_family && length(var.guest_accelerator != null ? var.guest_accelerator : []) > 0)
-      error_message = "Non-GPU machine types should have user defined guest_accelerator values"
-    }
   }
 }
 
