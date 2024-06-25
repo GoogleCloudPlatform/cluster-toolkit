@@ -15,7 +15,7 @@
   */
 
 output "cluster_id" {
-  description = "An identifier for the gke cluster with format projects/<project_id>/locations/<region>/clusters/<name>."
+  description = "An identifier for the gke cluster with format projects/{{project_id}}/locations/{{region}}/clusters/{{name}}."
   value       = data.google_container_cluster.existing_gke_cluster.id
 }
 

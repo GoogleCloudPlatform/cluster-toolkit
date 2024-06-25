@@ -184,8 +184,7 @@ Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial][fsi-monteca
   submission of Google Cloud Batch jobs.
 * **[gke-cluster]** ![community-badge] ![experimental-badge] : Creates a
   Kubernetes cluster using GKE.
-* **[pre-existing-gke-cluster]** ![community-badge] ![experimental-badge] : Retrieves an existing
-  GKE cluster's attributes to be used in other modules as a substitute for creating a new cluster ([gke-cluster]).
+* **[pre-existing-gke-cluster]** ![community-badge] ![experimental-badge] : Retrieves an existing GKE cluster. Substitute for ([gke-cluster]) module.
 * **[schedmd-slurm-gcp-v5-controller]** ![community-badge] :
   Creates a Slurm controller node using [slurm-gcp-version-5].
 * **[schedmd-slurm-gcp-v5-login]** ![community-badge] :
