@@ -614,19 +614,34 @@ EOD
 }
 
 variable "universe_information" {
-  description = "Domain address and credentials for alternate API universe"
+  description = "Domain address and service account credentials for alternate API universe"
   type = object({
-    domain      = string
-    credentials = string
+    domain         = string
+    sa_credentials = string
   })
   default = {
-    domain      = null
-    credentials = null
+    domain         = null
+    sa_credentials = null
+  }
+
+  validation {
+    condition     = var.universe_information.domain == null && var.universe_information.sa_credentials == null
+    error_message = "Universe credentials cannot be null if the domain is null"
   }
 }
 
-variable "custom_endpoints" {
-  description = "Alternate set of API endpoints"
-  type        = map(string)
-  default     = null
+variable "endpoint_versions" {
+  description = "Version of the API to use (The compute service is the only API currently supported)"
+  type = object({
+    compute = string
+  })
+  default = {
+    compute = null
+  }
+}
+
+variable "gcloud_executable" {
+  description = "Location of the gcloud executable to be used during cleanup"
+  type        = string
+  default     = "gcloud"
 }

@@ -195,14 +195,14 @@ limitations under the License.
 | Name | Source | Version |
 |------|--------|---------|
 | <a name="module_bucket"></a> [bucket](#module\_bucket) | terraform-google-modules/cloud-storage/google | ~> 5.0 |
-| <a name="module_slurm_controller_instance"></a> [slurm\_controller\_instance](#module\_slurm\_controller\_instance) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/_slurm_instance | fe3cc39 |
-| <a name="module_slurm_controller_template"></a> [slurm\_controller\_template](#module\_slurm\_controller\_template) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template | fe3cc39 |
-| <a name="module_slurm_files"></a> [slurm\_files](#module\_slurm\_files) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_files | fe3cc39 |
-| <a name="module_slurm_login_instance"></a> [slurm\_login\_instance](#module\_slurm\_login\_instance) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/_slurm_instance | fe3cc39 |
-| <a name="module_slurm_login_template"></a> [slurm\_login\_template](#module\_slurm\_login\_template) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template | fe3cc39 |
-| <a name="module_slurm_nodeset"></a> [slurm\_nodeset](#module\_slurm\_nodeset) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_nodeset | fe3cc39 |
-| <a name="module_slurm_nodeset_template"></a> [slurm\_nodeset\_template](#module\_slurm\_nodeset\_template) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template | fe3cc39 |
-| <a name="module_slurm_nodeset_tpu"></a> [slurm\_nodeset\_tpu](#module\_slurm\_nodeset\_tpu) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_nodeset_tpu | fe3cc39 |
+| <a name="module_slurm_controller_instance"></a> [slurm\_controller\_instance](#module\_slurm\_controller\_instance) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/_slurm_instance | cd5852d |
+| <a name="module_slurm_controller_template"></a> [slurm\_controller\_template](#module\_slurm\_controller\_template) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template | cd5852d |
+| <a name="module_slurm_files"></a> [slurm\_files](#module\_slurm\_files) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_files | cd5852d |
+| <a name="module_slurm_login_instance"></a> [slurm\_login\_instance](#module\_slurm\_login\_instance) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/_slurm_instance | cd5852d |
+| <a name="module_slurm_login_template"></a> [slurm\_login\_template](#module\_slurm\_login\_template) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template | cd5852d |
+| <a name="module_slurm_nodeset"></a> [slurm\_nodeset](#module\_slurm\_nodeset) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_nodeset | cd5852d |
+| <a name="module_slurm_nodeset_template"></a> [slurm\_nodeset\_template](#module\_slurm\_nodeset\_template) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template | cd5852d |
+| <a name="module_slurm_nodeset_tpu"></a> [slurm\_nodeset\_tpu](#module\_slurm\_nodeset\_tpu) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_nodeset_tpu | cd5852d |
 
 ## Resources
 
@@ -235,7 +235,6 @@ limitations under the License.
 | <a name="input_controller_startup_script"></a> [controller\_startup\_script](#input\_controller\_startup\_script) | Startup script used by the controller VM. | `string` | `"# no-op"` | no |
 | <a name="input_controller_startup_scripts_timeout"></a> [controller\_startup\_scripts\_timeout](#input\_controller\_startup\_scripts\_timeout) | The timeout (seconds) applied to each script in controller\_startup\_scripts. If<br>any script exceeds this timeout, then the instance setup process is considered<br>failed and handled accordingly.<br><br>NOTE: When set to 0, the timeout is considered infinite and thus disabled. | `number` | `300` | no |
 | <a name="input_create_bucket"></a> [create\_bucket](#input\_create\_bucket) | Create GCS bucket instead of using an existing one. | `bool` | `true` | no |
-| <a name="input_custom_endpoints"></a> [custom\_endpoints](#input\_custom\_endpoints) | Alternate set of API endpoints | `map(string)` | `null` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the deployment. | `string` | n/a | yes |
 | <a name="input_disable_controller_public_ips"></a> [disable\_controller\_public\_ips](#input\_disable\_controller\_public\_ips) | DEPRECATED: Use `enable_controller_public_ips` instead. | `bool` | `null` | no |
 | <a name="input_disable_default_mounts"></a> [disable\_default\_mounts](#input\_disable\_default\_mounts) | DEPRECATED: Use `enable_default_mounts` instead. | `bool` | `null` | no |
@@ -256,8 +255,10 @@ limitations under the License.
 | <a name="input_enable_shielded_vm"></a> [enable\_shielded\_vm](#input\_enable\_shielded\_vm) | Enable the Shielded VM configuration. Note: the instance image must support option. | `bool` | `false` | no |
 | <a name="input_enable_slurm_gcp_plugins"></a> [enable\_slurm\_gcp\_plugins](#input\_enable\_slurm\_gcp\_plugins) | Enables calling hooks in scripts/slurm\_gcp\_plugins during cluster resume and suspend. | `any` | `false` | no |
 | <a name="input_enable_smt"></a> [enable\_smt](#input\_enable\_smt) | Enables Simultaneous Multi-Threading (SMT) on instance. | `bool` | `false` | no |
+| <a name="input_endpoint_versions"></a> [endpoint\_versions](#input\_endpoint\_versions) | Version of the API to use (The compute service is the only API currently supported) | <pre>object({<br>    compute = string<br>  })</pre> | <pre>{<br>  "compute": null<br>}</pre> | no |
 | <a name="input_epilog_scripts"></a> [epilog\_scripts](#input\_epilog\_scripts) | List of scripts to be used for Epilog. Programs for the slurmd to execute<br>on every node when a user's job completes.<br>See https://slurm.schedmd.com/slurm.conf.html#OPT_Epilog. | <pre>list(object({<br>    filename = string<br>    content  = optional(string)<br>    source   = optional(string)<br>  }))</pre> | `[]` | no |
 | <a name="input_extra_logging_flags"></a> [extra\_logging\_flags](#input\_extra\_logging\_flags) | The list of extra flags for the logging system to use. See the logging\_flags variable in scripts/util.py to get the list of supported log flags. | `map(bool)` | `{}` | no |
+| <a name="input_gcloud_executable"></a> [gcloud\_executable](#input\_gcloud\_executable) | Location of the gcloud executable to be used during cleanup | `string` | `"gcloud"` | no |
 | <a name="input_guest_accelerator"></a> [guest\_accelerator](#input\_guest\_accelerator) | List of the type and count of accelerator cards attached to the instance. | <pre>list(object({<br>    type  = string,<br>    count = number<br>  }))</pre> | `[]` | no |
 | <a name="input_instance_image"></a> [instance\_image](#input\_instance\_image) | Defines the image that will be used in the Slurm controller VM instance.<br><br>Expected Fields:<br>name: The name of the image. Mutually exclusive with family.<br>family: The image family to use. Mutually exclusive with name.<br>project: The project where the image is hosted.<br><br>For more information on creating custom images that comply with Slurm on GCP<br>see the "Slurm on GCP Custom Images" section in docs/vm-images.md. | `map(string)` | <pre>{<br>  "family": "slurm-gcp-6-5-hpc-rocky-linux-8",<br>  "project": "schedmd-slurm-public"<br>}</pre> | no |
 | <a name="input_instance_image_custom"></a> [instance\_image\_custom](#input\_instance\_image\_custom) | A flag that designates that the user is aware that they are requesting<br>to use a custom and potentially incompatible image for this Slurm on<br>GCP module.<br><br>If the field is set to false, only the compatible families and project<br>names will be accepted.  The deployment will fail with any other image<br>family or name.  If set to true, no checks will be done.<br><br>See: https://goo.gle/hpc-slurm-images | `bool` | `false` | no |
@@ -290,7 +291,7 @@ limitations under the License.
 | <a name="input_static_ips"></a> [static\_ips](#input\_static\_ips) | List of static IPs for VM instances. | `list(string)` | `[]` | no |
 | <a name="input_subnetwork_self_link"></a> [subnetwork\_self\_link](#input\_subnetwork\_self\_link) | Subnet to deploy to. | `string` | n/a | yes |
 | <a name="input_tags"></a> [tags](#input\_tags) | Network tag list. | `list(string)` | `[]` | no |
-| <a name="input_universe_information"></a> [universe\_information](#input\_universe\_information) | Domain address and credentials for alternate API universe | <pre>object({<br>    domain      = string<br>    credentials = string<br>  })</pre> | <pre>{<br>  "credentials": null,<br>  "domain": null<br>}</pre> | no |
+| <a name="input_universe_information"></a> [universe\_information](#input\_universe\_information) | Domain address and service account credentials for alternate API universe | <pre>object({<br>    domain         = string<br>    sa_credentials = string<br>  })</pre> | <pre>{<br>  "domain": null,<br>  "sa_credentials": null<br>}</pre> | no |
 | <a name="input_zone"></a> [zone](#input\_zone) | Zone where the instances should be created. If not specified, instances will be<br>spread across available zones in the region. | `string` | `null` | no |
 
 ## Outputs
