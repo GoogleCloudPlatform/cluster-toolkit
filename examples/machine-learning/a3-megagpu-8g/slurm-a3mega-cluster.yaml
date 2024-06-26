@@ -19,8 +19,6 @@ blueprint_name: a3mega-cluster
 # deployment-image-cluster.yaml
 vars:
   deployment_name: a3mega-cluster
-  zones:
-  - $(vars.zone)
   a3mega_partition_name: a3mega
   enable_placement: false
   remote_mount_homefs: /nfsshare
