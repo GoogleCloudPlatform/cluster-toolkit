@@ -186,6 +186,7 @@ Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial][fsi-monteca
   submission of Google Cloud Batch jobs.
 * **[gke-cluster]** ![community-badge] ![experimental-badge] : Creates a
   Kubernetes cluster using GKE.
+* **[pre-existing-gke-cluster]** ![community-badge] ![experimental-badge] : Retrieves an existing GKE cluster. Substitute for ([gke-cluster]) module.
 * **[schedmd-slurm-gcp-v5-controller]** ![community-badge] :
   Creates a Slurm controller node using [slurm-gcp-version-5].
 * **[schedmd-slurm-gcp-v5-login]** ![community-badge] :
@@ -212,6 +213,7 @@ Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial][fsi-monteca
 [batch-job-template]: ../modules/scheduler/batch-job-template/README.md
 [batch-login-node]: ../modules/scheduler/batch-login-node/README.md
 [gke-cluster]: ../community/modules/scheduler/gke-cluster/README.md
+[pre-existing-gke-cluster]: ../community/modules/scheduler/pre-existing-gke-cluster/README.md
 [htcondor-setup]: ../community/modules/scheduler/htcondor-setup/README.md
 [htcondor-pool-secrets]: ../community/modules/scheduler/htcondor-pool-secrets/README.md
 [htcondor-access-point]: ../community/modules/scheduler/htcondor-access-point/README.md
