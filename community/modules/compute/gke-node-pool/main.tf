@@ -23,7 +23,7 @@ locals {
   sa_email = var.service_account_email != null ? var.service_account_email : data.google_compute_default_service_account.default_sa.email
 
   preattached_gpu_machine_family = contains(["a2", "a3", "g2"], local.machine_family)
-  has_gpu                        = local.guest_accelerator != null || local.preattached_gpu_machine_family
+  has_gpu                        = (local.guest_accelerator != null && length(local.guest_accelerator) > 0) || local.preattached_gpu_machine_family
   gpu_taint = local.has_gpu ? [{
     key    = "nvidia.com/gpu"
     value  = "present"
