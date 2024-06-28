@@ -22,7 +22,7 @@ git+https://github.com/jazzband/django-revproxy.git@d2234005135dc0771b7c4e0bb046
 Django==4.2.11
 django-allauth==0.54.0
 django-extensions==3.2.3
-djangorestframework==3.14.0
+djangorestframework==3.15.2
 filelock==3.12.2
 google-api-core==2.11.1
 google-api-python-client==2.90.0
