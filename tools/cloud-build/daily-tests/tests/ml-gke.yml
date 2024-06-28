@@ -14,9 +14,15 @@
 ---
 test_name: ml-gke
 deployment_name: ml-gke-{{ build }}
+region: asia-southeast1
 zone: asia-southeast1-b  # for remote node
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/community/examples/ml-gke.yaml"
 network: "{{ deployment_name }}-net"
 remote_node: "{{ deployment_name }}-0"
-post_deploy_tests: []
+cli_deployment_vars:
+  region: "{{ region }}"
+custom_vars:
+  project: "{{ project }}"
+post_deploy_tests:
+- test-validation/test-gke-job.yml

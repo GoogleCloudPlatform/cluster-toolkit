@@ -1,5 +1,5 @@
 /**
- * Copyright 2022 Google LLC
+ * Copyright 2024 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,9 +15,16 @@
 */
 
 terraform {
-  provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:windows-startup-script/v1.35.1"
+  required_providers {
+    google = {
+      source  = "hashicorp/google"
+      version = "> 5.0"
+    }
   }
 
-  required_version = ">= 0.14.0"
+  provider_meta "google" {
+    module_name = "blueprints/terraform/hpc-toolkit:pre-existing-gke-cluster/v1.35.0"
+  }
+
+  required_version = ">= 1.0.0"
 }

@@ -15,7 +15,7 @@
   */
 
 output "cluster_id" {
-  description = "An identifier for the resource with format projects/<project_id>/locations/<region>/clusters/<name>."
+  description = "An identifier for the resource with format projects/{{project_id}}/locations/{{region}}/clusters/{{name}}."
   value       = google_container_cluster.gke_cluster.id
 }
 
