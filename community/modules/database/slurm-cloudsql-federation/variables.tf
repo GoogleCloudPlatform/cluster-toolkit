@@ -14,13 +14,6 @@
  * limitations under the License.
 */
 
-variable "authorized_networks" {
-  description = "IP address ranges as authorized networks of the Cloud SQL for MySQL instances"
-  type        = list(string)
-  default     = []
-  nullable    = false
-}
-
 variable "database_version" {
   description = "The version of the database to be created."
   type        = string
@@ -79,20 +72,7 @@ variable "sql_password" {
   default     = null
 }
 
-variable "network_id" {
-  description = <<-EOT
-    The ID of the GCE VPC network to which the instance is going to be created in.:
-    `projects/<project_id>/global/networks/<network_name>`"
-    EOT
+variable "subnetwork_self_link" {
+  description = "Self link of the network where Cloud SQL instance PSC endpoint will be created"
   type        = string
-  validation {
-    condition     = length(split("/", var.network_id)) == 5
-    error_message = "The network id must be provided in the following format: projects/<project_id>/global/networks/<network_name>."
-  }
-}
-
-variable "private_vpc_connection_peering" {
-  description = "The name of the VPC Network peering connection, used only as dependency for Cloud SQL creation."
-  type        = string
-  default     = null
 }

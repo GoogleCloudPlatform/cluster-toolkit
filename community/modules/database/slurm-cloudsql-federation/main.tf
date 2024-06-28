@@ -36,7 +36,6 @@ locals {
 
 resource "google_sql_database_instance" "instance" {
   project             = var.project_id
-  depends_on          = [var.private_vpc_connection_peering]
   name                = local.sql_instance_name
   region              = var.region
   deletion_protection = var.deletion_protection
@@ -47,19 +46,33 @@ resource "google_sql_database_instance" "instance" {
     tier        = var.tier
     ip_configuration {
       ipv4_enabled                                  = false
-      private_network                               = var.network_id
       enable_private_path_for_google_cloud_services = true
-
-      dynamic "authorized_networks" {
-        for_each = var.authorized_networks
-        iterator = ip_range
-
-        content {
-          value = ip_range.value
-        }
+      psc_config {
+        psc_enabled               = true
+        allowed_consumer_projects = [var.project_id]
       }
     }
   }
+}
+
+resource "google_compute_address" "psc" {
+  project      = var.project_id
+  name         = local.sql_instance_name
+  address_type = "INTERNAL"
+  region       = var.region
+  subnetwork   = var.subnetwork_self_link
+  labels       = local.labels
+}
+
+resource "google_compute_forwarding_rule" "psc_consumer" {
+  name                  = local.sql_instance_name
+  project               = var.project_id
+  region                = var.region
+  subnetwork            = var.subnetwork_self_link
+  ip_address            = google_compute_address.psc.self_link
+  load_balancing_scheme = ""
+  recreate_closed_psc   = true
+  target                = google_sql_database_instance.instance.psc_service_attachment_link
 }
 
 resource "google_sql_database" "database" {
