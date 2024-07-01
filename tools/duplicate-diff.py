@@ -75,7 +75,15 @@ duplicates = [
     [
         "community/modules/scheduler/schedmd-slurm-gcp-v5-controller/etc/long-prolog-slurm.conf.tpl",
         "community/modules/scheduler/schedmd-slurm-gcp-v6-controller/etc/long-prolog-slurm.conf.tpl",
-    ]
+    ],
+    [
+        "modules/file-system/parallelstore/scripts/install-daos-client.sh",
+        "modules/file-system/pre-existing-network-storage/scripts/install-daos-client.sh",
+    ],
+    [
+        "modules/file-system/parallelstore/scripts/mount-daos.sh",
+        "modules/file-system/pre-existing-network-storage/scripts/mount-daos.sh",
+    ],
 ]
 
 for group in duplicates:
