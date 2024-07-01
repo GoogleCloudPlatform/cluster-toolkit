@@ -42,6 +42,7 @@ duplicates = [
         "community/modules/scheduler/schedmd-slurm-gcp-v5-login/gpu_definition.tf",
         "community/modules/scheduler/schedmd-slurm-gcp-v5-controller/gpu_definition.tf",
         "community/modules/compute/schedmd-slurm-gcp-v6-nodeset/gpu_definition.tf",
+        "community/modules/compute/schedmd-slurm-gcp-v6-nodeset-dynamic/gpu_definition.tf",
         "community/modules/scheduler/schedmd-slurm-gcp-v6-controller/gpu_definition.tf",
         "community/modules/scheduler/schedmd-slurm-gcp-v6-login/gpu_definition.tf",
         "community/modules/compute/gke-node-pool/gpu_definition.tf",
@@ -59,6 +60,7 @@ duplicates = [
         "community/modules/scheduler/schedmd-slurm-gcp-v6-controller/source_image_logic.tf",
         "community/modules/scheduler/schedmd-slurm-gcp-v6-login/source_image_logic.tf",
         "community/modules/compute/schedmd-slurm-gcp-v6-nodeset/source_image_logic.tf",
+        "community/modules/compute/schedmd-slurm-gcp-v6-nodeset-dynamic/source_image_logic.tf",
     ],
     [
         "community/modules/scripts/ramble-execute/templates/ramble_execute.yml.tpl",

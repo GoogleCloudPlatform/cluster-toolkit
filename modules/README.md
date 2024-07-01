@@ -45,6 +45,8 @@ Modules that are still in development and less stable are labeled with the
   Creates a nodeset to be used by the [schedmd-slurm-gcp-v6-partition] module.
 * **[schedmd-slurm-gcp-v6-nodeset-tpu]** ![community-badge] ![experimental-badge]:
   Creates a TPU nodeset to be used by the [schedmd-slurm-gcp-v6-partition] module.
+* **[schedmd-slurm-gcp-v6-nodeset-dynamic]** ![community-badge] ![experimental-badge]:
+  Creates a dynamic nodeset to be used by the [schedmd-slurm-gcp-v6-partition] module and instance template.
 * **[gke-node-pool]** ![community-badge] ![experimental-badge] : Creates a
   Kubernetes node pool using GKE.
 * **[gke-job-template]** ![community-badge] ![experimental-badge] : Creates a
@@ -66,6 +68,7 @@ Modules that are still in development and less stable are labeled with the
 [schedmd-slurm-gcp-v6-partition]: ../community/modules/compute/schedmd-slurm-gcp-v6-partition/README.md
 [schedmd-slurm-gcp-v6-nodeset]: ../community/modules/compute/schedmd-slurm-gcp-v6-nodeset/README.md
 [schedmd-slurm-gcp-v6-nodeset-tpu]: ../community/modules/compute/schedmd-slurm-gcp-v6-nodeset-tpu/README.md
+[schedmd-slurm-gcp-v6-nodeset-dynamic]: ../community/modules/compute/schedmd-slurm-gcp-v6-nodeset-dynamic/README.md
 [htcondor-execute-point]: ../community/modules/compute/htcondor-execute-point/README.md
 [pbspro-execution]: ../community/modules/compute/pbspro-execution/README.md
 [mig]: ../community/modules/compute/mig/README.md
