@@ -177,7 +177,7 @@ variable "disk_size_gb" {
 variable "disk_type" {
   description = "Disk type for template"
   type        = string
-  default     = "pd-standard"
+  default     = "pd-balanced"
 }
 
 variable "windows_startup_ps1" {
