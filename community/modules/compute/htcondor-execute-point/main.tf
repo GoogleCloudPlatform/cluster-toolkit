@@ -151,6 +151,7 @@ module "execute_point_instance_template" {
 
   machine_type   = var.machine_type
   disk_size_gb   = var.disk_size_gb
+  disk_type      = var.disk_type
   gpu            = one(local.guest_accelerator)
   preemptible    = var.spot
   startup_script = local.is_windows_image ? null : module.startup_script.startup_script
