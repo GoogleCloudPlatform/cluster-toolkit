@@ -298,4 +298,6 @@ limitations under the License.
 | <a name="output_instructions"></a> [instructions](#output\_instructions) | Post deployment instructions. |
 | <a name="output_slurm_bucket_path"></a> [slurm\_bucket\_path](#output\_slurm\_bucket\_path) | Bucket path used by cluster. |
 | <a name="output_slurm_cluster_name"></a> [slurm\_cluster\_name](#output\_slurm\_cluster\_name) | Slurm cluster name. |
+| <a name="output_slurm_controller_instance"></a> [slurm\_controller\_instance](#output\_slurm\_controller\_instance) | Compute instance of controller node |
+| <a name="output_slurm_login_instances"></a> [slurm\_login\_instances](#output\_slurm\_login\_instances) | Compute instances of login nodes |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
