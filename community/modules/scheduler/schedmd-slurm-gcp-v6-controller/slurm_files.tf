@@ -87,7 +87,7 @@ locals {
 }
 
 module "slurm_files" {
-  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_files?ref=cd5852d"
+  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_files?ref=a6dde52"
 
   project_id         = var.project_id
   slurm_cluster_name = local.slurm_cluster_name
@@ -132,6 +132,5 @@ module "slurm_files" {
   depends_on = [module.bucket]
 
   # Providers
-  universe_information = var.universe_information
-  endpoint_versions    = var.endpoint_versions
+  endpoint_versions = var.endpoint_versions
 }

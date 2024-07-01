@@ -37,7 +37,7 @@ fi
 echo "Deleting compute nodes"
 node_filter="labels.slurm_cluster_name=${cluster_name} AND labels.slurm_instance_role=compute"
 while true; do
-	nodes=$($gcloud_bin compute instances list --project "${project}" --format="value(selfLink)" --filter="${node_filter}" --limit=10 | paste -sd " " -)
+	nodes=$(bash -c "$gcloud_bin compute instances list --project \"${project}\" --format=\"value(selfLink)\" --filter=\"${node_filter}\" --limit=10 | paste -sd \" \" -")
 	if [[ -z "${nodes}" ]]; then
 		break
 	fi
@@ -50,7 +50,7 @@ done
 echo "Deleting resource policies"
 policies_filter="name:${cluster_name}-*"
 while true; do
-	policies=$($gcloud_bin compute resource-policies list --project "${project}" --format="value(selfLink)" --filter="${policies_filter}" --limit=10 | paste -sd " " -)
+	policies=$(bash -c "$gcloud_bin compute resource-policies list --project \"${project}\" --format=\"value(selfLink)\" --filter=\"${policies_filter}\" --limit=10 | paste -sd \" \" -")
 	if [[ -z "${policies}" ]]; then
 		break
 	fi

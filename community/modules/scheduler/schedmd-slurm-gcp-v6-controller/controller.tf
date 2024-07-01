@@ -36,8 +36,7 @@ locals {
 
 # INSTANCE TEMPLATE
 module "slurm_controller_template" {
-  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=cd5852d"
-  count  = local.have_template ? 0 : 1
+  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=a6dde52"
 
   project_id          = var.project_id
   region              = var.region
@@ -64,7 +63,7 @@ module "slurm_controller_template" {
   gpu = one(local.guest_accelerator)
 
   machine_type     = var.machine_type
-  metadata         = var.metadata
+  metadata         = merge(var.metadata, local.universe_domain)
   min_cpu_platform = var.min_cpu_platform
 
   # network_ip = TODO: add support for network_ip
@@ -93,7 +92,7 @@ locals {
 }
 
 module "slurm_controller_instance" {
-  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/_slurm_instance?ref=cd5852d"
+  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/_slurm_instance?ref=a6dde52"
 
   access_config       = var.enable_controller_public_ips ? [local.access_config] : []
   add_hostname_suffix = false

@@ -613,21 +613,11 @@ EOD
   default     = false
 }
 
-variable "universe_information" {
-  description = "Domain address and service account credentials for alternate API universe"
-  type = object({
-    domain         = string
-    sa_credentials = string
-  })
-  default = {
-    domain         = null
-    sa_credentials = null
-  }
-
-  validation {
-    condition     = var.universe_information.domain == null && var.universe_information.sa_credentials == null
-    error_message = "Universe credentials cannot be null if the domain is null"
-  }
+variable "universe_domain" {
+  description = "Domain address for alternate API universe"
+  type        = string
+  default     = "googleapis.com"
+  nullable    = false
 }
 
 variable "endpoint_versions" {
@@ -644,4 +634,9 @@ variable "gcloud_executable" {
   description = "Location of the gcloud executable to be used during cleanup"
   type        = string
   default     = "gcloud"
+
+  validation {
+    condition     = fileexists(var.gcloud_executable)
+    error_message = "Gcloud does not exist on the given path or $PATH"
+  }
 }
