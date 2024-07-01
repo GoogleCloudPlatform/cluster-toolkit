@@ -100,7 +100,7 @@
           <th>Image</th>
         </tr>
       </thead>
-      <tr>
+      <tr class="controller_row">
         <th>Controller</th>
         <td>
           <div class="form-group">
@@ -132,7 +132,7 @@
           </div>
         </td>
       </tr>
-      <tr>
+      <tr class="login_row">
         <th>Login Nodes</th>
         <td>
           <div class="form-group">
@@ -452,7 +452,7 @@
         dataType: "json",
         headers: { 'X-CSRFToken': $.cookie("csrftoken") }
     }).done(function (data) {
-        $(".part_formset_row").each(function () {
+        $(".part_formset_row, .login_row, .controller_row").each(function () {
             var formRow = $(this);
             var machineTypeSelect = formRow.find('.machine_type_select');
             var machineType = machineTypeSelect.val();
