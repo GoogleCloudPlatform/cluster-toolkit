@@ -131,7 +131,7 @@ module "daos_network_storage_scripts" {
 }
 
 module "slurm_files" {
-  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_files?ref=6.5.13"
+  source = "modules/slurm-files"
 
   project_id         = var.project_id
   slurm_cluster_name = local.slurm_cluster_name
