@@ -160,9 +160,11 @@ build {
 
   dynamic "provisioner" {
     labels   = ["powershell"]
-    for_each = length(var.windows_startup_ps1) == 0 ? [1] : []
+    for_each = length(var.windows_startup_ps1) > 0 ? [1] : []
     content {
-      inline = "GCESysprep -no_shutdown"
+      inline = [
+        "GCESysprep -no_shutdown"
+      ]
     }
   }
 
