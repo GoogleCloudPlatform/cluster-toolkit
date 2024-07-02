@@ -71,7 +71,7 @@ deployment_groups:
     - homefs
     settings:
       instance_image:
-        family: centos-7
+        name: centos-7-v20240611
         project: centos-cloud
       name_prefix: workstation-centos
       instance_count: 1
