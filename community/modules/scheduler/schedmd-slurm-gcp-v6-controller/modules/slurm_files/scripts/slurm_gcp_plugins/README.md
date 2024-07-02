@@ -32,7 +32,7 @@ def post_main_resume_nodes(*pos_args, **keyword_args):
 and extract arguments from `keyword_args`. Check the callback sites to
 understand which values that are available.
 
-### Current callback sites:
+### Current callback sites
 
 Callbacks are currently performed from the following places:
 

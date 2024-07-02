@@ -15,7 +15,7 @@
  */
 
 locals {
-  scripts_dir = abspath("${path.module}/../../../../scripts")
+  scripts_dir = abspath("${path.module}/scripts")
 
   bucket_dir = coalesce(var.bucket_dir, format("%s-files", var.slurm_cluster_name))
 }
@@ -106,7 +106,7 @@ locals {
   x_nodeset_tpu     = toset([for k, v in local.nodeset_tpu : v.nodeset_name])
   x_nodeset_overlap = setintersection([], local.x_nodeset, local.x_nodeset_dyn, local.x_nodeset_tpu)
 
-  etc_dir = abspath("${path.module}/../../../../etc")
+  etc_dir = abspath("${path.module}/etc")
 
   bucket_path = format("%s/%s", data.google_storage_bucket.this.url, local.bucket_dir)
 
@@ -138,7 +138,7 @@ resource "google_storage_bucket_object" "config" {
 #########
 
 locals {
-  build_dir = abspath("${path.module}/../../../../build")
+  build_dir = abspath("${path.module}/build")
 
   slurm_gcp_devel_zip        = "slurm-gcp-devel.zip"
   slurm_gcp_devel_zip_bucket = format("%s/%s", local.bucket_dir, local.slurm_gcp_devel_zip)

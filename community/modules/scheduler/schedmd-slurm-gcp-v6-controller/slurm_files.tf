@@ -131,7 +131,7 @@ module "daos_network_storage_scripts" {
 }
 
 module "slurm_files" {
-  source = "modules/slurm-files"
+  source = "./modules/slurm_files"
 
   project_id         = var.project_id
   slurm_cluster_name = local.slurm_cluster_name

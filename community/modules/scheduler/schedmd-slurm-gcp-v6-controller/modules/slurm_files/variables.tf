@@ -244,10 +244,10 @@ EOD
 variable "disable_default_mounts" {
   description = <<-EOD
     Disable default global network storage from the controller
-    * /usr/local/etc/slurm
-    * /etc/munge
-    * /home
-    * /apps
+    - /usr/local/etc/slurm
+    - /etc/munge
+    - /home
+    - /apps
     If these are disabled, the slurm etc and munge dirs must be added manually,
     or some other mechanism must be used to synchronize the slurm conf files
     and the munge key across the cluster.
@@ -259,11 +259,11 @@ variable "disable_default_mounts" {
 variable "network_storage" {
   description = <<EOD
 Storage to mounted on all instances.
-* server_ip     : Address of the storage server.
-* remote_mount  : The location in the remote instance filesystem to mount from.
-* local_mount   : The location on the instance filesystem to mount to.
-* fs_type       : Filesystem type (e.g. "nfs").
-* mount_options : Options to mount with.
+- server_ip     : Address of the storage server.
+- remote_mount  : The location in the remote instance filesystem to mount from.
+- local_mount   : The location on the instance filesystem to mount to.
+- fs_type       : Filesystem type (e.g. "nfs").
+- mount_options : Options to mount with.
 EOD
   type = list(object({
     server_ip     = string
