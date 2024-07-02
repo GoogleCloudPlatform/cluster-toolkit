@@ -626,17 +626,13 @@ variable "endpoint_versions" {
     compute = string
   })
   default = {
-    compute = null
+    compute = "beta"
   }
+  nullable = false
 }
 
-variable "gcloud_executable" {
-  description = "Location of the gcloud executable to be used during cleanup"
+variable "gcloud_path_override" {
+  description = "Directory of the gcloud executable to be used during cleanup"
   type        = string
-  default     = "gcloud"
-
-  validation {
-    condition     = fileexists(var.gcloud_executable)
-    error_message = "Gcloud does not exist on the given path or $PATH"
-  }
+  default     = null
 }
