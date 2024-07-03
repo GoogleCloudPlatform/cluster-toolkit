@@ -604,7 +604,7 @@ class Image(CloudResource):
         max_length=60,
         help_text="Enter a source image family",
         blank=False,
-        default="schedmd-v5-slurm-22-05-8-rocky-linux-8",
+        default="slurm-gcp-6-5-hpc-rocky-linux-8",
     )
 
     startup_script = models.ManyToManyField(
