@@ -13,6 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+#### Workaround for https://github.com/GoogleCloudPlatform/hpc-toolkit/issues/2733
+sed -i 's,latest-release,lustre-2.15.4,' /etc/yum.repos.d/lustre-client.repo
+####
+
 # shellcheck disable=SC1083
 BUCKET={{ server_bucket }}
 CLUSTER_ID={{ cluster.id }}
