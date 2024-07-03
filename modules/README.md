@@ -45,6 +45,8 @@ Modules that are still in development and less stable are labeled with the
   Creates a nodeset to be used by the [schedmd-slurm-gcp-v6-partition] module.
 * **[schedmd-slurm-gcp-v6-nodeset-tpu]** ![community-badge] ![experimental-badge]:
   Creates a TPU nodeset to be used by the [schedmd-slurm-gcp-v6-partition] module.
+* **[schedmd-slurm-gcp-v6-nodeset-dynamic]** ![community-badge] ![experimental-badge]:
+  Creates a dynamic nodeset to be used by the [schedmd-slurm-gcp-v6-partition] module and instance template.
 * **[gke-node-pool]** ![community-badge] ![experimental-badge] : Creates a
   Kubernetes node pool using GKE.
 * **[gke-job-template]** ![community-badge] ![experimental-badge] : Creates a
@@ -66,6 +68,7 @@ Modules that are still in development and less stable are labeled with the
 [schedmd-slurm-gcp-v6-partition]: ../community/modules/compute/schedmd-slurm-gcp-v6-partition/README.md
 [schedmd-slurm-gcp-v6-nodeset]: ../community/modules/compute/schedmd-slurm-gcp-v6-nodeset/README.md
 [schedmd-slurm-gcp-v6-nodeset-tpu]: ../community/modules/compute/schedmd-slurm-gcp-v6-nodeset-tpu/README.md
+[schedmd-slurm-gcp-v6-nodeset-dynamic]: ../community/modules/compute/schedmd-slurm-gcp-v6-nodeset-dynamic/README.md
 [htcondor-execute-point]: ../community/modules/compute/htcondor-execute-point/README.md
 [pbspro-execution]: ../community/modules/compute/pbspro-execution/README.md
 [mig]: ../community/modules/compute/mig/README.md
@@ -91,6 +94,7 @@ Modules that are still in development and less stable are labeled with the
 ### File System
 
 * **[filestore]** ![core-badge] : Creates a [filestore](https://cloud.google.com/filestore) file system.
+* **[parallelstore]** ![core-badge] ![experimental-badge]: Creates a [parallelstore](https://cloud.google.com/parallelstore) file system.
 * **[pre-existing-network-storage]** ![core-badge] : Specifies a
   pre-existing file system that can be mounted on a VM.
 * **[DDN-EXAScaler]** ![community-badge] : Creates
@@ -105,6 +109,7 @@ Modules that are still in development and less stable are labeled with the
   configures an NFS server that can be mounted by other VM.
 
 [filestore]: file-system/filestore/README.md
+[parallelstore]: file-system/parallelstore/README.md
 [pre-existing-network-storage]: file-system/pre-existing-network-storage/README.md
 [ddn-exascaler]: ../community/modules/file-system/DDN-EXAScaler/README.md
 [intel-daos]: ../community/modules/file-system/Intel-DAOS/README.md

@@ -174,6 +174,12 @@ variable "disk_size_gb" {
   default     = 100
 }
 
+variable "disk_type" {
+  description = "Disk type for template"
+  type        = string
+  default     = "pd-balanced"
+}
+
 variable "windows_startup_ps1" {
   description = "Startup script to run at boot-time for Windows-based HTCondor execute points"
   type        = list(string)
