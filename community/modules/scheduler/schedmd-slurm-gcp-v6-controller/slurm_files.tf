@@ -69,21 +69,65 @@ resource "google_storage_bucket_iam_binding" "legacy_readers" {
   members = compact(local.viewers)
 }
 
+locals {
+  daos_ns = [
+    for ns in var.network_storage :
+    ns if ns.fs_type == "daos"
+  ]
+
+  daos_client_install_runners = [
+    for ns in local.daos_ns :
+    ns.client_install_runner if ns.client_install_runner != null
+  ]
+
+  daos_mount_runners = [
+    for ns in local.daos_ns :
+    ns.mount_runner if ns.mount_runner != null
+  ]
+
+  daos_network_storage_runners = concat(
+    local.daos_client_install_runners,
+    local.daos_mount_runners,
+  )
+
+  daos_install_mount_script = {
+    filename = "ghpc_daos_mount.sh"
+    content  = length(local.daos_ns) > 0 ? module.daos_network_storage_scripts[0].startup_script : ""
+  }
+}
+
 # SLURM FILES
 locals {
-  ghpc_startup_script_controller = [{
+  ghpc_startup_controller = {
     filename = "ghpc_startup.sh"
     content  = var.controller_startup_script
-  }]
-  ghpc_startup_script_login = [{
+  }
+  ghpc_startup_script_controller = length(local.daos_ns) > 0 ? [local.daos_install_mount_script, local.ghpc_startup_controller] : [local.ghpc_startup_controller]
+
+  ghpc_startup_login = {
     filename = "ghpc_startup.sh"
     content  = var.login_startup_script
-  }]
-  ghpc_startup_script_compute = [{
+  }
+  ghpc_startup_script_login = length(local.daos_ns) > 0 ? [local.daos_install_mount_script, local.ghpc_startup_login] : [local.ghpc_startup_login]
+
+  ghpc_startup_compute = {
     filename = "ghpc_startup.sh"
     content  = var.compute_startup_script
-  }]
+  }
+  ghpc_startup_script_compute = length(local.daos_ns) > 0 ? [local.daos_install_mount_script, local.ghpc_startup_compute] : [local.ghpc_startup_compute]
+
   nodeset_startup_scripts = { for k, v in local.nodeset_map : k => v.startup_script }
+}
+
+module "daos_network_storage_scripts" {
+  count = length(local.daos_ns) > 0 ? 1 : 0
+
+  source          = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=v1.34.0&depth=1"
+  labels          = local.labels
+  project_id      = var.project_id
+  deployment_name = var.deployment_name
+  region          = var.region
+  runners         = local.daos_network_storage_runners
 }
 
 module "slurm_files" {
@@ -121,8 +165,17 @@ module "slurm_files" {
   enable_slurm_gcp_plugins      = var.enable_slurm_gcp_plugins
 
   disable_default_mounts = !var.enable_default_mounts
-  network_storage        = var.network_storage
-  login_network_storage  = var.login_network_storage
+  network_storage = [
+    for storage in var.network_storage : {
+      server_ip     = storage.server_ip,
+      remote_mount  = storage.remote_mount,
+      local_mount   = storage.local_mount,
+      fs_type       = storage.fs_type,
+      mount_options = storage.mount_options
+    }
+    if storage.fs_type != "daos"
+  ]
+  login_network_storage = var.login_network_storage
 
   partitions  = [for p in var.partitions : { partition : p }]
   nodeset     = values(module.slurm_nodeset)[*]
