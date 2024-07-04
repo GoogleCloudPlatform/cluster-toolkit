@@ -13,46 +13,39 @@
 # limitations under the License.
 
 ---
-- name: Set most recent Python version as default
-  ansible.builtin.shell:
-    cmd: |
-      latest_version=$(ls -1 /usr/bin/python3* | awk -F/ '{print $NF}' | grep -E 'python[0-9]+\.[0-9]+$' | sort -V | tail -1)
-      alternatives --set python3 /usr/bin/$latest_version
-  when: ansible_distribution == 'Rocky'
+- name: Get default Python interpreter from update-alternatives
+  ansible.builtin.shell: >
+    update-alternatives --display python3 |
+    grep 'link currently points to' |
+    awk '{print $NF}'
+  register: default_python
+  changed_when: false
 
-- name: Install pip3
-  ansible.builtin.package:
-    name: python3-pip
-    state: present
-  become: true
-  when: ansible_distribution == 'Rocky'
+- name: Set default Python interpreter for Ansible
+  ansible.builtin.set_fact:
+    ansible_python_interpreter: "{{ default_python.stdout }}"
 
-- name: Install setuptools for Python 3.11
-  ansible.builtin.command:
-    cmd: /usr/bin/python3.11 -m ensurepip --upgrade
-  become: true
-  when: ansible_distribution == 'Rocky'
+- name: Verify Python interpreter
+  ansible.builtin.command: "{{ ansible_python_interpreter }} --version"
+  register: python_version
 
-- name: Upgrade PIP3
-  ansible.builtin.pip:
-    executable: pip3
-    name: pip
-    state: forcereinstall
+- name: Display Python version
+  ansible.builtin.debug:
+    msg: "The Python interpreter version is: {{ python_version.stdout }}"
 
 # Can't use the pip action here because we need to explicitly enable
 # a modern gcc from the dev_env role
 - name: Install FE C&C Dependencies
   ansible.builtin.pip:
-    executable: pip3
     name:
-    - requests
-    - pexpect
-    - google-cloud-storage
-    - google-cloud-pubsub
-    - addict
-    - google-api-python-client
-    - google-cloud-secret-manager
-    - prometheus_client
+      - requests
+      - pexpect
+      - google-cloud-storage
+      - google-cloud-pubsub
+      - addict
+      - google-api-python-client
+      - google-cloud-secret-manager
+      - prometheus_client
     state: present
 
 - name: Install FE C&C Daemon
