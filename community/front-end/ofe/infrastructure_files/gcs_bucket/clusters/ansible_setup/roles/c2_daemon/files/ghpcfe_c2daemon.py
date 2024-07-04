@@ -918,7 +918,7 @@ def cb_run_job(message, **kwargs):
     logger.info(
         "Job %s (slurm %s) completed with result %s", jobid, slurm_jobid, state
     )
-    status = "c" if state in ["COMPLETED", "COMPLETING"] else "e"
+    status = "r" if any(s in ['COMPLETED', 'COMPLETING'] for s in state) else "e"
     response["status"] = "u"
     send_message("UPDATE", response)
 
