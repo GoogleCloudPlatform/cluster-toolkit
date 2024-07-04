@@ -13,7 +13,7 @@
 {{ uses_str }}
   settings:
     bandwidth_tier: {% if part.enable_tier1_networking %}tier_1_enabled{% else %}platform_default{% endif %}
-    subnetwork_self_link: "projects/{{ cluster.project_id }}/regions/{{ cluster.region }}/subnetworks/{{ cluster.subnet.cloud_id }}"
+    subnetwork_self_link: "projects/{{ cluster.project_id }}/regions/{{ cluster.cloud_region }}/subnetworks/{{ cluster.subnet.cloud_id }}"
     enable_smt: {{ part.enable_hyperthreads }}
     enable_placement: {{ part.enable_placement }}
     machine_type: {{ part.machine_type }}
