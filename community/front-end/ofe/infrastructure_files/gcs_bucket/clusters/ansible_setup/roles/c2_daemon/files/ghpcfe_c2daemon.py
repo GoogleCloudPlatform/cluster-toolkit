@@ -430,7 +430,7 @@ def cb_spack_install(message):
     logger.info(
         "Job for %s:%s completed with result %s", appid, app_name, state
     )
-    status = "r" if state in ["COMPLETED", "COMPLETING"] else "e"
+    status = "r" if any(s in ['COMPLETED', 'COMPLETING'] for s in state) else "e"
     final_update = {"ackid": ackid, "app_id": appid, "status": status}
     if status == "r":
         final_update.update(
