@@ -551,7 +551,7 @@ def cb_install_app(message):
         app_name,
         state,
     )
-    status = "r" if state in ["COMPLETED", "COMPLETING"] else "e"
+    status = "r" if any(s in ['COMPLETED', 'COMPLETING'] for s in state) else "e"
     response["status"] = status
     if status == "r":
         # Application installed.  Install Module file if appropriate
