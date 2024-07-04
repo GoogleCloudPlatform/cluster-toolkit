@@ -86,7 +86,7 @@ deployment_groups:
     id: slurm_login
     settings:
       num_instances: {{ cluster.num_login_nodes }}
-      subnetwork_self_link: "projects/{{ cluster.project_id }}/regions/{{ cluster.region }}/subnetworks/{{ cluster.subnet.cloud_id }}"
+      subnetwork_self_link: "projects/{{ cluster.project_id }}/regions/{{ cluster.cloud_region }}/subnetworks/{{ cluster.subnet.cloud_id }}"
       machine_type: {{ cluster.login_node_instance_type }}
       disk_type: {{ cluster.login_node_disk_type }}
       disk_size_gb: {{ cluster.login_node_disk_size }}
