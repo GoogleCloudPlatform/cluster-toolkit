@@ -919,6 +919,9 @@ class ClusterPartition(models.Model):
     enable_hyperthreads = models.BooleanField(
         default=False, help_text="Enable Hyperthreads (SMT)"
     )
+    exclusive = models.BooleanField(
+        default=True, help_text="Exclusive job access to nodes."
+    )
     enable_tier1_networking = models.BooleanField(
         default=False,
         help_text=(

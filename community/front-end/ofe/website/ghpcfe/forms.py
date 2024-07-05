@@ -248,6 +248,7 @@ class ClusterPartitionForm(forms.ModelForm):
             "dynamic_node_count",
             "static_node_count",
             "reservation_name",
+            "exclusive",
             "enable_placement",
             "enable_hyperthreads",
             "enable_tier1_networking",
@@ -316,6 +317,31 @@ class ClusterPartitionForm(forms.ModelForm):
             raise ValidationError(
                 "SlurmGCP does not support Placement Groups for selected instance type"  # pylint: disable=line-too-long
             )
+
+        # schedmd-slurm-gcp-v6-partition/outputs.tf
+        if cleaned_data["dynamic_node_count"] > 0 and not cleaned_data[
+            "exclusive"
+        ]:
+            raise ValidationError("If any non-static nodesets have enable placement set to true, exclusive must be true.")  
+
+        if cleaned_data["static_node_count"] > 0 and cleaned_data[
+            "exclusive"
+        ]:
+            raise ValidationError("Can't use static nodes within partition with exclusive set to true.")  
+
+        # schedmd-slurm-gcp-v6-nodeset/outputs.tf
+        if cleaned_data["reservation_name"] and cleaned_data[
+            "enable_placement"
+        ]:
+            raise ValidationError("If a reservation is specified, placement must be false.")  
+
+        if cleaned_data["enable_placement"] and cleaned_data[
+            "static_node_count"
+        ] > 0 and cleaned_data[
+            "dynamic_node_count"
+        ] > 0:
+            raise ValidationError("Cannot use placement with static and auto-scaling nodes in the same node set.")  
+
         return cleaned_data
 
 

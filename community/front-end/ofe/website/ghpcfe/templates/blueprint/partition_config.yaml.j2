@@ -5,7 +5,7 @@
   - {{ part_id }}-nodeset
   settings:
     partition_name: {{ part.name }}
-    exclusive: {{ exclusive }}
+    exclusive: {{ part.exclusive }}
     resume_timeout: 500
 
 - source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
