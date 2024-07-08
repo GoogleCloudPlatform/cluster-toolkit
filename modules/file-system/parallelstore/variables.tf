@@ -60,7 +60,11 @@ variable "mount_options" {
 }
 
 variable "private_vpc_connection_peering" {
-  description = "The name of the VPC Network peering connection."
+  description = <<-EOT
+    The name of the VPC Network peering connection.
+    If using new VPC, please use community/modules/network/private-service-access to create private-service-access and
+    If using existing VPC with private-service-access enabled, set this manually."
+    EOT
   type        = string
 }
 
@@ -76,14 +80,14 @@ variable "network_id" {
   }
 }
 
-variable "source_gcs_bucket_uri" {
+variable "import_gcs_bucket_uri" {
   description = "The name of the GCS bucket to import data from to parallelstore."
   type        = string
-  default     = ""
+  default     = null
 }
 
-variable "destination_hydration_parallelstore" {
+variable "import_destination_path" {
   description = "The name of local path to import data on parallelstore instance from GCS bucket."
   type        = string
-  default     = "/"
+  default     = null
 }
