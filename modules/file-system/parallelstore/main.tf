@@ -23,6 +23,7 @@ locals {
   fs_type       = "daos"
   server_ip     = ""
   remote_mount  = ""
+  id            = var.name != null ? var.name : "${var.deployment_name}-${random_id.resource_name_suffix.hex}"
   access_points = jsonencode(google_parallelstore_instance.instance.access_points)
 
   client_install_runner = {
@@ -45,7 +46,7 @@ resource "random_id" "resource_name_suffix" {
 }
 
 resource "google_parallelstore_instance" "instance" {
-  instance_id  = var.name != null ? var.name : "${var.deployment_name}-${random_id.resource_name_suffix.hex}"
+  instance_id  = local.id
   location     = var.zone
   capacity_gib = var.size_gb
   network      = var.network_id
@@ -61,6 +62,6 @@ resource "null_resource" "hydration" {
 
   depends_on = [resource.google_parallelstore_instance.instance]
   provisioner "local-exec" {
-    command = "curl -X POST   -H \"Content-Type: application/json\"   -H \"Authorization: Bearer $(gcloud auth print-access-token)\"   -d '{\"source_gcs_bucket\": {\"uri\":\"${var.source_gcs_bucket_uri}\"}, \"destination_parallelstore\": {\"path\":\"${var.destination_hydration_parallelstore}\"}}'   https://parallelstore.googleapis.com/v1beta/projects/${var.project_id}/locations/${var.zone}/instances/${var.name}:importData"
+    command = "curl -X POST   -H \"Content-Type: application/json\"   -H \"Authorization: Bearer $(gcloud auth print-access-token)\"   -d '{\"source_gcs_bucket\": {\"uri\":\"${var.source_gcs_bucket_uri}\"}, \"destination_parallelstore\": {\"path\":\"${var.destination_hydration_parallelstore}\"}}'   https://parallelstore.googleapis.com/v1beta/projects/${var.project_id}/locations/${var.zone}/instances/${local.id}:importData"
   }
 }
