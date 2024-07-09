@@ -175,8 +175,14 @@ def authentication_project():
     return google.auth.default()[1]
 
 
+DEFAULT_UNIVERSE_DOMAIN = "googleapis.com"
+
+
 def universe_domain() -> str:
-    return instance_metadata("attributes/universe_domain")
+    try:
+        return instance_metadata("attributes/universe_domain")
+    except Exception:
+        return DEFAULT_UNIVERSE_DOMAIN
 
 
 def endpoint_version(api: ApiEndpoint) -> Optional[str]:
@@ -204,6 +210,8 @@ def create_client_options(api: ApiEndpoint = None) -> ClientOptions:
     ep = None
     ver = endpoint_version(api)
     ud = universe_domain()
+    if ud == DEFAULT_UNIVERSE_DOMAIN:
+        ud = None
     if ver:
         ep = f"https://{api.value}.{ud}/{ver}/"
     log.debug(
@@ -469,7 +477,7 @@ def compute_service(credentials=None, user_agent=USER_AGENT, version="beta"):
     disc_url = googleapiclient.discovery.DISCOVERY_URI
     if ver:
         version = ver
-        disc_url = disc_url.replace("googleapis.com", universe_domain())
+        disc_url = disc_url.replace(DEFAULT_UNIVERSE_DOMAIN, universe_domain())
 
     log.debug(f"Using version={version} of Google Compute Engine API")
     return googleapiclient.discovery.build(
@@ -1519,6 +1527,7 @@ class TPU:
             "slurm_cluster_name": lkp.cfg.slurm_cluster_name,
             "slurm_bucket_path": lkp.cfg.bucket_path,
             "slurm_names": ";".join(slurm_names),
+            "universe_domain": universe_domain(),
         }
         node.tags = [lkp.cfg.slurm_cluster_name]
         if self.nodeset.service_account:

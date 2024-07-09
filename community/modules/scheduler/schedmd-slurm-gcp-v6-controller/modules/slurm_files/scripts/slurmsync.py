@@ -155,7 +155,7 @@ def _find_tpu_node_status(nodename, state):
             & state.flags
         ):
             return NodeStatus.unbacked
-        if nodename in find_node_status.static_nodeset:
+        if lkp.is_static_node(nodename):
             return NodeStatus.resume
     elif (
         state is not None
