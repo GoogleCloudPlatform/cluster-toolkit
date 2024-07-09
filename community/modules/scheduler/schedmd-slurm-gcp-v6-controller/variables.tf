@@ -217,11 +217,13 @@ variable "nodeset" {
     min_cpu_platform     = optional(string)
     network_tier         = optional(string, "STANDARD")
     network_storage = optional(list(object({
-      server_ip     = string
-      remote_mount  = string
-      local_mount   = string
-      fs_type       = string
-      mount_options = string
+      server_ip             = string
+      remote_mount          = string
+      local_mount           = string
+      fs_type               = string
+      mount_options         = string
+      client_install_runner = optional(map(string))
+      mount_runner          = optional(map(string))
     })), [])
     on_host_maintenance = optional(string)
     preemptible         = optional(bool, false)
@@ -298,11 +300,13 @@ variable "nodeset_tpu" {
     data_disks   = optional(list(string), [])
     docker_image = optional(string, "")
     network_storage = optional(list(object({
-      server_ip     = string
-      remote_mount  = string
-      local_mount   = string
-      fs_type       = string
-      mount_options = string
+      server_ip             = string
+      remote_mount          = string
+      local_mount           = string
+      fs_type               = string
+      mount_options         = string
+      client_install_runner = optional(map(string))
+      mount_runner          = optional(map(string))
     })), [])
     subnetwork = string
     service_account = optional(object({
@@ -379,7 +383,7 @@ variable "enable_cleanup_compute" {
 Enables automatic cleanup of compute nodes and resource policies (e.g.
 placement groups) managed by this module, when cluster is destroyed.
 
-*WARNING*: Toggling this off will impact the running workload. 
+*WARNING*: Toggling this off will impact the running workload.
 Deployed compute nodes and controller will be destroyed.
 EOD
   type        = bool
@@ -438,11 +442,13 @@ variable "disable_default_mounts" { # tflint-ignore: terraform_unused_declaratio
 variable "network_storage" {
   description = "An array of network attached storage mounts to be configured on all instances."
   type = list(object({
-    server_ip     = string,
-    remote_mount  = string,
-    local_mount   = string,
-    fs_type       = string,
-    mount_options = string,
+    server_ip             = string,
+    remote_mount          = string,
+    local_mount           = string,
+    fs_type               = string,
+    mount_options         = string,
+    client_install_runner = optional(map(string))
+    mount_runner          = optional(map(string))
   }))
   default = []
 }
