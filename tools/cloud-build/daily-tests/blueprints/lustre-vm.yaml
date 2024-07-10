@@ -98,7 +98,7 @@ deployment_groups:
       name_prefix: centos
       add_deployment_name_before_prefix: true
       instance_image:
-        family: centos-7
+        name: centos-7-v20240611
         project: centos-cloud
   - id: wait-centos
     source: community/modules/scripts/wait-for-startup

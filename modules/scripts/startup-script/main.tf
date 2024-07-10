@@ -108,8 +108,15 @@ locals {
     args        = var.ansible_virtualenv_path
   }] : []
 
+  hotfix_runner = [{
+    type        = "shell"
+    source      = "${path.module}/files/early_run_hotfixes.sh"
+    destination = "early_run_hotfixes.sh"
+  }]
+
   runners = concat(
     local.warnings,
+    local.hotfix_runner,
     local.proxy_runner,
     local.monitoring_agent_installer,
     local.ansible_installer,

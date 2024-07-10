@@ -27,8 +27,8 @@ vars:
   zone: customer-zone
   disk_size: 200
   final_image_family: slurm-dlvm
-  network_name_system: slurm-sys-net
-  subnetwork_name_system: slurm-sys-subnet
+  network_name_system: slurm-a3-base-sysnet
+  subnetwork_name_system: slurm-a3-base-sysnet-subnet
   slurm_cluster_name: slurm0
   source_image_project_id: source-image-project-id # use value supplied by Google Cloud staff
   source_image: source-image-name                  # use value supplied by Google Cloud staff

@@ -17,6 +17,16 @@ output "slurm_cluster_name" {
   value       = local.slurm_cluster_name
 }
 
+output "slurm_controller_instance" {
+  description = "Compute instance of controller node"
+  value       = module.slurm_controller_instance.slurm_instances[0]
+}
+
+output "slurm_login_instances" {
+  description = "Compute instances of login nodes"
+  value       = flatten([for k, v in module.slurm_login_instance : v.slurm_instances])
+}
+
 output "slurm_bucket_path" {
   description = "Bucket path used by cluster."
   value       = module.slurm_files.slurm_bucket_path
