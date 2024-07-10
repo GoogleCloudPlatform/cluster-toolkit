@@ -295,7 +295,7 @@ variable "instance_image_custom" {
     See: https://goo.gle/hpc-slurm-images
     EOD
   type        = bool
-  default     = false
+  default     = true
 }
 
 
