@@ -325,8 +325,8 @@ variable "instance_image" {
     EOD
   type        = map(string)
   default = {
-    family  = "slurm-gcp-6-5-hpc-rocky-linux-8"
-    project = "schedmd-slurm-public"
+    family  = "nstest-slurm-6-5"
+    project = "hpc-toolkit-dev"
   }
 
   validation {
@@ -353,7 +353,7 @@ variable "instance_image_custom" {
     See: https://goo.gle/hpc-slurm-images
     EOD
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "tags" {

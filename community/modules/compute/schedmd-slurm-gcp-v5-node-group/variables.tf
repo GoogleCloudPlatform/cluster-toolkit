@@ -95,8 +95,8 @@ variable "instance_image" {
     EOD
   type        = map(string)
   default = {
-    project = "schedmd-slurm-public"
-    family  = "slurm-gcp-5-11-hpc-centos-7"
+    project = "hpc-toolkit-dev"
+    family  = "nstest-slurm-5-11"
   }
 
   validation {
@@ -123,7 +123,7 @@ variable "instance_image_custom" {
     See: https://goo.gle/hpc-slurm-images
     EOD
   type        = bool
-  default     = false
+  default     = true
 }
 
 # tflint-ignore: terraform_unused_declarations
