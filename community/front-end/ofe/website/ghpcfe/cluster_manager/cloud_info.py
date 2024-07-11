@@ -83,6 +83,56 @@ def _get_gcp_client(credentials, service="compute", api_version="v1"):
     )
 
 
+def _get_vm_reservations(credentials, zone, ttl_hash=None):
+    try:
+        # logger.info(f"Fetching VM reservations for credentials: {credentials}, zone: {zone}")
+        project, client = _get_gcp_client(credentials)
+
+        req = client.reservations().list(project=project, zone=zone)
+        resp = req.execute()
+
+        if "items" not in resp:
+            # logger.info("No reservations found")
+            return {}
+
+        data = {
+            reservation["name"]: {
+                "name": reservation["name"],
+                "specificReservationRequired": reservation.get("specificReservationRequired", False),
+                "status": reservation["status"],
+                "instanceProperties": {
+                    "machineType": reservation
+                        .get("specificReservation", {})
+                        .get("instanceProperties", {})
+                        .get("machineType", ""),
+                    "minCpuPlatform": reservation
+                        .get("specificReservation", {})
+                        .get("instanceProperties", {})
+                        .get("minCpuPlatform", ""),
+                    "availableCount": int(
+                        reservation
+                            .get("specificReservation", {})
+                            .get("count", 0)
+                    )
+                },
+                "shareSettings": reservation.get("shareSettings", {}),
+            }
+            for reservation in resp["items"]
+        }
+
+        # logger.info(f"Reservations data: {data}")
+        return data
+    except Exception as e:
+        logger.error(f"Error fetching VM reservations: {e}")
+        return {}
+
+def get_vm_reservations(cloud_provider, credentials, unused_region, zone):
+    if cloud_provider == "GCP":
+        return _get_vm_reservations(credentials, zone, ttl_hash=_get_ttl_hash())
+    else:
+        raise Exception(f'Unsupported Cloud Provider "{cloud_provider}"')
+
+
 @lru_cache
 def _get_gcp_disk_types(
     credentials, zone, ttl_hash=None
