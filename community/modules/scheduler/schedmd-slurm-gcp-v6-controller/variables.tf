@@ -618,3 +618,21 @@ EOD
   type        = any
   default     = false
 }
+
+variable "universe_domain" {
+  description = "Domain address for alternate API universe"
+  type        = string
+  default     = "googleapis.com"
+  nullable    = false
+}
+
+variable "endpoint_versions" {
+  description = "Version of the API to use (The compute service is the only API currently supported)"
+  type = object({
+    compute = string
+  })
+  default = {
+    compute = "beta"
+  }
+  nullable = false
+}
