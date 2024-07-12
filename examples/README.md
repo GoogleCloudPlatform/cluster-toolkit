@@ -1445,7 +1445,7 @@ guest_accelerator:
 Once you have deployed the blueprint, follow output instructions to _fetch
 credentials for the created cluster_ and _submit a job calling `nvidia_smi`_.
 
-[ml-gke.yaml]: ../community/examples/ml-gke.yaml
+[ml-gke.yaml]: ../examples/ml-gke.yaml
 [`kubernetes-operations`]: ../community/modules/scripts/kubernetes-operations/README.md
 
 ### [storage-gke.yaml] ![community-badge] ![experimental-badge]
