@@ -89,7 +89,7 @@ limitations under the License.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_login_startup_script"></a> [login\_startup\_script](#module\_login\_startup\_script) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | v1.34.0&depth=1 |
+| <a name="module_login_startup_script"></a> [login\_startup\_script](#module\_login\_startup\_script) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | v1.35.0&depth=1 |
 
 ## Resources
 

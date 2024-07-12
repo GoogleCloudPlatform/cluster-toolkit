@@ -44,7 +44,6 @@ deployment_groups:
       local_mount: /gcs
       mount_options: defaults,rw,_netdev,implicit_dirs,allow_other,implicit_dirs,file_mode=777,dir_mode=777
       random_suffix: true
-      force_destroy: true
 
   - id: gpunets
     source: modules/network/multivpc
@@ -242,7 +241,6 @@ deployment_groups:
       machine_type: c2-standard-8
       enable_cleanup_compute: true
       enable_external_prolog_epilog: true
-      enable_devel: false
       slurm_conf_tpl: modules/embedded/community/modules/scheduler/schedmd-slurm-gcp-v6-controller/etc/long-prolog-slurm.conf.tpl
       enable_controller_public_ips: false
       controller_startup_script: $(controller_startup.startup_script)

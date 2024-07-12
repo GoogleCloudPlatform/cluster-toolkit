@@ -27,8 +27,8 @@ vars:
   zone: customer-zone
   disk_size: 200
   final_image_family: slurm-dlvm
-  network_name_system: slurm-sys-net
-  subnetwork_name_system: slurm-sys-subnet
+  network_name_system: slurm-a3-base-sysnet
+  subnetwork_name_system: slurm-a3-base-sysnet-subnet
   slurm_cluster_name: slurm0
   source_image_project_id: source-image-project-id # use value supplied by Google Cloud staff
   source_image: source-image-name                  # use value supplied by Google Cloud staff
@@ -127,12 +127,34 @@ deployment_groups:
 
           [Install]
           WantedBy=multi-user.target
-      - type: data
-        destination: /etc/enroot/enroot.conf
+      - type: shell
+        destination: install_enroot_pyxis.sh
         content: |
+          #!/bin/bash
+          set -e -o pipefail
+          ### Setting up Enroot
+          if ! dpkg -l enroot &>/dev/null; then
+              arch=\$(dpkg --print-architecture)
+              curl -fSsL -O https://github.com/NVIDIA/enroot/releases/download/v3.4.1/enroot_3.4.1-1_${arch}.deb
+              curl -fSsL -O https://github.com/NVIDIA/enroot/releases/download/v3.4.1/enroot+caps_3.4.1-1_${arch}.deb # optional
+              apt-get update
+              apt-get install --assume-yes ./*.deb
+              rm enroot*.deb
+          fi
+          # configure enroot
+          # use single quotes around EOT to avoid shell interpolation
+          cat <<'EOT' > /etc/enroot/enroot.conf
           ENROOT_RUNTIME_PATH    /mnt/localssd/${UID}/enroot/runtime
           ENROOT_CACHE_PATH      /mnt/localssd/${UID}/enroot/cache
           ENROOT_DATA_PATH       /mnt/localssd/${UID}/enroot/data
+          EOT
+          ### Install Pyxis
+          if [ ! -f "/usr/local/lib/slurm/spank_pyxis.so" ]; then
+              git clone --depth 1 https://github.com/NVIDIA/pyxis.git
+              cd pyxis && make install && cd -
+              rm -rf pyxis
+              echo "required /usr/local/lib/slurm/spank_pyxis.so" > /etc/slurm/plugstack.conf
+          fi
       - type: shell
         destination: install_mdadm.sh
         content: |

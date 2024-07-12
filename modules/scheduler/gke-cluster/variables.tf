@@ -214,6 +214,12 @@ variable "enable_master_global_access" {
   default     = false
 }
 
+variable "gcp_public_cidrs_access_enabled" {
+  description = "Whether the cluster master is accessible via all the Google Compute Engine Public IPs. To view this list of IP addresses look here https://cloud.google.com/compute/docs/faq#find_ip_range"
+  type        = bool
+  default     = false
+}
+
 variable "master_authorized_networks" {
   description = "External network that can access Kubernetes master through HTTPS. Must be specified in CIDR notation."
   type = list(object({

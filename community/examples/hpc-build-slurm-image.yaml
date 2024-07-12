@@ -70,6 +70,8 @@ deployment_groups:
           }
       - type: shell
         destination: install_slurm.sh
+        # Note: changes to slurm-gcp `/scripts` folder in the built image will not reflect in the deployed cluster.
+        # Instead the scripts referenced in `schedmd-slurm-gcp-v6-controller/slurm_files` will be used.
         content: |
           #!/bin/bash
           set -e -o pipefail
@@ -117,5 +119,3 @@ deployment_groups:
     settings:
       machine_type: n2d-standard-4
       instance_image: $(vars.built_instance_image)
-      # Will cause Slurm auto-scaling scripts to be sourced from built image
-      enable_devel: false

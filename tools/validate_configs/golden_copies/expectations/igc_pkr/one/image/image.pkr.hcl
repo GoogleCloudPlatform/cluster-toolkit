@@ -52,7 +52,6 @@ locals {
     sysprep-specialize-script-cmd = "winrm quickconfig -quiet & net user /add ${local.windows_packer_user} & net localgroup administrators ${local.windows_packer_user} /add & winrm set winrm/config/service/auth @{Basic=\\\"true\\\"}"
     windows-shutdown-script-cmd   = <<-EOT
       net user /delete ${local.windows_packer_user}
-      GCESysprep -no_shutdown
       EOT
   }
   user_metadata = local.communicator == "winrm" ? local.windows_user_metadata : local.linux_user_metadata
@@ -156,6 +155,16 @@ build {
     for_each = var.windows_startup_ps1
     content {
       inline = split("\n", provisioner.value)
+    }
+  }
+
+  dynamic "provisioner" {
+    labels   = ["powershell"]
+    for_each = length(var.windows_startup_ps1) > 0 ? [1] : []
+    content {
+      inline = [
+        "GCESysprep -no_shutdown"
+      ]
     }
   }
 

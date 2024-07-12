@@ -125,7 +125,7 @@ resource "google_storage_bucket_object" "execute_config" {
 }
 
 module "startup_script" {
-  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=v1.34.0&depth=1"
+  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=v1.35.0&depth=1"
 
   project_id      = var.project_id
   region          = var.region
@@ -151,6 +151,7 @@ module "execute_point_instance_template" {
 
   machine_type   = var.machine_type
   disk_size_gb   = var.disk_size_gb
+  disk_type      = var.disk_type
   gpu            = one(local.guest_accelerator)
   preemptible    = var.spot
   startup_script = local.is_windows_image ? null : module.startup_script.startup_script

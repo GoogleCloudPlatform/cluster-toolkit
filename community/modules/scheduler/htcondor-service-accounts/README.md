@@ -100,9 +100,9 @@ No providers.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_access_point_service_account"></a> [access\_point\_service\_account](#module\_access\_point\_service\_account) | github.com/GoogleCloudPlatform/hpc-toolkit//community/modules/project/service-account | v1.34.0&depth=1 |
-| <a name="module_central_manager_service_account"></a> [central\_manager\_service\_account](#module\_central\_manager\_service\_account) | github.com/GoogleCloudPlatform/hpc-toolkit//community/modules/project/service-account | v1.34.0&depth=1 |
-| <a name="module_execute_point_service_account"></a> [execute\_point\_service\_account](#module\_execute\_point\_service\_account) | github.com/GoogleCloudPlatform/hpc-toolkit//community/modules/project/service-account | v1.34.0&depth=1 |
+| <a name="module_access_point_service_account"></a> [access\_point\_service\_account](#module\_access\_point\_service\_account) | github.com/GoogleCloudPlatform/hpc-toolkit//community/modules/project/service-account | v1.35.0&depth=1 |
+| <a name="module_central_manager_service_account"></a> [central\_manager\_service\_account](#module\_central\_manager\_service\_account) | github.com/GoogleCloudPlatform/hpc-toolkit//community/modules/project/service-account | v1.35.0&depth=1 |
+| <a name="module_execute_point_service_account"></a> [execute\_point\_service\_account](#module\_execute\_point\_service\_account) | github.com/GoogleCloudPlatform/hpc-toolkit//community/modules/project/service-account | v1.35.0&depth=1 |
 
 ## Resources
 
