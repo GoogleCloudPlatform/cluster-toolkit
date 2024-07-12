@@ -47,9 +47,9 @@ Modules that are still in development and less stable are labeled with the
   Creates a TPU nodeset to be used by the [schedmd-slurm-gcp-v6-partition] module.
 * **[schedmd-slurm-gcp-v6-nodeset-dynamic]** ![community-badge] ![experimental-badge]:
   Creates a dynamic nodeset to be used by the [schedmd-slurm-gcp-v6-partition] module and instance template.
-* **[gke-node-pool]** ![community-badge] ![experimental-badge] : Creates a
+* **[gke-node-pool]** ![core-badge] ![experimental-badge] : Creates a
   Kubernetes node pool using GKE.
-* **[gke-job-template]** ![community-badge] ![experimental-badge] : Creates a
+* **[gke-job-template]** ![core-badge] ![experimental-badge] : Creates a
   Kubernetes job file to be used with a [gke-node-pool].
 * **[htcondor-execute-point]** ![community-badge] ![experimental-badge] :
   Manages a group of execute points for use in an [HTCondor
@@ -104,7 +104,7 @@ Modules that are still in development and less stable are labeled with the
 * **[Intel-DAOS]** ![community-badge] : Creates
   a [DAOS](https://docs.daos.io/) file system.
 * **[cloud-storage-bucket]** ![community-badge] ![experimental-badge] : Creates a Google Cloud Storage (GCS) bucket.
-* **[gke-persistent-volume]** ![community-badge] ![experimental-badge] : Creates persistent volumes and persistent volume claims for shared storage.
+* **[gke-persistent-volume]** ![core-badge] ![experimental-badge] : Creates persistent volumes and persistent volume claims for shared storage.
 * **[nfs-server]** ![community-badge] ![experimental-badge] : Creates a VM and
   configures an NFS server that can be mounted by other VM.
 
@@ -189,9 +189,9 @@ Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial][fsi-monteca
   template that works with other Toolkit modules.
 * **[batch-login-node]** ![core-badge] : Creates a VM that can be used for
   submission of Google Cloud Batch jobs.
-* **[gke-cluster]** ![community-badge] ![experimental-badge] : Creates a
+* **[gke-cluster]** ![core-badge] ![experimental-badge] : Creates a
   Kubernetes cluster using GKE.
-* **[pre-existing-gke-cluster]** ![community-badge] ![experimental-badge] : Retrieves an existing GKE cluster. Substitute for ([gke-cluster]) module.
+* **[pre-existing-gke-cluster]** ![core-badge] ![experimental-badge] : Retrieves an existing GKE cluster. Substitute for ([gke-cluster]) module.
 * **[schedmd-slurm-gcp-v5-controller]** ![community-badge] :
   Creates a Slurm controller node using [slurm-gcp-version-5].
 * **[schedmd-slurm-gcp-v5-login]** ![community-badge] :
@@ -218,7 +218,7 @@ Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial][fsi-monteca
 [batch-job-template]: ../modules/scheduler/batch-job-template/README.md
 [batch-login-node]: ../modules/scheduler/batch-login-node/README.md
 [gke-cluster]: ../modules/scheduler/gke-cluster/README.md
-[pre-existing-gke-cluster]: ../community/modules/scheduler/pre-existing-gke-cluster/README.md
+[pre-existing-gke-cluster]: ../modules/scheduler/pre-existing-gke-cluster/README.md
 [htcondor-setup]: ../community/modules/scheduler/htcondor-setup/README.md
 [htcondor-pool-secrets]: ../community/modules/scheduler/htcondor-pool-secrets/README.md
 [htcondor-access-point]: ../community/modules/scheduler/htcondor-access-point/README.md
