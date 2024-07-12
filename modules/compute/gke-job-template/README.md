@@ -19,7 +19,7 @@ The following example creates a GKE job template file.
 
 ```yaml
   - id: job-template
-    source: community/modules/compute/gke-job-template
+    source: modules/compute/gke-job-template
     use: [compute_pool]
     settings:
       node_count: 3

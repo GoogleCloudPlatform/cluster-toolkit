@@ -1390,7 +1390,7 @@ Toolkit. It includes:
   Example settings for a2 look like:
   
   ```yaml
-  source: community/modules/compute/gke-node-pool
+  source: modules/compute/gke-node-pool
     use: [gke_cluster]
     settings:
       disk_type: pd-balanced

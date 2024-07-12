@@ -39,7 +39,7 @@ deployment_groups:
           ip_cidr_range: 10.0.32.0/20
 
   - id: gke_cluster
-    source: community/modules/scheduler/gke-cluster
+    source: modules/scheduler/gke-cluster
     use: [network1]
     settings:
       enable_filestore_csi: true
@@ -52,7 +52,7 @@ deployment_groups:
     outputs: [instructions]
 
   - id: debug_pool
-    source: community/modules/compute/gke-node-pool
+    source: modules/compute/gke-node-pool
     use: [gke_cluster]
     settings:
       name: debug
@@ -69,7 +69,7 @@ deployment_groups:
       force_destroy: true
 
   - id: data-bucket-pv
-    source: community/modules/file-system/gke-persistent-volume
+    source: modules/file-system/gke-persistent-volume
     use: [gke_cluster, data-bucket]
     settings: {capacity_gb: 5000}
 
@@ -81,13 +81,13 @@ deployment_groups:
     settings: {local_mount: /shared}
 
   - id: shared-filestore-pv
-    source: community/modules/file-system/gke-persistent-volume
+    source: modules/file-system/gke-persistent-volume
     use: [gke_cluster, filestore]
 
   ### Shared Storage Job ###
 
   - id: shared-fs-job
-    source: community/modules/compute/gke-job-template
+    source: modules/compute/gke-job-template
     use:
     - gke_cluster
     - debug_pool
@@ -117,7 +117,7 @@ deployment_groups:
   ### Ephemeral Storage ###
 
   - id: local-ssd-pool
-    source: community/modules/compute/gke-node-pool
+    source: modules/compute/gke-node-pool
     use: [gke_cluster]
     settings:
       name: local-ssd
@@ -125,7 +125,7 @@ deployment_groups:
       local_ssd_count_ephemeral_storage: 1
 
   - id: ephemeral-storage-job
-    source: community/modules/compute/gke-job-template
+    source: modules/compute/gke-job-template
     use: [local-ssd-pool]
     settings:
       name: ephemeral-storage-job

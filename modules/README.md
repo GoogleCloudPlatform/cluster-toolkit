@@ -58,8 +58,8 @@ Modules that are still in development and less stable are labeled with the
   Notebook. Primarily used for [FSI - MonteCarlo Tutorial][fsi-montecarlo-on-batch-tutorial].
 
 [vm-instance]: compute/vm-instance/README.md
-[gke-node-pool]: ../community/modules/compute/gke-node-pool/README.md
-[gke-job-template]: ../community/modules/compute/gke-job-template/README.md
+[gke-node-pool]: ../modules/compute/gke-node-pool/README.md
+[gke-job-template]: ../modules/compute/gke-job-template/README.md
 [schedmd-slurm-gcp-v5-partition]: ../community/modules/compute/schedmd-slurm-gcp-v5-partition/README.md
 [schedmd-slurm-gcp-v5-node-group]: ../community/modules/compute/schedmd-slurm-gcp-v5-node-group/README.md
 [schedmd-slurm-gcp-v6-partition]: ../community/modules/compute/schedmd-slurm-gcp-v6-partition/README.md
@@ -108,7 +108,7 @@ Modules that are still in development and less stable are labeled with the
 [intel-daos]: ../community/modules/file-system/Intel-DAOS/README.md
 [nfs-server]: ../community/modules/file-system/nfs-server/README.md
 [cloud-storage-bucket]: ../community/modules/file-system/cloud-storage-bucket/README.md
-[gke-persistent-volume]: ../community/modules/file-system/gke-persistent-volume/README.md
+[gke-persistent-volume]: ../modules/file-system/gke-persistent-volume/README.md
 
 ### Monitoring
 
@@ -209,7 +209,7 @@ Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial][fsi-monteca
 
 [batch-job-template]: ../modules/scheduler/batch-job-template/README.md
 [batch-login-node]: ../modules/scheduler/batch-login-node/README.md
-[gke-cluster]: ../community/modules/scheduler/gke-cluster/README.md
+[gke-cluster]: ../modules/scheduler/gke-cluster/README.md
 [htcondor-setup]: ../community/modules/scheduler/htcondor-setup/README.md
 [htcondor-pool-secrets]: ../community/modules/scheduler/htcondor-pool-secrets/README.md
 [htcondor-access-point]: ../community/modules/scheduler/htcondor-access-point/README.md

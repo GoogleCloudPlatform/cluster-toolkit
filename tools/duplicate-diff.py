@@ -46,7 +46,7 @@ duplicates = [
         "community/modules/scheduler/schedmd-slurm-gcp-v6-login/gpu_definition.tf",
     ],
     [
-        "community/modules/compute/gke-node-pool/threads_per_core_calc.tf",
+        "modules/compute/gke-node-pool/threads_per_core_calc.tf",
         "modules/compute/vm-instance/threads_per_core_calc.tf",
     ],
     [ # Slurm V5
