@@ -207,25 +207,16 @@ def get_credentials() -> Optional[service_account.Credentials]:
 
 def create_client_options(api: ApiEndpoint = None) -> ClientOptions:
     """Create client options for cloud endpoints"""
-    ep = None
     ver = endpoint_version(api)
     ud = universe_domain()
-    if ud == DEFAULT_UNIVERSE_DOMAIN:
-        ud = None
+    options = {}
+    if ud and ud != DEFAULT_UNIVERSE_DOMAIN:
+        options["universe_domain"] = ud
     if ver:
-        ep = f"https://{api.value}.{ud}/{ver}/"
-    log.debug(
-        f"Using universe domain: {ud}. "
-        + (
-            f"For API: {api.value} using API endpoint: " f"{ep if ep else 'default'}"
-            if api
-            else ""
-        )
-    )
-    return ClientOptions(
-        universe_domain=ud,
-        api_endpoint=ep,
-    )
+        options["api_endpoint"] = f"https://{api.value}.{ud}/{ver}/"
+    co = ClientOptions(**options)
+    log.debug(f"Using ClientOptions = {co} for API: {api.value}")
+    return co
 
 
 class LogFormatter(logging.Formatter):
