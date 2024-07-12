@@ -49,7 +49,7 @@ locals {
   login_sa       = toset(flatten([for x in module.slurm_login_template : x.service_account]))
 
   viewers = toset(flatten([
-    "serviceAccount:${module.slurm_controller_template.service_account.email}",
+    "serviceAccount:${local.service_account.email}",
     formatlist("serviceAccount:%s", [for x in local.compute_sa : x.email]),
     formatlist("serviceAccount:%s", [for x in local.compute_tpu_sa : x.email]),
     formatlist("serviceAccount:%s", [for x in local.login_sa : x.email]),

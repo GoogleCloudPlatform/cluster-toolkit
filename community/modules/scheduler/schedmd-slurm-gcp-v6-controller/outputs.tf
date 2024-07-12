@@ -19,7 +19,7 @@ output "slurm_cluster_name" {
 
 output "slurm_controller_instance" {
   description = "Compute instance of controller node"
-  value       = module.slurm_controller_instance.slurm_instances[0]
+  value       = resource.google_compute_instance.controller
 }
 
 output "slurm_login_instances" {
@@ -36,6 +36,6 @@ output "instructions" {
   description = "Post deployment instructions."
   value       = <<-EOT
     To SSH to the controller (may need to add '--tunnel-through-iap'):
-      gcloud compute ssh ${module.slurm_controller_instance.instances_self_links[0]}
+      gcloud compute ssh ${resource.google_compute_instance.controller.self_link}
   EOT
 }
