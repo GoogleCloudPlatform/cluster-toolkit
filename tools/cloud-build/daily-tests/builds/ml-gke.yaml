@@ -47,7 +47,7 @@ steps:
     echo '      zone: asia-southeast1-b'           >> $${SG_EXAMPLE}
 
     echo '  - id: ubuntu_pool'                                         >> $${SG_EXAMPLE}
-    echo '    source: community/modules/compute/gke-node-pool'         >> $${SG_EXAMPLE}
+    echo '    source: modules/compute/gke-node-pool'         >> $${SG_EXAMPLE}
     echo '    use: [gke_cluster]'                                      >> $${SG_EXAMPLE}
     echo '    settings: {name: ubuntu, image_type: UBUNTU_CONTAINERD}' >> $${SG_EXAMPLE}
 

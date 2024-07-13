@@ -24,7 +24,7 @@ GKE node pool will be created.
     region: us-central1
 
 - id: compute_pool
-  source: community/modules/compute/gke-node-pool
+  source: modules/compute/gke-node-pool
   use: [existing-gke-cluster]
 ```
 
