@@ -13,7 +13,7 @@ The following example creates a GKE node group.
 
 ```yaml
   - id: compute_pool
-    source: community/modules/compute/gke-node-pool
+    source: modules/compute/gke-node-pool
     use: [gke_cluster]
 ```
 
@@ -83,7 +83,7 @@ fixed number of attached GPUs, let's call these machine types as "pre-defined gp
 
 ```yaml
   - id: simple-a2-pool
-    source: community/modules/compute/gke-node-pool
+    source: modules/compute/gke-node-pool
     use: [gke_cluster]
     settings:
       machine_type: a2-highgpu-1g
@@ -109,7 +109,7 @@ an A100 GPU:
 
 ```yaml
   - id: multi-instance-gpu-pool
-    source: community/modules/compute/gke-node-pool
+    source: modules/compute/gke-node-pool
     use: [gke_cluster]
     settings:
       machine_type: a2-highgpu-1g
@@ -125,7 +125,7 @@ The following is an example of
 
 ```yaml
   - id: time-sharing-gpu-pool
-    source: community/modules/compute/gke-node-pool
+    source: modules/compute/gke-node-pool
     use: [gke_cluster]
     settings:
       machine_type: a2-highgpu-1g
@@ -140,7 +140,7 @@ Following is an example of using a GPU attached to an `n1` machine:
 
 ```yaml
   - id: t4-pool
-    source: community/modules/compute/gke-node-pool
+    source: modules/compute/gke-node-pool
     use: [gke_cluster]
     settings:
       machine_type: n1-standard-16

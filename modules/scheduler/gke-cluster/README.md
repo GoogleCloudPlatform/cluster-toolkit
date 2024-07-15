@@ -26,7 +26,7 @@ requirements.
           ip_cidr_range: 10.0.32.0/20
 
   - id: gke_cluster
-    source: community/modules/scheduler/gke-cluster
+    source: modules/scheduler/gke-cluster
     use: [network1]
 ```
 

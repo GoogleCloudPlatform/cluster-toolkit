@@ -36,18 +36,18 @@ deployment_groups:
           ip_cidr_range: 10.0.32.0/20
 
   - id: gke_cluster
-    source: community/modules/scheduler/gke-cluster
+    source: modules/scheduler/gke-cluster
     use: [network1]
     settings:
       enable_private_endpoint: false  # Allows for access from authorized public IPs
     outputs: [instructions]
 
   - id: compute_pool
-    source: community/modules/compute/gke-node-pool
+    source: modules/compute/gke-node-pool
     use: [gke_cluster]
 
   - id: job-template
-    source: community/modules/compute/gke-job-template
+    source: modules/compute/gke-job-template
     use: [compute_pool]
     settings:
       image: busybox

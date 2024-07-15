@@ -20,7 +20,7 @@ The following example creates a Filestore and then uses the
 
 ```yaml
   - id: gke_cluster
-    source: community/modules/scheduler/gke-cluster
+    source: modules/scheduler/gke-cluster
     use: [network1]
     settings:
       master_authorized_networks:
@@ -34,11 +34,11 @@ The following example creates a Filestore and then uses the
       local_mount: /data
 
   - id: datafs-pv
-    source: community/modules/file-system/gke-persistent-volume
+    source: modules/file-system/gke-persistent-volume
     use: [datafs, gke_cluster]
 
   - id: job-template
-    source: community/modules/compute/gke-job-template
+    source: modules/compute/gke-job-template
     use: [datafs-pv, compute_pool]
 ```
 
@@ -48,7 +48,7 @@ The following example creates a GCS bucket and then uses the
 
 ```yaml
   - id: gke_cluster
-    source: community/modules/scheduler/gke-cluster
+    source: modules/scheduler/gke-cluster
     use: [network1]
     settings:
       master_authorized_networks:
@@ -61,11 +61,11 @@ The following example creates a GCS bucket and then uses the
       local_mount: /data
 
   - id: datafs-pv
-    source: community/modules/file-system/gke-persistent-volume
+    source: modules/file-system/gke-persistent-volume
     use: [data-bucket, gke_cluster]
 
   - id: job-template
-    source: community/modules/compute/gke-job-template
+    source: modules/compute/gke-job-template
     use: [datafs-pv, compute_pool, gke_cluster]
 ```
 

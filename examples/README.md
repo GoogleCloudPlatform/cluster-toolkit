@@ -1371,7 +1371,7 @@ secondary IP ranges defined.
 The `gke-job-template` module is used to create a job file that can be submitted
 to the cluster using `kubectl` and will run on the specified node pool.
 
-[hpc-gke.yaml]: ../community/examples/hpc-gke.yaml
+[hpc-gke.yaml]: ../examples/hpc-gke.yaml
 
 ### [ml-gke.yaml] ![community-badge] ![experimental-badge]
 
@@ -1390,7 +1390,7 @@ Toolkit. It includes:
   Example settings for a2 look like:
   
   ```yaml
-  source: community/modules/compute/gke-node-pool
+  source: modules/compute/gke-node-pool
     use: [gke_cluster]
     settings:
       disk_type: pd-balanced
@@ -1438,7 +1438,7 @@ guest_accelerator:
 Once you have deployed the blueprint, follow output instructions to _fetch
 credentials for the created cluster_ and _submit a job calling `nvidia_smi`_.
 
-[ml-gke.yaml]: ../community/examples/ml-gke.yaml
+[ml-gke.yaml]: ../examples/ml-gke.yaml
 [`kubernetes-operations`]: ../community/modules/scripts/kubernetes-operations/README.md
 
 ### [storage-gke.yaml] ![community-badge] ![experimental-badge]
@@ -1470,7 +1470,7 @@ cleaned up when the job is deleted.
 > `--vars authorized_cidr=<your-ip-address>/32`.** You can use a service like
 > [whatismyip.com](https://whatismyip.com) to determine your IP address.
 
-[storage-gke.yaml]: ../community/examples/storage-gke.yaml
+[storage-gke.yaml]: ../examples/storage-gke.yaml
 
 ### [htc-htcondor.yaml] ![community-badge] ![experimental-badge]
 

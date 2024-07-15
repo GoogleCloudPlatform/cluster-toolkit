@@ -17,14 +17,14 @@ GKE node pool will be created.
 
 ```yaml
 - id: existing-gke-cluster
-  source: community/modules/scheduler/pre-existing-gke-cluster
+  source: modules/scheduler/pre-existing-gke-cluster
   settings:
     project_id: $(vars.project_id)
     cluster_name: my-gke-cluster
     region: us-central1
 
 - id: compute_pool
-  source: community/modules/compute/gke-node-pool
+  source: modules/compute/gke-node-pool
   use: [existing-gke-cluster]
 ```
 

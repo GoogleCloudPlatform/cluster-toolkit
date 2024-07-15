@@ -41,7 +41,7 @@ deployment_groups:
           ip_cidr_range: 10.0.32.0/20
 
   - id: gke_cluster
-    source: community/modules/scheduler/gke-cluster
+    source: modules/scheduler/gke-cluster
     use: [network1]
     settings:
       enable_private_endpoint: false  # Allows for access from authorized public IPs
@@ -51,14 +51,14 @@ deployment_groups:
     outputs: [instructions]
 
   - id: g2_pool
-    source: community/modules/compute/gke-node-pool
+    source: modules/compute/gke-node-pool
     use: [gke_cluster]
     settings:
       disk_type: pd-balanced
       machine_type: g2-standard-4
 
   - id: job_template
-    source: community/modules/compute/gke-job-template
+    source: modules/compute/gke-job-template
     use: [g2_pool]
     settings:
       image: nvidia/cuda:11.0.3-runtime-ubuntu20.04
