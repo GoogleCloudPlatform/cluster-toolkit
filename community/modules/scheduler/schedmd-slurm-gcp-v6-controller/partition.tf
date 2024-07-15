@@ -53,6 +53,8 @@ module "slurm_nodeset_template" {
   name_prefix              = each.value.nodeset_name
   on_host_maintenance      = each.value.on_host_maintenance
   preemptible              = each.value.preemptible
+  spot                     = each.value.spot
+  termination_action       = each.value.termination_action
   service_account          = each.value.service_account
   shielded_instance_config = each.value.shielded_instance_config
   source_image_family      = each.value.source_image_family
