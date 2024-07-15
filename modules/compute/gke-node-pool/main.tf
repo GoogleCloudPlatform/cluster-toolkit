@@ -87,11 +87,11 @@ resource "google_container_node_pool" "node_pool" {
     dynamic "guest_accelerator" {
       for_each = local.guest_accelerator
       content {
-        type                           = guest_accelerator.value.type
-        count                          = guest_accelerator.value.count
-        gpu_driver_installation_config = try(guest_accelerator.value.gpu_driver_installation_config, [{ gpu_driver_version = "DEFAULT" }])
-        gpu_partition_size             = try(guest_accelerator.value.gpu_partition_size, null)
-        gpu_sharing_config             = try(guest_accelerator.value.gpu_sharing_config, null)
+        type                           = coalesce(guest_accelerator.value.type, try(local.generated_guest_accelerator[0].type, ""))
+        count                          = coalesce(try(guest_accelerator.value.count, 0) > 0 ? guest_accelerator.value.count : try(local.generated_guest_accelerator[0].count, "0"))
+        gpu_driver_installation_config = coalescelist(try(guest_accelerator.value.gpu_driver_installation_config, []), [{ gpu_driver_version = "DEFAULT" }])
+        gpu_partition_size             = try(guest_accelerator.value.gpu_partition_size, "")
+        gpu_sharing_config             = try(guest_accelerator.value.gpu_sharing_config, [])
       }
     }
 
