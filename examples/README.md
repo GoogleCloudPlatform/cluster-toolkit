@@ -1399,32 +1399,26 @@ Toolkit. It includes:
 
   Users only need to provide machine type for standard ["a2", "a3" and "g2"] machine families,
   while the other settings like `type`, `count` , `gpu_driver_installation_config` will default to
-  machine family specific values.
-  However, for other standard or custom machine families users will need to provide
-  the entire configuration as follows:
+  machine family specific values. More on this [gke-node-pool](../community/modules/compute/gke-node-pool/README.md#gpus-examples)
 
 ```yaml
 machine_type: n1-standard-1
 guest_accelerator:
 - type: nvidia-tesla-t4
   count: 1
-  gpu_partition_size: null
-  gpu_sharing_config: null
-  gpu_driver_installation_config:
-  - gpu_driver_version: "DEFAULT"
 ```
 
-Custom g2 pool
+Custom g2 pool with custom `guest_accelerator` config
 
 ```yaml
 machine_type: g2-custom-16-55296
+disk_type: pd-balanced
 guest_accelerator:
 - type: nvidia-l4
   count: 1
-  gpu_partition_size: null
   gpu_sharing_config:
-  -  max_shared_clients_per_gpu: 2
-      gpu_sharing_strategy: "TIME_SHARING"
+  - max_shared_clients_per_gpu: 2
+    gpu_sharing_strategy: "TIME_SHARING"
   gpu_driver_installation_config:
   - gpu_driver_version: "LATEST"
 ```
@@ -1434,8 +1428,7 @@ guest_accelerator:
   GPU node pool.
 
 > **Note**: The Kubernetes API server will only allow requests from authorized
-> networks. Nvidia drivers are installed on GPU nodes by a DaemonSet created by
-> the [`kubernetes-operations`] Terraform module. **You must use the
+> networks. **You must use the
 > `authorized_cidr` variable to supply an authorized network which contains the
 > IP address of the machine deploying the blueprint, for example
 > `--vars authorized_cidr=<your-ip-address>/32`.** This will allow Terraform to

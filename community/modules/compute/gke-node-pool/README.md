@@ -78,8 +78,8 @@ kernel modules to be loaded.
 There are several ways to add GPUs to a GKE node pool. See
 [docs](https://cloud.google.com/compute/docs/gpus) for more info on GPUs.
 
-The following is a node pool that uses `a2` or `g2` machine types which has a
-fixed number of attached GPUs:
+The following is a node pool that uses `a2`, `a3` or `g2` machine types which has a
+fixed number of attached GPUs, let's call these machine types as "pre-defined gpu machine families":
 
 ```yaml
   - id: simple-a2-pool
@@ -90,8 +90,10 @@ fixed number of attached GPUs:
 ```
 
 > **Note**: It is not necessary to define the [`guest_accelerator`] setting when
-> using `a2` or `g2` machines as information about GPUs, such as type and count,
-> is automatically inferred from the machine type.
+> using pre-defined gpu machine families as information about GPUs, such as type, count and
+> `gpu_driver_installation_config`, is automatically inferred from the machine type.
+> Optional fields such as `gpu_partition_size` need to be specified only if they have
+> non-default values.
 
 The following scenarios require the [`guest_accelerator`] block is specified:
 
@@ -103,6 +105,8 @@ The following is an example of
 [partitioning](https://cloud.google.com/kubernetes-engine/docs/how-to/gpus-multi)
 an A100 GPU:
 
+> **Note**: In the following example, `type`, `count` and `gpu_driver_installation_config` are picked up automatically.
+
 ```yaml
   - id: multi-instance-gpu-pool
     source: community/modules/compute/gke-node-pool
@@ -110,15 +114,8 @@ an A100 GPU:
     settings:
       machine_type: a2-highgpu-1g
       guest_accelerator:
-      - type: nvidia-tesla-a100
-        count: 1
-        gpu_partition_size: 1g.5gb
-        gpu_sharing_config: null
-        gpu_driver_installation_config: null
+      - gpu_partition_size: 1g.5gb
 ```
-
-> **Note**: Once we define the [`guest_accelerator`] block, all fields must be
-> defined. Use `null` for optional fields.
 
 [`guest_accelerator`]: https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/container_cluster#nested_guest_accelerator
 
@@ -133,16 +130,13 @@ The following is an example of
     settings:
       machine_type: a2-highgpu-1g
       guest_accelerator:
-      - type: nvidia-tesla-a100
-        count: 1
-        gpu_partition_size: 1g.5gb
+      - gpu_partition_size: 1g.5gb
         gpu_sharing_config:
         - gpu_sharing_strategy: TIME_SHARING
           max_shared_clients_per_gpu: 3
-        gpu_driver_installation_config: null
 ```
 
-Finally, the following is an example of using a GPU attached to an `n1` machine:
+Following is an example of using a GPU attached to an `n1` machine:
 
 ```yaml
   - id: t4-pool
@@ -153,9 +147,25 @@ Finally, the following is an example of using a GPU attached to an `n1` machine:
       guest_accelerator:
       - type: nvidia-tesla-t4
         count: 2
-        gpu_partition_size: null
-        gpu_sharing_config: null
-        gpu_driver_installation_config: null
+```
+
+Finally, the following is an example of using a GPU (with sharing config) attached to an `n1` machine:
+
+```yaml
+  - id: n1-t4-pool
+    source: community/modules/compute/gke-node-pool
+    use: [gke_cluster]
+    settings:
+      name: n1-t4-pool
+      machine_type: n1-standard-1
+      guest_accelerator:
+      - type: nvidia-tesla-t4
+        count: 2
+        gpu_driver_installation_config:
+        - gpu_driver_version: "LATEST"
+        gpu_sharing_config:
+        - max_shared_clients_per_gpu: 2
+          gpu_sharing_strategy: "TIME_SHARING"
 ```
 
 ## License
@@ -220,7 +230,7 @@ No modules.
 | <a name="input_disk_type"></a> [disk\_type](#input\_disk\_type) | Disk type for each node. | `string` | `"pd-standard"` | no |
 | <a name="input_enable_gcfs"></a> [enable\_gcfs](#input\_enable\_gcfs) | Enable the Google Container Filesystem (GCFS). See [restrictions](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/container_cluster#gcfs_config). | `bool` | `false` | no |
 | <a name="input_enable_secure_boot"></a> [enable\_secure\_boot](#input\_enable\_secure\_boot) | Enable secure boot for the nodes.  Keep enabled unless custom kernel modules need to be loaded. See [here](https://cloud.google.com/compute/shielded-vm/docs/shielded-vm#secure-boot) for more info. | `bool` | `true` | no |
-| <a name="input_guest_accelerator"></a> [guest\_accelerator](#input\_guest\_accelerator) | List of the type and count of accelerator cards attached to the instance. | <pre>list(object({<br>    type  = string<br>    count = number<br>    gpu_driver_installation_config = list(object({<br>      gpu_driver_version = string<br>    }))<br>    gpu_partition_size = string<br>    gpu_sharing_config = list(object({<br>      gpu_sharing_strategy       = string<br>      max_shared_clients_per_gpu = number<br>    }))<br>  }))</pre> | `null` | no |
+| <a name="input_guest_accelerator"></a> [guest\_accelerator](#input\_guest\_accelerator) | List of the type and count of accelerator cards attached to the instance. | <pre>list(object({<br>    type  = optional(string)<br>    count = optional(number, 0)<br>    gpu_driver_installation_config = optional(list(object({<br>      gpu_driver_version = string<br>    })))<br>    gpu_partition_size = optional(string)<br>    gpu_sharing_config = optional(list(object({<br>      gpu_sharing_strategy       = optional(string)<br>      max_shared_clients_per_gpu = optional(number)<br>    })))<br>  }))</pre> | `null` | no |
 | <a name="input_image_type"></a> [image\_type](#input\_image\_type) | The default image type used by NAP once a new node pool is being created. Use either COS\_CONTAINERD or UBUNTU\_CONTAINERD. | `string` | `"COS_CONTAINERD"` | no |
 | <a name="input_kubernetes_labels"></a> [kubernetes\_labels](#input\_kubernetes\_labels) | Kubernetes labels to be applied to each node in the node group. Key-value pairs. <br>(The `kubernetes.io/` and `k8s.io/` prefixes are reserved by Kubernetes Core components and cannot be specified) | `map(string)` | `null` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | GCE resource labels to be applied to resources. Key-value pairs. | `map(string)` | n/a | yes |
