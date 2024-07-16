@@ -154,7 +154,6 @@ module "slurm_files" {
   login_startup_scripts              = local.ghpc_startup_script_login
   login_startup_scripts_timeout      = var.login_startup_scripts_timeout
 
-  enable_devel         = var.enable_devel
   enable_debug_logging = var.enable_debug_logging
   extra_logging_flags  = var.extra_logging_flags
 
