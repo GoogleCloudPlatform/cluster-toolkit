@@ -916,20 +916,6 @@ def part_is_tpu(part):
     """check if partition with name part contains a nodeset of type tpu"""
     return len(lkp.cfg.partitions[part].partition_nodeset_tpu) > 0
 
-
-def get_vmcount_of_tpu_part(part):
-    res = 0
-    for ns in lkp.cfg.partitions[part].partition_nodeset_tpu:
-        tpu_obj = TPU(lkp.cfg.nodeset_tpu[ns])
-        if res == 0:
-            res = tpu_obj.vmcount
-        else:
-            if res != tpu_obj.vmcount:
-                # this should not happen, that in the same partition there are different vmcount nodesets
-                return -1
-    return res
-
-
 def to_hostnames(nodelist: str) -> List[str]:
     """make list of hostnames from hostlist expression"""
     if not nodelist:
@@ -1914,46 +1900,3 @@ if not cfg:
         save_config(cfg, CONFIG_FILE)
 
 lkp = Lookup(cfg)
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
-    )
-    parser.add_argument(
-        "--partitions",
-        "-p",
-        help="The partition(s) to retrieve the TPU vmcount value for.",
-    )
-    args = parser.parse_args()
-    if args.partitions:
-        # useful exit code
-        # partition does not exists in config.yaml, thus do not exist in slurm
-        PART_INVALID = -1
-        # in the same partition there are nodesets with different vmcounts
-        DIFF_VMCOUNTS_SAME_PART = -2
-        # partition is a list of partitions in which at least two of them have different vmcount
-        DIFF_PART_DIFFERENT_VMCOUNTS = -3
-        vmcounts = []
-        # valid equals to 0 means that we are ok, otherwise it will be set to one of the previously defined exit codes
-        valid = 0
-        for part in args.partitions.split(","):
-            if part not in lkp.cfg.partitions:
-                valid = PART_INVALID
-                break
-            else:
-                if part_is_tpu(part):
-                    vmcount = get_vmcount_of_tpu_part(part)
-                    if vmcount == -1:
-                        valid = DIFF_VMCOUNTS_SAME_PART
-                        break
-                    vmcounts.append(vmcount)
-                else:
-                    vmcounts.append(0)
-        # this means that there are different vmcounts for these partitions
-        if valid == 0 and len(set(vmcounts)) != 1:
-            valid = DIFF_PART_DIFFERENT_VMCOUNTS
-        if valid != 0:
-            print(f"VMCOUNT:{valid}")
-        else:
-            print(f"VMCOUNT:{vmcounts[0]}")
