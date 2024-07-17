@@ -86,6 +86,11 @@ duplicates = [
         "modules/file-system/parallelstore/scripts/mount-daos.sh",
         "modules/file-system/pre-existing-network-storage/scripts/mount-daos.sh",
     ],
+    [
+        "modules/compute/vm-instance/compute_image.tf"
+        "modules/scheduler/batch-job-template/compute_image.tf"
+        "community/modules/compute/htcondor-execute-point/compute_image.tf"
+    ],
 ]
 
 for group in duplicates:

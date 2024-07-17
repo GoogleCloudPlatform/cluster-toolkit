@@ -429,3 +429,13 @@ variable "disable_public_ips" {
   type        = bool
   default     = true
 }
+
+variable "disable_automatic_updates" {
+  description = <<-EOT
+  If true, disables automatic updates on the created instances.  This feature is only available on
+  supported images (or images derived from them).  For more details, see
+  https://cloud.google.com/compute/docs/instances/create-hpc-vm#disable_automatic_updates
+  EOT
+  type        = bool
+  default     = false
+}

@@ -99,6 +99,16 @@ variable "instance_image" {
   }
 }
 
+variable "disable_automatic_updates" {
+  description = <<-EOT
+  If true, disables automatic updates on the created instances.  This feature is only available on
+  supported images (or images derived from them).  For more details, see
+  https://cloud.google.com/compute/docs/instances/create-hpc-vm#disable_automatic_updates
+  EOT
+  type        = bool
+  default     = false
+}
+
 variable "execute_point_service_account_email" {
   description = "Service account for HTCondor execute point (e-mail format)"
   type        = string

@@ -147,6 +147,7 @@ limitations under the License.
 | <a name="input_central_manager_ips"></a> [central\_manager\_ips](#input\_central\_manager\_ips) | List of IP addresses of HTCondor Central Managers | `list(string)` | n/a | yes |
 | <a name="input_default_mig_id"></a> [default\_mig\_id](#input\_default\_mig\_id) | Default MIG ID for HTCondor jobs; if unset, jobs must specify MIG id | `string` | `""` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Cluster Toolkit deployment name. HTCondor cloud resource names will include this value. | `string` | n/a | yes |
+| <a name="input_disable_automatic_updates"></a> [disable\_automatic\_updates](#input\_disable\_automatic\_updates) | If true, disables automatic updates on the created instances.  This feature is only available on<br>supported images (or images derived from them).  For more details, see<br>https://cloud.google.com/compute/docs/instances/create-hpc-vm#disable_automatic_updates | `bool` | `false` | no |
 | <a name="input_disk_size_gb"></a> [disk\_size\_gb](#input\_disk\_size\_gb) | Boot disk size in GB | `number` | `32` | no |
 | <a name="input_disk_type"></a> [disk\_type](#input\_disk\_type) | Boot disk size in GB | `string` | `"pd-balanced"` | no |
 | <a name="input_distribution_policy_target_shape"></a> [distribution\_policy\_target\_shape](#input\_distribution\_policy\_target\_shape) | Target shape acoss zones for instance group managing high availability of access point | `string` | `"ANY_SINGLE_ZONE"` | no |

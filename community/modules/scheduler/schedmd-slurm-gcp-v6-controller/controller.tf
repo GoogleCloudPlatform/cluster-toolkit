@@ -32,6 +32,14 @@ locals {
     email  = local.service_account_email
     scopes = var.service_account_scopes
   }
+
+  disable_automatic_updates_metadata = var.disable_automatic_updates ? { google_disable_automatic_updates = "TRUE" } : {}
+
+  metadata = merge(
+    local.disable_automatic_updates_metadata,
+    var.metadata,
+    local.universe_domain
+  )
 }
 
 # INSTANCE TEMPLATE
@@ -63,7 +71,7 @@ module "slurm_controller_template" {
   gpu = one(local.guest_accelerator)
 
   machine_type     = var.machine_type
-  metadata         = merge(var.metadata, local.universe_domain)
+  metadata         = local.metadata
   min_cpu_platform = var.min_cpu_platform
 
   # network_ip = TODO: add support for network_ip

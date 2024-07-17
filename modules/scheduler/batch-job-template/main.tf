@@ -78,6 +78,14 @@ locals {
   on_host_maintenance_default = local.gpu_attached ? "TERMINATE" : "MIGRATE"
 
   on_host_maintenance = coalesce(var.on_host_maintenance, local.on_host_maintenance_default)
+
+  network_storage_metadata           = var.network_storage != null ? ({ network_storage = jsonencode(var.network_storage) }) : {}
+  disable_automatic_updates_metadata = var.disable_automatic_updates ? { google_disable_automatic_updates = "TRUE" } : {}
+
+  metadata = merge(
+    local.network_storage_metadata,
+    local.disable_automatic_updates_metadata
+  )
 }
 
 module "instance_template" {
@@ -94,10 +102,10 @@ module "instance_template" {
 
   machine_type         = var.machine_type
   startup_script       = local.startup_from_network_storage
-  metadata             = var.network_storage != null ? ({ network_storage = jsonencode(var.network_storage) }) : {}
-  source_image_family  = try(var.instance_image.family, "")
-  source_image         = try(var.instance_image.name, "")
-  source_image_project = var.instance_image.project
+  metadata             = local.metadata
+  source_image_family  = data.google_compute_image.compute_image.family
+  source_image         = data.google_compute_image.compute_image.name
+  source_image_project = data.google_compute_image.compute_image.project
   on_host_maintenance  = local.on_host_maintenance
 }
 

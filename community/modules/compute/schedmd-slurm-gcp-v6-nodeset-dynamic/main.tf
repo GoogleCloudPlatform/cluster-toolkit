@@ -20,7 +20,14 @@ locals {
 locals {
   nodeset_name = substr(replace(var.name, "/[^a-z0-9]/", ""), 0, 14)
   feature      = coalesce(var.feature, local.nodeset_name)
-  metadata     = merge(var.metadata, { slurmd_feature = local.feature })
+
+  disable_automatic_updates_metadata = var.disable_automatic_updates ? { google_disable_automatic_updates = "TRUE" } : {}
+
+  metadata = merge(
+    local.disable_automatic_updates_metadata,
+    { slurmd_feature = local.feature },
+    var.metadata
+  )
 
   nodeset = {
     nodeset_name = local.nodeset_name

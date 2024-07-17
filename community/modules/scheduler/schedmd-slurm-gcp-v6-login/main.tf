@@ -18,6 +18,13 @@ locals {
 }
 
 locals {
+  disable_automatic_updates_metadata = var.disable_automatic_updates ? { google_disable_automatic_updates = "TRUE" } : {}
+
+  metadata = merge(
+    local.disable_automatic_updates_metadata,
+    var.metadata
+  )
+
   additional_disks = [
     for ad in var.additional_disks : {
       disk_name    = ad.disk_name
@@ -68,7 +75,7 @@ locals {
     gpu                 = one(local.guest_accelerator)
     labels              = local.labels
     machine_type        = var.machine_type
-    metadata            = var.metadata
+    metadata            = local.metadata
     min_cpu_platform    = var.min_cpu_platform
     num_instances       = var.num_instances
     on_host_maintenance = var.on_host_maintenance

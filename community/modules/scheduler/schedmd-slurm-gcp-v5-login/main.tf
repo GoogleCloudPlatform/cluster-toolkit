@@ -20,6 +20,13 @@ locals {
 }
 
 locals {
+  disable_automatic_updates_metadata = var.disable_automatic_updates ? { google_disable_automatic_updates = "TRUE" } : {}
+
+  metadata = merge(
+    local.disable_automatic_updates_metadata,
+    var.metadata
+  )
+
   ghpc_startup_script = [{
     filename = "ghpc_startup.sh"
     content  = var.startup_script
@@ -66,7 +73,7 @@ module "slurm_login_template" {
   gpu                      = one(local.guest_accelerator)
   labels                   = local.labels
   machine_type             = var.machine_type
-  metadata                 = var.metadata
+  metadata                 = local.metadata
   min_cpu_platform         = var.min_cpu_platform
   on_host_maintenance      = var.on_host_maintenance
   preemptible              = var.preemptible
@@ -102,7 +109,7 @@ module "slurm_login_instance" {
   subnetwork            = var.subnetwork_self_link
   zone                  = var.zone
   login_startup_scripts = local.ghpc_startup_script
-  metadata              = var.metadata
+  metadata              = local.metadata
   slurm_depends_on      = var.controller_instance_id == null ? [] : [var.controller_instance_id]
   enable_reconfigure    = var.enable_reconfigure
   pubsub_topic          = var.pubsub_topic
