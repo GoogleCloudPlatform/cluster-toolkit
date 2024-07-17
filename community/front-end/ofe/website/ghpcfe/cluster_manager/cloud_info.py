@@ -83,6 +83,56 @@ def _get_gcp_client(credentials, service="compute", api_version="v1"):
     )
 
 
+def _get_vm_reservations(credentials, zone, ttl_hash=None):
+    try:
+        # logger.info(f"Fetching VM reservations for credentials: {credentials}, zone: {zone}")
+        project, client = _get_gcp_client(credentials)
+
+        req = client.reservations().list(project=project, zone=zone)
+        resp = req.execute()
+
+        if "items" not in resp:
+            # logger.info("No reservations found")
+            return {}
+
+        data = {
+            reservation["name"]: {
+                "name": reservation["name"],
+                "specificReservationRequired": reservation.get("specificReservationRequired", False),
+                "status": reservation["status"],
+                "instanceProperties": {
+                    "machineType": reservation
+                        .get("specificReservation", {})
+                        .get("instanceProperties", {})
+                        .get("machineType", ""),
+                    "minCpuPlatform": reservation
+                        .get("specificReservation", {})
+                        .get("instanceProperties", {})
+                        .get("minCpuPlatform", ""),
+                    "availableCount": int(
+                        reservation
+                            .get("specificReservation", {})
+                            .get("count", 0)
+                    )
+                },
+                "shareSettings": reservation.get("shareSettings", {}),
+            }
+            for reservation in resp["items"]
+        }
+
+        # logger.info(f"Reservations data: {data}")
+        return data
+    except Exception as e:
+        logger.error(f"Error fetching VM reservations: {e}")
+        return {}
+
+def get_vm_reservations(cloud_provider, credentials, unused_region, zone):
+    if cloud_provider == "GCP":
+        return _get_vm_reservations(credentials, zone, ttl_hash=_get_ttl_hash())
+    else:
+        raise Exception(f'Unsupported Cloud Provider "{cloud_provider}"')
+
+
 @lru_cache
 def _get_gcp_disk_types(
     credentials, zone, ttl_hash=None
@@ -116,6 +166,10 @@ def _get_gcp_machine_types(
 ):  # pylint: disable=unused-argument
     (project, client) = _get_gcp_client(credentials)
 
+    # Fetch disk types dynamically
+    disk_types = _get_gcp_disk_types(credentials, zone, ttl_hash=ttl_hash)
+    disk_type_names = [disk_type["name"] for disk_type in disk_types]
+
     req = client.machineTypes().list(
         project=project, zone=zone, filter="isSharedCpu=False"
     )
@@ -123,6 +177,99 @@ def _get_gcp_machine_types(
     resp = req.execute()
     if "items" not in resp:
         return []
+
+    invalid_disk_types = {
+        "c4-": [
+            "local-ssd", "pd-standard", "pd-balanced", "pd-ssd",
+            "pd-extreme", "hyperdisk-ml", "hyperdisk-balanced"
+        ],
+        "c3-": [
+            "pd-extreme", "pd-standard", "hyperdisk-ml"
+        ],
+        "c3d-": [
+            "pd-standard", "pd-extreme", "hyperdisk-extreme"
+        ],
+        "n4-": [
+            "local-ssd", "pd-standard", "pd-balanced", "pd-ssd",
+            "pd-extreme", "hyperdisk-extreme", "hyperdisk-ml",
+            "hyperdisk-throughput"
+        ],
+        "n2-": [
+            "hyperdisk-balanced", "hyperdisk-ml"
+        ],
+        "n2d-": [
+            "pd-extreme", "hyperdisk-ml", "hyperdisk-balanced",
+            "hyperdisk-extreme"
+        ],
+        "n1-": [
+            "pd-extreme", "hyperdisk-extreme", "hyperdisk-ml",
+            "hyperdisk-throughput", "hyperdisk-balanced"
+        ],
+        "td2-": [
+            "pd-extreme", "local-ssd", "hyperdisk-balanced",
+            "hyperdisk-ml", "hyperdisk-extreme"
+        ],
+        "t2a-": [
+            "local-ssd", "pd-extreme", "hyperdisk-balanced",
+            "hyperdisk-ml", "hyperdisk-extreme",
+            "hyperdisk-throughput"
+        ],
+        "e2-": [
+            "local-ssd", "pd-extreme", "hyperdisk-balanced",
+            "hyperdisk-ml", "hyperdisk-extreme",
+            "hyperdisk-throughput"
+        ],
+        "z3-": [
+            "pd-extreme", "pd-standard", "hyperdisk-throughput",
+            "hyperdisk-ml", "hyperdisk-extreme",
+            "hyperdisk-balanced"
+        ],
+        "h3-": [
+            "local-ssd", "pd-standard", "pd-ssd", "pd-extreme",
+            "hyperdisk-ml", "hyperdisk-extreme"
+        ],
+        "c2-": [
+            "pd-extreme", "hyperdisk-balanced", "hyperdisk-extreme",
+            "hyperdisk-ml", "hyperdisk-throughput"
+        ],
+        "c2d-": [
+            "pd-extreme", "hyperdisk-balanced", "hyperdisk-extreme",
+            "hyperdisk-ml", "hyperdisk-throughput"
+        ],
+        "x4-": [
+            "local-ssd", "pd-ssd", "pd-standard", "pd-balanced",
+            "pd-extreme", "hyperdisk-ml", "hyperdisk-throughput"
+        ],
+        "m3-": [
+            "hyperdisk-throughput", "hyperdisk-ml", "pd-standard"
+        ],
+        "m2-": [
+            "local-ssd", "hyperdisk-ml", "hyperdisk-throughput"
+        ],
+        "m1-": [
+            "hyperdisk-ml", "hyperdisk-throughput"
+        ],
+        "n1-": [
+            "pd-extreme", "hyperdisk-balanced", "hyperdisk-ml",
+            "hyperdisk-extreme", "hyperdisk-throughput"
+        ],
+        "a3-": [
+            "local-ssd", "pd-extreme", "pd-standard",
+            "hyperdisk-balanced"
+        ],
+        "a2-": [
+            "pd-extreme", "hyperdisk-throughput", "hyperdisk-ml",
+            "hyperdisk-balanced"
+        ],
+        "g2-": [
+            "pd-extreme", "pd-ssd", "hyperdisk-balanced",
+            "hyperdisk-extreme"
+        ]
+    }
+
+    def get_invalid_disk_types(machine_type_name):
+        family = machine_type_name.split("-")[0] + "-"
+        return invalid_disk_types.get(family, [])
 
     data = {
         mt["name"]: {
@@ -138,6 +285,7 @@ def _get_gcp_machine_types(
                 }
                 for acc in mt.get("accelerators", [])
             },
+            "invalid_disk_types": get_invalid_disk_types(mt["name"])
         }
         for mt in resp["items"]
     }
@@ -173,6 +321,8 @@ def _get_gcp_machine_types(
                     data[mach]["accelerators"][acc_name]["description"] = (
                         items[0]["description"]
                     )
+
+    # logger.info(data)
 
     return data
 

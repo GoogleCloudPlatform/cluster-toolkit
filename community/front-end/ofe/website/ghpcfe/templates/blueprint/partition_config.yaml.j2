@@ -19,7 +19,7 @@
     enable_placement: {{ part.enable_placement }}
     machine_type: {{ part.machine_type }}
     {% if part.reservation_name %}
-    reservation_name: {{ part.reservation_name }}
+    reservation_name: "projects/{{ cluster.project_id }}/reservations/{{ part.reservation_name }}"
     {% endif %}
     node_count_dynamic_max: {{ part.dynamic_node_count }}
     node_count_static: {{ part.static_node_count }}
