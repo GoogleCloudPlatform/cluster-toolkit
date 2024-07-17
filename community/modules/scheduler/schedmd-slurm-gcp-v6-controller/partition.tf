@@ -67,7 +67,7 @@ module "slurm_nodeset_template" {
 }
 
 module "slurm_nodeset" {
-  source   = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_nodeset?ref=6.5.13"
+  source   = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_nodeset?ref=experimental_flags"
   for_each = local.nodeset_map
 
   instance_template_self_link = module.slurm_nodeset_template[each.key].self_link
@@ -83,6 +83,7 @@ module "slurm_nodeset" {
   zones                  = each.value.zones
   zone_target_shape      = each.value.zone_target_shape
   reservation_name       = each.value.reservation_name
+  experimental_features  = each.value.experimental_features
 }
 
 # NODESET TPU

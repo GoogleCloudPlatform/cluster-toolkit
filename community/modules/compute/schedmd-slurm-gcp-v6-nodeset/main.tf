@@ -95,6 +95,8 @@ locals {
     zone_target_shape = var.zone_target_shape
     startup_script    = local.ghpc_startup_script
     network_storage   = var.network_storage
+
+    experimental_features = var.experimental_features
   }
 }
 

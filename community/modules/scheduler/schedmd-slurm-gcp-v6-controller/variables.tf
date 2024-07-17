@@ -274,6 +274,9 @@ variable "nodeset" {
     startup_script = optional(list(object({
       filename = string
     content = string })), [])
+    experimental_features = optional(object({
+      max_run_duration_sec = optional(number)
+    }))
   }))
   default = []
 }

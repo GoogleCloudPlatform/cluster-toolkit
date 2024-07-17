@@ -480,3 +480,18 @@ variable "network_storage" {
   }))
   default = []
 }
+
+
+variable "experimental_features" {
+  description = <<-EOD
+    Experimental features to enable on the nodes. Ongoing experiments:
+    - "max_run_duration_sec: optional(number)" 
+    If provided, will be set as scheduling propery of instances.
+
+    
+  EOD
+  type  = object({
+      max_run_duration_sec = optional(number)
+  })
+  default     = null
+}

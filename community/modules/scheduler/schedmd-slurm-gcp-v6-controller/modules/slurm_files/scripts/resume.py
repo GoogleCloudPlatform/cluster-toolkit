@@ -145,6 +145,16 @@ def instance_properties(nodeset, model, placement_group, labels=None):
         props.scheduling = props.scheduling or {}
         props.scheduling["maintenanceInterval"] = nodeset.maintenance_interval
 
+    mrd = nodeset.experimental_features.max_run_duration_sec
+    if mrd:
+        props.scheduling.maxRunDuration.seconds = mrd
+        # Must specify when we use a max-run-duration
+        props.scheduling.instanceTerminationAction = "DELETE"
+        # required
+        props.reservationAffinity = {
+            "consumeReservationType": "NO_RESERVATION",
+        }
+
     return props
 
 

@@ -47,100 +47,11 @@ variable "exclusive" {
 }
 
 variable "nodeset" {
-  description = "Define nodesets, as a list."
-  type = list(object({
-    node_count_static      = optional(number, 0)
-    node_count_dynamic_max = optional(number, 1)
-    node_conf              = optional(map(string), {})
-    nodeset_name           = string
-    additional_disks = optional(list(object({
-      disk_name    = optional(string)
-      device_name  = optional(string)
-      disk_size_gb = optional(number)
-      disk_type    = optional(string)
-      disk_labels  = optional(map(string), {})
-      auto_delete  = optional(bool, true)
-      boot         = optional(bool, false)
-    })), [])
-    bandwidth_tier         = optional(string, "platform_default")
-    can_ip_forward         = optional(bool, false)
-    disable_smt            = optional(bool, false)
-    disk_auto_delete       = optional(bool, true)
-    disk_labels            = optional(map(string), {})
-    disk_size_gb           = optional(number)
-    disk_type              = optional(string)
-    enable_confidential_vm = optional(bool, false)
-    enable_placement       = optional(bool, false)
-    enable_oslogin         = optional(bool, true)
-    enable_shielded_vm     = optional(bool, false)
-    gpu = optional(object({
-      count = number
-      type  = string
-    }))
-    instance_template    = optional(string)
-    labels               = optional(map(string), {})
-    machine_type         = optional(string)
-    maintenance_interval = optional(string)
-    metadata             = optional(map(string), {})
-    min_cpu_platform     = optional(string)
-    network_storage = optional(list(object({
-      server_ip     = string
-      remote_mount  = string
-      local_mount   = string
-      fs_type       = string
-      mount_options = string
-    })), [])
-    network_tier        = optional(string, "STANDARD")
-    on_host_maintenance = optional(string)
-    preemptible         = optional(bool, false)
-    region              = optional(string)
-    service_account = optional(object({
-      email  = optional(string)
-      scopes = optional(list(string), ["https://www.googleapis.com/auth/cloud-platform"])
-    }))
-    shielded_instance_config = optional(object({
-      enable_integrity_monitoring = optional(bool, true)
-      enable_secure_boot          = optional(bool, true)
-      enable_vtpm                 = optional(bool, true)
-    }))
-    source_image_family  = optional(string)
-    source_image_project = optional(string)
-    source_image         = optional(string)
-    additional_networks = optional(list(object({
-      network            = string
-      subnetwork         = string
-      subnetwork_project = string
-      network_ip         = string
-      nic_type           = string
-      stack_type         = string
-      queue_count        = number
-      access_config = list(object({
-        nat_ip       = string
-        network_tier = string
-      }))
-      ipv6_access_config = list(object({
-        network_tier = string
-      }))
-      alias_ip_range = list(object({
-        ip_cidr_range         = string
-        subnetwork_range_name = string
-      }))
-    })))
-    access_config = optional(list(object({
-      nat_ip       = string
-      network_tier = string
-    })))
-    subnetwork_self_link = string
-    spot                 = optional(bool, false)
-    tags                 = optional(list(string), [])
-    termination_action   = optional(string)
-    zones                = optional(list(string), [])
-    zone_target_shape    = optional(string, "ANY_SINGLE_ZONE")
-    reservation_name     = optional(string)
-    startup_script = optional(list(object({
-      filename = string
-    content = string })), [])
-  }))
+  description = <<-EOD
+  Define nodesets, as a list.
+  For type definition see community/modules/scheduler/schedmd-slurm-gcp-v6-controller/variables.tf::nodeset
+  EOD
+  type = list(any)
   default = []
 
   validation {
