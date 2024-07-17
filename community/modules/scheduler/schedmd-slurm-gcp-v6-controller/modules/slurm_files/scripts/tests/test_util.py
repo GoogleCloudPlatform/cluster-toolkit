@@ -12,16 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import sys
 import pytest
-
-if ".." not in sys.path:
-    sys.path.append("..")  # TODO: make this more robust
+import common # needed to import util
 import util
 from google.api_core.client_options import ClientOptions  # noqa: E402
 
 # Note: need to install pytest-mock
-
 
 @pytest.mark.parametrize(
     "name,expected",
