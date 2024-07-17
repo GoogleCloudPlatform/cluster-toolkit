@@ -38,14 +38,14 @@
 - name: Install FE C&C Dependencies
   ansible.builtin.pip:
     name:
-      - requests
-      - pexpect
-      - google-cloud-storage
-      - google-cloud-pubsub
-      - addict
-      - google-api-python-client
-      - google-cloud-secret-manager
-      - prometheus_client
+    - requests
+    - pexpect
+    - google-cloud-storage
+    - google-cloud-pubsub
+    - addict
+    - google-api-python-client
+    - google-cloud-secret-manager
+    - prometheus_client
     state: present
 
 - name: Install FE C&C Daemon
