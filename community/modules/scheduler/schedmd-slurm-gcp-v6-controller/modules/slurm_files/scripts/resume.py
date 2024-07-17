@@ -44,7 +44,6 @@ from util import (
 )
 from util import cfg, lkp, NSDict, TPU
 
-# from util import cfg, lkp, NSDict
 import slurm_gcp_plugins
 
 
@@ -214,7 +213,7 @@ def create_instances_request(nodes, partition_name, placement_group, job_id=None
             request_body=body,
         )
 
-    request = util.compute.regionInstances().bulkInsert(
+    request = lkp.compute.regionInstances().bulkInsert(
         project=cfg.project, region=region, body=body.to_dict()
     )
 
@@ -529,7 +528,7 @@ def create_placement_request(pg_name, region):
         slurm_gcp_plugins.pre_placement_group_insert(
             lkp=lkp, pg_name=pg_name, region=region, request_body=config
         )
-    request = util.compute.resourcePolicies().insert(
+    request = lkp.compute.resourcePolicies().insert(
         project=cfg.project, region=region, body=config
     )
     log_api_request(request)
