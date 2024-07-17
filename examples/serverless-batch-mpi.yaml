@@ -156,8 +156,8 @@ deployment_groups:
       task_count: 2
       mpi_mode: true
       instance_image:
-        family: batch-centos-7-official
-        project: batch-custom-image
+        family: hpc-rocky-linux-8
+        project: cloud-hpc-image-public
 
   - id: batch-login
     source: modules/scheduler/batch-login-node
