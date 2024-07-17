@@ -45,7 +45,7 @@ from util import (
     TPU,
     chunked,
 )
-from util import lkp, cfg, compute, CONFIG_FILE
+from util import lkp, cfg, CONFIG_FILE
 from suspend import delete_instances
 from resume import start_tpu
 from conf import (
@@ -83,10 +83,9 @@ NodeStatus = Enum(
 )
 
 
-def start_instance_op(inst, project=None):
-    project = project or lkp.project
-    return compute.instances().start(
-        project=project,
+def start_instance_op(inst):
+    return lkp.compute.instances().start(
+        project=lkp.project,
         zone=lkp.instance(inst).zone,
         instance=inst,
     )
@@ -334,7 +333,7 @@ def do_node_update(status, nodes):
 
 def delete_placement_groups(placement_groups):
     def delete_placement_request(pg_name, region):
-        return compute.resourcePolicies().delete(
+        return lkp.compute.resourcePolicies().delete(
             project=lkp.project, region=region, resourcePolicy=pg_name
         )
 
@@ -384,7 +383,7 @@ def sync_placement_groups():
 
     fields = "items.regions.resourcePolicies,nextPageToken"
     flt = f"name={lkp.cfg.slurm_cluster_name}-*"
-    act = compute.resourcePolicies()
+    act = lkp.compute.resourcePolicies()
     op = act.aggregatedList(project=lkp.project, fields=fields, filter=flt)
     placement_groups = {}
     pg_regex = re.compile(

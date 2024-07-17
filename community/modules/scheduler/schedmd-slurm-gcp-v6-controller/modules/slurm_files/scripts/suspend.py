@@ -31,7 +31,7 @@ from util import (
     separate,
     execute_with_futures,
 )
-from util import lkp, cfg, compute, TPU
+from util import lkp, cfg, TPU
 
 import slurm_gcp_plugins
 
@@ -52,11 +52,10 @@ def truncate_iter(iterable, max_count):
         yield el
 
 
-def delete_instance_request(instance, project=None, zone=None):
-    project = project or lkp.project
-    request = compute.instances().delete(
-        project=project,
-        zone=(zone or lkp.instance(instance).zone),
+def delete_instance_request(instance):
+    request = lkp.compute.instances().delete(
+        project=lkp.project,
+        zone=lkp.instance(instance).zone,
         instance=instance,
     )
     log_api_request(request)

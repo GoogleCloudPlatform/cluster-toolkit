@@ -112,8 +112,6 @@ scripts_dir = next(
     p for p in (Path(__file__).parent, Path("/slurm/scripts")) if p.is_dir()
 )
 
-# readily available compute api handle
-compute = None
 # slurm-gcp config object, could be empty if not available
 cfg = NSDict()
 # caching Lookup object
@@ -205,17 +203,17 @@ def get_credentials() -> Optional[service_account.Credentials]:
     return credentials
 
 
-def create_client_options(api: ApiEndpoint = None) -> ClientOptions:
+def create_client_options(api: Optional[ApiEndpoint] = None) -> ClientOptions:
     """Create client options for cloud endpoints"""
     ver = endpoint_version(api)
     ud = universe_domain()
     options = {}
     if ud and ud != DEFAULT_UNIVERSE_DOMAIN:
         options["universe_domain"] = ud
-    if ver:
+    if api and ver:
         options["api_endpoint"] = f"https://{api.value}.{ud}/{ver}/"
     co = ClientOptions(**options)
-    log.debug(f"Using ClientOptions = {co} for API: {api.value}")
+    log.debug(f"Using ClientOptions = {co} for API: {api}")
     return co
 
 
@@ -1066,8 +1064,6 @@ def batch_execute(requests, retry_cb=None, log_err=log.error):
     """execute list or dict<req_id, request> as batch requests
     retry if retry_cb returns true
     """
-
-    compute = globals()["compute"]
     BATCH_LIMIT = 1000
     if not isinstance(requests, dict):
         requests = {str(k): v for k, v in enumerate(requests)}  # rid generated here
@@ -1092,7 +1088,7 @@ def batch_execute(requests, retry_cb=None, log_err=log.error):
                 done[rid] = resp
 
     def batch_request(reqs):
-        batch = compute.new_batch_http_request(callback=batch_callback)
+        batch = lkp.compute.new_batch_http_request(callback=batch_callback)
         for rid, req in reqs:
             batch.add(req, request_id=rid)
         return batch
@@ -1124,38 +1120,31 @@ def batch_execute(requests, retry_cb=None, log_err=log.error):
     return done, failed
 
 
-def wait_request(operation, project=None, compute=None):
+def wait_request(operation, project: str):
     """makes the appropriate wait request for a given operation"""
-    if not compute:
-        compute = globals()["compute"]
-    if project is None:
-        project = lkp.project
     if "zone" in operation:
-        req = compute.zoneOperations().wait(
+        req = lkp.compute.zoneOperations().wait(
             project=project,
             zone=trim_self_link(operation["zone"]),
             operation=operation["name"],
         )
     elif "region" in operation:
-        req = compute.regionOperations().wait(
+        req = lkp.compute.regionOperations().wait(
             project=project,
             region=trim_self_link(operation["region"]),
             operation=operation["name"],
         )
     else:
-        req = compute.globalOperations().wait(
+        req = lkp.compute.globalOperations().wait(
             project=project, operation=operation["name"]
         )
     return req
 
 
-def wait_for_operation(operation, project=None, compute=None):
+def wait_for_operation(operation):
     """wait for given operation"""
-    if not compute:
-        compute = globals()["compute"]
-    if project is None:
-        project = parse_self_link(operation["selfLink"]).project
-    wait_req = wait_request(operation, project=project, compute=compute)
+    project = parse_self_link(operation["selfLink"]).project
+    wait_req = wait_request(operation, project=project)
 
     while True:
         result = ensure_execute(wait_req)
@@ -1167,28 +1156,15 @@ def wait_for_operation(operation, project=None, compute=None):
             return result
 
 
-def wait_for_operations(operations, project=None, compute=None):
-    if not compute:
-        compute = globals()["compute"]
+def wait_for_operations(operations):
     return [
-        wait_for_operation(op, project=project, compute=compute) for op in operations
+        wait_for_operation(op) for op in operations
     ]
 
 
-def get_filtered_operations(
-    op_filter,
-    zone=None,
-    region=None,
-    only_global=False,
-    project=None,
-    compute=None,
-):
+def get_filtered_operations(op_filter):
     """get list of operations associated with group id"""
-
-    if not compute:
-        compute = globals()["compute"]
-    if project is None:
-        project = lkp.project
+    project = lkp.project
     operations = []
 
     def get_aggregated_operations(items):
@@ -1199,47 +1175,24 @@ def get_filtered_operations(
             )
         )
 
-    def get_list_operations(items):
-        operations.extend(items)
+    act = lkp.compute.globalOperations()
+    op = act.aggregatedList(
+        project=project, filter=op_filter, fields="items.*.operations,nextPageToken"
+    )
 
-    handle_items = get_list_operations
-    if only_global:
-        act = compute.globalOperations()
-        op = act.list(project=project, filter=op_filter)
-        nxt = act.list_next
-    elif zone is not None:
-        act = compute.zoneOperations()
-        op = act.list(project=project, zone=zone, filter=op_filter)
-        nxt = act.list_next
-    elif region is not None:
-        act = compute.regionOperations()
-        op = act.list(project=project, region=region, filter=op_filter)
-        nxt = act.list_next
-    else:
-        act = compute.globalOperations()
-        op = act.aggregatedList(
-            project=project, filter=op_filter, fields="items.*.operations,nextPageToken"
-        )
-        nxt = act.aggregatedList_next
-        handle_items = get_aggregated_operations
     while op is not None:
         result = ensure_execute(op)
-        handle_items(result["items"])
-        op = nxt(op, result)
+        get_aggregated_operations(result["items"])
+        op = act.aggregatedList_next(op, result)
     return operations
 
 
-def get_insert_operations(group_ids, flt=None, project=None, compute=None):
+def get_insert_operations(group_ids):
     """get all insert operations from a list of operationGroupId"""
-    if not compute:
-        compute = globals()["compute"]
-    if project is None:
-        project = lkp.project
     if isinstance(group_ids, str):
         group_ids = group_ids.split(",")
     filters = [
         "operationType=insert",
-        flt,
         " OR ".join(f"(operationGroupId={id})" for id in group_ids),
     ]
     return get_filtered_operations(" AND ".join(f"({f})" for f in filters if f))
@@ -2035,9 +1988,6 @@ if not cfg:
         save_config(cfg, CONFIG_FILE)
 
 lkp = Lookup(cfg)
-
-# Needs to be run after the lookup is complete to get endpoint versions
-compute = compute_service()
 
 
 if __name__ == "__main__":
