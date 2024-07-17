@@ -16,6 +16,8 @@
 
 locals {
   scripts_dir = abspath("${path.module}/scripts")
+
+  bucket_dir = coalesce(var.bucket_dir, format("%s-files", var.slurm_cluster_name))
 }
 
 ########
@@ -91,7 +93,7 @@ locals {
   }
 
   config_yaml        = "config.yaml"
-  config_yaml_bucket = format("%s/%s", var.bucket_dir, local.config_yaml)
+  config_yaml_bucket = format("%s/%s", local.bucket_dir, local.config_yaml)
 
   partitions = { for p in var.partitions[*].partition : p.partition_name => p }
 
@@ -106,7 +108,7 @@ locals {
 
   etc_dir = abspath("${path.module}/etc")
 
-  bucket_path = format("%s/%s", data.google_storage_bucket.this.url, var.bucket_dir)
+  bucket_path = format("%s/%s", data.google_storage_bucket.this.url, local.bucket_dir)
 
   slurm_control_host_port = coalesce(var.slurm_control_host_port, "6818")
 
@@ -139,7 +141,7 @@ locals {
   build_dir = abspath("${path.module}/build")
 
   slurm_gcp_devel_zip        = "slurm-gcp-devel.zip"
-  slurm_gcp_devel_zip_bucket = format("%s/%s", var.bucket_dir, local.slurm_gcp_devel_zip)
+  slurm_gcp_devel_zip_bucket = format("%s/%s", local.bucket_dir, local.slurm_gcp_devel_zip)
 }
 
 data "archive_file" "slurm_gcp_devel_zip" {
@@ -180,7 +182,7 @@ resource "google_storage_bucket_object" "controller_startup_scripts" {
   }
 
   bucket  = var.bucket_name
-  name    = format("%s/slurm-controller-script-%s", var.bucket_dir, each.key)
+  name    = format("%s/slurm-controller-script-%s", local.bucket_dir, each.key)
   content = each.value.content
 }
 
@@ -191,7 +193,7 @@ resource "google_storage_bucket_object" "compute_startup_scripts" {
   }
 
   bucket  = var.bucket_name
-  name    = format("%s/slurm-compute-script-%s", var.bucket_dir, each.key)
+  name    = format("%s/slurm-compute-script-%s", local.bucket_dir, each.key)
   content = each.value.content
 }
 
@@ -205,7 +207,7 @@ resource "google_storage_bucket_object" "nodeset_startup_scripts" {
   ]]) : x.name => x.content }
 
   bucket  = var.bucket_name
-  name    = format("%s/%s", var.bucket_dir, each.key)
+  name    = format("%s/%s", local.bucket_dir, each.key)
   content = each.value
 }
 
@@ -216,7 +218,7 @@ resource "google_storage_bucket_object" "login_startup_scripts" {
   }
 
   bucket  = var.bucket_name
-  name    = format("%s/slurm-login-script-%s", var.bucket_dir, each.key)
+  name    = format("%s/slurm-login-script-%s", local.bucket_dir, each.key)
   content = each.value.content
 }
 
@@ -227,7 +229,7 @@ resource "google_storage_bucket_object" "prolog_scripts" {
   }
 
   bucket  = var.bucket_name
-  name    = format("%s/slurm-prolog-script-%s", var.bucket_dir, each.key)
+  name    = format("%s/slurm-prolog-script-%s", local.bucket_dir, each.key)
   content = each.value.content
   source  = each.value.source
 }
@@ -239,7 +241,7 @@ resource "google_storage_bucket_object" "epilog_scripts" {
   }
 
   bucket  = var.bucket_name
-  name    = format("%s/slurm-epilog-script-%s", var.bucket_dir, each.key)
+  name    = format("%s/slurm-epilog-script-%s", local.bucket_dir, each.key)
   content = each.value.content
   source  = each.value.source
 }

@@ -59,7 +59,7 @@ No modules.
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_bucket_dir"></a> [bucket\_dir](#input\_bucket\_dir) | Bucket directory for cluster files to be put into. | `string` | n/a | yes |
+| <a name="input_bucket_dir"></a> [bucket\_dir](#input\_bucket\_dir) | Bucket directory for cluster files to be put into. | `string` | `null` | no |
 | <a name="input_bucket_name"></a> [bucket\_name](#input\_bucket\_name) | Name of GCS bucket to use. | `string` | n/a | yes |
 | <a name="input_cgroup_conf_tpl"></a> [cgroup\_conf\_tpl](#input\_cgroup\_conf\_tpl) | Slurm cgroup.conf template file path. | `string` | `null` | no |
 | <a name="input_cloud_parameters"></a> [cloud\_parameters](#input\_cloud\_parameters) | cloud.conf options. Default behavior defined in scripts/conf.py | <pre>object({<br>    no_comma_params = optional(bool)<br>    resume_rate     = optional(number)<br>    resume_timeout  = optional(number)<br>    suspend_rate    = optional(number)<br>    suspend_timeout = optional(number)<br>    topology_plugin = optional(string)<br>    tree_width      = optional(number)<br>  })</pre> | `{}` | no |

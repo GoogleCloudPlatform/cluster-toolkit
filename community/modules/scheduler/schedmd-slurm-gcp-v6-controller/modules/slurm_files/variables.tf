@@ -24,6 +24,7 @@ variable "bucket_name" {
 variable "bucket_dir" {
   description = "Bucket directory for cluster files to be put into."
   type        = string
+  default     = null
 }
 
 variable "enable_devel" {
