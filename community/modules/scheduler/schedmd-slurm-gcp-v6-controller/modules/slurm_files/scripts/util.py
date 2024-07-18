@@ -582,6 +582,32 @@ def owned_file_handler(filename):
     chown_slurm(filename)
     return logging.handlers.WatchedFileHandler(filename, delay=True)
 
+def add_log_args_and_parse(parser: argparse.ArgumentParser) -> argparse.Namespace:
+    parser.add_argument(
+        "--debug",
+        "-d",
+        dest="loglevel",
+        action="store_const",
+        const=logging.DEBUG,
+        default=logging.INFO,
+        help="Enable debugging output",
+    )
+    parser.add_argument(
+        "--trace-api",
+        "-t",
+        action="store_true",
+        help="Enable detailed api request output",
+    )
+    args = parser.parse_args()
+    
+    if cfg.enable_debug_logging:
+        args.loglevel = logging.DEBUG
+    if args.trace_api:
+        cfg.extra_logging_flags = list(cfg.extra_logging_flags)
+        cfg.extra_logging_flags.append("trace_api")
+
+    return args
+
 
 def config_root_logger(caller_logger, level="DEBUG", stdout=True, logfile=None):
     """configure the root logger, disabling all existing loggers"""

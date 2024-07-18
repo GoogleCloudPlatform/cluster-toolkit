@@ -635,7 +635,7 @@ def get_resume_file_data():
     return NSDict(json.loads(resume_json))
 
 
-def main(nodelist, force=False):
+def main(nodelist):
     """main called when run as script"""
     log.debug(f"ResumeProgram {nodelist}")
     # Filter out nodes not in config.yaml
@@ -663,46 +663,16 @@ def main(nodelist, force=False):
             nodelist=nodelist, global_resume_data=global_resume_data
         )
 
-
-parser = argparse.ArgumentParser(
-    description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
-)
-parser.add_argument("nodelist", help="list of nodes to resume")
-parser.add_argument(
-    "--force",
-    "-f",
-    "--static",
-    action="store_true",
-    help="Force attempted creation of the nodelist, whether nodes are exclusive or not.",
-)
-parser.add_argument(
-    "--debug",
-    "-d",
-    dest="loglevel",
-    action="store_const",
-    const=logging.DEBUG,
-    default=logging.INFO,
-    help="Enable debugging output",
-)
-parser.add_argument(
-    "--trace-api",
-    "-t",
-    action="store_true",
-    help="Enable detailed api request output",
-)
-
-
 if __name__ == "__main__":
-    args = parser.parse_args()
-
-    if cfg.enable_debug_logging:
-        args.loglevel = logging.DEBUG
-    if args.trace_api:
-        cfg.extra_logging_flags = list(cfg.extra_logging_flags)
-        cfg.extra_logging_flags.append("trace_api")
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument("nodelist", help="list of nodes to resume")
+    
+    args = util.add_log_args_and_parse(parser)
     util.chown_slurm(LOGFILE, mode=0o600)
     util.config_root_logger(filename, level=args.loglevel, logfile=LOGFILE)
     sys.excepthook = util.handle_exception
 
     global_resume_data = get_resume_file_data()
-    main(args.nodelist, args.force)
+    main(args.nodelist)

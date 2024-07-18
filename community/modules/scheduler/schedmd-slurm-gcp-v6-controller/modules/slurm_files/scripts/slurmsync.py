@@ -523,52 +523,20 @@ def main():
         log.exception("failed to sync custom scripts")
 
 
-parser = argparse.ArgumentParser(
-    description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
-)
-parser.add_argument(
-    "--debug",
-    "-d",
-    dest="loglevel",
-    action="store_const",
-    const=logging.DEBUG,
-    default=logging.INFO,
-    help="Enable debugging output",
-)
-parser.add_argument(
-    "--trace-api",
-    "-t",
-    action="store_true",
-    help="Enable detailed api request output",
-)
-parser.add_argument(
-    "--force",
-    "-f",
-    action="store_true",
-    help="Force tasks to run, regardless of lock.",
-)
-
 if __name__ == "__main__":
-    args = parser.parse_args()
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+
+    args = util.add_log_args_and_parse(parser)
     util.chown_slurm(LOGFILE, mode=0o600)
-
-    if cfg.enable_debug_logging:
-        args.loglevel = logging.DEBUG
-    if args.trace_api:
-        cfg.extra_logging_flags = list(cfg.extra_logging_flags)
-        cfg.extra_logging_flags.append("trace_api")
     util.config_root_logger(filename, level=args.loglevel, logfile=LOGFILE)
-
     sys.excepthook = util.handle_exception
 
-    # only run one instance at a time unless --force
-    if args.force:
-        main()
-    else:
-        pid_file = (Path("/tmp") / Path(__file__).name).with_suffix(".pid")
-        with pid_file.open("w") as fp:
-            try:
-                fcntl.lockf(fp, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                main()
-            except BlockingIOError:
-                sys.exit(0)
+    pid_file = (Path("/tmp") / Path(__file__).name).with_suffix(".pid")
+    with pid_file.open("w") as fp:
+        try:
+            fcntl.lockf(fp, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            main()
+        except BlockingIOError:
+            sys.exit(0)
