@@ -129,27 +129,24 @@ def nodeset_lines(nodeset, lkp: util.Lookup) -> str:
 
     # follow https://slurm.schedmd.com/slurm.conf.html#OPT_Boards
     # by setting Boards, SocketsPerBoard, CoresPerSocket, and ThreadsPerCore
-    node_def = {
-        "NodeName": "DEFAULT",
-        "State": "UNKNOWN",
+    gres = f"gpu:{template_info.gpu_count}" if template_info.gpu_count else None
+    node_conf = {
         "RealMemory": machine_conf.memory,
         "Boards": machine_conf.boards,
         "SocketsPerBoard": machine_conf.sockets_per_board,
         "CoresPerSocket": machine_conf.cores_per_socket,
         "ThreadsPerCore": machine_conf.threads_per_core,
         "CPUs": machine_conf.cpus,
+        "Gres": gres,
         **nodeset.node_conf,
     }
-
-    gres = f"gpu:{template_info.gpu_count}" if template_info.gpu_count else None
     nodelist = lkp.nodelist(nodeset)
 
     return "\n".join(
         map(
             dict_to_conf,
             [
-                node_def,
-                {"NodeName": nodelist, "State": "CLOUD", "Gres": gres},
+                {"NodeName": nodelist, "State": "CLOUD", **node_conf},
                 {"NodeSet": nodeset.nodeset_name, "Nodes": nodelist},
             ],
         )
@@ -157,19 +154,12 @@ def nodeset_lines(nodeset, lkp: util.Lookup) -> str:
 
 
 def nodeset_tpu_lines(nodeset, lkp: util.Lookup) -> str:
-    node_def = {
-        "NodeName": "DEFAULT",
-        "State": "UNKNOWN",
-        **nodeset.node_conf,
-    }
     nodelist = lkp.nodelist(nodeset)
-
     return "\n".join(
         map(
             dict_to_conf,
             [
-                node_def,
-                {"NodeName": nodelist, "State": "CLOUD"},
+                {"NodeName": nodelist, "State": "CLOUD", **nodeset.node_conf},
                 {"NodeSet": nodeset.nodeset_name, "Nodes": nodelist},
             ],
         )
