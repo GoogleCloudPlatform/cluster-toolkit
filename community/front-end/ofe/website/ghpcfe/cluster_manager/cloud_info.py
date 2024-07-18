@@ -181,10 +181,10 @@ def _get_gcp_machine_types(
     invalid_disk_types = {
         "c4-": [
             "local-ssd", "pd-standard", "pd-balanced", "pd-ssd",
-            "pd-extreme", "hyperdisk-ml", "hyperdisk-balanced"
+            "pd-extreme", "hyperdisk-ml", "hyperdisk-throughput"
         ],
         "c3-": [
-            "pd-extreme", "pd-standard", "hyperdisk-ml"
+            "pd-extreme", "pd-standard"
         ],
         "c3d-": [
             "pd-standard", "pd-extreme", "hyperdisk-extreme"
@@ -205,7 +205,7 @@ def _get_gcp_machine_types(
             "pd-extreme", "hyperdisk-extreme", "hyperdisk-ml",
             "hyperdisk-throughput", "hyperdisk-balanced"
         ],
-        "td2-": [
+        "t2d-": [
             "pd-extreme", "local-ssd", "hyperdisk-balanced",
             "hyperdisk-ml", "hyperdisk-extreme"
         ],
@@ -220,9 +220,8 @@ def _get_gcp_machine_types(
             "hyperdisk-throughput"
         ],
         "z3-": [
-            "pd-extreme", "pd-standard", "hyperdisk-throughput",
-            "hyperdisk-ml", "hyperdisk-extreme",
-            "hyperdisk-balanced"
+            "pd-extreme", "pd-standard", "hyperdisk-balanced",
+            "hyperdisk-ml"
         ],
         "h3-": [
             "local-ssd", "pd-standard", "pd-ssd", "pd-extreme",
@@ -254,15 +253,15 @@ def _get_gcp_machine_types(
             "hyperdisk-extreme", "hyperdisk-throughput"
         ],
         "a3-": [
-            "local-ssd", "pd-extreme", "pd-standard",
+            "pd-extreme", "pd-standard",
             "hyperdisk-balanced"
         ],
         "a2-": [
-            "pd-extreme", "hyperdisk-throughput", "hyperdisk-ml",
-            "hyperdisk-balanced"
+            "pd-extreme", "hyperdisk-throughput",
+            "hyperdisk-balanced", "hyperdisk-extreme"
         ],
         "g2-": [
-            "pd-extreme", "pd-ssd", "hyperdisk-balanced",
+            "pd-extreme", "pd-standard", "hyperdisk-balanced",
             "hyperdisk-extreme"
         ]
     }
