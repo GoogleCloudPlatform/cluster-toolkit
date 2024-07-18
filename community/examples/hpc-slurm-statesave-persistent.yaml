@@ -1,0 +1,130 @@
+# Copyright 2024 Google LLC
+# Copyright (C) SchedMD LLC.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+# This blueprint provisions a cluster with a controller using persistent
+# storage for the statesave directory allowing to redeploy a cluster without
+# losing it's state.
+
+blueprint_name: hpc-slurm-statesave
+
+vars:
+  project_id: ## Set GCP Project ID Here ##
+  deployment_name: slurm-statesave-persistent
+  region: us-central1
+  zone: us-central1-a
+  state_save_disk_name: state-save
+  disk_size: 50
+
+# Documentation for each of the modules used below can be found at
+# https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
+
+deployment_groups:
+- group: primary
+  modules:
+  # Source is an embedded module, denoted by "modules/*" without ./, ../, /
+  # as a prefix. To refer to a local module, prefix with ./, ../ or /
+  # Example - ./modules/network/vpc
+  - id: network
+    source: modules/network/vpc
+
+  - id: debug_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network]
+    settings:
+      node_count_dynamic_max: 4
+      machine_type: n2-standard-2
+      enable_placement: false # the default is: true
+
+  - id: debug_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use:
+    - debug_nodeset
+    settings:
+      partition_name: debug
+      exclusive: false # allows nodes to stay up after jobs are done
+      is_default: true
+
+  - id: controller_startup
+    source: modules/scripts/startup-script
+    settings:
+      runners:
+      - type: shell
+        args: $(vars.state_save_disk_name)
+        content: |
+          USER_MOUNT="slurm"
+          GROUP_MOUNT="slurm"
+          FS_TYPE="xfs"
+          DISK_NAME=$1
+          if [ -z $DISK_NAME ]; then
+              echo "Usage: $0 disk_name"
+              exit 1
+          fi
+          MOUNT_POINT=$2
+          if [ -z $MOUNT_POINT ]; then
+              MOUNT_POINT="/var/spool/slurm"
+          fi
+          DEVICE="/dev/disk/by-id/google-${DISK_NAME}"
+          RDEVICE=`realpath $DEVICE`
+          echo "Handling $DISK_NAME disk"
+          if ! file -s $RDEVICE | grep -q "filesystem"; then
+              echo "Formatting disk $DEVICE"
+              mkfs -t $FS_TYPE -q $RDEVICE
+          fi
+          if ! grep -q "${MOUNT_POINT}" /etc/fstab; then
+              echo "Adding entry to fstab"
+              echo -e "${DEVICE}\t${MOUNT_POINT}\t${FS_TYPE}\tdefaults\t0 0" >> /etc/fstab
+              echo "Reloading systemd"
+              systemctl daemon-reload
+          fi
+          if [ ! -d "${MOUNT_POINT}" ]; then
+              echo "Creating mountpoint"
+              mkdir -p ${MOUNT_POINT}
+          fi
+          if ! mountpoint -q "${MOUNT_POINT}"; then
+              echo "Mounting the disk"
+              mount ${MOUNT_POINT}
+          fi
+          CURRENT_USER=`stat -c "%U" ${MOUNT_POINT}`
+          if [ "${CURRENT_USER}" != "${USER_MOUNT}" ]; then
+              echo "Adjusting permissions"
+              chown -R ${USER_MOUNT}:${GROUP_MOUNT} ${MOUNT_POINT}
+          fi
+          if [ ! -f "${MOUNT_POINT}/jwt_hs256.key" ]; then
+              echo "Creating jwtkey"
+              dd if=/dev/urandom bs=32 count=1 > ${MOUNT_POINT}/jwt_hs256.key
+              chown ${USER_MOUNT}:${GROUP_MOUNT} ${MOUNT_POINT}/jwt_hs256.key
+              chmod 400 ${MOUNT_POINT}/jwt_hs256.key
+          fi
+
+        destination: handle_state_save_disk.sh
+
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    use:
+    - network
+    - debug_partition
+    settings:
+      enable_controller_public_ips: true
+      controller_startup_script: $(controller_startup.startup_script)
+      additional_disks:
+      - device_name: $(vars.state_save_disk_name)
+        disk_name: $(vars.state_save_disk_name)
+        disk_size_gb: $(vars.disk_size)
+        disk_type: pd-ssd
+        disk_labels: {}
+        auto_delete: false
+        boot: false
