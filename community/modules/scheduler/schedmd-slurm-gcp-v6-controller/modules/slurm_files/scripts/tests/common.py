@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional
+from typing import Optional, Any
 import sys
 from dataclasses import dataclass, field
 
@@ -27,7 +27,8 @@ class TstNodeset:
     nodeset_name: str
     node_count_static: int = 0
     node_count_dynamic_max: int = 0
-
+    node_conf: dict[str, Any] = field(default_factory=dict)
+    instance_template: Optional[str] = None
 
 @dataclass
 class TstCfg:
@@ -41,6 +42,20 @@ class TstCfg:
 class TstTPU:  # to prevent client initialization durint "TPU.__init__"
     vmcount: int
 
+@dataclass
+class TstMachineConf:
+    cpus: int
+    memory: int
+    sockets: int
+    sockets_per_board: int
+    cores_per_socket: int
+    boards: int
+    threads_per_core: int
+
+
+@dataclass
+class TstTemplateInfo:
+    gpu_count: int = 0
 
 def make_to_hostnames_mock(tbl: Optional[dict[str, list[str]]]):
     tbl = tbl or {}
