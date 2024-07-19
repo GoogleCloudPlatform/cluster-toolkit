@@ -1,0 +1,45 @@
+# Copyright 2024 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+- name: Assert variables are defined
+  ansible.builtin.assert:
+    that:
+    - cli_deployment_vars.region is defined
+    - custom_vars.project is defined
+
+- name: Get cluster credentials for kubectl
+  delegate_to: localhost
+  ansible.builtin.command: gcloud container clusters get-credentials {{ deployment_name }} --region {{ cli_deployment_vars.region }} --project {{ custom_vars.project }}
+
+- name: Execute the job
+  delegate_to: localhost
+  ansible.builtin.shell: |
+    array=({{ workspace }}/{{ deployment_name }}/primary/my-job*)
+    kubectl create -f ${array[0]}
+  args:
+    executable: /bin/bash
+  changed_when: False
+
+- name: Wait for job to complete
+  delegate_to: localhost
+  ansible.builtin.command: |
+    kubectl get job --field-selector  status.successful=1
+  register: job_completion
+  until: job_completion.stdout_lines | length > 1
+  retries: 40
+  delay: 15
+
+- name: Print job_completion debug output
+  ansible.builtin.debug:
+    var: job_completion.stdout_lines

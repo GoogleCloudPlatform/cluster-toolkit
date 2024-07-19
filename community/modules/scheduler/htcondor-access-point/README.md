@@ -122,7 +122,7 @@ limitations under the License.
 |------|--------|---------|
 | <a name="module_access_point_instance_template"></a> [access\_point\_instance\_template](#module\_access\_point\_instance\_template) | github.com/terraform-google-modules/terraform-google-vm//modules/instance_template | 73dc845 |
 | <a name="module_htcondor_ap"></a> [htcondor\_ap](#module\_htcondor\_ap) | terraform-google-modules/vm/google//modules/mig | 10.1.1 |
-| <a name="module_startup_script"></a> [startup\_script](#module\_startup\_script) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | v1.34.0&depth=1 |
+| <a name="module_startup_script"></a> [startup\_script](#module\_startup\_script) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | v1.35.0&depth=1 |
 
 ## Resources
 

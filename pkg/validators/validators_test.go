@@ -73,6 +73,7 @@ func (s *MySuite) TestCheckInputs(c *C) {
 func (s *MySuite) TestDefaultValidators(c *C) {
 	unusedMods := config.Validator{Validator: "test_module_not_used"}
 	unusedVars := config.Validator{Validator: "test_deployment_variable_not_used"}
+	slurmTf := config.Validator{Validator: "test_tf_version_for_slurm"}
 
 	prjInp := config.Dict{}.With("project_id", config.GlobalRef("project_id").AsValue())
 	regInp := prjInp.With("region", config.GlobalRef("region").AsValue())
@@ -93,14 +94,14 @@ func (s *MySuite) TestDefaultValidators(c *C) {
 	{
 		bp := config.Blueprint{}
 		c.Check(defaults(bp), DeepEquals, []config.Validator{
-			unusedMods, unusedVars})
+			unusedMods, unusedVars, slurmTf})
 	}
 
 	{
 		bp := config.Blueprint{Vars: config.Dict{}.
 			With("project_id", cty.StringVal("f00b"))}
 		c.Check(defaults(bp), DeepEquals, []config.Validator{
-			unusedMods, unusedVars, projectExists, apisEnabled})
+			unusedMods, unusedVars, slurmTf, projectExists, apisEnabled})
 	}
 
 	{
@@ -109,7 +110,7 @@ func (s *MySuite) TestDefaultValidators(c *C) {
 			With("region", cty.StringVal("narnia"))}
 
 		c.Check(defaults(bp), DeepEquals, []config.Validator{
-			unusedMods, unusedVars, projectExists, apisEnabled, regionExists})
+			unusedMods, unusedVars, slurmTf, projectExists, apisEnabled, regionExists})
 	}
 
 	{
@@ -118,7 +119,7 @@ func (s *MySuite) TestDefaultValidators(c *C) {
 			With("zone", cty.StringVal("danger"))}
 
 		c.Check(defaults(bp), DeepEquals, []config.Validator{
-			unusedMods, unusedVars, projectExists, apisEnabled, zoneExists})
+			unusedMods, unusedVars, slurmTf, projectExists, apisEnabled, zoneExists})
 	}
 
 	{
@@ -128,6 +129,6 @@ func (s *MySuite) TestDefaultValidators(c *C) {
 			With("zone", cty.StringVal("danger"))}
 
 		c.Check(defaults(bp), DeepEquals, []config.Validator{
-			unusedMods, unusedVars, projectExists, apisEnabled, regionExists, zoneExists, zoneInRegion})
+			unusedMods, unusedVars, slurmTf, projectExists, apisEnabled, regionExists, zoneExists, zoneInRegion})
 	}
 }

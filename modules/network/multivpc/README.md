@@ -88,7 +88,7 @@ limitations under the License.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_vpcs"></a> [vpcs](#module\_vpcs) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/network/vpc | v1.34.0&depth=1 |
+| <a name="module_vpcs"></a> [vpcs](#module\_vpcs) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/network/vpc | v1.35.0&depth=1 |
 
 ## Resources
 

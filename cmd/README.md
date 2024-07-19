@@ -7,30 +7,38 @@ clusters, also referred to as the gHPC Engine.
 
 ### Usage - ghpc
 
-`ghpc [FLAGS]`
-
-`ghpc [SUBCOMMAND]`
+```bash
+ghpc [FLAGS]
+ghpc [SUBCOMMAND]
+```
 
 ### Subcommands - ghpc
 
-[create](#ghpc-create): Create a new deployment
-
-[expand](#ghpc-expand): Expand the blueprint without creating a new deployment
-
-[completion](#ghpc-completion): Generate completion script
-
-[help](#ghpc-help): Display help information for any command
+* [`deploy`](#ghpc-deploy): Deploy an HPC cluster on Google Cloud
+* [`create`](#ghpc-create): Create a new deployment
+* [`expand`](#ghpc-expand): Expand the blueprint without creating a new deployment
+* [`completion`](#ghpc-completion): Generate completion script
+* [`help`](#ghpc-help): Display help information for any command
 
 ### Flags - ghpc
 
-+ -h, --help: displays detailed help for the ghpc command.
-
-+ -v, --version: displays the version of ghpc being used.
+* `-h, --help`: displays detailed help for the ghpc command.
+* `-v, --version`: displays the version of ghpc being used.
 
 ### Example - ghpc
 
 ```bash
 ghpc --version
+```
+
+## ghpc deploy
+
+`ghpc deploy` deploys an HPC cluster on Google Cloud using the deployment directory created by `ghpc create` or creates one from supplied blueprint file.
+
+### Usage - deploy
+
+```bash
+ghpc deploy (<DEPLOYMENT_DIRECTORY> | <BLUEPRINT_FILE>) [flags]
 ```
 
 ## ghpc create
@@ -39,38 +47,37 @@ ghpc --version
 
 ### Usage - create
 
-`ghpc create BLUEPRINT_NAME [FLAGS]`
+```sh
+ghpc create BLUEPRINT_FILE [FLAGS]
+```
 
 ### Positional arguments - create
 
-`BLUEPRINT_NAME`: the name of the blueprint file that is used for the deployment.
+`BLUEPRINT_FILE`: the name of the blueprint file that is used for the deployment.
 
 ### Flags - create
 
-+ `--backend-config strings`: Comma-separated list of name=value variables to set Terraform backend configuration. Can be used multiple times.
+* `--backend-config strings`: Comma-separated list of name=value variables to set Terraform backend configuration. Can be used multiple times.
+* `-h, --help`: display detailed help for the create command.
+* `-o, --out string`: sets the output directory where the HPC deployment directory will be created.
+* `-w, --overwrite-deployment`: If specified, an existing deployment directory is overwritten by the new deployment.
 
-+ `-h, --help`: display detailed help for the create command.
+  * Terraform state IS preserved.
+  * Terraform workspaces are NOT supported (behavior undefined).
+  * Packer is NOT supported.
 
-+ `-o, --out string`: sets the output directory where the HPC deployment directory will be created.
+* `-l, --validation-level string`: sets validation level to one of ("ERROR", "WARNING", "IGNORE") (default "WARNING").
+* `--vars strings`: comma-separated list of name=value variables to override YAML configuration. Can be used multiple times. Arrays or maps containing comma-separated values must be enclosed in double quotes. The double quotes may require escaping depending on the shell used. Examples below have been tested using a `bash` shell:
 
-+ `-w, --overwrite-deployment`: If specified, an existing deployment directory is overwritten by the new deployment.
-
-  + Terraform state IS preserved.
-  + Terraform workspaces are NOT supported (behavior undefined).
-  + Packer is NOT supported.
-
-+ `-l, --validation-level string`: sets validation level to one of ("ERROR", "WARNING", "IGNORE") (default "WARNING").
-
-+ `--vars strings`: comma-separated list of name=value variables to override YAML configuration. Can be used multiple times. Arrays or maps containing comma-separated values must be enclosed in double quotes. The double quotes may require escaping depending on the shell used. Examples below have been tested using a `bash` shell:
-  + `--vars foo=bar,baz=2`
-  + `--vars bar=2 --vars baz=3.14`
-  + `--vars foo=true`
-  + `--vars "foo={bar: baz}"`
-  + `--vars "\"foo={bar: baz, qux: quux}\""`
-  + `--vars "\"foo={bar: baz}\"",\"b=[foo,3,3.14]\"`
-  + `--vars "\"a={foo: [bar, baz]}\"",\"b=[foo,3,3.14]\"`
-  + `--vars \"b=[foo,3,3.14]\"`
-  + `--vars \"b=[[foo,bar],3,3.14]\"`
+  * `--vars foo=bar,baz=2`
+  * `--vars bar=2 --vars baz=3.14`
+  * `--vars foo=true`
+  * `--vars "foo={bar: baz}"`
+  * `--vars "\"foo={bar: baz, qux: quux}\""`
+  * `--vars "\"foo={bar: baz}\"",\"b=[foo,3,3.14]\"`
+  * `--vars "\"a={foo: [bar, baz]}\"",\"b=[foo,3,3.14]\"`
+  * `--vars \"b=[foo,3,3.14]\"`
+  * `--vars \"b=[[foo,bar],3,3.14]\"`
 
 ### Example - create
 

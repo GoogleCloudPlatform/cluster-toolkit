@@ -36,6 +36,9 @@ RUN curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add -  && \
     curl https://packages.cloud.google.com/apt/doc/apt-key.gpg \
       | apt-key --keyring /usr/share/keyrings/cloud.google.gpg add - && \
     apt-get -y update && apt-get -y install google-cloud-sdk && \
+    apt-get -y install kubectl && \
+    # following is required to execute kubectl commands
+    apt-get -y install google-cloud-cli-gke-gcloud-auth-plugin && \ 
     apt-get clean && rm -rf /var/lib/apt/lists/* && \
     # install ansible and python dependencies
     pip install --no-cache-dir --upgrade pip && \

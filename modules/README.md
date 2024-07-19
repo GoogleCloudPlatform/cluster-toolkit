@@ -45,6 +45,8 @@ Modules that are still in development and less stable are labeled with the
   Creates a nodeset to be used by the [schedmd-slurm-gcp-v6-partition] module.
 * **[schedmd-slurm-gcp-v6-nodeset-tpu]** ![community-badge] ![experimental-badge]:
   Creates a TPU nodeset to be used by the [schedmd-slurm-gcp-v6-partition] module.
+* **[schedmd-slurm-gcp-v6-nodeset-dynamic]** ![community-badge] ![experimental-badge]:
+  Creates a dynamic nodeset to be used by the [schedmd-slurm-gcp-v6-partition] module and instance template.
 * **[gke-node-pool]** ![community-badge] ![experimental-badge] : Creates a
   Kubernetes node pool using GKE.
 * **[gke-job-template]** ![community-badge] ![experimental-badge] : Creates a
@@ -54,6 +56,7 @@ Modules that are still in development and less stable are labeled with the
   pool][htcondor-setup].
 * **[pbspro-execution]** ![community-badge] ![experimental-badge] :
   Creates execution hosts for use in a PBS Professional cluster.
+* **[mig]** ![community-badge] ![experimental-badge] : Creates a Managed Instance Group.
 * **[notebook]** ![community-badge] ![experimental-badge] : Creates a Vertex AI
   Notebook. Primarily used for [FSI - MonteCarlo Tutorial][fsi-montecarlo-on-batch-tutorial].
 
@@ -65,8 +68,10 @@ Modules that are still in development and less stable are labeled with the
 [schedmd-slurm-gcp-v6-partition]: ../community/modules/compute/schedmd-slurm-gcp-v6-partition/README.md
 [schedmd-slurm-gcp-v6-nodeset]: ../community/modules/compute/schedmd-slurm-gcp-v6-nodeset/README.md
 [schedmd-slurm-gcp-v6-nodeset-tpu]: ../community/modules/compute/schedmd-slurm-gcp-v6-nodeset-tpu/README.md
+[schedmd-slurm-gcp-v6-nodeset-dynamic]: ../community/modules/compute/schedmd-slurm-gcp-v6-nodeset-dynamic/README.md
 [htcondor-execute-point]: ../community/modules/compute/htcondor-execute-point/README.md
 [pbspro-execution]: ../community/modules/compute/pbspro-execution/README.md
+[mig]: ../community/modules/compute/mig/README.md
 [notebook]: ../community/modules/compute/notebook/README.md
 [fsi-montecarlo-on-batch-tutorial]: ../docs/tutorials/fsi-montecarlo-on-batch/README.md
 
@@ -89,6 +94,7 @@ Modules that are still in development and less stable are labeled with the
 ### File System
 
 * **[filestore]** ![core-badge] : Creates a [filestore](https://cloud.google.com/filestore) file system.
+* **[parallelstore]** ![core-badge] ![experimental-badge]: Creates a [parallelstore](https://cloud.google.com/parallelstore) file system.
 * **[pre-existing-network-storage]** ![core-badge] : Specifies a
   pre-existing file system that can be mounted on a VM.
 * **[DDN-EXAScaler]** ![community-badge] : Creates
@@ -103,6 +109,7 @@ Modules that are still in development and less stable are labeled with the
   configures an NFS server that can be mounted by other VM.
 
 [filestore]: file-system/filestore/README.md
+[parallelstore]: file-system/parallelstore/README.md
 [pre-existing-network-storage]: file-system/pre-existing-network-storage/README.md
 [ddn-exascaler]: ../community/modules/file-system/DDN-EXAScaler/README.md
 [intel-daos]: ../community/modules/file-system/Intel-DAOS/README.md
@@ -184,6 +191,7 @@ Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial][fsi-monteca
   submission of Google Cloud Batch jobs.
 * **[gke-cluster]** ![community-badge] ![experimental-badge] : Creates a
   Kubernetes cluster using GKE.
+* **[pre-existing-gke-cluster]** ![community-badge] ![experimental-badge] : Retrieves an existing GKE cluster. Substitute for ([gke-cluster]) module.
 * **[schedmd-slurm-gcp-v5-controller]** ![community-badge] :
   Creates a Slurm controller node using [slurm-gcp-version-5].
 * **[schedmd-slurm-gcp-v5-login]** ![community-badge] :
@@ -210,6 +218,7 @@ Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial][fsi-monteca
 [batch-job-template]: ../modules/scheduler/batch-job-template/README.md
 [batch-login-node]: ../modules/scheduler/batch-login-node/README.md
 [gke-cluster]: ../community/modules/scheduler/gke-cluster/README.md
+[pre-existing-gke-cluster]: ../community/modules/scheduler/pre-existing-gke-cluster/README.md
 [htcondor-setup]: ../community/modules/scheduler/htcondor-setup/README.md
 [htcondor-pool-secrets]: ../community/modules/scheduler/htcondor-pool-secrets/README.md
 [htcondor-access-point]: ../community/modules/scheduler/htcondor-access-point/README.md

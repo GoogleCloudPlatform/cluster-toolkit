@@ -96,6 +96,7 @@ git switch -c "${RC_BRANCH}" develop
 echo "Creating new Toolkit release-candidate branch"
 git push -u "${REMOTE_NAME}" "${RC_BRANCH}"
 git switch -c "${V_BRANCH}" "${RC_BRANCH}"
+echo "converting old v${OLD_MAJOR}.${OLD_MINOR}.${OLD_PATCH} to new ${NEW_TAG}"
 git sed "v${OLD_MAJOR}\.${OLD_MINOR}\.${OLD_PATCH}" "${NEW_TAG}" -- **/*.go **/versions.tf
 git add -u
 echo "Creating new branch with version update to ${NEW_VERSION}"
@@ -113,4 +114,4 @@ echo
 echo
 echo "Consider running the test babysitter using the pull request number from above:"
 echo
-echo "babysit.py --pr ${PR_NUM} --all -c 1"
+echo "tools/cloud-build/babysit/run --pr <PR_NUM> --all -c 1"

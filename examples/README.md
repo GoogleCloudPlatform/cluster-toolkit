@@ -1382,8 +1382,8 @@ Toolkit. It includes:
 > work. See note below.
 
 * Creation of a regional GKE cluster.
-* Creation of an autoscaling GKE node pool with `g2` machines each with 1
-  attached L4 GPUs. Note: This blueprint has also been tested with `a2` machines,
+* Creation of an autoscaling GKE node pool with `g2` machines.
+  Note: This blueprint has also been tested with `a2` machines,
   but as capacity is hard to find the example uses `g2` machines which have better obtainability.
   If using with `a2` machines it is recommended to first obtain an automatic reservation.
   
@@ -1395,14 +1395,39 @@ Toolkit. It includes:
     settings:
       disk_type: pd-balanced
       machine_type: a2-highgpu-2g
-      guest_accelerator:
-      - type: nvidia-tesla-a100
-        count: 2
-        gpu_partition_size: null
-        gpu_sharing_config: null
-        gpu_driver_installation_config:
-        - gpu_driver_version: "DEFAULT"
   ```
+
+  Users only need to provide machine type for standard ["a2", "a3" and "g2"] machine families,
+  while the other settings like `type`, `count` , `gpu_driver_installation_config` will default to
+  machine family specific values.
+  However, for other standard or custom machine families users will need to provide
+  the entire configuration as follows:
+
+```yaml
+machine_type: n1-standard-1
+guest_accelerator:
+- type: nvidia-tesla-t4
+  count: 1
+  gpu_partition_size: null
+  gpu_sharing_config: null
+  gpu_driver_installation_config:
+  - gpu_driver_version: "DEFAULT"
+```
+
+Custom g2 pool
+
+```yaml
+machine_type: g2-custom-16-55296
+guest_accelerator:
+- type: nvidia-l4
+  count: 1
+  gpu_partition_size: null
+  gpu_sharing_config:
+  -  max_shared_clients_per_gpu: 2
+      gpu_sharing_strategy: "TIME_SHARING"
+  gpu_driver_installation_config:
+  - gpu_driver_version: "LATEST"
+```
 
 * Configuration of the cluster using default drivers provided by GKE.
 * Creation of a job template yaml file that can be used to submit jobs to the
@@ -1863,3 +1888,38 @@ To avoid these issues, the `ghpc_stage` function can be used to copy a file (or 
 
 The `ghpc_stage` function will always look first in the path specified in the blueprint. If the file is not found at this path then `ghpc_stage` will look for the staged file in the deployment folder, if a deployment folder exists.
 This means that you can redeploy a blueprint (`ghpc deploy <blueprint> -w`) so long as you have the deployment folder from the original deployment, even if locally referenced files are not available.
+
+<!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
+## Requirements
+
+No requirements.
+
+## Providers
+
+| Name | Version |
+|------|---------|
+| <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | n/a |
+
+## Modules
+
+No modules.
+
+## Resources
+
+| Name | Type |
+|------|------|
+| [google-beta_google_compute_global_address.private_ip_alloc](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_compute_global_address) | resource |
+| [google-beta_google_compute_network.network](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_compute_network) | resource |
+| [google-beta_google_parallelstore_instance.instance](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_parallelstore_instance) | resource |
+| [google-beta_google_service_networking_connection.default](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_service_networking_connection) | resource |
+
+## Inputs
+
+No inputs.
+
+## Outputs
+
+| Name | Description |
+|------|-------------|
+| <a name="output_access_points"></a> [access\_points](#output\_access\_points) | Output access points |
+<!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

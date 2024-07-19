@@ -22,7 +22,8 @@ locals {
 locals {
   sa_email = var.service_account_email != null ? var.service_account_email : data.google_compute_default_service_account.default_sa.email
 
-  has_gpu = var.guest_accelerator != null || contains(["a2", "g2"], local.machine_family)
+  preattached_gpu_machine_family = contains(["a2", "a3", "g2"], local.machine_family)
+  has_gpu                        = (local.guest_accelerator != null && length(local.guest_accelerator) > 0) || local.preattached_gpu_machine_family
   gpu_taint = local.has_gpu ? [{
     key    = "nvidia.com/gpu"
     value  = "present"
@@ -73,16 +74,26 @@ resource "google_container_node_pool" "node_pool" {
   }
 
   node_config {
-    disk_size_gb      = var.disk_size_gb
-    disk_type         = var.disk_type
-    resource_labels   = local.labels
-    labels            = var.kubernetes_labels
-    service_account   = var.service_account_email
-    oauth_scopes      = var.service_account_scopes
-    machine_type      = var.machine_type
-    spot              = var.spot
-    image_type        = var.image_type
-    guest_accelerator = var.guest_accelerator
+    disk_size_gb    = var.disk_size_gb
+    disk_type       = var.disk_type
+    resource_labels = local.labels
+    labels          = var.kubernetes_labels
+    service_account = var.service_account_email
+    oauth_scopes    = var.service_account_scopes
+    machine_type    = var.machine_type
+    spot            = var.spot
+    image_type      = var.image_type
+
+    dynamic "guest_accelerator" {
+      for_each = local.guest_accelerator
+      content {
+        type                           = guest_accelerator.value.type
+        count                          = guest_accelerator.value.count
+        gpu_driver_installation_config = try(guest_accelerator.value.gpu_driver_installation_config, [{ gpu_driver_version = "DEFAULT" }])
+        gpu_partition_size             = try(guest_accelerator.value.gpu_partition_size, null)
+        gpu_sharing_config             = try(guest_accelerator.value.gpu_sharing_config, null)
+      }
+    }
 
     dynamic "taint" {
       for_each = concat(var.taints, local.gpu_taint)

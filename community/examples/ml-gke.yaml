@@ -50,23 +50,16 @@ deployment_groups:
         cidr_block: $(vars.authorized_cidr)
     outputs: [instructions]
 
-  - id: g2-pool
+  - id: g2_pool
     source: community/modules/compute/gke-node-pool
     use: [gke_cluster]
     settings:
       disk_type: pd-balanced
       machine_type: g2-standard-4
-      guest_accelerator:
-      - type: nvidia-l4
-        count: 1
-        gpu_partition_size: null
-        gpu_sharing_config: null
-        gpu_driver_installation_config:
-        - gpu_driver_version: "DEFAULT"
 
-  - id: job-template
+  - id: job_template
     source: community/modules/compute/gke-job-template
-    use: [g2-pool]
+    use: [g2_pool]
     settings:
       image: nvidia/cuda:11.0.3-runtime-ubuntu20.04
       command:
