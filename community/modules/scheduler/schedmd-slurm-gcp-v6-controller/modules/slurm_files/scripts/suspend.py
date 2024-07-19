@@ -146,35 +146,13 @@ def main(nodelist):
     suspend_nodes(pm_nodes)
 
 
-parser = argparse.ArgumentParser(
-    description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
-)
-parser.add_argument("nodelist", help="list of nodes to suspend")
-parser.add_argument(
-    "--debug",
-    "-d",
-    dest="loglevel",
-    action="store_const",
-    const=logging.DEBUG,
-    default=logging.INFO,
-    help="Enable debugging output",
-)
-parser.add_argument(
-    "--trace-api",
-    "-t",
-    action="store_true",
-    help="Enable detailed api request output",
-)
-
-
 if __name__ == "__main__":
-    args = parser.parse_args()
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument("nodelist", help="list of nodes to suspend")
 
-    if cfg.enable_debug_logging:
-        args.loglevel = logging.DEBUG
-    if args.trace_api:
-        cfg.extra_logging_flags = list(cfg.extra_logging_flags)
-        cfg.extra_logging_flags.append("trace_api")
+    args = util.add_log_args_and_parse(parser)
     util.chown_slurm(LOGFILE, mode=0o600)
     util.config_root_logger(filename, level=args.loglevel, logfile=LOGFILE)
     log = logging.getLogger(Path(__file__).name)
