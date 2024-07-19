@@ -35,6 +35,8 @@ chmod 777 "$local_mount"
 # Mount container for multi-user.
 fuse_config=/etc/fuse.conf
 sed -i "s/#.*user_allow_other/user_allow_other/g" $fuse_config
-dfuse -m "$local_mount" --pool default-pool --container default-container --multi-user -o "$mount_options"
+# To parse mount_options as --disable-wb-cache --eq-count=8.
+# shellcheck disable=SC2086
+dfuse -m "$local_mount" --pool default-pool --container default-container --multi-user $mount_options
 
 exit 0

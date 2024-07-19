@@ -25,6 +25,6 @@ terraform {
   }
 
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:schedmd-slurm-gcp-v6-nodeset-tpu/v1.35.1"
+    module_name = "blueprints/terraform/hpc-toolkit:schedmd-slurm-gcp-v6-nodeset-tpu/v1.36.0"
   }
 }
