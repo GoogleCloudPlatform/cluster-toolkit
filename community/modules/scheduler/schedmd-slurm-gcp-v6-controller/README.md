@@ -195,7 +195,7 @@ limitations under the License.
 | Name | Source | Version |
 |------|--------|---------|
 | <a name="module_bucket"></a> [bucket](#module\_bucket) | terraform-google-modules/cloud-storage/google | ~> 5.0 |
-| <a name="module_daos_network_storage_scripts"></a> [daos\_network\_storage\_scripts](#module\_daos\_network\_storage\_scripts) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | v1.34.0&depth=1 |
+| <a name="module_daos_network_storage_scripts"></a> [daos\_network\_storage\_scripts](#module\_daos\_network\_storage\_scripts) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | v1.36.0&depth=1 |
 | <a name="module_slurm_controller_instance"></a> [slurm\_controller\_instance](#module\_slurm\_controller\_instance) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/_slurm_instance | 6.5.13 |
 | <a name="module_slurm_controller_template"></a> [slurm\_controller\_template](#module\_slurm\_controller\_template) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template | 6.5.13 |
 | <a name="module_slurm_files"></a> [slurm\_files](#module\_slurm\_files) | ./modules/slurm_files | n/a |
