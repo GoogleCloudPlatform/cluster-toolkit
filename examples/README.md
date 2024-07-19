@@ -32,6 +32,8 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [serverless-batch.yaml](#serverless-batchyaml-) ![core-badge]
   * [serverless-batch-mpi.yaml](#serverless-batch-mpiyaml-) ![core-badge]
   * [pfs-lustre.yaml](#pfs-lustreyaml-) ![core-badge]
+  * [ps-slurm.yaml](#ps-slurmyaml--) ![core-badge] ![experimental-badge]
+  * [pfs-parallelstore.yaml](#pfs-parallelstoreyaml--) ![core-badge] ![experimental-badge]
   * [cae-slurm-v5-legacy.yaml](#cae-slurm-v5-legacyyaml-) ![core-badge]
   * [cae-slurm.yaml](#cae-slurmyaml-) ![core-badge]
   * [hpc-build-slurm-image.yaml](#hpc-build-slurm-imageyaml--) ![community-badge] ![experimental-badge]
@@ -994,6 +996,67 @@ For this example the following is needed in the selected region:
 
 [pfs-lustre.yaml]: ./pfs-lustre.yaml
 
+### [ps-slurm.yaml] ![core-badge] ![experimental-badge]
+
+Creates a Slurm cluster with [Parallelstore] instance mounted.
+
+After cluster is deployed, parallelstore drivers and DAOS client will be installed
+and mount-point will be configured on the VMs. You can SSH to login/ controller
+and verify by running:
+
+```sh
+df -H
+```
+
+This would show `dfuse` file system being attached at `/parallelstore` mount-point.
+
+#### Quota Requirements for ps-slurm.yaml
+
+To get access to a private preview of Parallelstore APIs, your project needs to
+be allowlisted. To set this up, please work with your account representative.
+
+For this example the following is needed in the selected region:
+
+* Cloud Parallelstore API: capacity (GB) per region: 12000 GB
+* Compute Engine API: Persistent Disk SSD (GB): ~100 GB for controller and login node.
+* Compute Engine API: Persistent Disk Standard (GB): 50 GB/node up to 200 GB.
+* Compute Engine API: N2 CPUs: 2 for the login node and 2/node active in the `debug` partition.
+* Compute Engine API: C2 CPUs: 4 for the controller node.
+* Compute Engine API: C2 CPUs: 60/node active in the `debug` partition up to 240.
+
+[ps-slurm.yaml]: ./ps-slurm.yaml
+[Parallelstore]: ../modules/file-system/parallelstore/README.md
+
+### [pfs-parallelstore.yaml] ![core-badge] ![experimental-badge]
+
+This creates 1 compute VM running debian 12 and 1 compute VM running ubuntu 20.04
+and connect with [Parallelstore] instance mounted.
+
+After cluster is deployed, parallelstore drivers and DAOS client will be installed
+and mount-point will be configured on the VMs. You can SSH to compute VM
+and verify by running:
+
+```sh
+df -H
+```
+
+This would show `dfuse` file system being attached at `/parallelstore` mount-point.
+
+#### Quota Requirements for pfs-parallelstore.yaml
+
+To get access to a private preview of Parallelstore APIs, your project needs to
+be allowlisted. To set this up, please work with your account representative.
+
+For this example the following is needed in the selected region:
+
+* Cloud Parallelstore API: capacity (GB) per region: 12000 GB
+* Compute Engine API: Persistent Disk Standard (GB): ~100 GB static.
+* Compute Engine API: N2 CPUs: 112 for the compute VM running debian 12.
+* Compute Engine API: N2 CPUs: 112 for the compute VM running ubuntu 22.04.
+
+[pfs-parallelstore.yaml]: ./pfs-parallelstore.yaml
+[Parallelstore]: ../modules/file-system/parallelstore/README.md
+
 ### [cae-slurm-v5-legacy.yaml] ![core-badge]
 
 The Computer Aided Engineering (CAE) blueprint captures a reference architecture
@@ -1386,9 +1449,9 @@ Toolkit. It includes:
   Note: This blueprint has also been tested with `a2` machines,
   but as capacity is hard to find the example uses `g2` machines which have better obtainability.
   If using with `a2` machines it is recommended to first obtain an automatic reservation.
-  
+
   Example settings for a2 look like:
-  
+
   ```yaml
   source: modules/compute/gke-node-pool
     use: [gke_cluster]
