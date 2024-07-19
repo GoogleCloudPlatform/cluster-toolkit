@@ -32,9 +32,16 @@ output "network_storage" {
     client_install_runner = local.client_install_runner
     mount_runner          = local.mount_runner
   }
+
+  precondition {
+    condition     = var.import_gcs_bucket_uri != null || var.import_destination_path == null
+    error_message = <<-EOD
+      Please specify import_gcs_bucket_uri to import data to parallelstore instance.
+    EOD
+  }
 }
 
 output "instructions" {
   description = "Instructions to monitor import-data operation from GCS bucket to parallelstore."
-  value       = var.source_gcs_bucket_uri != "" ? local.operation_instructions : "Data is not imported from GCS bucket."
+  value       = var.import_gcs_bucket_uri != null ? local.operation_instructions : "Data is not imported from GCS bucket."
 }

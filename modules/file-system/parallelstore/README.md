@@ -47,16 +47,16 @@ No modules.
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the HPC deployment. | `string` | n/a | yes |
-| <a name="input_destination_hydration_parallelstore"></a> [destination\_hydration\_parallelstore](#input\_destination\_hydration\_parallelstore) | The name of local path to import data on parallelstore instance from GCS bucket. | `string` | `"/"` | no |
+| <a name="input_import_destination_path"></a> [import\_destination\_path](#input\_import\_destination\_path) | The name of local path to import data on parallelstore instance from GCS bucket. | `string` | `null` | no |
+| <a name="input_import_gcs_bucket_uri"></a> [import\_gcs\_bucket\_uri](#input\_import\_gcs\_bucket\_uri) | The name of the GCS bucket to import data from to parallelstore. | `string` | `null` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to parallel store instance. | `map(string)` | `{}` | no |
 | <a name="input_local_mount"></a> [local\_mount](#input\_local\_mount) | The mount point where the contents of the device may be accessed after mounting. | `string` | `"/parallelstore"` | no |
 | <a name="input_mount_options"></a> [mount\_options](#input\_mount\_options) | Options describing various aspects of the parallelstore instance. | `string` | `"disable-wb-cache,thread-count=16,eq-count=8"` | no |
 | <a name="input_name"></a> [name](#input\_name) | Name of parallelstore instance. | `string` | `null` | no |
 | <a name="input_network_id"></a> [network\_id](#input\_network\_id) | The ID of the GCE VPC network to which the instance is connected given in the format:<br>`projects/<project_id>/global/networks/<network_name>`" | `string` | n/a | yes |
-| <a name="input_private_vpc_connection_peering"></a> [private\_vpc\_connection\_peering](#input\_private\_vpc\_connection\_peering) | The name of the VPC Network peering connection. | `string` | n/a | yes |
+| <a name="input_private_vpc_connection_peering"></a> [private\_vpc\_connection\_peering](#input\_private\_vpc\_connection\_peering) | The name of the VPC Network peering connection.<br>If using new VPC, please use community/modules/network/private-service-access to create private-service-access and<br>If using existing VPC with private-service-access enabled, set this manually." | `string` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created. | `string` | n/a | yes |
 | <a name="input_size_gb"></a> [size\_gb](#input\_size\_gb) | Storage size of the parallelstore instance in GB. | `number` | `12000` | no |
-| <a name="input_source_gcs_bucket_uri"></a> [source\_gcs\_bucket\_uri](#input\_source\_gcs\_bucket\_uri) | The name of the GCS bucket to import data from to parallelstore. | `string` | `""` | no |
 | <a name="input_zone"></a> [zone](#input\_zone) | Location for parallelstore instance. | `string` | n/a | yes |
 
 ## Outputs
