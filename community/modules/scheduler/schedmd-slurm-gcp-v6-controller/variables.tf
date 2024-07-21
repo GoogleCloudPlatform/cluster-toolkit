@@ -636,3 +636,10 @@ variable "endpoint_versions" {
   }
   nullable = false
 }
+
+variable "gcloud_path_override" {
+  description = "Directory of the gcloud executable to be used during cleanup"
+  type        = string
+  default     = ""
+  nullable    = false
+}
