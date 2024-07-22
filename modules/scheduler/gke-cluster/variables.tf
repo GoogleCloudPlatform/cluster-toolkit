@@ -296,3 +296,9 @@ variable "service_account" {
     error_message = "service_account is deprecated and replaced with service_account_email and scopes."
   }
 }
+
+variable "enable_multi_networking" {
+  description = "Enables [multi networking](https://cloud.google.com/kubernetes-engine/docs/how-to/setup-multinetwork-support-for-pods#create-a-gke-cluster). This setting is immutable on clusters and enables Dataplane V2."
+  type        = bool
+  default     = false
+}

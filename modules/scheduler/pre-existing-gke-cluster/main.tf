@@ -19,3 +19,57 @@ data "google_container_cluster" "existing_gke_cluster" {
   project  = var.project_id
   location = var.region
 }
+
+data "google_client_config" "default" {}
+
+provider "kubernetes" {
+  alias                  = "gke_cluster"
+  host                   = "https://${data.google_container_cluster.existing_gke_cluster.endpoint}" #"https://34.27.120.195"
+  token                  = data.google_client_config.default.access_token
+  cluster_ca_certificate = base64decode(data.google_container_cluster.existing_gke_cluster.master_auth[0].cluster_ca_certificate)
+}
+
+resource "kubernetes_manifest" "additional_net_params" {
+  for_each = { for idx, network_info in var.additional_networks : idx => network_info }
+
+  depends_on = [data.google_container_cluster.existing_gke_cluster]
+
+  manifest = {
+    "apiVersion" = "networking.gke.io/v1"
+    "kind"       = "GKENetworkParamSet"
+    "metadata" = {
+      "name" = "additional-network-${each.key}" # Unique name for each GKENetworkParamSet
+    }
+    "spec" = {
+      "vpc"        = each.value.network
+      "vpcSubnet"  = each.value.subnetwork
+      "deviceMode" = "NetDevice"
+    }
+  }
+
+  provider = kubernetes.gke_cluster
+}
+
+resource "kubernetes_manifest" "additional_nets" {
+  for_each = { for idx, network_info in var.additional_networks : idx => network_info }
+
+  depends_on = [data.google_container_cluster.existing_gke_cluster, kubernetes_manifest.additional_net_params]
+
+  manifest = {
+    "apiVersion" = "networking.gke.io/v1"
+    "kind"       = "Network"
+    "metadata" = {
+      "name" = "additional-network-${each.key}" # Unique name for each Network
+    }
+    "spec" = {
+      "parametersRef" = {
+        "group" = "networking.gke.io"
+        "kind"  = "GKENetworkParamSet"
+        "name"  = "additional-network-${each.key}" # Reference the corresponding param set
+      }
+      "type" = "Device"
+    }
+  }
+
+  provider = kubernetes.gke_cluster
+}

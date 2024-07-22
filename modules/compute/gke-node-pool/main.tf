@@ -152,6 +152,17 @@ resource "google_container_node_pool" "node_pool" {
     }
   }
 
+  network_config {
+    dynamic "additional_node_network_configs" {
+      for_each = var.additional_networks
+
+      content {
+        network    = additional_node_network_configs.value.network
+        subnetwork = additional_node_network_configs.value.subnetwork
+      }
+    }
+  }
+
   timeouts {
     create = var.timeout_create
     update = var.timeout_update

@@ -30,6 +30,9 @@ locals {
   }]
 
   sa_email = var.service_account_email != null ? var.service_account_email : data.google_compute_default_service_account.default_sa.email
+
+  #multi networking needs Dataplane v2 enabled
+  derived_enable_dataplane_v2 = var.enable_multi_networking ? true : var.enable_dataplane_v2
 }
 
 data "google_compute_default_service_account" "default_sa" {
@@ -85,7 +88,11 @@ resource "google_container_cluster" "gke_cluster" {
     autoscaling_profile = var.autoscaling_profile
   }
 
-  datapath_provider = var.enable_dataplane_v2 ? "ADVANCED_DATAPATH" : "LEGACY_DATAPATH"
+  datapath_provider = local.derived_enable_dataplane_v2 ? "ADVANCED_DATAPATH" : "LEGACY_DATAPATH"
+
+  enable_multi_networking = var.enable_multi_networking
+
+  networking_mode = "VPC_NATIVE"
 
   network_policy {
     # Enabling NetworkPolicy for clusters with DatapathProvider=ADVANCED_DATAPATH
@@ -288,14 +295,6 @@ resource "google_project_iam_member" "node_service_account_artifact_registry" {
   project = var.project_id
   role    = "roles/artifactregistry.reader"
   member  = "serviceAccount:${local.sa_email}"
-}
-
-data "google_client_config" "default" {}
-
-provider "kubernetes" {
-  host                   = "https://${google_container_cluster.gke_cluster.endpoint}"
-  cluster_ca_certificate = base64decode(google_container_cluster.gke_cluster.master_auth[0].cluster_ca_certificate)
-  token                  = data.google_client_config.default.access_token
 }
 
 module "workload_identity" {
