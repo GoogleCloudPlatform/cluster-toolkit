@@ -41,7 +41,7 @@ func (s *zeroSuite) TestGhpcStageImpl(c *C) {
 	h("zero", "../.ghpc/staged/zero_d02c4c4cde")
 	h("zero/one.txt", "../.ghpc/staged/one.txt_f8669c6c22")
 	h("./../../two.gif", "../.ghpc/staged/two.gif_711b257c4f")
-	h(".", "../.ghpc/staged/file_5.39.0af83")
+	h(".", "../.ghpc/staged/file_5058f1af83")
 	h("..", "../.ghpc/staged/file_58b9e70b65")
 
 	{
