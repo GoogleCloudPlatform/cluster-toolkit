@@ -57,13 +57,17 @@ deployment_groups:
       # if you follow this rule, any module which supports DKMS will be
       # properly configured at the end of image building (gVNIC, NVIDIA, ...)
       - type: shell
-        destination: disable_unattended_upgrades.sh
+        destination: prevent_unintentional_upgrades.sh
         content: |
           #!/bin/bash
           set -e -o pipefail
           systemctl stop unattended-upgrades.service
           systemctl disable unattended-upgrades.service
           systemctl mask unattended-upgrades.service
+          apt-mark hold google-compute-engine
+          apt-mark hold google-compute-engine-oslogin
+          apt-mark hold google-guest-agent
+          apt-mark hold google-osconfig-agent
       - type: ansible-local
         destination: install_headers_archive.yml
         content: |
@@ -104,7 +108,7 @@ deployment_groups:
           apt-get install -y git
           ansible-galaxy role install googlecloudplatform.google_cloud_ops_agents
           ansible-pull \
-              -U https://github.com/GoogleCloudPlatform/slurm-gcp -C 6.5.9 \
+              -U https://github.com/GoogleCloudPlatform/slurm-gcp -C 6.5.12 \
               -i localhost, --limit localhost --connection=local \
               -e @/var/tmp/slurm_vars.json \
               ansible/playbook.yml

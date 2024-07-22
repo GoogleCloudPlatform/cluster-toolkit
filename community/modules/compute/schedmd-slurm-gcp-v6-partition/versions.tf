@@ -18,6 +18,6 @@ terraform {
   required_version = ">= 1.3"
 
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:schedmd-slurm-gcp-v6-partition/v1.35.1"
+    module_name = "blueprints/terraform/hpc-toolkit:schedmd-slurm-gcp-v6-partition/v1.36.0"
   }
 }

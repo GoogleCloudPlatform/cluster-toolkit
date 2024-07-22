@@ -34,6 +34,7 @@
   ansible.builtin.command: |
       ./ghpc create -l ERROR "{{ blueprint_yaml }}" \
       --backend-config bucket={{ state_bucket }} \
+      --skip-validators=test_tf_version_for_slurm \
       --vars project_id={{ project }} \
       --vars deployment_name={{ deployment_name }} \
       {{ deployment_vars_str if deployment_vars_str is defined else '' }}

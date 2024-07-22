@@ -128,6 +128,10 @@ def run_from_cli():
                         help="Number of tests to run concurrently, default is 1")
     parser.add_argument("-r", "--retries", type=int, default=1,
                         help="Number of retries, to disable retries set to 0, default is 1")
+    # Non-runner args
+    parser.add_argument("--pretty", action="store_true", help="Render pretty output")
 
-    args = RunnerArgs(**vars(parser.parse_args()))
-    run(args, CliUI())
+    cli_args = vars(parser.parse_args())
+    ui = CliUI(pretty=cli_args.pop("pretty"))
+
+    run(RunnerArgs(**cli_args), ui)
