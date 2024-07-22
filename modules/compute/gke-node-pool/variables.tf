@@ -265,3 +265,27 @@ variable "service_account" {
     error_message = "service_account is deprecated and replaced with service_account_email and scopes."
   }
 }
+variable "additional_networks" {
+  description = "Additional network interface details for GCE, if any. Providing additional networks adds additional node networks to the node pool"
+  default     = []
+  type = list(object({
+    network            = string
+    subnetwork         = string
+    subnetwork_project = string
+    network_ip         = string
+    nic_type           = string
+    stack_type         = string
+    queue_count        = number
+    access_config = list(object({
+      nat_ip       = string
+      network_tier = string
+    }))
+    ipv6_access_config = list(object({
+      network_tier = string
+    }))
+    alias_ip_range = list(object({
+      ip_cidr_range         = string
+      subnetwork_range_name = string
+    }))
+  }))
+}

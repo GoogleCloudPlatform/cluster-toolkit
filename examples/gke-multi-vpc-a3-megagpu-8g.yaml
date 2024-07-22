@@ -1,0 +1,94 @@
+# Copyright 2023 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: gke-multi-vpc-a3-megagpu-8g
+
+vars:
+  project_id:  ## Set GCP Project ID Here ##
+  deployment_name: gkemvpc
+  region: us-central1
+  zone: us-central1-c
+
+  # Cidr block containing the IP of the machine calling terraform.
+  # The following line must be updated for this example to work.
+  authorized_cidr: <your-ip-address>/32
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: network1
+    source: modules/network/vpc
+    settings:
+      subnetwork_name: gke-subnet
+      secondary_ranges:
+        gke-subnet:
+        - range_name: pods
+          ip_cidr_range: 10.4.0.0/14
+        - range_name: services
+          ip_cidr_range: 10.0.32.0/20
+
+  - id: gke_cluster
+    source: modules/scheduler/gke-cluster
+    use: [network1]
+    settings:
+      enable_private_endpoint: false  # Allows for access from authorized public IPs
+      enable_multi_networking: true
+      master_authorized_networks:
+      - cidr_block: $(vars.authorized_cidr)
+        display_name: "kubectl-access-network" # Allows your machine run kubectl command.
+    outputs: [instructions]
+
+- group: multivpcgke
+  modules:
+  - id: gpunets
+    source: modules/network/multivpc
+    settings:
+      network_name_prefix: $(vars.deployment_name)-gpunet
+      global_ip_address_range: 192.169.0.0/16
+      network_count: 8
+      subnetwork_cidr_suffix: 24
+
+  - id: existing-gke-cluster
+    source: modules/scheduler/pre-existing-gke-cluster
+    use: [gpunets]
+    settings:
+      cluster_name: $(vars.deployment_name)
+
+  - id: a3-megagpu_pool
+    source: modules/compute/gke-node-pool
+    use: [existing-gke-cluster, gpunets]
+    settings:
+      machine_type: a3-megagpu-8g
+      guest_accelerator:
+      - type: nvidia-h100-mega-80gb
+        count: 8
+        gpu_driver_installation_config:
+        - gpu_driver_version: LATEST
+      static_node_count: 2
+      disk_type: pd-ssd
+      zones: [$(vars.zone)]
+      local_ssd_count_ephemeral_storage: 16
+
+  - id: job-template
+    source: modules/compute/gke-job-template
+    use: [a3-megagpu_pool]
+    settings:
+      image: busybox
+      command:
+      - echo
+      - Hello World
+      node_count: 3
+    outputs: [instructions]

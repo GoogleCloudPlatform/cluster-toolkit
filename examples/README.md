@@ -52,6 +52,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [hpc-gke.yaml](#hpc-gkeyaml--) ![community-badge] ![experimental-badge]
   * [ml-gke](#ml-gkeyaml--) ![community-badge] ![experimental-badge]
   * [storage-gke](#storage-gkeyaml--) ![community-badge] ![experimental-badge]
+  * [multivpc-gke](#multivpc-gkeyaml--) ![community-badge] ![experimental-badge]
   * [htc-slurm-v5-legacy.yaml](#htc-slurm-v5-legacyyaml--) ![community-badge] ![experimental-badge]
   * [htc-slurm.yaml](#htc-slurmyaml-) ![community-badge]
   * [htc-htcondor.yaml](#htc-htcondoryaml--) ![community-badge] ![experimental-badge]
@@ -1534,6 +1535,27 @@ cleaned up when the job is deleted.
 > [whatismyip.com](https://whatismyip.com) to determine your IP address.
 
 [storage-gke.yaml]: ../examples/storage-gke.yaml
+
+### [multivpc-gke.yaml] ![community-badge] ![experimental-badge]
+
+This blueprint shows how to use multiple VPC networks with GKE in the toolkit.
+
+The blueprint contains the following:
+
+* Two deployment groups
+  * The primary to provision the cluster
+  * The second group to apply mltiple VPCs to the cluster
+
+> [!Note]
+> The Kubernetes API server will only allow requests from authorized networks.
+> The `pre-existing-gke-cluster` module needs access to the Kubernetes API server
+> to apply a manifest. **You must use
+> the `authorized_cidr` variable to supply an authorized network which contains
+> the IP address of the machine deploying the blueprint, for example
+> `--vars authorized_cidr=<your-ip-address>/32`.** You can use a service like
+> [whatismyip.com](https://whatismyip.com) to determine your IP address.
+
+[multivpc-gke.yaml]: ../examples/gke-multi-vpc-a3-mgagpu-8g.yaml
 
 ### [htc-htcondor.yaml] ![community-badge] ![experimental-badge]
 

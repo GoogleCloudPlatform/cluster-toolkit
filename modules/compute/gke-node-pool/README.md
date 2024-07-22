@@ -73,6 +73,10 @@ use-cases). In this case, ensure that you turn off the
 [enable_secure_boot](#input\_enable\_secure\_boot) option to allow unsigned
 kernel modules to be loaded.
 
+To maximize GPU network bandwidth, nodepools accept multiple VPCs. Pass a multivpc module to gke-node-pool module, and [install GPUDirect and configure NCCL] (https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#install-gpudirect-tcpx-nccl).
+> **_NOTE:_** You must [enable multi networking](https://cloud.google.com/kubernetes-engine/docs/how-to/setup-multinetwork-support-for-pods#create-a-gke-cluster) feature when creating the GKE cluster.
+> To create network objects in gke cluster pass, the multivpc module to a pre-existing-gke-cluster module as well or [apply a manifest manually](https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#create-gke-environment).
+
 ### GPUs Examples
 
 There are several ways to add GPUs to a GKE node pool. See
@@ -149,7 +153,7 @@ Following is an example of using a GPU attached to an `n1` machine:
         count: 2
 ```
 
-Finally, the following is an example of using a GPU (with sharing config) attached to an `n1` machine:
+The following is an example of using a GPU (with sharing config) attached to an `n1` machine:
 
 ```yaml
   - id: n1-t4-pool
@@ -166,6 +170,39 @@ Finally, the following is an example of using a GPU (with sharing config) attach
         gpu_sharing_config:
         - max_shared_clients_per_gpu: 2
           gpu_sharing_strategy: "TIME_SHARING"
+```
+
+Finally, the following is adding multivpc to a node pool (with sharing config) attached to an `n1` machine:
+
+```yaml
+  - id: network
+    source: modules/network/vpc
+
+  - id: multinetwork
+    source: modules/network/multivpc
+    settings:
+      network_name_prefix: multivpc-net
+      network_count: 8
+      global_ip_address_range: 172.16.0.0/12
+      subnetwork_cidr_suffix: 16
+
+  - id: existing-gke-cluster ## multinetworking must be enabled in advance when cluster creation
+    source: modules/scheduler/pre-existing-gke-cluster
+    use: [multinetwork]
+    settings:
+      cluster_name: $(vars.deployment_name)
+
+  - id: a3-megagpu_pool
+    source: modules/compute/gke-node-pool
+    use: [existing-gke-cluster, multinetwork]
+    settings:
+      machine_type: a3-megagpu-8g
+      guest_accelerator:
+      - type: nvidia-h100-mega-80gb
+        count: 8
+        gpu_driver_installation_config:
+        - gpu_driver_version: LATEST
+      ...
 ```
 
 ## License
@@ -221,6 +258,7 @@ No modules.
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
+| <a name="input_additional_networks"></a> [additional\_networks](#input\_additional\_networks) | Additional network interface details for GCE, if any. Providing additional networks adds additional node networks to the node pool | <pre>list(object({<br>    network            = string<br>    subnetwork         = string<br>    subnetwork_project = string<br>    network_ip         = string<br>    nic_type           = string<br>    stack_type         = string<br>    queue_count        = number<br>    access_config = list(object({<br>      nat_ip       = string<br>      network_tier = string<br>    }))<br>    ipv6_access_config = list(object({<br>      network_tier = string<br>    }))<br>    alias_ip_range = list(object({<br>      ip_cidr_range         = string<br>      subnetwork_range_name = string<br>    }))<br>  }))</pre> | `[]` | no |
 | <a name="input_auto_upgrade"></a> [auto\_upgrade](#input\_auto\_upgrade) | Whether the nodes will be automatically upgraded. | `bool` | `false` | no |
 | <a name="input_autoscaling_total_max_nodes"></a> [autoscaling\_total\_max\_nodes](#input\_autoscaling\_total\_max\_nodes) | Total maximum number of nodes in the NodePool. | `number` | `1000` | no |
 | <a name="input_autoscaling_total_min_nodes"></a> [autoscaling\_total\_min\_nodes](#input\_autoscaling\_total\_min\_nodes) | Total minimum number of nodes in the NodePool. | `number` | `0` | no |
