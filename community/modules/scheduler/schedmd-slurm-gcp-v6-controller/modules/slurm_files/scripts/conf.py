@@ -417,20 +417,34 @@ class Switch:
 
 class TopologyBuilder:
     def __init__(self) -> None:
-        self._r = Switch("root")
+        self._r = Switch("")  # fake root, not part of the tree
 
     def add(self, path: List[str], nodes: Iterable[str]) -> None:
         n = self._r
         assert path
         for p in path:
             n = n.switches.setdefault(p, Switch(p))
-        n.nodes = chain(n.nodes, nodes)
+        n.nodes = [*n.nodes, *nodes]
 
     def render_conf_lines(self) -> Iterable[str]:
         if not self._r.switches:
             return []
         for s in sorted(self._r.switches.values(), key=lambda s: s.name):
             yield from s.render_conf_lines()
+
+    def compress(self) -> "TopologyBuilder":
+        compressed = TopologyBuilder()
+        def _walk(
+            u: Switch, c: Switch
+        ):  # u: uncompressed node, c: its counterpart in compressed tree
+            pref = f"{c.name}_" if c != compressed._r else "s"
+            for i, us in enumerate(sorted(u.switches.values(), key=lambda s: s.name)):
+                cs = Switch(f"{pref}{i}", nodes=us.nodes)
+                c.switches[cs.name] = cs
+                _walk(us, cs)
+
+        _walk(self._r, compressed._r)
+        return compressed
 
 
 def add_tpu_nodeset_topology(nodeset: object, bldr: TopologyBuilder, lkp: util.Lookup):
@@ -470,7 +484,7 @@ def gen_topology(lkp: util.Lookup) -> TopologyBuilder:
 
 def gen_topology_conf(lkp: util.Lookup) -> None:
     """generate slurm topology.conf from config.yaml"""
-    bldr = gen_topology(lkp)
+    bldr = gen_topology(lkp).compress()
     conf_file = Path(lkp.cfg.output_dir or slurmdirs.etc) / "cloud_topology.conf"
     with open(conf_file, "w") as f:
         f.writelines(FILE_PREAMBLE + "\n")

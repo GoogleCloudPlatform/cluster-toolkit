@@ -19,38 +19,20 @@ import util
 import conf
 import tempfile
 
-def test_gen_topology_conf_empty():
-    cfg = TstCfg(output_dir=tempfile.mkdtemp())
-    conf.gen_topology_conf(util.Lookup(cfg))
-    assert (
-        open(cfg.output_dir + "/cloud_topology.conf").read()
-        == """
+PRELUDE = """
 # Warning:
 # This file is managed by a script. Manual modifications will be overwritten.
 
-
 """
-    )
+
+def test_gen_topology_conf_empty():
+    cfg = TstCfg(output_dir=tempfile.mkdtemp())
+    conf.gen_topology_conf(util.Lookup(cfg))
+    assert open(cfg.output_dir + "/cloud_topology.conf").read() == PRELUDE + "\n"
 
 
 @mock.patch("util.TPU")
-@mock.patch(
-    "util.to_hostnames",
-    side_effect=make_to_hostnames_mock(
-        {
-            "m22-bold-[0-3]": ["m22-bold-0", "m22-bold-1", "m22-bold-2", "m22-bold-3"],
-            "m22-bold-[4-8]": [
-                "m22-bold-4",
-                "m22-bold-5",
-                "m22-bold-6",
-                "m22-bold-7",
-                "m22-bold-8",
-            ],
-            "m22-slim-[0-2]": ["m22-slim-0", "m22-slim-1", "m22-slim-2"],
-        }
-    ),
-)
-def test_gen_topology_conf(to_hostnames_mock, tpu_mock):
+def test_gen_topology_conf(tpu_mock):
     cfg = TstCfg(
         nodeset_tpu={
             "a": TstNodeset("bold", node_count_static=4, node_count_dynamic_max=5),
@@ -73,24 +55,37 @@ def test_gen_topology_conf(to_hostnames_mock, tpu_mock):
 
     tpu_mock.side_effect = tpu_se
 
+    lkp = util.Lookup(cfg)
+    uncompressed = conf.gen_topology(lkp)
+    want_uncompressed = [
+        "SwitchName=nodeset-root Switches=blue,green,pink",
+        "SwitchName=blue Nodes=m22-blue-[0-6]",
+        "SwitchName=green Nodes=m22-green-[0-4]",
+        "SwitchName=pink Nodes=m22-pink-[0-3]",
+        "SwitchName=nodeset_tpu-root Switches=bold,slim",
+        "SwitchName=bold Switches=bold-[0-3]",
+        "SwitchName=bold-0 Nodes=m22-bold-[0-2]",
+        "SwitchName=bold-1 Nodes=m22-bold-3",
+        "SwitchName=bold-2 Nodes=m22-bold-[4-6]",
+        "SwitchName=bold-3 Nodes=m22-bold-[7-8]",
+        "SwitchName=slim Nodes=m22-slim-[0-2]"]
+    assert list(uncompressed.render_conf_lines()) == want_uncompressed
+        
+    compressed = uncompressed.compress()
+    want_compressed = [
+        "SwitchName=s0 Switches=s0_[0-2]",
+        "SwitchName=s0_0 Nodes=m22-blue-[0-6]",
+        "SwitchName=s0_1 Nodes=m22-green-[0-4]",
+        "SwitchName=s0_2 Nodes=m22-pink-[0-3]",
+        "SwitchName=s1 Switches=s1_[0-1]",
+        "SwitchName=s1_0 Switches=s1_0_[0-3]",
+        "SwitchName=s1_0_0 Nodes=m22-bold-[0-2]",
+        "SwitchName=s1_0_1 Nodes=m22-bold-3",
+        "SwitchName=s1_0_2 Nodes=m22-bold-[4-6]",
+        "SwitchName=s1_0_3 Nodes=m22-bold-[7-8]",
+        "SwitchName=s1_1 Nodes=m22-slim-[0-2]"]
+    assert list(compressed.render_conf_lines()) == want_compressed
+
     conf.gen_topology_conf(util.Lookup(cfg))
-    assert (
-        open(cfg.output_dir + "/cloud_topology.conf").read()
-        == """
-# Warning:
-# This file is managed by a script. Manual modifications will be overwritten.
-
-SwitchName=nodeset-root Switches=blue,green,pink
-SwitchName=blue Nodes=m22-blue-[0-6]
-SwitchName=green Nodes=m22-green-[0-4]
-SwitchName=pink Nodes=m22-pink-[0-3]
-SwitchName=nodeset_tpu-root Switches=bold,slim
-SwitchName=bold Switches=bold-[0-3]
-SwitchName=bold-0 Nodes=m22-bold-[0-2]
-SwitchName=bold-1 Nodes=m22-bold-3
-SwitchName=bold-2 Nodes=m22-bold-[4-6]
-SwitchName=bold-3 Nodes=m22-bold-[7-8]
-SwitchName=slim Nodes=m22-slim-[0-2]
-
-"""
-    )
+    want_written = PRELUDE + "\n".join(want_compressed) + "\n\n"
+    assert open(cfg.output_dir + "/cloud_topology.conf").read() == want_written
