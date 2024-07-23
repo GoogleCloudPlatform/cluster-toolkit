@@ -27,6 +27,7 @@ from addict import Dict as NSDict
 
 import util
 from util import lkp, run, cfg, dirs, separate
+from more_executors import Executors, ExceptionRetryPolicy
 
 
 def mounts_by_local(mounts):
@@ -158,8 +159,6 @@ def setup_network_storage(log):
 
 def mount_fstab(mounts, log):
     """Wait on each mount, then make sure all fstab is mounted"""
-    from more_executors import Executors, ExceptionRetryPolicy
-
     def mount_path(path):
         log.info(f"Waiting for '{path}' to be mounted...")
         try:

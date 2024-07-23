@@ -19,7 +19,6 @@ import argparse
 import base64
 import collections
 import hashlib
-import importlib.util
 import inspect
 import json
 import logging
@@ -45,29 +44,8 @@ from time import sleep, time
 
 import slurm_gcp_plugins
 
-required_modules = [
-    ("googleapiclient", "google-api-python-client"),
-    ("requests", "requests"),
-    ("yaml", "yaml"),
-    ("addict", "addict"),
-    ("httplib2", "httplib2"),
-    ("google.cloud.tpu_v2", "google-cloud-tpu"),
-]
-missing_imports = False
-can_tpu = True
-for module, name in required_modules:
-    if importlib.util.find_spec(module) is None:
-        if module == "google.cloud.tpu_v2":
-            can_tpu = False
-            print(
-                f"WARNING: Missing Python module '{module} (pip:{name})', TPU support will not work."
-            )
-        else:
-            missing_imports = True
-            print(f"ERROR: Missing Python module '{module} (pip:{name})'")
-if missing_imports:
-    print("Aborting due to missing Python modules")
-    exit(1)
+from google.cloud import secretmanager
+from google.cloud import storage
 
 import google.auth  # noqa: E402
 from google.oauth2 import service_account  # noqa: E402
@@ -77,8 +55,13 @@ from googleapiclient.http import set_user_agent  # noqa: E402
 from google.api_core.client_options import ClientOptions  # noqa: E402
 import httplib2  # noqa: E402
 
-if can_tpu:
+try:
     from google.cloud import tpu_v2 as tpu  # noqa: E402
+    can_tpu = True
+except ImportError: # TODO: remove once CentOS 7 is deprecated or dependency is added
+    f"WARNING: Missing Python module 'google.cloud.tpu_v2 (pip:google-cloud-tpu)', TPU support will not work."
+    can_tpu = False
+
 import google.api_core.exceptions as gExceptions  # noqa: E402
 
 from requests import get as get_url  # noqa: E402
@@ -87,12 +70,6 @@ from requests.exceptions import RequestException  # noqa: E402
 import yaml  # noqa: E402
 from addict import Dict as NSDict  # noqa: E402
 
-optional_modules = [
-    ("google.cloud.secretmanager", "google-cloud-secret-manager"),
-]
-for module, name in optional_modules:
-    if importlib.util.find_spec(module) is None:
-        print(f"WARNING: Missing Python module '{module}' (pip:{name}) ")
 
 USER_AGENT = "Slurm_GCP_Scripts/1.5 (GPN:SchedMD)"
 ENV_CONFIG_YAML = os.getenv("SLURM_CONFIG_YAML")
@@ -225,9 +202,6 @@ def access_secret_version(project_id, secret_id, version_id="latest"):
     Access the payload for the given secret version if one exists. The version
     can be a version number as a string (e.g. "5") or an alias (e.g. "latest").
     """
-    from google.cloud import secretmanager
-    from google.api_core import exceptions
-
     co = create_client_options(ApiEndpoint.SECRET)
     client = secretmanager.SecretManagerServiceClient(client_options=co)
     name = f"projects/{project_id}/secrets/{secret_id}/versions/{version_id}"
@@ -235,7 +209,7 @@ def access_secret_version(project_id, secret_id, version_id="latest"):
         response = client.access_secret_version(request={"name": name})
         log.debug(f"Secret '{name}' was found.")
         payload = response.payload.data.decode("UTF-8")
-    except exceptions.NotFound:
+    except gExceptions.NotFound:
         log.debug(f"Secret '{name}' was not found!")
         payload = None
 
@@ -302,8 +276,6 @@ def map_with_futures(func, seq):
 
 
 def blob_get(file, project=None):
-    from google.cloud import storage
-
     if project is None:
         project = lkp.project
     uri = instance_metadata("attributes/slurm_bucket_path")
@@ -315,8 +287,6 @@ def blob_get(file, project=None):
 
 
 def blob_list(prefix="", delimiter=None, project=None):
-    from google.cloud import storage
-
     if project is None:
         project = lkp.project
     uri = instance_metadata("attributes/slurm_bucket_path")
@@ -490,8 +460,6 @@ def fetch_config_yaml():
 
 def fetch_config_yaml_md5():
     """Fetch config.yaml blob md5 from bucket"""
-    import hashlib
-
     blob = blob_get("config.yaml")
     blob.reload()  # Populate blob with metadata
     hash_str = str(blob.md5_hash).encode(encoding="utf-8")
@@ -854,8 +822,6 @@ def project_metadata(key):
 
 
 def bucket_blob_download(bucket_name, blob_name):
-    from google.cloud import storage
-
     co = create_client_options("storage")
     storage_client = storage.Client(client_options=co)
     bucket = storage_client.bucket(bucket_name)

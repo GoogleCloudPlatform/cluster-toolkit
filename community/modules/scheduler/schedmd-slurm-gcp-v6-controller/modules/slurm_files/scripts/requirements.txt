@@ -5,6 +5,7 @@ google-auth==2.22.0
 google-auth-httplib2==0.1.0
 google-cloud-bigquery==3.11.3
 google-cloud-core==2.3.3
+google-cloud-secret-manager~=2.0
 google-cloud-storage==2.10.0
 google-cloud-tpu==1.10.0
 google-resumable-media==2.5.0
@@ -13,5 +14,5 @@ grpcio==1.56.0
 grpcio-status==1.56.0
 httplib2==0.22.0
 more-executors==2.11.4
-PyYAML==6.0
+pyyaml==6.0
 requests==2.31.0
