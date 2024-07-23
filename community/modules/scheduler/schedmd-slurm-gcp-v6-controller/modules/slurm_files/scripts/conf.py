@@ -36,7 +36,7 @@ def dict_to_conf(conf, delim=" ") -> str:
     def filter_conf(pair):
         k, v = pair
         if isinstance(v, list):
-            v = ",".join(el for el in v if el is not None)
+            v = ",".join(str(el) for el in v if el is not None)
         return k, (v if bool(v) or v == 0 else None)
 
     return delim.join(
