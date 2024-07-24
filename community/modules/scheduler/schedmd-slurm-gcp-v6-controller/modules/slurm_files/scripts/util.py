@@ -1890,6 +1890,10 @@ class Lookup:
             nodeset_map[self.node_nodeset_name(node)].append(node)
         return nodeset_map
 
+    @property
+    def etc_dir(self) -> Path:
+        return Path(self.cfg.output_dir or slurmdirs.etc)
+
 
 # Define late globals
 lkp = Lookup()

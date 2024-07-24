@@ -256,7 +256,7 @@ def make_cloud_conf(lkp: util.Lookup) -> str:
 def gen_cloud_conf(lkp: util.Lookup) -> None:
     content = make_cloud_conf(lkp)
 
-    conf_file = Path(lkp.cfg.output_dir or slurmdirs.etc) / "cloud.conf"
+    conf_file = lkp.etc_dir / "cloud.conf"
     conf_file.write_text(content)
     util.chown_slurm(conf_file, mode=0o644)
 
@@ -281,7 +281,7 @@ def install_slurm_conf(lkp: util.Lookup) -> None:
 
     conf = lkp.cfg.slurm_conf_tpl.format(**conf_options)
 
-    conf_file = Path(lkp.cfg.output_dir or slurmdirs.etc) / "slurm.conf"
+    conf_file = lkp.etc_dir / "slurm.conf"
     conf_file.write_text(conf)
     util.chown_slurm(conf_file, mode=0o644)
 
@@ -319,14 +319,14 @@ def install_slurmdbd_conf(lkp: util.Lookup) -> None:
 
     conf = lkp.cfg.slurmdbd_conf_tpl.format(**conf_options)
 
-    conf_file = Path(lkp.cfg.output_dir or slurmdirs.etc) / "slurmdbd.conf"
+    conf_file = lkp.etc_dir / "slurmdbd.conf"
     conf_file.write_text(conf)
     util.chown_slurm(conf_file, 0o600)
 
 
 def install_cgroup_conf(lkp: util.Lookup) -> None:
     """install cgroup.conf"""
-    conf_file = Path(lkp.cfg.output_dir or slurmdirs.etc) / "cgroup.conf"
+    conf_file = lkp.etc_dir / "cgroup.conf"
     conf_file.write_text(lkp.cfg.cgroup_conf_tpl)
     util.chown_slurm(conf_file, mode=0o600)
 
@@ -343,7 +343,7 @@ def install_jobsubmit_lua(lkp: util.Lookup) -> None:
         }
         conf = lkp.cfg.jobsubmit_lua_tpl.format(**conf_options)
 
-        conf_file = Path(lkp.cfg.output_dir or slurmdirs.etc) / "job_submit.lua"
+        conf_file = lkp.etc_dir / "job_submit.lua"
         conf_file.write_text(conf)
         util.chown_slurm(conf_file, 0o600)
 
@@ -372,14 +372,14 @@ def gen_cloud_gres_conf(lkp: util.Lookup) -> None:
     lines.append("\n")
     content = FILE_PREAMBLE + "\n".join(lines)
 
-    conf_file = Path(lkp.cfg.output_dir or slurmdirs.etc) / "cloud_gres.conf"
+    conf_file = lkp.etc_dir / "cloud_gres.conf"
     conf_file.write_text(content)
     util.chown_slurm(conf_file, mode=0o600)
 
 
 def install_gres_conf(lkp: util.Lookup) -> None:
-    conf_file = Path(lkp.cfg.output_dir or slurmdirs.etc) / "cloud_gres.conf"
-    gres_conf = Path(lkp.cfg.output_dir or slurmdirs.etc) / "gres.conf"
+    conf_file = lkp.etc_dir / "cloud_gres.conf"
+    gres_conf = lkp.etc_dir / "gres.conf"
     if not gres_conf.exists():
         gres_conf.symlink_to(conf_file)
     util.chown_slurm(gres_conf, mode=0o600)
@@ -485,7 +485,8 @@ def gen_topology(lkp: util.Lookup) -> TopologyBuilder:
 def gen_topology_conf(lkp: util.Lookup) -> None:
     """generate slurm topology.conf from config.yaml"""
     bldr = gen_topology(lkp).compress()
-    conf_file = Path(lkp.cfg.output_dir or slurmdirs.etc) / "cloud_topology.conf"
+    conf_file = lkp.etc_dir / "cloud_topology.conf"
+
     with open(conf_file, "w") as f:
         f.writelines(FILE_PREAMBLE + "\n")
         for line in bldr.render_conf_lines():
@@ -496,8 +497,21 @@ def gen_topology_conf(lkp: util.Lookup) -> None:
 
 
 def install_topology_conf(lkp: util.Lookup) -> None:
-    conf_file = Path(lkp.cfg.output_dir or slurmdirs.etc) / "cloud_topology.conf"
-    topo_conf = Path(lkp.cfg.output_dir or slurmdirs.etc) / "topology.conf"
+    conf_file = lkp.etc_dir / "cloud_topology.conf"
+    topo_conf = lkp.etc_dir / "topology.conf"
     if not topo_conf.exists():
         topo_conf.symlink_to(conf_file)
     util.chown_slurm(conf_file, mode=0o600)
+
+
+def gen_controller_configs(lkp: util.Lookup) -> None:
+    install_slurm_conf(lkp)
+    install_slurmdbd_conf(lkp)
+    gen_cloud_conf(lkp)
+    gen_cloud_gres_conf(lkp)
+    gen_topology_conf(lkp)
+
+    install_gres_conf(lkp)
+    install_cgroup_conf(lkp)
+    install_topology_conf(lkp)
+    install_jobsubmit_lua(lkp)

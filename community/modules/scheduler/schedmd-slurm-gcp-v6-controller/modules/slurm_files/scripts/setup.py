@@ -34,19 +34,8 @@ from util import (
     run,
     install_custom_scripts,
 )
+import conf
 
-from conf import (
-    install_slurm_conf,
-    install_slurmdbd_conf,
-    gen_cloud_conf,
-    gen_cloud_gres_conf,
-    gen_topology_conf,
-    install_gres_conf,
-    install_cgroup_conf,
-    install_topology_conf,
-    install_jobsubmit_lua,
-    login_nodeset,
-)
 from slurmsync import sync_slurm
 
 from setup_network_storage import (
@@ -336,18 +325,7 @@ def setup_controller(args):
     log.info("Setting up controller")
     util.chown_slurm(dirs.scripts / "config.yaml", mode=0o600)
     install_custom_scripts()
-
-    install_slurm_conf(lkp)
-    install_slurmdbd_conf(lkp)
-
-    gen_cloud_conf(lkp)
-    gen_cloud_gres_conf(lkp)
-    gen_topology_conf(lkp)
-    install_gres_conf(lkp)
-    install_cgroup_conf(lkp)
-    install_topology_conf(lkp)
-    install_jobsubmit_lua(lkp)
-
+    conf.gen_controller_configs(lkp)
     setup_jwt_key()
     setup_munge_key()
     setup_sudoers()
@@ -412,7 +390,7 @@ def setup_login(args):
         slurmctld_host = f"{lkp.control_host}({lkp.control_addr})"
     slurmd_options = [
         f'--conf-server="{slurmctld_host}:{lkp.control_host_port}"',
-        f'--conf="Feature={login_nodeset}"',
+        f'--conf="Feature={conf.login_nodeset}"',
         "-Z",
     ]
     sysconf = f"""SLURMD_OPTIONS='{" ".join(slurmd_options)}'"""
