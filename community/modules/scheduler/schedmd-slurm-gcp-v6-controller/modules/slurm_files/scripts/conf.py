@@ -44,6 +44,17 @@ def dict_to_conf(conf, delim=" ") -> str:
     )
 
 
+TOPOLOGY_PLUGIN_TREE = "topology/tree"
+
+def topology_plugin(lkp: util.Lookup) -> str:
+    """
+    Returns configured topology plugin, defaults to `topology/tree`.
+    """
+    cp, key = lkp.cfg.cloud_parameters, "topology_plugin"
+    if key not in cp or cp[key] is None:
+        return TOPOLOGY_PLUGIN_TREE
+    return cp[key]
+
 def conflines(lkp: util.Lookup) -> str:
     params = lkp.cfg.cloud_parameters
     def get(key, default):
@@ -113,7 +124,7 @@ def conflines(lkp: util.Lookup) -> str:
         "SuspendTimeout": get("suspend_timeout", 300),
         "TreeWidth": get("tree_width", default_tree_width),
         "JobSubmitPlugins": "lua" if any_tpu else None,
-        "TopologyPlugin": get("topology_plugin", "topology/tree"),
+        "TopologyPlugin": topology_plugin(lkp),
     }
     return dict_to_conf(conf_options, delim="\n")
 
@@ -497,10 +508,14 @@ def gen_topology(lkp: util.Lookup) -> TopologyBuilder:
     return bldr
 
 
-def gen_topology_conf(lkp: util.Lookup) -> None:
-    """generate slurm topology.conf from config.yaml"""
+def gen_topology_conf(lkp: util.Lookup) -> bool:
+    """
+    Generates slurm topology.conf.
+    Returns whether the topology.conf got updated.
+    """
     bldr = gen_topology(lkp).compress()
     conf_file = lkp.etc_dir / "cloud_topology.conf"
+    old_hash = util.hash_file(conf_file) if conf_file.exists() else ""
 
     with open(conf_file, "w") as f:
         f.writelines(FILE_PREAMBLE + "\n")
@@ -508,8 +523,9 @@ def gen_topology_conf(lkp: util.Lookup) -> None:
             f.write(line)
             f.write("\n")
         f.write("\n")
-    util.chown_slurm(conf_file, mode=0o600)
+    new_hash = util.hash_file(conf_file)
 
+    return old_hash != new_hash
 
 def install_topology_conf(lkp: util.Lookup) -> None:
     conf_file = lkp.etc_dir / "cloud_topology.conf"
@@ -524,9 +540,10 @@ def gen_controller_configs(lkp: util.Lookup) -> None:
     install_slurmdbd_conf(lkp)
     gen_cloud_conf(lkp)
     gen_cloud_gres_conf(lkp)
-    gen_topology_conf(lkp)
-
     install_gres_conf(lkp)
-    install_cgroup_conf(lkp)
-    install_topology_conf(lkp)
+    install_cgroup_conf(lkp) 
     install_jobsubmit_lua(lkp)
+
+    if topology_plugin(lkp) == TOPOLOGY_PLUGIN_TREE:
+        gen_topology_conf(lkp)
+        install_topology_conf(lkp)

@@ -301,7 +301,7 @@ def blob_list(prefix="", delimiter=None, project=None):
     return [blob for blob in blobs]
 
 
-def _hash_file(fullpath):
+def hash_file(fullpath: Path) -> str:
     with open(fullpath, "rb") as f:
         file_hash = hashlib.md5()
         chunk = f.read(8192)
@@ -352,7 +352,9 @@ def install_custom_scripts(check_hash=False):
             chown_slurm(dirs.custom_scripts / par)
         need_update = True
         if check_hash and fullpath.exists():
-            need_update = _hash_file(fullpath) != blob.md5_hash
+            # TODO: MD5 reported by gcloud may differ from the one calculated here (e.g. if blob got gzipped), 
+            # consider using gCRC32C
+            need_update = hash_file(fullpath) != blob.md5_hash
         if need_update:
             log.info(f"installing custom script: {path} from {blob.name}")
             with fullpath.open("wb") as f:
@@ -839,7 +841,6 @@ def natural_sort(text):
         return int(text) if text.isdigit() else text
 
     return [atoi(w) for w in re.split(r"(\d+)", text)]
-
 
 # TODO: replace with to_hostlist_fast
 def to_hostlist(nodenames) -> str:
@@ -1490,6 +1491,10 @@ class Lookup:
             role = None
         return role
 
+    @property
+    def is_controller(self):
+        return self.instance_role_safe == "controller"
+
     @cached_property
     def compute(self):
         # TODO evaluate when we need to use google_app_cred_path
@@ -1894,6 +1899,9 @@ class Lookup:
     def etc_dir(self) -> Path:
         return Path(self.cfg.output_dir or slurmdirs.etc)
 
+def scontrol_reconfigure(lkp: Lookup) -> None:
+    log.info("Running scontrol reconfigure")
+    run(f"{lkp.scontrol} reconfigure", timeout=30)
 
 # Define late globals
 lkp = Lookup()
