@@ -58,17 +58,17 @@ def test_gen_topology_conf(tpu_mock):
     lkp = util.Lookup(cfg)
     uncompressed = conf.gen_topology(lkp)
     want_uncompressed = [
-        "SwitchName=nodeset-root Switches=blue,green,pink",
-        "SwitchName=blue Nodes=m22-blue-[0-6]",
-        "SwitchName=green Nodes=m22-green-[0-4]",
-        "SwitchName=pink Nodes=m22-pink-[0-3]",
-        "SwitchName=nodeset_tpu-root Switches=bold,slim",
-        "SwitchName=bold Switches=bold-[0-3]",
+        "SwitchName=slurm-root Switches=ns_blue,ns_green,ns_pink",
+        "SwitchName=ns_blue Nodes=m22-blue-[0-6]",
+        "SwitchName=ns_green Nodes=m22-green-[0-4]",
+        "SwitchName=ns_pink Nodes=m22-pink-[0-3]",
+        "SwitchName=tpu-root Switches=ns_bold,ns_slim",
+        "SwitchName=ns_bold Switches=bold-[0-3]",
         "SwitchName=bold-0 Nodes=m22-bold-[0-2]",
         "SwitchName=bold-1 Nodes=m22-bold-3",
         "SwitchName=bold-2 Nodes=m22-bold-[4-6]",
         "SwitchName=bold-3 Nodes=m22-bold-[7-8]",
-        "SwitchName=slim Nodes=m22-slim-[0-2]"]
+        "SwitchName=ns_slim Nodes=m22-slim-[0-2]"]
     assert list(uncompressed.render_conf_lines()) == want_uncompressed
         
     compressed = uncompressed.compress()

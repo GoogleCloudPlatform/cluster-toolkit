@@ -451,7 +451,7 @@ def add_tpu_nodeset_topology(nodeset: object, bldr: TopologyBuilder, lkp: util.L
     tpuobj = util.TPU(nodeset)
     static, dynamic = lkp.nodenames(nodeset)
 
-    pref = ["nodeset_tpu-root", nodeset.nodeset_name]
+    pref = ["tpu-root",  f"ns_{nodeset.nodeset_name}"]
     if tpuobj.vmcount == 1:  # Put all nodes in one switch
         bldr.add(pref, list(chain(static, dynamic)))
         return
@@ -468,7 +468,7 @@ def add_tpu_nodeset_topology(nodeset: object, bldr: TopologyBuilder, lkp: util.L
 def add_nodeset_topology(
     nodeset: object, bldr: TopologyBuilder, lkp: util.Lookup
 ) -> None:
-    path = ["nodeset-root", nodeset.nodeset_name]
+    path = ["slurm-root",  f"ns_{nodeset.nodeset_name}"]
     nodes = list(chain(*lkp.nodenames(nodeset)))
     bldr.add(path, nodes)
 
