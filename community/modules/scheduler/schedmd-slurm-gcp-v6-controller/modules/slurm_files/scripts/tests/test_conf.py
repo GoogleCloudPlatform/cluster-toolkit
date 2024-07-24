@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
+import pytest
 from mock import Mock
 from common import TstNodeset, TstCfg, TstMachineConf, TstTemplateInfo
 
@@ -60,3 +60,21 @@ def test_nodeset_lines():
             "NodeSet=turbo Nodes=m22-turbo-[0-4]",
         ]
     )
+
+
+@pytest.mark.parametrize(
+    "value,want",
+    [
+        ({"a": 1}, "a=1"),
+        ({"a": "two"}, "a=two"),
+        ({"a": [3, 4]}, "a=3,4"),
+        ({"a": ["five", "six"]}, "a=five,six"),
+        ({"a": None}, ""),
+        ({"a": ["seven", None, 8]}, "a=seven,8"),
+        ({"a": 1, "b": "two"}, "a=1 b=two"),
+        ({"a": 1, "b": None, "c": "three"}, "a=1 c=three"),
+        ({"a": 0, "b": None, "c": 0.0, "e": ""}, "a=0 c=0.0"),
+        ({"a": [0, 0.0, None, "X", "", "Y"]}, "a=0,0.0,X,,Y"),
+    ])
+def test_dict_to_conf(value: dict, want: str):
+    assert conf.dict_to_conf(value) == want
