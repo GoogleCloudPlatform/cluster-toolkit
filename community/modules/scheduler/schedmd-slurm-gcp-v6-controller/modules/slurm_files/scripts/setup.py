@@ -146,7 +146,7 @@ def run_custom_scripts():
     elif lkp.instance_role == "compute":
         # compute setup with compute.d and nodeset.d
         custom_dirs = [custom_dir / "compute.d", custom_dir / "nodeset.d"]
-    elif lkp.instance_role == "login":
+    elif lkp.is_login:
         # login setup with only login.d
         custom_dirs = [custom_dir / "login.d"]
     else:
@@ -167,8 +167,8 @@ def run_custom_scripts():
                 timeout = lkp.cfg.get("controller_startup_scripts_timeout", 300)
             elif "/compute.d/" in str(script) or "/nodeset.d/" in str(script):
                 timeout = lkp.cfg.get("compute_startup_scripts_timeout", 300)
-            elif "/login.d/" in str(script):
-                timeout = lkp.cfg.get("login_startup_scripts_timeout", 300)
+            elif "/login.d/" in str(script) and lkp.is_login:
+                timeout = lkp.login_cfg.get("startup_scripts_timeout", 300)
             else:
                 timeout = 300
             timeout = None if not timeout or timeout < 0 else timeout

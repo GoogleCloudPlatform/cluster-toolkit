@@ -54,13 +54,12 @@ locals {
     # storage
     disable_default_mounts = var.disable_default_mounts
     network_storage        = var.network_storage
-    login_network_storage  = var.enable_hybrid ? null : var.login_network_storage
 
     # timeouts
     controller_startup_scripts_timeout = var.enable_hybrid ? null : var.controller_startup_scripts_timeout
     compute_startup_scripts_timeout    = var.compute_startup_scripts_timeout
-    login_startup_scripts_timeout      = var.enable_hybrid ? null : var.login_startup_scripts_timeout
-    munge_mount                        = local.munge_mount
+
+    munge_mount = local.munge_mount
 
     # slurm conf
     prolog_scripts   = [for k, v in google_storage_bucket_object.prolog_scripts : k]
@@ -91,9 +90,6 @@ locals {
     # Providers
     endpoint_versions = var.endpoint_versions
   }
-
-  config_yaml        = "config.yaml"
-  config_yaml_bucket = format("%s/%s", local.bucket_dir, local.config_yaml)
 
   partitions = { for p in var.partitions[*].partition : p.partition_name => p }
 
@@ -129,8 +125,21 @@ locals {
 
 resource "google_storage_bucket_object" "config" {
   bucket  = data.google_storage_bucket.this.name
-  name    = local.config_yaml_bucket
+  name    = "${local.bucket_dir}/config.yaml"
   content = yamlencode(local.config)
+}
+
+locals {
+  login_config = {
+    network_storage         = var.login_network_storage
+    startup_scripts_timeout = var.login_startup_scripts_timeout
+  }
+}
+
+resource "google_storage_bucket_object" "login_config" {
+  bucket  = data.google_storage_bucket.this.name
+  name    = "${local.bucket_dir}/login_config.yaml"
+  content = yamlencode(local.login_config)
 }
 
 #########

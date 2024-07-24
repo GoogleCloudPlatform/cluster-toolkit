@@ -494,7 +494,7 @@ def reconfigure_slurm():
                 log.error(e)
             util.run(f"wall '{update_msg}'", timeout=30)
             log.debug("Done.")
-        elif lkp.instance_role_safe in ["compute", "login"]:
+        elif lkp.instance_role_safe == "compute" or lkp.is_login:
             log.info("Restarting slurmd to make changes take effect.")
             run("systemctl restart slurmd")
             util.run(f"wall '{update_msg}'", timeout=30)

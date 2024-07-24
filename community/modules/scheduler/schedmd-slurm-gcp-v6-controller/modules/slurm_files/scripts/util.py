@@ -275,14 +275,12 @@ def map_with_futures(func, seq):
             yield res
 
 
-def blob_get(file, project=None):
-    if project is None:
-        project = lkp.project
+def blob_get(file):
     uri = instance_metadata("attributes/slurm_bucket_path")
     bucket_name, path = parse_bucket_uri(uri)
     blob_name = f"{path}/{file}"
     co = create_client_options(ApiEndpoint.STORAGE)
-    storage_client = storage.Client(project=project, client_options=co)
+    storage_client = storage.Client(project=lkp.project, client_options=co)
     return storage_client.get_bucket(bucket_name).blob(blob_name)
 
 
@@ -427,27 +425,26 @@ def load_config_data(config):
     return cfg
 
 
+def _network_storages_substitute_controller_address(nss, cfg) -> None:
+    for ns in nss:
+        if ns.server_ip is None or ns.server_ip == "$controller":
+            ns.server_ip = cfg.slurm_control_host
+
 def new_config(config):
     """initialize a new config object
     necessary defaults are handled here
     """
     cfg = load_config_data(config)
 
-    network_storage_iter = filter(
+    _network_storages_substitute_controller_address(filter(
         None,
         (
             *cfg.network_storage,
-            *cfg.login_network_storage,
             *chain.from_iterable(ns.network_storage for ns in cfg.nodeset.values()),
             *chain.from_iterable(ns.network_storage for ns in cfg.nodeset_dyn.values()),
             *chain.from_iterable(ns.network_storage for ns in cfg.nodeset_tpu.values()),
         ),
-    )
-    for netstore in network_storage_iter:
-        if netstore != "gcsfuse" and (
-            netstore.server_ip is None or netstore.server_ip == "$controller"
-        ):
-            netstore.server_ip = cfg.slurm_control_host
+    ), cfg)
     return cfg
 
 
@@ -819,20 +816,6 @@ def instance_metadata(path):
 def project_metadata(key):
     """Get project metadata project/attributes/<slurm_cluster_name>-<path>"""
     return get_metadata(key, root=f"{ROOT_URL}/project/attributes")
-
-
-def bucket_blob_download(bucket_name, blob_name):
-    co = create_client_options("storage")
-    storage_client = storage.Client(client_options=co)
-    bucket = storage_client.bucket(bucket_name)
-    blob = bucket.blob(blob_name)
-    contents = None
-    with tempfile.NamedTemporaryFile(mode="w+t") as tmp:
-        blob.download_to_filename(tmp.name)
-        with open(tmp.name, "r") as f:
-            contents = f.read()
-    return contents
-
 
 def natural_sort(text):
     def atoi(text):
@@ -1449,6 +1432,16 @@ class Lookup:
     def cfg(self):
         return self._cfg
 
+    @cached_property
+    def login_cfg(self):
+        assert self.is_login, "The login node config is only available on login nodes"
+        # NOTE: It's OK to fetch config from bucket, it's cached and only used during startup.
+        content = blob_get("login_config.yaml").download_as_text()
+        # TODO: Don't use NSDict
+        login_cfg = NSDict(yaml.safe_load(content))
+        _network_storages_substitute_controller_address(login_cfg.network_storage, self.cfg)
+        return cfg
+
     @property
     def project(self):
         return self.cfg.project or authentication_project()
@@ -1489,6 +1482,11 @@ class Lookup:
             log.error(e)
             role = None
         return role
+    
+    @property
+    def is_login(self):
+        return self.instance_role_safe == "login"
+    
 
     @cached_property
     def compute(self):
