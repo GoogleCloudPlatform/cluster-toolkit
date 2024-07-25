@@ -275,29 +275,23 @@ def map_with_futures(func, seq):
             yield res
 
 
-def blob_get(file, project=None):
-    if project is None:
-        project = lkp.project
+def blob_get(file):
     uri = instance_metadata("attributes/slurm_bucket_path")
     bucket_name, path = parse_bucket_uri(uri)
     blob_name = f"{path}/{file}"
     co = create_client_options(ApiEndpoint.STORAGE)
-    storage_client = storage.Client(project=project, client_options=co)
+    storage_client = storage.Client(project=lkp.project, client_options=co)
     return storage_client.get_bucket(bucket_name).blob(blob_name)
 
 
-def blob_list(prefix="", delimiter=None, project=None):
-    if project is None:
-        project = lkp.project
+def blob_list(prefix=""):
     uri = instance_metadata("attributes/slurm_bucket_path")
     bucket_name, path = parse_bucket_uri(uri)
     blob_prefix = f"{path}/{prefix}"
     co = create_client_options(ApiEndpoint.STORAGE)
-    storage_client = storage.Client(project=project, client_options=co)
+    storage_client = storage.Client(project=lkp.project, client_options=co)
     # Note: The call returns a response only when the iterator is consumed.
-    blobs = storage_client.list_blobs(
-        bucket_name, prefix=blob_prefix, delimiter=delimiter
-    )
+    blobs = storage_client.list_blobs(bucket_name, prefix=blob_prefix)
     return [blob for blob in blobs]
 
 
@@ -1538,11 +1532,11 @@ class Lookup:
             return ns
         return self.cfg.nodeset_tpu.get(nodeset_name)
 
-    def node_is_tpu(self, node_name=None):
+    def node_is_tpu(self, node_name: str) -> bool:
         nodeset_name = self.node_nodeset_name(node_name)
         return self.cfg.nodeset_tpu.get(nodeset_name) is not None
 
-    def node_is_dyn(self, node_name=None) -> bool:
+    def node_is_dyn(self, node_name: str) -> bool:
         nodeset = self.node_nodeset_name(node_name)
         return self.cfg.nodeset_dyn.get(nodeset) is not None
 
@@ -1551,13 +1545,13 @@ class Lookup:
         tpu = TPU(self.node_nodeset(model))
         return chunked(tpu_nodes, n=tpu.vmcount)
 
-    def node_template(self, node_name=None):
+    def node_template(self, node_name: str):
         return self.node_nodeset(node_name).instance_template
 
-    def node_template_info(self, node_name=None):
+    def node_template_info(self, node_name: str):
         return self.template_info(self.node_template(node_name))
 
-    def node_region(self, node_name=None):
+    def node_region(self, node_name: str):
         nodeset = self.node_nodeset(node_name)
         return parse_self_link(nodeset.subnetwork).region
 
@@ -1637,9 +1631,7 @@ class Lookup:
         return self.slurm_nodes().get(nodename)
 
     @lru_cache(maxsize=1)
-    def instances(self, project=None, slurm_cluster_name=None):
-        slurm_cluster_name = slurm_cluster_name or self.cfg.slurm_cluster_name
-        project = project or self.project
+    def instances(self):
         instance_information_fields = [
             "advancedMachineFeatures",
             "cpuPlatform",
@@ -1677,16 +1669,16 @@ class Lookup:
         if lkp.cfg.enable_slurm_gcp_plugins:
             slurm_gcp_plugins.register_instance_information_fields(
                 lkp=lkp,
-                project=project,
-                slurm_cluster_name=slurm_cluster_name,
+                project=self.project,
+                slurm_cluster_name=self.slurm_cluster_name,
                 instance_information_fields=instance_information_fields,
             )
         instance_information_fields = sorted(set(instance_information_fields))
         instance_fields = ",".join(instance_information_fields)
         fields = f"items.zones.instances({instance_fields}),nextPageToken"
-        flt = f"labels.slurm_cluster_name={slurm_cluster_name} AND name:{slurm_cluster_name}-*"
+        flt = f"labels.slurm_cluster_name={self.slurm_cluster_name} AND name:{self.slurm_cluster_name}-*"
         act = self.compute.instances()
-        op = act.aggregatedList(project=project, fields=fields, filter=flt)
+        op = act.aggregatedList(project=self.project, fields=fields, filter=flt)
 
         def properties(inst):
             """change instance properties to a preferred format"""
@@ -1717,11 +1709,8 @@ class Lookup:
             op = act.aggregatedList_next(op, result)
         return instances
 
-    def instance(self, instance_name, project=None, slurm_cluster_name=None):
-        instances = self.instances(
-            project=project, slurm_cluster_name=slurm_cluster_name
-        )
-        return instances.get(instance_name)
+    def instance(self, instance_name: str):
+        return self.instances().get(instance_name)
 
     @lru_cache()
     def reservation(self, name: str, zone: str) -> object:
@@ -1740,14 +1729,13 @@ class Lookup:
         )
 
     @lru_cache(maxsize=1)
-    def machine_types(self, project=None):
-        project = project or self.project
+    def machine_types(self):
         field_names = "name,zone,guestCpus,memoryMb,accelerators"
         fields = f"items.zones.machineTypes({field_names}),nextPageToken"
 
         machines = defaultdict(dict)
         act = self.compute.machineTypes()
-        op = act.aggregatedList(project=project, fields=fields)
+        op = act.aggregatedList(project=self.project, fields=fields)
         while op is not None:
             result = ensure_execute(op)
             machine_iter = chain.from_iterable(
@@ -1763,17 +1751,16 @@ class Lookup:
             op = act.aggregatedList_next(op, result)
         return machines
 
-    def machine_type(self, machine_type, project=None, zone=None):
+    def machine_type(self, machine_type, zone=None):
         """ """
         custom_patt = re.compile(
             r"((?P<family>\w+)-)?custom-(?P<cpus>\d+)-(?P<mem>\d+)"
         )
         custom_match = custom_patt.match(machine_type)
         if zone:
-            project = project or self.project
             machine_info = ensure_execute(
                 self.compute.machineTypes().get(
-                    project=project, zone=zone, machineType=machine_type
+                    project=self.project, zone=zone, machineType=machine_type
                 )
             )
         elif custom_match is not None:
@@ -1784,13 +1771,13 @@ class Lookup:
                 "memoryMb": int(mem),
             }
         else:
-            machines = self.machine_types(project=project)
+            machines = self.machine_types()
             machine_info = next(iter(machines[machine_type].values()), None)
             if machine_info is None:
                 raise Exception(f"machine type {machine_type} not found")
         return NSDict(machine_info)
 
-    def template_machine_conf(self, template_link, project=None, zone=None):
+    def template_machine_conf(self, template_link, zone=None):
         template = self.template_info(template_link)
         if not template.machineType:
             temp_name = trim_self_link(template_link)
@@ -1841,8 +1828,7 @@ class Lookup:
             cache.close()
 
     @lru_cache(maxsize=None)
-    def template_info(self, template_link, project=None):
-        project = project or self.project
+    def template_info(self, template_link):
         template_name = trim_self_link(template_link)
         # split read and write access to minimize write-lock. This might be a
         # bit slower? TODO measure
@@ -1853,7 +1839,7 @@ class Lookup:
 
         template = ensure_execute(
             self.compute.instanceTemplates().get(
-                project=project, instanceTemplate=template_name
+                project=self.project, instanceTemplate=template_name
             )
         ).get("properties")
         template = NSDict(template)
@@ -1864,7 +1850,7 @@ class Lookup:
         # del template.metadata
 
         # translate gpus into an easier-to-read format
-        machine_info = self.machine_type(template.machineType, project=project)
+        machine_info = self.machine_type(template.machineType)
         if machine_info.accelerators:
             template.gpu_type = machine_info.accelerators[0].guestAcceleratorType
             template.gpu_count = machine_info.accelerators[0].guestAcceleratorCount

@@ -62,7 +62,7 @@ PLACEMENT_MAX_CNT = 150
 BULK_INSERT_LIMIT = 5000
 
 
-def instance_properties(nodeset, model, placement_group, labels=None):
+def instance_properties(nodeset, model: str, placement_group, labels=None):
     template = lkp.node_template(model)
     template_info = lkp.template_info(template)
 
@@ -155,7 +155,7 @@ def per_instance_properties(node):
     return props
 
 
-def create_instances_request(nodes, partition_name, placement_group, job_id=None):
+def create_instances_request(nodes, partition_name, placement_group, job_id):
     """Call regionInstances.bulkInsert to create instances"""
     assert len(nodes) > 0
     if placement_group:
@@ -225,13 +225,9 @@ def create_instances_request(nodes, partition_name, placement_group, job_id=None
     return request
 
 
-def group_nodes_bulk(nodes, resume_data=None):
+def group_nodes_bulk(nodes, resume_data):
     """group nodes by job_id, placement_group, node_group, and max bulkInsert size"""
-    if resume_data is None:
-        # all nodes will be considered jobless
-        jobs = {}
-    else:
-        jobs = {job.job_id: job for job in resume_data.jobs}
+    jobs = {job.job_id: job for job in resume_data.jobs}
 
     # expand all job nodelists
     for job in jobs.values():
@@ -362,14 +358,11 @@ def start_tpu(data):
             log.error("Error creating tpu node {node}")
 
 
-def resume_nodes(nodes: List[str], resume_data=None):
+def resume_nodes(nodes: List[str], resume_data):
     """resume nodes in nodelist"""
     if not nodes:
         log.info("No nodes to resume")
         return
-
-    if resume_data is None and global_resume_data is not None:
-        resume_data = global_resume_data.deepcopy()
 
     nodes = sorted(nodes, key=lkp.node_prefix)
     grouped_nodes, grouped_tpu_nodes = group_nodes_bulk(nodes, resume_data)
