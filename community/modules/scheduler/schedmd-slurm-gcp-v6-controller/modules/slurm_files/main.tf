@@ -261,7 +261,7 @@ data "local_file" "setup_external" {
 locals {
   checksum = md5(join("", flatten([
     google_storage_bucket_object.config.md5hash,
-    [for f in google_storage_bucket_object.devel : f.md5hash],
+    google_storage_bucket_object.devel.md5hash,
     [for k, f in google_storage_bucket_object.controller_startup_scripts : f.md5hash],
     [for k, f in google_storage_bucket_object.compute_startup_scripts : f.md5hash],
     [for k, f in google_storage_bucket_object.nodeset_startup_scripts : f.md5hash],
