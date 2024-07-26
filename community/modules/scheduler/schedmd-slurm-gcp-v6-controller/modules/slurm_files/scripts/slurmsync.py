@@ -362,9 +362,6 @@ def sync_placement_groups():
         ]
     )
 
-    if lkp.instance_role_safe != "controller":
-        return
-
     keep_jobs = {
         str(job["job_id"])
         for job in json.loads(run(f"{lkp.scontrol} show jobs --json").stdout)["jobs"]
@@ -402,9 +399,6 @@ def sync_placement_groups():
 
 
 def sync_slurm():
-    if lkp.instance_role_safe != "controller":
-        return
-
     compute_instances = [
         name for name, inst in lkp.instances().items() if inst.role == "compute"
     ]
@@ -468,14 +462,15 @@ def reconfigure_slurm():
         cfg_new = load_config_file(CONFIG_FILE)
         lkp = Lookup(cfg_new)
         util.lkp = lkp
-        if lkp.instance_role_safe == "controller":
+        if lkp.is_controller:
             conf.gen_controller_configs(lkp)
             log.info("Restarting slurmctld to make changes take effect.")
             try:
+                # TODO: consider removing "restart" since "reconfigure" should restart slurmctld as well
                 run("sudo systemctl restart slurmctld.service", check=False)
-                run(f"{lkp.scontrol} reconfigure", timeout=30)
-            except Exception as e:
-                log.error(e)
+                util.scontrol_reconfigure(lkp)
+            except Exception:
+                log.exception("failed to reconfigure slurmctld")
             util.run(f"wall '{update_msg}'", timeout=30)
             log.debug("Done.")
         elif lkp.instance_role_safe in ["compute", "login"]:
@@ -485,26 +480,39 @@ def reconfigure_slurm():
             log.debug("Done.")
 
 
+def update_topology(lkp: util.Lookup) -> None:
+    if conf.topology_plugin(lkp) != conf.TOPOLOGY_PLUGIN_TREE:
+        return
+    updated = conf.gen_topology_conf(lkp)
+    if updated:
+        log.debug("Topology configuration updated. Reconfiguring Slurm.")
+        util.scontrol_reconfigure(lkp)
+
 def main():
     try:
         reconfigure_slurm()
     except Exception:
         log.exception("failed to reconfigure slurm")
 
-    try:
-        sync_slurm()
-    except Exception:
-        log.exception("failed to sync instances")
-
-    try:
-        sync_placement_groups()
-    except Exception:
-        log.exception("failed to sync placement groups")
+    if lkp.is_controller:
+        try:
+            sync_slurm()
+        except Exception:
+            log.exception("failed to sync instances")
+        try:
+            sync_placement_groups()
+        except Exception:
+            log.exception("failed to sync placement groups")
+        try:
+            update_topology(lkp)
+        except Exception:
+            log.exception("failed to update topology")
 
     try:
         install_custom_scripts(check_hash=True)
     except Exception:
         log.exception("failed to sync custom scripts")
+
 
 
 if __name__ == "__main__":

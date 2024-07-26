@@ -99,7 +99,7 @@ def setup_network_storage(log):
     all_mounts = resolve_network_storage()
     ext_mounts, int_mounts = separate_external_internal_mounts(all_mounts)
 
-    if lkp.instance_role == "controller":
+    if lkp.is_controller:
         mounts = ext_mounts
     else:
         mounts = ext_mounts + int_mounts
@@ -192,7 +192,7 @@ def mount_fstab(mounts, log):
 def munge_mount_handler(log):
     if not cfg.munge_mount:
         log.error("Missing munge_mount in cfg")
-    elif lkp.instance_role == "controller":
+    elif lkp.is_controller:
         return
 
     mount = cfg.munge_mount

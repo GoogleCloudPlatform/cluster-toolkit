@@ -129,7 +129,7 @@ def failed_motd():
 def run_custom_scripts():
     """run custom scripts based on instance_role"""
     custom_dir = dirs.custom_scripts
-    if lkp.instance_role == "controller":
+    if lkp.is_controller:
         # controller has all scripts, but only runs controller.d
         custom_dirs = [custom_dir / "controller.d"]
     elif lkp.instance_role == "compute":
