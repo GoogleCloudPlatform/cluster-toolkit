@@ -27,12 +27,6 @@ variable "bucket_dir" {
   default     = null
 }
 
-variable "enable_devel" {
-  type        = bool
-  description = "Enables development mode. Not for production use."
-  default     = false
-}
-
 variable "enable_debug_logging" {
   type        = bool
   description = "Enables debug logging mode. Not for production use."

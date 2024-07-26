@@ -16,6 +16,7 @@ import pytest
 from mock import Mock
 from common import TstNodeset, TstCfg, TstMachineConf, TstTemplateInfo
 
+import addict
 import conf
 import util
 
@@ -78,3 +79,73 @@ def test_nodeset_lines():
     ])
 def test_dict_to_conf(value: dict, want: str):
     assert conf.dict_to_conf(value) == want
+
+
+
+@pytest.mark.parametrize(
+    "cfg,want",
+    [
+        (TstCfg(
+            install_dir="ukulele",
+        ), 
+         """PrivateData=cloud
+LaunchParameters=enable_nss_slurm,use_interactive_step
+SlurmctldParameters=cloud_dns,enable_configless,idle_on_node_suspend
+SchedulerParameters=bf_continue,salloc_wait_nodes,ignore_prefer_validation
+SuspendProgram=ukulele/suspend.py
+ResumeProgram=ukulele/resume.py
+ResumeFailProgram=ukulele/suspend.py
+ResumeRate=0
+ResumeTimeout=300
+SuspendRate=0
+SuspendTimeout=300
+TreeWidth=128
+TopologyPlugin=topology/tree"""),
+        (TstCfg(
+            install_dir="ukulele",
+            cloud_parameters={
+                "no_comma_params": True,
+                "resume_rate": None,
+                "resume_timeout": None,
+                "suspend_rate": None,
+                "suspend_timeout": None,
+                "topology_plugin": None,
+                "tree_width": None,
+            },
+        ),
+         """SuspendProgram=ukulele/suspend.py
+ResumeProgram=ukulele/resume.py
+ResumeFailProgram=ukulele/suspend.py
+ResumeRate=0
+ResumeTimeout=300
+SuspendRate=0
+SuspendTimeout=300
+TreeWidth=128
+TopologyPlugin=topology/tree"""),
+        (TstCfg(
+            install_dir="ukulele",
+            cloud_parameters={
+                "no_comma_params": True,
+                "resume_rate": 1,
+                "resume_timeout": 2,
+                "suspend_rate": 3,
+                "suspend_timeout": 4,
+                "topology_plugin": "guess",
+                "tree_width": 5,
+            },
+        ),
+         """SuspendProgram=ukulele/suspend.py
+ResumeProgram=ukulele/resume.py
+ResumeFailProgram=ukulele/suspend.py
+ResumeRate=1
+ResumeTimeout=2
+SuspendRate=3
+SuspendTimeout=4
+TreeWidth=5
+TopologyPlugin=guess"""),
+    ])
+def test_conflines(cfg, want):
+    assert conf.conflines(util.Lookup(cfg)) == want
+
+    cfg.cloud_parameters = addict.Dict(cfg.cloud_parameters)
+    assert conf.conflines(util.Lookup(cfg)) == want

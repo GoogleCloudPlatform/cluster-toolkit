@@ -22,6 +22,11 @@ if SCRIPTS_DIR not in sys.path:
 
 
 # TODO: use "real" classes once they are defined (instead of NSDict)
+
+@dataclass
+class Placeholder:
+    pass
+
 @dataclass
 class TstNodeset:
     nodeset_name: str
@@ -33,10 +38,18 @@ class TstNodeset:
 @dataclass
 class TstCfg:
     slurm_cluster_name: str = "m22"
+    cloud_parameters: dict[str, Any] = field(default_factory=dict)
+
+    partitions: dict[str, Placeholder] = field(default_factory=dict)
     nodeset: dict[str, TstNodeset] = field(default_factory=dict)
     nodeset_tpu: dict[str, TstNodeset] = field(default_factory=dict)
+    
+    install_dir: Optional[str] = None
     output_dir: Optional[str] = None
 
+    prolog_scripts: Optional[list[Placeholder]] = field(default_factory=list)
+    epilog_scripts: Optional[list[Placeholder]] = field(default_factory=list)
+    
 
 @dataclass
 class TstTPU:  # to prevent client initialization durint "TPU.__init__"

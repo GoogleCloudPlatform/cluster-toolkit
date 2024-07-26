@@ -360,12 +360,6 @@ EOD
 # SLURM #
 #########
 
-variable "enable_devel" {
-  type        = bool
-  description = "Enables development mode."
-  default     = true
-}
-
 variable "enable_debug_logging" {
   type        = bool
   description = "Enables debug logging mode."
@@ -409,7 +403,7 @@ variable "cloud_parameters" {
     suspend_rate    = optional(number)
     suspend_timeout = optional(number)
     topology_plugin = optional(string)
-    tree_width      = optional(number, 128)
+    tree_width      = optional(number)
   })
   default = {}
 }
@@ -427,16 +421,6 @@ variable "enable_default_mounts" {
     EOD
   type        = bool
   default     = true
-}
-
-variable "disable_default_mounts" { # tflint-ignore: terraform_unused_declarations
-  description = "DEPRECATED: Use `enable_default_mounts` instead."
-  type        = bool
-  default     = null
-  validation {
-    condition     = var.disable_default_mounts == null
-    error_message = "DEPRECATED: Use `enable_default_mounts` instead."
-  }
 }
 
 variable "network_storage" {
@@ -642,4 +626,26 @@ variable "gcloud_path_override" {
   type        = string
   default     = ""
   nullable    = false
+}
+
+# DEPRECATED VARIABLES
+
+variable "enable_devel" { # tflint-ignore: terraform_unused_declarations
+  description = "DEPRECATED: `enable_devel` is always on."
+  type        = bool
+  default     = null
+  validation {
+    condition     = var.enable_devel == null
+    error_message = "DEPRECATED: It is always on, remove `enable_devel` variable."
+  }
+}
+
+variable "disable_default_mounts" { # tflint-ignore: terraform_unused_declarations
+  description = "DEPRECATED: Use `enable_default_mounts` instead."
+  type        = bool
+  default     = null
+  validation {
+    condition     = var.disable_default_mounts == null
+    error_message = "DEPRECATED: Use `enable_default_mounts` instead."
+  }
 }

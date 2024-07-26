@@ -145,8 +145,6 @@ locals {
 }
 
 data "archive_file" "slurm_gcp_devel_zip" {
-  count = var.enable_devel ? 1 : 0
-
   output_path = "${local.build_dir}/${local.slurm_gcp_devel_zip}"
   type        = "zip"
   source_dir  = local.scripts_dir
@@ -163,11 +161,9 @@ data "archive_file" "slurm_gcp_devel_zip" {
 }
 
 resource "google_storage_bucket_object" "devel" {
-  count = var.enable_devel ? 1 : 0
-
   bucket = var.bucket_name
   name   = local.slurm_gcp_devel_zip_bucket
-  source = data.archive_file.slurm_gcp_devel_zip[0].output_path
+  source = data.archive_file.slurm_gcp_devel_zip.output_path
 }
 
 
