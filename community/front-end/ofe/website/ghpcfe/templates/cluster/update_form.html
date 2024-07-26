@@ -482,14 +482,6 @@
                   option.text = "Hyperdisk Balanced Persistent Disk";
                   option.setAttribute("value", "hyperdisk-balanced");
                   selObj.appendChild(option);
-
-                  if (machineType.startsWith('c4-') ||
-                      machineType.startsWith('x4-')) {
-                      var option = document.createElement("option");
-                      option.text = "Hyperdisk Extreme Persistent Disk";
-                      option.setAttribute("value", "hyperdisk-extreme");
-                      selObj.appendChild(option);
-                  }
               } else {
                   var additionalDisk = selObj.id.slice(0, selObj.id.lastIndexOf("_disk_type"));
                   if (additionalDisk.endsWith("additional")) {
