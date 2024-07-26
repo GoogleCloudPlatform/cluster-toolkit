@@ -479,9 +479,16 @@ class TopologySummary:
         
     def requires_reconfigure(self, prev: "TopologySummary") -> bool:
         """
-        Reconfigure IFF the nodes were added
+        Reconfigure IFF one of the following occurs:
+        * A node is added
+        * A node get a non-empty physicalHost
         """
-        return len(self._nodenames() - prev._nodenames()) > 0
+        if len(self._nodenames() - prev._nodenames()) > 0:
+            return True
+        for n, ph in self.physical_host.items():
+            if ph and ph != prev.physical_host.get(n):
+                return True
+        return False
 
 class TopologyBuilder:
     def __init__(self) -> None:
@@ -537,16 +544,45 @@ def add_tpu_nodeset_topology(nodeset: object, bldr: TopologyBuilder, lkp: util.L
             bldr.add([*pref, chunk_name], nodeschunk)
             bldr.summary.tpu_nodes.update(nodeschunk)
 
+_SLURM_TOPO_ROOT = "slurm-root"
+
+def _make_physical_path(physical_host: str) -> List[str]:
+    assert physical_host.startswith("/"), f"Unexpected physicalHost: {physical_host}"
+    parts = physical_host[1:].split("/")
+    # Due to issues with Slurm's topology plugin, we can not use all components of `physicalHost`,
+    # trim it down to `cluster/rack`.
+    short_path = parts[:2]
+    return [_SLURM_TOPO_ROOT, *short_path]
 
 def add_nodeset_topology(
     nodeset: object, bldr: TopologyBuilder, lkp: util.Lookup
 ) -> None:
-    path = ["slurm-root",  f"ns_{nodeset.nodeset_name}"]
-    nodes = list(chain(*lkp.nodenames(nodeset)))
-    bldr.add(path, nodes)
-    # treat all nodes as down, since we don't make use of physical_host yet
-    bldr.summary.down_nodes.update(nodes) 
+    up_nodes = set()
+    default_path = [_SLURM_TOPO_ROOT,  f"ns_{nodeset.nodeset_name}"]
 
+    for inst in lkp.instances().values():
+        try:
+            if lkp.node_nodeset_name(inst.name) != nodeset.nodeset_name:
+                continue
+        except Exception:
+            continue
+    
+        phys_host = inst.resourceStatus.get("physicalHost", "")
+        bldr.summary.physical_host[inst.name] = phys_host
+        up_nodes.add(inst.name)
+
+        if phys_host:
+            bldr.add(_make_physical_path(phys_host), [inst.name])
+        else:
+            bldr.add(default_path, [inst.name])
+        
+    down_nodes = []
+    for node in chain(*lkp.nodenames(nodeset)):
+        if node not in up_nodes:
+            down_nodes.append(node)
+    if down_nodes:
+        bldr.add(default_path, down_nodes)
+        bldr.summary.down_nodes.update(down_nodes)
 
 def gen_topology(lkp: util.Lookup) -> TopologyBuilder:
     bldr = TopologyBuilder()

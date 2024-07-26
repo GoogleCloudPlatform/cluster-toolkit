@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Iterable, List, Tuple, Optional, Any
+from typing import Iterable, List, Tuple, Optional, Any, Dict
 import argparse
 import base64
 import collections
@@ -1645,9 +1645,7 @@ class Lookup:
         return self.slurm_nodes().get(nodename)
 
     @lru_cache(maxsize=1)
-    def instances(self, project=None, slurm_cluster_name=None):
-        slurm_cluster_name = slurm_cluster_name or self.cfg.slurm_cluster_name
-        project = project or self.project
+    def instances(self) -> Dict[str, object]:
         instance_information_fields = [
             "advancedMachineFeatures",
             "cpuPlatform",
@@ -1685,8 +1683,8 @@ class Lookup:
         if lookup().cfg.enable_slurm_gcp_plugins:
             slurm_gcp_plugins.register_instance_information_fields(
                 lkp=lookup(),
-                project=project,
-                slurm_cluster_name=slurm_cluster_name,
+                project=self.project,
+                slurm_cluster_name=self.cfg.slurm_cluster_name,
                 instance_information_fields=instance_information_fields,
             )
 
@@ -1698,9 +1696,9 @@ class Lookup:
         instance_information_fields = sorted(set(instance_information_fields))
         instance_fields = ",".join(instance_information_fields)
         fields = f"items.zones.instances({instance_fields}),nextPageToken"
-        flt = f"labels.slurm_cluster_name={slurm_cluster_name} AND name:{slurm_cluster_name}-*"
+        flt = f"labels.slurm_cluster_name={self.cfg.slurm_cluster_name} AND name:{self.cfg.slurm_cluster_name}-*"
         act = self.compute.instances()
-        op = act.aggregatedList(project=project, fields=fields, filter=flt)
+        op = act.aggregatedList(project=self.project, fields=fields, filter=flt)
 
         def properties(inst):
             """change instance properties to a preferred format"""
@@ -1731,11 +1729,8 @@ class Lookup:
             op = act.aggregatedList_next(op, result)
         return instances
 
-    def instance(self, instance_name, project=None, slurm_cluster_name=None):
-        instances = self.instances(
-            project=project, slurm_cluster_name=slurm_cluster_name
-        )
-        return instances.get(instance_name)
+    def instance(self, instance_name: str) -> Optional[object]:
+        return self.instances().get(instance_name)
 
     @lru_cache()
     def reservation(self, name: str, zone: str) -> object:
