@@ -22,6 +22,7 @@
   delegate_to: localhost
   ansible.builtin.command: gcloud container clusters get-credentials {{ deployment_name }} --region {{ cli_deployment_vars.region }} --project {{ custom_vars.project }}
 
+# JOB 1
 - name: Execute job on g2 latest driver pool
   delegate_to: localhost
   ansible.builtin.shell: |
@@ -31,6 +32,17 @@
     executable: /bin/bash
   changed_when: False
 
+# JOB 2
+- name: Execute job on n1 default pool
+  delegate_to: localhost
+  ansible.builtin.shell: |
+    array=({{ workspace }}/{{ deployment_name }}/primary/job-n1-pool-default*)
+    kubectl create -f ${array[0]}
+  args:
+    executable: /bin/bash
+  changed_when: False
+
+# JOB 3
 - name: Execute job on n1 full spec pool
   delegate_to: localhost
   ansible.builtin.shell: |
@@ -45,7 +57,7 @@
   ansible.builtin.command: |
     kubectl get job --field-selector  status.successful=1
   register: job_completion
-  until: job_completion.stdout_lines | length > 2  # 2 jobs total
+  until: job_completion.stdout_lines | length > 3  # 3 jobs total
   retries: 40
   delay: 15
 
