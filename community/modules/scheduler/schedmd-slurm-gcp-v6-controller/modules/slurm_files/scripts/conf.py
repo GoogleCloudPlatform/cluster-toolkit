@@ -44,9 +44,21 @@ def dict_to_conf(conf, delim=" ") -> str:
     )
 
 
-def conflines(cloud_parameters, lkp: util.Lookup) -> str:
-    scripts_dir = lkp.cfg.install_dir or dirs.scripts
-    no_comma_params = cloud_parameters.no_comma_params or False
+def conflines(lkp: util.Lookup) -> str:
+    params = lkp.cfg.cloud_parameters
+    def get(key, default):
+        """
+        Returns the value of the key in params if it exists and is not None, 
+        otherwise returns supplied default.
+        We can't rely on the `dict.get` method because the value could be `None` as 
+        well as empty NSDict, depending on type of the `cfg.cloud_parameters`.
+        TODO: Simplify once NSDict is removed from the codebase.
+        """
+        if key not in params or params[key] is None:
+            return default
+        return params[key]
+    
+    no_comma_params = get("no_comma_params", False)
 
     any_gpus = any(
         lkp.template_info(nodeset.instance_template).gpu_count > 0
@@ -82,9 +94,12 @@ def conflines(cloud_parameters, lkp: util.Lookup) -> str:
             "gpu" if any_gpus else None,
         ],
     }
+
+    scripts_dir = lkp.cfg.install_dir or dirs.scripts
     prolog_path = Path(dirs.custom_scripts / "prolog.d")
     epilog_path = Path(dirs.custom_scripts / "epilog.d")
-    default_tree_width = 65533 if any_dynamic else None
+    default_tree_width = 65533 if any_dynamic else 128
+
     conf_options = {
         **(comma_params if not no_comma_params else {}),
         "Prolog": f"{prolog_path}/*" if lkp.cfg.prolog_scripts else None,
@@ -92,13 +107,13 @@ def conflines(cloud_parameters, lkp: util.Lookup) -> str:
         "SuspendProgram": f"{scripts_dir}/suspend.py",
         "ResumeProgram": f"{scripts_dir}/resume.py",
         "ResumeFailProgram": f"{scripts_dir}/suspend.py",
-        "ResumeRate": cloud_parameters.get("resume_rate", 0),
-        "ResumeTimeout": cloud_parameters.get("resume_timeout", 300),
-        "SuspendRate": cloud_parameters.get("suspend_rate", 0),
-        "SuspendTimeout": cloud_parameters.get("suspend_timeout", 300),
-        "TreeWidth": cloud_parameters.get("tree_width", default_tree_width),
+        "ResumeRate": get("resume_rate", 0),
+        "ResumeTimeout": get("resume_timeout", 300),
+        "SuspendRate": get("suspend_rate", 0),
+        "SuspendTimeout": get("suspend_timeout", 300),
+        "TreeWidth": get("tree_width", default_tree_width),
         "JobSubmitPlugins": "lua" if any_tpu else None,
-        "TopologyPlugin": cloud_parameters.get("topology_plugin", "topology/tree"),
+        "TopologyPlugin": get("topology_plugin", "topology/tree"),
     }
     return dict_to_conf(conf_options, delim="\n")
 
@@ -242,7 +257,7 @@ def make_cloud_conf(lkp: util.Lookup) -> str:
     """generate cloud.conf snippet"""
     lines = [
         FILE_PREAMBLE,
-        conflines(lkp.cfg.cloud_parameters, lkp),
+        conflines(lkp),
         loginlines(),
         *(nodeset_lines(n, lkp) for n in lkp.cfg.nodeset.values()),
         *(nodeset_dyn_lines(n) for n in lkp.cfg.nodeset_dyn.values()),
