@@ -48,16 +48,7 @@ from util import (
 from util import lkp, cfg, CONFIG_FILE
 from suspend import delete_instances
 from resume import start_tpu
-from conf import (
-    gen_cloud_conf,
-    gen_cloud_gres_conf,
-    gen_topology_conf,
-    install_slurm_conf,
-    install_slurmdbd_conf,
-    install_gres_conf,
-    install_cgroup_conf,
-    install_topology_conf,
-)
+import conf
 
 filename = Path(__file__).name
 LOGFILE = (Path(cfg.slurm_log_dir if cfg else ".") / filename).with_suffix(".log")
@@ -478,14 +469,7 @@ def reconfigure_slurm():
         lkp = Lookup(cfg_new)
         util.lkp = lkp
         if lkp.instance_role_safe == "controller":
-            install_slurm_conf(lkp)
-            install_slurmdbd_conf(lkp)
-            gen_cloud_conf(lkp)
-            gen_cloud_gres_conf(lkp)
-            gen_topology_conf(lkp)
-            install_gres_conf(lkp)
-            install_cgroup_conf(lkp)
-            install_topology_conf(lkp)
+            conf.gen_controller_configs(lkp)
             log.info("Restarting slurmctld to make changes take effect.")
             try:
                 run("sudo systemctl restart slurmctld.service", check=False)
