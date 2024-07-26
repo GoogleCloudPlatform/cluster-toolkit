@@ -14,7 +14,7 @@
 
 variable "disk_type" {
   type        = string
-  description = "Boot disk type, can be either hyperdisk-balanced, hyperdisk-extreme, pd-ssd, pd-standard, pd-balanced, or pd-extreme."
+  description = "Boot disk type, can be either hyperdisk-balanced, pd-ssd, pd-standard, pd-balanced, or pd-extreme."
   default     = "pd-ssd"
 }
 

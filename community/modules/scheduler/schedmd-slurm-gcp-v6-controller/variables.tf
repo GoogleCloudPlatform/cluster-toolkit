@@ -360,12 +360,6 @@ EOD
 # SLURM #
 #########
 
-variable "enable_devel" {
-  type        = bool
-  description = "Enables development mode."
-  default     = true
-}
-
 variable "enable_debug_logging" {
   type        = bool
   description = "Enables debug logging mode."
@@ -403,13 +397,13 @@ EOD
 variable "cloud_parameters" {
   description = "cloud.conf options. Defaults inherited from [Slurm GCP repo](https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/terraform/slurm_cluster/modules/slurm_files/README_TF.md#input_cloud_parameters)"
   type = object({
-    no_comma_params = optional(bool, false)
-    resume_rate     = optional(number, 0)
-    resume_timeout  = optional(number, 300)
-    suspend_rate    = optional(number, 0)
-    suspend_timeout = optional(number, 300)
-    topology_plugin = optional(string, "topology/tree")
-    tree_width      = optional(number, 128)
+    no_comma_params = optional(bool)
+    resume_rate     = optional(number)
+    resume_timeout  = optional(number)
+    suspend_rate    = optional(number)
+    suspend_timeout = optional(number)
+    topology_plugin = optional(string)
+    tree_width      = optional(number)
   })
   default = {}
 }
@@ -427,16 +421,6 @@ variable "enable_default_mounts" {
     EOD
   type        = bool
   default     = true
-}
-
-variable "disable_default_mounts" { # tflint-ignore: terraform_unused_declarations
-  description = "DEPRECATED: Use `enable_default_mounts` instead."
-  type        = bool
-  default     = null
-  validation {
-    condition     = var.disable_default_mounts == null
-    error_message = "DEPRECATED: Use `enable_default_mounts` instead."
-  }
 }
 
 variable "network_storage" {
@@ -617,4 +601,51 @@ Enables calling hooks in scripts/slurm_gcp_plugins during cluster resume and sus
 EOD
   type        = any
   default     = false
+}
+
+variable "universe_domain" {
+  description = "Domain address for alternate API universe"
+  type        = string
+  default     = "googleapis.com"
+  nullable    = false
+}
+
+variable "endpoint_versions" {
+  description = "Version of the API to use (The compute service is the only API currently supported)"
+  type = object({
+    compute = string
+  })
+  default = {
+    compute = "beta"
+  }
+  nullable = false
+}
+
+variable "gcloud_path_override" {
+  description = "Directory of the gcloud executable to be used during cleanup"
+  type        = string
+  default     = ""
+  nullable    = false
+}
+
+# DEPRECATED VARIABLES
+
+variable "enable_devel" { # tflint-ignore: terraform_unused_declarations
+  description = "DEPRECATED: `enable_devel` is always on."
+  type        = bool
+  default     = null
+  validation {
+    condition     = var.enable_devel == null
+    error_message = "DEPRECATED: It is always on, remove `enable_devel` variable."
+  }
+}
+
+variable "disable_default_mounts" { # tflint-ignore: terraform_unused_declarations
+  description = "DEPRECATED: Use `enable_default_mounts` instead."
+  type        = bool
+  default     = null
+  validation {
+    condition     = var.disable_default_mounts == null
+    error_message = "DEPRECATED: Use `enable_default_mounts` instead."
+  }
 }
