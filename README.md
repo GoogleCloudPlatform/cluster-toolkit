@@ -30,14 +30,14 @@ is the recommended path to get started with the HPC Toolkit.
 ---
 
 If a self directed path is preferred, you can use the following commands to
-build the `ghpc` binary:
+build the `gcluster` binary:
 
 ```shell
 git clone https://github.com/GoogleCloudPlatform/hpc-toolkit
 cd hpc-toolkit
 make
-./ghpc --version
-./ghpc --help
+./gcluster --version
+./gcluster --help
 ```
 
 > **_NOTE:_** You may need to [install dependencies](#dependencies) first.

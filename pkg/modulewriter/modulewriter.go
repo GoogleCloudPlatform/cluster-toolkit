@@ -419,7 +419,7 @@ func writeDestroyInstructions(w io.Writer, bp config.Blueprint, deploymentDir st
 	fmt.Fprintln(w, "Automated")
 	fmt.Fprintln(w, "---------")
 	fmt.Fprintln(w)
-	fmt.Fprintf(w, "ghpc destroy %s\n", deploymentDir)
+	fmt.Fprintf(w, "gcluster destroy %s\n", deploymentDir)
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Advanced / Manual")
 	fmt.Fprintln(w, "-----------------")

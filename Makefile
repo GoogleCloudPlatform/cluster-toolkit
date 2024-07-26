@@ -1,7 +1,7 @@
 # PREAMBLE
 MIN_PACKER_VERSION=1.7.9 # for building images
 MIN_TERRAFORM_VERSION=1.2 # for deploying modules
-MIN_GOLANG_VERSION=1.18 # for building ghpc
+MIN_GOLANG_VERSION=1.18 # for building gcluster
 
 .PHONY: install install-user tests format install-dev-deps \
         warn-go-missing warn-terraform-missing warn-packer-missing \
@@ -29,19 +29,22 @@ endif
 
 # RULES MEANT TO BE USED DIRECTLY
 
-ghpc: warn-go-version warn-terraform-version warn-packer-version $(shell find ./cmd ./pkg ghpc.go -type f)
-	$(info **************** building ghpc ************************)
-	@go build -ldflags="-X 'main.gitTagVersion=$(GIT_TAG_VERSION)' -X 'main.gitBranch=$(GIT_BRANCH)' -X 'main.gitCommitInfo=$(GIT_COMMIT_INFO)' -X 'main.gitCommitHash=$(GIT_COMMIT_HASH)' -X 'main.gitInitialHash=$(GIT_INITIAL_HASH)'" ghpc.go
+gcluster: warn-go-version warn-terraform-version warn-packer-version $(shell find ./cmd ./pkg gcluster.go -type f)
+	$(info **************** building gcluster ************************)
+	@go build -ldflags="-X 'main.gitTagVersion=$(GIT_TAG_VERSION)' -X 'main.gitBranch=$(GIT_BRANCH)' -X 'main.gitCommitInfo=$(GIT_COMMIT_INFO)' -X 'main.gitCommitHash=$(GIT_COMMIT_HASH)' -X 'main.gitInitialHash=$(GIT_INITIAL_HASH)'" gcluster.go
+	@ln -sf gcluster ghpc
+
+ghpc: gcluster
 
 install-user:
-	$(info ******** installing ghpc in ~/bin *********************)
+	$(info ******** installing gcluster in ~/bin *********************)
 	mkdir -p ~/bin
-	install ./ghpc ~/bin
+	install ./gcluster ~/bin
 
 ifeq ($(shell id -u), 0)
 install:
-	$(info ***** installing ghpc in /usr/local/bin ***************)
-	install ./ghpc /usr/local/bin
+	$(info ***** installing gcluster in /usr/local/bin ***************)
+	install ./gcluster /usr/local/bin
 
 else
 install: install-user
@@ -70,7 +73,7 @@ install-dev-deps: warn-terraform-version warn-packer-version check-pre-commit ch
 test-engine: warn-go-missing
 	$(info **************** vetting go code **********************)
 	go vet $(ENG)
-	$(info **************** running ghpc unit tests **************)
+	$(info **************** running gcluster unit tests **************)
 	go test -cover $(ENG) 2>&1 |  perl tools/enforce_coverage.pl
 
 ifeq (, $(shell which pre-commit))
@@ -148,11 +151,11 @@ else
 warn-terraform-version:
 endif
 
-validate_configs: ghpc
+validate_configs: gcluster
 	$(info *********** running basic integration tests ***********)
 	tools/validate_configs/validate_configs.sh
 
-validate_golden_copy: ghpc
+validate_golden_copy: gcluster
 	$(info *********** running "Golden copy" tests ***********)
 	tools/validate_configs/golden_copies/validate.sh
 
