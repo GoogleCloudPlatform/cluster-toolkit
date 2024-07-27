@@ -141,3 +141,27 @@ deployment_groups:
         }
       ]
     outputs: [instructions]
+
+  - id: default_settings_pool
+    source: modules/compute/gke-node-pool
+    use: [gke_cluster]
+    settings:
+      name: default-settings-pool
+
+  - id: job_default_settings_pool
+    source: modules/compute/gke-job-template
+    use: [default_settings_pool]
+    settings:
+      name: job-default-settings-pool
+      image: busybox
+      command:
+      - echo
+      - Hello World
+      node_count: 1
+      node_selectors: [
+        {
+          "key": "cloud.google.com/gke-nodepool",
+          "value": "default-settings-pool"
+        }
+      ]
+    outputs: [instructions]
