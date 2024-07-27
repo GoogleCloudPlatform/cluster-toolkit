@@ -18,8 +18,6 @@
 from typing import List
 import argparse
 import logging
-import sys
-from pathlib import Path
 
 import util
 from util import (
@@ -31,13 +29,11 @@ from util import (
     separate,
     execute_with_futures,
 )
-from util import lkp, cfg, TPU
+from util import lkp, TPU
 
 import slurm_gcp_plugins
 
-filename = Path(__file__).name
-LOGFILE = (Path(cfg.slurm_log_dir if cfg else ".") / filename).with_suffix(".log")
-log = logging.getLogger(filename)
+log = logging.getLogger()
 
 TOT_REQ_CNT = 1000
 
@@ -151,11 +147,6 @@ if __name__ == "__main__":
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument("nodelist", help="list of nodes to suspend")
-
-    args = util.add_log_args_and_parse(parser)
-    util.chown_slurm(LOGFILE, mode=0o600)
-    util.config_root_logger(filename, level=args.loglevel, logfile=LOGFILE)
-    log = logging.getLogger(Path(__file__).name)
-    sys.excepthook = util.handle_exception
+    args = util.init_log_and_parse(parser)
 
     main(args.nodelist)

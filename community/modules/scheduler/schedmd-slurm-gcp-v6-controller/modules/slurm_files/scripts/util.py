@@ -193,8 +193,7 @@ def create_client_options(api: Optional[ApiEndpoint] = None) -> ClientOptions:
     log.debug(f"Using ClientOptions = {co} for API: {api}")
     return co
 
-logging.basicConfig(level=logging.INFO, stream=sys.stdout)
-log = logging.getLogger(__name__)
+log = logging.getLogger()
 
 
 def access_secret_version(project_id, secret_id, version_id="latest"):
@@ -485,12 +484,18 @@ def save_config(cfg, path):
 
 def owned_file_handler(filename):
     """create file handler"""
-    if filename is None:
-        return None
     chown_slurm(filename)
     return logging.handlers.WatchedFileHandler(filename, delay=True)
 
-def add_log_args_and_parse(parser: argparse.ArgumentParser) -> argparse.Namespace:
+def get_log_path() -> Path:
+    """
+    Returns path to log file for the current script.
+    e.g. resume.py -> /var/log/slurm/resume.log
+    """
+    log_dir = Path(cfg.slurm_log_dir or ".")
+    return (log_dir / Path(sys.argv[0]).name).with_suffix(".log")
+
+def init_log_and_parse(parser: argparse.ArgumentParser) -> argparse.Namespace:
     parser.add_argument(
         "--debug",
         "-d",
@@ -508,27 +513,22 @@ def add_log_args_and_parse(parser: argparse.ArgumentParser) -> argparse.Namespac
     )
     args = parser.parse_args()
     
+    loglevel = args.loglevel
     if cfg.enable_debug_logging:
-        args.loglevel = logging.DEBUG
+        loglevel = logging.DEBUG
     if args.trace_api:
         cfg.extra_logging_flags["trace_api"] = True
 
-    return args
-
-
-def config_root_logger(caller_logger, level="DEBUG", stdout=True, logfile=None):
-    """configure the root logger, disabling all existing loggers"""
-    handlers = list(compress(("stdout_handler", "file_handler"), (stdout, logfile)))
-
-    config = {
+    # Configure root logger
+    logging.config.dictConfig({
         "version": 1,
         "disable_existing_loggers": True,
         "formatters": {
             "standard": {
-                "fmt": "%(levelname)s: %(message)s",
+                "format": "%(levelname)s: %(message)s",
             },
             "stamp": {
-                "fmt": "%(asctime)s %(levelname)s: %(message)s",
+                "format": "%(asctime)s %(levelname)s: %(message)s",
             },
         },
         "handlers": {
@@ -542,32 +542,23 @@ def config_root_logger(caller_logger, level="DEBUG", stdout=True, logfile=None):
                 "()": owned_file_handler,
                 "level": logging.DEBUG,
                 "formatter": "stamp",
-                "filename": logfile,
+                "filename": get_log_path(),
             },
         },
         "root": {
-            "handlers": handlers,
-            "level": level,
+            "handlers": ["stdout_handler", "file_handler"],
+            "level": loglevel,
         },
-    }
-    if not logfile:
-        del config["handlers"]["file_handler"]
-    logging.config.dictConfig(config)
-    loggers = (
-        __name__,
-        "resume",
-        "suspend",
-        "slurmsync",
-        "setup",
-        caller_logger,
-    )
-    for logger in map(logging.getLogger, loggers):
-        logger.disabled = False
+    })
+
+    sys.excepthook = _handle_exception
+
+    return args
 
 
 def log_api_request(request):
     """log.trace info about a compute API request"""
-    if not cfg.extra_logging_flags.get("trace_api", False):
+    if not cfg.extra_logging_flags.get("trace_api"):
         return
     
     # output the whole request object as pretty yaml
@@ -580,9 +571,8 @@ def log_api_request(request):
     log.debug(f"{inspect.stack()[1].function}:\n{pretty_req}")
 
 
-def handle_exception(exc_type, exc_value, exc_trace):
+def _handle_exception(exc_type, exc_value, exc_trace):
     """log exceptions other than KeyboardInterrupt"""
-    # TODO does this work?
     if not issubclass(exc_type, KeyboardInterrupt):
         log.exception("Fatal exception", exc_info=(exc_type, exc_value, exc_trace))
     sys.__excepthook__(exc_type, exc_value, exc_trace)

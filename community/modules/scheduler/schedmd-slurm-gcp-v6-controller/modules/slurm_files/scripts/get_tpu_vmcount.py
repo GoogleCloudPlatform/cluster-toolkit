@@ -32,9 +32,7 @@ def get_vmcount_of_tpu_part(part):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
-    )
+    parser = argparse.ArgumentParser()
     parser.add_argument(
         "--partitions",
         "-p",

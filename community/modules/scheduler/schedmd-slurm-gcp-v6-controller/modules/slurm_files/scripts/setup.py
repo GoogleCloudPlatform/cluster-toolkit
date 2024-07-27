@@ -20,7 +20,6 @@ import logging
 import os
 import shutil
 import subprocess
-import sys
 import stat
 import time
 from pathlib import Path
@@ -43,10 +42,8 @@ from setup_network_storage import (
     setup_nfs_exports,
 )
 
-SETUP_SCRIPT = Path(__file__)
-filename = SETUP_SCRIPT.name
-LOGFILE = ((cfg.slurm_log_dir if cfg else ".") / SETUP_SCRIPT).with_suffix(".log")
-log = logging.getLogger(filename)
+
+log = logging.getLogger()
 
 
 MOTD_HEADER = """
@@ -120,7 +117,7 @@ Log back in to ensure your home directory is correct.
 
 def failed_motd():
     """modify motd to signal that setup is failed"""
-    wall_msg = f"*** Slurm setup failed! Please view log: {LOGFILE} ***"
+    wall_msg = f"*** Slurm setup failed! Please view log: {util.get_log_path()} ***"
     motd_msg = MOTD_HEADER + wall_msg + "\n\n"
     Path("/etc/motd").write_text(motd_msg)
     util.run(f"wall -n '{wall_msg}'", timeout=30)
@@ -332,7 +329,7 @@ def setup_controller():
 
     if cfg.controller_secondary_disk:
         setup_secondary_disks()
-    setup_network_storage(log)
+    setup_network_storage()
 
     run_custom_scripts()
 
@@ -397,7 +394,7 @@ def setup_login():
     update_system_config("slurmd", sysconf)
     install_custom_scripts()
 
-    setup_network_storage(log)
+    setup_network_storage()
     setup_sudoers()
     run("systemctl restart munge")
     run("systemctl enable slurmd", timeout=30)
@@ -439,7 +436,7 @@ def setup_compute():
     install_custom_scripts()
 
     setup_nss_slurm()
-    setup_network_storage(log)
+    setup_network_storage()
 
     has_gpu = run("lspci | grep --ignore-case 'NVIDIA' | wc -l", shell=True).returncode
     if has_gpu:
@@ -477,16 +474,9 @@ def main():
 
 
 if __name__ == "__main__":
-    util.chown_slurm(LOGFILE, mode=0o600)
-
-    parser = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
-    )
+    parser = argparse.ArgumentParser()
     parser.add_argument("--slurmd-feature", dest="slurmd_feature", help="Unused, to be removed.")
-    _ = util.add_log_args_and_parse(parser)
-
-    util.config_root_logger(filename, logfile=LOGFILE)
-    sys.excepthook = util.handle_exception
+    _ = util.init_log_and_parse(parser)
 
     lkp = util.Lookup(cfg)  # noqa F811
 
