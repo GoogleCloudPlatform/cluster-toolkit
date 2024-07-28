@@ -40,19 +40,6 @@ deployment_groups:
         - range_name: services
           ip_cidr_range: 10.0.32.0/20
 
-  - id: gke_cluster
-    source: modules/scheduler/gke-cluster
-    use: [network1]
-    settings:
-      enable_private_endpoint: false  # Allows for access from authorized public IPs
-      enable_multi_networking: true
-      master_authorized_networks:
-      - cidr_block: $(vars.authorized_cidr)
-        display_name: "kubectl-access-network" # Allows your machine run kubectl command.
-    outputs: [instructions]
-
-- group: multivpcgke
-  modules:
   - id: gpunets
     source: modules/network/multivpc
     settings:
@@ -61,15 +48,20 @@ deployment_groups:
       network_count: 8
       subnetwork_cidr_suffix: 24
 
-  - id: existing-gke-cluster
-    source: modules/scheduler/pre-existing-gke-cluster
-    use: [gpunets]
+  - id: gke_cluster
+    source: modules/scheduler/gke-cluster
+    use: [network1, gpunets]
     settings:
-      cluster_name: $(vars.deployment_name)
+      enable_private_endpoint: false  # Allows for access from authorized public IPs
+      enable_multi_networking: true
+      master_authorized_networks:
+      - cidr_block: $(vars.authorized_cidr)
+        display_name: "kubectl-access-network" # Allows your machine run kubectl command.
+    outputs: [instructions]
 
   - id: a3-megagpu_pool
     source: modules/compute/gke-node-pool
-    use: [existing-gke-cluster, gpunets]
+    use: [gke_cluster, gpunets]
     settings:
       machine_type: a3-megagpu-8g
       guest_accelerator:
@@ -77,18 +69,23 @@ deployment_groups:
         count: 8
         gpu_driver_installation_config:
         - gpu_driver_version: LATEST
-      static_node_count: 2
-      disk_type: pd-ssd
+      disk_type: pd-balanced
+      autoscaling_total_min_nodes: 2
       zones: [$(vars.zone)]
-      local_ssd_count_ephemeral_storage: 16
+
+# We need to do the following here:
+# 1- Install the GPUDirect binary and configure NCCL: https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#install-gpudirect-tcpx-nccl
+# 2- Deploy NRI device injector plugin: https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#nri-device-injector
+# 3- Deploy a test workload: https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#test-workload
+# 4- Use recommended NCCL configuration settings to improve performance: https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#environment-variables-nccl
+# 5- Add GPUDirect to manifests: https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#add-gpudirect-manifests
 
   - id: job-template
     source: modules/compute/gke-job-template
     use: [a3-megagpu_pool]
     settings:
-      image: busybox
+      image: nvidia/cuda:11.0.3-runtime-ubuntu20.04
       command:
-      - echo
-      - Hello World
-      node_count: 3
+      - nvidia-smi
+      node_count: 2
     outputs: [instructions]

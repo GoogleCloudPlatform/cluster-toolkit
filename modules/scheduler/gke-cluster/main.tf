@@ -31,8 +31,11 @@ locals {
 
   sa_email = var.service_account_email != null ? var.service_account_email : data.google_compute_default_service_account.default_sa.email
 
-  #multi networking needs Dataplane v2 enabled
-  derived_enable_dataplane_v2 = var.enable_multi_networking ? true : var.enable_dataplane_v2
+  # additional VPCs enable multi networking 
+  derived_enable_multi_networking = length(var.additional_networks) > 0 ? true : var.enable_multi_networking
+
+  # multi networking needs enabled Dataplane v2
+  derived_enable_dataplane_v2 = local.derived_enable_multi_networking ? true : var.enable_dataplane_v2
 }
 
 data "google_compute_default_service_account" "default_sa" {
@@ -90,7 +93,7 @@ resource "google_container_cluster" "gke_cluster" {
 
   datapath_provider = local.derived_enable_dataplane_v2 ? "ADVANCED_DATAPATH" : "LEGACY_DATAPATH"
 
-  enable_multi_networking = var.enable_multi_networking
+  enable_multi_networking = local.derived_enable_multi_networking
 
   networking_mode = "VPC_NATIVE"
 
@@ -313,4 +316,53 @@ module "workload_identity" {
     data.google_compute_default_service_account.default_sa,
     google_container_cluster.gke_cluster
   ]
+}
+
+data "google_client_config" "default" {}
+
+provider "kubectl" {
+  host                   = "https://${google_container_cluster.gke_cluster.endpoint}"
+  cluster_ca_certificate = base64decode(google_container_cluster.gke_cluster.master_auth[0].cluster_ca_certificate)
+  token                  = data.google_client_config.default.access_token
+  load_config_file       = false
+}
+
+resource "kubectl_manifest" "additional_net_params" {
+  for_each = { for idx, network_info in var.additional_networks : idx => network_info }
+
+  depends_on = [google_container_cluster.gke_cluster]
+
+  yaml_body = <<YAML
+apiVersion: networking.gke.io/v1
+kind: GKENetworkParamSet
+metadata:
+  name: additional-network-${each.key}
+spec:
+  vpc: ${each.value.network}
+  vpcSubnet: ${each.value.subnetwork}
+  deviceMode: NetDevice
+YAML
+
+  provider = kubectl
+}
+
+resource "kubectl_manifest" "additional_nets" {
+  for_each = { for idx, network_info in var.additional_networks : idx => network_info }
+
+  depends_on = [google_container_cluster.gke_cluster, kubectl_manifest.additional_net_params]
+
+  yaml_body = <<YAML
+apiVersion: networking.gke.io/v1
+kind: Network
+metadata:
+  name: additional-network-${each.key}
+spec:
+  parametersRef:
+    group: networking.gke.io
+    kind: GKENetworkParamSet
+    name: additional-network-${each.key}
+  type: Device
+YAML
+
+  provider = kubectl
 }

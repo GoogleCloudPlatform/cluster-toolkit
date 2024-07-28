@@ -73,9 +73,10 @@ use-cases). In this case, ensure that you turn off the
 [enable_secure_boot](#input\_enable\_secure\_boot) option to allow unsigned
 kernel modules to be loaded.
 
-To maximize GPU network bandwidth, nodepools accept multiple VPCs. Pass a multivpc module to gke-node-pool module, and [install GPUDirect and configure NCCL] (https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#install-gpudirect-tcpx-nccl).
-> **_NOTE:_** You must [enable multi networking](https://cloud.google.com/kubernetes-engine/docs/how-to/setup-multinetwork-support-for-pods#create-a-gke-cluster) feature when creating the GKE cluster.
-> To create network objects in gke cluster pass, the multivpc module to a pre-existing-gke-cluster module as well or [apply a manifest manually](https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#create-gke-environment).
+To maximize GPU network bandwidth, nodepools accept multiple VPCs. Pass a multivpc module to gke-node-pool module, and [take these steps] (https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#install-gpudirect-tcpx-nccl) to install GPUDirect, configure NCCL, use recommended settings, and add GPUDirect to your pods.
+
+> **_NOTE:_** You must [enable multi networking](https://cloud.google.com/kubernetes-engine/docs/how-to/setup-multinetwork-support-for-pods#create-a-gke-cluster) feature when creating the GKE cluster. Passing the multivpc module to a gke-cluster module enables multi networking on the cluster creation.
+> Passing the multivpc module to a gke-cluster or pre-existing-gke-cluster module creates required network objects on the cluster for multi networking. You can do so by [applying a manifest manually](https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#create-gke-environment), too.
 
 ### GPUs Examples
 
@@ -172,7 +173,7 @@ The following is an example of using a GPU (with sharing config) attached to an 
           gpu_sharing_strategy: "TIME_SHARING"
 ```
 
-Finally, the following is adding multivpc to a node pool (with sharing config) attached to an `n1` machine:
+Finally, the following is adding multivpc to a node pool:
 
 ```yaml
   - id: network
@@ -186,15 +187,15 @@ Finally, the following is adding multivpc to a node pool (with sharing config) a
       global_ip_address_range: 172.16.0.0/12
       subnetwork_cidr_suffix: 16
 
-  - id: existing-gke-cluster ## multinetworking must be enabled in advance when cluster creation
-    source: modules/scheduler/pre-existing-gke-cluster
-    use: [multinetwork]
+  - id: gke-cluster
+    source: modules/scheduler/gke-cluster
+    use: [network, multinetwork]
     settings:
       cluster_name: $(vars.deployment_name)
 
   - id: a3-megagpu_pool
     source: modules/compute/gke-node-pool
-    use: [existing-gke-cluster, multinetwork]
+    use: [gke-cluster, multinetwork]
     settings:
       machine_type: a3-megagpu-8g
       guest_accelerator:
