@@ -266,7 +266,7 @@ variable "service_account" {
   }
 }
 variable "additional_networks" {
-  description = "Additional network interface details for GCE, if any. Providing additional networks adds additional node networks to the node pool"
+  description = "Additional network interface details for GKE, if any. Providing additional networks adds additional node networks to the node pool"
   default     = []
   type = list(object({
     network            = string
