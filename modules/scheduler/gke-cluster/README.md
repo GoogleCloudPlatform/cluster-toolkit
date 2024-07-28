@@ -42,13 +42,28 @@ are created in the VPC module. By default the `gke-cluster` module will look for
 ranges with the names `pods` and `services`. These names can be configured using
 the `pods_ip_range_name` and `services_ip_range_name` settings.
 
-If you are going to add multiple networks to the cluster, you need to
+### Multi-networking
 
-1. Set `enable_multi_networking` to true when creating the cluster (enables Dataplane V2, too).
-2. Add a second deployment group to your blueprint and continue the below in the second deployment group.
-3. Add a multivpc module.
-4. Add a pre-existing-gke-cluster module and pass the multivpc to the cluster.
-5. Add a gke-node-pool module and pass the multivpc to the nodepool, too.
+To create network objects in GKE cluster, you can pass a multivpc module to gke-cluster module instead of [applying a manifest manually](https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#create-gke-environment). Passing a multivpc module enables multi networking and [Dataplane V2](https://cloud.google.com/kubernetes-engine/docs/concepts/dataplane-v2?hl=en) on the cluster.
+
+```yaml
+  - id: network
+    source: modules/network/vpc
+
+  - id: multinetwork
+    source: modules/network/multivpc
+    settings:
+      network_name_prefix: multivpc-net
+      network_count: 8
+      global_ip_address_range: 172.16.0.0/12
+      subnetwork_cidr_suffix: 16
+
+  - id: gke-cluster
+    source: modules/scheduler/gke-cluster
+    use: [network, multinetwork] ## enables multi networking and Dataplane V2 on cluster
+    settings:
+      cluster_name: $(vars.deployment_name)
+```
 
 Find an example of multi networking in GKE [here](../../../examples/gke-multi-vpc-a3-megagpu-8g.yaml).
 
@@ -86,6 +101,7 @@ limitations under the License.
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.0 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | > 5.0 |
 | <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | > 5.0 |
+| <a name="requirement_kubectl"></a> [kubectl](#requirement\_kubectl) | >= 1.7.0 |
 
 ## Providers
 
@@ -93,6 +109,7 @@ limitations under the License.
 |------|---------|
 | <a name="provider_google"></a> [google](#provider\_google) | > 5.0 |
 | <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | > 5.0 |
+| <a name="provider_kubectl"></a> [kubectl](#provider\_kubectl) | >= 1.7.0 |
 
 ## Modules
 
@@ -112,12 +129,16 @@ limitations under the License.
 | [google_project_iam_member.node_service_account_metric_writer](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/project_iam_member) | resource |
 | [google_project_iam_member.node_service_account_monitoring_viewer](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/project_iam_member) | resource |
 | [google_project_iam_member.node_service_account_resource_metadata_writer](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/project_iam_member) | resource |
+| [kubectl_manifest.additional_net_params](https://registry.terraform.io/providers/gavinbunney/kubectl/latest/docs/resources/manifest) | resource |
+| [kubectl_manifest.additional_nets](https://registry.terraform.io/providers/gavinbunney/kubectl/latest/docs/resources/manifest) | resource |
+| [google_client_config.default](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/client_config) | data source |
 | [google_compute_default_service_account.default_sa](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_default_service_account) | data source |
 
 ## Inputs
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
+| <a name="input_additional_networks"></a> [additional\_networks](#input\_additional\_networks) | Additional network interface details for GKE, if any. Providing additional networks enables multi networking and creates relevat network objects on the cluster. | <pre>list(object({<br>    network            = string<br>    subnetwork         = string<br>    subnetwork_project = string<br>    network_ip         = string<br>    nic_type           = string<br>    stack_type         = string<br>    queue_count        = number<br>    access_config = list(object({<br>      nat_ip       = string<br>      network_tier = string<br>    }))<br>    ipv6_access_config = list(object({<br>      network_tier = string<br>    }))<br>    alias_ip_range = list(object({<br>      ip_cidr_range         = string<br>      subnetwork_range_name = string<br>    }))<br>  }))</pre> | `[]` | no |
 | <a name="input_authenticator_security_group"></a> [authenticator\_security\_group](#input\_authenticator\_security\_group) | The name of the RBAC security group for use with Google security groups in Kubernetes RBAC. Group name must be in format gke-security-groups@yourdomain.com | `string` | `null` | no |
 | <a name="input_autoscaling_profile"></a> [autoscaling\_profile](#input\_autoscaling\_profile) | (Beta) Optimize for utilization or availability when deciding to remove nodes. Can be BALANCED or OPTIMIZE\_UTILIZATION. | `string` | `"OPTIMIZE_UTILIZATION"` | no |
 | <a name="input_configure_workload_identity_sa"></a> [configure\_workload\_identity\_sa](#input\_configure\_workload\_identity\_sa) | When true, a kubernetes service account will be created and bound using workload identity to the service account used to create the cluster. | `bool` | `false` | no |
@@ -126,7 +147,7 @@ limitations under the License.
 | <a name="input_enable_filestore_csi"></a> [enable\_filestore\_csi](#input\_enable\_filestore\_csi) | The status of the Filestore Container Storage Interface (CSI) driver addon, which allows the usage of filestore instance as volumes. | `bool` | `false` | no |
 | <a name="input_enable_gcsfuse_csi"></a> [enable\_gcsfuse\_csi](#input\_enable\_gcsfuse\_csi) | The status of the GCSFuse Filestore Container Storage Interface (CSI) driver addon, which allows the usage of a gcs bucket as volumes. | `bool` | `false` | no |
 | <a name="input_enable_master_global_access"></a> [enable\_master\_global\_access](#input\_enable\_master\_global\_access) | Whether the cluster master is accessible globally (from any region) or only within the same region as the private endpoint. | `bool` | `false` | no |
-| <a name="input_enable_multi_networking"></a> [enable\_multi\_networking](#input\_enable\_multi\_networking) | Enables [multi networking](https://cloud.google.com/kubernetes-engine/docs/how-to/setup-multinetwork-support-for-pods#create-a-gke-cluster). This setting is immutable on clusters and enables Dataplane V2. | `bool` | `false` | no |
+| <a name="input_enable_multi_networking"></a> [enable\_multi\_networking](#input\_enable\_multi\_networking) | Enables [multi networking](https://cloud.google.com/kubernetes-engine/docs/how-to/setup-multinetwork-support-for-pods#create-a-gke-cluster). This setting is immutable on clusters and enables [Dataplane V2](https://cloud.google.com/kubernetes-engine/docs/concepts/dataplane-v2?hl=en). | `bool` | `false` | no |
 | <a name="input_enable_persistent_disk_csi"></a> [enable\_persistent\_disk\_csi](#input\_enable\_persistent\_disk\_csi) | The status of the Google Compute Engine Persistent Disk Container Storage Interface (CSI) driver addon, which allows the usage of a PD as volumes. | `bool` | `true` | no |
 | <a name="input_enable_private_endpoint"></a> [enable\_private\_endpoint](#input\_enable\_private\_endpoint) | (Beta) Whether the master's internal IP address is used as the cluster endpoint. | `bool` | `true` | no |
 | <a name="input_enable_private_ipv6_google_access"></a> [enable\_private\_ipv6\_google\_access](#input\_enable\_private\_ipv6\_google\_access) | The private IPv6 google access type for the VMs in this subnet. | `bool` | `true` | no |

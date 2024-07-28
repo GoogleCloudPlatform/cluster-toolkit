@@ -24,6 +24,10 @@ terraform {
       source  = "hashicorp/google-beta"
       version = "> 5.0"
     }
+    kubectl = {
+      source  = "gavinbunney/kubectl"
+      version = ">= 1.7.0"
+    }
   }
   provider_meta "google" {
     module_name = "blueprints/terraform/hpc-toolkit:gke-cluster/v1.37.2"

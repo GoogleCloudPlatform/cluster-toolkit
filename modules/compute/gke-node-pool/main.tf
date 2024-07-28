@@ -104,12 +104,18 @@ resource "google_container_node_pool" "node_pool" {
       }
     }
 
-    ephemeral_storage_local_ssd_config {
-      local_ssd_count = var.local_ssd_count_ephemeral_storage
+    dynamic "ephemeral_storage_local_ssd_config" {
+      for_each = var.local_ssd_count_ephemeral_storage > 0 ? [1] : []
+      content {
+        local_ssd_count = var.local_ssd_count_ephemeral_storage
+      }
     }
 
-    local_nvme_ssd_block_config {
-      local_ssd_count = var.local_ssd_count_nvme_block
+    dynamic "local_nvme_ssd_block_config" {
+      for_each = var.local_ssd_count_nvme_block > 0 ? [1] : []
+      content {
+        local_ssd_count = var.local_ssd_count_nvme_block
+      }
     }
 
     shielded_instance_config {

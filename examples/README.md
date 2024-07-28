@@ -1536,26 +1536,27 @@ cleaned up when the job is deleted.
 
 [storage-gke.yaml]: ../examples/storage-gke.yaml
 
-### [multivpc-gke.yaml] ![community-badge] ![experimental-badge]
+### [gke-multi-vpc-a3-megagpu-8g.yaml] ![community-badge] ![experimental-badge]
 
 This blueprint shows how to use multiple VPC networks with GKE in the toolkit.
 
-The blueprint contains the following:
-
-* Two deployment groups
-  * The primary to provision the cluster
-  * The second group to apply mltiple VPCs to the cluster
+After provisioning the cluster and the nodepool, we need to do the following:
+1- Install the GPUDirect binary and configure NCCL: https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#install-gpudirect-tcpx-nccl
+2- Deploy NRI device injector plugin: https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#nri-device-injector
+3- Deploy a test workload: https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#test-workload
+4- Use recommended NCCL configuration settings to improve performance: https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#environment-variables-nccl
+5- Add GPUDirect to manifests: https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#add-gpudirect-manifests
 
 > [!Note]
 > The Kubernetes API server will only allow requests from authorized networks.
-> The `pre-existing-gke-cluster` module needs access to the Kubernetes API server
+> The `gke-cluster` module needs access to the Kubernetes API server
 > to apply a manifest. **You must use
 > the `authorized_cidr` variable to supply an authorized network which contains
 > the IP address of the machine deploying the blueprint, for example
 > `--vars authorized_cidr=<your-ip-address>/32`.** You can use a service like
 > [whatismyip.com](https://whatismyip.com) to determine your IP address.
 
-[multivpc-gke.yaml]: ../examples/gke-multi-vpc-a3-mgagpu-8g.yaml
+[gke-multi-vpc-a3-megagpu-8g.yaml]: ../examples/gke-multi-vpc-a3-megagpu-8g.yaml
 
 ### [htc-htcondor.yaml] ![community-badge] ![experimental-badge]
 
