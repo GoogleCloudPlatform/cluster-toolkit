@@ -37,7 +37,7 @@ import (
 )
 
 // ApplyBehavior abstracts behaviors for making changes to cloud infrastructure
-// when ghpc believes that they may be necessary
+// when gcluster believes that they may be necessary
 type ApplyBehavior uint
 
 // 3 behaviors making changes: never, automatic, and explicit approval
@@ -159,7 +159,7 @@ func helpOnPlanError(msgs []JsonMessage) string {
 	if missingVar {
 		// Based on assumption that the only undefined variables can possibly come from IGC references.
 		// This may change in the future.
-		return `run "ghpc export-outputs" on previous deployment groups to define inputs`
+		return `run "gcluster export-outputs" on previous deployment groups to define inputs`
 	} else {
 		return ""
 	}
@@ -337,7 +337,7 @@ func gatherUpstreamOutputs(deploymentRoot string, artifactsDir string, g config.
 		gVals, err := modulereader.ReadHclAttributes(filepath)
 		if err != nil {
 			return nil, config.HintError{
-				Hint: fmt.Sprintf("consider running \"ghpc export-outputs %s/%s\"", deploymentRoot, pg),
+				Hint: fmt.Sprintf("consider running \"gcluster export-outputs %s/%s\"", deploymentRoot, pg),
 				Err:  err}
 		}
 		vals := intersectMapKeys(outputs, gVals) // filter for needed outputs

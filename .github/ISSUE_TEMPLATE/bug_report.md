@@ -29,7 +29,7 @@ A clear and concise description of what you expected to happen.
 
 What happened instead.
 
-### Version (`ghpc --version`)
+### Version (`gcluster --version`)
 
 ### Blueprint
 
@@ -41,9 +41,9 @@ If applicable, attach or paste the blueprint YAML used to produce the bug.
 
 ### Expanded Blueprint
 
-If applicable, please attach or paste the expanded blueprint. The expanded blueprint can be obtained by running `ghpc expand your-blueprint.yaml`.
+If applicable, please attach or paste the expanded blueprint. The expanded blueprint can be obtained by running `gcluster expand your-blueprint.yaml`.
 
-Disregard if the bug occurs when running `ghpc expand ...` as well.
+Disregard if the bug occurs when running `gcluster expand ...` as well.
 
 ```yaml
 
