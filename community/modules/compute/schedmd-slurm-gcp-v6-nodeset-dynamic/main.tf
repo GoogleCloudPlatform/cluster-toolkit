@@ -54,7 +54,7 @@ data "google_compute_default_service_account" "default" {
 
 
 module "slurm_nodeset_template" {
-  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=6.5.8"
+  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=0763467f028559ee07070b61ce0cb9e54f809e9d"
 
   project_id          = var.project_id
   region              = var.region
