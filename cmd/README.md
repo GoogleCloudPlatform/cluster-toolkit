@@ -1,8 +1,8 @@
-# HPC Toolkit Commands
+# Cluster Toolkit (formally HPC Toolkit) Commands
 
 ## gcluster
 
-`gcluster` is the tool used by Cloud HPC Toolkit to create deployments of HPC
+`gcluster` is the tool used by Cluster Toolkit to create deployments of HPC
 clusters, also referred to as the gHPC Engine.
 
 ### Usage - gcluster

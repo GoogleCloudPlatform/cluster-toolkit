@@ -103,7 +103,7 @@ No resources.
 |------|-------------|------|---------|:--------:|
 | <a name="input_access_point_service_account_email"></a> [access\_point\_service\_account\_email](#input\_access\_point\_service\_account\_email) | Service account e-mail for HTCondor Access Point | `string` | n/a | yes |
 | <a name="input_central_manager_service_account_email"></a> [central\_manager\_service\_account\_email](#input\_central\_manager\_service\_account\_email) | Service account e-mail for HTCondor Central Manager | `string` | n/a | yes |
-| <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | HPC Toolkit deployment name. HTCondor cloud resource names will include this value. | `string` | n/a | yes |
+| <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Cluster Toolkit deployment name. HTCondor cloud resource names will include this value. | `string` | n/a | yes |
 | <a name="input_execute_point_service_account_email"></a> [execute\_point\_service\_account\_email](#input\_execute\_point\_service\_account\_email) | Service account e-mail for HTCondor Execute Points | `string` | n/a | yes |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to resources. List key, value pairs. | `map(string)` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which HTCondor pool will be created | `string` | n/a | yes |

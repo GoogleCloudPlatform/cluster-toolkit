@@ -6,7 +6,7 @@ files with other clients over a network. `nfs-server` can be used by
 [vm-instance](../../../../modules/compute/vm-instance/README.md) and SchedMD
 community modules that create compute VMs.
 
-For more information on this and other network storage options in the Cloud HPC
+For more information on this and other network storage options in the Cluster
 Toolkit, see the extended [Network Storage documentation](../../../../docs/network_storage.md).
 
 > **_WARNING:_** This module has only been tested against the HPC centos7 OS
@@ -41,7 +41,7 @@ To mount the NFS Server you must first ensure that the NFS client has been
 installed the and then call the proper `mount` command.
 
 Both of these steps are automatically handled with the use of the `use` command
-in a selection of HPC Toolkit modules. See the [compatibility matrix][matrix] in
+in a selection of Cluster Toolkit modules. See the [compatibility matrix][matrix] in
 the network storage doc for a complete list of supported modules.
 See the [hpc-centos-ss.yaml] test config for an example of using this module
 with a `vm-instance` module.

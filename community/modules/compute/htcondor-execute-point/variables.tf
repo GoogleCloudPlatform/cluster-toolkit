@@ -38,7 +38,7 @@ variable "distribution_policy_target_shape" {
 }
 
 variable "deployment_name" {
-  description = "HPC Toolkit deployment name. HTCondor cloud resource names will include this value."
+  description = "Cluster Toolkit deployment name. HTCondor cloud resource names will include this value."
   type        = string
 }
 

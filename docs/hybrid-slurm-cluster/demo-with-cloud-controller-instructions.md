@@ -1,20 +1,20 @@
 # Hybrid Slurm Cluster Demonstration With GCP Static Cluster
 
 ## Description
-These instructions step through the setup and execution of a demo of the HPC
+These instructions step through the setup and execution of a demo of the Cluster
 Toolkit hybrid module. In this process you will:
 
 * Setup networking and internal DNS peering between 2 GCP projects
 * Deploy a [static cluster](#deploy-a-static-cluster) that will simulate an
-  on-premise cluster using the HPC Toolkit and
+  on-premise cluster using the Cluster Toolkit and
   [SchedMD's Slurm on GCP][slurm-gcp] terraform modules.
-* Create and deploy a hybrid deployment directory using the HPC Toolkit
+* Create and deploy a hybrid deployment directory using the Cluster Toolkit
 * Run through a few manual steps of integrating the hybrid configurations
   created with the hybrid deployment directory.
 * Test the new hybrid controller.
 
 These instructions are provided for demonstration purposes only. This process
-may serve as a first step in evaluating the HPC Toolkit's hybrid slurm module
+may serve as a first step in evaluating the Cluster Toolkit's hybrid slurm module
 for use with an on-premise slurm-cluster.
 
 > **Warning:** The [hybrid module][hybridmodule] is in active development and
@@ -129,7 +129,7 @@ Project A and Project B. If not specified, this will be the
 [computesa]:https://cloud.google.com/compute/docs/access/service-accounts#default_service_account
 
 #### Dependencies
-This demo has the same baseline dependencies as the HPC Toolkit that are
+This demo has the same baseline dependencies as the Cluster Toolkit that are
 outlined in the main [README.md](../../README.md#dependencies).
 
 In addition, some pip packages need to be installed locally. Run the following
@@ -142,7 +142,7 @@ pip install -r docs/hybrid-slurm-cluster/requirements.txt
 
 #### Build ghpc
 
-Before you begin, ensure that you have built the `ghpc` tool in the HPC Toolkit.
+Before you begin, ensure that you have built the `ghpc` tool in the Cluster Toolkit.
 For more information see the [README.md](../../README.md#quickstart) Quickstart.
 
 The commands in these instructions assume the ghpc binary is installed in a
@@ -295,7 +295,7 @@ create a new slurm cluster with the following:
   type n2-standard-2. This will be the default partition.
 * A Slurm controller and login node.
 
-First, use the HPC Toolkit to create the deployment directory, replacing
+First, use the Cluster Toolkit to create the deployment directory, replacing
 "<<Project A ID>>" with the ID of your project A:
 
 ```shell
@@ -319,6 +319,6 @@ Execute the terraform commands to deploy the static Slurm cluster in project A.
 ### Deploy and Install the Hybrid Configuration
 
 Congratulations! You've configured and deployed your static Slurm cluster in GCP
-using Slurm on GCP modules in the HPC Toolkit. The next step is to create,
+using Slurm on GCP modules in the Cluster Toolkit. The next step is to create,
 deploy and validate a hybrid configuration using your static cluster. To do
 that, follow the instructions at [deploy-instructions.md](./deploy-instructions.md).

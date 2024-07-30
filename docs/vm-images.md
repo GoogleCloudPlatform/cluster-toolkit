@@ -3,7 +3,7 @@
 * [Specifying Blueprint Images](#specifying-blueprint-images)
   * [Instance Image](#instance-images)
   * [Pinning Specific Images](#pinning-specifics-images)
-* [HPC Toolkit Supported Images](#hpc-toolkit-supported-images)
+* [Cluster Toolkit Supported Images](#cluster-toolkit-supported-images)
   * [HPC CentOS 7](#hpc-centos-7)
   * [HPC Rocky Linux 8](#hpc-rocky-linux-8)
   * [Debian 11](#debian-11)
@@ -28,7 +28,7 @@ Please see the [blueprint catalog](https://cloud.google.com/hpc-toolkit/docs/set
 > modules that have their own image specification. Please read the
 > documentation for any module utilized.
 
-When an HPC Toolkit blueprint points to a predefined source module (e.g.
+When an Cluster Toolkit blueprint points to a predefined source module (e.g.
 `community/modules/compute/schedmd-slurm-gcp-v5-node-group`), generally the
 module has a default image defined. In order to override this default image, a
 user may specify the `instance_image` setting in the yaml blueprint, within
@@ -108,11 +108,11 @@ Once the image has been created or copied, the user can specify their own
 project and the new image name in the `instance_image` field discussed in
 [Instance Images](#instance-images)
 
-## HPC Toolkit Supported Images
+## Cluster Toolkit Supported Images
 
 ### HPC CentOS 7
 
-The HPC Toolkit has officially supported the [HPC CentOS 7 VM Image][hpcimage]
+The Cluster Toolkit has officially supported the [HPC CentOS 7 VM Image][hpcimage]
 as the primary VM image for HPC workloads on Google Cloud since it's release.
 Since the [HPC CentOS 7 VM Image][hpcimage] comes pre-tuned for optimal
 performance on typical HPC workloads, it is the default VM image in our modules,
@@ -127,12 +127,12 @@ workloads on Google Cloud from 2024.
 
 ### Debian 11
 
-The HPC Toolkit officially supports Debian 11 based VM images in the majority of
+The Cluster Toolkit officially supports Debian 11 based VM images in the majority of
 our modules, with a couple of exceptions.
 
 ### Ubuntu 20.04 LTS
 
-The HPC Toolkit officially supports Ubuntu 20.04 LTS based VM images in the
+The Cluster Toolkit officially supports Ubuntu 20.04 LTS based VM images in the
 majority of our modules, with a couple of exceptions.
 
 ### Windows
@@ -270,8 +270,8 @@ description of our support for Windows images.
 
 ### Other Images
 
-The HPC Toolkit strives to provide flexibility wherever possible. It is possible
-to set a VM image in many HPC Toolkit modules. While we do not officially
+The Cluster Toolkit strives to provide flexibility wherever possible. It is possible
+to set a VM image in many Cluster Toolkit modules. While we do not officially
 support images not listed here, other public and custom images should work with
 the majority of modules with or without further customization, such as custom
 startup-scripts.

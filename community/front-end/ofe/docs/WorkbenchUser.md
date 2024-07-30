@@ -1,4 +1,4 @@
-# HPC Toolkit FrontEnd - Workbench User Guide
+# Cluster Toolkit FrontEnd - Workbench User Guide
 <!--
 0        1         2         3         4         5         6         7        8
 1234567890123456789012345678901234567890123456789012345678901234567890234567890
@@ -40,7 +40,7 @@ User, Machine Type, Boot disk type, Boot Disk Capacity and image family.
 - Boot disk type - The type of disk storage used for the workbench boot disk
 - Boot disk capacity - The amount of disk storage used for the workbench boot
   disk
-- Image family - Currently the HPC Toolkit FrontEnd supports Base Python3,
+- Image family - Currently the Cluster Toolkit FrontEnd supports Base Python3,
   Tensorflow, PyTorch and R images
 
 ## Add storage
@@ -48,7 +48,7 @@ User, Machine Type, Boot disk type, Boot Disk Capacity and image family.
 The second part of the configuration is to add any desired shared file storage.
 Once the initial configuration is saved an additional configuration section
 will be displayed showing the options to mount any shared file storage known
-about by the HPC Toolkit FrontEnd.
+about by the Cluster Toolkit FrontEnd.
 
 ![workbench step 2](images/Workbench_userguide/create2.png)
 

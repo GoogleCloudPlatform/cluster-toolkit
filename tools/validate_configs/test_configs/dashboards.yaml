@@ -30,18 +30,18 @@ deployment_groups:
       - |
           {
             "text": {
-              "content": "Metrics from the ${deployment_name} deployment of the HPC Toolkit.",
+              "content": "Metrics from the ${deployment_name} deployment of the Cluster Toolkit.",
               "format": "MARKDOWN"
             },
-            "title": "HPC Toolkit - TEST"
+            "title": "Cluster Toolkit - TEST"
           }
       - |
           {
             "text": {
-              "content": "Metrics from the ${deployment_name} deployment of the HPC Toolkit.",
+              "content": "Metrics from the ${deployment_name} deployment of the Cluster Toolkit.",
               "format": "MARKDOWN"
             },
-            "title": "HPC Toolkit - TEST 2"
+            "title": "Cluster Toolkit - TEST 2"
           }
   - id: empty_dash
     source: modules/monitoring/dashboard
@@ -51,16 +51,16 @@ deployment_groups:
       - |
           {
             "text": {
-              "content":"Metrics from the ${deployment_name} deployment of the HPC Toolkit.",
+              "content":"Metrics from the ${deployment_name} deployment of the Cluster Toolkit.",
               "format": "MARKDOWN"
             },
-            "title": "HPC Toolkit - TEST"
+            "title": "Cluster Toolkit - TEST"
           }
       - |
           {
             "text": {
-              "content": "Metrics from the ${deployment_name} deployment of the HPC Toolkit.",
+              "content": "Metrics from the ${deployment_name} deployment of the Cluster Toolkit.",
               "format": "MARKDOWN"
             },
-            "title": "HPC Toolkit - TEST 2"
+            "title": "Cluster Toolkit - TEST 2"
           }

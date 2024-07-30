@@ -1,6 +1,6 @@
 # Modules
 
-This directory contains a set of core modules built for the HPC Toolkit. Modules
+This directory contains a set of core modules built for the Cluster Toolkit. Modules
 describe the building blocks of an HPC deployment. The expected fields in a
 module are listed in more detail [below](#module-fields). Blueprints can be
 extended in functionality by incorporating [modules from GitHub
@@ -14,10 +14,10 @@ Modules from various sources are all listed here for visibility. Badges are used
 to indicate the source and status of many of these resources.
 
 Modules listed below with the ![core-badge] badge are located in this
-folder and are tested and maintained by the HPC Toolkit team.
+folder and are tested and maintained by the Cluster Toolkit team.
 
 Modules labeled with the ![community-badge] badge are contributed by
-the community (including the HPC Toolkit team, partners, etc.). Community modules
+the community (including the Cluster Toolkit team, partners, etc.). Community modules
 are located in the [community folder](../community/modules/README.md).
 
 Modules labeled with the ![deprecated-badge] badge are now deprecated and may be
@@ -121,7 +121,7 @@ Modules that are still in development and less stable are labeled with the
 
 * **[dashboard]** ![core-badge] : Creates a
   [monitoring dashboard](https://cloud.google.com/monitoring/dashboards) for
-  visually tracking a HPC Toolkit deployment.
+  visually tracking a Cluster Toolkit deployment.
 
 [dashboard]: monitoring/dashboard/README.md
 
@@ -353,7 +353,7 @@ following module definition refers the local pre-existing-vpc modules.
 
 > **_NOTE:_** Relative paths (beginning with `.` or `..` must be relative to the
 > working directory from which `ghpc` is executed. This example would have to be
-> run from a local copy of the HPC Toolkit repository. An alternative is to use
+> run from a local copy of the Cluster Toolkit repository. An alternative is to use
 > absolute paths to modules.
 
 #### GitHub-hosted Modules and Packages
@@ -602,4 +602,4 @@ than having to set it manually.
 ## Writing Custom HPC Modules
 
 Modules are flexible by design, however we do define some [best practices](../docs/module-guidelines.md) when
-creating a new module meant to be used with the HPC Toolkit.
+creating a new module meant to be used with the Cluster Toolkit.

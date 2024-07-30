@@ -1,11 +1,11 @@
-# HPC Toolkit FrontEnd - Administrator’s Guide
+# Cluster Toolkit FrontEnd - Administrator’s Guide
 
 <!--
 0        1         2         3         4         5         6         7        8
 1234567890123456789012345678901234567890123456789012345678901234567890234567890
 -->
 
-This document is for administrators of the HPC Toolkit FrontEnd (TKFE). An
+This document is for administrators of the Cluster Toolkit FrontEnd (TKFE). An
 administrator can deploy the TKFE portal, manage the lifecycle of HPC clusters,
 set up networking and storage resources that support clusters, install
 applications. and manage user access. Normal HPC users should refer to the
@@ -23,7 +23,7 @@ administrators, additional Django superusers can be created from the Admin site
 within TKFE, once it is deployed and running.
 
 The TFKE web application server uses the
-[Cloud HPC Toolkit](https://github.com/GoogleCloudPlatform/hpc-toolkit) to
+[Cluster Toolkit](https://github.com/GoogleCloudPlatform/hpc-toolkit) to
 provision resources for networks, filesystems and clusters, using a service
 account that has its credentials registered to TKFE. The service account is
 used for access management and billing.
@@ -308,7 +308,7 @@ external filesystem located elsewhere on GCP.
 ## Cluster Management
 
 HPC clusters can be created after setting up the hosting VPC and any
-additional filesystems. The HPC Toolkit FrontEnd can manage the whole life
+additional filesystems. The Cluster Toolkit FrontEnd can manage the whole life
 cycles of clusters. Click the *Clusters* item in the main menu to list all
 existing clusters.
 
@@ -496,7 +496,7 @@ Cloud resource deployment log files (from Terraform) are typically shown via
 the FrontEnd web site.  If those logs are not being shown, they can be found on
 the service machine under
 `/opt/gcluster/hpc-toolkit/frontend/(clusters|fs|vpc)/...`.
-HPC Toolkit log files will also be found in those directories.  The Terraform
+Cluster Toolkit log files will also be found in those directories.  The Terraform
 log files and status files will be down a few directories, based off of the
 Cluster Number, Deployment ID, and Terraform directory.
 

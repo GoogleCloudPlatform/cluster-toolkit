@@ -71,7 +71,7 @@ page.
 
 ## GPU Support
 
-More information on GPU support in Slurm on GCP and other HPC Toolkit modules
+More information on GPU support in Slurm on GCP and other Cluster Toolkit modules
 can be found at [docs/gpu-support.md](../../../../docs/gpu-support.md)
 
 ## Placement Max Distance
@@ -151,7 +151,7 @@ extended instructions in our [docs](../../../../docs/hybrid-slurm-cluster/).
 [schedmd-slurm-gcp-v5-hybrid]: ../schedmd-slurm-gcp-v5-hybrid/README.md
 
 ## Support
-The HPC Toolkit team maintains the wrapper around the [slurm-on-gcp] terraform
+The Cluster Toolkit team maintains the wrapper around the [slurm-on-gcp] terraform
 modules. For support with the underlying modules, see the instructions in the
 [slurm-gcp README][slurm-gcp-readme].
 
