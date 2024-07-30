@@ -51,7 +51,7 @@ variable "disk_size_gb" {
 variable "disk_type" {
   description = "Disk type for each node."
   type        = string
-  default     = "pd-standard"
+  default     = null
 }
 
 variable "enable_gcfs" {

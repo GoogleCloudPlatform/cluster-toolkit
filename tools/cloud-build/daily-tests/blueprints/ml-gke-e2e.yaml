@@ -55,7 +55,6 @@ deployment_groups:
     use: [gke_cluster]
     settings:
       name: g2-latest-driver
-      disk_type: pd-balanced
       machine_type: g2-standard-4
       guest_accelerator:
       - gpu_driver_installation_config:
@@ -138,6 +137,30 @@ deployment_groups:
         {
           "key": "cloud.google.com/gke-nodepool",
           "value": "n1-pool-full-spec"
+        }
+      ]
+    outputs: [instructions]
+
+  - id: default_settings_pool
+    source: modules/compute/gke-node-pool
+    use: [gke_cluster]
+    settings:
+      name: default-settings-pool
+
+  - id: job_default_settings_pool
+    source: modules/compute/gke-job-template
+    use: [default_settings_pool]
+    settings:
+      name: job-default-settings-pool
+      image: busybox
+      command:
+      - echo
+      - Hello World
+      node_count: 1
+      node_selectors: [
+        {
+          "key": "cloud.google.com/gke-nodepool",
+          "value": "default-settings-pool"
         }
       ]
     outputs: [instructions]
