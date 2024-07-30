@@ -28,10 +28,11 @@ class Color(Enum):
     END = "\033[0m"
 
 class CliUI: # implements UIProto
-    def __init__(self, no_color=False) -> None:
+    def __init__(self, no_color=False, short_url=False) -> None:
         self._status: Dict[str, Status] = {}
         self._change = False
         self._no_color = no_color
+        self._short_url = short_url
 
     def on_init(self, builds: Sequence[Build]) -> None:
         for b in builds:
@@ -94,6 +95,11 @@ class CliUI: # implements UIProto
         clr = CM.get(status, def_color).value
         return f"{clr}{sn}{Color.END.value}"
     
+    def _url(self, build: Build) -> str:
+        if not self._short_url:
+            return build.log_url
+        return f"go/ghpc-cb/{build.id}"
+
     def _render_link(self, build: Build) -> str:
-        name, url = trig_name(build), build.log_url
+        name, url = trig_name(build), self._url(build)
         return f"{name}\t{url}"

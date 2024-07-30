@@ -132,6 +132,7 @@ def run_from_cli():
     parser.add_argument("--nocolor", action="store_true", help="Do not use color in output")
 
     cli_args = vars(parser.parse_args())
-    ui = CliUI(no_color=cli_args.pop("nocolor"))
+    short_url = cli_args.get("project") == "hpc-toolkit-dev"
+    ui = CliUI(no_color=cli_args.pop("nocolor"), short_url=short_url)
 
     run(RunnerArgs(**cli_args), ui)
