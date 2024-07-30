@@ -511,8 +511,7 @@ def add_log_args_and_parse(parser: argparse.ArgumentParser) -> argparse.Namespac
     if cfg.enable_debug_logging:
         args.loglevel = logging.DEBUG
     if args.trace_api:
-        cfg.extra_logging_flags = list(cfg.extra_logging_flags)
-        cfg.extra_logging_flags.append("trace_api")
+        cfg.extra_logging_flags["trace_api"] = True
 
     return args
 
