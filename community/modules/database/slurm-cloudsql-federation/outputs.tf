@@ -22,5 +22,6 @@ output "cloudsql" {
     user      = google_sql_user.users.name
     password  = google_sql_user.users.password
     db_name   = google_sql_database.database.name
+    user_managed_replication = local.user_managed_replication
   }
 }
