@@ -28,7 +28,6 @@ from pathlib import Path
 import util
 from util import (
     lkp,
-    cfg,
     dirs,
     slurmdirs,
     run,
@@ -45,7 +44,7 @@ from setup_network_storage import (
 
 SETUP_SCRIPT = Path(__file__)
 filename = SETUP_SCRIPT.name
-LOGFILE = ((cfg.slurm_log_dir if cfg else ".") / SETUP_SCRIPT).with_suffix(".log")
+LOGFILE = ((lkp.cfg.slurm_log_dir if lkp.cfg else ".") / SETUP_SCRIPT).with_suffix(".log")
 log = logging.getLogger(filename)
 
 
@@ -320,7 +319,7 @@ def configure_dirs():
     scripts_log.symlink_to(dirs.log)
 
 
-def setup_controller(args):
+def setup_controller(args, lkp: util.Lookup) -> None:
     """Run controller setup"""
     log.info("Setting up controller")
     util.chown_slurm(dirs.scripts / "config.yaml", mode=0o600)
@@ -330,13 +329,13 @@ def setup_controller(args):
     setup_munge_key()
     setup_sudoers()
 
-    if cfg.controller_secondary_disk:
+    if lkp.cfg.controller_secondary_disk:
         setup_secondary_disks()
     setup_network_storage(log)
 
     run_custom_scripts()
 
-    if not cfg.cloudsql_secret:
+    if not lkp.cfg.cloudsql_secret:
         configure_mysql()
 
     run("systemctl enable slurmdbd", timeout=30)
@@ -347,7 +346,7 @@ def setup_controller(args):
 
     sacctmgr = f"{slurmdirs.prefix}/bin/sacctmgr -i"
     result = run(
-        f"{sacctmgr} add cluster {cfg.slurm_cluster_name}", timeout=30, check=False
+        f"{sacctmgr} add cluster {lkp.cfg.slurm_cluster_name}", timeout=30, check=False
     )
     if "already exists" in result.stdout:
         log.info(result.stdout)
@@ -382,7 +381,7 @@ def setup_controller(args):
     pass
 
 
-def setup_login(args):
+def setup_login(args, lkp: util.Lookup) -> None:
     """run login node setup"""
     log.info("Setting up login")
     slurmctld_host = f"{lkp.control_host}"
@@ -413,7 +412,7 @@ def setup_login(args):
     log.info("Done setting up login")
 
 
-def setup_compute(args):
+def setup_compute(args, lkp: util.Lookup) -> None:
     """run compute node setup"""
     log.info("Setting up compute")
     util.chown_slurm(dirs.scripts / "config.yaml", mode=0o600)
@@ -466,7 +465,7 @@ def main(args):
         lkp.instance_role,
         lambda: log.fatal(f"Unknown node role: {lkp.instance_role}"),
     )
-    setup(args)
+    setup(args, util.lkp)
 
     end_motd()
 
@@ -487,7 +486,7 @@ if __name__ == "__main__":
     util.config_root_logger(filename, logfile=LOGFILE)
     sys.excepthook = util.handle_exception
 
-    lkp = util.Lookup(cfg)  # noqa F811
+    lkp = util.Lookup(lkp.cfg)  # noqa F811
 
     try:
         main(args)

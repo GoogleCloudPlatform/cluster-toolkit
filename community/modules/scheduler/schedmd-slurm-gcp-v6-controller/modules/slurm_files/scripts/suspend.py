@@ -31,12 +31,12 @@ from util import (
     separate,
     execute_with_futures,
 )
-from util import lkp, cfg, TPU
+from util import lkp, TPU
 
 import slurm_gcp_plugins
 
 filename = Path(__file__).name
-LOGFILE = (Path(cfg.slurm_log_dir if cfg else ".") / filename).with_suffix(".log")
+LOGFILE = (Path(lkp.cfg.slurm_log_dir if lkp.cfg else ".") / filename).with_suffix(".log")
 log = logging.getLogger(filename)
 
 TOT_REQ_CNT = 1000

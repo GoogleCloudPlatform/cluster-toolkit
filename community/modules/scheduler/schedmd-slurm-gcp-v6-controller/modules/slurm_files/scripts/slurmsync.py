@@ -45,13 +45,13 @@ from util import (
     TPU,
     chunked,
 )
-from util import lkp, cfg, CONFIG_FILE
+from util import lkp, CONFIG_FILE
 from suspend import delete_instances
 from resume import start_tpu
 import conf
 
 filename = Path(__file__).name
-LOGFILE = (Path(cfg.slurm_log_dir if cfg else ".") / filename).with_suffix(".log")
+LOGFILE = (Path(lkp.cfg.slurm_log_dir if lkp.cfg else ".") / filename).with_suffix(".log")
 
 log = logging.getLogger(filename)
 

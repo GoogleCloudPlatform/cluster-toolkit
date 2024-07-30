@@ -89,8 +89,6 @@ scripts_dir = next(
     p for p in (Path(__file__).parent, Path("/slurm/scripts")) if p.is_dir()
 )
 
-# slurm-gcp config object, could be empty if not available
-cfg = NSDict()
 # caching Lookup object
 lkp = None
 
@@ -508,10 +506,10 @@ def add_log_args_and_parse(parser: argparse.ArgumentParser) -> argparse.Namespac
     )
     args = parser.parse_args()
     
-    if cfg.enable_debug_logging:
+    if lkp.cfg.enable_debug_logging:
         args.loglevel = logging.DEBUG
     if args.trace_api:
-        cfg.extra_logging_flags["trace_api"] = True
+        lkp.cfg.extra_logging_flags["trace_api"] = True
 
     return args
 
@@ -567,7 +565,7 @@ def config_root_logger(caller_logger, level="DEBUG", stdout=True, logfile=None):
 
 def log_api_request(request):
     """log.trace info about a compute API request"""
-    if not cfg.extra_logging_flags.get("trace_api", False):
+    if not lkp.cfg.extra_logging_flags.get("trace_api", False):
         return
     
     # output the whole request object as pretty yaml
@@ -1366,7 +1364,7 @@ class TPU:
         echo "startup script not found > /var/log/startup_error.log"
         """
         with open(
-            Path(cfg.slurm_scripts_dir or dirs.scripts) / "startup.sh", "r"
+            Path(lkp.cfg.slurm_scripts_dir or dirs.scripts) / "startup.sh", "r"
         ) as script:
             startup_script = script.read()
         if isinstance(nodename, list):
@@ -1475,7 +1473,7 @@ class Lookup:
 
     @property
     def scontrol(self):
-        return Path(self.cfg.slurm_bin_dir if cfg else "") / "scontrol"
+        return Path(self.cfg.slurm_bin_dir if lkp.cfg else "") / "scontrol"
 
     @cached_property
     def instance_role(self):
@@ -1903,18 +1901,7 @@ def scontrol_reconfigure(lkp: Lookup) -> None:
     run(f"{lkp.scontrol} reconfigure", timeout=30)
 
 # Define late globals
-lkp = Lookup()
-cfg = load_config_file(CONFIG_FILE)
-if not cfg:
-    try:
-        cfg = fetch_config_yaml()
-    except Exception as e:
-        log.warning(f"config not found in bucket: {e}")
-    if cfg:
-        save_config(cfg, CONFIG_FILE)
-
-lkp = Lookup(cfg)
-
+lkp = Lookup(load_config_file(CONFIG_FILE))
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
