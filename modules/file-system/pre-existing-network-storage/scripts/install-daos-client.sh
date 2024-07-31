@@ -68,6 +68,11 @@ sed -i "s/#.*transport_config/transport_config/g" $daos_config
 sed -i "s/#.*allow_insecure:.*false/  allow_insecure: true/g" $daos_config
 sed -i "s/.*access_points.*/access_points: $access_points/g" $daos_config
 
+# Move agent log destination from /tmp/ (default) to /var/log/daos_agent/
+mkdir -p /var/log/daos_agent
+chown daos_agent:daos_agent /var/log/daos_agent
+sed -i "s/#.*log_file:.*/log_file: \/var\/log\/daos_agent\/daos_agent.log/g" $daos_config
+
 # Start service
 if grep -q "ID=\"rocky\"" /etc/os-release && lsb_release -rs | grep -q "8\.[0-9]"; then
 	systemctl start daos_agent.service
