@@ -24,7 +24,7 @@ resource "google_cloudbuild_trigger" "pr_test" {
 
   github {
     owner = "GoogleCloudPlatform"
-    name  = "hpc-toolkit"
+    name  = "cluster-toolkit"
     pull_request {
       branch          = ".*"
       comment_control = "COMMENTS_ENABLED_FOR_EXTERNAL_CONTRIBUTORS_ONLY"
