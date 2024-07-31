@@ -50,7 +50,7 @@ An administrator can configure any type of machine type that is
 available. Users with the "Normal User" class will only be able to
 create workbenches using the preset machine type configurations while
 users with the "Viewer" class will not be able to create workbenches
-for themselves. The HPC toolkit frontend comes with some
+for themselves. The Cluster Toolkit Frontend comes with some
 pre-configured workbench presets:
 - Small - 1x core with 3840 Memory (n1-standard-1)
 - Medium - 2x cores with 7680 Memory (n1-standard-2)

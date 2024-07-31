@@ -125,7 +125,7 @@ func checkGitHashMismatch() (mismatch bool, branch, hash, dir string) {
 
 // hpcToolkitRepo will find the path of the directory containing the hpc-toolkit
 // starting with the working directory and evaluating the parent directories until
-// the toolkit repository is found. If the HPC Toolkit repository is not found by
+// the toolkit repository is found. If the Cluster Toolkit repository is not found by
 // traversing the path, then the executable directory is checked.
 func hpcToolkitRepo() (repo *git.Repository, dir string, err error) {
 	// first look in the working directory and it's parents until a git repo is
@@ -174,7 +174,7 @@ func hpcToolkitRepo() (repo *git.Repository, dir string, err error) {
 }
 
 // isHpcToolkitRepo will verify that the found git repository has a commit with
-// the known hash of the initial commit of the HPC Toolkit repository
+// the known hash of the initial commit of the Cluster Toolkit repository
 func isHpcToolkitRepo(r git.Repository) bool {
 	h := plumbing.NewHash(GitInitialHash)
 	_, err := r.CommitObject(h)

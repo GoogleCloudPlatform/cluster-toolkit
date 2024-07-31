@@ -17,7 +17,7 @@ job template will be placed on the login node.
 
 In some cases the job template can be submitted to the Google Cloud Batch API
 without modification, but for more complex workloads it is expected that the
-user will modify the template after running the HPC Toolkit.
+user will modify the template after running the Cluster Toolkit.
 
 ## Example
 
@@ -33,7 +33,7 @@ user will modify the template after running the HPC Toolkit.
 
 See the
 [Google Cloud Batch Example](../../../../examples/README.md#serverless-batchyaml--)
-for how to use the `batch-job-template` module with other HPC Toolkit modules such
+for how to use the `batch-job-template` module with other Cluster Toolkit modules such
 as `filestore` and `startup-script`.
 
 ## Shared VPC
@@ -54,7 +54,7 @@ the Google Cloud Batch job.
 
 Alternatively, one can supply an instance template to the `batch-job-template`
 module using the `instance_template` setting. This supplied instance template
-could be generated outside of the HPC Toolkit (via the Cloud Console UI for
+could be generated outside of the Cluster Toolkit (via the Cloud Console UI for
 example) or using a separate module within the blueprint. To define an instance
 template within a blueprint, one can use the Cloud Foundation Toolkit instance
 template module as shown in the following example. This can be useful when
@@ -166,7 +166,7 @@ limitations under the License.
 | <a name="input_log_policy"></a> [log\_policy](#input\_log\_policy) | Create a block to define log policy.<br>When set to `CLOUD_LOGGING`, logs will be sent to Cloud Logging.<br>When set to `PATH`, path must be added to generated template.<br>When set to `DESTINATION_UNSPECIFIED`, logs will not be preserved. | `string` | `"CLOUD_LOGGING"` | no |
 | <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | Machine type to use for Google Cloud Batch compute nodes. Ignored if `instance_template` is provided. | `string` | `"n2-standard-4"` | no |
 | <a name="input_mpi_mode"></a> [mpi\_mode](#input\_mpi\_mode) | Sets up barriers before and after each runnable. In addition, sets `permissiveSsh=true`, `requireHostsFile=true`, and `taskCountPerNode=1`. `taskCountPerNode` can be overridden by `task_count_per_node`. | `bool` | `false` | no |
-| <a name="input_native_batch_mounting"></a> [native\_batch\_mounting](#input\_native\_batch\_mounting) | Batch can mount some fs\_type nativly using the 'volumes' block in the job file. If set to false, all mounting will happen through HPC Toolkit startup scripts. | `bool` | `true` | no |
+| <a name="input_native_batch_mounting"></a> [native\_batch\_mounting](#input\_native\_batch\_mounting) | Batch can mount some fs\_type nativly using the 'volumes' block in the job file. If set to false, all mounting will happen through Cluster Toolkit startup scripts. | `bool` | `true` | no |
 | <a name="input_network_storage"></a> [network\_storage](#input\_network\_storage) | An array of network attached storage mounts to be configured. Ignored if `instance_template` is provided. | <pre>list(object({<br>    server_ip             = string<br>    remote_mount          = string<br>    local_mount           = string<br>    fs_type               = string<br>    mount_options         = string<br>    client_install_runner = map(string)<br>    mount_runner          = map(string)<br>  }))</pre> | `[]` | no |
 | <a name="input_on_host_maintenance"></a> [on\_host\_maintenance](#input\_on\_host\_maintenance) | Describes maintenance behavior for the instance. If left blank this will default to `MIGRATE` except the use of GPUs requires it to be `TERMINATE` | `string` | `null` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created | `string` | n/a | yes |

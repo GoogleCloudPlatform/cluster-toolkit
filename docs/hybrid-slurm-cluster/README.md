@@ -1,7 +1,7 @@
 # Hybrid Slurm Clusters
 
 ## [on-prem-instructions.md](./on-prem-instructions.md)
-This document describes how to use the HPC Toolkit to extend an on-premise Slurm
+This document describes how to use the Cluster Toolkit to extend an on-premise Slurm
 cluster to add cloud hybrid partitions.
 
 ## [demo-with-cloud-controller-instructions.md](./demo-with-cloud-controller-instructions.md)
@@ -23,7 +23,7 @@ already created.
 
 ### [troubleshooting.md](./troubleshooting.md)
 Includes a set of common troubleshooting tips when deploying a hybrid partition
-using the [schedmd-slurm-gcp-v5-hybrid][hybridmodule] HPC Toolkit Module.
+using the [schedmd-slurm-gcp-v5-hybrid][hybridmodule] Cluster Toolkit Module.
 
 ## Blueprints
 The [blueprints directory](./blueprints/) contains a set of support blueprints

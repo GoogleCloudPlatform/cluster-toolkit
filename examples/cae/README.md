@@ -34,7 +34,7 @@ including:
 To explore the reference architecture, you should follow the these steps:
 
 Before you start, make sure your prerequisites and dependencies are set up:
-[Set up Cloud HPC Toolkit](https://cloud.google.com/hpc-toolkit/docs/setup/configure-environment).
+[Set up Cluster Toolkit](https://cloud.google.com/cluster-toolkit/docs/setup/configure-environment).
 
 For deploying the CAE reference blueprint follow the
 [Deployment Instructions](#deployment-instructions).
@@ -99,7 +99,7 @@ storage intact and b) you can build software before you deploy your cluster.
    cd hpc-toolkit
    ```
 
-1. Build the HPC Toolkit
+1. Build the Cluster Toolkit
 
    ```bash
    make
@@ -201,8 +201,8 @@ Depending on the software you want to use, different installation paths may be r
   precompiled binaries which are provided by the ISV.
 
   See the tutorials for
-  [Ansys Fluent](https://cloud.google.com/hpc-toolkit/docs/tutorials/ansys-fluent#install_ansys_fluent)
-  and for [Siemens Simcenter STAR-CCM+](https://cloud.google.com/hpc-toolkit/docs/simcenter-star-ccm/run-workload#configure_the_vm)
+  [Ansys Fluent](https://cloud.google.com/cluster-toolkit/docs/tutorials/ansys-fluent#install_ansys_fluent)
+  and for [Siemens Simcenter STAR-CCM+](https://cloud.google.com/cluster-toolkit/docs/simcenter-star-ccm/run-workload#configure_the_vm)
   that illustrate this process.
 
   In general, you need to bring the binaries to your CAE cluster for which it is

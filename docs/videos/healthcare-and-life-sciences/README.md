@@ -101,7 +101,7 @@ storage intact and b) you can build software before you deploy your cluster.
    cd hpc-toolkit
    ```
 
-1. Build the HPC Toolkit
+1. Build the Cluster Toolkit
 
    ```bash
    make

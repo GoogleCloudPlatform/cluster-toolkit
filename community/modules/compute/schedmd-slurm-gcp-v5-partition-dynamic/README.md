@@ -31,7 +31,7 @@ of "dyn".
 
 ## Support
 
-The HPC Toolkit team maintains the wrapper around the [slurm-on-gcp] terraform
+The Cluster Toolkit team maintains the wrapper around the [slurm-on-gcp] terraform
 modules. For support with the underlying modules, see the instructions in the
 [slurm-gcp README][slurm-gcp-readme].
 

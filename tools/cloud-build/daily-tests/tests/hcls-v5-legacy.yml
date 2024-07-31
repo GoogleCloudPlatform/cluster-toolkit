@@ -17,7 +17,7 @@
 test_name: hcls-cluster
 deployment_name: "hcls-{{ build }}"
 # No non-alphanumerical characters in the slurm cluster name - they will be
-# removed by HPC Toolkit slurm wrappers, which will break the playbook
+# removed by Cluster Toolkit slurm wrappers, which will break the playbook
 slurm_cluster_name: "hcls{{ build[0:6] }}"
 zone: europe-west1-d
 workspace: /workspace

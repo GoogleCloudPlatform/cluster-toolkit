@@ -30,7 +30,7 @@ https://developer.hashicorp.com/terraform/language/modules/develop/providers#imp
 
 ## Terraform Coding Standards
 
-Any Terraform based modules in the HPC Toolkit should implement the following
+Any Terraform based modules in the Cluster Toolkit should implement the following
 standards:
 
 * `terraform-docs` is used to generate `README` files for each module.
@@ -102,7 +102,7 @@ To take/return information about instance image use variable `instance_image`. I
 
 ### `enable_oslogin {type=string}`
 
-When relevant, Enable or Disable OS Login with `"ENABLE"` or `"DISABLE"`. Set to `"INHERIT"` to inherit the project OS Login setting. . Note this ongoing development is not yet fully homogenized in the Cloud HPC Toolkit.
+When relevant, Enable or Disable OS Login with `"ENABLE"` or `"DISABLE"`. Set to `"INHERIT"` to inherit the project OS Login setting. . Note this ongoing development is not yet fully homogenized in the Cluster Toolkit.
 
 ### Network
 
@@ -138,7 +138,7 @@ If a module consumes network storage it should have a variable `network_storage`
 
 If there is a need to execute shell script, ansible playbook or just upload file to the vm-instance, consider using `startup-script` [module](https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/modules/scripts/startup-script) as a first option. `startup-script` module takes care of uploading local files to the GCS and downloading files to the vm-instance, and installing ansible if needed, configuring ssh, and executing requested scripts.
 
-To represent a script to execute HPC Toolkit modules use "runners". Runner is a `map(string)` with following expected fields:
+To represent a script to execute Cluster Toolkit modules use "runners". Runner is a `map(string)` with following expected fields:
 
 * `destination`: (Required) The name of the file at the destination VM;
 * `type`: (Required) One of the following: shell, ansible-local, and data;

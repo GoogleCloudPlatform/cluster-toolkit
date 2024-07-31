@@ -1,7 +1,7 @@
-# Google HPC Toolkit Open Front End
+# Google Cluster Toolkit Open Front End
 
 This is a web front-end for HPC applications on GCP. It delegates to the Cloud
-HPC Toolkit to create cloud resources for HPC clusters. Through the convenience
+Cluster Toolkit to create cloud resources for HPC clusters. Through the convenience
 of a web interface, system administrators can manage the life cycles of HPC
 clusters and install applications; users can prepare & submit HPC jobs and run
 benchmarks. This web application is built upon the Django framework.

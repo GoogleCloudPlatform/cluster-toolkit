@@ -2,7 +2,7 @@
 
 This module creates a [Google Cloud Storage (GCS) bucket](https://cloud.google.com/storage).
 
-For more information on this and other network storage options in the Cloud HPC
+For more information on this and other network storage options in the Cluster
 Toolkit, see the extended [Network Storage documentation](../../../../docs/network_storage.md).
 
 ### Example
@@ -63,7 +63,7 @@ To mount the Cloud Storage bucket you must first ensure that the GCS Fuse client
 has been installed and then call the proper `mount` command.
 
 Both of these steps are automatically handled with the use of the `use` command
-in a selection of HPC Toolkit modules. See the [compatibility matrix][matrix] in
+in a selection of Cluster Toolkit modules. See the [compatibility matrix][matrix] in
 the network storage doc for a complete list of supported modules.
 
 If mounting is not automatically handled as described above, the

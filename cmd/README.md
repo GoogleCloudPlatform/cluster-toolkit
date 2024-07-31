@@ -1,8 +1,8 @@
-# HPC Toolkit Commands
+# Cluster Toolkit (formally HPC Toolkit) Commands
 
 ## gcluster
 
-`gcluster` is the tool used by Cloud HPC Toolkit to create deployments of HPC
+`gcluster` is the tool used by Cluster Toolkit to create deployments of AI/ML and HPC
 clusters, also referred to as the gHPC Engine.
 
 ### Usage - gcluster
@@ -14,7 +14,7 @@ gcluster [SUBCOMMAND]
 
 ### Subcommands - gcluster
 
-* [`deploy`](#gcluster-deploy): Deploy an HPC cluster on Google Cloud
+* [`deploy`](#gcluster-deploy): Deploy an AI/ML or HPC cluster on Google Cloud
 * [`create`](#gcluster-create): Create a new deployment
 * [`expand`](#gcluster-expand): Expand the blueprint without creating a new deployment
 * [`completion`](#gcluster-completion): Generate completion script
@@ -33,7 +33,7 @@ gcluster --version
 
 ## gcluster deploy
 
-`gcluster deploy` deploys an HPC cluster on Google Cloud using the deployment directory created by `gcluster create` or creates one from supplied blueprint file.
+`gcluster deploy` deploys a cluster on Google Cloud using the deployment directory created by `gcluster create` or creates one from supplied blueprint file.
 
 ### Usage - deploy
 
@@ -43,7 +43,7 @@ gcluster deploy (<DEPLOYMENT_DIRECTORY> | <BLUEPRINT_FILE>) [flags]
 
 ## gcluster create
 
-`gcluster create` creates a deployment directory. This deployment directory is used to deploy an HPC cluster on Google Cloud.
+`gcluster create` creates a deployment directory. This deployment directory is used to deploy a cluster on Google Cloud.
 
 ### Usage - create
 
@@ -59,7 +59,7 @@ gcluster create BLUEPRINT_FILE [FLAGS]
 
 * `--backend-config strings`: Comma-separated list of name=value variables to set Terraform backend configuration. Can be used multiple times.
 * `-h, --help`: display detailed help for the create command.
-* `-o, --out string`: sets the output directory where the HPC deployment directory will be created.
+* `-o, --out string`: sets the output directory where the AI/ML or HPC deployment directory will be created.
 * `-w, --overwrite-deployment`: If specified, an existing deployment directory is overwritten by the new deployment.
 
   * Terraform state IS preserved.
