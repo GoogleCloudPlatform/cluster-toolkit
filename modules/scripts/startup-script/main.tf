@@ -98,8 +98,21 @@ locals {
     },
   ]
 
+  local_ssd_filesystem_enabled = can(coalesce(var.local_ssd_filesystem.mountpoint))
+  raid_setup = !local.local_ssd_filesystem_enabled ? [] : [
+    {
+      type        = "ansible-local"
+      destination = "setup-raid.yml"
+      content     = file("${path.module}/files/setup-raid.yml")
+      args = join(" ", [
+        "-e mountpoint=${var.local_ssd_filesystem.mountpoint}",
+        "-e fs_type=${var.local_ssd_filesystem.fs_type}",
+      ])
+    },
+  ]
+
   supplied_ansible_runners = anytrue([for r in var.runners : r.type == "ansible-local"])
-  has_ansible_runners      = anytrue([local.supplied_ansible_runners, local.configure_ssh, var.install_docker])
+  has_ansible_runners      = anytrue([local.supplied_ansible_runners, local.configure_ssh, var.install_docker, local.local_ssd_filesystem_enabled])
   install_ansible          = coalesce(var.install_ansible, local.has_ansible_runners)
   ansible_installer = local.install_ansible ? [{
     type        = "shell"
@@ -122,6 +135,7 @@ locals {
     local.ansible_installer,
     local.configure_ssh_runners,
     local.docker_runner,
+    local.raid_setup,
     var.runners
   )
 
