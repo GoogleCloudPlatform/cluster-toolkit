@@ -591,10 +591,10 @@ EOD
     user      = string
     password  = string # sensitive
     db_name   = string
-    user_managed_replication = list(object({
+    user_managed_replication = optional(list(object({
       location     = string
       kms_key_name = optional(string)
-    }))
+    })))
   })
   default   = null
   sensitive = true
