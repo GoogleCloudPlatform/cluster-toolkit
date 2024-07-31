@@ -1919,11 +1919,7 @@ def scontrol_reconfigure(lkp: Lookup) -> None:
     log.info("Running scontrol reconfigure")
     run(f"{lkp.scontrol} reconfigure", timeout=30)
 
-# Define late globals
+# Define late globals, fallback to empty config if none is saved
+# TODO: don't use global variables
 cfg = load_config_file(CONFIG_FILE)
-if not cfg:
-    try:
-        _, cfg = fetch_config()
-    except Exception as e:
-        log.warning(f"Could not load config: {e}")
 lkp = Lookup(cfg)

@@ -105,7 +105,7 @@ def end_motd(broadcast=True):
         "wall -n '*** Slurm {} setup complete ***'".format(lkp.instance_role),
         timeout=30,
     )
-    if lkp.instance_role != "controller":
+    if not lkp.is_controller:
         run(
             """wall -n '
 /home on the controller was mounted over the existing /home.
@@ -461,8 +461,20 @@ def main():
     start_motd()
     configure_dirs()
 
-    # call the setup function for the instance type
-    {
+    sleep_seconds = 5
+    while True:
+        try:
+            _, cfg = util.fetch_config()
+            # TODO: don't overwrite global variables
+            util.cfg = cfg
+            util.lkp = util.Lookup(cfg)
+            lkp = util.lkp
+            break
+        except Exception as e:
+            log.warning(f"could not fetch config, sleeping for {sleep_seconds}s: {e}")
+            time.sleep(sleep_seconds)
+
+    { # call the setup function for the instance type
         "controller": setup_controller,
         "compute": setup_compute,
         "login": setup_login,
