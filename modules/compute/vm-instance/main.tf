@@ -175,14 +175,16 @@ resource "google_compute_instance" "compute_vm" {
 
   depends_on = [var.network_self_link, var.network_storage]
 
-  name         = "${local.resource_prefix}-${count.index}"
-  machine_type = var.machine_type
-  zone         = var.zone
+  name             = "${local.resource_prefix}-${count.index}"
+  min_cpu_platform = var.min_cpu_platform
+  machine_type     = var.machine_type
+  zone             = var.zone
 
   resource_policies = google_compute_resource_policy.placement_policy[*].self_link
 
   tags   = var.tags
   labels = local.labels
+
 
   boot_disk {
     source      = google_compute_disk.boot_disk[count.index].self_link
