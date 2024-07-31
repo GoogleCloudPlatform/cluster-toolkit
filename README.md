@@ -3,17 +3,17 @@
 ## Description
 
 Cluster Toolkit is an open-source software offered by Google Cloud which makes it
-easy for customers to deploy HPC environments on Google Cloud.
+easy for customers to deploy AI/ML and HPC environments on Google Cloud.
 
-Cluster Toolkit allows customers to deploy turnkey HPC environments (compute,
+Cluster Toolkit allows customers to deploy turnkey AI/ML and HPC environments (compute,
 networking, storage, etc.) following Google Cloud best-practices, in a repeatable
 manner. The Cluster Toolkit is designed to be highly customizable and extensible,
-and intends to address the HPC deployment needs of a broad range of customers.
+and intends to address the AI/ML and HPC deployment needs of a broad range of customers.
 
 ## Detailed documentation and examples
 
 The Toolkit comes with a suite of [tutorials], [examples], and full
-documentation for a suite of [modules] that have been designed for HPC use cases.
+documentation for a suite of [modules] that have been designed for AI/ML and HPC use cases.
 More information can be found on the
 [Google Cloud Docs](https://cloud.google.com/cluster-toolkit/docs/overview).
 
@@ -124,14 +124,14 @@ The Cluster Toolkit provides modules and examples for implementing pre-built and
 ## Blueprint Validation
 
 The Toolkit contains "validator" functions that perform basic tests of the
-blueprint to ensure that deployment variables are valid and that the HPC
+blueprint to ensure that deployment variables are valid and that the AI/ML and HPC
 environment can be provisioned in your Google Cloud project. Further information
 can be found in [dedicated documentation](docs/blueprint-validation.md).
 
 ## Enable GCP APIs
 
 In a new GCP project there are several APIs that must be enabled to deploy your
-HPC cluster. These will be caught when you perform `terraform apply` but you can
+cluster. These will be caught when you perform `terraform apply` but you can
 save time by enabling them upfront.
 
 See
@@ -140,7 +140,7 @@ for instructions.
 
 ## GCP Quotas
 
-You may need to request additional quota to be able to deploy and use your HPC
+You may need to request additional quota to be able to deploy and use your
 cluster.
 
 See
@@ -149,7 +149,7 @@ for more information.
 
 ## Billing Reports
 
-You can view your billing reports for your HPC cluster on the
+You can view your billing reports for your cluster on the
 [Cloud Billing Reports](https://cloud.google.com/billing/docs/how-to/reports)
 page. ​​To view the Cloud Billing reports for your Cloud Billing account,
 including viewing the cost information for all of the Cloud projects that are

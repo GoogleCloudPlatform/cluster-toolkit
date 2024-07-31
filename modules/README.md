@@ -1,7 +1,7 @@
 # Modules
 
 This directory contains a set of core modules built for the Cluster Toolkit. Modules
-describe the building blocks of an HPC deployment. The expected fields in a
+describe the building blocks of an AI/ML and HPC deployment. The expected fields in a
 module are listed in more detail [below](#module-fields). Blueprints can be
 extended in functionality by incorporating [modules from GitHub
 repositories][ghmods].
@@ -561,7 +561,7 @@ internal_ip_simplevm = [
 ### Required Services (APIs) (optional)
 
 Each Toolkit module depends upon Google Cloud services ("APIs") being enabled
-in the project used by the HPC environment. For example, the [creation of
+in the project used by the AI/ML and HPC environment. For example, the [creation of
 VMs](compute/vm-instance/) requires the Compute Engine API
 (compute.googleapis.com). The [startup-script](scripts/startup-script/) module
 requires the Cloud Storage API (storage.googleapis.com) for storage of the
@@ -599,7 +599,7 @@ than having to set it manually.
   monitoring, labels must be exposed. We strongly recommend that all modules
   expose this variable.
 
-## Writing Custom HPC Modules
+## Writing Custom Cluster Toolkit Modules
 
 Modules are flexible by design, however we do define some [best practices](../docs/module-guidelines.md) when
 creating a new module meant to be used with the Cluster Toolkit.
