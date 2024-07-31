@@ -480,3 +480,16 @@ variable "network_storage" {
   }))
   default = []
 }
+
+
+variable "instance_properties" {
+  description = <<-EOD
+    Override the instance properties. Used to test features not supported by Slurm GCP,
+    recommended for advanced usage only.
+    See https://cloud.google.com/compute/docs/reference/rest/v1/regionInstances/bulkInsert
+    If any sub-field (e.g. scheduling) is set, it will override the values computed by 
+    SlurmGCP and ignoring values of provided vars.
+  EOD
+  type        = any
+  default     = null
+}
