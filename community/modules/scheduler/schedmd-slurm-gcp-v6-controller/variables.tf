@@ -268,12 +268,14 @@ variable "nodeset" {
     spot               = optional(bool, false)
     tags               = optional(list(string), [])
     termination_action = optional(string)
-    zones              = optional(list(string), [])
-    zone_target_shape  = optional(string, "ANY_SINGLE_ZONE")
     reservation_name   = optional(string)
     startup_script = optional(list(object({
       filename = string
     content = string })), [])
+
+    zone_target_shape = optional(string, "ANY_SINGLE_ZONE")
+    zone_policy_allow = optional(set(string), [])
+    zone_policy_deny  = optional(set(string), [])
   }))
   default = []
 }
