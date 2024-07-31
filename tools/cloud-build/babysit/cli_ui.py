@@ -16,6 +16,7 @@ import sys
 from typing import Sequence, Dict, Optional
 import time
 from enum import Enum
+from collections import defaultdict
 
 from .core import Status, Build, latest_by_trigger, trig_name
 
@@ -40,7 +41,6 @@ class CliUI: # implements UIProto
         if not builds:
             print("found no builds")
         else:
-            print(f"found {len(builds)} builds:")
             self._render_summary(builds)
 
     def on_done(self, builds: Sequence[Build]) -> None:
@@ -51,24 +51,29 @@ class CliUI: # implements UIProto
     def on_update(self, builds: Sequence[Build]) -> None:
         for b in builds:
             if b.status != self._status.get(b.id):
-                br = self._render_build(b)
-                sr = self._render_status(self._status.get(b.id))
-                print(f"status update: {sr} > {br}")
+                print(self._render_build(b))
                 self._change = True
             self._status[b.id] = b.status
 
     def on_action(self, action: str, build: Build) -> None:
-        print(f"{action} {self._render_build(build)}")
+        pass
 
     def sleep(self, sec: int) -> None:
         time.sleep(sec)
 
     def _render_summary(self, builds: Sequence[Build]) -> None:
         order_fn = lambda bc: (bc.build.status, trig_name(bc.build))
+        cnt = defaultdict(int)
 
         ordered = sorted(latest_by_trigger(builds).values(), key=order_fn)
         for bc in ordered:
             print(self._render_build(bc.build, bc.count))
+            cnt[bc.build.status] += 1
+        
+        print(f"------- TOTAL:{sum(cnt.values())} ", end="")
+        for s, c in cnt.items():
+            print(f"| {self._render_status(s)}: {c} ", end="")
+        print("")
 
     def _color(self) -> bool:
         if self._no_color: return False
