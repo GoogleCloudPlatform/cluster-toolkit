@@ -99,7 +99,7 @@ locals {
   ]
 
   local_ssd_filesystem_enabled = can(coalesce(var.local_ssd_filesystem.mountpoint))
-  raid_setup = local.local_ssd_filesystem_enabled ? [] : [
+  raid_setup = !local.local_ssd_filesystem_enabled ? [] : [
     {
       type        = "ansible-local"
       destination = "setup-raid.yml"
