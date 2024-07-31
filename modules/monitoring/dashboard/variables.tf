@@ -37,7 +37,7 @@ variable "base_dashboard" {
 variable "title" {
   description = "Title of the created dashboard"
   type        = string
-  default     = "HPC Toolkit Dashboard"
+  default     = "Cluster Toolkit Dashboard"
 }
 
 variable "widgets" {

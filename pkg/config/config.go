@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package config manages and updates the ghpc input config
+// Package config manages and updates the gcluster input config
 package config
 
 import (

@@ -1,9 +1,9 @@
-# HPC Toolkit FrontEnd - User Guide
+# Cluster Toolkit FrontEnd - User Guide
 <!--
 0        1         2         3         4         5         6         7        8
 1234567890123456789012345678901234567890123456789012345678901234567890234567890
 -->
-This document is for standard users of the HPC Toolkit FrontEnd. Standard users
+This document is for standard users of the Cluster Toolkit FrontEnd. Standard users
 can access HPC clusters and installed applications as set up by the
 administrators. They can prepare, submit and run jobs on the cluster through
 the convenience of the web interface.
@@ -15,7 +15,7 @@ guidance on how to provision and manage cloud resources for HPC clusters.
 
 An administrator should have arranged access to the system for a standard user:
 
-- A URL should be provided on which an instance of the HPC Toolkit FrontEnd is
+- A URL should be provided on which an instance of the Cluster Toolkit FrontEnd is
   deployed.
 - The Google identity of the user should be whitelisted to access the instance.
 - The user should be set as authorised users on existing HPC clusters.

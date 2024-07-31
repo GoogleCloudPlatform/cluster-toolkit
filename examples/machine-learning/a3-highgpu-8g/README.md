@@ -16,10 +16,10 @@ a3-highgpu-8g compute nodes running NVIDIA H100 GPUs.
 
 Please follow the initial instructions for:
 
-- Installing Cloud HPC Toolkit [dependencies][tkdeps] (Go, Terraform, Packer)
-- Installing the Cloud HPC [Toolkit][tkinstall]
+- Installing Cluster Toolkit [dependencies][tkdeps] (Go, Terraform, Packer)
+- Installing the Cluster [Toolkit][tkinstall]
 
-Verify that your release of the HPC Toolkit is 1.31.1 or later.
+Verify that your release of the Cluster Toolkit is 1.31.1 or later.
 
 ```shell
 ghpc --version
@@ -44,7 +44,7 @@ source /absolute/path/to/toolkit-a3/bin/activate
 
 ## Top-Level Design of Solution
 
-The solution is split into 3 HPC Toolkit blueprints:
+The solution is split into 3 Cluster Toolkit blueprints:
 
 1. Provision 5 VPCs (1 system network, 4 GPU networks) and 1 Filestore for
 mounting `/home` across the cluster
@@ -304,7 +304,7 @@ benchmark. It assumes the availability of a GPU/NIC topology file at
 into the DLVM images used by this solution, but may need to be provided if
 using an alternative image.
 
-### Clone the HPC Toolkit repository containing the NCCL benchmark
+### Clone the Cluster Toolkit repository containing the NCCL benchmark
 
 ```shell
 git clone https://github.com/GoogleCloudPlatform/hpc-toolkit
@@ -330,5 +330,5 @@ sbatch run-nccl-tests.sh
 ```
 
 [consume]: https://cloud.google.com/compute/docs/instances/reservations-consume#consuming_instances_from_any_matching_reservation
-[tkdeps]: https://cloud.google.com/hpc-toolkit/docs/setup/install-dependencies
+[tkdeps]: https://cloud.google.com/cluster-toolkit/docs/setup/install-dependencies
 [tkinstall]: https://github.com/GoogleCloudPlatform/hpc-toolkit/#quickstart

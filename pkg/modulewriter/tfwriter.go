@@ -228,13 +228,13 @@ func writeTerraformInstructions(w io.Writer, grpPath string, n config.GroupName,
 	fmt.Fprintln(w, "To deploy, run the following commands:")
 	fmt.Fprintln(w)
 	if printImportInputs {
-		fmt.Fprintf(w, "ghpc import-inputs %s\n", grpPath)
+		fmt.Fprintf(w, "gcluster import-inputs %s\n", grpPath)
 	}
 	fmt.Fprintf(w, "terraform -chdir=%s init\n", grpPath)
 	fmt.Fprintf(w, "terraform -chdir=%s validate\n", grpPath)
 	fmt.Fprintf(w, "terraform -chdir=%s apply\n", grpPath)
 	if printExportOutputs {
-		fmt.Fprintf(w, "ghpc export-outputs %s\n", grpPath)
+		fmt.Fprintf(w, "gcluster export-outputs %s\n", grpPath)
 	}
 }
 
@@ -405,7 +405,7 @@ func FindIntergroupVariables(group config.Group, bp config.Blueprint) map[config
 		res[r] = modulereader.VarInfo{
 			Name:        n,
 			Type:        cty.DynamicPseudoType,
-			Description: "Automatically generated input from previous groups (ghpc import-inputs --help)",
+			Description: "Automatically generated input from previous groups (gcluster import-inputs --help)",
 			Required:    true,
 		}
 	}

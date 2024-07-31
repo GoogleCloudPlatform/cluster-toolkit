@@ -126,7 +126,7 @@ specified number of VMs are created. See the warning below if using this field.
 
 ### GPU Support
 
-More information on GPU support in `vm-instance` and other HPC Toolkit modules
+More information on GPU support in `vm-instance` and other Cluster Toolkit modules
 can be found at [docs/gpu-support.md](../../../docs/gpu-support.md)
 
 ## Lifecycle
