@@ -150,12 +150,9 @@ data "archive_file" "slurm_gcp_devel_zip" {
   source_dir  = local.scripts_dir
 
   excludes = flatten([
-    "config.yaml",
-    "Pipfile",
-    fileset(local.scripts_dir, "__pycache__/*"),
-    fileset(local.scripts_dir, "*.log"),
-    fileset(local.scripts_dir, "*.cache"),
-    fileset(local.scripts_dir, "*.lock"),
+    fileset(local.scripts_dir, "tests/**"),
+    # TODO: consider removing (including nested) __pycache__ and all .* files
+    # Though it only affects developers
   ])
 
 }
