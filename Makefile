@@ -40,11 +40,13 @@ install-user:
 	$(info ******** installing gcluster in ~/bin *********************)
 	mkdir -p ~/bin
 	install ./gcluster ~/bin
+	ln -sf ~/bin/gcluster ~/bin/ghpc
 
 ifeq ($(shell id -u), 0)
 install:
 	$(info ***** installing gcluster in /usr/local/bin ***************)
 	install ./gcluster /usr/local/bin
+	ln -sf /usr/local/bin/gcluster /usr/local/bin/ghpc
 
 else
 install: install-user
