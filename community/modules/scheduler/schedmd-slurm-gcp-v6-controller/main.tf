@@ -33,6 +33,16 @@ data "google_compute_default_service_account" "default" {
   project = var.project_id
 }
 
+locals {
+  service_account_email = coalesce(var.service_account_email, data.google_compute_default_service_account.default.email)
+
+  # can't rely on `email=null` as it's used to instantiate `cloudsql_secret_accessor`
+  service_account = {
+    email  = local.service_account_email
+    scopes = var.service_account_scopes
+  }
+}
+
 # See 
 # * slurm_files.tf
 # * controller.tf

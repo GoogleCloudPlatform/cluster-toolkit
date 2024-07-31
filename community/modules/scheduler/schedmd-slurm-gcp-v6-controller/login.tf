@@ -78,5 +78,5 @@ module "slurm_login_instance" {
   zone       = each.value.zone
 
   # trigger replacement of login nodes when the controller instance is replaced
-  replace_trigger = module.slurm_controller_instance.instances_self_links[0]
+  replace_trigger = resource.google_compute_instance.controller.self_link
 }

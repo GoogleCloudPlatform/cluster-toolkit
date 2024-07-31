@@ -1,4 +1,4 @@
-# Copyright 2023 Google LLC
+# Copyright 2024 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,135 +13,159 @@
 # limitations under the License.
 
 locals {
-  additional_disks = [
-    for ad in var.additional_disks : {
-      disk_name    = ad.disk_name
-      device_name  = ad.device_name
-      disk_type    = ad.disk_type
-      disk_size_gb = ad.disk_size_gb
-      disk_labels  = merge(ad.disk_labels, local.labels)
-      auto_delete  = ad.auto_delete
-      boot         = ad.boot
-    }
-  ]
+  controller_labels = merge({
+    slurm_cluster_name  = local.slurm_cluster_name
+    slurm_instance_role = "controller"
+  }, local.labels)
 
-  service_account_email = coalesce(var.service_account_email, data.google_compute_default_service_account.default.email)
+  on_host_maintenance = (
+    var.preemptible || var.enable_confidential_vm || length(local.guest_accelerator) > 0
+    ? "TERMINATE"
+    : var.on_host_maintenance
+  )
 
-  # can't rely on `email=null` as it's used to instantiate `cloudsql_secret_accessor`
-  service_account = {
-    email  = local.service_account_email
-    scopes = var.service_account_scopes
+  nic_type_map = {
+    virtio_enabled = "VIRTIO_NET"
+    gvnic_enabled  = "GVNIC"
+    tier_1_enabled = "GVNIC"
   }
+  nic_type                    = lookup(local.nic_type_map, var.bandwidth_tier, null)
+  total_egress_bandwidth_tier = var.bandwidth_tier == "tier_1_enabled" ? "TIER_1" : "DEFAULT"
+
+  scratch_disks  = [for d in var.additional_disks : d if d.disk_type == "local-ssd"]
+  attached_disks = { for d in var.additional_disks : d.disk_name => d if d.disk_type != "local-ssd" }
 }
 
-# INSTANCE TEMPLATE
-module "slurm_controller_template" {
-  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=6.5.13"
+resource "google_compute_disk" "attached_disk" {
+  for_each = local.attached_disks
 
-  project_id          = var.project_id
-  region              = var.region
-  slurm_instance_role = "controller"
-  slurm_cluster_name  = local.slurm_cluster_name
-  labels              = local.labels
+  project = var.project_id
+  name    = each.value.disk_name
+  size    = each.value.disk_size_gb
+  type    = each.value.disk_type
+  zone    = var.zone
+  labels  = merge(local.controller_labels, each.value.disk_labels)
+}
 
-  disk_auto_delete = var.disk_auto_delete
-  disk_labels      = merge(var.disk_labels, local.labels)
-  disk_size_gb     = var.disk_size_gb
-  disk_type        = var.disk_type
-  additional_disks = local.additional_disks
-
-  bandwidth_tier    = var.bandwidth_tier
-  slurm_bucket_path = module.slurm_files.slurm_bucket_path
-  can_ip_forward    = var.can_ip_forward
-  disable_smt       = !var.enable_smt
-
-  enable_confidential_vm   = var.enable_confidential_vm
-  enable_oslogin           = var.enable_oslogin
-  enable_shielded_vm       = var.enable_shielded_vm
-  shielded_instance_config = var.shielded_instance_config
-
-  gpu = one(local.guest_accelerator)
-
+resource "google_compute_instance" "controller" {
+  project          = var.project_id
+  zone             = var.zone
+  name             = "${local.slurm_cluster_name}-controller"
   machine_type     = var.machine_type
-  metadata         = merge(var.metadata, local.universe_domain)
   min_cpu_platform = var.min_cpu_platform
 
-  # network_ip = TODO: add support for network_ip
-  on_host_maintenance = var.on_host_maintenance
-  preemptible         = var.preemptible
-  service_account     = local.service_account
+  labels = merge(local.files_cs_labels, local.controller_labels)
 
-  source_image_family  = local.source_image_family             # requires source_image_logic.tf
-  source_image_project = local.source_image_project_normalized # requires source_image_logic.tf
-  source_image         = local.source_image                    # requires source_image_logic.tf
+  metadata = merge(
+    var.metadata,
+    local.universe_domain,
+    {
+      enable-oslogin      = var.enable_oslogin ? "TRUE" : "FALSE"
+      slurm_bucket_path   = module.slurm_files.slurm_bucket_path
+      slurm_cluster_name  = local.slurm_cluster_name
+      slurm_instance_role = "controller"
+      VmDnsSetting        = "GlobalOnly"
+      startup-script      = file("${path.module}/scripts/startup.sh")
+  })
 
-  # spot = TODO: add support for spot (?)
-  subnetwork = var.subnetwork_self_link
+
+  boot_disk {
+    auto_delete = var.disk_auto_delete
+
+    initialize_params {
+      size   = var.disk_size_gb
+      type   = var.disk_type
+      image  = "${local.source_image_project_normalized}/${coalesce(local.source_image, local.source_image_family)}"
+      labels = merge(local.controller_labels, var.disk_labels)
+    }
+  }
+
+  dynamic "scratch_disk" {
+    for_each = local.scratch_disks
+    content {
+      interface = "NVME"
+    }
+  }
+
+  dynamic "attached_disk" {
+    for_each = local.attached_disks
+    content {
+      source      = google_compute_disk.attached_disk[attached_disk.key].self_link
+      device_name = attached_disk.value.device_name
+    }
+  }
+
+  network_interface {
+    subnetwork = var.subnetwork_self_link
+    network_ip = try(var.static_ips[0], null)
+    nic_type   = local.nic_type
+
+    dynamic "access_config" {
+      for_each = var.enable_controller_public_ips ? [1] : []
+      content {
+        nat_ip       = null
+        network_tier = null
+      }
+    }
+  }
+  network_performance_config {
+    total_egress_bandwidth_tier = local.total_egress_bandwidth_tier
+  }
+  can_ip_forward = var.can_ip_forward
+
+  service_account {
+    email  = local.service_account.email
+    scopes = local.service_account.scopes
+  }
+
+  scheduling {
+    preemptible                 = var.preemptible
+    provisioning_model          = var.preemptible ? "SPOT" : "STANDARD"
+    automatic_restart           = !var.preemptible # yes, unless preemptible
+    on_host_maintenance         = local.on_host_maintenance
+    instance_termination_action = var.preemptible ? "STOP" : null
+  }
+
+  advanced_machine_features {
+    enable_nested_virtualization = false
+    threads_per_core             = var.enable_smt ? null : 1
+  }
+
+  # NOTE: Even if all the shielded_instance_config values are false, 
+  # if the config block exists and an unsupported image is chosen,
+  # the apply will fail so we use a single-value array with the default value to
+  # initialize the block only if it is enabled.
+  dynamic "shielded_instance_config" {
+    for_each = var.enable_shielded_vm ? [1] : []
+    content {
+      enable_secure_boot          = var.shielded_instance_config.enable_secure_boot
+      enable_vtpm                 = var.shielded_instance_config.enable_vtpm
+      enable_integrity_monitoring = var.shielded_instance_config.enable_integrity_monitoring
+    }
+  }
+
+  dynamic "confidential_instance_config" {
+    for_each = var.enable_confidential_vm ? [1] : []
+    content {
+      enable_confidential_compute = true
+    }
+  }
+
+  dynamic "guest_accelerator" {
+    for_each = local.guest_accelerator
+    content {
+      type  = guest_accelerator.value.type
+      count = guest_accelerator.value.count
+    }
+  }
 
   tags = concat([local.slurm_cluster_name], var.tags)
-  # termination_action = TODO: add support for termination_action (?)
-}
 
-# INSTANCE
-locals {
-  # TODO: add support for proper access_config
-  access_config = {
-    nat_ip       = null
-    network_tier = null
+  lifecycle {
+    create_before_destroy = "true"
   }
-}
-
-module "slurm_controller_instance" {
-  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/_slurm_instance?ref=6.5.13"
-
-  access_config       = var.enable_controller_public_ips ? [local.access_config] : []
-  add_hostname_suffix = false
-  hostname            = "${local.slurm_cluster_name}-controller"
-  instance_template   = module.slurm_controller_template.self_link
-
-  project_id          = var.project_id
-  region              = var.region
-  slurm_cluster_name  = local.slurm_cluster_name
-  slurm_instance_role = "controller"
-  static_ips          = var.static_ips
-  subnetwork          = var.subnetwork_self_link
-  zone                = var.zone
-  metadata            = var.metadata
-
-  labels = merge(local.labels, local.files_cs_labels)
 
   depends_on = [
-    # Ensure that controller is destroyed BEFORE doing cleanup
-    null_resource.cleanup_compute[0],
+    null_resource.cleanup_compute[0], # Ensure that controller is destroyed BEFORE doing cleanup
   ]
-}
-
-# SECRETS: CLOUDSQL
-resource "google_secret_manager_secret" "cloudsql" {
-  count = var.cloudsql != null ? 1 : 0
-
-  secret_id = "${local.slurm_cluster_name}-slurm-secret-cloudsql"
-
-  replication {
-    auto {}
-  }
-
-  labels = {
-    slurm_cluster_name = local.slurm_cluster_name
-  }
-}
-
-resource "google_secret_manager_secret_version" "cloudsql_version" {
-  count = var.cloudsql != null ? 1 : 0
-
-  secret      = google_secret_manager_secret.cloudsql[0].id
-  secret_data = jsonencode(var.cloudsql)
-}
-
-resource "google_secret_manager_secret_iam_member" "cloudsql_secret_accessor" {
-  count = var.cloudsql != null ? 1 : 0
-
-  secret_id = google_secret_manager_secret.cloudsql[0].id
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${local.service_account.email}"
 }
