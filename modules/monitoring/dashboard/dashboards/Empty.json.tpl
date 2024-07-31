@@ -5,7 +5,7 @@
     "widgets": [
       {
         "text": {
-          "content": "Metrics from the ${deployment_name} deployment of the HPC Toolkit.",
+          "content": "Metrics from the ${deployment_name} deployment of the Cluster Toolkit.",
           "format": "MARKDOWN"
         },
         "title": "${title}"

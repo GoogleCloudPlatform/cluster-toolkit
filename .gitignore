@@ -2,6 +2,7 @@
 
 # Built Binary
 ghpc
+gcluster
 # Expand artifact
 expanded.yaml
 # macOS Desktop Services Store

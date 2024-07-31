@@ -151,7 +151,7 @@ existing user will be used for Spack installation.
 
 #### OS Login User
 
-If OS Login is enabled (default for most HPC Toolkit modules) then you can
+If OS Login is enabled (default for most Cluster Toolkit modules) then you can
 provide an OS Login user name:
 
 ```yaml

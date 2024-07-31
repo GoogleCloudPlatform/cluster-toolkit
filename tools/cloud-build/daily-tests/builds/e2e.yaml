@@ -33,9 +33,9 @@ steps:
 
     cd /workspace
     make
-    ./ghpc deploy tools/cloud-build/daily-tests/blueprints/e2e.yaml --vars="$vars" --auto-approve
+    ./gcluster deploy tools/cloud-build/daily-tests/blueprints/e2e.yaml --vars="$vars" --auto-approve
 
     # check instance was created
     gcloud compute instances describe "${depl_name}-0" --project="$PROJECT_ID" --zone="$zone" >/dev/null
 
-    ./ghpc destroy "$depl_name" --auto-approve
+    ./gcluster destroy "$depl_name" --auto-approve

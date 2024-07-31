@@ -43,7 +43,7 @@ via a [PubSub BigQuery subscription](https://cloud.google.com/pubsub/docs/bigque
 
 ## Basic getting started
 
-1. Get the HPC Toolkit configured.
+1. Get the Cluster Toolkit configured.
 
 Build the `ghpc` binary:
 

@@ -1,4 +1,4 @@
-# Configuring Cloud Workstations for usage with the Cloud HPC Toolkit
+# Configuring Cloud Workstations for usage with the Cluster Toolkit
 
 > **_NOTE:_** If you want to redirect container registry repos to artifact registry, please see
 > [this artifact registry guide](https://cloud.google.com/artifact-registry/docs/transition/setup-gcr-repo?&_ga=2.33584865.-1391632029.1681343137#redirect-enable).
@@ -27,9 +27,9 @@ The following will create a repository called `hpc-toolkit-workstation-image` in
 gcloud artifacts repositories create ${WORKSTATION_NAME} --repository-format=docker --location=${LOCATION} --project=${PROJECT_ID}
 ```
 
-## Build a Cloud Workstation container with all developer dependencies for the HPC Toolkit
+## Build a Cloud Workstation container with all developer dependencies for the Cluster Toolkit
 
-To build the Cloud workstation container as defined in the [Dockerfile](./Dockerfile), run the following command from the root of the HPC-Toolkit repo:
+To build the Cloud workstation container as defined in the [Dockerfile](./Dockerfile), run the following command from the root of the Cluster-Toolkit repo:
 
 ```sh
 gcloud builds submit --config=tools/cloud-workstations/workstation-image.yaml --substitutions _LOCATION=${LOCATION},_REPO=${WORKSTATION_NAME} --project ${PROJECT_ID}
@@ -75,9 +75,9 @@ Once this is complete, the cloud console can be used to start and launch the wor
 ## Using the Cloud Workstation
 
 > [!IMPORTANT]
-> When the workstation is launched for the first time, the system will clone hpc-toolkit and install a number of useful code-oss extensions for working with the toolkit.  This will be done in the background.  Please allow 4-5 min for installation.
+> When the workstation is launched for the first time, the system will clone cluster-toolkit and install a number of useful code-oss extensions for working with the toolkit.  This will be done in the background.  Please allow 4-5 min for installation.
 
-Once built and upon initial launch (assuming no changes were made to the files used to build the workstation image), the workstation should have a clean version of the main branch HPC Toolkit in the user's home directory, as well as all of the prerequisites required to build and run pre-commit (see [Development](../../README.md#development)).
+Once built and upon initial launch (assuming no changes were made to the files used to build the workstation image), the workstation should have a clean version of the main branch Cluster Toolkit in the user's home directory, as well as all of the prerequisites required to build and run pre-commit (see [Development](../../README.md#development)).
 
 The final setup steps are:
 

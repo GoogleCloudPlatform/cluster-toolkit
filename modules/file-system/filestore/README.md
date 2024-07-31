@@ -4,7 +4,7 @@ This module creates a [filestore](https://cloud.google.com/filestore)
 instance. Filestore is a high performance network file system that can be
 mounted to one or more compute VMs.
 
-For more information on this and other network storage options in the Cloud HPC
+For more information on this and other network storage options in the Cluster
 Toolkit, see the extended [Network Storage documentation](../../../docs/network_storage.md).
 
 ### Filestore tiers
@@ -101,7 +101,7 @@ To mount the Filestore instance you must first ensure that the NFS client has
 been installed and then call the proper `mount` command.
 
 Both of these steps are automatically handled with the use of the `use` command
-in a selection of HPC Toolkit modules. See the [compatibility matrix][matrix] in
+in a selection of Cluster Toolkit modules. See the [compatibility matrix][matrix] in
 the network storage doc for a complete list of supported modules.
 See the [hpc-slurm](../../../examples/hpc-slurm.yaml) for
 an example of using this module with Slurm.

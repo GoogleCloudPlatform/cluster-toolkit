@@ -1,10 +1,10 @@
-# HPC Toolkit HTCondor Tutorial
+# Cluster Toolkit HTCondor Tutorial
 
-HPC Toolkit is an open-source software offered by Google Cloud which makes it
+Cluster Toolkit is an open-source software offered by Google Cloud which makes it
 easy for customers to deploy HPC environments on Google Cloud.
 
 This tutorial will walk you through deploying a simple HTCondor pool on Google
-Cloud using the HPC Toolkit.
+Cloud using the Cluster Toolkit.
 
 ## Select a Project
 
@@ -28,7 +28,7 @@ but you can save time by enabling them now by running:
 
 ## Build the Toolkit Binary
 
-To build HPC Toolkit binary from source run:
+To build Cluster Toolkit binary from source run:
 
 ```bash
 make
@@ -41,7 +41,7 @@ build run:
 ./ghpc --version
 ```
 
-This should show you the version of the HPC Toolkit you are using.
+This should show you the version of the Cluster Toolkit you are using.
 
 (Optional) To install the `ghpc` binary in your home directory under bin,
 run the following command:

@@ -36,7 +36,7 @@ variable "project_id" {
 }
 
 variable "deployment_name" {
-  description = "HPC Toolkit deployment name. Cloud resource names will include this value."
+  description = "Cluster Toolkit deployment name. Cloud resource names will include this value."
   type        = string
 }
 

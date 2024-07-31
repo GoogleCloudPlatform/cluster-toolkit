@@ -1,54 +1,54 @@
-# HPC Toolkit Commands
+# Cluster Toolkit (formally HPC Toolkit) Commands
 
-## ghpc
+## gcluster
 
-`ghpc` is the tool used by Cloud HPC Toolkit to create deployments of HPC
+`gcluster` is the tool used by Cluster Toolkit to create deployments of AI/ML and HPC
 clusters, also referred to as the gHPC Engine.
 
-### Usage - ghpc
+### Usage - gcluster
 
 ```bash
-ghpc [FLAGS]
-ghpc [SUBCOMMAND]
+gcluster [FLAGS]
+gcluster [SUBCOMMAND]
 ```
 
-### Subcommands - ghpc
+### Subcommands - gcluster
 
-* [`deploy`](#ghpc-deploy): Deploy an HPC cluster on Google Cloud
-* [`create`](#ghpc-create): Create a new deployment
-* [`expand`](#ghpc-expand): Expand the blueprint without creating a new deployment
-* [`completion`](#ghpc-completion): Generate completion script
-* [`help`](#ghpc-help): Display help information for any command
+* [`deploy`](#gcluster-deploy): Deploy an AI/ML or HPC cluster on Google Cloud
+* [`create`](#gcluster-create): Create a new deployment
+* [`expand`](#gcluster-expand): Expand the blueprint without creating a new deployment
+* [`completion`](#gcluster-completion): Generate completion script
+* [`help`](#gcluster-help): Display help information for any command
 
-### Flags - ghpc
+### Flags - gcluster
 
-* `-h, --help`: displays detailed help for the ghpc command.
-* `-v, --version`: displays the version of ghpc being used.
+* `-h, --help`: displays detailed help for the gcluster command.
+* `-v, --version`: displays the version of gcluster being used.
 
-### Example - ghpc
+### Example - gcluster
 
 ```bash
-ghpc --version
+gcluster --version
 ```
 
-## ghpc deploy
+## gcluster deploy
 
-`ghpc deploy` deploys an HPC cluster on Google Cloud using the deployment directory created by `ghpc create` or creates one from supplied blueprint file.
+`gcluster deploy` deploys a cluster on Google Cloud using the deployment directory created by `gcluster create` or creates one from supplied blueprint file.
 
 ### Usage - deploy
 
 ```bash
-ghpc deploy (<DEPLOYMENT_DIRECTORY> | <BLUEPRINT_FILE>) [flags]
+gcluster deploy (<DEPLOYMENT_DIRECTORY> | <BLUEPRINT_FILE>) [flags]
 ```
 
-## ghpc create
+## gcluster create
 
-`ghpc create` creates a deployment directory. This deployment directory is used to deploy an HPC cluster on Google Cloud.
+`gcluster create` creates a deployment directory. This deployment directory is used to deploy a cluster on Google Cloud.
 
 ### Usage - create
 
 ```sh
-ghpc create BLUEPRINT_FILE [FLAGS]
+gcluster create BLUEPRINT_FILE [FLAGS]
 ```
 
 ### Positional arguments - create
@@ -59,7 +59,7 @@ ghpc create BLUEPRINT_FILE [FLAGS]
 
 * `--backend-config strings`: Comma-separated list of name=value variables to set Terraform backend configuration. Can be used multiple times.
 * `-h, --help`: display detailed help for the create command.
-* `-o, --out string`: sets the output directory where the HPC deployment directory will be created.
+* `-o, --out string`: sets the output directory where the AI/ML or HPC deployment directory will be created.
 * `-w, --overwrite-deployment`: If specified, an existing deployment directory is overwritten by the new deployment.
 
   * Terraform state IS preserved.
@@ -85,29 +85,29 @@ For example to create a deployment folder using a blueprint named `my-blueprint`
 run the following command:
 
 ```bash
-ghpc create my-blueprint
+gcluster create my-blueprint
 ```
 
-## ghpc expand
+## gcluster expand
 
-`ghpc expand` takes as input a blueprint file and expands all the fields
+`gcluster expand` takes as input a blueprint file and expands all the fields
 necessary to create a deployment without actually creating the deployment
 directory. It outputs an expanded blueprint, which can be used for debugging
-purposes and can be used as input to `ghpc create`.
+purposes and can be used as input to `gcluster create`.
 
-For detailed usage information, run `ghpc help create`.
+For detailed usage information, run `gcluster help create`.
 
-## ghpc completion
-Generates a script that enables command completion for `ghpc` for a given shell.
+## gcluster completion
+Generates a script that enables command completion for `gcluster` for a given shell.
 
-For detailed usage information, run `ghpc help completion`
+For detailed usage information, run `gcluster help completion`
 
-## ghpc help
-`ghpc help` prints the usage information for `ghpc` and subcommands of `ghpc`.
+## gcluster help
+`gcluster help` prints the usage information for `gcluster` and subcommands of `gcluster`.
 
-To generate usage details for `ghpc`, run `ghpc help`. To generate usage
+To generate usage details for `gcluster`, run `gcluster help`. To generate usage
 details for a specific command, for example `expand`, run the following command:
 
 ```bash
-ghpc help expand
+gcluster help expand
 ```

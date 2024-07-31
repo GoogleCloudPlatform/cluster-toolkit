@@ -185,7 +185,7 @@ main() {
 		fi
 	fi
 
-	# Create pip virtual environment for HPC Toolkit
+	# Create pip virtual environment for Cluster Toolkit
 	${python_path} -m venv "${venv_path}" --copies
 	venv_python_path=${venv_path}/bin/python3
 

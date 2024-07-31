@@ -1,4 +1,4 @@
-# Custom Images in the HPC Toolkit
+# Custom Images in the Cluster Toolkit (formally HPC Toolkit)
 
 Please review the
 [introduction to image building](../../../docs/image-building.md) for general
@@ -7,7 +7,7 @@ information on building custom images using the Toolkit.
 ## Introduction
 
 This module uses [Packer](https://www.packer.io/) to create an image within an
-HPC Toolkit deployment. Packer operates by provisioning a short-lived VM in
+Cluster Toolkit deployment. Packer operates by provisioning a short-lived VM in
 Google Cloud on which it executes scripts to customize the boot disk for
 repeated use. The VM's boot disk is specified from a source image that defaults
 to the [HPC VM Image][hpcimage]. This Packer "template" supports customization
@@ -272,7 +272,7 @@ No resources.
 | <a name="input_accelerator_type"></a> [accelerator\_type](#input\_accelerator\_type) | Type of accelerator cards to attach to the VM; not necessary for families that always include GPUs (A2). | `string` | `null` | no |
 | <a name="input_ansible_playbooks"></a> [ansible\_playbooks](#input\_ansible\_playbooks) | A list of Ansible playbook configurations that will be uploaded to customize the VM image | <pre>list(object({<br>    playbook_file   = string<br>    galaxy_file     = string<br>    extra_arguments = list(string)<br>  }))</pre> | `[]` | no |
 | <a name="input_communicator"></a> [communicator](#input\_communicator) | Communicator to use for provisioners that require access to VM ("ssh" or "winrm") | `string` | `null` | no |
-| <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | HPC Toolkit deployment name | `string` | n/a | yes |
+| <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Cluster Toolkit deployment name | `string` | n/a | yes |
 | <a name="input_disk_size"></a> [disk\_size](#input\_disk\_size) | Size of disk image in GB | `number` | `null` | no |
 | <a name="input_disk_type"></a> [disk\_type](#input\_disk\_type) | Type of persistent disk to provision | `string` | `"pd-balanced"` | no |
 | <a name="input_enable_shielded_vm"></a> [enable\_shielded\_vm](#input\_enable\_shielded\_vm) | Enable the Shielded VM configuration (var.shielded\_instance\_config). | `bool` | `false` | no |

@@ -51,7 +51,7 @@ Each runner receives the following attributes:
 ### Runner dependencies
 
 `ansible-local` runners require Ansible to be installed in the VM before
-running. To support other playbook runners in the HPC Toolkit, we install
+running. To support other playbook runners in the Cluster Toolkit, we install
 version 2.11 of `ansible-core` as well as the larger package of collections
 found in `ansible` version 4.10.0.
 

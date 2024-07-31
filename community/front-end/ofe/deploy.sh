@@ -15,7 +15,7 @@
 
 ################################################################################
 #                                                                              #
-#                    HPC Toolkit FrontEnd deployment script                    #
+#                    Cluster Toolkit FrontEnd deployment script                    #
 #                                                                              #
 ################################################################################
 #
@@ -332,7 +332,7 @@ check_account() {
 		echo ""
 		echo "Warning: account is not Owner or Editor of project"
 		echo "         Please ensure account has correct permissions before proceeding."
-		echo "         See HPC Toolkit FrontEnd Administrator's Guide for details."
+		echo "         See Cluster Toolkit FrontEnd Administrator's Guide for details."
 		echo ""
 		case $(ask "         Proceed [y/N] ") in
 		[Yy]*) ;;
@@ -344,7 +344,7 @@ check_account() {
 	fi
 
 	# TODO: perform more extensive check the account has all required roles.
-	#       - these could change over, depending back-end GCP / HPC Toolkit
+	#       - these could change over, depending back-end GCP / Cluster Toolkit
 	#         requirements, so would require maintaining.
 }
 
@@ -979,7 +979,7 @@ cat <<HEADER
 
 --------------------------------------------------------------------------------
 
-                               HPC Toolkit FrontEnd
+                               Cluster Toolkit FrontEnd
 
 --------------------------------------------------------------------------------
 

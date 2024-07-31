@@ -15,7 +15,7 @@
 # This playbook makes the assumption that a virtual environment has been created
 # with the autoscaler and its dependencies previously installed. A runner that
 # does this is provided as an output of the htcondor-install module within the
-# HPC Toolkit at community/modules/scripts/htcondor-install.
+# Cluster Toolkit at community/modules/scripts/htcondor-install.
 
 ---
 - name: Configure HTCondor Autoscaler

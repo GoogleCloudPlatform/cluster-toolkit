@@ -84,7 +84,7 @@ the deploying machine can connect to the cluster.
 
 ### Connecting Via Use
 
-The diagram below shows the valid `use` relationships for the GKE HPC Toolkit
+The diagram below shows the valid `use` relationships for the GKE Cluster Toolkit
 modules. For example the `gke-persistent-volume` module can `use` a
 `gke-cluster` module and a `filestore` module, as shown in the example above.
 

@@ -1,21 +1,21 @@
-# Google HPC-Toolkit
+# Google Cluster Toolkit (formally HPC Toolkit)
 
 ## Description
 
-HPC Toolkit is an open-source software offered by Google Cloud which makes it
-easy for customers to deploy HPC environments on Google Cloud.
+Cluster Toolkit is an open-source software offered by Google Cloud which makes it
+easy for customers to deploy AI/ML and HPC environments on Google Cloud.
 
-HPC Toolkit allows customers to deploy turnkey HPC environments (compute,
+Cluster Toolkit allows customers to deploy turnkey AI/ML and HPC environments (compute,
 networking, storage, etc.) following Google Cloud best-practices, in a repeatable
-manner. The HPC Toolkit is designed to be highly customizable and extensible,
-and intends to address the HPC deployment needs of a broad range of customers.
+manner. The Cluster Toolkit is designed to be highly customizable and extensible,
+and intends to address the AI/ML and HPC deployment needs of a broad range of customers.
 
 ## Detailed documentation and examples
 
 The Toolkit comes with a suite of [tutorials], [examples], and full
-documentation for a suite of [modules] that have been designed for HPC use cases.
+documentation for a suite of [modules] that have been designed for AI/ML and HPC use cases.
 More information can be found on the
-[Google Cloud Docs](https://cloud.google.com/hpc-toolkit/docs/overview).
+[Google Cloud Docs](https://cloud.google.com/cluster-toolkit/docs/overview).
 
 [tutorials]: docs/tutorials/README.md
 [examples]: examples/README.md
@@ -24,29 +24,29 @@ More information can be found on the
 ## Quickstart
 
 Running through the
-[quickstart tutorial](https://cloud.google.com/hpc-toolkit/docs/quickstarts/slurm-cluster)
-is the recommended path to get started with the HPC Toolkit.
+[quickstart tutorial](https://cloud.google.com/cluster-toolkit/docs/quickstarts/slurm-cluster)
+is the recommended path to get started with the Cluster Toolkit.
 
 ---
 
 If a self directed path is preferred, you can use the following commands to
-build the `ghpc` binary:
+build the `gcluster` binary:
 
 ```shell
 git clone https://github.com/GoogleCloudPlatform/hpc-toolkit
 cd hpc-toolkit
 make
-./ghpc --version
-./ghpc --help
+./gcluster --version
+./gcluster --help
 ```
 
 > **_NOTE:_** You may need to [install dependencies](#dependencies) first.
 
-## HPC Toolkit Components
+## Cluster Toolkit Components
 
-Learn about the components that make up the HPC Toolkit and more on how it works
+Learn about the components that make up the Cluster Toolkit and more on how it works
 on the
-[Google Cloud Docs Product Overview](https://cloud.google.com/hpc-toolkit/docs/overview#components).
+[Google Cloud Docs Product Overview](https://cloud.google.com/cluster-toolkit/docs/overview#components).
 
 ## GCP Credentials
 
@@ -105,7 +105,7 @@ minutes. Please consider it only for blueprints that are quickly deployed.
 
 ### Standard Images
 
-The HPC Toolkit officially supports the following VM images:
+The Cluster Toolkit officially supports the following VM images:
 
 * HPC CentOS 7
 * HPC Rocky Linux 8
@@ -119,37 +119,37 @@ For more information on these and other images, see
 
 > **_Warning:_** Slurm Terraform modules cannot be directly used on the standard OS images. They must be used in combination with images built for the versioned release of the Terraform module.
 
-The HPC Toolkit provides modules and examples for implementing pre-built and custom Slurm VM images, see [Slurm on GCP](docs/vm-images.md#slurm-on-gcp)
+The Cluster Toolkit provides modules and examples for implementing pre-built and custom Slurm VM images, see [Slurm on GCP](docs/vm-images.md#slurm-on-gcp)
 
 ## Blueprint Validation
 
 The Toolkit contains "validator" functions that perform basic tests of the
-blueprint to ensure that deployment variables are valid and that the HPC
+blueprint to ensure that deployment variables are valid and that the AI/ML and HPC
 environment can be provisioned in your Google Cloud project. Further information
 can be found in [dedicated documentation](docs/blueprint-validation.md).
 
 ## Enable GCP APIs
 
 In a new GCP project there are several APIs that must be enabled to deploy your
-HPC cluster. These will be caught when you perform `terraform apply` but you can
+cluster. These will be caught when you perform `terraform apply` but you can
 save time by enabling them upfront.
 
 See
-[Google Cloud Docs](https://cloud.google.com/hpc-toolkit/docs/setup/configure-environment#enable-apis)
+[Google Cloud Docs](https://cloud.google.com/cluster-toolkit/docs/setup/configure-environment#enable-apis)
 for instructions.
 
 ## GCP Quotas
 
-You may need to request additional quota to be able to deploy and use your HPC
+You may need to request additional quota to be able to deploy and use your
 cluster.
 
 See
-[Google Cloud Docs](https://cloud.google.com/hpc-toolkit/docs/setup/hpc-blueprint#request-quota)
+[Google Cloud Docs](https://cloud.google.com/cluster-toolkit/docs/setup/hpc-blueprint#request-quota)
 for more information.
 
 ## Billing Reports
 
-You can view your billing reports for your HPC cluster on the
+You can view your billing reports for your cluster on the
 [Cloud Billing Reports](https://cloud.google.com/billing/docs/how-to/reports)
 page. ​​To view the Cloud Billing reports for your Cloud Billing account,
 including viewing the cost information for all of the Cloud projects that are
@@ -279,7 +279,7 @@ hpc-slurm/
 ## Dependencies
 
 See
-[Cloud Docs on Installing Dependencies](https://cloud.google.com/hpc-toolkit/docs/setup/install-dependencies).
+[Cloud Docs on Installing Dependencies](https://cloud.google.com/cluster-toolkit/docs/setup/install-dependencies).
 
 ### Notes on Packer
 
@@ -303,12 +303,12 @@ applied at boot-time.
 ## Development
 
 The following setup is in addition to the [dependencies](#dependencies) needed
-to build and run HPC-Toolkit.
+to build and run Cluster-Toolkit.
 
 Please use the `pre-commit` hooks [configured](./.pre-commit-config.yaml) in
 this repository to ensure that all changes are validated, tested and properly
 documented before pushing code changes. The pre-commits configured
-in the HPC Toolkit have a set of dependencies that need to be installed before
+in the Cluster Toolkit have a set of dependencies that need to be installed before
 successfully passing.
 
 Follow these steps to install and setup pre-commit in your cloned repository:

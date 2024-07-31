@@ -79,7 +79,7 @@ under `vars` before using an example blueprint.
 
 ### (Optional) Setting up a remote terraform state
 
-There are two ways to specify [terraform backends] in HPC Toolkit: a default setting that propagates all groups and custom per-group configuration:
+There are two ways to specify [terraform backends] in Cluster Toolkit: a default setting that propagates all groups and custom per-group configuration:
 
 * `terraform_backend_defaults` at top-level of YAML blueprint
 * `terraform_backend` within a deployment group definition
@@ -142,10 +142,10 @@ subcommands as well:
 [Slurm-GCP](https://github.com/GoogleCloudPlatform/slurm-gcp) is the set of
 scripts and tools that automate the installation, deployment, and certain
 operational aspects of [Slurm](https://slurm.schedmd.com/overview.html) on
-Google Cloud Platform. It is recommended to use Slurm-GCP through the HPC
-toolkit where it is exposed as various modules.
+Google Cloud Platform. It is recommended to use Slurm-GCP through the Cluster
+Toolkit where it is exposed as various modules.
 
-The HPC Toolkit team has finished transitioning from Slurm-GCP v5 to Slurm-GCP v6 and
+The Cluster Toolkit team has finished transitioning from Slurm-GCP v5 to Slurm-GCP v6 and
 now Slurm-GCP v6 is the recommended option. Following this, blueprint naming would be
 as follows:
 
@@ -155,7 +155,7 @@ as follows:
 > [!IMPORTANT]
 > Three months after Slurm-gcp V6 becomes the recommended version, Slurm v5
 > modules will be marked as deprecated and will be maintained in our repo for
-> another three months, at which point the modules will be removed from the HPC
+> another three months, at which point the modules will be removed from the Cluster
 > Toolkit repo and regression tests will no longer run for V5. Those who choose
 > to not upgrade to V6 will still be able to use V5 modules by referencing
 > specific git tags in the module source lines.
@@ -197,9 +197,9 @@ _For a full accounting of changes, see the changelog._
 
 The example blueprints listed below labeled with the core badge
 (![core-badge]) are located in this folder and are developed and tested by the
-HPC Toolkit team directly.
+Cluster Toolkit team directly.
 
-The community blueprints are contributed by the community (including the HPC
+The community blueprints are contributed by the community (including the Cluster
 Toolkit team, partners, etc.) and are labeled with the community badge
 (![community-badge]). The community blueprints are located in the
 [community folder](../community/examples/).
@@ -513,16 +513,16 @@ Before deploying this example the following fields must be populated in the blue
 
 For more resources on static compute nodes see the following cloud docs pages:
 
-* [About [Slurm] node types](https://cloud.google.com/hpc-toolkit/docs/slurm/node-types)
+* [About [Slurm] node types](https://cloud.google.com/cluster-toolkit/docs/slurm/node-types)
 * [Best practices for static compute nodes]
-* [Reconfigure a running cluster](http://cloud/hpc-toolkit/docs/slurm/reconfigure-cluster)
-* [Manage static compute nodes](http://cloud/hpc-toolkit/docs/slurm/manage-static-nodes)
+* [Reconfigure a running cluster](http://cloud/cluster-toolkit/docs/slurm/reconfigure-cluster)
+* [Manage static compute nodes](http://cloud/cluster-toolkit/docs/slurm/manage-static-nodes)
 
 For a similar, more advanced, example which demonstrates static node
 functionality with GPUs, see the
 [ML Slurm A3 example](./machine-learning/README.md).
 
-[Best practices for static compute nodes]: http://cloud/hpc-toolkit/docs/slurm/static-nodes-best-practices
+[Best practices for static compute nodes]: http://cloud/cluster-toolkit/docs/slurm/static-nodes-best-practices
 [hpc-slurm-static.yaml]: ./hpc-slurm-static.yaml
 
 ### [hpc-slurm6-tpu.yaml] ![community-badge] ![experimental-badge]
@@ -898,7 +898,7 @@ For this example the following is needed in the selected region:
 
 ### [serverless-batch.yaml] ![core-badge]
 
-This example demonstrates how to use the HPC Toolkit to set up a Google Cloud Batch job
+This example demonstrates how to use the Cluster Toolkit to set up a Google Cloud Batch job
 that mounts a Filestore instance and runs startup scripts.
 
 The blueprint creates a Filestore and uses the `startup-script` module to mount
@@ -1062,7 +1062,7 @@ For this example the following is needed in the selected region:
 
 ### [hpc-build-slurm-image.yaml] ![community-badge] ![experimental-badge]
 
-This blueprint demonstrates how to use HPC Toolkit to build a Slurm image on top
+This blueprint demonstrates how to use Cluster Toolkit to build a Slurm image on top
 of an existing image, `hpc-rocky-linux-8` in the case of this example.
 
 The blueprint contains 3 groups:
@@ -1091,7 +1091,7 @@ The blueprint contains 3 groups:
 > ```
 
 Similar to the [hpc-slurm-v5-legacy.yaml] example, but using Ubuntu 20.04 instead of CentOS 7.
-[Other operating systems] are supported by SchedMD for the the Slurm on GCP project and images are listed [here](https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#published-image-family). Only the examples listed in this page been tested by the Cloud HPC Toolkit team.
+[Other operating systems] are supported by SchedMD for the the Slurm on GCP project and images are listed [here](https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#published-image-family). Only the examples listed in this page been tested by the Cluster Toolkit team.
 
 The cluster will support 2 partitions named `debug` and `compute`.
 The `debug` partition is the default partition and runs on smaller
@@ -1122,7 +1122,7 @@ For this example the following is needed in the selected region:
 ### [hpc-slurm-ubuntu2004.yaml] ![community-badge]
 
 Similar to the [hpc-slurm.yaml] example, but using Ubuntu 20.04 instead of CentOS 7.
-[Other operating systems] are supported by SchedMD for the the Slurm on GCP project and images are listed [here](https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#published-image-family). Only the examples listed in this page been tested by the Cloud HPC Toolkit team.
+[Other operating systems] are supported by SchedMD for the the Slurm on GCP project and images are listed [here](https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#published-image-family). Only the examples listed in this page been tested by the Cluster Toolkit team.
 
 The cluster will support 2 partitions named `debug` and `compute`.
 The `debug` partition is the default partition and runs on smaller
@@ -1195,11 +1195,11 @@ examples][amd-examples-readme].
 [client-google-cloud-storage.yaml]: ../community/examples/client-google-cloud-storage.yaml
 
 This example demonstrates several different ways to use Google Cloud Storage
-(GCS) buckets in the HPC Toolkit. There are two buckets referenced in the
+(GCS) buckets in the Cluster Toolkit. There are two buckets referenced in the
 example:
 
-1. A GCS bucket that is created by the HPC Toolkit (`id: new-bucket`).
-1. A GCS bucket that is created externally from the HPC Toolkit but referenced
+1. A GCS bucket that is created by the Cluster Toolkit (`id: new-bucket`).
+1. A GCS bucket that is created externally from the Cluster Toolkit but referenced
    by the blueprint (`id: existing-bucket`).
 
 The created VM (`id: workstation`) references these GCS buckets with the `use`
@@ -1375,7 +1375,7 @@ to the cluster using `kubectl` and will run on the specified node pool.
 
 ### [ml-gke.yaml] ![community-badge] ![experimental-badge]
 
-This blueprint demonstrates how to set up a GPU GKE cluster using the HPC
+This blueprint demonstrates how to set up a GPU GKE cluster using the Cluster
 Toolkit. It includes:
 
 > **Warning**: `authorized_cidr` variable must be entered for this example to
@@ -1534,7 +1534,7 @@ See the [full tutorial here](../docs/tutorials/fsi-montecarlo-on-batch/README.md
 This blueprint provisions an HPC cluster running Slurm for use with a Simcenter StarCCM+
 tutorial.
 
-> The main tutorial is described on the [HPC Toolkit website](https://cloud.google.com/hpc-toolkit/docs/simcenter-starccm-slurm/run-workload).
+> The main tutorial is described on the [Cluster Toolkit website](https://cloud.google.com/cluster-toolkit/docs/simcenter-starccm-slurm/run-workload).
 
 [tutorial-starccm-slurm.yaml]: ../community/examples/tutorial-starccm-slurm.yaml
 
@@ -1543,7 +1543,7 @@ tutorial.
 This blueprint provisions a simple cluster for use with a Simcenter StarCCM+
 tutorial.
 
-> The main tutorial is described on the [HPC Toolkit website](https://cloud.google.com/hpc-toolkit/docs/simcenter-star-ccm/run-workload).
+> The main tutorial is described on the [Cluster Toolkit website](https://cloud.google.com/cluster-toolkit/docs/simcenter-star-ccm/run-workload).
 
 [tutorial-starccm.yaml]: ../community/examples/tutorial-starccm.yaml
 
@@ -1552,7 +1552,7 @@ tutorial.
 This blueprint provisions a simple cluster for use with an Ansys Fluent
 tutorial.
 
-> The main tutorial is described on the [HPC Toolkit website](https://cloud.google.com/hpc-toolkit/docs/tutorials/ansys-fluent).
+> The main tutorial is described on the [Cluster Toolkit website](https://cloud.google.com/cluster-toolkit/docs/tutorials/ansys-fluent).
 
 [tutorial-fluent.yaml]: ../community/examples/tutorial-fluent.yaml
 
@@ -1597,7 +1597,7 @@ IPs for compute nodes, one must needs to [set up cloud nat][cloudnat] and
 ## Blueprint Schema
 
 Similar documentation can be found on
-[Google Cloud Docs](https://cloud.google.com/hpc-toolkit/docs/setup/hpc-blueprint).
+[Google Cloud Docs](https://cloud.google.com/cluster-toolkit/docs/setup/hpc-blueprint).
 
 A user defined blueprint should follow the following schema:
 
@@ -1719,7 +1719,7 @@ alongside module specific labels. Precedence is given to the module specific
 labels if a collision occurs. Default module labels will still be overwritten by
 deployment labels.
 
-The HPC Toolkit uses special reserved labels for monitoring each deployment.
+The Cluster Toolkit uses special reserved labels for monitoring each deployment.
 These are set automatically, but can be overridden in vars or module settings.
 They include:
 
@@ -1730,7 +1730,7 @@ They include:
 A module role is a default label applied to modules (`ghpc_role`), which
 conveys what role that module plays within a larger HPC environment.
 
-The modules provided with the HPC toolkit have been divided into roles
+The modules provided with the Cluster Toolkit have been divided into roles
 matching the names of folders in the [modules/](../modules/) and
 [community/modules](../community/modules/) directories (compute,
 file-system etc.).

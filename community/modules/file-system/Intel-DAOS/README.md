@@ -3,7 +3,7 @@
 This module allows creating an instance of Distributed Asynchronous Object Storage ([DAOS](https://docs.daos.io/)) on Google Cloud Platform ([GCP](https://cloud.google.com/)).
 
 > **_NOTE:_**
-> DAOS on GCP does not require an HPC Toolkit wrapper.
+> DAOS on GCP does not require an Cluster Toolkit wrapper.
 > Terraform modules are sourced directly from GitHub.
 > It will not work as a [local or embedded module](../../../../modules/README.md#embedded-modules).
 
@@ -14,7 +14,7 @@ DAOS Terraform module parameters can be found in the README.md files in each mod
 - [DAOS Server module](https://github.com/daos-stack/google-cloud-daos/tree/main/terraform/modules/daos_server#readme)
 - [DAOS Client module](https://github.com/daos-stack/google-cloud-daos/tree/main/terraform/modules/daos_client#readme)
 
-For more information on this and other network storage options in the Cloud HPC Toolkit, see the extended [Network Storage documentation](../../../../docs/network_storage.md).
+For more information on this and other network storage options in the Cluster Toolkit, see the extended [Network Storage documentation](../../../../docs/network_storage.md).
 ## Examples
 
 The [community examples folder](../../../examples/intel/) contains two example blueprints for deploying DAOS.
