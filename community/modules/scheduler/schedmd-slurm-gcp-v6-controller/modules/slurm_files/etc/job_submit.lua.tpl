@@ -1,10 +1,10 @@
 SCRIPTS_DIR = "{scripts_dir}"
 NO_VAL = 4294967294
---util.py exit code
+--get_tpu_vmcount.py exit code
 PART_INVALID = -1 --partition does not exists in config.yaml, thus do not exist in slurm
 DIFF_VMCOUNTS_SAME_PART = -2 --in the same partition there are nodesets with different vmcounts
 DIFF_PART_DIFFERENT_VMCOUNTS = -3 --partition is a list of partitions in which at least two of them have different vmcount
-UNKWOWN_ERROR = -4 --util.py did not return a valid response
+UNKWOWN_ERROR = -4 --get_tpu_vmcount.py did not return a valid response
 
 function get_part(job_desc,part_list)
     if job_desc.partition then
@@ -26,7 +26,7 @@ function os.capture(cmd, raw)
 end
 
 function get_vmcount(part)
-    local cmd = SCRIPTS_DIR .. "/util.py -p " .. part
+    local cmd = SCRIPTS_DIR .. "/get_tpu_vmcount.py -p " .. part
     local out = os.capture(cmd,true)
     for line in out:gmatch("(.-)\r?\n") do
 		local tag, val = line:match("([^:]+):([^:]+)")
@@ -63,7 +63,7 @@ function slurm_job_submit(job_desc, part_list, submit_uid)
 	    return slurm.FAILURE
     end
 	if vmcount == UNKWOWN_ERROR then
-	    slurm.log_user("Something went wrong while executing util.py to get the vmcount.")
+	    slurm.log_user("Something went wrong while executing get_tpu_vmcount.py.")
 	    return slurm.ERROR
     end
     --This is surely a TPU node
