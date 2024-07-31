@@ -129,9 +129,9 @@ def run_from_cli():
     parser.add_argument("-r", "--retries", type=int, default=1,
                         help="Number of retries, to disable retries set to 0, default is 1")
     # Non-runner args
-    parser.add_argument("--pretty", action="store_true", help="Render pretty output")
+    parser.add_argument("--nocolor", action="store_true", help="Do not use color in output")
 
     cli_args = vars(parser.parse_args())
-    ui = CliUI(pretty=cli_args.pop("pretty"))
+    ui = CliUI(no_color=cli_args.pop("nocolor"))
 
     run(RunnerArgs(**cli_args), ui)
