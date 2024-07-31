@@ -48,7 +48,11 @@
   delay: 100
   ansible.builtin.command: |
     srun -N 1 -p tpu bash -c '
-    pip install --upgrade 'jax[tpu]>0.3.0' -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
+    set -e
+    sudo apt install python3.10-venv
+    python3 -m venv tputest
+    source tputest/bin/activate
+    pip install -U "jax[tpu]" -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
     python3 -c "
     import sys
     import jax
