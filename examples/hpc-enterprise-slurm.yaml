@@ -20,6 +20,8 @@ vars:
   project_id:  ## Set GCP Project ID Here ##
   deployment_name: hpc01
   region: us-central1
+  # This blueprint uses H3 partition as the default. Note that H3 is available in only specific zones.
+  # https://cloud.google.com/compute/docs/regions-zones
   zone: us-central1-a
   gpu_zones: [us-central1-a, us-central1-b, us-central1-c, us-central1-f]
   slurm_image:
@@ -115,7 +117,6 @@ deployment_groups:
     settings:
       partition_name: n2
       exclusive: false  # allows nodes to stay up after jobs are done
-      is_default: true
       partition_conf:
         SuspendTime: 300 # time (in secs) the nodes in this partition stay active after their tasks have completed
 
@@ -260,6 +261,7 @@ deployment_groups:
     settings:
       instance_image: $(vars.slurm_image)
       machine_type: n2-standard-4
+      is_default: true
       # we recommend disabling public IPs if possible
       # but that requires your network to have a NAT or
       # private access configured

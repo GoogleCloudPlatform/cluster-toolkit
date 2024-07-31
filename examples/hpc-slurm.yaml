@@ -20,6 +20,8 @@ vars:
   project_id:  ## Set GCP Project ID Here ##
   deployment_name: hpc-slurm
   region: us-central1
+  # This blueprint uses H3 partition as the default. Note that H3 is available in only specific zones.
+  # https://cloud.google.com/compute/docs/regions-zones
   zone: us-central1-a
 
 # Documentation for each of the modules used below can be found at
@@ -55,7 +57,6 @@ deployment_groups:
     settings:
       partition_name: debug
       exclusive: false # allows nodes to stay up after jobs are done
-      is_default: true
 
   - id: compute_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
@@ -88,6 +89,7 @@ deployment_groups:
     - h3_nodeset
     settings:
       partition_name: h3
+      is_default: true
 
   - id: slurm_login
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
