@@ -320,7 +320,7 @@ def configure_dirs():
     scripts_log.symlink_to(dirs.log)
 
 
-def setup_controller(args):
+def setup_controller():
     """Run controller setup"""
     log.info("Setting up controller")
     util.chown_slurm(dirs.scripts / "config.yaml", mode=0o600)
@@ -382,7 +382,7 @@ def setup_controller(args):
     pass
 
 
-def setup_login(args):
+def setup_login():
     """run login node setup"""
     log.info("Setting up login")
     slurmctld_host = f"{lkp.control_host}"
@@ -413,7 +413,7 @@ def setup_login(args):
     log.info("Done setting up login")
 
 
-def setup_compute(args):
+def setup_compute():
     """run compute node setup"""
     log.info("Setting up compute")
     util.chown_slurm(dirs.scripts / "config.yaml", mode=0o600)
@@ -423,9 +423,17 @@ def setup_compute(args):
     slurmd_options = [
         f'--conf-server="{slurmctld_host}:{lkp.control_host_port}"',
     ]
-    if args.slurmd_feature is not None:
-        slurmd_options.append(f'--conf="Feature={args.slurmd_feature}"')
+    
+    try:
+        slurmd_feature = util.instance_metadata("attributes/slurmd_feature")
+    except Exception:
+        # TODO: differentiate between unset and error
+        slurmd_feature = None
+
+    if slurmd_feature is not None:
+        slurmd_options.append(f'--conf="Feature={slurmd_feature}"')
         slurmd_options.append("-Z")
+
     sysconf = f"""SLURMD_OPTIONS='{" ".join(slurmd_options)}'"""
     update_system_config("slurmd", sysconf)
     install_custom_scripts()
@@ -452,21 +460,18 @@ def setup_compute(args):
     log.info("Done setting up compute")
 
 
-def main(args):
+def main():
     start_motd()
     configure_dirs()
 
     # call the setup function for the instance type
-    setup = dict.get(
-        {
-            "controller": setup_controller,
-            "compute": setup_compute,
-            "login": setup_login,
-        },
+    {
+        "controller": setup_controller,
+        "compute": setup_compute,
+        "login": setup_login,
+    }.get(
         lkp.instance_role,
-        lambda: log.fatal(f"Unknown node role: {lkp.instance_role}"),
-    )
-    setup(args)
+        lambda: log.fatal(f"Unknown node role: {lkp.instance_role}"))()
 
     end_motd()
 
@@ -477,12 +482,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    parser.add_argument(
-        "--slurmd-feature",
-        dest="slurmd_feature",
-        help="Feature for slurmd to register with. Controller ignores this option.",
-    )
-    args = parser.parse_args()
+    parser.add_argument("--slurmd-feature", dest="slurmd_feature", help="Unused, to be removed.")
+    _ = util.add_log_args_and_parse(parser)
 
     util.config_root_logger(filename, logfile=LOGFILE)
     sys.excepthook = util.handle_exception
@@ -490,7 +491,7 @@ if __name__ == "__main__":
     lkp = util.Lookup(cfg)  # noqa F811
 
     try:
-        main(args)
+        main()
     except subprocess.TimeoutExpired as e:
         log.error(
             f"""TimeoutExpired:
