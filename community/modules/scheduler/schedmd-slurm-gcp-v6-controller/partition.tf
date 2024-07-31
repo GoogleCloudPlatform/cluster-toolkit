@@ -26,7 +26,7 @@ locals {
 # NODESET
 # TODO: remove dependency on slurm-gcp repo, move to local nodeset module
 module "slurm_nodeset_template" {
-  source   = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=6.5.9"
+  source   = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=6.5.13"
   for_each = local.nodeset_map
 
   project_id          = var.project_id
@@ -48,11 +48,13 @@ module "slurm_nodeset_template" {
   gpu                      = each.value.gpu
   labels                   = each.value.labels
   machine_type             = each.value.machine_type
-  metadata                 = each.value.metadata
+  metadata                 = merge(each.value.metadata, local.universe_domain)
   min_cpu_platform         = each.value.min_cpu_platform
   name_prefix              = each.value.nodeset_name
   on_host_maintenance      = each.value.on_host_maintenance
   preemptible              = each.value.preemptible
+  spot                     = each.value.spot
+  termination_action       = each.value.termination_action
   service_account          = each.value.service_account
   shielded_instance_config = each.value.shielded_instance_config
   source_image_family      = each.value.source_image_family
@@ -65,7 +67,7 @@ module "slurm_nodeset_template" {
 }
 
 module "slurm_nodeset" {
-  source   = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_nodeset?ref=6.5.9"
+  source   = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_nodeset?ref=6.5.13"
   for_each = local.nodeset_map
 
   instance_template_self_link = module.slurm_nodeset_template[each.key].self_link
@@ -85,7 +87,7 @@ module "slurm_nodeset" {
 
 # NODESET TPU
 module "slurm_nodeset_tpu" {
-  source   = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_nodeset_tpu?ref=6.5.9"
+  source   = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_nodeset_tpu?ref=6.5.13"
   for_each = local.nodeset_tpu_map
 
   project_id             = var.project_id
