@@ -17,6 +17,9 @@
 locals {
   # This label allows for billing report tracking based on module.
   labels = merge(var.labels, { ghpc_module = "slurm-cloudsql-federation", ghpc_role = "database" })
+}
+
+locals {
   user_managed_replication = var.user_managed_replication
 }
 
