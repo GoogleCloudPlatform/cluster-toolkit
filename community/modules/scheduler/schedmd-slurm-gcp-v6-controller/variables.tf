@@ -594,7 +594,7 @@ EOD
     user_managed_replication = optional(list(object({
       location     = string
       kms_key_name = optional(string)
-    })))
+    })), [])
   })
   default   = null
   sensitive = true
