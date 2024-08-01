@@ -34,10 +34,10 @@
   block:
 
   - name: Destroy deployment
-    register: ghpc_destroy
-    changed_when: ghpc_destroy.changed
+    register: gcluster_destroy
+    changed_when: gcluster_destroy.changed
     run_once: true
-    ansible.builtin.command: ./ghpc destroy {{ deployment_name }} --auto-approve
+    ansible.builtin.command: ./gcluster destroy {{ deployment_name }} --auto-approve
     args:
       chdir: "{{ workspace }}"
     environment:
