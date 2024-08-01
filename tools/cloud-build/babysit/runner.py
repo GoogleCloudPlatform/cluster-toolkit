@@ -54,7 +54,6 @@ def get_changed_files_tags(files: Collection[str]) -> set[str]:
         parts = f.split("/")
         if len(parts) < 3: continue
         tags.add(f"m.{parts[2]}")
-    print(f"Auto tags: {tags}") # TODO: use UI to log
     return tags
 
 @dataclass
