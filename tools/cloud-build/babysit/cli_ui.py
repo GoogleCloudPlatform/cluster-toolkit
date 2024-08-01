@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import sys
 from typing import Sequence, Dict, Optional
 import time
 from enum import Enum
@@ -27,10 +28,11 @@ class Color(Enum):
     END = "\033[0m"
 
 class CliUI: # implements UIProto
-    def __init__(self, pretty=False) -> None:
+    def __init__(self, no_color=False, short_url=False) -> None:
         self._status: Dict[str, Status] = {}
         self._change = False
-        self._pretty = pretty
+        self._no_color = no_color
+        self._short_url = short_url
 
     def on_init(self, builds: Sequence[Build]) -> None:
         for b in builds:
@@ -68,6 +70,10 @@ class CliUI: # implements UIProto
         for bc in ordered:
             print(self._render_build(bc.build, bc.count))
 
+    def _color(self) -> bool:
+        if self._no_color: return False
+        return hasattr(sys.stdout, 'isatty') and sys.stdout.isatty()
+    
     def _render_build(self, build: Build, count:int=1) -> str:
         status = self._render_status(build.status)
         cnt = f"[{count}]" if count > 1 else "   "
@@ -76,7 +82,7 @@ class CliUI: # implements UIProto
 
     def _render_status(self, status: Optional[Status]) -> str:
         sn = "NONE" if status is None else status.name
-        if not self._pretty: return sn
+        if not self._color(): return sn
         CM = {
             Status.SUCCESS: Color.GREEN,
             Status.FAILURE: Color.RED,
@@ -89,7 +95,11 @@ class CliUI: # implements UIProto
         clr = CM.get(status, def_color).value
         return f"{clr}{sn}{Color.END.value}"
     
+    def _url(self, build: Build) -> str:
+        if not self._short_url:
+            return build.log_url
+        return f"go/ghpc-cb/{build.id}"
+
     def _render_link(self, build: Build) -> str:
-        name, url = trig_name(build), build.log_url
-        if not self._pretty: return f"{name}\t{url}"
-        return f"\033]8;;{url}\033\\{name}\033]8;;\033\\"
+        name, url = trig_name(build), self._url(build)
+        return f"{name}\t{url}"

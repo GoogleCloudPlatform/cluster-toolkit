@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""The Command Line Interface to access the HPC Toolkit FrontEnd"""
+"""The Command Line Interface to access the Cluster Toolkit FrontEnd"""
 
 import click
 import requests
@@ -65,7 +65,7 @@ def config():
     """
     print("Configuration file will be written at $HOME/.ghpcfe/config")
     print()
-    server = input("Enter the URL of the HPC Toolkit FrontEnd website: ")
+    server = input("Enter the URL of the Cluster Toolkit FrontEnd website: ")
     try:
         requests.get(server, timeout=10)
     # pylint: disable=unused-variable

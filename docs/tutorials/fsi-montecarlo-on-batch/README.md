@@ -43,22 +43,22 @@ via a [PubSub BigQuery subscription](https://cloud.google.com/pubsub/docs/bigque
 
 ## Basic getting started
 
-1. Get the HPC Toolkit configured.
+1. Get the Cluster Toolkit configured.
 
-Build the `ghpc` binary:
+Build the `gcluster` binary:
 
 ```shell
-git clone https://github.com/GoogleCloudPlatform/hpc-toolkit
-cd hpc-toolkit
+git clone https://github.com/GoogleCloudPlatform/cluster-toolkit
+cd cluster-toolkit
 make
-./ghpc --version
-./ghpc --help
+./gcluster --version
+./gcluster --help
 ```
 
-2\. Run `ghpc` on the blueprint `fsi-montecarlo-on-batch.yaml`
+2\. Run `gcluster` on the blueprint `fsi-montecarlo-on-batch.yaml`
 
 ```bash
-./ghpc create community/examples/fsi-montecarlo-on-batch.yaml \
+./gcluster create community/examples/fsi-montecarlo-on-batch.yaml \
    --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
 ```
 
@@ -74,14 +74,14 @@ If successful, you will see output similar to:
 <p>
 To deploy your infrastructure please run:
 
-./ghpc deploy fsimontecarlo
+./gcluster deploy fsimontecarlo
 </p>
 </blockquote>
 
 3\. Deploy the blueprint as instructed:
 
 ```bash
-./ghpc deploy fsimontecarlo
+./gcluster deploy fsimontecarlo
 ```
 
 If successful, this will prompt you:
@@ -228,8 +228,8 @@ ensure you are not billed for any of the Cloud usage.
 
 ### Alternatively
 
-The other choice is to run a `ghpc destroy` command.
+The other choice is to run a `gcluster destroy` command.
 
 ```bash
-./ghpc destroy fsimontecarlo
+./gcluster destroy fsimontecarlo
 ```

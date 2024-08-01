@@ -14,7 +14,7 @@
 # limitations under the License.
 
 
-"""Cluster management daemon for the Google HPC Toolkit Frontend"""
+"""Cluster management daemon for the Google Cluster Toolkit Frontend"""
 
 import grp
 import json

@@ -126,6 +126,31 @@ variable "install_docker" {
   nullable    = false
 }
 
+variable "local_ssd_filesystem" {
+  description = "Create and mount a filesystem from local SSD disks (data will be lost if VMs are powered down without enabling migration); enable by setting mountpoint field to a valid directory path."
+  type = object({
+    fs_type    = optional(string, "ext4")
+    mountpoint = optional(string, "")
+  })
+
+  validation {
+    condition     = can(coalesce(var.local_ssd_filesystem.fs_type))
+    error_message = "var.local_ssd_filesystem.fs_type must be set to a filesystem supported by the Linux distribution."
+  }
+
+  validation {
+    condition     = var.local_ssd_filesystem.mountpoint == "" || startswith(var.local_ssd_filesystem.mountpoint, "/")
+    error_message = "To enable local SSD filesystems, var.local_ssd_filesystem.mountpoint must be set to an absolute path to a mountpoint."
+  }
+
+  default = {
+    fs_type    = "ext4"
+    mountpoint = ""
+  }
+
+  nullable = false
+}
+
 variable "install_cloud_ops_agent" {
   description = "Warning: Consider using `install_stackdriver_agent` for better performance. Run Google Ops Agent installation script if set to true."
   type        = bool

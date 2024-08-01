@@ -1,4 +1,4 @@
-# Setting up Hybrid Slurm Clusters Using the HPC Toolkit
+# Setting up Hybrid Slurm Clusters Using the Cluster Toolkit
 
 ## Introduction
 
@@ -7,13 +7,13 @@ partitions, where cloud partitions can elastically create resources in Google
 Cloud as needed.
 
 This document intends to support the use of the hybrid slurm terraform modules
-provided by SchedMD via [Slurm on GCP][slurm-gcp] and are available in the HPC
+provided by SchedMD via [Slurm on GCP][slurm-gcp] and are available in the Cluster
 Toolkit through the [schedmd-slurm-gcp-v5-hybrid][hybridmodule] module.
 
 > **_NOTE:_** Since on-premise Slurm configurations can vary significantly,
 > it is likely that this document does not cover every edge case.
 > The intent is to provide a useful starting point for setting up cloud
-> hybrid partitions with Slurm, the HPC Toolkit and Google Cloud.
+> hybrid partitions with Slurm, the Cluster Toolkit and Google Cloud.
 
 ## About the Hybrid Configuration Module
 
@@ -144,7 +144,7 @@ and the Google Cloud documentation on
 
 #### Build ghpc
 
-Before you begin, ensure that you have built the `ghpc` tool in the HPC Toolkit.
+Before you begin, ensure that you have built the `ghpc` tool in the Cluster Toolkit.
 For more information see the [README.md](../../README.md#quickstart) Quickstart.
 
 The commands in these instructions assume the ghpc binary is installed in a
@@ -158,7 +158,7 @@ make install
 
 ### Customize Your Blueprint
 
-A valid HPC Toolkit blueprint for creating a hybrid configuration deployment can
+A valid Cluster Toolkit blueprint for creating a hybrid configuration deployment can
 be found in the blueprints directory with the name [hybrid-configuration.yaml].
 This blueprint can be customized to your needs, for example, partitions can be
 updated or new partitions can be defined. See the documentation for the
@@ -344,7 +344,7 @@ controller path that is mounted on the cloud compute VM at the expected
 location.
 
 Network storage is added as a list under the [`network_storage`][inputns]
-setting of the [schedmd-slurm-gcp-v5-hybrid][hybridmodule] HPC Toolkit Module.
+setting of the [schedmd-slurm-gcp-v5-hybrid][hybridmodule] Cluster Toolkit Module.
 An example showing how to do this with each of the default mount paths is
 provided below:
 
@@ -412,10 +412,10 @@ If your on premise nodes are using the Slurm [power saving][powersaving]
 functionality, see the [Power Saving Operations](#power-saving-operations)
 section.
 
-## Creating the Hybrid Configuration with the HPC Toolkit
+## Creating the Hybrid Configuration with the Cluster Toolkit
 
 With these considerations in mind, you can now move on to creating and
-installing the hybrid HPC Toolkit deployment. To do so, follow the steps in
+installing the hybrid Cluster Toolkit deployment. To do so, follow the steps in
 [deploy-instructions.md].
 
 [deploy-instructions.md]: ./deploy-instructions.md

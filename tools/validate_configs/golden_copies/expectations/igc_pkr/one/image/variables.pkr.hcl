@@ -13,7 +13,7 @@
 # limitations under the License.
 
 variable "deployment_name" {
-  description = "HPC Toolkit deployment name"
+  description = "Cluster Toolkit deployment name"
   type        = string
 }
 

@@ -5,10 +5,10 @@ a new file system) in a way that can be shared with other modules. This allows
 a compute VM to mount a filesystem that is not part of the current deployment
 group.
 
-The pre-existing network storage can be referenced in the same way as any HPC
+The pre-existing network storage can be referenced in the same way as any Cluster
 Toolkit supported file-system such as [filestore](../filestore/README.md).
 
-For more information on network storage options in the Cloud HPC Toolkit, see
+For more information on network storage options in the Cluster Toolkit, see
 the extended [Network Storage documentation](../../../../docs/network_storage.md).
 
 ### Example
@@ -93,7 +93,7 @@ storage. This script will fail if the specified `local_mount` is already being
 used by another entry in `/etc/fstab`.
 
 Both of these steps are automatically handled with the use of the `use` command
-in a selection of HPC Toolkit modules. See the [compatibility matrix][matrix] in
+in a selection of Cluster Toolkit modules. See the [compatibility matrix][matrix] in
 the network storage doc for a complete list of supported modules.
 
 [matrix]: ../../../docs/network_storage.md#compatibility-matrix

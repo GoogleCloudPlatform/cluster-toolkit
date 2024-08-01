@@ -93,7 +93,7 @@ func CheckWritableDir(path string) error {
 }
 
 // ApplyChangesChoice prompts the user to decide whether they want to approve
-// changes to cloud configuration, to stop execution of ghpc entirely, or to
+// changes to cloud configuration, to stop execution of gcluster entirely, or to
 // skip making the proposed changes and continue execution (in deploy command)
 // only if the user responds with "y" or "yes" (case-insensitive)
 func ApplyChangesChoice(c ProposedChanges) bool {
@@ -120,7 +120,7 @@ Please select an option [d,a,s,c]: `)
 		case "d":
 			fmt.Println(c.Full)
 		case "s":
-			logging.Fatal("user chose to stop execution of ghpc rather than make proposed changes to infrastructure")
+			logging.Fatal("user chose to stop execution of gcluster rather than make proposed changes to infrastructure")
 		}
 	}
 }

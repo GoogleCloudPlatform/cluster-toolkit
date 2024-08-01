@@ -1,9 +1,9 @@
-# HPC Toolkit - Install and Run OpenFOAM on a Slurm Cluster
+# Cluster Toolkit - Install and Run OpenFOAM on a Slurm Cluster
 
-HPC Toolkit is an open-source software offered by Google Cloud which makes it
+Cluster Toolkit is an open-source software offered by Google Cloud which makes it
 easy for customers to deploy HPC environments on Google Cloud.
 
-In this tutorial you will use the HPC Toolkit to:
+In this tutorial you will use the Cluster Toolkit to:
 
 * Deploy a [Slurm](https://github.com/GoogleCloudPlatform/slurm-gcp#readme) HPC cluster on
   Google Cloud
@@ -53,7 +53,7 @@ gcloud projects add-iam-policy-binding <walkthrough-project-id/> --member=servic
 
 ## Build the Toolkit Binary
 
-To build HPC Toolkit binary from source run:
+To build Cluster Toolkit binary from source run:
 
 ```bash
 make
@@ -66,7 +66,7 @@ build run:
 ./ghpc --version
 ```
 
-This should show you the version of the HPC Toolkit you are using.
+This should show you the version of the Cluster Toolkit you are using.
 
 ## Generate a Deployment
 
@@ -249,7 +249,7 @@ cat slurm-*.out
 
 To view the monitoring dashboard containing metrics on your cluster, open the
 following URL in a new tab and click on the dashboard named
-`HPC Toolkit Dashboard: spack-openfoam`.
+`Cluster Toolkit Dashboard: spack-openfoam`.
 
 ```text
 https://console.cloud.google.com/monitoring/dashboards?project=<walkthrough-project-id/>

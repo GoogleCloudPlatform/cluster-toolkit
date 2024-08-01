@@ -97,11 +97,11 @@ storage intact and b) you can build software before you deploy your cluster.
 1. Clone the repo
 
    ```bash
-   git clone https://github.com/GoogleCloudPlatform/hpc-toolkit.git
-   cd hpc-toolkit
+   git clone https://github.com/GoogleCloudPlatform/cluster-toolkit.git
+   cd cluster-toolkit
    ```
 
-1. Build the HPC Toolkit
+1. Build the Cluster Toolkit
 
    ```bash
    make
@@ -114,12 +114,12 @@ storage intact and b) you can build software before you deploy your cluster.
    the cloud buckets being destroyed, it is recommended you run:
 
    ```bash
-   ./ghpc create examples/hcls-blueprint.yaml -w --vars project_id=<project> --vars bucket_force_delete=true
+   ./gcluster create examples/hcls-blueprint.yaml -w --vars project_id=<project> --vars bucket_force_delete=true
    ```
 
    The `bucket_force_delete` variable makes it easier to tear down the
    deployment. If it is set to the default value of `false`, buckets with
-   objects (files) will not be deleted and the `./ghpc destroy` command will
+   objects (files) will not be deleted and the `./gcluster destroy` command will
    fail partway through.
 
    If the data stored in the buckets should be preseverved, remove the
@@ -127,10 +127,10 @@ storage intact and b) you can build software before you deploy your cluster.
 
 1. Deploy the `enable_apis` group
 
-   Call the following ghpc command to deploy the the hcls blueprint.
+   Call the following gcluster command to deploy the the hcls blueprint.
 
    ```bash
-   ./ghpc deploy hcls-01
+   ./gcluster deploy hcls-01
    ```
 
    This will prompt you to **display**, **apply**, **stop**, or **continue**
@@ -140,20 +140,20 @@ storage intact and b) you can build software before you deploy your cluster.
    cluster.
 
    > [!WARNING]
-   > This ghpc command will run through 4 groups (`enable_apis`, `setup`,
+   > This gcluster command will run through 4 groups (`enable_apis`, `setup`,
    > `software_installation`, and `cluster`) and prompt you to apply each one.
    > If the command is cancelled or exited by accident before finishing, it can
    > be rerun to continue deploying the blueprint.
 
 1. Deploy the `setup` group
 
-   The next `ghpc` prompt will ask you to **display**, **apply**, **stop**, or
+   The next `gcluster` prompt will ask you to **display**, **apply**, **stop**, or
    **continue** without applying the `setup` group. Select 'apply'.
 
    This group will create a network and file systems to be used by the cluster.
 
    > [!NOTE]
-   > At this point do not proceed with the ghpc prompt for the `cluster` group.
+   > At this point do not proceed with the gcluster prompt for the `cluster` group.
    > Continue with the steps below before proceeding.
 
    This step will create a storage bucket for depositing software. The bucket
@@ -163,7 +163,7 @@ storage intact and b) you can build software before you deploy your cluster.
 
    Here are two ways to locate the bucket name:
 
-   1. At the end of the `setup` deployment, ghpc should output a line
+   1. At the end of the `setup` deployment, gcluster should output a line
       `Outputs:`. Under that there should be a line similar to
       `gcs_bucket_path_bucket-software = "gs://hcls-user-provided-software-hcls-01-84d0b51e"`,
       the bucket name is located within the quotes after `gs://`
@@ -200,7 +200,7 @@ storage intact and b) you can build software before you deploy your cluster.
 1. Deploy the `software_installation` group.
 
    Once the file from the prior step has been completely uploaded, you can
-   return to the ghpc command which will ask you to **display**, **apply**,
+   return to the gcluster command which will ask you to **display**, **apply**,
    **stop**, or **continue** without applying the `software_installation` group.
    Select 'apply'.
 
@@ -221,7 +221,7 @@ storage intact and b) you can build software before you deploy your cluster.
 
 1. Deploy the `cluster` group
 
-   The next `ghpc` prompt will ask you to **display**, **apply**, **stop**, or
+   The next `gcluster` prompt will ask you to **display**, **apply**, **stop**, or
    **continue** without applying the `cluster` group. Select 'apply'.
 
    This deployment group contains the Slurm cluster and the Chrome remote
@@ -249,7 +249,7 @@ destroyed first. You can use the following commands to destroy the deployment.
 > associated costs.
 
 ```bash
-./ghpc destroy hcls-01 --auto-approve
+./gcluster destroy hcls-01 --auto-approve
 ```
 
 > [!NOTE]

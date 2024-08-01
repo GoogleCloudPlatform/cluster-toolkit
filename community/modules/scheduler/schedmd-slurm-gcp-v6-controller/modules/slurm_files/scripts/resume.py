@@ -63,53 +63,26 @@ BULK_INSERT_LIMIT = 5000
 
 
 def instance_properties(nodeset, model, placement_group, labels=None):
-    template = lkp.node_template(model)
-    template_info = lkp.template_info(template)
-
     props = NSDict()
 
-    slurm_metadata = {
-        "slurm_cluster_name": cfg.slurm_cluster_name,
-        "slurm_instance_role": "compute",
-        "startup-script": (
-            Path(cfg.slurm_scripts_dir or util.dirs.scripts) / "startup.sh"
-        ).read_text(),
-        "VmDnsSetting": "GlobalOnly",
-    }
-    info_metadata = {
-        item.get("key"): item.get("value") for item in template_info.metadata["items"]
-    }
+    if labels: # merge in extra labels on instance and disks
+        template = lkp.node_template(model)
+        template_info = lkp.template_info(template)
 
-    props_metadata = {**info_metadata, **slurm_metadata}
-    props.metadata = {
-        "items": [NSDict({"key": k, "value": v}) for k, v in props_metadata.items()]
-    }
-
-    labels = {
-        "slurm_cluster_name": cfg.slurm_cluster_name,
-        "slurm_instance_role": "compute",
-        **(labels or {}),
-    }
-    props.labels = {**template_info.labels, **labels}
-
-    for disk in template_info.disks:
-        # do not label local ssd
-        if (
-            "diskType" not in disk.initializeParams
-            or disk.initializeParams.diskType == "local-ssd"
-        ):
-            continue
-        disk.initializeParams.labels.update(labels)
-    props.disks = template_info.disks
+        props.labels = {**template_info.labels, **labels}
+        
+        for disk in template_info.disks:
+            if disk.initializeParams.get("diskType", "local-ssd") == "local-ssd":
+                continue # do not label local ssd
+            disk.initializeParams.labels.update(labels)
+        props.disks = template_info.disks
 
     if placement_group:
         props.scheduling = {
             "onHostMaintenance": "TERMINATE",
             "automaticRestart": False,
         }
-        props.resourcePolicies = [
-            placement_group,
-        ]
+        props.resourcePolicies = [placement_group]
 
     if nodeset.reservation_name:
         reservation_name = nodeset.reservation_name
@@ -153,7 +126,6 @@ def per_instance_properties(node):
     # No properties beyond name are supported yet.
 
     return props
-
 
 def create_instances_request(nodes, partition_name, placement_group, job_id=None):
     """Call regionInstances.bulkInsert to create instances"""

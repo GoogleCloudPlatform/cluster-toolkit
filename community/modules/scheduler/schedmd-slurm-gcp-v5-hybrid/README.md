@@ -17,7 +17,7 @@ on-premise slurm cluster.
 
 > **_NOTE:_** This is an experimental module and the functionality and
 > documentation will likely be updated in the near future. This module has only
-> been tested in limited capacity with the HPC Toolkit. On Premise
+> been tested in limited capacity with the Cluster Toolkit. On Premise
 > Slurm configurations can vary significantly, this module should
 > be used as a starting point, not a complete solution.
 

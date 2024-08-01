@@ -2,7 +2,7 @@
 
 These instructions step you through the deployment, installation and
 verification of a hybrid slurm cluster using the
-[schedmd-slurm-gcp-v5-controller] HPC Toolkit module.
+[schedmd-slurm-gcp-v5-controller] Cluster Toolkit module.
 
 They assume that your on-premise or simulated on-premise slurm
 cluster has already been set up to allow hybrid partitions from the hybrid
@@ -24,7 +24,7 @@ GCP.
 
 [schedmd-slurm-gcp-v5-controller]: ../../community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid/README.md
 
-## Use the Cloud HPC Toolkit to Create the Hybrid Deployment Directory
+## Use the Cluster Toolkit to Create the Hybrid Deployment Directory
 The blueprint for creating a deploying the hybrid configuration can be found in
 the blueprints directory as [hybrid-configuration.yaml]. This blueprint defines
 two deployment groups, one to create the network if not already created named
