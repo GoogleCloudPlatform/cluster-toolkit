@@ -76,6 +76,7 @@ locals {
     subnetwork             = ns.subnetwork_self_link
     reservation_name       = ns.reservation_name
     maintenance_interval   = ns.maintenance_interval
+    instance_properties    = ns.instance_properties
     enable_placement       = ns.enable_placement
     network_storage        = ns.network_storage
     zone_target_shape      = ns.zone_target_shape
