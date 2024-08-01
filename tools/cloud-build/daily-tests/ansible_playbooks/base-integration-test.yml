@@ -40,6 +40,12 @@
           awk -F'"' '{print $2}'
 
   ## Create cluster
+  - name: Run Pre Create Tasks
+    ansible.builtin.include_tasks: "{{ pre_create_task }}"
+    loop: "{{ pre_create_tasks | default([]) }}"
+    loop_control:
+      loop_var: pre_create_task
+
   - name: Create Deployment Directory
     ansible.builtin.include_tasks:
       file: tasks/create_deployment_directory.yml
