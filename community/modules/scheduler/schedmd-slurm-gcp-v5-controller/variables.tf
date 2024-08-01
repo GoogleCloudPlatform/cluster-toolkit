@@ -15,7 +15,7 @@
  */
 
 # Most variables have been sourced and modified from the SchedMD/slurm-gcp
-# github repository: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/5.11.1
+# github repository: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/v5
 
 variable "access_config" {
   description = "Access configurations, i.e. IPs via which the VM instance can be accessed via the Internet."
@@ -557,7 +557,7 @@ variable "instance_image" {
   type        = map(string)
   default = {
     project = "schedmd-slurm-public"
-    family  = "slurm-gcp-5-11-hpc-centos-7"
+    family  = "slurm-gcp-5-12-hpc-centos-7"
   }
 
   validation {
