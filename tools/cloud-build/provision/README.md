@@ -66,7 +66,7 @@ When prompted for project, use integration test project.
 |------|-------------|------|---------|:--------:|
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | GCP project ID | `string` | `"hpc-toolkit-dev"` | no |
 | <a name="input_region"></a> [region](#input\_region) | GCP region | `string` | `"us-central1"` | no |
-| <a name="input_repo_uri"></a> [repo\_uri](#input\_repo\_uri) | URI of GitHub repo | `string` | `"https://github.com/GoogleCloudPlatform/hpc-toolkit"` | no |
+| <a name="input_repo_uri"></a> [repo\_uri](#input\_repo\_uri) | URI of GitHub repo | `string` | `"https://github.com/GoogleCloudPlatform/cluster-toolkit"` | no |
 | <a name="input_zone"></a> [zone](#input\_zone) | GCP zone | `string` | `"us-central1-c"` | no |
 
 ## Outputs
