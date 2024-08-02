@@ -1,5 +1,12 @@
 # Objective
 
+> [!CAUTION]
+> This solution is built upon "legacy" blueprints using Slurm-GCP v5. The
+> [solution using v6](../README.md) is recommended for all new deployments.
+> The legacy solution is presented for customers with existing deployments. We
+> recommend maintaining existing deployments with v1.37.0 of the Toolkit as this
+> combination is tested nightly.
+
 This document will guide you to successfully provisioning a Slurm cluster with
 a3-highgpu-8g compute nodes running NVIDIA H100 GPUs.
 
@@ -19,7 +26,8 @@ Please follow the initial instructions for:
 - Installing Cluster Toolkit [dependencies][tkdeps] (Go, Terraform, Packer)
 - Installing the Cluster [Toolkit][tkinstall]
 
-Verify that your release of the Cluster Toolkit is 1.31.1 or later.
+Verify that your release of the Cluster Toolkit is greater than 1.31.1 and less
+than or equal to 1.37.0.
 
 ```shell
 gcluster --version
@@ -46,11 +54,11 @@ source /absolute/path/to/toolkit-a3/bin/activate
 
 The solution is split into 3 Cluster Toolkit blueprints:
 
-1. Provision 5 VPCs (1 system network, 4 GPU networks) and 1 Filestore for
-mounting `/home` across the cluster
+1. Provision 1 system network and 1 Filestore instance for mounting `/home`
+across the cluster.
 2. Build a custom image installing Slurm in an Ubuntu 20.04 image. The image
 runs a kernel patched with performance enhancements for the a3-highgpu-8g VM.
-3. Provision a Slurm cluster using the custom image
+3. Provision 4 GPU networks and a Slurm cluster using the custom image.
 
 The 1st and 2nd blueprints should be provisioned once and rarely need further
 modification. This approach separates the lifecycle of a Filestore instance from
@@ -189,9 +197,9 @@ size. Recall that there are 8 NVIDIA H100 GPUs per a3-highgpu-8g VM.
 
 ## Cluster creation
 
-The blueprint `ml-slurm-a3-0-base.yaml` will create 5 VPCs (1 system, 4 GPU)
-and a Filestore `/home` filesystem. Run the standard Toolkit workflow at the
-command line (approx. 5 minutes):
+The blueprint `ml-slurm-a3-0-base.yaml` will create 1 system network and a
+Filestore `/home` filesystem. Run the standard Toolkit workflow at the command
+line (approx. 5 minutes):
 
 ```shell
 gcluster deploy ml-slurm-a3-0-base.yaml --auto-approve
