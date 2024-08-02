@@ -129,8 +129,9 @@ variable "install_docker" {
 variable "local_ssd_filesystem" {
   description = "Create and mount a filesystem from local SSD disks (data will be lost if VMs are powered down without enabling migration); enable by setting mountpoint field to a valid directory path."
   type = object({
-    fs_type    = optional(string, "ext4")
-    mountpoint = optional(string, "")
+    fs_type     = optional(string, "ext4")
+    mountpoint  = optional(string, "")
+    permissions = optional(string, "0755")
   })
 
   validation {
@@ -143,9 +144,15 @@ variable "local_ssd_filesystem" {
     error_message = "To enable local SSD filesystems, var.local_ssd_filesystem.mountpoint must be set to an absolute path to a mountpoint."
   }
 
+  validation {
+    condition     = length(regexall("^[0-7]{3,4}$", var.local_ssd_filesystem.permissions)) > 0
+    error_message = "The POSIX permissions for the mountpoint must be represented as a 3 or 4-digit octal"
+  }
+
   default = {
-    fs_type    = "ext4"
-    mountpoint = ""
+    fs_type     = "ext4"
+    mountpoint  = ""
+    permissions = "0755"
   }
 
   nullable = false

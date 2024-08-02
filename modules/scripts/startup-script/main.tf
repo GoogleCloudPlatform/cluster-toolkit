@@ -107,6 +107,7 @@ locals {
       args = join(" ", [
         "-e mountpoint=${var.local_ssd_filesystem.mountpoint}",
         "-e fs_type=${var.local_ssd_filesystem.fs_type}",
+        "-e mode=${var.local_ssd_filesystem.permissions}",
       ])
     },
   ]
