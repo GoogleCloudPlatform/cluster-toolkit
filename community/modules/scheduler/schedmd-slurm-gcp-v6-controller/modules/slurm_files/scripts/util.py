@@ -161,9 +161,7 @@ def universe_domain() -> str:
 
 
 def endpoint_version(api: ApiEndpoint) -> Optional[str]:
-    if api and api.value in lkp.endpoint_versions:
-        return lkp.endpoint_versions[api.value]
-    return None
+    return lkp.endpoint_versions.get(api.value, None)
 
 
 @lru_cache(maxsize=1)
@@ -180,17 +178,17 @@ def get_credentials() -> Optional[service_account.Credentials]:
     return credentials
 
 
-def create_client_options(api: Optional[ApiEndpoint] = None) -> ClientOptions:
+def create_client_options(api: ApiEndpoint) -> ClientOptions:
     """Create client options for cloud endpoints"""
     ver = endpoint_version(api)
     ud = universe_domain()
     options = {}
     if ud and ud != DEFAULT_UNIVERSE_DOMAIN:
         options["universe_domain"] = ud
-    if api and ver:
+    if ver:
         options["api_endpoint"] = f"https://{api.value}.{ud}/{ver}/"
     co = ClientOptions(**options)
-    log.debug(f"Using ClientOptions = {co} for API: {api}")
+    log.debug(f"Using ClientOptions = {co} for API: {api.value}")
     return co
 
 logging.basicConfig(level=logging.INFO, stream=sys.stdout)
@@ -275,27 +273,19 @@ def map_with_futures(func, seq):
             yield res
 
 
-def blob_get(file, project=None):
-    if project is None:
-        project = lkp.project
+def blob_get(file):
     uri = instance_metadata("attributes/slurm_bucket_path")
     bucket_name, path = parse_bucket_uri(uri)
     blob_name = f"{path}/{file}"
-    co = create_client_options(ApiEndpoint.STORAGE)
-    storage_client = storage.Client(project=project, client_options=co)
-    return storage_client.get_bucket(bucket_name).blob(blob_name)
+    return storage_client().get_bucket(bucket_name).blob(blob_name)
 
 
-def blob_list(prefix="", delimiter=None, project=None):
-    if project is None:
-        project = lkp.project
+def blob_list(prefix="", delimiter=None):
     uri = instance_metadata("attributes/slurm_bucket_path")
     bucket_name, path = parse_bucket_uri(uri)
     blob_prefix = f"{path}/{prefix}"
-    co = create_client_options(ApiEndpoint.STORAGE)
-    storage_client = storage.Client(project=project, client_options=co)
     # Note: The call returns a response only when the iterator is consumed.
-    blobs = storage_client.list_blobs(
+    blobs = storage_client().list_blobs(
         bucket_name, prefix=blob_prefix, delimiter=delimiter
     )
     return [blob for blob in blobs]
@@ -371,17 +361,14 @@ def reservation_resource_policies(reservation):
     return [u.split("/")[-1] for u in reservation.get("resourcePolicies", {}).values()]
 
 
-def compute_service(credentials=None, user_agent=USER_AGENT, version="beta"):
+def compute_service(version="beta"):
     """Make thread-safe compute service handle
     creates a new Http for each request
     """
-
     credentials = get_credentials()
 
     def build_request(http, *args, **kwargs):
-        new_http = httplib2.Http()
-        if user_agent is not None:
-            new_http = set_user_agent(new_http, user_agent)
+        new_http = set_user_agent(httplib2.Http(), USER_AGENT)
         if credentials is not None:
             new_http = google_auth_httplib2.AuthorizedHttp(credentials, http=new_http)
         return googleapiclient.http.HttpRequest(new_http, *args, **kwargs)
@@ -400,6 +387,16 @@ def compute_service(credentials=None, user_agent=USER_AGENT, version="beta"):
         credentials=credentials,
         discoveryServiceUrl=disc_url,
     )
+
+def storage_client() -> storage.Client:
+    """
+    Config-independent storage client
+    """
+    ud = universe_domain()
+    co = {}
+    if ud and ud != DEFAULT_UNIVERSE_DOMAIN:
+        co["universe_domain"] = ud
+    return storage.Client(client_options=ClientOptions(**co))
 
 
 def load_config_data(config):
@@ -823,9 +820,7 @@ def project_metadata(key):
 
 
 def bucket_blob_download(bucket_name, blob_name):
-    co = create_client_options("storage")
-    storage_client = storage.Client(client_options=co)
-    bucket = storage_client.bucket(bucket_name)
+    bucket = storage_client().bucket(bucket_name)
     blob = bucket.blob(blob_name)
     contents = None
     with tempfile.NamedTemporaryFile(mode="w+t") as tmp:

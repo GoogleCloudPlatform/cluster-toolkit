@@ -120,7 +120,6 @@ def test_to_hostlist_fast(names, expected):
             "alpha",
             ClientOptions(api_endpoint="https://tpu.googleapis.com/alpha/"),
         ),
-        (None, None, ClientOptions()),
     ],
 )
 def test_create_client_options(
