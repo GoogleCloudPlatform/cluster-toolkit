@@ -55,6 +55,7 @@ deployment_groups:
     settings:
       partition_name: debug
       exclusive: false # allows nodes to stay up after jobs are done
+      is_default: true
 
   - id: compute_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
@@ -75,6 +76,7 @@ deployment_groups:
     use: [network]
     settings:
       node_count_dynamic_max: 20
+      # Note that H3 is available in only specific zones. https://cloud.google.com/compute/docs/regions-zones
       machine_type: h3-standard-88
       # H3 does not support pd-ssd and pd-standard
       # https://cloud.google.com/compute/docs/compute-optimized-machines#h3_disks
@@ -87,9 +89,6 @@ deployment_groups:
     - h3_nodeset
     settings:
       partition_name: h3
-      # Note that H3 is available in only specific zones. https://cloud.google.com/compute/docs/regions-zones
-      # Choose another partition as the default if H3 is not available in your chosen zone.
-      is_default: true
 
   - id: slurm_login
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
