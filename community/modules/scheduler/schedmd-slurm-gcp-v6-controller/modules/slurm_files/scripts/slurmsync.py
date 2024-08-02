@@ -167,19 +167,6 @@ def _find_tpu_node_status(nodename, state):
 
     return NodeStatus.unchanged
 
-
-def allow_power_down(state):
-    config = run(f"{lkp.scontrol} show config").stdout.rstrip()
-    m = re.search(r"SuspendExcStates\s+=\s+(?P<states>[\w\(\)]+)", config)
-    if not m:
-        log.warning("SuspendExcStates not found in Slurm config")
-        return True
-    states = set(m.group("states").split(","))
-    if "(null)" in states or bool(state & state.flags.union(state.base)):
-        return False
-    return True
-
-
 def find_node_status(nodename):
     """Determine node/instance status that requires action"""
     state = lkp.slurm_node(nodename)
@@ -207,7 +194,7 @@ def find_node_status(nodename):
             return NodeStatus.unbacked
         if state.base != "DOWN" and not power_flags:
             return NodeStatus.unbacked
-        if state.base == "DOWN" and not power_flags and allow_power_down(state):
+        if state.base == "DOWN" and not power_flags:
             return NodeStatus.power_down
         if "POWERED_DOWN" in state.flags and lkp.is_static_node(nodename):
             return NodeStatus.resume
