@@ -1,4 +1,4 @@
-# Cluster Toolkit (formally HPC Toolkit) Commands
+# Cluster Toolkit (formerly HPC Toolkit) Commands
 
 ## gcluster
 
