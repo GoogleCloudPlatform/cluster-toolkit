@@ -1,4 +1,4 @@
-# Network Storage in the Cluster Toolkit (formally HPC Toolkit)
+# Network Storage in the Cluster Toolkit (formerly HPC Toolkit)
 
 The Cluster Toolkit provides powerful tools for working with network
 storage.

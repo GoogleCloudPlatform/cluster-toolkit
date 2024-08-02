@@ -1,4 +1,4 @@
-# Custom Images in the Cluster Toolkit (formally HPC Toolkit)
+# Custom Images in the Cluster Toolkit (formerly HPC Toolkit)
 
 Please review the
 [introduction to image building](../../../docs/image-building.md) for general
