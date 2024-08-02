@@ -1,4 +1,4 @@
-# Google Cluster Toolkit (formally HPC Toolkit)
+# Google Cluster Toolkit (formerly HPC Toolkit)
 
 ## Description
 

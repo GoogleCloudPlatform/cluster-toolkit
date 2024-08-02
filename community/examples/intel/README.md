@@ -1,4 +1,4 @@
-# Intel Solutions for the Cluster Toolkit (formally HPC Toolkit)
+# Intel Solutions for the Cluster Toolkit (formerly HPC Toolkit)
 
 > **_NOTE:_** The [hpc-slurm-daos.yaml](hpc-slurm-daos.yaml) will not be compatible
 > for newer version of slurm-gcp v6.
