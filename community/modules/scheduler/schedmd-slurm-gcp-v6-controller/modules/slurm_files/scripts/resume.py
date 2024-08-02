@@ -119,7 +119,7 @@ def instance_properties(nodeset, model, placement_group, labels=None):
         props.scheduling["maintenanceInterval"] = nodeset.maintenance_interval
 
     # Override with properties explicit specified in the nodeset
-    props.update(nodeset.get("instance_properties", {}))
+    props.update(nodeset.get("instance_properties") or {})
     
     return props
 
