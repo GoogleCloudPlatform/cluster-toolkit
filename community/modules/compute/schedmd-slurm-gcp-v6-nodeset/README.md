@@ -150,6 +150,7 @@ No modules.
 | [google_compute_default_service_account.default](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_default_service_account) | data source |
 | [google_compute_image.slurm](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_image) | data source |
 | [google_compute_reservation.reservation](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_reservation) | data source |
+| [google_compute_zones.available](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_zones) | data source |
 
 ## Inputs
 

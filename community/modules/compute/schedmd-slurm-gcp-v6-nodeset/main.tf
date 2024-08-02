@@ -93,8 +93,8 @@ locals {
     instance_properties      = var.instance_properties
 
     zone_target_shape = var.zone_target_shape
-    zone_policy_allow = toset(concat([var.zone], tolist(var.zones)))
-    zone_policy_deny  = toset([])
+    zone_policy_allow = local.zones
+    zone_policy_deny  = local.zones_deny
 
     startup_script  = local.ghpc_startup_script
     network_storage = var.network_storage
@@ -103,6 +103,26 @@ locals {
 
 data "google_compute_default_service_account" "default" {
   project = var.project_id
+}
+
+locals {
+  zones      = setunion(var.zones, [var.zone])
+  zones_deny = setsubtract(data.google_compute_zones.available.names, local.zones)
+}
+
+data "google_compute_zones" "available" {
+  project = var.project_id
+  region  = var.region
+
+  lifecycle {
+    postcondition {
+      condition     = length(setsubtract(local.zones, self.names)) == 0
+      error_message = <<-EOD
+      Invalid zones=${jsonencode(setsubtract(local.zones, self.names))}
+      Available zones=${jsonencode(self.names)}
+      EOD
+    }
+  }
 }
 
 locals {

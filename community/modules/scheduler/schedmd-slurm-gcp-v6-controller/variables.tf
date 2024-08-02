@@ -181,6 +181,7 @@ variable "login_nodes" {
 ############
 variable "nodeset" {
   description = "Define nodesets, as a list."
+  # TODO: remove optional & defaults from fields, since they SHOULD be properly set by nodeset module and not here.
   type = list(object({
     node_count_static      = optional(number, 0)
     node_count_dynamic_max = optional(number, 1)
@@ -274,9 +275,9 @@ variable "nodeset" {
       filename = string
     content = string })), [])
 
-    zone_target_shape = optional(string, "ANY_SINGLE_ZONE")
-    zone_policy_allow = optional(set(string), [])
-    zone_policy_deny  = optional(set(string), [])
+    zone_target_shape = string
+    zone_policy_allow = set(string)
+    zone_policy_deny  = set(string)
   }))
   default = []
 }
