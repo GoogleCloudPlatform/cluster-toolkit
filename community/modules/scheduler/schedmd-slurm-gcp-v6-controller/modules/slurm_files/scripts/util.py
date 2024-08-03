@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Iterable, List, Tuple, Optional
+from typing import Iterable, List, Tuple, Optional, Any
 import argparse
 import base64
 import collections
@@ -38,7 +38,7 @@ from collections import defaultdict, namedtuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
 from functools import lru_cache, reduce, wraps
-from itertools import chain, compress, islice
+from itertools import chain, islice
 from pathlib import Path
 from time import sleep, time
 
@@ -266,17 +266,18 @@ def map_with_futures(func, seq):
                 res = e
             yield res
 
+def _get_bucket_and_common_prefix() -> Tuple[str, str]:
+    uri = instance_metadata("attributes/slurm_bucket_path")
+    return parse_bucket_uri(uri)
 
 def blob_get(file):
-    uri = instance_metadata("attributes/slurm_bucket_path")
-    bucket_name, path = parse_bucket_uri(uri)
+    bucket_name, path = _get_bucket_and_common_prefix()
     blob_name = f"{path}/{file}"
     return storage_client().get_bucket(bucket_name).blob(blob_name)
 
 
 def blob_list(prefix="", delimiter=None):
-    uri = instance_metadata("attributes/slurm_bucket_path")
-    bucket_name, path = parse_bucket_uri(uri)
+    bucket_name, path = _get_bucket_and_common_prefix()
     blob_prefix = f"{path}/{prefix}"
     # Note: The call returns a response only when the iterator is consumed.
     blobs = storage_client().list_blobs(
@@ -402,8 +403,7 @@ def _fill_cfg_defaults(cfg: NSDict) -> NSDict:
         cfg.slurm_control_host = f"{cfg.slurm_cluster_name}-controller"
     if not cfg.slurm_control_host_port:
         cfg.slurm_control_host_port = "6820-6830"
-    if not cfg.munge_mount:
-        # NOTE: should only happen with cloud controller
+    if not cfg.munge_mount: # NOTE: should only happen with cloud controller
         cfg.munge_mount = NSDict(
             {
                 "server_ip": cfg.slurm_control_addr or cfg.slurm_control_host,
@@ -416,6 +416,7 @@ def _fill_cfg_defaults(cfg: NSDict) -> NSDict:
     network_storage_iter = filter(
         None,
         (
+            cfg.munge_mount,
             *cfg.network_storage,
             *cfg.login_network_storage,
             *chain.from_iterable(ns.network_storage for ns in cfg.nodeset.values()),
@@ -430,17 +431,69 @@ def _fill_cfg_defaults(cfg: NSDict) -> NSDict:
             netstore.server_ip = cfg.slurm_control_host
     return cfg
 
+def _list_config_blobs() -> Tuple[Any, str]:
+    _, common_prefix = _get_bucket_and_common_prefix()
+    res = { # TODO: use a dataclass once we move to python 3.7
+        "core": None,
+        "partition": [],
+        "nodeset": [],
+    }
+    hash = hashlib.md5()
+    blobs = list(blob_list(prefix=""))
+    # sort blobs so hash is consistent
+    for blob in sorted(blobs, key=lambda b: b.name):
+        if blob.name == f"{common_prefix}/config.yaml":
+            res["core"] = blob
+            hash.update(blob.md5_hash.encode("utf-8"))
+        for key in ("partition", "nodeset"):
+            if blob.name.startswith(f"{common_prefix}/{key}_configs/"):
+                res[key].append(blob)
+                hash.update(blob.md5_hash.encode("utf-8"))
+    assert res["core"] is not None, "config.yaml not found in bucket"
+    return res, hash.hexdigest()
+        
 
 def _fetch_config(old_hash: Optional[str]) -> Optional[Tuple[NSDict, str]]:
     """Fetch config from bucket, returns None if no changes are detected."""
-    blob = blob_get("config.yaml")
-    blob.reload()  # Populate blob with metadata
-    if old_hash == blob.md5_hash:
+    # TODO: fetch nodeset_dyn, nodeset_tpu, and login
+    blobs, hash = _list_config_blobs()
+    if old_hash == hash:
         return None
 
-    cfg = NSDict(yaml.safe_load(blob.download_as_text()))
-    return _fill_cfg_defaults(cfg), blob.md5_hash
+    def _download(bs) -> List[Any]:
+        return [yaml.safe_load(b.download_as_text()) for b in bs]
 
+    return _assemble_config(
+        core=_download([blobs["core"]])[0],
+        partitions=_download(blobs["partition"]),
+        nodesets=_download(blobs["nodeset"]),
+    ), hash
+
+def _assemble_config(core: Any, partitions: List[Any], nodesets: List[Any]) -> NSDict:
+    cfg = NSDict(core)
+
+    # add partition configs
+    for p_yaml in partitions:
+        p_cfg = NSDict(p_yaml)
+        assert p_cfg.get("partition_name"), "partition_name is required"
+        p_name = p_cfg.partition_name
+        assert p_name not in cfg.partitions, f"partition {p_name} already defined"
+        cfg.partitions[p_name] = p_cfg
+
+    # add nodeset configs
+    for ns_yaml in nodesets:
+        ns_cfg = NSDict(ns_yaml)
+        assert ns_cfg.get("nodeset_name"), "nodeset_name is required"
+        ns_name = ns_cfg.nodeset_name
+        assert ns_name not in cfg.nodeset, f"nodeset {ns_name} already defined"
+        cfg.nodeset[ns_name] = ns_cfg
+
+    # validate that configs for all referenced nodesets are present
+    for p in cfg.partitions.values():
+        for ns_name in p.partition_nodeset:
+            assert ns_name in cfg.nodeset, f"nodeset {ns_name} not defined in config"
+        
+    return _fill_cfg_defaults(cfg)
 
 def fetch_config() -> Tuple[bool, NSDict]:
     """
