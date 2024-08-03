@@ -401,9 +401,8 @@ def compute_service(credentials=None, user_agent=USER_AGENT, version="beta"):
         discoveryServiceUrl=disc_url,
     )
 
-
-def load_config_data(config):
-    """load dict-like data into a config object"""
+def new_config(config):
+    "initialize a new config object necessary defaults are handled here"
     cfg = NSDict(config)
     if not cfg.slurm_log_dir:
         cfg.slurm_log_dir = dirs.log
@@ -413,31 +412,17 @@ def load_config_data(config):
         cfg.slurm_control_host = f"{cfg.slurm_cluster_name}-controller"
     if not cfg.slurm_control_host_port:
         cfg.slurm_control_host_port = "6820-6830"
-    if not cfg.munge_mount:
-        # NOTE: should only happen with cloud controller
+    if not cfg.munge_mount: # NOTE: should only happen with cloud controller
         cfg.munge_mount = NSDict(
-            {
-                "server_ip": cfg.slurm_control_addr or cfg.slurm_control_host,
-                "remote_mount": "/etc/munge",
-                "fs_type": "nfs",
-                "mount_options": "defaults,hard,intr,_netdev",
-            }
-        )
-
-    if not cfg.enable_debug_logging and isinstance(cfg.enable_debug_logging, NSDict):
-        cfg.enable_debug_logging = False
-    return cfg
-
-
-def new_config(config):
-    """initialize a new config object
-    necessary defaults are handled here
-    """
-    cfg = load_config_data(config)
+            server_ip=cfg.slurm_control_addr or cfg.slurm_control_host,
+            remote_mount=dirs.munge,
+            fs_type="nfs",
+            mount_options="defaults,hard,intr,_netdev")
 
     network_storage_iter = filter(
         None,
         (
+            cfg.munge_mount,
             *cfg.network_storage,
             *cfg.login_network_storage,
             *chain.from_iterable(ns.network_storage for ns in cfg.nodeset.values()),
@@ -476,7 +461,7 @@ def load_config_file(path):
     except FileNotFoundError:
         log.warning(f"config file not found: {path}")
         return NSDict()
-    return load_config_data(content)
+    return NSDict(content)
 
 
 def save_config(cfg, path):

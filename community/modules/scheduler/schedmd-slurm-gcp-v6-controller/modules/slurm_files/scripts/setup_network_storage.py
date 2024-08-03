@@ -190,17 +190,12 @@ def mount_fstab(mounts, log):
 
 
 def munge_mount_handler(log):
-    if not cfg.munge_mount:
-        log.error("Missing munge_mount in cfg")
-    elif lkp.is_controller:
+    if lkp.is_controller:
         return
 
     mount = cfg.munge_mount
-    server_ip = (
-        mount.server_ip
-        if mount.server_ip
-        else (cfg.slurm_control_addr or cfg.slurm_control_host)
-    )
+    assert mount.server_ip, "munge_mount.server_ip must be set"
+    
     remote_mount = mount.remote_mount
     local_mount = Path("/mnt/munge")
     fs_type = mount.fs_type if mount.fs_type is not None else "nfs"
@@ -210,8 +205,6 @@ def munge_mount_handler(log):
         else "defaults,hard,intr,_netdev"
     )
 
-    munge_key = Path(dirs.munge / "munge.key")
-
     log.info(f"Mounting munge share to: {local_mount}")
     local_mount.mkdir()
     if fs_type.lower() == "gcsfuse".lower():
@@ -220,17 +213,17 @@ def munge_mount_handler(log):
         cmd = [
             "gcsfuse",
             f"--only-dir={remote_mount}" if remote_mount != "" else None,
-            server_ip,
+            mount.server_ip,
             str(local_mount),
         ]
     else:
         if remote_mount is None:
-            remote_mount = Path("/etc/munge")
+            remote_mount = dirs.munge
         cmd = [
             "mount",
             f"--types={fs_type}",
             f"--options={mount_options}" if mount_options != "" else None,
-            f"{server_ip}:{remote_mount}",
+            f"{mount.server_ip}:{remote_mount}",
             str(local_mount),
         ]
     # wait max 120s for munge mount
@@ -249,6 +242,7 @@ def munge_mount_handler(log):
     else:
         raise err
 
+    munge_key = Path(dirs.munge / "munge.key")
     log.info(f"Copy munge.key from: {local_mount}")
     shutil.copy2(Path(local_mount / "munge.key"), munge_key)
 
@@ -269,18 +263,12 @@ def setup_nfs_exports():
     # The controller only needs to set up exports for cluster-internal mounts
     # switch the key to remote mount path since that is what needs exporting
     mounts = resolve_network_storage()
-    # manually add munge_mount
-    mounts.append(
-        NSDict(
-            {
-                "server_ip": cfg.munge_mount.server_ip,
-                "remote_mount": cfg.munge_mount.remote_mount,
-                "local_mount": Path(f"{dirs.munge}_tmp"),
-                "fs_type": cfg.munge_mount.fs_type,
-                "mount_options": cfg.munge_mount.mount_options,
-            }
-        )
-    )
+
+    # manually add munge_mount (TODO: why `_tmp`?)
+    tmp_munge = NSDict(**lkp.cfg.munge_mount)
+    tmp_munge.local_mount = Path(f"{dirs.munge}_tmp")
+    mounts.append(tmp_munge)
+
     # controller mounts
     _, con_mounts = separate_external_internal_mounts(mounts)
     con_mounts = {m.remote_mount: m for m in con_mounts}
