@@ -333,6 +333,12 @@ variable "spot" {
   default     = false
 }
 
+variable "min_cpu_platform" {
+  description = "The name of the minimum CPU platform that you want the instance to use."
+  type        = string
+  default     = null
+}
+
 variable "tags" {
   description = "Network tags, provided as a list"
   type        = list(string)
