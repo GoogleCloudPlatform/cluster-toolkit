@@ -361,13 +361,6 @@ variable "zones" {
     EOD
   type        = set(string)
   default     = []
-
-  validation {
-    condition = alltrue([
-      for x in var.zones : length(regexall("^[a-z]+-[a-z]+[0-9]-[a-z]$", x)) > 0
-    ])
-    error_message = "A value in var.zones is not a valid zone (example: us-central1-f)."
-  }
 }
 
 variable "zone_target_shape" {

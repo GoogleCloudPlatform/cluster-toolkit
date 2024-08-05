@@ -166,7 +166,7 @@ def create_instances_request(nodes, partition_name, placement_group, job_id=None
     # key is instance name, value overwrites properties
     body.perInstanceProperties = {k: per_instance_properties(k) for k in nodes}
 
-    zones = {
+    body.locationPolicy.locations = {
         **{
             f"zones/{zone}": {"preference": "ALLOW"}
             for zone in nodeset.zone_policy_allow or []
@@ -176,9 +176,7 @@ def create_instances_request(nodes, partition_name, placement_group, job_id=None
             for zone in nodeset.zone_policy_deny or []
         },
     }
-    body.locationPolicy.targetShape = cfg.zone_target_shape or "ANY_SINGLE_ZONE"
-    if zones:
-        body.locationPolicy.locations = zones
+    body.locationPolicy.targetShape = nodeset.zone_target_shape
 
     if lkp.cfg.enable_slurm_gcp_plugins:
         slurm_gcp_plugins.pre_instance_bulk_insert(
