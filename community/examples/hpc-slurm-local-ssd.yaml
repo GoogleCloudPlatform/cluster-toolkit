@@ -37,9 +37,22 @@ deployment_groups:
     settings:
       local_mount: /home
 
+  - id: startup
+    source: modules/scripts/startup-script
+    settings:
+      # When shutting down a VM with local SSD disks, we strongly recommend the
+      # automatic migration of data following these instructions:
+      # https://cloud.google.com/compute/docs/disks/local-ssd#stop_instance
+      # Failure to do will result in VMs that lose data and do not automatically
+      # mount local SSD filesystems
+      local_ssd_filesystem:
+        fs_type: ext4
+        mountpoint: /mnt/localssd
+        permissions: "0755" # must quote numeric filesystem permissions!
+
   - id: nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [network]
+    use: [network, startup]
     settings:
       additional_disks:
       - device_name: test-disk-1
@@ -60,35 +73,6 @@ deployment_groups:
       machine_type: c2-standard-4
       node_count_dynamic_max: 5
       node_count_static: 0
-      startup_script: |
-        #!/bin/bash
-        set -e -o pipefail
-
-        # this script assumes it is running on a RedHat-derivative OS
-        yum install -y mdadm
-
-        RAID_DEVICE=/dev/md0
-        DST_MNT=/mnt/localssd
-        DISK_LABEL=LOCALSSD
-        OPTIONS=discard,defaults
-
-        # if mount is successful, do nothing
-        if mount --source LABEL="$DISK_LABEL" --target="$DST_MNT" -o "$OPTIONS"; then
-                exit 0
-        fi
-
-        # Create new RAID, format ext4 and mount
-        # TODO: handle case of zero or 1 local SSD disk
-        # TODO: handle case when /dev/md0 exists but was not mountable
-        DEVICES=`nvme list | grep nvme_ | grep -v nvme_card-pd | awk '{print $1}' | paste -sd ' '`
-        NB_DEVICES=`nvme list | grep nvme_ | grep -v nvme_card-pd | awk '{print $1}' | wc -l`
-        mdadm --create "$RAID_DEVICE" --level=0 --raid-devices=$NB_DEVICES $DEVICES
-        mkfs.ext4 -F "$RAID_DEVICE"
-        tune2fs "$RAID_DEVICE" -r 131072
-        e2label "$RAID_DEVICE" "$DISK_LABEL"
-        mkdir -p "$DST_MNT"
-        mount --source LABEL="$DISK_LABEL" --target="$DST_MNT" -o "$OPTIONS"
-        chmod 1777 "$DST_MNT"
 
   - id: partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
