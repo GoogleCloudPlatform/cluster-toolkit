@@ -64,6 +64,8 @@ locals {
   }
   enable_oslogin = var.enable_oslogin == "INHERIT" ? {} : { enable-oslogin = lookup(local.oslogin_api_values, var.enable_oslogin, "") }
 
+  disable_automatic_updates_metadata = var.allow_automatic_updates ? {} : { google_disable_automatic_updates = "TRUE" }
+
   # Network Interfaces
   # Support for `use` input and base network parameters like `network_self_link` and `subnetwork_self_link`
   empty_access_config = {
@@ -90,12 +92,6 @@ locals {
       network_ip = google_compute_address.compute_ip[i].address
     })
   ]
-}
-
-data "google_compute_image" "compute_image" {
-  family  = try(var.instance_image.family, null)
-  name    = try(var.instance_image.name, null)
-  project = try(var.instance_image.project, null)
 }
 
 resource "null_resource" "image" {
@@ -258,7 +254,13 @@ resource "google_compute_instance" "compute_vm" {
     }
   }
 
-  metadata = merge(local.network_storage, local.startup_script, local.enable_oslogin, var.metadata)
+  metadata = merge(
+    local.network_storage,
+    local.startup_script,
+    local.enable_oslogin,
+    local.disable_automatic_updates_metadata,
+    var.metadata
+  )
 
   lifecycle {
     ignore_changes = [

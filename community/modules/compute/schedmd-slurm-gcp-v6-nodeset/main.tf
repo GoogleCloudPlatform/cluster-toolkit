@@ -18,6 +18,13 @@ locals {
 }
 
 locals {
+  disable_automatic_updates_metadata = var.allow_automatic_updates ? {} : { google_disable_automatic_updates = "TRUE" }
+
+  metadata = merge(
+    local.disable_automatic_updates_metadata,
+    var.metadata
+  )
+
   name = substr(replace(var.name, "/[^a-z0-9]/", ""), 0, 14)
 
   additional_disks = [
@@ -71,7 +78,7 @@ locals {
 
     labels           = local.labels
     machine_type     = var.machine_type
-    metadata         = var.metadata
+    metadata         = local.metadata
     min_cpu_platform = var.min_cpu_platform
 
     on_host_maintenance      = var.on_host_maintenance

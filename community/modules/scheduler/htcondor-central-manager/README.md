@@ -122,6 +122,7 @@ limitations under the License.
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
+| <a name="input_allow_automatic_updates"></a> [allow\_automatic\_updates](#input\_allow\_automatic\_updates) | If false, disables automatic system package updates on the created instances.  This feature is<br>only available on supported images (or images derived from them).  For more details, see<br>https://cloud.google.com/compute/docs/instances/create-hpc-vm#disable_automatic_updates | `bool` | `true` | no |
 | <a name="input_central_manager_runner"></a> [central\_manager\_runner](#input\_central\_manager\_runner) | A list of Toolkit runners for configuring an HTCondor central manager | `list(map(string))` | `[]` | no |
 | <a name="input_central_manager_service_account_email"></a> [central\_manager\_service\_account\_email](#input\_central\_manager\_service\_account\_email) | Service account e-mail for central manager (can be supplied by htcondor-setup module) | `string` | n/a | yes |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Cluster Toolkit deployment name. HTCondor cloud resource names will include this value. | `string` | n/a | yes |

@@ -143,6 +143,7 @@ limitations under the License.
 |------|-------------|------|---------|:--------:|
 | <a name="input_access_point_runner"></a> [access\_point\_runner](#input\_access\_point\_runner) | A list of Toolkit runners for configuring an HTCondor access point | `list(map(string))` | `[]` | no |
 | <a name="input_access_point_service_account_email"></a> [access\_point\_service\_account\_email](#input\_access\_point\_service\_account\_email) | Service account for access point (e-mail format) | `string` | n/a | yes |
+| <a name="input_allow_automatic_updates"></a> [allow\_automatic\_updates](#input\_allow\_automatic\_updates) | If false, disables automatic system package updates on the created instances.  This feature is<br>only available on supported images (or images derived from them).  For more details, see<br>https://cloud.google.com/compute/docs/instances/create-hpc-vm#disable_automatic_updates | `bool` | `true` | no |
 | <a name="input_autoscaler_runner"></a> [autoscaler\_runner](#input\_autoscaler\_runner) | A list of Toolkit runners for configuring autoscaling daemons | `list(map(string))` | `[]` | no |
 | <a name="input_central_manager_ips"></a> [central\_manager\_ips](#input\_central\_manager\_ips) | List of IP addresses of HTCondor Central Managers | `list(string)` | n/a | yes |
 | <a name="input_default_mig_id"></a> [default\_mig\_id](#input\_default\_mig\_id) | Default MIG ID for HTCondor jobs; if unset, jobs must specify MIG id | `string` | `""` | no |

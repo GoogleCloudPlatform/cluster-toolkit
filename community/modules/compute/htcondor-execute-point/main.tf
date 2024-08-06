@@ -31,12 +31,20 @@ locals {
 
   windows_startup_ps1 = join("\n\n", flatten([var.windows_startup_ps1, local.execute_config_windows_startup_ps1]))
 
-  is_windows_image = anytrue([for l in data.google_compute_image.htcondor.licenses : length(regexall("windows-cloud", l)) > 0])
+  is_windows_image = anytrue([for l in data.google_compute_image.compute_image.licenses : length(regexall("windows-cloud", l)) > 0])
   windows_startup_metadata = local.is_windows_image && local.windows_startup_ps1 != "" ? {
     windows-startup-script-ps1 = local.windows_startup_ps1
   } : {}
 
-  metadata = merge(local.windows_startup_metadata, local.network_storage_metadata, local.enable_oslogin, var.metadata)
+  disable_automatic_updates_metadata = var.allow_automatic_updates ? {} : { google_disable_automatic_updates = "TRUE" }
+
+  metadata = merge(
+    local.windows_startup_metadata,
+    local.network_storage_metadata,
+    local.enable_oslogin,
+    local.disable_automatic_updates_metadata,
+    var.metadata
+  )
 
   autoscaler_runner = {
     "type"        = "ansible-local"
@@ -100,19 +108,6 @@ locals {
   name_prefix = "${var.deployment_name}-${var.name_prefix}-ep"
 }
 
-data "google_compute_image" "htcondor" {
-  family  = try(var.instance_image.family, null)
-  name    = try(var.instance_image.name, null)
-  project = var.instance_image.project
-
-  lifecycle {
-    postcondition {
-      condition     = self.disk_size_gb <= var.disk_size_gb
-      error_message = "var.disk_size_gb must be set to at least the size of the image (${self.disk_size_gb})"
-    }
-  }
-}
-
 data "google_compute_zones" "available" {
   project = var.project_id
   region  = var.region
@@ -156,7 +151,7 @@ module "execute_point_instance_template" {
   preemptible    = var.spot
   startup_script = local.is_windows_image ? null : module.startup_script.startup_script
   metadata       = local.metadata
-  source_image   = data.google_compute_image.htcondor.self_link
+  source_image   = data.google_compute_image.compute_image.self_link
 
   # secure boot
   enable_shielded_vm       = var.enable_shielded_vm

@@ -111,6 +111,17 @@ variable "instance_image_custom" {
   default     = false
 }
 
+variable "allow_automatic_updates" {
+  description = <<-EOT
+  If false, disables automatic system package updates on the created instances.  This feature is
+  only available on supported images (or images derived from them).  For more details, see
+  https://cloud.google.com/compute/docs/instances/create-hpc-vm#disable_automatic_updates
+  EOT
+  type        = bool
+  default     = true
+  nullable    = false
+}
+
 variable "tags" {
   type        = list(string)
   description = "Network tag list."
@@ -480,7 +491,7 @@ variable "instance_properties" {
     Override the instance properties. Used to test features not supported by Slurm GCP,
     recommended for advanced usage only.
     See https://cloud.google.com/compute/docs/reference/rest/v1/regionInstances/bulkInsert
-    If any sub-field (e.g. scheduling) is set, it will override the values computed by 
+    If any sub-field (e.g. scheduling) is set, it will override the values computed by
     SlurmGCP and ignoring values of provided vars.
   EOD
   type        = any

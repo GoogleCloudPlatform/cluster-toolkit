@@ -68,5 +68,11 @@ data "google_compute_image" "slurm" {
       condition     = var.disk_size_gb >= self.disk_size_gb
       error_message = "'disk_size_gb: ${var.disk_size_gb}' is smaller than the image size (${self.disk_size_gb}GB), please increase the blueprint disk size"
     }
+    postcondition {
+      # Condition needs to check the suffix of the license, as prefix contains an API version which can change.
+      # Example license value: https://www.googleapis.com/compute/v1/projects/cloud-hpc-image-public/global/licenses/hpc-vm-image-feature-disable-auto-updates
+      condition     = var.allow_automatic_updates || anytrue([for license in self.licenses : endswith(license, "/projects/cloud-hpc-image-public/global/licenses/hpc-vm-image-feature-disable-auto-updates")])
+      error_message = "Disabling automatic updates is not supported with the selected VM image.  More information: https://cloud.google.com/compute/docs/instances/create-hpc-vm#disable_automatic_updates"
+    }
   }
 }
