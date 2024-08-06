@@ -163,6 +163,7 @@ deployment_groups:
       machine_type: h3-standard-88
       disk_type: 'pd-balanced'
       bandwidth_tier: gvnic_enabled
+      allow_automatic_updates: false
 
   - id: h3_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
@@ -181,6 +182,7 @@ deployment_groups:
       machine_type: c3-highmem-176
       disk_type: 'pd-balanced'
       bandwidth_tier: tier_1_enabled
+      allow_automatic_updates: false
 
   - id: c3_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition

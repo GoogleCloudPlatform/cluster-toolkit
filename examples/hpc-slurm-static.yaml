@@ -51,6 +51,7 @@ deployment_groups:
       reservation_name: $(vars.static_reservation_name)
       machine_type: $(vars.static_reservation_machine_type)
       instance_image: $(vars.slurm_instance_image)
+      allow_automatic_updates: false
   - id: static_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
     use: [static_nodeset]
@@ -66,6 +67,7 @@ deployment_groups:
       machine_type: c2d-standard-112
       node_count_dynamic_max: 100
       instance_image: $(vars.slurm_instance_image)
+      allow_automatic_updates: false
   - id: dynamic_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
     use: [dynamic_nodeset]

@@ -77,6 +77,7 @@ deployment_groups:
       instance_image: $(vars.custom_image)
       instance_image_custom: true
       bandwidth_tier: gvnic_enabled
+      allow_automatic_updates: false
 
   - id: compute_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition

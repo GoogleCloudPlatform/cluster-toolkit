@@ -46,3 +46,4 @@ deployment_groups:
       add_deployment_name_before_prefix: true
       instance_count: 2
       machine_type: n2-standard-2
+      allow_automatic_updates: false

@@ -108,6 +108,7 @@ deployment_groups:
       machine_type: n2-standard-2
       instance_image: $(vars.slurm_image)
       enable_placement: false  # the default is: true
+      allow_automatic_updates: false
 
   - id: n2_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
@@ -130,6 +131,7 @@ deployment_groups:
       bandwidth_tier: tier_1_enabled
       disk_type: pd-ssd
       disk_size_gb: 100
+      allow_automatic_updates: false
 
   # use `-p c2` to submit jobs to this partition:
   # ex: `srun -p c2 -N 1 hostname`
@@ -151,6 +153,7 @@ deployment_groups:
       bandwidth_tier: tier_1_enabled
       disk_type: pd-ssd
       disk_size_gb: 100
+      allow_automatic_updates: false
 
   - id: c2d_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
@@ -168,6 +171,7 @@ deployment_groups:
       bandwidth_tier: tier_1_enabled
       disk_type: pd-ssd
       disk_size_gb: 100
+      allow_automatic_updates: false
 
   - id: c3_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
@@ -191,6 +195,7 @@ deployment_groups:
       node_conf:
         SocketsPerBoard: 2
         CoresPerSocket: 24
+      allow_automatic_updates: false
 
   # use `-p a208` to submit jobs to this partition:
   # ex: `srun -p a208 --gpus-per-node=8 -N 1 nvidia-smi`
@@ -220,6 +225,7 @@ deployment_groups:
       node_conf:
         SocketsPerBoard: 2
         CoresPerSocket: 24
+      allow_automatic_updates: false
 
   # use `-p a216` to submit jobs to this partition:
   # ex: `srun -p a216 --gpus-per-node=16 -N 1 nvidia-smi`
@@ -246,6 +252,7 @@ deployment_groups:
       # https://cloud.google.com/compute/docs/compute-optimized-machines#h3_disks
       disk_type: pd-balanced
       disk_size_gb: 100
+      allow_automatic_updates: false
 
   # use `-p h3` to submit jobs to this partition:
   # ex: `srun -p h3  -N 1 hostname`

@@ -21,7 +21,7 @@ vars:
   region: us-central1
   zone: us-central1-c
   instance_image:
-    family: hpc-centos-7
+    family: hpc-rocky-linux-8
     project: cloud-hpc-image-public
 
 deployment_groups:
@@ -147,6 +147,7 @@ deployment_groups:
       name_prefix: spack-builder
       add_deployment_name_before_prefix: true
       machine_type: c2-standard-16
+      allow_automatic_updates: false
 
   ### Batch Modules ###
   - id: batch-job
@@ -158,6 +159,7 @@ deployment_groups:
       machine_type: c2-standard-60
       task_count: 2
       mpi_mode: true
+      allow_automatic_updates: false
 
   - id: batch-login
     source: modules/scheduler/batch-login-node

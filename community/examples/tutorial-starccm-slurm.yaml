@@ -82,6 +82,7 @@ deployment_groups:
       disable_public_ips: false
       machine_type: c2-standard-60
       node_count_dynamic_max: 20
+      allow_automatic_updates: false
 
   - id: compute_partition
     source: community/modules/compute/schedmd-slurm-gcp-v5-partition

@@ -70,6 +70,7 @@ deployment_groups:
         vm_count: null
         collocation: "COLLOCATED"
         availability_domain_count: null
+      allow_automatic_updates: false
 
   - source: community/modules/scripts/wait-for-startup
     kind: terraform
