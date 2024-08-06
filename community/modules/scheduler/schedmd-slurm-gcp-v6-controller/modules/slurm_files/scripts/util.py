@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Iterable, List, Tuple, Optional
+from typing import Iterable, List, Tuple, Optional, Any
 import argparse
 import base64
 import collections
@@ -271,17 +271,18 @@ def map_with_futures(func, seq):
                 res = e
             yield res
 
+def _get_bucket_and_common_prefix() -> Tuple[str, str]:
+    uri = instance_metadata("attributes/slurm_bucket_path")
+    return parse_bucket_uri(uri)
 
 def blob_get(file):
-    uri = instance_metadata("attributes/slurm_bucket_path")
-    bucket_name, path = parse_bucket_uri(uri)
+    bucket_name, path = _get_bucket_and_common_prefix()
     blob_name = f"{path}/{file}"
     return storage_client().get_bucket(bucket_name).blob(blob_name)
 
 
 def blob_list(prefix="", delimiter=None):
-    uri = instance_metadata("attributes/slurm_bucket_path")
-    bucket_name, path = parse_bucket_uri(uri)
+    bucket_name, path = _get_bucket_and_common_prefix()
     blob_prefix = f"{path}/{prefix}"
     # Note: The call returns a response only when the iterator is consumed.
     blobs = storage_client().list_blobs(
@@ -397,9 +398,8 @@ def storage_client() -> storage.Client:
         co["universe_domain"] = ud
     return storage.Client(client_options=ClientOptions(**co))
 
-def new_config(config):
+def _fill_cfg_defaults(cfg: NSDict) -> NSDict:
     "initialize a new config object necessary defaults are handled here"
-    cfg = NSDict(config)
     if not cfg.slurm_log_dir:
         cfg.slurm_log_dir = dirs.log
     if not cfg.slurm_bin_dir:
@@ -433,36 +433,97 @@ def new_config(config):
             netstore.server_ip = cfg.slurm_control_host
     return cfg
 
+def _list_config_blobs() -> Tuple[Any, str]:
+    _, common_prefix = _get_bucket_and_common_prefix()
+    res = { # TODO: use a dataclass once we move to python 3.7
+        "core": None,
+        "partition": [],
+        "nodeset": [],
+    }
+    hash = hashlib.md5()
+    blobs = list(blob_list(prefix=""))
+    # sort blobs so hash is consistent
+    for blob in sorted(blobs, key=lambda b: b.name):
+        if blob.name == f"{common_prefix}/config.yaml":
+            res["core"] = blob
+            hash.update(blob.md5_hash.encode("utf-8"))
+        for key in ("partition", "nodeset"):
+            if blob.name.startswith(f"{common_prefix}/{key}_configs/"):
+                res[key].append(blob)
+                hash.update(blob.md5_hash.encode("utf-8"))
+    assert res["core"] is not None, "config.yaml not found in bucket"
+    return res, hash.hexdigest()
+        
 
-def fetch_config_yaml():
-    """Fetch config.yaml from bucket"""
-    config_yaml = blob_get("config.yaml").download_as_text()
-    cfg = new_config(yaml.safe_load(config_yaml))
-    return cfg
+def _fetch_config(old_hash: Optional[str]) -> Optional[Tuple[NSDict, str]]:
+    """Fetch config from bucket, returns None if no changes are detected."""
+    # TODO: fetch nodeset_dyn, nodeset_tpu, and login
+    blobs, hash = _list_config_blobs()
+    if old_hash == hash:
+        return None
 
+    def _download(bs) -> List[Any]:
+        return [yaml.safe_load(b.download_as_text()) for b in bs]
 
-def fetch_config_yaml_md5():
-    """Fetch config.yaml blob md5 from bucket"""
-    blob = blob_get("config.yaml")
-    blob.reload()  # Populate blob with metadata
-    hash_str = str(blob.md5_hash).encode(encoding="utf-8")
-    return hashlib.md5(hash_str)
+    return _assemble_config(
+        core=_download([blobs["core"]])[0],
+        partitions=_download(blobs["partition"]),
+        nodesets=_download(blobs["nodeset"]),
+    ), hash
 
+def _assemble_config(core: Any, partitions: List[Any], nodesets: List[Any]) -> NSDict:
+    cfg = NSDict(core)
+
+    # add partition configs
+    for p_yaml in partitions:
+        p_cfg = NSDict(p_yaml)
+        assert p_cfg.get("partition_name"), "partition_name is required"
+        p_name = p_cfg.partition_name
+        assert p_name not in cfg.partitions, f"partition {p_name} already defined"
+        cfg.partitions[p_name] = p_cfg
+
+    # add nodeset configs
+    for ns_yaml in nodesets:
+        ns_cfg = NSDict(ns_yaml)
+        assert ns_cfg.get("nodeset_name"), "nodeset_name is required"
+        ns_name = ns_cfg.nodeset_name
+        assert ns_name not in cfg.nodeset, f"nodeset {ns_name} already defined"
+        cfg.nodeset[ns_name] = ns_cfg
+
+    # validate that configs for all referenced nodesets are present
+    for p in cfg.partitions.values():
+        for ns_name in p.partition_nodeset:
+            assert ns_name in cfg.nodeset, f"nodeset {ns_name} not defined in config"
+        
+    return _fill_cfg_defaults(cfg)
+
+def fetch_config() -> Tuple[bool, NSDict]:
+    """fetch config from bucket, return True if new config was fetched"""
+    hash_file = Path("/slurm/scripts/.config.hash")
+    old_hash = None
+    if hash_file.exists():
+        with open(hash_file, "r", encoding="utf-8") as f:
+            old_hash = f.readline()
+
+    cfg_and_hash = _fetch_config(old_hash=old_hash)
+    if not cfg_and_hash:
+        return False, cfg
+    
+    cfg, hash = cfg_and_hash
+    with open(hash_file, "w", encoding="utf-8") as f:
+        f.write(hash)
+    chown_slurm(hash_file)
+    CONFIG_FILE.write_text(yaml.dump(cfg, Dumper=Dumper))
+    chown_slurm(CONFIG_FILE)
+    return True, cfg
 
 def load_config_file(path):
     """load config from file"""
-    content = None
     try:
-        content = yaml.safe_load(Path(path).read_text())
+        return NSDict(yaml.safe_load(Path(path).read_text()))
     except FileNotFoundError:
         log.warning(f"config file not found: {path}")
         return NSDict()
-    return NSDict(content)
-
-
-def save_config(cfg, path):
-    """save given config to file at path"""
-    Path(path).write_text(yaml.dump(cfg, Dumper=Dumper))
 
 def owned_file_handler(filename):
     """create file handler"""
@@ -1397,8 +1458,8 @@ class TPU:
 class Lookup:
     """Wrapper class for cached data access"""
 
-    def __init__(self, cfg=None):
-        self._cfg = cfg or NSDict()
+    def __init__(self, cfg):
+        self._cfg = cfg
         self.template_cache_path = Path(__file__).parent / "template_info.cache"
 
     @property
@@ -1859,14 +1920,10 @@ def scontrol_reconfigure(lkp: Lookup) -> None:
     run(f"{lkp.scontrol} reconfigure", timeout=30)
 
 # Define late globals
-lkp = Lookup()
 cfg = load_config_file(CONFIG_FILE)
 if not cfg:
     try:
-        cfg = fetch_config_yaml()
+        _, cfg = fetch_config()
     except Exception as e:
-        log.warning(f"config not found in bucket: {e}")
-    if cfg:
-        save_config(cfg, CONFIG_FILE)
-
+        log.warning(f"Could not load config: {e}")
 lkp = Lookup(cfg)
