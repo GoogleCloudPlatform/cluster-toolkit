@@ -67,28 +67,25 @@ def order(paths: List[List[str]]) -> List[str]:
                 n.children[v] = Vert(v, n)
             n = n.children[v]
 
-    def post_order_traversal(v: Vert, f: Callable[[Vert], None]) -> None:
-        # freeze order, since lex_key can be mutated
-        children = list(sorted(v.children.values(), key=lambda u: u.lex_key))
-        for u in children:
-            post_order_traversal(u, f)
-        f(v)
-    
     # propagate "lexicographical key" from the leaves to the root
-    def lex_key_prop(v: Vert) -> None:
+    def set_lex_key(v: Vert) -> None:
         if not v.children: # this is a node
             v.lex_key = name_idx[v.name]
         else:
+            for u in v.children.values():
+                set_lex_key(u)
             v.lex_key = min(u.lex_key for u in v.children.values())
-    post_order_traversal(root, lex_key_prop)
+    set_lex_key(root)
 
     # gather leafs
     result = []
-    def collect_nodes(v: Vert) -> None:
-        if not v.children: 
+    def gather_nodes(v: Vert) -> None:
+        if not v.children: # this is a node
             result.append(v.name)
-    post_order_traversal(root, collect_nodes)
+        for u in v.children.values():
+            gather_nodes(u)
     
+    gather_nodes(root)
     return result
 
 
