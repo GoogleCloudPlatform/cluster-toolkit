@@ -25,6 +25,7 @@ cli_deployment_vars:
   slurm_image: "{family: slurm-gcp-6-6-hpc-centos-7, project: schedmd-slurm-public}"
   region: us-west4
   zone: us-west4-c
+  allow_automatic_updates: false
 
 zone: us-west4-c
 workspace: /workspace

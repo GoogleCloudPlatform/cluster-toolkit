@@ -97,6 +97,7 @@ deployment_groups:
     settings:
       node_count_dynamic_max: 20
       bandwidth_tier: gvnic_enabled
+      allow_automatic_updates: false
 
   - id: compute_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
