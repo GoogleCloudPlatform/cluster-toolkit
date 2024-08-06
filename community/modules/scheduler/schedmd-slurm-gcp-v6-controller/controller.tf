@@ -36,7 +36,7 @@ locals {
 
 # INSTANCE TEMPLATE
 module "slurm_controller_template" {
-  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=6.6.0"
+  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=7dddbc9a7721b9e83360fd8cba866faf9485be46"
 
   project_id          = var.project_id
   region              = var.region
@@ -92,7 +92,7 @@ locals {
 }
 
 module "slurm_controller_instance" {
-  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/_slurm_instance?ref=6.6.0"
+  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/_slurm_instance?ref=7dddbc9a7721b9e83360fd8cba866faf9485be46"
 
   access_config       = var.enable_controller_public_ips ? [local.access_config] : []
   add_hostname_suffix = false
