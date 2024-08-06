@@ -28,14 +28,14 @@ vars:
   server_ip_homefs: 0.0.0.0 ## MUST set to IP address of Filestore instance from base deployment!
   remote_mount_homefs: /nfsshare
   local_mount_homefs: /home
-  zones: []
+  zones:
+  - $(vars.zone)
   disk_size_gb: 200
-  instance_image:
-    family: slurm-dlvm
-    project: $(vars.project_id)
-  instance_image_custom: true
+  final_image_family: slurm-dlvm
   slurm_cluster_name: slurm0
+  enable_reconfigure: true
   enable_cleanup_compute: true
+  enable_cleanup_subscriptions: true
   a3_partition_name: a3
   a3_static_cluster_size: 32
   # a3_reservation_name must be specified; if Google staff have provided you
@@ -48,10 +48,6 @@ vars:
   # these values are accurate if deployment_name was not modified from example
   network_name_system: slurm-a3-base-sysnet
   subnetwork_name_system: slurm-a3-base-sysnet-subnet
-  # enable Google Cloud Ops Agent logging and monitoring
-  enable_ops_agent: true
-  # enable the NVIDIA DCGM daemon and integration into Cloud Ops Agent
-  enable_nvidia_dcgm: true
 
 deployment_groups:
 - group: cluster
@@ -84,113 +80,67 @@ deployment_groups:
       project_roles:
       - logging.logWriter
       - monitoring.metricWriter
+      - pubsub.subscriber
       - storage.objectAdmin
 
-  - id: debug_nodeset
-    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use:
-    - sysnet
-    - compute_sa
+  - id: debug_node_group
+    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
     settings:
       node_count_static: 0
       node_count_dynamic_max: 4
       machine_type: n2-standard-2
-      enable_placement: false
+      instance_image_custom: true
+      instance_image:
+        family: $(vars.final_image_family)
+        project: $(vars.project_id)
 
   - id: debug_partition
-    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
     use:
-    - debug_nodeset
+    - debug_node_group
+    - sysnet
+    - homefs
     settings:
       partition_name: debug
       exclusive: false
+      enable_placement: false
 
-  - id: a3_startup
-    source: modules/scripts/startup-script
-    settings:
-      # When shutting down a VM with local SSD disks, we strongly recommend the
-      # automatic migration of data following these instructions:
-      # https://cloud.google.com/compute/docs/disks/local-ssd#stop_instance
-      # Failure to do will result in VMs that lose data and do not automatically
-      # mount local SSD filesystems
-      local_ssd_filesystem:
-        mountpoint: /mnt/localssd
-        permissions: 1777
-      runners:
-      - type: ansible-local
-        destination: enable_nvidia_dcgm.yml
-        content: |
-          ---
-          - name: Enable NVIDIA DCGM on GPU nodes
-            hosts: all
-            become: true
-            vars:
-              enable_ops_agent: $(vars.enable_ops_agent)
-              enable_nvidia_dcgm: $(vars.enable_nvidia_dcgm)
-            tasks:
-            - name: Update Ops Agent configuration
-              ansible.builtin.blockinfile:
-                path: /etc/google-cloud-ops-agent/config.yaml
-                insertafter: EOF
-                block: |
-                  metrics:
-                    receivers:
-                      dcgm:
-                        type: dcgm
-                    service:
-                      pipelines:
-                        dcgm:
-                          receivers:
-                            - dcgm
-              notify:
-              - Restart Google Cloud Ops Agent
-            handlers:
-            - name: Restart Google Cloud Ops Agent
-              ansible.builtin.service:
-                name: google-cloud-ops-agent.service
-                state: "{{ 'restarted' if enable_ops_agent else 'stopped' }}"
-                enabled: "{{ enable_ops_agent }}"
-            post_tasks:
-            - name: Enable Google Cloud Ops Agent
-              ansible.builtin.service:
-                name: google-cloud-ops-agent.service
-                state: "{{ 'started' if enable_ops_agent else 'stopped' }}"
-                enabled: "{{ enable_ops_agent }}"
-            - name: Enable NVIDIA DCGM
-              ansible.builtin.service:
-                name: nvidia-dcgm.service
-                state: "{{ 'started' if enable_nvidia_dcgm else 'stopped' }}"
-                enabled: "{{ enable_nvidia_dcgm }}"
-
-  - id: a3_nodeset
-    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+  - id: a3_node_group
+    source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
     use:
-    - sysnet
     - gpunets
-    - compute_sa
-    - a3_startup
     settings:
       reservation_name: $(vars.a3_reservation_name)
       maintenance_interval: $(vars.a3_maintenance_interval)
-      enable_placement: false
       node_count_static: $(vars.a3_static_cluster_size)
       node_count_dynamic_max: 0
       disk_type: pd-ssd
       machine_type: a3-highgpu-8g
-      enable_public_ips: false
+      instance_image_custom: true
+      disable_public_ips: true
       enable_smt: true
+      instance_image:
+        family: $(vars.final_image_family)
+        project: $(vars.project_id)
       node_conf:
         CoresPerSocket: 52
         ThreadsPerCore: 2
       on_host_maintenance: TERMINATE
+      service_account:
+        email: $(compute_sa.service_account_email)
+        scopes:
+        - cloud-platform
       bandwidth_tier: gvnic_enabled
 
   - id: a3_partition
-    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    source: community/modules/compute/schedmd-slurm-gcp-v5-partition
     use:
-    - a3_nodeset
+    - a3_node_group
+    - sysnet
+    - homefs
     settings:
       partition_name: $(vars.a3_partition_name)
+      enable_placement: false
       exclusive: false
       is_default: true
       partition_conf:
@@ -219,24 +169,15 @@ deployment_groups:
           # allows basic enroot testing on login/controller nodes (reduced I/O)
           rm -f /etc/enroot/enroot.conf
 
-  - id: slurm_login
-    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
-    use: [sysnet]
-    settings:
-      name_prefix: login
-      disk_type: pd-balanced
-      machine_type: c2-standard-4
-      enable_login_public_ips: true
-
   - id: slurm_controller
-    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
     use:
     - sysnet
     - a3_partition
     - debug_partition
-    - slurm_login
     - homefs
     settings:
+      machine_type: c2-standard-8
       cloud_parameters:
         resume_rate: 0
         resume_timeout: 900
@@ -244,13 +185,27 @@ deployment_groups:
         suspend_timeout: 600
         no_comma_params: false
         tree_width: $(vars.a3_static_cluster_size)
-      machine_type: c2-standard-8
-      disk_type: pd-balanced
-      slurm_conf_tpl: modules/embedded/community/modules/scheduler/schedmd-slurm-gcp-v6-controller/etc/long-prolog-slurm.conf.tpl
-      enable_controller_public_ips: true
-      enable_external_prolog_epilog: true
+      instance_image_custom: true
+      instance_image:
+        family: $(vars.final_image_family)
+        project: $(vars.project_id)
+      slurm_conf_tpl: modules/embedded/community/modules/scheduler/schedmd-slurm-gcp-v5-controller/etc/long-prolog-slurm.conf.tpl
       controller_startup_script: $(controller_startup.startup_script)
-      login_startup_script: |
+      enable_external_prolog_epilog: true
+
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v5-login
+    use:
+    - sysnet
+    - slurm_controller
+    settings:
+      disk_type: pd-balanced
+      instance_image_custom: true
+      instance_image:
+        family: $(vars.final_image_family)
+        project: $(vars.project_id)
+      machine_type: c2-standard-4
+      startup_script: |
         #!/bin/bash
         # reset enroot to defaults of files under /home and running under /run
         # allows basic enroot testing on login node (reduced I/O)

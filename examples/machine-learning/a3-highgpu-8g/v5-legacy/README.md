@@ -1,5 +1,12 @@
 # Objective
 
+> [!CAUTION]
+> This solution is built upon "legacy" blueprints using Slurm-GCP v5. The
+> [solution using v6](../README.md) is recommended for all new deployments.
+> The legacy solution is presented for customers with existing deployments. We
+> recommend maintaining existing deployments with v1.37.0 of the Toolkit as this
+> combination is tested nightly.
+
 This document will guide you to successfully provisioning a Slurm cluster with
 a3-highgpu-8g compute nodes running NVIDIA H100 GPUs.
 
@@ -12,26 +19,6 @@ a3-highgpu-8g compute nodes running NVIDIA H100 GPUs.
 > significantly enhance the network performance of workloads that span multiple
 > a3-highgpu-8g VMs. You will use the image ID in the steps shown below.
 
-## Upgrading from the v5 "legacy" solution to v6
-There is no direct path for upgrading the Slurm-GCP v5 solution in-place to v6.
-The recommended path requires temporarily bringing down your v5 cluster and
-replacing it with the v6 solution described in this document.
-
-> [!NOTE]
-> The `ml-slurm-a3-0-base.yaml` blueprint is identical for the "legacy" v5 and
-> v6 solutions. If you are upgrading from v5 to v6, do not destroy the v5 base
-> blueprint or re-deploy the v6 base blueprint. Simply copy the Filestore IP
-> address as instructed below.
-
-We recommend using `gcluster destroy` to destroy the deployments provisioned by the
-v5 legacy blueprints:
-
-- [Legacy v5 image building blueprint](v5-legacy/ml-slurm-a3-1-image-v5-legacy.yaml)
-- [Legacy v5 cluster provisioning blueprint](v5-legacy/ml-slurm-a3-2-cluster-v5-legacy.yaml)
-
-Then follow the instructions below while skipping the re-deployment of the base
-blueprint.
-
 ## Required setup
 
 Please follow the initial instructions for:
@@ -39,7 +26,8 @@ Please follow the initial instructions for:
 - Installing Cluster Toolkit [dependencies][tkdeps] (Go, Terraform, Packer)
 - Installing the Cluster [Toolkit][tkinstall]
 
-Verify that your release of the Cluster Toolkit is 1.37.0 or later.
+Verify that your release of the Cluster Toolkit is greater than 1.31.1 and less
+than or equal to 1.37.0.
 
 ```shell
 gcluster --version
@@ -52,7 +40,7 @@ installing them in a Python virtual environment:
 python3 -m venv toolkit-a3
 source toolkit-a3/bin/activate
 pip3 install -r \
-    https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/6.5.13/scripts/requirements.txt
+    https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/5.12.0/scripts/requirements.txt
 ```
 
 **Always** activate the environment before running any gcluster commands such as
@@ -208,12 +196,6 @@ size. Recall that there are 8 NVIDIA H100 GPUs per a3-highgpu-8g VM.
 ```
 
 ## Cluster creation
-
-> [!NOTE]
-> The `ml-slurm-a3-0-base.yaml` blueprint is identical for the "legacy" v5 and
-> v6 solutions. If you are upgrading from v5 to v6, do not destroy the v5 base
-> blueprint or re-deploy the v6 base blueprint. Simply copy the Filestore IP
-> address as instructed below.
 
 The blueprint `ml-slurm-a3-0-base.yaml` will create 1 system network and a
 Filestore `/home` filesystem. Run the standard Toolkit workflow at the command
