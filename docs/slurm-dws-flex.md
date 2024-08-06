@@ -25,4 +25,4 @@ In order to make use of DWS Flex Start mode with SlurmGCP, you must specify a pr
 
 > [!WARNING]
 > The use of the `instance_properties` setting directly overrides bulkInsert API parameters. While the documented sample
-> was tested at the time of publication, it is not regression tested and may cease to work based on changes in the buildInsert API.
+> was tested at the time of publication, it is not regression tested and may cease to work based on changes in the bulkInsert API.
