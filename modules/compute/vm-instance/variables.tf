@@ -223,9 +223,9 @@ variable "network_interfaces" {
   }
   validation {
     condition = alltrue([
-      for ni in var.network_interfaces : ni.nic_type == "GVNIC" || ni.nic_type == "VIRTIO_NET" || ni.nic_type == null
+      for ni in var.network_interfaces : contains(["GVNIC", "VIRTIO_NET", "RDMA", "IRDMA", "MRDMA"], coalesce(ni.nic_type, "INVALID")) || ni.nic_type == null
     ])
-    error_message = "In the variable network_interfaces, field \"nic_type\" must be either \"GVNIC\", \"VIRTIO_NET\" or null."
+    error_message = "In the variable network_interfaces, field \"nic_type\" must be either \"GVNIC\", \"VIRTIO_NET\", \"RDMA\", \"IRDMA\", \"MRDMA\", or null."
   }
   validation {
     condition = alltrue([
