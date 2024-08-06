@@ -45,15 +45,12 @@ from util import (
     TPU,
     chunked,
 )
-from util import lkp, cfg, CONFIG_FILE
+from util import lkp, CONFIG_FILE
 from suspend import delete_instances
 from resume import start_tpu
 import conf
 
-filename = Path(__file__).name
-LOGFILE = (Path(cfg.slurm_log_dir if cfg else ".") / filename).with_suffix(".log")
-
-log = logging.getLogger(filename)
+log = logging.getLogger()
 
 TOT_REQ_CNT = 1000
 
@@ -503,14 +500,8 @@ def main():
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
-    )
-
-    args = util.add_log_args_and_parse(parser)
-    util.chown_slurm(LOGFILE, mode=0o600)
-    util.config_root_logger(filename, level=args.loglevel, logfile=LOGFILE)
-    sys.excepthook = util.handle_exception
+    parser = argparse.ArgumentParser()
+    _ = util.init_log_and_parse(parser)
 
     pid_file = (Path("/tmp") / Path(__file__).name).with_suffix(".pid")
     with pid_file.open("w") as fp:

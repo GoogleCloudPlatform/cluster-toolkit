@@ -21,7 +21,6 @@ import collections
 import json
 import logging
 import os
-import sys
 import yaml
 from itertools import chain
 from pathlib import Path
@@ -46,11 +45,7 @@ from util import cfg, lkp, NSDict, TPU
 
 import slurm_gcp_plugins
 
-
-filename = Path(__file__).name
-LOGFILE = (Path(cfg.slurm_log_dir if cfg else ".") / filename).with_suffix(".log")
-
-log = logging.getLogger(filename)
+log = logging.getLogger()
 
 
 global_resume_data = None
@@ -603,7 +598,7 @@ def get_resume_file_data():
         return None
     resume_file = Path(SLURM_RESUME_FILE)
     resume_json = resume_file.read_text()
-    if args.loglevel == logging.DEBUG:
+    if log.isEnabledFor(logging.DEBUG):
         (dirs.scripts / "resume_data.json").write_text(resume_json)
     return NSDict(json.loads(resume_json))
 
@@ -637,15 +632,9 @@ def main(nodelist):
         )
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
-    )
+    parser = argparse.ArgumentParser()
     parser.add_argument("nodelist", help="list of nodes to resume")
-    
-    args = util.add_log_args_and_parse(parser)
-    util.chown_slurm(LOGFILE, mode=0o600)
-    util.config_root_logger(filename, level=args.loglevel, logfile=LOGFILE)
-    sys.excepthook = util.handle_exception
+    args = util.init_log_and_parse(parser)
 
     global_resume_data = get_resume_file_data()
     main(args.nodelist)

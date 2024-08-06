@@ -19,6 +19,7 @@ import os
 import sys
 import stat
 import time
+import logging
 
 import shutil
 from pathlib import Path
@@ -29,6 +30,8 @@ import util
 from util import lkp, run, cfg, dirs, separate
 from more_executors import Executors, ExceptionRetryPolicy
 
+
+log = logging.getLogger()
 
 def mounts_by_local(mounts):
     """convert list of mounts to dict of mounts, local_mount as key"""
@@ -91,7 +94,7 @@ def separate_external_internal_mounts(mounts):
     return separate(internal_mount, mounts)
 
 
-def setup_network_storage(log):
+def setup_network_storage():
     """prepare network fs mounts and add them to fstab"""
     log.info("Set up network storage")
     # filter mounts into two dicts, cluster-internal and external mounts
@@ -154,7 +157,7 @@ def setup_network_storage(log):
             f.write("\n")
 
     mount_fstab(mounts_by_local(mounts), log)
-    munge_mount_handler(log)
+    munge_mount_handler()
 
 
 def mount_fstab(mounts, log):
@@ -189,7 +192,7 @@ def mount_fstab(mounts, log):
                 raise e
 
 
-def munge_mount_handler(log):
+def munge_mount_handler():
     if not cfg.munge_mount:
         log.error("Missing munge_mount in cfg")
     elif lkp.is_controller:
