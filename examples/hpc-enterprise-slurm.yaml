@@ -238,6 +238,7 @@ deployment_groups:
     use: [network, compute_sa]
     settings:
       node_count_dynamic_max: 16
+      # Note that H3 is available in only specific zones. https://cloud.google.com/compute/docs/regions-zones
       machine_type: h3-standard-88
       bandwidth_tier: gvnic_enabled  # https://cloud.google.com/compute/docs/compute-optimized-machines#h3_network
       instance_image: $(vars.slurm_image)
