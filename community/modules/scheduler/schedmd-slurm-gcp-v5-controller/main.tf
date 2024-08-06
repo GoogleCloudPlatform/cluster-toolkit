@@ -20,7 +20,7 @@ locals {
 }
 
 locals {
-  disable_automatic_updates_metadata = var.disable_automatic_updates ? { google_disable_automatic_updates = "TRUE" } : {}
+  disable_automatic_updates_metadata = var.allow_automatic_updates ? {} : { google_disable_automatic_updates = "TRUE" }
 
   metadata = merge(
     local.disable_automatic_updates_metadata,

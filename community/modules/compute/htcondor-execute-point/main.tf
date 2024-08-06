@@ -36,7 +36,7 @@ locals {
     windows-startup-script-ps1 = local.windows_startup_ps1
   } : {}
 
-  disable_automatic_updates_metadata = var.disable_automatic_updates ? { google_disable_automatic_updates = "TRUE" } : {}
+  disable_automatic_updates_metadata = var.allow_automatic_updates ? {} : { google_disable_automatic_updates = "TRUE" }
 
   metadata = merge(
     local.windows_startup_metadata,

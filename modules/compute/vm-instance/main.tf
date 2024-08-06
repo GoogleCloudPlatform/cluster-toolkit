@@ -64,7 +64,7 @@ locals {
   }
   enable_oslogin = var.enable_oslogin == "INHERIT" ? {} : { enable-oslogin = lookup(local.oslogin_api_values, var.enable_oslogin, "") }
 
-  disable_automatic_updates_metadata = var.disable_automatic_updates ? { google_disable_automatic_updates = "TRUE" } : {}
+  disable_automatic_updates_metadata = var.allow_automatic_updates ? {} : { google_disable_automatic_updates = "TRUE" }
 
   # Network Interfaces
   # Support for `use` input and base network parameters like `network_self_link` and `subnetwork_self_link`

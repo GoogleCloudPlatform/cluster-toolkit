@@ -26,7 +26,7 @@ locals {
     "ENABLE"  = "TRUE"
   }
   enable_oslogin_metadata            = var.enable_oslogin == "INHERIT" ? {} : { enable-oslogin = lookup(local.oslogin_api_values, var.enable_oslogin, "") }
-  disable_automatic_updates_metadata = var.disable_automatic_updates ? { google_disable_automatic_updates = "TRUE" } : {}
+  disable_automatic_updates_metadata = var.allow_automatic_updates ? {} : { google_disable_automatic_updates = "TRUE" }
   metadata = merge(
     local.network_storage_metadata,
     local.enable_oslogin_metadata,
@@ -90,8 +90,8 @@ data "google_compute_image" "htcondor" {
     postcondition {
       # Condition needs to check the suffix of the license, as prefix contains an API version which can change.
       # Example license value: https://www.googleapis.com/compute/v1/projects/cloud-hpc-image-public/global/licenses/hpc-vm-image-feature-disable-auto-updates
-      condition     = !var.disable_automatic_updates || anytrue([for license in self.licenses : endswith(license, "/projects/cloud-hpc-image-public/global/licenses/hpc-vm-image-feature-disable-auto-updates")])
-      error_message = "The 'disable_automatic_updates' feature is not supported with the selected VM image.  More information: https://cloud.google.com/compute/docs/instances/create-hpc-vm#disable_automatic_updates"
+      condition     = var.allow_automatic_updates || anytrue([for license in self.licenses : endswith(license, "/projects/cloud-hpc-image-public/global/licenses/hpc-vm-image-feature-disable-auto-updates")])
+      error_message = "Disabling automatic updates is not supported with the selected VM image.  More information: https://cloud.google.com/compute/docs/instances/create-hpc-vm#disable_automatic_updates"
     }
   }
 }

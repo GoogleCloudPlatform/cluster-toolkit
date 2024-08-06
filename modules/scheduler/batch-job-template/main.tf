@@ -80,7 +80,7 @@ locals {
   on_host_maintenance = coalesce(var.on_host_maintenance, local.on_host_maintenance_default)
 
   network_storage_metadata           = var.network_storage != null ? ({ network_storage = jsonencode(var.network_storage) }) : {}
-  disable_automatic_updates_metadata = var.disable_automatic_updates ? { google_disable_automatic_updates = "TRUE" } : {}
+  disable_automatic_updates_metadata = var.allow_automatic_updates ? {} : { google_disable_automatic_updates = "TRUE" }
 
   metadata = merge(
     local.network_storage_metadata,
