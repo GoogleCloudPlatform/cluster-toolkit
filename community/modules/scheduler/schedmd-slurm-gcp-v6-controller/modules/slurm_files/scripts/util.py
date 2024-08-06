@@ -337,7 +337,7 @@ def install_custom_scripts(check_hash=False):
             chown_slurm(dirs.custom_scripts / par)
         need_update = True
         if check_hash and fullpath.exists():
-            # TODO: MD5 reported by gcloud may differ from the one calculated here (e.g. if blob got gzipped), 
+            # TODO: MD5 reported by gcloud may differ from the one calculated here (e.g. if blob got gzipped),
             # consider using gCRC32C
             need_update = hash_file(fullpath) != blob.md5_hash
         if need_update:
@@ -501,7 +501,6 @@ def init_log_and_parse(parser: argparse.ArgumentParser) -> argparse.Namespace:
         help="Enable detailed api request output",
     )
     args = parser.parse_args()
-    
     loglevel = args.loglevel
     if lookup().cfg.enable_debug_logging:
         loglevel = logging.DEBUG
@@ -549,7 +548,6 @@ def log_api_request(request):
     """log.trace info about a compute API request"""
     if not lookup().cfg.extra_logging_flags.get("trace_api"):
         return
-    
     # output the whole request object as pretty yaml
     # the body is nested json, so load it as well
     rep = json.loads(request.to_json())
@@ -1648,6 +1646,12 @@ class Lookup:
                 slurm_cluster_name=slurm_cluster_name,
                 instance_information_fields=instance_information_fields,
             )
+
+        # TODO: Merge this with all fields when upcoming maintenance is
+        # supported in beta.
+        if endpoint_version(ApiEndpoint.COMPUTE) == 'alpha':
+          instance_information_fields.append("upcomingMaintenance")
+
         instance_information_fields = sorted(set(instance_information_fields))
         instance_fields = ",".join(instance_information_fields)
         fields = f"items.zones.instances({instance_fields}),nextPageToken"
@@ -1675,7 +1679,7 @@ class Lookup:
             instance_iter = (
                 (inst["name"], properties(inst))
                 for inst in chain.from_iterable(
-                    m["instances"] for m in result.get("items", {}).values()
+                    zone.get("instances", []) for zone in result.get("items", {}).values()
                 )
             )
             instances.update(

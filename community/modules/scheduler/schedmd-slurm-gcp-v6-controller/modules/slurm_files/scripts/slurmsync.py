@@ -26,6 +26,8 @@ from enum import Enum
 from itertools import chain
 from pathlib import Path
 import yaml
+from datetime import datetime
+from typing import List, Dict, Tuple
 
 import util
 from util import (
@@ -443,7 +445,7 @@ def reconfigure_slurm():
         save_config(cfg_new, CONFIG_FILE)
         cfg_new = load_config_file(CONFIG_FILE)
         util._lkp = Lookup(cfg_new)
-        
+
         if lookup().is_controller:
             conf.gen_controller_configs(lookup())
             log.info("Restarting slurmctld to make changes take effect.")
@@ -470,6 +472,82 @@ def update_topology(lkp: util.Lookup) -> None:
         log.debug("Topology configuration updated. Reconfiguring Slurm.")
         util.scontrol_reconfigure(lkp)
 
+
+def delete_reservation(lkp: util.Lookup, reservation_name: str) -> None:
+    util.run(f"{lkp.scontrol} delete reservation {reservation_name}")
+
+
+def create_reservation(lkp: util.Lookup, reservation_name: str, node: str, start_time: datetime) -> None:
+    # Format time to be compatible with slurm reservation.
+    formatted_start_time = start_time.strftime('%Y-%m-%dT%H:%M:%S')
+    util.run(f"{lkp.scontrol} create reservation user=slurm starttime={formatted_start_time} duration=180 nodes={node} reservationname={reservation_name}")
+
+
+def get_slurm_reservation_maintenance(lkp: util.Lookup) -> Dict[str, datetime]:
+    res = util.run(f"{lkp.scontrol} show reservation --json")
+    all_reservations = json.loads(res.stdout)
+    reservation_map = {}
+
+    for reservation in all_reservations['reservations']:
+        name = reservation.get('name')
+        nodes = reservation.get('node_list')
+        time_epoch = reservation.get('start_time', {}).get('number')
+
+        if name is None or nodes is None or time_epoch is None:
+          continue
+
+        if reservation.get('node_count') != 1:
+          continue
+
+        if name != f"{nodes}_maintenance":
+          continue
+
+        reservation_map[name] = datetime.fromtimestamp(time_epoch)
+
+    return reservation_map
+
+
+def get_upcoming_maintenance(lkp: util.Lookup) -> Dict[str, Tuple[str, datetime]]:
+    upc_maint_map = {}
+
+    for node, properties in lkp.instances().items():
+        if 'upcomingMaintenance' in properties:
+          start_time = datetime.strptime(properties['upcomingMaintenance']['startTimeWindow']['earliest'], '%Y-%m-%dT%H:%M:%S%z')
+          upc_maint_map[node + "_maintenance"] = (node, start_time)
+
+    return upc_maint_map
+
+
+def sync_maintenance_reservation(lkp: util.Lookup) -> None:
+    upc_maint_map = get_upcoming_maintenance(lkp)  # map reservation_name -> (node_name, time)
+    log.debug(f"upcoming-maintenance-vms: {upc_maint_map}")
+
+    curr_reservation_map = get_slurm_reservation_maintenance(lkp) # map reservation_name -> time
+    log.debug(f"curr-reservation-map: {curr_reservation_map}")
+
+    del_reservation = set(curr_reservation_map.keys() - upc_maint_map.keys())
+    create_reservation_map = {}
+
+    for res_name, (node, start_time) in upc_maint_map.items():
+      if res_name in curr_reservation_map:
+        diff = curr_reservation_map[res_name] - start_time
+        if abs(diff) <= datetime.timedelta(seconds=1):
+          continue
+        else:
+          del_reservation.add(res_name)
+          create_reservation_map[res_name] = (node, start_time)
+      else:
+        create_reservation_map[res_name] = (node, start_time)
+
+    log.debug(f"del-reservation: {del_reservation}")
+    for res_name in del_reservation:
+      delete_reservation(lkp, res_name)
+
+    log.debug(f"create-reservation-map: {create_reservation_map}")
+    for res_name, (node, start_time) in create_reservation_map.items():
+      create_reservation(lkp, res_name, node, start_time)
+
+
 def main():
     try:
         reconfigure_slurm()
@@ -481,14 +559,22 @@ def main():
             sync_slurm()
         except Exception:
             log.exception("failed to sync instances")
+
         try:
             sync_placement_groups()
         except Exception:
             log.exception("failed to sync placement groups")
+
         try:
             update_topology(lookup())
         except Exception:
             log.exception("failed to update topology")
+
+        ## TODO: Enable reservation for scheduled maintenance.
+        # try:
+        #     sync_maintenance_reservation(lookup())
+        # except Exception:
+        #     log.exception("failed to sync slurm reservation for scheduled maintenance")
 
     try:
         install_custom_scripts(check_hash=True)
