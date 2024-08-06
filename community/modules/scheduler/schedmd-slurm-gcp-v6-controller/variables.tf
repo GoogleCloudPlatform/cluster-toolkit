@@ -120,13 +120,12 @@ variable "login_nodes" {
       ipv6_access_config = optional(list(object({
         network_tier = string
       })), [])
-      network            = optional(string)
-      network_ip         = optional(string, "")
-      nic_type           = optional(string)
-      queue_count        = optional(number)
-      stack_type         = optional(string)
-      subnetwork         = optional(string)
-      subnetwork_project = optional(string)
+      network              = optional(string)
+      network_ip           = optional(string, "")
+      nic_type             = optional(string)
+      queue_count          = optional(number)
+      stack_type           = optional(string)
+      subnetwork_self_link = optional(string)
     })), [])
     bandwidth_tier         = optional(string, "platform_default")
     can_ip_forward         = optional(bool, false)
@@ -163,7 +162,7 @@ variable "login_nodes" {
     source_image_project = optional(string)
     source_image         = optional(string)
     static_ips           = optional(list(string), [])
-    subnetwork           = string
+    subnetwork_self_link = string
     spot                 = optional(bool, false)
     tags                 = optional(list(string), [])
     zone                 = optional(string)

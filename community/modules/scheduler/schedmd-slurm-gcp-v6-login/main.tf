@@ -85,8 +85,8 @@ locals {
     static_ips     = var.static_ips
     bandwidth_tier = var.bandwidth_tier
 
-    subnetwork = var.subnetwork_self_link
-    tags       = var.tags
+    subnetwork_self_link = var.subnetwork_self_link
+    tags                 = var.tags
   }
 }
 

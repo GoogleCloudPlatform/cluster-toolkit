@@ -14,7 +14,8 @@
 
 # TEMPLATE
 module "slurm_login_template" {
-  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=6.6.0"
+  # source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=6.6.0"
+  source = "github.com/wiktorn/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=reserve_ip_addresses"
 
   for_each = { for x in var.login_nodes : x.name_prefix => x }
 
@@ -50,14 +51,15 @@ module "slurm_login_template" {
   source_image_project     = each.value.source_image_project
   source_image             = each.value.source_image
   spot                     = each.value.spot
-  subnetwork               = each.value.subnetwork
+  subnetwork_self_link     = each.value.subnetwork_self_link
   tags                     = concat([local.slurm_cluster_name], each.value.tags)
   termination_action       = each.value.termination_action
 }
 
 # INSTANCE
 module "slurm_login_instance" {
-  source   = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/_slurm_instance?ref=6.6.0"
+  # source   = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/_slurm_instance?ref=6.6.0"
+  source   = "github.com/wiktorn/slurm-gcp.git//terraform/slurm_cluster/modules/_slurm_instance?ref=reserve_ip_addresses"
   for_each = { for x in var.login_nodes : x.name_prefix => x }
 
   access_config       = each.value.access_config
@@ -72,10 +74,10 @@ module "slurm_login_instance" {
   labels            = merge(each.value.labels, local.files_cs_labels)
   num_instances     = each.value.num_instances
 
-  region     = each.value.region
-  static_ips = each.value.static_ips
-  subnetwork = each.value.subnetwork
-  zone       = each.value.zone
+  region               = each.value.region
+  static_ips           = each.value.static_ips
+  subnetwork_self_link = each.value.subnetwork_self_link
+  zone                 = each.value.zone
 
   # trigger replacement of login nodes when the controller instance is replaced
   replace_trigger = module.slurm_controller_instance.instances_self_links[0]

@@ -36,7 +36,8 @@ locals {
 
 # INSTANCE TEMPLATE
 module "slurm_controller_template" {
-  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=6.6.0"
+  # source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=6.6.0"
+  source = "github.com/wiktorn/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=reserve_ip_addresses"
 
   project_id          = var.project_id
   region              = var.region
@@ -76,7 +77,7 @@ module "slurm_controller_template" {
   source_image         = local.source_image                    # requires source_image_logic.tf
 
   # spot = TODO: add support for spot (?)
-  subnetwork = var.subnetwork_self_link
+  subnetwork_self_link = var.subnetwork_self_link
 
   tags = concat([local.slurm_cluster_name], var.tags)
   # termination_action = TODO: add support for termination_action (?)
@@ -92,21 +93,22 @@ locals {
 }
 
 module "slurm_controller_instance" {
-  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/_slurm_instance?ref=6.6.0"
+  # source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/_slurm_instance?ref=6.6.0"
+  source = "github.com/wiktorn/slurm-gcp.git//terraform/slurm_cluster/modules/_slurm_instance?ref=reserve_ip_addresses"
 
   access_config       = var.enable_controller_public_ips ? [local.access_config] : []
   add_hostname_suffix = false
   hostname            = "${local.slurm_cluster_name}-controller"
   instance_template   = module.slurm_controller_template.self_link
 
-  project_id          = var.project_id
-  region              = var.region
-  slurm_cluster_name  = local.slurm_cluster_name
-  slurm_instance_role = "controller"
-  static_ips          = var.static_ips
-  subnetwork          = var.subnetwork_self_link
-  zone                = var.zone
-  metadata            = var.metadata
+  project_id           = var.project_id
+  region               = var.region
+  slurm_cluster_name   = local.slurm_cluster_name
+  slurm_instance_role  = "controller"
+  static_ips           = var.static_ips
+  subnetwork_self_link = var.subnetwork_self_link
+  zone                 = var.zone
+  metadata             = var.metadata
 
   labels = merge(local.labels, local.files_cs_labels)
 
