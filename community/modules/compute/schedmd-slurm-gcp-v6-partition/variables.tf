@@ -42,10 +42,8 @@ variable "is_default" {
 
 variable "exclusive" {
   description = <<-EOD
-    Exclusive job access to nodes. When set to true, only one job can be scheduled on 
-    compute node and nodes are put into power save mode after job finishes. If set to false, 
-    multiple jobs can be scheduled on one node and node is shutdown after `var.suspend_time`
-    in idle state.
+    Exclusive job access to nodes. When set to true nodes execute single job and are deleted
+    after job exits. If set to false, multiple jobs can be scheduled on one node.
     EOD
   type        = bool
   default     = true
@@ -145,7 +143,7 @@ variable "suspend_time" {
     This sets 'SuspendTime' in partition_conf.
     See https://slurm.schedmd.com/slurm.conf.html#OPT_SuspendTime_1 for details.
     NOTE: use value -1 to exclude partition from suspend.
-    NOTE 2: if `var.exclusive` is set to true (default), nodes are placed into power save mode directly after job finishes.
+    NOTE 2: if `var.exclusive` is set to true (default), nodes are deleted immediately after job finishes.
   EOD
   type        = number
   default     = 300
