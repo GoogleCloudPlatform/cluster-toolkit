@@ -4,6 +4,10 @@
 
 With Dynamic Workload Scheduler in Flex Start mode, you submit a GPU capacity request for your AI/ML jobs by indicating how many you need, a duration, and your preferred region. It supports capacity requests for up to seven days, with no minimum duration requirement. You can request capacity for as little as a few minutes or hours; typically, the scheduler can fulfill shorter requests more quickly than longer ones.
 
+> [!IMPORTANT]  
+> The project needs to be allowlisted for private preview access.
+> Fill out the [form](https://docs.google.com/forms/d/1etaaXMW9jJUTTxfUC7TIIMttLWT5H-3Q8_3-sG6vwKk/edit).
+
 In order to make use of DWS Flex Start mode with SlurmGCP, you must specify a proper set of `instance_properties` in the `schedmd-slurm-gcp-v6-nodeset` module. See the example below:
 
 ```yaml
