@@ -1,5 +1,7 @@
 ### Submission Checklist
 
+NOTE: Pull requests can take up to 2 weeks to be reviewed.
+
 Please take the following actions before submitting this pull request.
 
 * Fork your PR branch from the Toolkit "develop" branch (not main)
