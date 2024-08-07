@@ -37,28 +37,30 @@ srun -l hostname | sort
 import os
 import subprocess
 import uuid
-from typing import List, Optional, Dict, Callable
+from typing import List, Optional, Dict
+from collections import OrderedDict
 
 def order(paths: List[List[str]]) -> List[str]:
     """
-    Orders the leafs of the tree in a way that minimizes the sum of distance in between 
+    Orders the leaves of the tree in a way that minimizes the sum of distance in between 
     each pair of neighboring nodes in the resulting order.
     The resulting order will always start from the first node in the input list.
-    The ordering is "stable" with respect to the input order of the leafs i.e.
+    The ordering is "stable" with respect to the input order of the leaves i.e.
     given a choice between two nodes (identical in other ways) it will select "nodelist-smallest" one.
+
+    Returns a list of nodenames, ordered as described above.  
     """
     if not paths: return []
-    # lookup table for node names order
-    name_idx = {p[-1]: i for i, p in enumerate(paths)}
     class Vert:
         "Represents a vertex in a *network* tree."
         def __init__(self, name: str, parent: "Vert"):
             self.name = name
             self.parent = parent
-            self.children = {}
-            self.lex_key: int = -1
+            # Use `OrderedDict` to preserve insertion order
+            # TODO: once we move to Python 3.7+ use regular `dict` since it has the same guarantee
+            self.children = OrderedDict()
 
-    # build a tree
+    # build a tree, children are ordered by insertion order
     root = Vert("", None)
     for path in paths:
         n = root
@@ -67,24 +69,13 @@ def order(paths: List[List[str]]) -> List[str]:
                 n.children[v] = Vert(v, n)
             n = n.children[v]
 
-    # propagate "lexicographical key" from the leaves to the root
-    def set_lex_key(v: Vert) -> None:
-        if not v.children: # this is a node
-            v.lex_key = name_idx[v.name]
-        else:
-            for u in v.children.values():
-                set_lex_key(u)
-            v.lex_key = min(u.lex_key for u in v.children.values())
-    set_lex_key(root)
-
-    # gather leafs
+    # walk the tree in insertion order, gather leaves
     result = []
     def gather_nodes(v: Vert) -> None:
-        if not v.children: # this is a node
+        if not v.children: # this is a Slurm node
             result.append(v.name)
         for u in v.children.values():
             gather_nodes(u)
-    
     gather_nodes(root)
     return result
 
@@ -107,10 +98,7 @@ def make_path(node_name: str, inst: Optional[Instance]) -> List[str]:
     parts = inst.physical_host[1:].split("/")
     if len(parts) >= 4:
         return [*parts, node_name]
-    elif len(parts) == 3:
-        return [zone, *parts, node_name]  # add zone
-
-    raise ValueError(f"Unexpected physicalHost: {inst.physical_host}")
+    return [zone, *parts, node_name]
 
 
 def to_hostnames(nodelist: str) -> List[str]:
