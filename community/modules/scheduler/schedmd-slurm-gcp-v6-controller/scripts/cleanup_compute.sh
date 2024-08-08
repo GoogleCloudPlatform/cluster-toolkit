@@ -52,7 +52,7 @@ while true; do
 done
 
 echo "Deleting resource policies"
-policies_filter="name:${cluster_name}-*"
+policies_filter="name:${cluster_name}-slurmgcp-managed-*"
 while true; do
 	policies=$(bash -c "$API_ENDPOINT gcloud compute resource-policies list --project \"${project}\" --format=\"value(selfLink)\" --filter=\"${policies_filter}\" --limit=10 | paste -sd \" \" -")
 	if [[ -z "${policies}" ]]; then
