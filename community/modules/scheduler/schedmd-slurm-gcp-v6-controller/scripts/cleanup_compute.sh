@@ -44,13 +44,9 @@ done
 
 echo "Deleting resource policies"
 policies_filter="name:${cluster_name}-*"
-while true; do
-	policies=$(gcloud compute resource-policies list --project "${project}" --format="value(selfLink)" --filter="${policies_filter}" --limit=10 | paste -sd " " -)
-	if [[ -z "${policies}" ]]; then
-		break
-	fi
-	# The lack of quotes is intentional and causes each new space-separated "word" to
-	# be treated as independent arguments. See PR#2523
-	# shellcheck disable=SC2086
-	gcloud compute resource-policies delete --quiet ${policies}
+gcloud compute resource-policies list --project "${project}" --format="value(selfLink)" --filter="${policies_filter}" | while read -r line; do
+	echo "Deleting resource policy: $line"
+	gcloud compute resource-policies delete --quiet "${line}" || {
+		echo "Failed to delete resource policy: $line"
+	}
 done
