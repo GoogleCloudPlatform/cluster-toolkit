@@ -336,7 +336,7 @@ resource "kubectl_manifest" "additional_net_params" {
 apiVersion: networking.gke.io/v1
 kind: GKENetworkParamSet
 metadata:
-  name: additional-network-${each.key}
+  name: vpc${each.key + 1}
 spec:
   vpc: ${each.value.network}
   vpcSubnet: ${each.value.subnetwork}
@@ -355,12 +355,12 @@ resource "kubectl_manifest" "additional_nets" {
 apiVersion: networking.gke.io/v1
 kind: Network
 metadata:
-  name: additional-network-${each.key}
+  name: vpc${each.key + 1}
 spec:
   parametersRef:
     group: networking.gke.io
     kind: GKENetworkParamSet
-    name: additional-network-${each.key}
+    name: vpc${each.key + 1}
   type: Device
 YAML
 

@@ -75,16 +75,16 @@ limitations under the License.
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.0.0 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.9 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | > 5.0 |
-| <a name="requirement_kubernetes"></a> [kubernetes](#requirement\_kubernetes) | > 2.23 |
+| <a name="requirement_kubectl"></a> [kubectl](#requirement\_kubectl) | >= 1.7.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
 | <a name="provider_google"></a> [google](#provider\_google) | > 5.0 |
-| <a name="provider_kubernetes.gke_cluster"></a> [kubernetes.gke\_cluster](#provider\_kubernetes.gke\_cluster) | > 2.23 |
+| <a name="provider_kubectl"></a> [kubectl](#provider\_kubectl) | >= 1.7.0 |
 
 ## Modules
 
@@ -94,8 +94,8 @@ No modules.
 
 | Name | Type |
 |------|------|
-| [kubernetes_manifest.additional_net_params](https://registry.terraform.io/providers/hashicorp/kubernetes/latest/docs/resources/manifest) | resource |
-| [kubernetes_manifest.additional_nets](https://registry.terraform.io/providers/hashicorp/kubernetes/latest/docs/resources/manifest) | resource |
+| [kubectl_manifest.additional_net_params](https://registry.terraform.io/providers/gavinbunney/kubectl/latest/docs/resources/manifest) | resource |
+| [kubectl_manifest.additional_nets](https://registry.terraform.io/providers/gavinbunney/kubectl/latest/docs/resources/manifest) | resource |
 | [google_client_config.default](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/client_config) | data source |
 | [google_container_cluster.existing_gke_cluster](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/container_cluster) | data source |
 
