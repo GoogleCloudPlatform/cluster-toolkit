@@ -150,6 +150,12 @@ resource "google_container_node_pool" "node_pool" {
         "net.ipv4.tcp_wmem" = "4096 16384 16777216"
       }
     }
+
+    reservation_affinity {
+      consume_reservation_type = var.reservation_type
+      key                      = var.specific_reservation.key
+      values                   = var.specific_reservation.values
+    }
   }
 
   timeouts {
