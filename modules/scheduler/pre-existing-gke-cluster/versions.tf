@@ -20,9 +20,9 @@ terraform {
       source  = "hashicorp/google"
       version = "> 5.0"
     }
-    kubernetes = {
-      source  = "hashicorp/kubernetes"
-      version = "> 2.23"
+    kubectl = {
+      source  = "gavinbunney/kubectl"
+      version = ">= 1.7.0"
     }
   }
 
@@ -30,5 +30,5 @@ terraform {
     module_name = "blueprints/terraform/hpc-toolkit:pre-existing-gke-cluster/v1.37.2"
   }
 
-  required_version = ">= 1.0.0"
+  required_version = ">= 1.9"
 }

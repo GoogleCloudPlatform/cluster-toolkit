@@ -198,11 +198,6 @@ Finally, the following is adding multivpc to a node pool:
     use: [gke-cluster, multinetwork]
     settings:
       machine_type: a3-megagpu-8g
-      guest_accelerator:
-      - type: nvidia-h100-mega-80gb
-        count: 8
-        gpu_driver_installation_config:
-        - gpu_driver_version: LATEST
       ...
 ```
 
@@ -273,8 +268,8 @@ No modules.
 | <a name="input_image_type"></a> [image\_type](#input\_image\_type) | The default image type used by NAP once a new node pool is being created. Use either COS\_CONTAINERD or UBUNTU\_CONTAINERD. | `string` | `"COS_CONTAINERD"` | no |
 | <a name="input_kubernetes_labels"></a> [kubernetes\_labels](#input\_kubernetes\_labels) | Kubernetes labels to be applied to each node in the node group. Key-value pairs. <br>(The `kubernetes.io/` and `k8s.io/` prefixes are reserved by Kubernetes Core components and cannot be specified) | `map(string)` | `null` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | GCE resource labels to be applied to resources. Key-value pairs. | `map(string)` | n/a | yes |
-| <a name="input_local_ssd_count_ephemeral_storage"></a> [local\_ssd\_count\_ephemeral\_storage](#input\_local\_ssd\_count\_ephemeral\_storage) | The number of local SSDs to attach to each node to back ephemeral storage.<br>Uses NVMe interfaces.  Must be supported by `machine_type`.<br>[See above](#local-ssd-storage) for more info. | `number` | `0` | no |
-| <a name="input_local_ssd_count_nvme_block"></a> [local\_ssd\_count\_nvme\_block](#input\_local\_ssd\_count\_nvme\_block) | The number of local SSDs to attach to each node to back block storage.<br>Uses NVMe interfaces.  Must be supported by `machine_type`.<br>[See above](#local-ssd-storage) for more info. | `number` | `0` | no |
+| <a name="input_local_ssd_count_ephemeral_storage"></a> [local\_ssd\_count\_ephemeral\_storage](#input\_local\_ssd\_count\_ephemeral\_storage) | The number of local SSDs to attach to each node to back ephemeral storage.<br>Uses NVMe interfaces.  Must be supported by `machine_type`.<br>[See above](#local-ssd-storage) for more info. | `number` | `null` | no |
+| <a name="input_local_ssd_count_nvme_block"></a> [local\_ssd\_count\_nvme\_block](#input\_local\_ssd\_count\_nvme\_block) | The number of local SSDs to attach to each node to back block storage.<br>Uses NVMe interfaces.  Must be supported by `machine_type`.<br>[See above](#local-ssd-storage) for more info. | `number` | `null` | no |
 | <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | The name of a Google Compute Engine machine type. | `string` | `"c2-standard-60"` | no |
 | <a name="input_name"></a> [name](#input\_name) | The name of the node pool. If left blank, will default to the machine type. | `string` | `null` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The project ID to host the cluster in. | `string` | n/a | yes |

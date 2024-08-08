@@ -22,54 +22,49 @@ data "google_container_cluster" "existing_gke_cluster" {
 
 data "google_client_config" "default" {}
 
-provider "kubernetes" {
-  alias                  = "gke_cluster"
+provider "kubectl" {
   host                   = "https://${data.google_container_cluster.existing_gke_cluster.endpoint}"
   token                  = data.google_client_config.default.access_token
   cluster_ca_certificate = base64decode(data.google_container_cluster.existing_gke_cluster.master_auth[0].cluster_ca_certificate)
+  load_config_file       = false
 }
 
-resource "kubernetes_manifest" "additional_net_params" {
+resource "kubectl_manifest" "additional_net_params" {
   for_each = { for idx, network_info in var.additional_networks : idx => network_info }
 
   depends_on = [data.google_container_cluster.existing_gke_cluster]
 
-  manifest = {
-    "apiVersion" = "networking.gke.io/v1"
-    "kind"       = "GKENetworkParamSet"
-    "metadata" = {
-      "name" = "additional-network-${each.key}" # Unique name for each GKENetworkParamSet
-    }
-    "spec" = {
-      "vpc"        = each.value.network
-      "vpcSubnet"  = each.value.subnetwork
-      "deviceMode" = "NetDevice"
-    }
-  }
+  yaml_body = <<YAML
+apiVersion: networking.gke.io/v1
+kind: GKENetworkParamSet
+metadata:
+  name: vpc${each.key + 1}
+spec:
+  vpc: ${each.value.network}
+  vpcSubnet: ${each.value.subnetwork}
+  deviceMode: NetDevice
+YAML
 
-  provider = kubernetes.gke_cluster
+  provider = kubectl
 }
 
-resource "kubernetes_manifest" "additional_nets" {
+resource "kubectl_manifest" "additional_nets" {
   for_each = { for idx, network_info in var.additional_networks : idx => network_info }
 
-  depends_on = [data.google_container_cluster.existing_gke_cluster, kubernetes_manifest.additional_net_params]
+  depends_on = [data.google_container_cluster.existing_gke_cluster, kubectl_manifest.additional_net_params]
 
-  manifest = {
-    "apiVersion" = "networking.gke.io/v1"
-    "kind"       = "Network"
-    "metadata" = {
-      "name" = "additional-network-${each.key}" # Unique name for each Network
-    }
-    "spec" = {
-      "parametersRef" = {
-        "group" = "networking.gke.io"
-        "kind"  = "GKENetworkParamSet"
-        "name"  = "additional-network-${each.key}" # Reference the corresponding param set
-      }
-      "type" = "Device"
-    }
-  }
+  yaml_body = <<YAML
+apiVersion: networking.gke.io/v1
+kind: Network
+metadata:
+  name: vpc${each.key + 1}
+spec:
+  parametersRef:
+    group: networking.gke.io
+    kind: GKENetworkParamSet
+    name: vpc${each.key + 1}
+  type: Device
+YAML
 
-  provider = kubernetes.gke_cluster
+  provider = kubectl
 }

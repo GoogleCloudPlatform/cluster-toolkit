@@ -1,4 +1,4 @@
-# Copyright 2023 Google LLC
+# Copyright 2024 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,11 +14,11 @@
 
 ---
 
-blueprint_name: gke-multi-vpc-a3-megagpu-8g
+blueprint_name: gke-a3-highgpu
 
 vars:
   project_id:  ## Set GCP Project ID Here ##
-  deployment_name: gkemvpc
+  deployment_name: gke-a3-highgpu
   region: us-central1
   zone: us-central1-c
 
@@ -45,7 +45,7 @@ deployment_groups:
     settings:
       network_name_prefix: $(vars.deployment_name)-gpunet
       global_ip_address_range: 192.169.0.0/16
-      network_count: 8
+      network_count: 4
       subnetwork_cidr_suffix: 24
 
   - id: gke_cluster
@@ -55,20 +55,15 @@ deployment_groups:
       enable_private_endpoint: false  # Allows for access from authorized public IPs
       enable_multi_networking: true
       master_authorized_networks:
-      - cidr_block: $(vars.authorized_cidr)
-        display_name: "kubectl-access-network" # Allows your machine run kubectl command.
+      - cidr_block: $(vars.authorized_cidr)  # Allows your machine run kubectl command. It's required for the multi-network setup.
+        display_name: "kubectl-access-network"
     outputs: [instructions]
 
-  - id: a3-megagpu_pool
+  - id: a3-highgpu_pool
     source: modules/compute/gke-node-pool
     use: [gke_cluster, gpunets]
     settings:
-      machine_type: a3-megagpu-8g
-      guest_accelerator:
-      - type: nvidia-h100-mega-80gb
-        count: 8
-        gpu_driver_installation_config:
-        - gpu_driver_version: LATEST
+      machine_type: a3-highgpu-8g
       disk_type: pd-balanced
       autoscaling_total_min_nodes: 2
       zones: [$(vars.zone)]
@@ -82,7 +77,7 @@ deployment_groups:
 
   - id: job-template
     source: modules/compute/gke-job-template
-    use: [a3-megagpu_pool]
+    use: [a3-highgpu_pool]
     settings:
       image: nvidia/cuda:11.0.3-runtime-ubuntu20.04
       command:
