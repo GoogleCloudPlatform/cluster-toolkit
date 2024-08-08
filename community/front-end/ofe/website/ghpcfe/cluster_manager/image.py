@@ -51,7 +51,7 @@ class ImageBackend:
 
         1. Create the necessary directory structure for the image.
         2. Generate a Cluster Toolkit blueprint to build the image.
-        3. Run the Cluster Toolkit (`ghpc`) to create the image based on the blueprint.
+        3. Run the Cluster Toolkit (`gcluster`) to create the image based on the blueprint.
         4. Set up the builder environment on Google Cloud Platform (GCP) using Terraform.
         5. Create the image on GCP using Packer.
         6. Destroy the builder environment after the image creation is complete.
@@ -71,7 +71,7 @@ class ImageBackend:
             OSError: If there is an error while creating the image directory or writing to
                      the credentials file.
             IOError: If there is an error while writing to the credentials file.
-            subprocess.CalledProcessError: If any of the subprocess calls (ghpc, Terraform, or Packer)
+            subprocess.CalledProcessError: If any of the subprocess calls (gcluster, Terraform, or Packer)
                                            encounter an error during execution.
         """
         self._create_image_dir()
@@ -172,7 +172,7 @@ deployment_groups:
     def _run_ghpc(self):
         target_dir = self.image_dir
         try:
-            logger.info(f"Invoking ghpc create for the image {self.image.id}")
+            logger.info(f"Invoking gcluster create for the image {self.image.id}")
             log_out_fn = target_dir / "ghpc_create_log.stdout"
             log_err_fn = target_dir / "ghpc_create_log.stderr"
 
@@ -191,7 +191,7 @@ deployment_groups:
                     )
         except subprocess.CalledProcessError as cpe:
             self.update_image_status("e")
-            logger.error(f"ghpc exec failed for image {self.image.id}", exc_info=cpe)
+            logger.error(f"gcluster exec failed for image {self.image.id}", exc_info=cpe)
             # No logs from stdout/err - get dumped to files
             raise
       

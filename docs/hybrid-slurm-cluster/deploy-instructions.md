@@ -77,7 +77,7 @@ command line, run the following command with the updated values for
 `<<Controller_Hostname>>` and `<<Project_ID>>`:
 
 ```shell
-./ghpc create docs/hybrid-slurm-cluster/blueprints/hybrid-configuration.yaml \
+./gcluster create docs/hybrid-slurm-cluster/blueprints/hybrid-configuration.yaml \
   --vars project_id=<<bursting project>> \
   --vars static_controller_hostname=<<fully qualified controller hostname>> \
   --vars static_controller_addr=<<Controller_Address>>
@@ -87,10 +87,10 @@ If successful, this command will create a deployment folder. Use the following
 command to deploy the hybrid configuration:
 
 ```sh
-./ghpc deploy hybrid-config
+./gcluster deploy hybrid-config
 ```
 
-`ghpc` reports the changes that Terraform is proposing to make for your
+`gcluster` reports the changes that Terraform is proposing to make for your
 cluster. Optionally, you may review them by typing `d` and pressing `enter`. To
 deploy the cluster, accept the proposed changes by typing `a` and pressing
 `enter`.
