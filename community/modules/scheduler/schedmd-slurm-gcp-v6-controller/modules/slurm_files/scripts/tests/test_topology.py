@@ -12,8 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import pytest
 import mock
 from common import TstCfg, TstNodeset, TstTPU, make_to_hostnames_mock
+import sort_nodes
 
 import util
 import conf
@@ -89,3 +91,15 @@ def test_gen_topology_conf(tpu_mock):
     conf.gen_topology_conf(util.Lookup(cfg))
     want_written = PRELUDE + "\n".join(want_compressed) + "\n\n"
     assert open(cfg.output_dir + "/cloud_topology.conf").read() == want_written
+
+
+
+@pytest.mark.parametrize(
+    "paths,expected",
+    [
+        (["z/n-0", "z/n-1", "z/n-2", "z/n-3", "z/n-4", "z/n-10"], ['n-0', 'n-1', 'n-2', 'n-3', 'n-4', 'n-10']),
+        (["y/n-0", "z/n-1", "x/n-2", "x/n-3", "y/n-4", "g/n-10"], ['n-0', 'n-4', 'n-1', 'n-2', 'n-3', 'n-10']),
+    ])
+def test_sort_nodes_order(paths: list[list[str]], expected: list[str]) -> None:
+    paths = [l.split("/") for l in paths]
+    assert sort_nodes.order(paths) == expected
