@@ -97,7 +97,7 @@ locals {
     termination_action       = try(var.spot_instance_config.termination_action, null)
     reservation_name         = local.reservation_name
     maintenance_interval     = var.maintenance_interval
-    instance_properties      = var.instance_properties
+    instance_properties_json = jsonencode(var.instance_properties)
 
     zone_target_shape = var.zone_target_shape
     zone_policy_allow = local.zones
