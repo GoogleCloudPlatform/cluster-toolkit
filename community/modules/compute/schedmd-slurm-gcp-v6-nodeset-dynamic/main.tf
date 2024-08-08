@@ -20,7 +20,14 @@ locals {
 locals {
   nodeset_name = substr(replace(var.name, "/[^a-z0-9]/", ""), 0, 14)
   feature      = coalesce(var.feature, local.nodeset_name)
-  metadata     = merge(var.metadata, { slurmd_feature = local.feature })
+
+  disable_automatic_updates_metadata = var.allow_automatic_updates ? {} : { google_disable_automatic_updates = "TRUE" }
+
+  metadata = merge(
+    local.disable_automatic_updates_metadata,
+    { slurmd_feature = local.feature },
+    var.metadata
+  )
 
   nodeset = {
     nodeset_name = local.nodeset_name
@@ -54,7 +61,7 @@ data "google_compute_default_service_account" "default" {
 
 
 module "slurm_nodeset_template" {
-  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=6.5.8"
+  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=6.6.1"
 
   project_id          = var.project_id
   region              = var.region

@@ -48,7 +48,9 @@
   delay: 100
   ansible.builtin.command: |
     srun -N 1 -p tpu bash -c '
-    pip install --upgrade 'jax[tpu]>0.3.0' -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
+    set -e
+    pip install --upgrade "jax[tpu]" -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
+    pip install --upgrade ml_dtypes
     python3 -c "
     import sys
     import jax

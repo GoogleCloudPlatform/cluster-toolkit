@@ -23,7 +23,7 @@ administrators, additional Django superusers can be created from the Admin site
 within TKFE, once it is deployed and running.
 
 The TFKE web application server uses the
-[Cluster Toolkit](https://github.com/GoogleCloudPlatform/hpc-toolkit) to
+[Cluster Toolkit](https://github.com/GoogleCloudPlatform/cluster-toolkit) to
 provision resources for networks, filesystems and clusters, using a service
 account that has its credentials registered to TKFE. The service account is
 used for access management and billing.
@@ -66,8 +66,8 @@ Clone the repository, checkout the corresponding branch, and switch to
 the `frontend` directory as follows:
 
 ```bash
-git clone https://github.com/GoogleCloudPlatform/hpc-toolkit.git
-cd hpc-toolkit
+git clone https://github.com/GoogleCloudPlatform/cluster-toolkit.git
+cd cluster-toolkit
 cd community/frontend/ofe
 ```
 
@@ -268,7 +268,7 @@ admin has to click *Edit Subnet* to create at least one subnet in the VPC.
 Once the network and subnet(s) are defined, click the ‘Apply Cloud Changes’
 button to trigger creation of the VPC and subnet(s).
 
-<!-- Behind the scenes, ghpc is used to get Terraform to provision the cloud resources. -->
+<!-- Behind the scenes, gcluster is used to get Terraform to provision the cloud resources. -->
 
 ### Import an existing VPC
 
@@ -495,7 +495,7 @@ files will show errors from the Django web application.
 Cloud resource deployment log files (from Terraform) are typically shown via
 the FrontEnd web site.  If those logs are not being shown, they can be found on
 the service machine under
-`/opt/gcluster/hpc-toolkit/frontend/(clusters|fs|vpc)/...`.
+`/opt/gcluster/cluster-toolkit/frontend/(clusters|fs|vpc)/...`.
 Cluster Toolkit log files will also be found in those directories.  The Terraform
 log files and status files will be down a few directories, based off of the
 Cluster Number, Deployment ID, and Terraform directory.
@@ -517,7 +517,7 @@ missing. Use the [IAM permissions reference](https://cloud.google.com/iam/docs/p
 to research this and identify additional roles to add to your user account.
 
 Before any attempt to redeploy the TKFE, make sure to run
-`terraform destroy` in `hpc-toolkit/frontend/tf` to remove cloud resources that
+`terraform destroy` in `cluster-toolkit/frontend/tf` to remove cloud resources that
 have been already created.
 
 ### Cluster problems

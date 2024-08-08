@@ -59,6 +59,8 @@ deployment_groups:
         destination: workaround_apt_change.sh
         content: |
           #!/bin/bash
+          # this script is no longer necessary on the most recent TCPX A3
+          # images, however it is included for backwards compatibility
           set -e -o pipefail
           rm -f /etc/apt/sources.list.d/kubernetes.list
           apt-get update --allow-releaseinfo-change
@@ -77,13 +79,13 @@ deployment_groups:
         content: |
           {
             "reboot": false,
-            "slurm_version": "23.02.7",
             "install_cuda": false,
-            "nvidia_version": "latest",
-            "install_ompi": true,
-            "install_lustre": true,
             "install_gcsfuse": true,
-            "monitoring_agent": "cloud-ops"
+            "install_lustre": true,
+            "install_ompi": true,
+            "monitoring_agent": "cloud-ops",
+            "nvidia_version": "latest",
+            "slurm_version": "23.11.8"
           }
       - type: shell
         destination: install_slurm.sh
@@ -92,7 +94,7 @@ deployment_groups:
           set -e -o pipefail
           ansible-galaxy role install googlecloudplatform.google_cloud_ops_agents
           ansible-pull \
-              -U https://github.com/GoogleCloudPlatform/slurm-gcp -C 5.11.1 \
+              -U https://github.com/GoogleCloudPlatform/slurm-gcp -C 6.5.13 \
               -i localhost, --limit localhost --connection=local \
               -e @/var/tmp/slurm_vars.json \
               ansible/playbook.yml
@@ -123,115 +125,12 @@ deployment_groups:
           [Service]
           ExecCondition=/bin/bash -c '/usr/bin/curl -s -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/machine-type | grep -q "/a3-highgpu-8g$"'
           ExecStart=/usr/lib/systemd/systemd-networkd-wait-online -i enp6s0 -i enp12s0 -i enp134s0 -i enp140s0 -o routable --timeout=120
-          ExecStartPost=/bin/sleep 60
+          ExecStartPost=/bin/sleep 10
 
           [Install]
           WantedBy=multi-user.target
       - type: shell
-        destination: install_enroot_pyxis.sh
-        content: |
-          #!/bin/bash
-          set -e -o pipefail
-          ### Setting up Enroot
-          if ! dpkg -l enroot &>/dev/null; then
-              arch=\$(dpkg --print-architecture)
-              curl -fSsL -O https://github.com/NVIDIA/enroot/releases/download/v3.4.1/enroot_3.4.1-1_${arch}.deb
-              curl -fSsL -O https://github.com/NVIDIA/enroot/releases/download/v3.4.1/enroot+caps_3.4.1-1_${arch}.deb # optional
-              apt-get update
-              apt-get install --assume-yes ./*.deb
-              rm enroot*.deb
-          fi
-          # configure enroot
-          # use single quotes around EOT to avoid shell interpolation
-          cat <<'EOT' > /etc/enroot/enroot.conf
-          ENROOT_RUNTIME_PATH    /mnt/localssd/${UID}/enroot/runtime
-          ENROOT_CACHE_PATH      /mnt/localssd/${UID}/enroot/cache
-          ENROOT_DATA_PATH       /mnt/localssd/${UID}/enroot/data
-          EOT
-          ### Install Pyxis
-          if [ ! -f "/usr/local/lib/slurm/spank_pyxis.so" ]; then
-              git clone --depth 1 https://github.com/NVIDIA/pyxis.git
-              cd pyxis && make install && cd -
-              rm -rf pyxis
-              echo "required /usr/local/lib/slurm/spank_pyxis.so" > /etc/slurm/plugstack.conf
-          fi
-      - type: shell
-        destination: install_mdadm.sh
-        content: |
-          #!/bin/bash
-          apt-get update
-          apt-get install mdadm --no-install-recommends --assume-yes
-      - type: data
-        destination: /usr/local/ghpc/mount_localssd.sh
-        content: |
-          #!/bin/bash
-          set -e -o pipefail
-
-          RAID_DEVICE=/dev/md0
-          DST_MNT=/mnt/localssd
-          DISK_LABEL=LOCALSSD
-          OPTIONS=discard,defaults
-
-          # if mount is successful, do nothing
-          if mount --source LABEL="$DISK_LABEL" --target="$DST_MNT" -o "$OPTIONS"; then
-                  exit 0
-          fi
-
-          # Create new RAID, format ext4 and mount
-          # TODO: handle case of zero or 1 local SSD disk
-          # TODO: handle case when /dev/md0 exists but was not mountable for
-          # some reason
-          DEVICES=`nvme list | grep nvme_ | grep -v nvme_card-pd | awk '{print $1}' | paste -sd ' '`
-          NB_DEVICES=`nvme list | grep nvme_ | grep -v nvme_card-pd | awk '{print $1}' | wc -l`
-          mdadm --create "$RAID_DEVICE" --level=0 --raid-devices=$NB_DEVICES $DEVICES
-          mkfs.ext4 -F "$RAID_DEVICE"
-          tune2fs "$RAID_DEVICE" -r 131072
-          e2label "$RAID_DEVICE" "$DISK_LABEL"
-          mkdir -p "$DST_MNT"
-          mount --source LABEL="$DISK_LABEL" --target="$DST_MNT" -o "$OPTIONS"
-          chmod 1777 "$DST_MNT"
-      - type: data
-        destination: /etc/systemd/system/mount-local-ssd.service
-        content: |
-          [Unit]
-          Description=Assemble local SSDs as software RAID; then format and mount
-
-          [Service]
-          ExecCondition=bash -c '/usr/bin/curl -s -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/machine-type | grep -q "/a3-highgpu-8g$"'
-          ExecStart=/bin/bash /usr/local/ghpc/mount_localssd.sh
-
-          [Install]
-          WantedBy=local-fs.target
-      - type: shell
-        destination: install_dcgm.sh
-        content: |
-          #!/bin/bash
-          set -e -o pipefail
-          apt-key del 7fa2af80
-          distribution=\$(. /etc/os-release;echo $ID$VERSION_ID | sed -e 's/\.//g')
-          wget https://developer.download.nvidia.com/compute/cuda/repos/$distribution/x86_64/cuda-keyring_1.0-1_all.deb
-          dpkg -i cuda-keyring_1.0-1_all.deb
-          apt-get update
-          apt-get install -y datacenter-gpu-manager
-          # libnvidia-nscq needed for A100/A800 and H100/H800 systems
-          apt-get install -y libnvidia-nscq-550
-      - type: shell
-        destination: add_dcgm_to_op_config.sh
-        content: |
-          #!/bin/bash
-          tee -a /etc/google-cloud-ops-agent/config.yaml > /dev/null << EOF
-          metrics:
-            receivers:
-              dcgm:
-                type: dcgm
-            service:
-              pipelines:
-                dcgm:
-                  receivers:
-                    - dcgm
-          EOF
-      - type: shell
-        destination: systemctl_services.sh
+        destination: enable_delay_a3.sh
         content: |
           #!/bin/bash
           set -e -o pipefail
@@ -239,8 +138,59 @@ deployment_groups:
           # resolution failures during google-startup-scripts.service)
           systemctl daemon-reload
           systemctl enable delay-a3.service
-          systemctl enable mount-local-ssd.service
-          systemctl enable nvidia-dcgm
+      - type: data
+        destination: /etc/enroot/enroot.conf
+        content: |
+          ENROOT_RUNTIME_PATH    /mnt/localssd/${UID}/enroot/runtime
+          ENROOT_CACHE_PATH      /mnt/localssd/${UID}/enroot/cache
+          ENROOT_DATA_PATH       /mnt/localssd/${UID}/enroot/data
+      - type: ansible-local
+        destination: configure_gpu_monitoring.yml
+        content: |
+          ---
+          - name: Install NVIDIA DCGM and Configure Ops Agent
+            hosts: all
+            become: true
+            vars:
+              distribution: "{{ ansible_distribution | lower }}{{ ansible_distribution_version | replace('.','') }}"
+              package_url: https://developer.download.nvidia.com/compute/cuda/repos/{{ distribution }}/x86_64/cuda-keyring_1.1-1_all.deb
+              package_filename: /tmp/{{ package_url | basename }}
+              enable_ops_agent: true
+              enable_nvidia_dcgm: false
+            tasks:
+            - name: Download NVIDIA repository package
+              ansible.builtin.get_url:
+                url: "{{ package_url }}"
+                dest: "{{ package_filename }}"
+            - name: Install NVIDIA repository package
+              ansible.builtin.apt:
+                deb: "{{ package_filename }}"
+                state: present
+            - name: Install NVIDIA DCGM
+              ansible.builtin.apt:
+                name:
+                - datacenter-gpu-manager
+                - libnvidia-nscq-550
+                update_cache: true
+            post_tasks:
+            - name: Enable Google Cloud Ops Agent
+              ansible.builtin.service:
+                name: google-cloud-ops-agent.service
+                state: "{{ 'started' if enable_ops_agent else 'stopped' }}"
+                enabled: "{{ enable_ops_agent }}"
+            - name: Disable NVIDIA DCGM by default (enable during boot on GPU nodes)
+              ansible.builtin.service:
+                name: nvidia-dcgm.service
+                state: stopped
+                enabled: false
+      - type: shell
+        destination: install_mdadm.sh
+        content: |
+          #!/bin/bash
+          # this script ensures that the mdadm package is already present when
+          # compute nodes boot and use MDADM to RAID local SSD disks
+          apt-get update
+          apt-get install mdadm --no-install-recommends --assume-yes
       - type: shell
         destination: remove_snap_gcloud.sh
         content: |

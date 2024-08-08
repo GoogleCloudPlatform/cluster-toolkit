@@ -14,7 +14,7 @@
 
 ---
 
-- name: "Setup Integration tests for HPC toolkit"
+- name: "Setup Integration tests for Cluster Toolkit"
   hosts: localhost
   tasks:
   ## Create SSH Keys
@@ -46,10 +46,10 @@
 
   - name: Create Infrastructure and test
     block:
-    - name: Create Cluster with GHPC
+    - name: Create Cluster with gcluster
       register: deployment
       changed_when: deployment.changed
-      ansible.builtin.command: ./ghpc deploy {{ deployment_name }} --auto-approve
+      ansible.builtin.command: ./gcluster deploy {{ deployment_name }} --auto-approve
       args:
         chdir: "{{ workspace }}"
       environment:
@@ -137,10 +137,10 @@
 
     ## Cleanup and fail gracefully
     rescue:
-    - name: Capture ghpc stderr
+    - name: Capture gcluster stderr
       failed_when: false
       ansible.builtin.set_fact:
-        ghpc_stderr: "{{ deployment.stderr | replace('\n',' ') }}"
+        gcluster_stderr: "{{ deployment.stderr | replace('\n',' ') }}"
 
     - name: Gather logs
       ansible.builtin.include_tasks:
@@ -148,9 +148,9 @@
         apply:
           delegate_to: localhost
 
-    - name: Include rescue from ghpc failure
+    - name: Include rescue from gcluster failure
       ansible.builtin.include_tasks:
-        file: tasks/rescue_ghpc_failure.yml
+        file: tasks/rescue_gcluster_failure.yml
         apply:
           delegate_to: localhost
       vars:
@@ -177,7 +177,7 @@
       vars:
         timeout_seconds: "{{ startup_timeout_seconds }}"
 
-    - name: Run Integration tests for HPC toolkit
+    - name: Run Integration tests for Cluster Toolkit
       ansible.builtin.include_tasks: "{{ test }}"
       vars:
         remote_node: "{{ remote_node }}"
@@ -190,7 +190,7 @@
     always:
     - name: Cleanup firewall and infrastructure
       ansible.builtin.include_tasks:
-        file: tasks/rescue_ghpc_failure.yml
+        file: tasks/rescue_gcluster_failure.yml
         apply:
           delegate_to: localhost
       vars:

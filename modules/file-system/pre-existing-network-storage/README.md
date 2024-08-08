@@ -60,6 +60,20 @@ filesystem:
 
 Note the use of the MGS NID (Network ID) in the `server_ip` field - in particular, note the `@tcp` suffix.
 
+The following is an example of using `pre-existing-network-storage` with the `daos`
+filesystem. In order to use existing `parallelstore` instance, `fs_type` needs to be
+explicitly mentioned in blueprint. The `remote_mount` option refers to `access_points`
+for `parallelstore` instance.
+
+```yaml
+- id: parallelstorefs
+  source: modules/file-system/pre-existing-network-storage
+  settings:
+    fs_type: daos
+    remote_mount: "[10.246.99.2,10.246.99.3,10.246.99.4]"
+    mount_options: disable-wb-cache,thread-count=16,eq-count=8
+```
+
 ### Mounting
 
 For the `fs_type` listed below, this module will provide `client_install_runner`
@@ -71,6 +85,7 @@ Supported `fs_type`:
 - nfs
 - lustre
 - gcsfuse
+- daos
 
 [scripts/mount.sh](./scripts/mount.sh) is used as the contents of
 `mount_runner`. This script will update `/etc/fstab` and mount the network

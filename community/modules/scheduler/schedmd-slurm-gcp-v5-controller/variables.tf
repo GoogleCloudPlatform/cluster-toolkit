@@ -15,7 +15,7 @@
  */
 
 # Most variables have been sourced and modified from the SchedMD/slurm-gcp
-# github repository: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/5.11.1
+# github repository: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/v5
 
 variable "access_config" {
   description = "Access configurations, i.e. IPs via which the VM instance can be accessed via the Internet."
@@ -557,7 +557,7 @@ variable "instance_image" {
   type        = map(string)
   default = {
     project = "schedmd-slurm-public"
-    family  = "slurm-gcp-5-11-hpc-centos-7"
+    family  = "slurm-gcp-5-12-hpc-centos-7"
   }
 
   validation {
@@ -585,6 +585,17 @@ variable "instance_image_custom" {
     EOD
   type        = bool
   default     = false
+}
+
+variable "allow_automatic_updates" {
+  description = <<-EOT
+  If false, disables automatic system package updates on the created instances.  This feature is
+  only available on supported images (or images derived from them).  For more details, see
+  https://cloud.google.com/compute/docs/instances/create-hpc-vm#disable_automatic_updates
+  EOT
+  type        = bool
+  default     = true
+  nullable    = false
 }
 
 # tflint-ignore: terraform_unused_declarations

@@ -1,0 +1,75 @@
+# Copyright 2024 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+# To get access to a private preview of Parallelstore APIs, your project needs to
+# be allowlisted. To set this up, please work with your account representative.
+
+blueprint_name: parallelstore-slurm
+
+vars:
+  project_id:  ## Set GCP Project ID Here ##
+  deployment_name: parallelstore-slurm
+  region: us-east4
+  zone: us-east4-b
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: network
+    source: modules/network/vpc
+
+  - id: private_service_access
+    source: community/modules/network/private-service-access
+    use: [network]
+    settings:
+      prefix_length: 24 # recommended to use <=24
+
+  - id: parallelstore
+    source: modules/file-system/parallelstore
+    use: [network, private_service_access]
+
+  - id: debug_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network]
+    settings:
+      node_count_dynamic_max: 4
+      machine_type: c2-standard-60
+      enable_placement: false  # the default is: true
+
+  - id: debug_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use: [debug_nodeset]
+    settings:
+      partition_name: debug
+      exclusive: false  # allows nodes to stay up after jobs are done.
+      is_default: true
+
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    use: [network]
+    settings:
+      machine_type: n2-standard-4
+      enable_login_public_ips: true
+
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    use:
+    - network
+    - debug_partition
+    - slurm_login
+    - parallelstore  # Connect parallelstore instance with slurm cluster.
+    settings:
+      enable_controller_public_ips: true

@@ -14,7 +14,7 @@
 
 ---
 
-- name: "Setup Integration tests for HPC toolkit"
+- name: "Setup Integration tests for Cluster Toolkit"
   hosts: localhost
   tasks:
   ## Create SSH Keys
@@ -44,10 +44,10 @@
       file: tasks/create_deployment_directory.yml
   - name: Create Infrastructure and test
     block:
-    - name: Execute ghpc deploy
+    - name: Execute gcluster deploy
       register: deployment
       changed_when: deployment.changed
-      ansible.builtin.command: ./ghpc deploy {{ deployment_name }} --auto-approve
+      ansible.builtin.command: ./gcluster deploy {{ deployment_name }} --auto-approve
       args:
         chdir: "{{ workspace }}"
       environment:
@@ -115,10 +115,10 @@
         - delete
         - "{{ deployment_name }}"
     - name: Destroy deployment
-      register: ghpc_destroy
-      changed_when: ghpc_destroy.changed
+      register: gcluster_destroy
+      changed_when: gcluster_destroy.changed
       ignore_errors: true
-      ansible.builtin.command: ./ghpc destroy {{ deployment_name }} --auto-approve
+      ansible.builtin.command: ./gcluster destroy {{ deployment_name }} --auto-approve
       args:
         chdir: "{{ workspace }}"
       environment:
@@ -158,7 +158,7 @@
         port: 9618
         delay: 10
         timeout: 480
-    - name: Run Integration tests for HPC toolkit
+    - name: Run Integration tests for Cluster Toolkit
       ansible.builtin.include_tasks: "{{ test }}"
       vars:
         access_point: "{{ access_point }}"
@@ -180,10 +180,10 @@
         - "{{ deployment_name }}"
     - name: Destroy deployment
       delegate_to: localhost
-      register: ghpc_destroy
-      changed_when: ghpc_destroy.changed
+      register: gcluster_destroy
+      changed_when: gcluster_destroy.changed
       ignore_errors: true
-      ansible.builtin.command: ./ghpc destroy {{ deployment_name }} --auto-approve
+      ansible.builtin.command: ./gcluster destroy {{ deployment_name }} --auto-approve
       args:
         chdir: "{{ workspace }}"
       environment:

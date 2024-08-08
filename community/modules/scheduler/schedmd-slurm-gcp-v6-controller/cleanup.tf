@@ -32,12 +32,15 @@ resource "null_resource" "cleanup_compute" {
   count = var.enable_cleanup_compute ? 1 : 0
 
   triggers = {
-    project_id   = var.project_id
-    cluster_name = local.slurm_cluster_name
+    project_id               = var.project_id
+    cluster_name             = local.slurm_cluster_name
+    universe_domain          = var.universe_domain
+    compute_endpoint_version = var.endpoint_versions.compute
+    gcloud_path_override     = var.gcloud_path_override
   }
 
   provisioner "local-exec" {
-    command = "/bin/bash ${path.module}/scripts/cleanup_compute.sh ${self.triggers.project_id} ${self.triggers.cluster_name}"
+    command = "/bin/bash ${path.module}/scripts/cleanup_compute.sh ${self.triggers.project_id} ${self.triggers.cluster_name} ${self.triggers.universe_domain} ${self.triggers.compute_endpoint_version} ${self.triggers.gcloud_path_override}"
     when    = destroy
   }
 

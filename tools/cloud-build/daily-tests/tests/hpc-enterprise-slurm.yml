@@ -23,7 +23,7 @@ cli_deployment_vars:
   network_name: "{{ network }}"
   region: europe-west1
   zone: "{{ zone }}"
-  zones: "[europe-west1-b,europe-west1-c,europe-west1-d]"
+  gpu_zones: "[europe-west1-b,europe-west1-c,europe-west1-d]"
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/examples/hpc-enterprise-slurm.yaml"
 network: "{{ test_name }}-net"

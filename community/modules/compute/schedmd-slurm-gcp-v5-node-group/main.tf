@@ -20,6 +20,13 @@ locals {
 }
 
 locals {
+  disable_automatic_updates_metadata = var.allow_automatic_updates ? {} : { google_disable_automatic_updates = "TRUE" }
+
+  metadata = merge(
+    local.disable_automatic_updates_metadata,
+    var.metadata
+  )
+
   enable_public_ip_access_config = var.disable_public_ips ? [] : [{ nat_ip = null, network_tier = null }]
   access_config                  = length(var.access_config) == 0 ? local.enable_public_ip_access_config : var.access_config
 
@@ -59,7 +66,7 @@ locals {
     labels                   = local.labels
     machine_type             = var.machine_type
     maintenance_interval     = var.maintenance_interval
-    metadata                 = var.metadata
+    metadata                 = local.metadata
     min_cpu_platform         = var.min_cpu_platform
     on_host_maintenance      = var.on_host_maintenance
     preemptible              = var.preemptible

@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
+	"hpc-toolkit/pkg/shell"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -79,13 +80,21 @@ func Execute() error {
 		if len(GitBranch) == 0 {
 			GitBranch = "detached HEAD"
 		}
+
 		annotation["version"] = GitTagVersion
 		annotation["branch"] = GitBranch
 		annotation["commitInfo"] = GitCommitInfo
-		rootCmd.SetVersionTemplate(`gcluster version {{index .Annotations "version"}}
+		tmpl := `gcluster version {{index .Annotations "version"}}
 Built from '{{index .Annotations "branch"}}' branch.
 Commit info: {{index .Annotations "commitInfo"}}
-`)
+`
+		tfVersion, _ := shell.TfVersion()
+		if tfVersion != "" {
+			annotation["tfVersion"] = tfVersion
+			tmpl += `Terraform version: {{index .Annotations "tfVersion"}}
+`
+		}
+		rootCmd.SetVersionTemplate(tmpl)
 	}
 
 	return rootCmd.Execute()

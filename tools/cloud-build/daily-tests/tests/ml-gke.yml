@@ -17,7 +17,7 @@ deployment_name: ml-gke-{{ build }}
 region: asia-southeast1
 zone: asia-southeast1-b  # for remote node
 workspace: /workspace
-blueprint_yaml: "{{ workspace }}/community/examples/ml-gke.yaml"
+blueprint_yaml: "{{ workspace }}/examples/ml-gke.yaml"
 network: "{{ deployment_name }}-net"
 remote_node: "{{ deployment_name }}-0"
 cli_deployment_vars:

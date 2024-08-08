@@ -14,7 +14,7 @@
 
 variable "disk_type" {
   type        = string
-  description = "Boot disk type, can be either hyperdisk-balanced, hyperdisk-extreme, pd-ssd, pd-standard, pd-balanced, or pd-extreme."
+  description = "Boot disk type, can be either hyperdisk-balanced, pd-ssd, pd-standard, pd-balanced, or pd-extreme."
   default     = "pd-ssd"
 }
 
@@ -267,7 +267,7 @@ variable "instance_image" {
     EOD
   type        = map(string)
   default = {
-    family  = "slurm-gcp-6-5-hpc-rocky-linux-8"
+    family  = "slurm-gcp-6-6-hpc-rocky-linux-8"
     project = "schedmd-slurm-public"
   }
 
@@ -298,6 +298,16 @@ variable "instance_image_custom" {
   default     = false
 }
 
+variable "allow_automatic_updates" {
+  description = <<-EOT
+  If false, disables automatic system package updates on the created instances.  This feature is
+  only available on supported images (or images derived from them).  For more details, see
+  https://cloud.google.com/compute/docs/instances/create-hpc-vm#disable_automatic_updates
+  EOT
+  type        = bool
+  default     = true
+  nullable    = false
+}
 
 variable "tags" {
   type        = list(string)

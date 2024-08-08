@@ -80,7 +80,7 @@ variable "instance_image" {
     EOD
   type        = map(string)
   default = {
-    family  = "slurm-gcp-6-5-hpc-rocky-linux-8"
+    family  = "slurm-gcp-6-6-hpc-rocky-linux-8"
     project = "schedmd-slurm-public"
   }
 
@@ -111,6 +111,17 @@ variable "instance_image_custom" {
   default     = false
 }
 
+variable "allow_automatic_updates" {
+  description = <<-EOT
+  If false, disables automatic system package updates on the created instances.  This feature is
+  only available on supported images (or images derived from them).  For more details, see
+  https://cloud.google.com/compute/docs/instances/create-hpc-vm#disable_automatic_updates
+  EOT
+  type        = bool
+  default     = true
+  nullable    = false
+}
+
 variable "tags" {
   type        = list(string)
   description = "Network tag list."
@@ -118,7 +129,7 @@ variable "tags" {
 }
 
 variable "disk_type" {
-  description = "Boot disk type, can be either hyperdisk-balanced, hyperdisk-extreme, pd-ssd, pd-standard, pd-balanced, or pd-extreme."
+  description = "Boot disk type, can be either hyperdisk-balanced, pd-ssd, pd-standard, pd-balanced, or pd-extreme."
   type        = string
   default     = "pd-standard"
 }
@@ -361,13 +372,6 @@ variable "zones" {
     EOD
   type        = set(string)
   default     = []
-
-  validation {
-    condition = alltrue([
-      for x in var.zones : length(regexall("^[a-z]+-[a-z]+[0-9]-[a-z]$", x)) > 0
-    ])
-    error_message = "A value in var.zones is not a valid zone (example: us-central1-f)."
-  }
 }
 
 variable "zone_target_shape" {
@@ -479,4 +483,17 @@ variable "network_storage" {
     mount_options = string,
   }))
   default = []
+}
+
+
+variable "instance_properties" {
+  description = <<-EOD
+    Override the instance properties. Used to test features not supported by Slurm GCP,
+    recommended for advanced usage only.
+    See https://cloud.google.com/compute/docs/reference/rest/v1/regionInstances/bulkInsert
+    If any sub-field (e.g. scheduling) is set, it will override the values computed by
+    SlurmGCP and ignoring values of provided vars.
+  EOD
+  type        = any
+  default     = null
 }

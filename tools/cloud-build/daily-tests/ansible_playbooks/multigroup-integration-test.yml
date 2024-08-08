@@ -14,7 +14,7 @@
 
 ---
 
-- name: "Multigroup integration test for ghpc deploy command"
+- name: "Multigroup integration test for gcluster deploy command"
   hosts: localhost
   force_handlers: true
   vars:
@@ -25,20 +25,20 @@
       file: tasks/create_deployment_directory.yml
   - name: Deploy from deployment directory
     block:
-    - name: Execute ghpc deploy
+    - name: Execute gcluster deploy
       register: deployment
       changed_when: deployment.changed
-      ansible.builtin.command: ./ghpc deploy {{ deployment_name }} --auto-approve
+      ansible.builtin.command: ./gcluster deploy {{ deployment_name }} --auto-approve
       args:
         chdir: "{{ workspace }}"
       environment:
         TF_IN_AUTOMATION: "TRUE"
     always:
     - name: Destroy deployment
-      register: ghpc_destroy
-      changed_when: ghpc_destroy.changed
+      register: gcluster_destroy
+      changed_when: gcluster_destroy.changed
       ignore_errors: true
-      ansible.builtin.command: ./ghpc destroy {{ deployment_name }} --auto-approve
+      ansible.builtin.command: ./gcluster destroy {{ deployment_name }} --auto-approve
       args:
         chdir: "{{ workspace }}"
       environment:
@@ -58,6 +58,6 @@
       - packer_group_name is defined
       - packer_module_id is defined
     - name: Trigger Cloud Build failure
-      when: ghpc_destroy is failed or image_deletion is failed
+      when: gcluster_destroy is failed or image_deletion is failed
       ansible.builtin.fail:
         msg: "Failed while destroying deployment or deleting custom VM image"

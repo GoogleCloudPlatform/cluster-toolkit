@@ -76,6 +76,7 @@ deployment_groups:
     use: [network]
     settings:
       node_count_dynamic_max: 20
+      # Note that H3 is available in only specific zones. https://cloud.google.com/compute/docs/regions-zones
       machine_type: h3-standard-88
       # H3 does not support pd-ssd and pd-standard
       # https://cloud.google.com/compute/docs/compute-optimized-machines#h3_disks

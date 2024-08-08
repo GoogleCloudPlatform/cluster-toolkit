@@ -32,7 +32,7 @@ on:
 
 jobs:
   pr-label-validation:
-    if: github.repository == 'GoogleCloudPlatform/hpc-toolkit'
+    if: github.repository == 'GoogleCloudPlatform/cluster-toolkit'
     runs-on: ubuntu-latest
     permissions:
       pull-requests: read

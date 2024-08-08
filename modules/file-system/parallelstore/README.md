@@ -1,3 +1,97 @@
+## Description
+
+This module creates [parallelstore](https://cloud.google.com/parallelstore)
+instance. Parallelstore is Google Cloud's first party parallel file system
+service based on [Intel DAOS](https://docs.daos.io/v2.2/)
+
+### Parallelstore Quota
+
+To get access to a private preview of Parallelstore APIs, your project needs to
+be allowlisted. To set this up, please work with your account representative.
+
+### Parallelstore mount options
+
+After parallelstore instance is created, you can specify mount options depending
+upon your workload. DAOS is configured to deliver the best user experience for
+interactive workloads with aggressive caching. If you are running parallel
+workloads concurrently accessing the sane files from multiple client nodes, it
+is recommended to disable the writeback cache to avoid cross-client consistency
+issues. You can specify different mount options as follows,
+
+```yaml
+  - id: parallelstore
+    source: modules/file-system/parallelstore
+    use: [network, ps_connect]
+    settings:
+      mount_options: "disable-wb-cache,thread-count=20,eq-count=8"
+```
+
+### Example - New VPC
+
+For parallelstore instance, Below snippet creates new VPC and configures private-service-access
+for this newly created network.
+
+The parallelstore instance created here can be used with Slurm cluster or compute
+VM running Ubuntu 22.04, debian 12 or HPC Rocky Linux 8.
+
+```yaml
+ - id: network
+    source: modules/network/vpc
+
+  - id: private_service_access
+    source: community/modules/network/private-service-access
+    use: [network]
+    settings:
+      prefix_length: 24
+
+  - id: parallelstore
+    source: modules/file-system/parallelstore
+    use: [network, private_service_access]
+```
+
+### Example - Existing VPC
+
+If you want to use existing network with private-service-access configured, you need
+to manually provide `private_vpc_connection_peering` to the parallelstore module.
+You can get this details from the Google Cloud Console UI in `VPC network peering`
+section. Below is the example of using existing network and creating parallelstore.
+If existing network is not configured with private-service-access, you can follow
+[Configure private service access](https://cloud.google.com/vpc/docs/configure-private-services-access)
+to set it up.
+
+```yaml
+  - id: network
+    source: modules/network/pre-existing-vpc
+    settings:
+      network_name: <network_name> // Add network name
+      subnetwork_name: <subnetwork_name> // Add subnetwork name
+
+  - id: parallelstore
+    source: modules/file-system/parallelstore
+    use: [network]
+    settings:
+      private_vpc_connection_peering: <private_vpc_connection_peering> # will look like "servicenetworking.googleapis.com"
+```
+
+### Import data from GCS bucket
+
+You can import data from your GCS bucket to parallelstore instance. Important to
+note that data may not be available to the instance immediately. This depends on
+latency and size of data. Below is the example of importing data from  bucket.
+
+```yaml
+  - id: parallelstore
+    source: modules/file-system/parallelstore
+    use: [network]
+    settings:
+      import_gcs_bucket_uri: gs://gcs-bucket/folder-path
+      import_destination_path: /gcs/import/
+```
+
+Here you can replace `import_gcs_bucket_uri` with the uri of sub folder within GCS
+bucket and `import_destination_path` with local directory within parallelstore
+instance.
+
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 Copyright 2024 Google LLC
 

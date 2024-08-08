@@ -49,8 +49,8 @@ button or by any other means.
 1. Copy the contents of this directory into the submission directory
 
    ```bash
-   git clone https://github.com/GoogleCloudPlatform/hpc-toolkit.git
-   cp -r hpc-toolkit/docs/videos/healthcare-and-life-sciences/lysozyme-example/* .
+   git clone https://github.com/GoogleCloudPlatform/cluster-toolkit.git
+   cp -r cluster-toolkit/docs/videos/healthcare-and-life-sciences/lysozyme-example/* .
    ```
 
 1. Copy the Lysozyme protein into the submission directory

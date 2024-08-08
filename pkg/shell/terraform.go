@@ -54,14 +54,21 @@ type outputValue struct {
 	Value     cty.Value
 }
 
-// ConfigureTerraform returns a Terraform object used to execute commands
-func ConfigureTerraform(workingDir string) (*tfexec.Terraform, error) {
+func tfExecPath() (string, error) {
 	path, err := exec.LookPath("terraform")
 	if err != nil {
-		return nil, config.HintError{
+		return "", config.HintError{
 			Hint: "must have a copy of terraform installed in PATH (obtain at https://terraform.io)",
-			Err:  err,
-		}
+			Err:  err}
+	}
+	return path, nil
+}
+
+// ConfigureTerraform returns a Terraform object used to execute commands
+func ConfigureTerraform(workingDir string) (*tfexec.Terraform, error) {
+	path, err := tfExecPath()
+	if err != nil {
+		return nil, err
 	}
 	return tfexec.NewTerraform(workingDir, path)
 }
@@ -423,4 +430,25 @@ func ImportInputs(groupDir string, artifactsDir string, bp config.Blueprint) err
 // Destroy destroys all infrastructure in the module working directory
 func Destroy(tf *tfexec.Terraform, b ApplyBehavior) error {
 	return applyOrDestroy(tf, b, true)
+}
+
+func TfVersion() (string, error) {
+	path, err := tfExecPath()
+	if err != nil {
+		return "", err
+	}
+
+	out, err := exec.Command(path, "version", "--json").Output()
+	if err != nil {
+		return "", err
+	}
+
+	var version struct {
+		TerraformVersion string `json:"terraform_version"`
+	}
+	if err := json.Unmarshal(out, &version); err != nil {
+		return "", err
+	}
+
+	return version.TerraformVersion, nil
 }

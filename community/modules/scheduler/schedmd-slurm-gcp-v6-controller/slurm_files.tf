@@ -122,7 +122,7 @@ locals {
 module "daos_network_storage_scripts" {
   count = length(local.daos_ns) > 0 ? 1 : 0
 
-  source          = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=v1.34.0&depth=1"
+  source          = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=v1.36.0&depth=1"
   labels          = local.labels
   project_id      = var.project_id
   deployment_name = var.deployment_name
@@ -131,7 +131,7 @@ module "daos_network_storage_scripts" {
 }
 
 module "slurm_files" {
-  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_files?ref=6.5.9"
+  source = "./modules/slurm_files"
 
   project_id         = var.project_id
   slurm_cluster_name = local.slurm_cluster_name
@@ -154,7 +154,6 @@ module "slurm_files" {
   login_startup_scripts              = local.ghpc_startup_script_login
   login_startup_scripts_timeout      = var.login_startup_scripts_timeout
 
-  enable_devel         = var.enable_devel
   enable_debug_logging = var.enable_debug_logging
   extra_logging_flags  = var.extra_logging_flags
 
@@ -177,10 +176,16 @@ module "slurm_files" {
   ]
   login_network_storage = var.login_network_storage
 
-  partitions  = [for p in var.partitions : { partition : p }]
-  nodeset     = values(module.slurm_nodeset)[*]
+  partitions = var.partitions
+
+  nodeset     = local.nodesets
+  nodeset_dyn = values(local.nodeset_dyn_map)
+  # Use legacy format for now
   nodeset_tpu = values(module.slurm_nodeset_tpu)[*]
-  nodeset_dyn = [for ns in values(local.nodeset_dyn_map) : { nodeset : ns }]
+
 
   depends_on = [module.bucket]
+
+  # Providers
+  endpoint_versions = var.endpoint_versions
 }

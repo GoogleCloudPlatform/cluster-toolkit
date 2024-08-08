@@ -182,11 +182,11 @@ func getDefaultGoogleProviders(bp Blueprint) map[string]TerraformProvider {
 	return map[string]TerraformProvider{
 		"google": {
 			Source:        "hashicorp/google",
-			Version:       ">= 4.84.0, < 5.32.0",
+			Version:       ">= 4.84.0, < 5.39.0",
 			Configuration: gglConf},
 		"google-beta": {
 			Source:        "hashicorp/google-beta",
-			Version:       ">= 4.84.0, < 5.32.0",
+			Version:       ">= 4.84.0, < 5.39.0",
 			Configuration: gglConf}}
 }
 
