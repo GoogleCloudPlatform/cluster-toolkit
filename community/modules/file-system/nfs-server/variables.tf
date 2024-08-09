@@ -72,7 +72,7 @@ variable "instance_image" {
   type        = map(string)
   default = {
     project = "cloud-hpc-image-public"
-    family  = "hpc-centos-7"
+    family  = "hpc-rocky-linux-8"
   }
 
   validation {
