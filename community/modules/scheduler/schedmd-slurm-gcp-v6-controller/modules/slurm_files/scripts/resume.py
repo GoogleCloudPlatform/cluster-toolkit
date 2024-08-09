@@ -521,7 +521,7 @@ def create_nodeset_placement_groups(node_list: list, job_id=0):
     region = lkp.node_region(model)
 
     groups = {
-        f"{cfg.slurm_cluster_name}-{nodeset.nodeset_name}-{job_id}-{i}": nodes
+        f"{cfg.slurm_cluster_name}-slurmgcp-managed-{nodeset.nodeset_name}-{job_id}-{i}": nodes
         for i, nodes in enumerate(chunked(node_list, n=PLACEMENT_MAX_CNT))
     }
 
