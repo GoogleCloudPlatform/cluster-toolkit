@@ -151,10 +151,14 @@ resource "google_container_node_pool" "node_pool" {
       }
     }
 
+    # TODO(arajmane): Default values for params in this block considering that
+    # this block need not be passed at all if reservation_affinity is not required
+    # Or, values of the params key and values are not required when any_reservation is to be used
     reservation_affinity {
       consume_reservation_type = var.reservation_type
       key                      = var.specific_reservation.key
-      values                   = var.specific_reservation.values
+      # TODO(arajmane): ensure the reservation exists through dependencies?
+      values = var.specific_reservation.values
     }
   }
 
