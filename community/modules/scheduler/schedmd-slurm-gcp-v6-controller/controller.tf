@@ -131,7 +131,27 @@ resource "google_secret_manager_secret" "cloudsql" {
   secret_id = "${local.slurm_cluster_name}-slurm-secret-cloudsql"
 
   replication {
-    auto {}
+    dynamic "auto" {
+      for_each = length(var.cloudsql.user_managed_replication) == 0 ? [1] : []
+      content {}
+    }
+    dynamic "user_managed" {
+      for_each = length(var.cloudsql.user_managed_replication) == 0 ? [] : [1]
+      content {
+        dynamic "replicas" {
+          for_each = nonsensitive(var.cloudsql.user_managed_replication)
+          content {
+            location = replicas.value.location
+            dynamic "customer_managed_encryption" {
+              for_each = compact([replicas.value.kms_key_name])
+              content {
+                kms_key_name = customer_managed_encryption.value
+              }
+            }
+          }
+        }
+      }
+    }
   }
 
   labels = {

@@ -96,3 +96,12 @@ variable "private_vpc_connection_peering" {
   type        = string
   default     = null
 }
+
+variable "user_managed_replication" {
+  type = list(object({
+    location     = string
+    kms_key_name = optional(string)
+  }))
+  description = "Replication parameters that will be used for defined secrets"
+  default     = []
+}
