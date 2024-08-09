@@ -150,6 +150,16 @@ resource "google_container_node_pool" "node_pool" {
         "net.ipv4.tcp_wmem" = "4096 16384 16777216"
       }
     }
+
+    # TODO(arajmane): Default values for params in this block considering that
+    # this block need not be passed at all if reservation_affinity is not required
+    # Or, values of the params key and values are not required when any_reservation is to be used
+    reservation_affinity {
+      consume_reservation_type = var.reservation_type
+      key                      = var.specific_reservation.key
+      # TODO(arajmane): ensure the reservation exists through dependencies?
+      values = var.specific_reservation.values
+    }
   }
 
   timeouts {
