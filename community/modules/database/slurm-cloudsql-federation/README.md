@@ -86,7 +86,7 @@ No modules.
 | <a name="input_sql_password"></a> [sql\_password](#input\_sql\_password) | Password for the SQL database. | `any` | `null` | no |
 | <a name="input_sql_username"></a> [sql\_username](#input\_sql\_username) | Username for the SQL database | `string` | `"slurm"` | no |
 | <a name="input_tier"></a> [tier](#input\_tier) | The machine type to use for the SQL instance | `string` | n/a | yes |
-| <a name="input_user_managed_replication"></a> [user\_managed\_replication](#input\_user\_managed\_replication) | Replication parameters that will be used for defined secret | <pre>list(object({<br>    location     = string<br>    kms_key_name = optional(string)<br>  }))</pre> | `[]` | no |
+| <a name="input_user_managed_replication"></a> [user\_managed\_replication](#input\_user\_managed\_replication) | Replication parameters that will be used for defined secrets | <pre>list(object({<br>    location     = string<br>    kms_key_name = optional(string)<br>  }))</pre> | `[]` | no |
 
 ## Outputs
 
