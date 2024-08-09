@@ -40,7 +40,7 @@ This can be achieved by one of the following 2 approaches:
 
 1. Configuring a VPC with a Cloud NAT in the region of the VM
 
-- Use the \[vpc\] module which automates NAT creation
+- Use the [vpc] module which automates NAT creation
 
 ### Inbound internet access
 
@@ -143,10 +143,9 @@ environment. SSH access can be enabled one of 2 ways:
    - Add firewall rules that open SSH to the VM
 
 The Packer template defaults to using to the 1st IAP-based solution because it
-is more secure (no exposure to public internet) and because the
-[Toolkit VPC module](../../network/vpc/README.md) automatically sets up all
-necessary firewall rules for SSH tunneling and outbound-only access to the
-internet through [Cloud NAT][cloudnat].
+is more secure (no exposure to public internet) and because the [vpc] module
+automatically sets up all necessary firewall rules for SSH tunneling and
+outbound-only access to the internet through [Cloud NAT][cloudnat].
 
 In either SSH solution, customization scripts should be supplied as files in the
 [shell_scripts][shell] and [ansible_playbooks][ansible] settings.
@@ -327,3 +326,4 @@ No outputs.
 [sss]: #input_startup_script
 [startup-metadata]: https://cloud.google.com/compute/docs/instances/startup-scripts/linux
 [startup-script]: ../../../modules/scripts/startup-script
+[vpc]: ../../network/vpc/README.md
