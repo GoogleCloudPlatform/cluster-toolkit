@@ -47,6 +47,7 @@ deployment_groups:
       node_count_dynamic_max: 4
       machine_type: n2-standard-2
       enable_placement: false # the default is: true
+      allow_automatic_updates: false
 
   - id: debug_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
@@ -63,6 +64,7 @@ deployment_groups:
     settings:
       node_count_dynamic_max: 20
       bandwidth_tier: gvnic_enabled
+      allow_automatic_updates: false
 
   - id: compute_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
@@ -82,6 +84,7 @@ deployment_groups:
       # https://cloud.google.com/compute/docs/compute-optimized-machines#h3_disks
       disk_type: pd-balanced
       bandwidth_tier: gvnic_enabled
+      allow_automatic_updates: false
 
   - id: h3_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition

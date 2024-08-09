@@ -235,5 +235,6 @@ variable "allow_automatic_updates" {
   https://cloud.google.com/compute/docs/instances/create-hpc-vm#disable_automatic_updates
   EOT
   type        = bool
-  default     = false
+  default     = true
+  nullable    = false
 }

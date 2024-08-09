@@ -104,6 +104,7 @@ deployment_groups:
       name_prefix: grp1
       instance_image: $(vars.new_image)
       min_idle: 2
+      allow_automatic_updates: false
 
   - id: htcondor_execute_point_spot
     source: community/modules/compute/htcondor-execute-point
@@ -117,6 +118,7 @@ deployment_groups:
       name_prefix: spot
       instance_image: $(vars.new_image)
       spot: true
+      allow_automatic_updates: false
 
   - id: htcondor_access
     source: community/modules/scheduler/htcondor-access-point

@@ -73,6 +73,7 @@ deployment_groups:
       machine_type: c2-standard-4
       node_count_dynamic_max: 5
       node_count_static: 0
+      allow_automatic_updates: false
 
   - id: partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition

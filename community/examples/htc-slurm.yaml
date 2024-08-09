@@ -80,6 +80,7 @@ deployment_groups:
       node_count_dynamic_max: 200
       bandwidth_tier: gvnic_enabled
       enable_placement: false
+      allow_automatic_updates: false
 
   - id: compute_nodeset_c2s30
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
@@ -89,6 +90,7 @@ deployment_groups:
       machine_type: c2-standard-30
       bandwidth_tier: gvnic_enabled
       enable_placement: false
+      allow_automatic_updates: false
 
   - id: compute_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
@@ -112,6 +114,7 @@ deployment_groups:
       node_count_dynamic_max: 10
       bandwidth_tier: gvnic_enabled
       enable_placement: false
+      allow_automatic_updates: false
 
   - id: low_cost_nodeset_n2s4
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
@@ -122,6 +125,7 @@ deployment_groups:
       node_count_dynamic_max: 10
       bandwidth_tier: gvnic_enabled
       enable_placement: false
+      allow_automatic_updates: false
 
   - id: low_cost_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition

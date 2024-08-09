@@ -47,8 +47,9 @@ deployment_groups:
       task_count: 8
       task_count_per_node: 4
       instance_image:
-        family: batch-centos-7-official
+        family: batch-hpc-rocky-linux-8-official
         project: batch-custom-image
+      allow_automatic_updates: false
 
   - id: batch-login
     source: modules/scheduler/batch-login-node

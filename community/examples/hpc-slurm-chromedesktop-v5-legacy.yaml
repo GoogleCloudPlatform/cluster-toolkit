@@ -63,6 +63,7 @@ deployment_groups:
       guest_accelerator:
       - type: nvidia-tesla-t4-vws
         count: 1
+      allow_automatic_updates: false
 
   - id: crd_partition
     source: community/modules/compute/schedmd-slurm-gcp-v5-partition
