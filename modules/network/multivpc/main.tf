@@ -24,7 +24,7 @@ locals {
   maximum_subnetworks   = pow(2, local.subnetwork_new_bits)
   additional_networks = [
     for vpc in module.vpcs :
-    merge(var.network_interface_defaults, { subnetwork = vpc.subnetwork_name, subnetwork_project = var.project_id })
+    merge(var.network_interface_defaults, { network = vpc.network_name, subnetwork = vpc.subnetwork_name, subnetwork_project = var.project_id })
   ]
 }
 

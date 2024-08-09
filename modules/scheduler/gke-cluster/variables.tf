@@ -262,7 +262,7 @@ variable "authenticator_security_group" {
 variable "enable_dataplane_v2" {
   description = "Enables [Dataplane v2](https://cloud.google.com/kubernetes-engine/docs/concepts/dataplane-v2). This setting is immutable on clusters."
   type        = bool
-  default     = false
+  default     = null
 }
 
 variable "labels" {
@@ -295,4 +295,39 @@ variable "service_account" {
     condition     = var.service_account == null
     error_message = "service_account is deprecated and replaced with service_account_email and scopes."
   }
+}
+
+variable "enable_multi_networking" {
+  description = "Enables [multi networking](https://cloud.google.com/kubernetes-engine/docs/how-to/setup-multinetwork-support-for-pods#create-a-gke-cluster) (Requires GKE Enterprise). This setting is immutable on clusters and enables [Dataplane V2](https://cloud.google.com/kubernetes-engine/docs/concepts/dataplane-v2?hl=en)."
+  type        = bool
+  default     = false
+  validation {
+    condition     = (var.enable_dataplane_v2 == null || coalesce(var.enable_dataplane_v2, false)) || !coalesce(var.enable_multi_networking, true)
+    error_message = "'enable_dataplane_v2' must be null or true when enabling multi networking."
+  }
+}
+
+variable "additional_networks" {
+  description = "Additional network interface details for GKE, if any. Providing additional networks enables multi networking and creates relevat network objects on the cluster."
+  default     = []
+  type = list(object({
+    network            = string
+    subnetwork         = string
+    subnetwork_project = string
+    network_ip         = string
+    nic_type           = string
+    stack_type         = string
+    queue_count        = number
+    access_config = list(object({
+      nat_ip       = string
+      network_tier = string
+    }))
+    ipv6_access_config = list(object({
+      network_tier = string
+    }))
+    alias_ip_range = list(object({
+      ip_cidr_range         = string
+      subnetwork_range_name = string
+    }))
+  }))
 }
