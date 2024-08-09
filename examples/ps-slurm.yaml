@@ -24,6 +24,7 @@ vars:
   deployment_name: parallelstore-slurm
   region: us-east4
   zone: us-east4-b
+  compute_node_machine_type: c2-standard-60
 
 deployment_groups:
 - group: primary
@@ -46,7 +47,7 @@ deployment_groups:
     use: [network]
     settings:
       node_count_dynamic_max: 4
-      machine_type: c2-standard-60
+      machine_type: $(vars.compute_node_machine_type)
       enable_placement: false  # the default is: true
 
   - id: debug_partition
