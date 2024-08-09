@@ -17,7 +17,6 @@
 import argparse
 import datetime
 import fcntl
-import hashlib
 import json
 import logging
 import re
@@ -32,12 +31,8 @@ from util import (
     batch_execute,
     ensure_execute,
     execute_with_futures,
-    fetch_config_yaml,
-    fetch_config_yaml_md5,
     install_custom_scripts,
-    load_config_file,
     run,
-    save_config,
     separate,
     to_hostlist_fast,
     Lookup,
@@ -45,7 +40,7 @@ from util import (
     TPU,
     chunked,
 )
-from util import lkp, CONFIG_FILE
+from util import lkp
 from suspend import delete_instances
 from resume import start_tpu
 import conf
@@ -413,55 +408,38 @@ def sync_slurm():
         do_node_update(status, nodes)
 
 
-def read_hash(filename):
-    filename = Path(filename)
-    if not filename.exists():
-        return None
-    with open(filename, "r", encoding="utf-8") as file:
-        return file.readline()
-
-
-def save_hash(filename, hash):
-    with open(filename, "w+", encoding="utf-8") as file:
-        file.write(hash)
-
-
-def reconfigure_slurm():
-    CONFIG_HASH = Path("/slurm/scripts/.config.hash")
-    update_msg = "*** slurm configuration was updated ***"
-    cfg_old = load_config_file(CONFIG_FILE)
-
-    if cfg_old.hybrid:
+def reconfigure_slurm() -> None:
+    if util.lkp.cfg.hybrid:
         # terraform handles generating the config.yaml, don't do it here
+        # TODO: what does it mean?
         return
-
-    hash_new: hashlib.md5 = fetch_config_yaml_md5()
-    hash_old: str = read_hash(CONFIG_HASH)
-
-    if hash_new.hexdigest() != hash_old:
-        log.debug("Delta detected. Reconfiguring Slurm now.")
-        cfg_new = fetch_config_yaml()
-        save_hash(CONFIG_HASH, hash_new.hexdigest())
-        save_config(cfg_new, CONFIG_FILE)
-        cfg_new = load_config_file(CONFIG_FILE)
-        lkp = Lookup(cfg_new)
-        util.lkp = lkp
-        if lkp.is_controller:
-            conf.gen_controller_configs(lkp)
-            log.info("Restarting slurmctld to make changes take effect.")
-            try:
-                # TODO: consider removing "restart" since "reconfigure" should restart slurmctld as well
-                run("sudo systemctl restart slurmctld.service", check=False)
-                util.scontrol_reconfigure(lkp)
-            except Exception:
-                log.exception("failed to reconfigure slurmctld")
-            util.run(f"wall '{update_msg}'", timeout=30)
-            log.debug("Done.")
-        elif lkp.instance_role_safe in ["compute", "login"]:
-            log.info("Restarting slurmd to make changes take effect.")
-            run("systemctl restart slurmd")
-            util.run(f"wall '{update_msg}'", timeout=30)
-            log.debug("Done.")
+    update_msg = "*** slurm configuration was updated ***"
+    
+    upd, cfg_new = util.fetch_config()
+    if not upd:
+        log.debug("No changes in config detected.")
+        return
+    log.debug("Changes in config detected. Reconfiguring Slurm now.")
+    
+    lkp = Lookup(cfg_new)
+    util.cfg = cfg_new
+    util.lkp = lkp
+    if lkp.is_controller:
+        conf.gen_controller_configs(lkp)
+        log.info("Restarting slurmctld to make changes take effect.")
+        try:
+            # TODO: consider removing "restart" since "reconfigure" should restart slurmctld as well
+            run("sudo systemctl restart slurmctld.service", check=False)
+            util.scontrol_reconfigure(lkp)
+        except Exception:
+            log.exception("failed to reconfigure slurmctld")
+        util.run(f"wall '{update_msg}'", timeout=30)
+        log.debug("Done.")
+    elif lkp.instance_role_safe in ["compute", "login"]:
+        log.info("Restarting slurmd to make changes take effect.")
+        run("systemctl restart slurmd")
+        util.run(f"wall '{update_msg}'", timeout=30)
+        log.debug("Done.")
 
 
 def update_topology(lkp: util.Lookup) -> None:
@@ -493,6 +471,8 @@ def main():
             log.exception("failed to update topology")
 
     try:
+        # TODO: it performs 1 to 4 GCS list requests, 
+        # use cached version, combine with `_list_config_blobs`
         install_custom_scripts(check_hash=True)
     except Exception:
         log.exception("failed to sync custom scripts")
