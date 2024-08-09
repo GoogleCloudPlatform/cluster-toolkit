@@ -67,8 +67,12 @@ locals {
     epilog_scripts   = [for k, v in google_storage_bucket_object.epilog_scripts : k]
     cloud_parameters = var.cloud_parameters
 
-    partitions  = { for p in var.partitions : p.partition_name => p }
-    nodeset     = { for n in var.nodeset : n.nodeset_name => n }
+    partitions = { for p in var.partitions : p.partition_name => p }
+    nodeset = {
+      for n in var.nodeset : n.nodeset_name => merge(n, {
+        instance_properties = jsondecode(n.instance_properties_json)
+      })
+    }
     nodeset_dyn = { for n in var.nodeset_dyn : n.nodeset_name => n }
     nodeset_tpu = { for n in var.nodeset_tpu[*].nodeset : n.nodeset_name => n }
 
