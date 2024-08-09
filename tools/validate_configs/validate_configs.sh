@@ -35,7 +35,7 @@ run_test() {
 	echo "testing ${example} in ${tmpdir}"
 
 	# Only run from the repo directory if there are local modules, otherwise
-	# run the test from the test directory using the installed ghpc binary.
+	# run the test from the test directory using the installed gcluster binary.
 	if grep -q "${LOCAL_SOURCE_PATTERN}" "${cwd}/${example}"; then
 		cd "${cwd}"
 	else
@@ -45,7 +45,7 @@ run_test() {
 		--skip-validators="${VALIDATORS_TO_SKIP}" "${deployment_args[@]}" \
 		--vars="project_id=${PROJECT},deployment_name=${DEPLOYMENT}" >/dev/null ||
 		{
-			echo "*** ERROR: error creating deployment with ghpc for ${exampleFile}"
+			echo "*** ERROR: error creating deployment with gcluster for ${exampleFile}"
 			exit 1
 		}
 	if grep -q "${LOCAL_SOURCE_PATTERN}" "${cwd}/${example}"; then

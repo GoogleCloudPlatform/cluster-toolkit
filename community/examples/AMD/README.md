@@ -53,10 +53,10 @@ using the `compute` partition, you may ignore its quota requirements.
 
 ### Deploying the Blueprint
 
-Use `ghpc` to provision the blueprint, supplying your project ID:
+Use `gcluster` to provision the blueprint, supplying your project ID:
 
 ```shell
-ghpc create --vars project_id=<<PROJECT_ID>> hpc-amd-slurm.yaml
+gcluster create --vars project_id=<<PROJECT_ID>> hpc-amd-slurm.yaml
 ```
 
 It will create a directory containing a Terraform module. Follow the printed

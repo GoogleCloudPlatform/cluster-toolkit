@@ -18,7 +18,7 @@ ARG ref
 RUN git clone https://github.com/GoogleCloudPlatform/hpc-toolkit.git &&\
  cd hpc-toolkit &&\
  git checkout ${ref} &&\
- make ghpc &&\
+ make gcluster &&\
  go install github.com/google/go-licenses@latest &&\
  /go/bin/go-licenses check "./..." &&\
  /go/bin/go-licenses save "./..." --save_path="THIRD_PARTY_NOTICES"

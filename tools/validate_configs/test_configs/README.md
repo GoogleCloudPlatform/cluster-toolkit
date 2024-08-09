@@ -3,8 +3,8 @@
 
 This directory contains a set of test blueprint files that can be fed into gHPC
 to create a deployment. These blueprints are used to run integration tests
-against `ghpc`. These blueprints can also be used independently and locally to
-verify a local `ghpc` build.
+against `gcluster`. These blueprints can also be used independently and locally to
+verify a local `gcluster` build.
 
 ## Blueprint Descriptions
 

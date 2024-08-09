@@ -142,14 +142,14 @@ a service account, see the [Setup Authentication](#setup-authentication) section
 and the Google Cloud documentation on
 [Service Accounts](https://cloud.google.com/iam/docs/service-accounts).
 
-#### Build ghpc
+#### Build gcluster
 
-Before you begin, ensure that you have built the `ghpc` tool in the Cluster Toolkit.
+Before you begin, ensure that you have built the `gcluster` tool in the Cluster Toolkit.
 For more information see the [README.md](../../README.md#quickstart) Quickstart.
 
-The commands in these instructions assume the ghpc binary is installed in a
+The commands in these instructions assume the gcluster binary is installed in a
 directory represented in the PATH environment variable. To ensure this is the
-case, run `make install` after building `ghpc`:
+case, run `make install` after building `gcluster`:
 
 ```shell
 make

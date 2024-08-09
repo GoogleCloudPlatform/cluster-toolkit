@@ -26,15 +26,15 @@ Toolkit guidance to enable [APIs][apis] and establish minimum resource
 
 ### Deploy the flux-framework Cluster
 
-Use `ghcp` to provision the blueprint
+Use `gcluster` to provision the blueprint
 
 ```bash
-ghpc create community/examples/flux-framework --vars project_id=<<PROJECT_ID>>
+gcluster create community/examples/flux-framework --vars project_id=<<PROJECT_ID>>
 ```
 
 This will create a directory containing Terraform modules.
 
-Follow `ghpc` instructions to deploy the cluster
+Follow `gcluster` instructions to deploy the cluster
 
 ```text
 terraform -chdir=flux-fw-cluster/primary init

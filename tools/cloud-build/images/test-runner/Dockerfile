@@ -46,6 +46,6 @@ RUN curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add -  && \
     pip install --no-cache-dir ansible && \
     rm -rf ~/.cache/pip/* && \
     # compile the binary to warm up `/ghpc_go_cache`
-    cd /workspace && make ghpc && \
+    cd /workspace && make gcluster && \
     # remove /workspace to reduce image size
     rm -rf /workspace

@@ -307,7 +307,7 @@ Terraform modules. A source can either be a filesystem path or a URL to a git
 repository:
 
 * Filesystem paths
-  * modules embedded in the `ghpc` executable
+  * modules embedded in the `gcluster` executable
   * modules in the local filesystem
 * Remote modules using [Terraform URL syntax](https://developer.hashicorp.com/terraform/language/modules/sources)
   * Hosted on [GitHub](https://developer.hashicorp.com/terraform/language/modules/sources#github)
@@ -324,13 +324,13 @@ deployment folder on your behalf.
 
 #### Embedded Modules
 
-Embedded modules are added to the ghpc binary during compilation and cannot
+Embedded modules are added to the gcluster binary during compilation and cannot
 be edited. To refer to embedded modules, set the source path to
 `modules/<<MODULE_PATH>>` or `community/modules/<<MODULE_PATH>>`.
 
 The paths match the modules in the repository structure for [core modules](./)
 and [community modules](../community/modules/). Because the modules are embedded
-during compilation, your local copies may differ unless you recompile ghpc.
+during compilation, your local copies may differ unless you recompile gcluster.
 
 For example, this example snippet uses the embedded pre-existing-vpc module:
 
@@ -352,7 +352,7 @@ following module definition refers the local pre-existing-vpc modules.
 ```
 
 > **_NOTE:_** Relative paths (beginning with `.` or `..` must be relative to the
-> working directory from which `ghpc` is executed. This example would have to be
+> working directory from which `gcluster` is executed. This example would have to be
 > run from a local copy of the Cluster Toolkit repository. An alternative is to use
 > absolute paths to modules.
 
@@ -392,7 +392,7 @@ release of the filestore module:
     source: github.com/GoogleCloudPlatform/hpc-toolkit//modules/file-system/filestore?ref=v1.22.1&depth=1
 ```
 
-Because Terraform modules natively support this syntax, ghpc will not copy
+Because Terraform modules natively support this syntax, gcluster will not copy
 GitHub-hosted modules into your deployment folder. Terraform will download them
 into a hidden folder when you run `terraform init`.
 
@@ -403,12 +403,12 @@ into a hidden folder when you run `terraform init`.
 
 ##### GitHub-hosted Packer modules
 
-Packer does not natively support GitHub-hosted modules so `ghpc create` will
+Packer does not natively support GitHub-hosted modules so `gcluster create` will
 copy modules into your deployment folder.
 
-If the module uses `//` package notation, `ghpc create` will copy the entire
+If the module uses `//` package notation, `gcluster create` will copy the entire
 repository to the module path: `deployment_name/group_name/module_id`. However,
-when `ghpc deploy` is invoked, it will run Packer from the subdirectory
+when `gcluster deploy` is invoked, it will run Packer from the subdirectory
 `deployment_name/group_name/module_id/subdirectory/after/double_slash`.
 
 Referring back to the [Intel DAOS blueprint][pfs-daos.yaml], we see that it will
@@ -417,10 +417,10 @@ create 2 deployment groups at `pfs-daos/daos-client-image` and
 a subdirectories ending in `daos-client-image/images` and
 `daos-server-image/images`.
 
-If the module does not use `//` package notation, `ghpc create` will copy
+If the module does not use `//` package notation, `gcluster create` will copy
 only the final directory in the path to `deployment_name/group_name/module_id`.
 
-In all cases, `ghpc create` will remove the `.git` directory from the packer
+In all cases, `gcluster create` will remove the `.git` directory from the packer
 module to ensure that you can manage the entire deployment directory with its
 own git versioning.
 
@@ -504,7 +504,7 @@ to `$(network1.network_self_link)` and `$(network1.subnetwork_self_link)` which
 refer to the [network1 outputs](network/vpc/README#Outputs)
 of the same names.
 
-The order of precedence that `ghpc` uses in determining when to infer a setting
+The order of precedence that `gcluster` uses in determining when to infer a setting
 value is in the following priority order:
 
 1. Explicitly set in the blueprint using the `settings` field
