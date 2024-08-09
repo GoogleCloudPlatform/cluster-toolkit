@@ -1,6 +1,6 @@
 ### Submission Checklist
 
-NOTE: Pull requests can take up to 2 weeks to be reviewed.
+NOTE: Community submissions can take up to 2 weeks to be reviewed.
 
 Please take the following actions before submitting this pull request.
 

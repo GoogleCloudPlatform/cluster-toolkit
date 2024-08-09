@@ -24,7 +24,7 @@ information on pull requests.
 
 ### Standard PR Response Times
 
-Pull requests can take up to 2 weeks to be reviewed.
+Community submissions can take up to 2 weeks to be reviewed.
 
 ## Community Guidelines
 
