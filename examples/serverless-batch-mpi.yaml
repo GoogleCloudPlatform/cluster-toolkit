@@ -21,7 +21,7 @@ vars:
   region: us-central1
   zone: us-central1-c
   instance_image:
-    family: hpc-centos-7
+    family: hpc-rocky-linux-8
     project: cloud-hpc-image-public
 
 deployment_groups:
