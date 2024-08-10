@@ -72,10 +72,11 @@ module "slurm_login_instance" {
   labels            = merge(each.value.labels, local.files_cs_labels)
   num_instances     = each.value.num_instances
 
-  region     = each.value.region
-  static_ips = each.value.static_ips
-  subnetwork = each.value.subnetwork
-  zone       = each.value.zone
+  additional_networks = each.value.additional_networks
+  region              = each.value.region
+  static_ips          = each.value.static_ips
+  subnetwork          = each.value.subnetwork
+  zone                = each.value.zone
 
   # trigger replacement of login nodes when the controller instance is replaced
   replace_trigger = module.slurm_controller_instance.instances_self_links[0]
