@@ -49,6 +49,7 @@ deployment_groups:
       node_count_dynamic_max: 4
       machine_type: $(vars.compute_node_machine_type)
       enable_placement: false  # the default is: true
+      allow_automatic_updates: false
 
   - id: debug_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
