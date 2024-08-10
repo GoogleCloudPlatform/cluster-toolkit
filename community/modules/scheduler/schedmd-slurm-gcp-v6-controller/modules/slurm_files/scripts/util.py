@@ -89,8 +89,6 @@ scripts_dir = next(
     p for p in (Path(__file__).parent, Path("/slurm/scripts")) if p.is_dir()
 )
 
-# slurm-gcp config object, could be empty if not available
-cfg = NSDict()
 # caching Lookup object
 lkp = None
 
@@ -419,9 +417,6 @@ def load_config_data(config):
                 "mount_options": "defaults,hard,intr,_netdev",
             }
         )
-
-    if not cfg.enable_debug_logging and isinstance(cfg.enable_debug_logging, NSDict):
-        cfg.enable_debug_logging = False
     return cfg
 
 
@@ -452,8 +447,7 @@ def new_config(config):
 def fetch_config_yaml():
     """Fetch config.yaml from bucket"""
     config_yaml = blob_get("config.yaml").download_as_text()
-    cfg = new_config(yaml.safe_load(config_yaml))
-    return cfg
+    return new_config(yaml.safe_load(config_yaml))
 
 
 def fetch_config_yaml_md5():
@@ -489,7 +483,7 @@ def get_log_path() -> Path:
     Returns path to log file for the current script.
     e.g. resume.py -> /var/log/slurm/resume.log
     """
-    log_dir = Path(cfg.slurm_log_dir or ".")
+    log_dir = Path(lkp.cfg.slurm_log_dir or ".")
     return (log_dir / Path(sys.argv[0]).name).with_suffix(".log")
 
 def init_log_and_parse(parser: argparse.ArgumentParser) -> argparse.Namespace:
@@ -511,10 +505,10 @@ def init_log_and_parse(parser: argparse.ArgumentParser) -> argparse.Namespace:
     args = parser.parse_args()
     
     loglevel = args.loglevel
-    if cfg.enable_debug_logging:
+    if lkp.cfg.enable_debug_logging:
         loglevel = logging.DEBUG
     if args.trace_api:
-        cfg.extra_logging_flags["trace_api"] = True
+        lkp.cfg.extra_logging_flags["trace_api"] = True
 
     # Configure root logger
     logging.config.dictConfig({
@@ -555,7 +549,7 @@ def init_log_and_parse(parser: argparse.ArgumentParser) -> argparse.Namespace:
 
 def log_api_request(request):
     """log.trace info about a compute API request"""
-    if not cfg.extra_logging_flags.get("trace_api"):
+    if not lkp.cfg.extra_logging_flags.get("trace_api"):
         return
     
     # output the whole request object as pretty yaml
@@ -1337,7 +1331,7 @@ class TPU:
         echo "startup script not found > /var/log/startup_error.log"
         """
         with open(
-            Path(cfg.slurm_scripts_dir or dirs.scripts) / "startup.sh", "r"
+            Path(lkp.cfg.slurm_scripts_dir or dirs.scripts) / "startup.sh", "r"
         ) as script:
             startup_script = script.read()
         if isinstance(nodename, list):
@@ -1412,8 +1406,8 @@ class TPU:
 class Lookup:
     """Wrapper class for cached data access"""
 
-    def __init__(self, cfg=None):
-        self._cfg = cfg or NSDict()
+    def __init__(self, cfg):
+        self._cfg = cfg
         self.template_cache_path = Path(__file__).parent / "template_info.cache"
 
     @property
@@ -1446,7 +1440,7 @@ class Lookup:
 
     @property
     def scontrol(self):
-        return Path(self.cfg.slurm_bin_dir if cfg else "") / "scontrol"
+        return Path(self.cfg.slurm_bin_dir or "") / "scontrol"
 
     @cached_property
     def instance_role(self):
@@ -1873,15 +1867,16 @@ def scontrol_reconfigure(lkp: Lookup) -> None:
     log.info("Running scontrol reconfigure")
     run(f"{lkp.scontrol} reconfigure", timeout=30)
 
-# Define late globals
-lkp = Lookup()
-cfg = load_config_file(CONFIG_FILE)
-if not cfg:
-    try:
-        cfg = fetch_config_yaml()
-    except Exception as e:
-        log.warning(f"config not found in bucket: {e}")
-    if cfg:
-        save_config(cfg, CONFIG_FILE)
-
-lkp = Lookup(cfg)
+def _init_lkp() -> None:
+    cfg = load_config_file(CONFIG_FILE)
+    if not cfg:
+        try:
+            cfg = fetch_config_yaml()
+        except Exception as e:
+            log.warning(f"config not found in bucket: {e}")
+        if cfg:
+            save_config(cfg, CONFIG_FILE)
+    global lkp
+    lkp = Lookup(cfg)
+    
+_init_lkp() # TODO: remove this line after refactoring

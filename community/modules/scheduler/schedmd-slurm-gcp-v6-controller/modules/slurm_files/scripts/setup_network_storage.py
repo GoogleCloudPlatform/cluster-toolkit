@@ -27,7 +27,7 @@ from concurrent.futures import as_completed
 from addict import Dict as NSDict
 
 import util
-from util import lkp, run, cfg, dirs, separate
+from util import lkp, run, dirs, separate
 from more_executors import Executors, ExceptionRetryPolicy
 
 
@@ -49,7 +49,7 @@ def resolve_network_storage(nodeset=None):
             nodeset = None
 
     # seed mounts with the default controller mounts
-    if cfg.disable_default_mounts:
+    if lkp.cfg.disable_default_mounts:
         default_mounts = []
     else:
         default_mounts = [
@@ -73,9 +73,9 @@ def resolve_network_storage(nodeset=None):
 
     # On non-controller instances, entries in network_storage could overwrite
     # default exports from the controller. Be careful, of course
-    mounts.update(mounts_by_local(cfg.network_storage))
+    mounts.update(mounts_by_local(lkp.cfg.network_storage))
     if lkp.instance_role in ("login", "controller"):
-        mounts.update(mounts_by_local(cfg.login_network_storage))
+        mounts.update(mounts_by_local(lkp.cfg.login_network_storage))
 
     if nodeset is not None:
         mounts.update(mounts_by_local(nodeset.network_storage))
@@ -193,16 +193,16 @@ def mount_fstab(mounts, log):
 
 
 def munge_mount_handler():
-    if not cfg.munge_mount:
+    if not lkp.cfg.munge_mount:
         log.error("Missing munge_mount in cfg")
     elif lkp.is_controller:
         return
 
-    mount = cfg.munge_mount
+    mount = lkp.cfg.munge_mount
     server_ip = (
         mount.server_ip
         if mount.server_ip
-        else (cfg.slurm_control_addr or cfg.slurm_control_host)
+        else (lkp.cfg.slurm_control_addr or lkp.cfg.slurm_control_host)
     )
     remote_mount = mount.remote_mount
     local_mount = Path("/mnt/munge")
@@ -276,18 +276,18 @@ def setup_nfs_exports():
     mounts.append(
         NSDict(
             {
-                "server_ip": cfg.munge_mount.server_ip,
-                "remote_mount": cfg.munge_mount.remote_mount,
+                "server_ip": lkp.cfg.munge_mount.server_ip,
+                "remote_mount": lkp.cfg.munge_mount.remote_mount,
                 "local_mount": Path(f"{dirs.munge}_tmp"),
-                "fs_type": cfg.munge_mount.fs_type,
-                "mount_options": cfg.munge_mount.mount_options,
+                "fs_type": lkp.cfg.munge_mount.fs_type,
+                "mount_options": lkp.cfg.munge_mount.mount_options,
             }
         )
     )
     # controller mounts
     _, con_mounts = separate_external_internal_mounts(mounts)
     con_mounts = {m.remote_mount: m for m in con_mounts}
-    for nodeset in cfg.nodeset.values():
+    for nodeset in lkp.cfg.nodeset.values():
         # get internal mounts for each nodeset by calling
         # resolve_network_storage as from a node in each nodeset
         ns_mounts = resolve_network_storage(nodeset=nodeset)
