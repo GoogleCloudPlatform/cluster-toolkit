@@ -40,6 +40,8 @@ resource "random_uuid" "cluster_id" {
 ##################
 
 locals {
+  tp = "${local.bucket_dir}/" # prefix to trim from the bucket path to get a "file name"
+
   config = {
     enable_slurm_gcp_plugins = var.enable_slurm_gcp_plugins
     enable_bigquery_load     = var.enable_bigquery_load
@@ -86,6 +88,29 @@ locals {
 
     # Providers
     endpoint_versions = var.endpoint_versions
+
+    # Extra-files MD5 hashes
+    # Makes config file creation depend on the files
+    # Allows for informed updates & checks on slurmsync side
+    slurm_gcp_scripts_md5 = google_storage_bucket_object.devel.md5hash,
+    controller_startup_scripts_md5 = {
+      for o in values(google_storage_bucket_object.controller_startup_scripts) : trimprefix(o.name, local.tp) => o.md5hash
+    }
+    compute_startup_scripts_md5 = {
+      for o in values(google_storage_bucket_object.compute_startup_scripts) : trimprefix(o.name, local.tp) => o.md5hash
+    }
+    nodeset_startup_scripts_md5 = {
+      for o in values(google_storage_bucket_object.nodeset_startup_scripts) : trimprefix(o.name, local.tp) => o.md5hash
+    }
+    login_startup_scripts_md5 = {
+      for o in values(google_storage_bucket_object.login_startup_scripts) : trimprefix(o.name, local.tp) => o.md5hash
+    }
+    prolog_scripts_md5 = {
+      for o in values(google_storage_bucket_object.prolog_scripts) : trimprefix(o.name, local.tp) => o.md5hash
+    }
+    epilog_scripts_md5 = {
+      for o in values(google_storage_bucket_object.epilog_scripts) : trimprefix(o.name, local.tp) => o.md5hash
+    }
   }
 
   x_nodeset         = toset(var.nodeset[*].nodeset_name)
