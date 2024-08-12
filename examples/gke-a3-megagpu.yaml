@@ -53,7 +53,6 @@ deployment_groups:
     use: [network1, gpunets]
     settings:
       enable_private_endpoint: false  # Allows for access from authorized public IPs
-      enable_multi_networking: true
       master_authorized_networks:
       - cidr_block: $(vars.authorized_cidr)  # Allows your machine run kubectl command. It's required for the multi-network setup.
         display_name: "kubectl-access-network"
