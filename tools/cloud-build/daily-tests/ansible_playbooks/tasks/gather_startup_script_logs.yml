@@ -16,14 +16,14 @@
 - name: Assert variables are defined
   ansible.builtin.assert:
     that:
-    - ghpc_stderr is defined
+    - gcluster_stderr is defined
 
 # Searches the ghpc stderr for a command that gathers the serial logs from the
 # deployed VM, defaults to an empty string if the command is not found
 - name: Get serial port command
   failed_when: false
   ansible.builtin.set_fact:
-    serial_port_cmd: '{{ ghpc_stderr | regex_findall("please run:\s+(.+?\s+--project\s+\S+)", "\\1") | first | default("") }}'
+    serial_port_cmd: '{{ gcluster_stderr | regex_findall("please run:\s+(.+?\s+--project\s+\S+)", "\\1") | first | default("") }}'
 
 - name: Print serial port command
   failed_when: false
