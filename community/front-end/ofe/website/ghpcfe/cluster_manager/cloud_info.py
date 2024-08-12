@@ -322,7 +322,7 @@ def _get_gcp_machine_types(
                     )
 
     # logger.info(data)
-                    
+
     return data
 
 

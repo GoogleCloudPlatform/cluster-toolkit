@@ -255,7 +255,6 @@ def _slurm_get_job_state(jobid):
 
     return None  # Return None if there is no job state or it's not a list
 
-
 def _spack_submit_build(app_id, partition, app_name, spec, extra_sbatch=None):
     build_dir = Path("/opt/cluster/installs") / str(app_id)
     build_dir.mkdir(parents=True, exist_ok=True)

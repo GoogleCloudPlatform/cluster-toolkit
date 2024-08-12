@@ -456,6 +456,19 @@
             var formRow = $(this);
             var machineTypeSelect = formRow.find('.machine_type_select');
             var machineType = machineTypeSelect.val();
+            
+            var invalidDiskTypes = [];
+
+            // Fetch the invalid disk types for the selected machine type
+            $.ajax({
+                url: "{% url 'api-instancetype-list' %}" + machineType + "/?cluster={{ object.id }}&region=" + region + "&zone=" + zone,
+                type: "GET",
+                dataType: "json",
+                async: false, // To ensure we get the data before proceeding
+                headers: { 'X-CSRFToken': $.cookie("csrftoken") }
+            }).done(function(machineData) {
+                invalidDiskTypes = machineData.invalid_disk_types || [];
+            });
 
             var invalidDiskTypes = [];
 

@@ -529,7 +529,7 @@ class ClusterUpdateView(LoginRequiredMixin, UpdateView):
                             raise ValidationError(f"Reservation {reservation_name} does not have enough available nodes."
                                                   f"Requested: {requested_nodes}, Available: {available_nodes}"
                                                   )
-                        
+
                 except KeyError as err:
                     raise ValidationError("Error in Partition - invalid machine type: " f"{part.machine_type}") from err
 

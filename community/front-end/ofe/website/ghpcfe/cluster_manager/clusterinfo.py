@@ -164,7 +164,7 @@ class ClusterInfo:
     def _create_ssh_key(self, target_dir):
         # ssh-keygen -t rsa -f <tgtdir>/.ssh/id_rsa -N ""
         sshdir = target_dir / ".ssh"
-        
+
         if not sshdir.exists():
             sshdir.mkdir(mode=0o711)
 
@@ -196,7 +196,7 @@ class ClusterInfo:
         filesystems_yaml = []
         refs = []
         template = self.env.get_template('blueprint/filesystem_config.yaml.j2')
-        
+
         for (count, mp) in enumerate(self.cluster.mount_points.order_by("mount_order")):
             storage_id = f"mount_num_{mp.id}"
             server_ip = "'$controller'" if mp.export in self.cluster.shared_fs.exports.all() else mp.export.server_name
@@ -212,7 +212,7 @@ class ClusterInfo:
             indented_yaml = self.indent_text(rendered_yaml, 1) # Indent as necessary...
             filesystems_yaml.append(indented_yaml)
             refs.append(context['storage_id'])
-        
+
         return ("\n\n".join(filesystems_yaml), refs)
 
     def _prepare_ghpc_partitions(self, part_uses):
@@ -254,7 +254,7 @@ class ClusterInfo:
     def _yaml_refs_to_uses(self, use_list, indent_level=0):
         indent = '  ' * indent_level
         use_lines = [f"{indent}- {item}" for item in use_list]
-        return "\n".join(use_lines) 
+        return "\n".join(use_lines)
 
     def _prepare_ghpc_yaml(self):
         try:
@@ -279,6 +279,19 @@ class ClusterInfo:
                 "controller_sa": "sa",
                 "startup_bucket": self.config["server"]["gcs_bucket"]
             }
+
+            if self.cluster.controller_node_image is not None:
+                context["controller_image_yaml"] = f"""instance_image:
+            family: image-{self.cluster.controller_node_image.family}
+            project: {self.cluster.project_id}
+            """
+
+            if self.cluster.login_node_image is not None:
+                context["login_image_yaml"] = f"""instance_image:
+            family: image-{self.cluster.login_node_image.family}
+            project: {self.cluster.project_id}
+            """
+
             rendered_yaml = template.render(context)
 
             if self.cluster.controller_node_image is not None:
@@ -380,6 +393,9 @@ class ClusterInfo:
 
         Returns each match
         """
+        print(state["resources"])
+        print(filters)
+
 
         print(state["resources"])
         print(filters)
@@ -439,7 +455,7 @@ class ClusterInfo:
                 return existing_instance  # Return the existing instance
             except ComputeInstance.DoesNotExist:
                 # If the instance doesn't exist, create a new one
-                return ComputeInstance(**ci_kwargs)          
+                return ComputeInstance(**ci_kwargs)
 
         return [model_from_tf(instance) for instance in tf_nodes]
 
