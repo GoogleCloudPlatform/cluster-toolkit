@@ -55,7 +55,7 @@ class ClusterInfo:
 
     def __init__(self, cluster):
         self.config = utils.load_config()
-        self.ghpc_path = "/opt/gcluster/hpc-toolkit/ghpc"
+        self.ghpc_path = "/opt/gcluster/cluster-toolkit/ghpc"
 
         self.cluster = cluster
         self.cluster_dir = (
@@ -281,6 +281,18 @@ class ClusterInfo:
             }
             rendered_yaml = template.render(context)
 
+            if self.cluster.controller_node_image is not None:
+                context["controller_image_yaml"] = f"""instance_image:
+            family: image-{self.cluster.controller_node_image.family}
+            project: {self.cluster.project_id}
+            """
+
+            if self.cluster.login_node_image is not None:
+                context["login_image_yaml"] = f"""instance_image:
+            family: image-{self.cluster.login_node_image.family}
+            project: {self.cluster.project_id}
+            """
+
             with yaml_file.open("w") as f:
                 f.write(rendered_yaml)
 
@@ -369,6 +381,9 @@ class ClusterInfo:
         Returns each match
         """
 
+        print(state["resources"])
+        print(filters)
+
         def matches(x):
             try:
                 for k, v in filters.items():
@@ -381,6 +396,7 @@ class ClusterInfo:
         return list(filter(matches, state["resources"]))
 
     def _create_model_instances_from_tf_state(self, state, filters):
+        print(self._get_tf_state_resource(state, filters))
         tf_nodes = self._get_tf_state_resource(state, filters)[0]["instances"]
 
         def model_from_tf(tf):
@@ -434,14 +450,14 @@ class ClusterInfo:
         # controller & login until we start setting them.
 
         filters = {
-            "module": "module.slurm_controller.module.slurm_controller_instance.module.slurm_controller_instance",  #pylint:disable=line-too-long
+            "module": "module.slurm_controller.module.slurm_controller_instance",  #pylint:disable=line-too-long
             "name": "slurm_instance",
         }
         tf_node = self._get_tf_state_resource(tf_state, filters)[0]["instances"][0]  #pylint:disable=line-too-long
         ctrl_sa = tf_node["attributes"]["service_account"][0]["email"]
 
         filters = {
-            "module": "module.slurm_login.module.slurm_login_instance.module.slurm_login_instance",  #pylint:disable=line-too-long
+            "module": 'module.slurm_controller.module.slurm_login_instance["slurm-login"]',  #pylint:disable=line-too-long
             "name": "slurm_instance",
         }
         tf_node = self._get_tf_state_resource(tf_state, filters)[0]["instances"][0]  #pylint:disable=line-too-long
@@ -518,7 +534,7 @@ class ClusterInfo:
                 mgmt_nodes = self._create_model_instances_from_tf_state(
                     state,
                     {
-                        "module": "module.slurm_controller.module.slurm_controller_instance.module.slurm_controller_instance",  # pylint: disable=line-too-long
+                        "module": "module.slurm_controller.module.slurm_controller_instance",  # pylint: disable=line-too-long
                         "name": "slurm_instance",
                     },
                 )
@@ -539,7 +555,7 @@ class ClusterInfo:
                 login_nodes = self._create_model_instances_from_tf_state(
                     state,
                     {
-                        "module": "module.slurm_login.module.slurm_login_instance.module.slurm_login_instance",   # pylint: disable=line-too-long
+                        "module": 'module.slurm_controller.module.slurm_login_instance["slurm-login"]',   # pylint: disable=line-too-long
                         "name": "slurm_instance",
                     },
                 )

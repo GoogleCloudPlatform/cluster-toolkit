@@ -243,11 +243,17 @@ def _slurm_get_job_info(jobid):
 
 
 def _slurm_get_job_state(jobid):
-    """Returns the job state, or None if job isn't in the queue"""
-    # N.B - eventually, pyslurm might work with our version of Slurm,
-    # and this can be changed to something more sane.  For now, call squeue
-    state = _slurm_get_job_info(jobid)
-    return state.get("job_state", None) if state else None
+    """Returns the job state, or None if the job isn't in the queue"""
+    state = _slurm_get_job_info(jobid)  # Fetch job info using an external function
+    job_state = state.get("job_state", None) if state else None  # Get the 'job_state' if available
+
+    if job_state and isinstance(job_state, list) and job_state:
+        logger.info("Slurm returned job %s with state %s", jobid, job_state[0])  # Log the first state if available
+        return job_state[0]  # Return the first element of the state list
+    else:
+        logger.info("No valid job state available for job %s", jobid)  # Log when no valid state is found
+
+    return None  # Return None if there is no job state or it's not a list
 
 
 def _spack_submit_build(app_id, partition, app_name, spec, extra_sbatch=None):
@@ -925,12 +931,14 @@ def cb_run_job(message, **kwargs):
     try:
         slurm_job_info = _slurm_get_job_info(slurm_jobid)
         response["job_runtime"] = (
-            slurm_job_info["end_time"] - slurm_job_info["start_time"]
+            slurm_job_info["end_time"]["number"] - slurm_job_info["start_time"]["number"]
         )
     except KeyError:
         logger.warning(
             "Job data from SLURM did not include start time and end time"
         )
+    except Exception as E:
+        logger.error("Unexpected error: %s", E)
 
     kpi = job_dir / "kpi.json"
     if kpi.is_file():

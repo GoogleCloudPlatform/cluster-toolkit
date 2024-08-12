@@ -468,6 +468,7 @@ class ClusterUpdateView(LoginRequiredMixin, UpdateView):
                 parts = partitions.save()
                 
                 try:
+                    total_nodes_requested = {}
                     for part in parts:
                         part.vCPU_per_node = machine_info[part.machine_type]["vCPU"] // (1 if part.enable_hyperthreads else 2)
                         cpu_count = machine_info[part.machine_type]["vCPU"]
@@ -507,6 +508,28 @@ class ClusterUpdateView(LoginRequiredMixin, UpdateView):
                                 raise ValidationError(
                                     f"Invalid combination: machine_type {part.machine_type} cannot be used with disk_type {disk_type}."
                                 )
+
+                        # Sum the total nodes for each reservation
+                        if part.reservation_name:
+                            if part.reservation_name not in total_nodes_requested:
+                                total_nodes_requested[part.reservation_name] = 0
+                            total_nodes_requested[part.reservation_name] += part.dynamic_node_count + part.static_node_count
+
+                    # Validate total requested nodes against available nodes
+                    for reservation_name, requested_nodes in total_nodes_requested.items():
+                        reservation = cloud_info.get_vm_reservations(
+                            "GCP",
+                            self.object.cloud_credential.detail,
+                            None,
+                            self.object.cloud_zone
+                        )
+                        matching_reservation = reservation.get(reservation_name)
+                        available_nodes = int(matching_reservation["instanceProperties"].get("availableCount", 0))
+                        if requested_nodes > available_nodes:
+                            raise ValidationError(f"Reservation {reservation_name} does not have enough available nodes."
+                                                  f"Requested: {requested_nodes}, Available: {available_nodes}"
+                                                  )
+                        
                 except KeyError as err:
                     raise ValidationError("Error in Partition - invalid machine type: " f"{part.machine_type}") from err
 
