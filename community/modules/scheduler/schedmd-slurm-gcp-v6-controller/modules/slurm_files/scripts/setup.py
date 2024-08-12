@@ -26,7 +26,7 @@ from pathlib import Path
 
 import util
 from util import (
-    lkp,
+    lookup,
     dirs,
     slurmdirs,
     run,
@@ -101,10 +101,10 @@ def end_motd(broadcast=True):
         return
 
     run(
-        "wall -n '*** Slurm {} setup complete ***'".format(lkp.instance_role),
+        "wall -n '*** Slurm {} setup complete ***'".format(lookup().instance_role),
         timeout=30,
     )
-    if lkp.instance_role != "controller":
+    if not lookup().is_controller:
         run(
             """wall -n '
 /home on the controller was mounted over the existing /home.
@@ -125,13 +125,13 @@ def failed_motd():
 def run_custom_scripts():
     """run custom scripts based on instance_role"""
     custom_dir = dirs.custom_scripts
-    if lkp.is_controller:
+    if lookup().is_controller:
         # controller has all scripts, but only runs controller.d
         custom_dirs = [custom_dir / "controller.d"]
-    elif lkp.instance_role == "compute":
+    elif lookup().instance_role == "compute":
         # compute setup with compute.d and nodeset.d
         custom_dirs = [custom_dir / "compute.d", custom_dir / "nodeset.d"]
-    elif lkp.instance_role == "login":
+    elif lookup().instance_role == "login":
         # login setup with only login.d
         custom_dirs = [custom_dir / "login.d"]
     else:
@@ -149,11 +149,11 @@ def run_custom_scripts():
     try:
         for script in custom_scripts:
             if "/controller.d/" in str(script):
-                timeout = lkp.cfg.get("controller_startup_scripts_timeout", 300)
+                timeout = lookup().cfg.get("controller_startup_scripts_timeout", 300)
             elif "/compute.d/" in str(script) or "/nodeset.d/" in str(script):
-                timeout = lkp.cfg.get("compute_startup_scripts_timeout", 300)
+                timeout = lookup().cfg.get("compute_startup_scripts_timeout", 300)
             elif "/login.d/" in str(script):
-                timeout = lkp.cfg.get("login_startup_scripts_timeout", 300)
+                timeout = lookup().cfg.get("login_startup_scripts_timeout", 300)
             else:
                 timeout = 300
             timeout = None if not timeout or timeout < 0 else timeout
@@ -265,13 +265,13 @@ innodb_lock_wait_timeout=900
         timeout=30,
     )
     run(
-        f"""{mysql} "drop user 'slurm'@'{lkp.control_host}'";""",
+        f"""{mysql} "drop user 'slurm'@'{lookup().control_host}'";""",
         timeout=30,
         check=False,
     )
-    run(f"""{mysql} "create user 'slurm'@'{lkp.control_host}'";""", timeout=30)
+    run(f"""{mysql} "create user 'slurm'@'{lookup().control_host}'";""", timeout=30)
     run(
-        f"""{mysql} "grant all on slurm_acct_db.* TO 'slurm'@'{lkp.control_host}'";""",
+        f"""{mysql} "grant all on slurm_acct_db.* TO 'slurm'@'{lookup().control_host}'";""",
         timeout=30,
     )
 
@@ -302,7 +302,7 @@ def configure_dirs():
     scripts_log.symlink_to(dirs.log)
 
     for f in ("sort_nodes.py",): # copy auxiliary scripts
-        dst = Path(lkp.cfg.slurm_bin_dir) / f
+        dst = Path(lookup().cfg.slurm_bin_dir) / f
         shutil.copyfile(util.scripts_dir / f, dst)
         os.chmod(dst, 0o755)
 
@@ -312,7 +312,7 @@ def setup_controller():
     log.info("Setting up controller")
     util.chown_slurm(dirs.scripts / "config.yaml", mode=0o600)
     install_custom_scripts()
-    conf.gen_controller_configs(lkp)
+    conf.gen_controller_configs(lookup())
     setup_jwt_key()
     setup_munge_key()
     setup_sudoers()
@@ -320,7 +320,7 @@ def setup_controller():
 
     run_custom_scripts()
 
-    if not lkp.cfg.cloudsql_secret:
+    if not lookup().cfg.cloudsql_secret:
         configure_mysql()
 
     run("systemctl enable slurmdbd", timeout=30)
@@ -331,7 +331,7 @@ def setup_controller():
 
     sacctmgr = f"{slurmdirs.prefix}/bin/sacctmgr -i"
     result = run(
-        f"{sacctmgr} add cluster {lkp.cfg.slurm_cluster_name}", timeout=30, check=False
+        f"{sacctmgr} add cluster {lookup().cfg.slurm_cluster_name}", timeout=30, check=False
     )
     if "already exists" in result.stdout:
         log.info(result.stdout)
@@ -369,11 +369,11 @@ def setup_controller():
 def setup_login():
     """run login node setup"""
     log.info("Setting up login")
-    slurmctld_host = f"{lkp.control_host}"
-    if lkp.control_addr:
-        slurmctld_host = f"{lkp.control_host}({lkp.control_addr})"
+    slurmctld_host = f"{lookup().control_host}"
+    if lookup().control_addr:
+        slurmctld_host = f"{lookup().control_host}({lookup().control_addr})"
     slurmd_options = [
-        f'--conf-server="{slurmctld_host}:{lkp.control_host_port}"',
+        f'--conf-server="{slurmctld_host}:{lookup().control_host_port}"',
         f'--conf="Feature={conf.login_nodeset}"',
         "-Z",
     ]
@@ -401,11 +401,11 @@ def setup_compute():
     """run compute node setup"""
     log.info("Setting up compute")
     util.chown_slurm(dirs.scripts / "config.yaml", mode=0o600)
-    slurmctld_host = f"{lkp.control_host}"
-    if lkp.control_addr:
-        slurmctld_host = f"{lkp.control_host}({lkp.control_addr})"
+    slurmctld_host = f"{lookup().control_host}"
+    if lookup().control_addr:
+        slurmctld_host = f"{lookup().control_host}({lookup().control_addr})"
     slurmd_options = [
-        f'--conf-server="{slurmctld_host}:{lkp.control_host_port}"',
+        f'--conf-server="{slurmctld_host}:{lookup().control_host_port}"',
     ]
     
     try:
@@ -454,8 +454,8 @@ def main():
         "compute": setup_compute,
         "login": setup_login,
     }.get(
-        lkp.instance_role,
-        lambda: log.fatal(f"Unknown node role: {lkp.instance_role}"))()
+        lookup().instance_role,
+        lambda: log.fatal(f"Unknown node role: {lookup().instance_role}"))()
 
     end_motd()
 

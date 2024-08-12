@@ -28,7 +28,7 @@ from google.cloud import bigquery as bq
 from google.api_core import retry, exceptions
 
 import util
-from util import lkp, run
+from util import lookup, run
 
 
 SACCT = "sacct"
@@ -175,14 +175,14 @@ job_schema = {field.name: field for field in schema_fields}
 Job = namedtuple("Job", job_schema.keys())
 
 client = bq.Client(
-    project=lkp.cfg.project,
+    project=lookup().cfg.project,
     credentials=util.default_credentials(),
     client_options=util.create_client_options(util.ApiEndpoint.BQ),
 )
-dataset_id = f"{lkp.cfg.slurm_cluster_name}_job_data"
-dataset = bq.DatasetReference(project=lkp.project, dataset_id=dataset_id)
+dataset_id = f"{lookup().cfg.slurm_cluster_name}_job_data"
+dataset = bq.DatasetReference(project=lookup().project, dataset_id=dataset_id)
 table = bq.Table(
-    bq.TableReference(dataset, f"jobs_{lkp.cfg.slurm_cluster_name}"), schema_fields
+    bq.TableReference(dataset, f"jobs_{lookup().cfg.slurm_cluster_name}"), schema_fields
 )
 
 
@@ -197,8 +197,8 @@ def make_job_row(job):
         if field_name in job
     }
     job_row["entry_uuid"] = uuid.uuid4().hex
-    job_row["cluster_id"] = lkp.cfg.cluster_id
-    job_row["cluster_name"] = lkp.cfg.slurm_cluster_name
+    job_row["cluster_id"] = lookup().cfg.cluster_id
+    job_row["cluster_name"] = lookup().cfg.slurm_cluster_name
     return job_row
 
 
@@ -309,7 +309,7 @@ def update_job_idx_cache(jobs, timestamp):
 
 
 def main():
-    if not lkp.cfg.enable_bigquery_load:
+    if not lookup().cfg.enable_bigquery_load:
         print("bigquery load is not currently enabled")
         exit(0)
     init_table()

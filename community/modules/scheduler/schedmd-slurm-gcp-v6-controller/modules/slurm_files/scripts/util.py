@@ -89,8 +89,6 @@ scripts_dir = next(
     p for p in (Path(__file__).parent, Path("/slurm/scripts")) if p.is_dir()
 )
 
-# caching Lookup object
-lkp = None
 
 # load all directories as Paths into a dict-like namespace
 dirs = NSDict(
@@ -159,7 +157,7 @@ def universe_domain() -> str:
 
 
 def endpoint_version(api: ApiEndpoint) -> Optional[str]:
-    return lkp.endpoint_versions.get(api.value, None)
+    return lookup().endpoint_versions.get(api.value, None)
 
 
 @lru_cache(maxsize=1)
@@ -302,9 +300,9 @@ def install_custom_scripts(check_hash=False):
     """download custom scripts from gcs bucket"""
 
     compute_tokens = ["compute", "prolog", "epilog"]
-    if lkp.instance_role == "compute":
+    if lookup().instance_role == "compute":
         try:
-            compute_tokens.append(f"nodeset-{lkp.node_nodeset_name()}")
+            compute_tokens.append(f"nodeset-{lookup().node_nodeset_name()}")
         except Exception as e:
             log.error(f"Failed to lookup nodeset: {e}")
 
@@ -314,7 +312,7 @@ def install_custom_scripts(check_hash=False):
             "compute": compute_tokens,
             "controller": ["controller", "prolog", "epilog"],
         },
-        lkp.instance_role,
+        lookup().instance_role,
         [],
     )
     prefixes = [f"slurm-{tok}-script" for tok in prefix_tokens]
@@ -483,7 +481,7 @@ def get_log_path() -> Path:
     Returns path to log file for the current script.
     e.g. resume.py -> /var/log/slurm/resume.log
     """
-    log_dir = Path(lkp.cfg.slurm_log_dir or ".")
+    log_dir = Path(lookup().cfg.slurm_log_dir or ".")
     return (log_dir / Path(sys.argv[0]).name).with_suffix(".log")
 
 def init_log_and_parse(parser: argparse.ArgumentParser) -> argparse.Namespace:
@@ -505,10 +503,10 @@ def init_log_and_parse(parser: argparse.ArgumentParser) -> argparse.Namespace:
     args = parser.parse_args()
     
     loglevel = args.loglevel
-    if lkp.cfg.enable_debug_logging:
+    if lookup().cfg.enable_debug_logging:
         loglevel = logging.DEBUG
     if args.trace_api:
-        lkp.cfg.extra_logging_flags["trace_api"] = True
+        lookup().cfg.extra_logging_flags["trace_api"] = True
 
     # Configure root logger
     logging.config.dictConfig({
@@ -549,7 +547,7 @@ def init_log_and_parse(parser: argparse.ArgumentParser) -> argparse.Namespace:
 
 def log_api_request(request):
     """log.trace info about a compute API request"""
-    if not lkp.cfg.extra_logging_flags.get("trace_api"):
+    if not lookup().cfg.extra_logging_flags.get("trace_api"):
         return
     
     # output the whole request object as pretty yaml
@@ -828,7 +826,7 @@ def to_hostlist(nodenames) -> str:
     tmp_file.writelines("\n".join(sorted(nodenames, key=natural_sort)))
     tmp_file.close()
 
-    hostlist = run(f"{lkp.scontrol} show hostlist {tmp_file.name}").stdout.rstrip()
+    hostlist = run(f"{lookup().scontrol} show hostlist {tmp_file.name}").stdout.rstrip()
     os.remove(tmp_file.name)
     return hostlist
 
@@ -893,7 +891,7 @@ def to_hostlist_fast(names: Iterable[str]) -> str:
 
 def part_is_tpu(part):
     """check if partition with name part contains a nodeset of type tpu"""
-    return len(lkp.cfg.partitions[part].partition_nodeset_tpu) > 0
+    return len(lookup().cfg.partitions[part].partition_nodeset_tpu) > 0
 
 def to_hostnames(nodelist: str) -> List[str]:
     """make list of hostnames from hostlist expression"""
@@ -903,7 +901,7 @@ def to_hostnames(nodelist: str) -> List[str]:
         hostlist = nodelist
     else:
         hostlist = ",".join(nodelist)
-    hostnames = run(f"{lkp.scontrol} show hostnames {hostlist}").stdout.splitlines()
+    hostnames = run(f"{lookup().scontrol} show hostnames {hostlist}").stdout.splitlines()
     return hostnames
 
 
@@ -968,7 +966,7 @@ def batch_execute(requests, retry_cb=None, log_err=log.error):
                 done[rid] = resp
 
     def batch_request(reqs):
-        batch = lkp.compute.new_batch_http_request(callback=batch_callback)
+        batch = lookup().compute.new_batch_http_request(callback=batch_callback)
         for rid, req in reqs:
             batch.add(req, request_id=rid)
         return batch
@@ -1003,19 +1001,19 @@ def batch_execute(requests, retry_cb=None, log_err=log.error):
 def wait_request(operation, project: str):
     """makes the appropriate wait request for a given operation"""
     if "zone" in operation:
-        req = lkp.compute.zoneOperations().wait(
+        req = lookup().compute.zoneOperations().wait(
             project=project,
             zone=trim_self_link(operation["zone"]),
             operation=operation["name"],
         )
     elif "region" in operation:
-        req = lkp.compute.regionOperations().wait(
+        req = lookup().compute.regionOperations().wait(
             project=project,
             region=trim_self_link(operation["region"]),
             operation=operation["name"],
         )
     else:
-        req = lkp.compute.globalOperations().wait(
+        req = lookup().compute.globalOperations().wait(
             project=project, operation=operation["name"]
         )
     return req
@@ -1044,7 +1042,7 @@ def wait_for_operations(operations):
 
 def get_filtered_operations(op_filter):
     """get list of operations associated with group id"""
-    project = lkp.project
+    project = lookup().project
     operations = []
 
     def get_aggregated_operations(items):
@@ -1055,7 +1053,7 @@ def get_filtered_operations(op_filter):
             )
         )
 
-    act = lkp.compute.globalOperations()
+    act = lookup().compute.globalOperations()
     op = act.aggregatedList(
         project=project, filter=op_filter, fields="items.*.operations,nextPageToken"
     )
@@ -1178,7 +1176,7 @@ class TPU:
         if not can_tpu:
             raise Exception("TPU pip package not installed")
         self._nodeset = nodeset
-        self._parent = f"projects/{lkp.project}/locations/{nodeset.zone}"
+        self._parent = f"projects/{lookup().project}/locations/{nodeset.zone}"
         co = create_client_options(ApiEndpoint.TPU)
         self._client = tpu.TpuClient(client_options=co)
         self.data_disks = []
@@ -1306,7 +1304,7 @@ class TPU:
     def _register_node(self, nodename, ip_addr):
         dns_name = socket.getnameinfo((ip_addr, 0), 0)[0]
         run(
-            f"{lkp.scontrol} update nodename={nodename} nodeaddr={ip_addr} nodehostname={dns_name}"
+            f"{lookup().scontrol} update nodename={nodename} nodeaddr={ip_addr} nodehostname={dns_name}"
         )
 
     def create_node(self, nodename):
@@ -1331,7 +1329,7 @@ class TPU:
         echo "startup script not found > /var/log/startup_error.log"
         """
         with open(
-            Path(lkp.cfg.slurm_scripts_dir or dirs.scripts) / "startup.sh", "r"
+            Path(lookup().cfg.slurm_scripts_dir or dirs.scripts) / "startup.sh", "r"
         ) as script:
             startup_script = script.read()
         if isinstance(nodename, list):
@@ -1348,12 +1346,12 @@ class TPU:
             "slurm_docker_image": self.nodeset.docker_image,
             "startup-script": startup_script,
             "slurm_instance_role": "compute",
-            "slurm_cluster_name": lkp.cfg.slurm_cluster_name,
-            "slurm_bucket_path": lkp.cfg.bucket_path,
+            "slurm_cluster_name": lookup().cfg.slurm_cluster_name,
+            "slurm_bucket_path": lookup().cfg.bucket_path,
             "slurm_names": ";".join(slurm_names),
             "universe_domain": universe_domain(),
         }
-        node.tags = [lkp.cfg.slurm_cluster_name]
+        node.tags = [lookup().cfg.slurm_cluster_name]
         if self.nodeset.service_account:
             node.service_account.email = self.nodeset.service_account.email
             node.service_account.scope = self.nodeset.service_account.scopes
@@ -1393,7 +1391,7 @@ class TPU:
                 # not been found, and if it ends in 0, it means that is the master node and it should have been found, and in consequence
                 # log an error
                 nodehostname = yaml.safe_load(
-                    run(f"{lkp.scontrol} --yaml show node {nodename}").stdout.rstrip()
+                    run(f"{lookup().scontrol} --yaml show node {nodename}").stdout.rstrip()
                 )["nodes"][0]["hostname"]
                 if nodehostname.split("-")[-1] == "0":
                     log.error(f"TPU master node {nodename} not found")
@@ -1643,9 +1641,9 @@ class Lookup:
             # "deletionProtection",
             # "startRestricted",
         ]
-        if lkp.cfg.enable_slurm_gcp_plugins:
+        if lookup().cfg.enable_slurm_gcp_plugins:
             slurm_gcp_plugins.register_instance_information_fields(
-                lkp=lkp,
+                lkp=lookup(),
                 project=project,
                 slurm_cluster_name=slurm_cluster_name,
                 instance_information_fields=instance_information_fields,
@@ -1863,20 +1861,22 @@ class Lookup:
     def etc_dir(self) -> Path:
         return Path(self.cfg.output_dir or slurmdirs.etc)
 
+_lkp: Optional[Lookup] = None
+
+def lookup() -> Lookup:
+    global _lkp
+    if _lkp is None:
+        cfg = load_config_file(CONFIG_FILE)
+        if not cfg:
+            try:
+                cfg = fetch_config_yaml()
+            except Exception as e:
+                log.warning(f"config not found in bucket: {e}")
+            if cfg:
+                save_config(cfg, CONFIG_FILE)
+        _lkp = Lookup(cfg)
+    return _lkp
+
 def scontrol_reconfigure(lkp: Lookup) -> None:
     log.info("Running scontrol reconfigure")
     run(f"{lkp.scontrol} reconfigure", timeout=30)
-
-def _init_lkp() -> None:
-    cfg = load_config_file(CONFIG_FILE)
-    if not cfg:
-        try:
-            cfg = fetch_config_yaml()
-        except Exception as e:
-            log.warning(f"config not found in bucket: {e}")
-        if cfg:
-            save_config(cfg, CONFIG_FILE)
-    global lkp
-    lkp = Lookup(cfg)
-    
-_init_lkp() # TODO: remove this line after refactoring
