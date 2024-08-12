@@ -27,7 +27,6 @@ from pathlib import Path
 import util
 from util import (
     lkp,
-    cfg,
     dirs,
     slurmdirs,
     run,
@@ -177,20 +176,6 @@ def run_custom_scripts():
         log.exception(e)
         raise e
 
-
-def setup_secondary_disks():
-    """Format and mount secondary disk"""
-    run(
-        "sudo mkfs.ext4 -m 0 -F -E lazy_itable_init=0,lazy_journal_init=0,discard /dev/sdb"
-    )
-    with open("/etc/fstab", "a") as f:
-        f.write(
-            "\n/dev/sdb     {0}     ext4    discard,defaults,nofail     0 2".format(
-                dirs.secdisk
-            )
-        )
-
-
 def setup_jwt_key():
     jwt_key = Path(slurmdirs.state / "jwt_hs256.key")
 
@@ -316,6 +301,11 @@ def configure_dirs():
         scripts_log.unlink()
     scripts_log.symlink_to(dirs.log)
 
+    for f in ("sort_nodes.py",): # copy auxiliary scripts
+        dst = Path(lkp.cfg.slurm_bin_dir) / f
+        shutil.copyfile(util.scripts_dir / f, dst)
+        os.chmod(dst, 0o755)
+
 
 def setup_controller():
     """Run controller setup"""
@@ -326,14 +316,11 @@ def setup_controller():
     setup_jwt_key()
     setup_munge_key()
     setup_sudoers()
-
-    if cfg.controller_secondary_disk:
-        setup_secondary_disks()
     setup_network_storage()
 
     run_custom_scripts()
 
-    if not cfg.cloudsql_secret:
+    if not lkp.cfg.cloudsql_secret:
         configure_mysql()
 
     run("systemctl enable slurmdbd", timeout=30)
@@ -344,7 +331,7 @@ def setup_controller():
 
     sacctmgr = f"{slurmdirs.prefix}/bin/sacctmgr -i"
     result = run(
-        f"{sacctmgr} add cluster {cfg.slurm_cluster_name}", timeout=30, check=False
+        f"{sacctmgr} add cluster {lkp.cfg.slurm_cluster_name}", timeout=30, check=False
     )
     if "already exists" in result.stdout:
         log.info(result.stdout)
@@ -477,8 +464,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--slurmd-feature", dest="slurmd_feature", help="Unused, to be removed.")
     _ = util.init_log_and_parse(parser)
-
-    lkp = util.Lookup(cfg)  # noqa F811
 
     try:
         main()

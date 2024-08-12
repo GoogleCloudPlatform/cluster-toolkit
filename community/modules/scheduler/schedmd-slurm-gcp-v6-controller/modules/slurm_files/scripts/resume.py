@@ -41,7 +41,7 @@ from util import (
     trim_self_link,
     wait_for_operation,
 )
-from util import cfg, lkp, NSDict, TPU
+from util import lkp, NSDict, TPU
 
 import slurm_gcp_plugins
 
@@ -138,7 +138,7 @@ def create_instances_request(nodes, partition_name, placement_group, job_id=None
     nodeset = lkp.node_nodeset(model)
     template = lkp.node_template(model)
     region = lkp.node_region(model)
-    partition = cfg.partitions[partition_name]
+    partition = lkp.cfg.partitions[partition_name]
     log.debug(f"create_instances_request: {model} placement: {placement_group}")
 
     body = NSDict()
@@ -182,7 +182,7 @@ def create_instances_request(nodes, partition_name, placement_group, job_id=None
         )
 
     request = lkp.compute.regionInstances().bulkInsert(
-        project=cfg.project, region=region, body=body.to_dict()
+        project=lkp.project, region=region, body=body.to_dict()
     )
 
     if log.isEnabledFor(logging.DEBUG):
@@ -497,7 +497,7 @@ def create_placement_request(pg_name, region):
             lkp=lkp, pg_name=pg_name, region=region, request_body=config
         )
     request = lkp.compute.resourcePolicies().insert(
-        project=cfg.project, region=region, body=config
+        project=lkp.project, region=region, body=config
     )
     log_api_request(request)
     return request
@@ -521,7 +521,7 @@ def create_nodeset_placement_groups(node_list: list, job_id=0):
     region = lkp.node_region(model)
 
     groups = {
-        f"{cfg.slurm_cluster_name}-slurmgcp-managed-{nodeset.nodeset_name}-{job_id}-{i}": nodes
+        f"{lkp.cfg.slurm_cluster_name}-slurmgcp-managed-{nodeset.nodeset_name}-{job_id}-{i}": nodes
         for i, nodes in enumerate(chunked(node_list, n=PLACEMENT_MAX_CNT))
     }
 
