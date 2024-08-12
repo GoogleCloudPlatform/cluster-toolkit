@@ -269,7 +269,7 @@ variable "service_account" {
 variable "reservation_type" {
   description = "Type of reservation to consume"
   type        = string
-  default     = null
+  default     = "NO_RESERVATION"
 
   validation {
     condition     = contains(["NO_RESERVATION", "ANY_RESERVATION", "SPECIFIC_RESERVATION"], var.reservation_type)
@@ -289,7 +289,7 @@ variable "specific_reservation" {
   }
 
   validation {
-    condition     = (var.specific_reservation.key == "compute.googleapis.com/reservation-name" && length(var.specific_reservation.values) > 0) || (var.specific_reservation.key == null && var.specific_reservation.values == null)
+    condition     = (var.specific_reservation.key == null && var.specific_reservation.values == null) || (var.specific_reservation.key == "compute.googleapis.com/reservation-name" && var.specific_reservation.values != null)
     error_message = "Value must be equal to `compute.googleapis.com/reservation-name` when targeting a SPECIFIC_RESERVATION. Otherwise, do not specify the value"
   }
 }
