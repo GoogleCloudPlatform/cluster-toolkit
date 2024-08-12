@@ -279,19 +279,6 @@ class ClusterInfo:
                 "controller_sa": "sa",
                 "startup_bucket": self.config["server"]["gcs_bucket"]
             }
-
-            if self.cluster.controller_node_image is not None:
-                context["controller_image_yaml"] = f"""instance_image:
-            family: image-{self.cluster.controller_node_image.family}
-            project: {self.cluster.project_id}
-            """
-
-            if self.cluster.login_node_image is not None:
-                context["login_image_yaml"] = f"""instance_image:
-            family: image-{self.cluster.login_node_image.family}
-            project: {self.cluster.project_id}
-            """
-
             rendered_yaml = template.render(context)
 
             if self.cluster.controller_node_image is not None:
