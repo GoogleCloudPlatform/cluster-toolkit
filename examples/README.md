@@ -1539,7 +1539,7 @@ cleaned up when the job is deleted.
 
 ### [gke-a3-megagpu.yaml] ![community-badge] ![experimental-badge]
 
-This blueprint shows how to provision a GKE cluster with A3 Megagpu machines in the toolkit.
+This blueprint shows how to provision a GKE cluster with A3 Mega machines in the toolkit.
 
 After provisioning the cluster and the nodepool, we need to do the following:
 1- Install the GPUDirect binary and configure NCCL: https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#install-gpudirect-tcpx-nccl
@@ -1561,7 +1561,7 @@ After provisioning the cluster and the nodepool, we need to do the following:
 
 ### [gke-a3-highgpu.yaml] ![community-badge] ![experimental-badge]
 
-This blueprint shows how to provision a GKE cluster with A3 Highgpu machines in the toolkit.
+This blueprint shows how to provision a GKE cluster with A3 High machines in the toolkit.
 
 After provisioning the cluster and the nodepool, we need to do the following:
 1- Install the GPUDirect binary and configure NCCL: https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#install-gpudirect-tcpx-nccl

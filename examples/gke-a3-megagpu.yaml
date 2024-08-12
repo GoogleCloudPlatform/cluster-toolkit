@@ -64,7 +64,6 @@ deployment_groups:
     use: [gke_cluster, gpunets]
     settings:
       machine_type: a3-megagpu-8g
-      disk_type: pd-balanced
       autoscaling_total_min_nodes: 2
       zones: [$(vars.zone)]
 

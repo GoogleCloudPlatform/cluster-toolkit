@@ -32,10 +32,10 @@ locals {
   sa_email = var.service_account_email != null ? var.service_account_email : data.google_compute_default_service_account.default_sa.email
 
   # additional VPCs enable multi networking 
-  derived_enable_multi_networking = length(var.additional_networks) > 0 ? true : var.enable_multi_networking
+  derived_enable_multi_networking = length(var.additional_networks) > 0 ? true : coalesce(var.enable_multi_networking, false)
 
   # multi networking needs enabled Dataplane v2
-  derived_enable_dataplane_v2 = local.derived_enable_multi_networking ? true : var.enable_dataplane_v2
+  derived_enable_dataplane_v2 = local.derived_enable_multi_networking ? true : coalesce(var.enable_dataplane_v2, false)
 }
 
 data "google_compute_default_service_account" "default_sa" {
@@ -178,6 +178,14 @@ resource "google_container_cluster" "gke_cluster" {
     ignore_changes = [
       node_config
     ]
+    precondition {
+      condition     = !(!coalesce(var.enable_dataplane_v2, true) && (coalesce(var.enable_multi_networking, false) || length(var.additional_networks) > 0))
+      error_message = "'enable_dataplane_v2' cannot be false when enabling multi networking."
+    }
+    precondition {
+      condition     = !(!coalesce(var.enable_multi_networking, true) && length(var.additional_networks) > 0)
+      error_message = "'enable_multi_networking' cannot be false when passing multivpc module."
+    }
   }
 
   logging_service    = "logging.googleapis.com/kubernetes"

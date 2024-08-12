@@ -300,11 +300,7 @@ variable "service_account" {
 variable "enable_multi_networking" {
   description = "Enables [multi networking](https://cloud.google.com/kubernetes-engine/docs/how-to/setup-multinetwork-support-for-pods#create-a-gke-cluster) (Requires GKE Enterprise). This setting is immutable on clusters and enables [Dataplane V2](https://cloud.google.com/kubernetes-engine/docs/concepts/dataplane-v2?hl=en)."
   type        = bool
-  default     = false
-  validation {
-    condition     = (var.enable_dataplane_v2 == null || coalesce(var.enable_dataplane_v2, false)) || !coalesce(var.enable_multi_networking, true)
-    error_message = "'enable_dataplane_v2' must be null or true when enabling multi networking."
-  }
+  default     = null
 }
 
 variable "additional_networks" {

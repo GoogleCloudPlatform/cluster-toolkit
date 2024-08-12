@@ -97,10 +97,6 @@ variable "local_ssd_count_ephemeral_storage" {
   EOT 
   type        = number
   default     = null
-  validation {
-    condition     = !(var.local_ssd_count_ephemeral_storage != null && coalesce(var.local_ssd_count_ephemeral_storage, 0) > 0 && var.local_ssd_count_nvme_block != null && coalesce(var.local_ssd_count_nvme_block, 0) > 0)
-    error_message = "Only one of local_ssd_count_ephemeral_storage or local_ssd_count_nvme_block can be set."
-  }
 }
 
 variable "local_ssd_count_nvme_block" {

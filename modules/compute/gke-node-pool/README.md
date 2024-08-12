@@ -76,7 +76,7 @@ kernel modules to be loaded.
 To maximize GPU network bandwidth, nodepools accept multiple VPCs. Pass a multivpc module to gke-node-pool module, and [take these steps] (https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#install-gpudirect-tcpx-nccl) to install GPUDirect, configure NCCL, use recommended settings, and add GPUDirect to your pods.
 
 > **_NOTE:_** You must [enable multi networking](https://cloud.google.com/kubernetes-engine/docs/how-to/setup-multinetwork-support-for-pods#create-a-gke-cluster) feature when creating the GKE cluster. Passing the multivpc module to a gke-cluster module enables multi networking on the cluster creation.
-> Passing the multivpc module to a gke-cluster or pre-existing-gke-cluster module creates required network objects on the cluster for multi networking. You can do so by [applying a manifest manually](https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#create-gke-environment), too.
+> Passing the multivpc module to a gke-cluster or pre-existing-gke-cluster module [creates required network objects](https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#create-gke-environment) on the cluster for multi networking.
 
 ### GPUs Examples
 
@@ -178,6 +178,14 @@ Finally, the following is adding multivpc to a node pool:
 ```yaml
   - id: network
     source: modules/network/vpc
+    settings:
+      subnetwork_name: gke-subnet
+      secondary_ranges:
+        gke-subnet:
+        - range_name: pods
+          ip_cidr_range: 10.4.0.0/14
+        - range_name: services
+          ip_cidr_range: 10.0.32.0/20
 
   - id: multinetwork
     source: modules/network/multivpc
