@@ -301,6 +301,11 @@ def configure_dirs():
         scripts_log.unlink()
     scripts_log.symlink_to(dirs.log)
 
+    for f in ("sort_nodes.py",): # copy auxiliary scripts
+        dst = Path(lkp.cfg.slurm_bin_dir) / f
+        shutil.copyfile(util.scripts_dir / f, dst)
+        os.chmod(dst, 0o755)
+
 
 def setup_controller():
     """Run controller setup"""
