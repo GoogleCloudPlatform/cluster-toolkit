@@ -6,7 +6,7 @@ files with other clients over a network. `nfs-server` can be used by
 [vm-instance](../../../../modules/compute/vm-instance/README.md) and SchedMD
 community modules that create compute VMs.
 
-For more information on this and other network storage options in the Cloud HPC
+For more information on this and other network storage options in the Cluster
 Toolkit, see the extended [Network Storage documentation](../../../../docs/network_storage.md).
 
 > **_WARNING:_** This module has only been tested against the HPC centos7 OS
@@ -41,7 +41,7 @@ To mount the NFS Server you must first ensure that the NFS client has been
 installed the and then call the proper `mount` command.
 
 Both of these steps are automatically handled with the use of the `use` command
-in a selection of HPC Toolkit modules. See the [compatibility matrix][matrix] in
+in a selection of Cluster Toolkit modules. See the [compatibility matrix][matrix] in
 the network storage doc for a complete list of supported modules.
 See the [hpc-centos-ss.yaml] test config for an example of using this module
 with a `vm-instance` module.
@@ -126,7 +126,7 @@ No modules.
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the HPC deployment, used as name of the NFS instance if no name is specified. | `string` | n/a | yes |
 | <a name="input_disk_size"></a> [disk\_size](#input\_disk\_size) | Storage size gb | `number` | `"100"` | no |
 | <a name="input_image"></a> [image](#input\_image) | DEPRECATED: The VM image used by the nfs server | `string` | `null` | no |
-| <a name="input_instance_image"></a> [instance\_image](#input\_instance\_image) | The VM image used by the nfs server.<br><br>Expected Fields:<br>name: The name of the image. Mutually exclusive with family.<br>family: The image family to use. Mutually exclusive with name.<br>project: The project where the image is hosted. | `map(string)` | <pre>{<br>  "family": "hpc-centos-7",<br>  "project": "cloud-hpc-image-public"<br>}</pre> | no |
+| <a name="input_instance_image"></a> [instance\_image](#input\_instance\_image) | The VM image used by the nfs server.<br><br>Expected Fields:<br>name: The name of the image. Mutually exclusive with family.<br>family: The image family to use. Mutually exclusive with name.<br>project: The project where the image is hosted. | `map(string)` | <pre>{<br>  "family": "hpc-rocky-linux-8",<br>  "project": "cloud-hpc-image-public"<br>}</pre> | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the NFS instance. Key-value pairs. | `map(string)` | n/a | yes |
 | <a name="input_local_mounts"></a> [local\_mounts](#input\_local\_mounts) | Mountpoint for this NFS compute instance | `list(string)` | <pre>[<br>  "/data"<br>]</pre> | no |
 | <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | Type of the VM instance to use | `string` | `"n2d-standard-2"` | no |

@@ -38,6 +38,10 @@ jobs:
         python-version: '3.10'
         check-latest: true
         cache: 'pip'
+    - run: >
+        pip install
+        -r community/modules/scheduler/schedmd-slurm-gcp-v6-controller/modules/slurm_files/scripts/requirements.txt
+        -r community/modules/scheduler/schedmd-slurm-gcp-v6-controller/modules/slurm_files/scripts/tests/requirements.txt
     - uses: actions/setup-go@v5
       with:
         go-version: '1.22'

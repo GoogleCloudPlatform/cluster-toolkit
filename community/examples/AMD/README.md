@@ -1,4 +1,4 @@
-# AMD solutions for the HPC Toolkit
+# AMD solutions for the Cluster Toolkit (formerly HPC Toolkit)
 
 > [!NOTE]
 > This document uses Slurm-GCP v6. If you want to use Slurm-GCP v5 version you

@@ -9,7 +9,7 @@ The cluster includes
 - A login node
 - Four compute nodes each of which is an instance of the c2-standard-16 machine type
 
-> **_NOTE:_** prior to running this HPC Toolkit example the [Flux Framework GCP Images](https://github.com/GoogleCloudPlatform/scientific-computing-examples/tree/main/fluxfw-gcp/img#flux-framework-gcp-images)
+> **_NOTE:_** prior to running this Cluster Toolkit example the [Flux Framework GCP Images](https://github.com/GoogleCloudPlatform/scientific-computing-examples/tree/main/fluxfw-gcp/img#flux-framework-gcp-images)
 > must be created in your project.
 
 ### Initial Setup for flux-framework Cluster

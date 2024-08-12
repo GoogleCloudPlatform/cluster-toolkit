@@ -1,7 +1,7 @@
 # Modules
 
-This directory contains a set of core modules built for the HPC Toolkit. Modules
-describe the building blocks of an HPC deployment. The expected fields in a
+This directory contains a set of core modules built for the Cluster Toolkit. Modules
+describe the building blocks of an AI/ML and HPC deployment. The expected fields in a
 module are listed in more detail [below](#module-fields). Blueprints can be
 extended in functionality by incorporating [modules from GitHub
 repositories][ghmods].
@@ -14,10 +14,10 @@ Modules from various sources are all listed here for visibility. Badges are used
 to indicate the source and status of many of these resources.
 
 Modules listed below with the ![core-badge] badge are located in this
-folder and are tested and maintained by the HPC Toolkit team.
+folder and are tested and maintained by the Cluster Toolkit team.
 
 Modules labeled with the ![community-badge] badge are contributed by
-the community (including the HPC Toolkit team, partners, etc.). Community modules
+the community (including the Cluster Toolkit team, partners, etc.). Community modules
 are located in the [community folder](../community/modules/README.md).
 
 Modules labeled with the ![deprecated-badge] badge are now deprecated and may be
@@ -47,9 +47,9 @@ Modules that are still in development and less stable are labeled with the
   Creates a TPU nodeset to be used by the [schedmd-slurm-gcp-v6-partition] module.
 * **[schedmd-slurm-gcp-v6-nodeset-dynamic]** ![community-badge] ![experimental-badge]:
   Creates a dynamic nodeset to be used by the [schedmd-slurm-gcp-v6-partition] module and instance template.
-* **[gke-node-pool]** ![community-badge] ![experimental-badge] : Creates a
+* **[gke-node-pool]** ![core-badge] ![experimental-badge] : Creates a
   Kubernetes node pool using GKE.
-* **[gke-job-template]** ![community-badge] ![experimental-badge] : Creates a
+* **[gke-job-template]** ![core-badge] ![experimental-badge] : Creates a
   Kubernetes job file to be used with a [gke-node-pool].
 * **[htcondor-execute-point]** ![community-badge] ![experimental-badge] :
   Manages a group of execute points for use in an [HTCondor
@@ -61,8 +61,8 @@ Modules that are still in development and less stable are labeled with the
   Notebook. Primarily used for [FSI - MonteCarlo Tutorial][fsi-montecarlo-on-batch-tutorial].
 
 [vm-instance]: compute/vm-instance/README.md
-[gke-node-pool]: ../community/modules/compute/gke-node-pool/README.md
-[gke-job-template]: ../community/modules/compute/gke-job-template/README.md
+[gke-node-pool]: ../modules/compute/gke-node-pool/README.md
+[gke-job-template]: ../modules/compute/gke-job-template/README.md
 [schedmd-slurm-gcp-v5-partition]: ../community/modules/compute/schedmd-slurm-gcp-v5-partition/README.md
 [schedmd-slurm-gcp-v5-node-group]: ../community/modules/compute/schedmd-slurm-gcp-v5-node-group/README.md
 [schedmd-slurm-gcp-v6-partition]: ../community/modules/compute/schedmd-slurm-gcp-v6-partition/README.md
@@ -104,7 +104,7 @@ Modules that are still in development and less stable are labeled with the
 * **[Intel-DAOS]** ![community-badge] : Creates
   a [DAOS](https://docs.daos.io/) file system.
 * **[cloud-storage-bucket]** ![community-badge] ![experimental-badge] : Creates a Google Cloud Storage (GCS) bucket.
-* **[gke-persistent-volume]** ![community-badge] ![experimental-badge] : Creates persistent volumes and persistent volume claims for shared storage.
+* **[gke-persistent-volume]** ![core-badge] ![experimental-badge] : Creates persistent volumes and persistent volume claims for shared storage.
 * **[nfs-server]** ![community-badge] ![experimental-badge] : Creates a VM and
   configures an NFS server that can be mounted by other VM.
 
@@ -115,13 +115,13 @@ Modules that are still in development and less stable are labeled with the
 [intel-daos]: ../community/modules/file-system/Intel-DAOS/README.md
 [nfs-server]: ../community/modules/file-system/nfs-server/README.md
 [cloud-storage-bucket]: ../community/modules/file-system/cloud-storage-bucket/README.md
-[gke-persistent-volume]: ../community/modules/file-system/gke-persistent-volume/README.md
+[gke-persistent-volume]: ../modules/file-system/gke-persistent-volume/README.md
 
 ### Monitoring
 
 * **[dashboard]** ![core-badge] : Creates a
   [monitoring dashboard](https://cloud.google.com/monitoring/dashboards) for
-  visually tracking a HPC Toolkit deployment.
+  visually tracking a Cluster Toolkit deployment.
 
 [dashboard]: monitoring/dashboard/README.md
 
@@ -189,9 +189,9 @@ Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial][fsi-monteca
   template that works with other Toolkit modules.
 * **[batch-login-node]** ![core-badge] : Creates a VM that can be used for
   submission of Google Cloud Batch jobs.
-* **[gke-cluster]** ![community-badge] ![experimental-badge] : Creates a
+* **[gke-cluster]** ![core-badge] ![experimental-badge] : Creates a
   Kubernetes cluster using GKE.
-* **[pre-existing-gke-cluster]** ![community-badge] ![experimental-badge] : Retrieves an existing GKE cluster. Substitute for ([gke-cluster]) module.
+* **[pre-existing-gke-cluster]** ![core-badge] ![experimental-badge] : Retrieves an existing GKE cluster. Substitute for ([gke-cluster]) module.
 * **[schedmd-slurm-gcp-v5-controller]** ![community-badge] :
   Creates a Slurm controller node using [slurm-gcp-version-5].
 * **[schedmd-slurm-gcp-v5-login]** ![community-badge] :
@@ -217,8 +217,8 @@ Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial][fsi-monteca
 
 [batch-job-template]: ../modules/scheduler/batch-job-template/README.md
 [batch-login-node]: ../modules/scheduler/batch-login-node/README.md
-[gke-cluster]: ../community/modules/scheduler/gke-cluster/README.md
-[pre-existing-gke-cluster]: ../community/modules/scheduler/pre-existing-gke-cluster/README.md
+[gke-cluster]: ../modules/scheduler/gke-cluster/README.md
+[pre-existing-gke-cluster]: ../modules/scheduler/pre-existing-gke-cluster/README.md
 [htcondor-setup]: ../community/modules/scheduler/htcondor-setup/README.md
 [htcondor-pool-secrets]: ../community/modules/scheduler/htcondor-pool-secrets/README.md
 [htcondor-access-point]: ../community/modules/scheduler/htcondor-access-point/README.md
@@ -227,7 +227,7 @@ Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial][fsi-monteca
 [schedmd-slurm-gcp-v5-controller]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-controller/README.md
 [schedmd-slurm-gcp-v5-login]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-login/README.md
 [schedmd-slurm-gcp-v5-hybrid]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid/README.md
-[slurm-gcp-version-5]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/5.11.1
+[slurm-gcp-version-5]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/5.12.0
 [slurm-gcp-version-6]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.5.8
 [pbspro-client]: ../community/modules/scheduler/pbspro-client/README.md
 [pbspro-server]: ../community/modules/scheduler/pbspro-server/README.md
@@ -353,7 +353,7 @@ following module definition refers the local pre-existing-vpc modules.
 
 > **_NOTE:_** Relative paths (beginning with `.` or `..` must be relative to the
 > working directory from which `ghpc` is executed. This example would have to be
-> run from a local copy of the HPC Toolkit repository. An alternative is to use
+> run from a local copy of the Cluster Toolkit repository. An alternative is to use
 > absolute paths to modules.
 
 #### GitHub-hosted Modules and Packages
@@ -561,7 +561,7 @@ internal_ip_simplevm = [
 ### Required Services (APIs) (optional)
 
 Each Toolkit module depends upon Google Cloud services ("APIs") being enabled
-in the project used by the HPC environment. For example, the [creation of
+in the project used by the AI/ML and HPC environment. For example, the [creation of
 VMs](compute/vm-instance/) requires the Compute Engine API
 (compute.googleapis.com). The [startup-script](scripts/startup-script/) module
 requires the Cloud Storage API (storage.googleapis.com) for storage of the
@@ -599,7 +599,7 @@ than having to set it manually.
   monitoring, labels must be exposed. We strongly recommend that all modules
   expose this variable.
 
-## Writing Custom HPC Modules
+## Writing Custom Cluster Toolkit Modules
 
 Modules are flexible by design, however we do define some [best practices](../docs/module-guidelines.md) when
-creating a new module meant to be used with the HPC Toolkit.
+creating a new module meant to be used with the Cluster Toolkit.

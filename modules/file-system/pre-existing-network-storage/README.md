@@ -5,10 +5,10 @@ a new file system) in a way that can be shared with other modules. This allows
 a compute VM to mount a filesystem that is not part of the current deployment
 group.
 
-The pre-existing network storage can be referenced in the same way as any HPC
+The pre-existing network storage can be referenced in the same way as any Cluster
 Toolkit supported file-system such as [filestore](../filestore/README.md).
 
-For more information on network storage options in the Cloud HPC Toolkit, see
+For more information on network storage options in the Cluster Toolkit, see
 the extended [Network Storage documentation](../../../../docs/network_storage.md).
 
 ### Example
@@ -60,6 +60,20 @@ filesystem:
 
 Note the use of the MGS NID (Network ID) in the `server_ip` field - in particular, note the `@tcp` suffix.
 
+The following is an example of using `pre-existing-network-storage` with the `daos`
+filesystem. In order to use existing `parallelstore` instance, `fs_type` needs to be
+explicitly mentioned in blueprint. The `remote_mount` option refers to `access_points`
+for `parallelstore` instance.
+
+```yaml
+- id: parallelstorefs
+  source: modules/file-system/pre-existing-network-storage
+  settings:
+    fs_type: daos
+    remote_mount: "[10.246.99.2,10.246.99.3,10.246.99.4]"
+    mount_options: disable-wb-cache,thread-count=16,eq-count=8
+```
+
 ### Mounting
 
 For the `fs_type` listed below, this module will provide `client_install_runner`
@@ -71,6 +85,7 @@ Supported `fs_type`:
 - nfs
 - lustre
 - gcsfuse
+- daos
 
 [scripts/mount.sh](./scripts/mount.sh) is used as the contents of
 `mount_runner`. This script will update `/etc/fstab` and mount the network
@@ -78,7 +93,7 @@ storage. This script will fail if the specified `local_mount` is already being
 used by another entry in `/etc/fstab`.
 
 Both of these steps are automatically handled with the use of the `use` command
-in a selection of HPC Toolkit modules. See the [compatibility matrix][matrix] in
+in a selection of Cluster Toolkit modules. See the [compatibility matrix][matrix] in
 the network storage doc for a complete list of supported modules.
 
 [matrix]: ../../../docs/network_storage.md#compatibility-matrix

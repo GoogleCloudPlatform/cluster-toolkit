@@ -1,6 +1,6 @@
-# Network Storage in the HPC Toolkit
+# Network Storage in the Cluster Toolkit (formerly HPC Toolkit)
 
-The HPC Toolkit provides powerful tools for working with network
+The Cluster Toolkit provides powerful tools for working with network
 storage.
 
 The Toolkit contains modules that will **provision**:

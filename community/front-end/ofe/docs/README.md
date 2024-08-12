@@ -1,4 +1,4 @@
-## HPC Toolkit FrontEnd Documentations
+## Cluster Toolkit FrontEnd Documentations
 
 - [Administrator's Guide](admin_guide.md)
 - [User Guide](user_guide.md)

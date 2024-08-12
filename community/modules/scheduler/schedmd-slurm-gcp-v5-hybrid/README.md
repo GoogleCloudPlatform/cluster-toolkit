@@ -17,7 +17,7 @@ on-premise slurm cluster.
 
 > **_NOTE:_** This is an experimental module and the functionality and
 > documentation will likely be updated in the near future. This module has only
-> been tested in limited capacity with the HPC Toolkit. On Premise
+> been tested in limited capacity with the Cluster Toolkit. On Premise
 > Slurm configurations can vary significantly, this module should
 > be used as a starting point, not a complete solution.
 
@@ -38,7 +38,7 @@ manually. This will require addition configuration and verification of
 permissions. For more information see the [hybrid.md] documentation on
 [slurm-gcp].
 
-[slurm-controller-hybrid]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/5.11.1/terraform/slurm_cluster/modules/slurm_controller_hybrid
+[slurm-controller-hybrid]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/5.12.0/terraform/slurm_cluster/modules/slurm_controller_hybrid
 
 > **_NOTE:_** The hybrid module requires the following dependencies to be
 > installed on the system deploying the module:
@@ -58,15 +58,15 @@ permissions. For more information see the [hybrid.md] documentation on
 [pyyaml]: https://pypi.org/project/PyYAML/
 [google-api-python-client]: https://pypi.org/project/google-api-python-client/
 [google-cloud-pubsub]: https://pypi.org/project/google-cloud-pubsub/
-[requirements.txt]: https://github.com/GoogleCloudPlatform/slurm-gcp/blob/5.11.1/scripts/requirements.txt
+[requirements.txt]: https://github.com/GoogleCloudPlatform/slurm-gcp/blob/5.12.0/scripts/requirements.txt
 
 ### Manual Configuration
 This module *does not* complete the installation of hybrid partitions on your
 slurm cluster. After deploying, you must follow the steps listed out in the
 [hybrid.md] documentation under [manual steps].
 
-[hybrid.md]: https://github.com/GoogleCloudPlatform/slurm-gcp/blob/5.11.1/docs/hybrid.md
-[manual steps]: https://github.com/GoogleCloudPlatform/slurm-gcp/blob/5.11.1/docs/hybrid.md#manual-configurations
+[hybrid.md]: https://github.com/GoogleCloudPlatform/slurm-gcp/blob/5.12.0/docs/hybrid.md
+[manual steps]: https://github.com/GoogleCloudPlatform/slurm-gcp/blob/5.12.0/docs/hybrid.md#manual-configurations
 
 ### Example Usage
 The hybrid module can be added to a blueprint as follows:
@@ -146,10 +146,10 @@ strongly advise only using versions 21 or 22 when using this module. Attempting
 to use this module with any version older than 21 may lead to unexpected
 results.
 
-[slurm-gcp]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/5.11.1
+[slurm-gcp]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/5.12.0
 [pre-existing-network-storage]: ../../../../modules/file-system/pre-existing-network-storage/
 [schedmd-slurm-gcp-v5-partition]: ../../compute/schedmd-slurm-gcp-v5-partition/
-[packer templates]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/5.11.1/packer
+[packer templates]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/5.12.0/packer
 
 ## License
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
@@ -181,7 +181,7 @@ No providers.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_slurm_controller_instance"></a> [slurm\_controller\_instance](#module\_slurm\_controller\_instance) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_controller_hybrid | 5.11.1 |
+| <a name="module_slurm_controller_instance"></a> [slurm\_controller\_instance](#module\_slurm\_controller\_instance) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_controller_hybrid | 5.12.0 |
 
 ## Resources
 

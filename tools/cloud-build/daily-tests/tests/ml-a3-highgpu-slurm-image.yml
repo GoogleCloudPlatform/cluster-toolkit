@@ -27,4 +27,4 @@ cli_deployment_vars:
   region: us-east4
   zone: us-east4-a
   source_image_project_id: deeplearning-platform
-  source_image: dlvm-tcpd-cu120-20231203-1800-rc0-ubuntu-2004-py310
+  source_image: dlvm-tcpd-cu120-648491853-ubuntu-2004-py310

@@ -1,15 +1,15 @@
-## HPC Toolkit FrontEnd - Developer Guide
+## Cluster Toolkit FrontEnd - Developer Guide
 <!--
 0        1         2         3         4         5         6         7        8
 1234567890123456789012345678901234567890123456789012345678901234567890234567890
 -->
 ### Architecture design
 
-The HPC Toolkit FrontEnd is a web application integrating several front-end and
+The Cluster Toolkit FrontEnd is a web application integrating several front-end and
 back-end technologies. *Django*, a high-level Python-based web framework, forms
 the foundation of the web application. The back-end business logics can mostly
 be delegated to *Terraform* to create GCP cloud infrastructure required by the
-HPC clusters. With HPC Toolkit, there is no need to define infrastructure
+HPC clusters. With Cluster Toolkit, there is no need to define infrastructure
 configurations from scratch. Rather, a high-level description of the clusters
 are provided for it to generate Terraform configurations.
 
@@ -102,7 +102,7 @@ Here are some notes from a developer's perspective:
   machine and clusters.
 - Terraform provisions a compute engine virtual machine to be the service
   machine. A startup script is then executed on the service machine to set up
-  the software environment for HPC Toolkit and Django, and start the web and
+  the software environment for Cluster Toolkit and Django, and start the web and
   application servers.
 
 ### Access the service machine
@@ -125,8 +125,8 @@ the FrontEnd files.
 
 The home directory of the *gcluster* account is at `/opt/gcluster`. For a new deployment, the following four sub-directories are created:
 
-- `go` - the development environment of the Go programming language, required to build Google HPC Toolkit
-- `hpc-toolkit` - a clone of the Google HPC Toolkit project. The `ghpc` binary
+- `go` - the development environment of the Go programming language, required to build Google Cluster Toolkit
+- `cluster-toolkit` - a clone of the Google Cluster Toolkit project. The `ghpc` binary
    should have already been built during the deployment. The `frontend`
    sub-directory contains the Django-based web application for the FrontEnd and
    other supporting files.
@@ -241,7 +241,7 @@ including network components, storage components, compute instance
 
 #### Code Layout
 
-The top few layers of the directory hierarchy of the HPC Toolkit FrontEnd
+The top few layers of the directory hierarchy of the Cluster Toolkit FrontEnd
 define the major components:
 
 | dir                         | description |
@@ -265,12 +265,12 @@ define the major components:
 
 These directories hold all the support infrastructure files which are used to
 create, provision, and initialize the cloud resources which may be created via
-the HPC Toolkit FrontEnd.  The VPC Terraform and Workbench Terraform files may
-eventually migrate into HPC Toolkit YAML files.
+the Cluster Toolkit FrontEnd.  The VPC Terraform and Workbench Terraform files may
+eventually migrate into Cluster Toolkit YAML files.
 
 The files under `gcs_bucket` contain the more in-depth startup scripts and
 configuration information for the FrontEnd webserver as well as for new
-clusters.  During the initial deployment of the HPC Toolkit FrontEnd, this
+clusters.  During the initial deployment of the Cluster Toolkit FrontEnd, this
 directory is copied to a new Google Cloud Storage bucket which is then used for
 storing these startup codes as well as additional cluster information, such as
 log files.  When clusters are created in Google Cloud, the initial bootstrap
@@ -300,11 +300,11 @@ here as well, under
 | `.../website/`          | Django core website configuration (including `settings.py`) |
 | `.../manage.py`         | Core Django application management script |
 
-As with many Django-based web applications, the HPC Toolkit FrontEnd Django
+As with many Django-based web applications, the Cluster Toolkit FrontEnd Django
 application is broken across multiple directories, each responsible for some
 critical subcomponent of the overall application, implementing the MVT (model,
 view, template) architecture.  The `ghpcfe/` directory hosts the pieces
-specific to the HPC Toolkit FrontEnd, whereas the other directories are more
+specific to the Cluster Toolkit FrontEnd, whereas the other directories are more
 Django-focused.
 
 Under `ghpcfe/`, there are a variety of directories as show in the above
@@ -338,7 +338,7 @@ contents to them.
 
 The workbench process is fairly straight-forward. Gather configuration values
 from the FrontEnd and pass them to Terraform to control the creation of the
-workbench instance. This is done directly via Terraform as the HPC Toolkit does
+workbench instance. This is done directly via Terraform as the Cluster Toolkit does
 not currently support Vertex AI Workbenches.
 
 ### Infrastructure files

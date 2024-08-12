@@ -34,3 +34,4 @@ deployment_groups:
     use: [network]
     settings:
       machine_type: n2-standard-2
+      allow_automatic_updates: false

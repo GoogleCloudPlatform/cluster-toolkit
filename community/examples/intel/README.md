@@ -1,4 +1,4 @@
-# Intel Solutions for the HPC Toolkit
+# Intel Solutions for the Cluster Toolkit (formerly HPC Toolkit)
 
 > **_NOTE:_** The [hpc-slurm-daos.yaml](hpc-slurm-daos.yaml) will not be compatible
 > for newer version of slurm-gcp v6.
@@ -6,7 +6,7 @@
 <!-- TOC generated with: md_toc github community/examples/intel/README.md | sed -e "s/\s-\s/ * /"-->
 <!-- TOC -->
 
-- [Intel Solutions for the HPC Toolkit](#intel-solutions-for-the-hpc-toolkit)
+- [Intel Solutions for the Cluster Toolkit](#intel-solutions-for-the-cluster-toolkit)
   - [DAOS Cluster](#daos-cluster)
     - [Initial Setup for DAOS Cluster](#initial-setup-for-daos-cluster)
     - [Deploy the DAOS Cluster](#deploy-the-daos-cluster)

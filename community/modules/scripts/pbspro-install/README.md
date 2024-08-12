@@ -33,7 +33,7 @@ pbspro-preinstall module that uploads RPM packages to Cloud Storage.
 ## Support
 
 PBS Professional is licensed and supported by [Altair][pbspro]. This module is
-maintained and supported by the HPC Toolkit team in collaboration with Altair.
+maintained and supported by the Cluster Toolkit team in collaboration with Altair.
 
 [pbspro]: https://www.altair.com/pbs-professional
 

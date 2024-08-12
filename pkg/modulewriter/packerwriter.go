@@ -37,7 +37,7 @@ func printPackerInstructions(w io.Writer, groupPath string, subPath string, prin
 	fmt.Fprintln(w, "To deploy, run the following commands:")
 	fmt.Fprintln(w)
 	if printImportInputs {
-		fmt.Fprintf(w, "ghpc import-inputs %s\n", groupPath)
+		fmt.Fprintf(w, "gcluster import-inputs %s\n", groupPath)
 	}
 	fmt.Fprintf(w, "cd %s\n", filepath.Join(groupPath, subPath))
 	fmt.Fprintln(w, "packer init .")

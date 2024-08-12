@@ -64,7 +64,7 @@ locals {
   readme_contents = <<-EOT
   # Batch Job Templates
 
-  This folder contains Batch job templates created by the Cloud HPC Toolkit.
+  This folder contains Batch job templates created by the Cluster Toolkit.
   These templates can be edited before submitting to Batch to capture more
   complex workloads.
 
@@ -94,7 +94,7 @@ locals {
 }
 
 module "login_startup_script" {
-  source          = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=v1.35.0&depth=1"
+  source          = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=v1.36.0&depth=1"
   labels          = local.labels
   project_id      = var.project_id
   deployment_name = var.deployment_name

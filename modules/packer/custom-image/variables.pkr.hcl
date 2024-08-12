@@ -13,7 +13,7 @@
 # limitations under the License.
 
 variable "deployment_name" {
-  description = "HPC Toolkit deployment name"
+  description = "Cluster Toolkit deployment name"
   type        = string
 }
 
@@ -99,7 +99,7 @@ variable "source_image" {
 variable "source_image_family" {
   description = "Alternative to source_image. Specify image family to build from latest image in family"
   type        = string
-  default     = "hpc-centos-7"
+  default     = "hpc-rocky-linux-8"
 }
 
 variable "service_account_email" {

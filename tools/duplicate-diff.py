@@ -45,10 +45,10 @@ duplicates = [
         "community/modules/compute/schedmd-slurm-gcp-v6-nodeset-dynamic/gpu_definition.tf",
         "community/modules/scheduler/schedmd-slurm-gcp-v6-controller/gpu_definition.tf",
         "community/modules/scheduler/schedmd-slurm-gcp-v6-login/gpu_definition.tf",
-        "community/modules/compute/gke-node-pool/gpu_definition.tf",
+        "modules/compute/gke-node-pool/gpu_definition.tf",
     ],
     [
-        "community/modules/compute/gke-node-pool/threads_per_core_calc.tf",
+        "modules/compute/gke-node-pool/threads_per_core_calc.tf",
         "modules/compute/vm-instance/threads_per_core_calc.tf",
     ],
     [ # Slurm V5
@@ -85,6 +85,11 @@ duplicates = [
     [
         "modules/file-system/parallelstore/scripts/mount-daos.sh",
         "modules/file-system/pre-existing-network-storage/scripts/mount-daos.sh",
+    ],
+    [
+        "modules/compute/vm-instance/compute_image.tf"
+        "modules/scheduler/batch-job-template/compute_image.tf"
+        "community/modules/compute/htcondor-execute-point/compute_image.tf"
     ],
 ]
 

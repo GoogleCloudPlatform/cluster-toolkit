@@ -51,7 +51,7 @@ Each runner receives the following attributes:
 ### Runner dependencies
 
 `ansible-local` runners require Ansible to be installed in the VM before
-running. To support other playbook runners in the HPC Toolkit, we install
+running. To support other playbook runners in the Cluster Toolkit, we install
 version 2.11 of `ansible-core` as well as the larger package of collections
 found in `ansible` version 4.10.0.
 
@@ -253,7 +253,7 @@ limitations under the License.
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 0.14.0 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.3 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 3.83 |
 | <a name="requirement_local"></a> [local](#requirement\_local) | >= 2.0.0 |
 | <a name="requirement_random"></a> [random](#requirement\_random) | ~> 3.0 |
@@ -298,6 +298,7 @@ No modules.
 | <a name="input_install_docker"></a> [install\_docker](#input\_install\_docker) | Install Docker command line tool and daemon. | `bool` | `false` | no |
 | <a name="input_install_stackdriver_agent"></a> [install\_stackdriver\_agent](#input\_install\_stackdriver\_agent) | Run Google Stackdriver Agent installation script if set to true. Preferred over ops agent for performance. | `bool` | `false` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels for the created GCS bucket. Key-value pairs. | `map(string)` | n/a | yes |
+| <a name="input_local_ssd_filesystem"></a> [local\_ssd\_filesystem](#input\_local\_ssd\_filesystem) | Create and mount a filesystem from local SSD disks (data will be lost if VMs are powered down without enabling migration); enable by setting mountpoint field to a valid directory path. | <pre>object({<br>    fs_type     = optional(string, "ext4")<br>    mountpoint  = optional(string, "")<br>    permissions = optional(string, "0755")<br>  })</pre> | <pre>{<br>  "fs_type": "ext4",<br>  "mountpoint": "",<br>  "permissions": "0755"<br>}</pre> | no |
 | <a name="input_prepend_ansible_installer"></a> [prepend\_ansible\_installer](#input\_prepend\_ansible\_installer) | DEPRECATED. Use `install_ansible=false` to prevent ansible installation. | `bool` | `null` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | The region to deploy to | `string` | n/a | yes |

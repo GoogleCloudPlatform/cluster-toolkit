@@ -57,13 +57,17 @@ deployment_groups:
       # if you follow this rule, any module which supports DKMS will be
       # properly configured at the end of image building (gVNIC, NVIDIA, ...)
       - type: shell
-        destination: disable_unattended_upgrades.sh
+        destination: prevent_unintentional_upgrades.sh
         content: |
           #!/bin/bash
           set -e -o pipefail
           systemctl stop unattended-upgrades.service
           systemctl disable unattended-upgrades.service
           systemctl mask unattended-upgrades.service
+          apt-mark hold google-compute-engine
+          apt-mark hold google-compute-engine-oslogin
+          apt-mark hold google-guest-agent
+          apt-mark hold google-osconfig-agent
       - type: ansible-local
         destination: install_headers_archive.yml
         content: |
@@ -104,7 +108,7 @@ deployment_groups:
           apt-get install -y git
           ansible-galaxy role install googlecloudplatform.google_cloud_ops_agents
           ansible-pull \
-              -U https://github.com/GoogleCloudPlatform/slurm-gcp -C 6.5.9 \
+              -U https://github.com/GoogleCloudPlatform/slurm-gcp -C 6.6.1 \
               -i localhost, --limit localhost --connection=local \
               -e @/var/tmp/slurm_vars.json \
               ansible/playbook.yml
@@ -224,78 +228,6 @@ deployment_groups:
               ansible.builtin.apt:
                 name: dmabuf-import-helper
                 state: present
-      - type: ansible-local
-        destination: mount-local-ssd-service.yml
-        content: |
-          ---
-          - name: Enable mount-local-ssd.service
-            hosts: all
-            become: true
-            tasks:
-            - name: Install mdadm
-              ansible.builtin.package:
-                name: mdadm
-                state: present
-            - name: Install local SSD formatting script
-              ansible.builtin.copy:
-                dest: /usr/local/ghpc/mount_localssd.sh
-                owner: root
-                group: root
-                mode: 0o755
-                content: |
-                  #!/bin/bash
-                  set -e -o pipefail
-
-                  RAID_DEVICE=/dev/md0
-                  DST_MNT=/mnt/localssd
-                  DISK_LABEL=LOCALSSD
-                  OPTIONS=discard,defaults
-
-                  # if mount is successful, do nothing
-                  if mount --source LABEL="$DISK_LABEL" --target="$DST_MNT" -o "$OPTIONS"; then
-                          exit 0
-                  fi
-
-                  # Create new RAID, format ext4 and mount
-                  # TODO: handle case of zero or 1 local SSD disk
-                  # TODO: handle case when /dev/md0 exists but was not mountable for
-                  # some reason
-                  DEVICES=`nvme list | grep nvme_ | grep -v nvme_card-pd | awk '{print $1}' | paste -sd ' '`
-                  NB_DEVICES=`nvme list | grep nvme_ | grep -v nvme_card-pd | awk '{print $1}' | wc -l`
-                  mdadm --create "$RAID_DEVICE" --level=0 --raid-devices=$NB_DEVICES $DEVICES
-                  mkfs.ext4 -F "$RAID_DEVICE"
-                  tune2fs "$RAID_DEVICE" -r 131072
-                  e2label "$RAID_DEVICE" "$DISK_LABEL"
-                  mkdir -p "$DST_MNT"
-                  mount --source LABEL="$DISK_LABEL" --target="$DST_MNT" -o "$OPTIONS"
-                  chmod 1777 "$DST_MNT"
-            - name: Configure mount-local-ssd.service
-              ansible.builtin.copy:
-                dest: /etc/systemd/system/mount-local-ssd.service
-                owner: root
-                group: root
-                mode: 0o644
-                content: |
-                  [Unit]
-                  Description=Assemble local SSDs as software RAID; then format and mount
-
-                  [Service]
-                  ExecCondition=bash -c '/usr/bin/curl -s -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/machine-type | grep -q "/a3-megagpu-8g$"'
-                  ExecStart=/bin/bash /usr/local/ghpc/mount_localssd.sh
-
-                  [Install]
-                  WantedBy=local-fs.target
-              notify: Reload SystemD
-            handlers:
-            - name: Reload SystemD
-              ansible.builtin.systemd:
-                daemon_reload: true
-            post_tasks:
-            - name: Start Local SSD service
-              ansible.builtin.service:
-                name: mount-local-ssd.service
-                state: started
-                enabled: true
       - type: ansible-local
         destination: timesyncd.yml
         content: |

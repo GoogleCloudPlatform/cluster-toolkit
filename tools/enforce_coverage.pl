@@ -24,7 +24,7 @@ while (<>){
     cmd 40
     pkg/shell 0
     pkg/logging 0
-    pkg/validators 13
+    pkg/validators 10
     pkg/inspect 60
     pkg/modulewriter 79
     pkg 80

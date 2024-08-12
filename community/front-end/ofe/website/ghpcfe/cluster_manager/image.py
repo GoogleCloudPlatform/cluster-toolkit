@@ -50,19 +50,19 @@ class ImageBackend:
         Prepare the image creation process by following these steps:
 
         1. Create the necessary directory structure for the image.
-        2. Generate a HPC Toolkit blueprint to build the image.
-        3. Run the HPC Toolkit (`ghpc`) to create the image based on the blueprint.
+        2. Generate a Cluster Toolkit blueprint to build the image.
+        3. Run the Cluster Toolkit (`ghpc`) to create the image based on the blueprint.
         4. Set up the builder environment on Google Cloud Platform (GCP) using Terraform.
         5. Create the image on GCP using Packer.
         6. Destroy the builder environment after the image creation is complete.
 
         This method handles the entire image creation process, from setting up the necessary
-        directories and configuration files to executing HPC Toolkit and Packer to build
+        directories and configuration files to executing Cluster Toolkit and Packer to build
         and finalize the image. If any step encounters an error, it logs the issue and marks
         the image's status as "error" (status code 'e').
 
         Note:
-        - This method assumes that the necessary tools (HPC Toolkit, Terraform, and Packer)
+        - This method assumes that the necessary tools (Cluster Toolkit, Terraform, and Packer)
           are properly installed and configured on the system.
         - The credentials file required for GCP authentication is created during the image
           directory setup.
@@ -103,7 +103,7 @@ class ImageBackend:
   
     def _create_blueprint(self):
         """
-        Create HPC Toolkit blueprint that will build the image.
+        Create Cluster Toolkit blueprint that will build the image.
         """
         try:
             blueprint_file = self.image_dir / "image.yaml"

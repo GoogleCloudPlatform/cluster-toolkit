@@ -17,11 +17,20 @@ set -e -o pipefail
 
 project="$1"
 cluster_name="$2"
+universe_domain="$3"
+compute_endpoint_version="$4"
+gcloud_dir="$5"
 
-if [[ -z "${project}" || -z "${cluster_name}" ]]; then
-	echo "Usage: $0 <project> <cluster_name>"
+if [[ -z "${project}" || -z "${cluster_name}" || -z "${universe_domain}" || -z "${compute_endpoint_version}" ]]; then
+	echo "Usage: $0 <project> <cluster_name> <universe_domain> <compute_endpoint_version> <gcloud_dir>"
 	exit 1
 fi
+
+if [[ -n "${gcloud_dir}" ]]; then
+	export PATH="$gcloud_dir:$PATH"
+fi
+
+export CLOUDSDK_API_ENDPOINT_OVERRIDES_COMPUTE="https://www.${universe_domain}/compute/${compute_endpoint_version}/"
 
 if ! type -P gcloud 1>/dev/null; then
 	echo "gcloud is not available and your compute resources are not being cleaned up"
@@ -43,14 +52,10 @@ while true; do
 done
 
 echo "Deleting resource policies"
-policies_filter="name:${cluster_name}-*"
-while true; do
-	policies=$(gcloud compute resource-policies list --project "${project}" --format="value(selfLink)" --filter="${policies_filter}" --limit=10 | paste -sd " " -)
-	if [[ -z "${policies}" ]]; then
-		break
-	fi
-	# The lack of quotes is intentional and causes each new space-separated "word" to
-	# be treated as independent arguments. See PR#2523
-	# shellcheck disable=SC2086
-	gcloud compute resource-policies delete --quiet ${policies}
+policies_filter="name:${cluster_name}-slurmgcp-managed-*"
+gcloud compute resource-policies list --project "${project}" --format="value(selfLink)" --filter="${policies_filter}" | while read -r line; do
+	echo "Deleting resource policy: $line"
+	gcloud compute resource-policies delete --quiet "${line}" || {
+		echo "Failed to delete resource policy: $line"
+	}
 done

@@ -6,7 +6,7 @@ This module creates a DDN EXAScaler Cloud Lustre file system using
 More information about the architecture can be found at
 [Architecture: Lustre file system in Google Cloud using DDN EXAScaler][architecture].
 
-For more information on this and other network storage options in the Cloud HPC
+For more information on this and other network storage options in the Cluster
 Toolkit, see the extended [Network Storage documentation](../../../../docs/network_storage.md).
 
 > **Warning**: This file system has a license cost as described in the pricing
@@ -30,7 +30,7 @@ To mount the DDN EXAScaler Lustre file system you must first install the DDN
 Lustre client and then call the proper `mount` command.
 
 Both of these steps are automatically handled with the use of the `use` command
-in a selection of HPC Toolkit modules. See the [compatibility matrix][matrix] in
+in a selection of Cluster Toolkit modules. See the [compatibility matrix][matrix] in
 the network storage doc for a complete list of supported modules.
 the [hpc-enterprise-slurm.yaml](../../../../examples/hpc-enterprise-slurm.yaml) for an
 example of using this module with Slurm.

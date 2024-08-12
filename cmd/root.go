@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package cmd defines command line utilities for ghpc
+// Package cmd defines command line utilities for gcluster
 package cmd
 
 import (
@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
+	"hpc-toolkit/pkg/shell"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -43,7 +44,7 @@ var (
 var (
 	annotation = make(map[string]string)
 	rootCmd    = &cobra.Command{
-		Use:   "ghpc",
+		Use:   "gcluster",
 		Short: "A blueprint and deployment engine for HPC clusters in GCP.",
 		Long: `gHPC provides a flexible and simple to use interface to accelerate
 HPC deployments on the Google Cloud Platform.`,
@@ -52,7 +53,7 @@ HPC deployments on the Google Cloud Platform.`,
 				logging.Fatal("cmd.Help function failed: %s", err)
 			}
 		},
-		Version:     "v1.35.1",
+		Version:     "v1.37.2",
 		Annotations: annotation,
 	}
 )
@@ -68,7 +69,7 @@ func init() {
 func Execute() error {
 	mismatch, branch, hash, dir := checkGitHashMismatch()
 	if mismatch {
-		logging.Error("WARNING: ghpc binary was built from a different commit (%s/%s) than the current git branch in %s (%s/%s). You can rebuild the binary by running 'make'",
+		logging.Error("WARNING: gcluster binary was built from a different commit (%s/%s) than the current git branch in %s (%s/%s). You can rebuild the binary by running 'make'",
 			GitBranch, GitCommitHash[0:7], dir, branch, hash[0:7])
 	}
 
@@ -79,20 +80,28 @@ func Execute() error {
 		if len(GitBranch) == 0 {
 			GitBranch = "detached HEAD"
 		}
+
 		annotation["version"] = GitTagVersion
 		annotation["branch"] = GitBranch
 		annotation["commitInfo"] = GitCommitInfo
-		rootCmd.SetVersionTemplate(`ghpc version {{index .Annotations "version"}}
+		tmpl := `gcluster version {{index .Annotations "version"}}
 Built from '{{index .Annotations "branch"}}' branch.
 Commit info: {{index .Annotations "commitInfo"}}
-`)
+`
+		tfVersion, _ := shell.TfVersion()
+		if tfVersion != "" {
+			annotation["tfVersion"] = tfVersion
+			tmpl += `Terraform version: {{index .Annotations "tfVersion"}}
+`
+		}
+		rootCmd.SetVersionTemplate(tmpl)
 	}
 
 	return rootCmd.Execute()
 }
 
 // checkGitHashMismatch will compare the hash of the git repository vs the git
-// hash the ghpc binary was compiled against, if the git repository if found and
+// hash the gcluster binary was compiled against, if the git repository if found and
 // a mismatch is identified, then the function returns a positive bool along with
 // the branch details, and false for all other cases.
 func checkGitHashMismatch() (mismatch bool, branch, hash, dir string) {
@@ -125,7 +134,7 @@ func checkGitHashMismatch() (mismatch bool, branch, hash, dir string) {
 
 // hpcToolkitRepo will find the path of the directory containing the hpc-toolkit
 // starting with the working directory and evaluating the parent directories until
-// the toolkit repository is found. If the HPC Toolkit repository is not found by
+// the toolkit repository is found. If the Cluster Toolkit repository is not found by
 // traversing the path, then the executable directory is checked.
 func hpcToolkitRepo() (repo *git.Repository, dir string, err error) {
 	// first look in the working directory and it's parents until a git repo is
@@ -170,11 +179,11 @@ func hpcToolkitRepo() (repo *git.Repository, dir string, err error) {
 	if isHpcToolkitRepo(*repo) {
 		return repo, dir, nil
 	}
-	return nil, "", errors.New("ghpc executable found in a git repo other than the hpc-toolkit git repo")
+	return nil, "", errors.New("gcluster executable found in a git repo other than the hpc-toolkit git repo")
 }
 
 // isHpcToolkitRepo will verify that the found git repository has a commit with
-// the known hash of the initial commit of the HPC Toolkit repository
+// the known hash of the initial commit of the Cluster Toolkit repository
 func isHpcToolkitRepo(r git.Repository) bool {
 	h := plumbing.NewHash(GitInitialHash)
 	_, err := r.CommitObject(h)
@@ -183,16 +192,16 @@ func isHpcToolkitRepo(r git.Repository) bool {
 
 // Best effort to find the path of the executable
 // Possible return values:
-// * "ghpc" if the executable is in the PATH
+// * "gcluster" if the executable is in the PATH
 // AND resolved path matches Args[0];
 // * Args[0].
-// If error occurs returns "ghpc"
+// If error occurs returns "gcluster"
 func execPath() string {
-	const nice string = "ghpc"
+	const nice string = "gcluster"
 	args0 := os.Args[0]
 	if args0 == nice { // trivial case
 		// but it's important to terminate here to prevent
-		// "simplification" of `ghpc` to `./ghpc`
+		// "simplification" of `gcluster` to `./gcluster`
 		return nice
 	}
 	// Code below assumes that `args0` contains path to file, not a
@@ -226,7 +235,7 @@ func execPath() string {
 		}
 	}
 
-	found, err := exec.LookPath("ghpc")
+	found, err := exec.LookPath("gcluster")
 	if err != nil { // not found in PATH
 		return args0
 	}

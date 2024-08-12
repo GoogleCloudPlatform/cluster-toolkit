@@ -1,4 +1,4 @@
-# Relevant extensions list for HPC Toolkit for code-oss on cloud workstations
+# Relevant extensions list for Cluster Toolkit for code-oss on cloud workstations
 
 golang.go
 hashicorp.terraform

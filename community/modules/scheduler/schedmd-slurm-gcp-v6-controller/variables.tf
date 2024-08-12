@@ -181,6 +181,7 @@ variable "login_nodes" {
 ############
 variable "nodeset" {
   description = "Define nodesets, as a list."
+  # TODO: remove optional & defaults from fields, since they SHOULD be properly set by nodeset module and not here.
   type = list(object({
     node_count_static      = optional(number, 0)
     node_count_dynamic_max = optional(number, 1)
@@ -210,12 +211,13 @@ variable "nodeset" {
       count = number
       type  = string
     }))
-    labels               = optional(map(string), {})
-    machine_type         = optional(string)
-    maintenance_interval = optional(string)
-    metadata             = optional(map(string), {})
-    min_cpu_platform     = optional(string)
-    network_tier         = optional(string, "STANDARD")
+    labels                   = optional(map(string), {})
+    machine_type             = optional(string)
+    maintenance_interval     = optional(string)
+    instance_properties_json = string
+    metadata                 = optional(map(string), {})
+    min_cpu_platform         = optional(string)
+    network_tier             = optional(string, "STANDARD")
     network_storage = optional(list(object({
       server_ip             = string
       remote_mount          = string
@@ -268,12 +270,14 @@ variable "nodeset" {
     spot               = optional(bool, false)
     tags               = optional(list(string), [])
     termination_action = optional(string)
-    zones              = optional(list(string), [])
-    zone_target_shape  = optional(string, "ANY_SINGLE_ZONE")
     reservation_name   = optional(string)
     startup_script = optional(list(object({
       filename = string
     content = string })), [])
+
+    zone_target_shape = string
+    zone_policy_allow = set(string)
+    zone_policy_deny  = set(string)
   }))
   default = []
 }
@@ -360,12 +364,6 @@ EOD
 # SLURM #
 #########
 
-variable "enable_devel" {
-  type        = bool
-  description = "Enables development mode."
-  default     = true
-}
-
 variable "enable_debug_logging" {
   type        = bool
   description = "Enables debug logging mode."
@@ -374,7 +372,7 @@ variable "enable_debug_logging" {
 
 variable "extra_logging_flags" {
   type        = map(bool)
-  description = "The list of extra flags for the logging system to use. See the logging_flags variable in scripts/util.py to get the list of supported log flags."
+  description = "The only available flag is `trace_api`"
   default     = {}
 }
 
@@ -409,7 +407,7 @@ variable "cloud_parameters" {
     suspend_rate    = optional(number)
     suspend_timeout = optional(number)
     topology_plugin = optional(string)
-    tree_width      = optional(number, 128)
+    tree_width      = optional(number)
   })
   default = {}
 }
@@ -427,16 +425,6 @@ variable "enable_default_mounts" {
     EOD
   type        = bool
   default     = true
-}
-
-variable "disable_default_mounts" { # tflint-ignore: terraform_unused_declarations
-  description = "DEPRECATED: Use `enable_default_mounts` instead."
-  type        = bool
-  default     = null
-  validation {
-    condition     = var.disable_default_mounts == null
-    error_message = "DEPRECATED: Use `enable_default_mounts` instead."
-  }
 }
 
 variable "network_storage" {
@@ -600,12 +588,17 @@ Use this database instead of the one on the controller.
   user      : The user to access the database as.
   password  : The password, given the user, to access the given database. (sensitive)
   db_name   : The database to access.
+  user_managed_replication : The list of location and (optional) kms_key_name for secret
 EOD
   type = object({
     server_ip = string
     user      = string
     password  = string # sensitive
     db_name   = string
+    user_managed_replication = optional(list(object({
+      location     = string
+      kms_key_name = optional(string)
+    })), [])
   })
   default   = null
   sensitive = true
@@ -635,4 +628,33 @@ variable "endpoint_versions" {
     compute = "beta"
   }
   nullable = false
+}
+
+variable "gcloud_path_override" {
+  description = "Directory of the gcloud executable to be used during cleanup"
+  type        = string
+  default     = ""
+  nullable    = false
+}
+
+# DEPRECATED VARIABLES
+
+variable "enable_devel" { # tflint-ignore: terraform_unused_declarations
+  description = "DEPRECATED: `enable_devel` is always on."
+  type        = bool
+  default     = null
+  validation {
+    condition     = var.enable_devel == null
+    error_message = "DEPRECATED: It is always on, remove `enable_devel` variable."
+  }
+}
+
+variable "disable_default_mounts" { # tflint-ignore: terraform_unused_declarations
+  description = "DEPRECATED: Use `enable_default_mounts` instead."
+  type        = bool
+  default     = null
+  validation {
+    condition     = var.disable_default_mounts == null
+    error_message = "DEPRECATED: Use `enable_default_mounts` instead."
+  }
 }

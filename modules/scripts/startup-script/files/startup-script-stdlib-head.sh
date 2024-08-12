@@ -31,11 +31,11 @@ readonly E_MISSING_MANDATORY_ARG=9
 readonly E_UNKNOWN_ARG=10
 
 SCRIPT_COMPLETE_FILE="/run/startup_script_msg"
-SUCCESS_MESSAGE="* NOTICE **: The HPC Toolkit startup scripts have finished running successfully."
+SUCCESS_MESSAGE="* NOTICE **: The Cluster Toolkit startup scripts have finished running successfully."
 readonly SUCCESS_MESSAGE
-ERROR_MESSAGE="** ERROR **: The HPC Toolkit startup scripts have finished running, but produced an error."
+ERROR_MESSAGE="** ERROR **: The Cluster Toolkit startup scripts have finished running, but produced an error."
 readonly ERROR_MESSAGE
-WARNING_MESSAGE="** WARNING **: The HPC Toolkit startup scripts are currently running."
+WARNING_MESSAGE="** WARNING **: The Cluster Toolkit startup scripts are currently running."
 readonly WARNING_MESSAGE
 
 stdlib::debug() {

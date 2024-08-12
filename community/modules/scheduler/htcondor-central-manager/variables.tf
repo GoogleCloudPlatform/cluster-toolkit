@@ -20,7 +20,7 @@ variable "project_id" {
 }
 
 variable "deployment_name" {
-  description = "HPC Toolkit deployment name. HTCondor cloud resource names will include this value."
+  description = "Cluster Toolkit deployment name. HTCondor cloud resource names will include this value."
   type        = string
 }
 
@@ -130,6 +130,17 @@ variable "instance_image" {
     condition     = can(coalesce(var.instance_image.name)) != can(coalesce(var.instance_image.family))
     error_message = "In var.instance_image, exactly one of \"family\" or \"name\" fields must be set to desired image family or name."
   }
+}
+
+variable "allow_automatic_updates" {
+  description = <<-EOT
+  If false, disables automatic system package updates on the created instances.  This feature is
+  only available on supported images (or images derived from them).  For more details, see
+  https://cloud.google.com/compute/docs/instances/create-hpc-vm#disable_automatic_updates
+  EOT
+  type        = bool
+  default     = true
+  nullable    = false
 }
 
 variable "machine_type" {

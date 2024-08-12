@@ -2,7 +2,7 @@
 
 These instructions step you through the deployment, installation and
 verification of a hybrid slurm cluster using the
-[schedmd-slurm-gcp-v5-controller] HPC Toolkit module.
+[schedmd-slurm-gcp-v5-controller] Cluster Toolkit module.
 
 They assume that your on-premise or simulated on-premise slurm
 cluster has already been set up to allow hybrid partitions from the hybrid
@@ -24,7 +24,7 @@ GCP.
 
 [schedmd-slurm-gcp-v5-controller]: ../../community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid/README.md
 
-## Use the Cloud HPC Toolkit to Create the Hybrid Deployment Directory
+## Use the Cluster Toolkit to Create the Hybrid Deployment Directory
 The blueprint for creating a deploying the hybrid configuration can be found in
 the blueprints directory as [hybrid-configuration.yaml]. This blueprint defines
 two deployment groups, one to create the network if not already created named
@@ -264,8 +264,8 @@ sudo systemctl restart slurmctld
 If the restart did not succeed, the logs at `/var/log/slurm/slurmctld.log`
 should point you in the right direction.
 
-[slurm-gcp]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/5.11.1
-[slurm-gcp-hybrid]: https://github.com/GoogleCloudPlatform/slurm-gcp/blob/5.11.1/docs/hybrid.md
+[slurm-gcp]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/5.12.0
+[slurm-gcp-hybrid]: https://github.com/GoogleCloudPlatform/slurm-gcp/blob/5.12.0/docs/hybrid.md
 [demo-with-cloud-controller-instructions.md]: ./demo-with-cloud-controller-instructions.md
 
 ## Validate the Hybrid Cluster

@@ -1,4 +1,4 @@
-# Deploying with Accelerators in the Cloud HPC Toolkit
+# Deploying with Accelerators in the Cluster Toolkit
 
 ## Supported modules
 
@@ -63,16 +63,16 @@ cannot be determined automatically like with `a2`.
 
 When deploying a Slurm cluster with GPUs, we highly recommend using the
 modules based on Slurm on GCP version 5 (`schedmd-slurm-gcp-v5-*`). The
-interface is more consistent with HPC Toolkit standards and more functionality
+interface is more consistent with Cluster Toolkit standards and more functionality
 is available to support, debug and workaround any issues related to GPU
 resources.
 
 #### Interface Considerations
 
-The Slurm on GCP v5 HPC Toolkit modules (`schedmd-slurm-gcp-v5-*`) have two
+The Slurm on GCP v5 Cluster Toolkit modules (`schedmd-slurm-gcp-v5-*`) have two
 variables that can be used to define attached GPUs. The variable
 `guest_accelerators` is the recommended option as it is consistent with other
-modules in the HPC Toolkit. The setting `gpus` can be set as well, which
+modules in the Cluster Toolkit. The setting `gpus` can be set as well, which
 provides consistency with the underlying terraform modules from the
 [Slurm on GCP repo][slurm-gcp].
 

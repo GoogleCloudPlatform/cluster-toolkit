@@ -14,7 +14,7 @@
 
 ---
 
-# WARNING: this example has been deprecated as of v1.28.0 of the HPC Toolkit
+# WARNING: this example has been deprecated as of v1.28.0 of the Cluster Toolkit
 
 blueprint_name: omnia-cluster
 
@@ -89,6 +89,7 @@ deployment_groups:
       name_prefix: omnia-compute
       add_deployment_name_before_prefix: true
       instance_count: 2
+      allow_automatic_updates: false
 
   # This module simply makes terraform wait until the startup script is complete
   - id: wait

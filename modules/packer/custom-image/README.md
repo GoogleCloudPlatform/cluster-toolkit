@@ -1,4 +1,4 @@
-# Custom Images in the HPC Toolkit
+# Custom Images in the Cluster Toolkit (formerly HPC Toolkit)
 
 Please review the
 [introduction to image building](../../../docs/image-building.md) for general
@@ -7,7 +7,7 @@ information on building custom images using the Toolkit.
 ## Introduction
 
 This module uses [Packer](https://www.packer.io/) to create an image within an
-HPC Toolkit deployment. Packer operates by provisioning a short-lived VM in
+Cluster Toolkit deployment. Packer operates by provisioning a short-lived VM in
 Google Cloud on which it executes scripts to customize the boot disk for
 repeated use. The VM's boot disk is specified from a source image that defaults
 to the [HPC VM Image][hpcimage]. This Packer "template" supports customization
@@ -40,7 +40,7 @@ This can be achieved by one of the following 2 approaches:
 
 1. Configuring a VPC with a Cloud NAT in the region of the VM
 
-- Use the \[vpc\] module which automates NAT creation
+- Use the [vpc] module which automates NAT creation
 
 ### Inbound internet access
 
@@ -143,10 +143,9 @@ environment. SSH access can be enabled one of 2 ways:
    - Add firewall rules that open SSH to the VM
 
 The Packer template defaults to using to the 1st IAP-based solution because it
-is more secure (no exposure to public internet) and because the
-[Toolkit VPC module](../../network/vpc/README.md) automatically sets up all
-necessary firewall rules for SSH tunneling and outbound-only access to the
-internet through [Cloud NAT][cloudnat].
+is more secure (no exposure to public internet) and because the [vpc] module
+automatically sets up all necessary firewall rules for SSH tunneling and
+outbound-only access to the internet through [Cloud NAT][cloudnat].
 
 In either SSH solution, customization scripts should be supplied as files in the
 [shell_scripts][shell] and [ansible_playbooks][ansible] settings.
@@ -272,7 +271,7 @@ No resources.
 | <a name="input_accelerator_type"></a> [accelerator\_type](#input\_accelerator\_type) | Type of accelerator cards to attach to the VM; not necessary for families that always include GPUs (A2). | `string` | `null` | no |
 | <a name="input_ansible_playbooks"></a> [ansible\_playbooks](#input\_ansible\_playbooks) | A list of Ansible playbook configurations that will be uploaded to customize the VM image | <pre>list(object({<br>    playbook_file   = string<br>    galaxy_file     = string<br>    extra_arguments = list(string)<br>  }))</pre> | `[]` | no |
 | <a name="input_communicator"></a> [communicator](#input\_communicator) | Communicator to use for provisioners that require access to VM ("ssh" or "winrm") | `string` | `null` | no |
-| <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | HPC Toolkit deployment name | `string` | n/a | yes |
+| <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Cluster Toolkit deployment name | `string` | n/a | yes |
 | <a name="input_disk_size"></a> [disk\_size](#input\_disk\_size) | Size of disk image in GB | `number` | `null` | no |
 | <a name="input_disk_type"></a> [disk\_type](#input\_disk\_type) | Type of persistent disk to provision | `string` | `"pd-balanced"` | no |
 | <a name="input_enable_shielded_vm"></a> [enable\_shielded\_vm](#input\_enable\_shielded\_vm) | Enable the Shielded VM configuration (var.shielded\_instance\_config). | `bool` | `false` | no |
@@ -293,7 +292,7 @@ No resources.
 | <a name="input_shell_scripts"></a> [shell\_scripts](#input\_shell\_scripts) | A list of paths to local shell scripts which will be uploaded to customize the VM image | `list(string)` | `[]` | no |
 | <a name="input_shielded_instance_config"></a> [shielded\_instance\_config](#input\_shielded\_instance\_config) | Shielded VM configuration for the instance (must set var.enabled\_shielded\_vm) | <pre>object({<br>    enable_secure_boot          = bool<br>    enable_vtpm                 = bool<br>    enable_integrity_monitoring = bool<br>  })</pre> | <pre>{<br>  "enable_integrity_monitoring": true,<br>  "enable_secure_boot": true,<br>  "enable_vtpm": true<br>}</pre> | no |
 | <a name="input_source_image"></a> [source\_image](#input\_source\_image) | Source OS image to build from | `string` | `null` | no |
-| <a name="input_source_image_family"></a> [source\_image\_family](#input\_source\_image\_family) | Alternative to source\_image. Specify image family to build from latest image in family | `string` | `"hpc-centos-7"` | no |
+| <a name="input_source_image_family"></a> [source\_image\_family](#input\_source\_image\_family) | Alternative to source\_image. Specify image family to build from latest image in family | `string` | `"hpc-rocky-linux-8"` | no |
 | <a name="input_source_image_project_id"></a> [source\_image\_project\_id](#input\_source\_image\_project\_id) | A list of project IDs to search for the source image. Packer will search the<br>first project ID in the list first, and fall back to the next in the list,<br>until it finds the source image. | `list(string)` | `null` | no |
 | <a name="input_ssh_username"></a> [ssh\_username](#input\_ssh\_username) | Username to use for SSH access to VM | `string` | `"hpc-toolkit-packer"` | no |
 | <a name="input_startup_script"></a> [startup\_script](#input\_startup\_script) | Startup script (as raw string) used to build the custom Linux VM image (overridden by var.startup\_script\_file if both are set) | `string` | `null` | no |
@@ -327,3 +326,4 @@ No outputs.
 [sss]: #input_startup_script
 [startup-metadata]: https://cloud.google.com/compute/docs/instances/startup-scripts/linux
 [startup-script]: ../../../modules/scripts/startup-script
+[vpc]: ../../network/vpc/README.md

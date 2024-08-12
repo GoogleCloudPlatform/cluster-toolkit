@@ -32,6 +32,8 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [serverless-batch.yaml](#serverless-batchyaml-) ![core-badge]
   * [serverless-batch-mpi.yaml](#serverless-batch-mpiyaml-) ![core-badge]
   * [pfs-lustre.yaml](#pfs-lustreyaml-) ![core-badge]
+  * [ps-slurm.yaml](#ps-slurmyaml--) ![core-badge] ![experimental-badge]
+  * [pfs-parallelstore.yaml](#pfs-parallelstoreyaml--) ![core-badge] ![experimental-badge]
   * [cae-slurm-v5-legacy.yaml](#cae-slurm-v5-legacyyaml-) ![core-badge]
   * [cae-slurm.yaml](#cae-slurmyaml-) ![core-badge]
   * [hpc-build-slurm-image.yaml](#hpc-build-slurm-imageyaml--) ![community-badge] ![experimental-badge]
@@ -79,7 +81,7 @@ under `vars` before using an example blueprint.
 
 ### (Optional) Setting up a remote terraform state
 
-There are two ways to specify [terraform backends] in HPC Toolkit: a default setting that propagates all groups and custom per-group configuration:
+There are two ways to specify [terraform backends] in Cluster Toolkit: a default setting that propagates all groups and custom per-group configuration:
 
 * `terraform_backend_defaults` at top-level of YAML blueprint
 * `terraform_backend` within a deployment group definition
@@ -142,10 +144,10 @@ subcommands as well:
 [Slurm-GCP](https://github.com/GoogleCloudPlatform/slurm-gcp) is the set of
 scripts and tools that automate the installation, deployment, and certain
 operational aspects of [Slurm](https://slurm.schedmd.com/overview.html) on
-Google Cloud Platform. It is recommended to use Slurm-GCP through the HPC
-toolkit where it is exposed as various modules.
+Google Cloud Platform. It is recommended to use Slurm-GCP through the Cluster
+Toolkit where it is exposed as various modules.
 
-The HPC Toolkit team has finished transitioning from Slurm-GCP v5 to Slurm-GCP v6 and
+The Cluster Toolkit team has finished transitioning from Slurm-GCP v5 to Slurm-GCP v6 and
 now Slurm-GCP v6 is the recommended option. Following this, blueprint naming would be
 as follows:
 
@@ -155,7 +157,7 @@ as follows:
 > [!IMPORTANT]
 > Three months after Slurm-gcp V6 becomes the recommended version, Slurm v5
 > modules will be marked as deprecated and will be maintained in our repo for
-> another three months, at which point the modules will be removed from the HPC
+> another three months, at which point the modules will be removed from the Cluster
 > Toolkit repo and regression tests will no longer run for V5. Those who choose
 > to not upgrade to V6 will still be able to use V5 modules by referencing
 > specific git tags in the module source lines.
@@ -197,9 +199,9 @@ _For a full accounting of changes, see the changelog._
 
 The example blueprints listed below labeled with the core badge
 (![core-badge]) are located in this folder and are developed and tested by the
-HPC Toolkit team directly.
+Cluster Toolkit team directly.
 
-The community blueprints are contributed by the community (including the HPC
+The community blueprints are contributed by the community (including the Cluster
 Toolkit team, partners, etc.) and are labeled with the community badge
 (![community-badge]). The community blueprints are located in the
 [community folder](../community/examples/).
@@ -215,7 +217,7 @@ the experimental badge (![experimental-badge]).
 >
 > ```shell
 > # Install Python3 and run
-> pip3 install -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/5.11.1/scripts/requirements.txt
+> pip3 install -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/5.12.0/scripts/requirements.txt
 > ```
 
 Creates a basic auto-scaling Slurm cluster with mostly default settings. The
@@ -513,16 +515,16 @@ Before deploying this example the following fields must be populated in the blue
 
 For more resources on static compute nodes see the following cloud docs pages:
 
-* [About [Slurm] node types](https://cloud.google.com/hpc-toolkit/docs/slurm/node-types)
+* [About [Slurm] node types](https://cloud.google.com/cluster-toolkit/docs/slurm/node-types)
 * [Best practices for static compute nodes]
-* [Reconfigure a running cluster](http://cloud/hpc-toolkit/docs/slurm/reconfigure-cluster)
-* [Manage static compute nodes](http://cloud/hpc-toolkit/docs/slurm/manage-static-nodes)
+* [Reconfigure a running cluster](http://cloud/cluster-toolkit/docs/slurm/reconfigure-cluster)
+* [Manage static compute nodes](http://cloud/cluster-toolkit/docs/slurm/manage-static-nodes)
 
 For a similar, more advanced, example which demonstrates static node
 functionality with GPUs, see the
 [ML Slurm A3 example](./machine-learning/README.md).
 
-[Best practices for static compute nodes]: http://cloud/hpc-toolkit/docs/slurm/static-nodes-best-practices
+[Best practices for static compute nodes]: http://cloud/cluster-toolkit/docs/slurm/static-nodes-best-practices
 [hpc-slurm-static.yaml]: ./hpc-slurm-static.yaml
 
 ### [hpc-slurm6-tpu.yaml] ![community-badge] ![experimental-badge]
@@ -898,7 +900,7 @@ For this example the following is needed in the selected region:
 
 ### [serverless-batch.yaml] ![core-badge]
 
-This example demonstrates how to use the HPC Toolkit to set up a Google Cloud Batch job
+This example demonstrates how to use the Cluster Toolkit to set up a Google Cloud Batch job
 that mounts a Filestore instance and runs startup scripts.
 
 The blueprint creates a Filestore and uses the `startup-script` module to mount
@@ -994,6 +996,67 @@ For this example the following is needed in the selected region:
 
 [pfs-lustre.yaml]: ./pfs-lustre.yaml
 
+### [ps-slurm.yaml] ![core-badge] ![experimental-badge]
+
+Creates a Slurm cluster with [Parallelstore] instance mounted.
+
+After cluster is deployed, parallelstore drivers and DAOS client will be installed
+and mount-point will be configured on the VMs. You can SSH to login/ controller
+and verify by running:
+
+```sh
+df -H
+```
+
+This would show `dfuse` file system being attached at `/parallelstore` mount-point.
+
+#### Quota Requirements for ps-slurm.yaml
+
+To get access to a private preview of Parallelstore APIs, your project needs to
+be allowlisted. To set this up, please work with your account representative.
+
+For this example the following is needed in the selected region:
+
+* Cloud Parallelstore API: capacity (GB) per region: 12000 GB
+* Compute Engine API: Persistent Disk SSD (GB): ~100 GB for controller and login node.
+* Compute Engine API: Persistent Disk Standard (GB): 50 GB/node up to 200 GB.
+* Compute Engine API: N2 CPUs: 2 for the login node and 2/node active in the `debug` partition.
+* Compute Engine API: C2 CPUs: 4 for the controller node.
+* Compute Engine API: C2 CPUs: 60/node active in the `debug` partition up to 240.
+
+[ps-slurm.yaml]: ./ps-slurm.yaml
+[Parallelstore]: ../modules/file-system/parallelstore/README.md
+
+### [pfs-parallelstore.yaml] ![core-badge] ![experimental-badge]
+
+This creates 1 compute VM running debian 12 and 1 compute VM running ubuntu 20.04
+and connect with [Parallelstore] instance mounted.
+
+After cluster is deployed, parallelstore drivers and DAOS client will be installed
+and mount-point will be configured on the VMs. You can SSH to compute VM
+and verify by running:
+
+```sh
+df -H
+```
+
+This would show `dfuse` file system being attached at `/parallelstore` mount-point.
+
+#### Quota Requirements for pfs-parallelstore.yaml
+
+To get access to a private preview of Parallelstore APIs, your project needs to
+be allowlisted. To set this up, please work with your account representative.
+
+For this example the following is needed in the selected region:
+
+* Cloud Parallelstore API: capacity (GB) per region: 12000 GB
+* Compute Engine API: Persistent Disk Standard (GB): ~100 GB static.
+* Compute Engine API: N2 CPUs: 112 for the compute VM running debian 12.
+* Compute Engine API: N2 CPUs: 112 for the compute VM running ubuntu 22.04.
+
+[pfs-parallelstore.yaml]: ./pfs-parallelstore.yaml
+[Parallelstore]: ../modules/file-system/parallelstore/README.md
+
 ### [cae-slurm-v5-legacy.yaml] ![core-badge]
 
 The Computer Aided Engineering (CAE) blueprint captures a reference architecture
@@ -1062,7 +1125,7 @@ For this example the following is needed in the selected region:
 
 ### [hpc-build-slurm-image.yaml] ![community-badge] ![experimental-badge]
 
-This blueprint demonstrates how to use HPC Toolkit to build a Slurm image on top
+This blueprint demonstrates how to use Cluster Toolkit to build a Slurm image on top
 of an existing image, `hpc-rocky-linux-8` in the case of this example.
 
 The blueprint contains 3 groups:
@@ -1087,11 +1150,11 @@ The blueprint contains 3 groups:
 >
 > ```shell
 > # Install Python3 and run
-> pip3 install -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/5.11.1/scripts/requirements.txt
+> pip3 install -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/5.12.0/scripts/requirements.txt
 > ```
 
 Similar to the [hpc-slurm-v5-legacy.yaml] example, but using Ubuntu 20.04 instead of CentOS 7.
-[Other operating systems] are supported by SchedMD for the the Slurm on GCP project and images are listed [here](https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#published-image-family). Only the examples listed in this page been tested by the Cloud HPC Toolkit team.
+[Other operating systems] are supported by SchedMD for the the Slurm on GCP project and images are listed [here](https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#published-image-family). Only the examples listed in this page been tested by the Cluster Toolkit team.
 
 The cluster will support 2 partitions named `debug` and `compute`.
 The `debug` partition is the default partition and runs on smaller
@@ -1122,7 +1185,7 @@ For this example the following is needed in the selected region:
 ### [hpc-slurm-ubuntu2004.yaml] ![community-badge]
 
 Similar to the [hpc-slurm.yaml] example, but using Ubuntu 20.04 instead of CentOS 7.
-[Other operating systems] are supported by SchedMD for the the Slurm on GCP project and images are listed [here](https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#published-image-family). Only the examples listed in this page been tested by the Cloud HPC Toolkit team.
+[Other operating systems] are supported by SchedMD for the the Slurm on GCP project and images are listed [here](https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#published-image-family). Only the examples listed in this page been tested by the Cluster Toolkit team.
 
 The cluster will support 2 partitions named `debug` and `compute`.
 The `debug` partition is the default partition and runs on smaller
@@ -1195,11 +1258,11 @@ examples][amd-examples-readme].
 [client-google-cloud-storage.yaml]: ../community/examples/client-google-cloud-storage.yaml
 
 This example demonstrates several different ways to use Google Cloud Storage
-(GCS) buckets in the HPC Toolkit. There are two buckets referenced in the
+(GCS) buckets in the Cluster Toolkit. There are two buckets referenced in the
 example:
 
-1. A GCS bucket that is created by the HPC Toolkit (`id: new-bucket`).
-1. A GCS bucket that is created externally from the HPC Toolkit but referenced
+1. A GCS bucket that is created by the Cluster Toolkit (`id: new-bucket`).
+1. A GCS bucket that is created externally from the Cluster Toolkit but referenced
    by the blueprint (`id: existing-bucket`).
 
 The created VM (`id: workstation`) references these GCS buckets with the `use`
@@ -1371,11 +1434,11 @@ secondary IP ranges defined.
 The `gke-job-template` module is used to create a job file that can be submitted
 to the cluster using `kubectl` and will run on the specified node pool.
 
-[hpc-gke.yaml]: ../community/examples/hpc-gke.yaml
+[hpc-gke.yaml]: ../examples/hpc-gke.yaml
 
 ### [ml-gke.yaml] ![community-badge] ![experimental-badge]
 
-This blueprint demonstrates how to set up a GPU GKE cluster using the HPC
+This blueprint demonstrates how to set up a GPU GKE cluster using the Cluster
 Toolkit. It includes:
 
 > **Warning**: `authorized_cidr` variable must be entered for this example to
@@ -1386,11 +1449,11 @@ Toolkit. It includes:
   Note: This blueprint has also been tested with `a2` machines,
   but as capacity is hard to find the example uses `g2` machines which have better obtainability.
   If using with `a2` machines it is recommended to first obtain an automatic reservation.
-  
+
   Example settings for a2 look like:
-  
+
   ```yaml
-  source: community/modules/compute/gke-node-pool
+  source: modules/compute/gke-node-pool
     use: [gke_cluster]
     settings:
       disk_type: pd-balanced
@@ -1399,32 +1462,26 @@ Toolkit. It includes:
 
   Users only need to provide machine type for standard ["a2", "a3" and "g2"] machine families,
   while the other settings like `type`, `count` , `gpu_driver_installation_config` will default to
-  machine family specific values.
-  However, for other standard or custom machine families users will need to provide
-  the entire configuration as follows:
+  machine family specific values. More on this [gke-node-pool](../community/modules/compute/gke-node-pool/README.md#gpus-examples)
 
 ```yaml
 machine_type: n1-standard-1
 guest_accelerator:
 - type: nvidia-tesla-t4
   count: 1
-  gpu_partition_size: null
-  gpu_sharing_config: null
-  gpu_driver_installation_config:
-  - gpu_driver_version: "DEFAULT"
 ```
 
-Custom g2 pool
+Custom g2 pool with custom `guest_accelerator` config
 
 ```yaml
 machine_type: g2-custom-16-55296
+disk_type: pd-balanced
 guest_accelerator:
 - type: nvidia-l4
   count: 1
-  gpu_partition_size: null
   gpu_sharing_config:
-  -  max_shared_clients_per_gpu: 2
-      gpu_sharing_strategy: "TIME_SHARING"
+  - max_shared_clients_per_gpu: 2
+    gpu_sharing_strategy: "TIME_SHARING"
   gpu_driver_installation_config:
   - gpu_driver_version: "LATEST"
 ```
@@ -1434,8 +1491,7 @@ guest_accelerator:
   GPU node pool.
 
 > **Note**: The Kubernetes API server will only allow requests from authorized
-> networks. Nvidia drivers are installed on GPU nodes by a DaemonSet created by
-> the [`kubernetes-operations`] Terraform module. **You must use the
+> networks. **You must use the
 > `authorized_cidr` variable to supply an authorized network which contains the
 > IP address of the machine deploying the blueprint, for example
 > `--vars authorized_cidr=<your-ip-address>/32`.** This will allow Terraform to
@@ -1445,7 +1501,7 @@ guest_accelerator:
 Once you have deployed the blueprint, follow output instructions to _fetch
 credentials for the created cluster_ and _submit a job calling `nvidia_smi`_.
 
-[ml-gke.yaml]: ../community/examples/ml-gke.yaml
+[ml-gke.yaml]: ../examples/ml-gke.yaml
 [`kubernetes-operations`]: ../community/modules/scripts/kubernetes-operations/README.md
 
 ### [storage-gke.yaml] ![community-badge] ![experimental-badge]
@@ -1477,7 +1533,7 @@ cleaned up when the job is deleted.
 > `--vars authorized_cidr=<your-ip-address>/32`.** You can use a service like
 > [whatismyip.com](https://whatismyip.com) to determine your IP address.
 
-[storage-gke.yaml]: ../community/examples/storage-gke.yaml
+[storage-gke.yaml]: ../examples/storage-gke.yaml
 
 ### [htc-htcondor.yaml] ![community-badge] ![experimental-badge]
 
@@ -1534,7 +1590,7 @@ See the [full tutorial here](../docs/tutorials/fsi-montecarlo-on-batch/README.md
 This blueprint provisions an HPC cluster running Slurm for use with a Simcenter StarCCM+
 tutorial.
 
-> The main tutorial is described on the [HPC Toolkit website](https://cloud.google.com/hpc-toolkit/docs/simcenter-starccm-slurm/run-workload).
+> The main tutorial is described on the [Cluster Toolkit website](https://cloud.google.com/cluster-toolkit/docs/simcenter-starccm-slurm/run-workload).
 
 [tutorial-starccm-slurm.yaml]: ../community/examples/tutorial-starccm-slurm.yaml
 
@@ -1543,7 +1599,7 @@ tutorial.
 This blueprint provisions a simple cluster for use with a Simcenter StarCCM+
 tutorial.
 
-> The main tutorial is described on the [HPC Toolkit website](https://cloud.google.com/hpc-toolkit/docs/simcenter-star-ccm/run-workload).
+> The main tutorial is described on the [Cluster Toolkit website](https://cloud.google.com/cluster-toolkit/docs/simcenter-star-ccm/run-workload).
 
 [tutorial-starccm.yaml]: ../community/examples/tutorial-starccm.yaml
 
@@ -1552,7 +1608,7 @@ tutorial.
 This blueprint provisions a simple cluster for use with an Ansys Fluent
 tutorial.
 
-> The main tutorial is described on the [HPC Toolkit website](https://cloud.google.com/hpc-toolkit/docs/tutorials/ansys-fluent).
+> The main tutorial is described on the [Cluster Toolkit website](https://cloud.google.com/cluster-toolkit/docs/tutorials/ansys-fluent).
 
 [tutorial-fluent.yaml]: ../community/examples/tutorial-fluent.yaml
 
@@ -1597,7 +1653,7 @@ IPs for compute nodes, one must needs to [set up cloud nat][cloudnat] and
 ## Blueprint Schema
 
 Similar documentation can be found on
-[Google Cloud Docs](https://cloud.google.com/hpc-toolkit/docs/setup/hpc-blueprint).
+[Google Cloud Docs](https://cloud.google.com/cluster-toolkit/docs/setup/hpc-blueprint).
 
 A user defined blueprint should follow the following schema:
 
@@ -1719,7 +1775,7 @@ alongside module specific labels. Precedence is given to the module specific
 labels if a collision occurs. Default module labels will still be overwritten by
 deployment labels.
 
-The HPC Toolkit uses special reserved labels for monitoring each deployment.
+The Cluster Toolkit uses special reserved labels for monitoring each deployment.
 These are set automatically, but can be overridden in vars or module settings.
 They include:
 
@@ -1730,7 +1786,7 @@ They include:
 A module role is a default label applied to modules (`ghpc_role`), which
 conveys what role that module plays within a larger HPC environment.
 
-The modules provided with the HPC toolkit have been divided into roles
+The modules provided with the Cluster Toolkit have been divided into roles
 matching the names of folders in the [modules/](../modules/) and
 [community/modules](../community/modules/) directories (compute,
 file-system etc.).

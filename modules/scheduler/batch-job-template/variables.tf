@@ -168,7 +168,7 @@ variable "network_storage" {
 }
 
 variable "native_batch_mounting" {
-  description = "Batch can mount some fs_type nativly using the 'volumes' block in the job file. If set to false, all mounting will happen through HPC Toolkit startup scripts."
+  description = "Batch can mount some fs_type nativly using the 'volumes' block in the job file. If set to false, all mounting will happen through Cluster Toolkit startup scripts."
   type        = bool
   default     = true
 }
@@ -226,4 +226,15 @@ variable "submit" {
   description = "When set to true, the generated job file will be submitted automatically to Google Cloud as part of terraform apply."
   type        = bool
   default     = false
+}
+
+variable "allow_automatic_updates" {
+  description = <<-EOT
+  If false, disables automatic system package updates on the created instances.  This feature is
+  only available on supported images (or images derived from them).  For more details, see
+  https://cloud.google.com/compute/docs/instances/create-hpc-vm#disable_automatic_updates
+  EOT
+  type        = bool
+  default     = true
+  nullable    = false
 }

@@ -12,17 +12,37 @@ a3-highgpu-8g compute nodes running NVIDIA H100 GPUs.
 > significantly enhance the network performance of workloads that span multiple
 > a3-highgpu-8g VMs. You will use the image ID in the steps shown below.
 
+## Upgrading from the v5 "legacy" solution to v6
+There is no direct path for upgrading the Slurm-GCP v5 solution in-place to v6.
+The recommended path requires temporarily bringing down your v5 cluster and
+replacing it with the v6 solution described in this document.
+
+> [!NOTE]
+> The `ml-slurm-a3-0-base.yaml` blueprint is identical for the "legacy" v5 and
+> v6 solutions. If you are upgrading from v5 to v6, do not destroy the v5 base
+> blueprint or re-deploy the v6 base blueprint. Simply copy the Filestore IP
+> address as instructed below.
+
+We recommend using `gcluster destroy` to destroy the deployments provisioned by the
+v5 legacy blueprints:
+
+- [Legacy v5 image building blueprint](v5-legacy/ml-slurm-a3-1-image-v5-legacy.yaml)
+- [Legacy v5 cluster provisioning blueprint](v5-legacy/ml-slurm-a3-2-cluster-v5-legacy.yaml)
+
+Then follow the instructions below while skipping the re-deployment of the base
+blueprint.
+
 ## Required setup
 
 Please follow the initial instructions for:
 
-- Installing Cloud HPC Toolkit [dependencies][tkdeps] (Go, Terraform, Packer)
-- Installing the Cloud HPC [Toolkit][tkinstall]
+- Installing Cluster Toolkit [dependencies][tkdeps] (Go, Terraform, Packer)
+- Installing the Cluster [Toolkit][tkinstall]
 
-Verify that your release of the HPC Toolkit is 1.31.1 or later.
+Verify that your release of the Cluster Toolkit is 1.37.0 or later.
 
 ```shell
-ghpc --version
+gcluster --version
 ```
 
 The solution requires several Python packages to be available. We recommend
@@ -32,10 +52,10 @@ installing them in a Python virtual environment:
 python3 -m venv toolkit-a3
 source toolkit-a3/bin/activate
 pip3 install -r \
-    https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/5.11.1/scripts/requirements.txt
+    https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/6.5.13/scripts/requirements.txt
 ```
 
-**Always** activate the environment before running any ghpc commands such as
+**Always** activate the environment before running any gcluster commands such as
 deploy or destroy.
 
 ```shell
@@ -44,13 +64,13 @@ source /absolute/path/to/toolkit-a3/bin/activate
 
 ## Top-Level Design of Solution
 
-The solution is split into 3 HPC Toolkit blueprints:
+The solution is split into 3 Cluster Toolkit blueprints:
 
-1. Provision 5 VPCs (1 system network, 4 GPU networks) and 1 Filestore for
-mounting `/home` across the cluster
+1. Provision 1 system network and 1 Filestore instance for mounting `/home`
+across the cluster.
 2. Build a custom image installing Slurm in an Ubuntu 20.04 image. The image
 runs a kernel patched with performance enhancements for the a3-highgpu-8g VM.
-3. Provision a Slurm cluster using the custom image
+3. Provision 4 GPU networks and a Slurm cluster using the custom image.
 
 The 1st and 2nd blueprints should be provisioned once and rarely need further
 modification. This approach separates the lifecycle of a Filestore instance from
@@ -189,12 +209,18 @@ size. Recall that there are 8 NVIDIA H100 GPUs per a3-highgpu-8g VM.
 
 ## Cluster creation
 
-The blueprint `ml-slurm-a3-0-base.yaml` will create 5 VPCs (1 system, 4 GPU)
-and a Filestore `/home` filesystem. Run the standard Toolkit workflow at the
-command line (approx. 5 minutes):
+> [!NOTE]
+> The `ml-slurm-a3-0-base.yaml` blueprint is identical for the "legacy" v5 and
+> v6 solutions. If you are upgrading from v5 to v6, do not destroy the v5 base
+> blueprint or re-deploy the v6 base blueprint. Simply copy the Filestore IP
+> address as instructed below.
+
+The blueprint `ml-slurm-a3-0-base.yaml` will create 1 system network and a
+Filestore `/home` filesystem. Run the standard Toolkit workflow at the command
+line (approx. 5 minutes):
 
 ```shell
-ghpc deploy ml-slurm-a3-0-base.yaml --auto-approve
+gcluster deploy ml-slurm-a3-0-base.yaml --auto-approve
 ```
 
 Several values will be output to the screen. The output will be similar to:
@@ -226,7 +252,7 @@ Build the custom image using ml-slurm-a3-1-image.yaml and the same workflow
 as above. Run at the command line:
 
 ```shell
-ghpc deploy ml-slurm-a3-1-image.yaml --auto-approve
+gcluster deploy ml-slurm-a3-1-image.yaml --auto-approve
 ```
 
 The image will take approximately 30 minutes to build.
@@ -243,7 +269,7 @@ The image will take approximately 30 minutes to build.
 Provision the cluster blueprint (approximately 5-10 minutes):
 
 ```shell
-ghpc deploy ml-slurm-a3-2-cluster.yaml --auto-approve
+gcluster deploy ml-slurm-a3-2-cluster.yaml --auto-approve
 ```
 
 ## Receive Data Path Manager (RxDM)
@@ -304,11 +330,11 @@ benchmark. It assumes the availability of a GPU/NIC topology file at
 into the DLVM images used by this solution, but may need to be provided if
 using an alternative image.
 
-### Clone the HPC Toolkit repository containing the NCCL benchmark
+### Clone the Cluster Toolkit repository containing the NCCL benchmark
 
 ```shell
-git clone https://github.com/GoogleCloudPlatform/hpc-toolkit
-cd hpc-toolkit/examples/machine-learning/a3-highgpu-8g/nccl-tests
+git clone https://github.com/GoogleCloudPlatform/cluster-toolkit
+cd cluster-toolkit/examples/machine-learning/a3-highgpu-8g/nccl-tests
 ```
 
 ### Import the PyTorch image from the NVIDIA Container Registry
@@ -330,5 +356,5 @@ sbatch run-nccl-tests.sh
 ```
 
 [consume]: https://cloud.google.com/compute/docs/instances/reservations-consume#consuming_instances_from_any_matching_reservation
-[tkdeps]: https://cloud.google.com/hpc-toolkit/docs/setup/install-dependencies
-[tkinstall]: https://github.com/GoogleCloudPlatform/hpc-toolkit/#quickstart
+[tkdeps]: https://cloud.google.com/cluster-toolkit/docs/setup/install-dependencies
+[tkinstall]: https://github.com/GoogleCloudPlatform/cluster-toolkit/#quickstart

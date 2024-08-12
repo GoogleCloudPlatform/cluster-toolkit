@@ -32,4 +32,4 @@ const license string = `/**
   * limitations under the License.
   */
 `
-const artifactsWarning string = "Files in this directory are managed by ghpc. Do not modify them manually!\n"
+const artifactsWarning string = "Files in this directory are managed by gcluster. Do not modify them manually!\n"

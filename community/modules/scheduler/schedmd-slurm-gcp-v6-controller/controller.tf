@@ -32,11 +32,19 @@ locals {
     email  = local.service_account_email
     scopes = var.service_account_scopes
   }
+
+  disable_automatic_updates_metadata = var.allow_automatic_updates ? {} : { google_disable_automatic_updates = "TRUE" }
+
+  metadata = merge(
+    local.disable_automatic_updates_metadata,
+    var.metadata,
+    local.universe_domain
+  )
 }
 
 # INSTANCE TEMPLATE
 module "slurm_controller_template" {
-  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=6.5.13"
+  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=6.6.1"
 
   project_id          = var.project_id
   region              = var.region
@@ -63,7 +71,7 @@ module "slurm_controller_template" {
   gpu = one(local.guest_accelerator)
 
   machine_type     = var.machine_type
-  metadata         = merge(var.metadata, local.universe_domain)
+  metadata         = local.metadata
   min_cpu_platform = var.min_cpu_platform
 
   # network_ip = TODO: add support for network_ip
@@ -92,7 +100,7 @@ locals {
 }
 
 module "slurm_controller_instance" {
-  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/_slurm_instance?ref=6.5.13"
+  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/_slurm_instance?ref=6.6.1"
 
   access_config       = var.enable_controller_public_ips ? [local.access_config] : []
   add_hostname_suffix = false
@@ -123,7 +131,27 @@ resource "google_secret_manager_secret" "cloudsql" {
   secret_id = "${local.slurm_cluster_name}-slurm-secret-cloudsql"
 
   replication {
-    auto {}
+    dynamic "auto" {
+      for_each = length(var.cloudsql.user_managed_replication) == 0 ? [1] : []
+      content {}
+    }
+    dynamic "user_managed" {
+      for_each = length(var.cloudsql.user_managed_replication) == 0 ? [] : [1]
+      content {
+        dynamic "replicas" {
+          for_each = nonsensitive(var.cloudsql.user_managed_replication)
+          content {
+            location = replicas.value.location
+            dynamic "customer_managed_encryption" {
+              for_each = compact([replicas.value.kms_key_name])
+              content {
+                kms_key_name = customer_managed_encryption.value
+              }
+            }
+          }
+        }
+      }
+    }
   }
 
   labels = {

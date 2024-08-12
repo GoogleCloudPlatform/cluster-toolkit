@@ -28,13 +28,13 @@ with the [pbspro-preinstall] and [filestore] modules.
 
 ## GPU Support
 
-More information on GPU support in PBS Pro and other HPC Toolkit modules
+More information on GPU support in PBS Pro and other Cluster Toolkit modules
 can be found at [docs/gpu-support.md](../../../../docs/gpu-support.md)
 
 ## Support
 
 PBS Professional is licensed and supported by [Altair][pbspro]. This module is
-maintained and supported by the HPC Toolkit team in collaboration with Altair.
+maintained and supported by the Cluster Toolkit team in collaboration with Altair.
 
 [pbspro]: https://www.altair.com/pbs-professional
 
@@ -69,10 +69,10 @@ No providers.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_pbs_install"></a> [pbs\_install](#module\_pbs\_install) | github.com/GoogleCloudPlatform/hpc-toolkit//community/modules/scripts/pbspro-install | v1.35.0&depth=1 |
-| <a name="module_pbs_qmgr"></a> [pbs\_qmgr](#module\_pbs\_qmgr) | github.com/GoogleCloudPlatform/hpc-toolkit//community/modules/scripts/pbspro-qmgr | v1.35.0&depth=1 |
-| <a name="module_pbs_server"></a> [pbs\_server](#module\_pbs\_server) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/compute/vm-instance | v1.35.0&depth=1 |
-| <a name="module_server_startup_script"></a> [server\_startup\_script](#module\_server\_startup\_script) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | v1.35.0&depth=1 |
+| <a name="module_pbs_install"></a> [pbs\_install](#module\_pbs\_install) | github.com/GoogleCloudPlatform/hpc-toolkit//community/modules/scripts/pbspro-install | v1.36.0&depth=1 |
+| <a name="module_pbs_qmgr"></a> [pbs\_qmgr](#module\_pbs\_qmgr) | github.com/GoogleCloudPlatform/hpc-toolkit//community/modules/scripts/pbspro-qmgr | v1.36.0&depth=1 |
+| <a name="module_pbs_server"></a> [pbs\_server](#module\_pbs\_server) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/compute/vm-instance | v1.36.0&depth=1 |
+| <a name="module_server_startup_script"></a> [server\_startup\_script](#module\_server\_startup\_script) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | v1.36.0&depth=1 |
 
 ## Resources
 
@@ -86,7 +86,7 @@ No resources.
 | <a name="input_bandwidth_tier"></a> [bandwidth\_tier](#input\_bandwidth\_tier) | Tier 1 bandwidth increases the maximum egress bandwidth for VMs.<br>  Using the `tier_1_enabled` setting will enable both gVNIC and TIER\_1 higher bandwidth networking.<br>  Using the `gvnic_enabled` setting will only enable gVNIC and will not enable TIER\_1.<br>  Note that TIER\_1 only works with specific machine families & shapes and must be using an image th<br>at supports gVNIC. See [official docs](https://cloud.google.com/compute/docs/networking/configure-v<br>m-with-high-bandwidth-configuration) for more details. | `string` | `"not_enabled"` | no |
 | <a name="input_client_host_count"></a> [client\_host\_count](#input\_client\_host\_count) | Number of client hosts to configure | `number` | `0` | no |
 | <a name="input_client_hostname_prefix"></a> [client\_hostname\_prefix](#input\_client\_hostname\_prefix) | Name prefix for client hosts | `string` | n/a | yes |
-| <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | HPC Toolkit deployment name. Cloud resource names will include this value. | `string` | n/a | yes |
+| <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Cluster Toolkit deployment name. Cloud resource names will include this value. | `string` | n/a | yes |
 | <a name="input_disk_size_gb"></a> [disk\_size\_gb](#input\_disk\_size\_gb) | Size of disk for instances. | `number` | `200` | no |
 | <a name="input_disk_type"></a> [disk\_type](#input\_disk\_type) | Disk type for instances. | `string` | `"pd-standard"` | no |
 | <a name="input_enable_oslogin"></a> [enable\_oslogin](#input\_enable\_oslogin) | Enable or Disable OS Login with "ENABLE" or "DISABLE". Set to "INHERIT" to inherit project OS Login setting. | `string` | `"ENABLE"` | no |

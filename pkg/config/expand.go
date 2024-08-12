@@ -52,7 +52,7 @@ func validateModuleInputs(mp ModulePath, m Module, bp Blueprint) error {
 func attemptEvalModuleInput(val cty.Value, bp Blueprint) (cty.Value, bool) {
 	v, err := bp.Eval(val)
 	// there could be a legitimate reasons for it.
-	// e.g. use of modules output or unsupported (by ghpc) functions
+	// e.g. use of modules output or unsupported (by gcluster) functions
 	// TODO:
 	// * substitute module outputs with an UnknownValue
 	// * skip if uses functions with side-effects, e.g. `file`
@@ -182,11 +182,11 @@ func getDefaultGoogleProviders(bp Blueprint) map[string]TerraformProvider {
 	return map[string]TerraformProvider{
 		"google": {
 			Source:        "hashicorp/google",
-			Version:       ">= 4.84.0, < 5.32.0",
+			Version:       ">= 4.84.0, < 5.39.0",
 			Configuration: gglConf},
 		"google-beta": {
 			Source:        "hashicorp/google-beta",
-			Version:       ">= 4.84.0, < 5.32.0",
+			Version:       ">= 4.84.0, < 5.39.0",
 			Configuration: gglConf}}
 }
 

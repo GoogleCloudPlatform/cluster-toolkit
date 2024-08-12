@@ -5,7 +5,7 @@ configuration yaml. Each test has its own yaml under
 tools/cloud-build/daily-tests/tests. This file specifies common variables and a
 list of post_deploy_test, which can be an empty array for tests that only
 validate deployment. Or can list various extra tasks, named `test-*.yml. This
-file also specifies the blueprint to create the HPC environment
+file also specifies the blueprint to create the AI/ML and HPC environment
 
 The integration test yml under ansible_playbooks, in turn calls the creation of
 the blueprint (create_deployment.sh) and the post_deploy_tests.

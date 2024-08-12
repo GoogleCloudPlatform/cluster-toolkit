@@ -151,7 +151,7 @@ existing user will be used for Spack installation.
 
 #### OS Login User
 
-If OS Login is enabled (default for most HPC Toolkit modules) then you can
+If OS Login is enabled (default for most Cluster Toolkit modules) then you can
 provide an OS Login user name:
 
 ```yaml
@@ -340,7 +340,7 @@ limitations under the License.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_startup_script"></a> [startup\_script](#module\_startup\_script) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | v1.35.0&depth=1 |
+| <a name="module_startup_script"></a> [startup\_script](#module\_startup\_script) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | v1.36.0&depth=1 |
 
 ## Resources
 

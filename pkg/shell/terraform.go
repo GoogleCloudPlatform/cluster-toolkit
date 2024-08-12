@@ -37,7 +37,7 @@ import (
 )
 
 // ApplyBehavior abstracts behaviors for making changes to cloud infrastructure
-// when ghpc believes that they may be necessary
+// when gcluster believes that they may be necessary
 type ApplyBehavior uint
 
 // 3 behaviors making changes: never, automatic, and explicit approval
@@ -54,14 +54,21 @@ type outputValue struct {
 	Value     cty.Value
 }
 
-// ConfigureTerraform returns a Terraform object used to execute commands
-func ConfigureTerraform(workingDir string) (*tfexec.Terraform, error) {
+func tfExecPath() (string, error) {
 	path, err := exec.LookPath("terraform")
 	if err != nil {
-		return nil, config.HintError{
+		return "", config.HintError{
 			Hint: "must have a copy of terraform installed in PATH (obtain at https://terraform.io)",
-			Err:  err,
-		}
+			Err:  err}
+	}
+	return path, nil
+}
+
+// ConfigureTerraform returns a Terraform object used to execute commands
+func ConfigureTerraform(workingDir string) (*tfexec.Terraform, error) {
+	path, err := tfExecPath()
+	if err != nil {
+		return nil, err
 	}
 	return tfexec.NewTerraform(workingDir, path)
 }
@@ -159,7 +166,7 @@ func helpOnPlanError(msgs []JsonMessage) string {
 	if missingVar {
 		// Based on assumption that the only undefined variables can possibly come from IGC references.
 		// This may change in the future.
-		return `run "ghpc export-outputs" on previous deployment groups to define inputs`
+		return `run "gcluster export-outputs" on previous deployment groups to define inputs`
 	} else {
 		return ""
 	}
@@ -337,7 +344,7 @@ func gatherUpstreamOutputs(deploymentRoot string, artifactsDir string, g config.
 		gVals, err := modulereader.ReadHclAttributes(filepath)
 		if err != nil {
 			return nil, config.HintError{
-				Hint: fmt.Sprintf("consider running \"ghpc export-outputs %s/%s\"", deploymentRoot, pg),
+				Hint: fmt.Sprintf("consider running \"gcluster export-outputs %s/%s\"", deploymentRoot, pg),
 				Err:  err}
 		}
 		vals := intersectMapKeys(outputs, gVals) // filter for needed outputs
@@ -423,4 +430,25 @@ func ImportInputs(groupDir string, artifactsDir string, bp config.Blueprint) err
 // Destroy destroys all infrastructure in the module working directory
 func Destroy(tf *tfexec.Terraform, b ApplyBehavior) error {
 	return applyOrDestroy(tf, b, true)
+}
+
+func TfVersion() (string, error) {
+	path, err := tfExecPath()
+	if err != nil {
+		return "", err
+	}
+
+	out, err := exec.Command(path, "version", "--json").Output()
+	if err != nil {
+		return "", err
+	}
+
+	var version struct {
+		TerraformVersion string `json:"terraform_version"`
+	}
+	if err := json.Unmarshal(out, &version); err != nil {
+		return "", err
+	}
+
+	return version.TerraformVersion, nil
 }
