@@ -383,10 +383,6 @@ class ClusterInfo:
         print(state["resources"])
         print(filters)
 
-
-        print(state["resources"])
-        print(filters)
-
         def matches(x):
             try:
                 for k, v in filters.items():
