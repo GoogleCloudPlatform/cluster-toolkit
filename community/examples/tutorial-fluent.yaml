@@ -144,6 +144,7 @@ deployment_groups:
         vm_count: 4  # Note: should match instance count
         collocation: "COLLOCATED"
         availability_domain_count: null
+      allow_automatic_updates: false
 
   - id: login
     source: modules/compute/vm-instance

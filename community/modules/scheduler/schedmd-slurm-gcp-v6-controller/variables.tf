@@ -211,13 +211,13 @@ variable "nodeset" {
       count = number
       type  = string
     }))
-    labels               = optional(map(string), {})
-    machine_type         = optional(string)
-    maintenance_interval = optional(string)
-    instance_properties  = optional(any, null)
-    metadata             = optional(map(string), {})
-    min_cpu_platform     = optional(string)
-    network_tier         = optional(string, "STANDARD")
+    labels                   = optional(map(string), {})
+    machine_type             = optional(string)
+    maintenance_interval     = optional(string)
+    instance_properties_json = string
+    metadata                 = optional(map(string), {})
+    min_cpu_platform         = optional(string)
+    network_tier             = optional(string, "STANDARD")
     network_storage = optional(list(object({
       server_ip             = string
       remote_mount          = string
@@ -588,12 +588,17 @@ Use this database instead of the one on the controller.
   user      : The user to access the database as.
   password  : The password, given the user, to access the given database. (sensitive)
   db_name   : The database to access.
+  user_managed_replication : The list of location and (optional) kms_key_name for secret
 EOD
   type = object({
     server_ip = string
     user      = string
     password  = string # sensitive
     db_name   = string
+    user_managed_replication = optional(list(object({
+      location     = string
+      kms_key_name = optional(string)
+    })), [])
   })
   default   = null
   sensitive = true

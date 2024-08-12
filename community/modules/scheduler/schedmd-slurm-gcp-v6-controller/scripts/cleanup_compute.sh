@@ -30,7 +30,7 @@ if [[ -n "${gcloud_dir}" ]]; then
 	export PATH="$gcloud_dir:$PATH"
 fi
 
-API_ENDPOINT="CLOUDSDK_API_ENDPOINT_OVERRIDES_COMPUTE=https://www.${universe_domain}/compute/${compute_endpoint_version}/"
+export CLOUDSDK_API_ENDPOINT_OVERRIDES_COMPUTE="https://www.${universe_domain}/compute/${compute_endpoint_version}/"
 
 if ! type -P gcloud 1>/dev/null; then
 	echo "gcloud is not available and your compute resources are not being cleaned up"
@@ -41,25 +41,21 @@ fi
 echo "Deleting compute nodes"
 node_filter="labels.slurm_cluster_name=${cluster_name} AND labels.slurm_instance_role=compute"
 while true; do
-	nodes=$(bash -c "$API_ENDPOINT gcloud compute instances list --project \"${project}\" --format=\"value(selfLink)\" --filter=\"${node_filter}\" --limit=10 | paste -sd \" \" -")
+	nodes=$(gcloud compute instances list --project "${project}" --format="value(selfLink)" --filter="${node_filter}" --limit=10 | paste -sd " " -)
 	if [[ -z "${nodes}" ]]; then
 		break
 	fi
 	# The lack of quotes is intentional and causes each new space-separated "word" to
 	# be treated as independent arguments. See PR#2523
 	# shellcheck disable=SC2086
-	bash -c "$API_ENDPOINT gcloud compute instances delete --quiet ${nodes}"
+	gcloud compute instances delete --quiet ${nodes}
 done
 
 echo "Deleting resource policies"
-policies_filter="name:${cluster_name}-*"
-while true; do
-	policies=$(bash -c "$API_ENDPOINT gcloud compute resource-policies list --project \"${project}\" --format=\"value(selfLink)\" --filter=\"${policies_filter}\" --limit=10 | paste -sd \" \" -")
-	if [[ -z "${policies}" ]]; then
-		break
-	fi
-	# The lack of quotes is intentional and causes each new space-separated "word" to
-	# be treated as independent arguments. See PR#2523
-	# shellcheck disable=SC2086
-	bash -c "$API_ENDPOINT gcloud compute resource-policies delete --quiet ${policies}"
+policies_filter="name:${cluster_name}-slurmgcp-managed-*"
+gcloud compute resource-policies list --project "${project}" --format="value(selfLink)" --filter="${policies_filter}" | while read -r line; do
+	echo "Deleting resource policy: $line"
+	gcloud compute resource-policies delete --quiet "${line}" || {
+		echo "Failed to delete resource policy: $line"
+	}
 done
