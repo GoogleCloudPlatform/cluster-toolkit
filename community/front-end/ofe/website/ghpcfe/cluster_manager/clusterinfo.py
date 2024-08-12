@@ -55,7 +55,7 @@ class ClusterInfo:
 
     def __init__(self, cluster):
         self.config = utils.load_config()
-        self.ghpc_path = "/opt/gcluster/hpc-toolkit/ghpc"
+        self.ghpc_path = "/opt/gcluster/cluster-toolkit/ghpc"
 
         self.cluster = cluster
         self.cluster_dir = (
@@ -294,6 +294,18 @@ class ClusterInfo:
 
             rendered_yaml = template.render(context)
 
+            if self.cluster.controller_node_image is not None:
+                context["controller_image_yaml"] = f"""instance_image:
+            family: image-{self.cluster.controller_node_image.family}
+            project: {self.cluster.project_id}
+            """
+
+            if self.cluster.login_node_image is not None:
+                context["login_image_yaml"] = f"""instance_image:
+            family: image-{self.cluster.login_node_image.family}
+            project: {self.cluster.project_id}
+            """
+
             with yaml_file.open("w") as f:
                 f.write(rendered_yaml)
 
@@ -384,6 +396,9 @@ class ClusterInfo:
         print(state["resources"])
         print(filters)
 
+
+        print(state["resources"])
+        print(filters)
 
         def matches(x):
             try:

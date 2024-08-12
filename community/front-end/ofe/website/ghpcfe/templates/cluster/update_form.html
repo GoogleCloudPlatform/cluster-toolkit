@@ -470,6 +470,19 @@
                 invalidDiskTypes = machineData.invalid_disk_types || [];
             });
 
+            var invalidDiskTypes = [];
+
+            // Fetch the invalid disk types for the selected machine type
+            $.ajax({
+                url: "{% url 'api-instancetype-list' %}" + machineType + "/?cluster={{ object.id }}&region=" + region + "&zone=" + zone,
+                type: "GET",
+                dataType: "json",
+                async: false, // To ensure we get the data before proceeding
+                headers: { 'X-CSRFToken': $.cookie("csrftoken") }
+            }).done(function(machineData) {
+                invalidDiskTypes = machineData.invalid_disk_types || [];
+            });
+
             formRow.find(".disk_type_select").each(function (pos, selObj) {
               var curVal = selObj.value;
               $(selObj).empty();

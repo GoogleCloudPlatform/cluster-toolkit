@@ -71,6 +71,7 @@ deployment_groups:
         echo "******************************************** CALLING CONTROLLER STARTUP"
         gsutil cp gs://{{ startup_bucket }}/clusters/{{ cluster.id }}/bootstrap_controller.sh - | bash
       compute_startup_script: |
+        echo "******************************************** CALLING COMPUTE STARTUP"
         #!/bin/bash
         gsutil cp gs://{{ startup_bucket }}/clusters/{{ cluster.id }}/bootstrap_compute.sh - | bash
       login_startup_script: |
