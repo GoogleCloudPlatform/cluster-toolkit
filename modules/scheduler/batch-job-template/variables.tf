@@ -197,8 +197,8 @@ variable "instance_image" {
     EOD
   type        = map(string)
   default = {
-    project = "batch-custom-image"
-    family  = "batch-hpc-centos-7-official"
+    project = "cloud-hpc-image-public"
+    family  = "hpc-rocky-linux-8"
   }
 
   validation {
