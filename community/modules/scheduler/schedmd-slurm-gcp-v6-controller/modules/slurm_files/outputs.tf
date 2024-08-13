@@ -55,6 +55,7 @@ output "nodeset_tpu" {
 }
 
 output "checksum" {
-  description = "Checksum of all files written to the bucket."
-  value       = local.checksum
+  description = "Checksum of SlurmGCP scripts written to the bucket."
+  # Wrap with `md5` to get nice hex suitable for labels
+  value = md5(google_storage_bucket_object.devel.md5hash)
 }
