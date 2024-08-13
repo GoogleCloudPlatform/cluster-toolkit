@@ -394,9 +394,7 @@ def storage_client() -> storage.Client:
     return storage.Client(client_options=ClientOptions(**co))
 
 
-def load_config_data(config):
-    """load dict-like data into a config object"""
-    cfg = NSDict(config)
+def _fill_cfg_defaults(cfg: NSDict) -> NSDict:
     if not cfg.slurm_log_dir:
         cfg.slurm_log_dir = dirs.log
     if not cfg.slurm_bin_dir:
@@ -415,15 +413,7 @@ def load_config_data(config):
                 "mount_options": "defaults,hard,intr,_netdev",
             }
         )
-    return cfg
-
-
-def new_config(config):
-    """initialize a new config object
-    necessary defaults are handled here
-    """
-    cfg = load_config_data(config)
-
+    
     network_storage_iter = filter(
         None,
         (
@@ -442,34 +432,41 @@ def new_config(config):
     return cfg
 
 
-def fetch_config_yaml():
-    """Fetch config.yaml from bucket"""
-    config_yaml = blob_get("config.yaml").download_as_text()
-    return new_config(yaml.safe_load(config_yaml))
-
-
-def fetch_config_yaml_md5():
-    """Fetch config.yaml blob md5 from bucket"""
+def _fetch_config(old_hash: Optional[str]) -> Optional[Tuple[NSDict, str]]:
+    """Fetch config from bucket, returns None if no changes are detected."""
     blob = blob_get("config.yaml")
     blob.reload()  # Populate blob with metadata
-    hash_str = str(blob.md5_hash).encode(encoding="utf-8")
-    return hashlib.md5(hash_str)
+    hash = blob.md5_hash.encode("utf-8")
+    
+    if old_hash == hash:
+        return None
+
+    cfg = NSDict(yaml.safe_load(blob.download_as_text()))
+    return _fill_cfg_defaults(cfg), hash
 
 
-def load_config_file(path):
-    """load config from file"""
-    content = None
-    try:
-        content = yaml.safe_load(Path(path).read_text())
-    except FileNotFoundError:
-        log.warning(f"config file not found: {path}")
-        return NSDict()
-    return load_config_data(content)
+def fetch_config() -> Tuple[bool, NSDict]:
+    """
+    Fetches config from bucket and saves it locally 
+    Returns True if new (updated) config was fetched
+    """
+    hash_file = Path("/slurm/scripts/.config.hash")
+    old_hash = None
+    if hash_file.exists():
+        with open(hash_file, "r", encoding="utf-8") as f:
+            old_hash = f.readline()
 
+    cfg_and_hash = _fetch_config(old_hash=old_hash)
+    if not cfg_and_hash:
+        return False, cfg
 
-def save_config(cfg, path):
-    """save given config to file at path"""
-    Path(path).write_text(yaml.dump(cfg, Dumper=Dumper))
+    cfg, hash = cfg_and_hash
+    with open(hash_file, "w", encoding="utf-8") as f:
+        f.write(hash)
+    chown_slurm(hash_file)
+    CONFIG_FILE.write_text(yaml.dump(cfg, Dumper=Dumper))
+    chown_slurm(CONFIG_FILE)
+    return True, cfg
 
 def owned_file_handler(filename):
     """create file handler"""
@@ -1866,16 +1863,17 @@ _lkp: Optional[Lookup] = None
 def lookup() -> Lookup:
     global _lkp
     if _lkp is None:
-        cfg = load_config_file(CONFIG_FILE)
-        if not cfg:
-            try:
-                cfg = fetch_config_yaml()
-            except Exception as e:
-                log.warning(f"config not found in bucket: {e}")
-            if cfg:
-                save_config(cfg, CONFIG_FILE)
+        try:
+            cfg =  NSDict(yaml.safe_load(CONFIG_FILE.read_text()))
+        except FileNotFoundError:
+            log.error(f"config file not found: {CONFIG_FILE}")
+            cfg = NSDict() # TODO: fail here, once all code paths are covered (mainly init_logging)
         _lkp = Lookup(cfg)
     return _lkp
+
+def update_config(cfg: NSDict) -> None:
+    global _lkp
+    _lkp = Lookup(cfg)
 
 def scontrol_reconfigure(lkp: Lookup) -> None:
     log.info("Running scontrol reconfigure")

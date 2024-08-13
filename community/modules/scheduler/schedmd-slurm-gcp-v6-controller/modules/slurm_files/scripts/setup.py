@@ -448,6 +448,16 @@ def main():
     start_motd()
     configure_dirs()
 
+    sleep_seconds = 5
+    while True:
+        try:
+            _, cfg = util.fetch_config()
+            util.update_config(cfg)
+            break
+        except Exception as e:
+            log.warning(f"could not fetch config, sleeping for {sleep_seconds}s: {e}")
+            time.sleep(sleep_seconds)
+
     # call the setup function for the instance type
     {
         "controller": setup_controller,
