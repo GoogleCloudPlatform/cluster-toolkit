@@ -289,21 +289,17 @@ def do_node_update(status, nodes):
         inst = lkp.instance(first)
         log.error(f"{first} state: {state}, instance status:{inst.status}")
 
-    update = dict.get(
-        {
-            NodeStatus.orphan: nodes_delete,
-            NodeStatus.power_down: nodes_power_down,
-            NodeStatus.preempted: lambda: (nodes_down(), nodes_restart()),
-            NodeStatus.restore: nodes_idle,
-            NodeStatus.resume: nodes_resume,
-            NodeStatus.terminated: nodes_down,
-            NodeStatus.unbacked: nodes_down,
-            NodeStatus.unchanged: lambda: None,
-            NodeStatus.unknown: nodes_unknown,
-        },
-        status,
-    )
-    update()
+    {
+        NodeStatus.orphan: nodes_delete,
+        NodeStatus.power_down: nodes_power_down,
+        NodeStatus.preempted: lambda: (nodes_down(), nodes_restart()),
+        NodeStatus.restore: nodes_idle,
+        NodeStatus.resume: nodes_resume,
+        NodeStatus.terminated: nodes_down,
+        NodeStatus.unbacked: nodes_down,
+        NodeStatus.unchanged: lambda: None,
+        NodeStatus.unknown: nodes_unknown,
+    }[status]()
 
 
 def delete_placement_groups(placement_groups):

@@ -1078,55 +1078,39 @@ def get_insert_operations(group_ids):
     return get_filtered_operations(" AND ".join(f"({f})" for f in filters if f))
 
 
-def machine_type_sockets(template):
-    pattern = re.compile("^(?P<family>[^-]+)")
-    m = pattern.match(template.machineType)
-    if not m:
-        raise Exception(f"template {template} does not match expected regex")
-    family = m.group("family")
+def machine_type_family(mt: str) -> str:
+    """get machine type family from machine type"""
+    # TODO: doesn't work with N1 custom machine types
+    # See https://cloud.google.com/compute/docs/instances/creating-instance-with-custom-machine-type#create
+    return mt.split("-")[0]
+
+
+def machine_type_sockets(template) -> int:
     guestCpus: int = int(template.machine_info.guestCpus)
-    socket_count = dict.get(
-        {
-            "h3": 2,
-            "c2d": 2 if guestCpus > 56 else 1,
-            "a3": 2,
-        },
-        family,
+    return {
+        "h3": 2,
+        "c2d": 2 if guestCpus > 56 else 1,
+        "a3": 2,
+    }.get(
+        machine_type_family(template.machineType),
         1,  # assume 1 socket for all other families
     )
-    return socket_count
 
 
-def isSmt(template):
-    machineType: str = template.machineType
-    guestCpus: int = int(template.machine_info.guestCpus)
-
-    pattern = re.compile("^(?P<family>[^-]+)")
-    matches = pattern.match(machineType)
-    machineTypeFamily: str = matches["family"]
-
+def isSmt(template) -> bool:
     # https://cloud.google.com/compute/docs/cpu-platforms
-    noSmtFamily = [
-        "t2a",
-        "t2d",
-        "h3",
-    ]
-    if machineTypeFamily in noSmtFamily:
+    noSmtFamily = ("t2a", "t2d", "h3",)
+    if machine_type_family(template.machineType) in noSmtFamily:
         return False
-    elif guestCpus == 1:
+    if template.machine_info.guestCpus == 1:
         return False
     return True
 
 
-def getThreadsPerCore(template):
-    threadsPerCore: int = template.advancedMachineFeatures.threadsPerCore
-
+def getThreadsPerCore(template) -> int:
     if not isSmt(template):
         return 1
-    elif threadsPerCore:
-        return threadsPerCore
-    else:
-        return 2
+    return template.advancedMachineFeatures.threadsPerCore or 2
 
 
 @retry(
@@ -1709,20 +1693,17 @@ class Lookup:
         )
 
     @lru_cache(maxsize=1)
-    def machine_types(self, project=None):
-        project = project or self.project
+    def machine_types(self):
         field_names = "name,zone,guestCpus,memoryMb,accelerators"
         fields = f"items.zones.machineTypes({field_names}),nextPageToken"
 
         machines = defaultdict(dict)
         act = self.compute.machineTypes()
-        op = act.aggregatedList(project=project, fields=fields)
+        op = act.aggregatedList(project=self.project, fields=fields)
         while op is not None:
             result = ensure_execute(op)
             machine_iter = chain.from_iterable(
-                m["machineTypes"]
-                for m in result["items"].values()
-                if "machineTypes" in m
+                scope.get("machineTypes", []) for scope in result["items"].values()
             )
             for machine in machine_iter:
                 name = machine["name"]
@@ -1732,20 +1713,13 @@ class Lookup:
             op = act.aggregatedList_next(op, result)
         return machines
 
-    def machine_type(self, machine_type, project=None, zone=None):
+    def machine_type(self, machine_type: str):
         """ """
         custom_patt = re.compile(
             r"((?P<family>\w+)-)?custom-(?P<cpus>\d+)-(?P<mem>\d+)"
         )
         custom_match = custom_patt.match(machine_type)
-        if zone:
-            project = project or self.project
-            machine_info = ensure_execute(
-                self.compute.machineTypes().get(
-                    project=project, zone=zone, machineType=machine_type
-                )
-            )
-        elif custom_match is not None:
+        if custom_match is not None:
             groups = custom_match.groupdict()
             cpus, mem = (groups[k] for k in ["cpus", "mem"])
             machine_info = {
@@ -1753,18 +1727,20 @@ class Lookup:
                 "memoryMb": int(mem),
             }
         else:
-            machines = self.machine_types(project=project)
-            machine_info = next(iter(machines[machine_type].values()), None)
-            if machine_info is None:
+            machines = self.machine_types()
+            if machine_type not in machines:
                 raise Exception(f"machine type {machine_type} not found")
+            per_zone = machines[machine_type]
+            assert per_zone
+            machine_info = next(iter(per_zone.values())) # pick the first/any zone
         return NSDict(machine_info)
 
-    def template_machine_conf(self, template_link, project=None, zone=None):
+    def template_machine_conf(self, template_link):
         template = self.template_info(template_link)
         if not template.machineType:
             temp_name = trim_self_link(template_link)
             raise Exception(f"instance template {temp_name} has no machine type")
-        template.machine_info = self.machine_type(template.machineType, zone=zone)
+        template.machine_info = self.machine_type(template.machineType)
         machine = template.machine_info
 
         machine_conf = NSDict()
@@ -1810,8 +1786,7 @@ class Lookup:
             cache.close()
 
     @lru_cache(maxsize=None)
-    def template_info(self, template_link, project=None):
-        project = project or self.project
+    def template_info(self, template_link):
         template_name = trim_self_link(template_link)
         # split read and write access to minimize write-lock. This might be a
         # bit slower? TODO measure
@@ -1822,7 +1797,7 @@ class Lookup:
 
         template = ensure_execute(
             self.compute.instanceTemplates().get(
-                project=project, instanceTemplate=template_name
+                project=self.project, instanceTemplate=template_name
             )
         ).get("properties")
         template = NSDict(template)
@@ -1833,7 +1808,7 @@ class Lookup:
         # del template.metadata
 
         # translate gpus into an easier-to-read format
-        machine_info = self.machine_type(template.machineType, project=project)
+        machine_info = self.machine_type(template.machineType)
         if machine_info.accelerators:
             template.gpu_type = machine_info.accelerators[0].guestAcceleratorType
             template.gpu_count = machine_info.accelerators[0].guestAcceleratorCount
