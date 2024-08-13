@@ -45,7 +45,7 @@ from util import (
     TPU,
     chunked,
 )
-from util import lkp, CONFIG_FILE
+from util import lookup, CONFIG_FILE
 from suspend import delete_instances
 from resume import start_tpu
 import conf
@@ -72,9 +72,9 @@ NodeStatus = Enum(
 
 
 def start_instance_op(inst):
-    return lkp.compute.instances().start(
-        project=lkp.project,
-        zone=lkp.instance(inst).zone,
+    return lookup().compute.instances().start(
+        project=lookup().project,
+        zone=lookup().instance(inst).zone,
         instance=inst,
     )
 
@@ -82,16 +82,14 @@ def start_instance_op(inst):
 def start_instances(node_list):
     log.info("{} instances to start ({})".format(len(node_list), ",".join(node_list)))
 
-    normal, tpu_nodes = separate(lkp.node_is_tpu, node_list)
-    invalid, valid = separate(lambda inst: bool(lkp.instance), normal)
-
-    ops = {inst: start_instance_op(inst) for inst in valid}
+    normal, tpu_nodes = separate(lookup().node_is_tpu, node_list)
+    ops = {inst: start_instance_op(inst) for inst in normal}
 
     done, failed = batch_execute(ops)
 
     tpu_start_data = []
-    for ns, nodes in util.groupby_unsorted(tpu_nodes, lkp.node_nodeset_name):
-        tpuobj = TPU(lkp.cfg.nodeset_tpu[ns])
+    for ns, nodes in util.groupby_unsorted(tpu_nodes, lookup().node_nodeset_name):
+        tpuobj = TPU(lookup().cfg.nodeset_tpu[ns])
         for snodes in chunked(nodes, n=tpuobj.vmcount):
             tpu_start_data.append({"tpu": tpuobj, "node": snodes})
     execute_with_futures(start_tpu, tpu_start_data)
@@ -105,14 +103,14 @@ def _find_dynamic_node_status() -> NodeStatus:
 
 
 def _find_tpu_node_status(nodename, state):
-    ns = lkp.node_nodeset(nodename)
+    ns = lookup().node_nodeset(nodename)
     tpuobj = TPU(ns)
     inst = tpuobj.get_node(nodename)
     # If we do not find the node but it is from a Tpu that has multiple vms look for the master node
     if inst is None and tpuobj.vmcount > 1:
         # Get the tpu slurm nodelist of the nodes in the same tpu group as nodename
         nodelist = run(
-            f"{lkp.scontrol} show topo {nodename}"
+            f"{lookup().scontrol} show topo {nodename}"
             + " | awk -F'=' '/Level=0/ { print $NF }'",
             shell=True,
         ).stdout
@@ -142,7 +140,7 @@ def _find_tpu_node_status(nodename, state):
             & state.flags
         ):
             return NodeStatus.unbacked
-        if lkp.is_static_node(nodename):
+        if lookup().is_static_node(nodename):
             return NodeStatus.resume
     elif (
         state is not None
@@ -166,16 +164,16 @@ def _find_tpu_node_status(nodename, state):
 
 def find_node_status(nodename):
     """Determine node/instance status that requires action"""
-    state = lkp.slurm_node(nodename)
+    state = lookup().slurm_node(nodename)
 
-    if lkp.node_is_dyn(nodename):
+    if lookup().node_is_dyn(nodename):
         return _find_dynamic_node_status()
 
-    if lkp.node_is_tpu(nodename):
+    if lookup().node_is_tpu(nodename):
         return _find_tpu_node_status(nodename, state)
 
     # split below is workaround for VMs whose hostname is FQDN
-    inst = lkp.instance(nodename.split(".")[0])
+    inst = lookup().instance(nodename.split(".")[0])
     power_flags = frozenset(
         ("POWER_DOWN", "POWERING_UP", "POWERING_DOWN", "POWERED_DOWN")
     ) & (state.flags if state is not None else set())
@@ -193,7 +191,7 @@ def find_node_status(nodename):
             return NodeStatus.unbacked
         if state.base == "DOWN" and not power_flags:
             return NodeStatus.power_down
-        if "POWERED_DOWN" in state.flags and lkp.is_static_node(nodename):
+        if "POWERED_DOWN" in state.flags and lookup().is_static_node(nodename):
             return NodeStatus.resume
     elif (
         state is not None
@@ -252,7 +250,7 @@ def do_node_update(status, nodes):
             f"{count} nodes set down due to node status '{status.name}' ({hostlist})"
         )
         run(
-            f"{lkp.scontrol} update nodename={hostlist} state=down reason='Instance stopped/deleted'"
+            f"{lookup().scontrol} update nodename={hostlist} state=down reason='Instance stopped/deleted'"
         )
 
     def nodes_restart():
@@ -263,12 +261,12 @@ def do_node_update(status, nodes):
     def nodes_idle():
         """idle nodes"""
         log.info(f"{count} nodes to idle ({hostlist})")
-        run(f"{lkp.scontrol} update nodename={hostlist} state=resume")
+        run(f"{lookup().scontrol} update nodename={hostlist} state=resume")
 
     def nodes_resume():
         """resume nodes via scontrol"""
         log.info(f"{count} instances to resume ({hostlist})")
-        run(f"{lkp.scontrol} update nodename={hostlist} state=power_up")
+        run(f"{lookup().scontrol} update nodename={hostlist} state=power_up")
 
     def nodes_delete():
         """delete instances for nodes"""
@@ -278,15 +276,15 @@ def do_node_update(status, nodes):
     def nodes_power_down():
         """power_down node in slurm"""
         log.info(f"{count} instances to power down ({hostlist})")
-        run(f"{lkp.scontrol} update nodename={hostlist} state=power_down")
+        run(f"{lookup().scontrol} update nodename={hostlist} state=power_down")
 
     def nodes_unknown():
         """Error status, nodes shouldn't get in this status"""
         log.error(f"{count} nodes have unexpected status: ({hostlist})")
         first = next(iter(nodes))
-        state = lkp.slurm_node(first)
+        state = lookup().slurm_node(first)
         state = "{}+{}".format(state.base, "+".join(state.flags)) if state else "None"
-        inst = lkp.instance(first)
+        inst = lookup().instance(first)
         log.error(f"{first} state: {state}, instance status:{inst.status}")
 
     update = dict.get(
@@ -308,8 +306,8 @@ def do_node_update(status, nodes):
 
 def delete_placement_groups(placement_groups):
     def delete_placement_request(pg_name, region):
-        return lkp.compute.resourcePolicies().delete(
-            project=lkp.project, region=region, resourcePolicy=pg_name
+        return lookup().compute.resourcePolicies().delete(
+            project=lookup().project, region=region, resourcePolicy=pg_name
         )
 
     requests = {
@@ -348,18 +346,18 @@ def sync_placement_groups():
 
     keep_jobs = {
         str(job["job_id"])
-        for job in json.loads(run(f"{lkp.scontrol} show jobs --json").stdout)["jobs"]
+        for job in json.loads(run(f"{lookup().scontrol} show jobs --json").stdout)["jobs"]
         if "job_state" in job and set(job["job_state"]) & keep_states
     }
     keep_jobs.add("0")  # Job 0 is a placeholder for static node placement
 
     fields = "items.regions.resourcePolicies,nextPageToken"
-    flt = f"name={lkp.cfg.slurm_cluster_name}-*"
-    act = lkp.compute.resourcePolicies()
-    op = act.aggregatedList(project=lkp.project, fields=fields, filter=flt)
+    flt = f"name={lookup().cfg.slurm_cluster_name}-*"
+    act = lookup().compute.resourcePolicies()
+    op = act.aggregatedList(project=lookup().project, fields=fields, filter=flt)
     placement_groups = {}
     pg_regex = re.compile(
-        rf"{lkp.cfg.slurm_cluster_name}-(?P<partition>[^\s\-]+)-(?P<job_id>\d+)-(?P<index>\d+)"
+        rf"{lookup().cfg.slurm_cluster_name}-(?P<partition>[^\s\-]+)-(?P<job_id>\d+)-(?P<index>\d+)"
     )
     while op is not None:
         result = ensure_execute(op)
@@ -384,9 +382,9 @@ def sync_placement_groups():
 
 def sync_slurm():
     compute_instances = [
-        name for name, inst in lkp.instances().items() if inst.role == "compute"
+        name for name, inst in lookup().instances().items() if inst.role == "compute"
     ]
-    slurm_nodes = list(lkp.slurm_nodes().keys())
+    slurm_nodes = list(lookup().slurm_nodes().keys())
 
     all_nodes = list(
         set(
@@ -444,20 +442,20 @@ def reconfigure_slurm():
         save_hash(CONFIG_HASH, hash_new.hexdigest())
         save_config(cfg_new, CONFIG_FILE)
         cfg_new = load_config_file(CONFIG_FILE)
-        lkp = Lookup(cfg_new)
-        util.lkp = lkp
-        if lkp.is_controller:
-            conf.gen_controller_configs(lkp)
+        util._lkp = Lookup(cfg_new)
+        
+        if lookup().is_controller:
+            conf.gen_controller_configs(lookup())
             log.info("Restarting slurmctld to make changes take effect.")
             try:
                 # TODO: consider removing "restart" since "reconfigure" should restart slurmctld as well
                 run("sudo systemctl restart slurmctld.service", check=False)
-                util.scontrol_reconfigure(lkp)
+                util.scontrol_reconfigure(lookup())
             except Exception:
                 log.exception("failed to reconfigure slurmctld")
             util.run(f"wall '{update_msg}'", timeout=30)
             log.debug("Done.")
-        elif lkp.instance_role_safe in ["compute", "login"]:
+        elif lookup().instance_role_safe in ["compute", "login"]:
             log.info("Restarting slurmd to make changes take effect.")
             run("systemctl restart slurmd")
             util.run(f"wall '{update_msg}'", timeout=30)
@@ -478,7 +476,7 @@ def main():
     except Exception:
         log.exception("failed to reconfigure slurm")
 
-    if lkp.is_controller:
+    if lookup().is_controller:
         try:
             sync_slurm()
         except Exception:
@@ -488,7 +486,7 @@ def main():
         except Exception:
             log.exception("failed to sync placement groups")
         try:
-            update_topology(lkp)
+            update_topology(lookup())
         except Exception:
             log.exception("failed to update topology")
 
