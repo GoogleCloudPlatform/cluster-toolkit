@@ -87,7 +87,7 @@ def delete_tpu_instances(instances):
 
 def delete_instances(instances):
     """delete instances individually"""
-    invalid, valid = separate(lambda inst: bool(lookup.instance(inst)), instances)
+    invalid, valid = separate(lambda inst: bool(lookup().instance(inst)), instances)
     if len(invalid) > 0:
         log.debug("instances do not exist: {}".format(",".join(invalid)))
     if len(valid) == 0:
