@@ -278,7 +278,10 @@ variable "reservation_type" {
 }
 
 variable "specific_reservation" {
-  description = "Reservation resources to consume when targeting SPECIFIC_RESERVATION. Specify `compute.googleapis.com/reservation-name` as the key and the list of reservation names as the value."
+  description = <<-EOT
+  Reservation resources to consume when targeting SPECIFIC_RESERVATION.
+  Specify `compute.googleapis.com/reservation-name` as the key and the list of reservation names as the value.
+  EOT
   type = object({
     key    = string
     values = list(string)
@@ -286,10 +289,5 @@ variable "specific_reservation" {
   default = {
     key    = null
     values = null
-  }
-
-  validation {
-    condition     = (var.specific_reservation.key == null && var.specific_reservation.values == null) || (var.specific_reservation.key == "compute.googleapis.com/reservation-name" && var.specific_reservation.values != null)
-    error_message = "Value must be equal to `compute.googleapis.com/reservation-name` when targeting a SPECIFIC_RESERVATION. Otherwise, do not specify the value"
   }
 }
