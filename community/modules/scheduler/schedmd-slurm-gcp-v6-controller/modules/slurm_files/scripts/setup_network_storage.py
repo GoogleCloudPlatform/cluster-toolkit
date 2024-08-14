@@ -27,7 +27,7 @@ from concurrent.futures import as_completed
 from addict import Dict as NSDict
 
 import util
-from util import lkp, run, cfg, dirs, separate
+from util import lookup, run, dirs, separate
 from more_executors import Executors, ExceptionRetryPolicy
 
 
@@ -41,21 +41,21 @@ def mounts_by_local(mounts):
 def resolve_network_storage(nodeset=None):
     """Combine appropriate network_storage fields to a single list"""
 
-    if lkp.instance_role == "compute":
+    if lookup().instance_role == "compute":
         try:
-            nodeset = lkp.node_nodeset()
+            nodeset = lookup().node_nodeset()
         except Exception:
             # External nodename, skip lookup
             nodeset = None
 
     # seed mounts with the default controller mounts
-    if cfg.disable_default_mounts:
+    if lookup().cfg.disable_default_mounts:
         default_mounts = []
     else:
         default_mounts = [
             NSDict(
                 {
-                    "server_ip": lkp.control_addr or lkp.control_host,
+                    "server_ip": lookup().control_addr or lookup().control_host,
                     "remote_mount": str(path),
                     "local_mount": str(path),
                     "fs_type": "nfs",
@@ -73,9 +73,9 @@ def resolve_network_storage(nodeset=None):
 
     # On non-controller instances, entries in network_storage could overwrite
     # default exports from the controller. Be careful, of course
-    mounts.update(mounts_by_local(cfg.network_storage))
-    if lkp.instance_role in ("login", "controller"):
-        mounts.update(mounts_by_local(cfg.login_network_storage))
+    mounts.update(mounts_by_local(lookup().cfg.network_storage))
+    if lookup().instance_role in ("login", "controller"):
+        mounts.update(mounts_by_local(lookup().cfg.login_network_storage))
 
     if nodeset is not None:
         mounts.update(mounts_by_local(nodeset.network_storage))
@@ -89,7 +89,7 @@ def separate_external_internal_mounts(mounts):
         # NOTE: Valid Lustre server_ip can take the form of '<IP>@tcp'
         server_ip = mount.server_ip.split("@")[0]
         mount_addr = util.host_lookup(server_ip)
-        return mount_addr == lkp.control_host_addr
+        return mount_addr == lookup().control_host_addr
 
     return separate(internal_mount, mounts)
 
@@ -102,7 +102,7 @@ def setup_network_storage():
     all_mounts = resolve_network_storage()
     ext_mounts, int_mounts = separate_external_internal_mounts(all_mounts)
 
-    if lkp.is_controller:
+    if lookup().is_controller:
         mounts = ext_mounts
     else:
         mounts = ext_mounts + int_mounts
@@ -193,16 +193,16 @@ def mount_fstab(mounts, log):
 
 
 def munge_mount_handler():
-    if not cfg.munge_mount:
+    if not lookup().cfg.munge_mount:
         log.error("Missing munge_mount in cfg")
-    elif lkp.is_controller:
+    elif lookup().is_controller:
         return
 
-    mount = cfg.munge_mount
+    mount = lookup().cfg.munge_mount
     server_ip = (
         mount.server_ip
         if mount.server_ip
-        else (cfg.slurm_control_addr or cfg.slurm_control_host)
+        else (lookup().cfg.slurm_control_addr or lookup().cfg.slurm_control_host)
     )
     remote_mount = mount.remote_mount
     local_mount = Path("/mnt/munge")
@@ -276,18 +276,18 @@ def setup_nfs_exports():
     mounts.append(
         NSDict(
             {
-                "server_ip": cfg.munge_mount.server_ip,
-                "remote_mount": cfg.munge_mount.remote_mount,
+                "server_ip": lookup().cfg.munge_mount.server_ip,
+                "remote_mount": lookup().cfg.munge_mount.remote_mount,
                 "local_mount": Path(f"{dirs.munge}_tmp"),
-                "fs_type": cfg.munge_mount.fs_type,
-                "mount_options": cfg.munge_mount.mount_options,
+                "fs_type": lookup().cfg.munge_mount.fs_type,
+                "mount_options": lookup().cfg.munge_mount.mount_options,
             }
         )
     )
     # controller mounts
     _, con_mounts = separate_external_internal_mounts(mounts)
     con_mounts = {m.remote_mount: m for m in con_mounts}
-    for nodeset in cfg.nodeset.values():
+    for nodeset in lookup().cfg.nodeset.values():
         # get internal mounts for each nodeset by calling
         # resolve_network_storage as from a node in each nodeset
         ns_mounts = resolve_network_storage(nodeset=nodeset)

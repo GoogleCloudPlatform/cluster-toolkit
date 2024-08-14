@@ -20,8 +20,8 @@ import util
 
 def get_vmcount_of_tpu_part(part):
     res = 0
-    for ns in util.lkp.cfg.partitions[part].partition_nodeset_tpu:
-        tpu_obj = util.TPU(util.lkp.cfg.nodeset_tpu[ns])
+    for ns in util.lookup().cfg.partitions[part].partition_nodeset_tpu:
+        tpu_obj = util.TPU(util.lookup().cfg.nodeset_tpu[ns])
         if res == 0:
             res = tpu_obj.vmcount
         else:
@@ -53,7 +53,7 @@ if __name__ == "__main__":
     # valid equals to 0 means that we are ok, otherwise it will be set to one of the previously defined exit codes
     valid = 0
     for part in args.partitions.split(","):
-        if part not in util.lkp.cfg.partitions:
+        if part not in util.lookup().cfg.partitions:
             valid = PART_INVALID
             break
         else:

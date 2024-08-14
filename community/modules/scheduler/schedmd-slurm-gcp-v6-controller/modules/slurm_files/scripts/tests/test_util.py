@@ -58,7 +58,7 @@ from google.api_core.client_options import ClientOptions  # noqa: E402
     ],
 )
 def test_node_desc(name, expected):
-    assert util.lkp._node_desc(name) == expected
+    assert util.lookup()._node_desc(name) == expected
 
 
 @pytest.mark.parametrize(
@@ -69,7 +69,7 @@ def test_node_desc(name, expected):
 )
 def test_node_desc_fail(name):
     with pytest.raises(Exception):
-        util.lkp._node_desc(name)
+        util.lookup()._node_desc(name)
 
 
 @pytest.mark.parametrize(

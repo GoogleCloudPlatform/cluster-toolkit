@@ -29,7 +29,7 @@ Example usage:
 #SBATCH --ntasks-per-node=8
 #SBATCH --nodes=64
 
-export SLURM_HOSTFILE=$(/slurm/scripts/sort_nodes.py)
+export SLURM_HOSTFILE=$(sort_nodes.py)
 
 srun -l hostname | sort
 ```
