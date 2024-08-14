@@ -172,8 +172,7 @@ def run_custom_scripts():
         log.error(f"script {script} did not complete within timeout={timeout}")
         raise e
     except Exception as e:
-        log.error(f"script {script} encountered an exception")
-        log.exception(e)
+        log.exception(f"script {script} encountered an exception")
         raise e
 
 def setup_jwt_key():
@@ -493,7 +492,6 @@ if __name__ == "__main__":
         )
         log.error("Aborting setup...")
         failed_motd()
-    except Exception as e:
-        log.exception(e)
-        log.error("Aborting setup...")
+    except Exception:
+        log.exception("Aborting setup...")
         failed_motd()
