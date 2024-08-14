@@ -54,7 +54,6 @@ def get_changed_files_tags(files: Collection[str]) -> set[str]:
         parts = f.split("/")
         if len(parts) < 3: continue
         tags.add(f"m.{parts[2]}")
-    print(f"Auto tags: {tags}") # TODO: use UI to log
     return tags
 
 @dataclass
@@ -128,6 +127,11 @@ def run_from_cli():
                         help="Number of tests to run concurrently, default is 1")
     parser.add_argument("-r", "--retries", type=int, default=1,
                         help="Number of retries, to disable retries set to 0, default is 1")
+    # Non-runner args
+    parser.add_argument("--nocolor", action="store_true", help="Do not use color in output")
 
-    args = RunnerArgs(**vars(parser.parse_args()))
-    run(args, CliUI())
+    cli_args = vars(parser.parse_args())
+    short_url = cli_args.get("project") == "hpc-toolkit-dev"
+    ui = CliUI(no_color=cli_args.pop("nocolor"), short_url=short_url)
+
+    run(RunnerArgs(**cli_args), ui)

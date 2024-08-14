@@ -14,7 +14,7 @@
 
 # TEMPLATE
 module "slurm_login_template" {
-  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=6.5.9"
+  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=6.6.1"
 
   for_each = { for x in var.login_nodes : x.name_prefix => x }
 
@@ -25,7 +25,6 @@ module "slurm_login_template" {
   name_prefix         = each.value.name_prefix
 
   additional_disks         = each.value.additional_disks
-  additional_networks      = each.value.additional_networks
   bandwidth_tier           = each.value.bandwidth_tier
   can_ip_forward           = each.value.can_ip_forward
   disable_smt              = each.value.disable_smt
@@ -39,7 +38,7 @@ module "slurm_login_template" {
   gpu                      = each.value.gpu
   labels                   = each.value.labels
   machine_type             = each.value.machine_type
-  metadata                 = each.value.metadata
+  metadata                 = merge(each.value.metadata, local.universe_domain)
   min_cpu_platform         = each.value.min_cpu_platform
   on_host_maintenance      = each.value.on_host_maintenance
   preemptible              = each.value.preemptible
@@ -57,7 +56,7 @@ module "slurm_login_template" {
 
 # INSTANCE
 module "slurm_login_instance" {
-  source   = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/_slurm_instance?ref=6.5.9"
+  source   = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/_slurm_instance?ref=6.6.1"
   for_each = { for x in var.login_nodes : x.name_prefix => x }
 
   access_config       = each.value.access_config
@@ -72,10 +71,11 @@ module "slurm_login_instance" {
   labels            = merge(each.value.labels, local.files_cs_labels)
   num_instances     = each.value.num_instances
 
-  region     = each.value.region
-  static_ips = each.value.static_ips
-  subnetwork = each.value.subnetwork
-  zone       = each.value.zone
+  additional_networks = each.value.additional_networks
+  region              = each.value.region
+  static_ips          = each.value.static_ips
+  subnetwork          = each.value.subnetwork
+  zone                = each.value.zone
 
   # trigger replacement of login nodes when the controller instance is replaced
   replace_trigger = module.slurm_controller_instance.instances_self_links[0]

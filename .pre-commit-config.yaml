@@ -74,6 +74,12 @@ repos:
     files: 'tools/cloud-build/daily-tests/builds/.*\.yaml'
     pass_filenames: false
     require_serial: true
+  - id: pytest-check
+    name: pytest-check
+    entry: python -m pytest
+    language: system
+    types: [python]
+    pass_filenames: false
 
 - repo: https://github.com/dnephin/pre-commit-golang
   rev: v0.5.1

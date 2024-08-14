@@ -40,7 +40,7 @@ vars:
   # for a list of valid family options with Slurm; note: the image types for the compute nodes
   # and the Chrome Remote Desktop (CRD) need to have the same Slurm base.
   instance_image:
-    family: slurm-gcp-6-5-hpc-rocky-linux-8
+    family: slurm-gcp-6-6-hpc-rocky-linux-8
     project: schedmd-slurm-public
 
 # Documentation for each of the modules used below can be found at
@@ -163,6 +163,7 @@ deployment_groups:
       machine_type: h3-standard-88
       disk_type: 'pd-balanced'
       bandwidth_tier: gvnic_enabled
+      allow_automatic_updates: false
 
   - id: h3_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
@@ -181,6 +182,7 @@ deployment_groups:
       machine_type: c3-highmem-176
       disk_type: 'pd-balanced'
       bandwidth_tier: tier_1_enabled
+      allow_automatic_updates: false
 
   - id: c3_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition

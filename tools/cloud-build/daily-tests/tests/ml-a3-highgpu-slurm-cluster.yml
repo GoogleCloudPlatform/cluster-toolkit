@@ -41,6 +41,4 @@ cli_deployment_vars:
   server_ip_homefs: "{{ nfs_ip }}"
   remote_mount_homefs: "{{ remote_mount_homefs }}"
   slurm_cluster_name: "{{ slurm_cluster_name }}"
-  disable_login_public_ips: "false"
-  disable_controller_public_ips: "false"
   a3_static_cluster_size: 2

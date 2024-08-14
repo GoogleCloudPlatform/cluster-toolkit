@@ -17,11 +17,20 @@ set -e -o pipefail
 
 project="$1"
 cluster_name="$2"
+universe_domain="$3"
+compute_endpoint_version="$4"
+gcloud_dir="$5"
 
-if [[ -z "${project}" || -z "${cluster_name}" ]]; then
-	echo "Usage: $0 <project> <cluster_name>"
+if [[ -z "${project}" || -z "${cluster_name}" || -z "${universe_domain}" || -z "${compute_endpoint_version}" ]]; then
+	echo "Usage: $0 <project> <cluster_name> <universe_domain> <compute_endpoint_version> <gcloud_dir>"
 	exit 1
 fi
+
+if [[ -n "${gcloud_dir}" ]]; then
+	export PATH="$gcloud_dir:$PATH"
+fi
+
+export CLOUDSDK_API_ENDPOINT_OVERRIDES_COMPUTE="https://www.${universe_domain}/compute/${compute_endpoint_version}/"
 
 if ! type -P gcloud 1>/dev/null; then
 	echo "gcloud is not available and your compute resources are not being cleaned up"
@@ -43,7 +52,7 @@ while true; do
 done
 
 echo "Deleting resource policies"
-policies_filter="name:${cluster_name}-*"
+policies_filter="name:${cluster_name}-slurmgcp-managed-*"
 gcloud compute resource-policies list --project "${project}" --format="value(selfLink)" --filter="${policies_filter}" | while read -r line; do
 	echo "Deleting resource policy: $line"
 	gcloud compute resource-policies delete --quiet "${line}" || {

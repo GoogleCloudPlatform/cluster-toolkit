@@ -18,6 +18,13 @@ locals {
 }
 
 locals {
+  disable_automatic_updates_metadata = var.allow_automatic_updates ? {} : { google_disable_automatic_updates = "TRUE" }
+
+  metadata = merge(
+    local.disable_automatic_updates_metadata,
+    var.metadata
+  )
+
   name = substr(replace(var.name, "/[^a-z0-9]/", ""), 0, 14)
 
   additional_disks = [
@@ -71,7 +78,7 @@ locals {
 
     labels           = local.labels
     machine_type     = var.machine_type
-    metadata         = var.metadata
+    metadata         = local.metadata
     min_cpu_platform = var.min_cpu_platform
 
     on_host_maintenance      = var.on_host_maintenance
@@ -90,16 +97,39 @@ locals {
     termination_action       = try(var.spot_instance_config.termination_action, null)
     reservation_name         = local.reservation_name
     maintenance_interval     = var.maintenance_interval
+    instance_properties_json = jsonencode(var.instance_properties)
 
-    zones             = toset(concat([var.zone], tolist(var.zones)))
     zone_target_shape = var.zone_target_shape
-    startup_script    = local.ghpc_startup_script
-    network_storage   = var.network_storage
+    zone_policy_allow = local.zones
+    zone_policy_deny  = local.zones_deny
+
+    startup_script  = local.ghpc_startup_script
+    network_storage = var.network_storage
   }
 }
 
 data "google_compute_default_service_account" "default" {
   project = var.project_id
+}
+
+locals {
+  zones      = setunion(var.zones, [var.zone])
+  zones_deny = setsubtract(data.google_compute_zones.available.names, local.zones)
+}
+
+data "google_compute_zones" "available" {
+  project = var.project_id
+  region  = var.region
+
+  lifecycle {
+    postcondition {
+      condition     = length(setsubtract(local.zones, self.names)) == 0
+      error_message = <<-EOD
+      Invalid zones=${jsonencode(setsubtract(local.zones, self.names))}
+      Available zones=${jsonencode(self.names)}
+      EOD
+    }
+  }
 }
 
 locals {

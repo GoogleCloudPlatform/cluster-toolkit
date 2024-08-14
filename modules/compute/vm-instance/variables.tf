@@ -30,7 +30,7 @@ variable "instance_image" {
   type        = map(string)
   default = {
     project = "cloud-hpc-image-public"
-    family  = "hpc-centos-7"
+    family  = "hpc-rocky-linux-8"
   }
 
   validation {
@@ -76,9 +76,9 @@ variable "local_ssd_interface" {
 
 variable "name_prefix" {
   description = <<-EOT
-    An optional name for all VM and disk resources. 
-    If not supplied, `deployment_name` will be used. 
-    When `name_prefix` is supplied, and `add_deployment_name_before_prefix` is set, 
+    An optional name for all VM and disk resources.
+    If not supplied, `deployment_name` will be used.
+    When `name_prefix` is supplied, and `add_deployment_name_before_prefix` is set,
     then resources are named by "<`deployment_name`>-<`name_prefix`>-<#>".
     EOT
   type        = string
@@ -310,7 +310,7 @@ variable "placement_policy" {
   validation {
     condition     = var.placement_policy == null ? true : try(keys(var.placement_policy), null) != null
     error_message = <<-EOT
-    The var.placement_policy should be either unset/null or be a map/object with 
+    The var.placement_policy should be either unset/null or be a map/object with
     fields: vm_count (number), availability_domain_count (number), collocation (string), max_distance (number).
     EOT
   }
@@ -331,6 +331,12 @@ variable "spot" {
   description = "Provision VMs using discounted Spot pricing, allowing for preemption"
   type        = bool
   default     = false
+}
+
+variable "min_cpu_platform" {
+  description = "The name of the minimum CPU platform that you want the instance to use."
+  type        = string
+  default     = null
 }
 
 variable "tags" {
@@ -391,4 +397,15 @@ variable "allocate_ip" {
     ip_version   = optional(string, "IPV4"),
   })
   default = null
+}
+
+variable "allow_automatic_updates" {
+  description = <<-EOT
+  If false, disables automatic system package updates on the created instances.  This feature is
+  only available on supported images (or images derived from them).  For more details, see
+  https://cloud.google.com/compute/docs/instances/create-hpc-vm#disable_automatic_updates
+  EOT
+  type        = bool
+  default     = true
+  nullable    = false
 }

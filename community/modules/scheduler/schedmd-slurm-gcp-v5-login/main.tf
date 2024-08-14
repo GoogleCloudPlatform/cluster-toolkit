@@ -20,6 +20,13 @@ locals {
 }
 
 locals {
+  disable_automatic_updates_metadata = var.allow_automatic_updates ? {} : { google_disable_automatic_updates = "TRUE" }
+
+  metadata = merge(
+    local.disable_automatic_updates_metadata,
+    var.metadata
+  )
+
   ghpc_startup_script = [{
     filename = "ghpc_startup.sh"
     content  = var.startup_script
@@ -50,7 +57,7 @@ data "google_compute_default_service_account" "default" {
 }
 
 module "slurm_login_template" {
-  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=5.11.1"
+  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=5.12.0"
 
   additional_disks         = local.additional_disks
   can_ip_forward           = var.can_ip_forward
@@ -66,7 +73,7 @@ module "slurm_login_template" {
   gpu                      = one(local.guest_accelerator)
   labels                   = local.labels
   machine_type             = var.machine_type
-  metadata                 = var.metadata
+  metadata                 = local.metadata
   min_cpu_platform         = var.min_cpu_platform
   on_host_maintenance      = var.on_host_maintenance
   preemptible              = var.preemptible
@@ -88,7 +95,7 @@ module "slurm_login_template" {
 }
 
 module "slurm_login_instance" {
-  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_login_instance?ref=5.11.1"
+  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_login_instance?ref=5.12.0"
 
   access_config         = local.access_config
   slurm_cluster_name    = local.slurm_cluster_name
@@ -102,7 +109,7 @@ module "slurm_login_instance" {
   subnetwork            = var.subnetwork_self_link
   zone                  = var.zone
   login_startup_scripts = local.ghpc_startup_script
-  metadata              = var.metadata
+  metadata              = local.metadata
   slurm_depends_on      = var.controller_instance_id == null ? [] : [var.controller_instance_id]
   enable_reconfigure    = var.enable_reconfigure
   pubsub_topic          = var.pubsub_topic

@@ -197,8 +197,8 @@ variable "instance_image" {
     EOD
   type        = map(string)
   default = {
-    project = "batch-custom-image"
-    family  = "batch-hpc-centos-7-official"
+    project = "cloud-hpc-image-public"
+    family  = "hpc-rocky-linux-8"
   }
 
   validation {
@@ -226,4 +226,15 @@ variable "submit" {
   description = "When set to true, the generated job file will be submitted automatically to Google Cloud as part of terraform apply."
   type        = bool
   default     = false
+}
+
+variable "allow_automatic_updates" {
+  description = <<-EOT
+  If false, disables automatic system package updates on the created instances.  This feature is
+  only available on supported images (or images derived from them).  For more details, see
+  https://cloud.google.com/compute/docs/instances/create-hpc-vm#disable_automatic_updates
+  EOT
+  type        = bool
+  default     = true
+  nullable    = false
 }

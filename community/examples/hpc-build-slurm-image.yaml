@@ -104,6 +104,7 @@ deployment_groups:
     settings:
       machine_type: n2d-standard-2
       instance_image: $(vars.built_instance_image)
+      allow_automatic_updates: false
 
   - id: debug_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition

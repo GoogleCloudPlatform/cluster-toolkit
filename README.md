@@ -33,8 +33,8 @@ If a self directed path is preferred, you can use the following commands to
 build the `gcluster` binary:
 
 ```shell
-git clone https://github.com/GoogleCloudPlatform/hpc-toolkit
-cd hpc-toolkit
+git clone https://github.com/GoogleCloudPlatform/cluster-toolkit
+cd cluster-toolkit
 make
 ./gcluster --version
 ./gcluster --help
