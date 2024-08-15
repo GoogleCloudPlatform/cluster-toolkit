@@ -115,7 +115,7 @@ deployment_groups:
       # mount local SSD filesystems
       local_ssd_filesystem:
         mountpoint: /mnt/localssd
-        permissions: 1777
+        permissions: "1777" # must quote numeric filesystem permissions!
       runners:
       - type: ansible-local
         destination: enable_nvidia_dcgm.yml
