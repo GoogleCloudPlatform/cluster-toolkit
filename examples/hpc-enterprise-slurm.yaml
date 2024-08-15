@@ -25,7 +25,7 @@ vars:
   slurm_image:
     # Visit https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#published-image-family
     # for a list of valid family options with Slurm
-    family: slurm-gcp-6-5-hpc-rocky-linux-8
+    family: slurm-gcp-6-6-hpc-rocky-linux-8
     project: schedmd-slurm-public
   # If image above is changed to use custom image, then setting below must be set to true
   instance_image_custom: false
@@ -108,6 +108,7 @@ deployment_groups:
       machine_type: n2-standard-2
       instance_image: $(vars.slurm_image)
       enable_placement: false  # the default is: true
+      allow_automatic_updates: false
 
   - id: n2_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
@@ -130,6 +131,7 @@ deployment_groups:
       bandwidth_tier: tier_1_enabled
       disk_type: pd-ssd
       disk_size_gb: 100
+      allow_automatic_updates: false
 
   # use `-p c2` to submit jobs to this partition:
   # ex: `srun -p c2 -N 1 hostname`
@@ -151,6 +153,7 @@ deployment_groups:
       bandwidth_tier: tier_1_enabled
       disk_type: pd-ssd
       disk_size_gb: 100
+      allow_automatic_updates: false
 
   - id: c2d_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
@@ -168,6 +171,7 @@ deployment_groups:
       bandwidth_tier: tier_1_enabled
       disk_type: pd-ssd
       disk_size_gb: 100
+      allow_automatic_updates: false
 
   - id: c3_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
@@ -191,6 +195,7 @@ deployment_groups:
       node_conf:
         SocketsPerBoard: 2
         CoresPerSocket: 24
+      allow_automatic_updates: false
 
   # use `-p a208` to submit jobs to this partition:
   # ex: `srun -p a208 --gpus-per-node=8 -N 1 nvidia-smi`
@@ -220,6 +225,7 @@ deployment_groups:
       node_conf:
         SocketsPerBoard: 2
         CoresPerSocket: 24
+      allow_automatic_updates: false
 
   # use `-p a216` to submit jobs to this partition:
   # ex: `srun -p a216 --gpus-per-node=16 -N 1 nvidia-smi`
@@ -238,6 +244,7 @@ deployment_groups:
     use: [network, compute_sa]
     settings:
       node_count_dynamic_max: 16
+      # Note that H3 is available in only specific zones. https://cloud.google.com/compute/docs/regions-zones
       machine_type: h3-standard-88
       bandwidth_tier: gvnic_enabled  # https://cloud.google.com/compute/docs/compute-optimized-machines#h3_network
       instance_image: $(vars.slurm_image)
@@ -245,6 +252,7 @@ deployment_groups:
       # https://cloud.google.com/compute/docs/compute-optimized-machines#h3_disks
       disk_type: pd-balanced
       disk_size_gb: 100
+      allow_automatic_updates: false
 
   # use `-p h3` to submit jobs to this partition:
   # ex: `srun -p h3  -N 1 hostname`

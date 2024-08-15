@@ -24,9 +24,9 @@ locals {
 }
 
 # NODESET
-# TODO: remove dependency on slurm-gcp repo, move to local nodeset module
+# TODO: remove dependency on slurm-gcp repo, move to local template module
 module "slurm_nodeset_template" {
-  source   = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=6.5.9"
+  source   = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=6.6.1"
   for_each = local.nodeset_map
 
   project_id          = var.project_id
@@ -48,11 +48,13 @@ module "slurm_nodeset_template" {
   gpu                      = each.value.gpu
   labels                   = each.value.labels
   machine_type             = each.value.machine_type
-  metadata                 = each.value.metadata
+  metadata                 = merge(each.value.metadata, local.universe_domain)
   min_cpu_platform         = each.value.min_cpu_platform
   name_prefix              = each.value.nodeset_name
   on_host_maintenance      = each.value.on_host_maintenance
   preemptible              = each.value.preemptible
+  spot                     = each.value.spot
+  termination_action       = each.value.termination_action
   service_account          = each.value.service_account
   shielded_instance_config = each.value.shielded_instance_config
   source_image_family      = each.value.source_image_family
@@ -64,28 +66,28 @@ module "slurm_nodeset_template" {
   tags                     = concat([local.slurm_cluster_name], each.value.tags)
 }
 
-module "slurm_nodeset" {
-  source   = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_nodeset?ref=6.5.9"
-  for_each = local.nodeset_map
-
-  instance_template_self_link = module.slurm_nodeset_template[each.key].self_link
-
-  enable_placement       = each.value.enable_placement
-  maintenance_interval   = each.value.maintenance_interval
-  network_tier           = each.value.network_tier
-  node_count_dynamic_max = each.value.node_count_dynamic_max
-  node_count_static      = each.value.node_count_static
-  nodeset_name           = each.value.nodeset_name
-  node_conf              = each.value.node_conf
-  subnetwork_self_link   = each.value.subnetwork_self_link
-  zones                  = each.value.zones
-  zone_target_shape      = each.value.zone_target_shape
-  reservation_name       = each.value.reservation_name
+locals {
+  nodesets = [for name, ns in local.nodeset_map : {
+    nodeset_name             = ns.nodeset_name
+    node_conf                = ns.node_conf
+    instance_template        = module.slurm_nodeset_template[ns.nodeset_name].self_link
+    node_count_dynamic_max   = ns.node_count_dynamic_max
+    node_count_static        = ns.node_count_static
+    subnetwork               = ns.subnetwork_self_link
+    reservation_name         = ns.reservation_name
+    maintenance_interval     = ns.maintenance_interval
+    instance_properties_json = ns.instance_properties_json
+    enable_placement         = ns.enable_placement
+    network_storage          = ns.network_storage
+    zone_target_shape        = ns.zone_target_shape
+    zone_policy_allow        = ns.zone_policy_allow
+    zone_policy_deny         = ns.zone_policy_deny
+  }]
 }
 
 # NODESET TPU
 module "slurm_nodeset_tpu" {
-  source   = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_nodeset_tpu?ref=6.5.9"
+  source   = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_nodeset_tpu?ref=6.6.1"
   for_each = local.nodeset_tpu_map
 
   project_id             = var.project_id

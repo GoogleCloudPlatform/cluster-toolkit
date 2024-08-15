@@ -7,7 +7,7 @@ attrs==23.1.0
 # This should be supported by zoneinfo in Python 3.9+
 backports.zoneinfo==0.2.1;python_version<"3.9"
 cachetools==5.3.1
-certifi==2023.07.22
+certifi==2024.7.4
 cffi==1.15.1
 cfgv==3.3.1
 charset-normalizer==3.1.0
@@ -19,7 +19,7 @@ dill==0.3.6
 distlib==0.3.6
 # django-revproxy==0.11.0 released but not yet in pypi
 git+https://github.com/jazzband/django-revproxy.git@d2234005135dc0771b7c4e0bb0465664ccfa5787
-Django==4.2.11
+Django==4.2.15
 django-allauth==0.54.0
 django-extensions==3.2.3
 djangorestframework==3.15.2
@@ -38,7 +38,7 @@ google-resumable-media==2.5.0
 googleapis-common-protos==1.59.1
 grafana-api==1.0.3
 grpc-google-iam-v1==0.12.6
-grpcio==1.56.0
+grpcio==1.56.2
 grpcio-status==1.56.0
 h11==0.14.0
 httplib2==0.22.0
@@ -98,4 +98,4 @@ virtualenv==20.23.1
 wrapt==1.15.0
 xmltodict==0.13.0
 yq==3.2.2
-zipp==3.17.0
+zipp==3.19.1

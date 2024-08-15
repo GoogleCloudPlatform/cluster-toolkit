@@ -80,6 +80,14 @@ deployment_groups:
   - id: a3mega_startup
     source: modules/scripts/startup-script
     settings:
+      # When shutting down a VM with local SSD disks, we strongly recommend the
+      # automatic migration of data following these instructions:
+      # https://cloud.google.com/compute/docs/disks/local-ssd#stop_instance
+      # Failure to do will result in VMs that lose data and do not automatically
+      # mount local SSD filesystems
+      local_ssd_filesystem:
+        mountpoint: /mnt/localssd
+        permissions: "1777" # must quote numeric filesystem permissions!
       runners:
       - type: shell
         destination: setup_aperture.sh

@@ -35,5 +35,5 @@ variable "zone" {
 variable "repo_uri" {
   description = "URI of GitHub repo"
   type        = string
-  default     = "https://github.com/GoogleCloudPlatform/hpc-toolkit"
+  default     = "https://github.com/GoogleCloudPlatform/cluster-toolkit"
 }

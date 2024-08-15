@@ -87,10 +87,10 @@ func defaultAPIList(source string) []string {
 			"iam.googleapis.com",
 			"storage.googleapis.com",
 		},
-		"community/modules/compute/gke-node-pool": {
+		"modules/compute/gke-node-pool": {
 			"container.googleapis.com",
 		},
-		"community/modules/scheduler/gke-cluster": {
+		"modules/scheduler/gke-cluster": {
 			"container.googleapis.com",
 		},
 		"modules/scheduler/batch-job-template": {

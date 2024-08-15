@@ -95,8 +95,8 @@ storage intact and b) you can build software before you deploy your cluster.
 1. Clone the repo
 
    ```bash
-   git clone https://github.com/GoogleCloudPlatform/hpc-toolkit.git
-   cd hpc-toolkit
+   git clone https://github.com/GoogleCloudPlatform/cluster-toolkit.git
+   cd cluster-toolkit
    ```
 
 1. Build the Cluster Toolkit
@@ -109,24 +109,24 @@ storage intact and b) you can build software before you deploy your cluster.
    id.
 
    ```bash
-   ./ghpc create community/examples/cae-slurm.yaml -w --vars project_id=<project>
+   ./gcluster create community/examples/cae-slurm.yaml -w --vars project_id=<project>
    ```
 
 1. Deploy the `setup` group
 
-   Call the following ghpc command to deploy the cae-slurm blueprint.
+   Call the following gcluster command to deploy the cae-slurm blueprint.
 
    ```bash
-   ./ghpc deploy cae-slurm
+   ./gcluster deploy cae-slurm
    ```
 
-   The next `ghpc` prompt will ask you to **display**, **apply**, **stop**, or
+   The next `gcluster` prompt will ask you to **display**, **apply**, **stop**, or
    **continue** without applying the `setup` group. Select 'apply'.
 
    This group will create a network and file systems to be used by the cluster.
 
    > [!WARNING]
-   > This ghpc command will run through 2 deployment groups (3 if you populate
+   > This gcluster command will run through 2 deployment groups (3 if you populate
    > & activate the `software_installation` stage) and prompt you to apply each one.
    > If the command is cancelled or exited by accident before finishing, it can
    > be rerun to continue deploying the blueprint.
@@ -148,13 +148,13 @@ storage intact and b) you can build software before you deploy your cluster.
    > [Software Installation Patterns](#software-installation-patterns) for more information.
 
    If this deployment group is used (needs to be uncomment in the blueprint first),
-   you can return to the ghpc command which will ask you to **display**, **apply**,
+   you can return to the gcluster command which will ask you to **display**, **apply**,
    **stop**, or **continue** without applying the `software_installation` group.
    Select 'apply'.
 
 1. Deploy the `cluster` group
 
-   The next `ghpc` prompt will ask you to **display**, **apply**, **stop**, or
+   The next `gcluster` prompt will ask you to **display**, **apply**, **stop**, or
    **continue** without applying the `cluster` group. Select 'apply'.
 
    This deployment group contains the Slurm cluster and with compute partitions
@@ -182,7 +182,7 @@ commands to destroy the deployment in this reverse order. You will be prompted
 to confirm the deletion of each stage.
 
 ```bash
-./ghpc destroy cae-slurm
+./gcluster destroy cae-slurm
 ```
 
 > [!WARNING]
