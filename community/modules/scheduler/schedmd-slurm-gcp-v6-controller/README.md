@@ -181,14 +181,12 @@ limitations under the License.
 |------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.3 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 4.84 |
-| <a name="requirement_null"></a> [null](#requirement\_null) | >= 3.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
 | <a name="provider_google"></a> [google](#provider\_google) | >= 4.84 |
-| <a name="provider_null"></a> [null](#provider\_null) | >= 3.0 |
 
 ## Modules
 
@@ -196,6 +194,8 @@ limitations under the License.
 |------|--------|---------|
 | <a name="module_bucket"></a> [bucket](#module\_bucket) | terraform-google-modules/cloud-storage/google | ~> 5.0 |
 | <a name="module_daos_network_storage_scripts"></a> [daos\_network\_storage\_scripts](#module\_daos\_network\_storage\_scripts) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | v1.36.0&depth=1 |
+| <a name="module_nodeset_cleanup"></a> [nodeset\_cleanup](#module\_nodeset\_cleanup) | ./modules/cleanup_compute | n/a |
+| <a name="module_nodeset_tpu_cleanup"></a> [nodeset\_tpu\_cleanup](#module\_nodeset\_tpu\_cleanup) | ./modules/cleanup_compute | n/a |
 | <a name="module_slurm_controller_instance"></a> [slurm\_controller\_instance](#module\_slurm\_controller\_instance) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/_slurm_instance | 6.6.1 |
 | <a name="module_slurm_controller_template"></a> [slurm\_controller\_template](#module\_slurm\_controller\_template) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template | 6.6.1 |
 | <a name="module_slurm_files"></a> [slurm\_files](#module\_slurm\_files) | ./modules/slurm_files | n/a |
@@ -213,8 +213,6 @@ limitations under the License.
 | [google_secret_manager_secret_version.cloudsql_version](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/secret_manager_secret_version) | resource |
 | [google_storage_bucket_iam_binding.legacy_readers](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_iam_binding) | resource |
 | [google_storage_bucket_iam_binding.viewers](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_iam_binding) | resource |
-| [null_resource.cleanup_compute](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
-| [null_resource.cleanup_compute_depenencies](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
 | [google_compute_default_service_account.default](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_default_service_account) | data source |
 | [google_compute_image.slurm](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_image) | data source |
 
@@ -245,7 +243,7 @@ limitations under the License.
 | <a name="input_disk_size_gb"></a> [disk\_size\_gb](#input\_disk\_size\_gb) | Boot disk size in GB. | `number` | `50` | no |
 | <a name="input_disk_type"></a> [disk\_type](#input\_disk\_type) | Boot disk type, can be either hyperdisk-balanced, pd-ssd, pd-standard, pd-balanced, or pd-extreme. | `string` | `"pd-ssd"` | no |
 | <a name="input_enable_bigquery_load"></a> [enable\_bigquery\_load](#input\_enable\_bigquery\_load) | Enables loading of cluster job usage into big query.<br><br>NOTE: Requires Google Bigquery API. | `bool` | `false` | no |
-| <a name="input_enable_cleanup_compute"></a> [enable\_cleanup\_compute](#input\_enable\_cleanup\_compute) | Enables automatic cleanup of compute nodes and resource policies (e.g.<br>placement groups) managed by this module, when cluster is destroyed.<br><br>*WARNING*: Toggling this off will impact the running workload.<br>Deployed compute nodes and controller will be destroyed. | `bool` | `true` | no |
+| <a name="input_enable_cleanup_compute"></a> [enable\_cleanup\_compute](#input\_enable\_cleanup\_compute) | Enables automatic cleanup of compute nodes and resource policies (e.g.<br>placement groups) managed by this module, when cluster is destroyed.<br><br>*WARNING*: Toggling this off will impact the running workload.<br>Deployed compute nodes will be destroyed. | `bool` | `true` | no |
 | <a name="input_enable_confidential_vm"></a> [enable\_confidential\_vm](#input\_enable\_confidential\_vm) | Enable the Confidential VM configuration. Note: the instance image must support option. | `bool` | `false` | no |
 | <a name="input_enable_controller_public_ips"></a> [enable\_controller\_public\_ips](#input\_enable\_controller\_public\_ips) | If set to true. The controller will have a random public IP assigned to it. Ignored if access\_config is set. | `bool` | `false` | no |
 | <a name="input_enable_debug_logging"></a> [enable\_debug\_logging](#input\_enable\_debug\_logging) | Enables debug logging mode. | `bool` | `false` | no |
