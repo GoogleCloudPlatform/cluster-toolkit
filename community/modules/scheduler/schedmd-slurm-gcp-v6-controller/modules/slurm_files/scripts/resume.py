@@ -41,7 +41,7 @@ from util import (
     trim_self_link,
     wait_for_operation,
 )
-from util import cfg, lkp, NSDict, TPU
+from util import lookup, NSDict, TPU
 
 import slurm_gcp_plugins
 
@@ -61,8 +61,8 @@ def instance_properties(nodeset, model, placement_group, labels=None):
     props = NSDict()
 
     if labels: # merge in extra labels on instance and disks
-        template = lkp.node_template(model)
-        template_info = lkp.template_info(template)
+        template = lookup().node_template(model)
+        template_info = lookup().template_info(template)
 
         props.labels = {**template_info.labels, **labels}
         
@@ -85,7 +85,7 @@ def instance_properties(nodeset, model, placement_group, labels=None):
         zones = list(nodeset.zone_policy_allow or [])
         assert len(zones) == 1, "Only single zone is supported if using a reservation"
 
-        reservation = lkp.reservation(reservation_name, zones[0])
+        reservation = lookup().reservation(reservation_name, zones[0])
 
         props.reservationAffinity = {
             "consumeReservationType": "SPECIFIC_RESERVATION",
@@ -135,10 +135,10 @@ def create_instances_request(nodes, partition_name, placement_group, job_id=None
 
     # model here indicates any node that can be used to describe the rest
     model = next(iter(nodes))
-    nodeset = lkp.node_nodeset(model)
-    template = lkp.node_template(model)
-    region = lkp.node_region(model)
-    partition = cfg.partitions[partition_name]
+    nodeset = lookup().node_nodeset(model)
+    template = lookup().node_template(model)
+    region = lookup().node_region(model)
+    partition = lookup().cfg.partitions[partition_name]
     log.debug(f"create_instances_request: {model} placement: {placement_group}")
 
     body = NSDict()
@@ -173,16 +173,16 @@ def create_instances_request(nodes, partition_name, placement_group, job_id=None
     }
     body.locationPolicy.targetShape = nodeset.zone_target_shape
 
-    if lkp.cfg.enable_slurm_gcp_plugins:
+    if lookup().cfg.enable_slurm_gcp_plugins:
         slurm_gcp_plugins.pre_instance_bulk_insert(
-            lkp=lkp,
+            lkp=lookup(),
             nodes=nodes,
             placement_group=placement_group,
             request_body=body,
         )
 
-    request = lkp.compute.regionInstances().bulkInsert(
-        project=cfg.project, region=region, body=body.to_dict()
+    request = lookup().compute.regionInstances().bulkInsert(
+        project=lookup().project, region=region, body=body.to_dict()
     )
 
     if log.isEnabledFor(logging.DEBUG):
@@ -228,7 +228,7 @@ def group_nodes_bulk(nodes, resume_data=None):
     )
     jobless_nodes_tpu = []
     for jobless_node in jobless_nodes[:]:
-        if lkp.node_is_tpu(jobless_node):
+        if lookup().node_is_tpu(jobless_node):
             jobless_nodes.remove(jobless_node)
             jobless_nodes_tpu.append(jobless_node)
 
@@ -268,7 +268,7 @@ def group_nodes_bulk(nodes, resume_data=None):
         for job_id, job in jobs.items()
         if not job.tpu
         for placement_group, pg_nodes in job.placement_groups.items()
-        for prefix, nodes in util.groupby_unsorted(pg_nodes, lkp.node_prefix)
+        for prefix, nodes in util.groupby_unsorted(pg_nodes, lookup().node_prefix)
         for i, chunk_nodes in enumerate(chunked(nodes, n=BULK_INSERT_LIMIT))
     ]
     grouped_nodes_tpu = [
@@ -281,8 +281,8 @@ def group_nodes_bulk(nodes, resume_data=None):
         )
         for job_id, job in jobs.items()
         if job.tpu
-        for prefix, nodes in util.groupby_unsorted(job.nodes_resume, lkp.node_prefix)
-        for i, chunk_nodes in enumerate(lkp.chunk_tpu_nodes(list(nodes)))
+        for prefix, nodes in util.groupby_unsorted(job.nodes_resume, lookup().node_prefix)
+        for i, chunk_nodes in enumerate(lookup().chunk_tpu_nodes(list(nodes)))
     ]
 
     def group_name(chunk: BulkChunk):
@@ -339,7 +339,7 @@ def resume_nodes(nodes: List[str], resume_data=None):
     if resume_data is None and global_resume_data is not None:
         resume_data = global_resume_data.deepcopy()
 
-    nodes = sorted(nodes, key=lkp.node_prefix)
+    nodes = sorted(nodes, key=lookup().node_prefix)
     grouped_nodes, grouped_tpu_nodes = group_nodes_bulk(nodes, resume_data)
 
     if log.isEnabledFor(logging.DEBUG):
@@ -365,7 +365,7 @@ def resume_nodes(nodes: List[str], resume_data=None):
         # do not create multiple tpu_objs if nodes with the same prefix are used
         if chunk.prefix not in tpu_objs.keys():
             model = chunk.nodes[0]
-            tpu_objs[chunk.prefix] = TPU(lkp.node_nodeset(model))
+            tpu_objs[chunk.prefix] = TPU(lookup().node_nodeset(model))
 
         tpu_start_data.append({"tpu": tpu_objs[chunk.prefix], "node": chunk.nodes})
 
@@ -466,8 +466,8 @@ def update_job_comment(nodelist: str, comment: str):
         if any(map(lambda node: node in nodes, util.to_hostnames(job.nodelist_resume)))
     )
     for job in job_list:
-        run(f"{lkp.scontrol} update jobid={job.job_id} admincomment='{comment}'")
-        run(f"{lkp.scontrol} notify {job.job_id} '{comment}'")
+        run(f"{lookup().scontrol} update jobid={job.job_id} admincomment='{comment}'")
+        run(f"{lookup().scontrol} notify {job.job_id} '{comment}'")
 
 
 def down_nodes(nodelist, reason):
@@ -475,13 +475,13 @@ def down_nodes(nodelist, reason):
     if isinstance(nodelist, list):
         nodelist = util.to_hostlist(nodelist)
     update_job_comment(nodelist, reason)
-    run(f"{lkp.scontrol} update nodename={nodelist} state=down reason='{reason}'")
+    run(f"{lookup().scontrol} update nodename={nodelist} state=down reason='{reason}'")
 
 
 def hold_job(job_id, reason):
     """hold job, set comment to reason"""
-    run(f"{lkp.scontrol} hold jobid={job_id}")
-    run(f"{lkp.scontrol} update jobid={job_id} comment='{reason}'")
+    run(f"{lookup().scontrol} hold jobid={job_id}")
+    run(f"{lookup().scontrol} update jobid={job_id} comment='{reason}'")
 
 
 def create_placement_request(pg_name, region):
@@ -492,12 +492,12 @@ def create_placement_request(pg_name, region):
             "collocation": "COLLOCATED",
         },
     }
-    if lkp.cfg.enable_slurm_gcp_plugins:
+    if lookup().cfg.enable_slurm_gcp_plugins:
         slurm_gcp_plugins.pre_placement_group_insert(
-            lkp=lkp, pg_name=pg_name, region=region, request_body=config
+            lkp=lookup(), pg_name=pg_name, region=region, request_body=config
         )
-    request = lkp.compute.resourcePolicies().insert(
-        project=cfg.project, region=region, body=config
+    request = lookup().compute.resourcePolicies().insert(
+        project=lookup().project, region=region, body=config
     )
     log_api_request(request)
     return request
@@ -505,7 +505,7 @@ def create_placement_request(pg_name, region):
 
 def create_placement_groups(node_list: list, job_id=0):
     pgs = {}
-    node_map = lkp.nodeset_map(node_list)
+    node_map = lookup().nodeset_map(node_list)
     for _, nodes in node_map.items():
         pgs.update(create_nodeset_placement_groups(nodes, job_id=job_id))
     return pgs
@@ -513,15 +513,15 @@ def create_placement_groups(node_list: list, job_id=0):
 
 def create_nodeset_placement_groups(node_list: list, job_id=0):
     model = next(iter(node_list))
-    nodeset = lkp.node_nodeset(model)
+    nodeset = lookup().node_nodeset(model)
     if not nodeset.enable_placement:
         return {None: node_list}
     if not valid_placement_nodes(node_list):
         return {None: node_list}
-    region = lkp.node_region(model)
+    region = lookup().node_region(model)
 
     groups = {
-        f"{cfg.slurm_cluster_name}-{nodeset.nodeset_name}-{job_id}-{i}": nodes
+        f"{lookup().cfg.slurm_cluster_name}-slurmgcp-managed-{nodeset.nodeset_name}-{job_id}-{i}": nodes
         for i, nodes in enumerate(chunked(node_list, n=PLACEMENT_MAX_CNT))
     }
 
@@ -579,7 +579,7 @@ def create_nodeset_placement_groups(node_list: list, job_id=0):
 def valid_placement_nodes(nodelist):
     invalid_types = frozenset(["e2", "t2d", "n1", "t2a", "m1", "m2", "m3"])
     for node in nodelist:
-        mt = lkp.node_template_info(node).machineType
+        mt = lookup().node_template_info(node).machineType
         if mt.split("-")[0] in invalid_types:
             log.warn(f"Unsupported machine type for placement policy: {mt}.")
             log.warn(
@@ -608,7 +608,7 @@ def main(nodelist):
     log.debug(f"ResumeProgram {nodelist}")
     # Filter out nodes not in config.yaml
     other_nodes, pm_nodes = separate(
-        lkp.is_power_managed_node, util.to_hostnames(nodelist)
+        lookup().is_power_managed_node, util.to_hostnames(nodelist)
     )
     if other_nodes:
         log.debug(
@@ -626,7 +626,7 @@ def main(nodelist):
     resume_nodes(pm_nodes, global_resume_data)
     # TODO only run below if resume_nodes succeeds but
     # resume_nodes does not currently return any status.
-    if lkp.cfg.enable_slurm_gcp_plugins:
+    if lookup().cfg.enable_slurm_gcp_plugins:
         slurm_gcp_plugins.post_main_resume_nodes(
             nodelist=nodelist, global_resume_data=global_resume_data
         )

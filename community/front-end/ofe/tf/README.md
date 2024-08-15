@@ -61,7 +61,7 @@ limitations under the License.
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | GCP Project in which to deploy the HPC Frontend. | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | GCP Region for HPC Frontend deployment. | `string` | n/a | yes |
 | <a name="input_repo_branch"></a> [repo\_branch](#input\_repo\_branch) | git branch to checkout when deploying the HPC Frontend | `string` | `"main"` | no |
-| <a name="input_repo_fork"></a> [repo\_fork](#input\_repo\_fork) | GitHub repository name in which to find the hpc-toolkit repo | `string` | `"GoogleCloudPlatform"` | no |
+| <a name="input_repo_fork"></a> [repo\_fork](#input\_repo\_fork) | GitHub repository name in which to find the cluster-toolkit repo | `string` | `"GoogleCloudPlatform"` | no |
 | <a name="input_server_instance_type"></a> [server\_instance\_type](#input\_server\_instance\_type) | Instance size to use from HPC Frontend webserver | `string` | `"e2-standard-2"` | no |
 | <a name="input_static_ip"></a> [static\_ip](#input\_static\_ip) | Optional pre-configured static IP for HPC Frontend. | `string` | `""` | no |
 | <a name="input_subnet"></a> [subnet](#input\_subnet) | Subnet in which to deploy HPC Frontend. | `string` | `""` | no |
