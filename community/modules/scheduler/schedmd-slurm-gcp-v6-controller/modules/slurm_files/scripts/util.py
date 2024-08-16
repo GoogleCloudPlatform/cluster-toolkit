@@ -437,6 +437,8 @@ def _list_config_blobs() -> Tuple[Any, str]:
         "core": None,
         "partition": [],
         "nodeset": [],
+        "nodeset_dyn": [],
+        "nodeset_tpu": [],
     }
     hash = hashlib.md5()
     blobs = list(blob_list(prefix=""))
@@ -445,7 +447,7 @@ def _list_config_blobs() -> Tuple[Any, str]:
         if blob.name == f"{common_prefix}/config.yaml":
             res["core"] = blob
             hash.update(blob.md5_hash.encode("utf-8"))
-        for key in ("partition", "nodeset"):
+        for key in ("partition", "nodeset", "nodeset_dyn", "nodeset_tpu"):
             if blob.name.startswith(f"{common_prefix}/{key}_configs/"):
                 res[key].append(blob)
                 hash.update(blob.md5_hash.encode("utf-8"))
@@ -455,7 +457,6 @@ def _list_config_blobs() -> Tuple[Any, str]:
 
 def _fetch_config(old_hash: Optional[str]) -> Optional[Tuple[NSDict, str]]:
     """Fetch config from bucket, returns None if no changes are detected."""
-    # TODO: fetch nodeset_dyn, nodeset_tpu, and login
     blobs, hash = _list_config_blobs()
     if old_hash == hash:
         return None
@@ -467,9 +468,17 @@ def _fetch_config(old_hash: Optional[str]) -> Optional[Tuple[NSDict, str]]:
         core=_download([blobs["core"]])[0],
         partitions=_download(blobs["partition"]),
         nodesets=_download(blobs["nodeset"]),
+        nodesets_dyn=_download(blobs["nodeset_dyn"]),
+        nodesets_tpu=_download(blobs["nodeset_tpu"]),
     ), hash
 
-def _assemble_config(core: Any, partitions: List[Any], nodesets: List[Any]) -> NSDict:
+def _assemble_config(
+        core: Any, 
+        partitions: List[Any], 
+        nodesets: List[Any],
+        nodesets_dyn: List[Any],
+        nodesets_tpu: List[Any],
+    ) -> NSDict:
     cfg = NSDict(core)
 
     # add partition configs
@@ -481,17 +490,24 @@ def _assemble_config(core: Any, partitions: List[Any], nodesets: List[Any]) -> N
         cfg.partitions[p_name] = p_cfg
 
     # add nodeset configs
-    for ns_yaml in nodesets:
-        ns_cfg = NSDict(ns_yaml)
-        assert ns_cfg.get("nodeset_name"), "nodeset_name is required"
-        ns_name = ns_cfg.nodeset_name
-        assert ns_name not in cfg.nodeset, f"nodeset {ns_name} already defined"
-        cfg.nodeset[ns_name] = ns_cfg
+    ns_names = set()
+    def _add_nodesets(yamls: List[Any], target: dict):
+        for ns_yaml in yamls:
+            ns_cfg = NSDict(ns_yaml)
+            assert ns_cfg.get("nodeset_name"), "nodeset_name is required"
+            ns_name = ns_cfg.nodeset_name
+            assert ns_name not in ns_names, f"nodeset {ns_name} already defined"
+            target[ns_name] = ns_cfg
+            ns_names.add(ns_name)
+
+    _add_nodesets(nodesets, cfg.nodeset)
+    _add_nodesets(nodesets_dyn, cfg.nodeset_dyn)
+    _add_nodesets(nodesets_tpu, cfg.nodeset_tpu)
 
     # validate that configs for all referenced nodesets are present
     for p in cfg.partitions.values():
         for ns_name in p.partition_nodeset:
-            assert ns_name in cfg.nodeset, f"nodeset {ns_name} not defined in config"
+            assert ns_name in ns_names, f"nodeset {ns_name} not defined in config"
         
     return _fill_cfg_defaults(cfg)
 
