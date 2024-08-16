@@ -94,7 +94,7 @@ variable "repo_branch" {
 variable "repo_fork" {
   default     = "GoogleCloudPlatform"
   type        = string
-  description = "GitHub repository name in which to find the hpc-toolkit repo"
+  description = "GitHub repository name in which to find the cluster-toolkit repo"
 }
 
 variable "deployment_key" {

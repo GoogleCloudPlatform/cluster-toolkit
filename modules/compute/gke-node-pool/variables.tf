@@ -281,6 +281,8 @@ variable "specific_reservation" {
   description = <<-EOT
   Reservation resources to consume when targeting SPECIFIC_RESERVATION.
   Specify `compute.googleapis.com/reservation-name` as the key and the list of reservation names as the value.
+  It is assumed that the specified reservations exist and they have available capacity.
+  To create reservations refer to https://cloud.google.com/compute/docs/instances/reservations-single-project and https://cloud.google.com/compute/docs/instances/reservations-shared
   EOT
   type = object({
     key    = string

@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Iterable, List, Tuple, Optional
+from typing import Iterable, List, Tuple, Optional, Any
 import argparse
 import base64
 import collections
@@ -38,7 +38,7 @@ from collections import defaultdict, namedtuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
 from functools import lru_cache, reduce, wraps
-from itertools import chain, compress, islice
+from itertools import chain, islice
 from pathlib import Path
 from time import sleep, time
 
@@ -78,7 +78,6 @@ if ENV_CONFIG_YAML:
 else:
     CONFIG_FILE = Path(__file__).with_name("config.yaml")
 API_REQ_LIMIT = 2000
-URI_REGEX = r"[a-z]([-a-z0-9]*[a-z0-9])?"
 
 
 def mkdirp(path: Path) -> None:
@@ -267,17 +266,18 @@ def map_with_futures(func, seq):
                 res = e
             yield res
 
+def _get_bucket_and_common_prefix() -> Tuple[str, str]:
+    uri = instance_metadata("attributes/slurm_bucket_path")
+    return parse_bucket_uri(uri)
 
 def blob_get(file):
-    uri = instance_metadata("attributes/slurm_bucket_path")
-    bucket_name, path = parse_bucket_uri(uri)
+    bucket_name, path = _get_bucket_and_common_prefix()
     blob_name = f"{path}/{file}"
     return storage_client().get_bucket(bucket_name).blob(blob_name)
 
 
 def blob_list(prefix="", delimiter=None):
-    uri = instance_metadata("attributes/slurm_bucket_path")
-    bucket_name, path = parse_bucket_uri(uri)
+    bucket_name, path = _get_bucket_and_common_prefix()
     blob_prefix = f"{path}/{prefix}"
     # Note: The call returns a response only when the iterator is consumed.
     blobs = storage_client().list_blobs(
@@ -337,7 +337,7 @@ def install_custom_scripts(check_hash=False):
             chown_slurm(dirs.custom_scripts / par)
         need_update = True
         if check_hash and fullpath.exists():
-            # TODO: MD5 reported by gcloud may differ from the one calculated here (e.g. if blob got gzipped), 
+            # TODO: MD5 reported by gcloud may differ from the one calculated here (e.g. if blob got gzipped),
             # consider using gCRC32C
             need_update = hash_file(fullpath) != blob.md5_hash
         if need_update:
@@ -394,9 +394,7 @@ def storage_client() -> storage.Client:
     return storage.Client(client_options=ClientOptions(**co))
 
 
-def load_config_data(config):
-    """load dict-like data into a config object"""
-    cfg = NSDict(config)
+def _fill_cfg_defaults(cfg: NSDict) -> NSDict:
     if not cfg.slurm_log_dir:
         cfg.slurm_log_dir = dirs.log
     if not cfg.slurm_bin_dir:
@@ -405,8 +403,7 @@ def load_config_data(config):
         cfg.slurm_control_host = f"{cfg.slurm_cluster_name}-controller"
     if not cfg.slurm_control_host_port:
         cfg.slurm_control_host_port = "6820-6830"
-    if not cfg.munge_mount:
-        # NOTE: should only happen with cloud controller
+    if not cfg.munge_mount: # NOTE: should only happen with cloud controller
         cfg.munge_mount = NSDict(
             {
                 "server_ip": cfg.slurm_control_addr or cfg.slurm_control_host,
@@ -415,18 +412,11 @@ def load_config_data(config):
                 "mount_options": "defaults,hard,intr,_netdev",
             }
         )
-    return cfg
-
-
-def new_config(config):
-    """initialize a new config object
-    necessary defaults are handled here
-    """
-    cfg = load_config_data(config)
-
+    
     network_storage_iter = filter(
         None,
         (
+            cfg.munge_mount,
             *cfg.network_storage,
             *cfg.login_network_storage,
             *chain.from_iterable(ns.network_storage for ns in cfg.nodeset.values()),
@@ -441,35 +431,88 @@ def new_config(config):
             netstore.server_ip = cfg.slurm_control_host
     return cfg
 
+def _list_config_blobs() -> Tuple[Any, str]:
+    _, common_prefix = _get_bucket_and_common_prefix()
+    res = { # TODO: use a dataclass once we move to python 3.7
+        "core": None,
+        "partition": [],
+        "nodeset": [],
+    }
+    hash = hashlib.md5()
+    blobs = list(blob_list(prefix=""))
+    # sort blobs so hash is consistent
+    for blob in sorted(blobs, key=lambda b: b.name):
+        if blob.name == f"{common_prefix}/config.yaml":
+            res["core"] = blob
+            hash.update(blob.md5_hash.encode("utf-8"))
+        for key in ("partition", "nodeset"):
+            if blob.name.startswith(f"{common_prefix}/{key}_configs/"):
+                res[key].append(blob)
+                hash.update(blob.md5_hash.encode("utf-8"))
+    assert res["core"] is not None, "config.yaml not found in bucket"
+    return res, hash.hexdigest()
+        
 
-def fetch_config_yaml():
-    """Fetch config.yaml from bucket"""
-    config_yaml = blob_get("config.yaml").download_as_text()
-    return new_config(yaml.safe_load(config_yaml))
+def _fetch_config(old_hash: Optional[str]) -> Optional[Tuple[NSDict, str]]:
+    """Fetch config from bucket, returns None if no changes are detected."""
+    # TODO: fetch nodeset_dyn, nodeset_tpu, and login
+    blobs, hash = _list_config_blobs()
+    if old_hash == hash:
+        return None
 
+    def _download(bs) -> List[Any]:
+        return [yaml.safe_load(b.download_as_text()) for b in bs]
 
-def fetch_config_yaml_md5():
-    """Fetch config.yaml blob md5 from bucket"""
-    blob = blob_get("config.yaml")
-    blob.reload()  # Populate blob with metadata
-    hash_str = str(blob.md5_hash).encode(encoding="utf-8")
-    return hashlib.md5(hash_str)
+    return _assemble_config(
+        core=_download([blobs["core"]])[0],
+        partitions=_download(blobs["partition"]),
+        nodesets=_download(blobs["nodeset"]),
+    ), hash
 
+def _assemble_config(core: Any, partitions: List[Any], nodesets: List[Any]) -> NSDict:
+    cfg = NSDict(core)
 
-def load_config_file(path):
-    """load config from file"""
-    content = None
-    try:
-        content = yaml.safe_load(Path(path).read_text())
-    except FileNotFoundError:
-        log.warning(f"config file not found: {path}")
-        return NSDict()
-    return load_config_data(content)
+    # add partition configs
+    for p_yaml in partitions:
+        p_cfg = NSDict(p_yaml)
+        assert p_cfg.get("partition_name"), "partition_name is required"
+        p_name = p_cfg.partition_name
+        assert p_name not in cfg.partitions, f"partition {p_name} already defined"
+        cfg.partitions[p_name] = p_cfg
 
+    # add nodeset configs
+    for ns_yaml in nodesets:
+        ns_cfg = NSDict(ns_yaml)
+        assert ns_cfg.get("nodeset_name"), "nodeset_name is required"
+        ns_name = ns_cfg.nodeset_name
+        assert ns_name not in cfg.nodeset, f"nodeset {ns_name} already defined"
+        cfg.nodeset[ns_name] = ns_cfg
 
-def save_config(cfg, path):
-    """save given config to file at path"""
-    Path(path).write_text(yaml.dump(cfg, Dumper=Dumper))
+    # validate that configs for all referenced nodesets are present
+    for p in cfg.partitions.values():
+        for ns_name in p.partition_nodeset:
+            assert ns_name in cfg.nodeset, f"nodeset {ns_name} not defined in config"
+        
+    return _fill_cfg_defaults(cfg)
+
+def fetch_config() -> Tuple[bool, NSDict]:
+    """
+    Fetches config from bucket and saves it locally 
+    Returns True if new (updated) config was fetched
+    """
+    hash_file = Path("/slurm/scripts/.config.hash")
+    old_hash = hash_file.read_text() if hash_file.exists() else None
+    
+    cfg_and_hash = _fetch_config(old_hash=old_hash)
+    if not cfg_and_hash:
+        return False, _load_config()
+
+    cfg, hash = cfg_and_hash
+    hash_file.write_text(hash)
+    chown_slurm(hash_file)
+    CONFIG_FILE.write_text(yaml.dump(cfg, Dumper=Dumper))
+    chown_slurm(CONFIG_FILE)
+    return True, cfg
 
 def owned_file_handler(filename):
     """create file handler"""
@@ -481,7 +524,8 @@ def get_log_path() -> Path:
     Returns path to log file for the current script.
     e.g. resume.py -> /var/log/slurm/resume.log
     """
-    log_dir = Path(lookup().cfg.slurm_log_dir or ".")
+    cfg_log_dir = lookup().cfg.slurm_log_dir
+    log_dir = Path(cfg_log_dir) if cfg_log_dir else dirs.log
     return (log_dir / Path(sys.argv[0]).name).with_suffix(".log")
 
 def init_log_and_parse(parser: argparse.ArgumentParser) -> argparse.Namespace:
@@ -501,13 +545,11 @@ def init_log_and_parse(parser: argparse.ArgumentParser) -> argparse.Namespace:
         help="Enable detailed api request output",
     )
     args = parser.parse_args()
-    
     loglevel = args.loglevel
     if lookup().cfg.enable_debug_logging:
         loglevel = logging.DEBUG
     if args.trace_api:
         lookup().cfg.extra_logging_flags["trace_api"] = True
-
     # Configure root logger
     logging.config.dictConfig({
         "version": 1,
@@ -549,7 +591,6 @@ def log_api_request(request):
     """log.trace info about a compute API request"""
     if not lookup().cfg.extra_logging_flags.get("trace_api"):
         return
-    
     # output the whole request object as pretty yaml
     # the body is nested json, so load it as well
     rep = json.loads(request.to_json())
@@ -1076,55 +1117,39 @@ def get_insert_operations(group_ids):
     return get_filtered_operations(" AND ".join(f"({f})" for f in filters if f))
 
 
-def machine_type_sockets(template):
-    pattern = re.compile("^(?P<family>[^-]+)")
-    m = pattern.match(template.machineType)
-    if not m:
-        raise Exception(f"template {template} does not match expected regex")
-    family = m.group("family")
+def machine_type_family(mt: str) -> str:
+    """get machine type family from machine type"""
+    # TODO: doesn't work with N1 custom machine types
+    # See https://cloud.google.com/compute/docs/instances/creating-instance-with-custom-machine-type#create
+    return mt.split("-")[0]
+
+
+def machine_type_sockets(template) -> int:
     guestCpus: int = int(template.machine_info.guestCpus)
-    socket_count = dict.get(
-        {
-            "h3": 2,
-            "c2d": 2 if guestCpus > 56 else 1,
-            "a3": 2,
-        },
-        family,
+    return {
+        "h3": 2,
+        "c2d": 2 if guestCpus > 56 else 1,
+        "a3": 2,
+    }.get(
+        machine_type_family(template.machineType),
         1,  # assume 1 socket for all other families
     )
-    return socket_count
 
 
-def isSmt(template):
-    machineType: str = template.machineType
-    guestCpus: int = int(template.machine_info.guestCpus)
-
-    pattern = re.compile("^(?P<family>[^-]+)")
-    matches = pattern.match(machineType)
-    machineTypeFamily: str = matches["family"]
-
+def isSmt(template) -> bool:
     # https://cloud.google.com/compute/docs/cpu-platforms
-    noSmtFamily = [
-        "t2a",
-        "t2d",
-        "h3",
-    ]
-    if machineTypeFamily in noSmtFamily:
+    noSmtFamily = ("t2a", "t2d", "h3",)
+    if machine_type_family(template.machineType) in noSmtFamily:
         return False
-    elif guestCpus == 1:
+    if template.machine_info.guestCpus == 1:
         return False
     return True
 
 
-def getThreadsPerCore(template):
-    threadsPerCore: int = template.advancedMachineFeatures.threadsPerCore
-
+def getThreadsPerCore(template) -> int:
     if not isSmt(template):
         return 1
-    elif threadsPerCore:
-        return threadsPerCore
-    else:
-        return 2
+    return template.advancedMachineFeatures.threadsPerCore or 2
 
 
 @retry(
@@ -1648,6 +1673,12 @@ class Lookup:
                 slurm_cluster_name=slurm_cluster_name,
                 instance_information_fields=instance_information_fields,
             )
+
+        # TODO: Merge this with all fields when upcoming maintenance is
+        # supported in beta.
+        if endpoint_version(ApiEndpoint.COMPUTE) == 'alpha':
+          instance_information_fields.append("upcomingMaintenance")
+
         instance_information_fields = sorted(set(instance_information_fields))
         instance_fields = ",".join(instance_information_fields)
         fields = f"items.zones.instances({instance_fields}),nextPageToken"
@@ -1675,7 +1706,7 @@ class Lookup:
             instance_iter = (
                 (inst["name"], properties(inst))
                 for inst in chain.from_iterable(
-                    m["instances"] for m in result.get("items", {}).values()
+                    zone.get("instances", []) for zone in result.get("items", {}).values()
                 )
             )
             instances.update(
@@ -1707,20 +1738,17 @@ class Lookup:
         )
 
     @lru_cache(maxsize=1)
-    def machine_types(self, project=None):
-        project = project or self.project
+    def machine_types(self):
         field_names = "name,zone,guestCpus,memoryMb,accelerators"
         fields = f"items.zones.machineTypes({field_names}),nextPageToken"
 
         machines = defaultdict(dict)
         act = self.compute.machineTypes()
-        op = act.aggregatedList(project=project, fields=fields)
+        op = act.aggregatedList(project=self.project, fields=fields)
         while op is not None:
             result = ensure_execute(op)
             machine_iter = chain.from_iterable(
-                m["machineTypes"]
-                for m in result["items"].values()
-                if "machineTypes" in m
+                scope.get("machineTypes", []) for scope in result["items"].values()
             )
             for machine in machine_iter:
                 name = machine["name"]
@@ -1730,20 +1758,13 @@ class Lookup:
             op = act.aggregatedList_next(op, result)
         return machines
 
-    def machine_type(self, machine_type, project=None, zone=None):
+    def machine_type(self, machine_type: str):
         """ """
         custom_patt = re.compile(
             r"((?P<family>\w+)-)?custom-(?P<cpus>\d+)-(?P<mem>\d+)"
         )
         custom_match = custom_patt.match(machine_type)
-        if zone:
-            project = project or self.project
-            machine_info = ensure_execute(
-                self.compute.machineTypes().get(
-                    project=project, zone=zone, machineType=machine_type
-                )
-            )
-        elif custom_match is not None:
+        if custom_match is not None:
             groups = custom_match.groupdict()
             cpus, mem = (groups[k] for k in ["cpus", "mem"])
             machine_info = {
@@ -1751,18 +1772,20 @@ class Lookup:
                 "memoryMb": int(mem),
             }
         else:
-            machines = self.machine_types(project=project)
-            machine_info = next(iter(machines[machine_type].values()), None)
-            if machine_info is None:
+            machines = self.machine_types()
+            if machine_type not in machines:
                 raise Exception(f"machine type {machine_type} not found")
+            per_zone = machines[machine_type]
+            assert per_zone
+            machine_info = next(iter(per_zone.values())) # pick the first/any zone
         return NSDict(machine_info)
 
-    def template_machine_conf(self, template_link, project=None, zone=None):
+    def template_machine_conf(self, template_link):
         template = self.template_info(template_link)
         if not template.machineType:
             temp_name = trim_self_link(template_link)
             raise Exception(f"instance template {temp_name} has no machine type")
-        template.machine_info = self.machine_type(template.machineType, zone=zone)
+        template.machine_info = self.machine_type(template.machineType)
         machine = template.machine_info
 
         machine_conf = NSDict()
@@ -1808,8 +1831,7 @@ class Lookup:
             cache.close()
 
     @lru_cache(maxsize=None)
-    def template_info(self, template_link, project=None):
-        project = project or self.project
+    def template_info(self, template_link):
         template_name = trim_self_link(template_link)
         # split read and write access to minimize write-lock. This might be a
         # bit slower? TODO measure
@@ -1820,7 +1842,7 @@ class Lookup:
 
         template = ensure_execute(
             self.compute.instanceTemplates().get(
-                project=project, instanceTemplate=template_name
+                project=self.project, instanceTemplate=template_name
             )
         ).get("properties")
         template = NSDict(template)
@@ -1831,7 +1853,7 @@ class Lookup:
         # del template.metadata
 
         # translate gpus into an easier-to-read format
-        machine_info = self.machine_type(template.machineType, project=project)
+        machine_info = self.machine_type(template.machineType)
         if machine_info.accelerators:
             template.gpu_type = machine_info.accelerators[0].guestAcceleratorType
             template.gpu_count = machine_info.accelerators[0].guestAcceleratorCount
@@ -1863,19 +1885,23 @@ class Lookup:
 
 _lkp: Optional[Lookup] = None
 
+def _load_config() -> NSDict:
+    return NSDict(yaml.safe_load(CONFIG_FILE.read_text()))
+
 def lookup() -> Lookup:
     global _lkp
     if _lkp is None:
-        cfg = load_config_file(CONFIG_FILE)
-        if not cfg:
-            try:
-                cfg = fetch_config_yaml()
-            except Exception as e:
-                log.warning(f"config not found in bucket: {e}")
-            if cfg:
-                save_config(cfg, CONFIG_FILE)
+        try:
+            cfg =  _load_config()
+        except FileNotFoundError:
+            log.error(f"config file not found: {CONFIG_FILE}")
+            cfg = NSDict() # TODO: fail here, once all code paths are covered (mainly init_logging)
         _lkp = Lookup(cfg)
     return _lkp
+
+def update_config(cfg: NSDict) -> None:
+    global _lkp
+    _lkp = Lookup(cfg)
 
 def scontrol_reconfigure(lkp: Lookup) -> None:
     log.info("Running scontrol reconfigure")

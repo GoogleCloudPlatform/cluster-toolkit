@@ -1,24 +1,25 @@
-- source: community/modules/compute/schedmd-slurm-gcp-v5-partition
+- source: community/modules/compute/schedmd-slurm-gcp-v6-partition
   kind: terraform
   id: {{ part_id }}
   use:
-  - {{ part_id }}-group
-{{ uses_str }}
+  - {{ part_id }}-nodeset
   settings:
     partition_name: {{ part.name }}
-    subnetwork_self_link: {{ cluster.subnet.cloud_id }}
-    enable_placement: {{ part.enable_placement }}
-    exclusive: {{ exclusive }}
+    exclusive: {{ part.exclusive }}
+    resume_timeout: 500
 
-- source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
-  id: {{ part_id }}-group
+- source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+  id: {{ part_id }}-nodeset
   use:
+{{ uses_str }}
   settings:
     bandwidth_tier: {% if part.enable_tier1_networking %}tier_1_enabled{% else %}platform_default{% endif %}
+    subnetwork_self_link: "projects/{{ cluster.project_id }}/regions/{{ cluster.cloud_region }}/subnetworks/{{ cluster.subnet.cloud_id }}"
     enable_smt: {{ part.enable_hyperthreads }}
+    enable_placement: {{ part.enable_placement }}
     machine_type: {{ part.machine_type }}
     {% if part.reservation_name %}
-    reservation_name: {{ part.reservation_name }}
+    reservation_name: "projects/{{ cluster.project_id }}/reservations/{{ part.reservation_name }}"
     {% endif %}
     node_count_dynamic_max: {{ part.dynamic_node_count }}
     node_count_static: {{ part.static_node_count }}

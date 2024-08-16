@@ -35,7 +35,7 @@ deploy_mode=$(curl --silent --show-error http://metadata/computeMetadata/v1/inst
 
 # Exit if deployment already exists to stop startup script running on reboots
 #
-if [[ -d /opt/gcluster/hpc-toolkit ]]; then
+if [[ -d /opt/gcluster/cluster-toolkit ]]; then
 	printf "It appears gcluster has already been deployed. Exiting...\n"
 	exit 0
 fi
@@ -48,9 +48,10 @@ printf "####################\n#### Installing required packages\n###############
 dnf install -y epel-release
 dnf update -y --security
 dnf config-manager --add-repo https://rpm.releases.hashicorp.com/RHEL/hashicorp.repo
+dnf install -y terraform-1.4.6
 dnf install --best -y google-cloud-sdk nano make gcc python38-devel unzip git \
 	rsync wget nginx bind-utils policycoreutils-python-utils \
-	terraform packer supervisor python3-certbot-nginx jq
+	packer supervisor python3-certbot-nginx jq
 curl --silent --show-error --location https://github.com/mikefarah/yq/releases/download/v4.13.4/yq_linux_amd64 --output /usr/local/bin/yq
 chmod +x /usr/local/bin/yq
 curl --silent --show-error --location https://github.com/koalaman/shellcheck/releases/download/stable/shellcheck-stable.linux.x86_64.tar.xz --output /tmp/shellcheck.tar.xz
@@ -75,7 +76,7 @@ EOL
 
 dnf install -y grafana
 
-# Packages for https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/scheduler/schedmd-slurm-gcp-v5-controller#input_enable_cleanup_compute
+# Packages for https://github.com/GoogleCloudPlatform/cluster-toolkit/tree/main/community/modules/scheduler/schedmd-slurm-gcp-v5-controller#input_enable_cleanup_compute
 pip3.8 install google-api-python-client \
 	google-cloud-secret-manager \
 	google.cloud.pubsub \
@@ -136,7 +137,7 @@ fi
 useradd -r -m -d /opt/gcluster gcluster
 
 if [ "${deploy_mode}" == "git" ]; then
-	fetch_hpc_toolkit="git clone -b \"${repo_branch}\" https://github.com/${repo_fork}/hpc-toolkit.git"
+	fetch_hpc_toolkit="git clone -b \"${repo_branch}\" https://github.com/${repo_fork}/cluster-toolkit.git"
 
 elif [ "${deploy_mode}" == "tarball" ]; then
 	printf "\n####################\n#### Download web application files\n####################\n"
@@ -159,8 +160,8 @@ EOF
 # Install go version specified in go.mod file
 #
 # Note: go.mod doesn't reference minor version so we need to capture the latest
-GO_MAJOR_VERSION=$(awk '/^go/ {print $2}' "/opt/gcluster/hpc-toolkit/go.mod")
-GO_API_RESPONSE=$(curl --silent "https://go.dev/dl/?mode=json")
+GO_MAJOR_VERSION=$(awk '/^go/ {print $2}' "/opt/gcluster/cluster-toolkit/go.mod")
+GO_API_RESPONSE=$(curl --silent "https://go.dev/dl/?mode=json&include=all")
 GO_VERSION=$(echo "$GO_API_RESPONSE" | jq -r --arg major "go$GO_MAJOR_VERSION" '.[] | select(.version | startswith($major)).version' | sort -V | tail -n 1)
 GO_DOWNLOAD_URL="https://golang.org/dl/${GO_VERSION}.linux-amd64.tar.gz"
 curl --silent --show-error --location "${GO_DOWNLOAD_URL}" --output "/tmp/${GO_VERSION}.linux-amd64.tar.gz"
@@ -171,7 +172,7 @@ rm -rf /usr/local/go && tar -C /usr/local -xzf "/tmp/${GO_VERSION}.linux-amd64.t
 echo 'export PATH=$PATH:/usr/local/go/bin:~/go/bin' >>/etc/bashrc
 
 sudo su - gcluster -c /bin/bash <<EOF
-  cd /opt/gcluster/hpc-toolkit/community/front-end/ofe
+  cd /opt/gcluster/cluster-toolkit/community/front-end/ofe
 
   printf "\nDownloading Frontend dependencies...\n"
   mkdir dependencies
@@ -184,7 +185,7 @@ sudo su - gcluster -c /bin/bash <<EOF
   printf "\nDownloading ghpc dependencies...\n"
   go install github.com/terraform-docs/terraform-docs@v0.16.0
   go install github.com/google/addlicense@latest
-  pushd /opt/gcluster/hpc-toolkit
+  pushd /opt/gcluster/cluster-toolkit
   make
   popd
 
@@ -194,7 +195,7 @@ sudo su - gcluster -c /bin/bash <<EOF
   printf "\nUpgrading pip...\n"
   pip install --upgrade pip
   printf "\nInstalling pip requirements...\n"
-  pip install -r /opt/gcluster/hpc-toolkit/community/front-end/ofe/requirements.txt
+  pip install -r /opt/gcluster/cluster-toolkit/community/front-end/ofe/requirements.txt
 
   printf "Generating configuration file for backend..."
   echo "config:" > configuration.yaml
@@ -243,7 +244,7 @@ EOL
 printf "Creating supervisord service..."
 echo "[program:gcluster-uvicorn-background]
 process_name=%(program_name)s_%(process_num)02d
-directory=/opt/gcluster/hpc-toolkit/community/front-end/ofe/website
+directory=/opt/gcluster/cluster-toolkit/community/front-end/ofe/website
 command=/opt/gcluster/django-env/bin/uvicorn website.asgi:application --reload --host 127.0.0.1 --port 8001
 autostart=true
 autorestart=true
@@ -261,8 +262,8 @@ After=supervisord.service grafana-server.service
 
 [Service]
 Type=forking
-ExecStart=/usr/sbin/nginx -p /opt/gcluster/run/ -c /opt/gcluster/hpc-toolkit/community/front-end/ofe/website/nginx.conf
-ExecStop=/usr/sbin/nginx -p /opt/gcluster/run/ -c /opt/gcluster/hpc-toolkit/community/front-end/ofe/website/nginx.conf -s stop
+ExecStart=/usr/sbin/nginx -p /opt/gcluster/run/ -c /opt/gcluster/cluster-toolkit/community/front-end/ofe/website/nginx.conf
+ExecStop=/usr/sbin/nginx -p /opt/gcluster/run/ -c /opt/gcluster/cluster-toolkit/community/front-end/ofe/website/nginx.conf -s stop
 PIDFile=/opt/gcluster/run/nginx.pid
 Restart=no
 
@@ -280,7 +281,7 @@ systemctl status gcluster.service
 #
 sudo su - gcluster -c /bin/bash <<EOF
   source /opt/gcluster/django-env/bin/activate
-  cd /opt/gcluster/hpc-toolkit/community/front-end/ofe/website
+  cd /opt/gcluster/cluster-toolkit/community/front-end/ofe/website
   python manage.py setup_grafana "${DJANGO_EMAIL}"
 EOF
 
@@ -288,7 +289,7 @@ EOF
 #
 if [ -n "${SERVER_HOSTNAME}" ]; then
 	printf "Installing LetsEncrypt Certificate"
-	/usr/bin/certbot --nginx --nginx-server-root=/opt/gcluster/hpc-toolkit/community/front-end/ofe/website -m "${DJANGO_EMAIL}" --agree-tos -d "${SERVER_HOSTNAME}"
+	/usr/bin/certbot --nginx --nginx-server-root=/opt/gcluster/cluster-toolkit/community/front-end/ofe/website -m "${DJANGO_EMAIL}" --agree-tos -d "${SERVER_HOSTNAME}"
 
 	printf "Installing Cron entry to keep Cert up to date"
 	tmpcron=$(mktemp)
@@ -296,7 +297,7 @@ if [ -n "${SERVER_HOSTNAME}" ]; then
 	echo "0 12 * * * /usr/bin/certbot renew --quiet" >>"${tmpcron}"
 
 	# .. if something more forceful/complete is needed:
-	#	echo "0 12 * * * /usr/bin/certbot certonly --force-renew --quiet" --nginx --nginx-server-root=/opt/gcluster/hpc-toolkit/community/front-end/ofe/website --cert-name "${SERVER_HOSTNAME}" -m "${DJANGO_EMAIL}" >>"${tmpcron}"
+	#	echo "0 12 * * * /usr/bin/certbot certonly --force-renew --quiet" --nginx --nginx-server-root=/opt/gcluster/cluster-toolkit/community/front-end/ofe/website --cert-name "${SERVER_HOSTNAME}" -m "${DJANGO_EMAIL}" >>"${tmpcron}"
 
 	crontab -u root "${tmpcron}"
 	rm "${tmpcron}"
