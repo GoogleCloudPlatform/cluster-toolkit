@@ -150,6 +150,12 @@ resource "google_container_node_pool" "node_pool" {
         "net.ipv4.tcp_wmem" = "4096 16384 16777216"
       }
     }
+
+    reservation_affinity {
+      consume_reservation_type = var.reservation_type
+      key                      = var.specific_reservation.key
+      values                   = var.specific_reservation.values
+    }
   }
 
   timeouts {
@@ -168,6 +174,16 @@ resource "google_container_node_pool" "node_pool" {
     precondition {
       condition     = !(var.local_ssd_count_ephemeral_storage > 0 && var.local_ssd_count_nvme_block > 0)
       error_message = "Only one of local_ssd_count_ephemeral_storage or local_ssd_count_nvme_block can be set to a non-zero value."
+    }
+    precondition {
+      condition = (
+        (var.reservation_type != "SPECIFIC_RESERVATION" && var.specific_reservation.key == null && var.specific_reservation.values == null) ||
+        (var.reservation_type == "SPECIFIC_RESERVATION" && var.specific_reservation.key == "compute.googleapis.com/reservation-name" && var.specific_reservation.values != null)
+      )
+      error_message = <<-EOT
+      When using NO_RESERVATION or ANY_RESERVATION as the reservation type, `specific_reservation` cannot be set.
+      On the other hand, with SPECIFIC_RESERVATION you must set `specific_reservation.key` and `specific_reservation.values` to `compute.googleapis.com/reservation-name` and a list of reservation names respectively.
+      EOT
     }
   }
 }
