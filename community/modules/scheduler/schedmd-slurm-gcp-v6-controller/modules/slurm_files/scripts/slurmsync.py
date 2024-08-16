@@ -147,7 +147,7 @@ def _find_tpu_node_status(nodename, state):
     ):
         if tpuobj.preemptible:
             return NodeStatus.preempted
-        if not state.base.startswith("DOWN"):
+        if state.base != "DOWN":
             return NodeStatus.terminated
     elif (
         state is None or "POWERED_DOWN" in state.flags
@@ -198,7 +198,7 @@ def find_node_status(nodename):
     ):
         if inst.scheduling.preemptible:
             return NodeStatus.preempted
-        if not state.base.startswith("DOWN"):
+        if state.base != "DOWN":
             return NodeStatus.terminated
     elif (state is None or "POWERED_DOWN" in state.flags) and inst.status == "RUNNING":
         log.info("%s is potential orphan node", nodename)
