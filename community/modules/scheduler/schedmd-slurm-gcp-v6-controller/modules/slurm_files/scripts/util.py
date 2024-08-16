@@ -276,14 +276,9 @@ def blob_get(file):
     return storage_client().get_bucket(bucket_name).blob(blob_name)
 
 
-def blob_list(prefix="", delimiter=None):
+def blob_list() -> List[storage.Blob]:
     bucket_name, path = _get_bucket_and_common_prefix()
-    blob_prefix = f"{path}/{prefix}"
-    # Note: The call returns a response only when the iterator is consumed.
-    blobs = storage_client().list_blobs(
-        bucket_name, prefix=blob_prefix, delimiter=delimiter
-    )
-    return [blob for blob in blobs]
+    return list(storage_client().list_blobs(bucket_name, prefix=path))
 
 
 def hash_file(fullpath: Path) -> str:
@@ -301,30 +296,21 @@ def install_custom_scripts(check_hash=False):
 
     compute_tokens = ["compute", "prolog", "epilog"]
     if lookup().instance_role == "compute":
-        try:
-            compute_tokens.append(f"nodeset-{lookup().node_nodeset_name()}")
-        except Exception as e:
-            log.error(f"Failed to lookup nodeset: {e}")
+        compute_tokens.append(f"nodeset-{lookup().node_nodeset_name()}")
+    
+    tokens = {
+        "login": ["login"],
+        "compute": compute_tokens,
+        "controller": ["controller", "prolog", "epilog"],
+    }.get(lookup().instance_role, [])
 
-    prefix_tokens = dict.get(
-        {
-            "login": ["login"],
-            "compute": compute_tokens,
-            "controller": ["controller", "prolog", "epilog"],
-        },
-        lookup().instance_role,
-        [],
-    )
-    prefixes = [f"slurm-{tok}-script" for tok in prefix_tokens]
-    blobs = list(chain.from_iterable(blob_list(prefix=p) for p in prefixes))
-
-    script_pattern = re.compile(r"slurm-(?P<path>\S+)-script-(?P<name>\S+)")
-    for blob in blobs:
+    script_pattern = re.compile(r"slurm-(?P<token>\S+)-script-(?P<name>\S+)")
+    for blob in blob_list():
         m = script_pattern.match(Path(blob.name).name)
-        if not m:
-            log.warning(f"found blob that doesn't match expected pattern: {blob.name}")
+        if not m or m["token"] not in tokens:
             continue
-        path_parts = m["path"].split("-")
+        # TODO: Don't use ".d", make it simpler
+        path_parts = m["token"].split("-")
         path_parts[0] += ".d"
         stem, _, ext = m["name"].rpartition("_")
         filename = ".".join((stem, ext))
@@ -439,7 +425,7 @@ def _list_config_blobs() -> Tuple[Any, str]:
         "nodeset": [],
     }
     hash = hashlib.md5()
-    blobs = list(blob_list(prefix=""))
+    blobs = list(blob_list())
     # sort blobs so hash is consistent
     for blob in sorted(blobs, key=lambda b: b.name):
         if blob.name == f"{common_prefix}/config.yaml":
