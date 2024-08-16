@@ -67,9 +67,6 @@ locals {
     epilog_scripts   = [for k, v in google_storage_bucket_object.epilog_scripts : k]
     cloud_parameters = var.cloud_parameters
 
-    nodeset_dyn = { for n in var.nodeset_dyn : n.nodeset_name => n }
-    nodeset_tpu = { for n in var.nodeset_tpu[*].nodeset : n.nodeset_name => n }
-
     # hybrid
     hybrid                  = var.enable_hybrid
     google_app_cred_path    = var.enable_hybrid ? local.google_app_cred_path : null
@@ -138,6 +135,22 @@ resource "google_storage_bucket_object" "nodeset_config" {
 
   bucket  = data.google_storage_bucket.this.name
   name    = "${local.bucket_dir}/nodeset_configs/${each.key}.yaml"
+  content = yamlencode(each.value)
+}
+
+resource "google_storage_bucket_object" "nodeset_dyn_config" {
+  for_each = { for ns in var.nodeset_dyn : ns.nodeset_name => ns }
+
+  bucket  = data.google_storage_bucket.this.name
+  name    = "${local.bucket_dir}/nodeset_dyn_configs/${each.key}.yaml"
+  content = yamlencode(each.value)
+}
+
+resource "google_storage_bucket_object" "nodeset_tpu_config" {
+  for_each = { for n in var.nodeset_tpu[*].nodeset : n.nodeset_name => n }
+
+  bucket  = data.google_storage_bucket.this.name
+  name    = "${local.bucket_dir}/nodeset_tpu_configs/${each.key}.yaml"
   content = yamlencode(each.value)
 }
 
