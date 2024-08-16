@@ -25,16 +25,15 @@ done
 if [ -x /bin/daos ]; then
 	echo "DAOS already installed"
 	daos version
-	exit 0
-fi
+else
 
-# Install the DAOS client library
-# The following commands should be executed on each client vm.
-## For Rocky linux 8.
-if grep -q "ID=\"rocky\"" /etc/os-release && lsb_release -rs | grep -q "8\.[0-9]"; then
+	# Install the DAOS client library
+	# The following commands should be executed on each client vm.
+	## For Rocky linux 8.
+	if grep -q "ID=\"(rocky|rhel)\"" /etc/os-release && lsb_release -rs | grep -q "8\.[0-9]"; then
 
-	# 1) Add the Parallelstore package repository
-	tee /etc/yum.repos.d/parallelstore-v2-6-el8.repo <<EOF
+		# 1) Add the Parallelstore package repository
+		tee /etc/yum.repos.d/parallelstore-v2-6-el8.repo <<EOF
 [parallelstore-v2-6-el8]
 name=Parallelstore EL8 v2.6
 baseurl=https://us-central1-yum.pkg.dev/projects/parallelstore-packages/v2-6-el8
@@ -42,30 +41,31 @@ enabled=1
 repo_gpgcheck=0
 gpgcheck=0
 EOF
-	dnf makecache
+		dnf makecache
 
-	# 2) Install daos-client
-	dnf install -y epel-release # needed for capstone
-	dnf install -y daos-client
+		# 2) Install daos-client
+		dnf install -y epel-release # needed for capstone
+		dnf install -y daos-client
 
-	# 3) Upgrade libfabric
-	dnf upgrade -y libfabric
+		# 3) Upgrade libfabric
+		dnf upgrade -y libfabric
 
-# For Ubuntu 22.04 and debian 12,
-elif (grep -q "ID=ubuntu" /etc/os-release && lsb_release -rs | grep -q "22\.04") || (grep -q "ID=debian" /etc/os-release && lsb_release -rs | grep -q "12"); then
+	# For Ubuntu 22.04 and debian 12,
+	elif (grep -q "ID=ubuntu" /etc/os-release && lsb_release -rs | grep -q "22\.04") || (grep -q "ID=debian" /etc/os-release && lsb_release -rs | grep -q "12"); then
 
-	# 1) Add the Parallelstore package repository
-	curl https://us-central1-apt.pkg.dev/doc/repo-signing-key.gpg | apt-key add -
-	echo "deb https://us-central1-apt.pkg.dev/projects/parallelstore-packages v2-6-deb main" | tee -a /etc/apt/sources.list.d/artifact-registry.list
+		# 1) Add the Parallelstore package repository
+		curl https://us-central1-apt.pkg.dev/doc/repo-signing-key.gpg | apt-key add -
+		echo "deb https://us-central1-apt.pkg.dev/projects/parallelstore-packages v2-6-deb main" | tee -a /etc/apt/sources.list.d/artifact-registry.list
 
-	apt update
+		apt update
 
-	# 2) Install daos-client
-	apt install -y daos-client
+		# 2) Install daos-client
+		apt install -y daos-client
 
-else
-	echo "Unsupported operating system. This script only supports Rocky Linux 8, Ubuntu 22.04, and Debian 12."
-	exit 1
+	else
+		echo "Unsupported operating system. This script only supports Rocky Linux 8, Ubuntu 22.04, and Debian 12."
+		exit 1
+	fi
 fi
 
 # Edit agent config
@@ -80,7 +80,7 @@ chown daos_agent:daos_agent /var/log/daos_agent
 sed -i "s/#.*log_file:.*/log_file: \/var\/log\/daos_agent\/daos_agent.log/g" $daos_config
 
 # Start service
-if grep -q "ID=\"rocky\"" /etc/os-release && lsb_release -rs | grep -q "8\.[0-9]"; then
+if grep -q "ID=\"(rocky|rhel)\"" /etc/os-release && lsb_release -rs | grep -q "8\.[0-9]"; then
 	systemctl start daos_agent.service
 
 elif (grep -q "ID=ubuntu" /etc/os-release && lsb_release -rs | grep -q "22\.04") || (grep -q "ID=debian" /etc/os-release && lsb_release -rs | grep -q "12"); then
