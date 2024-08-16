@@ -4,6 +4,11 @@ This module creates [parallelstore](https://cloud.google.com/parallelstore)
 instance. Parallelstore is Google Cloud's first party parallel file system
 service based on [Intel DAOS](https://docs.daos.io/v2.2/)
 
+### Supported Operating Systems
+
+A parallelstore instance can be used with Slurm cluster or compute
+VM running Ubuntu 22.04, debian 12 or HPC Rocky Linux 8.
+
 ### Parallelstore Quota
 
 To get access to a private preview of Parallelstore APIs, your project needs to
@@ -30,9 +35,6 @@ issues. You can specify different mount options as follows,
 
 For parallelstore instance, Below snippet creates new VPC and configures private-service-access
 for this newly created network.
-
-The parallelstore instance created here can be used with Slurm cluster or compute
-VM running Ubuntu 22.04, debian 12 or HPC Rocky Linux 8.
 
 ```yaml
  - id: network
