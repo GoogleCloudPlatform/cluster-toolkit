@@ -13,7 +13,9 @@
 # limitations under the License.
 
 import pytest
+import json
 import mock
+from pytest_unordered import unordered
 from common import TstCfg, TstNodeset, TstTPU, make_to_hostnames_mock
 import sort_nodes
 
@@ -88,10 +90,39 @@ def test_gen_topology_conf(tpu_mock):
         "SwitchName=s1_1 Nodes=m22-slim-[0-2]"]
     assert list(compressed.render_conf_lines()) == want_compressed
 
-    conf.gen_topology_conf(util.Lookup(cfg))
+    assert conf.gen_topology_conf(lkp) == True
     want_written = PRELUDE + "\n".join(want_compressed) + "\n\n"
     assert open(cfg.output_dir + "/cloud_topology.conf").read() == want_written
 
+    summary_got = json.loads(open(cfg.output_dir + "/cloud_topology.summary.json").read())
+    assert  summary_got == {
+        "down_nodes": unordered(
+            [f"m22-blue-{i}" for i in range(7)] +
+            [f"m22-green-{i}" for i in range(5)] +
+            [f"m22-pink-{i}" for i in range(4)]),
+        "tpu_nodes": unordered(
+            [f"m22-bold-{i}" for i in range(9)] +
+            [f"m22-slim-{i}" for i in range(3)]),
+        "physical_host": {},
+    }
+
+
+
+def test_gen_topology_conf_update():
+    cfg = TstCfg(
+        nodeset={
+            "c": TstNodeset("green", node_count_static=2),
+        },
+        output_dir=tempfile.mkdtemp(),
+    )
+    lkp = util.Lookup(cfg)
+    assert conf.gen_topology_conf(lkp) == True
+
+    lkp.cfg.nodeset["c"].node_count_static = 3
+    assert conf.gen_topology_conf(lkp) == True
+
+    lkp.cfg.nodeset["c"].node_count_static = 1
+    assert conf.gen_topology_conf(lkp) == False
 
 
 @pytest.mark.parametrize(

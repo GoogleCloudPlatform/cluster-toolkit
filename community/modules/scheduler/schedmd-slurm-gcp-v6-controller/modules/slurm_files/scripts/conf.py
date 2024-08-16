@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Optional, Iterable, Dict
+from typing import List, Optional, Iterable, Dict, Set
 from itertools import chain
 from collections import defaultdict
 import json
@@ -440,10 +440,53 @@ class Switch:
         for s in sorted(self.switches.values(), key=lambda s: s.name):
             yield from s.render_conf_lines()
 
+class TopologySummary:
+    """
+    Represents a summary of the topology, to make judgements about changes.
+    To be stored in JSON file along side of topology.conf to simplify parsing.
+    """
+    def __init__(
+            self,
+            physical_host: Optional[Dict[str, str]] = None,
+            down_nodes: Optional[Iterable[str]] = None,
+            tpu_nodes: Optional[Iterable[str]] = None,
+        ) -> None:
+        self.physical_host = physical_host or {}
+        self.down_nodes = set(down_nodes or [])
+        self.tpu_nodes = set(tpu_nodes or [])
+
+
+    @classmethod
+    def loads(cls, s: str) -> "TopologySummary":
+        d = json.loads(s)
+        return cls(
+            physical_host=d.get("physical_host"),
+            down_nodes=d.get("down_nodes"),
+            tpu_nodes=d.get("tpu_nodes"),
+        )
+    
+    def dumps(self) -> str:
+        return json.dumps(
+            {
+                "physical_host": self.physical_host,
+                "down_nodes": list(self.down_nodes),
+                "tpu_nodes": list(self.tpu_nodes),
+            },
+            indent=2)
+    
+    def _nodenames(self) -> Set[str]:
+        return set(self.physical_host) | self.down_nodes | self.tpu_nodes
+        
+    def requires_reconfigure(self, prev: "TopologySummary") -> bool:
+        """
+        Reconfigure IFF the nodes were added
+        """
+        return len(self._nodenames() - prev._nodenames()) > 0
 
 class TopologyBuilder:
     def __init__(self) -> None:
         self._r = Switch("")  # fake root, not part of the tree
+        self.summary = TopologySummary()
 
     def add(self, path: List[str], nodes: Iterable[str]) -> None:
         n = self._r
@@ -460,6 +503,7 @@ class TopologyBuilder:
 
     def compress(self) -> "TopologyBuilder":
         compressed = TopologyBuilder()
+        compressed.summary = self.summary
         def _walk(
             u: Switch, c: Switch
         ):  # u: uncompressed node, c: its counterpart in compressed tree
@@ -479,7 +523,9 @@ def add_tpu_nodeset_topology(nodeset: object, bldr: TopologyBuilder, lkp: util.L
 
     pref = ["tpu-root",  f"ns_{nodeset.nodeset_name}"]
     if tpuobj.vmcount == 1:  # Put all nodes in one switch
-        bldr.add(pref, list(chain(static, dynamic)))
+        all_nodes = list(chain(static, dynamic))
+        bldr.add(pref, all_nodes)
+        bldr.summary.tpu_nodes.update(all_nodes)
         return
 
     # Chunk nodes into sub-switches of size `vmcount`
@@ -488,7 +534,8 @@ def add_tpu_nodeset_topology(nodeset: object, bldr: TopologyBuilder, lkp: util.L
         for nodeschunk in util.chunked(nodenames, n=tpuobj.vmcount):
             chunk_name = f"{nodeset.nodeset_name}-{chunk_num}"
             chunk_num += 1
-            bldr.add([*pref, chunk_name], list(nodeschunk))
+            bldr.add([*pref, chunk_name], nodeschunk)
+            bldr.summary.tpu_nodes.update(nodeschunk)
 
 
 def add_nodeset_topology(
@@ -497,6 +544,8 @@ def add_nodeset_topology(
     path = ["slurm-root",  f"ns_{nodeset.nodeset_name}"]
     nodes = list(chain(*lkp.nodenames(nodeset)))
     bldr.add(path, nodes)
+    # treat all nodes as down, since we don't make use of physical_host yet
+    bldr.summary.down_nodes.update(nodes) 
 
 
 def gen_topology(lkp: util.Lookup) -> TopologyBuilder:
@@ -513,26 +562,35 @@ def gen_topology_conf(lkp: util.Lookup) -> bool:
     Generates slurm topology.conf.
     Returns whether the topology.conf got updated.
     """
-    bldr = gen_topology(lkp).compress()
+    topo = gen_topology(lkp).compress()
     conf_file = lkp.etc_dir / "cloud_topology.conf"
-    old_hash = util.hash_file(conf_file) if conf_file.exists() else ""
+
 
     with open(conf_file, "w") as f:
         f.writelines(FILE_PREAMBLE + "\n")
-        for line in bldr.render_conf_lines():
+        for line in topo.render_conf_lines():
             f.write(line)
             f.write("\n")
         f.write("\n")
-    new_hash = util.hash_file(conf_file)
 
-    return old_hash != new_hash
+    summary_file = lkp.etc_dir / "cloud_topology.summary.json"
+    prev_summary = TopologySummary()
+    if summary_file.exists():
+        prev_summary = TopologySummary.loads(summary_file.read_text())
+    summary_file.write_text(topo.summary.dumps())
+    
+    return topo.summary.requires_reconfigure(prev_summary)
 
 def install_topology_conf(lkp: util.Lookup) -> None:
     conf_file = lkp.etc_dir / "cloud_topology.conf"
+    summary_file = lkp.etc_dir / "cloud_topology.summary.json"
     topo_conf = lkp.etc_dir / "topology.conf"
+    
     if not topo_conf.exists():
         topo_conf.symlink_to(conf_file)
+
     util.chown_slurm(conf_file, mode=0o600)
+    util.chown_slurm(summary_file, mode=0o600)
 
 
 def gen_controller_configs(lkp: util.Lookup) -> None:
