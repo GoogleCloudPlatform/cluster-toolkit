@@ -126,6 +126,7 @@ limitations under the License.
 | Name | Description |
 |------|-------------|
 | <a name="output_additional_networks"></a> [additional\_networks](#output\_additional\_networks) | Network interfaces for each subnetwork created by this module |
+| <a name="output_enable_multi_networking"></a> [enable\_multi\_networking](#output\_enable\_multi\_networking) | Enables multi-networking by setting the corresponding variable to true on supported modules (e.g., gke\_cluster). |
 | <a name="output_network_ids"></a> [network\_ids](#output\_network\_ids) | IDs of the new VPC network |
 | <a name="output_network_names"></a> [network\_names](#output\_network\_names) | Names of the new VPC networks |
 | <a name="output_network_self_links"></a> [network\_self\_links](#output\_network\_self\_links) | Self link of the new VPC network |
