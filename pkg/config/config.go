@@ -272,6 +272,8 @@ type Blueprint struct {
 	Groups                   []Group                      `yaml:"deployment_groups"`
 	TerraformBackendDefaults TerraformBackend             `yaml:"terraform_backend_defaults,omitempty"`
 	TerraformProviders       map[string]TerraformProvider `yaml:"terraform_providers,omitempty"`
+	ToolkitModulesURL        string                       `yaml:"toolkit_modules_url,omitempty"`
+	ToolkitModulesVersion    string                       `yaml:"toolkit_modules_version,omitempty"`
 
 	// internal & non-serializable fields
 
