@@ -22,16 +22,22 @@ for arg in "$@"; do
 	fi
 done
 
+if [ -x /bin/daos ]; then
+	echo "DAOS already installed"
+	daos version
+	exit 0
+fi
+
 # Install the DAOS client library
 # The following commands should be executed on each client vm.
 ## For Rocky linux 8.
 if grep -q "ID=\"rocky\"" /etc/os-release && lsb_release -rs | grep -q "8\.[0-9]"; then
 
 	# 1) Add the Parallelstore package repository
-	tee /etc/yum.repos.d/parallelstore-v2-4-el8.repo <<EOF
-[parallelstore-v2-4-el8]
-name=Parallelstore EL8 v2.4
-baseurl=https://us-central1-yum.pkg.dev/projects/parallelstore-packages/v2-4-el8
+	tee /etc/yum.repos.d/parallelstore-v2-6-el8.repo <<EOF
+[parallelstore-v2-6-el8]
+name=Parallelstore EL8 v2.6
+baseurl=https://us-central1-yum.pkg.dev/projects/parallelstore-packages/v2-6-el8
 enabled=1
 repo_gpgcheck=0
 gpgcheck=0
@@ -50,7 +56,7 @@ elif (grep -q "ID=ubuntu" /etc/os-release && lsb_release -rs | grep -q "22\.04")
 
 	# 1) Add the Parallelstore package repository
 	curl https://us-central1-apt.pkg.dev/doc/repo-signing-key.gpg | apt-key add -
-	echo "deb https://us-central1-apt.pkg.dev/projects/parallelstore-packages v2-4-deb main" | tee -a /etc/apt/sources.list.d/artifact-registry.list
+	echo "deb https://us-central1-apt.pkg.dev/projects/parallelstore-packages v2-6-deb main" | tee -a /etc/apt/sources.list.d/artifact-registry.list
 
 	apt update
 
