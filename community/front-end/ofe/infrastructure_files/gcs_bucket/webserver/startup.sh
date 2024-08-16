@@ -161,7 +161,7 @@ EOF
 #
 # Note: go.mod doesn't reference minor version so we need to capture the latest
 GO_MAJOR_VERSION=$(awk '/^go/ {print $2}' "/opt/gcluster/cluster-toolkit/go.mod")
-GO_API_RESPONSE=$(curl --silent "https://go.dev/dl/?mode=json")
+GO_API_RESPONSE=$(curl --silent "https://go.dev/dl/?mode=json&include=all")
 GO_VERSION=$(echo "$GO_API_RESPONSE" | jq -r --arg major "go$GO_MAJOR_VERSION" '.[] | select(.version | startswith($major)).version' | sort -V | tail -n 1)
 GO_DOWNLOAD_URL="https://golang.org/dl/${GO_VERSION}.linux-amd64.tar.gz"
 curl --silent --show-error --location "${GO_DOWNLOAD_URL}" --output "/tmp/${GO_VERSION}.linux-amd64.tar.gz"
