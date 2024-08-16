@@ -23,11 +23,14 @@ updates:
   - go
   - release-chore
   schedule:
-    interval: weekly
+    interval: monthly
     day: monday
     time: "03:00"
     timezone: America/Los_Angeles
   target-branch: develop
+  ignore:
+  - dependency-name: "google.golang.org/api"
+
 - package-ecosystem: pip
   directory: /community/front-end/ofe/
   labels:
