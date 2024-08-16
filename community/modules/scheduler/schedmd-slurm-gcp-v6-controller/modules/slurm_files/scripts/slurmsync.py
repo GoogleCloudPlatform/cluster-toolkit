@@ -25,8 +25,9 @@ from enum import Enum
 from itertools import chain
 from pathlib import Path
 import yaml
+import datetime as dt
 from datetime import datetime
-from typing import List, Dict, Tuple
+from typing import Dict, Tuple
 
 import util
 from util import (
@@ -229,8 +230,8 @@ def _seconds_since_timestamp(timestamp):
     """
     if timestamp[-3] == ":":  # python 36 datetime does not support the colon
         timestamp = timestamp[:-3] + timestamp[-2:]
-    creation_dt = datetime.datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%S.%f%z")
-    return datetime.datetime.now().timestamp() - creation_dt.timestamp()
+    creation_dt = datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%S.%f%z")
+    return datetime.now().timestamp() - creation_dt.timestamp()
 
 
 def do_node_update(status, nodes):
@@ -501,7 +502,7 @@ def sync_maintenance_reservation(lkp: util.Lookup) -> None:
     for res_name, (node, start_time) in upc_maint_map.items():
       if res_name in curr_reservation_map:
         diff = curr_reservation_map[res_name] - start_time
-        if abs(diff) <= datetime.timedelta(seconds=1):
+        if abs(diff) <= dt.timedelta(seconds=1):
           continue
         else:
           del_reservation.add(res_name)
