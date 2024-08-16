@@ -37,7 +37,6 @@ from util import (
     run,
     separate,
     to_hostlist_fast,
-    Lookup,
     NSDict,
     TPU,
     chunked,
@@ -548,6 +547,8 @@ def main():
         #     log.exception("failed to sync slurm reservation for scheduled maintenance")
 
     try:
+        # TODO: it performs 1 to 4 GCS list requests, 
+        # use cached version, combine with `_list_config_blobs`
         install_custom_scripts(check_hash=True)
     except Exception:
         log.exception("failed to sync custom scripts")
