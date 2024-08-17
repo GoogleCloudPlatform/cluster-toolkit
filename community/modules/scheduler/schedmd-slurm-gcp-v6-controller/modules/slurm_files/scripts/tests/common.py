@@ -70,6 +70,18 @@ class TstMachineConf:
 class TstTemplateInfo:
     gpu_count: int = 0
 
+@dataclass
+class TstInstance:
+    name: str
+    region: str = "gondor"
+    zone: str = "anorien"
+    placementPolicyId: Optional[str] = None
+    physicalHost: Optional[str] = None
+
+    @property
+    def resourceStatus(self):
+        return {"physicalHost": self.physicalHost}
+
 def make_to_hostnames_mock(tbl: Optional[dict[str, list[str]]]):
     tbl = tbl or {}
 
