@@ -407,6 +407,7 @@ variable "cloud_parameters" {
     suspend_rate    = optional(number)
     suspend_timeout = optional(number)
     topology_plugin = optional(string)
+    topology_param  = optional(string)
     tree_width      = optional(number)
   })
   default = {}

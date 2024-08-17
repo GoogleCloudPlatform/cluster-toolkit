@@ -125,6 +125,7 @@ def conflines(lkp: util.Lookup) -> str:
         "TreeWidth": get("tree_width", default_tree_width),
         "JobSubmitPlugins": "lua" if any_tpu else None,
         "TopologyPlugin": topology_plugin(lkp),
+        "TopologyParam": get("topology_param", "SwitchAsNodeRank"),
     }
     return dict_to_conf(conf_options, delim="\n")
 
