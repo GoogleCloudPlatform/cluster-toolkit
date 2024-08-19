@@ -22,7 +22,7 @@ universe_domain="$4"
 compute_endpoint_version="$5"
 gcloud_dir="$6"
 
-if [[ -z "${project}" || -z "${cluster_name}" || -z "${nodeset_name}" || -z "${universe_domain}" || -z "${compute_endpoint_version}" ]]; then
+if [[ $# -ne 5 ]]; then
 	echo "Usage: $0 <project> <cluster_name> <nodeset_name> <universe_domain> <compute_endpoint_version> <gcloud_dir>"
 	exit 1
 fi
@@ -43,7 +43,9 @@ fi
 echo "Deleting compute nodes"
 node_filter="name:${cluster_name}-${nodeset_name}-* labels.slurm_cluster_name=${cluster_name} AND labels.slurm_instance_role=compute"
 
-tmpfile=$(mktemp)
+tmpfile=$(mktemp) # have to use a temp file, since `< <(gcloud ...)` doesn't work nicely with `head`
+trap 'rm -f "$tmpfile"' EXIT
+
 running_nodes_filter="${node_filter} AND (status!=STOPPING AND status!=TERMINATED)"
 # List all currently running instances and attempt to delete them
 gcloud compute instances list --format="value(selfLink)" --filter="${running_nodes_filter}" >"$tmpfile"
@@ -54,8 +56,7 @@ while batch="$(head -n 10)" && [[ ${#batch} -gt 0 ]]; do
 	# be treated as independent arguments. See PR#2523
 	# shellcheck disable=SC2086
 	gcloud compute instances delete --quiet ${nodes} || echo "Failed to delete some instances"
-done <"$tmpfile" # have to use a temp file, since `< <(gcloud ...)` doesn't work nicely with `head`
-rm -f "$tmpfile"
+done <"$tmpfile"
 
 # In case if controller tries to delete the nodes as well,
 # wait until nodes in STOPPING state are deleted, before deleting the resource policies
