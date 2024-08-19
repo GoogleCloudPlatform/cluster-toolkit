@@ -49,7 +49,7 @@ partitions and slurm configuration in a running, active cluster.
 To reconfigure a running cluster:
 
 1. Edit the blueprint with the desired configuration changes
-2. Call `ghpc create <blueprint> -w` to overwrite the deployment directory
+2. Call `gcluster create <blueprint> -w` to overwrite the deployment directory
 3. Follow instructions in terminal to deploy
 
 The following are examples of updates that can be made to a running cluster:

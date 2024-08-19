@@ -63,10 +63,10 @@ The Pre-deployment Guide provides instructions for:
 
 ### Deploy the DAOS Cluster
 
-After completing the steps in the [Pre-deployment Guide][pre-deployment_guide] use `ghpc` to provision the blueprint
+After completing the steps in the [Pre-deployment Guide][pre-deployment_guide] use `gcluster` to provision the blueprint
 
 ```text
-ghpc create community/examples/intel/pfs-daos.yaml  \
+gcluster create community/examples/intel/pfs-daos.yaml  \
   --vars project_id=<<PROJECT_ID>> \
   [--backend-config bucket=<GCS tf backend bucket>]
 ```
@@ -75,10 +75,10 @@ This will create the deployment directory containing Terraform modules and
 Packer templates. The `--backend-config` option is not required but recommended.
 It will save the terraform state in a pre-existing [Google Cloud Storage
 bucket][bucket]. For more information see [Setting up a remote terraform
-state][backend]. Use `ghpc deploy` to provision your DAOS storage cluster:
+state][backend]. Use `gcluster deploy` to provision your DAOS storage cluster:
 
 ```text
-ghpc deploy pfs-daos --auto-approve
+gcluster deploy pfs-daos --auto-approve
 ```
 
 [backend]: ../../../examples/README.md#optional-setting-up-a-remote-terraform-state
@@ -238,7 +238,7 @@ See the [DFuse (DAOS FUSE)](https://docs.daos.io/v2.4/user/filesystem/?h=dfuse#d
 Delete the remaining infrastructure
 
 ```bash
-ghpc destroy pfs-daos --auto-approve
+gcluster destroy pfs-daos --auto-approve
 ```
 
 ## DAOS Server with Slurm cluster
@@ -291,10 +291,10 @@ The following available quota is required in the region used by Slurm:
 
 ### Deploy the DAOS/Slurm Cluster
 
-Use `ghpc` to provision the blueprint, supplying your project ID
+Use `gcluster` to provision the blueprint, supplying your project ID
 
 ```text
-ghpc create community/examples/intel/hpc-slurm-daos.yaml \
+gcluster create community/examples/intel/hpc-slurm-daos.yaml \
   --vars project_id=<<PROJECT_ID>> \
   [--backend-config bucket=<GCS tf backend bucket>]
 ```
@@ -304,10 +304,10 @@ templates.
 
 The `--backend-config` option is not required but recommended. It will save the terraform state in a pre-existing [Google Cloud Storage bucket][bucket]. For more information see [Setting up a remote terraform state][backend].
 
-Follow `ghpc` instructions to deploy the environment
+Follow `gcluster` instructions to deploy the environment
 
 ```text
-ghpc deploy hpc-slurm-daos --auto-approve
+gcluster deploy hpc-slurm-daos --auto-approve
 ```
 
 [backend]: ../../../examples/README.md#optional-setting-up-a-remote-terraform-state
@@ -450,5 +450,5 @@ have been shutdown and deleted by the Slurm autoscaler.
 Delete the remaining infrastructure:
 
 ```bash
-ghpc destroy hpc-slurm-daos --auto-approve
+gcluster destroy hpc-slurm-daos --auto-approve
 ```

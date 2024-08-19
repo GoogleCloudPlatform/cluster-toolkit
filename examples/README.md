@@ -124,7 +124,7 @@ You can set the configuration using the CLI in the `create` and `expand`
 subcommands as well:
 
 ```shell
-./ghpc create examples/hpc-slurm.yaml \
+./gcluster create examples/hpc-slurm.yaml \
   --vars "project_id=${GOOGLE_CLOUD_PROJECT}" \
   --backend-config "bucket=${GCS_BUCKET}"
 ```
@@ -166,7 +166,7 @@ as follows:
 
 * Robust reconfiguration
 
-  Reconfiguration is now managed by a service that runs on each instance. This has removed the dependency on the Pub/Sub Google cloud service, and provides a more consistent reconfiguration experience (when calling `ghpc deploy blueprint.yaml -w`). Reconfiguration has also been enabled by default.
+  Reconfiguration is now managed by a service that runs on each instance. This has removed the dependency on the Pub/Sub Google cloud service, and provides a more consistent reconfiguration experience (when calling `gcluster deploy blueprint.yaml -w`). Reconfiguration has also been enabled by default.
 
 * Faster deployments
 
@@ -178,7 +178,7 @@ as follows:
 
 * Fewer dependencies in the deployment environment
 
-  Reconfiguration and compute node cleanup no longer require users to install local python dependencies in the deployment environment (where ghpc is called). This has allowed for these features to be enabled by default.
+  Reconfiguration and compute node cleanup no longer require users to install local python dependencies in the deployment environment (where gcluster is called). This has allowed for these features to be enabled by default.
 
 * Flexible node to partition relation
 
@@ -565,8 +565,8 @@ VM. The cluster has 2 partitions:
 To provision the cluster, please run:
 
 ```text
-./ghpc create examples/ml-slurm-v5-legacy.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
-./ghpc deploy ml-example
+./gcluster create examples/ml-slurm-v5-legacy.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
+./gcluster deploy ml-example
 ```
 
 After accessing the login node, you can activate the conda environment for each
@@ -590,7 +590,7 @@ sbatch -N 1 torch_test.sh
 When you are done, clean up the resources in reverse order of creation:
 
 ```text
-./ghpc destroy ml-example
+./gcluster destroy ml-example
 ```
 
 Finally, browse to the [Cloud Console][console-images] to delete your custom
@@ -614,8 +614,8 @@ VM. The cluster has 2 partitions:
 To provision the cluster, please run:
 
 ```text
-./ghpc create examples/ml-slurm.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
-./ghpc deploy ml-example-v6
+./gcluster create examples/ml-slurm.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
+./gcluster deploy ml-example-v6
 ```
 
 After accessing the login node, you can activate the conda environment for each
@@ -639,7 +639,7 @@ sbatch -N 1 torch_test.sh
 When you are done, clean up the resources in reverse order of creation:
 
 ```text
-./ghpc destroy ml-example-v6
+./gcluster destroy ml-example-v6
 ```
 
 Finally, browse to the [Cloud Console][console-images] to delete your custom
@@ -670,8 +670,8 @@ example takes the following steps:
 Create the deployment folder from the blueprint:
 
 ```text
-./ghpc create examples/image-builder-v5-legacy.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
-./ghpc deploy image-builder-001"
+./gcluster create examples/image-builder-v5-legacy.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
+./gcluster deploy image-builder-001"
 ```
 
 Follow the on-screen prompts to approve the creation of each deployment group.
@@ -795,8 +795,8 @@ example takes the following steps:
 Create the deployment folder from the blueprint:
 
 ```text
-./ghpc create examples/image-builder.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
-./ghpc deploy image-builder-v6-001"
+./gcluster create examples/image-builder.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
+./gcluster deploy image-builder-v6-001"
 ```
 
 Follow the on-screen prompts to approve the creation of each deployment group.
@@ -1277,7 +1277,7 @@ To use the blueprint you must supply the project id and the name of an existing
 bucket:
 
 ```shell
-./ghpc create community/examples/client-google-cloud-storage.yaml \
+./gcluster create community/examples/client-google-cloud-storage.yaml \
   --vars project_id=<project_id> \
   --vars existing_bucket_name=<name_of_existing_bucket>
 ```
@@ -1943,7 +1943,7 @@ To avoid these issues, the `ghpc_stage` function can be used to copy a file (or 
 ```
 
 The `ghpc_stage` function will always look first in the path specified in the blueprint. If the file is not found at this path then `ghpc_stage` will look for the staged file in the deployment folder, if a deployment folder exists.
-This means that you can redeploy a blueprint (`ghpc deploy <blueprint> -w`) so long as you have the deployment folder from the original deployment, even if locally referenced files are not available.
+This means that you can redeploy a blueprint (`gcluster deploy <blueprint> -w`) so long as you have the deployment folder from the original deployment, even if locally referenced files are not available.
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 ## Requirements
