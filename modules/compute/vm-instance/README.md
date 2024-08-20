@@ -171,6 +171,7 @@ limitations under the License.
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.3.0 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 4.73.0 |
 | <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 4.73.0 |
+| <a name="requirement_google-private"></a> [google-private](#requirement\_google-private) | >= 0.0.1954 |
 | <a name="requirement_null"></a> [null](#requirement\_null) | >= 3.0 |
 
 ## Providers
@@ -179,6 +180,7 @@ limitations under the License.
 |------|---------|
 | <a name="provider_google"></a> [google](#provider\_google) | >= 4.73.0 |
 | <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 4.73.0 |
+| <a name="provider_google-private"></a> [google-private](#provider\_google-private) | >= 0.0.1954 |
 | <a name="provider_null"></a> [null](#provider\_null) | >= 3.0 |
 
 ## Modules
@@ -191,12 +193,13 @@ limitations under the License.
 
 | Name | Type |
 |------|------|
-| [google-beta_google_compute_instance.compute_vm](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_compute_instance) | resource |
 | [google-beta_google_compute_resource_policy.placement_policy](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_compute_resource_policy) | resource |
+| [google-private_google_compute_instance.compute_vm](https://registry.terraform.io/providers/hashicorp/google-private/latest/docs/resources/google_compute_instance) | resource |
 | [google_compute_address.compute_ip](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_address) | resource |
 | [google_compute_disk.boot_disk](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_disk) | resource |
 | [null_resource.image](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
 | [null_resource.replace_vm_trigger_from_placement](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
+| [google-beta_google_compute_resource_policy.pre_existing_placement_policy](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/data-sources/google_compute_resource_policy) | data source |
 | [google_compute_image.compute_image](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_image) | data source |
 
 ## Inputs
@@ -229,6 +232,7 @@ limitations under the License.
 | <a name="input_network_storage"></a> [network\_storage](#input\_network\_storage) | An array of network attached storage mounts to be configured. | <pre>list(object({<br>    server_ip             = string,<br>    remote_mount          = string,<br>    local_mount           = string,<br>    fs_type               = string,<br>    mount_options         = string,<br>    client_install_runner = map(string)<br>    mount_runner          = map(string)<br>  }))</pre> | `[]` | no |
 | <a name="input_on_host_maintenance"></a> [on\_host\_maintenance](#input\_on\_host\_maintenance) | Describes maintenance behavior for the instance. If left blank this will default to `MIGRATE` except for when `placement_policy`, spot provisioning, or GPUs require it to be `TERMINATE` | `string` | `null` | no |
 | <a name="input_placement_policy"></a> [placement\_policy](#input\_placement\_policy) | Control where your VM instances are physically located relative to each other within a zone.<br>See https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_resource_policy#nested_group_placement_policy | `any` | `null` | no |
+| <a name="input_pre_existing_placement_policy"></a> [pre\_existing\_placement\_policy](#input\_pre\_existing\_placement\_policy) | Use pre-existing placement policy within the project specified | `string` | `null` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | The region to deploy to | `string` | n/a | yes |
 | <a name="input_service_account"></a> [service\_account](#input\_service\_account) | DEPRECATED - Use `service_account_email` and `service_account_scopes` instead. | <pre>object({<br>    email  = string,<br>    scopes = set(string)<br>  })</pre> | `null` | no |
