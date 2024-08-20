@@ -32,10 +32,10 @@ locals {
   sa_email = var.service_account_email != null ? var.service_account_email : data.google_compute_default_service_account.default_sa.email
 
   # additional VPCs enable multi networking 
-  derived_enable_multi_networking = length(var.additional_networks) > 0 ? true : coalesce(var.enable_multi_networking, false)
+  derived_enable_multi_networking = coalesce(var.enable_multi_networking, length(var.additional_networks) > 0 ? true : false)
 
   # multi networking needs enabled Dataplane v2
-  derived_enable_dataplane_v2 = local.derived_enable_multi_networking ? true : coalesce(var.enable_dataplane_v2, false)
+  derived_enable_dataplane_v2 = coalesce(var.enable_dataplane_v2, local.derived_enable_multi_networking)
 }
 
 data "google_compute_default_service_account" "default_sa" {
