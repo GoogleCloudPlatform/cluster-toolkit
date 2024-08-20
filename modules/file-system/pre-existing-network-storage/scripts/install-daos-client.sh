@@ -22,18 +22,21 @@ for arg in "$@"; do
 	fi
 done
 
+OS_ID=$(awk -F '=' '/^ID=/ {print $2}' /etc/os-release | sed -e 's/"//g')
+OS_VERSION=$(awk -F '=' '/VERSION_ID/ {print $2}' /etc/os-release | sed -e 's/"//g')
+OS_VERSION_MAJOR=$(awk -F '=' '/VERSION_ID/ {print $2}' /etc/os-release | sed -e 's/"//g' -e 's/\..*$//')
+
 if [ -x /bin/daos ]; then
 	echo "DAOS already installed"
 	daos version
 else
-
 	# Install the DAOS client library
 	# The following commands should be executed on each client vm.
-	## For Rocky linux 8.
-	if grep -q "ID=\"rocky\"" /etc/os-release && lsb_release -rs | grep -q "8\.[0-9]"; then
-
-		# 1) Add the Parallelstore package repository
-		tee /etc/yum.repos.d/parallelstore-v2-6-el8.repo <<EOF
+	## For Rocky linux 8 / RedHat 8.
+	if [ "${OS_ID}" = "rocky" ] || [ "${OS_ID}" = "rhel" ]; then
+		if [ "${OS_VERSION_MAJOR}" = "8" ]; then
+			# 1) Add the Parallelstore package repository
+			tee /etc/yum.repos.d/parallelstore-v2-6-el8.repo <<EOF
 [parallelstore-v2-6-el8]
 name=Parallelstore EL8 v2.6
 baseurl=https://us-central1-yum.pkg.dev/projects/parallelstore-packages/v2-6-el8
@@ -41,6 +44,19 @@ enabled=1
 repo_gpgcheck=0
 gpgcheck=0
 EOF
+		elif [ "${OS_VERSION_MAJOR}" -eq "9" ]; then
+			tee /etc/yum.repos.d/parallelstore-v2-6-el9.repo <<EOF
+[parallelstore-v2-6-el9]
+name=Parallelstore EL9 v2.6
+baseurl=https://packages.daos.io/v2.6/EL9/packages/x86_64/
+enabled=1
+repo_gpgcheck=0
+gpgcheck=0
+EOF
+		else
+			echo "Unsupported RedHat / Rocky Linux system version ${OS_VERSION_MAJOR}. This script only supports version 8 and 9."
+			exit 1
+		fi
 		dnf makecache
 
 		# 2) Install daos-client
@@ -51,7 +67,7 @@ EOF
 		dnf upgrade -y libfabric
 
 	# For Ubuntu 22.04 and debian 12,
-	elif (grep -q "ID=ubuntu" /etc/os-release && lsb_release -rs | grep -q "22\.04") || (grep -q "ID=debian" /etc/os-release && lsb_release -rs | grep -q "12"); then
+	elif { [ "${OS_ID}" = "ubuntu" ] && [ "${OS_VERSION}" = "22.04" ]; } || { [ "${OS_ID}" = "debian" ] && [ "${OS_VERSION_MAJOR}" = "12" ]; }; then
 
 		# 1) Add the Parallelstore package repository
 		curl https://us-central1-apt.pkg.dev/doc/repo-signing-key.gpg | apt-key add -
@@ -63,7 +79,7 @@ EOF
 		apt install -y daos-client
 
 	else
-		echo "Unsupported operating system. This script only supports Rocky Linux 8, Ubuntu 22.04, and Debian 12."
+		echo "Unsupported operating system ${OS_ID} ${OS_VERSION_MAJOR}. This script only supports Rocky Linux 8, Ubuntu 22.04, and Debian 12."
 		exit 1
 	fi
 fi
@@ -80,17 +96,13 @@ chown daos_agent:daos_agent /var/log/daos_agent
 sed -i "s/#.*log_file:.*/log_file: \/var\/log\/daos_agent\/daos_agent.log/g" $daos_config
 
 # Start service
-if grep -q "ID=\"rocky\"" /etc/os-release && lsb_release -rs | grep -q "8\.[0-9]"; then
+if { [ "${OS_ID}" = "rocky" ] || [ "${OS_ID}" = "rhel" ]; } && { [ "${OS_VERSION_MAJOR}" = "8" ] || [ "${OS_VERSION_MAJOR}" = "9" ]; }; then
 	systemctl start daos_agent.service
-elif grep -q "ID=\"rhel\"" /etc/os-release && grep -q "VERSION_ID=\"[8-9]" /etc/os-release; then
-	systemctl start daos_agent.service
-
-elif (grep -q "ID=ubuntu" /etc/os-release && lsb_release -rs | grep -q "22\.04") || (grep -q "ID=debian" /etc/os-release && lsb_release -rs | grep -q "12"); then
+elif { [ "${OS_ID}" = "ubuntu" ] && [ "${OS_VERSION}" = "22.04" ]; } || { [ "${OS_ID}" = "debian" ] && [ "${OS_VERSION_MAJOR}" = "12" ]; }; then
 	mkdir -p /var/run/daos_agent
 	daos_agent -o /etc/daos/daos_agent.yml &
-
 else
-	echo "Unsupported operating system. This script only supports Rocky Linux 8, Ubuntu 22.04, and Debian 12."
+	echo "Unsupported operating system ${OS_ID} ${OS_VERSION}. This script only supports Rocky Linux 8, Redhat 8, Redhat 9, Ubuntu 22.04, and Debian 12."
 	exit 1
 fi
 
