@@ -243,3 +243,10 @@ variable "firewall_log_config" {
     error_message = "var.firewall_log_config must be set to \"DISABLE_LOGGING\", or enable logging with \"INCLUDE_ALL_METADATA\" or \"EXCLUDE_ALL_METADATA\""
   }
 }
+
+variable "network_profile" {
+  # TODO Update this description
+  description = "Profile name for VPC configuration"
+  type        = string
+  default     = null
+}

@@ -150,8 +150,7 @@ locals {
 }
 
 module "vpc" {
-  source  = "terraform-google-modules/network/google"
-  version = "~> 9.0"
+  source = "./vpc-submodule"
 
   network_name                           = local.network_name
   project_id                             = var.project_id
@@ -164,6 +163,7 @@ module "vpc" {
   shared_vpc_host                        = var.shared_vpc_host
   delete_default_internet_gateway_routes = var.delete_default_internet_gateway_routes
   firewall_rules                         = local.firewall_rules
+  network_profile                        = var.network_profile
 }
 
 # This use of the module may appear odd when var.ips_per_nat = 0. The module

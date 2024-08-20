@@ -171,6 +171,7 @@ limitations under the License.
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.3.0 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 4.73.0 |
 | <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 4.73.0 |
+| <a name="requirement_google-private"></a> [google-private](#requirement\_google-private) | >= 0.0.1954 |
 | <a name="requirement_null"></a> [null](#requirement\_null) | >= 3.0 |
 
 ## Providers
@@ -179,6 +180,7 @@ limitations under the License.
 |------|---------|
 | <a name="provider_google"></a> [google](#provider\_google) | >= 4.73.0 |
 | <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 4.73.0 |
+| <a name="provider_google-private"></a> [google-private](#provider\_google-private) | >= 0.0.1954 |
 | <a name="provider_null"></a> [null](#provider\_null) | >= 3.0 |
 
 ## Modules
@@ -191,8 +193,8 @@ limitations under the License.
 
 | Name | Type |
 |------|------|
-| [google-beta_google_compute_instance.compute_vm](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_compute_instance) | resource |
 | [google-beta_google_compute_resource_policy.placement_policy](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_compute_resource_policy) | resource |
+| [google-private_google_compute_instance.compute_vm](https://registry.terraform.io/providers/hashicorp/google-private/latest/docs/resources/google_compute_instance) | resource |
 | [google_compute_address.compute_ip](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_address) | resource |
 | [google_compute_disk.boot_disk](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_disk) | resource |
 | [null_resource.image](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
