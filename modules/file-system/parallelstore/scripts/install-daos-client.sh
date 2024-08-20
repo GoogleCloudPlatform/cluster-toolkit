@@ -79,7 +79,7 @@ EOF
 		apt install -y daos-client
 
 	else
-		echo "Unsupported operating system ${OS_ID} ${OS_VERSION_MAJOR}. This script only supports Rocky Linux 8, Ubuntu 22.04, and Debian 12."
+		echo "Unsupported operating system ${OS_ID} ${OS_VERSION}. This script only supports Rocky Linux 8, Redhat 8, Redhat 9, Ubuntu 22.04, and Debian 12."
 		exit 1
 	fi
 fi
