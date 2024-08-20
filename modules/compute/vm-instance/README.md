@@ -133,7 +133,7 @@ can be found at [docs/gpu-support.md](../../../docs/gpu-support.md)
 
 The `vm-instance` module will be replaced when the `instance_image` variable is
 changed and `terraform apply` is run on  the deployment group folder or
-`ghpc deploy` is run. However, it will not be automatically replaced if a new
+`gcluster deploy` is run. However, it will not be automatically replaced if a new
 image is created in a family.
 
 To selectively replace the vm-instance(s), consider running terraform

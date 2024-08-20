@@ -266,6 +266,7 @@ variable "service_account" {
     error_message = "service_account is deprecated and replaced with service_account_email and scopes."
   }
 }
+
 variable "additional_networks" {
   description = "Additional network interface details for GKE, if any. Providing additional networks adds additional node networks to the node pool"
   default     = []
@@ -289,4 +290,32 @@ variable "additional_networks" {
       subnetwork_range_name = string
     }))
   }))
+}
+
+variable "reservation_type" {
+  description = "Type of reservation to consume"
+  type        = string
+  default     = "NO_RESERVATION"
+
+  validation {
+    condition     = contains(["NO_RESERVATION", "ANY_RESERVATION", "SPECIFIC_RESERVATION"], var.reservation_type)
+    error_message = "Accepted values are: {NO_RESERVATION, ANY_RESERVATION, SPECIFIC_RESERVATION}"
+  }
+}
+
+variable "specific_reservation" {
+  description = <<-EOT
+  Reservation resources to consume when targeting SPECIFIC_RESERVATION.
+  Specify `compute.googleapis.com/reservation-name` as the key and the list of reservation names as the value.
+  It is assumed that the specified reservations exist and they have available capacity.
+  To create reservations refer to https://cloud.google.com/compute/docs/instances/reservations-single-project and https://cloud.google.com/compute/docs/instances/reservations-shared
+  EOT
+  type = object({
+    key    = string
+    values = list(string)
+  })
+  default = {
+    key    = null
+    values = null
+  }
 }

@@ -48,7 +48,7 @@ deployment_groups:
       local_ssd_filesystem:
         fs_type: ext4
         mountpoint: /mnt/localssd
-        permissions: "0755" # must quote numeric filesystem permissions!
+        permissions: "1777" # must quote numeric filesystem permissions!
 
   - id: compute_node_group
     source: community/modules/compute/schedmd-slurm-gcp-v5-node-group

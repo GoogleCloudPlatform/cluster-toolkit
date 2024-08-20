@@ -70,7 +70,7 @@ activated through the `enable_reconfigure` setting:
 To reconfigure a running cluster:
 
 1. Edit the blueprint with the desired configuration changes
-1. Call `ghpc create <blueprint> -w` to overwrite the deployment directory
+1. Call `gcluster create <blueprint> -w` to overwrite the deployment directory
 1. Follow instructions in terminal to deploy
 
 The following are examples of updates that can be made to a running cluster:
