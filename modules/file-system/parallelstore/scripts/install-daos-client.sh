@@ -30,7 +30,7 @@ else
 	# Install the DAOS client library
 	# The following commands should be executed on each client vm.
 	## For Rocky linux 8.
-	if grep -q "ID=\"(rocky|rhel)\"" /etc/os-release && lsb_release -rs | grep -q "8\.[0-9]"; then
+	if grep -q "ID=\"rocky\"" /etc/os-release && lsb_release -rs | grep -q "8\.[0-9]"; then
 
 		# 1) Add the Parallelstore package repository
 		tee /etc/yum.repos.d/parallelstore-v2-6-el8.repo <<EOF
@@ -80,7 +80,9 @@ chown daos_agent:daos_agent /var/log/daos_agent
 sed -i "s/#.*log_file:.*/log_file: \/var\/log\/daos_agent\/daos_agent.log/g" $daos_config
 
 # Start service
-if grep -q "ID=\"(rocky|rhel)\"" /etc/os-release && lsb_release -rs | grep -q "8\.[0-9]"; then
+if grep -q "ID=\"rocky\"" /etc/os-release && lsb_release -rs | grep -q "8\.[0-9]"; then
+	systemctl start daos_agent.service
+elif grep -q "ID=\"rhel\"" /etc/os-release && grep -q "VERSION_ID=\"[8-9]" /etc/os-release; then
 	systemctl start daos_agent.service
 
 elif (grep -q "ID=ubuntu" /etc/os-release && lsb_release -rs | grep -q "22\.04") || (grep -q "ID=debian" /etc/os-release && lsb_release -rs | grep -q "12"); then
