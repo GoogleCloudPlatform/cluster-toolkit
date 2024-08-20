@@ -1542,16 +1542,11 @@ cleaned up when the job is deleted.
 This blueprint shows how to provision a GKE cluster with A3 Mega machines in the toolkit.
 
 After provisioning the cluster and the nodepool, we need to do the following:
-
-1- Install the GPUDirect binary and configure NCCL: https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#install-gpudirect-tcpx-nccl
-
-2- Deploy NRI device injector plugin: https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#nri-device-injector
-
-3- Deploy a test workload: https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#test-workload
-
-4- Use recommended NCCL configuration settings to improve performance: https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#environment-variables-nccl
-
-5- Add GPUDirect to manifests: https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#add-gpudirect-manifests
+1. Install the GPUDirect binary and configure NCCL: https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#install-gpudirect-tcpx-nccl
+2. Deploy NRI device injector plugin: https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#nri-device-injector
+3. Deploy a test workload: https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#test-workload
+4. Use recommended NCCL configuration settings to improve performance: https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#environment-variables-nccl
+5. Add GPUDirect to manifests: https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#add-gpudirect-manifests
 
 > [!Note]
 > The Kubernetes API server will only allow requests from authorized networks.
@@ -1568,7 +1563,7 @@ After provisioning the cluster and the nodepool, we need to do the following:
 
 This blueprint shows how to provision a GKE cluster with A3 High machines in the toolkit.
 
-After provisioning the cluster and the nodepool, we need to do the [following](#gke-a3-high-setup-steps):
+After provisioning the cluster and the nodepool, we need to do the following:
 1- Install the GPUDirect binary and configure NCCL: https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#gpudirect-tcpx_2
 2- Deploy NRI device injector plugin: https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#nri-device-injector
 3- Deploy a test workload: https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#test-workload

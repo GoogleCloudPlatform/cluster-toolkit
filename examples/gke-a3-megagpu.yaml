@@ -66,7 +66,7 @@ deployment_groups:
       autoscaling_total_min_nodes: 2
       zones: [$(vars.zone)]
 
-# We need to take the following steps as explained here: https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/examples/README.md#gke-a3-megagpuyaml--
+# # We need to do the following here after deployment (https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/examples/README.md#gke-a3-megagpuyaml--):
 # 1- Install the GPUDirect binary and configure NCCL: https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#install-gpudirect-tcpx-nccl
 # 2- Deploy NRI device injector plugin: https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#nri-device-injector
 # 3- Deploy a test workload: https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#test-workload
