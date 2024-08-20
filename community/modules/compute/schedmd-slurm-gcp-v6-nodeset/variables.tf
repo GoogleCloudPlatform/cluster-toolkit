@@ -29,6 +29,14 @@ variable "node_conf" {
   description = "Map of Slurm node line configuration."
   type        = map(any)
   default     = {}
+  validation {
+    condition     = lookup(var.node_conf, "Sockets", null) == null
+    error_message = <<-EOD
+    `Sockets` settings conflicts with `SocketsPerBoard` that is automatically computed by SlurmGCP.
+    Instead you can override `Boards`, `SocketsPerBoard`, `CoresPerSocket`, and `ThreadsPerCore`.
+    See: https://slurm.schedmd.com/slurm.conf.html#OPT_Boards and https://slurm.schedmd.com/slurm.conf.html#OPT_Sockets_1
+    EOD
+  }
 }
 
 variable "node_count_static" {
