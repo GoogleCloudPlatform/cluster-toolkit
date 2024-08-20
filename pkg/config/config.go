@@ -349,6 +349,7 @@ func (bp *Blueprint) Expand() error {
 	errs := (&Errors{}).
 		Add(checkStringLiterals(bp)).
 		Add(bp.checkBlueprintName()).
+		Add(bp.checkToolkitModulesUrlAndVersion()).
 		Add(checkProviders(Root.Provider, bp.TerraformProviders))
 	if errs.Any() {
 		return *errs
@@ -676,6 +677,19 @@ func (bp *Blueprint) checkBlueprintName() error {
 		}}
 	}
 
+	return nil
+}
+
+// checkToolkitModulesUrlAndVersion returns an error if either
+// toolkit_modules_url or toolkit_modules_version is
+// exclsuively supplied (i.e., one is present, but the other is missing).
+func (bp *Blueprint) checkToolkitModulesUrlAndVersion() error {
+	if bp.ToolkitModulesURL == "" && bp.ToolkitModulesVersion != "" {
+		return fmt.Errorf("toolkit_modules_url must be provided when toolkit_modules_version is specified")
+	}
+	if bp.ToolkitModulesURL != "" && bp.ToolkitModulesVersion == "" {
+		return fmt.Errorf("toolkit_modules_version must be provided when toolkit_modules_url is specified")
+	}
 	return nil
 }
 

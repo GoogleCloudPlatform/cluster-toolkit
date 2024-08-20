@@ -17,8 +17,8 @@ package config
 import (
 	"errors"
 	"fmt"
-	"strings"
 
+	"hpc-toolkit/pkg/inspect"
 	"hpc-toolkit/pkg/modulereader"
 
 	"github.com/zclconf/go-cty/cty"
@@ -104,9 +104,23 @@ func (bp *Blueprint) expandVars() error {
 	return nil
 }
 
+func (bp *Blueprint) substituteModuleSources() {
+	for ig := range bp.Groups {
+		g := &bp.Groups[ig]
+		for im := range g.Modules {
+			m := &g.Modules[im]
+			if inspect.IsLocalModule(m.Source) {
+				m.Source = fmt.Sprintf("%s//%s?ref=%s&depth=1", bp.ToolkitModulesURL, m.Source, bp.ToolkitModulesVersion)
+			}
+		}
+	}
+}
+
 func (bp *Blueprint) expandGroups() error {
 	bp.addKindToModules()
-
+	if bp.ToolkitModulesURL != "" && bp.ToolkitModulesVersion != "" {
+		bp.substituteModuleSources()
+	}
 	if err := checkModulesAndGroups(*bp); err != nil {
 		return err
 	}
@@ -144,22 +158,7 @@ func (bp Blueprint) expandGroup(gp groupPath, g *Group) error {
 func (bp Blueprint) expandModule(mp ModulePath, m *Module) error {
 	bp.applyUseModules(m)
 	bp.applyGlobalVarsInModule(m)
-	// Versioned Module Logic for Embedded Modules
-	if bp.ToolkitModulesURL != "" && bp.ToolkitModulesVersion != "" {
-		if strings.HasPrefix(m.Source, "modules/") || strings.HasPrefix(m.Source, "community/") {
-			newSource, err := constructVersionedModuleSource(bp.ToolkitModulesURL, m.Source, bp.ToolkitModulesVersion)
-			if err != nil {
-				return fmt.Errorf("error constructing versioned module source: %w", err)
-			}
-			m.Source = newSource
-		}
-	}
 	return validateModuleInputs(mp, *m, bp)
-}
-
-// TODO: Add validation and error checks for baseURL and version
-func constructVersionedModuleSource(baseURL, modulePath, version string) (string, error) {
-	return fmt.Sprintf("%s//%s?ref=%s&depth=1", baseURL, modulePath, version), nil
 }
 
 func (bp Blueprint) expandBackend(grp *Group) {
