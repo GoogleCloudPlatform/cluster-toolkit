@@ -68,7 +68,7 @@ module "slurm_login_instance" {
   slurm_cluster_name = local.slurm_cluster_name
 
   instance_template = module.slurm_login_template[each.key].self_link
-  labels            = merge(each.value.labels, local.files_cs_labels)
+  labels            = each.value.labels
   num_instances     = each.value.num_instances
 
   additional_networks = each.value.additional_networks

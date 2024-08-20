@@ -116,7 +116,7 @@ module "slurm_controller_instance" {
   zone                = var.zone
   metadata            = var.metadata
 
-  labels = merge(local.labels, local.files_cs_labels)
+  labels = local.labels
 }
 
 # SECRETS: CLOUDSQL

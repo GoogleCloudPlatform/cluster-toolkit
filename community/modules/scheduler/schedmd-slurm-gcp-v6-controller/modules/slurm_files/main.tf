@@ -277,17 +277,6 @@ data "local_file" "setup_external" {
 }
 
 locals {
-  checksum = md5(join("", flatten([
-    google_storage_bucket_object.config.md5hash,
-    google_storage_bucket_object.devel.md5hash,
-    [for k, f in google_storage_bucket_object.controller_startup_scripts : f.md5hash],
-    [for k, f in google_storage_bucket_object.compute_startup_scripts : f.md5hash],
-    [for k, f in google_storage_bucket_object.nodeset_startup_scripts : f.md5hash],
-    [for k, f in google_storage_bucket_object.login_startup_scripts : f.md5hash],
-    [for k, f in google_storage_bucket_object.prolog_scripts : f.md5hash],
-    [for k, f in google_storage_bucket_object.epilog_scripts : f.md5hash]
-  ])))
-
   external_epilog = [{
     filename = "z_external_epilog.sh"
     content  = data.local_file.external_epilog.content
