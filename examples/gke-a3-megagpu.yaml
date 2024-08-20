@@ -72,13 +72,3 @@ deployment_groups:
 # 3- Deploy a test workload: https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#test-workload
 # 4- Use recommended NCCL configuration settings to improve performance: https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#environment-variables-nccl
 # 5- Add GPUDirect to manifests: https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#add-gpudirect-manifests
-
-  - id: job-template
-    source: modules/compute/gke-job-template
-    use: [a3-megagpu_pool]
-    settings:
-      image: nvidia/cuda:11.0.3-runtime-ubuntu20.04
-      command:
-      - nvidia-smi
-      node_count: 2
-    outputs: [instructions]

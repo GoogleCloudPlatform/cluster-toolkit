@@ -48,8 +48,3 @@ output "subnetwork_addresses" {
   description = "IP address range of the primary subnetwork"
   value       = module.vpcs[*].subnetwork_address
 }
-
-output "enable_multi_networking" {
-  description = "Enables multi-networking by setting the corresponding variable to true on supported modules (e.g., gke_cluster)."
-  value       = true
-}
