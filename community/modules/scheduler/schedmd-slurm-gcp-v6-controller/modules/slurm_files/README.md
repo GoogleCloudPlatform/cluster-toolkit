@@ -110,7 +110,6 @@ No modules.
 
 | Name | Description |
 |------|-------------|
-| <a name="output_checksum"></a> [checksum](#output\_checksum) | Checksum of all files written to the bucket. |
 | <a name="output_config"></a> [config](#output\_config) | Cluster configuration. |
 | <a name="output_nodeset"></a> [nodeset](#output\_nodeset) | Cluster nodesets. |
 | <a name="output_nodeset_dyn"></a> [nodeset\_dyn](#output\_nodeset\_dyn) | Cluster nodesets (dynamic). |
