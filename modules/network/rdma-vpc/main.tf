@@ -58,9 +58,6 @@ locals {
     merge({ for k, v in subnet : k => v if k != "new_bits" }, { "subnet_ip" = local.subnetworks_cidr_blocks[i] })
   ]
 
-  # gather the unique regions for purposes of creating Router/NAT
-  regions = distinct([for subnet in local.subnetworks : subnet.subnet_region])
-
   # this comprehension should have 1 and only 1 match
   output_primary_subnetwork               = one([for k, v in module.vpc.subnets : v if k == "${local.subnetworks[0].subnet_region}/${local.subnetworks[0].subnet_name}"])
   output_primary_subnetwork_name          = local.output_primary_subnetwork.name
@@ -150,8 +147,7 @@ locals {
 }
 
 module "vpc" {
-  source  = "terraform-google-modules/network/google"
-  version = "~> 9.0"
+  source = "./vpc-submodule"
 
   network_name                           = local.network_name
   project_id                             = var.project_id
@@ -164,45 +160,5 @@ module "vpc" {
   shared_vpc_host                        = var.shared_vpc_host
   delete_default_internet_gateway_routes = var.delete_default_internet_gateway_routes
   firewall_rules                         = local.firewall_rules
-}
-
-# This use of the module may appear odd when var.ips_per_nat = 0. The module
-# will be called for all regions with subnetworks but names will be set to the
-# empty list. This is a perfectly valid value (the default!). In this scenario,
-# no IP addresses are created and all module outputs are empty lists.
-#
-# https://github.com/terraform-google-modules/terraform-google-address/blob/v3.1.1/variables.tf#L27
-# https://github.com/terraform-google-modules/terraform-google-address/blob/v3.1.1/outputs.tf
-module "nat_ip_addresses" {
-  source  = "terraform-google-modules/address/google"
-  version = "~> 3.1"
-
-  for_each = toset(local.regions)
-
-  project_id = var.project_id
-  region     = each.value
-  # an external, regional (not global) IP address is suited for a regional NAT
-  address_type = "EXTERNAL"
-  global       = false
-  names        = [for idx in range(var.ips_per_nat) : "${local.network_name}-nat-ips-${each.value}-${idx}"]
-}
-
-module "cloud_router" {
-  source  = "terraform-google-modules/cloud-router/google"
-  version = "~> 6.0"
-
-  for_each = toset(local.regions)
-
-  project = var.project_id
-  name    = "${local.network_name}-router"
-  region  = each.value
-  network = module.vpc.network_name
-  # in scenario with no NAT IPs, no NAT is created even if router is created
-  # https://github.com/terraform-google-modules/terraform-google-cloud-router/blob/v2.0.0/nat.tf#L18-L20
-  nats = length(module.nat_ip_addresses[each.value].self_links) == 0 ? [] : [
-    {
-      name : "cloud-nat-${each.value}",
-      nat_ips : module.nat_ip_addresses[each.value].self_links
-    },
-  ]
+  network_profile                        = var.network_profile
 }

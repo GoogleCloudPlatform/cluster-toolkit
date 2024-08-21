@@ -123,6 +123,15 @@ resource "google_compute_disk" "boot_disk" {
   }
 }
 
+data "google_compute_resource_policy" "pre_existing_placement_policy" {
+  project  = var.project_id
+  provider = google-beta
+
+  count  = var.pre_existing_placement_policy != null ? 1 : 0
+  name   = var.pre_existing_placement_policy
+  region = var.region
+}
+
 resource "google_compute_resource_policy" "placement_policy" {
   project  = var.project_id
   provider = google-beta
@@ -176,7 +185,8 @@ resource "google_compute_instance" "compute_vm" {
   machine_type     = var.machine_type
   zone             = var.zone
 
-  resource_policies = google_compute_resource_policy.placement_policy[*].self_link
+  resource_policies = coalesce(google_compute_resource_policy.placement_policy[*].self_link,
+  data.google_compute_resource_policy.pre_existing_placement_policy[*].self_link)
 
   tags   = var.tags
   labels = local.labels
@@ -289,6 +299,11 @@ resource "google_compute_instance" "compute_vm" {
         "h3-:pd-ssd",
       ], "${substr(var.machine_type, 0, 3)}:${var.disk_type}")
       error_message = "A disk_type=${var.disk_type} cannot be used with machine_type=${var.machine_type}."
+    }
+    precondition {
+      condition = (length(google_compute_resource_policy.placement_policy) == 0 ||
+      length(data.google_compute_resource_policy.pre_existing_placement_policy) == 0)
+      error_message = "Pre-existing placement policy and placement policy variables are mutually exclusive"
     }
   }
 }

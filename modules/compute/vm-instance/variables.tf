@@ -327,6 +327,12 @@ variable "placement_policy" {
   }
 }
 
+variable "pre_existing_placement_policy" {
+  description = "Use pre-existing placement policy within the project specified"
+  type        = string
+  default     = null
+}
+
 variable "spot" {
   description = "Provision VMs using discounted Spot pricing, allowing for preemption"
   type        = bool

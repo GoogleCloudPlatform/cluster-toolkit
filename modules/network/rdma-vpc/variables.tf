@@ -163,12 +163,6 @@ variable "network_description" {
   default     = ""
 }
 
-variable "ips_per_nat" {
-  type        = number
-  description = "The number of IP addresses to allocate for each regional Cloud NAT (set to 0 to disable NAT)"
-  default     = 2
-}
-
 variable "shared_vpc_host" {
   type        = bool
   description = "Makes this project a Shared VPC host if 'true' (default 'false')"
@@ -242,4 +236,11 @@ variable "firewall_log_config" {
     ], var.firewall_log_config)
     error_message = "var.firewall_log_config must be set to \"DISABLE_LOGGING\", or enable logging with \"INCLUDE_ALL_METADATA\" or \"EXCLUDE_ALL_METADATA\""
   }
+}
+
+variable "network_profile" {
+  # TODO Update this description
+  description = "Profile name for VPC configuration"
+  type        = string
+  default     = null
 }
