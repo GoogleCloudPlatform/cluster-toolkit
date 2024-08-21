@@ -475,7 +475,7 @@ variable "cgroup_conf_tpl" {
 variable "controller_startup_script" {
   description = "Startup script used by the controller VM."
   type        = string
-  default     = "# no-op"
+  default     = ""
 }
 
 variable "controller_startup_scripts_timeout" {
@@ -493,7 +493,7 @@ EOD
 variable "login_startup_script" {
   description = "Startup script used by the login VMs."
   type        = string
-  default     = "# no-op"
+  default     = ""
 }
 
 variable "login_startup_scripts_timeout" {
@@ -511,7 +511,7 @@ EOD
 variable "compute_startup_script" {
   description = "Startup script used by the compute VMs."
   type        = string
-  default     = "# no-op"
+  default     = ""
 }
 
 variable "compute_startup_scripts_timeout" {
