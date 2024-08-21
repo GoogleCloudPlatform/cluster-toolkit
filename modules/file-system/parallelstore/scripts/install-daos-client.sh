@@ -100,7 +100,7 @@ if { [ "${OS_ID}" = "rocky" ] || [ "${OS_ID}" = "rhel" ]; } && { [ "${OS_VERSION
 	systemctl start daos_agent.service
 elif { [ "${OS_ID}" = "ubuntu" ] && [ "${OS_VERSION}" = "22.04" ]; } || { [ "${OS_ID}" = "debian" ] && [ "${OS_VERSION_MAJOR}" = "12" ]; }; then
 	mkdir -p /var/run/daos_agent
-	daos_agent -o /etc/daos/daos_agent.yml &
+	daos_agent -o /etc/daos/daos_agent.yml >/dev/null 2>&1 &
 else
 	echo "Unsupported operating system ${OS_ID} ${OS_VERSION}. This script only supports Rocky Linux 8, Redhat 8, Redhat 9, Ubuntu 22.04, and Debian 12."
 	exit 1
