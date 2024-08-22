@@ -93,23 +93,24 @@ variable "local_ssd_count_ephemeral_storage" {
   description = <<-EOT
   The number of local SSDs to attach to each node to back ephemeral storage.  
   Uses NVMe interfaces.  Must be supported by `machine_type`.
+  When set to null, GKE decides about default value.
   [See above](#local-ssd-storage) for more info.
   EOT 
   type        = number
-  default     = 0
+  default     = null
 }
 
 variable "local_ssd_count_nvme_block" {
   description = <<-EOT
   The number of local SSDs to attach to each node to back block storage.  
   Uses NVMe interfaces.  Must be supported by `machine_type`.
+  When set to null, GKE decides about default value.
   [See above](#local-ssd-storage) for more info.
   
   EOT 
   type        = number
-  default     = 0
+  default     = null
 }
-
 
 variable "autoscaling_total_min_nodes" {
   description = "Total minimum number of nodes in the NodePool."
@@ -264,6 +265,31 @@ variable "service_account" {
     condition     = var.service_account == null
     error_message = "service_account is deprecated and replaced with service_account_email and scopes."
   }
+}
+
+variable "additional_networks" {
+  description = "Additional network interface details for GKE, if any. Providing additional networks adds additional node networks to the node pool"
+  default     = []
+  type = list(object({
+    network            = string
+    subnetwork         = string
+    subnetwork_project = string
+    network_ip         = string
+    nic_type           = string
+    stack_type         = string
+    queue_count        = number
+    access_config = list(object({
+      nat_ip       = string
+      network_tier = string
+    }))
+    ipv6_access_config = list(object({
+      network_tier = string
+    }))
+    alias_ip_range = list(object({
+      ip_cidr_range         = string
+      subnetwork_range_name = string
+    }))
+  }))
 }
 
 variable "reservation_type" {

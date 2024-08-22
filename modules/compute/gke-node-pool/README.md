@@ -73,6 +73,11 @@ use-cases). In this case, ensure that you turn off the
 [enable_secure_boot](#input\_enable\_secure\_boot) option to allow unsigned
 kernel modules to be loaded.
 
+To maximize GPU network bandwidth, nodepools accept multiple VPCs. Pass a multivpc module to gke-node-pool module, and [take these steps] (https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#install-gpudirect-tcpx-nccl) to install GPUDirect, configure NCCL, use recommended settings, and add GPUDirect to your pods.
+
+> **_NOTE:_** You must [enable multi networking](https://cloud.google.com/kubernetes-engine/docs/how-to/setup-multinetwork-support-for-pods#create-a-gke-cluster) feature when creating the GKE cluster. When gke-cluster depends on multivpc (with the use keyword), multi networking will be automatically enabled on the cluster creation.
+> When gke-cluster or pre-existing-gke-cluster  depends on multivpc (with the use keyword), the [network objects](https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#create-gke-environment) required for multi networking will be created on the cluster.
+
 ### GPUs Examples
 
 There are several ways to add GPUs to a GKE node pool. See
@@ -149,7 +154,7 @@ Following is an example of using a GPU attached to an `n1` machine:
         count: 2
 ```
 
-Finally, the following is an example of using a GPU (with sharing config) attached to an `n1` machine:
+The following is an example of using a GPU (with sharing config) attached to an `n1` machine:
 
 ```yaml
   - id: n1-t4-pool
@@ -166,6 +171,42 @@ Finally, the following is an example of using a GPU (with sharing config) attach
         gpu_sharing_config:
         - max_shared_clients_per_gpu: 2
           gpu_sharing_strategy: "TIME_SHARING"
+```
+
+Finally, the following is adding multivpc to a node pool:
+
+```yaml
+  - id: network
+    source: modules/network/vpc
+    settings:
+      subnetwork_name: gke-subnet
+      secondary_ranges:
+        gke-subnet:
+        - range_name: pods
+          ip_cidr_range: 10.4.0.0/14
+        - range_name: services
+          ip_cidr_range: 10.0.32.0/20
+
+  - id: multinetwork
+    source: modules/network/multivpc
+    settings:
+      network_name_prefix: multivpc-net
+      network_count: 8
+      global_ip_address_range: 172.16.0.0/12
+      subnetwork_cidr_suffix: 16
+
+  - id: gke-cluster
+    source: modules/scheduler/gke-cluster
+    use: [network, multinetwork]
+    settings:
+      cluster_name: $(vars.deployment_name)
+
+  - id: a3-megagpu_pool
+    source: modules/compute/gke-node-pool
+    use: [gke-cluster, multinetwork]
+    settings:
+      machine_type: a3-megagpu-8g
+      ...
 ```
 
 ## License
@@ -221,6 +262,7 @@ No modules.
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
+| <a name="input_additional_networks"></a> [additional\_networks](#input\_additional\_networks) | Additional network interface details for GKE, if any. Providing additional networks adds additional node networks to the node pool | <pre>list(object({<br>    network            = string<br>    subnetwork         = string<br>    subnetwork_project = string<br>    network_ip         = string<br>    nic_type           = string<br>    stack_type         = string<br>    queue_count        = number<br>    access_config = list(object({<br>      nat_ip       = string<br>      network_tier = string<br>    }))<br>    ipv6_access_config = list(object({<br>      network_tier = string<br>    }))<br>    alias_ip_range = list(object({<br>      ip_cidr_range         = string<br>      subnetwork_range_name = string<br>    }))<br>  }))</pre> | `[]` | no |
 | <a name="input_auto_upgrade"></a> [auto\_upgrade](#input\_auto\_upgrade) | Whether the nodes will be automatically upgraded. | `bool` | `false` | no |
 | <a name="input_autoscaling_total_max_nodes"></a> [autoscaling\_total\_max\_nodes](#input\_autoscaling\_total\_max\_nodes) | Total maximum number of nodes in the NodePool. | `number` | `1000` | no |
 | <a name="input_autoscaling_total_min_nodes"></a> [autoscaling\_total\_min\_nodes](#input\_autoscaling\_total\_min\_nodes) | Total minimum number of nodes in the NodePool. | `number` | `0` | no |
@@ -234,8 +276,8 @@ No modules.
 | <a name="input_image_type"></a> [image\_type](#input\_image\_type) | The default image type used by NAP once a new node pool is being created. Use either COS\_CONTAINERD or UBUNTU\_CONTAINERD. | `string` | `"COS_CONTAINERD"` | no |
 | <a name="input_kubernetes_labels"></a> [kubernetes\_labels](#input\_kubernetes\_labels) | Kubernetes labels to be applied to each node in the node group. Key-value pairs. <br>(The `kubernetes.io/` and `k8s.io/` prefixes are reserved by Kubernetes Core components and cannot be specified) | `map(string)` | `null` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | GCE resource labels to be applied to resources. Key-value pairs. | `map(string)` | n/a | yes |
-| <a name="input_local_ssd_count_ephemeral_storage"></a> [local\_ssd\_count\_ephemeral\_storage](#input\_local\_ssd\_count\_ephemeral\_storage) | The number of local SSDs to attach to each node to back ephemeral storage.<br>Uses NVMe interfaces.  Must be supported by `machine_type`.<br>[See above](#local-ssd-storage) for more info. | `number` | `0` | no |
-| <a name="input_local_ssd_count_nvme_block"></a> [local\_ssd\_count\_nvme\_block](#input\_local\_ssd\_count\_nvme\_block) | The number of local SSDs to attach to each node to back block storage.<br>Uses NVMe interfaces.  Must be supported by `machine_type`.<br>[See above](#local-ssd-storage) for more info. | `number` | `0` | no |
+| <a name="input_local_ssd_count_ephemeral_storage"></a> [local\_ssd\_count\_ephemeral\_storage](#input\_local\_ssd\_count\_ephemeral\_storage) | The number of local SSDs to attach to each node to back ephemeral storage.<br>Uses NVMe interfaces.  Must be supported by `machine_type`.<br>When set to null, GKE decides about default value.<br>[See above](#local-ssd-storage) for more info. | `number` | `null` | no |
+| <a name="input_local_ssd_count_nvme_block"></a> [local\_ssd\_count\_nvme\_block](#input\_local\_ssd\_count\_nvme\_block) | The number of local SSDs to attach to each node to back block storage.<br>Uses NVMe interfaces.  Must be supported by `machine_type`.<br>When set to null, GKE decides about default value.<br>[See above](#local-ssd-storage) for more info. | `number` | `null` | no |
 | <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | The name of a Google Compute Engine machine type. | `string` | `"c2-standard-60"` | no |
 | <a name="input_name"></a> [name](#input\_name) | The name of the node pool. If left blank, will default to the machine type. | `string` | `null` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The project ID to host the cluster in. | `string` | n/a | yes |

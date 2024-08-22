@@ -104,12 +104,18 @@ resource "google_container_node_pool" "node_pool" {
       }
     }
 
-    ephemeral_storage_local_ssd_config {
-      local_ssd_count = var.local_ssd_count_ephemeral_storage
+    dynamic "ephemeral_storage_local_ssd_config" {
+      for_each = var.local_ssd_count_ephemeral_storage != null ? [1] : []
+      content {
+        local_ssd_count = var.local_ssd_count_ephemeral_storage
+      }
     }
 
-    local_nvme_ssd_block_config {
-      local_ssd_count = var.local_ssd_count_nvme_block
+    dynamic "local_nvme_ssd_block_config" {
+      for_each = var.local_ssd_count_nvme_block != null ? [1] : []
+      content {
+        local_ssd_count = var.local_ssd_count_nvme_block
+      }
     }
 
     shielded_instance_config {
@@ -158,6 +164,17 @@ resource "google_container_node_pool" "node_pool" {
     }
   }
 
+  network_config {
+    dynamic "additional_node_network_configs" {
+      for_each = var.additional_networks
+
+      content {
+        network    = additional_node_network_configs.value.network
+        subnetwork = additional_node_network_configs.value.subnetwork
+      }
+    }
+  }
+
   timeouts {
     create = var.timeout_create
     update = var.timeout_update
@@ -172,7 +189,7 @@ resource "google_container_node_pool" "node_pool" {
       error_message = "static_node_count cannot be set with either autoscaling_total_min_nodes or autoscaling_total_max_nodes."
     }
     precondition {
-      condition     = !(var.local_ssd_count_ephemeral_storage > 0 && var.local_ssd_count_nvme_block > 0)
+      condition     = !(coalesce(var.local_ssd_count_ephemeral_storage, 0) > 0 && coalesce(var.local_ssd_count_nvme_block, 0) > 0)
       error_message = "Only one of local_ssd_count_ephemeral_storage or local_ssd_count_nvme_block can be set to a non-zero value."
     }
     precondition {

@@ -30,6 +30,12 @@ locals {
   }]
 
   sa_email = var.service_account_email != null ? var.service_account_email : data.google_compute_default_service_account.default_sa.email
+
+  # additional VPCs enable multi networking 
+  derived_enable_multi_networking = coalesce(var.enable_multi_networking, length(var.additional_networks) > 0)
+
+  # multi networking needs enabled Dataplane v2
+  derived_enable_dataplane_v2 = coalesce(var.enable_dataplane_v2, local.derived_enable_multi_networking)
 }
 
 data "google_compute_default_service_account" "default_sa" {
@@ -85,7 +91,9 @@ resource "google_container_cluster" "gke_cluster" {
     autoscaling_profile = var.autoscaling_profile
   }
 
-  datapath_provider = var.enable_dataplane_v2 ? "ADVANCED_DATAPATH" : "LEGACY_DATAPATH"
+  datapath_provider = local.derived_enable_dataplane_v2 ? "ADVANCED_DATAPATH" : "LEGACY_DATAPATH"
+
+  enable_multi_networking = local.derived_enable_multi_networking
 
   network_policy {
     # Enabling NetworkPolicy for clusters with DatapathProvider=ADVANCED_DATAPATH
@@ -168,6 +176,14 @@ resource "google_container_cluster" "gke_cluster" {
     ignore_changes = [
       node_config
     ]
+    precondition {
+      condition     = !(!coalesce(var.enable_dataplane_v2, true) && local.derived_enable_multi_networking)
+      error_message = "'enable_dataplane_v2' cannot be false when enabling multi networking."
+    }
+    precondition {
+      condition     = !(!coalesce(var.enable_multi_networking, true) && length(var.additional_networks) > 0)
+      error_message = "'enable_multi_networking' cannot be false when using multivpc module, which passes additional_networks."
+    }
   }
 
   logging_service    = "logging.googleapis.com/kubernetes"
@@ -290,14 +306,6 @@ resource "google_project_iam_member" "node_service_account_artifact_registry" {
   member  = "serviceAccount:${local.sa_email}"
 }
 
-data "google_client_config" "default" {}
-
-provider "kubernetes" {
-  host                   = "https://${google_container_cluster.gke_cluster.endpoint}"
-  cluster_ca_certificate = base64decode(google_container_cluster.gke_cluster.master_auth[0].cluster_ca_certificate)
-  token                  = data.google_client_config.default.access_token
-}
-
 module "workload_identity" {
   count   = var.configure_workload_identity_sa ? 1 : 0
   source  = "terraform-google-modules/kubernetes-engine/google//modules/workload-identity"
@@ -314,4 +322,53 @@ module "workload_identity" {
     data.google_compute_default_service_account.default_sa,
     google_container_cluster.gke_cluster
   ]
+}
+
+data "google_client_config" "default" {}
+
+provider "kubectl" {
+  host                   = "https://${google_container_cluster.gke_cluster.endpoint}"
+  cluster_ca_certificate = base64decode(google_container_cluster.gke_cluster.master_auth[0].cluster_ca_certificate)
+  token                  = data.google_client_config.default.access_token
+  load_config_file       = false
+}
+
+resource "kubectl_manifest" "additional_net_params" {
+  for_each = { for idx, network_info in var.additional_networks : idx => network_info }
+
+  depends_on = [google_container_cluster.gke_cluster]
+
+  yaml_body = <<YAML
+apiVersion: networking.gke.io/v1
+kind: GKENetworkParamSet
+metadata:
+  name: vpc${each.key + 1}
+spec:
+  vpc: ${each.value.network}
+  vpcSubnet: ${each.value.subnetwork}
+  deviceMode: NetDevice
+YAML
+
+  provider = kubectl
+}
+
+resource "kubectl_manifest" "additional_nets" {
+  for_each = { for idx, network_info in var.additional_networks : idx => network_info }
+
+  depends_on = [google_container_cluster.gke_cluster, kubectl_manifest.additional_net_params]
+
+  yaml_body = <<YAML
+apiVersion: networking.gke.io/v1
+kind: Network
+metadata:
+  name: vpc${each.key + 1}
+spec:
+  parametersRef:
+    group: networking.gke.io
+    kind: GKENetworkParamSet
+    name: vpc${each.key + 1}
+  type: Device
+YAML
+
+  provider = kubectl
 }
