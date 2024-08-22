@@ -356,6 +356,41 @@ func (s *zeroSuite) TestValidateModuleReference(c *C) {
 
 }
 
+func (s *zeroSuite) TestSubstituteModuleSources(c *C) {
+	a := Module{ID: "moduleA", Source: "modules/network/pre-existing-vpc"}
+	b := Module{ID: "moduleB", Source: "community/modules/file-system/DDN-EXAScaler"}
+	y := Module{ID: "moduleY", Source: "./modules/network/pre-existing-vpc"}
+
+	dg := []Group{
+		{Name: "zero", Modules: []Module{a, b}},
+		{Name: "one", Modules: []Module{y}},
+	}
+
+	// toolkit_modules_url and toolkit_modules_version not provided
+	bp := Blueprint{
+		Groups: dg,
+	}
+	bp.substituteModuleSources()
+	// Check that sources remain unchanged
+	c.Assert(bp.Groups[0].Modules[0].Source, Equals, "modules/network/pre-existing-vpc")
+	c.Assert(bp.Groups[0].Modules[1].Source, Equals, "community/modules/file-system/DDN-EXAScaler")
+	c.Assert(bp.Groups[1].Modules[0].Source, Equals, "./modules/network/pre-existing-vpc")
+
+	// toolkit_modules_url and toolkit_modules_version provided
+	bp = Blueprint{
+		Groups: dg, ToolkitModulesURL: "github.com/GoogleCloudPlatform/cluster-toolkit", ToolkitModulesVersion: "v1.15.0",
+	}
+	bp.substituteModuleSources()
+	// Check that embedded sources (a and b) are transformed correctly
+	expectedSourceA := "github.com/GoogleCloudPlatform/cluster-toolkit//modules/network/pre-existing-vpc?ref=v1.15.0&depth=1"
+	expectedSourceB := "github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/file-system/DDN-EXAScaler?ref=v1.15.0&depth=1"
+	c.Assert(bp.Groups[0].Modules[0].Source, Equals, expectedSourceA)
+	c.Assert(bp.Groups[0].Modules[1].Source, Equals, expectedSourceB)
+
+	// Check that the non-embedded source (y) remains unchanged
+	c.Assert(bp.Groups[1].Modules[0].Source, Equals, "./modules/network/pre-existing-vpc")
+}
+
 func (s *zeroSuite) TestIntersection(c *C) {
 	is := intersection([]string{"A", "B", "C"}, []string{"A", "B", "C"})
 	c.Assert(is, DeepEquals, []string{"A", "B", "C"})

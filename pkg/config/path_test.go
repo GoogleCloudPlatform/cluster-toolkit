@@ -37,6 +37,8 @@ func TestPath(t *testing.T) {
 		{r.Groups, "deployment_groups"},
 		{r.Backend, "terraform_backend_defaults"},
 		{r.Provider, "terraform_providers"},
+		{r.ToolkitModulesURL, "toolkit_modules_url"},
+		{r.ToolkitModulesVersion, "toolkit_modules_version"},
 
 		{r.Validators.At(2), "validators[2]"},
 		{r.Validators.At(2).Validator, "validators[2].validator"},

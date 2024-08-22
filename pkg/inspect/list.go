@@ -67,7 +67,3 @@ func LocalModules() ([]SourceAndKind, error) {
 	}
 	return ret, nil
 }
-
-func IsLocalModule(source string) bool {
-	return strings.HasPrefix(source, "modules/") || strings.HasPrefix(source, "community/modules")
-}

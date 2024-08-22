@@ -18,8 +18,8 @@ import (
 	"errors"
 	"fmt"
 
-	"hpc-toolkit/pkg/inspect"
 	"hpc-toolkit/pkg/modulereader"
+	"hpc-toolkit/pkg/sourcereader"
 
 	"github.com/zclconf/go-cty/cty"
 	"github.com/zclconf/go-cty/cty/convert"
@@ -105,22 +105,21 @@ func (bp *Blueprint) expandVars() error {
 }
 
 func (bp *Blueprint) substituteModuleSources() {
-	for ig := range bp.Groups {
-		g := &bp.Groups[ig]
-		for im := range g.Modules {
-			m := &g.Modules[im]
-			if inspect.IsLocalModule(m.Source) {
-				m.Source = fmt.Sprintf("%s//%s?ref=%s&depth=1", bp.ToolkitModulesURL, m.Source, bp.ToolkitModulesVersion)
-			}
-		}
+	bp.WalkModulesSafe(func(_ ModulePath, m *Module) {
+		m.Source = bp.transformSource(m.Source)
+	})
+}
+
+func (bp Blueprint) transformSource(s string) string {
+	if sourcereader.IsEmbeddedPath(s) && bp.ToolkitModulesURL != "" && bp.ToolkitModulesVersion != "" {
+		return fmt.Sprintf("%s//%s?ref=%s&depth=1", bp.ToolkitModulesURL, s, bp.ToolkitModulesVersion)
 	}
+	return s
 }
 
 func (bp *Blueprint) expandGroups() error {
 	bp.addKindToModules()
-	if bp.ToolkitModulesURL != "" && bp.ToolkitModulesVersion != "" {
-		bp.substituteModuleSources()
-	}
+	bp.substituteModuleSources()
 	if err := checkModulesAndGroups(*bp); err != nil {
 		return err
 	}
