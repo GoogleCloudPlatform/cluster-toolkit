@@ -685,12 +685,12 @@ func (bp *Blueprint) checkBlueprintName() error {
 // exclsuively supplied (i.e., one is present, but the other is missing).
 func (bp *Blueprint) checkToolkitModulesUrlAndVersion() error {
 	if bp.ToolkitModulesURL == "" && bp.ToolkitModulesVersion != "" {
-		return BpError{Root.ToolkitModulesURL, HintError{
+		return BpError{Root.ToolkitModulesVersion, HintError{
 			Err:  errors.New("toolkit_modules_url must be provided when toolkit_modules_version is specified"),
 			Hint: "Specify toolkit_modules_url"}}
 	}
 	if bp.ToolkitModulesURL != "" && bp.ToolkitModulesVersion == "" {
-		return BpError{Root.ToolkitModulesVersion, HintError{
+		return BpError{Root.ToolkitModulesURL, HintError{
 			Err:  errors.New("toolkit_modules_version must be provided when toolkit_modules_url is specified"),
 			Hint: "Specify toolkit_modules_version"}}
 	}
