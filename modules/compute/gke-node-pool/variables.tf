@@ -344,3 +344,13 @@ variable "specific_reservation" {
     values = null
   }
 }
+
+variable "compact_placement_policy" {
+  description = <<-EOT
+  Name of the placement policy to use when compact_placement is enabled.
+  It is assumed that the specified policy exists. To create a compact placement policy refer to https://cloud.google.com/compute/docs/instances/use-compact-placement-policies.
+  Beware of the limitations of using compact placement with GKE https://cloud.google.com/kubernetes-engine/docs/how-to/compact-placement#limitations-standard
+  EOT
+  type        = string
+  default     = null
+}
