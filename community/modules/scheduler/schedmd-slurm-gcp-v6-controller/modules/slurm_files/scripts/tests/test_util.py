@@ -13,9 +13,12 @@
 # limitations under the License.
 
 import pytest
+import itertools
 import common # needed to import util
 import util
 from google.api_core.client_options import ClientOptions  # noqa: E402
+
+from util import NodeState
 
 # Note: need to install pytest-mock
 
@@ -130,3 +133,24 @@ def test_create_client_options(
     ud_mock.return_value = "googleapis.com"
     ep_mock.return_value = ep_ver
     assert util.create_client_options(api).__repr__() == expected.__repr__()
+
+
+def test_NodeState():
+    
+    for l,r in itertools.product((NodeState.DOWN, NodeState("DOWN"), "DOWN"), repeat=2):
+        assert l == r
+    
+    gecko = NodeState("GECKO")  # unknown state
+    assert gecko == NodeState("GECKO")
+    assert gecko == "GECKO"
+    assert gecko != NodeState.DOWN
+
+    
+    assert NodeState.DOWN != NodeState.POWER_DOWN
+    assert NodeState.DOWN != NodeState("dOwN") # case sensitive
+
+    assert f"{NodeState.DOWN}" == "NodeState.DOWN"
+    assert NodeState.DOWN.__repr__() == "NodeState.DOWN"
+    
+    assert f"{gecko}" == "NodeState.GECKO"
+    assert gecko.__repr__() == "NodeState.GECKO"

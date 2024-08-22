@@ -33,7 +33,7 @@ import socket
 import subprocess
 import sys
 import tempfile
-from enum import Enum
+import enum
 from collections import defaultdict, namedtuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
@@ -127,7 +127,7 @@ yaml.SafeDumper.yaml_representers[
 ] = lambda self, data: yaml.representer.SafeRepresenter.represent_str(self, str(data))
 
 
-class ApiEndpoint(Enum):
+class ApiEndpoint(enum.Enum):
     COMPUTE = "compute"
     BQ = "bq"
     STORAGE = "storage"
@@ -1917,3 +1917,52 @@ def update_config(cfg: NSDict) -> None:
 def scontrol_reconfigure(lkp: Lookup) -> None:
     log.info("Running scontrol reconfigure")
     run(f"{lkp.scontrol} reconfigure", timeout=30)
+
+
+class NodeState(str, enum.Enum):
+    """
+    Representation of Slurm NODE_STATE
+
+    For source of truth with 1-line explanation, see:
+    https://github.com/SchedMD/slurm/blob/master/slurm/slurm.h#L980
+    For string representation to match, see:
+    https://github.com/SchedMD/slurm/blob/master/src/plugins/data_parser/v0.0.42/parsers.c#L7449
+
+    NOTE: Copy of StrEnum implementation from python 3.11 stripped of extra features.
+    Additionally support "unknown" items by defining `_missing_`.
+    See tests for contract.
+    """
+    def __new__(cls, value):
+        return str.__new__(cls, value)
+    
+    @classmethod
+    def _missing_(cls, value):
+        o = str.__new__(cls, value)
+        o._name_ = value
+        return o
+
+    def _generate_next_value_(name, *_):
+        return name
+    
+    def __repr__(self):
+        return self.__str__()
+    
+    # *** Base states
+    DOWN = enum.auto() # node in non-usable state
+    IDLE = enum.auto() # node idle and available for use
+    
+    # *** "state flags"
+
+    CLOUD = enum.auto() # node comes from cloud
+    
+    # Restore a DRAINED, DRAINING, DOWN or FAILING node to service 
+    # (e.g. IDLE or ALLOCATED). Used in slurm_update_node() request
+    RESUME = enum.auto() 
+    
+    POWER_DOWN = enum.auto() # manual node power down
+    POWERED_DOWN = enum.auto() # node is powered down
+    POWERING_DOWN = enum.auto() # node is powering down
+
+    POWERING_UP = enum.auto() # node is powering up
+
+    COMPLETING = enum.auto() # node is completing allocated job
