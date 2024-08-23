@@ -162,6 +162,13 @@ resource "google_container_node_pool" "node_pool" {
       key                      = var.specific_reservation.key
       values                   = var.specific_reservation.values
     }
+
+    dynamic "host_maintenance_policy" {
+      for_each = true ? [1] : []
+      content {
+        maintenance_interval = var.host_maintenance_interval
+      }
+    }
   }
 
   network_config {
