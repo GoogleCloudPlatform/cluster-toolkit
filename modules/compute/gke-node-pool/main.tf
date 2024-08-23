@@ -66,11 +66,33 @@ resource "google_container_node_pool" "node_pool" {
     max_unavailable = 1
   }
 
+  # NOTE: `placement_type` and `placement_policy` together can support compact placement of nodes in a node pool.
+  # So, one might wonder if we can remove this block. But to support backward compatibility this needs to be kept.
+  # By backward compatibility we mean that there maybe blueprints that might be using `compact_placement`.
+  # Those blueprints will stop working if we remove this block.
   dynamic "placement_policy" {
     for_each = var.placement_policy_type != null ? [1] : []
     content {
-      type        = "COMPACT"
-      policy_name = var.compact_placement_policy
+      type = "COMPACT"
+    }
+  }
+
+  # NOTE: `placement_type` and `placement_policy` together can support compact placement of nodes in a node pool.
+  # So, one might wonder if we can remove this block. But to support backward compatibility this needs to be kept.
+  # By backward compatibility we mean that there maybe blueprints that might be using `compact_placement`.
+  # Those blueprints will stop working if we remove this block.
+  dynamic "placement_policy" {
+    for_each = var.compact_placement ? [1] : []
+    content {
+      type = "COMPACT"
+    }
+  }
+
+  dynamic "placement_policy" {
+    for_each = (!var.compact_placement && try(contains(["COMPACT"], var.placement_type), false)) ? [1] : []
+    content {
+      type        = var.placement_type
+      policy_name = var.placement_policy
     }
   }
 
@@ -204,13 +226,13 @@ resource "google_container_node_pool" "node_pool" {
       EOT
     }
     precondition {
-      condition     = var.placement_policy_type == null || try(contains(["COMPACT"], var.placement_policy_type), false)
-      error_message = "`COMPACT` is the only supported value for `placement_policy_type`."
+      condition     = var.compact_placement || var.placement_type == null || try(contains(["COMPACT"], var.placement_type), false)
+      error_message = "`COMPACT` is the only supported value for `placement_type`."
     }
 
     precondition {
-      condition     = var.placement_policy_type != null || (var.placement_policy_type == null && var.placement_policy_name == null)
-      error_message = "`placement_policy_type` needs to be set when specifying `placement_policy_name`"
+      condition     = var.compact_placement || var.placement_type != null || (var.placement_type == null && var.placement_policy == null)
+      error_message = "`placement_type` needs to be set when specifying `placement_policy`"
     }
   }
 }
