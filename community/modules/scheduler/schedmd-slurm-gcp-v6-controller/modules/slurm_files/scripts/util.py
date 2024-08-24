@@ -394,6 +394,13 @@ def storage_client() -> storage.Client:
     return storage.Client(client_options=ClientOptions(**co))
 
 
+class DeffetiveStoredConfigError(Exception):
+    """
+    Raised when config can not be loaded and assembled from bucket
+    """
+    pass
+
+
 def _fill_cfg_defaults(cfg: NSDict) -> NSDict:
     if not cfg.slurm_log_dir:
         cfg.slurm_log_dir = dirs.log
@@ -451,7 +458,9 @@ def _list_config_blobs() -> Tuple[Any, str]:
             if blob.name.startswith(f"{common_prefix}/{key}_configs/"):
                 res[key].append(blob)
                 hash.update(blob.md5_hash.encode("utf-8"))
-    assert res["core"] is not None, "config.yaml not found in bucket"
+
+    if res["core"] is None:
+        raise DeffetiveStoredConfigError("config.yaml not found in bucket")
     return res, hash.hexdigest()
         
 
@@ -506,8 +515,9 @@ def _assemble_config(
 
     # validate that configs for all referenced nodesets are present
     for p in cfg.partitions.values():
-        for ns_name in p.partition_nodeset:
-            assert ns_name in ns_names, f"nodeset {ns_name} not defined in config"
+        for ns_name in chain(p.partition_nodeset, p.partition_nodeset_dyn, p.partition_nodeset_tpu):
+            if ns_name not in ns_names:
+                raise DeffetiveStoredConfigError(f"nodeset {ns_name} not defined in config")
         
     return _fill_cfg_defaults(cfg)
 
