@@ -323,12 +323,10 @@ variable "specific_reservation" {
 variable "host_maintenance_interval" {
   description = "Specifies the frequency of planned maintenance events."
   type        = string
-  default     = "PERIODIC"
+  default     = ""
+  nullable    = false
   validation {
-    condition = var.host_maintenance_interval != null ? contains(
-      ["PERIODIC", "AS_NEEDED"],
-      var.host_maintenance_interval,
-    ) : true
-    error_message = "Invalid host_maintenance_interval value."
+    condition     = contains(["", "PERIODIC", "AS_NEEDED"], var.host_maintenance_interval)
+    error_message = "Invalid host_maintenance_interval value. Must be PERIODIC, AS_NEEDED or the empty string"
   }
 }
