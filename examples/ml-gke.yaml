@@ -54,8 +54,6 @@ deployment_groups:
     source: modules/compute/gke-node-pool
     use: [gke_cluster]
     settings:
-      placement_policy_type: COMPACT2
-      # placement_policy_name: abcd
       disk_type: pd-balanced
       machine_type: g2-standard-4
 

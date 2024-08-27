@@ -203,10 +203,6 @@ resource "google_container_node_pool" "node_pool" {
       On the other hand, with SPECIFIC_RESERVATION you must set `specific_reservation.key` and `specific_reservation.values` to `compute.googleapis.com/reservation-name` and a list of reservation names respectively.
       EOT
     }
-    precondition {
-      condition     = var.placement_policy_type == null || try(contains(["COMPACT"], var.placement_policy_type), false)
-      error_message = "`COMPACT` is the only supported value for `placement_policy_type`."
-    }
 
     precondition {
       condition     = var.placement_policy_type != null || (var.placement_policy_type == null && var.placement_policy_name == null)
