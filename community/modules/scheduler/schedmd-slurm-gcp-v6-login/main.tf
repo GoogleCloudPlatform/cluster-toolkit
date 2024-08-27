@@ -39,10 +39,8 @@ locals {
 
   public_access_config = [{ nat_ip = null, network_tier = null }]
 
-  service_account_email = coalesce(var.service_account_email, data.google_compute_default_service_account.default.email)
-
   service_account = {
-    email  = local.service_account_email
+    email  = var.service_account_email
     scopes = var.service_account_scopes
   }
 
@@ -95,8 +93,4 @@ locals {
     subnetwork = var.subnetwork_self_link
     tags       = var.tags
   }
-}
-
-data "google_compute_default_service_account" "default" {
-  project = var.project_id
 }
