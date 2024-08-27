@@ -171,30 +171,30 @@ variable "spot" {
   default     = false
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "compact_placement" {
-  description = <<-EOT
-  Places node pool's nodes in a closer physical proximity in order to reduce network latency between nodes.
-  Use `placement_type` and `placement_policy` if you want to use the placement policy you created.
-  Note that `compact_placement` might be deprecated in future in favour of `placement_type` and `placement_policy`
-  EOT
+  description = "DEPRECATED: Use `placement_policy_type`"
   type        = bool
-  default     = false
+  default     = null
+  validation {
+    condition     = var.compact_placement == null
+    error_message = "`compact_placement` is deprecated. Use `placement_policy_type`"
+  }
 }
 
-variable "placement_type" {
+variable "placement_policy_type" {
   description = <<-EOT
-  Type of the group placement to use for the node pool's nodes. This is used together with `placement_policy`.
+  Type of the group placement to use for the node pool's nodes. This is used together with `placement_policy_name`.
   `COMPACT` is the only supported value currently.
-  Note that `placement_type` and `placement_policy` take effect only when `compact_placement` is `false`.
   EOT
   type        = string
   default     = null
 
 }
 
-variable "placement_policy" {
+variable "placement_policy_name" {
   description = <<-EOT
-  Name of the placement policy to use when `placement_type` is set.
+  Name of the placement policy to use when `placement_policy_type` is set.
   It is assumed that the specified policy exists. To create a placement policy refer to https://cloud.google.com/sdk/gcloud/reference/compute/resource-policies/create/group-placement.
   Beware of the restrictions for placement policies https://cloud.google.com/compute/docs/instances/placement-policies-overview#restrictions-compact-policies
   EOT
