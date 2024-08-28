@@ -71,28 +71,10 @@ resource "google_container_node_pool" "node_pool" {
   # By backward compatibility we mean that there maybe blueprints that might be using `compact_placement`.
   # Those blueprints will stop working if we remove this block.
   dynamic "placement_policy" {
-    for_each = var.placement_policy_type != null ? [1] : []
+    for_each = var.placement_policy.type != null ? [1] : []
     content {
-      type = "COMPACT"
-    }
-  }
-
-  # NOTE: `placement_type` and `placement_policy` together can support compact placement of nodes in a node pool.
-  # So, one might wonder if we can remove this block. But to support backward compatibility this needs to be kept.
-  # By backward compatibility we mean that there maybe blueprints that might be using `compact_placement`.
-  # Those blueprints will stop working if we remove this block.
-  dynamic "placement_policy" {
-    for_each = var.compact_placement ? [1] : []
-    content {
-      type = "COMPACT"
-    }
-  }
-
-  dynamic "placement_policy" {
-    for_each = (!var.compact_placement && try(contains(["COMPACT"], var.placement_type), false)) ? [1] : []
-    content {
-      type        = var.placement_type
-      policy_name = var.placement_policy
+      type        = var.placement_policy.type
+      policy_name = var.placement_policy.name
     }
   }
 
@@ -224,11 +206,6 @@ resource "google_container_node_pool" "node_pool" {
       When using NO_RESERVATION or ANY_RESERVATION as the reservation type, `specific_reservation` cannot be set.
       On the other hand, with SPECIFIC_RESERVATION you must set `specific_reservation.key` and `specific_reservation.values` to `compute.googleapis.com/reservation-name` and a list of reservation names respectively.
       EOT
-    }
-
-    precondition {
-      condition     = var.compact_placement || var.placement_type != null || (var.placement_type == null && var.placement_policy == null)
-      error_message = "`placement_type` needs to be set when specifying `placement_policy`"
     }
   }
 }

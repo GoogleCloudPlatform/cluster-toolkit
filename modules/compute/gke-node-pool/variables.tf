@@ -173,37 +173,34 @@ variable "spot" {
 
 # tflint-ignore: terraform_unused_declarations
 variable "compact_placement" {
-  description = <<-EOT
-  Places node pool's nodes in a closer physical proximity in order to reduce network latency between nodes.
-  Use `placement_type` and `placement_policy` if you want to use the placement policy you created.
-  Note that `compact_placement` might be deprecated in future in favour of `placement_type` and `placement_policy`
-  EOT
+  description = "DEPRECATED: Use `placement_policy`"
   type        = bool
-  default     = false
-}
-
-variable "placement_type" {
-  description = <<-EOT
-  Type of the group placement to use for the node pool's nodes. This is used together with `placement_policy`.
-  `COMPACT` is the only supported value currently.
-  Note that `placement_type` and `placement_policy` take effect only when `compact_placement` is `false`.
-  EOT
-  type        = string
   default     = null
   validation {
-    condition     = var.placement_policy_type == null || try(contains(["COMPACT"], var.placement_policy_type), false)
-    error_message = "`COMPACT` is the only supported value for `placement_policy_type`."
+    condition     = var.compact_placement == null
+    error_message = "`compact_placement` is deprecated. Use `placement_policy` instead"
   }
 }
 
 variable "placement_policy" {
   description = <<-EOT
-  Name of the placement policy to use when `placement_type` is set.
+  Group placement policy to use for the node pool's nodes. `COMPACT` is the only supported value for `type` currently. `name` is the name of the placement policy.
   It is assumed that the specified policy exists. To create a placement policy refer to https://cloud.google.com/sdk/gcloud/reference/compute/resource-policies/create/group-placement.
   Beware of the restrictions for placement policies https://cloud.google.com/compute/docs/instances/placement-policies-overview#restrictions-compact-policies
   EOT
-  type        = string
-  default     = null
+
+  type = object({
+    type = string
+    name = optional(string)
+  })
+  default = {
+    type = null
+    name = null
+  }
+  validation {
+    condition     = var.placement_policy.type == null || try(contains(["COMPACT"], var.placement_policy.type), false)
+    error_message = "`COMPACT` is the only supported value for `placement_policy.type`."
+  }
 }
 
 variable "service_account_email" {
