@@ -371,27 +371,25 @@ def setup_login():
     slurmctld_host = f"{lookup().control_host}"
     if lookup().control_addr:
         slurmctld_host = f"{lookup().control_host}({lookup().control_addr})"
-    slurmd_options = [
+    sackd_options = [
         f'--conf-server="{slurmctld_host}:{lookup().control_host_port}"',
-        f'--conf="Feature={conf.login_nodeset}"',
-        "-Z",
     ]
-    sysconf = f"""SLURMD_OPTIONS='{" ".join(slurmd_options)}'"""
-    update_system_config("slurmd", sysconf)
+    sysconf = f"""SACKD_OPTIONS='{" ".join(sackd_options)}'"""
+    update_system_config("sackd", sysconf)
     install_custom_scripts()
 
     setup_network_storage()
     setup_sudoers()
     run("systemctl restart munge")
-    run("systemctl enable slurmd", timeout=30)
-    run("systemctl restart slurmd", timeout=30)
+    run("systemctl enable sackd", timeout=30)
+    run("systemctl restart sackd", timeout=30)
     run("systemctl enable --now slurmcmd.timer", timeout=30)
 
     run_custom_scripts()
 
     log.info("Check status of cluster services")
     run("systemctl status munge", timeout=30)
-    run("systemctl status slurmd", timeout=30)
+    run("systemctl status sackd", timeout=30)
 
     log.info("Done setting up login")
 
