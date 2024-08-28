@@ -26,12 +26,13 @@ variable "cluster_id" {
 }
 
 variable "apply_manifests" {
-  description = "An identifier for the gke cluster resource with format projects/<project_id>/locations/<region>/clusters/<name>."
+  description = "A list of manifests to apply to GKE cluster using kubectl."
   type = list(object({
     content           = optional(string, null)
     source            = optional(string, null)
     template_vars     = optional(any, null)
     server_side_apply = optional(bool, false)
+    wait_for_rollout  = optional(bool, false)
   }))
   default = []
 }

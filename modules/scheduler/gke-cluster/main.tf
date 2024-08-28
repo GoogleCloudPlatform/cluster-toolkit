@@ -333,7 +333,7 @@ module "kubectl_apply" {
   apply_manifests = flatten([
     for idx, network_info in var.additional_networks : [
       {
-        source = "./templates/gke-network-paramset.yaml.tftpl",
+        source = "${path.module}/templates/gke-network-paramset.yaml.tftpl",
         template_vars = {
           name            = "vpc${idx + 1}",
           network_name    = network_info.network
@@ -341,7 +341,7 @@ module "kubectl_apply" {
         }
       },
       {
-        source        = "./templates/network-object.yaml.tftpl",
+        source        = "${path.module}/templates/network-object.yaml.tftpl",
         template_vars = { name = "vpc${idx + 1}" }
       }
     ]

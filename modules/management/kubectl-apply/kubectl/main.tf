@@ -19,21 +19,26 @@ locals {
 
   content_yaml_body = var.content
 
-  null_safe_source = coalesce(var.source_path, "")
+  null_safe_source = coalesce(var.source_path, " ")
 
   url         = startswith(local.null_safe_source, "http://") || startswith(local.null_safe_source, "https://") ? var.source_path : null
   url_content = local.url != null ? data.http.yaml_content[0].response_body : null
 
-  yaml_file         = local.url == null && endswith(lower(local.null_safe_source), ".yaml") ? var.source_path : null
+  yaml_file         = local.url == null && endswith(lower(local.null_safe_source), ".yaml") ? abspath(var.source_path) : null
   yaml_file_content = local.yaml_file != null ? file(local.yaml_file) : null
 
-  template_file         = local.url == null && endswith(lower(local.null_safe_source), ".tftpl") ? var.source_path : null
+  template_file         = local.url == null && endswith(lower(local.null_safe_source), ".tftpl") ? abspath(var.source_path) : null
   template_file_content = local.template_file != null ? templatefile(local.template_file, var.template_vars) : null
 
-  yaml_body      = coalesce(local.content_yaml_body, local.url_content, local.yaml_file_content, local.template_file_content)
+  yaml_body      = coalesce(local.content_yaml_body, local.url_content, local.yaml_file_content, local.template_file_content, " ")
   yaml_body_docs = [for doc in split(local.yaml_separator, local.yaml_body) : trimspace(doc) if length(trimspace(doc)) > 0] # Split yaml to single docs because the kubectl provider only supports single resource
 
-  directory = length(local.yaml_body_docs) == 0 && endswith(lower(local.null_safe_source), "/") ? var.source_path : null
+  directory = length(local.yaml_body_docs) == 0 && endswith(local.null_safe_source, "/") ? abspath(var.source_path) : null
+
+  docs_list = concat(try(local.yaml_body_docs, []), try(data.kubectl_path_documents.yamls[0].documents, []), try(data.kubectl_path_documents.templates[0].documents, []))
+  docs_map = tomap({
+    for index, doc in local.docs_list : index => doc
+  })
 }
 
 data "http" "yaml_content" {
@@ -43,17 +48,18 @@ data "http" "yaml_content" {
 
 data "kubectl_path_documents" "yamls" {
   count   = local.directory != null ? 1 : 0
-  pattern = "${local.directory}*.yaml"
+  pattern = "${local.directory}/*.yaml"
 }
 
 data "kubectl_path_documents" "templates" {
   count   = local.directory != null ? 1 : 0
-  pattern = "${local.directory}*.tftpl"
+  pattern = "${local.directory}/*.tftpl"
   vars    = var.template_vars
 }
 
-resource "kubectl_manifest" "apply_docs" {
-  for_each          = toset(concat(local.yaml_body_docs, data.kubectl_path_documents.yamls[0].documents, data.kubectl_path_documents.templates[0].documents))
+resource "kubectl_manifest" "apply_doc" {
+  for_each          = local.docs_map
   yaml_body         = each.value
   server_side_apply = var.server_side_apply
+  wait_for_rollout  = var.wait_for_rollout
 }

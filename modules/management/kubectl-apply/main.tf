@@ -41,9 +41,10 @@ module "kubectl" {
   source_path       = each.value.source
   template_vars     = each.value.template_vars
   server_side_apply = each.value.server_side_apply
+  wait_for_rollout  = each.value.wait_for_rollout
 
   providers = {
-    kubectl = kubectl.k
+    kubectl = kubectl
     http    = http.h
   }
 }

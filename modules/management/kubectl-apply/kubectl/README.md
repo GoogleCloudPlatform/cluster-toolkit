@@ -36,7 +36,7 @@ No modules.
 
 | Name | Type |
 |------|------|
-| [kubectl_manifest.apply_docs](https://registry.terraform.io/providers/gavinbunney/kubectl/latest/docs/resources/manifest) | resource |
+| [kubectl_manifest.apply_doc](https://registry.terraform.io/providers/gavinbunney/kubectl/latest/docs/resources/manifest) | resource |
 | [http_http.yaml_content](https://registry.terraform.io/providers/hashicorp/http/latest/docs/data-sources/http) | data source |
 | [kubectl_path_documents.templates](https://registry.terraform.io/providers/gavinbunney/kubectl/latest/docs/data-sources/path_documents) | data source |
 | [kubectl_path_documents.yamls](https://registry.terraform.io/providers/gavinbunney/kubectl/latest/docs/data-sources/path_documents) | data source |
@@ -49,8 +49,11 @@ No modules.
 | <a name="input_server_side_apply"></a> [server\_side\_apply](#input\_server\_side\_apply) | Allow using kubectl server-side apply method. | `bool` | `false` | no |
 | <a name="input_source_path"></a> [source\_path](#input\_source\_path) | The source for manifest(s) to apply to gke cluster. Acceptable sources are a local yaml or template (.tftpl) file path, a directory (ends with '/') containing yaml or template files, and a url for a yaml file. | `string` | `null` | no |
 | <a name="input_template_vars"></a> [template\_vars](#input\_template\_vars) | The values to populate template file(s) with. | `any` | `null` | no |
+| <a name="input_wait_for_rollout"></a> [wait\_for\_rollout](#input\_wait\_for\_rollout) | Wait or not for Deployments and APIService to complete rollout. | `bool` | `false` | no |
 
 ## Outputs
 
-No outputs.
+| Name | Description |
+|------|-------------|
+| <a name="output_documents_count"></a> [documents\_count](#output\_documents\_count) | The count of applying documents. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

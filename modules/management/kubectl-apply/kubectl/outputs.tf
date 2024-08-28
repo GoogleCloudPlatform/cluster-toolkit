@@ -13,3 +13,8 @@
   * See the License for the specific language governing permissions and
   * limitations under the License.
   */
+
+output "documents_count" {
+  description = "The count of applying documents."
+  value       = length(local.docs_map)
+}

@@ -37,3 +37,9 @@ variable "server_side_apply" {
   type        = bool
   default     = false
 }
+
+variable "wait_for_rollout" {
+  description = "Wait or not for Deployments and APIService to complete rollout."
+  type        = bool
+  default     = false
+}
