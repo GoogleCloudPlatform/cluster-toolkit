@@ -173,36 +173,34 @@ variable "spot" {
 
 # tflint-ignore: terraform_unused_declarations
 variable "compact_placement" {
-  description = "DEPRECATED: Use `placement_policy_type`"
+  description = "DEPRECATED: Use `placement_policy`"
   type        = bool
   default     = null
   validation {
     condition     = var.compact_placement == null
-    error_message = "`compact_placement` is deprecated. Use `placement_policy_type`"
+    error_message = "`compact_placement` is deprecated. Use `placement_policy` instead"
   }
 }
 
-variable "placement_policy_type" {
+variable "placement_policy" {
   description = <<-EOT
-  Type of the group placement to use for the node pool's nodes. This is used together with `placement_policy_name`.
-  `COMPACT` is the only supported value currently.
-  EOT
-  type        = string
-  default     = null
-  validation {
-    condition     = var.placement_policy_type == null || try(contains(["COMPACT"], var.placement_policy_type), false)
-    error_message = "`COMPACT` is the only supported value for `placement_policy_type`."
-  }
-}
-
-variable "placement_policy_name" {
-  description = <<-EOT
-  Name of the placement policy to use when `placement_policy_type` is set.
+  Group placement policy to use for the node pool's nodes. `COMPACT` is the only supported value for `type` currently. `name` is the name of the placement policy.
   It is assumed that the specified policy exists. To create a placement policy refer to https://cloud.google.com/sdk/gcloud/reference/compute/resource-policies/create/group-placement.
   Beware of the restrictions for placement policies https://cloud.google.com/compute/docs/instances/placement-policies-overview#restrictions-compact-policies
   EOT
-  type        = string
-  default     = null
+
+  type = object({
+    type = string
+    name = optional(string)
+  })
+  default = {
+    type = null
+    name = null
+  }
+  validation {
+    condition     = var.placement_policy.type == null || try(contains(["COMPACT"], var.placement_policy.type), false)
+    error_message = "`COMPACT` is the only supported value for `placement_policy.type`."
+  }
 }
 
 variable "service_account_email" {

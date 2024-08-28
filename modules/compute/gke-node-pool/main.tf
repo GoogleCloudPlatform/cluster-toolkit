@@ -67,10 +67,10 @@ resource "google_container_node_pool" "node_pool" {
   }
 
   dynamic "placement_policy" {
-    for_each = var.placement_policy_type != null ? [1] : []
+    for_each = var.placement_policy.type != null ? [1] : []
     content {
-      type        = var.placement_policy_type
-      policy_name = var.placement_policy_name
+      type        = var.placement_policy.type
+      policy_name = var.placement_policy.name
     }
   }
 
@@ -202,11 +202,6 @@ resource "google_container_node_pool" "node_pool" {
       When using NO_RESERVATION or ANY_RESERVATION as the reservation type, `specific_reservation` cannot be set.
       On the other hand, with SPECIFIC_RESERVATION you must set `specific_reservation.key` and `specific_reservation.values` to `compute.googleapis.com/reservation-name` and a list of reservation names respectively.
       EOT
-    }
-
-    precondition {
-      condition     = var.placement_policy_type != null || (var.placement_policy_type == null && var.placement_policy_name == null)
-      error_message = "`placement_policy_type` needs to be set when specifying `placement_policy_name`"
     }
   }
 }
