@@ -433,6 +433,11 @@ def reconfigure_slurm():
         run("systemctl restart slurmd")
         util.run(f"wall '{update_msg}'", timeout=30)
         log.debug("Done.")
+    elif lookup().instance_role_safe == "login":
+        log.info("Restarting sackd to make changes take effect.")
+        run("systemctl restart sackd")
+        util.run(f"wall '{update_msg}'", timeout=30)
+        log.debug("Done.")
 
 
 def update_topology(lkp: util.Lookup) -> None:
