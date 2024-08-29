@@ -216,6 +216,7 @@ def setup_sudoers():
     content = """
 # Allow SlurmUser to manage the slurm daemons
 slurm ALL= NOPASSWD: /usr/bin/systemctl restart slurmd.service
+slurm ALL= NOPASSWD: /usr/bin/systemctl restart sackd.service
 slurm ALL= NOPASSWD: /usr/bin/systemctl restart slurmctld.service
 """
     sudoers_file = Path("/etc/sudoers.d/slurm")
