@@ -105,16 +105,16 @@ resource "google_container_node_pool" "node_pool" {
     }
 
     dynamic "ephemeral_storage_local_ssd_config" {
-      for_each = var.local_ssd_count_ephemeral_storage != null ? [1] : []
+      for_each = local.local_ssd_config.local_ssd_count_ephemeral_storage != null ? [1] : []
       content {
-        local_ssd_count = var.local_ssd_count_ephemeral_storage
+        local_ssd_count = local.local_ssd_config.local_ssd_count_ephemeral_storage
       }
     }
 
     dynamic "local_nvme_ssd_block_config" {
-      for_each = var.local_ssd_count_nvme_block != null ? [1] : []
+      for_each = local.local_ssd_config.local_ssd_count_nvme_block != null ? [1] : []
       content {
-        local_ssd_count = var.local_ssd_count_nvme_block
+        local_ssd_count = local.local_ssd_config.local_ssd_count_nvme_block
       }
     }
 
@@ -189,7 +189,7 @@ resource "google_container_node_pool" "node_pool" {
       error_message = "static_node_count cannot be set with either autoscaling_total_min_nodes or autoscaling_total_max_nodes."
     }
     precondition {
-      condition     = !(coalesce(var.local_ssd_count_ephemeral_storage, 0) > 0 && coalesce(var.local_ssd_count_nvme_block, 0) > 0)
+      condition     = !(coalesce(local.local_ssd_config.local_ssd_count_ephemeral_storage, 0) > 0 && coalesce(local.local_ssd_config.local_ssd_count_nvme_block, 0) > 0)
       error_message = "Only one of local_ssd_count_ephemeral_storage or local_ssd_count_nvme_block can be set to a non-zero value."
     }
     precondition {
