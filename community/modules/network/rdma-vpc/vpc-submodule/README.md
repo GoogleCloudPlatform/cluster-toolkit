@@ -1,6 +1,6 @@
 # Terraform Network Module
 
-This is a temporary sub-module to use the new private-preview features in the VPC module: network_profile
+This is a temporary sub-module to use the new experimental features in the VPC module: network_profile
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 Copyright 2019 Google LLC
