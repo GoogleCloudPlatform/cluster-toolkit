@@ -93,7 +93,7 @@ variable "local_ssd_count_ephemeral_storage" {
   description = <<-EOT
   The number of local SSDs to attach to each node to back ephemeral storage.  
   Uses NVMe interfaces.  Must be supported by `machine_type`.
-  When set to null,  default value either is [set based on machine_type](https://cloud.google.com/compute/docs/disks/local-ssd?_gl=1*103lsfs*_ga*MTczMTAzMDM4My4xNzIyMzc1ODU5*_ga_WH2QY8WWF5*MTcyMzYzODIzOS4xOC4xLjE3MjM2MzgzNTEuNTAuMC4w#choose_number_local_ssds) or GKE decides about default value.
+  When set to null,  default value either is [set based on machine_type](https://cloud.google.com/compute/docs/disks/local-ssd#choose_number_local_ssds) or GKE decides about default value.
   [See above](#local-ssd-storage) for more info.
   EOT 
   type        = number
@@ -104,7 +104,7 @@ variable "local_ssd_count_nvme_block" {
   description = <<-EOT
   The number of local SSDs to attach to each node to back block storage.  
   Uses NVMe interfaces.  Must be supported by `machine_type`.
-  When set to null,  default value either is [set based on machine_type](https://cloud.google.com/compute/docs/disks/local-ssd?_gl=1*103lsfs*_ga*MTczMTAzMDM4My4xNzIyMzc1ODU5*_ga_WH2QY8WWF5*MTcyMzYzODIzOS4xOC4xLjE3MjM2MzgzNTEuNTAuMC4w#choose_number_local_ssds) or GKE decides about default value.
+  When set to null,  default value either is [set based on machine_type](https://cloud.google.com/compute/docs/disks/local-ssd#choose_number_local_ssds) or GKE decides about default value.
   [See above](#local-ssd-storage) for more info.
   
   EOT 
