@@ -319,3 +319,14 @@ variable "specific_reservation" {
     values = null
   }
 }
+
+variable "host_maintenance_interval" {
+  description = "Specifies the frequency of planned maintenance events."
+  type        = string
+  default     = ""
+  nullable    = false
+  validation {
+    condition     = contains(["", "PERIODIC", "AS_NEEDED"], var.host_maintenance_interval)
+    error_message = "Invalid host_maintenance_interval value. Must be PERIODIC, AS_NEEDED or the empty string"
+  }
+}
