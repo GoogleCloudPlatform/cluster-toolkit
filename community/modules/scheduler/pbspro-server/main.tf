@@ -70,7 +70,7 @@ module "server_startup_script" {
 }
 
 module "pbs_server" {
-  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/compute/vm-instance?ref=v1.36.0&depth=1"
+  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/compute/vm-instance?ref=09ae2725"
 
   instance_count = var.instance_count
   spot           = var.spot
