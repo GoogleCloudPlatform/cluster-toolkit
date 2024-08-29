@@ -75,7 +75,6 @@ def instance_properties(nodeset, model, placement_group, labels=None):
     if placement_group:
         props.scheduling = {
             "onHostMaintenance": "TERMINATE",
-            "automaticRestart": False,
         }
         props.resourcePolicies = [placement_group]
 
@@ -97,7 +96,6 @@ def instance_properties(nodeset, model, placement_group, labels=None):
         if policies:
             props.scheduling = {
                 "onHostMaintenance": "TERMINATE",
-                "automaticRestart": False,
             }
             props.resourcePolicies = policies
             log.info(
