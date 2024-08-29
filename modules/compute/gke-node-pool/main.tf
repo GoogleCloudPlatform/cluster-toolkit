@@ -66,10 +66,6 @@ resource "google_container_node_pool" "node_pool" {
     max_unavailable = 1
   }
 
-  # NOTE: `placement_type` and `placement_policy` together can support compact placement of nodes in a node pool.
-  # So, one might wonder if we can remove this block. But to support backward compatibility this needs to be kept.
-  # By backward compatibility we mean that there maybe blueprints that might be using `compact_placement`.
-  # Those blueprints will stop working if we remove this block.
   dynamic "placement_policy" {
     for_each = var.placement_policy.type != null ? [1] : []
     content {
