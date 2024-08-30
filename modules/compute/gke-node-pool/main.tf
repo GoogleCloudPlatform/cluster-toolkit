@@ -67,9 +67,10 @@ resource "google_container_node_pool" "node_pool" {
   }
 
   dynamic "placement_policy" {
-    for_each = var.compact_placement ? [1] : []
+    for_each = var.placement_policy.type != null ? [1] : []
     content {
-      type = "COMPACT"
+      type        = var.placement_policy.type
+      policy_name = var.placement_policy.name
     }
   }
 
