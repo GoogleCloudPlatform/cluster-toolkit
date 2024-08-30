@@ -186,7 +186,7 @@ variable "placement_policy" {
   description = <<-EOT
   Group placement policy to use for the node pool's nodes. `COMPACT` is the only supported value for `type` currently. `name` is the name of the placement policy.
   It is assumed that the specified policy exists. To create a placement policy refer to https://cloud.google.com/sdk/gcloud/reference/compute/resource-policies/create/group-placement.
-  Beware of the restrictions for placement policies https://cloud.google.com/compute/docs/instances/placement-policies-overview#restrictions-compact-policies
+  Note: Placement policies have the [following](https://cloud.google.com/compute/docs/instances/placement-policies-overview#restrictions-compact-policies) restrictions.
   EOT
 
   type = object({
