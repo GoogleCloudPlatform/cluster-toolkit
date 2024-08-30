@@ -57,6 +57,9 @@ EOF
 			echo "Unsupported RedHat / Rocky Linux system version ${OS_VERSION_MAJOR}. This script only supports version 8 and 9."
 			exit 1
 		fi
+
+		## TODO: Remove disable automatic update script after issue is fixed.
+		/usr/bin/google_disable_automatic_updates
 		dnf makecache
 
 		# 2) Install daos-client
