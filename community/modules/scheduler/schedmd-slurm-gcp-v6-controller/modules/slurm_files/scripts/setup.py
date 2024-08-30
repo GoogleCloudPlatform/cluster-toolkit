@@ -278,27 +278,22 @@ innodb_lock_wait_timeout=900
 def configure_dirs():
     for p in dirs.values():
         util.mkdirp(p)
-    util.chown_slurm(dirs.slurm)
-    util.chown_slurm(dirs.scripts)
-
+    
+    for p in (dirs.slurm, dirs.scripts, dirs.custom_scripts):
+        util.chown_slurm(p)
+    
     for p in slurmdirs.values():
         util.mkdirp(p)
         util.chown_slurm(p)
 
-    etc_slurm = Path("/etc/slurm")
-    if etc_slurm.exists() and etc_slurm.is_symlink():
-        etc_slurm.unlink()
-    etc_slurm.symlink_to(slurmdirs.etc)
-
-    scripts_etc = dirs.scripts / "etc"
-    if scripts_etc.exists() and scripts_etc.is_symlink():
-        scripts_etc.unlink()
-    scripts_etc.symlink_to(slurmdirs.etc)
-
-    scripts_log = dirs.scripts / "log"
-    if scripts_log.exists() and scripts_log.is_symlink():
-        scripts_log.unlink()
-    scripts_log.symlink_to(dirs.log)
+    for sl, tgt in ( # create symlinks
+        (Path("/etc/slurm"), slurmdirs.etc),
+        (dirs.scripts / "etc", slurmdirs.etc),
+        (dirs.scripts / "log", dirs.log),
+    ):
+        if sl.exists() and sl.is_symlink():
+            sl.unlink()
+        sl.symlink_to(tgt)
 
     for f in ("sort_nodes.py",): # copy auxiliary scripts
         dst = Path(lookup().cfg.slurm_bin_dir) / f
@@ -446,15 +441,19 @@ def setup_compute():
 def main():
     start_motd()
     
+    log.info("Starting setup, fetching config")
     sleep_seconds = 5
     while True:
         try:
             _, cfg = util.fetch_config()
             util.update_config(cfg)
             break
+        except util.DeffetiveStoredConfigError as e:
+            log.warning(f"config is not ready yet: {e}, sleeping for {sleep_seconds}s")
         except Exception as e:
-            log.exception(f"could not fetch config, sleeping for {sleep_seconds}s")
-            time.sleep(sleep_seconds)
+            log.exception(f"unexpected error while fetching config, sleeping for {sleep_seconds}s")
+        time.sleep(sleep_seconds)
+    log.info("Config fetched")
 
     configure_dirs()
     # call the setup function for the instance type
