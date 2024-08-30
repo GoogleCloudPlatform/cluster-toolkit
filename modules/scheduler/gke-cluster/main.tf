@@ -325,11 +325,6 @@ module "workload_identity" {
   project_id          = var.project_id
   roles               = var.enable_gcsfuse_csi ? ["roles/storage.admin"] : []
 
-  providers = {
-    google     = google
-    kubernetes = kubernetes
-  }
-
   # https://github.com/terraform-google-modules/terraform-google-kubernetes-engine/issues/1059
   depends_on = [
     data.google_compute_default_service_account.default_sa,
