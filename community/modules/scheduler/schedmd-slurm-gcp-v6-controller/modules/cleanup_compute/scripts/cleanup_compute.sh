@@ -46,7 +46,7 @@ node_filter="name:${cluster_name}-${nodeset_name}-* labels.slurm_cluster_name=${
 tmpfile=$(mktemp) # have to use a temp file, since `< <(gcloud ...)` doesn't work nicely with `head`
 trap 'rm -f "$tmpfile"' EXIT
 
-running_nodes_filter="${node_filter} AND (status!=STOPPING AND status!=TERMINATED)"
+running_nodes_filter="${node_filter} AND status!=STOPPING"
 # List all currently running instances and attempt to delete them
 gcloud compute instances list --format="value(selfLink)" --filter="${running_nodes_filter}" >"$tmpfile"
 # Do 10 instances at a time
