@@ -505,3 +505,10 @@ variable "instance_properties" {
   type        = any
   default     = null
 }
+
+
+variable "enable_maintenance_reservation" {
+  type        = bool
+  description = "Enables slurm reservation for scheduled maintenance."
+  default     = false
+}
