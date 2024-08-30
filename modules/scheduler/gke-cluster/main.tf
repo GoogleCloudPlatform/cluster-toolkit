@@ -306,6 +306,14 @@ resource "google_project_iam_member" "node_service_account_artifact_registry" {
   member  = "serviceAccount:${local.sa_email}"
 }
 
+data "google_client_config" "default" {}
+
+provider "kubernetes" {
+  host                   = "https://${google_container_cluster.gke_cluster.endpoint}"
+  cluster_ca_certificate = base64decode(google_container_cluster.gke_cluster.master_auth[0].cluster_ca_certificate)
+  token                  = data.google_client_config.default.access_token
+}
+
 module "workload_identity" {
   count   = var.configure_workload_identity_sa ? 1 : 0
   source  = "terraform-google-modules/kubernetes-engine/google//modules/workload-identity"
@@ -317,14 +325,17 @@ module "workload_identity" {
   project_id          = var.project_id
   roles               = var.enable_gcsfuse_csi ? ["roles/storage.admin"] : []
 
+  providers = {
+    google     = google
+    kubernetes = kubernetes
+  }
+
   # https://github.com/terraform-google-modules/terraform-google-kubernetes-engine/issues/1059
   depends_on = [
     data.google_compute_default_service_account.default_sa,
     google_container_cluster.gke_cluster
   ]
 }
-
-data "google_client_config" "default" {}
 
 provider "kubectl" {
   host                   = "https://${google_container_cluster.gke_cluster.endpoint}"
