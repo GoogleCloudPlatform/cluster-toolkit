@@ -478,7 +478,7 @@ variable "startup_script" {
     NOTE: will be executed after `compute_startup_script` defined on controller module.
   EOD
   type        = string
-  default     = ""
+  default     = "# no-op"
 }
 
 variable "network_storage" {
