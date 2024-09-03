@@ -49,7 +49,7 @@ locals {
     scopes = var.service_account_scopes
   }
 
-  ghpc_startup_script = length(var.startup_script) == 0 ? [] : [{
+  ghpc_startup_script = [{
     filename = "ghpc_nodeset_startup.sh"
     content  = var.startup_script
   }]

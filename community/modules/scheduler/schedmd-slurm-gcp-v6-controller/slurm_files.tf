@@ -90,30 +90,31 @@ locals {
     local.daos_mount_runners,
   )
 
-  daos_ss = length(local.daos_ns) == 0 ? [] : [{
+  daos_install_mount_script = {
     filename = "ghpc_daos_mount.sh"
-    content  = module.daos_network_storage_scripts[0].startup_script
-  }]
-
-  additional_ss = concat([], local.daos_ss)
+    content  = length(local.daos_ns) > 0 ? module.daos_network_storage_scripts[0].startup_script : ""
+  }
 }
 
 # SLURM FILES
 locals {
-  controller_ghpc_ss = length(var.controller_startup_script) == 0 ? [] : [{
+  ghpc_startup_controller = {
     filename = "ghpc_startup.sh"
-  content = var.controller_startup_script }]
-  controller_ss = concat(local.additional_ss, local.controller_ghpc_ss)
+    content  = var.controller_startup_script
+  }
+  ghpc_startup_script_controller = length(local.daos_ns) > 0 ? [local.daos_install_mount_script, local.ghpc_startup_controller] : [local.ghpc_startup_controller]
 
-  login_ghpc_ss = length(var.login_startup_script) == 0 ? [] : [{
+  ghpc_startup_login = {
     filename = "ghpc_startup.sh"
-  content = var.login_startup_script }]
-  login_ss = concat(local.additional_ss, local.login_ghpc_ss)
+    content  = var.login_startup_script
+  }
+  ghpc_startup_script_login = length(local.daos_ns) > 0 ? [local.daos_install_mount_script, local.ghpc_startup_login] : [local.ghpc_startup_login]
 
-  compute_ghpc_ss = length(var.compute_startup_script) == 0 ? [] : [{
+  ghpc_startup_compute = {
     filename = "ghpc_startup.sh"
-  content = var.compute_startup_script }]
-  compute_ss = concat(local.additional_ss, local.compute_ghpc_ss)
+    content  = var.compute_startup_script
+  }
+  ghpc_startup_script_compute = length(local.daos_ns) > 0 ? [local.daos_install_mount_script, local.ghpc_startup_compute] : [local.ghpc_startup_compute]
 
   nodeset_startup_scripts = { for k, v in local.nodeset_map : k => v.startup_script }
 }
@@ -145,12 +146,12 @@ module "slurm_files" {
     one(google_secret_manager_secret_version.cloudsql_version[*].id),
   null)
 
-  controller_startup_scripts         = local.controller_ss
+  controller_startup_scripts         = local.ghpc_startup_script_controller
   controller_startup_scripts_timeout = var.controller_startup_scripts_timeout
   nodeset_startup_scripts            = local.nodeset_startup_scripts
-  compute_startup_scripts            = local.compute_ss
+  compute_startup_scripts            = local.ghpc_startup_script_compute
   compute_startup_scripts_timeout    = var.compute_startup_scripts_timeout
-  login_startup_scripts              = local.login_ss
+  login_startup_scripts              = local.ghpc_startup_script_login
   login_startup_scripts_timeout      = var.login_startup_scripts_timeout
 
   enable_debug_logging = var.enable_debug_logging
