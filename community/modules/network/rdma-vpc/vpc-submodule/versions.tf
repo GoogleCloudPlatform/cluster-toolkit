@@ -1,5 +1,5 @@
 /**
- * Copyright 2022 Google LLC
+ * Copyright 2019 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -12,39 +12,22 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
-*/
+ */
 
 terraform {
+  required_version = ">= 1.3"
   required_providers {
     google = {
       source  = "hashicorp/google"
-      version = ">= 4.73.0"
+      version = ">= 4.64"
     }
-
-    google-beta = {
-      source  = "hashicorp/google-beta"
-      version = ">= 4.73.0"
-    }
-
     google-private = {
       source  = "hashicorp/google-private"
-      version = ">= 0.0.1960"
-    }
-
-    null = {
-      source  = "hashicorp/null"
-      version = ">= 3.0"
+      version = ">= 0.0.1954"
     }
   }
+
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:vm-instance/v1.38.0"
+    module_name = "blueprints/terraform/terraform-google-network/v9.1.0"
   }
-  provider_meta "google-beta" {
-    module_name = "blueprints/terraform/hpc-toolkit:vm-instance/v1.38.0"
-  }
-  provider_meta "google-private" {
-    module_name = "blueprints/terraform/hpc-toolkit:vm-instance/v1.38.0"
-  }
-
-  required_version = ">= 1.3.0"
 }
