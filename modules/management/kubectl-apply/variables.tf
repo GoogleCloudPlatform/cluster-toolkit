@@ -32,7 +32,7 @@ variable "apply_manifests" {
     source            = optional(string, null)
     template_vars     = optional(map(any), null)
     server_side_apply = optional(bool, false)
-    wait_for_rollout  = optional(bool, false)
+    wait_for_rollout  = optional(bool, true)
   }))
   default = []
 }
