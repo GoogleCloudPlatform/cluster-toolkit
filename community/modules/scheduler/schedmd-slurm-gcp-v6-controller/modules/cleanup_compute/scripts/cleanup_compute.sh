@@ -22,8 +22,8 @@ universe_domain="$4"
 compute_endpoint_version="$5"
 gcloud_dir="$6"
 
-if [[ $# -ne 5 ]]; then
-	echo "Usage: $0 <project> <cluster_name> <nodeset_name> <universe_domain> <compute_endpoint_version> <gcloud_dir>"
+if [[ $# -ne 5 ]] && [[ $# -ne 6 ]]; then
+	echo "Usage: $0 <project> <cluster_name> <nodeset_name> <universe_domain> <compute_endpoint_version> [<gcloud_dir>]"
 	exit 1
 fi
 
