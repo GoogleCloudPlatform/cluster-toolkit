@@ -26,7 +26,7 @@ locals {
 # NODESET
 # TODO: remove dependency on slurm-gcp repo, move to local template module
 module "slurm_nodeset_template" {
-  source   = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=6.6.1"
+  source   = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=6.6.2"
   for_each = local.nodeset_map
 
   project_id          = var.project_id
@@ -66,6 +66,19 @@ module "slurm_nodeset_template" {
   tags                     = concat([local.slurm_cluster_name], each.value.tags)
 }
 
+module "nodeset_cleanup" {
+  source   = "./modules/cleanup_compute"
+  for_each = local.nodeset_map
+
+  nodeset                = each.value
+  project_id             = var.project_id
+  slurm_cluster_name     = local.slurm_cluster_name
+  enable_cleanup_compute = var.enable_cleanup_compute
+  universe_domain        = var.universe_domain
+  endpoint_versions      = var.endpoint_versions
+  gcloud_path_override   = var.gcloud_path_override
+}
+
 locals {
   nodesets = [for name, ns in local.nodeset_map : {
     nodeset_name             = ns.nodeset_name
@@ -87,7 +100,7 @@ locals {
 
 # NODESET TPU
 module "slurm_nodeset_tpu" {
-  source   = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_nodeset_tpu?ref=6.6.1"
+  source   = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_nodeset_tpu?ref=6.6.2"
   for_each = local.nodeset_tpu_map
 
   project_id             = var.project_id
@@ -105,4 +118,22 @@ module "slurm_nodeset_tpu" {
   data_disks             = each.value.data_disks
   docker_image           = each.value.docker_image
   subnetwork             = each.value.subnetwork
+}
+
+module "nodeset_tpu_cleanup" {
+  source   = "./modules/cleanup_compute"
+  for_each = local.nodeset_tpu_map
+
+  nodeset = {
+    nodeset_name         = each.value.nodeset_name
+    subnetwork_self_link = each.value.subnetwork
+    additional_networks  = []
+  }
+
+  project_id             = var.project_id
+  slurm_cluster_name     = local.slurm_cluster_name
+  enable_cleanup_compute = var.enable_cleanup_compute
+  universe_domain        = var.universe_domain
+  endpoint_versions      = var.endpoint_versions
+  gcloud_path_override   = var.gcloud_path_override
 }

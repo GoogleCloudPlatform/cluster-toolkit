@@ -25,7 +25,6 @@ locals {
   tmp_cluster_name   = substr(replace(lower(var.deployment_name), "/^[^a-z]*|[^a-z0-9]/", ""), 0, 10)
   slurm_cluster_name = coalesce(var.slurm_cluster_name, local.tmp_cluster_name)
 
-  files_cs_labels = { slurm_files_checksum = module.slurm_files.checksum }
   universe_domain = { "universe_domain" = var.universe_domain }
 }
 

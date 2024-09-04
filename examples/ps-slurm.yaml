@@ -26,6 +26,13 @@ vars:
   zone: us-east4-b
   compute_node_machine_type: c2-standard-60
 
+  # The Parallelstore drivers installation takes a long time.
+  # Increase the timeout to 20 minutes (default is 5 minutes).
+  compute_startup_scripts_timeout: $(20*60)
+  login_startup_scripts_timeout: $(20*60)
+  controller_startup_scripts_timeout: $(20*60)
+  resume_timeout: $(20*60)
+
 deployment_groups:
 - group: primary
   modules:

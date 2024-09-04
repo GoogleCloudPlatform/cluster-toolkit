@@ -13,8 +13,10 @@
 # limitations under the License.
 
 import pytest
+import json
 import mock
-from common import TstCfg, TstNodeset, TstTPU, make_to_hostnames_mock
+from pytest_unordered import unordered
+from common import TstCfg, TstNodeset, TstTPU, TstInstance
 import sort_nodes
 
 import util
@@ -58,12 +60,33 @@ def test_gen_topology_conf(tpu_mock):
     tpu_mock.side_effect = tpu_se
 
     lkp = util.Lookup(cfg)
+    lkp.instances = lambda: { n.name: n for n in [
+        # nodeset blue
+        TstInstance("m22-blue-0"),  # no physicalHost
+        TstInstance("m22-blue-0", physicalHost="/a/a/a"),
+        TstInstance("m22-blue-1", physicalHost="/a/a/b"),
+        TstInstance("m22-blue-2", physicalHost="/a/b/a"),
+        TstInstance("m22-blue-3", physicalHost="/b/a/a"),
+        # nodeset green
+        TstInstance("m22-green-3", physicalHost="/a/a/c"),
+    ]}
+
     uncompressed = conf.gen_topology(lkp)
-    want_uncompressed = [
-        "SwitchName=slurm-root Switches=ns_blue,ns_green,ns_pink",
-        "SwitchName=ns_blue Nodes=m22-blue-[0-6]",
-        "SwitchName=ns_green Nodes=m22-green-[0-4]",
+    want_uncompressed = [ 
+        #NOTE: the switch names are not unique, it's not valid content for topology.conf
+        # The uniquefication and compression of names are done in the compress() method
+        "SwitchName=slurm-root Switches=a,b,ns_blue,ns_green,ns_pink",
+        # "physical" topology
+        'SwitchName=a Switches=a,b',
+        'SwitchName=a Nodes=m22-blue-[0-1],m22-green-3',
+        'SwitchName=b Nodes=m22-blue-2',
+        'SwitchName=b Switches=a',
+        'SwitchName=a Nodes=m22-blue-3',
+        # topology "by nodeset"
+        "SwitchName=ns_blue Nodes=m22-blue-[4-6]",
+        "SwitchName=ns_green Nodes=m22-green-[0-2,4]",
         "SwitchName=ns_pink Nodes=m22-pink-[0-3]",
+        # TPU topology
         "SwitchName=tpu-root Switches=ns_bold,ns_slim",
         "SwitchName=ns_bold Switches=bold-[0-3]",
         "SwitchName=bold-0 Nodes=m22-bold-[0-2]",
@@ -75,10 +98,18 @@ def test_gen_topology_conf(tpu_mock):
         
     compressed = uncompressed.compress()
     want_compressed = [
-        "SwitchName=s0 Switches=s0_[0-2]",
-        "SwitchName=s0_0 Nodes=m22-blue-[0-6]",
-        "SwitchName=s0_1 Nodes=m22-green-[0-4]",
-        "SwitchName=s0_2 Nodes=m22-pink-[0-3]",
+        "SwitchName=s0 Switches=s0_[0-4]", # root
+        # "physical" topology
+        'SwitchName=s0_0 Switches=s0_0_[0-1]', # /a
+        'SwitchName=s0_0_0 Nodes=m22-blue-[0-1],m22-green-3', # /a/a
+        'SwitchName=s0_0_1 Nodes=m22-blue-2',  # /a/b
+        'SwitchName=s0_1 Switches=s0_1_0',  # /b
+        'SwitchName=s0_1_0 Nodes=m22-blue-3',  # /b/a
+        # topology "by nodeset"
+        "SwitchName=s0_2 Nodes=m22-blue-[4-6]",
+        "SwitchName=s0_3 Nodes=m22-green-[0-2,4]",
+        "SwitchName=s0_4 Nodes=m22-pink-[0-3]",
+        # TPU topology
         "SwitchName=s1 Switches=s1_[0-1]",
         "SwitchName=s1_0 Switches=s1_0_[0-3]",
         "SwitchName=s1_0_0 Nodes=m22-bold-[0-2]",
@@ -88,10 +119,66 @@ def test_gen_topology_conf(tpu_mock):
         "SwitchName=s1_1 Nodes=m22-slim-[0-2]"]
     assert list(compressed.render_conf_lines()) == want_compressed
 
-    conf.gen_topology_conf(util.Lookup(cfg))
+    assert conf.gen_topology_conf(lkp) == True
     want_written = PRELUDE + "\n".join(want_compressed) + "\n\n"
     assert open(cfg.output_dir + "/cloud_topology.conf").read() == want_written
 
+    summary_got = json.loads(open(cfg.output_dir + "/cloud_topology.summary.json").read())
+    
+    assert summary_got == {
+        "down_nodes": unordered(
+            [f"m22-blue-{i}" for i in (4,5,6)] +
+            [f"m22-green-{i}" for i in (0,1,2,4)] +
+            [f"m22-pink-{i}" for i in range(4)]),
+        "tpu_nodes": unordered(
+            [f"m22-bold-{i}" for i in range(9)] +
+            [f"m22-slim-{i}" for i in range(3)]),
+        'physical_host': {
+            'm22-blue-0': '/a/a/a',
+            'm22-blue-1': '/a/a/b',
+            'm22-blue-2': '/a/b/a',
+            'm22-blue-3': '/b/a/a',
+            'm22-green-3': '/a/a/c'},
+    }
+
+
+
+def test_gen_topology_conf_update():
+    cfg = TstCfg(
+        nodeset={
+            "c": TstNodeset("green", node_count_static=2),
+        },
+        output_dir=tempfile.mkdtemp(),
+    )
+    lkp = util.Lookup(cfg)
+    lkp.instances = lambda: {} # no instances
+
+    # initial generation - reconfigure
+    assert conf.gen_topology_conf(lkp) == True
+
+    # add node: node_count_static 2 -> 3 - reconfigure
+    lkp.cfg.nodeset["c"].node_count_static = 3
+    assert conf.gen_topology_conf(lkp) == True
+
+    # remove node: node_count_static 3 -> 2  - no reconfigure
+    lkp.cfg.nodeset["c"].node_count_static = 2
+    assert conf.gen_topology_conf(lkp) == False
+
+    # set empty physicalHost - no reconfigure
+    lkp.instances = lambda: { n.name: n for n in [TstInstance("m22-green-0", physicalHost="")]}
+    assert conf.gen_topology_conf(lkp) == False
+
+    # set physicalHost - reconfigure
+    lkp.instances = lambda: { n.name: n for n in [TstInstance("m22-green-0", physicalHost="/a/b/c")]}
+    assert conf.gen_topology_conf(lkp) == True
+
+    # change physicalHost - reconfigure
+    lkp.instances = lambda: { n.name: n for n in [TstInstance("m22-green-0", physicalHost="/a/b/z")]}
+    assert conf.gen_topology_conf(lkp) == True
+
+    # shut down node - no reconfigure
+    lkp.instances = lambda: {}
+    assert conf.gen_topology_conf(lkp) == False
 
 
 @pytest.mark.parametrize(

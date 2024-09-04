@@ -30,8 +30,10 @@ locals {
     effect = "NO_SCHEDULE"
   }] : []
 
-  autoscale_set   = var.autoscaling_total_min_nodes != 0 || var.autoscaling_total_max_nodes != 1000
-  static_node_set = var.static_node_count != null
+  autoscale_set                  = var.autoscaling_total_min_nodes != 0 || var.autoscaling_total_max_nodes != 1000
+  static_node_set                = var.static_node_count != null
+  reservation_resource_api_label = "compute.googleapis.com/reservation-name"
+  specific_reservations_count    = try(length(var.reservation_affinity.specific_reservations), 0)
 }
 
 data "google_compute_default_service_account" "default_sa" {
@@ -67,9 +69,10 @@ resource "google_container_node_pool" "node_pool" {
   }
 
   dynamic "placement_policy" {
-    for_each = var.compact_placement ? [1] : []
+    for_each = var.placement_policy.type != null ? [1] : []
     content {
-      type = "COMPACT"
+      type        = var.placement_policy.type
+      policy_name = var.placement_policy.name
     }
   }
 
@@ -105,16 +108,16 @@ resource "google_container_node_pool" "node_pool" {
     }
 
     dynamic "ephemeral_storage_local_ssd_config" {
-      for_each = var.local_ssd_count_ephemeral_storage != null ? [1] : []
+      for_each = local.local_ssd_config.local_ssd_count_ephemeral_storage != null ? [1] : []
       content {
-        local_ssd_count = var.local_ssd_count_ephemeral_storage
+        local_ssd_count = local.local_ssd_config.local_ssd_count_ephemeral_storage
       }
     }
 
     dynamic "local_nvme_ssd_block_config" {
-      for_each = var.local_ssd_count_nvme_block != null ? [1] : []
+      for_each = local.local_ssd_config.local_ssd_count_nvme_block != null ? [1] : []
       content {
-        local_ssd_count = var.local_ssd_count_nvme_block
+        local_ssd_count = local.local_ssd_config.local_ssd_count_nvme_block
       }
     }
 
@@ -156,6 +159,19 @@ resource "google_container_node_pool" "node_pool" {
         "net.ipv4.tcp_wmem" = "4096 16384 16777216"
       }
     }
+
+    reservation_affinity {
+      consume_reservation_type = var.reservation_affinity.consume_reservation_type
+      key                      = local.specific_reservations_count != 1 ? null : local.reservation_resource_api_label
+      values                   = local.specific_reservations_count != 1 ? null : [for reservation in var.reservation_affinity.specific_reservations : reservation.name]
+    }
+
+    dynamic "host_maintenance_policy" {
+      for_each = var.host_maintenance_interval != "" ? [1] : []
+      content {
+        maintenance_interval = var.host_maintenance_interval
+      }
+    }
   }
 
   network_config {
@@ -183,8 +199,18 @@ resource "google_container_node_pool" "node_pool" {
       error_message = "static_node_count cannot be set with either autoscaling_total_min_nodes or autoscaling_total_max_nodes."
     }
     precondition {
-      condition     = !(coalesce(var.local_ssd_count_ephemeral_storage, 0) > 0 && coalesce(var.local_ssd_count_nvme_block, 0) > 0)
+      condition     = !(coalesce(local.local_ssd_config.local_ssd_count_ephemeral_storage, 0) > 0 && coalesce(local.local_ssd_config.local_ssd_count_nvme_block, 0) > 0)
       error_message = "Only one of local_ssd_count_ephemeral_storage or local_ssd_count_nvme_block can be set to a non-zero value."
+    }
+    precondition {
+      condition = (
+        (var.reservation_affinity.consume_reservation_type != "SPECIFIC_RESERVATION" && local.specific_reservations_count == 0) ||
+        (var.reservation_affinity.consume_reservation_type == "SPECIFIC_RESERVATION" && local.specific_reservations_count == 1)
+      )
+      error_message = <<-EOT
+      When using NO_RESERVATION or ANY_RESERVATION as the `consume_reservation_type`, `specific_reservations` cannot be set.
+      On the other hand, with SPECIFIC_RESERVATION you must set `specific_reservations`.
+      EOT
     }
   }
 }

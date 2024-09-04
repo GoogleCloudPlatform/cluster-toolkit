@@ -87,7 +87,7 @@ deployment_groups:
       # mount local SSD filesystems
       local_ssd_filesystem:
         mountpoint: /mnt/localssd
-        permissions: "0755" # must quote numeric filesystem permissions!
+        permissions: "1777" # must quote numeric filesystem permissions!
       runners:
       - type: shell
         destination: setup_aperture.sh

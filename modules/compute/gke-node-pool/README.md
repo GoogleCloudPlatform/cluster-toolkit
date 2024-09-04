@@ -75,8 +75,8 @@ kernel modules to be loaded.
 
 To maximize GPU network bandwidth, nodepools accept multiple VPCs. Pass a multivpc module to gke-node-pool module, and [take these steps] (https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#install-gpudirect-tcpx-nccl) to install GPUDirect, configure NCCL, use recommended settings, and add GPUDirect to your pods.
 
-> **_NOTE:_** You must [enable multi networking](https://cloud.google.com/kubernetes-engine/docs/how-to/setup-multinetwork-support-for-pods#create-a-gke-cluster) feature when creating the GKE cluster. Passing the multivpc module to a gke-cluster module enables multi networking on the cluster creation.
-> Passing the multivpc module to a gke-cluster or pre-existing-gke-cluster module [creates required network objects](https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#create-gke-environment) on the cluster for multi networking.
+> **_NOTE:_** You must [enable multi networking](https://cloud.google.com/kubernetes-engine/docs/how-to/setup-multinetwork-support-for-pods#create-a-gke-cluster) feature when creating the GKE cluster. When gke-cluster depends on multivpc (with the use keyword), multi networking will be automatically enabled on the cluster creation.
+> When gke-cluster or pre-existing-gke-cluster  depends on multivpc (with the use keyword), the [network objects](https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#create-gke-environment) required for multi networking will be created on the cluster.
 
 ### GPUs Examples
 
@@ -231,15 +231,15 @@ limitations under the License.
 | Name | Version |
 |------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.2 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | > 5.0 |
-| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | > 5.0 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | ~> 5.0 |
+| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | ~> 5.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google"></a> [google](#provider\_google) | > 5.0 |
-| <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | > 5.0 |
+| <a name="provider_google"></a> [google](#provider\_google) | ~> 5.0 |
+| <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | ~> 5.0 |
 
 ## Modules
 
@@ -267,20 +267,23 @@ No modules.
 | <a name="input_autoscaling_total_max_nodes"></a> [autoscaling\_total\_max\_nodes](#input\_autoscaling\_total\_max\_nodes) | Total maximum number of nodes in the NodePool. | `number` | `1000` | no |
 | <a name="input_autoscaling_total_min_nodes"></a> [autoscaling\_total\_min\_nodes](#input\_autoscaling\_total\_min\_nodes) | Total minimum number of nodes in the NodePool. | `number` | `0` | no |
 | <a name="input_cluster_id"></a> [cluster\_id](#input\_cluster\_id) | projects/{{project}}/locations/{{location}}/clusters/{{cluster}} | `string` | n/a | yes |
-| <a name="input_compact_placement"></a> [compact\_placement](#input\_compact\_placement) | Places node pool's nodes in a closer physical proximity in order to reduce network latency between nodes. | `bool` | `false` | no |
+| <a name="input_compact_placement"></a> [compact\_placement](#input\_compact\_placement) | DEPRECATED: Use `placement_policy` | `bool` | `null` | no |
 | <a name="input_disk_size_gb"></a> [disk\_size\_gb](#input\_disk\_size\_gb) | Size of disk for each node. | `number` | `100` | no |
 | <a name="input_disk_type"></a> [disk\_type](#input\_disk\_type) | Disk type for each node. | `string` | `null` | no |
 | <a name="input_enable_gcfs"></a> [enable\_gcfs](#input\_enable\_gcfs) | Enable the Google Container Filesystem (GCFS). See [restrictions](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/container_cluster#gcfs_config). | `bool` | `false` | no |
 | <a name="input_enable_secure_boot"></a> [enable\_secure\_boot](#input\_enable\_secure\_boot) | Enable secure boot for the nodes.  Keep enabled unless custom kernel modules need to be loaded. See [here](https://cloud.google.com/compute/shielded-vm/docs/shielded-vm#secure-boot) for more info. | `bool` | `true` | no |
 | <a name="input_guest_accelerator"></a> [guest\_accelerator](#input\_guest\_accelerator) | List of the type and count of accelerator cards attached to the instance. | <pre>list(object({<br>    type  = optional(string)<br>    count = optional(number, 0)<br>    gpu_driver_installation_config = optional(list(object({<br>      gpu_driver_version = string<br>    })))<br>    gpu_partition_size = optional(string)<br>    gpu_sharing_config = optional(list(object({<br>      gpu_sharing_strategy       = optional(string)<br>      max_shared_clients_per_gpu = optional(number)<br>    })))<br>  }))</pre> | `null` | no |
+| <a name="input_host_maintenance_interval"></a> [host\_maintenance\_interval](#input\_host\_maintenance\_interval) | Specifies the frequency of planned maintenance events. | `string` | `""` | no |
 | <a name="input_image_type"></a> [image\_type](#input\_image\_type) | The default image type used by NAP once a new node pool is being created. Use either COS\_CONTAINERD or UBUNTU\_CONTAINERD. | `string` | `"COS_CONTAINERD"` | no |
 | <a name="input_kubernetes_labels"></a> [kubernetes\_labels](#input\_kubernetes\_labels) | Kubernetes labels to be applied to each node in the node group. Key-value pairs. <br>(The `kubernetes.io/` and `k8s.io/` prefixes are reserved by Kubernetes Core components and cannot be specified) | `map(string)` | `null` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | GCE resource labels to be applied to resources. Key-value pairs. | `map(string)` | n/a | yes |
-| <a name="input_local_ssd_count_ephemeral_storage"></a> [local\_ssd\_count\_ephemeral\_storage](#input\_local\_ssd\_count\_ephemeral\_storage) | The number of local SSDs to attach to each node to back ephemeral storage.<br>Uses NVMe interfaces.  Must be supported by `machine_type`.<br>[See above](#local-ssd-storage) for more info. | `number` | `null` | no |
-| <a name="input_local_ssd_count_nvme_block"></a> [local\_ssd\_count\_nvme\_block](#input\_local\_ssd\_count\_nvme\_block) | The number of local SSDs to attach to each node to back block storage.<br>Uses NVMe interfaces.  Must be supported by `machine_type`.<br>[See above](#local-ssd-storage) for more info. | `number` | `null` | no |
+| <a name="input_local_ssd_count_ephemeral_storage"></a> [local\_ssd\_count\_ephemeral\_storage](#input\_local\_ssd\_count\_ephemeral\_storage) | The number of local SSDs to attach to each node to back ephemeral storage.<br>Uses NVMe interfaces.  Must be supported by `machine_type`.<br>When set to null,  default value either is [set based on machine\_type](https://cloud.google.com/compute/docs/disks/local-ssd#choose_number_local_ssds) or GKE decides about default value.<br>[See above](#local-ssd-storage) for more info. | `number` | `null` | no |
+| <a name="input_local_ssd_count_nvme_block"></a> [local\_ssd\_count\_nvme\_block](#input\_local\_ssd\_count\_nvme\_block) | The number of local SSDs to attach to each node to back block storage.<br>Uses NVMe interfaces.  Must be supported by `machine_type`.<br>When set to null,  default value either is [set based on machine\_type](https://cloud.google.com/compute/docs/disks/local-ssd#choose_number_local_ssds) or GKE decides about default value.<br>[See above](#local-ssd-storage) for more info. | `number` | `null` | no |
 | <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | The name of a Google Compute Engine machine type. | `string` | `"c2-standard-60"` | no |
 | <a name="input_name"></a> [name](#input\_name) | The name of the node pool. If left blank, will default to the machine type. | `string` | `null` | no |
+| <a name="input_placement_policy"></a> [placement\_policy](#input\_placement\_policy) | Group placement policy to use for the node pool's nodes. `COMPACT` is the only supported value for `type` currently. `name` is the name of the placement policy.<br>It is assumed that the specified policy exists. To create a placement policy refer to https://cloud.google.com/sdk/gcloud/reference/compute/resource-policies/create/group-placement.<br>Note: Placement policies have the [following](https://cloud.google.com/compute/docs/instances/placement-policies-overview#restrictions-compact-policies) restrictions. | <pre>object({<br>    type = string<br>    name = optional(string)<br>  })</pre> | <pre>{<br>  "name": null,<br>  "type": null<br>}</pre> | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The project ID to host the cluster in. | `string` | n/a | yes |
+| <a name="input_reservation_affinity"></a> [reservation\_affinity](#input\_reservation\_affinity) | Reservation resource to consume. When targeting SPECIFIC\_RESERVATION, specific\_reservations needs be specified.<br>Even though specific\_reservations is a list, only one reservation is allowed by the NodePool API.<br>It is assumed that the specified reservation exists and has available capacity.<br>For a shared reservation, specify the project\_id as well in which it was created.<br>To create a reservation refer to https://cloud.google.com/compute/docs/instances/reservations-single-project and https://cloud.google.com/compute/docs/instances/reservations-shared | <pre>object({<br>    consume_reservation_type = string<br>    specific_reservations = optional(list(object({<br>      name    = string<br>      project = optional(string)<br>    })))<br>  })</pre> | <pre>{<br>  "consume_reservation_type": "NO_RESERVATION",<br>  "specific_reservations": []<br>}</pre> | no |
 | <a name="input_service_account"></a> [service\_account](#input\_service\_account) | DEPRECATED: use service\_account\_email and scopes. | <pre>object({<br>    email  = string,<br>    scopes = set(string)<br>  })</pre> | `null` | no |
 | <a name="input_service_account_email"></a> [service\_account\_email](#input\_service\_account\_email) | Service account e-mail address to use with the node pool | `string` | `null` | no |
 | <a name="input_service_account_scopes"></a> [service\_account\_scopes](#input\_service\_account\_scopes) | Scopes to to use with the node pool. | `set(string)` | <pre>[<br>  "https://www.googleapis.com/auth/cloud-platform"<br>]</pre> | no |

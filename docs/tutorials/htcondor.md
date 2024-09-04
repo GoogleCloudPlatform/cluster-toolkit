@@ -34,16 +34,16 @@ To build Cluster Toolkit binary from source run:
 make
 ```
 
-You should now have a binary named ghpc in the current directory. To verify the
+You should now have a binary named gcluster in the current directory. To verify the
 build run:
 
 ```bash
-./ghpc --version
+./gcluster --version
 ```
 
 This should show you the version of the Cluster Toolkit you are using.
 
-(Optional) To install the `ghpc` binary in your home directory under bin,
+(Optional) To install the `gcluster` binary in your home directory under bin,
 run the following command:
 
 ```bash
@@ -70,10 +70,10 @@ The blueprint `community/examples/htc-htcondor.yaml` should be open in the Cloud
 Shell Editor (on the left).
 
 This file describes the cluster you will deploy. After you have inspected the
-file, use the ghpc binary to create a deployment directory by running:
+file, use the gcluster binary to create a deployment directory by running:
 
 ```bash
-./ghpc create community/examples/htc-htcondor.yaml --vars "project_id=<walkthrough-project-id/>"
+./gcluster create community/examples/htc-htcondor.yaml --vars "project_id=<walkthrough-project-id/>"
 ```
 
 > **_NOTE:_** The `--vars` argument is used to override `project_id` in the
@@ -89,7 +89,7 @@ contains the terraform needed to deploy your cluster.
 Use the following commands to run terraform and deploy your cluster.
 
 ```bash
-./ghpc deploy htcondor-pool --auto-approve
+./gcluster deploy htcondor-pool --auto-approve
 ```
 
 The Toolkit will automatically approve provisioning a network, building a VM
@@ -222,7 +222,7 @@ You should be returned to the Cloud Shell console. You may then destroy your
 HTCondor pool:
 
 ```bash
-./ghpc destroy htcondor-pool --auto-approve
+./gcluster destroy htcondor-pool --auto-approve
 ```
 
 When complete you should see output similar to:

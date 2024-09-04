@@ -15,8 +15,8 @@ the dataset in your GCS bucket. After that you can update the blueprint to use t
 dataset from GCS bucket in training script.
 
 ```bash
-./ghpc create community/examples/hpc-slurm6-tpu-maxtext.yaml --vars project_id=<project-id>;
-./ghpc deploy slurm6-tpu-v4 --auto-approve
+./gcluster create community/examples/hpc-slurm6-tpu-maxtext.yaml --vars project_id=<project-id>;
+./gcluster deploy slurm6-tpu-v4 --auto-approve
 ```
 
 This would deploy slurm cluster with TPU partition, dynamic compute partition. Maxtext benchmark test script
@@ -79,7 +79,7 @@ For this we need to return to our cloud shell terminal. Run exit in the terminal
 Run the following command in the cloud shell terminal to destroy the cluster:
 
 ```bash
-./ghpc destroy slurm6-tpu-v4 --auto-approve
+./gcluster destroy slurm6-tpu-v4 --auto-approve
 ```
 
 When complete you should see something like:

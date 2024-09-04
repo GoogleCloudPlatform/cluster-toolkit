@@ -32,10 +32,10 @@ locals {
   sa_email = var.service_account_email != null ? var.service_account_email : data.google_compute_default_service_account.default_sa.email
 
   # additional VPCs enable multi networking 
-  derived_enable_multi_networking = length(var.additional_networks) > 0 ? true : coalesce(var.enable_multi_networking, false)
+  derived_enable_multi_networking = coalesce(var.enable_multi_networking, length(var.additional_networks) > 0)
 
   # multi networking needs enabled Dataplane v2
-  derived_enable_dataplane_v2 = local.derived_enable_multi_networking ? true : coalesce(var.enable_dataplane_v2, false)
+  derived_enable_dataplane_v2 = coalesce(var.enable_dataplane_v2, local.derived_enable_multi_networking)
 }
 
 data "google_compute_default_service_account" "default_sa" {
@@ -177,12 +177,12 @@ resource "google_container_cluster" "gke_cluster" {
       node_config
     ]
     precondition {
-      condition     = !(!coalesce(var.enable_dataplane_v2, true) && (coalesce(var.enable_multi_networking, false) || length(var.additional_networks) > 0))
+      condition     = !(!coalesce(var.enable_dataplane_v2, true) && local.derived_enable_multi_networking)
       error_message = "'enable_dataplane_v2' cannot be false when enabling multi networking."
     }
     precondition {
       condition     = !(!coalesce(var.enable_multi_networking, true) && length(var.additional_networks) > 0)
-      error_message = "'enable_multi_networking' cannot be false when passing multivpc module."
+      error_message = "'enable_multi_networking' cannot be false when using multivpc module, which passes additional_networks."
     }
   }
 
@@ -304,6 +304,14 @@ resource "google_project_iam_member" "node_service_account_artifact_registry" {
   project = var.project_id
   role    = "roles/artifactregistry.reader"
   member  = "serviceAccount:${local.sa_email}"
+}
+
+data "google_client_config" "default" {}
+
+provider "kubernetes" {
+  host                   = "https://${google_container_cluster.gke_cluster.endpoint}"
+  cluster_ca_certificate = base64decode(google_container_cluster.gke_cluster.master_auth[0].cluster_ca_certificate)
+  token                  = data.google_client_config.default.access_token
 }
 
 module "workload_identity" {
