@@ -5,8 +5,8 @@ This module simplifies applying Kubernetes manifests to GKE clusters. It provide
 * **Manifest:**
   * **Raw String:** Specify manifests directly within the module configuration using the `content: manifest_body` format.
   * **File/Template/Directory Reference:** Set `source` to the path to:
-    * A single URL to a manifest file. Ex.: `https://github.com/.../myrepo/manfiest.yaml`.
-    * A single local YAML manifest file (`.yaml`). Ex.: `./manfiest.yaml`.
+    * A single URL to a manifest file. Ex.: `https://github.com/.../myrepo/manifest.yaml`.
+    * A single local YAML manifest file (`.yaml`). Ex.: `./manifest.yaml`.
     * A template file (`.tftpl`) to generate a manifest. Ex.: `./template.yaml.tftpl`. You can pass the variables to format the template file in `template_vars`.
     * A directory containing multiple YAML or template files. Ex: `./manifests/`. You can pass the variables to format the template files in `template_vars`.
 
@@ -24,16 +24,22 @@ This module simplifies applying Kubernetes manifests to GKE clusters. It provide
   source: modules/management/kubectl-apply
   use: [existing-gke-cluster]
   settings:
-    - content: "A YAML body"
-    - source: "A URL"
-    - source: "A file path"
-    - source: "A template file path"
-      template_vars: {key1: value1, key2: value2, ...}
-    - source: "A directory path"
+    - content: |
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: my-namespace
+    - source: "https://github.com/kubernetes-sigs/jobset/releases/download/v0.6.0/manifests.yaml"
+    - source: "./manifests/configmap1.yaml"
+    - source: "./manifests/configmap2.yaml.tftpl"
+      template_vars: {name: "dev-config", public: "false"}
+    - source: "./manifests/"
+      template_vars: {name: "dev-config", public: "false"}
 ```
 
-> **_NOTE:_** The `project_id` and `region` settings would be inferred from the
-> deployment variables of the same name, but they are included here for clarity.
+> **_NOTE:_** The `project_id` and `region` settings would be inferred from the deployment variables of the same name, but they are included here for clarity.
+>
+> Terraform may apply resources in parallel, leading to potential dependency issues. If a resource's dependencies aren't ready, it will be applied again up to 15 times.
 
 ## License
 
@@ -84,7 +90,7 @@ limitations under the License.
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_apply_manifests"></a> [apply\_manifests](#input\_apply\_manifests) | A list of manifests to apply to GKE cluster using kubectl. | <pre>list(object({<br>    content           = optional(string, null)<br>    source            = optional(string, null)<br>    template_vars     = optional(any, null)<br>    server_side_apply = optional(bool, false)<br>    wait_for_rollout  = optional(bool, false)<br>  }))</pre> | `[]` | no |
+| <a name="input_apply_manifests"></a> [apply\_manifests](#input\_apply\_manifests) | A list of manifests to apply to GKE cluster using kubectl. For more details see [kubectl module's inputs](kubectl/README.md). | <pre>list(object({<br>    content           = optional(string, null)<br>    source            = optional(string, null)<br>    template_vars     = optional(map(any), null)<br>    server_side_apply = optional(bool, false)<br>    wait_for_rollout  = optional(bool, false)<br>  }))</pre> | `[]` | no |
 | <a name="input_cluster_id"></a> [cluster\_id](#input\_cluster\_id) | An identifier for the gke cluster resource with format projects/<project\_id>/locations/<region>/clusters/<name>. | `string` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The project ID that hosts the gke cluster. | `string` | n/a | yes |
 

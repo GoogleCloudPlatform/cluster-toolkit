@@ -28,7 +28,7 @@ variable "source_path" {
 
 variable "template_vars" {
   description = "The values to populate template file(s) with."
-  type        = any
+  type        = map(any)
   default     = null
 }
 
@@ -39,7 +39,7 @@ variable "server_side_apply" {
 }
 
 variable "wait_for_rollout" {
-  description = "Wait or not for Deployments and APIService to complete rollout."
+  description = "Wait or not for Deployments and APIService to complete rollout. See [kubectl wait](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_wait/) for more details."
   type        = bool
-  default     = false
+  default     = true
 }
