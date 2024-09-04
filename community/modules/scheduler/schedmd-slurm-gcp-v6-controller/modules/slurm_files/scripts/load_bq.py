@@ -50,6 +50,8 @@ SLURM_TIME_FORMAT = r"%Y-%m-%dT%H:%M:%S"
 
 
 def make_datetime(time_string):
+    if time_string == "None":
+        return None
     return datetime.strptime(time_string, SLURM_TIME_FORMAT).replace(
         tzinfo=timezone.utc
     )
@@ -195,7 +197,6 @@ def make_job_row(job):
         field_name: dict.get(converters, field.field_type)(job[field_name])
         for field_name, field in job_schema.items()
         if field_name in job
-        and job[field_name] != "None"
     }
     job_row["entry_uuid"] = uuid.uuid4().hex
     job_row["cluster_id"] = lookup().cfg.cluster_id
