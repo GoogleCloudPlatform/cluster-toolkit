@@ -37,7 +37,9 @@ This module simplifies applying Kubernetes manifests to GKE clusters. It provide
       template_vars: {name: "dev-config", public: "false"}
 ```
 
-> **_NOTE:_** The `project_id` and `region` settings would be inferred from the deployment variables of the same name, but they are included here for clarity.
+> **_NOTE:_**
+>
+> The `project_id` and `region` settings would be inferred from the deployment variables of the same name, but they are included here for clarity.
 >
 > Terraform may apply resources in parallel, leading to potential dependency issues. If a resource's dependencies aren't ready, it will be applied again up to 15 times.
 
