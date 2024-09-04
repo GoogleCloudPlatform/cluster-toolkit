@@ -39,15 +39,25 @@ locals {
 
   finalize_setup_script = <<-EOF
     set -e
+
     . ${var.spack_profile_script_path}
     spack config --scope site add 'packages:all:permissions:read:world'
     spack config --scope site add 'packages:all:permissions:write:group'
     spack gpg init
+
     spack compiler find --scope site
     ${local.add_google_mirror_script}
+
+    # More info: https://github.com/spack/spack/blob/d41fb3d542fd273a95f61e120ce0d506d59905fa/lib/spack/docs/getting_started.rst#bootstrapping-clingo
+    echo 'Disabling clingo bootstrap (install from source instead of buildcache)'
+    spack bootstrap list
+    spack bootstrap disable github-actions-v0.4
+    spack bootstrap disable github-actions-v0.5
+    spack bootstrap list
+
     # perform fast install to make sure Spack is fully initialized
-    spack install xz
-    spack uninstall --yes-to-all xz
+    spack install gnuconfig
+    spack uninstall --yes-to-all gnuconfig
   EOF
 
   script_content = templatefile(
