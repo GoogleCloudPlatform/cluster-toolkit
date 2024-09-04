@@ -1,6 +1,6 @@
 ## Description
 
-This module simplifies applying Kubernetes manifests to GKE clusters. It provides flexible options for specifying manifests, allowing you to either directly embed them as strings content or reference them from URLs, files, templates, or entire files in directories.
+This module simplifies applying Kubernetes manifests to GKE clusters. It provides flexible options for specifying manifests, allowing you to either directly embed them as strings content or reference them from URLs, files, templates, or entire .yaml and .tftpl files in directories.
 
 * **Manifest:**
   * **Raw String:** Specify manifests directly within the module configuration using the `content: manifest_body` format.
