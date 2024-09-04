@@ -320,10 +320,11 @@ variable "additional_networks" {
 
 variable "reservation_affinity" {
   description = <<-EOT
-  Reservation resources to consume. When targeting SPECIFIC_RESERVATION, the list of specific_reservations needs be specified.
-  It is assumed that the specified reservations exist and they have available capacity.
+  Reservation resource to consume. When targeting SPECIFIC_RESERVATION, specific_reservations needs be specified.
+  Even though specific_reservations is a list, only one reservation is allowed by the NodePool API.
+  It is assumed that the specified reservation exists and has available capacity.
   For a shared reservation, specify the project_id as well in which it was created.
-  To create reservations refer to https://cloud.google.com/compute/docs/instances/reservations-single-project and https://cloud.google.com/compute/docs/instances/reservations-shared
+  To create a reservation refer to https://cloud.google.com/compute/docs/instances/reservations-single-project and https://cloud.google.com/compute/docs/instances/reservations-shared
   EOT
   type = object({
     consume_reservation_type = string
@@ -341,7 +342,6 @@ variable "reservation_affinity" {
     error_message = "Accepted values are: {NO_RESERVATION, ANY_RESERVATION, SPECIFIC_RESERVATION}"
   }
 }
-
 
 variable "host_maintenance_interval" {
   description = "Specifies the frequency of planned maintenance events."
