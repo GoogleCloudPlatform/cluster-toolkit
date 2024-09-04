@@ -50,6 +50,8 @@ SLURM_TIME_FORMAT = r"%Y-%m-%dT%H:%M:%S"
 
 
 def make_datetime(time_string):
+    if time_string == "None":
+        return None
     return datetime.strptime(time_string, SLURM_TIME_FORMAT).replace(
         tzinfo=timezone.utc
     )
