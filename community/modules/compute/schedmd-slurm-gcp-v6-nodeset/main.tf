@@ -105,6 +105,8 @@ locals {
 
     startup_script  = local.ghpc_startup_script
     network_storage = var.network_storage
+
+    enable_maintenance_reservation = var.enable_maintenance_reservation
   }
 }
 

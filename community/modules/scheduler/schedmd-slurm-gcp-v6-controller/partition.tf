@@ -81,20 +81,21 @@ module "nodeset_cleanup" {
 
 locals {
   nodesets = [for name, ns in local.nodeset_map : {
-    nodeset_name             = ns.nodeset_name
-    node_conf                = ns.node_conf
-    instance_template        = module.slurm_nodeset_template[ns.nodeset_name].self_link
-    node_count_dynamic_max   = ns.node_count_dynamic_max
-    node_count_static        = ns.node_count_static
-    subnetwork               = ns.subnetwork_self_link
-    reservation_name         = ns.reservation_name
-    maintenance_interval     = ns.maintenance_interval
-    instance_properties_json = ns.instance_properties_json
-    enable_placement         = ns.enable_placement
-    network_storage          = ns.network_storage
-    zone_target_shape        = ns.zone_target_shape
-    zone_policy_allow        = ns.zone_policy_allow
-    zone_policy_deny         = ns.zone_policy_deny
+    nodeset_name                   = ns.nodeset_name
+    node_conf                      = ns.node_conf
+    instance_template              = module.slurm_nodeset_template[ns.nodeset_name].self_link
+    node_count_dynamic_max         = ns.node_count_dynamic_max
+    node_count_static              = ns.node_count_static
+    subnetwork                     = ns.subnetwork_self_link
+    reservation_name               = ns.reservation_name
+    maintenance_interval           = ns.maintenance_interval
+    instance_properties_json       = ns.instance_properties_json
+    enable_placement               = ns.enable_placement
+    network_storage                = ns.network_storage
+    zone_target_shape              = ns.zone_target_shape
+    zone_policy_allow              = ns.zone_policy_allow
+    zone_policy_deny               = ns.zone_policy_deny
+    enable_maintenance_reservation = ns.enable_maintenance_reservation
   }]
 }
 
