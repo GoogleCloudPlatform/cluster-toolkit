@@ -32,9 +32,9 @@ deployment_groups:
   - id: network1
     source: modules/network/vpc
     settings:
-      subnetwork_name: gke-subnet
+      subnetwork_name: gke-subnet-a3-highgpu
       secondary_ranges:
-        gke-subnet:
+        chdu-gke-subnet-a3-highgpu:
         - range_name: pods
           ip_cidr_range: 10.4.0.0/14
         - range_name: services
@@ -65,5 +65,4 @@ deployment_groups:
       machine_type: a3-highgpu-8g
       autoscaling_total_min_nodes: 2
       zones: [$(vars.zone)]
-
-# We need to do the following here after deployment: https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/examples/README.md#gke-a3-highgpuyaml--
+    outputs: [instructions]

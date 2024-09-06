@@ -64,3 +64,19 @@ output "tolerations" {
   description = "Tolerations needed for a pod to be scheduled on this node pool."
   value       = local.tolerations
 }
+
+output "instructions" {
+  description = "Instructions for submitting the sample GPUDirect enabled job."
+  value       = <<-EOT
+    A sample GKE job that had GPUDirect enabled and NCCL test included has been created locally at:
+      ${abspath(local.updated_user_workload_path)}
+
+    Use the following commands to:
+    Submit your job:
+      kubectl create -f ${abspath(local.updated_user_workload_path)}
+
+    If you would like to enable GPUDirect for your own workload, please provide your Kubernetes Job manifest
+    as user_workload_path in the gke-node-pool blueprint, or follow our instruction to update your workload
+    https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#add-gpudirect-manifests
+  EOT
+}

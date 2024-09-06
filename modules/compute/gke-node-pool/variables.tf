@@ -255,6 +255,12 @@ variable "timeout_update" {
   default     = null
 }
 
+variable "user_workload_path" {
+  description = "The path to the user workload, this should point to the kubernetes job manifest that user want to have the TCPX sidecar injected."
+  type        = string
+  default     = null
+}
+
 # Deprecated
 
 # tflint-ignore: terraform_unused_declarations
