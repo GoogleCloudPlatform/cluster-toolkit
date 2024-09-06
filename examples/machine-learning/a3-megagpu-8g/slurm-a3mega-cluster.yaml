@@ -91,34 +91,29 @@ deployment_groups:
         mountpoint: /mnt/localssd
         permissions: "1777" # must quote numeric filesystem permissions!
       runners:
-      - type: shell
-        destination: setup_aperture.sh
+      - type: ansible-local
+        destination: slurm_aperture.yml
         content: |
-          #!/bin/bash
-          MAX_APERTURE_RETRIES=10
-          aperture_retries=0
-
-          until lspci -nn -D | grep -q '1ae0:0084' || [ $aperture_retries -eq $MAX_APERTURE_RETRIES ]; do
-            echo "\$(date): APERTURE devices not yet fully available (attempt $aperture_retries/$MAX_APERTURE_RETRIES). Retrying in 5 seconds..."
-            sleep 5
-            aperture_retries=\$((aperture_retries + 1))
-          done
-
-          if [ $aperture_retries -eq $MAX_APERTURE_RETRIES ]; then
-            echo "\$(date): ERROR: APERTURE devices failed to initialize after $MAX_APERTURE_RETRIES retries."
-            # Consider taking additional error-handling actions
-            exit 0
-          fi
-
-          echo "\$(date): Aperture devices ready!"
-          lspci -nn -D | grep '1ae0:0084' | awk '{print $1}' | xargs --no-run-if-empty -I {} -n 1 mkdir -p /dev/aperture_devices/{}
-          lspci -nn -D | grep '1ae0:0084' | awk '{print $1}' | xargs --no-run-if-empty -I {} -n 1 umount -f /dev/aperture_devices/{} || true
-          lspci -nn -D | grep '1ae0:0084' | awk '{print $1}' | xargs --no-run-if-empty -I {} -n 1 mount --bind /sys/bus/pci/devices/{} /dev/aperture_devices/{}
-          if [ -d /dev/aperture_devices ]; then
-              chmod -R a+r /dev/aperture_devices/
-              chmod a+rw /dev/aperture_devices/*/resource*
-          fi
-          echo "\$(date): Aperture devices mounted!"
+          ---
+          - name: Configure Slurm to depend upon aperture devices
+            hosts: all
+            become: true
+            vars: {}
+            tasks:
+            - name: Ensure slurmd starts after aperture devices are ready
+              ansible.builtin.copy:
+                dest: /etc/systemd/system/slurmd.service.d/aperture.conf
+                owner: root
+                group: root
+                mode: 0o644
+                content: |
+                  [Service]
+                  ExecCondition=/usr/bin/test -d /dev/aperture_devices/
+              notify: Reload SystemD
+            handlers:
+            - name: Reload SystemD
+              ansible.builtin.systemd:
+                daemon_reload: true
       - type: ansible-local
         destination: enable_dcgm.yml
         content: |

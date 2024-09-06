@@ -286,6 +286,29 @@ deployment_groups:
               ansible.posix.patch:
                 src: /tmp/bash_completion.patch
                 dest: /usr/share/bash-completion/bash_completion
+      - type: ansible-local
+        destination: aperture_devices.yml
+        content: |
+          ---
+          - name: Setup GPUDirect-TCPXO aperture devices
+            hosts: all
+            become: true
+            tasks:
+            - name: Mount aperture devices to /dev and make writable
+              ansible.builtin.copy:
+                dest: /etc/udev/rules.d/00-a3-megagpu.rules
+                owner: root
+                group: root
+                mode: 0o644
+                content: |
+                  ACTION=="add", SUBSYSTEM=="pci", ATTR{vendor}=="0x1ae0", ATTR{device}=="0x0084", TAG+="systemd", \
+                      RUN+="/usr/bin/mkdir --mode=0755 -p /dev/aperture_devices", \
+                      RUN+="/usr/bin/systemd-mount --type=none --options=bind --collect %S/%p /dev/aperture_devices/%k", \
+                      RUN+="/usr/bin/bash -c '/usr/bin/chmod 0666 /dev/aperture_devices/%k/resource*'"
+              notify: Update initramfs
+            handlers:
+            - name: Update initramfs
+              ansible.builtin.command: /usr/sbin/update-initramfs -u -k all
       - type: data
         destination: /etc/netplan/90-default.yaml
         content: |
