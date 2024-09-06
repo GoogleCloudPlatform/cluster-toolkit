@@ -120,7 +120,7 @@ deployment_groups:
             hosts: all
             become: true
             vars:
-              package_url: https://github.com/GoogleCloudPlatform/compute-virtual-ethernet-linux/releases/download/v1.3.4/gve-dkms_1.3.4_all.deb
+              package_url: https://github.com/GoogleCloudPlatform/compute-virtual-ethernet-linux/releases/download/v1.4.3/gve-dkms_1.4.3_all.deb
               package_filename: /tmp/{{ package_url | basename }}
             tasks:
             - name: Install driver dependencies
