@@ -147,6 +147,7 @@ deployment_groups:
           ENROOT_RUNTIME_PATH    /mnt/localssd/${UID}/enroot/runtime
           ENROOT_CACHE_PATH      /mnt/localssd/${UID}/enroot/cache
           ENROOT_DATA_PATH       /mnt/localssd/${UID}/enroot/data
+          ENROOT_TEMP_PATH       /mnt/localssd/${UID}/enroot
           EOT
           ### Install Pyxis
           if [ ! -f "/usr/local/lib/slurm/spank_pyxis.so" ]; then
