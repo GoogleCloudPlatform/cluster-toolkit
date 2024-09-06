@@ -34,7 +34,7 @@ deployment_groups:
     settings:
       subnetwork_name: gke-subnet-a3-highgpu
       secondary_ranges:
-        chdu-gke-subnet-a3-highgpu:
+        gke-subnet-a3-highgpu:
         - range_name: pods
           ip_cidr_range: 10.4.0.0/14
         - range_name: services
