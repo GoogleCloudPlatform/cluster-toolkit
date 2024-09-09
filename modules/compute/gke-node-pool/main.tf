@@ -277,8 +277,6 @@ resource "null_resource" "enable_tcpx_in_workload" {
   triggers = {
     always_run = timestamp()
   }
-  # rxdm version v2.0.12 should be matching nccl-tcpx-installer version v3.1.9 
-  # more details in https://docs.google.com/document/d/1D5umT4-WDuNnYf3ieQ5SfLdmvGRPBQGLB662udzwz8I/edit?tab=t.0#heading=h.n4ytmbxt737h
   provisioner "local-exec" {
     command = "python3 ${path.module}/gpu-direct-workload/scripts/enable-tcpx-in-workload.py --file ${local.user_workload_path_tcpx} --rxdm ${local.gpu_direct_setting.rxdm_version}"
   }
@@ -292,8 +290,6 @@ resource "null_resource" "enable_tcpxo_in_workload" {
   triggers = {
     always_run = timestamp()
   }
-  # rxdm version v1.0.10 should be matching nccl-tcpxo-installer version v1.0.4 
-  # more details in https://docs.google.com/document/d/1D5umT4-WDuNnYf3ieQ5SfLdmvGRPBQGLB662udzwz8I/edit?tab=t.0#heading=h.n4ytmbxt737h
   provisioner "local-exec" {
     command = "python3 ${path.module}/gpu-direct-workload/scripts/enable-tcpxo-in-workload.py --file ${local.user_workload_path_tcpxo} --rxdm ${local.gpu_direct_setting.rxdm_version}"
   }
