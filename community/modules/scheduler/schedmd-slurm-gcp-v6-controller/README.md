@@ -74,6 +74,37 @@ page.
 More information on GPU support in Slurm on GCP and other Cluster Toolkit modules
 can be found at [docs/gpu-support.md](../../../../docs/gpu-support.md)
 
+## Reservation for Scheduled Maintenance
+
+A [maintenance event](https://cloud.google.com/compute/docs/instances/host-maintenance-overview#maintenanceevents) is when a compute engine stops a VM to perform a hardware or
+software update which is determined by the host maintenance policy. This can
+also affect the running jobs if the maintenance kicks in. Now, Customers can
+protect jobs from getting terminated due to maintenance using the cluster
+toolkit. You can enable creation of reservation for scheduled maintenance for
+your compute nodeset and Slurm will reserve your node for maintenance during the
+maintenance window. If you try to schedule any jobs which overlap with the
+maintenance reservation, Slurm would not schedule any job.
+
+You can specify in your blueprint like
+
+```yaml
+  - id: compute_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network]
+    settings:
+      enable_maintenance_reservation: true
+```
+
+To enable creation of reservation for maintenance.
+
+While running job on slurm cluster, you can specify total run time of the job
+using [-t flag](https://slurm.schedmd.com/srun.html#OPT_time).This would only
+run the job outside of the maintenance window.
+
+```shell
+srun -n1 -pcompute -t 10:00 <job.sh>
+```
+
 ## Placement Max Distance
 
 When using
