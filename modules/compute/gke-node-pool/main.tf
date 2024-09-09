@@ -254,43 +254,6 @@ resource "google_project_iam_member" "node_service_account_artifact_registry" {
   member  = "serviceAccount:${local.sa_email}"
 }
 
-# Enable GPUDirect for A3 and A3Mega VMs, this involve multiple kubectl steps to integrate with the created cluster
-# 1. Install NCCL plugin daemonset
-# 2. Install NRI plugin daemonset
-# 3. Update user workload to inject rxdm sidecar and other required annotation, volume etc.
-locals {
-  split_cluster_id         = split("/", var.cluster_id)
-  user_workload_path_tcpx  = var.user_workload_path == null ? "${path.module}/gpu-direct-workload/sample-tcpx-workload-job.yaml" : var.user_workload_path
-  user_workload_path_tcpxo = var.user_workload_path == null ? "${path.module}/gpu-direct-workload/sample-tcpxo-workload-job.yaml" : var.user_workload_path
-
-  # Manifest to be installed for enabling TCPX on A3 machines
-  tcpx_manifests = [
-    "https://raw.githubusercontent.com/GoogleCloudPlatform/container-engine-accelerators/fee883360a660f71ba07478db95d5c1325322f77/gpudirect-tcpx/nccl-tcpx-installer.yaml",      # nccl_plugin v3.1.9 for tcpx
-    "https://raw.githubusercontent.com/GoogleCloudPlatform/container-engine-accelerators/fee883360a660f71ba07478db95d5c1325322f77/gpudirect-tcpx/nccl-config.yaml",              # nccl_configmap
-    "https://raw.githubusercontent.com/GoogleCloudPlatform/container-engine-accelerators/fee883360a660f71ba07478db95d5c1325322f77/nri_device_injector/nri-device-injector.yaml", # nri_plugin
-  ]
-
-  # Manifest to be installed for enabling TCPXO on A3Mega machines
-  tcpxo_manifests = [
-    "https://raw.githubusercontent.com/GoogleCloudPlatform/container-engine-accelerators/fee883360a660f71ba07478db95d5c1325322f77/gpudirect-tcpxo/nccl-tcpxo-installer.yaml",    # nccl_plugin v1.0.4 for tcpxo
-    "https://raw.githubusercontent.com/GoogleCloudPlatform/container-engine-accelerators/fee883360a660f71ba07478db95d5c1325322f77/nri_device_injector/nri-device-injector.yaml", # nri_plugin
-  ]
-
-  updated_user_workload_path = (
-    var.machine_type == "a3-highgpu-8g"
-    ? replace(local.user_workload_path_tcpx, ".yaml", "-tcpx.yaml")
-    : var.machine_type == "a3-megagpu-8g"
-    ? replace(local.user_workload_path_tcpxo, ".yaml", "-tcpxo.yaml")
-  : null)
-
-  gpu_direct_manifest = (
-    var.machine_type == "a3-highgpu-8g"
-    ? local.tcpx_manifests
-    : var.machine_type == "a3-megagpu-8g"
-    ? local.tcpxo_manifests
-  : null)
-}
-
 data "google_container_cluster" "gke_cluster" {
   project  = var.project_id
   name     = local.split_cluster_id[5]
@@ -303,7 +266,12 @@ resource "null_resource" "install_dependencies" {
   }
 }
 
-# execute script to inject rxdm sidecar into workload to enable tcpx for A3 VM workload
+locals {
+  split_cluster_id   = split("/", var.cluster_id)
+  gpu_direct_setting = lookup(local.gpu_direct_settings, var.machine_type, { gpu_direct_manifests = [], updated_user_workload_path = "", rxdm_version = "" })
+}
+
+# execute script to inject rxdm sidecar into workload to enable tcpx for a3-highgpu-8g VM workload
 resource "null_resource" "enable_tcpx_in_workload" {
   count = var.machine_type == "a3-highgpu-8g" ? 1 : 0
   triggers = {
@@ -312,13 +280,13 @@ resource "null_resource" "enable_tcpx_in_workload" {
   # rxdm version v2.0.12 should be matching nccl-tcpx-installer version v3.1.9 
   # more details in https://docs.google.com/document/d/1D5umT4-WDuNnYf3ieQ5SfLdmvGRPBQGLB662udzwz8I/edit?tab=t.0#heading=h.n4ytmbxt737h
   provisioner "local-exec" {
-    command = "python3 ${path.module}/gpu-direct-workload/scripts/enable-tcpx-in-workload.py --file ${local.user_workload_path_tcpx} --rxdm v2.0.12"
+    command = "python3 ${path.module}/gpu-direct-workload/scripts/enable-tcpx-in-workload.py --file ${local.user_workload_path_tcpx} --rxdm ${local.gpu_direct_setting.rxdm_version}"
   }
 
   depends_on = [null_resource.install_dependencies]
 }
 
-# execute script to inject rxdm sidecar into workload to enable tcpxo for A3Mega VM workload
+# execute script to inject rxdm sidecar into workload to enable tcpxo for a3-megagpu-8g VM workload
 resource "null_resource" "enable_tcpxo_in_workload" {
   count = var.machine_type == "a3-megagpu-8g" ? 1 : 0
   triggers = {
@@ -327,7 +295,7 @@ resource "null_resource" "enable_tcpxo_in_workload" {
   # rxdm version v1.0.10 should be matching nccl-tcpxo-installer version v1.0.4 
   # more details in https://docs.google.com/document/d/1D5umT4-WDuNnYf3ieQ5SfLdmvGRPBQGLB662udzwz8I/edit?tab=t.0#heading=h.n4ytmbxt737h
   provisioner "local-exec" {
-    command = "python3 ${path.module}/gpu-direct-workload/scripts/enable-tcpxo-in-workload.py --file ${local.user_workload_path_tcpxo} --rxdm v1.0.10"
+    command = "python3 ${path.module}/gpu-direct-workload/scripts/enable-tcpxo-in-workload.py --file ${local.user_workload_path_tcpxo} --rxdm ${local.gpu_direct_setting.rxdm_version}"
   }
 
   depends_on = [null_resource.install_dependencies]
@@ -341,7 +309,7 @@ module "kubectl_apply" {
   project_id = var.project_id
 
   apply_manifests = flatten([
-    for manifest in local.gpu_direct_manifest : [
+    for manifest in local.gpu_direct_setting.gpu_direct_manifests : [
       {
         source = manifest
       }
