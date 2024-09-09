@@ -166,6 +166,7 @@ deployment_groups:
           ENROOT_RUNTIME_PATH    /mnt/localssd/${UID}/enroot/runtime
           ENROOT_CACHE_PATH      /mnt/localssd/${UID}/enroot/cache
           ENROOT_DATA_PATH       /mnt/localssd/${UID}/enroot/data
+          ENROOT_TEMP_PATH       /mnt/localssd/${UID}/enroot
       - type: ansible-local
         destination: configure_gpu_monitoring.yml
         content: |
