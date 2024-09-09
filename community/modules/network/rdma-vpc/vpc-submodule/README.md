@@ -23,14 +23,14 @@ limitations under the License.
 |------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.3 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 4.64 |
-| <a name="requirement_google-private"></a> [google-private](#requirement\_google-private) | >= 0.0.1954 |
+| <a name="requirement_google-private"></a> [google-private](#requirement\_google-private) | >= 0.0.1962 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
 | <a name="provider_google"></a> [google](#provider\_google) | >= 4.64 |
-| <a name="provider_google-private"></a> [google-private](#provider\_google-private) | >= 0.0.1954 |
+| <a name="provider_google-private"></a> [google-private](#provider\_google-private) | >= 0.0.1962 |
 
 ## Modules
 

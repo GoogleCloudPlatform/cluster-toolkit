@@ -44,7 +44,7 @@ locals {
 
 # INSTANCE TEMPLATE
 module "slurm_controller_template" {
-  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=016b76c"
+  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=2aa6ad1"
 
   project_id          = var.project_id
   region              = var.region
