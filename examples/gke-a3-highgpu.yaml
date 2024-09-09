@@ -66,3 +66,12 @@ deployment_groups:
       autoscaling_total_min_nodes: 2
       zones: [$(vars.zone)]
     outputs: [instructions]
+
+  - id: workload_component_install
+    source: modules/management/kubectl-apply
+    use: [gke_cluster]
+    settings:
+      kueue:
+        install: true
+      jobset:
+        install: true

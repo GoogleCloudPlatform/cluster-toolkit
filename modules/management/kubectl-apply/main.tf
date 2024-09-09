@@ -23,6 +23,11 @@ locals {
   apply_manifests_map = tomap({
     for index, manifest in var.apply_manifests : index => manifest
   })
+
+  install_kueue         = try(var.kueue.install, false)
+  install_jobset        = try(var.jobset.install, false)
+  kueue_install_source  = format("${path.module}/manifests/kueue-%s.yaml", try(var.kueue.version, ""))
+  jobset_install_source = format("${path.module}/manifests/jobset-%s.yaml", try(var.jobset.version, ""))
 }
 
 data "google_container_cluster" "gke_cluster" {
@@ -33,7 +38,7 @@ data "google_container_cluster" "gke_cluster" {
 
 data "google_client_config" "default" {}
 
-module "kubectl" {
+module "kubectl_apply_manifests" {
   for_each = local.apply_manifests_map
   source   = "./kubectl"
 
@@ -42,6 +47,42 @@ module "kubectl" {
   template_vars     = each.value.template_vars
   server_side_apply = each.value.server_side_apply
   wait_for_rollout  = each.value.wait_for_rollout
+
+  providers = {
+    kubectl = kubectl
+    http    = http.h
+  }
+}
+
+module "install_kueue" {
+  source            = "./kubectl"
+  source_path       = local.install_kueue ? local.kueue_install_source : null
+  server_side_apply = true
+
+  providers = {
+    kubectl = kubectl
+    http    = http.h
+  }
+}
+
+module "install_jobset" {
+  source            = "./kubectl"
+  source_path       = local.install_jobset ? local.jobset_install_source : null
+  server_side_apply = true
+
+  providers = {
+    kubectl = kubectl
+    http    = http.h
+  }
+}
+
+module "configure_kueue" {
+  source      = "./kubectl"
+  source_path = local.install_kueue ? try(var.kueue.config_path, "") : null
+  depends_on  = [module.install_kueue]
+
+  server_side_apply = true
+  wait_for_rollout  = true
 
   providers = {
     kubectl = kubectl
