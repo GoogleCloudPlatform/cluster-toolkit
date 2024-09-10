@@ -303,7 +303,7 @@ limitations under the License.
 | <a name="input_timeout_update"></a> [timeout\_update](#input\_timeout\_update) | Timeout for updating a node pool | `string` | `null` | no |
 | <a name="input_total_max_nodes"></a> [total\_max\_nodes](#input\_total\_max\_nodes) | DEPRECATED: Use autoscaling\_total\_max\_nodes. | `number` | `null` | no |
 | <a name="input_total_min_nodes"></a> [total\_min\_nodes](#input\_total\_min\_nodes) | DEPRECATED: Use autoscaling\_total\_min\_nodes. | `number` | `null` | no |
-| <a name="input_user_workload_path"></a> [user\_workload\_path](#input\_user\_workload\_path) | The path to the user workload, this should point to the kubernetes job manifest that user want to have the TCPX sidecar injected. | `string` | `null` | no |
+| <a name="input_user_workload_path"></a> [user\_workload\_path](#input\_user\_workload\_path) | The gke-node-pool module relative path to the user workload, this should point to the kubernetes job manifest<br>that user want to have the GPUDirect rxdm sidecar injected. The toolkit would apply the required changes to this<br>user workload and generate a new workload file for user to inspect and apply to the cluster. Details of the required<br>changes can be found in the [GPUDirect user guide](https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#add-gpudirect-manifests) | `string` | `null` | no |
 | <a name="input_zones"></a> [zones](#input\_zones) | A list of zones to be used. Zones must be in region of cluster. If null, cluster zones will be inherited. Note `zones` not `zone`; does not work with `zone` deployment variable. | `list(string)` | `null` | no |
 
 ## Outputs
