@@ -329,11 +329,11 @@ deployment_groups:
       partition_name: gpu
 
   - id: slurm_login
-    source: ./community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
     use: [network]
 
   - id: slurm_controller
-    source: ./community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     use:
     - network
     - compute_partition
