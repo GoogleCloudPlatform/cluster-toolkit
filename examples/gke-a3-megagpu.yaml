@@ -64,6 +64,5 @@ deployment_groups:
     settings:
       machine_type: a3-megagpu-8g
       autoscaling_total_min_nodes: 2
-      user_workload_path: gpu-direct-workload/sample-tcpxo-workload-job.yaml # gke-node-pool module relative path to the user provided workload
       zones: [$(vars.zone)]
     outputs: [instructions]

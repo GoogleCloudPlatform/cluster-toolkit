@@ -17,10 +17,10 @@
 # Enable GPUDirect for A3 and A3Mega VMs, this involve multiple kubectl steps to integrate with the created cluster
 # 1. Install NCCL plugin daemonset
 # 2. Install NRI plugin daemonset
-# 3. Update user workload to inject rxdm sidecar and other required annotation, volume etc.
+# 3. Update provided workload to inject rxdm sidecar and other required annotation, volume etc.
 locals {
-  user_workload_path_tcpx  = var.user_workload_path == null ? "${path.module}/gpu-direct-workload/sample-tcpx-workload-job.yaml" : "${path.module}/${var.user_workload_path}"
-  user_workload_path_tcpxo = var.user_workload_path == null ? "${path.module}/gpu-direct-workload/sample-tcpxo-workload-job.yaml" : "${path.module}/${var.user_workload_path}"
+  workload_path_tcpx  = "${path.module}/gpu-direct-workload/sample-tcpx-workload-job.yaml"
+  workload_path_tcpxo = "${path.module}/gpu-direct-workload/sample-tcpxo-workload-job.yaml"
 
   gpu_direct_settings = {
     "a3-highgpu-8g" = {
@@ -30,8 +30,8 @@ locals {
         "https://raw.githubusercontent.com/GoogleCloudPlatform/container-engine-accelerators/fee883360a660f71ba07478db95d5c1325322f77/gpudirect-tcpx/nccl-config.yaml",              # nccl_configmap
         "https://raw.githubusercontent.com/GoogleCloudPlatform/container-engine-accelerators/fee883360a660f71ba07478db95d5c1325322f77/nri_device_injector/nri-device-injector.yaml", # nri_plugin
       ]
-      updated_user_workload_path = replace(local.user_workload_path_tcpx, ".yaml", "-tcpx.yaml")
-      rxdm_version               = "v2.0.12" # matching nccl-tcpx-installer version v3.1.9
+      updated_workload_path = replace(local.workload_path_tcpx, ".yaml", "-tcpx.yaml")
+      rxdm_version          = "v2.0.12" # matching nccl-tcpx-installer version v3.1.9
     }
     "a3-megagpu-8g" = {
       # Manifest to be installed for enabling TCPXO on a3-megagpu-8g machines
@@ -39,8 +39,8 @@ locals {
         "https://raw.githubusercontent.com/GoogleCloudPlatform/container-engine-accelerators/fee883360a660f71ba07478db95d5c1325322f77/gpudirect-tcpxo/nccl-tcpxo-installer.yaml",    # nccl_plugin v1.0.4 for tcpxo
         "https://raw.githubusercontent.com/GoogleCloudPlatform/container-engine-accelerators/fee883360a660f71ba07478db95d5c1325322f77/nri_device_injector/nri-device-injector.yaml", # nri_plugin
       ]
-      updated_user_workload_path = replace(local.user_workload_path_tcpxo, ".yaml", "-tcpxo.yaml")
-      rxdm_version               = "v1.0.10" # matching nccl-tcpxo-installer version v1.0.4
+      updated_workload_path = replace(local.workload_path_tcpxo, ".yaml", "-tcpxo.yaml")
+      rxdm_version          = "v1.0.10" # matching nccl-tcpxo-installer version v1.0.4
     }
   }
 }

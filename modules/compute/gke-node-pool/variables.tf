@@ -255,17 +255,6 @@ variable "timeout_update" {
   default     = null
 }
 
-variable "user_workload_path" {
-  description = <<-EOT
-  The gke-node-pool module relative path to the user workload, this should point to the kubernetes job manifest
-  that user want to have the GPUDirect rxdm sidecar injected. The toolkit would apply the required changes to this
-  user workload and generate a new workload file for user to inspect and apply to the cluster. Details of the required
-  changes can be found in the [GPUDirect user guide](https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#add-gpudirect-manifests)
-  EOT
-  type        = string
-  default     = null
-}
-
 # Deprecated
 
 # tflint-ignore: terraform_unused_declarations

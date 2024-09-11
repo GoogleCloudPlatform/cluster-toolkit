@@ -264,7 +264,6 @@ limitations under the License.
 | [null_resource.enable_tcpxo_in_workload](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
 | [null_resource.install_dependencies](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
 | [google_compute_default_service_account.default_sa](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_default_service_account) | data source |
-| [google_container_cluster.gke_cluster](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/container_cluster) | data source |
 
 ## Inputs
 
@@ -303,7 +302,6 @@ limitations under the License.
 | <a name="input_timeout_update"></a> [timeout\_update](#input\_timeout\_update) | Timeout for updating a node pool | `string` | `null` | no |
 | <a name="input_total_max_nodes"></a> [total\_max\_nodes](#input\_total\_max\_nodes) | DEPRECATED: Use autoscaling\_total\_max\_nodes. | `number` | `null` | no |
 | <a name="input_total_min_nodes"></a> [total\_min\_nodes](#input\_total\_min\_nodes) | DEPRECATED: Use autoscaling\_total\_min\_nodes. | `number` | `null` | no |
-| <a name="input_user_workload_path"></a> [user\_workload\_path](#input\_user\_workload\_path) | The gke-node-pool module relative path to the user workload, this should point to the kubernetes job manifest<br>that user want to have the GPUDirect rxdm sidecar injected. The toolkit would apply the required changes to this<br>user workload and generate a new workload file for user to inspect and apply to the cluster. Details of the required<br>changes can be found in the [GPUDirect user guide](https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#add-gpudirect-manifests) | `string` | `null` | no |
 | <a name="input_zones"></a> [zones](#input\_zones) | A list of zones to be used. Zones must be in region of cluster. If null, cluster zones will be inherited. Note `zones` not `zone`; does not work with `zone` deployment variable. | `list(string)` | `null` | no |
 
 ## Outputs
