@@ -119,6 +119,7 @@ type sourceAndKind struct {
 }
 
 var modInfoCache = map[sourceAndKind]ModuleInfo{}
+var modDownloadCache = map[string]string{} // Cache for downloaded module data
 
 // GetModuleInfo gathers information about a module at a given source using the
 // tfconfig package. It will add details about required APIs to be
@@ -135,20 +136,26 @@ func GetModuleInfo(source string, kind string) (ModuleInfo, error) {
 	case sourcereader.IsEmbeddedPath(source) || sourcereader.IsLocalPath(source):
 		modPath = source
 	default:
-		tmpDir, err := os.MkdirTemp("", "module-*")
-		if err != nil {
-			return ModuleInfo{}, err
-		}
 		pkgAddr, subDir := getter.SourceDirSubdir(source)
-		pkgPath := path.Join(tmpDir, "module")
-		modPath = path.Join(pkgPath, subDir)
-		sourceReader := sourcereader.Factory(pkgAddr)
-		if err = sourceReader.GetModule(pkgAddr, pkgPath); err != nil {
-			if subDir != "" && kind == "packer" {
-				err = fmt.Errorf("module source %s included \"//\" package syntax; "+
-					"the \"//\" should typically be placed at the root of the repository:\n%w", source, err)
+		if cachedModPath, ok := modDownloadCache[pkgAddr]; ok {
+			modPath = path.Join(cachedModPath, subDir)
+		} else {
+			tmpDir, err := os.MkdirTemp("", "module-*")
+			if err != nil {
+				return ModuleInfo{}, err
 			}
-			return ModuleInfo{}, err
+
+			pkgPath := path.Join(tmpDir, "module")
+			modPath = path.Join(pkgPath, subDir)
+			sourceReader := sourcereader.Factory(pkgAddr)
+			if err = sourceReader.GetModule(pkgAddr, pkgPath); err != nil {
+				if subDir != "" && kind == "packer" {
+					err = fmt.Errorf("module source %s included \"//\" package syntax; "+
+						"the \"//\" should typically be placed at the root of the repository:\n%w", source, err)
+				}
+				return ModuleInfo{}, err
+			}
+			modDownloadCache[pkgAddr] = pkgPath
 		}
 	}
 
