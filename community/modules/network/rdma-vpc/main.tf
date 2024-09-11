@@ -15,54 +15,18 @@
 */
 
 locals {
-  autoname        = replace(var.deployment_name, "_", "-")
-  network_name    = var.network_name == null ? "${local.autoname}-net" : var.network_name
-  subnetwork_name = var.subnetwork_name == null ? "${local.autoname}-primary-subnet" : var.subnetwork_name
+  autoname     = replace(var.deployment_name, "_", "-")
+  network_name = var.network_name == null ? "${local.autoname}-net" : var.network_name
 
-  # define a default subnetwork for cases in which no explicit subnetworks are
-  # defined in var.subnetworks
-  default_primary_subnetwork_cidr_block = cidrsubnet(var.network_address_range, var.default_primary_subnetwork_size, 0)
-  default_primary_subnetwork = {
-    subnet_name           = local.subnetwork_name
-    subnet_ip             = local.default_primary_subnetwork_cidr_block
-    subnet_region         = var.region
-    subnet_private_access = true
-    subnet_flow_logs      = false
-    description           = "primary subnetwork in ${local.network_name}"
-    purpose               = null
-    role                  = null
-  }
-
-  # Identify user-supplied primary subnetwork
-  # (1) explicit var.subnetworks[0]
-  # (2) implicit local default subnetwork
-  input_primary_subnetwork = coalesce(try(var.subnetworks[0], null), local.default_primary_subnetwork)
-
-  # Identify user-supplied additional subnetworks
-  # (1) explicit var.subnetworks[1:end]
-  # (2) empty list
-  input_additional_subnetworks = try(slice(var.subnetworks, 1, length(var.subnetworks)), [])
-
-  # at this point we have constructed a list of subnetworks but need to extract
-  # user-provided CIDR blocks or calculate them from user-provided new_bits
-  # after we complete deprecation, local.all_subnetworks can be replaced with
-  # var.subnetworks (or local.default_primary_subnetwork if that is null)
-  input_subnetworks = concat([local.input_primary_subnetwork], local.input_additional_subnetworks)
-  subnetworks_cidr_blocks = try(
-    local.input_subnetworks[*]["subnet_ip"],
-    cidrsubnets(var.network_address_range, local.input_subnetworks[*]["new_bits"]...)
-  )
-
-  # merge in the CIDR blocks (even when already there) and remove new_bits
-  subnetworks = [for i, subnet in local.input_subnetworks :
-    merge({ for k, v in subnet : k => v if k != "new_bits" }, { "subnet_ip" = local.subnetworks_cidr_blocks[i] })
+  new_bits = ceil(log(var.subnetworks_template.count, 2))
+  template_subnetworks = [for i in range(var.subnetworks_template.count) :
+    {
+      subnet_name           = "${var.subnetworks_template.name_prefix}-${i}"
+      subnet_region         = try(var.subnetworks_template.region, var.region)
+      subnet_ip             = cidrsubnet(var.subnetworks_template.ip_range, local.new_bits, i)
+      subnet_private_access = coalesce(var.subnetworks_template.private_access, false)
+    }
   ]
-
-  # this comprehension should have 1 and only 1 match
-  output_primary_subnetwork               = one([for k, v in module.vpc.subnets : v if k == "${local.subnetworks[0].subnet_region}/${local.subnetworks[0].subnet_name}"])
-  output_primary_subnetwork_name          = local.output_primary_subnetwork.name
-  output_primary_subnetwork_self_link     = local.output_primary_subnetwork.self_link
-  output_primary_subnetwork_ip_cidr_range = local.output_primary_subnetwork.ip_cidr_range
 
   iap_ports = distinct(concat(compact([
     var.enable_iap_rdp_ingress ? "3389" : "",
@@ -144,6 +108,23 @@ locals {
     var.enable_internal_traffic ? [local.allow_internal_traffic] : [],
     length(local.iap_ports) > 0 ? [local.allow_iap_ingress] : []
   )
+
+  url_parts    = split("/", var.network_profile)
+  profile_name = upper(element(local.url_parts, length(local.url_parts) - 1))
+  output_subnets = [
+    for subnet in module.vpc.subnets : {
+      network            = null
+      subnetwork         = subnet.self_link
+      subnetwork_project = null # will populate from subnetwork_self_link
+      network_ip         = null
+      nic_type           = coalesce(var.nic_type, try(regex("IRDMA", local.profile_name), regex("MRDMA", local.profile_name), "RDMA"))
+      stack_type         = null
+      queue_count        = null
+      access_config      = []
+      ipv6_access_config = []
+      alias_ip_range     = []
+    }
+  ]
 }
 
 module "vpc" {
@@ -152,7 +133,7 @@ module "vpc" {
   network_name                           = local.network_name
   project_id                             = var.project_id
   auto_create_subnetworks                = false
-  subnets                                = local.subnetworks
+  subnets                                = local.template_subnetworks
   secondary_ranges                       = var.secondary_ranges
   routing_mode                           = var.network_routing_mode
   mtu                                    = var.mtu

@@ -38,26 +38,8 @@ output "subnetworks" {
   depends_on  = [module.vpc]
 }
 
-output "subnetwork" {
-  description = "Primary subnetwork object"
-  value       = local.output_primary_subnetwork
-  depends_on  = [module.vpc]
-}
-
-output "subnetwork_name" {
-  description = "Name of the primary subnetwork"
-  value       = local.output_primary_subnetwork_name
-  depends_on  = [module.vpc]
-}
-
-output "subnetwork_self_link" {
-  description = "Self link of the primary subnetwork"
-  value       = local.output_primary_subnetwork_self_link
-  depends_on  = [module.vpc]
-}
-
-output "subnetwork_address" {
-  description = "IP address range of the primary subnetwork"
-  value       = local.output_primary_subnetwork_ip_cidr_range
+output "subnetwork_interfaces" {
+  description = "Full list of subnetwork objects belonging to the new VPC network (compatible with vm-instance)"
+  value       = local.output_subnets
   depends_on  = [module.vpc]
 }
