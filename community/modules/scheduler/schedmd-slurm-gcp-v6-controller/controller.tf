@@ -25,7 +25,7 @@ locals {
     }
   ]
 
-  service_account_email = coalesce(var.service_account_email, data.google_compute_default_service_account.default.email)
+  service_account_email = (var.service_account_email == null || var.service_account_email == "") ? data.google_compute_default_service_account.default[0].email : var.service_account_email
 
   # can't rely on `email=null` as it's used to instantiate `cloudsql_secret_accessor`
   service_account = {
