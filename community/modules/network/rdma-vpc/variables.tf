@@ -25,29 +25,6 @@ variable "network_name" {
   default     = null
 }
 
-variable "subnetwork_name" {
-  description = "The name of the network to be created (if unsupplied, will default to \"{deployment_name}-primary-subnet\")"
-  type        = string
-  default     = null
-}
-
-# tflint-ignore: terraform_unused_declarations
-variable "subnetwork_size" {
-  description = "DEPRECATED: please see https://goo.gle/hpc-toolkit-vpc-deprecation for migration instructions"
-  type        = number
-  default     = null
-  validation {
-    condition     = var.subnetwork_size == null
-    error_message = "subnetwork_size is deprecated. Please see https://goo.gle/hpc-toolkit-vpc-deprecation for migration instructions."
-  }
-}
-
-variable "default_primary_subnetwork_size" {
-  description = "The size, in CIDR bits, of the default primary subnetwork unless explicitly defined in var.subnetworks"
-  type        = number
-  default     = 15
-}
-
 variable "region" {
   description = "The default region for Cloud resources"
   type        = string
@@ -75,68 +52,21 @@ variable "mtu" {
   default     = 8896
 }
 
-variable "subnetworks" {
-  description = <<-EOT
-  List of subnetworks to create within the VPC. If left empty, it will be
-  replaced by a single, default subnetwork constructed from other parameters
-  (e.g. var.region). In all cases, the first subnetwork in the list is identified
-  by outputs as a "primary" subnetwork.
-
-  subnet_name           (string, required, name of subnet)
-  subnet_region         (string, required, region of subnet)
-  subnet_ip             (string, mutually exclusive with new_bits, CIDR-formatted IP range for subnetwork)
-  new_bits              (number, mutually exclusive with subnet_ip, CIDR bits used to calculate subnetwork range)
-  subnet_private_access (bool, optional, Enable Private Access on subnetwork)
-  subnet_flow_logs      (map(string), optional, Configure Flow Logs see terraform-google-network module)
-  description           (string, optional, Description of Network)
-  purpose               (string, optional, related to Load Balancing)
-  role                  (string, optional, related to Load Balancing)
-  EOT
-  type        = list(map(string))
-  default     = []
-  validation {
-    condition = alltrue([
-      for s in var.subnetworks : can(s["subnet_name"])
-    ])
-    error_message = "All subnetworks must define \"subnet_name\"."
-  }
-  validation {
-    condition = alltrue([
-      for s in var.subnetworks : can(s["subnet_region"])
-    ])
-    error_message = "All subnetworks must define \"subnet_region\"."
-  }
-  validation {
-    condition = alltrue([
-      for s in var.subnetworks : can(s["subnet_ip"]) != can(s["new_bits"])
-    ])
-    error_message = "All subnetworks must define exactly one of \"subnet_ip\" or \"new_bits\"."
-  }
-  validation {
-    condition     = alltrue([for s in var.subnetworks : can(s["subnet_ip"])]) || alltrue([for s in var.subnetworks : can(s["new_bits"])])
-    error_message = "All subnetworks must make same choice of \"subnet_ip\" or \"new_bits\"."
-  }
-}
-
-# tflint-ignore: terraform_unused_declarations
-variable "primary_subnetwork" {
-  description = "DEPRECATED: please see https://goo.gle/hpc-toolkit-vpc-deprecation for migration instructions"
-  type        = map(string)
-  default     = null
-  validation {
-    condition     = var.primary_subnetwork == null
-    error_message = "primary_subnetwork is deprecated. Please see https://goo.gle/hpc-toolkit-vpc-deprecation for migration instructions."
-  }
-}
-
-# tflint-ignore: terraform_unused_declarations
-variable "additional_subnetworks" {
-  description = "DEPRECATED: please see https://goo.gle/hpc-toolkit-vpc-deprecation for migration instructions"
-  type        = list(map(string))
-  default     = null
-  validation {
-    condition     = var.additional_subnetworks == null
-    error_message = "additional_subnetworks is deprecated. Please see https://goo.gle/hpc-toolkit-vpc-deprecation for migration instructions."
+variable "subnetworks_template" {
+  # TODO: Add validation and improve description
+  description = "Rules for creating subnetworks within the VPC"
+  type = object({
+    count          = number
+    name_prefix    = string
+    ip_range       = string
+    region         = string
+    private_access = optional(bool)
+  })
+  default = {
+    count       = 8
+    name_prefix = "subnet"
+    ip_range    = "192.168.0.0/16"
+    region      = null
   }
 }
 
@@ -241,6 +171,12 @@ variable "firewall_log_config" {
 variable "network_profile" {
   # TODO Update this description
   description = "Profile name for VPC configuration"
+  type        = string
+  default     = null
+}
+
+variable "nic_type" {
+  description = "NIC type for use in modules that use the output"
   type        = string
   default     = null
 }
