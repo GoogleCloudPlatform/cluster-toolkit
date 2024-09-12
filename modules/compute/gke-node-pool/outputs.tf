@@ -77,6 +77,9 @@ output "instructions" {
     If you would like to enable GPUDirect for your own workload, please follow the below steps:
       export WORKLOAD_PATH=<>
       python3 ${abspath("${path.module}/gpu-direct-workload/scripts/enable-tcpxo-in-workload.py")} --file $WORKLOAD_PATH --rxdm ${local.gpu_direct_setting.rxdm_version}
+    **WARNING**
+    The "--rxdm" version is tide to the nccl-tcpx/o-installer that had been deployed to your cluster, changing it to other value might have impact on performance
+    **WARNING**
 
     Or you can also follow our GPUDirect user guide to update your workload
     https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#add-gpudirect-manifests
