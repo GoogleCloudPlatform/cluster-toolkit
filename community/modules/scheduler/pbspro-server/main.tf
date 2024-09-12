@@ -32,7 +32,7 @@ locals {
 }
 
 module "pbs_install" {
-  source = "github.com/GoogleCloudPlatform/hpc-toolkit//community/modules/scripts/pbspro-install?ref=v1.36.0&depth=1"
+  source = "github.com/GoogleCloudPlatform/hpc-toolkit//community/modules/scripts/pbspro-install?ref=v1.39.0&depth=1"
 
   pbs_data_service_user   = var.pbs_data_service_user
   pbs_exec                = var.pbs_exec
@@ -45,7 +45,7 @@ module "pbs_install" {
 }
 
 module "pbs_qmgr" {
-  source = "github.com/GoogleCloudPlatform/hpc-toolkit//community/modules/scripts/pbspro-qmgr?ref=v1.36.0&depth=1"
+  source = "github.com/GoogleCloudPlatform/hpc-toolkit//community/modules/scripts/pbspro-qmgr?ref=v1.39.0&depth=1"
 
   client_host_count         = var.client_host_count
   client_hostname_prefix    = var.client_hostname_prefix
@@ -55,7 +55,7 @@ module "pbs_qmgr" {
 }
 
 module "server_startup_script" {
-  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=v1.36.0&depth=1"
+  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=v1.39.0&depth=1"
 
   deployment_name = var.deployment_name
   project_id      = var.project_id
