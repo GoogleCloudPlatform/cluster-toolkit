@@ -74,13 +74,11 @@ output "instructions" {
     You can use the following commands to submit the sample job:
       kubectl create -f ${abspath(local.gpu_direct_setting.updated_workload_path)}
 
-    If you would like to enable GPUDirect for your own workload, please provide the path to your Kubernetes Job manifest
-    as WORKLOAD_PATH in the command below:
-      python3 ${abspath("${path.module}/gpu-direct-workload/scripts/enable-tcpxo-in-workload.py")} --file $<WORKLOAD_PATH> --rxdm ${local.gpu_direct_setting.rxdm_version}
+    If you would like to enable GPUDirect for your own workload, please follow the below steps:
+      export WORKLOAD_PATH=<>
+      python3 ${abspath("${path.module}/gpu-direct-workload/scripts/enable-tcpxo-in-workload.py")} --file $WORKLOAD_PATH --rxdm ${local.gpu_direct_setting.rxdm_version}
 
     Or you can also follow our GPUDirect user guide to update your workload
     https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#add-gpudirect-manifests
-
-    After the command an updated manifest will be generated and you can deploy it to the clsuter using kubectl
   EOT
 }

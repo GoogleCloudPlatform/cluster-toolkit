@@ -14,6 +14,7 @@
 
 import yaml
 import argparse
+import os
 
 def main():
     parser = argparse.ArgumentParser(description="TCPXO Job Manifest Generator")
@@ -57,8 +58,10 @@ def main():
         file.write(updated_job)
 
     # Step 7: Provide instructions to the user
-    print("\nA new manifest had been generated and updated to have TCPXO enabled based on the provided worklad,")
-    print("It can be found in the same path as the original workload file with name ending \"-tcpxo\"")
+    print("\nA new manifest has been generated and updated to have TCPXO enabled based on the provided workload")
+    print("It can be found in {path}".format(path=os.path.abspath(new_file_name)))
+    print("You can use the following commands to submit the sample job:")
+    print("  kubectl create -f {path}".format(path=os.path.abspath(new_file_name)))
 
 def add_annotations(job_manifest):
     annotations = {
