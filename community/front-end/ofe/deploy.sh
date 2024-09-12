@@ -504,7 +504,7 @@ deploy() {
 	# -- Collect deployment files
 	#
 	#    For a tarball deployment, it is important that the 'root' directory is
-	#    named 'hpc-toolkit' as most of the install depends on it.
+	#    named 'cluster-toolkit' as most of the install depends on it.
 	#
 	#    Simplest way to ensure this is to build from a temporary copy that
 	#    definitely is named correctly.
@@ -512,7 +512,7 @@ deploy() {
 	if [ "${deployment_mode}" == "tarball" ]; then
 
 		basedir=$(git rev-parse --show-toplevel)
-		tdir=/tmp/hpc-toolkit
+		tdir=/tmp/cluster-toolkit
 
 		cp -R "${basedir}" ${tdir}/
 		(
@@ -523,7 +523,7 @@ deploy() {
 				--exclude=.terraform.lock.hcl \
 				--exclude=tf \
 				--directory=/tmp \
-				./hpc-toolkit 2>/dev/null
+				./cluster-toolkit 2>/dev/null
 		)
 
 		rm -rf ${tdir}
@@ -562,7 +562,7 @@ TFVARS
 		fi
 
 		if [ "${deployment_mode}" == "git" ]; then
-			echo "Will clone hpc-toolkit from github.com/${repo_fork}/hpc-toolkit.git ${repo_branch} branch."
+			echo "Will clone cluster-toolkit from github.com/${repo_fork}/cluster-toolkit.git ${repo_branch} branch."
 
 			cat <<-END >>terraform.tfvars
 				repo_fork = "${repo_fork}"

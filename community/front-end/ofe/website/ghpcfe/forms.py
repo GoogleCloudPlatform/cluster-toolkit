@@ -248,6 +248,7 @@ class ClusterPartitionForm(forms.ModelForm):
             "dynamic_node_count",
             "static_node_count",
             "reservation_name",
+            "exclusive",
             "enable_placement",
             "enable_hyperthreads",
             "enable_tier1_networking",
@@ -316,6 +317,94 @@ class ClusterPartitionForm(forms.ModelForm):
             raise ValidationError(
                 "SlurmGCP does not support Placement Groups for selected instance type"  # pylint: disable=line-too-long
             )
+
+        # schedmd-slurm-gcp-v6-partition/outputs.tf
+        if cleaned_data["dynamic_node_count"] > 0 and not cleaned_data[
+            "exclusive"
+        ]:
+            raise ValidationError(
+                "If any non-static nodesets have enable placement set to true, exclusive must be true."
+            )  
+
+        if cleaned_data["static_node_count"] > 0 and cleaned_data[
+            "exclusive"
+        ]:
+            raise ValidationError(
+                "Can't use static nodes within partition with exclusive set to true."
+            )  
+
+        # schedmd-slurm-gcp-v6-nodeset/outputs.tf
+        if cleaned_data["reservation_name"] and cleaned_data[
+            "enable_placement"
+        ]:
+            raise ValidationError("If a reservation is specified, placement must be false.")  
+
+        if cleaned_data["enable_placement"] and cleaned_data[
+            "static_node_count"
+        ] > 0 and cleaned_data[
+            "dynamic_node_count"
+        ] > 0:
+            raise ValidationError(
+                "Cannot use placement with static and auto-scaling nodes in the same node set."
+            )  
+
+        # Reservation validation logic
+        reservation_name = cleaned_data.get("reservation_name")
+        if reservation_name:
+            try:
+                cluster = cleaned_data.get('cluster')
+                cloud_credential = cluster.cloud_credential.detail
+                cloud_zone = cluster.cloud_zone
+
+                # logger.info(f"Cluster: {cluster}")
+                # logger.info(f"Cloud Credential: {cloud_credential}")
+                # logger.info(f"Cloud Zone: {cloud_zone}")
+
+                reservations = cloud_info.get_vm_reservations("GCP", cloud_credential, None, cloud_zone)
+
+                if not reservations:
+                    raise ValidationError("No reservations found for the specified zone.")
+
+                matching_reservation = reservations.get(reservation_name)
+
+                if not matching_reservation:
+                    raise ValidationError(
+                        f"Reservation {reservation_name} does not exist in the specified zone."
+                    )
+
+                if matching_reservation[
+                    "instanceProperties"
+                    ][
+                        "machineType"
+                        ] != cleaned_data["machine_type"]:
+                    raise ValidationError(
+                        f"Reservation {reservation_name} does not support the specified machine type. "
+                        f"Machine type: {cleaned_data['machine_type']}."
+                    )
+
+                total_requested_nodes = cleaned_data["dynamic_node_count"] + cleaned_data["static_node_count"]
+                available_nodes = matching_reservation.get("instanceProperties", {}).get("availableCount", 0)
+
+                if total_requested_nodes > available_nodes:
+                    raise ValidationError(
+                        f"Reservation {reservation_name} does not have enough available nodes."
+                        f"Requested: {total_requested_nodes}, Available: {available_nodes}"
+                    )
+
+                specific_reservation = matching_reservation.get("specificReservationRequired")
+                if specific_reservation == False:
+                    raise ValidationError(
+                        f"You must use a 'specific' reservation type."
+                        f"Please read the following URL for more information about setting up reservations:"
+                        f"https://cloud.google.com/compute/docs/instances/reservations-overview#how-reservations-work"
+                    )
+
+            except Exception as e:
+                logger.error(f"Error validating reservation: {reservation_name}. Exception: {e}")
+                raise ValidationError(
+                    f"Error validating reservation: {reservation_name}. Exception: {str(e)}"
+                )
+
         return cleaned_data
 
 

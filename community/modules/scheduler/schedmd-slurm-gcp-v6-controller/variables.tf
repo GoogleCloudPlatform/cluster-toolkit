@@ -382,7 +382,7 @@ Enables automatic cleanup of compute nodes and resource policies (e.g.
 placement groups) managed by this module, when cluster is destroyed.
 
 *WARNING*: Toggling this off will impact the running workload.
-Deployed compute nodes and controller will be destroyed.
+Deployed compute nodes will be destroyed.
 EOD
   type        = bool
   default     = true
@@ -407,6 +407,7 @@ variable "cloud_parameters" {
     suspend_rate    = optional(number)
     suspend_timeout = optional(number)
     topology_plugin = optional(string)
+    topology_param  = optional(string)
     tree_width      = optional(number)
   })
   default = {}
@@ -588,12 +589,17 @@ Use this database instead of the one on the controller.
   user      : The user to access the database as.
   password  : The password, given the user, to access the given database. (sensitive)
   db_name   : The database to access.
+  user_managed_replication : The list of location and (optional) kms_key_name for secret
 EOD
   type = object({
     server_ip = string
     user      = string
     password  = string # sensitive
     db_name   = string
+    user_managed_replication = optional(list(object({
+      location     = string
+      kms_key_name = optional(string)
+    })), [])
   })
   default   = null
   sensitive = true

@@ -17,7 +17,6 @@
 import argparse
 import datetime
 import fcntl
-import hashlib
 import json
 import logging
 import re
@@ -26,26 +25,24 @@ from enum import Enum
 from itertools import chain
 from pathlib import Path
 import yaml
+import datetime as dt
+from datetime import datetime
+from typing import Dict, Tuple
 
 import util
 from util import (
     batch_execute,
     ensure_execute,
     execute_with_futures,
-    fetch_config_yaml,
-    fetch_config_yaml_md5,
     install_custom_scripts,
-    load_config_file,
     run,
-    save_config,
     separate,
     to_hostlist_fast,
-    Lookup,
     NSDict,
     TPU,
     chunked,
 )
-from util import lkp, CONFIG_FILE
+from util import lookup
 from suspend import delete_instances
 from resume import start_tpu
 import conf
@@ -72,9 +69,9 @@ NodeStatus = Enum(
 
 
 def start_instance_op(inst):
-    return lkp.compute.instances().start(
-        project=lkp.project,
-        zone=lkp.instance(inst).zone,
+    return lookup().compute.instances().start(
+        project=lookup().project,
+        zone=lookup().instance(inst).zone,
         instance=inst,
     )
 
@@ -82,16 +79,14 @@ def start_instance_op(inst):
 def start_instances(node_list):
     log.info("{} instances to start ({})".format(len(node_list), ",".join(node_list)))
 
-    normal, tpu_nodes = separate(lkp.node_is_tpu, node_list)
-    invalid, valid = separate(lambda inst: bool(lkp.instance), normal)
-
-    ops = {inst: start_instance_op(inst) for inst in valid}
+    normal, tpu_nodes = separate(lookup().node_is_tpu, node_list)
+    ops = {inst: start_instance_op(inst) for inst in normal}
 
     done, failed = batch_execute(ops)
 
     tpu_start_data = []
-    for ns, nodes in util.groupby_unsorted(tpu_nodes, lkp.node_nodeset_name):
-        tpuobj = TPU(lkp.cfg.nodeset_tpu[ns])
+    for ns, nodes in util.groupby_unsorted(tpu_nodes, lookup().node_nodeset_name):
+        tpuobj = TPU(lookup().cfg.nodeset_tpu[ns])
         for snodes in chunked(nodes, n=tpuobj.vmcount):
             tpu_start_data.append({"tpu": tpuobj, "node": snodes})
     execute_with_futures(start_tpu, tpu_start_data)
@@ -105,14 +100,14 @@ def _find_dynamic_node_status() -> NodeStatus:
 
 
 def _find_tpu_node_status(nodename, state):
-    ns = lkp.node_nodeset(nodename)
+    ns = lookup().node_nodeset(nodename)
     tpuobj = TPU(ns)
     inst = tpuobj.get_node(nodename)
     # If we do not find the node but it is from a Tpu that has multiple vms look for the master node
     if inst is None and tpuobj.vmcount > 1:
         # Get the tpu slurm nodelist of the nodes in the same tpu group as nodename
         nodelist = run(
-            f"{lkp.scontrol} show topo {nodename}"
+            f"{lookup().scontrol} show topo {nodename}"
             + " | awk -F'=' '/Level=0/ { print $NF }'",
             shell=True,
         ).stdout
@@ -142,7 +137,7 @@ def _find_tpu_node_status(nodename, state):
             & state.flags
         ):
             return NodeStatus.unbacked
-        if lkp.is_static_node(nodename):
+        if lookup().is_static_node(nodename):
             return NodeStatus.resume
     elif (
         state is not None
@@ -152,7 +147,7 @@ def _find_tpu_node_status(nodename, state):
     ):
         if tpuobj.preemptible:
             return NodeStatus.preempted
-        if not state.base.startswith("DOWN"):
+        if state.base != "DOWN":
             return NodeStatus.terminated
     elif (
         state is None or "POWERED_DOWN" in state.flags
@@ -166,16 +161,16 @@ def _find_tpu_node_status(nodename, state):
 
 def find_node_status(nodename):
     """Determine node/instance status that requires action"""
-    state = lkp.slurm_node(nodename)
+    state = lookup().slurm_node(nodename)
 
-    if lkp.node_is_dyn(nodename):
+    if lookup().node_is_dyn(nodename):
         return _find_dynamic_node_status()
 
-    if lkp.node_is_tpu(nodename):
+    if lookup().node_is_tpu(nodename):
         return _find_tpu_node_status(nodename, state)
 
     # split below is workaround for VMs whose hostname is FQDN
-    inst = lkp.instance(nodename.split(".")[0])
+    inst = lookup().instance(nodename.split(".")[0])
     power_flags = frozenset(
         ("POWER_DOWN", "POWERING_UP", "POWERING_DOWN", "POWERED_DOWN")
     ) & (state.flags if state is not None else set())
@@ -193,7 +188,7 @@ def find_node_status(nodename):
             return NodeStatus.unbacked
         if state.base == "DOWN" and not power_flags:
             return NodeStatus.power_down
-        if "POWERED_DOWN" in state.flags and lkp.is_static_node(nodename):
+        if "POWERED_DOWN" in state.flags and lookup().is_static_node(nodename):
             return NodeStatus.resume
     elif (
         state is not None
@@ -203,7 +198,7 @@ def find_node_status(nodename):
     ):
         if inst.scheduling.preemptible:
             return NodeStatus.preempted
-        if not state.base.startswith("DOWN"):
+        if state.base != "DOWN":
             return NodeStatus.terminated
     elif (state is None or "POWERED_DOWN" in state.flags) and inst.status == "RUNNING":
         log.info("%s is potential orphan node", nodename)
@@ -235,8 +230,8 @@ def _seconds_since_timestamp(timestamp):
     """
     if timestamp[-3] == ":":  # python 36 datetime does not support the colon
         timestamp = timestamp[:-3] + timestamp[-2:]
-    creation_dt = datetime.datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%S.%f%z")
-    return datetime.datetime.now().timestamp() - creation_dt.timestamp()
+    creation_dt = datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%S.%f%z")
+    return datetime.now().timestamp() - creation_dt.timestamp()
 
 
 def do_node_update(status, nodes):
@@ -252,7 +247,7 @@ def do_node_update(status, nodes):
             f"{count} nodes set down due to node status '{status.name}' ({hostlist})"
         )
         run(
-            f"{lkp.scontrol} update nodename={hostlist} state=down reason='Instance stopped/deleted'"
+            f"{lookup().scontrol} update nodename={hostlist} state=down reason='Instance stopped/deleted'"
         )
 
     def nodes_restart():
@@ -263,12 +258,12 @@ def do_node_update(status, nodes):
     def nodes_idle():
         """idle nodes"""
         log.info(f"{count} nodes to idle ({hostlist})")
-        run(f"{lkp.scontrol} update nodename={hostlist} state=resume")
+        run(f"{lookup().scontrol} update nodename={hostlist} state=resume")
 
     def nodes_resume():
         """resume nodes via scontrol"""
         log.info(f"{count} instances to resume ({hostlist})")
-        run(f"{lkp.scontrol} update nodename={hostlist} state=power_up")
+        run(f"{lookup().scontrol} update nodename={hostlist} state=power_up")
 
     def nodes_delete():
         """delete instances for nodes"""
@@ -278,38 +273,34 @@ def do_node_update(status, nodes):
     def nodes_power_down():
         """power_down node in slurm"""
         log.info(f"{count} instances to power down ({hostlist})")
-        run(f"{lkp.scontrol} update nodename={hostlist} state=power_down")
+        run(f"{lookup().scontrol} update nodename={hostlist} state=power_down")
 
     def nodes_unknown():
         """Error status, nodes shouldn't get in this status"""
         log.error(f"{count} nodes have unexpected status: ({hostlist})")
         first = next(iter(nodes))
-        state = lkp.slurm_node(first)
+        state = lookup().slurm_node(first)
         state = "{}+{}".format(state.base, "+".join(state.flags)) if state else "None"
-        inst = lkp.instance(first)
+        inst = lookup().instance(first)
         log.error(f"{first} state: {state}, instance status:{inst.status}")
 
-    update = dict.get(
-        {
-            NodeStatus.orphan: nodes_delete,
-            NodeStatus.power_down: nodes_power_down,
-            NodeStatus.preempted: lambda: (nodes_down(), nodes_restart()),
-            NodeStatus.restore: nodes_idle,
-            NodeStatus.resume: nodes_resume,
-            NodeStatus.terminated: nodes_down,
-            NodeStatus.unbacked: nodes_down,
-            NodeStatus.unchanged: lambda: None,
-            NodeStatus.unknown: nodes_unknown,
-        },
-        status,
-    )
-    update()
+    {
+        NodeStatus.orphan: nodes_delete,
+        NodeStatus.power_down: nodes_power_down,
+        NodeStatus.preempted: lambda: (nodes_down(), nodes_restart()),
+        NodeStatus.restore: nodes_idle,
+        NodeStatus.resume: nodes_resume,
+        NodeStatus.terminated: nodes_down,
+        NodeStatus.unbacked: nodes_down,
+        NodeStatus.unchanged: lambda: None,
+        NodeStatus.unknown: nodes_unknown,
+    }[status]()
 
 
 def delete_placement_groups(placement_groups):
     def delete_placement_request(pg_name, region):
-        return lkp.compute.resourcePolicies().delete(
-            project=lkp.project, region=region, resourcePolicy=pg_name
+        return lookup().compute.resourcePolicies().delete(
+            project=lookup().project, region=region, resourcePolicy=pg_name
         )
 
     requests = {
@@ -348,18 +339,18 @@ def sync_placement_groups():
 
     keep_jobs = {
         str(job["job_id"])
-        for job in json.loads(run(f"{lkp.scontrol} show jobs --json").stdout)["jobs"]
+        for job in json.loads(run(f"{lookup().scontrol} show jobs --json").stdout)["jobs"]
         if "job_state" in job and set(job["job_state"]) & keep_states
     }
     keep_jobs.add("0")  # Job 0 is a placeholder for static node placement
 
     fields = "items.regions.resourcePolicies,nextPageToken"
-    flt = f"name={lkp.cfg.slurm_cluster_name}-*"
-    act = lkp.compute.resourcePolicies()
-    op = act.aggregatedList(project=lkp.project, fields=fields, filter=flt)
+    flt = f"name={lookup().cfg.slurm_cluster_name}-*"
+    act = lookup().compute.resourcePolicies()
+    op = act.aggregatedList(project=lookup().project, fields=fields, filter=flt)
     placement_groups = {}
     pg_regex = re.compile(
-        rf"{lkp.cfg.slurm_cluster_name}-(?P<partition>[^\s\-]+)-(?P<job_id>\d+)-(?P<index>\d+)"
+        rf"{lookup().cfg.slurm_cluster_name}-(?P<partition>[^\s\-]+)-(?P<job_id>\d+)-(?P<index>\d+)"
     )
     while op is not None:
         result = ensure_execute(op)
@@ -384,9 +375,9 @@ def sync_placement_groups():
 
 def sync_slurm():
     compute_instances = [
-        name for name, inst in lkp.instances().items() if inst.role == "compute"
+        name for name, inst in lookup().instances().items() if inst.role == "compute"
     ]
-    slurm_nodes = list(lkp.slurm_nodes().keys())
+    slurm_nodes = list(lookup().slurm_nodes().keys())
 
     all_nodes = list(
         set(
@@ -413,55 +404,35 @@ def sync_slurm():
         do_node_update(status, nodes)
 
 
-def read_hash(filename):
-    filename = Path(filename)
-    if not filename.exists():
-        return None
-    with open(filename, "r", encoding="utf-8") as file:
-        return file.readline()
-
-
-def save_hash(filename, hash):
-    with open(filename, "w+", encoding="utf-8") as file:
-        file.write(hash)
-
-
 def reconfigure_slurm():
-    CONFIG_HASH = Path("/slurm/scripts/.config.hash")
     update_msg = "*** slurm configuration was updated ***"
-    cfg_old = load_config_file(CONFIG_FILE)
-
-    if cfg_old.hybrid:
+    if lookup().cfg.hybrid:
         # terraform handles generating the config.yaml, don't do it here
         return
-
-    hash_new: hashlib.md5 = fetch_config_yaml_md5()
-    hash_old: str = read_hash(CONFIG_HASH)
-
-    if hash_new.hexdigest() != hash_old:
-        log.debug("Delta detected. Reconfiguring Slurm now.")
-        cfg_new = fetch_config_yaml()
-        save_hash(CONFIG_HASH, hash_new.hexdigest())
-        save_config(cfg_new, CONFIG_FILE)
-        cfg_new = load_config_file(CONFIG_FILE)
-        lkp = Lookup(cfg_new)
-        util.lkp = lkp
-        if lkp.is_controller:
-            conf.gen_controller_configs(lkp)
-            log.info("Restarting slurmctld to make changes take effect.")
-            try:
-                # TODO: consider removing "restart" since "reconfigure" should restart slurmctld as well
-                run("sudo systemctl restart slurmctld.service", check=False)
-                util.scontrol_reconfigure(lkp)
-            except Exception:
-                log.exception("failed to reconfigure slurmctld")
-            util.run(f"wall '{update_msg}'", timeout=30)
-            log.debug("Done.")
-        elif lkp.instance_role_safe in ["compute", "login"]:
-            log.info("Restarting slurmd to make changes take effect.")
-            run("systemctl restart slurmd")
-            util.run(f"wall '{update_msg}'", timeout=30)
-            log.debug("Done.")
+    
+    upd, cfg_new = util.fetch_config()
+    if not upd:
+        log.debug("No changes in config detected.")
+        return
+    log.debug("Changes in config detected. Reconfiguring Slurm now.")
+    util.update_config(cfg_new)
+        
+    if lookup().is_controller:
+        conf.gen_controller_configs(lookup())
+        log.info("Restarting slurmctld to make changes take effect.")
+        try:
+            # TODO: consider removing "restart" since "reconfigure" should restart slurmctld as well
+            run("sudo systemctl restart slurmctld.service", check=False)
+            util.scontrol_reconfigure(lookup())
+        except Exception:
+            log.exception("failed to reconfigure slurmctld")
+        util.run(f"wall '{update_msg}'", timeout=30)
+        log.debug("Done.")
+    elif lookup().instance_role_safe in ["compute", "login"]:
+        log.info("Restarting slurmd to make changes take effect.")
+        run("systemctl restart slurmd")
+        util.run(f"wall '{update_msg}'", timeout=30)
+        log.debug("Done.")
 
 
 def update_topology(lkp: util.Lookup) -> None:
@@ -472,27 +443,113 @@ def update_topology(lkp: util.Lookup) -> None:
         log.debug("Topology configuration updated. Reconfiguring Slurm.")
         util.scontrol_reconfigure(lkp)
 
+
+def delete_reservation(lkp: util.Lookup, reservation_name: str) -> None:
+    util.run(f"{lkp.scontrol} delete reservation {reservation_name}")
+
+
+def create_reservation(lkp: util.Lookup, reservation_name: str, node: str, start_time: datetime) -> None:
+    # Format time to be compatible with slurm reservation.
+    formatted_start_time = start_time.strftime('%Y-%m-%dT%H:%M:%S')
+    util.run(f"{lkp.scontrol} create reservation user=slurm starttime={formatted_start_time} duration=180 nodes={node} reservationname={reservation_name}")
+
+
+def get_slurm_reservation_maintenance(lkp: util.Lookup) -> Dict[str, datetime]:
+    res = util.run(f"{lkp.scontrol} show reservation --json")
+    all_reservations = json.loads(res.stdout)
+    reservation_map = {}
+
+    for reservation in all_reservations['reservations']:
+        name = reservation.get('name')
+        nodes = reservation.get('node_list')
+        time_epoch = reservation.get('start_time', {}).get('number')
+
+        if name is None or nodes is None or time_epoch is None:
+          continue
+
+        if reservation.get('node_count') != 1:
+          continue
+
+        if name != f"{nodes}_maintenance":
+          continue
+
+        reservation_map[name] = datetime.fromtimestamp(time_epoch)
+
+    return reservation_map
+
+
+def get_upcoming_maintenance(lkp: util.Lookup) -> Dict[str, Tuple[str, datetime]]:
+    upc_maint_map = {}
+
+    for node, properties in lkp.instances().items():
+        if 'upcomingMaintenance' in properties:
+          start_time = datetime.strptime(properties['upcomingMaintenance']['startTimeWindow']['earliest'], '%Y-%m-%dT%H:%M:%S%z')
+          upc_maint_map[node + "_maintenance"] = (node, start_time)
+
+    return upc_maint_map
+
+
+def sync_maintenance_reservation(lkp: util.Lookup) -> None:
+    upc_maint_map = get_upcoming_maintenance(lkp)  # map reservation_name -> (node_name, time)
+    log.debug(f"upcoming-maintenance-vms: {upc_maint_map}")
+
+    curr_reservation_map = get_slurm_reservation_maintenance(lkp) # map reservation_name -> time
+    log.debug(f"curr-reservation-map: {curr_reservation_map}")
+
+    del_reservation = set(curr_reservation_map.keys() - upc_maint_map.keys())
+    create_reservation_map = {}
+
+    for res_name, (node, start_time) in upc_maint_map.items():
+      if res_name in curr_reservation_map:
+        diff = curr_reservation_map[res_name] - start_time
+        if abs(diff) <= dt.timedelta(seconds=1):
+          continue
+        else:
+          del_reservation.add(res_name)
+          create_reservation_map[res_name] = (node, start_time)
+      else:
+        create_reservation_map[res_name] = (node, start_time)
+
+    log.debug(f"del-reservation: {del_reservation}")
+    for res_name in del_reservation:
+      delete_reservation(lkp, res_name)
+
+    log.debug(f"create-reservation-map: {create_reservation_map}")
+    for res_name, (node, start_time) in create_reservation_map.items():
+      create_reservation(lkp, res_name, node, start_time)
+
+
 def main():
     try:
         reconfigure_slurm()
     except Exception:
         log.exception("failed to reconfigure slurm")
 
-    if lkp.is_controller:
+    if lookup().is_controller:
         try:
             sync_slurm()
         except Exception:
             log.exception("failed to sync instances")
+
         try:
             sync_placement_groups()
         except Exception:
             log.exception("failed to sync placement groups")
+
         try:
-            update_topology(lkp)
+            update_topology(lookup())
         except Exception:
             log.exception("failed to update topology")
 
+        ## TODO: Enable reservation for scheduled maintenance.
+        # try:
+        #     sync_maintenance_reservation(lookup())
+        # except Exception:
+        #     log.exception("failed to sync slurm reservation for scheduled maintenance")
+
     try:
+        # TODO: it performs 1 to 4 GCS list requests, 
+        # use cached version, combine with `_list_config_blobs`
         install_custom_scripts(check_hash=True)
     except Exception:
         log.exception("failed to sync custom scripts")

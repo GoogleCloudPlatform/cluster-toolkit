@@ -19,6 +19,7 @@ import (
 	"fmt"
 
 	"hpc-toolkit/pkg/modulereader"
+	"hpc-toolkit/pkg/sourcereader"
 
 	"github.com/zclconf/go-cty/cty"
 	"github.com/zclconf/go-cty/cty/convert"
@@ -103,9 +104,22 @@ func (bp *Blueprint) expandVars() error {
 	return nil
 }
 
+func (bp *Blueprint) substituteModuleSources() {
+	bp.WalkModulesSafe(func(_ ModulePath, m *Module) {
+		m.Source = bp.transformSource(m.Source)
+	})
+}
+
+func (bp Blueprint) transformSource(s string) string {
+	if sourcereader.IsEmbeddedPath(s) && bp.ToolkitModulesURL != "" && bp.ToolkitModulesVersion != "" {
+		return fmt.Sprintf("%s//%s?ref=%s&depth=1", bp.ToolkitModulesURL, s, bp.ToolkitModulesVersion)
+	}
+	return s
+}
+
 func (bp *Blueprint) expandGroups() error {
 	bp.addKindToModules()
-
+	bp.substituteModuleSources()
 	if err := checkModulesAndGroups(*bp); err != nil {
 		return err
 	}

@@ -26,7 +26,7 @@ run_test() {
 	exampleFile=$(basename "$example")
 	DEPLOYMENT=$(echo "${exampleFile%.yaml}-$(basename "${tmpdir##*.}")" | sed -e 's/\(.*\)/\L\1/')
 	PROJECT="invalid-project"
-	VALIDATORS_TO_SKIP="test_project_exists,test_apis_enabled,test_region_exists,test_zone_exists,test_zone_in_region,test_tf_version_for_slurm"
+	VALIDATORS_TO_SKIP="test_project_exists,test_apis_enabled,test_region_exists,test_zone_exists,test_zone_in_region"
 	GHPC_PATH="${cwd}/ghpc"
 	BP_PATH="${cwd}/${example}"
 	# Cover the three possible starting sequences for local sources: ./ ../ /
@@ -35,7 +35,7 @@ run_test() {
 	echo "testing ${example} in ${tmpdir}"
 
 	# Only run from the repo directory if there are local modules, otherwise
-	# run the test from the test directory using the installed ghpc binary.
+	# run the test from the test directory using the installed gcluster binary.
 	if grep -q "${LOCAL_SOURCE_PATTERN}" "${cwd}/${example}"; then
 		cd "${cwd}"
 	else
@@ -45,7 +45,7 @@ run_test() {
 		--skip-validators="${VALIDATORS_TO_SKIP}" "${deployment_args[@]}" \
 		--vars="project_id=${PROJECT},deployment_name=${DEPLOYMENT}" >/dev/null ||
 		{
-			echo "*** ERROR: error creating deployment with ghpc for ${exampleFile}"
+			echo "*** ERROR: error creating deployment with gcluster for ${exampleFile}"
 			exit 1
 		}
 	if grep -q "${LOCAL_SOURCE_PATTERN}" "${cwd}/${example}"; then
