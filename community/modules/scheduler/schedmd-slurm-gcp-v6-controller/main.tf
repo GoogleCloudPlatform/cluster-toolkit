@@ -29,6 +29,8 @@ locals {
 }
 
 data "google_compute_default_service_account" "default" {
+  count = (var.service_account_email == null || var.service_account_email == "") ? 1 : 0
+
   project = var.project_id
 }
 
