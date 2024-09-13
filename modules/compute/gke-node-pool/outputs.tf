@@ -72,8 +72,10 @@ locals {
     a3-megagpu-8g = "enable-tcpxo-in-workload.py"
   }
   gpu_direct_instruction = <<-EOT
-    Since you are using a3-mega machine type, you will have to add gpudirect support to your workload.
-    A sample GKE job that had GPUDirect enabled and NCCL test included has been created locally at:
+    Since you are using ${var.machine_type} machine type that has GPUDirect support, your nodepool had been configured with the required plugins.
+    To fully utilize GPUDirect you will need to add the some components into your workload manifest. Details below:
+
+    A sample GKE job that had GPUDirect enabled and NCCL test included has been generated locally at:
       ${abspath(local.gpu_direct_setting.updated_workload_path)}
 
     You can use the following commands to submit the sample job:
