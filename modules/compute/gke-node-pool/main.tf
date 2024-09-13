@@ -253,3 +253,55 @@ resource "google_project_iam_member" "node_service_account_artifact_registry" {
   role    = "roles/artifactregistry.reader"
   member  = "serviceAccount:${local.sa_email}"
 }
+
+resource "null_resource" "install_dependencies" {
+  provisioner "local-exec" {
+    command = "pip3 install pyyaml argparse"
+  }
+}
+
+locals {
+  gpu_direct_setting = lookup(local.gpu_direct_settings, var.machine_type, { gpu_direct_manifests = [], updated_workload_path = "", rxdm_version = "" })
+}
+
+# execute script to inject rxdm sidecar into workload to enable tcpx for a3-highgpu-8g VM workload
+resource "null_resource" "enable_tcpx_in_workload" {
+  count = var.machine_type == "a3-highgpu-8g" ? 1 : 0
+  triggers = {
+    always_run = timestamp()
+  }
+  provisioner "local-exec" {
+    command = "python3 ${path.module}/gpu-direct-workload/scripts/enable-tcpx-in-workload.py --file ${local.workload_path_tcpx} --rxdm ${local.gpu_direct_setting.rxdm_version}"
+  }
+
+  depends_on = [null_resource.install_dependencies]
+}
+
+# execute script to inject rxdm sidecar into workload to enable tcpxo for a3-megagpu-8g VM workload
+resource "null_resource" "enable_tcpxo_in_workload" {
+  count = var.machine_type == "a3-megagpu-8g" ? 1 : 0
+  triggers = {
+    always_run = timestamp()
+  }
+  provisioner "local-exec" {
+    command = "python3 ${path.module}/gpu-direct-workload/scripts/enable-tcpxo-in-workload.py --file ${local.workload_path_tcpxo} --rxdm ${local.gpu_direct_setting.rxdm_version}"
+  }
+
+  depends_on = [null_resource.install_dependencies]
+}
+
+# apply manifest to enable tcpx
+module "kubectl_apply" {
+  source = "../../management/kubectl-apply"
+
+  cluster_id = var.cluster_id
+  project_id = var.project_id
+
+  apply_manifests = flatten([
+    for manifest in local.gpu_direct_setting.gpu_direct_manifests : [
+      {
+        source = manifest
+      }
+    ]
+  ])
+}
