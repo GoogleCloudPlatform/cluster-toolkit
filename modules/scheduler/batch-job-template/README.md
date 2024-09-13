@@ -90,7 +90,7 @@ deployment_groups:
       machine_type: n2-standard-4
       metadata:
         network_storage: ((jsonencode([module.appfs.network_storage])))
-      source_image_family: hpc-centos-7
+      source_image_family: hpc-rocky-linux-8
       source_image_project: cloud-hpc-image-public
 
   - id: batch-job
