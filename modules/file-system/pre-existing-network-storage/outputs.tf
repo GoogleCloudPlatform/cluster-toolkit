@@ -60,7 +60,7 @@ locals {
     "type"        = "shell"
     "content"     = lookup(local.install_scripts, var.fs_type, "echo 'skipping: client_install_runner not yet supported for ${var.fs_type}'")
     "destination" = "install_filesystem_client${replace(var.local_mount, "/", "_")}.sh"
-    "args"        = var.fs_type == "daos" ? "--access_points=\"${var.remote_mount}\"" : ""
+    "args"        = ""
   }
 
   mount_vanilla_supported_fstype = ["lustre", "nfs"]
@@ -85,7 +85,7 @@ locals {
   mount_runner_daos = {
     "type"        = "shell"
     "content"     = file("${path.module}/scripts/mount-daos.sh")
-    "args"        = "--local_mount=\"${var.local_mount}\" --mount_options=\"${var.mount_options}\""
+    "args"        = "--access_points=\"${var.remote_mount}\" --local_mount=\"${var.local_mount}\" --mount_options=\"${var.mount_options}\""
     "destination" = "mount_filesystem${replace(var.local_mount, "/", "_")}.sh"
   }
 
