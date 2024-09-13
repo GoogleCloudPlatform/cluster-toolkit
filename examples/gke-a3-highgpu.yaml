@@ -58,7 +58,7 @@ deployment_groups:
         display_name: "kubectl-access-network"
     outputs: [instructions]
 
-  - id: a3-highgpu_pool
+  - id: a3_highgpu_pool
     source: modules/compute/gke-node-pool
     use: [gke_cluster, gpunets]
     settings:
