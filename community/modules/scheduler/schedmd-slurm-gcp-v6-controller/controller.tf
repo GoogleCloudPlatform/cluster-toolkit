@@ -25,11 +25,10 @@ locals {
     }
   ]
 
-  service_account_email = (var.service_account_email == null || var.service_account_email == "") ? data.google_compute_default_service_account.default[0].email : var.service_account_email
+  synth_def_sa_email = "${data.google_project.this.number}-compute@developer.gserviceaccount.com"
 
-  # can't rely on `email=null` as it's used to instantiate `cloudsql_secret_accessor`
   service_account = {
-    email  = local.service_account_email
+    email  = coalesce(var.service_account_email, local.synth_def_sa_email)
     scopes = var.service_account_scopes
   }
 
