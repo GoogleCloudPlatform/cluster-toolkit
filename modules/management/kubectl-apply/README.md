@@ -30,10 +30,10 @@ This module simplifies applying Kubernetes manifests to GKE clusters. It provide
         metadata:
           name: my-namespace
     - source: "https://github.com/kubernetes-sigs/jobset/releases/download/v0.6.0/manifests.yaml"
-    - source: "./manifests/configmap1.yaml"
-    - source: "./manifests/configmap2.yaml.tftpl"
+    - source: $(ghpc_stage("manifests/configmap1.yaml"))
+    - source: $(ghpc_stage("manifests/configmap2.yaml.tftpl"))
       template_vars: {name: "dev-config", public: "false"}
-    - source: "./manifests/"
+    - source: $(ghpc_stage("manifests"))/
       template_vars: {name: "dev-config", public: "false"}
 ```
 
