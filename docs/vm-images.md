@@ -4,7 +4,6 @@
   * [Instance Image](#instance-images)
   * [Pinning Specific Images](#pinning-specifics-images)
 * [Cluster Toolkit Supported Images](#cluster-toolkit-supported-images)
-  * [HPC CentOS 7](#hpc-centos-7)
   * [HPC Rocky Linux 8](#hpc-rocky-linux-8)
   * [Debian 11](#debian-11)
   * [Ubuntu 20.04 LTS](#ubuntu-2004-lts)
@@ -69,10 +68,6 @@ blueprint:
 
       instance_image:
         family: hpc-rocky-linux-8
-        project: cloud-hpc-image-public
-
-      instance_image:
-        family: hpc-centos-7
         project: cloud-hpc-image-public
 
       instance_image:

@@ -24,10 +24,10 @@ locals {
   url         = startswith(local.null_safe_source, "http://") || startswith(local.null_safe_source, "https://") ? var.source_path : null
   url_content = local.url != null ? data.http.yaml_content[0].response_body : null
 
-  yaml_file         = local.url == null && endswith(lower(local.null_safe_source), ".yaml") ? abspath(var.source_path) : null
+  yaml_file         = local.url == null && length(regexall("\\.yaml(_.*)?$", lower(local.null_safe_source))) == 1 ? abspath(var.source_path) : null
   yaml_file_content = local.yaml_file != null ? file(local.yaml_file) : null
 
-  template_file         = local.url == null && endswith(lower(local.null_safe_source), ".tftpl") ? abspath(var.source_path) : null
+  template_file         = local.url == null && length(regexall("\\.tftpl(_.*)?$", lower(local.null_safe_source))) == 1 ? abspath(var.source_path) : null
   template_file_content = local.template_file != null ? templatefile(local.template_file, var.template_vars) : null
 
   yaml_body      = coalesce(local.content_yaml_body, local.url_content, local.yaml_file_content, local.template_file_content, " ")

@@ -28,8 +28,8 @@ locals {
   universe_domain = { "universe_domain" = var.universe_domain }
 }
 
-data "google_compute_default_service_account" "default" {
-  project = var.project_id
+data "google_project" "this" {
+  project_id = var.project_id
 }
 
 # See 

@@ -94,7 +94,7 @@ deployment_groups:
           set -e -o pipefail
           ansible-galaxy role install googlecloudplatform.google_cloud_ops_agents
           ansible-pull \
-              -U https://github.com/GoogleCloudPlatform/slurm-gcp -C 6.5.13 \
+              -U https://github.com/GoogleCloudPlatform/slurm-gcp -C 6.7.0 \
               -i localhost, --limit localhost --connection=local \
               -e @/var/tmp/slurm_vars.json \
               ansible/playbook.yml
@@ -144,6 +144,7 @@ deployment_groups:
           ENROOT_RUNTIME_PATH    /mnt/localssd/${UID}/enroot/runtime
           ENROOT_CACHE_PATH      /mnt/localssd/${UID}/enroot/cache
           ENROOT_DATA_PATH       /mnt/localssd/${UID}/enroot/data
+          ENROOT_TEMP_PATH       /mnt/localssd/${UID}/enroot
       - type: ansible-local
         destination: configure_gpu_monitoring.yml
         content: |

@@ -5,9 +5,9 @@ This module creates a login node for a Slurm cluster based on the
 terraform modules. The login node is used in conjunction with the
 [Slurm controller](../schedmd-slurm-gcp-v5-controller/README.md).
 
-[slurm-gcp]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.5.8
-[slurm\_login\_instance]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.5.8/terraform/slurm_cluster/modules/slurm_login_instance
-[slurm\_instance\_template]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.5.8/terraform/slurm_cluster/modules/slurm_instance_template
+[slurm-gcp]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.7.0
+[slurm\_login\_instance]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.7.0/terraform/slurm_cluster/modules/slurm_login_instance
+[slurm\_instance\_template]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.7.0/terraform/slurm_cluster/modules/slurm_instance_template
 
 ### Example
 
@@ -53,7 +53,7 @@ modules. For support with the underlying modules, see the instructions in the
 [slurm-gcp README][slurm-gcp-readme].
 
 [slurm-on-gcp]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/7
-[slurm-gcp-readme]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.5.8#slurm-on-google-cloud-platform
+[slurm-gcp-readme]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.7.0#slurm-on-google-cloud-platform
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 ## Requirements
@@ -77,7 +77,6 @@ No modules.
 
 | Name | Type |
 |------|------|
-| [google_compute_default_service_account.default](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_default_service_account) | data source |
 | [google_compute_image.slurm](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_image) | data source |
 
 ## Inputs

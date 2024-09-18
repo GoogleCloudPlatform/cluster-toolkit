@@ -37,6 +37,7 @@ resource "null_resource" "wait_for_startup" {
       ZONE          = var.zone
       PROJECT_ID    = var.project_id
       TIMEOUT       = var.timeout
+      GCLOUD_PATH   = var.gcloud_path_override
     }
   }
 
