@@ -156,7 +156,7 @@ locals {
       no_proxy   = var.http_no_proxy,
       runners = [
         for runner in local.runners : {
-          object      = google_storage_bucket_object.scripts[basename(runner["destination"])].output_name
+          object      = local.runners_map[basename(runner["destination"])].name
           type        = runner["type"]
           destination = runner["destination"]
           args        = contains(keys(runner), "args") ? runner["args"] : ""
@@ -180,11 +180,16 @@ locals {
   # Final content output to the user
   stdlib = join("", local.stdlib_list)
 
-  runners_map = { for runner in local.runners :
-    basename(runner["destination"]) => {
-      content = lookup(runner, "content", null)
-      source  = lookup(runner, "source", null)
-    }
+  runners_map = {
+    for k, v in {
+      for runner in local.runners :
+      basename(runner["destination"]) => {
+        content = lookup(runner, "content", null)
+        source  = lookup(runner, "source", null)
+    } } :
+    k => merge(v, {
+      name = "${local.storage_folder_path_prefix}${k}-${substr(try(md5(v.content), filemd5(v.source)), 0, 4)}"
+    })
   }
 }
 
@@ -211,7 +216,7 @@ resource "google_storage_bucket_iam_binding" "viewers" {
 resource "google_storage_bucket_object" "scripts" {
   # this writes all scripts exactly once into GCS
   for_each = local.runners_map
-  name     = "${local.storage_folder_path_prefix}${each.key}-${substr(try(md5(each.value.content), filemd5(each.value.source)), 0, 4)}"
+  name     = each.value.name
   content  = each.value.content
   source   = each.value.source
   bucket   = local.storage_bucket_name
