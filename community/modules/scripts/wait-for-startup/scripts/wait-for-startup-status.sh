@@ -30,6 +30,10 @@ if [[ -z "${TIMEOUT}" ]]; then
 	exit 1
 fi
 
+if [[ -n "${GCLOUD_PATH}" ]]; then
+	export PATH="$GCLOUD_PATH:$PATH"
+fi
+
 echo "Waiting for startup: instance_name='${INSTANCE_NAME}', zone='${ZONE}', project_id='${PROJECT_ID}', timeout_seconds='${TIMEOUT}'"
 
 # Wrapper around grep that swallows the error status code 1
