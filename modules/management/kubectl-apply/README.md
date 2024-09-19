@@ -1,6 +1,13 @@
 ## Description
 
-This module simplifies applying Kubernetes manifests to GKE clusters. It provides flexible options for specifying manifests, allowing you to either directly embed them as strings content or reference them from URLs, files, templates, or entire .yaml and .tftpl files in directories.
+This module simplifies the following functionality:
+
+* Applying Kubernetes manifests to GKE clusters: It provides flexible options for specifying manifests, allowing you to either directly embed them as strings content or reference them from URLs, files, templates, or entire .yaml and .tftpl files in directories.
+* Deploying commonly used infrastructure like [Kueue](https://kueue.sigs.k8s.io/docs/) or [Jobset](https://jobset.sigs.k8s.io/docs/).
+
+> Note: Kueue can work with a variety of frameworks out of the box, find them [here](https://kueue.sigs.k8s.io/docs/tasks/run/)
+
+### Explanation
 
 * **Manifest:**
   * **Raw String:** Specify manifests directly within the module configuration using the `content: manifest_body` format.
@@ -10,7 +17,7 @@ This module simplifies applying Kubernetes manifests to GKE clusters. It provide
     * A template file (`.tftpl`) to generate a manifest. Ex.: `./template.yaml.tftpl`. You can pass the variables to format the template file in `template_vars`.
     * A directory containing multiple YAML or template files. Ex: `./manifests/`. You can pass the variables to format the template files in `template_vars`.
 
-### Example
+#### Manifest Example
 
 ```yaml
 - id: existing-gke-cluster
@@ -35,6 +42,20 @@ This module simplifies applying Kubernetes manifests to GKE clusters. It provide
       template_vars: {name: "dev-config", public: "false"}
     - source: $(ghpc_stage("manifests"))/
       template_vars: {name: "dev-config", public: "false"}
+```
+
+#### Pre-build infrastructure Example
+
+```yaml
+  - id: workload_component_install
+    source: modules/management/kubectl-apply
+    use: [gke_cluster]
+    settings:
+      kueue:
+        install: true
+        config_path: $(ghpc_stage("manifests/user-provided-kueue-config.yaml"))
+      jobset:
+        install: true
 ```
 
 > **_NOTE:_**
@@ -79,7 +100,10 @@ limitations under the License.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_kubectl"></a> [kubectl](#module\_kubectl) | ./kubectl | n/a |
+| <a name="module_configure_kueue"></a> [configure\_kueue](#module\_configure\_kueue) | ./kubectl | n/a |
+| <a name="module_install_jobset"></a> [install\_jobset](#module\_install\_jobset) | ./kubectl | n/a |
+| <a name="module_install_kueue"></a> [install\_kueue](#module\_install\_kueue) | ./kubectl | n/a |
+| <a name="module_kubectl_apply_manifests"></a> [kubectl\_apply\_manifests](#module\_kubectl\_apply\_manifests) | ./kubectl | n/a |
 
 ## Resources
 
@@ -94,6 +118,8 @@ limitations under the License.
 |------|-------------|------|---------|:--------:|
 | <a name="input_apply_manifests"></a> [apply\_manifests](#input\_apply\_manifests) | A list of manifests to apply to GKE cluster using kubectl. For more details see [kubectl module's inputs](kubectl/README.md). | <pre>list(object({<br/>    content           = optional(string, null)<br/>    source            = optional(string, null)<br/>    template_vars     = optional(map(any), null)<br/>    server_side_apply = optional(bool, false)<br/>    wait_for_rollout  = optional(bool, true)<br/>  }))</pre> | `[]` | no |
 | <a name="input_cluster_id"></a> [cluster\_id](#input\_cluster\_id) | An identifier for the gke cluster resource with format projects/<project\_id>/locations/<region>/clusters/<name>. | `string` | n/a | yes |
+| <a name="input_jobset"></a> [jobset](#input\_jobset) | Install [Jobset](https://github.com/kubernetes-sigs/jobset) which manages a group of K8s [jobs](https://kubernetes.io/docs/concepts/workloads/controllers/job/) as a unit. | <pre>object({<br/>    install = optional(bool, false)<br/>    version = optional(string, "v0.5.2")<br/>  })</pre> | `{}` | no |
+| <a name="input_kueue"></a> [kueue](#input\_kueue) | Install and configure [Kueue](https://kueue.sigs.k8s.io/docs/overview/) workload scheduler. | <pre>object({<br/>    install     = optional(bool, false)<br/>    version     = optional(string, "v0.8.1")<br/>    config_path = optional(string, null)<br/>  })</pre> | `{}` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The project ID that hosts the gke cluster. | `string` | n/a | yes |
 
 ## Outputs

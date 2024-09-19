@@ -36,3 +36,32 @@ variable "apply_manifests" {
   }))
   default = []
 }
+
+variable "kueue" {
+  description = "Install and configure [Kueue](https://kueue.sigs.k8s.io/docs/overview/) workload scheduler."
+  type = object({
+    install     = optional(bool, false)
+    version     = optional(string, "v0.8.1")
+    config_path = optional(string, null)
+  })
+  default = {}
+
+  validation {
+    condition     = !var.kueue.install || contains(["v0.8.1"], var.kueue.version)
+    error_message = "Supported version of Kueue is v0.8.1"
+  }
+}
+
+variable "jobset" {
+  description = "Install [Jobset](https://github.com/kubernetes-sigs/jobset) which manages a group of K8s [jobs](https://kubernetes.io/docs/concepts/workloads/controllers/job/) as a unit."
+  type = object({
+    install = optional(bool, false)
+    version = optional(string, "v0.5.2")
+  })
+  default = {}
+
+  validation {
+    condition     = !var.jobset.install || contains(["v0.5.2"], var.jobset.version)
+    error_message = "Supported version of Jobset is v0.5.2"
+  }
+}
