@@ -17,7 +17,7 @@ tags:
 - m.custom-image
 - m.pre-existing-vpc
 - m.startup-script
-- slurm6
+- slurm5
 
 timeout: 14400s  # 4hr
 steps:
@@ -37,7 +37,7 @@ steps:
 
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/multigroup-integration-test.yml \
         --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
-        --extra-vars="@tools/cloud-build/daily-tests/tests/ml-a3-highgpu-slurm-image.yml"
+        --extra-vars="@tools/cloud-build/daily-tests/tests/ml-a3-highgpu-slurm-image-legacy.yml"
     IMAGE_NAME=$(gcloud compute images list --project "${PROJECT_ID}" \
         --no-standard-images --filter="labels.ghpc_deployment~$${BUILD_ID_SHORT}" \
         --format='get(name)' --limit=1)
@@ -70,6 +70,7 @@ steps:
     ZONE=us-west1-a
 
     trap 'destroy_on_exit' EXIT
+
     ./gcluster deploy \
         --vars region="$${REGION}" \
         --vars zone="$${ZONE}" \
@@ -86,7 +87,7 @@ steps:
       --user=sa_106486320838376751393 \
       --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT} nfs_ip=$${NFS_IP}" \
       --extra-vars="region=$${REGION} zone=$${ZONE} remote_mount_homefs=/exports/home" \
-      --extra-vars="@tools/cloud-build/daily-tests/tests/ml-a3-highgpu-slurm-cluster.yml"
+      --extra-vars="@tools/cloud-build/daily-tests/tests/ml-a3-highgpu-slurm-cluster-legacy.yml"
   volumes:
   - name: 'persistent_volume'
     path: '/persistent_volume'

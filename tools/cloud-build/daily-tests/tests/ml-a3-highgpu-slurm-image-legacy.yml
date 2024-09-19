@@ -14,10 +14,10 @@
 
 ---
 
-test_name: a3m-image
-deployment_name: a3mimg{{ build }}
+test_name: a3h-image
+deployment_name: a3himg{{ build }}
 workspace: /workspace
-blueprint_yaml: "{{ workspace }}/examples/machine-learning/a3-megagpu-8g/slurm-a3mega-image.yaml"
+blueprint_yaml: "{{ workspace }}/examples/machine-learning/a3-highgpu-8g/v5-legacy/ml-slurm-a3-1-image-v5-legacy.yaml"
 packer_group_name: slurm-build
 packer_module_id: slurm-image
 delete_image: false
@@ -26,8 +26,5 @@ cli_deployment_vars:
   subnetwork_name_system: default
   region: us-west1
   zone: us-west1-a
-  enable_ops_agent: true
-  enable_nvidia_dcgm: true
-  slurm_cluster_name: a3mc{{ build[0:4] }}
-  final_image_family: "{{ deployment_name }}-slurm"
-  disk_size_gb: 200
+  source_image_project_id: deeplearning-platform
+  source_image: dlvm-tcpd-cu120-648491853-ubuntu-2004-py310
