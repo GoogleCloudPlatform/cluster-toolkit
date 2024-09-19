@@ -44,3 +44,14 @@ locals {
     }
   }
 }
+
+check "gpu_direct_check_multi_vpc" {
+  assert {
+    condition     = !(var.machine_type == "a3-highgpu-8g" && length(var.additional_networks) != 4)
+    error_message = "To achieve optimal performance for ${var.machine_type} machine, 4 additional vpc is recommended. You could configure it in the blueprint through modules/network/multivpc with network_count set as 4"
+  }
+  assert {
+    condition     = !(var.machine_type == "a3-megagpu-8g" && length(var.additional_networks) != 8)
+    error_message = "To achieve optimal performance for ${var.machine_type} machine, 8 additional vpc is recommended. You could configure it in the blueprint through modules/network/multivpc with network_count set as 8"
+  }
+}

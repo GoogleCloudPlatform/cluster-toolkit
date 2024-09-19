@@ -316,6 +316,7 @@ variable "additional_networks" {
       subnetwork_range_name = string
     }))
   }))
+  nullable = false
 }
 
 variable "reservation_affinity" {
