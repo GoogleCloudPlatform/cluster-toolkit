@@ -1570,9 +1570,7 @@ to enable GPUDirect for the A3 High machines.
 
 * NCCL plugin for GPUDirect [TCPX](https://github.com/GoogleCloudPlatform/container-engine-accelerators/tree/master/gpudirect-tcpx)
 * [NRI](https://github.com/GoogleCloudPlatform/container-engine-accelerators/tree/master/nri_device_injector) device injector plugin
-* Provide support for injecting GPUDirect required components(annotations, volumes, rxdm sidecar etc.) into the user workload in the form of Kubernetes Job.
-  * Provide sample workload to showcase how it will be updated with the required components injected, and how it can be deployed.
-  * Allow user to use the provided script to update their own workload and deploy.
+* Provide support for injecting GPUDirect required components(annotations, volumes, rxdm sidecar etc.) into the user workload in the form of Kubernetes Job via a script.
 
 > [!Note]
 > The Kubernetes API server will only allow requests from authorized networks.

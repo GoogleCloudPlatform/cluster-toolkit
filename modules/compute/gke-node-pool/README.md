@@ -79,7 +79,7 @@ For A3 Series machines to achieve optimal performance , GKE provide two networki
 - A3 High machine types (a3-highgpu-8g): utilize GPUDirect-TCPX to reduce the overhead required to transfer packet payloads to and from GPUs, which significantly improves throughput at scale compared to GPUs that don't use GPUDirect.
 - A3 Mega machine types (a3-megagpu-8g): utilize GPUDirect-TCPXO to improve GPU to GPU communication, and further improves GPU to VM communication.
 
-To achieve this, GKE nodepools can accept multiple VPCs. When creating nodepools with A3 Series machine type, pass in a multivpc module to the gke-node-pool module, and the gke-node-pool module would detect the eligible machine type and enable GPUDirect for it. More specifically, the below components will be installed in the nodepool for enabling GPUDirect.
+To achieve this, when creating nodepools with A3 Series machine type, pass in a multivpc module to the gke-node-pool module, and the gke-node-pool module would detect the eligible machine type and enable GPUDirect for it. More specifically, the below components will be installed in the nodepool for enabling GPUDirect.
 
 - Install NCCL plugin for GPUDirect [TCPX](https://github.com/GoogleCloudPlatform/container-engine-accelerators/tree/master/gpudirect-tcpx) or [TCPXO](https://github.com/GoogleCloudPlatform/container-engine-accelerators/tree/master/gpudirect-tcpxo)
 - Install [NRI](https://github.com/GoogleCloudPlatform/container-engine-accelerators/tree/master/nri_device_injector) device injector plugin
