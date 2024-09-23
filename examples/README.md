@@ -52,8 +52,8 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [hpc-gke.yaml](#hpc-gkeyaml--) ![community-badge] ![experimental-badge]
   * [ml-gke](#ml-gkeyaml--) ![community-badge] ![experimental-badge]
   * [storage-gke](#storage-gkeyaml--) ![community-badge] ![experimental-badge]
-  * [gke-a3-megagpu](#gke-a3-megagpuyaml--) ![community-badge] ![experimental-badge]
-  * [gke-a3-highgpu](#gke-a3-highgpuyaml--) ![community-badge] ![experimental-badge]
+  * [gke-a3-megagpu](#gke-a3-megagpuyaml--) ![experimental-badge]
+  * [gke-a3-highgpu](#gke-a3-highgpuyaml--) ![experimental-badge]
   * [htc-slurm-v5-legacy.yaml](#htc-slurm-v5-legacyyaml--) ![community-badge] ![experimental-badge]
   * [htc-slurm.yaml](#htc-slurmyaml-) ![community-badge]
   * [htc-htcondor.yaml](#htc-htcondoryaml--) ![community-badge] ![experimental-badge]
@@ -1537,7 +1537,7 @@ cleaned up when the job is deleted.
 
 [storage-gke.yaml]: ../examples/storage-gke.yaml
 
-### [gke-a3-megagpu.yaml] ![community-badge] ![experimental-badge]
+### [gke-a3-megagpu.yaml] ![experimental-badge]
 
 This blueprint shows how to provision a GKE cluster with A3 Mega machines in the toolkit.
 
@@ -1559,7 +1559,7 @@ After provisioning the cluster and the nodepool, we need to do the following:
 
 [gke-a3-megagpu.yaml]: ../examples/gke-a3-megagpu.yaml
 
-### [gke-a3-highgpu.yaml] ![community-badge] ![experimental-badge]
+### [gke-a3-highgpu.yaml] ![experimental-badge]
 
 This blueprint shows how to provision a GKE cluster with A3 High machines in the toolkit.
 
