@@ -185,7 +185,7 @@ variable "compact_placement" {
 variable "placement_policy" {
   description = <<-EOT
   Group placement policy to use for the node pool's nodes. `COMPACT` is the only supported value for `type` currently. `name` is the name of the placement policy.
-  It is assumed that the specified policy exists. To create a placement policy refer to https://cloud.google.com/sdk/gcloud/reference/compute/resource-policies/create/group-placement.
+  It is assumed that the specified policy exists. To create a placement policy use [resource-policy module](../resource-policy/README.md) or refer to https://cloud.google.com/sdk/gcloud/reference/compute/resource-policies/create/group-placement.
   Note: Placement policies have the [following](https://cloud.google.com/compute/docs/instances/placement-policies-overview#restrictions-compact-policies) restrictions.
   EOT
 
@@ -353,4 +353,15 @@ variable "host_maintenance_interval" {
     condition     = contains(["", "PERIODIC", "AS_NEEDED"], var.host_maintenance_interval)
     error_message = "Invalid host_maintenance_interval value. Must be PERIODIC, AS_NEEDED or the empty string"
   }
+}
+
+variable "gke_master_version" {
+  description = "GKE master version"
+  type        = string
+}
+
+variable "initial_node_count" {
+  description = "The initial number of nodes for the pool. In regional clusters, this is the number of nodes per zone. Changing this setting after node pool creation will not make any effect."
+  type        = number
+  default     = null
 }
