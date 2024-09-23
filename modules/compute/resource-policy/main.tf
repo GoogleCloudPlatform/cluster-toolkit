@@ -14,20 +14,18 @@
   * limitations under the License.
   */
 
-output "cluster_id" {
-  description = "An identifier for the gke cluster with format projects/{{project_id}}/locations/{{region}}/clusters/{{name}}."
-  value       = data.google_container_cluster.existing_gke_cluster.id
-}
+resource "google_compute_resource_policy" "policy" {
+  name     = var.name
+  region   = var.region
+  project  = var.project_id
+  provider = google-beta
 
-output "gke_cluster_exists" {
-  description = "A static flag that signals to downstream modules that a cluster exists."
-  value       = true
-  depends_on = [
-    data.google_container_cluster.existing_gke_cluster
-  ]
-}
+  dynamic "group_placement_policy" {
+    for_each = var.group_placement_max_distance > 0 ? [1] : []
 
-output "gke_master_version" {
-  description = "GKE cluster's master version."
-  value       = data.google_container_cluster.existing_gke_cluster.master_version
+    content {
+      collocation  = "COLLOCATED"
+      max_distance = var.group_placement_max_distance
+    }
+  }
 }
