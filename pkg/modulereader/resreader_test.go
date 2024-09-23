@@ -131,24 +131,20 @@ func (s *zeroSuite) TestGetModuleInfo_Git(c *C) {
 	c.Check(err, NotNil)
 }
 
-func (s *zeroSuite) TestGetModuleInfo_DownloadCache(c *C) {
-	remoteSourceA := "github.com/GoogleCloudPlatform/cluster-toolkit//modules/compute/vm-instance?ref=v1.15.0&depth=1"
-	remoteSourceB := "github.com/GoogleCloudPlatform/cluster-toolkit//modules/compute/vm-instance?ref=v1.39.0&depth=1"
-	remoteSourceC := "github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/file-system/cloud-storage-bucket?ref=v1.15.0&depth=1"
+func (s *zeroSuite) TestSourceDirSubdir(c *C) {
+	var table = []struct {
+		remoteSource    string
+		expectedPkgAddr string
+	}{
+		{"github.com/GoogleCloudPlatform/cluster-toolkit//modules/compute/vm-instance?ref=v1.15.0&depth=1", "github.com/GoogleCloudPlatform/cluster-toolkit?ref=v1.15.0&depth=1"},
+		{"github.com/GoogleCloudPlatform/cluster-toolkit//modules/compute/vm-instance?ref=v1.39.0&depth=1", "github.com/GoogleCloudPlatform/cluster-toolkit?ref=v1.39.0&depth=1"},
+		{"github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/file-system/cloud-storage-bucket?ref=v1.15.0&depth=1", "github.com/GoogleCloudPlatform/cluster-toolkit?ref=v1.15.0&depth=1"},
+	}
 
-	// Get the package addresses
-	pkgAddrA, _ := getter.SourceDirSubdir(remoteSourceA)
-	pkgAddrB, _ := getter.SourceDirSubdir(remoteSourceB)
-	pkgAddrC, _ := getter.SourceDirSubdir(remoteSourceC)
-
-	// pkgAddrA and pkgAddrC should be the same
-	c.Check(pkgAddrA, Equals, "github.com/GoogleCloudPlatform/cluster-toolkit?ref=v1.15.0&depth=1")
-	c.Check(pkgAddrC, Equals, "github.com/GoogleCloudPlatform/cluster-toolkit?ref=v1.15.0&depth=1")
-
-	// pkgAddrA and pkgAddrB should be different
-	c.Check(pkgAddrA, Equals, "github.com/GoogleCloudPlatform/cluster-toolkit?ref=v1.15.0&depth=1")
-	c.Check(pkgAddrB, Equals, "github.com/GoogleCloudPlatform/cluster-toolkit?ref=v1.39.0&depth=1")
-
+	for _, entry := range table {
+		pkgAddr, _ := getter.SourceDirSubdir(entry.remoteSource)
+		c.Check(pkgAddr, Equals, entry.expectedPkgAddr)
+	}
 }
 
 func (s *MySuite) TestGetModuleInfo_Local(c *C) {
