@@ -62,7 +62,10 @@ class CliUI: # implements UIProto
         time.sleep(sec)
 
     def _render_summary(self, builds: Sequence[Build]) -> None:
-        order_fn = lambda bc: (bc.build.status, trig_name(bc.build))
+        status_order = {  # show success and pending first (as less interesting)
+            Status.SUCCESS: 0,
+            Status.PENDING: 1}
+        order_fn = lambda bc: (status_order.get(bc.build.status, 100), bc.build.status, trig_name(bc.build))
         cnt = defaultdict(int)
 
         ordered = sorted(latest_by_trigger(builds).values(), key=order_fn)

@@ -36,7 +36,7 @@ steps:
   - -c
   - |
     set -x -e
-    cd /workspace && make ghpc
+    cd /workspace && make gcluster
     BUILD_ID_FULL=$BUILD_ID
     BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
 

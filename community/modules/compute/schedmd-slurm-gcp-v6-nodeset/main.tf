@@ -42,10 +42,8 @@ locals {
   public_access_config = var.enable_public_ips ? [{ nat_ip = null, network_tier = null }] : []
   access_config        = length(var.access_config) == 0 ? local.public_access_config : var.access_config
 
-  service_account_email = coalesce(var.service_account_email, data.google_compute_default_service_account.default.email)
-
   service_account = {
-    email  = local.service_account_email
+    email  = var.service_account_email
     scopes = var.service_account_scopes
   }
 
@@ -77,7 +75,7 @@ locals {
     gpu                    = one(local.guest_accelerator)
 
     labels           = local.labels
-    machine_type     = var.machine_type
+    machine_type     = terraform_data.machine_type_zone_validation.output
     metadata         = local.metadata
     min_cpu_platform = var.min_cpu_platform
 
@@ -105,11 +103,9 @@ locals {
 
     startup_script  = local.ghpc_startup_script
     network_storage = var.network_storage
-  }
-}
 
-data "google_compute_default_service_account" "default" {
-  project = var.project_id
+    enable_maintenance_reservation = var.enable_maintenance_reservation
+  }
 }
 
 locals {
@@ -173,5 +169,30 @@ data "google_compute_reservation" "reservation" {
 
     # TODO: wait for https://github.com/hashicorp/terraform-provider-google/issues/18248
     # Add a validation that if reservation.project != var.project_id it should be a shared reservation
+  }
+}
+
+data "google_compute_machine_types" "machine_types_by_zone" {
+  for_each = local.zones
+  filter   = format("name = \"%s\"", var.machine_type)
+  zone     = each.value
+}
+
+locals {
+  machine_types_by_zone   = data.google_compute_machine_types.machine_types_by_zone
+  zones_with_machine_type = [for k, v in local.machine_types_by_zone : k if length(v.machine_types) > 0]
+}
+
+resource "terraform_data" "machine_type_zone_validation" {
+  input = var.machine_type
+  lifecycle {
+    precondition {
+      condition     = length(local.zones_with_machine_type) > 0
+      error_message = <<-EOT
+        machine type ${var.machine_type} is not available in any of the zones ${jsonencode(local.zones)}". To list zones in which it is available, run:
+
+        gcloud compute machine-types list --filter="name=${var.machine_type}"
+        EOT
+    }
   }
 }

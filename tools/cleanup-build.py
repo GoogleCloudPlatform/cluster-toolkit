@@ -12,15 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import argparse
-import os
-import shutil
-import tarfile
-
-# pip install google-cloud-storage
-from google.cloud import storage
-
-DESCRIPTION = """
+"""
 This tool automates some manual tasks for cleaning up failed builds.
 When provided with the uri for a deployment folder this tool will:
 - download the tar locally
@@ -29,8 +21,19 @@ When provided with the uri for a deployment folder this tool will:
 - remove the tar and deployment folder
 
 Usage:
-tools/cleanup-build.py my-project gs://my-bucket/test-name/build.tgz
+tools/cleanup-build.py gs://my-bucket/test-name/build.tgz
 """
+
+import argparse
+import os
+import shutil
+import tarfile
+import shlex
+import subprocess
+import sys
+
+# pip install google-cloud-storage
+from google.cloud import storage
 
 def cp_from_gcs(gcs_source_uri: str, local_destination_path: str, project_id: str) -> str:
     """Downloads a file from Google Cloud Storage to a local destination.
@@ -53,10 +56,17 @@ def unpack_tgz(tar_file: str, destination_folder: str):
   with tarfile.open(tar_file, "r:gz") as tar:
     tar.extractall(destination_folder)
 
+def gcluster_path() -> str:
+    gcluster = "gcluster"
+    if os.path.exists(gcluster):
+        return f"./{gcluster}"
+    if shutil.which(gcluster) is not None:
+        return gcluster  # it's in PATH
+    raise RuntimeError(f"Could not find {gcluster} in PATH or current directory")
+
 def destroy(deployment_folder: str) -> bool:
-    import subprocess
-    import sys
-    process = subprocess.Popen(["./ghpc" , "destroy", deployment_folder, "--auto-approve"], stdout=subprocess.PIPE)
+    cmd = f"{gcluster_path()} destroy {deployment_folder} --auto-approve"
+    process = subprocess.Popen(shlex.split(cmd), stdout=subprocess.PIPE)
     for line in iter(lambda: process.stdout.read(1), b""):
         sys.stdout.buffer.write(line)
     process.wait()
@@ -65,19 +75,13 @@ def destroy(deployment_folder: str) -> bool:
         stdout, stderr = process.communicate()
         print(f'stdout: {stdout}')
         print(f'stderr: {stderr}\n\n')
-        print("Deployment destroy failed. Command to manually destroy:")
-        print(f"./ghpc destroy {deployment_folder} --auto-approve")
+        print(f"Deployment destroy failed. Command to manually destroy:\n{cmd}")
         return False
 
     print("Deployment destroyed")
     return True
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("project_id", help="Your Google Cloud project ID.")
-    parser.add_argument("gcs_tar_path", help="The path to the GCS tar file.")
-    args = parser.parse_args()
-
+def main(args: argparse.Namespace) -> None:
     print('Downloading tgz file')
     tgz_file = cp_from_gcs(args.gcs_tar_path, ".", args.project_id)
 
@@ -92,4 +96,8 @@ def main():
         shutil.rmtree(deployment_folder)
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--project_id", type=str, default="hpc-toolkit-dev", help="Your Google Cloud project ID.")
+    parser.add_argument("gcs_tar_path", help="The path to the GCS tar file.")
+
+    main(parser.parse_args())

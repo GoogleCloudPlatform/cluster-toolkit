@@ -23,11 +23,14 @@ updates:
   - go
   - release-chore
   schedule:
-    interval: weekly
+    interval: monthly
     day: monday
     time: "03:00"
     timezone: America/Los_Angeles
   target-branch: develop
+  ignore:
+  - dependency-name: "google.golang.org/api"
+
 - package-ecosystem: pip
   directory: /community/front-end/ofe/
   labels:
@@ -42,6 +45,21 @@ updates:
   reviewers:
   - ek-nag
   - mattstreet-nag
+  # Disable version updates, do security updates only
+  # See https://docs.github.com/en/code-security/dependabot/dependabot-security-updates/configuring-dependabot-security-updates#overriding-the-default-behavior-with-a-configuration-file
+  open-pull-requests-limit: 0
+- package-ecosystem: pip
+  directory: /community/modules/scheduler/schedmd-slurm-gcp-v6-controller/modules/slurm_files/scripts/
+  labels:
+  - dependencies
+  - python
+  - release-chore
+  schedule:
+    interval: weekly
+    day: monday
+    time: "03:00"
+    timezone: America/Los_Angeles
+  target-branch: develop
   # Disable version updates, do security updates only
   # See https://docs.github.com/en/code-security/dependabot/dependabot-security-updates/configuring-dependabot-security-updates#overriding-the-default-behavior-with-a-configuration-file
   open-pull-requests-limit: 0

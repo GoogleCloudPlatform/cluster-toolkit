@@ -100,7 +100,8 @@ ResumeTimeout=300
 SuspendRate=0
 SuspendTimeout=300
 TreeWidth=128
-TopologyPlugin=topology/tree"""),
+TopologyPlugin=topology/tree
+TopologyParam=SwitchAsNodeRank"""),
         (TstCfg(
             install_dir="ukulele",
             cloud_parameters={
@@ -110,6 +111,7 @@ TopologyPlugin=topology/tree"""),
                 "suspend_rate": None,
                 "suspend_timeout": None,
                 "topology_plugin": None,
+                "topology_param": None,
                 "tree_width": None,
             },
         ),
@@ -121,7 +123,8 @@ ResumeTimeout=300
 SuspendRate=0
 SuspendTimeout=300
 TreeWidth=128
-TopologyPlugin=topology/tree"""),
+TopologyPlugin=topology/tree
+TopologyParam=SwitchAsNodeRank"""),
         (TstCfg(
             install_dir="ukulele",
             cloud_parameters={
@@ -131,6 +134,7 @@ TopologyPlugin=topology/tree"""),
                 "suspend_rate": 3,
                 "suspend_timeout": 4,
                 "topology_plugin": "guess",
+                "topology_param": "yellow",
                 "tree_width": 5,
             },
         ),
@@ -142,7 +146,8 @@ ResumeTimeout=2
 SuspendRate=3
 SuspendTimeout=4
 TreeWidth=5
-TopologyPlugin=guess"""),
+TopologyPlugin=guess
+TopologyParam=yellow"""),
     ])
 def test_conflines(cfg, want):
     assert conf.conflines(util.Lookup(cfg)) == want

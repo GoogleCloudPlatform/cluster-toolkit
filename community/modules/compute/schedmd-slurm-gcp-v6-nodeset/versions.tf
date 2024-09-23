@@ -15,7 +15,7 @@
 */
 
 terraform {
-  required_version = ">= 1.3"
+  required_version = ">= 1.4"
 
   required_providers {
     google = {
@@ -24,6 +24,6 @@ terraform {
     }
   }
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:schedmd-slurm-gcp-v6-nodeset/v1.38.0"
+    module_name = "blueprints/terraform/hpc-toolkit:schedmd-slurm-gcp-v6-nodeset/v1.39.0"
   }
 }

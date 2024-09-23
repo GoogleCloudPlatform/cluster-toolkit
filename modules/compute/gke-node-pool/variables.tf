@@ -93,23 +93,24 @@ variable "local_ssd_count_ephemeral_storage" {
   description = <<-EOT
   The number of local SSDs to attach to each node to back ephemeral storage.  
   Uses NVMe interfaces.  Must be supported by `machine_type`.
+  When set to null,  default value either is [set based on machine_type](https://cloud.google.com/compute/docs/disks/local-ssd#choose_number_local_ssds) or GKE decides about default value.
   [See above](#local-ssd-storage) for more info.
   EOT 
   type        = number
-  default     = 0
+  default     = null
 }
 
 variable "local_ssd_count_nvme_block" {
   description = <<-EOT
   The number of local SSDs to attach to each node to back block storage.  
   Uses NVMe interfaces.  Must be supported by `machine_type`.
+  When set to null,  default value either is [set based on machine_type](https://cloud.google.com/compute/docs/disks/local-ssd#choose_number_local_ssds) or GKE decides about default value.
   [See above](#local-ssd-storage) for more info.
   
   EOT 
   type        = number
-  default     = 0
+  default     = null
 }
-
 
 variable "autoscaling_total_min_nodes" {
   description = "Total minimum number of nodes in the NodePool."
@@ -170,10 +171,36 @@ variable "spot" {
   default     = false
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "compact_placement" {
-  description = "Places node pool's nodes in a closer physical proximity in order to reduce network latency between nodes."
+  description = "DEPRECATED: Use `placement_policy`"
   type        = bool
-  default     = false
+  default     = null
+  validation {
+    condition     = var.compact_placement == null
+    error_message = "`compact_placement` is deprecated. Use `placement_policy` instead"
+  }
+}
+
+variable "placement_policy" {
+  description = <<-EOT
+  Group placement policy to use for the node pool's nodes. `COMPACT` is the only supported value for `type` currently. `name` is the name of the placement policy.
+  It is assumed that the specified policy exists. To create a placement policy refer to https://cloud.google.com/sdk/gcloud/reference/compute/resource-policies/create/group-placement.
+  Note: Placement policies have the [following](https://cloud.google.com/compute/docs/instances/placement-policies-overview#restrictions-compact-policies) restrictions.
+  EOT
+
+  type = object({
+    type = string
+    name = optional(string)
+  })
+  default = {
+    type = null
+    name = null
+  }
+  validation {
+    condition     = var.placement_policy.type == null || try(contains(["COMPACT"], var.placement_policy.type), false)
+    error_message = "`COMPACT` is the only supported value for `placement_policy.type`."
+  }
 }
 
 variable "service_account_email" {
@@ -263,5 +290,67 @@ variable "service_account" {
   validation {
     condition     = var.service_account == null
     error_message = "service_account is deprecated and replaced with service_account_email and scopes."
+  }
+}
+
+variable "additional_networks" {
+  description = "Additional network interface details for GKE, if any. Providing additional networks adds additional node networks to the node pool"
+  default     = []
+  type = list(object({
+    network            = string
+    subnetwork         = string
+    subnetwork_project = string
+    network_ip         = string
+    nic_type           = string
+    stack_type         = string
+    queue_count        = number
+    access_config = list(object({
+      nat_ip       = string
+      network_tier = string
+    }))
+    ipv6_access_config = list(object({
+      network_tier = string
+    }))
+    alias_ip_range = list(object({
+      ip_cidr_range         = string
+      subnetwork_range_name = string
+    }))
+  }))
+  nullable = false
+}
+
+variable "reservation_affinity" {
+  description = <<-EOT
+  Reservation resource to consume. When targeting SPECIFIC_RESERVATION, specific_reservations needs be specified.
+  Even though specific_reservations is a list, only one reservation is allowed by the NodePool API.
+  It is assumed that the specified reservation exists and has available capacity.
+  For a shared reservation, specify the project_id as well in which it was created.
+  To create a reservation refer to https://cloud.google.com/compute/docs/instances/reservations-single-project and https://cloud.google.com/compute/docs/instances/reservations-shared
+  EOT
+  type = object({
+    consume_reservation_type = string
+    specific_reservations = optional(list(object({
+      name    = string
+      project = optional(string)
+    })))
+  })
+  default = {
+    consume_reservation_type = "NO_RESERVATION"
+    specific_reservations    = []
+  }
+  validation {
+    condition     = contains(["NO_RESERVATION", "ANY_RESERVATION", "SPECIFIC_RESERVATION"], var.reservation_affinity.consume_reservation_type)
+    error_message = "Accepted values are: {NO_RESERVATION, ANY_RESERVATION, SPECIFIC_RESERVATION}"
+  }
+}
+
+variable "host_maintenance_interval" {
+  description = "Specifies the frequency of planned maintenance events."
+  type        = string
+  default     = ""
+  nullable    = false
+  validation {
+    condition     = contains(["", "PERIODIC", "AS_NEEDED"], var.host_maintenance_interval)
+    error_message = "Invalid host_maintenance_interval value. Must be PERIODIC, AS_NEEDED or the empty string"
   }
 }

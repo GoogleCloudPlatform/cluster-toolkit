@@ -67,9 +67,10 @@ resource "google_container_node_pool" "node_pool" {
   }
 
   dynamic "placement_policy" {
-    for_each = var.compact_placement ? [1] : []
+    for_each = var.placement_policy.type != null ? [1] : []
     content {
-      type = "COMPACT"
+      type        = var.placement_policy.type
+      policy_name = var.placement_policy.name
     }
   }
 
@@ -104,12 +105,18 @@ resource "google_container_node_pool" "node_pool" {
       }
     }
 
-    ephemeral_storage_local_ssd_config {
-      local_ssd_count = var.local_ssd_count_ephemeral_storage
+    dynamic "ephemeral_storage_local_ssd_config" {
+      for_each = local.local_ssd_config.local_ssd_count_ephemeral_storage != null ? [1] : []
+      content {
+        local_ssd_count = local.local_ssd_config.local_ssd_count_ephemeral_storage
+      }
     }
 
-    local_nvme_ssd_block_config {
-      local_ssd_count = var.local_ssd_count_nvme_block
+    dynamic "local_nvme_ssd_block_config" {
+      for_each = local.local_ssd_config.local_ssd_count_nvme_block != null ? [1] : []
+      content {
+        local_ssd_count = local.local_ssd_config.local_ssd_count_nvme_block
+      }
     }
 
     shielded_instance_config {
@@ -150,6 +157,30 @@ resource "google_container_node_pool" "node_pool" {
         "net.ipv4.tcp_wmem" = "4096 16384 16777216"
       }
     }
+
+    reservation_affinity {
+      consume_reservation_type = var.reservation_affinity.consume_reservation_type
+      key                      = length(local.verified_specific_reservations) != 1 ? null : local.reservation_resource_api_label
+      values                   = length(local.verified_specific_reservations) != 1 ? null : [for r in local.verified_specific_reservations : "projects/${r.project}/reservations/${r.name}"]
+    }
+
+    dynamic "host_maintenance_policy" {
+      for_each = var.host_maintenance_interval != "" ? [1] : []
+      content {
+        maintenance_interval = var.host_maintenance_interval
+      }
+    }
+  }
+
+  network_config {
+    dynamic "additional_node_network_configs" {
+      for_each = var.additional_networks
+
+      content {
+        network    = additional_node_network_configs.value.network
+        subnetwork = additional_node_network_configs.value.subnetwork
+      }
+    }
   }
 
   timeouts {
@@ -166,8 +197,30 @@ resource "google_container_node_pool" "node_pool" {
       error_message = "static_node_count cannot be set with either autoscaling_total_min_nodes or autoscaling_total_max_nodes."
     }
     precondition {
-      condition     = !(var.local_ssd_count_ephemeral_storage > 0 && var.local_ssd_count_nvme_block > 0)
+      condition     = !(coalesce(local.local_ssd_config.local_ssd_count_ephemeral_storage, 0) > 0 && coalesce(local.local_ssd_config.local_ssd_count_nvme_block, 0) > 0)
       error_message = "Only one of local_ssd_count_ephemeral_storage or local_ssd_count_nvme_block can be set to a non-zero value."
+    }
+    precondition {
+      condition = (
+        (var.reservation_affinity.consume_reservation_type != "SPECIFIC_RESERVATION" && local.input_specific_reservations_count == 0) ||
+        (var.reservation_affinity.consume_reservation_type == "SPECIFIC_RESERVATION" && local.input_specific_reservations_count == 1)
+      )
+      error_message = <<-EOT
+      When using NO_RESERVATION or ANY_RESERVATION as the `consume_reservation_type`, `specific_reservations` cannot be set.
+      On the other hand, with SPECIFIC_RESERVATION you must set `specific_reservations`.
+      EOT
+    }
+    precondition {
+      condition = (
+        (local.input_specific_reservations_count == 0) ||
+        (local.input_specific_reservations_count == 1 && length(local.verified_specific_reservations) > 0 && length(local.specific_reservation_requirement_violations) == 0)
+      )
+      error_message = <<-EOT
+      Check if your reservation is configured correctly:
+      1. A reservation with the name must exist in the specified project and one of the specified zones
+      2. Its consumption type must be "specific"
+      3. Its VM Properties must match with those of the Node Pool; Machine type, Accelerators (GPU Type and count), Local SSD disk type and count
+      EOT
     }
   }
 }
@@ -209,4 +262,56 @@ resource "google_project_iam_member" "node_service_account_artifact_registry" {
   project = var.project_id
   role    = "roles/artifactregistry.reader"
   member  = "serviceAccount:${local.sa_email}"
+}
+
+resource "null_resource" "install_dependencies" {
+  provisioner "local-exec" {
+    command = "pip3 install pyyaml argparse"
+  }
+}
+
+locals {
+  gpu_direct_setting = lookup(local.gpu_direct_settings, var.machine_type, { gpu_direct_manifests = [], updated_workload_path = "", rxdm_version = "" })
+}
+
+# execute script to inject rxdm sidecar into workload to enable tcpx for a3-highgpu-8g VM workload
+resource "null_resource" "enable_tcpx_in_workload" {
+  count = var.machine_type == "a3-highgpu-8g" ? 1 : 0
+  triggers = {
+    always_run = timestamp()
+  }
+  provisioner "local-exec" {
+    command = "python3 ${path.module}/gpu-direct-workload/scripts/enable-tcpx-in-workload.py --file ${local.workload_path_tcpx} --rxdm ${local.gpu_direct_setting.rxdm_version}"
+  }
+
+  depends_on = [null_resource.install_dependencies]
+}
+
+# execute script to inject rxdm sidecar into workload to enable tcpxo for a3-megagpu-8g VM workload
+resource "null_resource" "enable_tcpxo_in_workload" {
+  count = var.machine_type == "a3-megagpu-8g" ? 1 : 0
+  triggers = {
+    always_run = timestamp()
+  }
+  provisioner "local-exec" {
+    command = "python3 ${path.module}/gpu-direct-workload/scripts/enable-tcpxo-in-workload.py --file ${local.workload_path_tcpxo} --rxdm ${local.gpu_direct_setting.rxdm_version}"
+  }
+
+  depends_on = [null_resource.install_dependencies]
+}
+
+# apply manifest to enable tcpx
+module "kubectl_apply" {
+  source = "../../management/kubectl-apply"
+
+  cluster_id = var.cluster_id
+  project_id = var.project_id
+
+  apply_manifests = flatten([
+    for manifest in local.gpu_direct_setting.gpu_direct_manifests : [
+      {
+        source = manifest
+      }
+    ]
+  ])
 }
