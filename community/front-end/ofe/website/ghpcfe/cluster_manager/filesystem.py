@@ -90,7 +90,7 @@ def create_filesystem(fs: Filesystem) -> None:
 
 
 def _run_ghpc(target_dir: Path, cred_env: dict) -> None:
-    ghpc_path = "/opt/gcluster/hpc-toolkit/ghpc"
+    ghpc_path = "/opt/gcluster/cluster-toolkit/ghpc"
 
     try:
         logger.info("Invoking ghpc create")

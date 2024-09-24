@@ -20,10 +20,8 @@
 locals {
   name = substr(replace(var.name, "/[^a-z0-9]/", ""), 0, 14)
 
-  service_account_email = coalesce(var.service_account_email, data.google_compute_default_service_account.default.email)
-
   service_account = {
-    email  = local.service_account_email
+    email  = var.service_account_email
     scopes = var.service_account_scopes
   }
 
@@ -51,8 +49,4 @@ locals {
     reserved        = var.reserved
     network_storage = var.network_storage
   }
-}
-
-data "google_compute_default_service_account" "default" {
-  project = var.project_id
 }

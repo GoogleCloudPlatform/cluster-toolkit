@@ -148,7 +148,7 @@ The home directory of the *gcluster* account is at `/opt/gcluster`. For a new de
 #### For cloud resources
 
 Run-time data to support creating and managing cloud resources are generated
-and stored in the following sub-directories within `hpc-toolkit/frontend` on
+and stored in the following sub-directories within `cluster-toolkit/frontend` on
 the service machine:
 
 - `clusters/cluster_\<id>` - holding run-time data for a cluster. `\<id>` here
@@ -246,7 +246,7 @@ define the major components:
 
 | dir                         | description |
 |-----------------------------|-------------|
-| `hpc-toolkit/frontend/`     | Top level   |
+| `cluster-toolkit/frontend/` | Top level   |
 | `.../cli/`                  | client commandline interface |
 | `.../docs/`                 | documentation |
 | `.../infrastructure_files/` | Support files for deploying cloud infrastructure |
@@ -344,7 +344,7 @@ not currently support Vertex AI Workbenches.
 ### Infrastructure files
 
 Workbenches are created using a template configuration in
-`hpc-toolkit/frontend/infrastructure_files/workbench_tf`. The Terraform
+`cluster-toolkit/frontend/infrastructure_files/workbench_tf`. The Terraform
 template was originally based on the Terraform template provided by the
 [Google Cloud Platform Rad-Lab git repo](https://github.com/GoogleCloudPlatform/rad-lab)
 however the configuration diverged during early development. The main reason
@@ -353,11 +353,11 @@ specific OSLogin user rather than the generic Jupyter user which would make it
 impossible to interact properly with any mounted shared storage.
 
 The process of creating the workbench files is mostly contained within the file
-`hpc-toolkit/frontend/website/ghpcfe/cluster_manager/workbenchinfo.py`. The
+`cluster-toolkit/frontend/website/ghpcfe/cluster_manager/workbenchinfo.py`. The
 `copy_terraform()` routine copies files from the `infrastructure_files`
 directory while the `prepare_terraform_vars()` routine creates a
 `terraform.tfvars` file within the
-`hpc-toolkit/frontend/workbenches/workbench_##` directory to provide the
+`cluster-toolkit/frontend/workbenches/workbench_##` directory to provide the
 following info gathered by the FrontEnd during the workbench creation process:
 
 - region

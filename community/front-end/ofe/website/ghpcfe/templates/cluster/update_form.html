@@ -100,7 +100,7 @@
           <th>Image</th>
         </tr>
       </thead>
-      <tr>
+      <tr class="controller_row">
         <th>Controller</th>
         <td>
           <div class="form-group">
@@ -132,7 +132,7 @@
           </div>
         </td>
       </tr>
-      <tr>
+      <tr class="login_row">
         <th>Login Nodes</th>
         <td>
           <div class="form-group">
@@ -443,7 +443,7 @@
         region = cloudRegionInput.options[cloudRegionInput.selectedIndex].text;
     } else {
         zone = cloudZoneInput.value;
-        region = cloudZoneInput.value;
+        region = cloudRegionInput.value;
     }
 
     $.ajax({
@@ -452,40 +452,73 @@
         dataType: "json",
         headers: { 'X-CSRFToken': $.cookie("csrftoken") }
     }).done(function (data) {
-        $(".part_formset_row").each(function () {
+        $(".part_formset_row, .login_row, .controller_row").each(function () {
             var formRow = $(this);
             var machineTypeSelect = formRow.find('.machine_type_select');
             var machineType = machineTypeSelect.val();
+            
+            var invalidDiskTypes = [];
+
+            // Fetch the invalid disk types for the selected machine type
+            $.ajax({
+                url: "{% url 'api-instancetype-list' %}" + machineType + "/?cluster={{ object.id }}&region=" + region + "&zone=" + zone,
+                type: "GET",
+                dataType: "json",
+                async: false, // To ensure we get the data before proceeding
+                headers: { 'X-CSRFToken': $.cookie("csrftoken") }
+            }).done(function(machineData) {
+                invalidDiskTypes = machineData.invalid_disk_types || [];
+            });
+
+            var invalidDiskTypes = [];
+
+            // Fetch the invalid disk types for the selected machine type
+            $.ajax({
+                url: "{% url 'api-instancetype-list' %}" + machineType + "/?cluster={{ object.id }}&region=" + region + "&zone=" + zone,
+                type: "GET",
+                dataType: "json",
+                async: false, // To ensure we get the data before proceeding
+                headers: { 'X-CSRFToken': $.cookie("csrftoken") }
+            }).done(function(machineData) {
+                invalidDiskTypes = machineData.invalid_disk_types || [];
+            });
 
             formRow.find(".disk_type_select").each(function (pos, selObj) {
-                var curVal = selObj.value;
-                $(selObj).empty();
+              var curVal = selObj.value;
+              $(selObj).empty();
 
-                if (machineType && machineType.startsWith('c4-')) {
-                    var option = document.createElement("option");
-                    option.text = "Hyperdisk Balanced Persistent Disk";
-                    option.setAttribute("value", "hyperdisk-balanced");
-                    selObj.appendChild(option);
-                } else {
-                    var additionalDisk = selObj.id.slice(0, selObj.id.lastIndexOf("_disk_type"));
-                    if (additionalDisk.endsWith("additional")) {
-                        $.each(data.disks, function (i, disk_info) {
-                            var option = document.createElement("option");
-                            option.text = disk_info.description;
-                            option.setAttribute("value", disk_info.name);
-                            selObj.appendChild(option);
-                        });
-                    } else {
-                        $.each(data.disks, function (i, disk_info) {
-                            if (disk_info.name === 'local-ssd' || disk_info.name.startsWith("pd-")) {
-                                var option = document.createElement("option");
-                                option.text = disk_info.description;
-                                option.setAttribute("value", disk_info.name);
-                                selObj.appendChild(option);
-                            }
-                        });
-                    }
-                }
+              if (machineType && 
+              (machineType.startsWith('c4-') ||
+               machineType.startsWith('n4-') ||
+               machineType.startsWith('x4-'))) {
+                  var option = document.createElement("option");
+                  option.text = "Hyperdisk Balanced Persistent Disk";
+                  option.setAttribute("value", "hyperdisk-balanced");
+                  selObj.appendChild(option);
+              } else {
+                  var additionalDisk = selObj.id.slice(0, selObj.id.lastIndexOf("_disk_type"));
+                  if (additionalDisk.endsWith("additional")) {
+                      $.each(data.disks, function (i, disk_info) {
+                          if (invalidDiskTypes.indexOf(disk_info.name) === -1) {
+                              var option = document.createElement("option");
+                              option.text = disk_info.description;
+                              option.setAttribute("value", disk_info.name);
+                              selObj.appendChild(option);
+                          }
+                      });
+                  } else {
+                      $.each(data.disks, function (i, disk_info) {
+                          if ((disk_info.name === 'local-ssd' ||
+                               disk_info.name.startsWith("pd-")) &&
+                               invalidDiskTypes.indexOf(disk_info.name) === -1) {
+                              var option = document.createElement("option");
+                              option.text = disk_info.description;
+                              option.setAttribute("value", disk_info.name);
+                              selObj.appendChild(option);
+                          }
+                      });
+                  }
+              }
 
                 var id_prefix = selObj.id.slice(0, selObj.id.lastIndexOf("_disk_type"));
                 var disk_size_sel = $(selObj).parentsUntil("tbody").find("#" + id_prefix + "_disk_size")[0];

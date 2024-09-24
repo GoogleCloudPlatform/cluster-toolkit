@@ -19,3 +19,27 @@ data "google_container_cluster" "existing_gke_cluster" {
   project  = var.project_id
   location = var.region
 }
+
+module "kubectl_apply" {
+  source = "../../management/kubectl-apply" # can point to github
+
+  cluster_id = data.google_container_cluster.existing_gke_cluster.id
+  project_id = var.project_id
+
+  apply_manifests = flatten([
+    for idx, network_info in var.additional_networks : [
+      {
+        source = "${path.module}/templates/gke-network-paramset.yaml.tftpl",
+        template_vars = {
+          name            = "vpc${idx + 1}",
+          network_name    = network_info.network
+          subnetwork_name = network_info.subnetwork
+        }
+      },
+      {
+        source        = "${path.module}/templates/network-object.yaml.tftpl",
+        template_vars = { name = "vpc${idx + 1}" }
+      }
+    ]
+  ])
+}

@@ -29,7 +29,7 @@ from util import (
     separate,
     execute_with_futures,
 )
-from util import lkp, TPU
+from util import lookup, TPU
 
 import slurm_gcp_plugins
 
@@ -49,9 +49,9 @@ def truncate_iter(iterable, max_count):
 
 
 def delete_instance_request(instance):
-    request = lkp.compute.instances().delete(
-        project=lkp.project,
-        zone=lkp.instance(instance).zone,
+    request = lookup().compute.instances().delete(
+        project=lookup().project,
+        zone=lookup().instance(instance).zone,
         instance=instance,
     )
     log_api_request(request)
@@ -74,10 +74,10 @@ def stop_tpu(data):
 
 def delete_tpu_instances(instances):
     stop_data = []
-    for prefix, nodes in util.groupby_unsorted(instances, lkp.node_prefix):
+    for prefix, nodes in util.groupby_unsorted(instances, lookup().node_prefix):
         log.info(f"Deleting TPU nodes from prefix {prefix}")
         lnodes = list(nodes)
-        tpu_nodeset = lkp.node_nodeset(lnodes[0])
+        tpu_nodeset = lookup().node_nodeset(lnodes[0])
         tpu = TPU(tpu_nodeset)
         stop_data.extend(
             [{"tpu": tpu, "node": node, "nodeset": tpu_nodeset} for node in lnodes]
@@ -87,7 +87,7 @@ def delete_tpu_instances(instances):
 
 def delete_instances(instances):
     """delete instances individually"""
-    invalid, valid = separate(lambda inst: bool(lkp.instance(inst)), instances)
+    invalid, valid = separate(lambda inst: bool(lookup().instance(inst)), instances)
     if len(invalid) > 0:
         log.debug("instances do not exist: {}".format(",".join(invalid)))
     if len(valid) == 0:
@@ -109,7 +109,7 @@ def delete_instances(instances):
 def suspend_nodes(nodes: List[str]) -> None:
     tpu_nodes, other_nodes = [], []
     for node in nodes[:]:
-        if lkp.node_is_tpu(node):
+        if lookup().node_is_tpu(node):
             tpu_nodes.append(node)
         else:
             other_nodes.append(node)
@@ -124,7 +124,7 @@ def main(nodelist):
 
     # Filter out nodes not in config.yaml
     other_nodes, pm_nodes = separate(
-        lkp.is_power_managed_node, util.to_hostnames(nodelist)
+        lookup().is_power_managed_node, util.to_hostnames(nodelist)
     )
     if other_nodes:
         log.debug(
@@ -137,8 +137,8 @@ def main(nodelist):
         return
 
     log.info(f"suspend {nodelist}")
-    if lkp.cfg.enable_slurm_gcp_plugins:
-        slurm_gcp_plugins.pre_main_suspend_nodes(lkp=lkp, nodelist=nodelist)
+    if lookup().cfg.enable_slurm_gcp_plugins:
+        slurm_gcp_plugins.pre_main_suspend_nodes(lkp=lookup(), nodelist=nodelist)
     suspend_nodes(pm_nodes)
 
 

@@ -196,17 +196,18 @@ variable "nodeset" {
       auto_delete  = optional(bool, true)
       boot         = optional(bool, false)
     })), [])
-    bandwidth_tier         = optional(string, "platform_default")
-    can_ip_forward         = optional(bool, false)
-    disable_smt            = optional(bool, false)
-    disk_auto_delete       = optional(bool, true)
-    disk_labels            = optional(map(string), {})
-    disk_size_gb           = optional(number)
-    disk_type              = optional(string)
-    enable_confidential_vm = optional(bool, false)
-    enable_placement       = optional(bool, false)
-    enable_oslogin         = optional(bool, true)
-    enable_shielded_vm     = optional(bool, false)
+    bandwidth_tier                 = optional(string, "platform_default")
+    can_ip_forward                 = optional(bool, false)
+    disable_smt                    = optional(bool, false)
+    disk_auto_delete               = optional(bool, true)
+    disk_labels                    = optional(map(string), {})
+    disk_size_gb                   = optional(number)
+    disk_type                      = optional(string)
+    enable_confidential_vm         = optional(bool, false)
+    enable_placement               = optional(bool, false)
+    enable_oslogin                 = optional(bool, true)
+    enable_shielded_vm             = optional(bool, false)
+    enable_maintenance_reservation = optional(bool, true)
     gpu = optional(object({
       count = number
       type  = string
@@ -382,7 +383,7 @@ Enables automatic cleanup of compute nodes and resource policies (e.g.
 placement groups) managed by this module, when cluster is destroyed.
 
 *WARNING*: Toggling this off will impact the running workload.
-Deployed compute nodes and controller will be destroyed.
+Deployed compute nodes will be destroyed.
 EOD
   type        = bool
   default     = true
@@ -407,6 +408,7 @@ variable "cloud_parameters" {
     suspend_rate    = optional(number)
     suspend_timeout = optional(number)
     topology_plugin = optional(string)
+    topology_param  = optional(string)
     tree_width      = optional(number)
   })
   default = {}
@@ -588,12 +590,17 @@ Use this database instead of the one on the controller.
   user      : The user to access the database as.
   password  : The password, given the user, to access the given database. (sensitive)
   db_name   : The database to access.
+  user_managed_replication : The list of location and (optional) kms_key_name for secret
 EOD
   type = object({
     server_ip = string
     user      = string
     password  = string # sensitive
     db_name   = string
+    user_managed_replication = optional(list(object({
+      location     = string
+      kms_key_name = optional(string)
+    })), [])
   })
   default   = null
   sensitive = true

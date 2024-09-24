@@ -94,7 +94,7 @@ variable "instance_image" {
   type        = map(string)
   default = {
     project = "cloud-hpc-image-public"
-    family  = "hpc-centos-7"
+    name    = "hpc-centos-7-v20240712"
   }
 
   validation {

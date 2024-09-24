@@ -19,6 +19,7 @@ import (
 	"fmt"
 
 	"hpc-toolkit/pkg/modulereader"
+	"hpc-toolkit/pkg/sourcereader"
 
 	"github.com/zclconf/go-cty/cty"
 	"github.com/zclconf/go-cty/cty/convert"
@@ -39,7 +40,10 @@ func validateModuleInputs(mp ModulePath, m Module, bp Blueprint) error {
 
 		if !m.Settings.Has(input.Name) {
 			if input.Required {
-				errs.At(ip, fmt.Errorf("a required setting %q is missing from a module %q", input.Name, m.ID))
+				errs.At(ip,
+					HintError{
+						Err:  fmt.Errorf("a required setting %q is missing from a module %q", input.Name, m.ID),
+						Hint: fmt.Sprintf("%q description: %s", input.Name, input.Description)})
 			}
 			continue
 		}
@@ -103,9 +107,22 @@ func (bp *Blueprint) expandVars() error {
 	return nil
 }
 
+func (bp *Blueprint) substituteModuleSources() {
+	bp.WalkModulesSafe(func(_ ModulePath, m *Module) {
+		m.Source = bp.transformSource(m.Source)
+	})
+}
+
+func (bp Blueprint) transformSource(s string) string {
+	if sourcereader.IsEmbeddedPath(s) && bp.ToolkitModulesURL != "" && bp.ToolkitModulesVersion != "" {
+		return fmt.Sprintf("%s//%s?ref=%s&depth=1", bp.ToolkitModulesURL, s, bp.ToolkitModulesVersion)
+	}
+	return s
+}
+
 func (bp *Blueprint) expandGroups() error {
 	bp.addKindToModules()
-
+	bp.substituteModuleSources()
 	if err := checkModulesAndGroups(*bp); err != nil {
 		return err
 	}

@@ -47,6 +47,7 @@ deployment_groups:
     use: [network, parallelstore]
     settings:
       name_prefix: debian
+      add_deployment_name_before_prefix: true
       instance_count: 1
       instance_image:
         family: debian-12
@@ -59,6 +60,7 @@ deployment_groups:
     use: [network, parallelstore]
     settings:
       name_prefix: ubuntu
+      add_deployment_name_before_prefix: true
       instance_count: 1
       instance_image:
         family: ubuntu-2204-lts

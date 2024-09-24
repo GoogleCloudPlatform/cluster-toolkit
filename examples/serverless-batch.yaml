@@ -46,9 +46,6 @@ deployment_groups:
       machine_type: n2-standard-4
       task_count: 8
       task_count_per_node: 4
-      instance_image:
-        family: batch-hpc-rocky-linux-8-official
-        project: batch-custom-image
       allow_automatic_updates: false
 
   - id: batch-login

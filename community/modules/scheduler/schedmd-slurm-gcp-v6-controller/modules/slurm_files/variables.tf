@@ -272,11 +272,11 @@ EOD
 variable "login_network_storage" {
   description = <<EOD
 Storage to mounted on login and controller instances
-* server_ip     : Address of the storage server.
-* remote_mount  : The location in the remote instance filesystem to mount from.
-* local_mount   : The location on the instance filesystem to mount to.
-* fs_type       : Filesystem type (e.g. "nfs").
-* mount_options : Options to mount with.
+- server_ip     : Address of the storage server.
+- remote_mount  : The location in the remote instance filesystem to mount from.
+- local_mount   : The location on the instance filesystem to mount to.
+- fs_type       : Filesystem type (e.g. "nfs").
+- mount_options : Options to mount with.
 EOD
   type = list(object({
     server_ip     = string
@@ -328,6 +328,7 @@ variable "cloud_parameters" {
     suspend_rate    = optional(number)
     suspend_timeout = optional(number)
     topology_plugin = optional(string)
+    topology_param  = optional(string)
     tree_width      = optional(number)
   })
   default = {}

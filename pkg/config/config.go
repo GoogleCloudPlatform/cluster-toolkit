@@ -272,6 +272,8 @@ type Blueprint struct {
 	Groups                   []Group                      `yaml:"deployment_groups"`
 	TerraformBackendDefaults TerraformBackend             `yaml:"terraform_backend_defaults,omitempty"`
 	TerraformProviders       map[string]TerraformProvider `yaml:"terraform_providers,omitempty"`
+	ToolkitModulesURL        string                       `yaml:"toolkit_modules_url,omitempty"`
+	ToolkitModulesVersion    string                       `yaml:"toolkit_modules_version,omitempty"`
 
 	// internal & non-serializable fields
 
@@ -347,6 +349,7 @@ func (bp *Blueprint) Expand() error {
 	errs := (&Errors{}).
 		Add(checkStringLiterals(bp)).
 		Add(bp.checkBlueprintName()).
+		Add(bp.checkToolkitModulesUrlAndVersion()).
 		Add(checkProviders(Root.Provider, bp.TerraformProviders))
 	if errs.Any() {
 		return *errs
@@ -674,6 +677,23 @@ func (bp *Blueprint) checkBlueprintName() error {
 		}}
 	}
 
+	return nil
+}
+
+// checkToolkitModulesUrlAndVersion returns an error if either
+// toolkit_modules_url or toolkit_modules_version is
+// exclsuively supplied (i.e., one is present, but the other is missing).
+func (bp *Blueprint) checkToolkitModulesUrlAndVersion() error {
+	if bp.ToolkitModulesURL == "" && bp.ToolkitModulesVersion != "" {
+		return BpError{Root.ToolkitModulesVersion, HintError{
+			Err:  errors.New("toolkit_modules_url must be provided when toolkit_modules_version is specified"),
+			Hint: "Specify toolkit_modules_url"}}
+	}
+	if bp.ToolkitModulesURL != "" && bp.ToolkitModulesVersion == "" {
+		return BpError{Root.ToolkitModulesURL, HintError{
+			Err:  errors.New("toolkit_modules_version must be provided when toolkit_modules_url is specified"),
+			Hint: "Specify toolkit_modules_version"}}
+	}
 	return nil
 }
 

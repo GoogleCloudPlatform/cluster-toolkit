@@ -49,9 +49,11 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [hpc-slurm-local-ssd-v5-legacy.yaml](#hpc-slurm-local-ssd-v5-legacyyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-local-ssd.yaml](#hpc-slurm-local-ssdyaml--) ![community-badge] ![experimental-badge]
   * [hcls-blueprint.yaml](#hcls-blueprintyaml-) ![core-badge]
-  * [hpc-gke.yaml](#hpc-gkeyaml--) ![community-badge] ![experimental-badge]
-  * [ml-gke](#ml-gkeyaml--) ![community-badge] ![experimental-badge]
-  * [storage-gke](#storage-gkeyaml--) ![community-badge] ![experimental-badge]
+  * [hpc-gke.yaml](#hpc-gkeyaml--) ![core-badge] ![experimental-badge]
+  * [ml-gke](#ml-gkeyaml--) ![core-badge] ![experimental-badge]
+  * [storage-gke](#storage-gkeyaml--) ![core-badge] ![experimental-badge]
+  * [gke-a3-megagpu](#gke-a3-megagpuyaml--) ![core-badge] ![experimental-badge]
+  * [gke-a3-highgpu](#gke-a3-highgpuyaml--) ![core-badge] ![experimental-badge]
   * [htc-slurm-v5-legacy.yaml](#htc-slurm-v5-legacyyaml--) ![community-badge] ![experimental-badge]
   * [htc-slurm.yaml](#htc-slurmyaml-) ![community-badge]
   * [htc-htcondor.yaml](#htc-htcondoryaml--) ![community-badge] ![experimental-badge]
@@ -124,7 +126,7 @@ You can set the configuration using the CLI in the `create` and `expand`
 subcommands as well:
 
 ```shell
-./ghpc create examples/hpc-slurm.yaml \
+./gcluster create examples/hpc-slurm.yaml \
   --vars "project_id=${GOOGLE_CLOUD_PROJECT}" \
   --backend-config "bucket=${GCS_BUCKET}"
 ```
@@ -166,7 +168,7 @@ as follows:
 
 * Robust reconfiguration
 
-  Reconfiguration is now managed by a service that runs on each instance. This has removed the dependency on the Pub/Sub Google cloud service, and provides a more consistent reconfiguration experience (when calling `ghpc deploy blueprint.yaml -w`). Reconfiguration has also been enabled by default.
+  Reconfiguration is now managed by a service that runs on each instance. This has removed the dependency on the Pub/Sub Google cloud service, and provides a more consistent reconfiguration experience (when calling `gcluster deploy blueprint.yaml -w`). Reconfiguration has also been enabled by default.
 
 * Faster deployments
 
@@ -178,7 +180,7 @@ as follows:
 
 * Fewer dependencies in the deployment environment
 
-  Reconfiguration and compute node cleanup no longer require users to install local python dependencies in the deployment environment (where ghpc is called). This has allowed for these features to be enabled by default.
+  Reconfiguration and compute node cleanup no longer require users to install local python dependencies in the deployment environment (where gcluster is called). This has allowed for these features to be enabled by default.
 
 * Flexible node to partition relation
 
@@ -565,8 +567,8 @@ VM. The cluster has 2 partitions:
 To provision the cluster, please run:
 
 ```text
-./ghpc create examples/ml-slurm-v5-legacy.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
-./ghpc deploy ml-example
+./gcluster create examples/ml-slurm-v5-legacy.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
+./gcluster deploy ml-example
 ```
 
 After accessing the login node, you can activate the conda environment for each
@@ -590,7 +592,7 @@ sbatch -N 1 torch_test.sh
 When you are done, clean up the resources in reverse order of creation:
 
 ```text
-./ghpc destroy ml-example
+./gcluster destroy ml-example
 ```
 
 Finally, browse to the [Cloud Console][console-images] to delete your custom
@@ -614,8 +616,8 @@ VM. The cluster has 2 partitions:
 To provision the cluster, please run:
 
 ```text
-./ghpc create examples/ml-slurm.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
-./ghpc deploy ml-example-v6
+./gcluster create examples/ml-slurm.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
+./gcluster deploy ml-example-v6
 ```
 
 After accessing the login node, you can activate the conda environment for each
@@ -639,7 +641,7 @@ sbatch -N 1 torch_test.sh
 When you are done, clean up the resources in reverse order of creation:
 
 ```text
-./ghpc destroy ml-example-v6
+./gcluster destroy ml-example-v6
 ```
 
 Finally, browse to the [Cloud Console][console-images] to delete your custom
@@ -670,8 +672,8 @@ example takes the following steps:
 Create the deployment folder from the blueprint:
 
 ```text
-./ghpc create examples/image-builder-v5-legacy.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
-./ghpc deploy image-builder-001"
+./gcluster create examples/image-builder-v5-legacy.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
+./gcluster deploy image-builder-001"
 ```
 
 Follow the on-screen prompts to approve the creation of each deployment group.
@@ -795,8 +797,8 @@ example takes the following steps:
 Create the deployment folder from the blueprint:
 
 ```text
-./ghpc create examples/image-builder.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
-./ghpc deploy image-builder-v6-001"
+./gcluster create examples/image-builder.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
+./gcluster deploy image-builder-v6-001"
 ```
 
 Follow the on-screen prompts to approve the creation of each deployment group.
@@ -1277,7 +1279,7 @@ To use the blueprint you must supply the project id and the name of an existing
 bucket:
 
 ```shell
-./ghpc create community/examples/client-google-cloud-storage.yaml \
+./gcluster create community/examples/client-google-cloud-storage.yaml \
   --vars project_id=<project_id> \
   --vars existing_bucket_name=<name_of_existing_bucket>
 ```
@@ -1424,7 +1426,7 @@ GROMACS with GPUs and CPUs on Google Cloud. For full documentation, refer
 [document]: ../docs/videos/healthcare-and-life-sciences/README.md
 [hcls-blueprint.yaml]:  ../example/hcls-blueprint.yaml
 
-### [hpc-gke.yaml] ![community-badge] ![experimental-badge]
+### [hpc-gke.yaml] ![core-badge] ![experimental-badge]
 
 This blueprint uses GKE to provision a Kubernetes cluster with a system node
 pool (included in gke-cluster module) and an autoscaling compute node pool. It
@@ -1436,7 +1438,7 @@ to the cluster using `kubectl` and will run on the specified node pool.
 
 [hpc-gke.yaml]: ../examples/hpc-gke.yaml
 
-### [ml-gke.yaml] ![community-badge] ![experimental-badge]
+### [ml-gke.yaml] ![core-badge] ![experimental-badge]
 
 This blueprint demonstrates how to set up a GPU GKE cluster using the Cluster
 Toolkit. It includes:
@@ -1504,7 +1506,7 @@ credentials for the created cluster_ and _submit a job calling `nvidia_smi`_.
 [ml-gke.yaml]: ../examples/ml-gke.yaml
 [`kubernetes-operations`]: ../community/modules/scripts/kubernetes-operations/README.md
 
-### [storage-gke.yaml] ![community-badge] ![experimental-badge]
+### [storage-gke.yaml] ![core-badge] ![experimental-badge]
 
 This blueprint shows how to use different storage options with GKE in the toolkit.
 
@@ -1534,6 +1536,52 @@ cleaned up when the job is deleted.
 > [whatismyip.com](https://whatismyip.com) to determine your IP address.
 
 [storage-gke.yaml]: ../examples/storage-gke.yaml
+
+### [gke-a3-megagpu.yaml] ![core-badge] ![experimental-badge]
+
+This blueprint shows how to provision a GKE cluster with A3 Mega machines in the toolkit.
+
+After provisioning the cluster and the nodepool, the below components will be installed
+to enable GPUDirect for the A3 Mega machines.
+
+* NCCL plugin for GPUDirect [TCPXO](https://github.com/GoogleCloudPlatform/container-engine-accelerators/tree/master/gpudirect-tcpxo)
+* [NRI](https://github.com/GoogleCloudPlatform/container-engine-accelerators/tree/master/nri_device_injector) device injector plugin
+* Provide support for injecting GPUDirect required components(annotations, volumes, rxdm sidecar etc.) into the user workload in the form of Kubernetes Job.
+  * Provide sample workload to showcase how it will be updated with the required components injected, and how it can be deployed.
+  * Allow user to use the provided script to update their own workload and deploy.
+
+> [!Note]
+> The Kubernetes API server will only allow requests from authorized networks.
+> The `gke-cluster` module needs access to the Kubernetes API server
+> to apply a manifest. **You must use
+> the `authorized_cidr` variable to supply an authorized network which contains
+> the IP address of the machine deploying the blueprint, for example
+> `--vars authorized_cidr=<your-ip-address>/32`.** You can use a service like
+> [whatismyip.com](https://whatismyip.com) to determine your IP address.
+
+[gke-a3-megagpu.yaml]: ../examples/gke-a3-megagpu.yaml
+
+### [gke-a3-highgpu.yaml] ![core-badge] ![experimental-badge]
+
+This blueprint shows how to provision a GKE cluster with A3 High machines in the toolkit.
+
+After provisioning the cluster and the nodepool, the below components will be installed
+to enable GPUDirect for the A3 High machines.
+
+* NCCL plugin for GPUDirect [TCPX](https://github.com/GoogleCloudPlatform/container-engine-accelerators/tree/master/gpudirect-tcpx)
+* [NRI](https://github.com/GoogleCloudPlatform/container-engine-accelerators/tree/master/nri_device_injector) device injector plugin
+* Provide support for injecting GPUDirect required components(annotations, volumes, rxdm sidecar etc.) into the user workload in the form of Kubernetes Job via a script.
+
+> [!Note]
+> The Kubernetes API server will only allow requests from authorized networks.
+> The `gke-cluster` module needs access to the Kubernetes API server
+> to apply a manifest. **You must use
+> the `authorized_cidr` variable to supply an authorized network which contains
+> the IP address of the machine deploying the blueprint, for example
+> `--vars authorized_cidr=<your-ip-address>/32`.** You can use a service like
+> [whatismyip.com](https://whatismyip.com) to determine your IP address.
+
+[gke-a3-highgpu.yaml]: ../examples/gke-a3-highgpu.yaml
 
 ### [htc-htcondor.yaml] ![community-badge] ![experimental-badge]
 
@@ -1723,6 +1771,8 @@ scratch.
 ```yaml
 ---
 blueprint_name: # boilerplate-blueprint
+toolkit_modules_url: # github.com/GoogleCloudPlatform/cluster-toolkit
+toolkit_modules_version: # v1.15.0
 
 vars:
   project_id: # my-project-id
@@ -1745,6 +1795,8 @@ deployment_groups:
    must abide to label value naming constraints: `blueprint_name` must be at most
    63 characters long, and can only contain lowercase letters, numeric
    characters, underscores and dashes.
+
+* **toolkit_modules_url** and **toolkit_modules_version** (optional): The blueprint schema provides the optional fields `toolkit_modules_url` and `toolkit_modules_version` to version a blueprint. When these fields are provided, any module in the blueprint with a reference to an embedded module in its source field will be updated to reference the specified GitHub source and toolkit version in the expanded blueprint. `toolkit_modules_url` specifies the base URL of the GitHub repository containing the modules and `toolkit_modules_version` specifies the version of the modules to use. `toolkit_modules_url` and `toolkit_modules_version` should be provided together when in use.
 
 ### Deployment Variables
 
@@ -1943,7 +1995,7 @@ To avoid these issues, the `ghpc_stage` function can be used to copy a file (or 
 ```
 
 The `ghpc_stage` function will always look first in the path specified in the blueprint. If the file is not found at this path then `ghpc_stage` will look for the staged file in the deployment folder, if a deployment folder exists.
-This means that you can redeploy a blueprint (`ghpc deploy <blueprint> -w`) so long as you have the deployment folder from the original deployment, even if locally referenced files are not available.
+This means that you can redeploy a blueprint (`gcluster deploy <blueprint> -w`) so long as you have the deployment folder from the original deployment, even if locally referenced files are not available.
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 ## Requirements

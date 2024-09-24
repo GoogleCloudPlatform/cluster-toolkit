@@ -4,6 +4,11 @@ This module creates [parallelstore](https://cloud.google.com/parallelstore)
 instance. Parallelstore is Google Cloud's first party parallel file system
 service based on [Intel DAOS](https://docs.daos.io/v2.2/)
 
+### Supported Operating Systems
+
+A parallelstore instance can be used with Slurm cluster or compute
+VM running Ubuntu 22.04, debian 12 or HPC Rocky Linux 8.
+
 ### Parallelstore Quota
 
 To get access to a private preview of Parallelstore APIs, your project needs to
@@ -30,9 +35,6 @@ issues. You can specify different mount options as follows,
 
 For parallelstore instance, Below snippet creates new VPC and configures private-service-access
 for this newly created network.
-
-The parallelstore instance created here can be used with Slurm cluster or compute
-VM running Ubuntu 22.04, debian 12 or HPC Rocky Linux 8.
 
 ```yaml
  - id: network
@@ -147,8 +149,8 @@ No modules.
 | <a name="input_local_mount"></a> [local\_mount](#input\_local\_mount) | The mount point where the contents of the device may be accessed after mounting. | `string` | `"/parallelstore"` | no |
 | <a name="input_mount_options"></a> [mount\_options](#input\_mount\_options) | Options describing various aspects of the parallelstore instance. | `string` | `"disable-wb-cache,thread-count=16,eq-count=8"` | no |
 | <a name="input_name"></a> [name](#input\_name) | Name of parallelstore instance. | `string` | `null` | no |
-| <a name="input_network_id"></a> [network\_id](#input\_network\_id) | The ID of the GCE VPC network to which the instance is connected given in the format:<br>`projects/<project_id>/global/networks/<network_name>`" | `string` | n/a | yes |
-| <a name="input_private_vpc_connection_peering"></a> [private\_vpc\_connection\_peering](#input\_private\_vpc\_connection\_peering) | The name of the VPC Network peering connection.<br>If using new VPC, please use community/modules/network/private-service-access to create private-service-access and<br>If using existing VPC with private-service-access enabled, set this manually." | `string` | n/a | yes |
+| <a name="input_network_id"></a> [network\_id](#input\_network\_id) | The ID of the GCE VPC network to which the instance is connected given in the format:<br/>`projects/<project_id>/global/networks/<network_name>`" | `string` | n/a | yes |
+| <a name="input_private_vpc_connection_peering"></a> [private\_vpc\_connection\_peering](#input\_private\_vpc\_connection\_peering) | The name of the VPC Network peering connection.<br/>If using new VPC, please use community/modules/network/private-service-access to create private-service-access and<br/>If using existing VPC with private-service-access enabled, set this manually." | `string` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created. | `string` | n/a | yes |
 | <a name="input_size_gb"></a> [size\_gb](#input\_size\_gb) | Storage size of the parallelstore instance in GB. | `number` | `12000` | no |
 | <a name="input_zone"></a> [zone](#input\_zone) | Location for parallelstore instance. | `string` | n/a | yes |

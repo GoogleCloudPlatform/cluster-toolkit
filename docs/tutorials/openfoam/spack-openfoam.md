@@ -31,7 +31,7 @@ Once you have selected a project, click START.
 ## Enable APIs & Permissions
 
 In a new Google Cloud project there are several apis that must be enabled to
-deploy your HPC cluster. These will be caught when you perform `./ghpc create`
+deploy your HPC cluster. These will be caught when you perform `./gcluster create`
 but you can save time by enabling them now by running:
 
 <walkthrough-enable-apis apis="file.googleapis.com,compute.googleapis.com,logging.googleapis.com,serviceusage.googleapis.com"></walkthrough-enable-apis>
@@ -59,11 +59,11 @@ To build Cluster Toolkit binary from source run:
 make
 ```
 
-You should now have a binary named ghpc in the current directory. To verify the
+You should now have a binary named gcluster in the current directory. To verify the
 build run:
 
 ```bash
-./ghpc --version
+./gcluster --version
 ```
 
 This should show you the version of the Cluster Toolkit you are using.
@@ -88,11 +88,11 @@ This file describes the cluster you will deploy. It defines:
   * a Slurm controller
   * An auto-scaling Slurm partition
 
-After you have inspected the file, use the ghpc binary to create a deployment
+After you have inspected the file, use the gcluster binary to create a deployment
 folder by running:
 
 ```bash
-./ghpc create docs/tutorials/openfoam/spack-openfoam.yaml --vars project_id=<walkthrough-project-id/>
+./gcluster create docs/tutorials/openfoam/spack-openfoam.yaml --vars project_id=<walkthrough-project-id/>
 ```
 
 > **_NOTE:_** The `--vars` argument is used to override `project_id` in the
@@ -106,7 +106,7 @@ contains the terraform needed to deploy your cluster.
 Use below command to deploy your cluster.
 
 ```bash
-./ghpc deploy spack-openfoam
+./gcluster deploy spack-openfoam
 ```
 
 You can also use below command to generate a _plan_ that describes the Google
@@ -272,7 +272,7 @@ exit
 Run the following command in the cloud shell terminal to destroy the cluster:
 
 ```bash
-./ghpc destroy spack-openfoam
+./gcluster destroy spack-openfoam
 ```
 
 When complete you should see something like:

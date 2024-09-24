@@ -11,9 +11,9 @@ The [user guide][slurm-ug] provides detailed instructions on customizing and
 enhancing the Slurm on GCP cluster as well as recommendations on configuring the
 controller for optimal performance at different scales.
 
-[slurm-gcp]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.5.8
-[slurm\_controller\_instance]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.5.8/terraform/slurm_cluster/modules/slurm_controller_instance
-[slurm\_instance\_template]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.5.8/terraform/slurm_cluster/modules/slurm_instance_template
+[slurm-gcp]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.7.0
+[slurm\_controller\_instance]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.7.0/terraform/slurm_cluster/modules/slurm_controller_instance
+[slurm\_instance\_template]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.7.0/terraform/slurm_cluster/modules/slurm_instance_template
 [slurm-ug]: https://goo.gle/slurm-gcp-user-guide.
 [enable\_cleanup\_compute]: #input\_enable\_cleanup\_compute
 [enable\_cleanup\_subscriptions]: #input\_enable\_cleanup\_subscriptions
@@ -49,7 +49,7 @@ partitions and slurm configuration in a running, active cluster.
 To reconfigure a running cluster:
 
 1. Edit the blueprint with the desired configuration changes
-2. Call `ghpc create <blueprint> -w` to overwrite the deployment directory
+2. Call `gcluster create <blueprint> -w` to overwrite the deployment directory
 3. Follow instructions in terminal to deploy
 
 The following are examples of updates that can be made to a running cluster:
@@ -73,6 +73,37 @@ page.
 
 More information on GPU support in Slurm on GCP and other Cluster Toolkit modules
 can be found at [docs/gpu-support.md](../../../../docs/gpu-support.md)
+
+## Reservation for Scheduled Maintenance
+
+A [maintenance event](https://cloud.google.com/compute/docs/instances/host-maintenance-overview#maintenanceevents) is when a compute engine stops a VM to perform a hardware or
+software update which is determined by the host maintenance policy. This can
+also affect the running jobs if the maintenance kicks in. Now, Customers can
+protect jobs from getting terminated due to maintenance using the cluster
+toolkit. You can enable creation of reservation for scheduled maintenance for
+your compute nodeset and Slurm will reserve your node for maintenance during the
+maintenance window. If you try to schedule any jobs which overlap with the
+maintenance reservation, Slurm would not schedule any job.
+
+You can specify in your blueprint like
+
+```yaml
+  - id: compute_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network]
+    settings:
+      enable_maintenance_reservation: true
+```
+
+To enable creation of reservation for maintenance.
+
+While running job on slurm cluster, you can specify total run time of the job
+using [-t flag](https://slurm.schedmd.com/srun.html#OPT_time).This would only
+run the job outside of the maintenance window.
+
+```shell
+srun -n1 -pcompute -t 10:00 <job.sh>
+```
 
 ## Placement Max Distance
 
@@ -181,28 +212,28 @@ limitations under the License.
 |------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.3 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 4.84 |
-| <a name="requirement_null"></a> [null](#requirement\_null) | >= 3.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
 | <a name="provider_google"></a> [google](#provider\_google) | >= 4.84 |
-| <a name="provider_null"></a> [null](#provider\_null) | >= 3.0 |
 
 ## Modules
 
 | Name | Source | Version |
 |------|--------|---------|
 | <a name="module_bucket"></a> [bucket](#module\_bucket) | terraform-google-modules/cloud-storage/google | ~> 5.0 |
-| <a name="module_daos_network_storage_scripts"></a> [daos\_network\_storage\_scripts](#module\_daos\_network\_storage\_scripts) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | v1.36.0&depth=1 |
-| <a name="module_slurm_controller_instance"></a> [slurm\_controller\_instance](#module\_slurm\_controller\_instance) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/_slurm_instance | 6.6.1 |
-| <a name="module_slurm_controller_template"></a> [slurm\_controller\_template](#module\_slurm\_controller\_template) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template | 2aa6ad1 |
+| <a name="module_daos_network_storage_scripts"></a> [daos\_network\_storage\_scripts](#module\_daos\_network\_storage\_scripts) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | v1.39.0&depth=1 |
+| <a name="module_nodeset_cleanup"></a> [nodeset\_cleanup](#module\_nodeset\_cleanup) | ./modules/cleanup_compute | n/a |
+| <a name="module_nodeset_tpu_cleanup"></a> [nodeset\_tpu\_cleanup](#module\_nodeset\_tpu\_cleanup) | ./modules/cleanup_compute | n/a |
+| <a name="module_slurm_controller_instance"></a> [slurm\_controller\_instance](#module\_slurm\_controller\_instance) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/_slurm_instance | 6.7.0 |
+| <a name="module_slurm_controller_template"></a> [slurm\_controller\_template](#module\_slurm\_controller\_template) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template | 729f513 |
 | <a name="module_slurm_files"></a> [slurm\_files](#module\_slurm\_files) | ./modules/slurm_files | n/a |
-| <a name="module_slurm_login_instance"></a> [slurm\_login\_instance](#module\_slurm\_login\_instance) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/_slurm_instance | 6.6.1 |
-| <a name="module_slurm_login_template"></a> [slurm\_login\_template](#module\_slurm\_login\_template) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template | 2aa6ad1 |
-| <a name="module_slurm_nodeset_template"></a> [slurm\_nodeset\_template](#module\_slurm\_nodeset\_template) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template | 2aa6ad1 |
-| <a name="module_slurm_nodeset_tpu"></a> [slurm\_nodeset\_tpu](#module\_slurm\_nodeset\_tpu) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_nodeset_tpu | 6.6.1 |
+| <a name="module_slurm_login_instance"></a> [slurm\_login\_instance](#module\_slurm\_login\_instance) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/_slurm_instance | 6.7.0 |
+| <a name="module_slurm_login_template"></a> [slurm\_login\_template](#module\_slurm\_login\_template) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template | 729f513 |
+| <a name="module_slurm_nodeset_template"></a> [slurm\_nodeset\_template](#module\_slurm\_nodeset\_template) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template | 729f513 |
+| <a name="module_slurm_nodeset_tpu"></a> [slurm\_nodeset\_tpu](#module\_slurm\_nodeset\_tpu) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_nodeset_tpu | 6.7.0 |
 
 ## Resources
 
@@ -213,10 +244,8 @@ limitations under the License.
 | [google_secret_manager_secret_version.cloudsql_version](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/secret_manager_secret_version) | resource |
 | [google_storage_bucket_iam_binding.legacy_readers](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_iam_binding) | resource |
 | [google_storage_bucket_iam_binding.viewers](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_iam_binding) | resource |
-| [null_resource.cleanup_compute](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
-| [null_resource.cleanup_compute_depenencies](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
-| [google_compute_default_service_account.default](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_default_service_account) | data source |
 | [google_compute_image.slurm](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_image) | data source |
+| [google_project.this](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/project) | data source |
 
 ## Inputs
 
@@ -229,8 +258,8 @@ limitations under the License.
 | <a name="input_bucket_name"></a> [bucket\_name](#input\_bucket\_name) | Name of GCS bucket.<br>Ignored when 'create\_bucket' is true. | `string` | `null` | no |
 | <a name="input_can_ip_forward"></a> [can\_ip\_forward](#input\_can\_ip\_forward) | Enable IP forwarding, for NAT instances for example. | `bool` | `false` | no |
 | <a name="input_cgroup_conf_tpl"></a> [cgroup\_conf\_tpl](#input\_cgroup\_conf\_tpl) | Slurm cgroup.conf template file path. | `string` | `null` | no |
-| <a name="input_cloud_parameters"></a> [cloud\_parameters](#input\_cloud\_parameters) | cloud.conf options. Defaults inherited from [Slurm GCP repo](https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/terraform/slurm_cluster/modules/slurm_files/README_TF.md#input_cloud_parameters) | <pre>object({<br>    no_comma_params = optional(bool)<br>    resume_rate     = optional(number)<br>    resume_timeout  = optional(number)<br>    suspend_rate    = optional(number)<br>    suspend_timeout = optional(number)<br>    topology_plugin = optional(string)<br>    tree_width      = optional(number)<br>  })</pre> | `{}` | no |
-| <a name="input_cloudsql"></a> [cloudsql](#input\_cloudsql) | Use this database instead of the one on the controller.<br>  server\_ip : Address of the database server.<br>  user      : The user to access the database as.<br>  password  : The password, given the user, to access the given database. (sensitive)<br>  db\_name   : The database to access. | <pre>object({<br>    server_ip = string<br>    user      = string<br>    password  = string # sensitive<br>    db_name   = string<br>  })</pre> | `null` | no |
+| <a name="input_cloud_parameters"></a> [cloud\_parameters](#input\_cloud\_parameters) | cloud.conf options. Defaults inherited from [Slurm GCP repo](https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/terraform/slurm_cluster/modules/slurm_files/README_TF.md#input_cloud_parameters) | <pre>object({<br>    no_comma_params = optional(bool)<br>    resume_rate     = optional(number)<br>    resume_timeout  = optional(number)<br>    suspend_rate    = optional(number)<br>    suspend_timeout = optional(number)<br>    topology_plugin = optional(string)<br>    topology_param  = optional(string)<br>    tree_width      = optional(number)<br>  })</pre> | `{}` | no |
+| <a name="input_cloudsql"></a> [cloudsql](#input\_cloudsql) | Use this database instead of the one on the controller.<br>  server\_ip : Address of the database server.<br>  user      : The user to access the database as.<br>  password  : The password, given the user, to access the given database. (sensitive)<br>  db\_name   : The database to access.<br>  user\_managed\_replication : The list of location and (optional) kms\_key\_name for secret | <pre>object({<br>    server_ip = string<br>    user      = string<br>    password  = string # sensitive<br>    db_name   = string<br>    user_managed_replication = optional(list(object({<br>      location     = string<br>      kms_key_name = optional(string)<br>    })), [])<br>  })</pre> | `null` | no |
 | <a name="input_compute_startup_script"></a> [compute\_startup\_script](#input\_compute\_startup\_script) | Startup script used by the compute VMs. | `string` | `"# no-op"` | no |
 | <a name="input_compute_startup_scripts_timeout"></a> [compute\_startup\_scripts\_timeout](#input\_compute\_startup\_scripts\_timeout) | The timeout (seconds) applied to each script in compute\_startup\_scripts. If<br>any script exceeds this timeout, then the instance setup process is considered<br>failed and handled accordingly.<br><br>NOTE: When set to 0, the timeout is considered infinite and thus disabled. | `number` | `300` | no |
 | <a name="input_controller_startup_script"></a> [controller\_startup\_script](#input\_controller\_startup\_script) | Startup script used by the controller VM. | `string` | `"# no-op"` | no |
@@ -245,7 +274,7 @@ limitations under the License.
 | <a name="input_disk_size_gb"></a> [disk\_size\_gb](#input\_disk\_size\_gb) | Boot disk size in GB. | `number` | `50` | no |
 | <a name="input_disk_type"></a> [disk\_type](#input\_disk\_type) | Boot disk type, can be either hyperdisk-balanced, pd-ssd, pd-standard, pd-balanced, or pd-extreme. | `string` | `"pd-ssd"` | no |
 | <a name="input_enable_bigquery_load"></a> [enable\_bigquery\_load](#input\_enable\_bigquery\_load) | Enables loading of cluster job usage into big query.<br><br>NOTE: Requires Google Bigquery API. | `bool` | `false` | no |
-| <a name="input_enable_cleanup_compute"></a> [enable\_cleanup\_compute](#input\_enable\_cleanup\_compute) | Enables automatic cleanup of compute nodes and resource policies (e.g.<br>placement groups) managed by this module, when cluster is destroyed.<br><br>*WARNING*: Toggling this off will impact the running workload.<br>Deployed compute nodes and controller will be destroyed. | `bool` | `true` | no |
+| <a name="input_enable_cleanup_compute"></a> [enable\_cleanup\_compute](#input\_enable\_cleanup\_compute) | Enables automatic cleanup of compute nodes and resource policies (e.g.<br>placement groups) managed by this module, when cluster is destroyed.<br><br>*WARNING*: Toggling this off will impact the running workload.<br>Deployed compute nodes will be destroyed. | `bool` | `true` | no |
 | <a name="input_enable_confidential_vm"></a> [enable\_confidential\_vm](#input\_enable\_confidential\_vm) | Enable the Confidential VM configuration. Note: the instance image must support option. | `bool` | `false` | no |
 | <a name="input_enable_controller_public_ips"></a> [enable\_controller\_public\_ips](#input\_enable\_controller\_public\_ips) | If set to true. The controller will have a random public IP assigned to it. Ignored if access\_config is set. | `bool` | `false` | no |
 | <a name="input_enable_debug_logging"></a> [enable\_debug\_logging](#input\_enable\_debug\_logging) | Enables debug logging mode. | `bool` | `false` | no |
@@ -273,7 +302,7 @@ limitations under the License.
 | <a name="input_metadata"></a> [metadata](#input\_metadata) | Metadata, provided as a map. | `map(string)` | `{}` | no |
 | <a name="input_min_cpu_platform"></a> [min\_cpu\_platform](#input\_min\_cpu\_platform) | Specifies a minimum CPU platform. Applicable values are the friendly names of<br>CPU platforms, such as Intel Haswell or Intel Skylake. See the complete list:<br>https://cloud.google.com/compute/docs/instances/specify-min-cpu-platform | `string` | `null` | no |
 | <a name="input_network_storage"></a> [network\_storage](#input\_network\_storage) | An array of network attached storage mounts to be configured on all instances. | <pre>list(object({<br>    server_ip             = string,<br>    remote_mount          = string,<br>    local_mount           = string,<br>    fs_type               = string,<br>    mount_options         = string,<br>    client_install_runner = optional(map(string))<br>    mount_runner          = optional(map(string))<br>  }))</pre> | `[]` | no |
-| <a name="input_nodeset"></a> [nodeset](#input\_nodeset) | Define nodesets, as a list. | <pre>list(object({<br>    node_count_static      = optional(number, 0)<br>    node_count_dynamic_max = optional(number, 1)<br>    node_conf              = optional(map(string), {})<br>    nodeset_name           = string<br>    additional_disks = optional(list(object({<br>      disk_name    = optional(string)<br>      device_name  = optional(string)<br>      disk_size_gb = optional(number)<br>      disk_type    = optional(string)<br>      disk_labels  = optional(map(string), {})<br>      auto_delete  = optional(bool, true)<br>      boot         = optional(bool, false)<br>    })), [])<br>    bandwidth_tier         = optional(string, "platform_default")<br>    can_ip_forward         = optional(bool, false)<br>    disable_smt            = optional(bool, false)<br>    disk_auto_delete       = optional(bool, true)<br>    disk_labels            = optional(map(string), {})<br>    disk_size_gb           = optional(number)<br>    disk_type              = optional(string)<br>    enable_confidential_vm = optional(bool, false)<br>    enable_placement       = optional(bool, false)<br>    enable_oslogin         = optional(bool, true)<br>    enable_shielded_vm     = optional(bool, false)<br>    gpu = optional(object({<br>      count = number<br>      type  = string<br>    }))<br>    labels                   = optional(map(string), {})<br>    machine_type             = optional(string)<br>    maintenance_interval     = optional(string)<br>    instance_properties_json = string<br>    metadata                 = optional(map(string), {})<br>    min_cpu_platform         = optional(string)<br>    network_tier             = optional(string, "STANDARD")<br>    network_storage = optional(list(object({<br>      server_ip             = string<br>      remote_mount          = string<br>      local_mount           = string<br>      fs_type               = string<br>      mount_options         = string<br>      client_install_runner = optional(map(string))<br>      mount_runner          = optional(map(string))<br>    })), [])<br>    on_host_maintenance = optional(string)<br>    preemptible         = optional(bool, false)<br>    region              = optional(string)<br>    service_account = optional(object({<br>      email  = optional(string)<br>      scopes = optional(list(string), ["https://www.googleapis.com/auth/cloud-platform"])<br>    }))<br>    shielded_instance_config = optional(object({<br>      enable_integrity_monitoring = optional(bool, true)<br>      enable_secure_boot          = optional(bool, true)<br>      enable_vtpm                 = optional(bool, true)<br>    }))<br>    source_image_family  = optional(string)<br>    source_image_project = optional(string)<br>    source_image         = optional(string)<br>    subnetwork_self_link = string<br>    additional_networks = optional(list(object({<br>      network            = string<br>      subnetwork         = string<br>      subnetwork_project = string<br>      network_ip         = string<br>      nic_type           = string<br>      stack_type         = string<br>      queue_count        = number<br>      access_config = list(object({<br>        nat_ip       = string<br>        network_tier = string<br>      }))<br>      ipv6_access_config = list(object({<br>        network_tier = string<br>      }))<br>      alias_ip_range = list(object({<br>        ip_cidr_range         = string<br>        subnetwork_range_name = string<br>      }))<br>    })))<br>    access_config = optional(list(object({<br>      nat_ip       = string<br>      network_tier = string<br>    })))<br>    spot               = optional(bool, false)<br>    tags               = optional(list(string), [])<br>    termination_action = optional(string)<br>    reservation_name   = optional(string)<br>    startup_script = optional(list(object({<br>      filename = string<br>    content = string })), [])<br><br>    zone_target_shape = string<br>    zone_policy_allow = set(string)<br>    zone_policy_deny  = set(string)<br>  }))</pre> | `[]` | no |
+| <a name="input_nodeset"></a> [nodeset](#input\_nodeset) | Define nodesets, as a list. | <pre>list(object({<br>    node_count_static      = optional(number, 0)<br>    node_count_dynamic_max = optional(number, 1)<br>    node_conf              = optional(map(string), {})<br>    nodeset_name           = string<br>    additional_disks = optional(list(object({<br>      disk_name    = optional(string)<br>      device_name  = optional(string)<br>      disk_size_gb = optional(number)<br>      disk_type    = optional(string)<br>      disk_labels  = optional(map(string), {})<br>      auto_delete  = optional(bool, true)<br>      boot         = optional(bool, false)<br>    })), [])<br>    bandwidth_tier                 = optional(string, "platform_default")<br>    can_ip_forward                 = optional(bool, false)<br>    disable_smt                    = optional(bool, false)<br>    disk_auto_delete               = optional(bool, true)<br>    disk_labels                    = optional(map(string), {})<br>    disk_size_gb                   = optional(number)<br>    disk_type                      = optional(string)<br>    enable_confidential_vm         = optional(bool, false)<br>    enable_placement               = optional(bool, false)<br>    enable_oslogin                 = optional(bool, true)<br>    enable_shielded_vm             = optional(bool, false)<br>    enable_maintenance_reservation = optional(bool, true)<br>    gpu = optional(object({<br>      count = number<br>      type  = string<br>    }))<br>    labels                   = optional(map(string), {})<br>    machine_type             = optional(string)<br>    maintenance_interval     = optional(string)<br>    instance_properties_json = string<br>    metadata                 = optional(map(string), {})<br>    min_cpu_platform         = optional(string)<br>    network_tier             = optional(string, "STANDARD")<br>    network_storage = optional(list(object({<br>      server_ip             = string<br>      remote_mount          = string<br>      local_mount           = string<br>      fs_type               = string<br>      mount_options         = string<br>      client_install_runner = optional(map(string))<br>      mount_runner          = optional(map(string))<br>    })), [])<br>    on_host_maintenance = optional(string)<br>    preemptible         = optional(bool, false)<br>    region              = optional(string)<br>    service_account = optional(object({<br>      email  = optional(string)<br>      scopes = optional(list(string), ["https://www.googleapis.com/auth/cloud-platform"])<br>    }))<br>    shielded_instance_config = optional(object({<br>      enable_integrity_monitoring = optional(bool, true)<br>      enable_secure_boot          = optional(bool, true)<br>      enable_vtpm                 = optional(bool, true)<br>    }))<br>    source_image_family  = optional(string)<br>    source_image_project = optional(string)<br>    source_image         = optional(string)<br>    subnetwork_self_link = string<br>    additional_networks = optional(list(object({<br>      network            = string<br>      subnetwork         = string<br>      subnetwork_project = string<br>      network_ip         = string<br>      nic_type           = string<br>      stack_type         = string<br>      queue_count        = number<br>      access_config = list(object({<br>        nat_ip       = string<br>        network_tier = string<br>      }))<br>      ipv6_access_config = list(object({<br>        network_tier = string<br>      }))<br>      alias_ip_range = list(object({<br>        ip_cidr_range         = string<br>        subnetwork_range_name = string<br>      }))<br>    })))<br>    access_config = optional(list(object({<br>      nat_ip       = string<br>      network_tier = string<br>    })))<br>    spot               = optional(bool, false)<br>    tags               = optional(list(string), [])<br>    termination_action = optional(string)<br>    reservation_name   = optional(string)<br>    startup_script = optional(list(object({<br>      filename = string<br>    content = string })), [])<br><br>    zone_target_shape = string<br>    zone_policy_allow = set(string)<br>    zone_policy_deny  = set(string)<br>  }))</pre> | `[]` | no |
 | <a name="input_nodeset_dyn"></a> [nodeset\_dyn](#input\_nodeset\_dyn) | Defines dynamic nodesets, as a list. | <pre>list(object({<br>    nodeset_name    = string<br>    nodeset_feature = string<br>  }))</pre> | `[]` | no |
 | <a name="input_nodeset_tpu"></a> [nodeset\_tpu](#input\_nodeset\_tpu) | Define TPU nodesets, as a list. | <pre>list(object({<br>    node_count_static      = optional(number, 0)<br>    node_count_dynamic_max = optional(number, 5)<br>    nodeset_name           = string<br>    enable_public_ip       = optional(bool, false)<br>    node_type              = string<br>    accelerator_config = optional(object({<br>      topology = string<br>      version  = string<br>      }), {<br>      topology = ""<br>      version  = ""<br>    })<br>    tf_version   = string<br>    preemptible  = optional(bool, false)<br>    preserve_tpu = optional(bool, false)<br>    zone         = string<br>    data_disks   = optional(list(string), [])<br>    docker_image = optional(string, "")<br>    network_storage = optional(list(object({<br>      server_ip             = string<br>      remote_mount          = string<br>      local_mount           = string<br>      fs_type               = string<br>      mount_options         = string<br>      client_install_runner = optional(map(string))<br>      mount_runner          = optional(map(string))<br>    })), [])<br>    subnetwork = string<br>    service_account = optional(object({<br>      email  = optional(string)<br>      scopes = optional(list(string), ["https://www.googleapis.com/auth/cloud-platform"])<br>    }))<br>    project_id = string<br>    reserved   = optional(string, false)<br>  }))</pre> | `[]` | no |
 | <a name="input_on_host_maintenance"></a> [on\_host\_maintenance](#input\_on\_host\_maintenance) | Instance availability Policy. | `string` | `"MIGRATE"` | no |

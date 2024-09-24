@@ -25,11 +25,10 @@ locals {
     }
   ]
 
-  service_account_email = coalesce(var.service_account_email, data.google_compute_default_service_account.default.email)
+  synth_def_sa_email = "${data.google_project.this.number}-compute@developer.gserviceaccount.com"
 
-  # can't rely on `email=null` as it's used to instantiate `cloudsql_secret_accessor`
   service_account = {
-    email  = local.service_account_email
+    email  = coalesce(var.service_account_email, local.synth_def_sa_email)
     scopes = var.service_account_scopes
   }
 
@@ -44,7 +43,7 @@ locals {
 
 # INSTANCE TEMPLATE
 module "slurm_controller_template" {
-  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=2aa6ad1"
+  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=729f513"
 
   project_id          = var.project_id
   region              = var.region
@@ -100,7 +99,7 @@ locals {
 }
 
 module "slurm_controller_instance" {
-  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/_slurm_instance?ref=6.6.1"
+  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/_slurm_instance?ref=6.7.0"
 
   access_config       = var.enable_controller_public_ips ? [local.access_config] : []
   add_hostname_suffix = false
@@ -116,12 +115,7 @@ module "slurm_controller_instance" {
   zone                = var.zone
   metadata            = var.metadata
 
-  labels = merge(local.labels, local.files_cs_labels)
-
-  depends_on = [
-    # Ensure that controller is destroyed BEFORE doing cleanup
-    null_resource.cleanup_compute[0],
-  ]
+  labels = local.labels
 }
 
 # SECRETS: CLOUDSQL
@@ -131,7 +125,27 @@ resource "google_secret_manager_secret" "cloudsql" {
   secret_id = "${local.slurm_cluster_name}-slurm-secret-cloudsql"
 
   replication {
-    auto {}
+    dynamic "auto" {
+      for_each = length(var.cloudsql.user_managed_replication) == 0 ? [1] : []
+      content {}
+    }
+    dynamic "user_managed" {
+      for_each = length(var.cloudsql.user_managed_replication) == 0 ? [] : [1]
+      content {
+        dynamic "replicas" {
+          for_each = nonsensitive(var.cloudsql.user_managed_replication)
+          content {
+            location = replicas.value.location
+            dynamic "customer_managed_encryption" {
+              for_each = compact([replicas.value.kms_key_name])
+              content {
+                kms_key_name = customer_managed_encryption.value
+              }
+            }
+          }
+        }
+      }
+    }
   }
 
   labels = {
