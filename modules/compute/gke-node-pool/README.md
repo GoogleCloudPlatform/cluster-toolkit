@@ -73,7 +73,21 @@ use-cases). In this case, ensure that you turn off the
 [enable_secure_boot](#input\_enable\_secure\_boot) option to allow unsigned
 kernel modules to be loaded.
 
-To maximize GPU network bandwidth, nodepools accept multiple VPCs. Pass a multivpc module to gke-node-pool module, and [take these steps] (https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#install-gpudirect-tcpx-nccl) to install GPUDirect, configure NCCL, use recommended settings, and add GPUDirect to your pods.
+#### Maximize GPU network bandwidth with GPUDirect and multi-networking
+For A3 Series machines to achieve optimal performance , GKE provide two networking stacks for remote direct memory access (RDMA):
+
+- A3 High machine types (a3-highgpu-8g): utilize GPUDirect-TCPX to reduce the overhead required to transfer packet payloads to and from GPUs, which significantly improves throughput at scale compared to GPUs that don't use GPUDirect.
+- A3 Mega machine types (a3-megagpu-8g): utilize GPUDirect-TCPXO to improve GPU to GPU communication, and further improves GPU to VM communication.
+
+To achieve this, when creating nodepools with A3 Series machine type, pass in a multivpc module to the gke-node-pool module, and the gke-node-pool module would detect the eligible machine type and enable GPUDirect for it. More specifically, the below components will be installed in the nodepool for enabling GPUDirect.
+
+- Install NCCL plugin for GPUDirect [TCPX](https://github.com/GoogleCloudPlatform/container-engine-accelerators/tree/master/gpudirect-tcpx) or [TCPXO](https://github.com/GoogleCloudPlatform/container-engine-accelerators/tree/master/gpudirect-tcpxo)
+- Install [NRI](https://github.com/GoogleCloudPlatform/container-engine-accelerators/tree/master/nri_device_injector) device injector plugin
+- Provide support for injecting GPUDirect required components(annotations, volumes, rxdm sidecar etc.) into the user workload in the form of Kubernetes Job.
+  - Provide sample workload to showcase how it will be updated with the required components injected, and how it can be deployed.
+  - Allow user to use the provided script to update their own workload and deploy.
+
+The GPUDirect supports included in the Cluster Toolkit aim to automate the [GPUDirect User Guid](https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#install-gpudirect-tcpx-nccl) and provide better usability.
 
 > **_NOTE:_** You must [enable multi networking](https://cloud.google.com/kubernetes-engine/docs/how-to/setup-multinetwork-support-for-pods#create-a-gke-cluster) feature when creating the GKE cluster. When gke-cluster depends on multivpc (with the use keyword), multi networking will be automatically enabled on the cluster creation.
 > When gke-cluster or pre-existing-gke-cluster  depends on multivpc (with the use keyword), the [network objects](https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#create-gke-environment) required for multi networking will be created on the cluster.
