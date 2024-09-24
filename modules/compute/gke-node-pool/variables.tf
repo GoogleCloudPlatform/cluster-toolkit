@@ -354,3 +354,9 @@ variable "host_maintenance_interval" {
     error_message = "Invalid host_maintenance_interval value. Must be PERIODIC, AS_NEEDED or the empty string"
   }
 }
+
+variable "initial_node_count" {
+  description = "The initial number of nodes for the pool. In regional clusters, this is the number of nodes per zone. Changing this setting after node pool creation will not make any effect."
+  type        = number
+  default     = null
+}

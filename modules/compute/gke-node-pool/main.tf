@@ -55,6 +55,8 @@ resource "google_container_node_pool" "node_pool" {
     }
   }
 
+  initial_node_count = var.initial_node_count
+
   management {
     auto_repair  = true
     auto_upgrade = var.auto_upgrade
@@ -191,6 +193,7 @@ resource "google_container_node_pool" "node_pool" {
   lifecycle {
     ignore_changes = [
       node_config[0].labels,
+      initial_node_count,
     ]
     precondition {
       condition     = !local.static_node_set || !local.autoscale_set
