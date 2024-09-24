@@ -1,5 +1,10 @@
 # Obtaining SlurmGCP nodes with DWS Flex
 
+> [!NOTE]
+> DWS Flex Start is currently in early development and undergoing extensive testing. While it
+> can be used with other machine families, we strongly recommend utilizing it primarily with
+> A3 machine families during this phase.
+
 [Dynamic Workload Scheduler](https://cloud.google.com/blog/products/compute/introducing-dynamic-workload-scheduler) Flex Start mode is designed for fine-tuning models, experimentation, shorter training jobs, distillation, offline inference, and batch jobs.
 
 With Dynamic Workload Scheduler in Flex Start mode, you submit a GPU capacity request for your AI/ML jobs by indicating how many you need, a duration, and your preferred region. It supports capacity requests for up to seven days, with no minimum duration requirement. You can request capacity for as little as a few minutes or hours; typically, the scheduler can fulfill shorter requests more quickly than longer ones.
