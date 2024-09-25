@@ -30,8 +30,9 @@ locals {
     effect = "NO_SCHEDULE"
   }] : []
 
-  autoscale_set   = var.autoscaling_total_min_nodes != 0 || var.autoscaling_total_max_nodes != 1000
-  static_node_set = var.static_node_count != null
+  autoscale_set    = var.autoscaling_total_min_nodes != 0 || var.autoscaling_total_max_nodes != 1000
+  static_node_set  = var.static_node_count != null
+  initial_node_set = var.initial_node_count > 0
 }
 
 data "google_compute_default_service_account" "default_sa" {
@@ -198,6 +199,14 @@ resource "google_container_node_pool" "node_pool" {
     precondition {
       condition     = !local.static_node_set || !local.autoscale_set
       error_message = "static_node_count cannot be set with either autoscaling_total_min_nodes or autoscaling_total_max_nodes."
+    }
+    precondition {
+      condition     = !local.static_node_set || !local.initial_node_set
+      error_message = "initial_node_count cannot be set with static_node_count."
+    }
+    precondition {
+      condition     = !local.initial_node_set || (var.initial_node_count >= var.autoscaling_total_min_nodes && var.initial_node_count <= var.autoscaling_total_max_nodes)
+      error_message = "initial_node_count must be between autoscaling_total_min_nodes and autoscaling_total_max_nodes included."
     }
     precondition {
       condition     = !(coalesce(local.local_ssd_config.local_ssd_count_ephemeral_storage, 0) > 0 && coalesce(local.local_ssd_config.local_ssd_count_nvme_block, 0) > 0)

@@ -356,7 +356,7 @@ variable "host_maintenance_interval" {
 }
 
 variable "initial_node_count" {
-  description = "The initial number of nodes for the pool. In regional clusters, this is the number of nodes per zone. Changing this setting after node pool creation will not make any effect."
+  description = "The initial number of nodes for the pool. In regional clusters, this is the number of nodes per zone. Changing this setting after node pool creation will not make any effect. It cannot be set with static_node_count and must be set to a value between autoscaling_total_min_nodes and autoscaling_total_max_nodes."
   type        = number
   default     = null
 }
