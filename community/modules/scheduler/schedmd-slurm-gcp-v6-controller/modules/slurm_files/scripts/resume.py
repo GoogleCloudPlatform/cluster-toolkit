@@ -625,7 +625,7 @@ def main(nodelist):
     # resume_nodes does not currently return any status.
     if lookup().cfg.enable_slurm_gcp_plugins:
         slurm_gcp_plugins.post_main_resume_nodes(
-            nodelist=nodelist, global_resume_data=global_resume_data
+            lkp=lookup(), nodelist=nodelist, global_resume_data=global_resume_data
         )
 
 if __name__ == "__main__":
