@@ -29,7 +29,7 @@ can be overridden using the `taints` setting. See
 more info.
 
 ### Local SSD Storage
-GKE offers two options for managing locally attached SSDs.  
+GKE offers two options for managing locally attached SSDs.
 
 The first, and recommended, option is for GKE to manage the ephemeral storage
 space on the node, which will then be automatically attached to pods which
