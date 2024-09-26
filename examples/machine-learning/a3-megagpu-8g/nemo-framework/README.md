@@ -28,7 +28,10 @@ README
 
 3. Run an example NeMo Framework Pre-Training
 
-   First, prepare the cache. This will download several files to the ~/.cache/huggingface folder which are needed to load the tokenizer for training.
+   First, prepare the cache. This will download several files to the 
+   ~/.cache/huggingface folder which are needed to load the tokenizer for 
+   training.
+   
    ```shell
    pip install transformers
    python -c "from transformers import AutoTokenizer; \
