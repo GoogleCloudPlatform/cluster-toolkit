@@ -46,7 +46,7 @@ locals {
     }
   }
 
-  min_additional_networks = try(local.gpu_direct_setting[var.machine_type].min_additional_networks, 0)
+  min_additional_networks = try(local.gpu_direct_setting[var.machine_type].required_additional_networks, 0)
 }
 
 check "gpu_direct_check_multi_vpc" {
