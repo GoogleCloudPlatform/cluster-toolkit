@@ -29,7 +29,7 @@ else
 	if [ "${OS_ID}" = "rocky" ] || [ "${OS_ID}" = "rhel" ]; then
 		if [ "${OS_VERSION_MAJOR}" = "8" ]; then
 			# 1) Add the Parallelstore package repository
-			tee /etc/yum.repos.d/parallelstore-v2-6-el8.repo <<EOF
+			cat >/etc/yum.repos.d/parallelstore-v2-6-el8.repo <<EOF
 [parallelstore-v2-6-el8]
 name=Parallelstore EL8 v2.6
 baseurl=https://us-central1-yum.pkg.dev/projects/parallelstore-packages/v2-6-el8
@@ -38,7 +38,7 @@ repo_gpgcheck=0
 gpgcheck=0
 EOF
 		elif [ "${OS_VERSION_MAJOR}" -eq "9" ]; then
-			tee /etc/yum.repos.d/parallelstore-v2-6-el9.repo <<EOF
+			cat >/etc/yum.repos.d/parallelstore-v2-6-el9.repo <<EOF
 [parallelstore-v2-6-el9]
 name=Parallelstore EL9 v2.6
 baseurl=https://packages.daos.io/v2.6/EL9/packages/x86_64/
@@ -64,15 +64,17 @@ EOF
 
 	# For Ubuntu 22.04 and debian 12,
 	elif { [ "${OS_ID}" = "ubuntu" ] && [ "${OS_VERSION}" = "22.04" ]; } || { [ "${OS_ID}" = "debian" ] && [ "${OS_VERSION_MAJOR}" = "12" ]; }; then
+		# shellcheck disable=SC2034
+		DEBIAN_FRONTEND=noninteractive
 
 		# 1) Add the Parallelstore package repository
-		curl https://us-central1-apt.pkg.dev/doc/repo-signing-key.gpg | apt-key add -
-		echo "deb https://us-central1-apt.pkg.dev/projects/parallelstore-packages v2-6-deb main" | tee -a /etc/apt/sources.list.d/artifact-registry.list
+		curl -o /etc/apt/trusted.gpg.d/us-central1-apt.pkg.dev.asc https://us-central1-apt.pkg.dev/doc/repo-signing-key.gpg
+		echo "deb https://us-central1-apt.pkg.dev/projects/parallelstore-packages v2-6-deb main" >>/etc/apt/sources.list.d/artifact-registry.list
 
-		apt update
+		apt-get update
 
 		# 2) Install daos-client
-		apt install -y daos-client
+		apt-get install -y daos-client
 
 	else
 		echo "Unsupported operating system ${OS_ID} ${OS_VERSION}. This script only supports Rocky Linux 8, Redhat 8, Redhat 9, Ubuntu 22.04, and Debian 12."
