@@ -1,8 +1,28 @@
 ## Description
 
-This modules create a resource policy for compute engines. This policy can be passed to a gke-node-pool module to apply the policy on the node-pool's nodes.
+This modules create a [resource policy for compute engines](https://cloud.google.com/compute/docs/instances/placement-policies-overview). This policy can be passed to a gke-node-pool module to apply the policy on the node-pool's nodes.
 
-Note: By default, you can't apply compact placement policies with a max distance value to A3 VMs. To request access to this feature, contact your Technical Account Manager (TAM) or the Sales team.
+Note: By default, you can't apply compact placement policies with a max distance value to A3 VMs. To request access to this feature, contact your [Technical Account Manager (TAM)](https://cloud.google.com/tam) or the [Sales team](https://cloud.google.com/contact).
+
+### Example
+
+The following example creates a group placement resource policy and applies it to a gke-node-pool.
+
+```yaml
+  - id: group_placement_1
+    source: modules/compute/resource-policy
+    settings:
+      name: gp-np-1
+      group_placement_max_distance: 2
+
+  - id: node_pool_1
+    source: modules/compute/gke-node-pool
+    use: [group_placement_1]
+    settings:
+      machine_type: e2-standard-8
+    outputs: [instructions]
+```
+
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 Copyright 2024 Google LLC
