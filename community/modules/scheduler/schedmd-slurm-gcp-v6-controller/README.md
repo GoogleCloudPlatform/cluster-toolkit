@@ -105,6 +105,17 @@ run the job outside of the maintenance window.
 srun -n1 -pcompute -t 10:00 <job.sh>
 ```
 
+Currently upcoming maintenance notification is supported in ALPHA version of
+compute API. You can update the API version from your blueprint,
+
+```yaml
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    settings:
+      endpoint_versions:
+        compute: "alpha"
+```
+
 ## Placement Max Distance
 
 When using
