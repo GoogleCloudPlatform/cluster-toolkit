@@ -111,4 +111,5 @@ limitations under the License.
 |------|-------------|
 | <a name="output_cluster_id"></a> [cluster\_id](#output\_cluster\_id) | An identifier for the gke cluster with format projects/{{project\_id}}/locations/{{region}}/clusters/{{name}}. |
 | <a name="output_gke_cluster_exists"></a> [gke\_cluster\_exists](#output\_gke\_cluster\_exists) | A static flag that signals to downstream modules that a cluster exists. |
+| <a name="output_gke_master_version"></a> [gke\_master\_version](#output\_gke\_master\_version) | GKE cluster's master version. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

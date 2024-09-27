@@ -33,6 +33,12 @@ locals {
       updated_workload_path   = replace(local.workload_path_tcpx, ".yaml", "-tcpx.yaml")
       rxdm_version            = "v2.0.12" # matching nccl-tcpx-installer version v3.1.9
       min_additional_networks = 4
+      min_gke_versions = {
+        "1.27" = "1.27.7-gke.1121000"
+        "1.28" = "1.28.8-gke.1095000"
+        "1.29" = "1.29.3-gke.1093000"
+        "1.30" = "1.30.2-gke.1023000"
+      }
     }
     "a3-megagpu-8g" = {
       # Manifest to be installed for enabling TCPXO on a3-megagpu-8g machines
@@ -43,15 +49,37 @@ locals {
       updated_workload_path   = replace(local.workload_path_tcpxo, ".yaml", "-tcpxo.yaml")
       rxdm_version            = "v1.0.10" # matching nccl-tcpxo-installer version v1.0.4
       min_additional_networks = 8
+      min_gke_versions = {
+        "1.28" = "1.28.9-gke.1250000"
+        "1.29" = "1.29.4-gke.1542000"
+        "1.30" = "1.30.4-gke.1129000"
+      }
     }
   }
 
   min_additional_networks = try(local.gpu_direct_settings[var.machine_type].min_additional_networks, 0)
+
+  gke_version_regex = "(\\d+\\.\\d+)\\.(\\d+)-gke\\.(\\d+)" # GKE version format: 1.X.Y-gke.Z , regex output: ["1.X" , "Y", "Z"]
+
+  gke_version_parts = regex(local.gke_version_regex, var.gke_master_version)
+  gke_version_major = local.gke_version_parts[0]
+
+  min_gke_versions         = try(local.gpu_direct_setting[var.machine_type].min_gke_versions, null)
+  min_version              = try(contains(keys(local.min_gke_versions), local.gke_version_major), false) ? local.min_gke_versions[local.gke_version_major] : "1.0.0-gke.0"
+  min_version_parts        = regex(local.gke_version_regex, local.min_version)
+  gke_gpudirect_compatible = local.gke_version_parts[1] > local.min_version_parts[1] || (local.gke_version_parts[1] == local.min_version_parts[1] && local.gke_version_parts[2] >= local.min_version_parts[2])
 }
 
 check "gpu_direct_check_multi_vpc" {
   assert {
     condition     = length(var.additional_networks) >= local.min_additional_networks
     error_message = "To achieve optimal performance for ${var.machine_type} machine, at least ${local.min_additional_networks} additional vpc is recommended. You could configure it in the blueprint through modules/network/multivpc with network_count set as ${local.min_additional_networks}"
+  }
+}
+
+check "gke_master_version_requirements" {
+  assert {
+    condition     = local.gke_gpudirect_compatible
+    error_message = "GPUDirect is not supported on GKE master version ${var.gke_master_version} for ${var.machine_type} machine. For supported version details visit https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#requirements"
   }
 }

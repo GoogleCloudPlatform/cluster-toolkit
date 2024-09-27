@@ -26,3 +26,8 @@ output "gke_cluster_exists" {
     data.google_container_cluster.existing_gke_cluster
   ]
 }
+
+output "gke_master_version" {
+  description = "GKE cluster's master version."
+  value       = data.google_container_cluster.existing_gke_cluster.master_version
+}
