@@ -30,8 +30,8 @@ locals {
         "https://raw.githubusercontent.com/GoogleCloudPlatform/container-engine-accelerators/fee883360a660f71ba07478db95d5c1325322f77/gpudirect-tcpx/nccl-config.yaml",              # nccl_configmap
         "https://raw.githubusercontent.com/GoogleCloudPlatform/container-engine-accelerators/fee883360a660f71ba07478db95d5c1325322f77/nri_device_injector/nri-device-injector.yaml", # nri_plugin
       ]
-      updated_workload_path        = replace(local.workload_path_tcpx, ".yaml", "-tcpx.yaml")
-      rxdm_version                 = "v2.0.12" # matching nccl-tcpx-installer version v3.1.9
+      updated_workload_path   = replace(local.workload_path_tcpx, ".yaml", "-tcpx.yaml")
+      rxdm_version            = "v2.0.12" # matching nccl-tcpx-installer version v3.1.9
       min_additional_networks = 4
     }
     "a3-megagpu-8g" = {
@@ -40,8 +40,8 @@ locals {
         "https://raw.githubusercontent.com/GoogleCloudPlatform/container-engine-accelerators/fee883360a660f71ba07478db95d5c1325322f77/gpudirect-tcpxo/nccl-tcpxo-installer.yaml",    # nccl_plugin v1.0.4 for tcpxo
         "https://raw.githubusercontent.com/GoogleCloudPlatform/container-engine-accelerators/fee883360a660f71ba07478db95d5c1325322f77/nri_device_injector/nri-device-injector.yaml", # nri_plugin
       ]
-      updated_workload_path        = replace(local.workload_path_tcpxo, ".yaml", "-tcpxo.yaml")
-      rxdm_version                 = "v1.0.10" # matching nccl-tcpxo-installer version v1.0.4
+      updated_workload_path   = replace(local.workload_path_tcpxo, ".yaml", "-tcpxo.yaml")
+      rxdm_version            = "v1.0.10" # matching nccl-tcpxo-installer version v1.0.4
       min_additional_networks = 8
     }
   }
