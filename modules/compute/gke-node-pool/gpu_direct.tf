@@ -32,7 +32,7 @@ locals {
       ]
       updated_workload_path        = replace(local.workload_path_tcpx, ".yaml", "-tcpx.yaml")
       rxdm_version                 = "v2.0.12" # matching nccl-tcpx-installer version v3.1.9
-      required_additional_networks = 4
+      min_additional_networks = 4
     }
     "a3-megagpu-8g" = {
       # Manifest to be installed for enabling TCPXO on a3-megagpu-8g machines
@@ -42,11 +42,11 @@ locals {
       ]
       updated_workload_path        = replace(local.workload_path_tcpxo, ".yaml", "-tcpxo.yaml")
       rxdm_version                 = "v1.0.10" # matching nccl-tcpxo-installer version v1.0.4
-      required_additional_networks = 8
+      min_additional_networks = 8
     }
   }
 
-  min_additional_networks = try(local.gpu_direct_settings[var.machine_type].required_additional_networks, 0)
+  min_additional_networks = try(local.gpu_direct_settings[var.machine_type].min_additional_networks, 0)
 }
 
 check "gpu_direct_check_multi_vpc" {
