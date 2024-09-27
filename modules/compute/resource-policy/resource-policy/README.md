@@ -23,7 +23,6 @@ The following example creates a group placement resource policy and applies it t
     outputs: [instructions]
 ```
 
-
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 Copyright 2024 Google LLC
 
