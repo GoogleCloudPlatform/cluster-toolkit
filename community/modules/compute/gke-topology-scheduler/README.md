@@ -15,7 +15,7 @@ should be present for each GPU node in the cluster.
 The following example installs topology scheduler on a GKE cluster.
 
 ```yaml
-  - id: topology_aware_scheduler_install
+- id: topology_aware_scheduler_install
     source: community/modules/compute/gke-topology-scheduler
     use: [gke_cluster]
 ```
