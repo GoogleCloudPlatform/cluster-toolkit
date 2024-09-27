@@ -30,8 +30,9 @@ locals {
         "https://raw.githubusercontent.com/GoogleCloudPlatform/container-engine-accelerators/fee883360a660f71ba07478db95d5c1325322f77/gpudirect-tcpx/nccl-config.yaml",              # nccl_configmap
         "https://raw.githubusercontent.com/GoogleCloudPlatform/container-engine-accelerators/fee883360a660f71ba07478db95d5c1325322f77/nri_device_injector/nri-device-injector.yaml", # nri_plugin
       ]
-      updated_workload_path = replace(local.workload_path_tcpx, ".yaml", "-tcpx.yaml")
-      rxdm_version          = "v2.0.12" # matching nccl-tcpx-installer version v3.1.9
+      updated_workload_path   = replace(local.workload_path_tcpx, ".yaml", "-tcpx.yaml")
+      rxdm_version            = "v2.0.12" # matching nccl-tcpx-installer version v3.1.9
+      min_additional_networks = 4
     }
     "a3-megagpu-8g" = {
       # Manifest to be installed for enabling TCPXO on a3-megagpu-8g machines
@@ -39,19 +40,18 @@ locals {
         "https://raw.githubusercontent.com/GoogleCloudPlatform/container-engine-accelerators/fee883360a660f71ba07478db95d5c1325322f77/gpudirect-tcpxo/nccl-tcpxo-installer.yaml",    # nccl_plugin v1.0.4 for tcpxo
         "https://raw.githubusercontent.com/GoogleCloudPlatform/container-engine-accelerators/fee883360a660f71ba07478db95d5c1325322f77/nri_device_injector/nri-device-injector.yaml", # nri_plugin
       ]
-      updated_workload_path = replace(local.workload_path_tcpxo, ".yaml", "-tcpxo.yaml")
-      rxdm_version          = "v1.0.10" # matching nccl-tcpxo-installer version v1.0.4
+      updated_workload_path   = replace(local.workload_path_tcpxo, ".yaml", "-tcpxo.yaml")
+      rxdm_version            = "v1.0.10" # matching nccl-tcpxo-installer version v1.0.4
+      min_additional_networks = 8
     }
   }
+
+  min_additional_networks = try(local.gpu_direct_settings[var.machine_type].min_additional_networks, 0)
 }
 
 check "gpu_direct_check_multi_vpc" {
   assert {
-    condition     = !(var.machine_type == "a3-highgpu-8g" && length(var.additional_networks) != 4)
-    error_message = "To achieve optimal performance for ${var.machine_type} machine, 4 additional vpc is recommended. You could configure it in the blueprint through modules/network/multivpc with network_count set as 4"
-  }
-  assert {
-    condition     = !(var.machine_type == "a3-megagpu-8g" && length(var.additional_networks) != 8)
-    error_message = "To achieve optimal performance for ${var.machine_type} machine, 8 additional vpc is recommended. You could configure it in the blueprint through modules/network/multivpc with network_count set as 8"
+    condition     = length(var.additional_networks) >= local.min_additional_networks
+    error_message = "To achieve optimal performance for ${var.machine_type} machine, at least ${local.min_additional_networks} additional vpc is recommended. You could configure it in the blueprint through modules/network/multivpc with network_count set as ${local.min_additional_networks}"
   }
 }
