@@ -32,7 +32,7 @@ locals {
 
   autoscale_set    = var.autoscaling_total_min_nodes != 0 || var.autoscaling_total_max_nodes != 1000
   static_node_set  = var.static_node_count != null
-  initial_node_set = var.initial_node_count > 0
+  initial_node_set = try(var.initial_node_count > 0, false)
 }
 
 data "google_compute_default_service_account" "default_sa" {
@@ -205,7 +205,7 @@ resource "google_container_node_pool" "node_pool" {
       error_message = "initial_node_count cannot be set with static_node_count."
     }
     precondition {
-      condition     = !local.initial_node_set || (var.initial_node_count >= var.autoscaling_total_min_nodes && var.initial_node_count <= var.autoscaling_total_max_nodes)
+      condition     = !local.initial_node_set || (coalesce(var.initial_node_count, 0) >= var.autoscaling_total_min_nodes && coalesce(var.initial_node_count, 0) <= var.autoscaling_total_max_nodes)
       error_message = "initial_node_count must be between autoscaling_total_min_nodes and autoscaling_total_max_nodes included."
     }
     precondition {
