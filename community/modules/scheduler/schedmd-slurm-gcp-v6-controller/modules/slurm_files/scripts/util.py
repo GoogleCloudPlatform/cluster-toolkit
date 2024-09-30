@@ -18,6 +18,7 @@ from typing import Iterable, List, Tuple, Optional, Any, Dict
 import argparse
 import base64
 import collections
+from dataclasses import dataclass
 import hashlib
 import inspect
 import json
@@ -345,16 +346,6 @@ def install_custom_scripts(check_hash=False):
             with fullpath.open("wb") as f:
                 blob.download_to_file(f)
             chown_slurm(fullpath, mode=0o755)
-
-
-def reservation_resource_policies(reservation):
-    """
-    Inspects reservation object, returns list of resource policies names.
-    Converts policy URLs to names, e.g.:
-    projects/111111/regions/us-central1/resourcePolicies/zebra -> zebra
-    """
-    return [u.split("/")[-1] for u in reservation.get("resourcePolicies", {}).values()]
-
 
 def compute_service(version="beta"):
     """Make thread-safe compute service handle
@@ -1452,6 +1443,13 @@ class TPU:
             return True
 
 
+@dataclass(frozen=True)
+class ReservationDetails:
+    project: str
+    zone: str
+    policies: List[str] # names (not URLs) of resource policies
+    bulk_insert_name: str # name in format suitable for bulk insert (currently identical to user supplied name)
+
 class Lookup:
     """Wrapper class for cached data access"""
 
@@ -1743,20 +1741,37 @@ class Lookup:
         return self.instances().get(instance_name)
 
     @lru_cache()
-    def reservation(self, name: str, zone: str) -> object:
+    def _get_reservation(self, project: str, zone: str, name: str) -> object:
         """See https://cloud.google.com/compute/docs/reference/rest/v1/reservations"""
+        return self.compute.reservations().get(
+            project=project, zone=zone, reservation=name).execute()
+    
+    def nodeset_reservation(self, nodeset: object) -> Optional[ReservationDetails]:
+        if not nodeset.reservation_name:
+            return None
+        
+        zones = list(nodeset.zone_policy_allow or [])
+        assert len(zones) == 1, "Only single zone is supported if using a reservation"
+        zone = zones[0]
+
         try:
-            _, project, _, short_name = name.split("/")
+            _, project, _, name = nodeset.reservation_name.split("/")
         except ValueError:
             raise ValueError(
-                f"Invalid reservation name: '{name}', expected format is 'projects/PROJECT/reservations/NAME'"
+                f"Invalid reservation name: '{nodeset.reservation_name}', expected format is 'projects/PROJECT/reservations/NAME'"
             )
+        
+        reservation = self._get_reservation(project, zone, name)
 
-        return (
-            self.compute.reservations()
-            .get(project=project, zone=zone, reservation=short_name)
-            .execute()
-        )
+        # Converts policy URLs to names, e.g.:
+        # projects/111111/regions/us-central1/resourcePolicies/zebra -> zebra
+        policies = [u.split("/")[-1] for u in reservation.get("resourcePolicies", {}).values()]
+
+        return ReservationDetails(
+            project=project,
+            zone=zone,
+            policies=policies,
+            bulk_insert_name=nodeset.reservation_name)
 
     @lru_cache(maxsize=1)
     def machine_types(self):
