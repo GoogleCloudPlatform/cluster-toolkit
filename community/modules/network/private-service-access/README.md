@@ -80,14 +80,14 @@ No modules.
 |------|-------------|------|---------|:--------:|
 | <a name="input_address"></a> [address](#input\_address) | The IP address or beginning of the address range allocated for the private service access. | `string` | `null` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to supporting resources. Key-value pairs. | `map(string)` | n/a | yes |
-| <a name="input_network_id"></a> [network\_id](#input\_network\_id) | The ID of the GCE VPC network to configure private service Access.:<br>`projects/<project_id>/global/networks/<network_name>`" | `string` | n/a | yes |
+| <a name="input_network_id"></a> [network\_id](#input\_network\_id) | The ID of the GCE VPC network to configure private service Access.:<br/>`projects/<project_id>/global/networks/<network_name>`" | `string` | n/a | yes |
 | <a name="input_prefix_length"></a> [prefix\_length](#input\_prefix\_length) | The prefix length of the IP range allocated for the private service access. | `number` | `16` | no |
 
 ## Outputs
 
 | Name | Description |
 |------|-------------|
-| <a name="output_connect_mode"></a> [connect\_mode](#output\_connect\_mode) | Services that use Private Service Access typically specify connect\_mode<br>"PRIVATE\_SERVICE\_ACCESS". This output value sets connect\_mode and additionally<br>blocks terraform actions until the VPC connection has been created. |
+| <a name="output_connect_mode"></a> [connect\_mode](#output\_connect\_mode) | Services that use Private Service Access typically specify connect\_mode<br/>"PRIVATE\_SERVICE\_ACCESS". This output value sets connect\_mode and additionally<br/>blocks terraform actions until the VPC connection has been created. |
 | <a name="output_private_vpc_connection_peering"></a> [private\_vpc\_connection\_peering](#output\_private\_vpc\_connection\_peering) | The name of the VPC Network peering connection that was created by the service provider. |
 | <a name="output_reserved_ip_range"></a> [reserved\_ip\_range](#output\_reserved\_ip\_range) | Named IP range to be used by services connected with Private Service Access. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

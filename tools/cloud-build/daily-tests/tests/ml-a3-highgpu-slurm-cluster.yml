@@ -27,6 +27,7 @@ network: default
 post_deploy_tests:
 - test-validation/test-mounts.yml
 - test-validation/test-partitions.yml
+- test-validation/test-enroot.yml
 custom_vars:
   partitions:
   - a3

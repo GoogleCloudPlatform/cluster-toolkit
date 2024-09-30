@@ -76,7 +76,7 @@ repos:
     require_serial: true
   - id: pytest-check
     name: pytest-check
-    entry: pytest
+    entry: python -m pytest
     language: system
     types: [python]
     pass_filenames: false

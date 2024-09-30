@@ -30,6 +30,12 @@ locals {
   }]
 
   sa_email = var.service_account_email != null ? var.service_account_email : data.google_compute_default_service_account.default_sa.email
+
+  # additional VPCs enable multi networking 
+  derived_enable_multi_networking = coalesce(var.enable_multi_networking, length(var.additional_networks) > 0)
+
+  # multi networking needs enabled Dataplane v2
+  derived_enable_dataplane_v2 = coalesce(var.enable_dataplane_v2, local.derived_enable_multi_networking)
 }
 
 data "google_compute_default_service_account" "default_sa" {
@@ -85,7 +91,9 @@ resource "google_container_cluster" "gke_cluster" {
     autoscaling_profile = var.autoscaling_profile
   }
 
-  datapath_provider = var.enable_dataplane_v2 ? "ADVANCED_DATAPATH" : "LEGACY_DATAPATH"
+  datapath_provider = local.derived_enable_dataplane_v2 ? "ADVANCED_DATAPATH" : "LEGACY_DATAPATH"
+
+  enable_multi_networking = local.derived_enable_multi_networking
 
   network_policy {
     # Enabling NetworkPolicy for clusters with DatapathProvider=ADVANCED_DATAPATH
@@ -168,6 +176,14 @@ resource "google_container_cluster" "gke_cluster" {
     ignore_changes = [
       node_config
     ]
+    precondition {
+      condition     = !(!coalesce(var.enable_dataplane_v2, true) && local.derived_enable_multi_networking)
+      error_message = "'enable_dataplane_v2' cannot be false when enabling multi networking."
+    }
+    precondition {
+      condition     = !(!coalesce(var.enable_multi_networking, true) && length(var.additional_networks) > 0)
+      error_message = "'enable_multi_networking' cannot be false when using multivpc module, which passes additional_networks."
+    }
   }
 
   logging_service    = "logging.googleapis.com/kubernetes"
@@ -314,4 +330,28 @@ module "workload_identity" {
     data.google_compute_default_service_account.default_sa,
     google_container_cluster.gke_cluster
   ]
+}
+
+module "kubectl_apply" {
+  source = "../../management/kubectl-apply"
+
+  cluster_id = google_container_cluster.gke_cluster.id
+  project_id = var.project_id
+
+  apply_manifests = flatten([
+    for idx, network_info in var.additional_networks : [
+      {
+        source = "${path.module}/templates/gke-network-paramset.yaml.tftpl",
+        template_vars = {
+          name            = "vpc${idx + 1}",
+          network_name    = network_info.network
+          subnetwork_name = network_info.subnetwork
+        }
+      },
+      {
+        source        = "${path.module}/templates/network-object.yaml.tftpl",
+        template_vars = { name = "vpc${idx + 1}" }
+      }
+    ]
+  ])
 }

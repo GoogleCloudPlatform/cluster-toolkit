@@ -53,8 +53,3 @@ output "nodeset_tpu" {
   description = "Cluster nodesets (TPU)."
   value       = lookup(local.config, "nodeset_tpu", null)
 }
-
-output "checksum" {
-  description = "Checksum of all files written to the bucket."
-  value       = local.checksum
-}

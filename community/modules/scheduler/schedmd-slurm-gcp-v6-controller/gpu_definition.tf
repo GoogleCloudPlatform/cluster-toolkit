@@ -37,6 +37,7 @@ locals {
     "a2-ultragpu-4g" = { type = "nvidia-a100-80gb", count = 4 },
     "a2-ultragpu-8g" = { type = "nvidia-a100-80gb", count = 8 },
     "a3-highgpu-8g"  = { type = "nvidia-h100-80gb", count = 8 },
+    "a3-megagpu-8g"  = { type = "nvidia-h100-mega-80gb", count = 8 },
     "g2-standard-4"  = { type = "nvidia-l4", count = 1 },
     "g2-standard-8"  = { type = "nvidia-l4", count = 1 },
     "g2-standard-12" = { type = "nvidia-l4", count = 1 },

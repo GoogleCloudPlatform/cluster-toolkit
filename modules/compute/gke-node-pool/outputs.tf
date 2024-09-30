@@ -64,3 +64,36 @@ output "tolerations" {
   description = "Tolerations needed for a pod to be scheduled on this node pool."
   value       = local.tolerations
 }
+
+locals {
+  gpu_direct_enabled = var.machine_type == "a3-highgpu-8g" || var.machine_type == "a3-megagpu-8g"
+  script_path = {
+    a3-highgpu-8g = "enable-tcpx-in-workload.py",
+    a3-megagpu-8g = "enable-tcpxo-in-workload.py"
+  }
+  gpu_direct_instruction = <<-EOT
+    Since you are using ${var.machine_type} machine type that has GPUDirect support, your nodepool had been configured with the required plugins.
+    To fully utilize GPUDirect you will need to add the some components into your workload manifest. Details below:
+
+    A sample GKE job that had GPUDirect enabled and NCCL test included has been generated locally at:
+      ${abspath(local.gpu_direct_setting.updated_workload_path)}
+
+    You can use the following commands to submit the sample job:
+      kubectl create -f ${abspath(local.gpu_direct_setting.updated_workload_path)}
+
+    If you would like to enable GPUDirect for your own workload, please follow the below steps:
+      export WORKLOAD_PATH=<>
+      python3 ${abspath("${path.module}/gpu-direct-workload/scripts/${lookup(local.script_path, var.machine_type, "")}")} --file $WORKLOAD_PATH --rxdm ${local.gpu_direct_setting.rxdm_version}
+    **WARNING**
+    The "--rxdm" version is tide to the nccl-tcpx/o-installer that had been deployed to your cluster, changing it to other value might have impact on performance
+    **WARNING**
+
+    Or you can also follow our GPUDirect user guide to update your workload
+    https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#add-gpudirect-manifests
+  EOT
+}
+
+output "instructions" {
+  description = "Instructions for submitting the sample GPUDirect enabled job."
+  value       = local.gpu_direct_enabled ? local.gpu_direct_instruction : null
+}

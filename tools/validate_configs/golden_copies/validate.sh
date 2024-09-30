@@ -42,7 +42,7 @@ run_test() {
 	cp -r tools/validate_configs/golden_copies/configs/files "${tmpdir}/"
 
 	# Only run from the repo directory if there are local modules, otherwise
-	# run the test from the test directory using the installed ghpc binary.
+	# run the test from the test directory using the installed gcluster binary.
 	if grep -q "${LOCAL_SOURCE_PATTERN}" "${cwd}/${bp}"; then
 		cd "${cwd}"
 	else

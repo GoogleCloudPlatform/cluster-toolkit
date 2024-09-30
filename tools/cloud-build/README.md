@@ -4,7 +4,7 @@
 
 * `daily-tests`: The daily-tests directory contains cloud build configs and
   support files for running the daily test suite
-* `dependency-checks`: Verifies the `ghpc` build in limited dependency
+* `dependency-checks`: Verifies the `gcluster` build in limited dependency
   environments.
 * `ansible.cfg`: Ansible config used to set common ansible setting for running
   the test suite.
