@@ -65,6 +65,9 @@ chmod 777 "$local_mount"
 fuse_config=/etc/fuse.conf
 sed -i "s/#.*user_allow_other/user_allow_other/g" $fuse_config
 
+# make sure limit of open files is high enough for dfuse (1M of open files)
+ulimit -n 1048576
+
 for i in {1..10}; do
 	# To parse mount_options as --disable-wb-cache --eq-count=8.
 	# shellcheck disable=SC2086
