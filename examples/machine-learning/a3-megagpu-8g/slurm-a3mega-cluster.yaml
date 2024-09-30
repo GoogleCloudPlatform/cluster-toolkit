@@ -20,6 +20,7 @@ blueprint_name: a3mega-cluster
 vars:
   deployment_name: a3mega-cluster
   a3mega_partition_name: a3mega
+  a3mega_maintenance_interval: ""
   enable_placement: false
   remote_mount_homefs: /nfsshare
   local_mount_homefs: /home
