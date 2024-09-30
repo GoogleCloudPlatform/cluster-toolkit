@@ -49,6 +49,7 @@ Modules that are still in development and less stable are labeled with the
   Creates a dynamic nodeset to be used by the [schedmd-slurm-gcp-v6-partition] module and instance template.
 * **[gke-node-pool]** ![core-badge] ![experimental-badge] : Creates a
   Kubernetes node pool using GKE.
+* **[resource-policy]** ![core-badge] ![experimental-badge] : Create a resource policy for compute engines that can be applied to gke-node-pool's nodes.
 * **[gke-job-template]** ![core-badge] ![experimental-badge] : Creates a
   Kubernetes job file to be used with a [gke-node-pool].
 * **[htcondor-execute-point]** ![community-badge] ![experimental-badge] :
@@ -62,6 +63,7 @@ Modules that are still in development and less stable are labeled with the
 
 [vm-instance]: compute/vm-instance/README.md
 [gke-node-pool]: ../modules/compute/gke-node-pool/README.md
+[resource-policy]: ../modules/compute/resource-policy/README.md
 [gke-job-template]: ../modules/compute/gke-job-template/README.md
 [schedmd-slurm-gcp-v5-partition]: ../community/modules/compute/schedmd-slurm-gcp-v5-partition/README.md
 [schedmd-slurm-gcp-v5-node-group]: ../community/modules/compute/schedmd-slurm-gcp-v5-node-group/README.md
