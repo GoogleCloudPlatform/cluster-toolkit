@@ -28,6 +28,16 @@ README
 
 3. Run an example NeMo Framework Pre-Training
 
+   First, prepare the cache. This will download several files to the 
+   ~/.cache/huggingface folder which are needed to load the tokenizer for 
+   training.
+   
+   ```shell
+   pip install transformers
+   python -c "from transformers import AutoTokenizer; \
+       AutoTokenizer.from_pretrained('gpt2')"
+   ```
+
    This will run an example of training a 5B parameter GPT3 model for 10 steps
    using mock data as the input.
 
@@ -44,7 +54,7 @@ README
        training=gpt3/5b \
        env_vars.TRANSFORMERS_OFFLINE=0 \
        container=../nemofw+tcpxo-23.11.sqsh \
-       container_mounts='["/var/lib/tcpxo/lib64"]' \
+       container_mounts=[${HOME}/.cache,/var/lib/tcpxo/lib64] \
        cluster.srun_args=["--container-writable"] \
        training.model.data.data_impl=mock \
        training.model.data.data_prefix=[] \
