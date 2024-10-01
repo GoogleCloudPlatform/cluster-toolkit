@@ -12,14 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-ARG NEMOFW_VERSION=23.11
-FROM nvcr.io/nvidia/nemo:${NEMOFW_VERSION}.framework
+ARG NEMOFW_VERSION=24.07
+FROM nvcr.io/nvidia/nemo:$NEMOFW_VERSION
 
 ENV NCCL_FASTRAK_CTRL_DEV=enp0s12
 ENV NCCL_FASTRAK_IFNAME=enp6s0,enp7s0,enp13s0,enp14s0,enp134s0,enp135s0,enp141s0,enp142s0
 ENV NCCL_SOCKET_IFNAME=enp0s12
+ENV GLOO_SOCKET_IFNAME=enp0s12
 ENV NCCL_CROSS_NIC=0
-ENV NCCL_ALGO=Ring
+ENV NCCL_ALGO=Ring,Tree
 ENV NCCL_PROTO=Simple
 ENV NCCL_MIN_NCHANNELS=4
 ENV NCCL_DYNAMIC_CHUNK_SIZE=524288
@@ -35,6 +36,11 @@ ENV NCCL_NET_GDR_LEVEL=PIX
 ENV NCCL_FASTRAK_ENABLE_HOTPATH_LOGGING=0
 ENV NCCL_FASTRAK_USE_LLCM=1
 ENV NCCL_FASTRAK_LLCM_DEVICE_DIRECTORY=/dev/aperture_devices
+ENV NCCL_TUNER_PLUGIN=libnccl-tuner.io
+ENV NCCL_TUNER_CONFIG_PATH=/var/lib/tcpxo/lib64/a3plus_tuner_config.textproto
+ENV NCCL_SHIMNET_GUEST_CONFIG_CHECKER_CONFIG_FILE=/var/lib/tcpxo/lib64/a3plus_guest_config.textproto
+ENV NCCL_FASTRAK_PLUGIN_ACCEPT_TIMEOUT_MS=600000
+ENV NCCL_NVLS_ENABLE=0
 
 RUN echo "/var/lib/tcpxo/lib64" >> /etc/ld.so.conf.d/tcpxo.conf && ldconfig
 ENV LD_LIBRARY_PATH=/var/lib/tcpxo/lib64:$LD_LIBRARY_PATH
