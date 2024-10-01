@@ -121,14 +121,13 @@ module "slurm_nodeset_tpu" {
   subnetwork             = each.value.subnetwork
 }
 
-module "nodeset_tpu_cleanup" {
-  source   = "./modules/cleanup_compute"
+module "nodeset_cleanup_tpu" {
+  source   = "./modules/cleanup_tpu"
   for_each = local.nodeset_tpu_map
 
   nodeset = {
-    nodeset_name         = each.value.nodeset_name
-    subnetwork_self_link = each.value.subnetwork
-    additional_networks  = []
+    nodeset_name = each.value.nodeset_name
+    zone         = each.value.zone
   }
 
   project_id             = var.project_id
@@ -137,4 +136,10 @@ module "nodeset_tpu_cleanup" {
   universe_domain        = var.universe_domain
   endpoint_versions      = var.endpoint_versions
   gcloud_path_override   = var.gcloud_path_override
+
+  depends_on = [
+    # Depend on controller network, as a best effort to avoid
+    # subnetwork resourceInUseByAnotherResource error
+    var.subnetwork_self_link
+  ]
 }
