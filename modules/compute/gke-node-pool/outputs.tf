@@ -80,6 +80,11 @@ locals {
 
     You can use the following commands to submit the sample job:
       kubectl create -f ${abspath(local.gpu_direct_setting.updated_workload_path)}
+    After submitting the sample job, you can validate the GPU performance by initiating NCCL test included in the sample workload:
+      NCCL test can be initiated from any one of the sample job Pods and coordinate with the peer Pods:
+      export POD_NAME=$(kubectl get pods -l job-name=my-sample-job -o go-template='{{range .items}}{{.metadata.name}}{{"\n"}}{{end}}' | head -n 1)
+      export PEER_POD_IPS=$(kubectl get pods -l job-name=my-sample-job -o go-template='{{range .items}}{{.status.podIP}}{{" "}}{{end}}')
+      kubectl exec --stdin --tty --container=nccl-test $POD_NAME -- /scripts/allgather.sh $PEER_POD_IPS
 
     If you would like to enable GPUDirect for your own workload, please follow the below steps:
       export WORKLOAD_PATH=<>
