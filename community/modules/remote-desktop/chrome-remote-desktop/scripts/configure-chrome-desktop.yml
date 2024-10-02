@@ -28,8 +28,8 @@
       - xfce4-goodies
       state: present
     register: apt_result
-    retries: 6
-    delay: 10
+    retries: 10
+    delay: 30
     until: apt_result is success
 
   - name: Download and configure CRD
@@ -45,8 +45,8 @@
     environment:
       DEBIAN_FRONTEND: noninteractive
     register: apt_result
-    retries: 6
-    delay: 10
+    retries: 10
+    delay: 30
     until: apt_result is success
 
   - name: Configure CRD to use Xfce by default
