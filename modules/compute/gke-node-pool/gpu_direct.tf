@@ -80,6 +80,6 @@ check "gpu_direct_check_multi_vpc" {
 check "gke_version_requirements" {
   assert {
     condition     = local.gke_gpudirect_compatible
-    error_message = "GPUDirect is not supported on GKE master version ${var.gke_version} for ${var.machine_type} machine. For supported version details visit https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#requirements"
+    error_message = "GPUDirect is not supported on GKE version ${var.gke_version} for ${var.machine_type} machine. For supported version details visit https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#requirements"
   }
 }
