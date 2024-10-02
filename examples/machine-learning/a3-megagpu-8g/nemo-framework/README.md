@@ -3,7 +3,7 @@ README
 
 1. Set up NeMo Framework Container
 
-   This makes a few environment variable modifications to the [nvcr.io/nvidia/nemo:23.11.framework](https://catalog.ngc.nvidia.com/orgs/nvidia/containers/nemo)
+   This makes a few environment variable modifications to the [nvcr.io/nvidia/nemo:24.07](https://catalog.ngc.nvidia.com/orgs/nvidia/containers/nemo)
    container, and submits a Slurm job to copy the framework launcher scripts and a
    few other auxiliary files into your working directory.
 
@@ -21,17 +21,17 @@ README
    python3 -m venv env
    source env/bin/activate
    pip install -r requirements.txt # Copied from the NeMo Framework Container earlier
-   # This is needed to use 23.11 and python3.11, which is what is present on
+   # This is needed to use 24.07 and python3.11, which is what is present on
    # Debian 12
    pip install -U hydra-core
    ```
 
 3. Run an example NeMo Framework Pre-Training
 
-   First, prepare the cache. This will download several files to the 
-   ~/.cache/huggingface folder which are needed to load the tokenizer for 
+   First, prepare the cache. This will download several files to the
+   ~/.cache/huggingface folder which are needed to load the tokenizer for
    training.
-   
+
    ```shell
    pip install transformers
    python -c "from transformers import AutoTokenizer; \
@@ -53,7 +53,7 @@ README
        stages=[training] \
        training=gpt3/5b \
        env_vars.TRANSFORMERS_OFFLINE=0 \
-       container=../nemofw+tcpxo-23.11.sqsh \
+       container=../nemofw+tcpxo-24.07.sqsh \
        container_mounts=[${HOME}/.cache,/var/lib/tcpxo/lib64] \
        cluster.srun_args=["--container-writable"] \
        training.model.data.data_impl=mock \
