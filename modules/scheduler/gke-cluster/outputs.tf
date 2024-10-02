@@ -75,7 +75,7 @@ output "k8s_service_account_name" {
   value       = one(module.workload_identity[*].k8s_service_account_name)
 }
 
-output "gke_master_version" {
-  description = "GKE cluster's master version."
+output "gke_version" {
+  description = "GKE cluster's version."
   value       = google_container_cluster.gke_cluster.master_version
 }

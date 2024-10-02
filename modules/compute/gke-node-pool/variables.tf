@@ -361,7 +361,7 @@ variable "initial_node_count" {
   default     = null
 }
 
-variable "gke_master_version" {
-  description = "GKE master version"
+variable "gke_version" {
+  description = "GKE version"
   type        = string
 }
