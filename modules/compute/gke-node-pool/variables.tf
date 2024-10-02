@@ -360,3 +360,8 @@ variable "initial_node_count" {
   type        = number
   default     = null
 }
+
+variable "gke_version" {
+  description = "GKE version"
+  type        = string
+}
