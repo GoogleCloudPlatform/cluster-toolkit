@@ -37,5 +37,10 @@ output "instructions" {
   value       = <<-EOT
     To SSH to the controller (may need to add '--tunnel-through-iap'):
       gcloud compute ssh ${module.slurm_controller_instance.instances_self_links[0]}
+    
+    If you are using cloud ops agent with this deployment,
+    you can use the following command to see the logs for the entire cluster or any particular VM host:
+      gcloud logging read labels.cluster_name=${local.slurm_cluster_name}
+      gcloud logging read labels.hostname=${local.slurm_cluster_name}-controller
   EOT
 }
