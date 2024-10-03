@@ -87,5 +87,5 @@ output "cluster_ca_certificate" {
 
 output "access_token" {
   description = "Access token."
-  value       = data.google_client_config.default.access_token 
+  value       = data.google_client_config.default.access_token
 }

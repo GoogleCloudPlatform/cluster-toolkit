@@ -49,7 +49,6 @@ module "kubectl_apply_manifests" {
   wait_for_rollout  = each.value.wait_for_rollout
 
   providers = {
-    kubectl = kubectl
     http    = http.h
   }
 }
@@ -60,7 +59,6 @@ module "install_kueue" {
   server_side_apply = true
 
   providers = {
-    kubectl = kubectl
     http    = http.h
   }
 }
@@ -71,7 +69,6 @@ module "install_jobset" {
   server_side_apply = true
 
   providers = {
-    kubectl = kubectl
     http    = http.h
   }
 }
@@ -85,7 +82,6 @@ module "configure_kueue" {
   wait_for_rollout  = true
 
   providers = {
-    kubectl = kubectl
     http    = http.h
   }
 }

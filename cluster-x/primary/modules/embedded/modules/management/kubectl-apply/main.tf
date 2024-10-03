@@ -41,7 +41,7 @@ module "kubectl_apply_manifests" {
   wait_for_rollout  = each.value.wait_for_rollout
 
   providers = {
-    http    = http.h
+    http = http.h
   }
 }
 
@@ -51,7 +51,7 @@ module "install_kueue" {
   server_side_apply = true
 
   providers = {
-    http    = http.h
+    http = http.h
   }
 }
 
@@ -61,7 +61,7 @@ module "install_jobset" {
   server_side_apply = true
 
   providers = {
-    http    = http.h
+    http = http.h
   }
 }
 
@@ -74,6 +74,6 @@ module "configure_kueue" {
   wait_for_rollout  = true
 
   providers = {
-    http    = http.h
+    http = http.h
   }
 }
