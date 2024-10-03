@@ -74,3 +74,19 @@ output "k8s_service_account_name" {
   description = "Name of k8s service account."
   value       = one(module.workload_identity[*].k8s_service_account_name)
 }
+
+
+output "gke_cluster_endpoint" {
+  description = "GKE cluster endpoint."
+  value       = google_container_cluster.gke_cluster.endpoint
+}
+
+output "cluster_ca_certificate" {
+  description = "Cluster CA certificate."
+  value       = google_container_cluster.gke_cluster.master_auth[0].cluster_ca_certificate
+}
+
+output "access_token" {
+  description = "Access token."
+  value       = data.google_client_config.default.access_token 
+}

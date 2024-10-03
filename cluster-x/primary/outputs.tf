@@ -18,3 +18,20 @@ output "instructions_gke_cluster" {
   description = "Generated output from module 'gke_cluster'"
   value       = module.gke_cluster.instructions
 }
+
+
+output "gke_cluster_endpoint" {
+  description = "GKE cluster endpoint."
+  value       = module.gke_cluster.gke_cluster_endpoint
+}
+
+output "cluster_ca_certificate" {
+  description = "Cluster CA certificate."
+  value       = module.gke_cluster.cluster_ca_certificate
+}
+
+output "access_token" {
+  description = "Access token."
+  value       = module.gke_cluster.access_token
+  sensitive   = true
+}

@@ -25,9 +25,9 @@ provider "google-beta" {
 }
 
 provider "kubectl" {
-  host                   = "host"
-  token                  = "token"
-  cluster_ca_certificate = "certificate"
+  host                   = "https://${module.gke_cluster.gke_cluster_endpoint}"
+  token                  = module.gke_cluster.access_token
+  cluster_ca_certificate = base64decode(module.gke_cluster.cluster_ca_certificate)
   load_config_file       = false
-  apply_retry_count      = 15
+  apply_retry_count      = 15 # Terraform may apply resources in parallel, leading to potential dependency issues. This retry mechanism ensures that if a resource's dependencies aren't ready, Terraform will attempt to apply it again.
 }
