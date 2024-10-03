@@ -17,7 +17,7 @@
 blueprint_name: hpc-gke
 
 vars:
-  project_id:  ## Set GCP Project ID Here ##
+  project_id: ns-playground-a
   deployment_name: cluster-01
   region: us-central1
 

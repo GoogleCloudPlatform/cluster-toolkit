@@ -1,0 +1,23 @@
+Advanced Deployment Instructions
+================================
+
+Terraform group 'primary' was successfully created in directory gke-a3-highgpu/primary
+To deploy, run the following commands:
+
+terraform -chdir=gke-a3-highgpu/primary init
+terraform -chdir=gke-a3-highgpu/primary validate
+terraform -chdir=gke-a3-highgpu/primary apply
+
+Destroying infrastructure when no longer needed
+===============================================
+
+Automated
+---------
+
+gcluster destroy gke-a3-highgpu
+
+Advanced / Manual
+-----------------
+Infrastructure should be destroyed in reverse order of creation:
+
+terraform -chdir=gke-a3-highgpu/primary destroy

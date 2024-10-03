@@ -17,7 +17,7 @@
 blueprint_name: gke-a3-highgpu
 
 vars:
-  project_id:  ## Set GCP Project ID Here ##
+  project_id: ns-playground-a
   deployment_name: gke-a3-highgpu
   region: us-central1
   zone: us-central1-c
