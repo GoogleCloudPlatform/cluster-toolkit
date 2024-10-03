@@ -14,11 +14,13 @@
 
 ---
 
+# TODO: revert changes to this file
+
 blueprint_name: hpc-gke
 
 vars:
   project_id: ns-playground-a
-  deployment_name: cluster-y
+  deployment_name: annuay-03-oct
   region: us-central1
   authorized_cidr: 34.19.66.155/32
 
@@ -28,9 +30,9 @@ deployment_groups:
   - id: network1
     source: modules/network/vpc
     settings:
-      subnetwork_name: gke-subnet-y
+      subnetwork_name: gke-subnet-annuay-03-oct
       secondary_ranges:
-        gke-subnet-y:
+        gke-subnet-annuay-03-oct:
         - range_name: pods
           ip_cidr_range: 10.4.0.0/14
         - range_name: services
@@ -45,10 +47,3 @@ deployment_groups:
       - display_name: deployment-machine
         cidr_block: $(vars.authorized_cidr)
     outputs: [instructions]
-
-  - id: workload_manager_install
-    source: modules/management/kubectl-apply
-    use: [gke_cluster]
-    settings:
-      jobset:
-        install: true

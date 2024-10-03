@@ -15,11 +15,6 @@
   */
 
 locals {
-  cluster_id_parts = split("/", var.cluster_id)
-  cluster_name     = local.cluster_id_parts[5]
-  cluster_location = local.cluster_id_parts[3]
-  project_id       = var.project_id != null ? var.project_id : local.cluster_id_parts[1]
-
   apply_manifests_map = tomap({
     for index, manifest in var.apply_manifests : index => manifest
   })
@@ -29,14 +24,6 @@ locals {
   kueue_install_source  = format("${path.module}/manifests/kueue-%s.yaml", try(var.kueue.version, ""))
   jobset_install_source = format("${path.module}/manifests/jobset-%s.yaml", try(var.jobset.version, ""))
 }
-
-data "google_container_cluster" "gke_cluster" {
-  project  = local.project_id
-  name     = local.cluster_name
-  location = local.cluster_location
-}
-
-data "google_client_config" "default" {}
 
 module "kubectl_apply_manifests" {
   for_each = local.apply_manifests_map
@@ -49,7 +36,7 @@ module "kubectl_apply_manifests" {
   wait_for_rollout  = each.value.wait_for_rollout
 
   providers = {
-    http    = http.h
+    http = http.h
   }
 }
 
@@ -59,7 +46,7 @@ module "install_kueue" {
   server_side_apply = true
 
   providers = {
-    http    = http.h
+    http = http.h
   }
 }
 
@@ -69,7 +56,7 @@ module "install_jobset" {
   server_side_apply = true
 
   providers = {
-    http    = http.h
+    http = http.h
   }
 }
 
@@ -82,6 +69,6 @@ module "configure_kueue" {
   wait_for_rollout  = true
 
   providers = {
-    http    = http.h
+    http = http.h
   }
 }
