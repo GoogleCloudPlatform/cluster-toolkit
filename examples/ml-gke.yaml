@@ -44,7 +44,7 @@ deployment_groups:
     source: modules/scheduler/gke-cluster
     use: [network1]
     settings:
-      enable_private_endpoint: false
+      enable_private_endpoint: false  # Allows for access from authorized public IPs
       master_authorized_networks:
       - display_name: deployment-machine
         cidr_block: $(vars.authorized_cidr)
