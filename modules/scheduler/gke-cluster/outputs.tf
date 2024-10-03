@@ -86,11 +86,11 @@ output "gke_cluster_endpoint" {
 }
 
 output "cluster_ca_certificate" {
-  description = "Cluster CA certificate."
+  description = "GKE cluster CA certificate."
   value       = google_container_cluster.gke_cluster.master_auth[0].cluster_ca_certificate
 }
 
 output "access_token" {
-  description = "Access token."
+  description = "Google client config access token."
   value       = data.google_client_config.default.access_token
 }
