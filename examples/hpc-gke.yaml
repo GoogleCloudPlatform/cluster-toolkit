@@ -14,15 +14,12 @@
 
 ---
 
-# TODO: revert changes to this file
-
 blueprint_name: hpc-gke
 
 vars:
-  project_id: ns-playground-a
-  deployment_name: annuay-03-oct
+  project_id:  ## Set GCP Project ID Here ##
+  deployment_name: cluster-01
   region: us-central1
-  authorized_cidr: 34.19.66.155/32
 
 deployment_groups:
 - group: primary
@@ -30,9 +27,9 @@ deployment_groups:
   - id: network1
     source: modules/network/vpc
     settings:
-      subnetwork_name: gke-subnet-annuay-03-oct
+      subnetwork_name: gke-subnet
       secondary_ranges:
-        gke-subnet-annuay-03-oct:
+        gke-subnet:
         - range_name: pods
           ip_cidr_range: 10.4.0.0/14
         - range_name: services
@@ -42,8 +39,20 @@ deployment_groups:
     source: modules/scheduler/gke-cluster
     use: [network1]
     settings:
-      enable_private_endpoint: false
-      master_authorized_networks:
-      - display_name: deployment-machine
-        cidr_block: $(vars.authorized_cidr)
+      enable_private_endpoint: false  # Allows for access from authorized public IPs
+    outputs: [instructions]
+
+  - id: compute_pool
+    source: modules/compute/gke-node-pool
+    use: [gke_cluster]
+
+  - id: job-template
+    source: modules/compute/gke-job-template
+    use: [compute_pool]
+    settings:
+      image: busybox
+      command:
+      - echo
+      - Hello World
+      node_count: 3
     outputs: [instructions]
