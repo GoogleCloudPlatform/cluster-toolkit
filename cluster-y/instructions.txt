@@ -1,0 +1,23 @@
+Advanced Deployment Instructions
+================================
+
+Terraform group 'primary' was successfully created in directory cluster-y/primary
+To deploy, run the following commands:
+
+terraform -chdir=cluster-y/primary init
+terraform -chdir=cluster-y/primary validate
+terraform -chdir=cluster-y/primary apply
+
+Destroying infrastructure when no longer needed
+===============================================
+
+Automated
+---------
+
+gcluster destroy cluster-y
+
+Advanced / Manual
+-----------------
+Infrastructure should be destroyed in reverse order of creation:
+
+terraform -chdir=cluster-y/primary destroy

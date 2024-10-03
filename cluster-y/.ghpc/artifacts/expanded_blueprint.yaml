@@ -1,0 +1,82 @@
+# Copyright 2023 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+blueprint_name: hpc-gke
+ghpc_version: v1.39.0-164-g7f71bb03-dirty
+vars:
+  authorized_cidr: 34.19.66.155/32
+  deployment_name: cluster-y
+  labels:
+    ghpc_blueprint: hpc-gke
+    ghpc_deployment: ((var.deployment_name))
+  project_id: ns-playground-a
+  region: us-central1
+deployment_groups:
+  - group: primary
+    terraform_providers:
+      google:
+        source: hashicorp/google
+        version: '>= 4.84.0, < 5.39.0'
+        configuration:
+          project: ((var.project_id))
+          region: ((var.region))
+      google-beta:
+        source: hashicorp/google-beta
+        version: '>= 4.84.0, < 5.39.0'
+        configuration:
+          project: ((var.project_id))
+          region: ((var.region))
+    modules:
+      - source: modules/network/vpc
+        kind: terraform
+        id: network1
+        settings:
+          deployment_name: ((var.deployment_name))
+          project_id: ((var.project_id))
+          region: ((var.region))
+          secondary_ranges:
+            gke-subnet-y:
+              - ip_cidr_range: 10.4.0.0/14
+                range_name: pods
+              - ip_cidr_range: 10.0.32.0/20
+                range_name: services
+          subnetwork_name: gke-subnet-y
+      - source: modules/scheduler/gke-cluster
+        kind: terraform
+        id: gke_cluster
+        use:
+          - network1
+        outputs:
+          - name: instructions
+        settings:
+          deployment_name: ((var.deployment_name))
+          enable_private_endpoint: false
+          labels: ((var.labels))
+          master_authorized_networks:
+            - cidr_block: ((var.authorized_cidr))
+              display_name: deployment-machine
+          network_id: ((module.network1.network_id))
+          project_id: ((var.project_id))
+          region: ((var.region))
+          subnetwork_self_link: ((module.network1.subnetwork_self_link))
+      - source: modules/management/kubectl-apply
+        kind: terraform
+        id: workload_manager_install
+        use:
+          - gke_cluster
+        settings:
+          cluster_id: ((module.gke_cluster.cluster_id))
+          jobset:
+            install: true
+          project_id: ((var.project_id))

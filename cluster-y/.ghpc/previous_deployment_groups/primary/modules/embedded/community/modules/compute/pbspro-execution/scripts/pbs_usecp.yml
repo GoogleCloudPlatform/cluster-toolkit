@@ -1,0 +1,40 @@
+# Copyright 2022 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+- name: Configure mountpoints to use PBS local copy mechanism
+  become: true
+  hosts: localhost
+  vars:
+    pbs_home: /var/spool/pbs
+    mountpoints: ""
+  tasks:
+  - name: Allow PBS MoM to transfer files on shared filesystems using cp
+    ansible.builtin.lineinfile:
+      path: "{{ pbs_home }}/mom_priv/config"
+      line: $usecp *:{{ item }} {{ item }}
+    loop: "{{ mountpoints.split(',') }}"
+    notify:
+    - Restart PBS
+  - name: Ensure PBS is running
+    ansible.builtin.service:
+      name: pbs
+      state: started
+  handlers:
+  - name: Restart PBS
+    ansible.builtin.service:
+      name: pbs
+      state: restarted

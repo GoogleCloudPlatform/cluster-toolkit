@@ -75,7 +75,6 @@ output "k8s_service_account_name" {
   value       = one(module.workload_identity[*].k8s_service_account_name)
 }
 
-
 output "gke_cluster_endpoint" {
   description = "GKE cluster endpoint."
   value       = google_container_cluster.gke_cluster.endpoint

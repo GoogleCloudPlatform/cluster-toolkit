@@ -30,14 +30,6 @@ locals {
   jobset_install_source = format("${path.module}/manifests/jobset-%s.yaml", try(var.jobset.version, ""))
 }
 
-data "google_container_cluster" "gke_cluster" {
-  project  = local.project_id
-  name     = local.cluster_name
-  location = local.cluster_location
-}
-
-data "google_client_config" "default" {}
-
 module "kubectl_apply_manifests" {
   for_each = local.apply_manifests_map
   source   = "./kubectl"
