@@ -1,0 +1,23 @@
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: ${pv_name}
+  labels:
+  %{~ for key, val in labels ~}
+    ${key}: ${val}
+  %{~ endfor ~}
+spec:
+  storageClassName: ""
+  capacity:
+    storage: ${capacity}
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  volumeMode: Filesystem
+  csi:
+    driver: filestore.csi.storage.gke.io
+    volumeHandle: "modeInstance/${location}/${filestore_name}/${share_name}"
+    volumeAttributes:
+      ip: ${ip_address}
+      volume: ${share_name}
