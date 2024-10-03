@@ -49,11 +49,11 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [hpc-slurm-local-ssd-v5-legacy.yaml](#hpc-slurm-local-ssd-v5-legacyyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-local-ssd.yaml](#hpc-slurm-local-ssdyaml--) ![community-badge] ![experimental-badge]
   * [hcls-blueprint.yaml](#hcls-blueprintyaml-) ![core-badge]
-  * [hpc-gke.yaml](#hpc-gkeyaml--) ![community-badge] ![experimental-badge]
-  * [ml-gke](#ml-gkeyaml--) ![community-badge] ![experimental-badge]
-  * [storage-gke](#storage-gkeyaml--) ![community-badge] ![experimental-badge]
-  * [gke-a3-megagpu](#gke-a3-megagpuyaml--) ![community-badge] ![experimental-badge]
-  * [gke-a3-highgpu](#gke-a3-highgpuyaml--) ![community-badge] ![experimental-badge]
+  * [hpc-gke.yaml](#hpc-gkeyaml--) ![core-badge] ![experimental-badge]
+  * [ml-gke](#ml-gkeyaml--) ![core-badge] ![experimental-badge]
+  * [storage-gke](#storage-gkeyaml--) ![core-badge] ![experimental-badge]
+  * [gke-a3-megagpu](#gke-a3-megagpuyaml--) ![core-badge] ![experimental-badge]
+  * [gke-a3-highgpu](#gke-a3-highgpuyaml--) ![core-badge] ![experimental-badge]
   * [htc-slurm-v5-legacy.yaml](#htc-slurm-v5-legacyyaml--) ![community-badge] ![experimental-badge]
   * [htc-slurm.yaml](#htc-slurmyaml-) ![community-badge]
   * [htc-htcondor.yaml](#htc-htcondoryaml--) ![community-badge] ![experimental-badge]
@@ -1426,7 +1426,7 @@ GROMACS with GPUs and CPUs on Google Cloud. For full documentation, refer
 [document]: ../docs/videos/healthcare-and-life-sciences/README.md
 [hcls-blueprint.yaml]:  ../example/hcls-blueprint.yaml
 
-### [hpc-gke.yaml] ![community-badge] ![experimental-badge]
+### [hpc-gke.yaml] ![core-badge] ![experimental-badge]
 
 This blueprint uses GKE to provision a Kubernetes cluster with a system node
 pool (included in gke-cluster module) and an autoscaling compute node pool. It
@@ -1438,7 +1438,7 @@ to the cluster using `kubectl` and will run on the specified node pool.
 
 [hpc-gke.yaml]: ../examples/hpc-gke.yaml
 
-### [ml-gke.yaml] ![community-badge] ![experimental-badge]
+### [ml-gke.yaml] ![core-badge] ![experimental-badge]
 
 This blueprint demonstrates how to set up a GPU GKE cluster using the Cluster
 Toolkit. It includes:
@@ -1506,7 +1506,7 @@ credentials for the created cluster_ and _submit a job calling `nvidia_smi`_.
 [ml-gke.yaml]: ../examples/ml-gke.yaml
 [`kubernetes-operations`]: ../community/modules/scripts/kubernetes-operations/README.md
 
-### [storage-gke.yaml] ![community-badge] ![experimental-badge]
+### [storage-gke.yaml] ![core-badge] ![experimental-badge]
 
 This blueprint shows how to use different storage options with GKE in the toolkit.
 
@@ -1537,16 +1537,18 @@ cleaned up when the job is deleted.
 
 [storage-gke.yaml]: ../examples/storage-gke.yaml
 
-### [gke-a3-megagpu.yaml] ![community-badge] ![experimental-badge]
+### [gke-a3-megagpu.yaml] ![core-badge] ![experimental-badge]
 
 This blueprint shows how to provision a GKE cluster with A3 Mega machines in the toolkit.
 
-After provisioning the cluster and the nodepool, we need to do the following:
-1. Install the GPUDirect binary and configure NCCL: https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#install-gpudirect-tcpx-nccl
-2. Deploy NRI device injector plugin: https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#nri-device-injector
-3. Deploy a test workload: https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#test-workload
-4. Use recommended NCCL configuration settings to improve performance: https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#environment-variables-nccl
-5. Add GPUDirect to manifests: https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#add-gpudirect-manifests
+After provisioning the cluster and the nodepool, the below components will be installed
+to enable GPUDirect for the A3 Mega machines.
+
+* NCCL plugin for GPUDirect [TCPXO](https://github.com/GoogleCloudPlatform/container-engine-accelerators/tree/master/gpudirect-tcpxo)
+* [NRI](https://github.com/GoogleCloudPlatform/container-engine-accelerators/tree/master/nri_device_injector) device injector plugin
+* Provide support for injecting GPUDirect required components(annotations, volumes, rxdm sidecar etc.) into the user workload in the form of Kubernetes Job.
+  * Provide sample workload to showcase how it will be updated with the required components injected, and how it can be deployed.
+  * Allow user to use the provided script to update their own workload and deploy.
 
 > [!Note]
 > The Kubernetes API server will only allow requests from authorized networks.
@@ -1559,16 +1561,16 @@ After provisioning the cluster and the nodepool, we need to do the following:
 
 [gke-a3-megagpu.yaml]: ../examples/gke-a3-megagpu.yaml
 
-### [gke-a3-highgpu.yaml] ![community-badge] ![experimental-badge]
+### [gke-a3-highgpu.yaml] ![core-badge] ![experimental-badge]
 
 This blueprint shows how to provision a GKE cluster with A3 High machines in the toolkit.
 
-After provisioning the cluster and the nodepool, we need to do the following:
-1. Install the GPUDirect binary and configure NCCL: https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#gpudirect-tcpx_2
-2. Deploy NRI device injector plugin: https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#nri-device-injector
-3. Deploy a test workload: https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#test-workload
-4. Use recommended NCCL configuration settings to improve performance: https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#environment-variables-nccl
-5. Add GPUDirect to manifests: https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#add-gpudirect-manifests
+After provisioning the cluster and the nodepool, the below components will be installed
+to enable GPUDirect for the A3 High machines.
+
+* NCCL plugin for GPUDirect [TCPX](https://github.com/GoogleCloudPlatform/container-engine-accelerators/tree/master/gpudirect-tcpx)
+* [NRI](https://github.com/GoogleCloudPlatform/container-engine-accelerators/tree/master/nri_device_injector) device injector plugin
+* Provide support for injecting GPUDirect required components(annotations, volumes, rxdm sidecar etc.) into the user workload in the form of Kubernetes Job via a script.
 
 > [!Note]
 > The Kubernetes API server will only allow requests from authorized networks.
@@ -1769,6 +1771,8 @@ scratch.
 ```yaml
 ---
 blueprint_name: # boilerplate-blueprint
+toolkit_modules_url: # github.com/GoogleCloudPlatform/cluster-toolkit
+toolkit_modules_version: # v1.15.0
 
 vars:
   project_id: # my-project-id
@@ -1791,6 +1795,8 @@ deployment_groups:
    must abide to label value naming constraints: `blueprint_name` must be at most
    63 characters long, and can only contain lowercase letters, numeric
    characters, underscores and dashes.
+
+* **toolkit_modules_url** and **toolkit_modules_version** (optional): The blueprint schema provides the optional fields `toolkit_modules_url` and `toolkit_modules_version` to version a blueprint. When these fields are provided, any module in the blueprint with a reference to an embedded module in its source field will be updated to reference the specified GitHub source and toolkit version in the expanded blueprint. `toolkit_modules_url` specifies the base URL of the GitHub repository containing the modules and `toolkit_modules_version` specifies the version of the modules to use. `toolkit_modules_url` and `toolkit_modules_version` should be provided together when in use.
 
 ### Deployment Variables
 

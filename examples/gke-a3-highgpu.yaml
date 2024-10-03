@@ -32,9 +32,9 @@ deployment_groups:
   - id: network1
     source: modules/network/vpc
     settings:
-      subnetwork_name: gke-subnet
+      subnetwork_name: gke-subnet-a3-highgpu
       secondary_ranges:
-        gke-subnet:
+        gke-subnet-a3-highgpu:
         - range_name: pods
           ip_cidr_range: 10.4.0.0/14
         - range_name: services
@@ -58,12 +58,20 @@ deployment_groups:
         display_name: "kubectl-access-network"
     outputs: [instructions]
 
-  - id: a3-highgpu_pool
+  - id: a3_highgpu_pool
     source: modules/compute/gke-node-pool
     use: [gke_cluster, gpunets]
     settings:
       machine_type: a3-highgpu-8g
       autoscaling_total_min_nodes: 2
       zones: [$(vars.zone)]
+    outputs: [instructions]
 
-# We need to do the following here after deployment: https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/examples/README.md#gke-a3-highgpuyaml--
+  - id: workload_component_install
+    source: modules/management/kubectl-apply
+    use: [gke_cluster]
+    settings:
+      kueue:
+        install: true
+      jobset:
+        install: true

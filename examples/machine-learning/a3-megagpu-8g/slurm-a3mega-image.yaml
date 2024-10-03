@@ -24,7 +24,7 @@ validators:
 # deployment-image-cluster.yaml
 vars:
   deployment_name: a3mega-image
-  source_image: debian-12-bookworm-v20240515
+  source_image: debian-12-bookworm-v20240815
 
 deployment_groups:
 - group: build_script
@@ -76,7 +76,7 @@ deployment_groups:
             hosts: all
             become: true
             vars:
-              package_url: https://snapshot.debian.org/archive/debian/20240515T205635Z/pool/main/l/linux/linux-headers-6.1.0-21-cloud-amd64_6.1.90-1_amd64.deb
+              package_url: https://snapshot.debian.org/archive/debian/20240819T204354Z/pool/main/l/linux/linux-headers-6.1.0-23-amd64_6.1.99-1_amd64.deb
               package_filename: /tmp/{{ package_url | basename }}
             tasks:
             - name: Download kernel headers package
@@ -108,7 +108,7 @@ deployment_groups:
           apt-get install -y git
           ansible-galaxy role install googlecloudplatform.google_cloud_ops_agents
           ansible-pull \
-              -U https://github.com/GoogleCloudPlatform/slurm-gcp -C 6.6.2 \
+              -U https://github.com/GoogleCloudPlatform/slurm-gcp -C 6.7.0 \
               -i localhost, --limit localhost --connection=local \
               -e @/var/tmp/slurm_vars.json \
               ansible/playbook.yml
@@ -120,7 +120,7 @@ deployment_groups:
             hosts: all
             become: true
             vars:
-              package_url: https://github.com/GoogleCloudPlatform/compute-virtual-ethernet-linux/releases/download/v1.3.4/gve-dkms_1.3.4_all.deb
+              package_url: https://github.com/GoogleCloudPlatform/compute-virtual-ethernet-linux/releases/download/v1.4.3/gve-dkms_1.4.3_all.deb
               package_filename: /tmp/{{ package_url | basename }}
             tasks:
             - name: Install driver dependencies
@@ -287,6 +287,29 @@ deployment_groups:
               ansible.posix.patch:
                 src: /tmp/bash_completion.patch
                 dest: /usr/share/bash-completion/bash_completion
+      - type: ansible-local
+        destination: aperture_devices.yml
+        content: |
+          ---
+          - name: Setup GPUDirect-TCPXO aperture devices
+            hosts: all
+            become: true
+            tasks:
+            - name: Mount aperture devices to /dev and make writable
+              ansible.builtin.copy:
+                dest: /etc/udev/rules.d/00-a3-megagpu.rules
+                owner: root
+                group: root
+                mode: 0o644
+                content: |
+                  ACTION=="add", SUBSYSTEM=="pci", ATTR{vendor}=="0x1ae0", ATTR{device}=="0x0084", TAG+="systemd", \
+                      RUN+="/usr/bin/mkdir --mode=0755 -p /dev/aperture_devices", \
+                      RUN+="/usr/bin/systemd-mount --type=none --options=bind --collect %S/%p /dev/aperture_devices/%k", \
+                      RUN+="/usr/bin/bash -c '/usr/bin/chmod 0666 /dev/aperture_devices/%k/resource*'"
+              notify: Update initramfs
+            handlers:
+            - name: Update initramfs
+              ansible.builtin.command: /usr/sbin/update-initramfs -u -k all
       - type: data
         destination: /etc/netplan/90-default.yaml
         content: |

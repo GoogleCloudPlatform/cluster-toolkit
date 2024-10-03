@@ -30,10 +30,9 @@ locals {
     effect = "NO_SCHEDULE"
   }] : []
 
-  autoscale_set                  = var.autoscaling_total_min_nodes != 0 || var.autoscaling_total_max_nodes != 1000
-  static_node_set                = var.static_node_count != null
-  reservation_resource_api_label = "compute.googleapis.com/reservation-name"
-  specific_reservations_count    = try(length(var.reservation_affinity.specific_reservations), 0)
+  autoscale_set    = var.autoscaling_total_min_nodes != 0 || var.autoscaling_total_max_nodes != 1000
+  static_node_set  = var.static_node_count != null
+  initial_node_set = try(var.initial_node_count > 0, false)
 }
 
 data "google_compute_default_service_account" "default_sa" {
@@ -56,6 +55,8 @@ resource "google_container_node_pool" "node_pool" {
       location_policy      = "ANY"
     }
   }
+
+  initial_node_count = var.initial_node_count
 
   management {
     auto_repair  = true
@@ -162,8 +163,8 @@ resource "google_container_node_pool" "node_pool" {
 
     reservation_affinity {
       consume_reservation_type = var.reservation_affinity.consume_reservation_type
-      key                      = local.specific_reservations_count != 1 ? null : local.reservation_resource_api_label
-      values                   = local.specific_reservations_count != 1 ? null : [for reservation in var.reservation_affinity.specific_reservations : reservation.name]
+      key                      = length(local.verified_specific_reservations) != 1 ? null : local.reservation_resource_api_label
+      values                   = length(local.verified_specific_reservations) != 1 ? null : [for r in local.verified_specific_reservations : "projects/${r.project}/reservations/${r.name}"]
     }
 
     dynamic "host_maintenance_policy" {
@@ -193,10 +194,19 @@ resource "google_container_node_pool" "node_pool" {
   lifecycle {
     ignore_changes = [
       node_config[0].labels,
+      initial_node_count,
     ]
     precondition {
       condition     = !local.static_node_set || !local.autoscale_set
       error_message = "static_node_count cannot be set with either autoscaling_total_min_nodes or autoscaling_total_max_nodes."
+    }
+    precondition {
+      condition     = !local.static_node_set || !local.initial_node_set
+      error_message = "initial_node_count cannot be set with static_node_count."
+    }
+    precondition {
+      condition     = !local.initial_node_set || (coalesce(var.initial_node_count, 0) >= var.autoscaling_total_min_nodes && coalesce(var.initial_node_count, 0) <= var.autoscaling_total_max_nodes)
+      error_message = "initial_node_count must be between autoscaling_total_min_nodes and autoscaling_total_max_nodes included."
     }
     precondition {
       condition     = !(coalesce(local.local_ssd_config.local_ssd_count_ephemeral_storage, 0) > 0 && coalesce(local.local_ssd_config.local_ssd_count_nvme_block, 0) > 0)
@@ -204,12 +214,24 @@ resource "google_container_node_pool" "node_pool" {
     }
     precondition {
       condition = (
-        (var.reservation_affinity.consume_reservation_type != "SPECIFIC_RESERVATION" && local.specific_reservations_count == 0) ||
-        (var.reservation_affinity.consume_reservation_type == "SPECIFIC_RESERVATION" && local.specific_reservations_count == 1)
+        (var.reservation_affinity.consume_reservation_type != "SPECIFIC_RESERVATION" && local.input_specific_reservations_count == 0) ||
+        (var.reservation_affinity.consume_reservation_type == "SPECIFIC_RESERVATION" && local.input_specific_reservations_count == 1)
       )
       error_message = <<-EOT
       When using NO_RESERVATION or ANY_RESERVATION as the `consume_reservation_type`, `specific_reservations` cannot be set.
       On the other hand, with SPECIFIC_RESERVATION you must set `specific_reservations`.
+      EOT
+    }
+    precondition {
+      condition = (
+        (local.input_specific_reservations_count == 0) ||
+        (local.input_specific_reservations_count == 1 && length(local.verified_specific_reservations) > 0 && length(local.specific_reservation_requirement_violations) == 0)
+      )
+      error_message = <<-EOT
+      Check if your reservation is configured correctly:
+      1. A reservation with the name must exist in the specified project and one of the specified zones
+      2. Its consumption type must be "specific"
+      3. Its VM Properties must match with those of the Node Pool; Machine type, Accelerators (GPU Type and count), Local SSD disk type and count
       EOT
     }
   }
@@ -252,4 +274,56 @@ resource "google_project_iam_member" "node_service_account_artifact_registry" {
   project = var.project_id
   role    = "roles/artifactregistry.reader"
   member  = "serviceAccount:${local.sa_email}"
+}
+
+resource "null_resource" "install_dependencies" {
+  provisioner "local-exec" {
+    command = "pip3 install pyyaml argparse"
+  }
+}
+
+locals {
+  gpu_direct_setting = lookup(local.gpu_direct_settings, var.machine_type, { gpu_direct_manifests = [], updated_workload_path = "", rxdm_version = "" })
+}
+
+# execute script to inject rxdm sidecar into workload to enable tcpx for a3-highgpu-8g VM workload
+resource "null_resource" "enable_tcpx_in_workload" {
+  count = var.machine_type == "a3-highgpu-8g" ? 1 : 0
+  triggers = {
+    always_run = timestamp()
+  }
+  provisioner "local-exec" {
+    command = "python3 ${path.module}/gpu-direct-workload/scripts/enable-tcpx-in-workload.py --file ${local.workload_path_tcpx} --rxdm ${local.gpu_direct_setting.rxdm_version}"
+  }
+
+  depends_on = [null_resource.install_dependencies]
+}
+
+# execute script to inject rxdm sidecar into workload to enable tcpxo for a3-megagpu-8g VM workload
+resource "null_resource" "enable_tcpxo_in_workload" {
+  count = var.machine_type == "a3-megagpu-8g" ? 1 : 0
+  triggers = {
+    always_run = timestamp()
+  }
+  provisioner "local-exec" {
+    command = "python3 ${path.module}/gpu-direct-workload/scripts/enable-tcpxo-in-workload.py --file ${local.workload_path_tcpxo} --rxdm ${local.gpu_direct_setting.rxdm_version}"
+  }
+
+  depends_on = [null_resource.install_dependencies]
+}
+
+# apply manifest to enable tcpx
+module "kubectl_apply" {
+  source = "../../management/kubectl-apply"
+
+  cluster_id = var.cluster_id
+  project_id = var.project_id
+
+  apply_manifests = flatten([
+    for manifest in local.gpu_direct_setting.gpu_direct_manifests : [
+      {
+        source = manifest
+      }
+    ]
+  ])
 }

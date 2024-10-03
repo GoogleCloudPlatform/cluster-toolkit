@@ -332,49 +332,26 @@ module "workload_identity" {
   ]
 }
 
-provider "kubectl" {
-  host                   = "https://${google_container_cluster.gke_cluster.endpoint}"
-  cluster_ca_certificate = base64decode(google_container_cluster.gke_cluster.master_auth[0].cluster_ca_certificate)
-  token                  = data.google_client_config.default.access_token
-  load_config_file       = false
-}
+module "kubectl_apply" {
+  source = "../../management/kubectl-apply"
 
-resource "kubectl_manifest" "additional_net_params" {
-  for_each = { for idx, network_info in var.additional_networks : idx => network_info }
+  cluster_id = google_container_cluster.gke_cluster.id
+  project_id = var.project_id
 
-  depends_on = [google_container_cluster.gke_cluster]
-
-  yaml_body = <<YAML
-apiVersion: networking.gke.io/v1
-kind: GKENetworkParamSet
-metadata:
-  name: vpc${each.key + 1}
-spec:
-  vpc: ${each.value.network}
-  vpcSubnet: ${each.value.subnetwork}
-  deviceMode: NetDevice
-YAML
-
-  provider = kubectl
-}
-
-resource "kubectl_manifest" "additional_nets" {
-  for_each = { for idx, network_info in var.additional_networks : idx => network_info }
-
-  depends_on = [google_container_cluster.gke_cluster, kubectl_manifest.additional_net_params]
-
-  yaml_body = <<YAML
-apiVersion: networking.gke.io/v1
-kind: Network
-metadata:
-  name: vpc${each.key + 1}
-spec:
-  parametersRef:
-    group: networking.gke.io
-    kind: GKENetworkParamSet
-    name: vpc${each.key + 1}
-  type: Device
-YAML
-
-  provider = kubectl
+  apply_manifests = flatten([
+    for idx, network_info in var.additional_networks : [
+      {
+        source = "${path.module}/templates/gke-network-paramset.yaml.tftpl",
+        template_vars = {
+          name            = "vpc${idx + 1}",
+          network_name    = network_info.network
+          subnetwork_name = network_info.subnetwork
+        }
+      },
+      {
+        source        = "${path.module}/templates/network-object.yaml.tftpl",
+        template_vars = { name = "vpc${idx + 1}" }
+      }
+    ]
+  ])
 }

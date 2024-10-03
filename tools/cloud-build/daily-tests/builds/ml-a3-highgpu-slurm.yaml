@@ -17,7 +17,7 @@ tags:
 - m.custom-image
 - m.pre-existing-vpc
 - m.startup-script
-- slurm5
+- slurm6
 
 timeout: 14400s  # 4hr
 steps:
@@ -66,8 +66,8 @@ steps:
         cat /persistent_volume/image_name | xargs -L1 gcloud compute images delete --project "${PROJECT_ID}" --quiet
     }
 
-    REGION=us-east4
-    ZONE=us-east4-a
+    REGION=us-west1
+    ZONE=us-west1-a
 
     trap 'destroy_on_exit' EXIT
     ./gcluster deploy \

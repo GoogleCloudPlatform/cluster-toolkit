@@ -91,6 +91,14 @@ duplicates = [
         "modules/scheduler/batch-job-template/compute_image.tf"
         "community/modules/compute/htcondor-execute-point/compute_image.tf"
     ],
+    [
+        "modules/scheduler/gke-cluster/templates/gke-network-paramset.yaml.tftpl",
+        "modules/scheduler/pre-existing-gke-cluster/templates/gke-network-paramset.yaml.tftpl",
+    ],
+    [
+        "modules/scheduler/gke-cluster/templates/network-object.yaml.tftpl",
+        "modules/scheduler/pre-existing-gke-cluster/templates/network-object.yaml.tftpl",
+    ],
 ]
 
 for group in duplicates:
