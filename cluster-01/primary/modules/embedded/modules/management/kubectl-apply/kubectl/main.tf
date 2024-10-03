@@ -58,7 +58,6 @@ data "kubectl_path_documents" "templates" {
 }
 
 resource "kubectl_manifest" "apply_doc" {
-  provider          = kubectl
   for_each          = local.docs_map
   yaml_body         = each.value
   server_side_apply = var.server_side_apply
