@@ -23,9 +23,6 @@ data "google_container_cluster" "existing_gke_cluster" {
 module "kubectl_apply" {
   source = "../../management/kubectl-apply" # can point to github
 
-  cluster_id = data.google_container_cluster.existing_gke_cluster.id
-  project_id = var.project_id
-
   apply_manifests = flatten([
     for idx, network_info in var.additional_networks : [
       {
