@@ -28,7 +28,9 @@ on:
     - ready_for_review
     - unlocked
     branches:
+    - main
     - develop
+    - release-candidate
 
 jobs:
   pr-label-validation:

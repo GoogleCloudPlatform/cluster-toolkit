@@ -22,6 +22,6 @@ terraform {
     }
   }
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:mig/v1.39.0"
+    module_name = "blueprints/terraform/hpc-toolkit:mig/v1.40.0"
   }
 }
