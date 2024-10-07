@@ -328,9 +328,7 @@ def main():
             f"loading {num_batches} batches of BigQuery data in batches of size : {BQ_ROW_BATCH_SIZE}"
         )
         for batch_indx, job_indx in enumerate(range(0, len(jobs), BQ_ROW_BATCH_SIZE)):
-            print(
-                f"loading BigQuery data batch {batch_indx} of {num_batches}. Loading rows {job_indx} to {job_indx + BQ_ROW_BATCH_SIZE}"
-            )
+            print(f"loading BigQuery data batch {batch_indx} of {num_batches}")
             bq_submit(jobs[job_indx : job_indx + BQ_ROW_BATCH_SIZE])
     write_timestamp(end)
     update_job_idx_cache(jobs, end)
