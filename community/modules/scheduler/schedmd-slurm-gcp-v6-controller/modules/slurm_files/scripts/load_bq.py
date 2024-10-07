@@ -285,7 +285,7 @@ def bq_submit(jobs):
 
 
 def batched_bq_submit(
-    client, table, jobs, submit_function=bq_submit, bq_row_batch_size=BQ_ROW_BATCH_SIZE
+    jobs, submit_function=bq_submit, bq_row_batch_size=BQ_ROW_BATCH_SIZE
 ):
     """Submit sacct data in batches of size bq_row_batch_size
 
