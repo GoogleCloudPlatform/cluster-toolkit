@@ -15,6 +15,7 @@
 
 
 import argparse
+import math
 import os
 import shelve
 import uuid
@@ -23,11 +24,10 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from pprint import pprint
 
+import util
 from google.api_core import exceptions, retry
 from google.cloud import bigquery as bq
 from google.cloud.bigquery import SchemaField
-
-import util
 from util import lookup, run
 
 SACCT = "sacct"
@@ -35,7 +35,9 @@ script = Path(__file__).resolve()
 
 DEFAULT_TIMESTAMP_FILE = script.parent / "bq_timestamp"
 timestamp_file = Path(os.environ.get("TIMESTAMP_FILE", DEFAULT_TIMESTAMP_FILE))
-BQ_MAX_ROW_LOAD_SIZE = 10000
+# The maximum request to insert_rows is 10MB, each sacct row is about 1200 KB or ~ 8000 rows.
+# Set to 5000 for a little wiggle room.
+BQ_ROW_BATCH_SIZE = 5000
 
 # cluster_id_file = script.parent / 'cluster_uuid'
 # try:
@@ -282,6 +284,26 @@ def bq_submit(jobs):
     print(f"successfully loaded {len(jobs)} jobs")
 
 
+def batched_bq_submit(
+    client, table, jobs, submit_function=bq_submit, bq_row_batch_size=BQ_ROW_BATCH_SIZE
+):
+    """Submit sacct data in batches of size bq_row_batch_size
+
+    Args:
+        jobs: A list of dictionaries of sacct accounting data.
+        submit_function: The method to submit the jobs to BigQuery with. Defaults to bq_submit.
+        bq_row_batch_size: The accounting data will be submitted to BigQuery in
+            batches of this size.
+    """
+    num_batches = int(math.ceil(len(jobs) / bq_row_batch_size))
+    print(
+        f"loading {num_batches} batches of BigQuery data in batches of size : {bq_row_batch_size}"
+    )
+    for indx in range(0, len(jobs), bq_row_batch_size):
+        print(f"loading BigQuery data batch {indx} of {num_batches}")
+        submit_function(client, jobs[indx : indx + bq_row_batch_size])
+
+
 def get_time_window():
     if not timestamp_file.is_file():
         timestamp_file.touch()
@@ -321,16 +343,9 @@ def main():
     # on failure, an exception will cause the timestamp not to be rewritten. So
     # it will try again next time. If some writes succeed, we don't currently
     # have a way to not submit duplicates next time.
-    print(f"loading BigQuery data in batches of size : {BQ_MAX_ROW_LOAD_SIZE}")
-    num_batches = (len(jobs) // BQ_MAX_ROW_LOAD_SIZE) + 1
-    print(f"Number of batches: {num_batches}")
     if jobs:
-        start_job_idx = 0
-        end_job_idx = BQ_MAX_ROW_LOAD_SIZE
-        for _ in range(num_batches):
-            bq_submit(jobs[start_job_idx:end_job_idx])
-            start_job_idx = end_job_idx
-            end_job_idx += BQ_MAX_ROW_LOAD_SIZE
+        batched_bq_submit(client, table, jobs)
+
     write_timestamp(end)
     update_job_idx_cache(jobs, end)
 
