@@ -284,26 +284,6 @@ def bq_submit(jobs):
     print(f"successfully loaded {len(jobs)} jobs")
 
 
-def batched_bq_submit(
-    jobs, submit_function=bq_submit, bq_row_batch_size=BQ_ROW_BATCH_SIZE
-):
-    """Submit sacct data in batches of size bq_row_batch_size
-
-    Args:
-        jobs: A list of dictionaries of sacct accounting data.
-        submit_function: The method to submit the jobs to BigQuery with. Defaults to bq_submit.
-        bq_row_batch_size: The accounting data will be submitted to BigQuery in
-            batches of this size.
-    """
-    num_batches = int(math.ceil(len(jobs) / bq_row_batch_size))
-    print(
-        f"loading {num_batches} batches of BigQuery data in batches of size : {bq_row_batch_size}"
-    )
-    for indx in range(0, len(jobs), bq_row_batch_size):
-        print(f"loading BigQuery data batch {indx} of {num_batches}")
-        submit_function(client, jobs[indx : indx + bq_row_batch_size])
-
-
 def get_time_window():
     if not timestamp_file.is_file():
         timestamp_file.touch()
@@ -344,8 +324,13 @@ def main():
     # it will try again next time. If some writes succeed, we don't currently
     # have a way to not submit duplicates next time.
     if jobs:
-        batched_bq_submit(client, table, jobs)
-
+        num_batches = math.ceil(len(jobs) / BQ_ROW_BATCH_SIZE)
+        print(
+            f"loading {num_batches} batches of BigQuery data in batches of size : {BQ_ROW_BATCH_SIZE}"
+        )
+        for indx in range(0, len(jobs), BQ_ROW_BATCH_SIZE):
+            print(f"loading BigQuery data batch {indx} of {num_batches}")
+            bq_submit(jobs[indx : indx + BQ_ROW_BATCH_SIZE])
     write_timestamp(end)
     update_job_idx_cache(jobs, end)
 
