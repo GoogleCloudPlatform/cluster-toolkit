@@ -19,23 +19,23 @@ import os
 import shelve
 import uuid
 from collections import namedtuple
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from pprint import pprint
 
-from google.cloud.bigquery import SchemaField
+from google.api_core import exceptions, retry
 from google.cloud import bigquery as bq
-from google.api_core import retry, exceptions
+from google.cloud.bigquery import SchemaField
 
 import util
 from util import lookup, run
-
 
 SACCT = "sacct"
 script = Path(__file__).resolve()
 
 DEFAULT_TIMESTAMP_FILE = script.parent / "bq_timestamp"
 timestamp_file = Path(os.environ.get("TIMESTAMP_FILE", DEFAULT_TIMESTAMP_FILE))
+BQ_MAX_ROW_LOAD_SIZE = 10000
 
 # cluster_id_file = script.parent / 'cluster_uuid'
 # try:
@@ -321,8 +321,16 @@ def main():
     # on failure, an exception will cause the timestamp not to be rewritten. So
     # it will try again next time. If some writes succeed, we don't currently
     # have a way to not submit duplicates next time.
+    print(f"loading BigQuery data in batches of size : {BQ_MAX_ROW_LOAD_SIZE}")
+    num_batches = (len(jobs) // BQ_MAX_ROW_LOAD_SIZE) + 1
+    print(f"Number of batches: {num_batches}")
     if jobs:
-        bq_submit(jobs)
+        start_job_idx = 0
+        end_job_idx = BQ_MAX_ROW_LOAD_SIZE
+        for _ in range(num_batches):
+            bq_submit(jobs[start_job_idx:end_job_idx])
+            start_job_idx = end_job_idx
+            end_job_idx += BQ_MAX_ROW_LOAD_SIZE
     write_timestamp(end)
     update_job_idx_cache(jobs, end)
 
