@@ -15,7 +15,6 @@
 
 
 import argparse
-import math
 import os
 import shelve
 import uuid
@@ -324,7 +323,7 @@ def main():
     # it will try again next time. If some writes succeed, we don't currently
     # have a way to not submit duplicates next time.
     if jobs:
-        num_batches = math.ceil(len(jobs) / BQ_ROW_BATCH_SIZE)
+        num_batches = (len(jobs) - 1) // BQ_ROW_BATCH_SIZE + 1
         print(
             f"loading {num_batches} batches of BigQuery data in batches of size : {BQ_ROW_BATCH_SIZE}"
         )
