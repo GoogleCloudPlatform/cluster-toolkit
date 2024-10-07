@@ -35,7 +35,7 @@ script = Path(__file__).resolve()
 
 DEFAULT_TIMESTAMP_FILE = script.parent / "bq_timestamp"
 timestamp_file = Path(os.environ.get("TIMESTAMP_FILE", DEFAULT_TIMESTAMP_FILE))
-# The maximum request to insert_rows is 10MB, each sacct row is about 1200 KB or ~ 8000 rows.
+# The maximum request to insert_rows is 10MB, each sacct row is about 1200 bytes or ~ 8000 rows.
 # Set to 5000 for a little wiggle room.
 BQ_ROW_BATCH_SIZE = 5000
 
