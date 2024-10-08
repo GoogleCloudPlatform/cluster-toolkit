@@ -33,6 +33,10 @@ spec:
       - key: "node-role.kubernetes.io/control-plane"
         operator: "Exists"
         effect: "NoSchedule"
+      - key: components.gke.io/gke-managed-components
+        value: "true"
+        operator: Equal
+        effect: NoSchedule
       containers:
       - name: topology-scheduler-container
         image: python:3.9
