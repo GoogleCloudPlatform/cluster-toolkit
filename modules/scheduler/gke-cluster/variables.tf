@@ -327,3 +327,23 @@ variable "additional_networks" {
     }))
   }))
 }
+
+variable "rdma_subnetwork_name_prefix" {
+  description = "Prefix of the RDMA subnetwork names"
+  default     = null
+  type        = string
+}
+
+# REMOVE_ME: It's a temporary variable used in internal testing
+variable "is_gke_sandbox" {
+  description = "Temporary variable to identify the GKE sandbox environment"
+  default     = false
+  type        = bool
+}
+
+# REMOVE_ME: It's a temporary variable used in internal testing
+variable "zone" {
+  description = "Zone"
+  default     = null
+  type        = string
+}
