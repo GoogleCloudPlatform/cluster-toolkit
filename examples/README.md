@@ -1772,7 +1772,7 @@ scratch.
 ---
 blueprint_name: # boilerplate-blueprint
 toolkit_modules_url: # github.com/GoogleCloudPlatform/cluster-toolkit
-toolkit_modules_version: # v1.15.0
+toolkit_modules_version: # v1.38.0
 
 vars:
   project_id: # my-project-id
@@ -1796,7 +1796,7 @@ deployment_groups:
    63 characters long, and can only contain lowercase letters, numeric
    characters, underscores and dashes.
 
-* **toolkit_modules_url** and **toolkit_modules_version** (optional): The blueprint schema provides the optional fields `toolkit_modules_url` and `toolkit_modules_version` to version a blueprint. When these fields are provided, any module in the blueprint with a reference to an embedded module in its source field will be updated to reference the specified GitHub source and toolkit version in the expanded blueprint. `toolkit_modules_url` specifies the base URL of the GitHub repository containing the modules and `toolkit_modules_version` specifies the version of the modules to use. `toolkit_modules_url` and `toolkit_modules_version` should be provided together when in use.
+* **toolkit_modules_url** and **toolkit_modules_version** (optional): The blueprint schema provides the optional fields `toolkit_modules_url` and `toolkit_modules_version` to version a blueprint. When these fields are provided, any module in the blueprint with a reference to an embedded module in its source field will be updated to reference the specified GitHub source and toolkit version in the deployment folder. `toolkit_modules_url` specifies the base URL of the GitHub repository containing the modules and `toolkit_modules_version` specifies the version of the modules to use. `toolkit_modules_url` and `toolkit_modules_version` should be provided together when in use.
 
 ### Deployment Variables
 
