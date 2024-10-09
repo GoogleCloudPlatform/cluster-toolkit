@@ -23,7 +23,7 @@ locals {
   sa_email = var.service_account_email != null ? var.service_account_email : data.google_compute_default_service_account.default_sa.email
 
   preattached_gpu_machine_family = contains(["a2", "a3", "g2"], local.machine_family)
-  has_gpu                        = (local.guest_accelerator != null && length(local.guest_accelerator) > 0) || local.preattached_gpu_machine_family
+  has_gpu                        = (local.guest_accelerator != null && (length([for ga in local.guest_accelerator : ga if ga.count > 0]) > 0)) || local.preattached_gpu_machine_family
   gpu_taint = local.has_gpu ? [{
     key    = "nvidia.com/gpu"
     value  = "present"
@@ -89,13 +89,13 @@ resource "google_container_node_pool" "node_pool" {
     image_type      = var.image_type
 
     dynamic "guest_accelerator" {
-      for_each = local.guest_accelerator
+      for_each = { for idx, ga in local.guest_accelerator : idx => ga if ga.count > 0 }
       content {
         type                           = coalesce(guest_accelerator.value.type, try(local.generated_guest_accelerator[0].type, ""))
         count                          = coalesce(try(guest_accelerator.value.count, 0) > 0 ? guest_accelerator.value.count : try(local.generated_guest_accelerator[0].count, "0"))
         gpu_driver_installation_config = coalescelist(try(guest_accelerator.value.gpu_driver_installation_config, []), [{ gpu_driver_version = "DEFAULT" }])
         gpu_partition_size             = try(guest_accelerator.value.gpu_partition_size, "")
-        gpu_sharing_config             = try(guest_accelerator.value.gpu_sharing_config, [])
+        gpu_sharing_config             = try(guest_accelerator.value.gpu_sharing_config, null)
       }
     }
 
