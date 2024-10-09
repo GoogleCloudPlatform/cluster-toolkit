@@ -58,6 +58,21 @@ This module simplifies the following functionality:
         install: true
 ```
 
+The `config_path` field in `kueue` installation accepts a template file, too. You will need to provide variables for the template using `config_template_vars` field.
+
+```yaml
+  - id: workload_component_install
+    source: modules/management/kubectl-apply
+    use: [gke_cluster]
+    settings:
+      kueue:
+        install: true
+        config_path: $(ghpc_stage("manifests/user-provided-kueue-config.yaml.tftpl"))
+        config_template_vars: {name: "dev-config", public: "false"}
+      jobset:
+        install: true
+```
+
 > **_NOTE:_**
 >
 > The `project_id` and `region` settings would be inferred from the deployment variables of the same name, but they are included here for clarity.
