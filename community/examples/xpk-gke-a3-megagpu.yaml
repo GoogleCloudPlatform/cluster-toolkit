@@ -114,5 +114,5 @@ deployment_groups:
       apply_manifests:
       - source: $(ghpc_stage("xpk-gke-a3-megagpu-files"))/config-map.yaml.tftpl
         template_vars: {name: "xpk-gke-a3-megagpu-configmap", num_nodes: "2"}
-      - source: $(ghpc_stage("xpk-gke-a3-megagpu-files"))/kueue-credentials.yaml.tftpl
+      - source: $(ghpc_stage("xpk-gke-a3-megagpu-files"))/kueue-xpk-configuration.yaml.tftpl
         template_vars: {num_chips: "16"}
