@@ -354,3 +354,17 @@ variable "host_maintenance_interval" {
     error_message = "Invalid host_maintenance_interval value. Must be PERIODIC, AS_NEEDED or the empty string"
   }
 }
+
+# REMOVE_ME: It's a temporary variable used in internal testing
+variable "is_gke_sandbox" {
+  description = "Temporary variable to identify the GKE sandbox environment"
+  default     = false
+  type        = bool
+}
+
+# REMOVE_ME: It's a temporary variable used in internal testing
+variable "node_version" {
+  description = "Temporary variable to explicitly set the node version"
+  type        = string
+  default     = null
+}

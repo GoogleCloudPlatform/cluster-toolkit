@@ -53,3 +53,9 @@ variable "additional_networks" {
     }))
   }))
 }
+
+variable "rdma_subnetwork_name_prefix" {
+  description = "Prefix of the RDMA subnetwork names"
+  default     = null
+  type        = string
+}

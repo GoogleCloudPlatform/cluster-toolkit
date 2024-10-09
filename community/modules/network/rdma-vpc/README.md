@@ -66,7 +66,7 @@ No resources.
 | <a name="input_region"></a> [region](#input\_region) | The default region for Cloud resources | `string` | n/a | yes |
 | <a name="input_secondary_ranges"></a> [secondary\_ranges](#input\_secondary\_ranges) | Secondary ranges that will be used in some of the subnets. Please see https://goo.gle/hpc-toolkit-vpc-deprecation for migration instructions. | `map(list(object({ range_name = string, ip_cidr_range = string })))` | `{}` | no |
 | <a name="input_shared_vpc_host"></a> [shared\_vpc\_host](#input\_shared\_vpc\_host) | Makes this project a Shared VPC host if 'true' (default 'false') | `bool` | `false` | no |
-| <a name="input_subnetworks_template"></a> [subnetworks\_template](#input\_subnetworks\_template) | Rules for creating subnetworks within the VPC | <pre>object({<br>    count          = number<br>    name_prefix    = string<br>    ip_range       = string<br>    region         = string<br>    private_access = optional(bool)<br>  })</pre> | <pre>{<br>  "count": 8,<br>  "ip_range": "192.168.0.0/16",<br>  "name_prefix": "subnet",<br>  "region": null<br>}</pre> | no |
+| <a name="input_subnetworks_template"></a> [subnetworks\_template](#input\_subnetworks\_template) | Rules for creating subnetworks within the VPC | <pre>object({<br/>    count          = number<br/>    name_prefix    = string<br/>    ip_range       = string<br/>    region         = string<br/>    private_access = optional(bool)<br/>  })</pre> | <pre>{<br/>  "count": 8,<br/>  "ip_range": "192.168.0.0/16",<br/>  "name_prefix": "subnet",<br/>  "region": null<br/>}</pre> | no |
 
 ## Outputs
 
@@ -76,5 +76,7 @@ No resources.
 | <a name="output_network_name"></a> [network\_name](#output\_network\_name) | Name of the new VPC network |
 | <a name="output_network_self_link"></a> [network\_self\_link](#output\_network\_self\_link) | Self link of the new VPC network |
 | <a name="output_subnetwork_interfaces"></a> [subnetwork\_interfaces](#output\_subnetwork\_interfaces) | Full list of subnetwork objects belonging to the new VPC network (compatible with vm-instance) |
+| <a name="output_subnetwork_interfaces_gke"></a> [subnetwork\_interfaces\_gke](#output\_subnetwork\_interfaces\_gke) | Full list of subnetwork objects belonging to the new VPC network (compatible with gke-node-pool) |
+| <a name="output_subnetwork_name_prefix"></a> [subnetwork\_name\_prefix](#output\_subnetwork\_name\_prefix) | Prefix of the RDMA subnetwork names |
 | <a name="output_subnetworks"></a> [subnetworks](#output\_subnetworks) | Full list of subnetwork objects belonging to the new VPC network |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
