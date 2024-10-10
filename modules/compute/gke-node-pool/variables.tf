@@ -15,7 +15,7 @@
 */
 
 variable "project_id" {
-  description = "The project ID to host the cluster in."
+  description = "The project ID to host the cluster in. "
   type        = string
 }
 
