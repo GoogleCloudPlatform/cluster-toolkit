@@ -267,6 +267,17 @@ resource "google_container_node_pool" "system_node_pools" {
   }
 }
 
+### TODO: remove this after Terraform support for GKE Parallelstore CSI is added. ###
+###       Instead use addons_config above to enable the CSI                       ###
+resource "null_resource" "enable_parallelstore_csi" {
+  count = var.enable_parallelstore_csi == true ? 1 : 0
+
+  provisioner "local-exec" {
+    command = "gcloud container clusters update ${local.name} --location=${var.region} --project=${var.project_id} --update-addons=ParallelstoreCsiDriver=ENABLED"
+  }
+  depends_on = [google_container_node_pool.system_node_pools] # avoid cluster operation conflict
+}
+
 # For container logs to show up under Cloud Logging and GKE metrics to show up
 # on Cloud Monitoring console, some project level roles are needed for the
 # node_service_account
