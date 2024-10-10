@@ -63,13 +63,13 @@ deployment_groups:
   - id: group_placement_0
     source: modules/compute/resource-policy
     settings:
-      name: xpk-gke-a3-megagpu-gp-np-0
+      name: $(vars.deployment_name)-gp-np-0
       group_placement_max_distance: 2
 
   - id: group_placement_1
     source: modules/compute/resource-policy
     settings:
-      name: xpk-gke-a3-megagpu-gp-np-0
+      name: $(vars.deployment_name)-gp-np-0
       group_placement_max_distance: 2
 
   - id: a3_megagpu_pool_0
@@ -94,12 +94,14 @@ deployment_groups:
       host_maintenance_interval: PERIODIC
     outputs: [instructions]
 
-  - id: workload_manager_install
+  - id: workload_component_install
     source: modules/management/kubectl-apply
     use: [gke_cluster]
     settings:
       kueue:
         install: true
+        config_path: $(ghpc_stage("xpk-gke-a3-megagpu-files"))/kueue-xpk-configuration.yaml.tftpl
+        config_template_vars: {num_chips: "16"}
       jobset:
         install: true
 
@@ -107,12 +109,10 @@ deployment_groups:
     source: community/modules/compute/gke-topology-scheduler
     use: [gke_cluster]
 
-  - id: workload_manager_config
+  - id: workload_configmap
     source: modules/management/kubectl-apply
     use: [gke_cluster]
     settings:
       apply_manifests:
       - source: $(ghpc_stage("xpk-gke-a3-megagpu-files"))/config-map.yaml.tftpl
         template_vars: {name: "xpk-gke-a3-megagpu-configmap", num_nodes: "2"}
-      - source: $(ghpc_stage("xpk-gke-a3-megagpu-files"))/kueue-xpk-configuration.yaml.tftpl
-        template_vars: {num_chips: "16"}
