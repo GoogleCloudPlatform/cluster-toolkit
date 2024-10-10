@@ -157,9 +157,8 @@ as follows:
 * Slurm v6: hpc-slurm.yaml
 
 > [!IMPORTANT]
-> Three months after Slurm-gcp V6 becomes the recommended version, Slurm v5
-> modules will be marked as deprecated and will be maintained in our repo for
-> another three months, at which point the modules will be removed from the Cluster
+> Slurm-GCP v5 modules are now marked as deprecated and will be maintained in our
+> repo till January 2025. After that, the modules will be removed from the Cluster
 > Toolkit repo and regression tests will no longer run for V5. Those who choose
 > to not upgrade to V6 will still be able to use V5 modules by referencing
 > specific git tags in the module source lines.
