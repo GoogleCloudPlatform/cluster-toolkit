@@ -27,7 +27,6 @@ FILE_PREAMBLE = """
 # This file is managed by a script. Manual modifications will be overwritten.
 """
 
-login_nodeset = "x-login"
 
 
 def dict_to_conf(conf, delim=" ") -> str:
@@ -130,24 +129,6 @@ def conflines(lkp: util.Lookup) -> str:
     return dict_to_conf(conf_options, delim="\n")
 
 
-def loginlines() -> str:
-    nodeset = {
-        "NodeSet": login_nodeset,
-        "Feature": login_nodeset,
-    }
-    partition = {
-        "PartitionName": login_nodeset,
-        "Nodes": login_nodeset,
-        "State": "UP",
-        "DefMemPerCPU": 1,
-        "Hidden": "YES",
-        "RootOnly": "YES",
-    }
-    lines = [
-        dict_to_conf(nodeset),
-        dict_to_conf(partition),
-    ]
-    return "\n".join(lines)
 
 
 def nodeset_lines(nodeset, lkp: util.Lookup) -> str:
@@ -254,7 +235,7 @@ def suspend_exc_lines(lkp: util.Lookup) -> Iterable[str]:
         for p in lkp.cfg.partitions.values()
         if len(p.partition_nodeset_dyn) > 0
     ]
-    suspend_exc_parts = {"SuspendExcParts": [login_nodeset, *dyn_parts]}
+    suspend_exc_parts = {"SuspendExcParts": [*dyn_parts]}
 
     return filter(
         None,
@@ -270,7 +251,6 @@ def make_cloud_conf(lkp: util.Lookup) -> str:
     lines = [
         FILE_PREAMBLE,
         conflines(lkp),
-        loginlines(),
         *(nodeset_lines(n, lkp) for n in lkp.cfg.nodeset.values()),
         *(nodeset_dyn_lines(n) for n in lkp.cfg.nodeset_dyn.values()),
         *(nodeset_tpu_lines(n, lkp) for n in lkp.cfg.nodeset_tpu.values()),
