@@ -98,11 +98,19 @@ def instance_properties(nodeset, model, placement_group, labels=None):
     if nodeset.maintenance_interval:
         props.scheduling.maintenanceInterval = nodeset.maintenance_interval
 
+    if nodeset.dws_flex.enabled:
+        update_props_dws(props,nodeset.dws_flex)
+
     # Override with properties explicit specified in the nodeset
     props.update(nodeset.get("instance_properties") or {})
     
     return props
 
+def update_props_dws(props:dict,dws_flex:dict) -> None:
+    props.scheduling.onHostMaintenance = "TERMINATE"
+    props.scheduling.instanceTerminationAction = "DELETE"
+    props.scheduling.maxRunDuration['seconds'] = dws_flex.max_run_duration
+    props.reservationAffinity['consumeReservationType'] = "NO_RESERVATION"
 
 def per_instance_properties(node):
     props = NSDict()
