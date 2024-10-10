@@ -52,12 +52,18 @@ locals {
     content  = var.startup_script
   }]
 
+  dws_flex = {
+    enabled = var.dws_flex.enabled
+    max_run_duration = tostring(var.dws_flex.max_run_duration)
+  }
+
   nodeset = {
     node_count_static      = var.node_count_static
     node_count_dynamic_max = var.node_count_dynamic_max
     node_conf              = var.node_conf
     nodeset_name           = local.name
-
+    dws_flex		   = local.dws_flex
+    
     disk_auto_delete = var.disk_auto_delete
     disk_labels      = merge(local.labels, var.disk_labels)
     disk_size_gb     = var.disk_size_gb

@@ -512,3 +512,29 @@ variable "enable_maintenance_reservation" {
   description = "Enables slurm reservation for scheduled maintenance."
   default     = false
 }
+
+variable "dws_flex" {
+  description = <<-EOD
+  If set and `enabled = true`, will utilize the DWS Flex Start to provision nodes.
+  See: https://cloud.google.com/blog/products/compute/introducing-dynamic-workload-scheduler
+  Options:
+  - enable: Enable DWS Flex Start
+  - max_run_duration: Maximum duration in seconds for the job to run, should not exceed 1,209,600 (2 weeks).
+  - use_job_duration: Use the job duration to determine the max_run_duration, if job duration is not set, max_run_duration will be used.
+  
+ Limitations:
+  - CAN NOT be used with reservations;
+  - CAN NOT be used with placement groups (TODO: revisit);
+
+ EOD
+
+ type = object({
+   enabled = bool
+   max_run_duration = number
+  })
+ 
+ default = {
+  enabled = false
+  max_run_duration = (2*7*24*60*60) # 2 weeks
+ }
+}
