@@ -12,8 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-ARG NEMOFW_VERSION=23.11
-FROM nvcr.io/nvidia/nemo:${NEMOFW_VERSION}.framework
+ARG NEMOFW_VERSION=24.07
+FROM nvcr.io/nvidia/nemo:${NEMOFW_VERSION}
 
 ENV USE_TCPX=yes
 ENV NCCL_NET=GPUDirectTCPX_v7
