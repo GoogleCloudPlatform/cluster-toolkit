@@ -57,6 +57,6 @@ variable "capacity_gb" {
 }
 
 variable "labels" {
-  description = "GCE resource labels to be applied to resources. Key-value pairs. "
+  description = "GCE resource labels to be applied to resources. Key-value pairs."
   type        = map(string)
 }
