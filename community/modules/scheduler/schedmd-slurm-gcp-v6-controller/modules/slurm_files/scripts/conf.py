@@ -360,19 +360,20 @@ def install_cgroup_conf(lkp: util.Lookup) -> None:
 
 def install_jobsubmit_lua(lkp: util.Lookup) -> None:
     """install job_submit.lua if there are tpu nodes in the cluster"""
-    if any(
+    if not any(
         tpu_nodeset is not None
         for part in lkp.cfg.partitions.values()
         for tpu_nodeset in part.partition_nodeset_tpu
     ):
-        conf_options = {
-            "scripts_dir": lkp.cfg.slurm_scripts_dir or dirs.scripts,
-        }
-        conf = lkp.cfg.jobsubmit_lua_tpl.format(**conf_options)
+        return # No TPU partitions, no need for job_submit.lua
+    
+    scripts_dir = lkp.cfg.slurm_scripts_dir or dirs.scripts
+    tpl = (scripts_dir / "job_submit.lua.tpl").read_text()
+    conf = tpl.format(scripts_dir=scripts_dir)
 
-        conf_file = lkp.etc_dir / "job_submit.lua"
-        conf_file.write_text(conf)
-        util.chown_slurm(conf_file, 0o600)
+    conf_file = lkp.etc_dir / "job_submit.lua"
+    conf_file.write_text(conf)
+    util.chown_slurm(conf_file, 0o600)
 
 
 def gen_cloud_gres_conf(lkp: util.Lookup) -> None:
