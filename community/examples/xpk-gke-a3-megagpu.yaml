@@ -69,7 +69,7 @@ deployment_groups:
   - id: group_placement_1
     source: modules/compute/resource-policy
     settings:
-      name: $(vars.deployment_name)-gp-np-0
+      name: $(vars.deployment_name)-gp-np-1
       group_placement_max_distance: 2
 
   - id: a3_megagpu_pool_0
