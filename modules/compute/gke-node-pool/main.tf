@@ -33,20 +33,18 @@ locals {
   autoscale_set    = var.autoscaling_total_min_nodes != 0 || var.autoscaling_total_max_nodes != 1000
   static_node_set  = var.static_node_count != null
   initial_node_set = try(var.initial_node_count > 0, false)
+
+  module_unique_id = replace(lower(var.ineternal_filed_to_be_used_by_secret_coven_of_mages_do_not_touch), "/[^a-z0-9]/", "")
 }
 
 data "google_compute_default_service_account" "default_sa" {
   project = var.project_id
 }
 
-resource "random_id" "nodepool_name_suffix" {
-  byte_length = 8
-}
-
 resource "google_container_node_pool" "node_pool" {
   provider = google-beta
 
-  name           = var.name == null ? "${var.machine_type}-${random_id.nodepool_name_suffix.hex}" : var.name
+  name           = var.name == null ? "${var.machine_type}-${local.module_unique_id}" : var.name
   cluster        = var.cluster_id
   node_locations = var.zones
 

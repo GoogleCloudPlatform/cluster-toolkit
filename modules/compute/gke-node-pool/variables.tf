@@ -31,9 +31,17 @@ variable "zones" {
 }
 
 variable "name" {
-  description = "The name of the node pool. If left blank, will default to the machine type and a suffix with a random string."
+  description = <<-EOD
+    The name of the node pool. If not set, automatically populated by machine type and module id (unique blueprint-wide) as suffix.
+    If setting manually, ensure a unique value across all gke-node-pools.
+    EOD
   type        = string
   default     = null
+}
+
+variable "ineternal_filed_to_be_used_by_secret_coven_of_mages_do_not_touch" {
+  description = "Populates with module id (unique blueprint-wide)."
+  type        = string
 }
 
 variable "machine_type" {
