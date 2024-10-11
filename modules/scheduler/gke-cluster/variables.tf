@@ -327,3 +327,27 @@ variable "additional_networks" {
     }))
   }))
 }
+
+variable "rdma_subnetwork_name_prefix" {
+  description = "Prefix of the RDMA subnetwork names"
+  default     = null
+  type        = string
+}
+
+variable "cluster_reference_type" {
+  description = "How the google_container_node_pool.system_node_pools refers to the cluster. Possible values are: {SELF_LINK, NAME}"
+  default     = "SELF_LINK"
+  type        = string
+}
+
+variable "cluster_availability_type" {
+  description = "Type of cluster availability. Possible values are: {REGIONAL, MULTI_ZONAL}"
+  default     = "REGIONAL"
+  type        = string
+}
+
+variable "zone" {
+  description = "Zone for a zonal cluster"
+  default     = null
+  type        = string
+}

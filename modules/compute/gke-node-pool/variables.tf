@@ -354,3 +354,9 @@ variable "host_maintenance_interval" {
     error_message = "Invalid host_maintenance_interval value. Must be PERIODIC, AS_NEEDED or the empty string"
   }
 }
+
+variable "node_version" {
+  description = "Temporary variable to explicitly set the node version"
+  type        = string
+  default     = null
+}

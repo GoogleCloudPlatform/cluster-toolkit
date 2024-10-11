@@ -43,3 +43,17 @@ output "subnetwork_interfaces" {
   value       = local.output_subnets
   depends_on  = [module.vpc]
 }
+
+# The output subnetwork_interfaces is compatible with vm-instance module but not with gke-node-pool
+# See https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/99493df21cecf6a092c45298bf7a45e0343cf622/modules/compute/vm-instance/variables.tf#L220
+# So, we need a separate output that makes the network and subnetwork names available
+output "subnetwork_interfaces_gke" {
+  description = "Full list of subnetwork objects belonging to the new VPC network (compatible with gke-node-pool)"
+  value       = local.output_subnets_gke
+  depends_on  = [module.vpc]
+}
+
+output "subnetwork_name_prefix" {
+  description = "Prefix of the RDMA subnetwork names"
+  value       = var.subnetworks_template.name_prefix
+}

@@ -36,6 +36,44 @@ locals {
 
   # multi networking needs enabled Dataplane v2
   derived_enable_dataplane_v2 = coalesce(var.enable_dataplane_v2, local.derived_enable_multi_networking)
+
+  rdma_networks     = [for network_info in var.additional_networks : network_info if strcontains(upper(network_info.nic_type), "RDMA")]
+  non_rdma_networks = [for network_info in var.additional_networks : network_info if !strcontains(upper(network_info.nic_type), "RDMA")]
+  apply_manifests_rdma_networks = flatten([
+    for idx, network_info in local.rdma_networks : [
+      {
+        source = "${path.module}/templates/gke-network-paramset.yaml.tftpl",
+        template_vars = {
+          name            = "${var.rdma_subnetwork_name_prefix}-${idx}",
+          network_name    = network_info.network
+          subnetwork_name = "${var.rdma_subnetwork_name_prefix}-${idx}",
+          device_mode     = "RDMA"
+        }
+      },
+      {
+        source        = "${path.module}/templates/network-object.yaml.tftpl",
+        template_vars = { name = "${var.rdma_subnetwork_name_prefix}-${idx}" }
+      }
+    ]
+  ])
+
+  apply_manifests_non_rdma_networks = flatten([
+    for idx, network_info in local.non_rdma_networks : [
+      {
+        source = "${path.module}/templates/gke-network-paramset.yaml.tftpl",
+        template_vars = {
+          name            = network_info.subnetwork
+          network_name    = network_info.network
+          subnetwork_name = network_info.subnetwork
+          device_mode     = "NetDevice"
+        }
+      },
+      {
+        source        = "${path.module}/templates/network-object.yaml.tftpl",
+        template_vars = { name = network_info.subnetwork }
+      }
+    ]
+  ])
 }
 
 data "google_compute_default_service_account" "default_sa" {
@@ -47,7 +85,7 @@ resource "google_container_cluster" "gke_cluster" {
 
   project         = var.project_id
   name            = local.name
-  location        = var.region
+  location        = var.cluster_availability_type == "MULTI_ZONAL" ? var.zone : var.region
   resource_labels = local.labels
 
   # decouple node pool lifecycle from cluster life cycle
@@ -184,6 +222,15 @@ resource "google_container_cluster" "gke_cluster" {
       condition     = !(!coalesce(var.enable_multi_networking, true) && length(var.additional_networks) > 0)
       error_message = "'enable_multi_networking' cannot be false when using multivpc module, which passes additional_networks."
     }
+    precondition {
+      condition     = contains(["REGIONAL", "MULTI_ZONAL"], var.cluster_availability_type)
+      error_message = "`cluster_availability_type` must be one of {REGIONAL, MULTI_ZONAL}"
+    }
+    precondition {
+      condition     = contains(["SELF_LINK", "NAME"], var.cluster_reference_type)
+      error_message = "`cluster_reference_type` must be one of {SELF_LINK, NAME}"
+    }
+
   }
 
   logging_service    = "logging.googleapis.com/kubernetes"
@@ -196,9 +243,12 @@ resource "google_container_node_pool" "system_node_pools" {
   provider = google-beta
   count    = var.system_node_pool_enabled ? 1 : 0
 
-  project = var.project_id
-  name    = var.system_node_pool_name
-  cluster = google_container_cluster.gke_cluster.self_link
+  project  = var.project_id
+  name     = var.system_node_pool_name
+  cluster  = var.cluster_reference_type == "NAME" ? google_container_cluster.gke_cluster.name : google_container_cluster.gke_cluster.self_link
+  version  = var.min_master_version
+  location = var.cluster_availability_type == "MULTI_ZONAL" ? var.zone : null
+
   autoscaling {
     total_min_node_count = var.system_node_pool_node_count.total_min_nodes
     total_max_node_count = var.system_node_pool_node_count.total_max_nodes
@@ -338,20 +388,5 @@ module "kubectl_apply" {
   cluster_id = google_container_cluster.gke_cluster.id
   project_id = var.project_id
 
-  apply_manifests = flatten([
-    for idx, network_info in var.additional_networks : [
-      {
-        source = "${path.module}/templates/gke-network-paramset.yaml.tftpl",
-        template_vars = {
-          name            = "vpc${idx + 1}",
-          network_name    = network_info.network
-          subnetwork_name = network_info.subnetwork
-        }
-      },
-      {
-        source        = "${path.module}/templates/network-object.yaml.tftpl",
-        template_vars = { name = "vpc${idx + 1}" }
-      }
-    ]
-  ])
+  apply_manifests = concat(local.apply_manifests_non_rdma_networks, local.apply_manifests_rdma_networks)
 }

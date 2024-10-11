@@ -44,6 +44,7 @@ resource "google_container_node_pool" "node_pool" {
   name           = var.name == null ? var.machine_type : var.name
   cluster        = var.cluster_id
   node_locations = var.zones
+  version        = var.node_version
 
   node_count = var.static_node_count
   dynamic "autoscaling" {
