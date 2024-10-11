@@ -37,7 +37,7 @@ deployment_groups:
       auto_delete_disk: true
 
   - id: appsfs
-    source: ./community/modules/file-system/nfs-server
+    source: community/modules/file-system/nfs-server
     use: [network1]
     outputs: [network_storage]
     settings:
@@ -45,7 +45,7 @@ deployment_groups:
       auto_delete_disk: true
 
   - id: multiple-local-mounts
-    source: ./community/modules/file-system/nfs-server
+    source: community/modules/file-system/nfs-server
     use: [network1]
     outputs: [network_storage]
     settings:

@@ -17,7 +17,7 @@ be accessed as `tpu` partition.
 
 ```yaml
   - id: tpu_nodeset
-    source: ./community/modules/compute/schedmd-slurm-gcp-v6-nodeset-tpu
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset-tpu
     use: [network]
     settings:
       node_type: v2-8
@@ -27,7 +27,7 @@ be accessed as `tpu` partition.
       preserve_tpu: false
 
   - id: tpu_partition
-    source: ./community/modules/compute/schedmd-slurm-gcp-v6-partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
     use: [tpu_nodeset]
     settings:
       partition_name: tpu

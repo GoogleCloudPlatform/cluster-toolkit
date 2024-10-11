@@ -134,7 +134,7 @@ example:
 
 ```yaml
   - id: controller
-    source: ./community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     use: [ network, partition ]
     settings:
       enable_slurm_gcp_plugins:

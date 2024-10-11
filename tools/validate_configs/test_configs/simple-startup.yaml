@@ -26,10 +26,10 @@ deployment_groups:
 - group: primary
   modules:
   - id: network1
-    source: ./modules/network/pre-existing-vpc
+    source: modules/network/pre-existing-vpc
 
   - id: startup
-    source: ./modules/scripts/startup-script
+    source: modules/scripts/startup-script
     settings:
       runners:
       - type: data
@@ -44,12 +44,12 @@ deployment_groups:
         args: "foo.tgz 'Expanding the file'"
 
   - id: instance
-    source: ./modules/compute/vm-instance
+    source: modules/compute/vm-instance
     use: [network1, startup]
     settings:
       machine_type: e2-standard-4
 
   - id: waiter
-    source: ./community/modules/scripts/wait-for-startup
+    source: community/modules/scripts/wait-for-startup
     settings:
       instance_name: $(instance.name[0])
