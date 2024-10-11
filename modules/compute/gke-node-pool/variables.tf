@@ -31,7 +31,7 @@ variable "zones" {
 }
 
 variable "name" {
-  description = "The name of the node pool. If left blank, will default to the machine type."
+  description = "The name of the node pool. If left blank, will default to the machine type and a suffix with a random string."
   type        = string
   default     = null
 }

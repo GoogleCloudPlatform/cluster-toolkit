@@ -39,10 +39,14 @@ data "google_compute_default_service_account" "default_sa" {
   project = var.project_id
 }
 
+resource "random_id" "nodepool_name_suffix" {
+  byte_length = 8
+}
+
 resource "google_container_node_pool" "node_pool" {
   provider = google-beta
 
-  name           = var.name == null ? var.machine_type : var.name
+  name           = var.name == null ? "${var.machine_type}-${random_id.nodepool_name_suffix.hex}" : var.name
   cluster        = var.cluster_id
   node_locations = var.zones
 

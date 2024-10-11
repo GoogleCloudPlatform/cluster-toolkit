@@ -28,6 +28,10 @@ terraform {
       source  = "hashicorp/null"
       version = "~> 3.0"
     }
+    random = {
+      source  = "hashicorp/random"
+      version = "3.6.3"
+    }
   }
   provider_meta "google" {
     module_name = "blueprints/terraform/hpc-toolkit:gke-node-pool/v1.40.0"

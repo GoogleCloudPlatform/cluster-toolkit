@@ -248,6 +248,7 @@ limitations under the License.
 | <a name="requirement_google"></a> [google](#requirement\_google) | ~> 5.0 |
 | <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | ~> 5.0 |
 | <a name="requirement_null"></a> [null](#requirement\_null) | ~> 3.0 |
+| <a name="requirement_random"></a> [random](#requirement\_random) | 3.6.3 |
 
 ## Providers
 
@@ -256,6 +257,7 @@ limitations under the License.
 | <a name="provider_google"></a> [google](#provider\_google) | ~> 5.0 |
 | <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | ~> 5.0 |
 | <a name="provider_null"></a> [null](#provider\_null) | ~> 3.0 |
+| <a name="provider_random"></a> [random](#provider\_random) | 3.6.3 |
 
 ## Modules
 
@@ -277,6 +279,7 @@ limitations under the License.
 | [null_resource.enable_tcpx_in_workload](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
 | [null_resource.enable_tcpxo_in_workload](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
 | [null_resource.install_dependencies](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
+| [random_id.nodepool_name_suffix](https://registry.terraform.io/providers/hashicorp/random/3.6.3/docs/resources/id) | resource |
 | [google_compute_default_service_account.default_sa](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_default_service_account) | data source |
 | [google_compute_reservation.specific_reservations](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_reservation) | data source |
 
@@ -304,7 +307,7 @@ limitations under the License.
 | <a name="input_local_ssd_count_ephemeral_storage"></a> [local\_ssd\_count\_ephemeral\_storage](#input\_local\_ssd\_count\_ephemeral\_storage) | The number of local SSDs to attach to each node to back ephemeral storage.<br/>Uses NVMe interfaces.  Must be supported by `machine_type`.<br/>When set to null,  default value either is [set based on machine\_type](https://cloud.google.com/compute/docs/disks/local-ssd#choose_number_local_ssds) or GKE decides about default value.<br/>[See above](#local-ssd-storage) for more info. | `number` | `null` | no |
 | <a name="input_local_ssd_count_nvme_block"></a> [local\_ssd\_count\_nvme\_block](#input\_local\_ssd\_count\_nvme\_block) | The number of local SSDs to attach to each node to back block storage.<br/>Uses NVMe interfaces.  Must be supported by `machine_type`.<br/>When set to null,  default value either is [set based on machine\_type](https://cloud.google.com/compute/docs/disks/local-ssd#choose_number_local_ssds) or GKE decides about default value.<br/>[See above](#local-ssd-storage) for more info. | `number` | `null` | no |
 | <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | The name of a Google Compute Engine machine type. | `string` | `"c2-standard-60"` | no |
-| <a name="input_name"></a> [name](#input\_name) | The name of the node pool. If left blank, will default to the machine type. | `string` | `null` | no |
+| <a name="input_name"></a> [name](#input\_name) | The name of the node pool. If left blank, will default to the machine type and a suffix with a random string. | `string` | `null` | no |
 | <a name="input_placement_policy"></a> [placement\_policy](#input\_placement\_policy) | Group placement policy to use for the node pool's nodes. `COMPACT` is the only supported value for `type` currently. `name` is the name of the placement policy.<br/>It is assumed that the specified policy exists. To create a placement policy refer to https://cloud.google.com/sdk/gcloud/reference/compute/resource-policies/create/group-placement.<br/>Note: Placement policies have the [following](https://cloud.google.com/compute/docs/instances/placement-policies-overview#restrictions-compact-policies) restrictions. | <pre>object({<br/>    type = string<br/>    name = optional(string)<br/>  })</pre> | <pre>{<br/>  "name": null,<br/>  "type": null<br/>}</pre> | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The project ID to host the cluster in. | `string` | n/a | yes |
 | <a name="input_reservation_affinity"></a> [reservation\_affinity](#input\_reservation\_affinity) | Reservation resource to consume. When targeting SPECIFIC\_RESERVATION, specific\_reservations needs be specified.<br/>Even though specific\_reservations is a list, only one reservation is allowed by the NodePool API.<br/>It is assumed that the specified reservation exists and has available capacity.<br/>For a shared reservation, specify the project\_id as well in which it was created.<br/>To create a reservation refer to https://cloud.google.com/compute/docs/instances/reservations-single-project and https://cloud.google.com/compute/docs/instances/reservations-shared | <pre>object({<br/>    consume_reservation_type = string<br/>    specific_reservations = optional(list(object({<br/>      name    = string<br/>      project = optional(string)<br/>    })))<br/>  })</pre> | <pre>{<br/>  "consume_reservation_type": "NO_RESERVATION",<br/>  "specific_reservations": []<br/>}</pre> | no |
