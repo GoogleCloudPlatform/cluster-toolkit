@@ -85,7 +85,7 @@ resource "google_container_cluster" "gke_cluster" {
 
   project         = var.project_id
   name            = local.name
-  location        = var.is_gke_sandbox ? var.zone : var.region
+  location        = var.cluster_availability_type == "MULTI_ZONAL" ? var.zone : var.region
   resource_labels = local.labels
 
   # decouple node pool lifecycle from cluster life cycle
@@ -97,10 +97,6 @@ resource "google_container_cluster" "gke_cluster" {
 
   network    = var.network_id
   subnetwork = var.subnetwork_self_link
-  # Note: Though the default value of VPC_NATIVE is sufficient to enable IP Aliasing,
-  # It makes sense to let that argument be explicit so that it remains in our consideration when upgrading the provider.
-  # Because, in the newer provider versions the default may change
-  networking_mode = "VPC_NATIVE"
 
   # Note: the existence of the "master_authorized_networks_config" block enables
   # the master authorized networks even if it's empty.
@@ -226,6 +222,15 @@ resource "google_container_cluster" "gke_cluster" {
       condition     = !(!coalesce(var.enable_multi_networking, true) && length(var.additional_networks) > 0)
       error_message = "'enable_multi_networking' cannot be false when using multivpc module, which passes additional_networks."
     }
+    precondition {
+      condition     = contains(["REGIONAL", "MULTI_ZONAL"], var.cluster_availability_type)
+      error_message = "`cluster_availability_type` must be one of {REGIONAL, MULTI_ZONAL}"
+    }
+    precondition {
+      condition     = contains(["SELF_LINK", "NAME"], var.cluster_reference_type)
+      error_message = "`cluster_reference_type` must be one of {SELF_LINK, NAME}"
+    }
+
   }
 
   logging_service    = "logging.googleapis.com/kubernetes"
@@ -240,9 +245,9 @@ resource "google_container_node_pool" "system_node_pools" {
 
   project  = var.project_id
   name     = var.system_node_pool_name
-  cluster  = var.is_gke_sandbox ? google_container_cluster.gke_cluster.name : google_container_cluster.gke_cluster.self_link
+  cluster  = var.cluster_reference_type == "NAME" ? google_container_cluster.gke_cluster.name : google_container_cluster.gke_cluster.self_link
   version  = var.min_master_version
-  location = var.is_gke_sandbox ? var.zone : null
+  location = var.cluster_availability_type == "MULTI_ZONAL" ? var.zone : null
 
   autoscaling {
     total_min_node_count = var.system_node_pool_node_count.total_min_nodes

@@ -61,7 +61,7 @@ locals {
 }
 
 module "kubectl_apply" {
-  source = "../../management/kubectl-apply" # can point to github
+  source = "../../management/kubectl-apply"
 
   cluster_id = data.google_container_cluster.existing_gke_cluster.id
   project_id = var.project_id

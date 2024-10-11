@@ -132,7 +132,7 @@ locals {
     for subnet in module.vpc.subnets : {
       network            = local.network_name
       subnetwork         = subnet.name
-      subnetwork_project = null
+      subnetwork_project = var.project_id
       network_ip         = ""
       nic_type           = coalesce(var.nic_type, try(regex("IRDMA", local.profile_name), regex("MRDMA", local.profile_name), "RDMA"))
       stack_type         = null
