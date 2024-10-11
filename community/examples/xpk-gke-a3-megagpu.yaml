@@ -52,11 +52,9 @@ deployment_groups:
     source: modules/scheduler/gke-cluster
     use: [network1, gpunets]
     settings:
-      enable_private_endpoint: false  # Allows for access from authorized public IPs
       master_authorized_networks:
       - cidr_block: $(vars.authorized_cidr)  # Allows your machine run kubectl command. It's required for the multi-network setup.
         display_name: "kubectl-access-network"
-      #min_master_version: "1.29.6-gke.1326000" # (TODO: Ask MaxText the reason to set this) Couldn't find this version in the valid master versions in australia-southeast1-c. Can be left unset to be set by GKE to the version of the most recent official release.
       system_node_pool_machine_type: "e2-standard-32"
     outputs: [instructions]
 
