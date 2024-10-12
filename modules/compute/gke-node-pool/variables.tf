@@ -40,7 +40,7 @@ variable "name" {
 }
 
 variable "internal_ghpc_module_id" {
-  description = "Populates with module id (unique blueprint-wide)."
+  description = "DO NOT SET THIS MANUALLY. Automatically populates with module id (unique blueprint-wide)."
   type        = string
 }
 
