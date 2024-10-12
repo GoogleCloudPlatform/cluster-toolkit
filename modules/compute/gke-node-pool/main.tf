@@ -34,7 +34,7 @@ locals {
   static_node_set  = var.static_node_count != null
   initial_node_set = try(var.initial_node_count > 0, false)
 
-  module_unique_id = replace(lower(var.ineternal_filed_to_be_used_by_secret_coven_of_mages_do_not_touch), "/[^a-z0-9]/", "")
+  module_unique_id = replace(lower(var.internal_ghpc_module_id), "/[^a-z0-9\\-]/", "")
 }
 
 data "google_compute_default_service_account" "default_sa" {
@@ -44,7 +44,7 @@ data "google_compute_default_service_account" "default_sa" {
 resource "google_container_node_pool" "node_pool" {
   provider = google-beta
 
-  name           = var.name == null ? "${var.machine_type}-${local.module_unique_id}" : var.name
+  name           = coalesce(var.name, "${var.machine_type}-${local.module_unique_id}")
   cluster        = var.cluster_id
   node_locations = var.zones
 

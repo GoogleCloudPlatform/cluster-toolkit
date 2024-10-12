@@ -18,4 +18,4 @@ spec:
     services:
     - container.googleapis.com
 ghpc:
-  inject_module_id: ineternal_filed_to_be_used_by_secret_coven_of_mages_do_not_touch
+  inject_module_id: internal_ghpc_module_id

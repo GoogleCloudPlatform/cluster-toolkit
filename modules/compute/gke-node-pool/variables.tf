@@ -39,7 +39,7 @@ variable "name" {
   default     = null
 }
 
-variable "ineternal_filed_to_be_used_by_secret_coven_of_mages_do_not_touch" {
+variable "internal_ghpc_module_id" {
   description = "Populates with module id (unique blueprint-wide)."
   type        = string
 }
