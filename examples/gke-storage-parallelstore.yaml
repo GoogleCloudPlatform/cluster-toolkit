@@ -24,7 +24,7 @@ vars:
   authorized_cidr: <your-ip-address>/32
 
 deployment_groups:
-- group: primary
+- group: setup
   modules:
   - id: network
     source: modules/network/vpc
@@ -43,6 +43,8 @@ deployment_groups:
     settings:
       prefix_length: 24
 
+- group: primary
+  modules:
   - id: gke_cluster
     source: modules/scheduler/gke-cluster
     use: [network]

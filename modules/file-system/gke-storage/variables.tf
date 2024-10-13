@@ -34,15 +34,12 @@ variable "storage_type" {
   The type of [GKE supported storage options](https://cloud.google.com/kubernetes-engine/docs/concepts/storage-overview)
   to used. This module currently support dynamic provisioning for the below storage options
   - Parallelstore
-  - Hyperdisk-balanced
-  - Hyperdisk-throughput
-  - Hyperdisk-extreme
   EOT 
   type        = string
   nullable    = false
   validation {
-    condition     = var.storage_type == null ? false : contains(["parallelstore", "hyperdisk-balanced", "hyperdisk-throughput", "hyperdisk-extreme"], lower(var.storage_type))
-    error_message = "Allowed string values for var.storage_type are \"Parallelstore\", \"Hyperdisk-balanced\", \"Hyperdisk-throughput\", \"Hyperdisk-extreme\"."
+    condition     = var.storage_type == null ? false : contains(["parallelstore"], lower(var.storage_type))
+    error_message = "Allowed string values for var.storage_type are \"Parallelstore\"."
   }
 }
 
@@ -110,6 +107,10 @@ variable "pv_mount_path" {
   description = "Path within the container at which the volume should be mounted. Must not contain ':'."
   type        = string
   default     = "/data"
+  validation {
+    condition     = var.pv_mount_path == null ? true : !strcontains(var.pv_mount_path, ":")
+    error_message = "pv_mount_path must not contain ':', please correct it and retry"
+  }
 }
 
 variable "mount_options" {
