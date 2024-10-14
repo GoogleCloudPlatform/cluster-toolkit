@@ -2,7 +2,7 @@
 
 > [!NOTE]
 > Migration to Slurm-GCP v6 is completed. See
-> [this update](#ongoing-migration-to-slurm-gcp-v6) for specific recommendations
+> [this update](#completed-migration-to-slurm-gcp-v6) for specific recommendations
 > and timelines.
 
 This directory contains a set of example blueprint files that can be fed into
@@ -15,7 +15,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
 
 * [Instructions](#instructions)
   * [(Optional) Setting up a remote terraform state](#optional-setting-up-a-remote-terraform-state)
-* [Ongoing Migration to Slurm-GCP v6](#ongoing-migration-to-slurm-gcp-v6)
+* [Completed Migration to Slurm-GCP v6](#completed-migration-to-slurm-gcp-v6)
 * [Blueprint Descriptions](#blueprint-descriptions)
   * [hpc-slurm-v5-legacy.yaml](#hpc-slurm-v5-legacyyaml-) ![core-badge]
   * [hpc-slurm.yaml](#hpc-slurmyaml-) ![core-badge]
@@ -141,7 +141,7 @@ subcommands as well:
 [configuration block]: https://developer.hashicorp.com/terraform/language/settings/backends/configuration#using-a-backend-block
 [gcs]: https://developer.hashicorp.com/terraform/language/settings/backends/gcs
 
-## Ongoing Migration to Slurm-GCP v6
+## Completed Migration to Slurm-GCP v6
 
 [Slurm-GCP](https://github.com/GoogleCloudPlatform/slurm-gcp) is the set of
 scripts and tools that automate the installation, deployment, and certain
@@ -150,16 +150,15 @@ Google Cloud Platform. It is recommended to use Slurm-GCP through the Cluster
 Toolkit where it is exposed as various modules.
 
 The Cluster Toolkit team has finished transitioning from Slurm-GCP v5 to Slurm-GCP v6 and
-now Slurm-GCP v6 is the recommended option. Following this, blueprint naming would be
-as follows:
+as of 10/11/2024, Slurm-GCP v6 is the recommended option. Blueprint naming is as
+follows:
 
 * Slurm v5: hpc-slurm-v5-legacy.yaml
 * Slurm v6: hpc-slurm.yaml
 
 > [!IMPORTANT]
-> Three months after Slurm-gcp V6 becomes the recommended version, Slurm v5
-> modules will be marked as deprecated and will be maintained in our repo for
-> another three months, at which point the modules will be removed from the Cluster
+> Slurm-GCP v5 modules are now marked as deprecated and will be maintained in our
+> repo till January 6, 2025. After that, the modules will be removed from the Cluster
 > Toolkit repo and regression tests will no longer run for V5. Those who choose
 > to not upgrade to V6 will still be able to use V5 modules by referencing
 > specific git tags in the module source lines.
@@ -1772,7 +1771,7 @@ scratch.
 ---
 blueprint_name: # boilerplate-blueprint
 toolkit_modules_url: # github.com/GoogleCloudPlatform/cluster-toolkit
-toolkit_modules_version: # v1.15.0
+toolkit_modules_version: # v1.38.0
 
 vars:
   project_id: # my-project-id
@@ -1796,7 +1795,7 @@ deployment_groups:
    63 characters long, and can only contain lowercase letters, numeric
    characters, underscores and dashes.
 
-* **toolkit_modules_url** and **toolkit_modules_version** (optional): The blueprint schema provides the optional fields `toolkit_modules_url` and `toolkit_modules_version` to version a blueprint. When these fields are provided, any module in the blueprint with a reference to an embedded module in its source field will be updated to reference the specified GitHub source and toolkit version in the expanded blueprint. `toolkit_modules_url` specifies the base URL of the GitHub repository containing the modules and `toolkit_modules_version` specifies the version of the modules to use. `toolkit_modules_url` and `toolkit_modules_version` should be provided together when in use.
+* **toolkit_modules_url** and **toolkit_modules_version** (optional): The blueprint schema provides the optional fields `toolkit_modules_url` and `toolkit_modules_version` to version a blueprint. When these fields are provided, any module in the blueprint with a reference to an embedded module in its source field will be updated to reference the specified GitHub source and toolkit version in the deployment folder. `toolkit_modules_url` specifies the base URL of the GitHub repository containing the modules and `toolkit_modules_version` specifies the version of the modules to use. `toolkit_modules_url` and `toolkit_modules_version` should be provided together when in use.
 
 ### Deployment Variables
 

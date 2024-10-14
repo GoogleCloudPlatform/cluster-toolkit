@@ -31,9 +31,17 @@ variable "zones" {
 }
 
 variable "name" {
-  description = "The name of the node pool. If left blank, will default to the machine type."
+  description = <<-EOD
+    The name of the node pool. If not set, automatically populated by machine type and module id (unique blueprint-wide) as suffix.
+    If setting manually, ensure a unique value across all gke-node-pools.
+    EOD
   type        = string
   default     = null
+}
+
+variable "internal_ghpc_module_id" {
+  description = "DO NOT SET THIS MANUALLY. Automatically populates with module id (unique blueprint-wide)."
+  type        = string
 }
 
 variable "machine_type" {

@@ -174,6 +174,7 @@ data "google_compute_reservation" "reservation" {
 
 data "google_compute_machine_types" "machine_types_by_zone" {
   for_each = local.zones
+  project  = var.project_id
   filter   = format("name = \"%s\"", var.machine_type)
   zone     = each.value
 }

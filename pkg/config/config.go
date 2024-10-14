@@ -36,10 +36,7 @@ import (
 )
 
 const (
-	expectedVarFormat        string = "$(vars.var_name) or $(module_id.output_name)"
-	expectedModFormat        string = "$(module_id) or $(group_id.module_id)"
-	unexpectedConnectionKind string = "connectionKind must be useConnection or deploymentConnection"
-	maxHintDist              int    = 3 // Maximum Levenshtein distance where we suggest a hint
+	maxHintDist int = 3 // Maximum Levenshtein distance where we suggest a hint
 )
 
 // map[moved module path]replacing module path

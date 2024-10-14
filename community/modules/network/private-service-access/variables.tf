@@ -40,3 +40,8 @@ variable "prefix_length" {
   type        = number
   default     = 16
 }
+
+variable "project_id" {
+  description = "ID of project in which Private Service Access will be created."
+  type        = string
+}
