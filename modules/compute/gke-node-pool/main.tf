@@ -33,6 +33,8 @@ locals {
   autoscale_set    = var.autoscaling_total_min_nodes != 0 || var.autoscaling_total_max_nodes != 1000
   static_node_set  = var.static_node_count != null
   initial_node_set = try(var.initial_node_count > 0, false)
+
+  module_unique_id = replace(lower(var.internal_ghpc_module_id), "/[^a-z0-9\\-]/", "")
 }
 
 data "google_compute_default_service_account" "default_sa" {
@@ -42,7 +44,7 @@ data "google_compute_default_service_account" "default_sa" {
 resource "google_container_node_pool" "node_pool" {
   provider = google-beta
 
-  name           = var.name == null ? var.machine_type : var.name
+  name           = coalesce(var.name, "${var.machine_type}-${local.module_unique_id}")
   cluster        = var.cluster_id
   node_locations = var.zones
 
