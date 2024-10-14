@@ -25,7 +25,7 @@ set -x
 CONTAINER_IMAGE=./nvidia+pytorch+23.10-py3.sqsh
 
 # Install nccl-tests using openmpi from within pytorch container
-srun --container-mounts="$PWD:/nccl" \
+srun --container-mounts="$PWD:/nccl,/var/tmp:/var/tmp" \
 	--container-image=${CONTAINER_IMAGE} \
 	--container-name="nccl" \
 	bash -c "
