@@ -16,6 +16,7 @@
 tags:
 - m.gke-cluster
 - m.gke-node-pool
+- m.service-account
 - m.vpc
 - m.multivpc
 - m.kubectl-apply
