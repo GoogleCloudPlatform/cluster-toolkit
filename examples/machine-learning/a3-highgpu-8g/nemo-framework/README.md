@@ -46,7 +46,7 @@ README
        stages=[training] \
        env_vars.TRANSFORMERS_OFFLINE=0 \
        container=../nemofw+tcpx-24.07.sqsh \
-       container_mounts=[${HOME}/.cache,"/var/lib/tcpx/lib64","/run/tcpx-\${SLURM_JOB_ID}:/run/tcpx"] \
+       container_mounts='['${HOME}/.cache',"/var/lib/tcpx/lib64","/run/tcpx-\${SLURM_JOB_ID}:/run/tcpx"]' \
        cluster.srun_args=["--container-writable"] \
        training.model.data.data_impl=mock \
        training.model.data.data_prefix=[] \
