@@ -215,6 +215,11 @@ deployment_groups:
           chmod 0755 "${SLURM_ROOT}/scripts/rxdm"
           ln -s "${SLURM_ROOT}/scripts/rxdm" "${SLURM_ROOT}/partition-$(vars.a3mega_partition_name)-prolog_slurmd.d/rxdm.prolog_slurmd"
           ln -s "${SLURM_ROOT}/scripts/rxdm" "${SLURM_ROOT}/partition-$(vars.a3mega_partition_name)-epilog_slurmd.d/rxdm.epilog_slurmd"
+          curl -s -o "${SLURM_ROOT}/scripts/gpu-health" \
+              https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/master/tools/prologs-epilogs/gpu-health
+          chmod 0755 "${SLURM_ROOT}/scripts/gpu-health"
+          ln -s "${SLURM_ROOT}/scripts/gpu-health" "${SLURM_ROOT}/partition-$(vars.a3mega_partition_name)-prolog_slurmd.d/gpu-health.prolog_slurmd"
+          ln -s "${SLURM_ROOT}/scripts/gpu-health" "${SLURM_ROOT}/partition-$(vars.a3mega_partition_name)-epilog_slurmd.d/gpu-health.epilog_slurmd"
       - type: shell
         destination: reset_enroot.sh
         content: |
