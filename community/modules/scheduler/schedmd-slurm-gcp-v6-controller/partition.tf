@@ -83,6 +83,7 @@ locals {
   nodesets = [for name, ns in local.nodeset_map : {
     nodeset_name                   = ns.nodeset_name
     node_conf                      = ns.node_conf
+    dws_flex                       = ns.dws_flex
     instance_template              = module.slurm_nodeset_template[ns.nodeset_name].self_link
     node_count_dynamic_max         = ns.node_count_dynamic_max
     node_count_static              = ns.node_count_static
