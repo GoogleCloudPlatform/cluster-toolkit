@@ -2,10 +2,8 @@
 
 > [!NOTE]
 > Slurm-gcp-v5-login module is deprecated. See
-> [this update](#completed-migration-to-slurm-gcp-v6) for specific recommendations
-> and timelines.
-
-* [Completed Migration to Slurm-GCP v6](../../../../modules/README.md#completed-migration-to-slurm-gcp-v6)
+> [this update](../../../../examples/README.md#completed-migration-to-slurm-gcp-v6)
+> for specific recommendations and timelines.
 
 This module creates a login node for a Slurm cluster based on the
 [SchedMD/slurm-gcp] [slurm\_instance\_template] and [slurm\_login\_instance]

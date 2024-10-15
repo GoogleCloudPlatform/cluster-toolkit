@@ -18,7 +18,7 @@
 #SBATCH --partition=a3
 #SBATCH --exclusive
 
-: "${NEMOFW_VERSION:=23.11}"
+: "${NEMOFW_VERSION:=24.07}"
 
 srun docker build --build-arg="NEMOFW_VERSION=${NEMOFW_VERSION}" -t nemofw:tcpx-"${NEMOFW_VERSION}" .
 srun rm -f nemofw+tcpx-"${NEMOFW_VERSION}".sqsh
@@ -27,4 +27,4 @@ srun enroot import dockerd://nemofw:tcpx-"${NEMOFW_VERSION}"
 srun \
 	--container-mounts="${PWD}":/workspace/mount_dir,/var/tmp:/var/tmp \
 	--container-image=./nemofw+tcpx-"${NEMOFW_VERSION}".sqsh \
-	bash -c "cp -r /opt/NeMo-Megatron-Launcher/requirements.txt /opt/NeMo-Megatron-Launcher/launcher_scripts /opt/NeMo-Megatron-Launcher/auto_configurator /workspace/mount_dir/"
+	bash -c "cp -r /opt/NeMo-Framework-Launcher/requirements.txt /opt/NeMo-Framework-Launcher/launcher_scripts /opt/NeMo-Framework-Launcher/auto_configurator /workspace/mount_dir/"

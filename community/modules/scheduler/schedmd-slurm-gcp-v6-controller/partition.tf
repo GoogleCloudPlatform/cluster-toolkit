@@ -26,7 +26,7 @@ locals {
 # NODESET
 # TODO: remove dependency on slurm-gcp repo, move to local template module
 module "slurm_nodeset_template" {
-  source   = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=6.8.1"
+  source   = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=6.8.2"
   for_each = local.nodeset_map
 
   project_id          = var.project_id
@@ -83,6 +83,7 @@ locals {
   nodesets = [for name, ns in local.nodeset_map : {
     nodeset_name                   = ns.nodeset_name
     node_conf                      = ns.node_conf
+    dws_flex                       = ns.dws_flex
     instance_template              = module.slurm_nodeset_template[ns.nodeset_name].self_link
     node_count_dynamic_max         = ns.node_count_dynamic_max
     node_count_static              = ns.node_count_static
@@ -101,7 +102,7 @@ locals {
 
 # NODESET TPU
 module "slurm_nodeset_tpu" {
-  source   = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_nodeset_tpu?ref=6.8.1"
+  source   = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_nodeset_tpu?ref=6.8.2"
   for_each = local.nodeset_tpu_map
 
   project_id             = var.project_id

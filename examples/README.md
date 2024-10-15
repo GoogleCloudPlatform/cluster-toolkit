@@ -17,36 +17,36 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [(Optional) Setting up a remote terraform state](#optional-setting-up-a-remote-terraform-state)
 * [Completed Migration to Slurm-GCP v6](#completed-migration-to-slurm-gcp-v6)
 * [Blueprint Descriptions](#blueprint-descriptions)
-  * [hpc-slurm-v5-legacy.yaml](#hpc-slurm-v5-legacyyaml-) ![core-badge]
+  * [hpc-slurm-v5-legacy.yaml](#hpc-slurm-v5-legacyyaml--) ![core-badge] ![deprecated-badge]
   * [hpc-slurm.yaml](#hpc-slurmyaml-) ![core-badge]
-  * [hpc-enterprise-slurm-v5-legacy.yaml](#hpc-enterprise-slurm-v5-legacyyaml-) ![core-badge]
+  * [hpc-enterprise-slurm-v5-legacy.yaml](#hpc-enterprise-slurm-v5-legacyyaml--) ![core-badge] ![deprecated-badge]
   * [hpc-enterprise-slurm.yaml](#hpc-enterprise-slurmyaml-) ![core-badge]
   * [hpc-slurm-static.yaml](#hpc-slurm-staticyaml-) ![core-badge]
   * [hpc-slurm6-tpu.yaml](#hpc-slurm6-tpuyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm6-tpu-maxtext.yaml](#hpc-slurm6-tpu-maxtextyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm6-apptainer.yaml](#hpc-slurm6-apptaineryaml--) ![community-badge] ![experimental-badge]
-  * [ml-slurm-v5-legacy.yaml](#ml-slurm-v5-legacyyaml-) ![core-badge]
+  * [ml-slurm-v5-legacy.yaml](#ml-slurm-v5-legacyyaml--) ![core-badge] ![deprecated-badge]
   * [ml-slurm.yaml](#ml-slurmyaml-) ![core-badge]
-  * [image-builder-v5-legacy.yaml](#image-builder-v5-legacyyaml-) ![core-badge]
+  * [image-builder-v5-legacy.yaml](#image-builder-v5-legacyyaml--) ![core-badge] ![deprecated-badge]
   * [image-builder.yaml](#image-builderyaml--) ![core-badge]
   * [serverless-batch.yaml](#serverless-batchyaml-) ![core-badge]
   * [serverless-batch-mpi.yaml](#serverless-batch-mpiyaml-) ![core-badge]
   * [pfs-lustre.yaml](#pfs-lustreyaml-) ![core-badge]
   * [ps-slurm.yaml](#ps-slurmyaml--) ![core-badge] ![experimental-badge]
   * [pfs-parallelstore.yaml](#pfs-parallelstoreyaml--) ![core-badge] ![experimental-badge]
-  * [cae-slurm-v5-legacy.yaml](#cae-slurm-v5-legacyyaml-) ![core-badge]
+  * [cae-slurm-v5-legacy.yaml](#cae-slurm-v5-legacyyaml--) ![core-badge] ![deprecated-badge]
   * [cae-slurm.yaml](#cae-slurmyaml-) ![core-badge]
   * [hpc-build-slurm-image.yaml](#hpc-build-slurm-imageyaml--) ![community-badge] ![experimental-badge]
-  * [hpc-slurm-ubuntu2004-v5-legacy.yaml](#hpc-slurm-ubuntu2004-v5-legacyyaml-) ![community-badge]
+  * [hpc-slurm-ubuntu2004-v5-legacy.yaml](#hpc-slurm-ubuntu2004-v5-legacyyaml--) ![community-badge] ![deprecated-badge]
   * [hpc-slurm-ubuntu2004.yaml](#hpc-slurm-ubuntu2004yaml--) ![community-badge]
   * [pfs-daos.yaml](#pfs-daosyaml-) ![community-badge]
   * [hpc-slurm-daos.yaml](#hpc-slurm-daosyaml-) ![community-badge]
-  * [hpc-amd-slurm-v5-legacy.yaml](#hpc-amd-slurm-v5-legacyyaml-) ![community-badge]
+  * [hpc-amd-slurm-v5-legacy.yaml](#hpc-amd-slurm-v5-legacyyaml--) ![community-badge] ![deprecated-badge]
   * [hpc-amd-slurm.yaml](#hpc-amd-slurmyaml-) ![community-badge]
   * [hpc-slurm-sharedvpc.yaml](#hpc-slurm-sharedvpcyaml--) ![community-badge] ![experimental-badge]
   * [client-google-cloud-storage.yaml](#client-google-cloud-storageyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-gromacs.yaml](#hpc-slurm-gromacsyaml--) ![community-badge] ![experimental-badge]
-  * [hpc-slurm-local-ssd-v5-legacy.yaml](#hpc-slurm-local-ssd-v5-legacyyaml--) ![community-badge] ![experimental-badge]
+  * [hpc-slurm-local-ssd-v5-legacy.yaml](#hpc-slurm-local-ssd-v5-legacyyaml---) ![community-badge] ![experimental-badge] ![deprecated-badge]
   * [hpc-slurm-local-ssd.yaml](#hpc-slurm-local-ssdyaml--) ![community-badge] ![experimental-badge]
   * [hcls-blueprint.yaml](#hcls-blueprintyaml-) ![core-badge]
   * [hpc-gke.yaml](#hpc-gkeyaml--) ![core-badge] ![experimental-badge]
@@ -54,14 +54,14 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [storage-gke](#storage-gkeyaml--) ![core-badge] ![experimental-badge]
   * [gke-a3-megagpu](#gke-a3-megagpuyaml--) ![core-badge] ![experimental-badge]
   * [gke-a3-highgpu](#gke-a3-highgpuyaml--) ![core-badge] ![experimental-badge]
-  * [htc-slurm-v5-legacy.yaml](#htc-slurm-v5-legacyyaml--) ![community-badge] ![experimental-badge]
+  * [htc-slurm-v5-legacy.yaml](#htc-slurm-v5-legacyyaml---) ![community-badge] ![experimental-badge] ![deprecated-badge]
   * [htc-slurm.yaml](#htc-slurmyaml-) ![community-badge]
   * [htc-htcondor.yaml](#htc-htcondoryaml--) ![community-badge] ![experimental-badge]
   * [fsi-montecarlo-on-batch.yaml](#fsi-montecarlo-on-batchyaml-) ![community-badge] ![experimental-badge]
   * [tutorial-starccm-slurm.yaml](#tutorial-starccm-slurmyaml--) ![community-badge] ![experimental-badge]
   * [tutorial-starccm.yaml](#tutorial-starccmyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-ramble-gromacs.yaml](#hpc-slurm-ramble-gromacsyaml--) ![community-badge] ![experimental-badge]
-  * [hpc-slurm-chromedesktop-v5-legacy.yaml](#hpc-slurm-chromedesktop-v5-legacyyaml--) ![community-badge] ![experimental-badge]
+  * [hpc-slurm-chromedesktop-v5-legacy.yaml](#hpc-slurm-chromedesktop-v5-legacyyaml---) ![community-badge] ![experimental-badge] ![deprecated-badge]
   * [flux-cluster](#flux-clusteryaml--) ![community-badge] ![experimental-badge]
   * [tutorial-fluent.yaml](#tutorial-fluentyaml--) ![community-badge] ![experimental-badge]
   * [omnia-cluster.yaml](#omnia-clusteryaml---) ![community-badge] ![experimental-badge] ![deprecated-badge]
@@ -210,7 +210,7 @@ Toolkit team, partners, etc.) and are labeled with the community badge
 Blueprints that are still in development and less stable are also labeled with
 the experimental badge (![experimental-badge]).
 
-### [hpc-slurm-v5-legacy.yaml] ![core-badge]
+### [hpc-slurm-v5-legacy.yaml] ![core-badge] ![deprecated-badge]
 
 > **Warning**: The variables `enable_reconfigure`,
 > `enable_cleanup_compute`, and `enable_cleanup_subscriptions`, if set to
@@ -319,7 +319,7 @@ For this example the following is needed in the selected region:
 * Compute Engine API: Resource policies: **one for each job in parallel** -
   _only needed for the `compute` partition_
 
-### [hpc-enterprise-slurm-v5-legacy.yaml] ![core-badge]
+### [hpc-enterprise-slurm-v5-legacy.yaml] ![core-badge] ![deprecated-badge]
 
 This advanced blueprint creates a cluster with Slurm with several performance
 tunings enabled, along with tiered file systems for higher performance. Some of
@@ -551,7 +551,7 @@ This blueprint creates a custom [Apptainer](https:https://apptainer.org) enabled
 
 [hpc-slurm6-apptainer.yaml]: ../community/examples/hpc-slurm6-apptainer.yaml
 
-### [ml-slurm-v5-legacy.yaml] ![core-badge]
+### [ml-slurm-v5-legacy.yaml] ![core-badge] ![deprecated-badge]
 
 This blueprint provisions an HPC cluster running the Slurm scheduler with the
 machine learning frameworks PyTorch and TensorFlow pre-installed on every
@@ -649,7 +649,7 @@ timestamp for uniqueness.
 
 [ml-slurm.yaml]: ../examples/ml-slurm.yaml
 
-### [image-builder-v5-legacy.yaml] ![core-badge]
+### [image-builder-v5-legacy.yaml] ![core-badge] ![deprecated-badge]
 
 This blueprint uses the [Packer template module][pkr] to create a custom VM
 image and uses it to provision an HPC cluster using the Slurm scheduler. By
@@ -1058,7 +1058,7 @@ For this example the following is needed in the selected region:
 [pfs-parallelstore.yaml]: ./pfs-parallelstore.yaml
 [Parallelstore]: ../modules/file-system/parallelstore/README.md
 
-### [cae-slurm-v5-legacy.yaml] ![core-badge]
+### [cae-slurm-v5-legacy.yaml] ![core-badge] ![deprecated-badge]
 
 The Computer Aided Engineering (CAE) blueprint captures a reference architecture
 where the right cloud components are assembled to optimally cater to the
@@ -1143,7 +1143,7 @@ The blueprint contains 3 groups:
 
 [hpc-build-slurm-image.yaml]: ../community/examples/hpc-build-slurm-image.yaml
 
-### [hpc-slurm-ubuntu2004-v5-legacy.yaml] ![community-badge]
+### [hpc-slurm-ubuntu2004-v5-legacy.yaml] ![community-badge] ![deprecated-badge]
 
 > **Warning**: The variables `enable_reconfigure`,
 > `enable_cleanup_compute`, and `enable_cleanup_subscriptions`, if set to
@@ -1230,7 +1230,7 @@ examples][intel-examples-readme].
 
 [hpc-slurm-daos.yaml]: ../community/examples/intel/hpc-slurm-daos.yaml
 
-### [hpc-amd-slurm-v5-legacy.yaml] ![community-badge]
+### [hpc-amd-slurm-v5-legacy.yaml] ![community-badge] ![deprecated-badge]
 
 This example provisions a Slurm cluster using AMD VM machine types. It
 automates the initial setup of Spack, including a script that can be used to
@@ -1398,7 +1398,7 @@ the nodes are provisioned. All nodes mount a filestore instance on `/home`.
 [omnia-github]: https://github.com/dellhpc/omnia
 [omnia-cluster.yaml]: ../community/examples/omnia-cluster.yaml
 
-### [hpc-slurm-local-ssd-v5-legacy.yaml] ![community-badge] ![experimental-badge]
+### [hpc-slurm-local-ssd-v5-legacy.yaml] ![community-badge] ![experimental-badge] ![deprecated-badge]
 
 This blueprint demonstrates the use of Slurm and Filestore, with the definition
 of a partition which deploys compute nodes that have local ssd drives deployed.
@@ -1594,7 +1594,7 @@ walks through the use of this blueprint.
 [htc-htcondor.yaml]: ../community/examples/htc-htcondor.yaml
 [hpcvmimage]: https://cloud.google.com/compute/docs/instances/create-hpc-vm
 
-### [htc-slurm-v5-legacy.yaml] ![community-badge] ![experimental-badge]
+### [htc-slurm-v5-legacy.yaml] ![community-badge] ![experimental-badge] ![deprecated-badge]
 
 This blueprint provisions a cluster using the Slurm scheduler in a configuration
 tuned for the execution of many short-duration, loosely-coupled (non-MPI) jobs.
@@ -1659,7 +1659,7 @@ tutorial.
 
 [tutorial-fluent.yaml]: ../community/examples/tutorial-fluent.yaml
 
-### [hpc-slurm-chromedesktop-v5-legacy.yaml] ![community-badge] ![experimental-badge]
+### [hpc-slurm-chromedesktop-v5-legacy.yaml] ![community-badge] ![experimental-badge] ![deprecated-badge]
 
 This example shows how to use the `chrome-remote-desktop` module with a Slurm
 partition to be able to `salloc` a GPU accelerated remote desktop.
@@ -1729,10 +1729,9 @@ vars:
 deployment_groups:
 - group: groupName
   modules:
-
-  # Local source, prefixed with ./ (/ and ../ also accepted)
+  # Embedded module (part of the toolkit), prefixed with `modules/` or `community/modules`
   - id: <a unique id> # Required: Name of this module used to uniquely identify it.
-    source: ./modules/role/module-name # Required: Points to the module directory.
+    source: modules/role/module-name # Required
     kind: < terraform | packer > # Optional: Type of module, currently choose from terraform or packer. If not specified, `kind` will default to `terraform`
     # Optional: All configured settings for the module. For terraform, each
     # variable listed in variables.tf can be set here, and are mandatory if no
@@ -1746,14 +1745,18 @@ deployment_groups:
         key3a: value3a
         key3b: value3b
 
-  # Embedded module (part of the toolkit), prefixed with modules/
-  - source: modules/role/module-name
-
   # GitHub module over SSH, prefixed with git@github.com
-  - source: git@github.com:org/repo.git//modules/role/module-name
+  - source: git@github.com:org/repo.git//path/to/module
 
   # GitHub module over HTTPS, prefixed with github.com
-  - source: github.com/org/repo//modules/role/module-name
+  - source: github.com/org/repo//path/to/module
+
+  # Local absolute source, prefixed with / 
+  - source: /path/to/module
+
+  # Local relative (to current working directory) source, prefixed with ./ or ../
+  - source: ../path/to/module
+  # NOTE: Do not reference toolkit modules by local source, use embedded source instead.
 ```
 
 ## Writing an HPC Blueprint
@@ -1845,38 +1848,6 @@ file-system etc.).
 When possible, custom modules should use these roles so that they match other
 modules defined by the toolkit. If a custom module does not fit into these
 roles, a new role can be defined.
-
-A module's parent folder will define the module’s role if possible. Therefore,
-regardless of where the module is located, the module directory should be
-explicitly referenced at least 2 layers deep, where the top layer refers to the
-“role” of that module.
-
-If a module is not defined at least 2 layers deep and the `ghpc_role` label has
-not been explicitly set in settings, ghpc_role will default to `undefined`.
-
-Below we show some of the core modules and their roles (as parent folders).
-
-```text
-modules/
-└── <<ROLE>
-    └── <<MODULE_NAME>>
-
-modules/
-├── compute
-│   └── vm-instance
-├── file-system
-│   ├── pre-existing-network-storage
-│   └── filestore
-├── monitoring
-│   └── dashboard
-├── network
-│   ├── pre-existing-vpc
-│   └── vpc
-├── packer
-│   └── custom-image
-└── scripts
-    └── startup-script
-```
 
 ### Deployment Groups
 

@@ -35,17 +35,17 @@ Modules that are still in development and less stable are labeled with the
 ### Compute
 
 * **[vm-instance]** ![core-badge] : Creates one or more VM instances.
-* **[schedmd-slurm-gcp-v5-partition]** ![community-badge] :
+* **[schedmd-slurm-gcp-v5-partition]** ![community-badge] ![deprecated-badge] :
   Creates a partition to be used by a [slurm-controller][schedmd-slurm-gcp-v5-controller].
-* **[schedmd-slurm-gcp-v5-node-group]** ![community-badge] :
+* **[schedmd-slurm-gcp-v5-node-group]** ![community-badge] ![deprecated-badge]:
   Creates a node group to be used by the [schedmd-slurm-gcp-v5-partition] module.
-* **[schedmd-slurm-gcp-v6-partition]** ![community-badge] ![experimental-badge]:
+* **[schedmd-slurm-gcp-v6-partition]** ![core-badge] :
   Creates a partition to be used by a [slurm-controller][schedmd-slurm-gcp-v6-controller].
-* **[schedmd-slurm-gcp-v6-nodeset]** ![community-badge] ![experimental-badge]:
+* **[schedmd-slurm-gcp-v6-nodeset]** ![core-badge] :
   Creates a nodeset to be used by the [schedmd-slurm-gcp-v6-partition] module.
-* **[schedmd-slurm-gcp-v6-nodeset-tpu]** ![community-badge] ![experimental-badge]:
+* **[schedmd-slurm-gcp-v6-nodeset-tpu]** ![core-badge] :
   Creates a TPU nodeset to be used by the [schedmd-slurm-gcp-v6-partition] module.
-* **[schedmd-slurm-gcp-v6-nodeset-dynamic]** ![community-badge] ![experimental-badge]:
+* **[schedmd-slurm-gcp-v6-nodeset-dynamic]** ![core-badge] ![experimental-badge]:
   Creates a dynamic nodeset to be used by the [schedmd-slurm-gcp-v6-partition] module and instance template.
 * **[gke-node-pool]** ![core-badge] ![experimental-badge] : Creates a
   Kubernetes node pool using GKE.
@@ -194,15 +194,15 @@ Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial][fsi-monteca
 * **[gke-cluster]** ![core-badge] ![experimental-badge] : Creates a
   Kubernetes cluster using GKE.
 * **[pre-existing-gke-cluster]** ![core-badge] ![experimental-badge] : Retrieves an existing GKE cluster. Substitute for ([gke-cluster]) module.
-* **[schedmd-slurm-gcp-v5-controller]** ![community-badge] :
+* **[schedmd-slurm-gcp-v5-controller]** ![community-badge] ![deprecated-badge] :
   Creates a Slurm controller node using [slurm-gcp-version-5].
-* **[schedmd-slurm-gcp-v5-login]** ![community-badge] :
+* **[schedmd-slurm-gcp-v5-login]** ![community-badge] ![deprecated-badge] :
   Creates a Slurm login node using [slurm-gcp-version-5].
-* **[schedmd-slurm-gcp-v5-hybrid]** ![community-badge] ![experimental-badge] :
+* **[schedmd-slurm-gcp-v5-hybrid]** ![community-badge] ![experimental-badge] ![deprecated-badge] :
   Creates hybrid Slurm partition configuration files using [slurm-gcp-version-5].
-* **[schedmd-slurm-gcp-v6-controller]** ![community-badge] ![experimental-badge]:
+* **[schedmd-slurm-gcp-v6-controller]** ![core-badge] :
   Creates a Slurm controller node using [slurm-gcp-version-6].
-* **[schedmd-slurm-gcp-v6-login]** ![community-badge] ![experimental-badge]:
+* **[schedmd-slurm-gcp-v6-login]** ![core-badge] :
   Creates a Slurm login node using [slurm-gcp-version-6].
 * **[htcondor-setup]** ![community-badge] ![experimental-badge] : Creates the
   base infrastructure for an HTCondor pool (service accounts and Cloud Storage bucket).
@@ -230,7 +230,7 @@ Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial][fsi-monteca
 [schedmd-slurm-gcp-v5-login]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-login/README.md
 [schedmd-slurm-gcp-v5-hybrid]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid/README.md
 [slurm-gcp-version-5]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/5.12.0
-[slurm-gcp-version-6]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.7.0
+[slurm-gcp-version-6]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.8.2
 [pbspro-client]: ../community/modules/scheduler/pbspro-client/README.md
 [pbspro-server]: ../community/modules/scheduler/pbspro-server/README.md
 
@@ -350,7 +350,7 @@ following module definition refers the local pre-existing-vpc modules.
 
 ```yaml
   - id: network1
-    source: ./modules/network/pre-existing-vpc
+    source: modules/network/pre-existing-vpc
 ```
 
 > **_NOTE:_** Relative paths (beginning with `.` or `..` must be relative to the

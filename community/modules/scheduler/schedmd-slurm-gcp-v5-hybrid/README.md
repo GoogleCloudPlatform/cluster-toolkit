@@ -2,10 +2,8 @@
 
 > [!NOTE]
 > Slurm-gcp-v5-hybrid module is deprecated. See
-> [this update](#completed-migration-to-slurm-gcp-v6) for specific recommendations
-> and timelines.
-
-* [Completed Migration to Slurm-GCP v6](../../../../modules/README.md#completed-migration-to-slurm-gcp-v6)
+> [this update](../../../../examples/README.md#completed-migration-to-slurm-gcp-v6)
+> for specific recommendations and timelines.
 
 This module is a wrapper around the [slurm-controller-hybrid] module by SchedMD
 as part of the [slurm-gcp] github repository. The hybrid module serves to create
@@ -81,7 +79,7 @@ The hybrid module can be added to a blueprint as follows:
 
 ```yaml
 - id: slurm-controller
-  source: ./community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid
+  source: community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid
   use:
   - debug-partition
   - compute-partition
