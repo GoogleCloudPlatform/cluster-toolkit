@@ -55,7 +55,7 @@ locals {
 }
 
 module "client_startup_script" {
-  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=v1.39.0&depth=1"
+  source = "../../../../modules/scripts/startup-script"
 
   deployment_name = var.deployment_name
   project_id      = var.project_id
@@ -71,7 +71,7 @@ module "client_startup_script" {
 }
 
 module "instances" {
-  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/compute/vm-instance?ref=09ae2725"
+  source = "../../../../modules/compute/vm-instance"
 
   instance_count                    = var.instance_count
   name_prefix                       = var.name_prefix
