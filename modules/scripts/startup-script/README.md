@@ -186,7 +186,7 @@ sudo bash add-google-cloud-ops-agent-repo.sh --also-install
 sudo service google-cloud-ops-agent start
 ```
 
-As a reminder, this should be in a startup script, which should run on all 
+As a reminder, this should be in a startup script, which should run on all
 Compute nodes via the `compute_startup_script` on the controller.
 
 #### Testing Installation
