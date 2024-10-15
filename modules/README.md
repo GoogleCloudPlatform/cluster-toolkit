@@ -350,7 +350,7 @@ following module definition refers the local pre-existing-vpc modules.
 
 ```yaml
   - id: network1
-    source: ./modules/network/pre-existing-vpc
+    source: modules/network/pre-existing-vpc
 ```
 
 > **_NOTE:_** Relative paths (beginning with `.` or `..` must be relative to the

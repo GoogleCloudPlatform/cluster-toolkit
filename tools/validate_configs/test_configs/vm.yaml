@@ -30,7 +30,7 @@ deployment_groups:
   - id: network1
     source: modules/network/pre-existing-vpc
 
-  - source: ./modules/compute/vm-instance
+  - source: modules/compute/vm-instance
     id: compute_instances_family
     use: [network1]
     settings:
@@ -47,7 +47,7 @@ deployment_groups:
         # project: $(vars.project_id)
         # family: myubuntu
 
-  - source: ./modules/compute/vm-instance
+  - source: modules/compute/vm-instance
     id: compute_instances_name
     use: [network1]
     settings:

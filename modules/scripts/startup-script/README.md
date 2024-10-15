@@ -29,12 +29,11 @@ Each runner receives the following attributes:
    not.
 - `source`: (Optional) A path to the file or data you want to upload. Must be
   defined if `content` is not. The source path is relative to the deployment
-  group directory. Scripts distributed as part of modules should start with
-  `modules/` followed by the name of the module used (not to be confused with
-  the module ID) and the path to the script. The format is shown below:
+  group directory. To ensure correctness of path use `ghpc_stage` function, that
+  would copy referenced file to the deployment group directory. For example:
 
-    ```text
-    source: ./modules/<<MODULE_NAME>>/<<SCRIPT_NAME>>
+    ```yaml
+    source: $(ghpc_stage("path/to/file"))
     ```
 
   For more examples with context, see the
@@ -218,7 +217,7 @@ For official documentation see troubleshooting docs:
 
 ```yaml
 - id: startup
-  source: ./modules/scripts/startup-script
+  source: modules/scripts/startup-script
   settings:
     runners:
       # Some modules such as filestore have runners as outputs for convenience:
@@ -242,7 +241,7 @@ For official documentation see troubleshooting docs:
         args: "bar.tgz 'Expanding file'"
 
 - id: compute-cluster
-  source: ./modules/compute/vm-instance
+  source: modules/compute/vm-instance
   use: [homefs, startup]
 ```
 
@@ -252,13 +251,13 @@ they are able to do so by using the `gcs_bucket_path` as shown in the below exam
 
 ```yaml
 - id: startup
-  source: ./modules/scripts/startup-script
+  source: modules/scripts/startup-script
   settings:
     gcs_bucket_path: gs://user-test-bucket/folder1/folder2
     install_stackdriver_agent: true
 
 - id: compute-cluster
-  source: ./modules/compute/vm-instance
+  source: modules/compute/vm-instance
   use: [startup]
 ```
 

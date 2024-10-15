@@ -1729,10 +1729,9 @@ vars:
 deployment_groups:
 - group: groupName
   modules:
-
-  # Local source, prefixed with ./ (/ and ../ also accepted)
+  # Embedded module (part of the toolkit), prefixed with `modules/` or `community/modules`
   - id: <a unique id> # Required: Name of this module used to uniquely identify it.
-    source: ./modules/role/module-name # Required: Points to the module directory.
+    source: modules/role/module-name # Required
     kind: < terraform | packer > # Optional: Type of module, currently choose from terraform or packer. If not specified, `kind` will default to `terraform`
     # Optional: All configured settings for the module. For terraform, each
     # variable listed in variables.tf can be set here, and are mandatory if no
@@ -1746,14 +1745,18 @@ deployment_groups:
         key3a: value3a
         key3b: value3b
 
-  # Embedded module (part of the toolkit), prefixed with modules/
-  - source: modules/role/module-name
-
   # GitHub module over SSH, prefixed with git@github.com
-  - source: git@github.com:org/repo.git//modules/role/module-name
+  - source: git@github.com:org/repo.git//path/to/module
 
   # GitHub module over HTTPS, prefixed with github.com
-  - source: github.com/org/repo//modules/role/module-name
+  - source: github.com/org/repo//path/to/module
+
+  # Local absolute source, prefixed with / 
+  - source: /path/to/module
+
+  # Local relative (to current working directory) source, prefixed with ./ or ../
+  - source: ../path/to/module
+  # NOTE: Do not reference toolkit modules by local source, use embedded source instead.
 ```
 
 ## Writing an HPC Blueprint
@@ -1845,38 +1848,6 @@ file-system etc.).
 When possible, custom modules should use these roles so that they match other
 modules defined by the toolkit. If a custom module does not fit into these
 roles, a new role can be defined.
-
-A module's parent folder will define the module’s role if possible. Therefore,
-regardless of where the module is located, the module directory should be
-explicitly referenced at least 2 layers deep, where the top layer refers to the
-“role” of that module.
-
-If a module is not defined at least 2 layers deep and the `ghpc_role` label has
-not been explicitly set in settings, ghpc_role will default to `undefined`.
-
-Below we show some of the core modules and their roles (as parent folders).
-
-```text
-modules/
-└── <<ROLE>
-    └── <<MODULE_NAME>>
-
-modules/
-├── compute
-│   └── vm-instance
-├── file-system
-│   ├── pre-existing-network-storage
-│   └── filestore
-├── monitoring
-│   └── dashboard
-├── network
-│   ├── pre-existing-vpc
-│   └── vpc
-├── packer
-│   └── custom-image
-└── scripts
-    └── startup-script
-```
 
 ### Deployment Groups
 
