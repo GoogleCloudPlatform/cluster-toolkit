@@ -162,6 +162,7 @@ curl -sSO https://dl.google.com/cloudagents/add-logging-agent-repo.sh
 sudo bash add-logging-agent-repo.sh --also-install
 sudo service stackdriver-agent start
 ```
+
 #### Cloud Ops Agent Installation
 
 If an image or machine already has the Stackdriver Agent installed and you would
