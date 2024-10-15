@@ -20,8 +20,6 @@ locals {
 }
 
 locals {
-  sa_email = var.service_account_email != null ? var.service_account_email : data.google_compute_default_service_account.default_sa.email
-
   preattached_gpu_machine_family = contains(["a2", "a3", "g2"], local.machine_family)
   has_gpu                        = (local.guest_accelerator != null && length(local.guest_accelerator) > 0) || local.preattached_gpu_machine_family
   gpu_taint = local.has_gpu ? [{
@@ -35,10 +33,6 @@ locals {
   initial_node_set = try(var.initial_node_count > 0, false)
 
   module_unique_id = replace(lower(var.internal_ghpc_module_id), "/[^a-z0-9\\-]/", "")
-}
-
-data "google_compute_default_service_account" "default_sa" {
-  project = var.project_id
 }
 
 resource "google_container_node_pool" "node_pool" {
@@ -237,45 +231,6 @@ resource "google_container_node_pool" "node_pool" {
       EOT
     }
   }
-}
-
-# For container logs to show up under Cloud Logging and GKE metrics to show up
-# on Cloud Monitoring console, some project level roles are needed for the
-# node_service_account
-resource "google_project_iam_member" "node_service_account_log_writer" {
-  project = var.project_id
-  role    = "roles/logging.logWriter"
-  member  = "serviceAccount:${local.sa_email}"
-}
-
-resource "google_project_iam_member" "node_service_account_metric_writer" {
-  project = var.project_id
-  role    = "roles/monitoring.metricWriter"
-  member  = "serviceAccount:${local.sa_email}"
-}
-
-resource "google_project_iam_member" "node_service_account_monitoring_viewer" {
-  project = var.project_id
-  role    = "roles/monitoring.viewer"
-  member  = "serviceAccount:${local.sa_email}"
-}
-
-resource "google_project_iam_member" "node_service_account_resource_metadata_writer" {
-  project = var.project_id
-  role    = "roles/stackdriver.resourceMetadata.writer"
-  member  = "serviceAccount:${local.sa_email}"
-}
-
-resource "google_project_iam_member" "node_service_account_gcr" {
-  project = var.project_id
-  role    = "roles/storage.objectViewer"
-  member  = "serviceAccount:${local.sa_email}"
-}
-
-resource "google_project_iam_member" "node_service_account_artifact_registry" {
-  project = var.project_id
-  role    = "roles/artifactregistry.reader"
-  member  = "serviceAccount:${local.sa_email}"
 }
 
 resource "null_resource" "install_dependencies" {
