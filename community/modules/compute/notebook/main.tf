@@ -20,9 +20,9 @@ locals {
 }
 
 locals {
-  suffix               = random_id.resource_name_suffix.hex
+  suffix = random_id.resource_name_suffix.hex
   #name                 = "thenotebook"
-  name                 = "notebook-${local.suffix}"
+  name                 = "notebook-${var.deployment_name}-${local.suffix}"
   bucket               = replace(var.gcs_bucket_path, "gs://", "")
   post_script_filename = "mount-${local.suffix}.sh"
 
@@ -55,23 +55,19 @@ resource "google_storage_bucket_object" "mount_script" {
   bucket  = local.bucket
 }
 
-output resource_name_suffix {
-  value = local.name
-}
-
 resource "google_workbench_instance" "instance" {
-  name                = local.name
-  location            = var.zone
-  project             = var.project_id
-  labels              = local.labels
-  gce_setup{ 
-    machine_type        = var.machine_type
+  name     = local.name
+  location = var.zone
+  project  = var.project_id
+  labels   = local.labels
+  gce_setup {
+    machine_type = var.machine_type
     metadata = {
       post-startup-script = "${var.gcs_bucket_path}/${google_storage_bucket_object.mount_script.name}"
     }
     vm_image {
-      project      = var.instance_image.project
-      family = var.instance_image.family
+      project = var.instance_image.project
+      family  = var.instance_image.family
     }
   }
 }
