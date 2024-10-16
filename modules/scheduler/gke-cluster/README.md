@@ -172,7 +172,6 @@ limitations under the License.
 | <a name="input_pods_ip_range_name"></a> [pods\_ip\_range\_name](#input\_pods\_ip\_range\_name) | The name of the secondary subnet ip range to use for pods. | `string` | `"pods"` | no |
 | <a name="input_prefix_with_deployment_name"></a> [prefix\_with\_deployment\_name](#input\_prefix\_with\_deployment\_name) | If true, cluster name will be prefixed by `deployment_name` (ex: <deployment\_name>-<name\_suffix>). | `bool` | `true` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The project ID to host the cluster in. | `string` | n/a | yes |
-| <a name="input_rdma_subnetwork_name_prefix"></a> [rdma\_subnetwork\_name\_prefix](#input\_rdma\_subnetwork\_name\_prefix) | Prefix of the RDMA subnetwork names | `string` | `null` | no |
 | <a name="input_region"></a> [region](#input\_region) | The region to host the cluster in. | `string` | n/a | yes |
 | <a name="input_release_channel"></a> [release\_channel](#input\_release\_channel) | The release channel of this cluster. Accepted values are `UNSPECIFIED`, `RAPID`, `REGULAR` and `STABLE`. | `string` | `"UNSPECIFIED"` | no |
 | <a name="input_service_account"></a> [service\_account](#input\_service\_account) | DEPRECATED: use service\_account\_email and scopes. | <pre>object({<br/>    email  = string,<br/>    scopes = set(string)<br/>  })</pre> | `null` | no |

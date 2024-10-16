@@ -36,44 +36,6 @@ locals {
 
   # multi networking needs enabled Dataplane v2
   derived_enable_dataplane_v2 = coalesce(var.enable_dataplane_v2, local.derived_enable_multi_networking)
-
-  rdma_networks     = [for network_info in var.additional_networks : network_info if strcontains(upper(network_info.nic_type), "RDMA")]
-  non_rdma_networks = [for network_info in var.additional_networks : network_info if !strcontains(upper(network_info.nic_type), "RDMA")]
-  apply_manifests_rdma_networks = flatten([
-    for idx, network_info in local.rdma_networks : [
-      {
-        source = "${path.module}/templates/gke-network-paramset.yaml.tftpl",
-        template_vars = {
-          name            = "${var.rdma_subnetwork_name_prefix}-${idx}",
-          network_name    = network_info.network
-          subnetwork_name = "${var.rdma_subnetwork_name_prefix}-${idx}",
-          device_mode     = "RDMA"
-        }
-      },
-      {
-        source        = "${path.module}/templates/network-object.yaml.tftpl",
-        template_vars = { name = "${var.rdma_subnetwork_name_prefix}-${idx}" }
-      }
-    ]
-  ])
-
-  apply_manifests_non_rdma_networks = flatten([
-    for idx, network_info in local.non_rdma_networks : [
-      {
-        source = "${path.module}/templates/gke-network-paramset.yaml.tftpl",
-        template_vars = {
-          name            = network_info.subnetwork
-          network_name    = network_info.network
-          subnetwork_name = network_info.subnetwork
-          device_mode     = "NetDevice"
-        }
-      },
-      {
-        source        = "${path.module}/templates/network-object.yaml.tftpl",
-        template_vars = { name = network_info.subnetwork }
-      }
-    ]
-  ])
 }
 
 data "google_compute_default_service_account" "default_sa" {
@@ -388,5 +350,21 @@ module "kubectl_apply" {
   cluster_id = google_container_cluster.gke_cluster.id
   project_id = var.project_id
 
-  apply_manifests = concat(local.apply_manifests_non_rdma_networks, local.apply_manifests_rdma_networks)
+  apply_manifests = flatten([
+    for idx, network_info in var.additional_networks : [
+      {
+        source = "${path.module}/templates/gke-network-paramset.yaml.tftpl",
+        template_vars = {
+          name            = network_info.subnetwork,
+          network_name    = network_info.network
+          subnetwork_name = network_info.subnetwork,
+          device_mode     = strcontains(upper(network_info.nic_type), "RDMA") ? "RDMA" : "NetDevice"
+        }
+      },
+      {
+        source        = "${path.module}/templates/network-object.yaml.tftpl",
+        template_vars = { name = network_info.subnetwork }
+      }
+    ]
+  ])
 }
