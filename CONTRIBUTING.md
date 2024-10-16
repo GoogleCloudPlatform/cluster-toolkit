@@ -22,6 +22,7 @@ use GitHub pull requests for this purpose. Consult
 [GitHub Help](https://help.github.com/articles/about-pull-requests/) for more
 information on pull requests.
 
+
 ### Standard PR Response Times
 
 Community submissions can take up to 2 weeks to be reviewed.
