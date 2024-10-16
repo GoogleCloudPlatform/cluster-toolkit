@@ -520,16 +520,19 @@ variable "dws_flex" {
   Options:
   - enable: Enable DWS Flex Start
   - max_run_duration: Maximum duration in seconds for the job to run, should not exceed 1,209,600 (2 weeks).
+  - use_job_duration: Use the job duration to determine the max_run_duration, if job duration is not set, max_run_duration will be used.
   
  Limitations:
   - CAN NOT be used with reservations;
   - CAN NOT be used with placement groups;
+  - If `use_job_duration` is enabled nodeset can be used in "exclusive" partitions only
 
  EOD
 
   type = object({
     enabled          = optional(bool, true)
     max_run_duration = optional(number, 1209600) # 2 weeks
+    use_job_duration = optional(bool, false)
   })
   default = {
     enabled = false
