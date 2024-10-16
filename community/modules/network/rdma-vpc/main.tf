@@ -126,12 +126,10 @@ locals {
     }
   ]
 
-  # FIX_ME(arajmane): There is a concern about this not working in a shared VPC environment. 
-  # To unblock experimental testing, we decided to go ahead with this.
   output_subnets_gke = [
-    for subnet in module.vpc.subnets : {
+    for i in range(length(module.vpc.subnets)) : {
       network            = local.network_name
-      subnetwork         = subnet.name
+      subnetwork         = local.template_subnetworks[i].subnet_name
       subnetwork_project = var.project_id
       network_ip         = ""
       nic_type           = coalesce(var.nic_type, try(regex("IRDMA", local.profile_name), regex("MRDMA", local.profile_name), "RDMA"))
