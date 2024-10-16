@@ -80,7 +80,7 @@ locals {
   }
 
   bucket_md5  = substr(md5("${var.project_id}.${var.deployment_name}.${local.script_content}"), 0, 8)
-  bucket_name = "spack-scripts-${local.bucket_md5}"
+  bucket_name = "${var.deployment_name}-spack-scripts-${local.bucket_md5}"
   runners     = [local.install_spack_deps_runner, local.install_spack_runner]
 
   combined_runner = {

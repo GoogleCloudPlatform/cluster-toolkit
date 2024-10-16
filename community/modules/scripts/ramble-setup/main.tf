@@ -73,7 +73,7 @@ locals {
   }
 
   bucket_md5  = substr(md5("${var.project_id}.${var.deployment_name}"), 0, 8)
-  bucket_name = "ramble-scripts-${local.bucket_md5}"
+  bucket_name = "${var.deployment_name}-ramble-scripts-${local.bucket_md5}"
   runners     = [local.install_ramble_deps_runner, local.install_ramble_runner, local.python_reqs_runner]
 
   combined_runner = {
