@@ -92,21 +92,9 @@ deployment_groups:
       ]
     outputs: [instructions]
 
-  - id: n1_service_account
-    source: community/modules/project/service-account
-    settings:
-      name: n1-sa
-      project_roles:
-      - logging.logWriter
-      - monitoring.metricWriter
-      - monitoring.viewer
-      - stackdriver.resourceMetadata.writer
-      - storage.objectViewer
-      - artifactregistry.reader
-
   - id: n1_pool_default
     source: modules/compute/gke-node-pool
-    use: [gke_cluster, n1_service_account]
+    use: [gke_cluster, gke_service_account]
     settings:
       name: n1-pool-default
       disk_type: pd-balanced
@@ -132,21 +120,9 @@ deployment_groups:
       ]
     outputs: [instructions]
 
-  - id: n1_full_service_account
-    source: community/modules/project/service-account
-    settings:
-      name: n1-full-sa
-      project_roles:
-      - logging.logWriter
-      - monitoring.metricWriter
-      - monitoring.viewer
-      - stackdriver.resourceMetadata.writer
-      - storage.objectViewer
-      - artifactregistry.reader
-
   - id: n1_pool_full_spec
     source: modules/compute/gke-node-pool
-    use: [gke_cluster, n1_full_service_account]
+    use: [gke_cluster, gke_service_account]
     settings:
       name: n1-pool-full-spec
       disk_type: pd-balanced
@@ -177,21 +153,9 @@ deployment_groups:
       ]
     outputs: [instructions]
 
-  - id: default_settings_service_account
-    source: community/modules/project/service-account
-    settings:
-      name: ds-sa
-      project_roles:
-      - logging.logWriter
-      - monitoring.metricWriter
-      - monitoring.viewer
-      - stackdriver.resourceMetadata.writer
-      - storage.objectViewer
-      - artifactregistry.reader
-
   - id: default_settings_pool
     source: modules/compute/gke-node-pool
-    use: [gke_cluster, default_settings_service_account]
+    use: [gke_cluster, gke_service_account]
     settings:
       name: default-settings-pool
 
