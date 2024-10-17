@@ -1917,6 +1917,10 @@ class Lookup:
             nodeset_map[self.node_nodeset_name(node)].append(node)
         return nodeset_map
 
+    @lru_cache(maxsize=16)
+    def job(self, job_id: int) -> str:
+        return run(f"{self.scontrol} show jobid {job_id}").stdout.rstrip()
+
     @property
     def etc_dir(self) -> Path:
         return Path(self.cfg.output_dir or slurmdirs.etc)
