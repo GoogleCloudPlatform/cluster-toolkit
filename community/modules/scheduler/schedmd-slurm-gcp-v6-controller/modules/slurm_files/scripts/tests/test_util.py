@@ -184,7 +184,7 @@ def test_nodeset_reservation_err(nodeset, err):
                     policies=["wanders", "apples", "yum"],
                     bulk_insert_name="projects/bobin/reservations/robin")),
             (TstNodeset(
-                reservation_name="projects/bobin/reservations/robin/reservationBlocks/cheese-brie-6",
+                reservation_name="projects/bobin/reservations/robin/snek/cheese-brie-6",
                 zone_policy_allow=["eine"]), 
                 [],
                 util.ReservationDetails(
@@ -192,8 +192,7 @@ def test_nodeset_reservation_err(nodeset, err):
                     zone="eine",
                     name="robin",
                     policies=[],
-                    reservation_block="cheese-brie-6",
-                    bulk_insert_name="projects/bobin/reservations/robin/reservationBlocks/cheese-brie-6")),
+                    bulk_insert_name="projects/bobin/reservations/robin/snek/cheese-brie-6")),
 
         ])
 
