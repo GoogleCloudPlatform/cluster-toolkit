@@ -274,3 +274,9 @@ variable "shielded_instance_config" {
     enable_integrity_monitoring = true
   }
 }
+
+variable "gcloud_path_override" {
+  description = "Directory of the gcloud executable"
+  type        = string
+  default     = ""
+}
