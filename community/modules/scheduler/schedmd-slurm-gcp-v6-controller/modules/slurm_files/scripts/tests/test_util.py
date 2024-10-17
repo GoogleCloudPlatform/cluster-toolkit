@@ -13,7 +13,8 @@
 # limitations under the License.
 
 import pytest
-import common # needed to import util
+from mock import Mock
+from common import TstNodeset, TstCfg # needed to import util
 import util
 from google.api_core.client_options import ClientOptions  # noqa: E402
 
@@ -130,3 +131,85 @@ def test_create_client_options(
     ud_mock.return_value = "googleapis.com"
     ep_mock.return_value = ep_ver
     assert util.create_client_options(api).__repr__() == expected.__repr__()
+
+
+
+@pytest.mark.parametrize(
+        "nodeset,err",
+        [
+            (TstNodeset(reservation_name="projects/x/reservations/y"), AssertionError), # no zones
+            (TstNodeset(
+                reservation_name="projects/x/reservations/y",
+                zone_policy_allow=["eine", "zwei"]), AssertionError), # multiples zones
+            (TstNodeset(
+                reservation_name="robin",
+                zone_policy_allow=["eine"]), ValueError), # invalid name
+            (TstNodeset(
+                reservation_name="projects/reservations/y",
+                zone_policy_allow=["eine"]), ValueError), # invalid name
+            (TstNodeset(
+                reservation_name="projects/x/zones/z/reservations/y",
+                zone_policy_allow=["eine"]), ValueError), # invalid name
+        ]
+)
+def test_nodeset_reservation_err(nodeset, err):
+    lkp = util.Lookup(TstCfg())
+    lkp._get_reservation = Mock()
+    with pytest.raises(err):
+        lkp.nodeset_reservation(nodeset)
+    lkp._get_reservation.assert_not_called()
+    
+@pytest.mark.parametrize(
+        "nodeset,policies,expected",
+        [
+            (TstNodeset(), [], None), # no reservation
+            (TstNodeset(
+                reservation_name="projects/bobin/reservations/robin",
+                zone_policy_allow=["eine"]), 
+                [],
+                util.ReservationDetails(
+                    project="bobin",
+                    zone="eine",
+                    name="robin",
+                    policies=[],
+                    bulk_insert_name="projects/bobin/reservations/robin")),
+            (TstNodeset(
+                reservation_name="projects/bobin/reservations/robin",
+                zone_policy_allow=["eine"]), 
+                ["seven/wanders", "five/red/apples", "yum"],
+                util.ReservationDetails(
+                    project="bobin",
+                    zone="eine",
+                    name="robin",
+                    policies=["wanders", "apples", "yum"],
+                    bulk_insert_name="projects/bobin/reservations/robin")),
+            (TstNodeset(
+                reservation_name="projects/bobin/reservations/robin/reservationBlocks/cheese-brie-6",
+                zone_policy_allow=["eine"]), 
+                [],
+                util.ReservationDetails(
+                    project="bobin",
+                    zone="eine",
+                    name="robin",
+                    policies=[],
+                    reservation_block="cheese-brie-6",
+                    bulk_insert_name="projects/bobin/reservations/robin/reservationBlocks/cheese-brie-6")),
+
+        ])
+
+def test_nodeset_reservation_ok(nodeset, policies, expected):
+    lkp = util.Lookup(TstCfg())
+    lkp._get_reservation = Mock()
+    
+    if not expected:
+        assert lkp.nodeset_reservation(nodeset) is None
+        lkp._get_reservation.assert_not_called()
+        return
+    
+    lkp._get_reservation.return_value = {
+        "resourcePolicies": {i: p for i, p in enumerate(policies)},
+    }
+    assert lkp.nodeset_reservation(nodeset) == expected
+    lkp._get_reservation.assert_called_once_with(expected.project, expected.zone, expected.name)
+    
+    
