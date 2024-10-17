@@ -24,6 +24,20 @@ variable "deployment_name" {
   type        = string
 }
 
+variable "daos_agent_config" {
+  description = "Additional configuration to be added to daos_config.yml"
+  type        = string
+  default     = ""
+  nullable    = false
+}
+
+variable "dfuse_environment" {
+  description = "Additional environment variables for DFuse process"
+  type        = map(string)
+  default     = {}
+  nullable    = false
+}
+
 variable "name" {
   description = "Name of parallelstore instance."
   type        = string
