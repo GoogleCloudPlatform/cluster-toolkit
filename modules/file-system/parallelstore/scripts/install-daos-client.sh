@@ -50,6 +50,7 @@ else
 		if [ -x /usr/bin/google_disable_automatic_updates ]; then
 			/usr/bin/google_disable_automatic_updates
 		fi
+		dnf clean all
 		dnf makecache
 
 		# 2) Install daos-client
