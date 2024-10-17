@@ -40,9 +40,21 @@ deployment_groups:
         - range_name: services
           ip_cidr_range: 10.0.32.0/20
 
+  - id: gke_service_account
+    source: community/modules/project/service-account
+    settings:
+      name: gke-sa
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
+      - monitoring.viewer
+      - stackdriver.resourceMetadata.writer
+      - storage.objectViewer
+      - artifactregistry.reader
+
   - id: gke_cluster
     source: modules/scheduler/gke-cluster
-    use: [network1]
+    use: [network1, gke_service_account]
     settings:
       enable_private_endpoint: false  # Allows for access from authorized public IPs
       master_authorized_networks:
@@ -52,7 +64,7 @@ deployment_groups:
 
   - id: g2_latest_driver
     source: modules/compute/gke-node-pool
-    use: [gke_cluster]
+    use: [gke_cluster, gke_service_account]
     settings:
       name: g2-latest-driver
       machine_type: g2-standard-4
@@ -82,7 +94,7 @@ deployment_groups:
 
   - id: n1_pool_default
     source: modules/compute/gke-node-pool
-    use: [gke_cluster]
+    use: [gke_cluster, gke_service_account]
     settings:
       name: n1-pool-default
       disk_type: pd-balanced
@@ -110,7 +122,7 @@ deployment_groups:
 
   - id: n1_pool_full_spec
     source: modules/compute/gke-node-pool
-    use: [gke_cluster]
+    use: [gke_cluster, gke_service_account]
     settings:
       name: n1-pool-full-spec
       disk_type: pd-balanced
@@ -143,7 +155,7 @@ deployment_groups:
 
   - id: default_settings_pool
     source: modules/compute/gke-node-pool
-    use: [gke_cluster]
+    use: [gke_cluster, gke_service_account]
     settings:
       name: default-settings-pool
 

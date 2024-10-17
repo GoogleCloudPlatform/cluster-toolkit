@@ -24,7 +24,7 @@ deployment_groups:
 - group: primary
   modules:
   - id: project
-    source: ./community/modules/project/new-project
+    source: community/modules/project/new-project
     settings:
       folder_id: 334688113020  # random number
       billing_account: 111110-M2N704-854685  # random billing number

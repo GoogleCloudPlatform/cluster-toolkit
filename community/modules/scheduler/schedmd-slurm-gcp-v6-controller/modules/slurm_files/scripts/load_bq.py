@@ -19,23 +19,24 @@ import os
 import shelve
 import uuid
 from collections import namedtuple
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from pprint import pprint
 
-from google.cloud.bigquery import SchemaField
-from google.cloud import bigquery as bq
-from google.api_core import retry, exceptions
-
 import util
+from google.api_core import exceptions, retry
+from google.cloud import bigquery as bq
+from google.cloud.bigquery import SchemaField
 from util import lookup, run
-
 
 SACCT = "sacct"
 script = Path(__file__).resolve()
 
 DEFAULT_TIMESTAMP_FILE = script.parent / "bq_timestamp"
 timestamp_file = Path(os.environ.get("TIMESTAMP_FILE", DEFAULT_TIMESTAMP_FILE))
+# The maximum request to insert_rows is 10MB, each sacct row is about 1200 bytes or ~ 8000 rows.
+# Set to 5000 for a little wiggle room.
+BQ_ROW_BATCH_SIZE = 5000
 
 # cluster_id_file = script.parent / 'cluster_uuid'
 # try:
@@ -322,7 +323,13 @@ def main():
     # it will try again next time. If some writes succeed, we don't currently
     # have a way to not submit duplicates next time.
     if jobs:
-        bq_submit(jobs)
+        num_batches = (len(jobs) - 1) // BQ_ROW_BATCH_SIZE + 1
+        print(
+            f"loading {num_batches} batches of BigQuery data in batches of size : {BQ_ROW_BATCH_SIZE}"
+        )
+        for batch_indx, job_indx in enumerate(range(0, len(jobs), BQ_ROW_BATCH_SIZE)):
+            print(f"loading BigQuery data batch {batch_indx} of {num_batches}")
+            bq_submit(jobs[job_indx : job_indx + BQ_ROW_BATCH_SIZE])
     write_timestamp(end)
     update_job_idx_cache(jobs, end)
 

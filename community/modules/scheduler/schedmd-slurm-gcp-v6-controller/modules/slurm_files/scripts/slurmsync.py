@@ -428,9 +428,14 @@ def reconfigure_slurm():
             log.exception("failed to reconfigure slurmctld")
         util.run(f"wall '{update_msg}'", timeout=30)
         log.debug("Done.")
-    elif lookup().instance_role_safe in ["compute", "login"]:
+    elif lookup().instance_role_safe == "compute":
         log.info("Restarting slurmd to make changes take effect.")
         run("systemctl restart slurmd")
+        util.run(f"wall '{update_msg}'", timeout=30)
+        log.debug("Done.")
+    elif lookup().instance_role_safe == "login":
+        log.info("Restarting sackd to make changes take effect.")
+        run("systemctl restart sackd")
         util.run(f"wall '{update_msg}'", timeout=30)
         log.debug("Done.")
 

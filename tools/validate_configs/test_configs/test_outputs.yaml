@@ -47,7 +47,7 @@ deployment_groups:
     - install_nfs_client
 
   - id: nfs
-    source: ./community/modules/file-system/nfs-server
+    source: community/modules/file-system/nfs-server
     outputs:
     - network_storage
     - install_nfs_client
@@ -131,7 +131,7 @@ deployment_groups:
     - startup_script
 
   - id: lustre
-    source: ./community/modules/file-system/DDN-EXAScaler
+    source: community/modules/file-system/DDN-EXAScaler
     outputs:
     - private_addresses
     - ssh_console

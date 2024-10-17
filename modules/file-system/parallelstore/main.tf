@@ -46,6 +46,7 @@ resource "random_id" "resource_name_suffix" {
 }
 
 resource "google_parallelstore_instance" "instance" {
+  project      = var.project_id
   instance_id  = local.id
   location     = var.zone
   capacity_gib = var.size_gb

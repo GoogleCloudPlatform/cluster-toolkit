@@ -17,7 +17,23 @@ output "nodeset_tpu" {
   value       = local.nodeset_tpu
 
   precondition {
-    condition     = (var.node_type == null) != (var.accelerator_config == { topology : "", version : "" })
+    condition     = (var.node_type == "") != (var.accelerator_config == { topology : "", version : "" })
     error_message = "Either a node_type or an accelerator_config must be provided."
+  }
+
+  precondition {
+    condition     = ((local.tpu_core_count / 8) <= var.node_count_dynamic_max) || ((local.tpu_core_count / 8) <= var.node_count_static)
+    error_message = <<-EOD
+      When using TPUs there should be at least one node per every 8 cores. 
+      Currently there are ${local.tpu_core_count} cores but only ${var.node_count_static} static nodes and ${var.node_count_dynamic_max} dynamic nodes.
+    EOD
+  }
+
+  precondition {
+    condition     = (var.node_count_dynamic_max % (local.tpu_core_count / 8) == 0) && (var.node_count_static % (local.tpu_core_count / 8) == 0)
+    error_message = <<-EOD
+      The number of worker nodes should be a multiple of ${local.tpu_core_count / 8}.
+      This is to ensure each node has a TPU machine for job scheduling.
+    EOD
   }
 }

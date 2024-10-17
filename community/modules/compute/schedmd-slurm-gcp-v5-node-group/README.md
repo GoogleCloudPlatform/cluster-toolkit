@@ -1,5 +1,10 @@
 ## Description
 
+> [!NOTE]
+> Slurm-gcp-v5-node-group module is deprecated. See
+> [this update](../../../../examples/README.md#completed-migration-to-slurm-gcp-v6)
+> for specific recommendations and timelines.
+
 This module creates a node group data structure intended to be input to the
 [schedmd-slurm-gcp-v5-partition](../schedmd-slurm-gcp-v5-partition/) module.
 

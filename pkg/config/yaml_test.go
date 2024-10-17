@@ -218,6 +218,7 @@ func TestDictUnmarshalYAML(t *testing.T) {
 	yml := `
 s1: "red"
 s2: pink
+nl:
 m1: {}	
 m2:
   m2f1: green
@@ -229,6 +230,7 @@ m2:
 	want := Dict{}.
 		With("s1", cty.StringVal("red")).
 		With("s2", cty.StringVal("pink")).
+		With("nl", cty.NullVal(cty.DynamicPseudoType)).
 		With("m1", cty.EmptyObjectVal).
 		With("m2", cty.ObjectVal(map[string]cty.Value{
 			"m2f1": cty.StringVal("green"),
@@ -259,14 +261,12 @@ func TestDictWrongTypeUnmarshalYAML(t *testing.T) {
 	if err == nil {
 		t.Errorf("expected error, got nil")
 	}
-	if diff := cmp.Diff(err.Error(), "line 2 column 1: must be a mapping, got number"); diff != "" {
-		t.Errorf("diff (-want +got):\n%s", diff)
-	}
 }
 
 func TestDictMarshalYAML(t *testing.T) {
 	d := Dict{}.
 		With("s1", cty.StringVal("red")).
+		With("nl", cty.NullVal(cty.DynamicPseudoType)).
 		With("m1", cty.EmptyObjectVal).
 		With("m2", cty.ObjectVal(map[string]cty.Value{
 			"m2f1": cty.StringVal("green"),
@@ -280,12 +280,25 @@ func TestDictMarshalYAML(t *testing.T) {
 		}))
 	want := map[string]interface{}{
 		"s1": "red",
+		"nl": nil,
 		"m1": map[string]interface{}{},
 		"m2": map[string]interface{}{
 			"m2f1": "green",
 			"m2f2": []interface{}{1.0, 0.2, -3.0, false, "((7 + 4))"},
 		},
 	}
+	got, err := d.MarshalYAML()
+	if err != nil {
+		t.Fatalf("failed to marshal: %v", err)
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("diff (-want +got):\n%s", diff)
+	}
+}
+
+func TestEmptyDictMarshalYAML(t *testing.T) {
+	d := Dict{}
+	want := map[string]interface{}{}
 	got, err := d.MarshalYAML()
 	if err != nil {
 		t.Fatalf("failed to marshal: %v", err)

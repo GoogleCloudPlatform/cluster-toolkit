@@ -73,49 +73,44 @@ def instance_properties(nodeset, model, placement_group, labels=None):
         props.disks = template_info.disks
 
     if placement_group:
-        props.scheduling = {
-            "onHostMaintenance": "TERMINATE",
-        }
+        props.scheduling.onHostMaintenance = "TERMINATE"
         props.resourcePolicies = [placement_group]
 
-    if nodeset.reservation_name:
-        reservation_name = nodeset.reservation_name
-
-        zones = list(nodeset.zone_policy_allow or [])
-        assert len(zones) == 1, "Only single zone is supported if using a reservation"
-
-        reservation = lookup().reservation(reservation_name, zones[0])
-
+    if reservation := lookup().nodeset_reservation(nodeset):
         props.reservationAffinity = {
             "consumeReservationType": "SPECIFIC_RESERVATION",
             "key": f"compute.{util.universe_domain()}/reservation-name",
-            "values": [reservation_name],
+            "values": [reservation.bulk_insert_name],
         }
 
-        policies = util.reservation_resource_policies(reservation)
-        if policies:
-            props.scheduling = {
-                "onHostMaintenance": "TERMINATE",
-            }
-            props.resourcePolicies = policies
+        if reservation.policies:
+            props.scheduling.onHostMaintenance = "TERMINATE"
+            props.resourcePolicies = reservation.policies
             log.info(
-                f"reservation {reservation_name} is being used with policies {props.resourcePolicies}"
+                f"reservation {reservation.bulk_insert_name} is being used with policies {props.resourcePolicies}"
             )
         else:
             props.resourcePolicies = []
             log.info(
-                f"reservation {reservation_name} is being used without any policies"
+                f"reservation {reservation.bulk_insert_name} is being used without any policies"
             )
 
     if nodeset.maintenance_interval:
-        props.scheduling = props.scheduling or {}
-        props.scheduling["maintenanceInterval"] = nodeset.maintenance_interval
+        props.scheduling.maintenanceInterval = nodeset.maintenance_interval
+
+    if nodeset.dws_flex.enabled:
+        update_props_dws(props,nodeset.dws_flex)
 
     # Override with properties explicit specified in the nodeset
     props.update(nodeset.get("instance_properties") or {})
     
     return props
 
+def update_props_dws(props:dict,dws_flex:dict) -> None:
+    props.scheduling.onHostMaintenance = "TERMINATE"
+    props.scheduling.instanceTerminationAction = "DELETE"
+    props.scheduling.maxRunDuration['seconds'] = dws_flex.max_run_duration
+    props.reservationAffinity['consumeReservationType'] = "NO_RESERVATION"
 
 def per_instance_properties(node):
     props = NSDict()

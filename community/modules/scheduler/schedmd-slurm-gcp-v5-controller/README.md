@@ -1,5 +1,10 @@
 ## Description
 
+> [!NOTE]
+> Slurm-gcp-v5-controller module is deprecated. See
+> [this update](../../../../examples/README.md#completed-migration-to-slurm-gcp-v6)
+> for specific recommendations and timelines.
+
 This module creates a slurm controller node via the [SchedMD/slurm-gcp]
 [slurm\_controller\_instance] and [slurm\_instance\_template] modules.
 

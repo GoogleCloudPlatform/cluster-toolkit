@@ -40,6 +40,18 @@ deployment_groups:
         - range_name: services
           ip_cidr_range: 10.0.32.0/20
 
+  - id: gke_service_account
+    source: community/modules/project/service-account
+    settings:
+      name: gke-sa
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
+      - monitoring.viewer
+      - stackdriver.resourceMetadata.writer
+      - storage.objectViewer
+      - artifactregistry.reader
+
   - id: gpunets
     source: modules/network/multivpc
     settings:
@@ -50,7 +62,7 @@ deployment_groups:
 
   - id: gke_cluster
     source: modules/scheduler/gke-cluster
-    use: [network1, gpunets]
+    use: [network1, gpunets, gke_service_account]
     settings:
       enable_private_endpoint: false  # Allows for access from authorized public IPs
       master_authorized_networks:
@@ -60,7 +72,7 @@ deployment_groups:
 
   - id: a3_highgpu_pool
     source: modules/compute/gke-node-pool
-    use: [gke_cluster, gpunets]
+    use: [gke_cluster, gpunets, gke_service_account]
     settings:
       machine_type: a3-highgpu-8g
       autoscaling_total_min_nodes: 2

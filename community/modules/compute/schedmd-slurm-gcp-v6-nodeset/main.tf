@@ -57,6 +57,7 @@ locals {
     node_count_dynamic_max = var.node_count_dynamic_max
     node_conf              = var.node_conf
     nodeset_name           = local.name
+    dws_flex               = var.dws_flex
 
     disk_auto_delete = var.disk_auto_delete
     disk_labels      = merge(local.labels, var.disk_labels)
@@ -174,6 +175,7 @@ data "google_compute_reservation" "reservation" {
 
 data "google_compute_machine_types" "machine_types_by_zone" {
   for_each = local.zones
+  project  = var.project_id
   filter   = format("name = \"%s\"", var.machine_type)
   zone     = each.value
 }

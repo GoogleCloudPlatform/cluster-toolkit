@@ -16,6 +16,10 @@
 - name: Ensure Desktop OS and Chrome Remote Desktop is installed
   hosts: localhost
   become: true
+  module_defaults:
+    ansible.builtin.apt:
+      update_cache: true
+      cache_valid_time: 3600
   tasks:
   - name: Install desktop packages
     ansible.builtin.apt:
@@ -23,10 +27,9 @@
       - xfce4
       - xfce4-goodies
       state: present
-      update_cache: true
     register: apt_result
-    retries: 6
-    delay: 10
+    retries: 10
+    delay: 30
     until: apt_result is success
 
   - name: Download and configure CRD
@@ -42,8 +45,8 @@
     environment:
       DEBIAN_FRONTEND: noninteractive
     register: apt_result
-    retries: 6
-    delay: 10
+    retries: 10
+    delay: 30
     until: apt_result is success
 
   - name: Configure CRD to use Xfce by default
