@@ -23,6 +23,7 @@
     fstype: ext4
     interface: nvme
     mode: '0755'
+    mountpoint: /mnt/{{ raid_name }}
   tasks:
   - name: Get local SSD devices
     ansible.builtin.find:
@@ -61,7 +62,7 @@
   - name: Mount RAID array
     ansible.posix.mount:
       src: "{{ array_dev }}"
-      path: '{{ mountpoint | default("/mnt/" + raid_name) }}'
+      path: "{{ mountpoint }}"
       fstype: "{{ fstype }}"
       # the nofail option is critical as it enables the boot process to complete on machines
       # that were powered off and had local SSD contents discarded; without this option
@@ -71,6 +72,6 @@
 
   - name: Set mount permissions
     ansible.builtin.file:
-      path: '{{ mountpoint | default("/mnt/" + raid_name) }}'
+      path: "{{ mountpoint }}"
       state: directory
       mode: "{{ mode }}"
