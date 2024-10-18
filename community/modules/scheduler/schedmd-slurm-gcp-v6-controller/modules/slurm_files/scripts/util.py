@@ -19,6 +19,7 @@ import argparse
 import base64
 import collections
 from dataclasses import dataclass
+from datetime import timedelta
 import hashlib
 import inspect
 import json
@@ -1916,6 +1917,28 @@ class Lookup:
         for node in hostnames:
             nodeset_map[self.node_nodeset_name(node)].append(node)
         return nodeset_map
+
+    @lru_cache
+    def job(self, job_id: int) -> object:
+        jobInfo = run(f"{self.scontrol} show jobid {job_id}").stdout.rstrip()
+        timePattern = r"TimeLimit=(?:(\d+)-)?(\d{2}):(\d{2}):(\d{2})"
+        job_duration = 0
+
+        if match := re.search(timePattern, jobInfo):
+            days, hours, minutes, seconds = match.groups()
+            job_duration = int(timedelta(
+                days=int(days),
+                hours=int(hours),
+                minutes=int(minutes),
+                seconds=int(seconds)
+            ).total_seconds())
+
+        @dataclass
+        class Job:
+            job_id: int
+            duration: int
+
+        return Job(job_id,job_duration)
 
     @property
     def etc_dir(self) -> Path:
