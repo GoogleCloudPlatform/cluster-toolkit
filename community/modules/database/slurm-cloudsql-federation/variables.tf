@@ -52,6 +52,12 @@ variable "edition" {
   default = "ENTERPRISE"
 }
 
+variable "enable_backups" {
+  description = "Set true to enable backups"
+  type        = bool
+  default     = false
+}
+
 variable "project_id" {
   description = "Project in which the HPC deployment will be created"
   type        = string

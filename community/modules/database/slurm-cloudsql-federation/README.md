@@ -81,6 +81,7 @@ No modules.
 | <a name="input_deletion_protection"></a> [deletion\_protection](#input\_deletion\_protection) | Whether or not to allow Terraform to destroy the instance. | `string` | `false` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | The name of the current deployment | `string` | n/a | yes |
 | <a name="input_edition"></a> [edition](#input\_edition) | value | `string` | `"ENTERPRISE"` | no |
+| <a name="input_enable_backups"></a> [enable\_backups](#input\_enable\_backups) | Set true to enable backups | `bool` | `false` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the instances. Key-value pairs. | `map(string)` | n/a | yes |
 | <a name="input_network_id"></a> [network\_id](#input\_network\_id) | The ID of the GCE VPC network to which the instance is going to be created in.:<br>`projects/<project_id>/global/networks/<network_name>`" | `string` | n/a | yes |
 | <a name="input_private_vpc_connection_peering"></a> [private\_vpc\_connection\_peering](#input\_private\_vpc\_connection\_peering) | The name of the VPC Network peering connection, used only as dependency for Cloud SQL creation. | `string` | `null` | no |

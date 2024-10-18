@@ -77,6 +77,12 @@ resource "google_sql_database_instance" "instance" {
         }
       }
     }
+
+    backup_configuration {
+      enabled = var.enable_backups
+      # to allow easy switching between ENTERPRISE and ENTERPRISE_PLUS
+      transaction_log_retention_days = 7
+    }
   }
 }
 
