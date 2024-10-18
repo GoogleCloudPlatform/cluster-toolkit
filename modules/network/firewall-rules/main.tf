@@ -20,6 +20,14 @@ data "google_compute_subnetwork" "subnetwork" {
   self_link = var.subnetwork_self_link
 }
 
+# Module-level check for Private Google Access on the subnetwork
+check "private_google_access_enabled_subnetwork" {
+  assert {
+    condition     = data.google_compute_subnetwork.subnetwork.private_ip_google_access
+    error_message = "Private Google Access is disabled for subnetwork '${data.google_compute_subnetwork.subnetwork.name}'. This may cause connectivity issues for instances without external IPs trying to access Google APIs and services."
+  }
+}
+
 module "firewall_rule" {
   source       = "terraform-google-modules/network/google//modules/firewall-rules"
   version      = "~> 9.0"
