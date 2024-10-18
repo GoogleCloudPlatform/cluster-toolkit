@@ -26,14 +26,30 @@ variable "database_version" {
   type        = string
   default     = "MYSQL_5_7"
   validation {
-    condition     = var.database_version == "MYSQL_5_7" || var.database_version == "MYSQL_8_0"
-    error_message = "The database version must be either MYSQL_5_7 or MYSQL_8_0."
+    condition     = contains(["MYSQL_5_7", "MYSQL_8_0", "MYSQL_8_4"], var.database_version)
+    error_message = "The database version must be either MYSQL_5_7, MYSQL_8_0 or MYSQL_8_4."
   }
+}
+
+variable "data_cache_enabled" {
+  description = "Whether data cache is enabled for the instance. Can be used with ENTERPRISE_PLUS edition."
+  type        = bool
+  default     = false
 }
 
 variable "deployment_name" {
   description = "The name of the current deployment"
   type        = string
+}
+
+variable "edition" {
+  description = "value"
+  type        = string
+  validation {
+    condition     = contains(["ENTERPRISE", "ENTERPRISE_PLUS"], var.edition)
+    error_message = "The database edition must be either ENTERPRISE or ENTERPRISE_PLUS"
+  }
+  default = "ENTERPRISE"
 }
 
 variable "project_id" {
@@ -97,6 +113,11 @@ variable "private_vpc_connection_peering" {
   default     = null
 }
 
+variable "subnetwork_self_link" {
+  description = "Self link of the network where Cloud SQL instance PSC endpoint will be created"
+  type        = string
+}
+
 variable "user_managed_replication" {
   type = list(object({
     location     = string
@@ -104,4 +125,10 @@ variable "user_managed_replication" {
   }))
   description = "Replication parameters that will be used for defined secrets"
   default     = []
+}
+
+variable "use_psc_connection" {
+  description = "Create Private Service Connection instead of using Private Service Access peering"
+  type        = bool
+  default     = false
 }
