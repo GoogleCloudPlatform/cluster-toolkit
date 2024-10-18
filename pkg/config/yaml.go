@@ -313,29 +313,9 @@ func (y *YamlValue) unmarshalTuple(n *yaml.Node) error {
 	return nil
 }
 
-// UnmarshalYAML implements custom YAML unmarshaling.
-func (d *Dict) UnmarshalYAML(n *yaml.Node) error {
-	var v YamlValue
-	if err := n.Decode(&v); err != nil {
-		return err
-	}
-	ty := v.Unwrap().Type()
-	if !ty.IsObjectType() {
-		return nodeToPosErr(n, fmt.Errorf("must be a mapping, got %s", ty.FriendlyName()))
-	}
-
-	for k, w := range v.Unwrap().AsValueMap() {
-		if d.m == nil {
-			d.m = map[string]cty.Value{}
-		}
-		d.m[k] = w
-	}
-	return nil
-}
-
 // MarshalYAML implements custom YAML marshaling.
-func (d Dict) MarshalYAML() (interface{}, error) {
-	o, _ := cty.Transform(d.AsObject(), func(p cty.Path, v cty.Value) (cty.Value, error) {
+func (y YamlValue) MarshalYAML() (interface{}, error) {
+	m, err := cty.Transform(y.Unwrap(), func(p cty.Path, v cty.Value) (cty.Value, error) {
 		if v.IsNull() {
 			return v, nil
 		}
@@ -358,7 +338,11 @@ func (d Dict) MarshalYAML() (interface{}, error) {
 		return v, nil
 	})
 
-	j := ctyJson.SimpleJSONValue{Value: o}
+	if err != nil {
+		return nil, err
+	}
+
+	j := ctyJson.SimpleJSONValue{Value: m}
 	b, err := j.MarshalJSON()
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal JSON: %v", err)
@@ -369,6 +353,35 @@ func (d Dict) MarshalYAML() (interface{}, error) {
 		return nil, fmt.Errorf("failed to unmarshal JSON: %v", err)
 	}
 	return g, nil
+}
+
+// UnmarshalYAML implements custom YAML unmarshaling.
+func (d *Dict) UnmarshalYAML(n *yaml.Node) error {
+	var vm map[string]YamlValue
+	if err := n.Decode(&vm); err != nil {
+		return err
+	}
+
+	for k, v := range vm {
+		if d.m == nil {
+			d.m = map[string]cty.Value{}
+		}
+		d.m[k] = v.Unwrap()
+	}
+	return nil
+}
+
+// MarshalYAML implements custom YAML marshaling.
+func (d Dict) MarshalYAML() (interface{}, error) {
+	m := map[string]interface{}{}
+	for k, v := range d.m {
+		y, err := YamlValue{v}.MarshalYAML()
+		if err != nil {
+			return nil, err
+		}
+		m[k] = y
+	}
+	return m, nil
 }
 
 // yaml.v3 errors are either TypeError - collection of error message or single error message.

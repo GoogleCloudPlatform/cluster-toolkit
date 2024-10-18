@@ -62,12 +62,11 @@ deployment_groups:
   modules:
   # Source is an embedded module, denoted by "modules/*" without ./, ../, /
   # as a prefix. To refer to a local or community module, prefix with ./, ../ or /
-  # Example - ./modules/network/vpc
   - id: network1
     source: modules/network/pre-existing-vpc
 
   - id: nogpu-n1
-    source: ./modules/compute/vm-instance
+    source: modules/compute/vm-instance
     use:
     - network1
     settings:
@@ -76,7 +75,7 @@ deployment_groups:
       instance_image: $(vars.instance_image_vm)
 
   - id: manual-n1
-    source: ./modules/compute/vm-instance
+    source: modules/compute/vm-instance
     use:
     - network1
     settings:

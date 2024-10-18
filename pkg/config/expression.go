@@ -69,11 +69,11 @@ func (r Reference) String() string {
 // and transforms it to "terraform namespace" (e.g. `var.zone` or `module.homefs.mount`).
 func bpTraversalToTerraform(t hcl.Traversal) (hcl.Traversal, error) {
 	if len(t) < 2 {
-		return nil, fmt.Errorf(expectedVarFormat)
+		return nil, UnexpectedRefFormat
 	}
 	_, ok := t[1].(hcl.TraverseAttr)
 	if !ok {
-		return nil, fmt.Errorf(expectedVarFormat)
+		return nil, UnexpectedRefFormat
 	}
 
 	if t.RootName() == "vars" {

@@ -70,8 +70,8 @@ steps:
         cat /persistent_volume/image_name | xargs -L1 gcloud compute images delete --project "${PROJECT_ID}" --quiet
     }
 
-    REGION=australia-southeast1
-    ZONE=australia-southeast1-c
+    REGION=us-west4
+    ZONE=us-west4-a
 
     trap 'destroy_on_exit' EXIT
     ./gcluster deploy \

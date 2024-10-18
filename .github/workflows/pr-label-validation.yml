@@ -28,11 +28,13 @@ on:
     - ready_for_review
     - unlocked
     branches:
+    - main
     - develop
+    - release-candidate
 
 jobs:
   pr-label-validation:
-    if: github.repository == 'GoogleCloudPlatform/cluster-toolkit'
+    if: github.repository == 'GoogleCloudPlatform/cluster-toolkit' && github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     permissions:
       pull-requests: read

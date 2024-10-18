@@ -46,6 +46,5 @@ cli_deployment_vars:
   a3mega_cluster_size: 2
   enable_ops_agent: "true"
   enable_nvidia_dcgm: "true"
-  a3mega_reservation_name: a3mega-reservation-australia-southeast1-c
-  a3mega_maintenance_interval: PERIODIC
+  a3mega_reservation_name: a3mega-reservation-0
   final_image_family: "{{ final_image_family }}"

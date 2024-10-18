@@ -94,7 +94,7 @@ deployment_groups:
       source_image_project: cloud-hpc-image-public
 
   - id: batch-job
-    source: ./modules/scheduler/batch-job-template
+    source: modules/scheduler/batch-job-template
     settings:
       instance_template: $(batch-compute-template.self_link)
     outputs: [instructions]

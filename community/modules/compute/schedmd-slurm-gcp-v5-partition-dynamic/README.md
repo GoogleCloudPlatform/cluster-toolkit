@@ -1,5 +1,10 @@
 ## Description
 
+> [!NOTE]
+> Slurm-gcp-v5-partition-dynamic module is deprecated. See
+> [this update](../../../../examples/README.md#completed-migration-to-slurm-gcp-v6)
+> for specific recommendations and timelines.
+
 This module creates a dynamic compute partition that can be used as input to the
 [schedmd-slurm-gcp-v5-controller](../../scheduler/schedmd-slurm-gcp-v5-controller/README.md).
 This will configure the slurm partition to contain nodes with the corresponding feature.
