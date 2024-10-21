@@ -193,15 +193,6 @@ build {
     }
   }
 
-  # if the jq command is present, this will print the image name to stdout
-  # if jq is not present, this exits silently with code 0
-  post-processor "shell-local" {
-    inline = [
-      "command -v jq > /dev/null || exit 0",
-      "echo \"Image built: $(jq -r '.builds[-1].artifact_id' ${var.manifest_file} | cut -d ':' -f2)\"",
-    ]
-  }
-
   # If there is an error during image creation, print out command for getting packer VM logs
   error-cleanup-provisioner "shell-local" {
     environment_vars = [
