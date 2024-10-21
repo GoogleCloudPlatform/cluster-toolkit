@@ -47,9 +47,12 @@ resource "google_sql_database_instance" "instance" {
   database_version    = var.database_version
 
   settings {
-    user_labels = local.labels
-    edition     = var.edition
-    tier        = var.tier
+    disk_size       = var.disk_size_gb
+    disk_autoresize = var.disk_autoresize
+    edition         = var.edition
+    tier            = var.tier
+    user_labels     = local.labels
+
     dynamic "data_cache_config" {
       for_each = var.edition == "ENTERPRISE_PLUS" ? [""] : []
       content {
@@ -84,7 +87,15 @@ resource "google_sql_database_instance" "instance" {
       transaction_log_retention_days = 7
     }
   }
+  lifecycle {
+    precondition {
+      condition     = var.disk_autoresize && var.disk_size_gb == null || !var.disk_autoresize
+      error_message = "If setting disk_size_gb set disk_autorize to false to prevent re-provisioning of the instance after disk auto-expansion."
+    }
+  }
 }
+
+
 
 resource "google_compute_address" "psc" {
   count        = var.use_psc_connection ? 1 : 0

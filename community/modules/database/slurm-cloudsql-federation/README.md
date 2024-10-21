@@ -80,6 +80,8 @@ No modules.
 | <a name="input_database_version"></a> [database\_version](#input\_database\_version) | The version of the database to be created. | `string` | `"MYSQL_5_7"` | no |
 | <a name="input_deletion_protection"></a> [deletion\_protection](#input\_deletion\_protection) | Whether or not to allow Terraform to destroy the instance. | `string` | `false` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | The name of the current deployment | `string` | n/a | yes |
+| <a name="input_disk_autoresize"></a> [disk\_autoresize](#input\_disk\_autoresize) | Set to false to disable automatic disk grow. | `bool` | `true` | no |
+| <a name="input_disk_size_gb"></a> [disk\_size\_gb](#input\_disk\_size\_gb) | Size of the database disk in GiB. | `number` | `null` | no |
 | <a name="input_edition"></a> [edition](#input\_edition) | value | `string` | `"ENTERPRISE"` | no |
 | <a name="input_enable_backups"></a> [enable\_backups](#input\_enable\_backups) | Set true to enable backups | `bool` | `false` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the instances. Key-value pairs. | `map(string)` | n/a | yes |
