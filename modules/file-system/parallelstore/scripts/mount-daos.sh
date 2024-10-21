@@ -48,6 +48,7 @@ if { [ "${OS_ID}" = "rocky" ] || [ "${OS_ID}" = "rhel" ]; } && { [ "${OS_VERSION
 	mkdir -p /var/log/daos_agent
 	chown daos_agent:daos_agent /var/log/daos_agent
 	sed -i "s/#.*log_file:.*/log_file: \/var\/log\/daos_agent\/daos_agent.log/g" $daos_config
+	systemctl enable daos_agent.service
 	systemctl start daos_agent.service
 elif { [ "${OS_ID}" = "ubuntu" ] && [ "${OS_VERSION}" = "22.04" ]; } || { [ "${OS_ID}" = "debian" ] && [ "${OS_VERSION_MAJOR}" = "12" ]; }; then
 	mkdir -p /var/run/daos_agent
@@ -73,12 +74,34 @@ for i in {1..10}; do
 	# shellcheck disable=SC2086
 	dfuse -m "$local_mount" --pool default-pool --container default-container --multi-user $mount_options && break
 
-	echo "dfuse failed, retrying in 1 seconds (attempt $i/5)..."
+	echo "dfuse failed, retrying in 1 seconds (attempt $i/10)..."
 	sleep 1
 done
 
 if ! mountpoint -q "$local_mount"; then
 	exit 1
 fi
+
+# Store the mounting logic in a variable
+mount_command='for i in {1..10}; do /bin/dfuse -m '$local_mount' --pool default-pool --container default-container --multi-user '$mount_options' --foreground && break; echo \"dfuse, failed, retrying in 1 second (attempt '$i'/10)\"; sleep 1; done'
+
+# --- Begin: Add systemd service creation ---
+cat >/usr/lib/systemd/system/mount_parallelstore.service <<EOF
+[Unit]
+Description=DAOS Mount Service
+After=network-online.target daos_agent.service
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+ExecStart=/bin/bash -c '$mount_command'
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl enable mount_parallelstore.service
+# --- End: Add systemd service creation ---
 
 exit 0

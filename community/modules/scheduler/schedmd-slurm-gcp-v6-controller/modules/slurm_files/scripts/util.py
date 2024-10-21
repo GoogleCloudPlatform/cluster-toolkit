@@ -1447,8 +1447,9 @@ class TPU:
 class ReservationDetails:
     project: str
     zone: str
+    name: str
     policies: List[str] # names (not URLs) of resource policies
-    bulk_insert_name: str # name in format suitable for bulk insert (currently identical to user supplied name)
+    bulk_insert_name: str # name in format suitable for bulk insert (currently identical to user supplied name in long format)
 
 class Lookup:
     """Wrapper class for cached data access"""
@@ -1754,13 +1755,13 @@ class Lookup:
         assert len(zones) == 1, "Only single zone is supported if using a reservation"
         zone = zones[0]
 
-        try:
-            _, project, _, name = nodeset.reservation_name.split("/")
-        except ValueError:
+        regex = re.compile(r'^projects/(?P<project>[^/]+)/reservations/(?P<reservation>[^/]+)(/.*)?$')
+        if not (match := regex.match(nodeset.reservation_name)):
             raise ValueError(
                 f"Invalid reservation name: '{nodeset.reservation_name}', expected format is 'projects/PROJECT/reservations/NAME'"
             )
         
+        project, name = match.group("project", "reservation")
         reservation = self._get_reservation(project, zone, name)
 
         # Converts policy URLs to names, e.g.:
@@ -1770,6 +1771,7 @@ class Lookup:
         return ReservationDetails(
             project=project,
             zone=zone,
+            name=name,
             policies=policies,
             bulk_insert_name=nodeset.reservation_name)
 
