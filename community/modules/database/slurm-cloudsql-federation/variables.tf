@@ -42,6 +42,18 @@ variable "deployment_name" {
   type        = string
 }
 
+variable "disk_autoresize" {
+  description = "Set to false to disable automatic disk grow."
+  type        = bool
+  default     = true
+}
+
+variable "disk_size_gb" {
+  description = "Size of the database disk in GiB."
+  type        = number
+  default     = null
+}
+
 variable "edition" {
   description = "value"
   type        = string
@@ -122,6 +134,7 @@ variable "private_vpc_connection_peering" {
 variable "subnetwork_self_link" {
   description = "Self link of the network where Cloud SQL instance PSC endpoint will be created"
   type        = string
+  default     = null
 }
 
 variable "user_managed_replication" {
