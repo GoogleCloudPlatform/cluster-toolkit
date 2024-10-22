@@ -22,7 +22,7 @@ slurm_cluster_name: "debiv6{{ build[0:4] }}"
 
 cli_deployment_vars:
   network_name: "{{ network }}"
-  slurm_image: "{family: slurm-gcp-6-7-debian-11, project: schedmd-slurm-public}"
+  slurm_image: "{family: slurm-gcp-6-8-debian-11, project: schedmd-slurm-public}"
   region: us-west4
   zone: us-west4-c
 
