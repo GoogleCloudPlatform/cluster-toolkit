@@ -135,6 +135,9 @@ func GetModuleInfo(source string, kind string) (ModuleInfo, error) {
 	switch {
 	case sourcereader.IsEmbeddedPath(source) || sourcereader.IsLocalPath(source):
 		modPath = source
+		if sourcereader.IsLocalPath(source) && sourcereader.LocalModuleIsEmbedded(source) {
+			return ModuleInfo{}, fmt.Errorf("using embedded modules with local paths is no longer supported; use embedded path and rebuild gcluster binary")
+		}
 	default:
 		pkgAddr, subDir := getter.SourceDirSubdir(source)
 		if cachedModPath, ok := modDownloadCache[pkgAddr]; ok {

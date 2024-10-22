@@ -183,7 +183,7 @@ resource "google_storage_bucket_object" "ap_config" {
 }
 
 module "startup_script" {
-  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=v1.39.0&depth=1"
+  source = "../../../../modules/scripts/startup-script"
 
   project_id      = var.project_id
   region          = var.region

@@ -48,7 +48,7 @@ resource "terraform_data" "global_ip_cidr_suffix" {
 }
 
 module "vpcs" {
-  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/network/vpc?ref=v1.39.0&depth=1"
+  source = "../vpc"
 
   count = var.network_count
 
