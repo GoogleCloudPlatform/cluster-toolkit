@@ -22,6 +22,11 @@ variable "project_id" {
 variable "deployment_name" {
   description = "Name of the HPC deployment; used as part of name of the notebook."
   type        = string
+  # notebook name can have: lowercase letters, numbers, or hyphens (-) and cannot end with a hyphen
+  validation {
+    error_message = "The notebook name uses 'deployment_name' -- can only have: lowercase letters, numbers, or hyphens"
+    condition     = can(regex("^[a-z0-9]+(?:-[a-z0-9]+)*$", var.deployment_name))
+  }
 }
 
 variable "zone" {
