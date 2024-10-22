@@ -26,7 +26,7 @@ deployment_groups:
 - group: infrastructure
   modules:
   - id: network
-    source: ./modules/network/vpc
+    source: modules/network/vpc
 
   - id: homefs
     source: modules/file-system/filestore
@@ -38,7 +38,7 @@ deployment_groups:
         ghpc_role: storage-home
 
   - id: apps
-    source: ./modules/file-system/filestore
+    source: modules/file-system/filestore
     use: [network]
     settings:
       name: apps
@@ -47,7 +47,7 @@ deployment_groups:
         ghpc_role: storage-apps
 
   - id: license-server-1
-    source: ./modules/compute/vm-instance
+    source: modules/compute/vm-instance
     use: [network, homefs]
     settings:
       name_prefix: ls1

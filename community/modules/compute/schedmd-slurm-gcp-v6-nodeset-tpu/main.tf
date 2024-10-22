@@ -49,4 +49,11 @@ locals {
     reserved        = var.reserved
     network_storage = var.network_storage
   }
+
+  node_type_core_count = var.node_type == "" ? 0 : tonumber(regex("-(.*)", var.node_type)[0])
+
+  accelerator_core_list  = var.accelerator_config.topology == "" ? [0, 0] : regexall("\\d+", var.accelerator_config.topology)
+  accelerator_core_count = length(local.accelerator_core_list) > 2 ? (local.accelerator_core_list[0] * local.accelerator_core_list[1] * local.accelerator_core_list[2]) * 2 : (local.accelerator_core_list[0] * local.accelerator_core_list[1]) * 2
+
+  tpu_core_count = local.accelerator_core_count == 0 ? local.node_type_core_count : local.accelerator_core_count
 }

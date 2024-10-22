@@ -29,7 +29,8 @@ locals {
     security_group = var.authenticator_security_group
   }]
 
-  sa_email = var.service_account_email != null ? var.service_account_email : data.google_compute_default_service_account.default_sa.email
+  default_sa_email = "${data.google_project.project.number}-compute@developer.gserviceaccount.com"
+  sa_email         = coalesce(var.service_account_email, local.default_sa_email)
 
   # additional VPCs enable multi networking 
   derived_enable_multi_networking = coalesce(var.enable_multi_networking, length(var.additional_networks) > 0)
@@ -38,8 +39,8 @@ locals {
   derived_enable_dataplane_v2 = coalesce(var.enable_dataplane_v2, local.derived_enable_multi_networking)
 }
 
-data "google_compute_default_service_account" "default_sa" {
-  project = var.project_id
+data "google_project" "project" {
+  project_id = var.project_id
 }
 
 resource "google_container_cluster" "gke_cluster" {
@@ -267,43 +268,15 @@ resource "google_container_node_pool" "system_node_pools" {
   }
 }
 
-# For container logs to show up under Cloud Logging and GKE metrics to show up
-# on Cloud Monitoring console, some project level roles are needed for the
-# node_service_account
-resource "google_project_iam_member" "node_service_account_log_writer" {
-  project = var.project_id
-  role    = "roles/logging.logWriter"
-  member  = "serviceAccount:${local.sa_email}"
-}
+### TODO: remove this after Terraform support for GKE Parallelstore CSI is added. ###
+###       Instead use addons_config above to enable the CSI                       ###
+resource "null_resource" "enable_parallelstore_csi" {
+  count = var.enable_parallelstore_csi == true ? 1 : 0
 
-resource "google_project_iam_member" "node_service_account_metric_writer" {
-  project = var.project_id
-  role    = "roles/monitoring.metricWriter"
-  member  = "serviceAccount:${local.sa_email}"
-}
-
-resource "google_project_iam_member" "node_service_account_monitoring_viewer" {
-  project = var.project_id
-  role    = "roles/monitoring.viewer"
-  member  = "serviceAccount:${local.sa_email}"
-}
-
-resource "google_project_iam_member" "node_service_account_resource_metadata_writer" {
-  project = var.project_id
-  role    = "roles/stackdriver.resourceMetadata.writer"
-  member  = "serviceAccount:${local.sa_email}"
-}
-
-resource "google_project_iam_member" "node_service_account_gcr" {
-  project = var.project_id
-  role    = "roles/storage.objectViewer"
-  member  = "serviceAccount:${local.sa_email}"
-}
-
-resource "google_project_iam_member" "node_service_account_artifact_registry" {
-  project = var.project_id
-  role    = "roles/artifactregistry.reader"
-  member  = "serviceAccount:${local.sa_email}"
+  provisioner "local-exec" {
+    command = "gcloud container clusters update ${local.name} --location=${var.region} --project=${var.project_id} --update-addons=ParallelstoreCsiDriver=ENABLED"
+  }
+  depends_on = [google_container_node_pool.system_node_pools] # avoid cluster operation conflict
 }
 
 data "google_client_config" "default" {}
@@ -327,7 +300,7 @@ module "workload_identity" {
 
   # https://github.com/terraform-google-modules/terraform-google-kubernetes-engine/issues/1059
   depends_on = [
-    data.google_compute_default_service_account.default_sa,
+    data.google_project.project,
     google_container_cluster.gke_cluster
   ]
 }
