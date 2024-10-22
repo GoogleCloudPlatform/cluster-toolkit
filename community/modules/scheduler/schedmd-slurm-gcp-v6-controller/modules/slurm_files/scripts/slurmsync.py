@@ -534,6 +534,58 @@ def sync_maintenance_reservation(lkp: util.Lookup) -> None:
       create_reservation(lkp, res_name, node, start_time)
 
 
+def delete_maintenance_job(job_name: str) -> None:
+    util.run(f"scancel --name={job_name}")
+
+
+def create_maintenance_job(job_name: str, node: str) -> None:
+    util.run(f"sbatch --job-name={job_name} --nodelist={node} /slurm/custom_scripts/perform_maintenance.sh")
+
+
+def get_slurm_maintenance_job(lkp: util.Lookup) -> Dict[str, str]:
+    res = util.run(f"{lkp.scontrol} show jobs --json")
+    all_jobs = json.loads(res.stdout)
+    maintenance_job = {}
+
+    for job in all_jobs['jobs']:
+        name = job['name']
+        nodes = job['nodes']
+
+        if name is None or nodes is None:
+          continue
+
+        if name != f"{nodes}_maintenance":
+          continue
+
+        maintenance_job[name] = nodes
+
+    return maintenance_job
+
+
+def sync_opportunistic_maintenance(lkp: util.Lookup) -> None:
+    # Generate sbatch script to perform maintenance.
+    upc_maint_map = get_upcoming_maintenance(lkp)  # map job_name -> (node_name, time)
+    log.debug(f"upcoming-maintenance-vms: {upc_maint_map}")
+
+    curr_maintenance_job_map = get_slurm_maintenance_job(lkp)  # map job_name -> node.
+    log.debug(f"curr-maintenance-job-map: {curr_maintenance_job_map}")
+
+    del_maintenance_job = set(curr_maintenance_job_map.keys() - upc_maint_map.keys())
+    create_maintenance_job = {}
+
+    for job_name, (node, _) in upc_maint_map.items():
+      if job_name not in curr_maintenance_job_map:
+          create_maintenance_job[job_name] = node
+
+    log.debug(f"del-maintenance-job: {del_maintenance_job}")
+    for job_name in del_maintenance_job:
+        delete_maintenance_job(job_name)
+
+    log.debug(f"create-maintenance-job: {create_maintenance_job}")
+    for job_name, node in create_maintenance_job.items():
+        create_maintenance_job(job_name, node)
+
+
 def main():
     try:
         reconfigure_slurm()

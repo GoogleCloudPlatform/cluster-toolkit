@@ -224,6 +224,26 @@ slurm ALL= NOPASSWD: /usr/bin/systemctl restart slurmctld.service
     sudoers_file.chmod(0o0440)
 
 
+def setup_maintenance_script():
+    perform_maintenance = """
+#!/bin/bash
+
+#SBATCH --priority=low
+#SBATCH --time=180
+
+## Not really, may be sudo reboot ???
+gcloud alpha compute instances perform-maintenance $VM_NAME \
+  --project=$PROJECT_ID \
+  --zone=$ZONE
+"""
+
+    filename = "/slurm/custom_scripts/perform_maintenance.sh"
+    with open(filename, "w") as f:
+        f.write(perform_maintenance)
+
+    os.chmod(filename, 0o755)
+
+
 def update_system_config(file, content):
     """Add system defaults options for service files"""
     sysconfig = Path("/etc/sysconfig")
@@ -279,10 +299,10 @@ innodb_lock_wait_timeout=900
 def configure_dirs():
     for p in dirs.values():
         util.mkdirp(p)
-    
+
     for p in (dirs.slurm, dirs.scripts, dirs.custom_scripts):
         util.chown_slurm(p)
-    
+
     for p in slurmdirs.values():
         util.mkdirp(p)
         util.chown_slurm(p)
@@ -357,6 +377,9 @@ def setup_controller():
     run("systemctl start slurm_load_bq.timer", timeout=30)
     run("systemctl status slurm_load_bq.timer", timeout=30)
 
+    # Add script to perform maintenance
+    setup_maintenance_script()
+
     log.info("Done setting up controller")
     pass
 
@@ -400,7 +423,7 @@ def setup_compute():
     slurmd_options = [
         f'--conf-server="{slurmctld_host}:{lookup().control_host_port}"',
     ]
-    
+
     try:
         slurmd_feature = util.instance_metadata("attributes/slurmd_feature")
     except Exception:
@@ -439,7 +462,7 @@ def setup_compute():
 
 def main():
     start_motd()
-    
+
     log.info("Starting setup, fetching config")
     sleep_seconds = 5
     while True:
