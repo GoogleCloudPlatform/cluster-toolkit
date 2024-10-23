@@ -57,6 +57,7 @@ deployment_groups:
         id: network
         settings:
           deployment_name: ((var.deployment_name))
+          labels: ((var.labels))
           project_id: ((var.project_id))
           region: ((var.region))
       - source: modules/file-system/filestore
