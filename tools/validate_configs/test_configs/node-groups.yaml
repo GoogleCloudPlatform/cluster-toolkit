@@ -64,7 +64,7 @@ deployment_groups:
       name: c30
       machine_type: c2-standard-30
       instance_image:
-        family: slurm-gcp-6-7-debian-11
+        family: slurm-gcp-6-8-debian-11
         project: schedmd-slurm-public
       instance_image_custom: true
 
@@ -75,7 +75,7 @@ deployment_groups:
       name: c60
       machine_type: c2-standard-60
       instance_image:
-        family: slurm-gcp-6-7-hpc-rocky-linux-8
+        family: slurm-gcp-6-8-hpc-rocky-linux-8
         project: schedmd-slurm-public
 
   - id: nodeset_3
@@ -85,7 +85,7 @@ deployment_groups:
       name: cd112
       machine_type: c2d-standard-112
       instance_image:
-        family: slurm-gcp-6-7-hpc-rocky-linux-8
+        family: slurm-gcp-6-8-hpc-rocky-linux-8
         project: schedmd-slurm-public
       instance_image_custom: true
       enable_smt: true
