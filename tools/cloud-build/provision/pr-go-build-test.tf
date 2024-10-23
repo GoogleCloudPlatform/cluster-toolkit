@@ -14,7 +14,7 @@
 
 
 resource "google_cloudbuild_trigger" "pr_go_build_test" {
-  for_each = toset(["1.21", "1.22"])
+  for_each = toset(["1.22", "1.23"])
 
   name        = "PR-Go-${replace(each.key, ".", "-")}-build-test"
   description = "Test that the PR builds with Go ${each.key}"
