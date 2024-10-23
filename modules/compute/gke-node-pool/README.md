@@ -262,6 +262,7 @@ limitations under the License.
 | Name | Source | Version |
 |------|--------|---------|
 | <a name="module_kubectl_apply"></a> [kubectl\_apply](#module\_kubectl\_apply) | ../../management/kubectl-apply | n/a |
+| <a name="module_kubectl_apply_nccl_installer_a3u"></a> [kubectl\_apply\_nccl\_installer\_a3u](#module\_kubectl\_apply\_nccl\_installer\_a3u) | ../../management/kubectl-apply | n/a |
 
 ## Resources
 
@@ -303,6 +304,7 @@ limitations under the License.
 | <a name="input_local_ssd_count_nvme_block"></a> [local\_ssd\_count\_nvme\_block](#input\_local\_ssd\_count\_nvme\_block) | The number of local SSDs to attach to each node to back block storage.<br/>Uses NVMe interfaces.  Must be supported by `machine_type`.<br/>When set to null,  default value either is [set based on machine\_type](https://cloud.google.com/compute/docs/disks/local-ssd#choose_number_local_ssds) or GKE decides about default value.<br/>[See above](#local-ssd-storage) for more info. | `number` | `null` | no |
 | <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | The name of a Google Compute Engine machine type. | `string` | `"c2-standard-60"` | no |
 | <a name="input_name"></a> [name](#input\_name) | The name of the node pool. If left blank, will default to the machine type. | `string` | `null` | no |
+| <a name="input_nccl_installer_a3u_location"></a> [nccl\_installer\_a3u\_location](#input\_nccl\_installer\_a3u\_location) | Temporary variable for the location of NCCL Installer for A3U | `string` | `null` | no |
 | <a name="input_node_version"></a> [node\_version](#input\_node\_version) | Temporary variable to explicitly set the node version | `string` | `null` | no |
 | <a name="input_placement_policy"></a> [placement\_policy](#input\_placement\_policy) | Group placement policy to use for the node pool's nodes. `COMPACT` is the only supported value for `type` currently. `name` is the name of the placement policy.<br/>It is assumed that the specified policy exists. To create a placement policy refer to https://cloud.google.com/sdk/gcloud/reference/compute/resource-policies/create/group-placement.<br/>Note: Placement policies have the [following](https://cloud.google.com/compute/docs/instances/placement-policies-overview#restrictions-compact-policies) restrictions. | <pre>object({<br/>    type = string<br/>    name = optional(string)<br/>  })</pre> | <pre>{<br/>  "name": null,<br/>  "type": null<br/>}</pre> | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The project ID to host the cluster in. | `string` | n/a | yes |
