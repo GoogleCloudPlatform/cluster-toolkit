@@ -157,18 +157,21 @@ deployment_groups:
         ))
     outputs: [instructions]
 
+  - id: nccl_installer
+    source: modules/management/kubectl-apply
+    use: [a3-ultragpu-cluster]
+    settings:
+      apply_manifests:
+      - source: /usr/local/google/home/annuay/nccl.yaml
+
   - id: a3-ultragpu-pool
     source: modules/compute/gke-node-pool
     use: [a3-ultragpu-cluster]
     settings:
       node_version: 1.30.4-gke.1348000    # Temporarily used to target the GKE sandbox
       machine_type: a3-ultragpu-8g
-      # TODO: To ensure the nodes join the cluster in the absence of a workload
-      static_node_count: 2
       zones: [$(vars.zone)]
       disk_type: hyperdisk-balanced
-      # nccl_installer_a3u_location: https://source.corp.google.com/codesearch/f/piper///depot/google3/experimental/users/jiaqicao/rdma/rdma-installer-a3ultra.yaml
-      nccl_installer_a3u_location: /usr/local/google/home/arajmane/dev/hpc-toolkit/modules/compute/gke-node-pool/rdma-installer-a3ultra.yaml
       guest_accelerator:
       - type: nvidia-h200-141gb
         count: 8

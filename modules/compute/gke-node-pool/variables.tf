@@ -360,9 +360,3 @@ variable "node_version" {
   type        = string
   default     = null
 }
-
-variable "nccl_installer_a3u_location" {
-  description = "Temporary variable for the location of NCCL Installer for A3U"
-  type        = string
-  default     = null
-}
