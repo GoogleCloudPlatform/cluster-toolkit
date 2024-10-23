@@ -19,6 +19,13 @@ variable "project_id" {
   type        = string
 }
 
+variable "labels" {
+  description = "Labels to add to network resources that support labels. Key-value pairs of strings."
+  type        = map(string)
+  default     = {}
+  nullable    = false
+}
+
 variable "network_name" {
   description = "The name of the network to be created (if unsupplied, will default to \"{deployment_name}-net\")"
   type        = string

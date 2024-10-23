@@ -17,6 +17,7 @@
 module "network" {
   source          = "./modules/embedded/modules/network/vpc"
   deployment_name = var.deployment_name
+  labels          = var.labels
   project_id      = var.project_id
   region          = var.region
 }
