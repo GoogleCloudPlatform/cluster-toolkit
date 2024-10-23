@@ -31,9 +31,7 @@ locals {
   }] : []
 
   autoscale_set   = var.autoscaling_total_min_nodes != 0 || var.autoscaling_total_max_nodes != 1000
-  static_node_set = var.static_node_count != null
-
-  nccl_installer_a3u_manifest = (var.machine_type == "a3-ultragpu-8g" && var.nccl_installer_a3u_location != null) ? [{ source = var.nccl_installer_a3u_location }] : []
+  static_node_set = var.static_node_count != null  
 }
 
 data "google_compute_default_service_account" "default_sa" {
@@ -317,14 +315,4 @@ module "kubectl_apply" {
       }
     ]
   ])
-}
-
-# TODO: Ensure this works in when the machine family is not A3U
-module "kubectl_apply_nccl_installer_a3u" {
-  source = "../../management/kubectl-apply"
-
-  cluster_id = var.cluster_id
-  project_id = var.project_id
-
-  apply_manifests = local.nccl_installer_a3u_manifest
 }
