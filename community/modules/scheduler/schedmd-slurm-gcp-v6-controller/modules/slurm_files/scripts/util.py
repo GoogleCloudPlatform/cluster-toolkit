@@ -19,6 +19,7 @@ import argparse
 import base64
 import collections
 from dataclasses import dataclass
+from datetime import timedelta
 import hashlib
 import inspect
 import json
@@ -1451,6 +1452,11 @@ class ReservationDetails:
     policies: List[str] # names (not URLs) of resource policies
     bulk_insert_name: str # name in format suitable for bulk insert (currently identical to user supplied name in long format)
 
+@dataclass
+class Job:
+    id: int
+    duration: Optional[timedelta] = None
+
 class Lookup:
     """Wrapper class for cached data access"""
 
@@ -1916,6 +1922,27 @@ class Lookup:
         for node in hostnames:
             nodeset_map[self.node_nodeset_name(node)].append(node)
         return nodeset_map
+
+    @lru_cache
+    def job(self, job_id: int) -> Optional[Job]:
+        jobInfo = run(f"{self.scontrol} show jobid {job_id}", check=False).stdout.rstrip()
+        if not jobInfo:
+            return None
+
+        timePattern = r"TimeLimit=(?:(\d+)-)?(\d{2}):(\d{2}):(\d{2})"
+        match = re.search(timePattern, jobInfo)
+
+        if not match:
+            return Job(id=job_id)
+
+        days, hours, minutes, seconds = match.groups()
+        job_duration = timedelta(
+            days=int(days) if days else 0,
+            hours=int(hours),
+            minutes=int(minutes),
+            seconds=int(seconds)
+        )
+        return Job(id=job_id, duration=job_duration)
 
     @property
     def etc_dir(self) -> Path:

@@ -57,7 +57,7 @@ PLACEMENT_MAX_CNT = 150
 BULK_INSERT_LIMIT = 5000
 
 
-def instance_properties(nodeset, model, placement_group, labels=None):
+def instance_properties(nodeset:object, model:str, placement_group:str, labels:dict, job_id:int):
     props = NSDict()
 
     if labels: # merge in extra labels on instance and disks
@@ -99,18 +99,31 @@ def instance_properties(nodeset, model, placement_group, labels=None):
         props.scheduling.maintenanceInterval = nodeset.maintenance_interval
 
     if nodeset.dws_flex.enabled:
-        update_props_dws(props,nodeset.dws_flex)
+        update_props_dws(props, nodeset.dws_flex, job_id)
 
     # Override with properties explicit specified in the nodeset
     props.update(nodeset.get("instance_properties") or {})
     
     return props
 
-def update_props_dws(props:dict,dws_flex:dict) -> None:
+def update_props_dws(props:object, dws_flex:object, job_id: int) -> None:
     props.scheduling.onHostMaintenance = "TERMINATE"
     props.scheduling.instanceTerminationAction = "DELETE"
-    props.scheduling.maxRunDuration['seconds'] = dws_flex.max_run_duration
     props.reservationAffinity['consumeReservationType'] = "NO_RESERVATION"
+
+    if dws_flex.use_job_duration:
+        current_job = lookup().job(job_id)
+        if not current_job or not current_job.duration:
+            props.scheduling.maxRunDuration['seconds'] = dws_flex.max_run_duration
+            return
+
+        current_job_duration = int(current_job.duration.total_seconds())
+        if 30<=current_job_duration<=1209600:
+            props.scheduling.maxRunDuration['seconds'] = current_job_duration
+            return
+
+        log.info("Job TimeLimit cannot be less than 30 seconds or exceed 2 weeks")
+    props.scheduling.maxRunDuration['seconds'] = dws_flex.max_run_duration
 
 def per_instance_properties(node):
     props = NSDict()
@@ -149,7 +162,7 @@ def create_instances_request(nodes, partition_name, placement_group, job_id=None
     )
     # overwrites properties across all instances
     body.instanceProperties = instance_properties(
-        nodeset, model, placement_group, labels
+        nodeset, model, placement_group, labels, job_id
     )
 
     # key is instance name, value overwrites properties

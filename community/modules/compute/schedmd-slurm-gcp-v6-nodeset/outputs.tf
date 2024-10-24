@@ -44,6 +44,7 @@ output "nodeset" {
     condition     = !var.enable_placement || var.node_count_static == 0 || var.node_count_dynamic_max == 0
     error_message = "Cannot use placement with static and auto-scaling nodes in the same node set."
   }
+
   precondition {
     condition     = var.reservation_name == "" || !var.dws_flex.enabled
     error_message = "Cannot use reservations with DWS Flex."
