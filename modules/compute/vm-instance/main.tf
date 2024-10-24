@@ -239,7 +239,14 @@ resource "google_compute_instance" "compute_vm" {
     scopes = var.service_account_scopes
   }
 
-  guest_accelerator = local.guest_accelerator
+  dynamic "guest_accelerator" {
+    for_each = local.guest_accelerator
+    content {
+      count = guest_accelerator.value.count
+      type  = guest_accelerator.value.type
+    }
+  }
+
   scheduling {
     on_host_maintenance = local.on_host_maintenance
     automatic_restart   = local.automatic_restart
