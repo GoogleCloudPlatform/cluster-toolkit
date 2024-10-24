@@ -53,7 +53,6 @@ deployment_groups:
   modules:
   # Source is an embedded module, denoted by "modules/*" without ./, ../, /
   # as a prefix. To refer to a local or community module, prefix with ./, ../ or /
-  # Example - ./modules/network/vpc
   - id: network1
     source: modules/network/pre-existing-vpc
 

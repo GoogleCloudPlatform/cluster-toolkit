@@ -84,7 +84,6 @@ locals {
     slurmdbd_conf_tpl = file(coalesce(var.slurmdbd_conf_tpl, "${local.etc_dir}/slurmdbd.conf.tpl"))
     slurm_conf_tpl    = file(coalesce(var.slurm_conf_tpl, "${local.etc_dir}/slurm.conf.tpl"))
     cgroup_conf_tpl   = file(coalesce(var.cgroup_conf_tpl, "${local.etc_dir}/cgroup.conf.tpl"))
-    jobsubmit_lua_tpl = file(coalesce(var.job_submit_lua_tpl, "${local.etc_dir}/job_submit.lua.tpl"))
 
     # Providers
     endpoint_versions = var.endpoint_versions

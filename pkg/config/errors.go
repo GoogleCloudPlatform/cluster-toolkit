@@ -157,6 +157,7 @@ var UnknownModuleSetting = errors.New("a setting was added that is not found in 
 var ModuleSettingWithPeriod = errors.New("a setting name contains a period, which is not supported; variable subfields cannot be set independently in a blueprint.")
 var ModuleSettingInvalidChar = errors.New("a setting name must begin with a non-numeric character and all characters must be either letters, numbers, dashes ('-') or underscores ('_').")
 var EmptyGroupName = errors.New("group name must be set for each deployment group")
+var UnexpectedRefFormat = errors.New("Expected reference formats: $(vars.var_name) or $(module_id.output_name)")
 
 // Error messages
 const (

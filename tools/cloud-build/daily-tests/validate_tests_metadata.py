@@ -42,7 +42,7 @@ def module_tag(src: str) -> Optional[str]:
     Remote sources are not supported (None).
     Ex: "modules/network/vpc" -> "m.vpc"
     """
-    if not src.startswith(("modules/", "community/modules/", "./modules/", "./community/modules/")):
+    if not src.startswith(("modules/", "community/modules/")):
         return None
     return f"m.{os.path.basename(src)}"
 

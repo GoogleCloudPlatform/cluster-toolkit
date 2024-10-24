@@ -88,7 +88,7 @@ variable "instance_image" {
     EOD
   type        = map(string)
   default = {
-    family  = "slurm-gcp-6-6-hpc-rocky-linux-8"
+    family  = "slurm-gcp-6-7-hpc-rocky-linux-8"
     project = "schedmd-slurm-public"
   }
 
@@ -511,4 +511,31 @@ variable "enable_maintenance_reservation" {
   type        = bool
   description = "Enables slurm reservation for scheduled maintenance."
   default     = false
+}
+
+variable "dws_flex" {
+  description = <<-EOD
+  If set and `enabled = true`, will utilize the DWS Flex Start to provision nodes.
+  See: https://cloud.google.com/blog/products/compute/introducing-dynamic-workload-scheduler
+  Options:
+  - enable: Enable DWS Flex Start
+  - max_run_duration: Maximum duration in seconds for the job to run, should not exceed 1,209,600 (2 weeks).
+  
+ Limitations:
+  - CAN NOT be used with reservations;
+  - CAN NOT be used with placement groups;
+
+ EOD
+
+  type = object({
+    enabled          = optional(bool, true)
+    max_run_duration = optional(number, 1209600) # 2 weeks
+  })
+  default = {
+    enabled = false
+  }
+  validation {
+    condition     = var.dws_flex.max_run_duration >= 30 && var.dws_flex.max_run_duration <= 1209600
+    error_message = "Max duration must be more than 30 seconds, and cannot be more than two weeks."
+  }
 }

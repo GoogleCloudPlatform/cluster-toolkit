@@ -26,7 +26,7 @@ deployment_groups:
 - group: primary
   modules:
   - id: network1
-    source: ./modules/network/pre-existing-vpc
+    source: modules/network/pre-existing-vpc
 
   - id: appsfs
     source: modules/file-system/filestore
@@ -42,7 +42,7 @@ deployment_groups:
       auto_delete_disk: true
 
   - id: spack-setup
-    source: ./community/modules/scripts/spack-setup
+    source: community/modules/scripts/spack-setup
     settings:
       install_dir: /apps/spack
 
@@ -61,7 +61,7 @@ deployment_groups:
         spack install fftw%intel@18.0.5 target=skylake ^intel-mpi@2018.4.274%intel@18.0.5 target=x86_64
 
   - id: startup
-    source: ./modules/scripts/startup-script
+    source: modules/scripts/startup-script
     settings:
       install_stackdriver_agent: true
       runners:
@@ -78,7 +78,7 @@ deployment_groups:
       - $(spack-execute.spack_runner)
 
   - id: instance
-    source: ./modules/compute/vm-instance
+    source: modules/compute/vm-instance
     use: [network1, startup, nfs, appsfs]
     settings:
       machine_type: e2-standard-4

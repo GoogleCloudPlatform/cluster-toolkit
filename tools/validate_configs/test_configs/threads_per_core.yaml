@@ -27,13 +27,12 @@ deployment_groups:
   modules:
   # Source is an embedded module, denoted by "modules/*" without ./, ../, /
   # as a prefix. To refer to a local or community module, prefix with ./, ../ or /
-  # Example - ./modules/network/vpc
   - id: network1
     source: modules/network/pre-existing-vpc
     kind: terraform
 
   - id: n1-2-threads
-    source: ./modules/compute/vm-instance
+    source: modules/compute/vm-instance
     kind: terraform
     use:
     - network1
@@ -43,7 +42,7 @@ deployment_groups:
       threads_per_core: 2
 
   - id: n1-1-thread
-    source: ./modules/compute/vm-instance
+    source: modules/compute/vm-instance
     kind: terraform
     use:
     - network1
@@ -53,7 +52,7 @@ deployment_groups:
       threads_per_core: 1
 
   - id: n1-0-threads
-    source: ./modules/compute/vm-instance
+    source: modules/compute/vm-instance
     kind: terraform
     use:
     - network1
@@ -63,7 +62,7 @@ deployment_groups:
       threads_per_core: 0
 
   - id: n1-null-threads
-    source: ./modules/compute/vm-instance
+    source: modules/compute/vm-instance
     kind: terraform
     use:
     - network1
@@ -73,7 +72,7 @@ deployment_groups:
       threads_per_core: null
 
   - id: n2-2-threads
-    source: ./modules/compute/vm-instance
+    source: modules/compute/vm-instance
     kind: terraform
     use:
     - network1
@@ -83,7 +82,7 @@ deployment_groups:
       threads_per_core: 2
 
   - id: n2-1-thread
-    source: ./modules/compute/vm-instance
+    source: modules/compute/vm-instance
     kind: terraform
     use:
     - network1
@@ -93,7 +92,7 @@ deployment_groups:
       threads_per_core: 1
 
   - id: c2-2-threads
-    source: ./modules/compute/vm-instance
+    source: modules/compute/vm-instance
     kind: terraform
     use:
     - network1
@@ -103,7 +102,7 @@ deployment_groups:
       threads_per_core: 2
 
   - id: c2-1-thread
-    source: ./modules/compute/vm-instance
+    source: modules/compute/vm-instance
     kind: terraform
     use:
     - network1
@@ -113,7 +112,7 @@ deployment_groups:
       threads_per_core: 1
 
   - id: e2-medium-0-thread
-    source: ./modules/compute/vm-instance
+    source: modules/compute/vm-instance
     kind: terraform
     use:
     - network1
@@ -123,7 +122,7 @@ deployment_groups:
       threads_per_core: 0
 
   - id: e2-medium-null-thread
-    source: ./modules/compute/vm-instance
+    source: modules/compute/vm-instance
     kind: terraform
     use:
     - network1

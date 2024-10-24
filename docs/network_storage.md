@@ -41,7 +41,7 @@ as shown below:
     settings: {local_mount: /home}
 
   - id: workstation
-    source: ./modules/compute/vm-instance
+    source: modules/compute/vm-instance
     use: [network1, homefs]  # Note this line
 ```
 

@@ -537,9 +537,6 @@ func (s *zeroSuite) TestCheckMovedModules(c *C) {
 
 	// embedded moved
 	c.Check(checkMovedModule("community/modules/scheduler/cloud-batch-job"), NotNil)
-
-	// local moved
-	c.Assert(checkMovedModule("./community/modules/scheduler/cloud-batch-job"), NotNil)
 }
 
 func (s *zeroSuite) TestCheckStringLiteral(c *C) {
