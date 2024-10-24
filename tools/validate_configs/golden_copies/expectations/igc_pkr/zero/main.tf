@@ -19,6 +19,7 @@ module "network0" {
   deployment_name          = var.deployment_name
   enable_iap_rdp_ingress   = true
   enable_iap_winrm_ingress = true
+  labels                   = var.labels
   project_id               = var.project_id
   region                   = var.region
 }

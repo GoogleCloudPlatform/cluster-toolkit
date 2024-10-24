@@ -68,6 +68,7 @@ deployment_groups:
             sensitive: true
         settings:
           deployment_name: ((var.deployment_name))
+          labels: ((var.labels))
           project_id: ((var.project_id))
           region: ((var.region))
   - group: one
