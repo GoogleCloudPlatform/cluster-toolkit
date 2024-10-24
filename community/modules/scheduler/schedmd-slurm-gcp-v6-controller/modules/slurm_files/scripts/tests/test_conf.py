@@ -92,11 +92,11 @@ def test_dict_to_conf(value: dict, want: str):
 LaunchParameters=enable_nss_slurm,use_interactive_step
 SlurmctldParameters=cloud_dns,enable_configless,idle_on_node_suspend
 SchedulerParameters=bf_continue,salloc_wait_nodes,ignore_prefer_validation
-SuspendProgram=ukulele/suspend.py
 ResumeProgram=ukulele/resume.py
 ResumeFailProgram=ukulele/suspend.py
 ResumeRate=0
 ResumeTimeout=300
+SuspendProgram=ukulele/suspend.py
 SuspendRate=0
 SuspendTimeout=300
 TreeWidth=128
@@ -106,6 +106,7 @@ TopologyParam=SwitchAsNodeRank"""),
             install_dir="ukulele",
             cloud_parameters={
                 "no_comma_params": True,
+                "scheduler_parameters": None,
                 "resume_rate": None,
                 "resume_timeout": None,
                 "suspend_rate": None,
@@ -115,11 +116,12 @@ TopologyParam=SwitchAsNodeRank"""),
                 "tree_width": None,
             },
         ),
-         """SuspendProgram=ukulele/suspend.py
+         """SchedulerParameters=bf_continue,salloc_wait_nodes,ignore_prefer_validation
 ResumeProgram=ukulele/resume.py
 ResumeFailProgram=ukulele/suspend.py
 ResumeRate=0
 ResumeTimeout=300
+SuspendProgram=ukulele/suspend.py
 SuspendRate=0
 SuspendTimeout=300
 TreeWidth=128
@@ -129,6 +131,12 @@ TopologyParam=SwitchAsNodeRank"""),
             install_dir="ukulele",
             cloud_parameters={
                 "no_comma_params": True,
+                "scheduler_parameters": [
+                    "bf_busy_nodes",
+                    "bf_continue",
+                    "ignore_prefer_validation",
+                    "nohold_on_prolog_fail",
+                ],
                 "resume_rate": 1,
                 "resume_timeout": 2,
                 "suspend_rate": 3,
@@ -138,11 +146,12 @@ TopologyParam=SwitchAsNodeRank"""),
                 "tree_width": 5,
             },
         ),
-         """SuspendProgram=ukulele/suspend.py
+         """SchedulerParameters=bf_busy_nodes,bf_continue,ignore_prefer_validation,nohold_on_prolog_fail
 ResumeProgram=ukulele/resume.py
 ResumeFailProgram=ukulele/suspend.py
 ResumeRate=1
 ResumeTimeout=2
+SuspendProgram=ukulele/suspend.py
 SuspendRate=3
 SuspendTimeout=4
 TreeWidth=5
