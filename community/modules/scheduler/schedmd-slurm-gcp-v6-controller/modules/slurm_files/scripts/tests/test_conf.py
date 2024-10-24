@@ -88,8 +88,7 @@ def test_dict_to_conf(value: dict, want: str):
         (TstCfg(
             install_dir="ukulele",
         ), 
-         """PrivateData=cloud
-LaunchParameters=enable_nss_slurm,use_interactive_step
+         """LaunchParameters=enable_nss_slurm,use_interactive_step
 SlurmctldParameters=cloud_dns,enable_configless,idle_on_node_suspend
 SchedulerParameters=bf_continue,salloc_wait_nodes,ignore_prefer_validation
 ResumeProgram=ukulele/resume.py
@@ -106,6 +105,7 @@ TopologyParam=SwitchAsNodeRank"""),
             install_dir="ukulele",
             cloud_parameters={
                 "no_comma_params": True,
+                "private_data": None,
                 "scheduler_parameters": None,
                 "resume_rate": None,
                 "resume_timeout": None,
@@ -131,6 +131,10 @@ TopologyParam=SwitchAsNodeRank"""),
             install_dir="ukulele",
             cloud_parameters={
                 "no_comma_params": True,
+                "private_data": [
+                    "events",
+                    "jobs",
+                ],
                 "scheduler_parameters": [
                     "bf_busy_nodes",
                     "bf_continue",
@@ -146,7 +150,8 @@ TopologyParam=SwitchAsNodeRank"""),
                 "tree_width": 5,
             },
         ),
-         """SchedulerParameters=bf_busy_nodes,bf_continue,ignore_prefer_validation,nohold_on_prolog_fail
+         """PrivateData=events,jobs
+SchedulerParameters=bf_busy_nodes,bf_continue,ignore_prefer_validation,nohold_on_prolog_fail
 ResumeProgram=ukulele/resume.py
 ResumeFailProgram=ukulele/suspend.py
 ResumeRate=1

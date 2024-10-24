@@ -407,6 +407,7 @@ variable "cloud_parameters" {
   description = "cloud.conf options. Defaults inherited from [Slurm GCP repo](https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/terraform/slurm_cluster/modules/slurm_files/README_TF.md#input_cloud_parameters)"
   type = object({
     no_comma_params      = optional(bool, false)
+    private_data         = optional(list(string))
     scheduler_parameters = optional(list(string))
     resume_rate          = optional(number)
     resume_timeout       = optional(number)

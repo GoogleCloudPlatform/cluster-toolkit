@@ -83,9 +83,6 @@ def conflines(lkp: util.Lookup) -> str:
 
     any_dynamic = any(bool(p.partition_feature) for p in lkp.cfg.partitions.values())
     comma_params = {
-        "PrivateData": [
-            "cloud",
-        ],
         "LaunchParameters": [
             "enable_nss_slurm",
             "use_interactive_step",
@@ -109,6 +106,7 @@ def conflines(lkp: util.Lookup) -> str:
         **(comma_params if not no_comma_params else {}),
         "Prolog": f"{prolog_path}/*" if lkp.cfg.prolog_scripts else None,
         "Epilog": f"{epilog_path}/*" if lkp.cfg.epilog_scripts else None,
+        "PrivateData": get("private_data", []),
         "SchedulerParameters": get("scheduler_parameters", [
             "bf_continue",
             "salloc_wait_nodes",
