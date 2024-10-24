@@ -120,11 +120,7 @@ def per_instance_properties(node):
 
 def create_instances_request(nodes, partition_name, placement_group, job_id=None):
     """Call regionInstances.bulkInsert to create instances"""
-    assert len(nodes) > 0
-    if placement_group:
-        assert len(nodes) <= min(PLACEMENT_MAX_CNT, BULK_INSERT_LIMIT)
-    else:
-        assert len(nodes) <= BULK_INSERT_LIMIT
+    assert 0 < len(nodes) <= BULK_INSERT_LIMIT
 
     # model here indicates any node that can be used to describe the rest
     model = next(iter(nodes))
@@ -134,8 +130,14 @@ def create_instances_request(nodes, partition_name, placement_group, job_id=None
     log.debug(f"create_instances_request: {model} placement: {placement_group}")
 
     body = NSDict()
+
     body.count = len(nodes)
-    body.minCount = 1
+
+    if placement_group:
+        assert len(nodes) <= PLACEMENT_MAX_CNT
+        pass # do not set minCount to force "all or nothing" behavior
+    else:
+        body.minCount = 1
 
     # source of instance properties
     body.sourceInstanceTemplate = template
