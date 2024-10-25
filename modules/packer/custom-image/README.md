@@ -210,24 +210,41 @@ to the console. For example:
 ==> example.googlecompute.toolkit_image: Startup script, if any, has finished running.
 ```
 
-Using the default value for \[var.scopes\]\[#input_scopes\], the output of
-startup script execution will be stored in Cloud Logging. It can be examined
-using the [Cloud Logging Console][logging-console] or with a
-[gcloud logging read][logging-read-docs] command (substituting `<<PROJECT_ID>>`
-with your project ID):
+To monitor the progress of the startup script, first gather the name and zone
+of the instance using Cloud Console or the following command:
 
 ```shell
-$ gcloud logging --project <<PROJECT_ID>> read \
-    'logName="projects/<<PROJECT_ID>>/logs/GCEMetadataScripts" AND jsonPayload.message=~"^startup-script: "' \
-    --format="table[box](timestamp, resource.labels.instance_id, jsonPayload.message)" --freshness 2h
+gcloud compute instances list --project <PROJECT_ID> --filter="name~^packer"
 ```
 
-Note that this command will print **all** startup script entries within the
-project within the "freshness" window **in reverse order**. You may need to
-identify the instance ID of the Packer VM and filter further by that value using
-`gcloud` or `grep`. To print the entries in the order they would have appeared
-on your console, we recommend piping the output of this command to the standard
-Linux utility `tac`.
+This will produce a list of VMs starting with `packer` along with other
+information including which zone the VMs are in.  If there is more than one
+Packer VM you will need to determine which is the one that you wish to monitor
+using criteria such as zone or machine-type.
+
+Once the VM name is determined, you can either check the serial port output in
+Cloud Console or by running the command:
+
+```shell
+gcloud compute instances get-serial-port-output <VM_NAME> --port 1 --zone <ZONE> --project <PROJECT_ID>
+```
+
+The serial port output of the Packer VM will contain the startup script logs.
+This output will only be available while Packer is running.
+
+### Gathering Startup Script Logs After Failure
+
+If the Packer image build fails, the module will produce a `gcloud` command
+that prints the failed startup script output from the Packer VM. The produced
+command will have the variables specified and can be used in a terminal without
+modification.
+
+The output will look similar to:
+
+```shell
+Error building image try checking logs:
+gcloud logging --project <PROJECT_ID> read 'logName=("projects/<PROJECT_ID>/logs/GCEMetadataScripts" OR "projects/<PROJECT_ID>/logs/google_metadata_script_runner") AND resource.labels.instance_id=<INSTANCE_ID>' --format="table(timestamp, resource.labels.instance_id, jsonPayload.message) --order=asc
+```
 
 ## License
 
