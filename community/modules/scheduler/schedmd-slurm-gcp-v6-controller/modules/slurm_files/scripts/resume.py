@@ -15,9 +15,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List
+from typing import List, Optional
 import argparse
 import collections
+from datetime import timedelta
 import json
 import logging
 import os
@@ -57,7 +58,7 @@ PLACEMENT_MAX_CNT = 150
 BULK_INSERT_LIMIT = 5000
 
 
-def instance_properties(nodeset, model, placement_group, labels=None):
+def instance_properties(nodeset:object, model:str, placement_group:Optional[str], labels:Optional[dict], job_id:Optional[int]):
     props = NSDict()
 
     if labels: # merge in extra labels on instance and disks
@@ -99,18 +100,28 @@ def instance_properties(nodeset, model, placement_group, labels=None):
         props.scheduling.maintenanceInterval = nodeset.maintenance_interval
 
     if nodeset.dws_flex.enabled:
-        update_props_dws(props,nodeset.dws_flex)
+        update_props_dws(props, nodeset.dws_flex, job_id)
 
     # Override with properties explicit specified in the nodeset
     props.update(nodeset.get("instance_properties") or {})
     
     return props
 
-def update_props_dws(props:dict,dws_flex:dict) -> None:
+def update_props_dws(props:object, dws_flex:object, job_id: Optional[int]) -> None:
     props.scheduling.onHostMaintenance = "TERMINATE"
     props.scheduling.instanceTerminationAction = "DELETE"
-    props.scheduling.maxRunDuration['seconds'] = dws_flex.max_run_duration
     props.reservationAffinity['consumeReservationType'] = "NO_RESERVATION"
+    props.scheduling.maxRunDuration['seconds'] = dws_flex_duration(dws_flex, job_id)
+
+def dws_flex_duration(dws_flex:object, job_id: Optional[int]) -> int:
+    max_duration = dws_flex.max_run_duration
+    if dws_flex.use_job_duration and job_id is not None and (job := lookup().job(job_id)) and job.duration:
+        if timedelta(seconds=30) <= job.duration <= timedelta(weeks=2):
+            max_duration = int(job.duration.total_seconds())
+        else:
+            log.info("Job TimeLimit cannot be less than 30 seconds or exceed 2 weeks")
+    return max_duration
+
 
 def per_instance_properties(node):
     props = NSDict()
@@ -149,7 +160,7 @@ def create_instances_request(nodes, partition_name, placement_group, job_id=None
     )
     # overwrites properties across all instances
     body.instanceProperties = instance_properties(
-        nodeset, model, placement_group, labels
+        nodeset, model, placement_group, labels, job_id
     )
 
     # key is instance name, value overwrites properties

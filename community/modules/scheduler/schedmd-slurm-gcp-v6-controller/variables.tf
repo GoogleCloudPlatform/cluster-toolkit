@@ -215,6 +215,7 @@ variable "nodeset" {
     dws_flex = object({
       enabled          = bool
       max_run_duration = number
+      use_job_duration = bool
     })
     labels                   = optional(map(string), {})
     machine_type             = optional(string)

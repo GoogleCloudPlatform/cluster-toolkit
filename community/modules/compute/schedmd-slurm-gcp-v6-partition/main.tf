@@ -15,6 +15,7 @@
 locals {
   non_static_ns_with_placement = [for ns in var.nodeset : ns.nodeset_name if ns.enable_placement && ns.node_count_static == 0]
   use_static                   = [for ns in concat(var.nodeset, var.nodeset_tpu) : ns.nodeset_name if ns.node_count_static > 0]
+  uses_job_duration            = length([for ns in var.nodeset : ns.dws_flex.use_job_duration if ns.dws_flex.use_job_duration]) > 0 ? true : false
 
   has_node = length(var.nodeset) > 0
   has_dyn  = length(var.nodeset_dyn) > 0
