@@ -26,7 +26,7 @@ locals {
 # NODESET
 # TODO: remove dependency on slurm-gcp repo, move to local template module
 module "slurm_nodeset_template" {
-  source   = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=6.7.0"
+  source   = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=6.8.2"
   for_each = local.nodeset_map
 
   project_id          = var.project_id
@@ -83,6 +83,7 @@ locals {
   nodesets = [for name, ns in local.nodeset_map : {
     nodeset_name                   = ns.nodeset_name
     node_conf                      = ns.node_conf
+    dws_flex                       = ns.dws_flex
     instance_template              = module.slurm_nodeset_template[ns.nodeset_name].self_link
     node_count_dynamic_max         = ns.node_count_dynamic_max
     node_count_static              = ns.node_count_static
@@ -101,7 +102,7 @@ locals {
 
 # NODESET TPU
 module "slurm_nodeset_tpu" {
-  source   = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_nodeset_tpu?ref=6.7.0"
+  source   = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_nodeset_tpu?ref=6.8.2"
   for_each = local.nodeset_tpu_map
 
   project_id             = var.project_id
@@ -121,14 +122,13 @@ module "slurm_nodeset_tpu" {
   subnetwork             = each.value.subnetwork
 }
 
-module "nodeset_tpu_cleanup" {
-  source   = "./modules/cleanup_compute"
+module "nodeset_cleanup_tpu" {
+  source   = "./modules/cleanup_tpu"
   for_each = local.nodeset_tpu_map
 
   nodeset = {
-    nodeset_name         = each.value.nodeset_name
-    subnetwork_self_link = each.value.subnetwork
-    additional_networks  = []
+    nodeset_name = each.value.nodeset_name
+    zone         = each.value.zone
   }
 
   project_id             = var.project_id
@@ -137,4 +137,10 @@ module "nodeset_tpu_cleanup" {
   universe_domain        = var.universe_domain
   endpoint_versions      = var.endpoint_versions
   gcloud_path_override   = var.gcloud_path_override
+
+  depends_on = [
+    # Depend on controller network, as a best effort to avoid
+    # subnetwork resourceInUseByAnotherResource error
+    var.subnetwork_self_link
+  ]
 }

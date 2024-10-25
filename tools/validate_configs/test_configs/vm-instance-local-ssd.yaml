@@ -26,10 +26,10 @@ deployment_groups:
 - group: primary
   modules:
   - id: network1
-    source: ./modules/network/pre-existing-vpc
+    source: modules/network/pre-existing-vpc
 
   - id: multi-instance-multi-ssd
-    source: ./modules/compute/vm-instance
+    source: modules/compute/vm-instance
     use: [network1]
     settings:
       machine_type: n2-standard-16
@@ -37,7 +37,7 @@ deployment_groups:
       local_ssd_count: 2
 
   - id: instance-ssd-interface-defined
-    source: ./modules/compute/vm-instance
+    source: modules/compute/vm-instance
     use: [network1]
     settings:
       machine_type: n2-standard-16

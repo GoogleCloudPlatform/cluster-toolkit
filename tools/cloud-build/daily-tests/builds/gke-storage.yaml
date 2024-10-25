@@ -17,6 +17,7 @@ tags:
 - m.cloud-storage-bucket
 - m.filestore
 - m.gke-cluster
+- m.service-account
 - m.gke-job-template
 - m.gke-node-pool
 - m.gke-persistent-volume

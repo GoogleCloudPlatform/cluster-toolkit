@@ -31,9 +31,17 @@ variable "zones" {
 }
 
 variable "name" {
-  description = "The name of the node pool. If left blank, will default to the machine type."
+  description = <<-EOD
+    The name of the node pool. If not set, automatically populated by machine type and module id (unique blueprint-wide) as suffix.
+    If setting manually, ensure a unique value across all gke-node-pools.
+    EOD
   type        = string
   default     = null
+}
+
+variable "internal_ghpc_module_id" {
+  description = "DO NOT SET THIS MANUALLY. Automatically populates with module id (unique blueprint-wide)."
+  type        = string
 }
 
 variable "machine_type" {
@@ -359,4 +367,9 @@ variable "initial_node_count" {
   description = "The initial number of nodes for the pool. In regional clusters, this is the number of nodes per zone. Changing this setting after node pool creation will not make any effect. It cannot be set with static_node_count and must be set to a value between autoscaling_total_min_nodes and autoscaling_total_max_nodes."
   type        = number
   default     = null
+}
+
+variable "gke_version" {
+  description = "GKE version"
+  type        = string
 }
