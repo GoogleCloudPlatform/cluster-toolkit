@@ -447,8 +447,8 @@ variable "access_config" {
 variable "reservation_name" {
   description = <<-EOD
     Name of the reservation to use for VM resources, should be in one of the following formats:
-    - projects/PROJECT_ID/reservations/RESERVATION_NAME[/SUFF/IX]
-    - RESERVATION_NAME[/SUFF/IX]
+    - projects/PROJECT_ID/reservations/RESERVATION_NAME
+    - RESERVATION_NAME
 
     Must be a "SPECIFIC" reservation
     Set to empty string if using no reservation or automatically-consumed reservations
@@ -458,8 +458,8 @@ variable "reservation_name" {
   nullable    = false
 
   validation {
-    condition     = length(regexall("^((projects/([a-z0-9-]+)/reservations/)?([a-z0-9-]+)(/[a-z0-9-]+/[a-z0-9-]+)?)?$", var.reservation_name)) > 0
-    error_message = "Reservation name must be either empty or in the format '[projects/PROJECT_ID/reservations/]RESERVATION_NAME[/SUFF/IX]', [...] are optional parts."
+    condition     = var.reservation_name == "" || length(regexall("^projects/[a-z0-9-]+/reservations/[a-z0-9-]+$", var.reservation_name)) > 0 || length(regexall("^[a-z0-9-]+$", var.reservation_name)) > 0
+    error_message = "Reservation name must be in the format 'projects/PROJECT_ID/reservations/RESERVATION_NAME' or 'RESERVATION_NAME'."
   }
 }
 
