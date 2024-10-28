@@ -39,8 +39,6 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [hpc-build-slurm-image.yaml](#hpc-build-slurm-imageyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-ubuntu2004-v5-legacy.yaml](#hpc-slurm-ubuntu2004-v5-legacyyaml--) ![community-badge] ![deprecated-badge]
   * [hpc-slurm-ubuntu2004.yaml](#hpc-slurm-ubuntu2004yaml--) ![community-badge]
-  * [pfs-daos.yaml](#pfs-daosyaml-) ![community-badge]
-  * [hpc-slurm-daos.yaml](#hpc-slurm-daosyaml-) ![community-badge]
   * [hpc-amd-slurm-v5-legacy.yaml](#hpc-amd-slurm-v5-legacyyaml--) ![community-badge] ![deprecated-badge]
   * [hpc-amd-slurm.yaml](#hpc-amd-slurmyaml-) ![community-badge]
   * [hpc-slurm-sharedvpc.yaml](#hpc-slurm-sharedvpcyaml--) ![community-badge] ![experimental-badge]
@@ -1213,22 +1211,6 @@ For this example the following is needed in the selected region:
   needed for `compute` partition_
 * Compute Engine API: Resource policies: **one for each job in parallel** -
   _only needed for `compute` partition_
-
-### [pfs-daos.yaml] ![community-badge]
-
-This example provisions a DAOS cluster with [managed instance groups][migs] for the servers and for clients. It is more extensively discussed in a dedicated [README for Intel
-examples][intel-examples-readme].
-
-[pfs-daos.yaml]: ../community/examples/intel/pfs-daos.yaml
-[migs]: https://cloud.google.com/compute/docs/instance-groups
-
-### [hpc-slurm-daos.yaml] ![community-badge]
-
-This example provisions DAOS servers and a Slurm cluster. It is
-more extensively discussed in a dedicated [README for Intel
-examples][intel-examples-readme].
-
-[hpc-slurm-daos.yaml]: ../community/examples/intel/hpc-slurm-daos.yaml
 
 ### [hpc-amd-slurm-v5-legacy.yaml] ![community-badge] ![deprecated-badge]
 
