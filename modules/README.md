@@ -103,8 +103,6 @@ Modules that are still in development and less stable are labeled with the
   a [DDN EXAscaler lustre](https://www.ddn.com/partners/google-cloud-platform/)
   file system. This module has
   [license costs](https://console.developers.google.com/marketplace/product/ddnstorage/exascaler-cloud).
-* **[Intel-DAOS]** ![community-badge] : Creates
-  a [DAOS](https://docs.daos.io/) file system.
 * **[cloud-storage-bucket]** ![community-badge] ![experimental-badge] : Creates a Google Cloud Storage (GCS) bucket.
 * **[gke-persistent-volume]** ![core-badge] ![experimental-badge] : Creates persistent volumes and persistent volume claims for shared storage.
 * **[nfs-server]** ![community-badge] ![experimental-badge] : Creates a VM and
@@ -114,7 +112,6 @@ Modules that are still in development and less stable are labeled with the
 [parallelstore]: file-system/parallelstore/README.md
 [pre-existing-network-storage]: file-system/pre-existing-network-storage/README.md
 [ddn-exascaler]: ../community/modules/file-system/DDN-EXAScaler/README.md
-[intel-daos]: ../community/modules/file-system/Intel-DAOS/README.md
 [nfs-server]: ../community/modules/file-system/nfs-server/README.md
 [cloud-storage-bucket]: ../community/modules/file-system/cloud-storage-bucket/README.md
 [gke-persistent-volume]: ../modules/file-system/gke-persistent-volume/README.md
