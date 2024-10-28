@@ -12,10 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ---
-blueprint_name: gke-storage-parallelstore-dev
+blueprint_name: gke-storage-parallelstore
 vars:
   project_id:  ## Set GCP Project ID Here ##
-  deployment_name: gke-storage-parallelstore-dev
+  deployment_name: gke-storage-parallelstore
   region: us-central1
   zone: us-central1-c
 
