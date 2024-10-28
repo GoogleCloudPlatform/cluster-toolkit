@@ -210,41 +210,25 @@ to the console. For example:
 ==> example.googlecompute.toolkit_image: Startup script, if any, has finished running.
 ```
 
-To monitor the progress of the startup script, first gather the name and zone
-of the instance using Cloud Console or the following command:
+### Viewing Startup Script Logs
+
+The recommended method for debugging the image build process is to use Cloud
+Logging. This can be done by either searching for the VM instance in the Cloud
+Console or using the following template command with the variables `PROJECT_ID`
+(e.g. `test_project_1`) and `INSTANCE_ID` (note: unique numerical id, not
+instance name) specified:
 
 ```shell
-gcloud compute instances list --project <PROJECT_ID> --filter="name~^packer"
-```
-
-This will produce a list of VMs starting with `packer` along with other
-information including which zone the VMs are in.  If there is more than one
-Packer VM you will need to determine which is the one that you wish to monitor
-using criteria such as zone or machine-type.
-
-Once the VM name is determined, you can either check the serial port output in
-Cloud Console or by running the command:
-
-```shell
-gcloud compute instances get-serial-port-output <VM_NAME> --port 1 --zone <ZONE> --project <PROJECT_ID>
-```
-
-The serial port output of the Packer VM will contain the startup script logs.
-This output will only be available while Packer is running.
-
-### Gathering Startup Script Logs After Failure
-
-If the Packer image build fails, the module will produce a `gcloud` command
-that prints the failed startup script output from the Packer VM. The produced
-command will have the variables specified and can be used in a terminal without
-modification.
-
-The output will look similar to:
-
-```shell
-Error building image try checking logs:
 gcloud logging --project <PROJECT_ID> read 'logName=("projects/<PROJECT_ID>/logs/GCEMetadataScripts" OR "projects/<PROJECT_ID>/logs/google_metadata_script_runner") AND resource.labels.instance_id=<INSTANCE_ID>' --format="table(timestamp, resource.labels.instance_id, jsonPayload.message) --order=asc
 ```
+
+> [!NOTE]
+> There can be a delay in the propagation of the logs from the instance to
+> Cloud Logging, so it may require waiting a few minutes to see the full logs.
+
+If the Packer image build fails, the module will output the command above
+with the variables specified and can be used in a terminal without
+modification.
 
 ## License
 
