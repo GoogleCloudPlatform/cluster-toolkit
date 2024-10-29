@@ -33,6 +33,7 @@ deployment_groups:
     source: modules/network/vpc
     settings:
       subnetwork_name: xpk-gke-a3-megagpu-subnet
+      mtu: 8244
       secondary_ranges:
         xpk-gke-a3-megagpu-subnet:
         - range_name: pods
@@ -47,15 +48,18 @@ deployment_groups:
       global_ip_address_range: 192.169.0.0/16
       network_count: 8
       subnetwork_cidr_suffix: 24
+      mtu: 8244
 
   - id: gke_cluster
     source: modules/scheduler/gke-cluster
     use: [network1, gpunets]
     settings:
+      enable_private_endpoint: false
       master_authorized_networks:
       - cidr_block: $(vars.authorized_cidr)  # Allows your machine run kubectl command. It's required for the multi-network setup.
         display_name: "kubectl-access-network"
       system_node_pool_machine_type: "e2-standard-32"
+      system_node_pool_taints: []
     outputs: [instructions]
 
   - id: group_placement_0
@@ -70,25 +74,29 @@ deployment_groups:
       name: $(vars.deployment_name)-gp-np-1
       group_placement_max_distance: 2
 
-  - id: a3_megagpu_pool_0
+  - id: a3_megagpu_pool_np_0
     source: modules/compute/gke-node-pool
     use: [gke_cluster, gpunets, group_placement_0]
     settings:
-      name: a3-megagpu-pool-0
+      name: a3-megagpu-pool-np-0  # xpk naming scheme
       machine_type: a3-megagpu-8g
       autoscaling_total_min_nodes: 2
+      autoscaling_total_max_nodes: 150
+      taints: []
       initial_node_count: 2
       zones: [$(vars.zone)]
       host_maintenance_interval: PERIODIC
     outputs: [instructions]
 
-  - id: a3_megagpu_pool_1
+  - id: a3_megagpu_pool_np_1
     source: modules/compute/gke-node-pool
     use: [gke_cluster, gpunets, group_placement_1]
     settings:
-      name: a3-megagpu-pool-1
+      name: a3-megagpu-pool-np-1  # xpk naming scheme
       machine_type: a3-megagpu-8g
       autoscaling_total_min_nodes: 2
+      autoscaling_total_max_nodes: 150
+      taints: []
       initial_node_count: 2
       zones: [$(vars.zone)]
       host_maintenance_interval: PERIODIC
@@ -115,4 +123,4 @@ deployment_groups:
     settings:
       apply_manifests:
       - source: $(ghpc_stage("xpk-gke-a3-megagpu-files"))/config-map.yaml.tftpl
-        template_vars: {name: "xpk-gke-a3-megagpu-resources-configmap", num_nodes: "4"}
+        template_vars: {name: "$(vars.deployment_name)-resources-configmap", num_nodes: "4"}
