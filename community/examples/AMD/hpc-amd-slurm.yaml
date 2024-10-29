@@ -168,7 +168,7 @@ deployment_groups:
         # these images must match the images used by Slurm modules below because
         # we are building OpenMPI with PMI support in libraries contained in
         # Slurm installation
-        family: slurm-gcp-6-6-hpc-rocky-linux-8
+        family: slurm-gcp-6-8-hpc-rocky-linux-8
         project: schedmd-slurm-public
 
   - id: low_cost_nodeset

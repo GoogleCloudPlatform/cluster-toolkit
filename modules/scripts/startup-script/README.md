@@ -29,12 +29,11 @@ Each runner receives the following attributes:
    not.
 - `source`: (Optional) A path to the file or data you want to upload. Must be
   defined if `content` is not. The source path is relative to the deployment
-  group directory. Scripts distributed as part of modules should start with
-  `modules/` followed by the name of the module used (not to be confused with
-  the module ID) and the path to the script. The format is shown below:
+  group directory. To ensure correctness of path use `ghpc_stage` function, that
+  would copy referenced file to the deployment group directory. For example:
 
-    ```text
-    source: ./modules/<<MODULE_NAME>>/<<SCRIPT_NAME>>
+    ```yaml
+    source: $(ghpc_stage("path/to/file"))
     ```
 
   For more examples with context, see the
@@ -141,6 +140,8 @@ better performance under some HPC workloads. While official documentation
 recommends using the _Cloud Ops Agent_, it is recommended to use
 `install_stackdriver_agent` when performance is important.
 
+#### Stackdriver Agent Installation
+
 If an image or machine already has Cloud Ops Agent installed and you would like
 to instead use the Stackdrier Agent, the following script will remove the Cloud
 Ops Agent and install the Stackdriver Agent.
@@ -160,6 +161,34 @@ curl -sSO https://dl.google.com/cloudagents/add-logging-agent-repo.sh
 sudo bash add-logging-agent-repo.sh --also-install
 sudo service stackdriver-agent start
 ```
+
+#### Cloud Ops Agent Installation
+
+If an image or machine already has the Stackdriver Agent installed and you would
+like to instead use the Cloud Ops Agent, the following script will remove the
+Stackdriver Agent and install the Cloud Ops Agent.
+
+```bash
+# UnInstall Stackdriver Agent
+
+sudo systemctl stop stackdriver-agent.service
+sudo systemctl disable stackdriver-agent.service
+curl -sSO https://dl.google.com/cloudagents/add-monitoring-agent-repo.sh
+sudo dpkg --configure -a
+sudo bash add-monitoring-agent-repo.sh --uninstall
+sudo bash add-monitoring-agent-repo.sh --remove-repo
+
+# Install ops-agent
+
+curl -sSO https://dl.google.com/cloudagents/add-google-cloud-ops-agent-repo.sh
+sudo bash add-google-cloud-ops-agent-repo.sh --also-install
+sudo service google-cloud-ops-agent start
+```
+
+As a reminder, this should be in a startup script, which should run on all
+Compute nodes via the `compute_startup_script` on the controller.
+
+#### Testing Installation
 
 You can test if one of the agents is running using the following commands:
 
@@ -188,7 +217,7 @@ For official documentation see troubleshooting docs:
 
 ```yaml
 - id: startup
-  source: ./modules/scripts/startup-script
+  source: modules/scripts/startup-script
   settings:
     runners:
       # Some modules such as filestore have runners as outputs for convenience:
@@ -212,7 +241,7 @@ For official documentation see troubleshooting docs:
         args: "bar.tgz 'Expanding file'"
 
 - id: compute-cluster
-  source: ./modules/compute/vm-instance
+  source: modules/compute/vm-instance
   use: [homefs, startup]
 ```
 
@@ -222,13 +251,13 @@ they are able to do so by using the `gcs_bucket_path` as shown in the below exam
 
 ```yaml
 - id: startup
-  source: ./modules/scripts/startup-script
+  source: modules/scripts/startup-script
   settings:
     gcs_bucket_path: gs://user-test-bucket/folder1/folder2
     install_stackdriver_agent: true
 
 - id: compute-cluster
-  source: ./modules/compute/vm-instance
+  source: modules/compute/vm-instance
   use: [startup]
 ```
 

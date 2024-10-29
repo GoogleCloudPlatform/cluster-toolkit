@@ -15,9 +15,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List
+from typing import List, Optional
 import argparse
 import collections
+from datetime import timedelta
 import json
 import logging
 import os
@@ -57,7 +58,7 @@ PLACEMENT_MAX_CNT = 150
 BULK_INSERT_LIMIT = 5000
 
 
-def instance_properties(nodeset, model, placement_group, labels=None):
+def instance_properties(nodeset:object, model:str, placement_group:Optional[str], labels:Optional[dict], job_id:Optional[int]):
     props = NSDict()
 
     if labels: # merge in extra labels on instance and disks
@@ -73,48 +74,53 @@ def instance_properties(nodeset, model, placement_group, labels=None):
         props.disks = template_info.disks
 
     if placement_group:
-        props.scheduling = {
-            "onHostMaintenance": "TERMINATE",
-        }
+        props.scheduling.onHostMaintenance = "TERMINATE"
         props.resourcePolicies = [placement_group]
 
-    if nodeset.reservation_name:
-        reservation_name = nodeset.reservation_name
-
-        zones = list(nodeset.zone_policy_allow or [])
-        assert len(zones) == 1, "Only single zone is supported if using a reservation"
-
-        reservation = lookup().reservation(reservation_name, zones[0])
-
+    if reservation := lookup().nodeset_reservation(nodeset):
         props.reservationAffinity = {
             "consumeReservationType": "SPECIFIC_RESERVATION",
             "key": f"compute.{util.universe_domain()}/reservation-name",
-            "values": [reservation_name],
+            "values": [reservation.bulk_insert_name],
         }
 
-        policies = util.reservation_resource_policies(reservation)
-        if policies:
-            props.scheduling = {
-                "onHostMaintenance": "TERMINATE",
-            }
-            props.resourcePolicies = policies
+        if reservation.policies:
+            props.scheduling.onHostMaintenance = "TERMINATE"
+            props.resourcePolicies = reservation.policies
             log.info(
-                f"reservation {reservation_name} is being used with policies {props.resourcePolicies}"
+                f"reservation {reservation.bulk_insert_name} is being used with policies {props.resourcePolicies}"
             )
         else:
             props.resourcePolicies = []
             log.info(
-                f"reservation {reservation_name} is being used without any policies"
+                f"reservation {reservation.bulk_insert_name} is being used without any policies"
             )
 
     if nodeset.maintenance_interval:
-        props.scheduling = props.scheduling or {}
-        props.scheduling["maintenanceInterval"] = nodeset.maintenance_interval
+        props.scheduling.maintenanceInterval = nodeset.maintenance_interval
+
+    if nodeset.dws_flex.enabled:
+        update_props_dws(props, nodeset.dws_flex, job_id)
 
     # Override with properties explicit specified in the nodeset
     props.update(nodeset.get("instance_properties") or {})
     
     return props
+
+def update_props_dws(props:object, dws_flex:object, job_id: Optional[int]) -> None:
+    props.scheduling.onHostMaintenance = "TERMINATE"
+    props.scheduling.instanceTerminationAction = "DELETE"
+    props.reservationAffinity['consumeReservationType'] = "NO_RESERVATION"
+    props.scheduling.maxRunDuration['seconds'] = dws_flex_duration(dws_flex, job_id)
+
+def dws_flex_duration(dws_flex:object, job_id: Optional[int]) -> int:
+    max_duration = dws_flex.max_run_duration
+    if dws_flex.use_job_duration and job_id is not None and (job := lookup().job(job_id)) and job.duration:
+        if timedelta(seconds=30) <= job.duration <= timedelta(weeks=2):
+            max_duration = int(job.duration.total_seconds())
+        else:
+            log.info("Job TimeLimit cannot be less than 30 seconds or exceed 2 weeks")
+    return max_duration
 
 
 def per_instance_properties(node):
@@ -125,11 +131,7 @@ def per_instance_properties(node):
 
 def create_instances_request(nodes, partition_name, placement_group, job_id=None):
     """Call regionInstances.bulkInsert to create instances"""
-    assert len(nodes) > 0
-    if placement_group:
-        assert len(nodes) <= min(PLACEMENT_MAX_CNT, BULK_INSERT_LIMIT)
-    else:
-        assert len(nodes) <= BULK_INSERT_LIMIT
+    assert 0 < len(nodes) <= BULK_INSERT_LIMIT
 
     # model here indicates any node that can be used to describe the rest
     model = next(iter(nodes))
@@ -139,8 +141,14 @@ def create_instances_request(nodes, partition_name, placement_group, job_id=None
     log.debug(f"create_instances_request: {model} placement: {placement_group}")
 
     body = NSDict()
+
     body.count = len(nodes)
-    body.minCount = 1
+
+    if placement_group:
+        assert len(nodes) <= PLACEMENT_MAX_CNT
+        pass # do not set minCount to force "all or nothing" behavior
+    else:
+        body.minCount = 1
 
     # source of instance properties
     body.sourceInstanceTemplate = template
@@ -152,7 +160,7 @@ def create_instances_request(nodes, partition_name, placement_group, job_id=None
     )
     # overwrites properties across all instances
     body.instanceProperties = instance_properties(
-        nodeset, model, placement_group, labels
+        nodeset, model, placement_group, labels, job_id
     )
 
     # key is instance name, value overwrites properties
@@ -625,7 +633,7 @@ def main(nodelist):
     # resume_nodes does not currently return any status.
     if lookup().cfg.enable_slurm_gcp_plugins:
         slurm_gcp_plugins.post_main_resume_nodes(
-            nodelist=nodelist, global_resume_data=global_resume_data
+            lkp=lookup(), nodelist=nodelist, global_resume_data=global_resume_data
         )
 
 if __name__ == "__main__":

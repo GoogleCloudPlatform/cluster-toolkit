@@ -27,7 +27,6 @@ below demonstrate each approach:
 - [Customizing a Slurm cluster (Hello, World)](../examples/README.md#image-builderyaml-)
 - [Customizing a Slurm cluster (AI/ML applications)](../examples/README.md#ml-slurmyaml-)
 - [Provisioning an HTCondor pool (installing scheduler)](../examples/README.md#htc-htcondoryaml--)
-- [Provisioning a DAOS storage cluster](../community/examples/intel/README.md#daos-cluster)
 
 ## Why build an image?
 

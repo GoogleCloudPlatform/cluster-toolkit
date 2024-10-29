@@ -27,7 +27,6 @@ FILE_PREAMBLE = """
 # This file is managed by a script. Manual modifications will be overwritten.
 """
 
-login_nodeset = "x-login"
 
 
 def dict_to_conf(conf, delim=" ") -> str:
@@ -84,9 +83,6 @@ def conflines(lkp: util.Lookup) -> str:
 
     any_dynamic = any(bool(p.partition_feature) for p in lkp.cfg.partitions.values())
     comma_params = {
-        "PrivateData": [
-            "cloud",
-        ],
         "LaunchParameters": [
             "enable_nss_slurm",
             "use_interactive_step",
@@ -95,11 +91,6 @@ def conflines(lkp: util.Lookup) -> str:
             "cloud_reg_addrs" if any_dynamic or any_tpu else "cloud_dns",
             "enable_configless",
             "idle_on_node_suspend",
-        ],
-        "SchedulerParameters": [
-            "bf_continue",
-            "salloc_wait_nodes",
-            "ignore_prefer_validation",
         ],
         "GresTypes": [
             "gpu" if any_gpus else None,
@@ -115,11 +106,17 @@ def conflines(lkp: util.Lookup) -> str:
         **(comma_params if not no_comma_params else {}),
         "Prolog": f"{prolog_path}/*" if lkp.cfg.prolog_scripts else None,
         "Epilog": f"{epilog_path}/*" if lkp.cfg.epilog_scripts else None,
-        "SuspendProgram": f"{scripts_dir}/suspend.py",
+        "PrivateData": get("private_data", []),
+        "SchedulerParameters": get("scheduler_parameters", [
+            "bf_continue",
+            "salloc_wait_nodes",
+            "ignore_prefer_validation",
+        ]),
         "ResumeProgram": f"{scripts_dir}/resume.py",
         "ResumeFailProgram": f"{scripts_dir}/suspend.py",
         "ResumeRate": get("resume_rate", 0),
         "ResumeTimeout": get("resume_timeout", 300),
+        "SuspendProgram": f"{scripts_dir}/suspend.py",
         "SuspendRate": get("suspend_rate", 0),
         "SuspendTimeout": get("suspend_timeout", 300),
         "TreeWidth": get("tree_width", default_tree_width),
@@ -130,24 +127,6 @@ def conflines(lkp: util.Lookup) -> str:
     return dict_to_conf(conf_options, delim="\n")
 
 
-def loginlines() -> str:
-    nodeset = {
-        "NodeSet": login_nodeset,
-        "Feature": login_nodeset,
-    }
-    partition = {
-        "PartitionName": login_nodeset,
-        "Nodes": login_nodeset,
-        "State": "UP",
-        "DefMemPerCPU": 1,
-        "Hidden": "YES",
-        "RootOnly": "YES",
-    }
-    lines = [
-        dict_to_conf(nodeset),
-        dict_to_conf(partition),
-    ]
-    return "\n".join(lines)
 
 
 def nodeset_lines(nodeset, lkp: util.Lookup) -> str:
@@ -254,7 +233,7 @@ def suspend_exc_lines(lkp: util.Lookup) -> Iterable[str]:
         for p in lkp.cfg.partitions.values()
         if len(p.partition_nodeset_dyn) > 0
     ]
-    suspend_exc_parts = {"SuspendExcParts": [login_nodeset, *dyn_parts]}
+    suspend_exc_parts = {"SuspendExcParts": [*dyn_parts]}
 
     return filter(
         None,
@@ -270,7 +249,6 @@ def make_cloud_conf(lkp: util.Lookup) -> str:
     lines = [
         FILE_PREAMBLE,
         conflines(lkp),
-        loginlines(),
         *(nodeset_lines(n, lkp) for n in lkp.cfg.nodeset.values()),
         *(nodeset_dyn_lines(n) for n in lkp.cfg.nodeset_dyn.values()),
         *(nodeset_tpu_lines(n, lkp) for n in lkp.cfg.nodeset_tpu.values()),
@@ -360,19 +338,20 @@ def install_cgroup_conf(lkp: util.Lookup) -> None:
 
 def install_jobsubmit_lua(lkp: util.Lookup) -> None:
     """install job_submit.lua if there are tpu nodes in the cluster"""
-    if any(
+    if not any(
         tpu_nodeset is not None
         for part in lkp.cfg.partitions.values()
         for tpu_nodeset in part.partition_nodeset_tpu
     ):
-        conf_options = {
-            "scripts_dir": lkp.cfg.slurm_scripts_dir or dirs.scripts,
-        }
-        conf = lkp.cfg.jobsubmit_lua_tpl.format(**conf_options)
+        return # No TPU partitions, no need for job_submit.lua
+    
+    scripts_dir = lkp.cfg.slurm_scripts_dir or dirs.scripts
+    tpl = (scripts_dir / "job_submit.lua.tpl").read_text()
+    conf = tpl.format(scripts_dir=scripts_dir)
 
-        conf_file = lkp.etc_dir / "job_submit.lua"
-        conf_file.write_text(conf)
-        util.chown_slurm(conf_file, 0o600)
+    conf_file = lkp.etc_dir / "job_submit.lua"
+    conf_file.write_text(conf)
+    util.chown_slurm(conf_file, 0o600)
 
 
 def gen_cloud_gres_conf(lkp: util.Lookup) -> None:

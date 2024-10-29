@@ -29,7 +29,7 @@ vars:
   static_node_count: 2 ## Must be <= number of reserved machines ##
 
   slurm_instance_image:
-    family: slurm-gcp-6-6-hpc-rocky-linux-8
+    family: slurm-gcp-6-8-hpc-rocky-linux-8
     project: schedmd-slurm-public
   instance_image_custom: false  # true if using custom image in lines above
   bandwidth_tier: gvnic_enabled

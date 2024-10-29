@@ -15,12 +15,12 @@
 - name: Assert variables are defined
   ansible.builtin.assert:
     that:
-    - cli_deployment_vars.region is defined
+    - region is defined
     - custom_vars.project is defined
 
 - name: Get cluster credentials for kubectl
   delegate_to: localhost
-  ansible.builtin.command: gcloud container clusters get-credentials {{ deployment_name }} --region {{ cli_deployment_vars.region }} --project {{ custom_vars.project }}
+  ansible.builtin.command: gcloud container clusters get-credentials {{ deployment_name }} --region {{ region }} --project {{ custom_vars.project }}
 
 - name: Execute the job
   delegate_to: localhost

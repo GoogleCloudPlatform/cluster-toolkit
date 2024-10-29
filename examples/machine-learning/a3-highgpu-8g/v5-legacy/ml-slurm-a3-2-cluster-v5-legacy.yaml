@@ -154,8 +154,9 @@ deployment_groups:
         destination: stage_scripts.sh
         content: |
           #!/bin/bash
+          # use script from master branch which is actively maintained
           curl -s --create-dirs -o /opt/apps/adm/slurm/scripts/receive-data-path-manager \
-              https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/v5/tools/prologs-epilogs/receive-data-path-manager
+              https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/master/tools/prologs-epilogs/receive-data-path-manager
           chmod 0755 /opt/apps/adm/slurm/scripts/receive-data-path-manager
           mkdir -p /opt/apps/adm/slurm/partition-$(vars.a3_partition_name)-prolog_slurmd.d
           mkdir -p /opt/apps/adm/slurm/partition-$(vars.a3_partition_name)-epilog_slurmd.d

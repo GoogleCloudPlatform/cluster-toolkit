@@ -29,7 +29,7 @@ deployment_groups:
     source: modules/network/pre-existing-vpc
 
   - id: spack-setup
-    source: ./community/modules/scripts/spack-setup
+    source: community/modules/scripts/spack-setup
     settings:
       install_dir: /apps/spack
 
