@@ -1676,6 +1676,28 @@ the controller and login nodes. Also since this blueprint doesn't use external
 IPs for compute nodes, one must needs to [set up cloud nat][cloudnat] and
 [set up iap][iap].
 
+Now, one needs to update the blueprint to include shared vpc details. In the
+network configuration, update the details for shared vpc as mentioned below,
+
+```yaml
+vars:
+  project_id:  <service-project> # update /w the service project id in which shared network will be used.
+  host_project_id: <host-project> # update /w the host project id in which shared network is created.
+  deployment_name: hpc-small-shared-vpc
+  region: us-central1
+  zone: us-central1-c
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: network1
+    source: modules/network/pre-existing-vpc
+    settings:
+      project_id: $(vars.host_project_id)
+      network_name: <shared-network> # update /w shared network name
+      subnetwork_name: <shared-subnetwork> # update /w shared sub-net name
+```
+
 [hpc-slurm-sharedvpc.yaml]: ../community/examples/hpc-slurm-sharedvpc.yaml
 [fs-shared-vpc]: https://cloud.google.com/filestore/docs/shared-vpc
 
@@ -1733,7 +1755,7 @@ deployment_groups:
   # GitHub module over HTTPS, prefixed with github.com
   - source: github.com/org/repo//path/to/module
 
-  # Local absolute source, prefixed with / 
+  # Local absolute source, prefixed with /
   - source: /path/to/module
 
   # Local relative (to current working directory) source, prefixed with ./ or ../
