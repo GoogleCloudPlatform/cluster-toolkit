@@ -54,6 +54,8 @@ resource "google_container_node_pool" "node_pool" {
 
   initial_node_count = var.initial_node_count
 
+  max_pods_per_node = var.max_pods_per_node
+
   management {
     auto_repair  = true
     auto_upgrade = var.auto_upgrade
