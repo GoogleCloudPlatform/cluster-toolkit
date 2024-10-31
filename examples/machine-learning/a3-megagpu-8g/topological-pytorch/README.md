@@ -7,16 +7,7 @@ pytorch distributed workload.
 Note: This requires that your nodes were created using a compact placement
 policy.
 
-The main concept is that pytorch needs to incorporate the information from topologically-aware Slurm into its
-`dist.init_process_group` function. [Slurm topology plugin is automatically configured for ClusterToolkit](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/docs/slurm-topology.md).
-
-Note: If you use torchrun, you may need to alter how this information is
-incorporated. Using  `torchrun ... --node-rank=${SLURM_NODEID}` does not seem to
-properly initialize ranks based on the correct node sorting.  For that reason,
-we suggest using the
-[env://](https://pytorch.org/docs/stable/distributed.html#environment-variable-initialization)
-initialization process, which is slightly more manual but enables the fine grain
-control that we want.
+The main concept is that pytorch should incorporate the information from topologically-aware Slurm into its `dist.init_process_group` function. [Slurm topology plugin is automatically configured for ClusterToolkit](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/docs/slurm-topology.md).
 
 ## Quickstart
 
@@ -28,7 +19,7 @@ Run the following commands to demonstrate topologically aware pytorch:
     # Run an example of setting SLURM_HOSTFILE based on topology
     sbatch --dependency=afterok:$jobid topological_pytorch.sh
 
-Once submitted, you should be able to view the state of the jobs with `sinfo`:
+Once submitted, you should be able to view the state of the jobs with `squeue`:
 
     JOBID PARTITION     NAME     USER ST       TIME  NODES NODELIST(REASON)
     124    a3mega topologi username   PD       0:00      8 (Dependency)
@@ -98,12 +89,12 @@ not incorporate topology into how it orders ranks among the nodes.
     export MASTER_ADDR=$(scontrol show hostnames $SLURM_JOB_NODELIST | head -n 1)
     # For torchrun, we only launch 1 task per node, and instruct torchrun to create
     # 8 (SLURM_GPUS_PER_NODE) processes per node.
-    srun --ntasks-per-node=1 --nodes $SLURM_NNODES \
+    srun --ntasks-per-node=1 --nodes "${SLURM_NNODES}" \
         python -m torch.distributed.run \
-        --nproc_per_node ${SLURM_GPUS_PER_NODE}  \
-        --rdzv_endpoint $MASTER_ADDR:$MASTER_PORT \
+        --nproc_per_node "${SLURM_GPUS_PER_NODE}" \
+        --rdzv_endpoint "${MASTER_ADDR}":"${MASTER_PORT}" \
         --rdzv_backend c10d \
-        --nnodes $SLURM_NNODES topological_pytorch.py
+        --nnodes "${SLURM_NNODES}" topological_pytorch.py
 
 torchrun will launch 8 tasks per node, and assign ranks lexiconographically
 across nodes according to the hostnames.
@@ -119,6 +110,10 @@ order NCCL ranks in Pytorch. The last thing we need to do is launch the job,
 adding `--topology` to the script arguments to trigger the topology logic.
 
     srun python topological_pytorch.py --topology
+
+Note: Alternatively you can set the required environment variables to be populated by Slurm in the srun command.
+
+    srun sh -c "WORLD_SIZE=\${SLURM_NPROCS} RANK=\${SLURM_PROCID} LOCAL_RANK=\${SLURM_LOCALID} LOCAL_WORLD_SIZE=\${SLURM_NTASKS_PER_NODE} python topological_pytorch.py"
 
 ### Test Script
 Next review the `topological_pytorch.py` script. There is a top level flag of
@@ -155,7 +150,6 @@ the ordering of this output will vary.
 
 Run the following commands to demonstrate topologically aware pytorch:
 
-    # Run an example of setting SLURM_HOSTFILE based on topology
     sbatch topological_pytorch.sh
 
 The output shows the standard vs topologically-aware behavior. See

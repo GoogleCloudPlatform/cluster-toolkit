@@ -49,6 +49,7 @@ srun --ntasks-per-node=1 --nodes "${SLURM_NNODES}" \
 
 # Demonstrate how to incorporate topology
 echo "Topologically aware"
-# Run 8 tasks per node (inherited from the job script)l, since we aren't using
-# torchrun in this case. Supply the --topology flag to the script to s
+# Run 8 tasks per node (inherited from the job script), since we aren't using
+# torchrun in this case. Supply the --topology flag to the script to set
+# global rank and world size of variables based on Slurm
 srun python topological_pytorch.py --topology
