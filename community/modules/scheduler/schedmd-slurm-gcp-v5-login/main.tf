@@ -85,7 +85,7 @@ module "slurm_login_template" {
   source_image_project     = local.source_image_project_normalized # requires source_image_logic.tf
   source_image             = local.source_image                    # requires source_image_logic.tf
   network                  = var.network_self_link == null ? "" : var.network_self_link
-  subnetwork_project       = var.subnetwork_project == null ? "" : var.subnetwork_project
+  subnetwork_project       = var.subnetwork_project
   subnetwork               = var.subnetwork_self_link == null ? "" : var.subnetwork_self_link
   tags                     = concat([local.slurm_cluster_name], var.tags)
   service_account = var.service_account != null ? var.service_account : {
