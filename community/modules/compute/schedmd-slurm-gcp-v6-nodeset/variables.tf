@@ -463,6 +463,21 @@ variable "reservation_name" {
   }
 }
 
+variable "future_reservation" {
+  description = <<-EOD
+  If set, will make use of the future reservation for the nodeset. Input can be either the future reservation name or its selfLink in the format 'projects/PROJECT_ID/zones/ZONE/futureReservations/FUTURE_RESERVATION_NAME'.
+  See https://cloud.google.com/compute/docs/instances/future-reservations-overview
+  EOD
+  type        = string
+  default     = ""
+  nullable    = false
+
+  validation {
+    condition     = length(regexall("^(projects/([a-z0-9-]+)/zones/([a-z0-9-]+)/futureReservations/([a-z0-9-]+))?$", var.future_reservation)) > 0 || length(regexall("^([a-z0-9-]+)$", var.future_reservation)) > 0
+    error_message = "Future reservation must be either the future reservation name or its selfLink in the format 'projects/PROJECT_ID/zone/ZONE/futureReservations/FUTURE_RESERVATION_NAME'."
+  }
+}
+
 variable "maintenance_interval" {
   description = <<-EOD
     Sets the maintenance interval for instances in this nodeset.
