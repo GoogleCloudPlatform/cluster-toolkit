@@ -170,7 +170,11 @@ variable "system_node_pool_taints" {
     value  = any
     effect = string
   }))
-  default = []
+  default = [{
+    key    = "components.gke.io/gke-managed-components"
+    value  = true
+    effect = "NO_SCHEDULE"
+  }]
 }
 
 variable "system_node_pool_kubernetes_labels" {
