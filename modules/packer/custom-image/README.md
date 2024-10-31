@@ -36,7 +36,7 @@ This can be achieved by one of the following 2 approaches:
 
 1. Using a public IP address on the VM
 
-- Set [var.omit_external_ip](#input_omit_external_ip) to `true`
+- Set [var.omit_external_ip](#input_omit_external_ip) to `false`
 
 1. Configuring a VPC with a Cloud NAT in the region of the VM
 
