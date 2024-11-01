@@ -117,6 +117,7 @@ variable "docker" {
   type = object({
     enabled        = optional(bool, false)
     world_writable = optional(bool, false)
+    daemon_config  = optional(string, "")
   })
   default = {
     enabled = false
@@ -126,6 +127,17 @@ variable "docker" {
     condition     = !coalesce(var.docker.world_writable) || var.docker.enabled
     error_message = "var.docker.world_writable should only be set if var.docker.enabled is set to true"
   }
+
+  validation {
+    condition     = !can(coalesce(var.docker.daemon_config)) || var.docker.enabled
+    error_message = "var.docker.daemon_config should only be set if var.docker.enabled is set to true"
+  }
+
+  validation {
+    condition     = !can(coalesce(var.docker.daemon_config)) || can(jsondecode(var.docker.daemon_config))
+    error_message = "var.docker.daemon_config should be set to a valid Docker daemon JSON configuration"
+  }
+
 }
 
 # tflint-ignore: terraform_unused_declarations
