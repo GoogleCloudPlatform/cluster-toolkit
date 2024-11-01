@@ -47,7 +47,7 @@ deployment_groups:
     - install_nfs_client
 
   - id: nfs
-    source: ./community/modules/file-system/nfs-server
+    source: community/modules/file-system/nfs-server
     outputs:
     - network_storage
     - install_nfs_client
@@ -83,31 +83,6 @@ deployment_groups:
     - subnetwork_address
     - nat_ips
 
-  - id: new-project
-    source: community/modules/project/new-project
-    outputs:
-    - project_name
-    - project_id
-    - project_number
-    - domain
-    - group_email
-    - service_account_id
-    - service_account_display_name
-    - service_account_email
-    - service_account_name
-    - service_account_unique_id
-    - project_bucket_self_link
-    - project_bucket_url
-    - api_s_account
-    - api_s_account_fmt
-    - enabled_apis
-    - enabled_api_identities
-    - budget_name
-    settings:
-      folder_id: 334688113020  # random number
-      billing_account: "111110-M2N704-854685"  # random billing number
-      org_id: 123456789  # random org id
-
   - id: sa
     source: community/modules/project/service-account
     outputs:
@@ -131,7 +106,7 @@ deployment_groups:
     - startup_script
 
   - id: lustre
-    source: ./community/modules/file-system/DDN-EXAScaler
+    source: community/modules/file-system/DDN-EXAScaler
     outputs:
     - private_addresses
     - ssh_console

@@ -252,8 +252,8 @@ resource "google_compute_instance" "compute_vm" {
   dynamic "guest_accelerator" {
     for_each = local.guest_accelerator
     content {
-      count = guest_accelerator.count
-      type  = guest_accelerator.type
+      count = guest_accelerator.value.count
+      type  = guest_accelerator.value.type
     }
   }
 

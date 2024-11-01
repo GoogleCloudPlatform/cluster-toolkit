@@ -100,7 +100,7 @@
     ansible.builtin.command: "{{ item }}"
     with_items:
       - git clone {{ git_url }} {{ install_dir }}
-      - git --git-dir={{ install_dir }}/.git checkout {{ git_ref }}
+      - git -C {{ install_dir }} checkout {{ git_ref }}
     when: lock_out.rc == 0 and clone_res.rc != 0
 
   - name: Transfer ownership to system user
@@ -133,7 +133,7 @@
     when: lock_out.rc == 0
 
   - name: Wait for lock
-    block: 
+    block:
     - name: Wait for lock
       ansible.builtin.wait_for:
         path: "{{ lock_dir }}/done"
@@ -144,14 +144,14 @@
 
     rescue:
     - name: Timed out on waiting for lock, get lock directory contents
-      ansible.builtin.find: 
+      ansible.builtin.find:
         paths: "{{ lock_dir }}"
       register: lock_dir_contents
 
     - name: Print lock directory contents, it should contain name of host that is holding lock
       ansible.builtin.debug:
         msg: "{{ lock_dir_contents.files|map(attribute='path')|map('basename')|list }}"
-      
+
     - name: Failed to get lock
       ansible.builtin.fail:
         msg: "Timeout waiting on lock for ${sw_name}, exiting"

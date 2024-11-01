@@ -169,8 +169,8 @@ limitations under the License.
 | Name | Version |
 |------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.3.0 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | >= 4.73.0, <6.0 |
-| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 4.73.0, <6.0 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 4.73.0 |
+| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 4.73.0 |
 | <a name="requirement_google-private"></a> [google-private](#requirement\_google-private) | >= 0.0.1962 |
 | <a name="requirement_null"></a> [null](#requirement\_null) | >= 3.0 |
 
@@ -178,8 +178,8 @@ limitations under the License.
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google"></a> [google](#provider\_google) | >= 4.73.0, <6.0 |
-| <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 4.73.0, <6.0 |
+| <a name="provider_google"></a> [google](#provider\_google) | >= 4.73.0 |
+| <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 4.73.0 |
 | <a name="provider_google-private"></a> [google-private](#provider\_google-private) | >= 0.0.1962 |
 | <a name="provider_null"></a> [null](#provider\_null) | >= 3.0 |
 

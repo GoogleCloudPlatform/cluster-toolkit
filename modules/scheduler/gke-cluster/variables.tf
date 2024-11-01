@@ -127,6 +127,12 @@ variable "enable_persistent_disk_csi" {
   default     = true
 }
 
+variable "enable_parallelstore_csi" {
+  description = "The status of the Google Compute Engine Parallelstore Container Storage Interface (CSI) driver addon, which allows the usage of a parallelstore as volumes."
+  type        = bool
+  default     = false
+}
+
 variable "system_node_pool_enabled" {
   description = "Create a system node pool."
   type        = bool

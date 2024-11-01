@@ -125,7 +125,25 @@ func expandOrDie(path string) (config.Blueprint, *config.YamlCtx) {
 	// Expand the blueprint
 	checkErr(bp.Expand(), ctx)
 	validateMaybeDie(bp, *ctx)
+	v5DeprecationWarning(bp)
+
 	return bp, ctx
+}
+
+// TODO: Remove this warning when v5 deprecation is complete
+func v5DeprecationWarning(bp config.Blueprint) {
+	alreadyContainsV5 := false
+	bp.WalkModulesSafe(func(mp config.ModulePath, m *config.Module) {
+		if strings.Contains(m.Source, "schedmd-slurm-gcp-v5-controller") && !alreadyContainsV5 {
+			logging.Info(boldYellow(
+				"We have been supporting slurm-gcp v5 since July 2022 and are now deprecating it, as we've launched slurm-gcp v6 in June 2024. \n" +
+					"Toolkit blueprints using Slurm-gcp v5 will be marked “deprecated” starting October 2024 and slurm-gcp v6 will be the default deployment. \n" +
+					"However we won't begin removing slurm-gcp v5 blueprints until January 6, 2025. Beginning on January 6, 2025, the Cluster Toolkit team will cease their support for Slurm-gcp v5. \n" +
+					"While this will not directly or immediately impact running clusters, we recommend replacing any v5 clusters with Slurm-gcp v6.",
+			))
+			alreadyContainsV5 = true // This is to avoid the logging message showing repeatedly for multiple v5 controllers
+		}
+	})
 }
 
 // TODO: move to expand.go

@@ -59,7 +59,7 @@ deployment_groups:
     settings:
       source_image_project_id: [schedmd-slurm-public]
       # see latest in https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#published-image-family
-      source_image_family: slurm-gcp-6-6-hpc-rocky-linux-8
+      source_image_family: slurm-gcp-6-8-hpc-rocky-linux-8
       # You can find size of source image by using following command
       # gcloud compute images describe-from-family <source_image_family> --project schedmd-slurm-public
       disk_size: $(vars.disk_size)

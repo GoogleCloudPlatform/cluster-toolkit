@@ -24,7 +24,7 @@ vars:
   slurm_image:
     # Please refer to the following link for the latest images:
     # https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#supported-operating-systems
-    family: slurm-gcp-6-6-ubuntu-2004-lts
+    family: slurm-gcp-6-8-ubuntu-2004-lts
     project: schedmd-slurm-public
   instance_image_custom: true
 
@@ -33,7 +33,6 @@ deployment_groups:
   modules:
   # Source is an embedded module, denoted by "modules/*" without ./, ../, /
   # as a prefix. To refer to a local module, prefix with ./, ../ or /
-  # Example - ./modules/network/vpc
   - id: network1
     source: modules/network/vpc
 

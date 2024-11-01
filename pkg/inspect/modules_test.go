@@ -234,7 +234,7 @@ func TestOutputForbiddenNames(t *testing.T) {
 	nowhere := []string{}
 	allowed := map[string][]string{
 		// Global blueprint variables we don't want to get overwritten.
-		"project_id":      {"community/modules/project/new-project"},
+		"project_id":      nowhere,
 		"labels":          nowhere,
 		"region":          nowhere,
 		"zone":            nowhere,
