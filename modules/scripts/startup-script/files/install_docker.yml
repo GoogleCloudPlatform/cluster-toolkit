@@ -31,7 +31,7 @@
       dest: /tmp/get-docker.sh
       owner: root
       group: root
-      mode: 0644
+      mode: '0644'
     when: not docker_binary.stat.exists
   - name: Install Docker
     ansible.builtin.command: sh /tmp/get-docker.sh
@@ -41,7 +41,7 @@
   - name: Create Docker daemon configuration
     ansible.builtin.copy:
       dest: /etc/docker/daemon.json
-      mode: 0644
+      mode: '0644'
       content: '{{ docker_daemon_config }}'
       validate: /usr/bin/dockerd --validate --config-file %s
     when: docker_daemon_config
@@ -53,11 +53,11 @@
       state: directory
       owner: root
       group: root
-      mode: 0755
+      mode: '0755'
   - name: Create Docker service override configuration
     ansible.builtin.copy:
       dest: /etc/systemd/system/docker.service.d/data-root.conf
-      mode: 0644
+      mode: '0644'
       content: |
         [Unit]
         {% if docker_data_root %}
@@ -70,12 +70,12 @@
       state: directory
       owner: root
       group: root
-      mode: 0755
+      mode: '0755'
     when: enable_docker_world_writable
   - name: Create Docker socket override configuration
     ansible.builtin.copy:
       dest: /etc/systemd/system/docker.socket.d/world-writable.conf
-      mode: 0644
+      mode: '0644'
       content: |
         [Socket]
         SocketMode=0666
