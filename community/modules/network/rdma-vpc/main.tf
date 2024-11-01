@@ -117,7 +117,7 @@ locals {
       subnetwork         = subnet.self_link
       subnetwork_project = null # will populate from subnetwork_self_link
       network_ip         = ""
-      nic_type           = coalesce(var.nic_type, try(regex("IRDMA", local.profile_name), regex("MRDMA", local.profile_name), "RDMA"))
+      nic_type           = var.nic_type
       stack_type         = null
       queue_count        = null
       access_config      = []

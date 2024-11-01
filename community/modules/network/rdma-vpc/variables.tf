@@ -178,5 +178,6 @@ variable "network_profile" {
 variable "nic_type" {
   description = "NIC type for use in modules that use the output"
   type        = string
-  default     = null
+  nullable    = false
+  default     = "MRDMA"
 }
