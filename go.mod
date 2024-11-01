@@ -1,6 +1,6 @@
 module hpc-toolkit
 
-go 1.21
+go 1.22
 
 require (
 	cloud.google.com/go/storage v1.41.0 // indirect
@@ -21,7 +21,7 @@ require (
 )
 
 require (
-	github.com/fatih/color v1.17.0
+	github.com/fatih/color v1.18.0
 	github.com/go-git/go-billy/v5 v5.5.0
 	github.com/google/go-cmp v0.6.0
 	github.com/hashicorp/terraform-exec v0.21.0
@@ -98,9 +98,9 @@ require (
 	golang.org/x/crypto v0.24.0 // indirect
 	golang.org/x/net v0.26.0 // indirect
 	golang.org/x/oauth2 v0.21.0 // indirect
-	golang.org/x/sys v0.25.0
+	golang.org/x/sys v0.26.0
 	golang.org/x/text v0.16.0 // indirect
-	google.golang.org/grpc v1.64.0 // indirect
+	google.golang.org/grpc v1.64.1 // indirect
 	google.golang.org/protobuf v1.34.2 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect
 )

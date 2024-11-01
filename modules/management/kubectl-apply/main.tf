@@ -77,9 +77,10 @@ module "install_jobset" {
 }
 
 module "configure_kueue" {
-  source      = "./kubectl"
-  source_path = local.install_kueue ? try(var.kueue.config_path, "") : null
-  depends_on  = [module.install_kueue]
+  source        = "./kubectl"
+  source_path   = local.install_kueue ? try(var.kueue.config_path, "") : null
+  template_vars = local.install_kueue ? try(var.kueue.config_template_vars, null) : null
+  depends_on    = [module.install_kueue]
 
   server_side_apply = true
   wait_for_rollout  = true

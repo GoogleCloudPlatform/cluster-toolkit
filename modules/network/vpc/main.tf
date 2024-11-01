@@ -15,6 +15,11 @@
 */
 
 locals {
+  # This label allows for billing report tracking based on module.
+  labels = merge(var.labels, { ghpc_module = "vpc", ghpc_role = "network" })
+}
+
+locals {
   autoname        = replace(var.deployment_name, "_", "-")
   network_name    = var.network_name == null ? "${local.autoname}-net" : var.network_name
   subnetwork_name = var.subnetwork_name == null ? "${local.autoname}-primary-subnet" : var.subnetwork_name
@@ -175,7 +180,7 @@ module "vpc" {
 # https://github.com/terraform-google-modules/terraform-google-address/blob/v3.1.1/outputs.tf
 module "nat_ip_addresses" {
   source  = "terraform-google-modules/address/google"
-  version = "~> 3.1"
+  version = "~> 4.1"
 
   for_each = toset(local.regions)
 
@@ -184,6 +189,7 @@ module "nat_ip_addresses" {
   # an external, regional (not global) IP address is suited for a regional NAT
   address_type = "EXTERNAL"
   global       = false
+  labels       = local.labels
   names        = [for idx in range(var.ips_per_nat) : "${local.network_name}-nat-ips-${each.value}-${idx}"]
 }
 

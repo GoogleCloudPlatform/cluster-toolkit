@@ -86,7 +86,7 @@ limitations under the License.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_startup_script"></a> [startup\_script](#module\_startup\_script) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | v1.39.0&depth=1 |
+| <a name="module_startup_script"></a> [startup\_script](#module\_startup\_script) | ../../../../modules/scripts/startup-script | n/a |
 
 ## Resources
 
@@ -99,9 +99,7 @@ limitations under the License.
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_chgrp_group"></a> [chgrp\_group](#input\_chgrp\_group) | Deprecated: installation will be owned by group of `system_user_name`. If special group is needed, supply user with group assigned. | `string` | `null` | no |
 | <a name="input_chmod_mode"></a> [chmod\_mode](#input\_chmod\_mode) | Mode to chmod the Ramble clone to. Defaults to `""` (i.e. do not modify).<br/>For usage information see:<br/>https://docs.ansible.com/ansible/latest/collections/ansible/builtin/file_module.html#parameter-mode | `string` | `""` | no |
-| <a name="input_chown_owner"></a> [chown\_owner](#input\_chown\_owner) | Deprecated: use `system_user_name`. | `string` | `null` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of deployment, used to name bucket containing startup script. | `string` | n/a | yes |
 | <a name="input_install_dir"></a> [install\_dir](#input\_install\_dir) | Destination directory of installation of Ramble. | `string` | `"/apps/ramble"` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Key-value pairs of labels to be added to created resources. | `map(string)` | n/a | yes |

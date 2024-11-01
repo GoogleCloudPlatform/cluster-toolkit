@@ -61,7 +61,7 @@ No resources.
 | <a name="input_network_name"></a> [network\_name](#input\_network\_name) | The name of the network to be created (if unsupplied, will default to "{deployment\_name}-net") | `string` | `null` | no |
 | <a name="input_network_profile"></a> [network\_profile](#input\_network\_profile) | Profile name for VPC configuration | `string` | `null` | no |
 | <a name="input_network_routing_mode"></a> [network\_routing\_mode](#input\_network\_routing\_mode) | The network routing mode (default "GLOBAL") | `string` | `"GLOBAL"` | no |
-| <a name="input_nic_type"></a> [nic\_type](#input\_nic\_type) | NIC type for use in modules that use the output | `string` | `null` | no |
+| <a name="input_nic_type"></a> [nic\_type](#input\_nic\_type) | NIC type for use in modules that use the output | `string` | `"MRDMA"` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | The default region for Cloud resources | `string` | n/a | yes |
 | <a name="input_secondary_ranges"></a> [secondary\_ranges](#input\_secondary\_ranges) | Secondary ranges that will be used in some of the subnets. Please see https://goo.gle/hpc-toolkit-vpc-deprecation for migration instructions. | `map(list(object({ range_name = string, ip_cidr_range = string })))` | `{}` | no |
