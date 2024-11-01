@@ -117,6 +117,7 @@ No modules.
 | <a name="input_random_name_sufix"></a> [random\_name\_sufix](#input\_random\_name\_sufix) | Appends a random suffix to the job name to avoid clashes. | `bool` | `true` | no |
 | <a name="input_requested_cpu_per_pod"></a> [requested\_cpu\_per\_pod](#input\_requested\_cpu\_per\_pod) | The requested cpu per pod. If null, allocatable\_cpu\_per\_node will be used to claim whole nodes. If provided will override allocatable\_cpu\_per\_node. | `number` | `-1` | no |
 | <a name="input_restart_policy"></a> [restart\_policy](#input\_restart\_policy) | Job restart policy. Only a RestartPolicy equal to `Never` or `OnFailure` is allowed. | `string` | `"Never"` | no |
+| <a name="input_security_context"></a> [security\_context](#input\_security\_context) | The security options the container should be run with. More info: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/ | <pre>list(object({<br/>    key   = string<br/>    value = string<br/>  }))</pre> | `[]` | no |
 | <a name="input_tolerations"></a> [tolerations](#input\_tolerations) | Tolerations allow the scheduler to schedule pods with matching taints. Generally populated from gke-node-pool via `use` field. | <pre>list(object({<br/>    key      = string<br/>    operator = string<br/>    value    = string<br/>    effect   = string<br/>  }))</pre> | <pre>[<br/>  {<br/>    "effect": "NoSchedule",<br/>    "key": "user-workload",<br/>    "operator": "Equal",<br/>    "value": "true"<br/>  }<br/>]</pre> | no |
 
 ## Outputs
