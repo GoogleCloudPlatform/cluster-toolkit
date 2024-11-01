@@ -44,7 +44,11 @@ locals {
     host_name_prefix = var.configure_ssh_host_patterns
   }
 
-  prefix_file = "/tmp/prefix_file.json"
+  prefix_file                  = "/tmp/prefix_file.json"
+  ansible_docker_settings_file = "/tmp/ansible_docker_settings.json"
+
+  docker_config    = try(jsondecode(var.docker.daemon_config), {})
+  docker_data_root = try(local.docker_config.data-root, null)
 
   configure_ssh_runners = local.configure_ssh ? [
     {
@@ -91,10 +95,19 @@ locals {
 
   docker_runner = !var.docker.enabled ? [] : [
     {
+      type        = "data"
+      destination = local.ansible_docker_settings_file
+      content = jsonencode({
+        enable_docker_world_writable = var.docker.world_writable
+        docker_daemon_config         = var.docker.daemon_config
+        docker_data_root             = local.docker_data_root
+      })
+    },
+    {
       type        = "ansible-local"
       destination = "install_docker.yml"
       content     = file("${path.module}/files/install_docker.yml")
-      args        = "-e enable_docker_world_writable=${var.docker.world_writable}"
+      args        = "-e \"@${local.ansible_docker_settings_file}\""
     },
   ]
 
@@ -134,9 +147,9 @@ locals {
     local.proxy_runner,
     local.monitoring_agent_installer,
     local.ansible_installer,
+    local.raid_setup, # order RAID early to ensure filesystem is ready for subsequent runners
     local.configure_ssh_runners,
     local.docker_runner,
-    local.raid_setup,
     var.runners
   )
 
@@ -185,6 +198,19 @@ locals {
       content = lookup(runner, "content", null)
       source  = lookup(runner, "source", null)
     }
+  }
+}
+
+check "health_check" {
+  assert {
+    condition     = local.docker_config == {}
+    error_message = <<-EOT
+      This message is only a warning. The Toolkit performs no validation of the Docker
+      daemon configuration. VM startup scripts will fail if the configuration file is
+      not a valid Docker JSON configuration. Please review the Docker documentation:
+
+      https://docs.docker.com/engine/daemon/
+    EOT
   }
 }
 
