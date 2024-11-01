@@ -89,7 +89,7 @@ deployment_groups:
     settings:
       name: tensorflow
       image: jupyter/tensorflow-notebook@sha256:173f124f638efe870bb2b535e01a76a80a95217e66ed00751058c51c09d6d85d
-      security_context:
+      security_context:  # to make sure the job have enough access to execute the jobs and r/w from parallelstore
       - key: runAsUser
         value: 1000
       - key: runAsGroup
