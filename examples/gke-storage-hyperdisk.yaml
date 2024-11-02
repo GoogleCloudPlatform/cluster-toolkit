@@ -94,8 +94,8 @@ deployment_groups:
       zones: [$(vars.zone)]
       machine_type: c3-standard-88 # Hyperdisk-extreme required C3 machine with 88 or more vCPUs
 
-  ### Hyperdisk Balanced enabled Job ###
-
+  # Train a TensorFlow model with Keras and Hyperdisk Balanced on GKE
+  # Tutorial: https://cloud.google.com/parallelstore/docs/tensorflow-sample
   - id: hyperdisk-balanced-job
     source: modules/compute/gke-job-template
     use:
@@ -135,8 +135,8 @@ deployment_groups:
       node_count: 1
     outputs: [instructions]
 
-  ### Hyperdisk Extreme enabled Job ###
-
+  # Train a TensorFlow model with Keras and Hyperdisk Extreme on GKE
+  # Tutorial: https://cloud.google.com/parallelstore/docs/tensorflow-sample
   - id: hyperdisk-extreme-job
     source: modules/compute/gke-job-template
     use:
@@ -176,8 +176,8 @@ deployment_groups:
       node_count: 1
     outputs: [instructions]
 
-  ### Hyperdisk Throughput enabled Job ###
-
+  # Train a TensorFlow model with Keras and Hyperdisk Throughput on GKE
+  # Tutorial: https://cloud.google.com/parallelstore/docs/tensorflow-sample
   - id: hyperdisk-throughput-job
     source: modules/compute/gke-job-template
     use:
