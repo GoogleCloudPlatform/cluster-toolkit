@@ -454,7 +454,7 @@ def _list_config_blobs() -> Tuple[Any, str]:
     if res["core"] is None:
         raise DeffetiveStoredConfigError("config.yaml not found in bucket")
     return res, hash.hexdigest()
-        
+
 
 def _fetch_config(old_hash: Optional[str]) -> Optional[Tuple[NSDict, str]]:
     """Fetch config from bucket, returns None if no changes are detected."""
@@ -1156,7 +1156,12 @@ def machine_type_sockets(template) -> int:
 
 def isSmt(template) -> bool:
     # https://cloud.google.com/compute/docs/cpu-platforms
-    noSmtFamily = ("t2a", "t2d", "h3",)
+    noSmtFamily = (
+        "t2a",
+        "t2d",
+        "h3",
+        "c4a",
+    )
     if machine_type_family(template.machineType) in noSmtFamily:
         return False
     if template.machine_info.guestCpus == 1:
