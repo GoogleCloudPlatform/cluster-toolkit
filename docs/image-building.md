@@ -167,7 +167,7 @@ deployment_groups:
 - group: packer
   modules:
   - id: custom-image
-    source: github.com/GoogleCloudPlatform/slurm-gcp//packer?ref=5.12.1&depth=1
+    source: github.com/GoogleCloudPlatform/slurm-gcp//packer?ref=5.12.2&depth=1
     kind: packer
     settings:
       use_iap: true
