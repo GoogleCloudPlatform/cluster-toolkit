@@ -425,8 +425,6 @@ variable "cloud_parameters" {
 variable "enable_default_mounts" {
   description = <<-EOD
     Enable default global network storage from the controller
-    - /usr/local/etc/slurm
-    - /etc/munge
     - /home
     - /apps
     Warning: If these are disabled, the slurm etc and munge dirs must be added
