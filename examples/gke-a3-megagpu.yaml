@@ -33,6 +33,7 @@ deployment_groups:
     source: modules/network/vpc
     settings:
       subnetwork_name: gke-subnet-a3-mega
+      mtu: 8244
       secondary_ranges:
         gke-subnet-a3-mega:
         - range_name: pods
@@ -59,6 +60,7 @@ deployment_groups:
       global_ip_address_range: 192.169.0.0/16
       network_count: 8
       subnetwork_cidr_suffix: 24
+      mtu: 8244
 
   - id: gke_cluster
     source: modules/scheduler/gke-cluster

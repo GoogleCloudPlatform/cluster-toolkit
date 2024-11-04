@@ -52,6 +52,7 @@ vars:
   enable_ops_agent: true
   # enable the NVIDIA DCGM daemon and integration into Cloud Ops Agent
   enable_nvidia_dcgm: true
+  localssd_mountpoint: /mnt/localssd
 
 deployment_groups:
 - group: cluster
@@ -114,8 +115,17 @@ deployment_groups:
       # Failure to do will result in VMs that lose data and do not automatically
       # mount local SSD filesystems
       local_ssd_filesystem:
-        mountpoint: /mnt/localssd
+        mountpoint: $(vars.localssd_mountpoint)
         permissions: "1777" # must quote numeric filesystem permissions!
+      # Docker was successfully installed in the image, this configures it
+      # to use the A3-specific local SSD volumes to store container images
+      docker:
+        enabled: true
+        world_writable: true
+        daemon_config: |
+          {
+            "data-root": "$(vars.localssd_mountpoint)/docker"
+          }
       runners:
       - type: ansible-local
         destination: enable_nvidia_dcgm.yml

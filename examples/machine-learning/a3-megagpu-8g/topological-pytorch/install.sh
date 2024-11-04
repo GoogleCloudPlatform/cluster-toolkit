@@ -1,10 +1,11 @@
-# Copyright 2022 Google LLC
+#!/bin/bash
+# Copyright 2024 "Google LLC"
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#      http://www.apache.org/licenses/LICENSE-2.0
+#     http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -12,20 +13,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
----
+#filename: install.sh
+#submit with `sbatch install.sh`
 
-blueprint_name: new_project
+#SBATCH --partition=a3mega
+#SBATCH --gpus-per-node=8
+#SBATCH --ntasks-per-node=1
+#SBATCH --nodes 1
 
-vars:
-  project_id: test_project
-  deployment_name: new_project_deployment
-
-deployment_groups:
-- group: primary
-  modules:
-  - id: project
-    source: community/modules/project/new-project
-    settings:
-      folder_id: 334688113020  # random number
-      billing_account: 111110-M2N704-854685  # random billing number
-      org_id: 123456789  # random org id
+python3 -m venv env
+source env/bin/activate
+pip3 install --pre torch torchvision torchaudio

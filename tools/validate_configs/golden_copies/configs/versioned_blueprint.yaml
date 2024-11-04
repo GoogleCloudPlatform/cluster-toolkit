@@ -27,7 +27,7 @@ vars:
   slurm_image:
     # Visit https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#published-image-family
     # for a list of valid family options with Slurm
-    family: slurm-gcp-6-7-hpc-rocky-linux-8
+    family: slurm-gcp-6-8-hpc-rocky-linux-8
     project: schedmd-slurm-public
   # If image above is changed to use custom image, then setting below must be set to true
   instance_image_custom: false

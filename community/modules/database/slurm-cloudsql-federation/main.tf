@@ -47,23 +47,76 @@ resource "google_sql_database_instance" "instance" {
   database_version    = var.database_version
 
   settings {
-    user_labels = local.labels
-    tier        = var.tier
+    disk_size       = var.disk_size_gb
+    disk_autoresize = var.disk_autoresize
+    edition         = var.edition
+    tier            = var.tier
+    user_labels     = local.labels
+
+    dynamic "data_cache_config" {
+      for_each = var.edition == "ENTERPRISE_PLUS" ? [""] : []
+      content {
+        data_cache_enabled = var.data_cache_enabled
+      }
+    }
     ip_configuration {
       ipv4_enabled                                  = false
-      private_network                               = var.network_id
+      private_network                               = var.use_psc_connection ? null : var.network_id
       enable_private_path_for_google_cloud_services = true
 
       dynamic "authorized_networks" {
-        for_each = var.authorized_networks
+        for_each = var.use_psc_connection ? [] : var.authorized_networks
         iterator = ip_range
 
         content {
           value = ip_range.value
         }
       }
+      dynamic "psc_config" {
+        for_each = var.use_psc_connection ? [""] : []
+        content {
+          psc_enabled               = true
+          allowed_consumer_projects = [var.project_id]
+        }
+      }
+    }
+
+    backup_configuration {
+      enabled = var.enable_backups
+      # to allow easy switching between ENTERPRISE and ENTERPRISE_PLUS
+      transaction_log_retention_days = 7
     }
   }
+  lifecycle {
+    precondition {
+      condition     = var.disk_autoresize && var.disk_size_gb == null || !var.disk_autoresize
+      error_message = "If setting disk_size_gb set disk_autorize to false to prevent re-provisioning of the instance after disk auto-expansion."
+    }
+  }
+}
+
+
+
+resource "google_compute_address" "psc" {
+  count        = var.use_psc_connection ? 1 : 0
+  project      = var.project_id
+  name         = local.sql_instance_name
+  address_type = "INTERNAL"
+  region       = var.region
+  subnetwork   = var.subnetwork_self_link
+  labels       = local.labels
+}
+
+resource "google_compute_forwarding_rule" "psc_consumer" {
+  count                 = var.use_psc_connection ? 1 : 0
+  name                  = local.sql_instance_name
+  project               = var.project_id
+  region                = var.region
+  subnetwork            = var.subnetwork_self_link
+  ip_address            = google_compute_address.psc[0].self_link
+  load_balancing_scheme = ""
+  recreate_closed_psc   = true
+  target                = google_sql_database_instance.instance.psc_service_attachment_link
 }
 
 resource "google_sql_database" "database" {

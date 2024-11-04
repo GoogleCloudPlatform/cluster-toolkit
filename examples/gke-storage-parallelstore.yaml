@@ -67,7 +67,7 @@ deployment_groups:
       sc_volume_binding_mode: Immediate
       sc_reclaim_policy: Delete # Use Retain if you want to volume and parallelstore resource will remain after
       sc_topology_zones: [$(vars.zone)]
-      pvc_count: 2
+      pvc_count: 1
       capacity_gb: 12000 # from 12,000 GiB to 100,000 GiB, in multiples of 4,000 GiB
 
   - id: sample-pool
@@ -76,9 +76,10 @@ deployment_groups:
     settings:
       name: sample-pool
       zones: [$(vars.zone)]
-      machine_type: n2-standard-4
+      machine_type: n2-standard-16
 
-  ### Parallelstore enabled Job ###
+  # Train a TensorFlow model with Keras and Parallelstore on GKE
+  # Tutorial: https://cloud.google.com/parallelstore/docs/tensorflow-sample
 
   - id: parallelstore-job
     source: modules/compute/gke-job-template
@@ -86,22 +87,35 @@ deployment_groups:
     - gke_cluster
     - parallelstore-setup
     settings:
-      image: busybox
+      name: tensorflow
+      image: jupyter/tensorflow-notebook@sha256:173f124f638efe870bb2b535e01a76a80a95217e66ed00751058c51c09d6d85d
+      security_context:  # to make sure the job have enough access to execute the jobs and r/w from parallelstore
+      - key: runAsUser
+        value: 1000
+      - key: runAsGroup
+        value: 100
+      - key: fsGroup
+        value: 100
       command:
-      - bin/sh
+      - bash
       - -c
       - |
-        echo "Set up job folders"
-        shopt -s extglob; JOB=${HOSTNAME%%-+([[:digit:]])}
-        mkdir /data/parallelstore-pvc-0/${JOB}/ -p;
-        mkdir /data/parallelstore-pvc-1/${JOB}/ -p;
-
-        echo "Writing seed data to Parallelstore volumes"
-        dd if=/dev/urandom of=/data/parallelstore-pvc-0/${JOB}/${JOB_COMPLETION_INDEX}.dat bs=1K count=1000
-        dd if=/dev/urandom of=/data/parallelstore-pvc-1/${JOB}/${JOB_COMPLETION_INDEX}.dat bs=1K count=1000
-
-        # echo "Hash file and write between the 2 hyerpdisk balanced volumes"
-        # md5sum /data/parallelstore-pvc-0/${JOB}/${JOB_COMPLETION_INDEX}.dat > /data/parallelstore-pvc-1/${JOB}/${JOB_COMPLETION_INDEX}.md5
-        # md5sum /data/parallelstore-pvc-1/${JOB}/${JOB_COMPLETION_INDEX}.dat > /data/parallelstore-pvc-0/${JOB}/${JOB_COMPLETION_INDEX}.md5
-      node_count: 5
+        pip install transformers datasets
+        python - <<EOF
+        from datasets import load_dataset
+        dataset = load_dataset("glue", "cola", cache_dir='/data/parallelstore-pvc-0')
+        dataset = dataset["train"]
+        from transformers import AutoTokenizer
+        import numpy as np
+        tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
+        tokenized_data = tokenizer(dataset["sentence"], return_tensors="np", padding=True)
+        tokenized_data = dict(tokenized_data)
+        labels = np.array(dataset["label"])
+        from transformers import TFAutoModelForSequenceClassification
+        from tensorflow.keras.optimizers import Adam
+        model = TFAutoModelForSequenceClassification.from_pretrained("bert-base-cased")
+        model.compile(optimizer=Adam(3e-5))
+        model.fit(tokenized_data, labels)
+        EOF
+      node_count: 1
     outputs: [instructions]

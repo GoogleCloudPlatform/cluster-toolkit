@@ -290,7 +290,7 @@ provider "kubernetes" {
 module "workload_identity" {
   count   = var.configure_workload_identity_sa ? 1 : 0
   source  = "terraform-google-modules/kubernetes-engine/google//modules/workload-identity"
-  version = "29.0.0"
+  version = "~> 34.0"
 
   use_existing_gcp_sa = true
   name                = "workload-identity-k8-sa"
