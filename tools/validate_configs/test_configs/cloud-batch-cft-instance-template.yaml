@@ -44,7 +44,7 @@ deployment_groups:
           echo "Hello World" > /sw/hello.txt
 
   - id: batch-compute-template
-    source: github.com/terraform-google-modules/terraform-google-vm//modules/instance_template?ref=v7.8.0
+    source: github.com/terraform-google-modules/terraform-google-vm//modules/instance_template?ref=v12.1.0
     use: [batch-startup-script]
     settings:
       # Boiler plate to work with Cloud Foundation Toolkit

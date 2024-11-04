@@ -24,7 +24,7 @@ locals {
 
 module "bucket" {
   source  = "terraform-google-modules/cloud-storage/google"
-  version = "~> 5.0"
+  version = "~> 6.1"
 
   count = var.create_bucket ? 1 : 0
 
@@ -122,7 +122,7 @@ locals {
 module "daos_network_storage_scripts" {
   count = length(local.daos_ns) > 0 ? 1 : 0
 
-  source          = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=v1.39.0&depth=1"
+  source          = "../../../../modules/scripts/startup-script"
   labels          = local.labels
   project_id      = var.project_id
   deployment_name = var.deployment_name

@@ -47,11 +47,11 @@ locals {
     "g2-standard-48" = { type = "nvidia-l4", count = 4 },
     "g2-standard-96" = { type = "nvidia-l4", count = 8 },
   }
-  generated_guest_accelerator = try([local.accelerator_machines[var.machine_type]], [{ count = 0, type = "" }])
+  generated_guest_accelerator = try([local.accelerator_machines[var.machine_type]], [])
 
   # Select in priority order:
   # (1) var.guest_accelerator if not empty
   # (2) local.generated_guest_accelerator if not empty
   # (3) default to empty list if both are empty
-  guest_accelerator = try(coalescelist(var.guest_accelerator, local.generated_guest_accelerator), [{ count = 0, type = "" }])
+  guest_accelerator = try(coalescelist(var.guest_accelerator, local.generated_guest_accelerator), [])
 }

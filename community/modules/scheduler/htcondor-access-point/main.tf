@@ -183,7 +183,7 @@ resource "google_storage_bucket_object" "ap_config" {
 }
 
 module "startup_script" {
-  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=v1.39.0&depth=1"
+  source = "../../../../modules/scripts/startup-script"
 
   project_id      = var.project_id
   region          = var.region
@@ -226,7 +226,8 @@ resource "google_compute_disk" "spool" {
 }
 
 module "access_point_instance_template" {
-  source = "github.com/terraform-google-modules/terraform-google-vm//modules/instance_template?ref=73dc845"
+  source  = "terraform-google-modules/vm/google//modules/instance_template"
+  version = "~> 12.1"
 
   name_prefix = local.name_prefix
   project_id  = var.project_id
@@ -261,7 +262,7 @@ module "access_point_instance_template" {
 
 module "htcondor_ap" {
   source  = "terraform-google-modules/vm/google//modules/mig"
-  version = "10.1.1"
+  version = "~> 12.1"
 
   project_id                       = var.project_id
   region                           = var.region

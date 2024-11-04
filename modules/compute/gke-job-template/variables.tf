@@ -92,6 +92,15 @@ variable "tolerations" {
   ]
 }
 
+variable "security_context" {
+  description = "The security options the container should be run with. More info: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/"
+  type = list(object({
+    key   = string
+    value = string
+  }))
+  default = []
+}
+
 variable "machine_family" {
   description = "The machine family to use in the node selector (example: `n2`). If null then machine family will not be used as selector criteria."
   type        = string

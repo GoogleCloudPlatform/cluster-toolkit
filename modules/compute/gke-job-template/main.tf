@@ -129,6 +129,7 @@ locals {
       restart_policy           = var.restart_policy
       backoff_limit            = var.backoff_limit
       tolerations              = distinct(var.tolerations)
+      security_context         = var.security_context
       labels                   = local.labels
 
       empty_dir_volumes    = local.empty_dir_volumes

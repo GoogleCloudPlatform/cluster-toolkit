@@ -103,8 +103,6 @@ Modules that are still in development and less stable are labeled with the
   a [DDN EXAscaler lustre](https://www.ddn.com/partners/google-cloud-platform/)
   file system. This module has
   [license costs](https://console.developers.google.com/marketplace/product/ddnstorage/exascaler-cloud).
-* **[Intel-DAOS]** ![community-badge] : Creates
-  a [DAOS](https://docs.daos.io/) file system.
 * **[cloud-storage-bucket]** ![community-badge] ![experimental-badge] : Creates a Google Cloud Storage (GCS) bucket.
 * **[gke-persistent-volume]** ![core-badge] ![experimental-badge] : Creates persistent volumes and persistent volume claims for shared storage.
 * **[nfs-server]** ![community-badge] ![experimental-badge] : Creates a VM and
@@ -114,7 +112,6 @@ Modules that are still in development and less stable are labeled with the
 [parallelstore]: file-system/parallelstore/README.md
 [pre-existing-network-storage]: file-system/pre-existing-network-storage/README.md
 [ddn-exascaler]: ../community/modules/file-system/DDN-EXAScaler/README.md
-[intel-daos]: ../community/modules/file-system/Intel-DAOS/README.md
 [nfs-server]: ../community/modules/file-system/nfs-server/README.md
 [cloud-storage-bucket]: ../community/modules/file-system/cloud-storage-bucket/README.md
 [gke-persistent-volume]: ../modules/file-system/gke-persistent-volume/README.md
@@ -156,15 +153,12 @@ Modules that are still in development and less stable are labeled with the
 
 ### Project
 
-* **[new-project]** ![community-badge] ![experimental-badge] : Creates a Google
-  Cloud Project.
 * **[service-account]** ![community-badge] ![experimental-badge] : Creates [service
   accounts](https://cloud.google.com/iam/docs/service-accounts) for a GCP
   project.
 * **[service-enablement]** ![community-badge] ![experimental-badge] : Allows enabling
   various APIs for a Google Cloud Project.
 
-[new-project]: ../community/modules/project/new-project/README.md
 [service-account]: ../community/modules/project/service-account/README.md
 [service-enablement]: ../community/modules/project/service-enablement/README.md
 
@@ -229,8 +223,8 @@ Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial][fsi-monteca
 [schedmd-slurm-gcp-v5-controller]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-controller/README.md
 [schedmd-slurm-gcp-v5-login]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-login/README.md
 [schedmd-slurm-gcp-v5-hybrid]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid/README.md
-[slurm-gcp-version-5]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/5.12.0
-[slurm-gcp-version-6]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.8.2
+[slurm-gcp-version-5]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/5.12.2
+[slurm-gcp-version-6]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.8.5
 [pbspro-client]: ../community/modules/scheduler/pbspro-client/README.md
 [pbspro-server]: ../community/modules/scheduler/pbspro-server/README.md
 
@@ -360,10 +354,6 @@ following module definition refers the local pre-existing-vpc modules.
 
 #### GitHub-hosted Modules and Packages
 
-The [Intel DAOS blueprint][pfs-daos.yaml] makes extensive use of GitHub-hosted
-Terraform and Packer modules. You may wish to use it as an example reference for
-this documentation.
-
 To use a Terraform module available on GitHub, set the source to a path starting
 with `github.com` (HTTPS) or `git@github.com` (SSH). For instance, the following
 module definition sources the Toolkit vpc module:
@@ -401,7 +391,6 @@ into a hidden folder when you run `terraform init`.
 [tfrev]: https://www.terraform.io/language/modules/sources#selecting-a-revision
 [gitref]: https://git-scm.com/book/en/v2/Git-Tools-Revision-Selection#_single_revisions
 [tfsubdir]: https://www.terraform.io/language/modules/sources#modules-in-package-sub-directories
-[pfs-daos.yaml]: ../community/examples/intel/pfs-daos.yaml
 
 ##### GitHub-hosted Packer modules
 
@@ -412,12 +401,6 @@ If the module uses `//` package notation, `gcluster create` will copy the entire
 repository to the module path: `deployment_name/group_name/module_id`. However,
 when `gcluster deploy` is invoked, it will run Packer from the subdirectory
 `deployment_name/group_name/module_id/subdirectory/after/double_slash`.
-
-Referring back to the [Intel DAOS blueprint][pfs-daos.yaml], we see that it will
-create 2 deployment groups at `pfs-daos/daos-client-image` and
-`pfs-daos/daos-server-image`. However, Packer will actually be invoked from
-a subdirectories ending in `daos-client-image/images` and
-`daos-server-image/images`.
 
 If the module does not use `//` package notation, `gcluster create` will copy
 only the final directory in the path to `deployment_name/group_name/module_id`.

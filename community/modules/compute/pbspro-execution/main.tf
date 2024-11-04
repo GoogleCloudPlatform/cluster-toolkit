@@ -42,7 +42,7 @@ locals {
 }
 
 module "pbs_install" {
-  source = "github.com/GoogleCloudPlatform/hpc-toolkit//community/modules/scripts/pbspro-install?ref=v1.39.0&depth=1"
+  source = "../../scripts/pbspro-install"
 
   pbs_exec   = var.pbs_exec
   pbs_home   = var.pbs_home
@@ -53,7 +53,7 @@ module "pbs_install" {
 }
 
 module "execution_startup_script" {
-  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=v1.39.0&depth=1"
+  source = "../../../../modules/scripts/startup-script"
 
   deployment_name = var.deployment_name
   project_id      = var.project_id
@@ -68,7 +68,7 @@ module "execution_startup_script" {
 }
 
 module "pbs_execution" {
-  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/compute/vm-instance?ref=09ae2725"
+  source = "../../../../modules/compute/vm-instance"
 
   instance_count = var.instance_count
   spot           = var.spot
