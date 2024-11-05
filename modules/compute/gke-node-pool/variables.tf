@@ -370,8 +370,8 @@ variable "gke_version" {
   type        = string
 }
 
-variable max_pods_per_node {
+variable "max_pods_per_node" {
   description = "The maximum number of pods per node in this node pool."
-  type = number
-  default = null
+  type        = number
+  default     = null
 }

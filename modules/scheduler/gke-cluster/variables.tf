@@ -336,6 +336,6 @@ variable "additional_networks" {
 
 variable "max_pods_per_node" {
   description = "The default maximum number of pods per node in this cluster."
-  type = number
-  default = null
+  type        = number
+  default     = null
 }
