@@ -1148,6 +1148,10 @@ def machine_type_sockets(template) -> int:
         "h3": 2,
         "c2d": 2 if guestCpus > 56 else 1,
         "a3": 2,
+        "c2": 2 if guestCpus > 30 else 1,
+        "c3": 2 if guestCpus > 88 else 1,
+        "c3d": 2 if guestCpus > 180 else 1,
+        "c4": 2 if guestCpus > 96 else 1,
     }.get(
         machine_type_family(template.machineType),
         1,  # assume 1 socket for all other families
