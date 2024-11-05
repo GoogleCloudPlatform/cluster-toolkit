@@ -223,6 +223,40 @@ Finally, the following is adding multivpc to a node pool:
       ...
 ```
 
+## Using GCE Reservations
+You can reserve Google Compute Engine instances in a specific zone to ensure resources are available for their workloads when needed. For more details on how to manage reservations, see [Reserving Compute Engine zonal resources](https://cloud.google.com/compute/docs/instances/reserving-zonal-resources).
+
+After creating a reservation, you can consume the reserved GCE VM instances in GKE. GKE clusters deployed using Cluster Toolkit support the same consumption modes as Compute Engine: NO_RESERVATION(default), ANY_RESERVATION, SPECIFIC_RESERVATION.
+
+This can be accomplished using [`reservation_affinity`](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/modules/compute/gke-node-pool/README.md#input_reservation_affinity).
+
+```yaml
+# Target any reservation
+reservation_affinity:
+  consume_reservation_type: ANY_RESERVATION
+
+# Target a specific reservation
+reservation_affinity:
+  consume_reservation_type: SPECIFIC_RESERVATION
+  specific_reservations:
+  - name: specific-reservation-1
+```
+
+The following requirements need to be satisfied for the node pool nodes to be able to use a specific reservation:
+1. A reservation with the name must exist in the specified project(`var.project_id`) and one of the specified zones(`var.zones`).
+2. Its consumption type must be `specific`.
+3. Its GCE VM Properties must match with those of the Node Pool; Machine type, Accelerators (GPU Type and count), Local SSD disk type and count.
+
+If you want to utilise a shared reservation, the owner project of the shared reservation needs to be explicitly specified like the following. Note that a shared reservation can be used by the project that hosts the reservation (owner project) and by the projects the reservation is shared with (consumer projects). See how to [create and use a shared reservation](https://cloud.google.com/compute/docs/instances/reservations-shared).
+
+```yaml
+reservation_affinity:
+  consume_reservation_type: SPECIFIC_RESERVATION
+  specific_reservations:
+  - name: specific-reservation-shared
+    project: shared_reservation_owner_project_id
+```
+
 ## License
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

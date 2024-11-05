@@ -225,9 +225,12 @@ resource "google_container_node_pool" "node_pool" {
       )
       error_message = <<-EOT
       Check if your reservation is configured correctly:
-      1. A reservation with the name must exist in the specified project and one of the specified zones
-      2. Its consumption type must be "specific"
-      3. Its VM Properties must match with those of the Node Pool; Machine type, Accelerators (GPU Type and count), Local SSD disk type and count
+      - A reservation with the name must exist in the specified project and one of the specified zones
+
+      - Its consumption type must be "specific"
+      %{for property in local.specific_reservation_requirement_violations}
+      - ${local.specific_reservation_requirement_violation_messages[property]}
+      %{endfor}
       EOT
     }
   }
