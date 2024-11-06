@@ -221,7 +221,7 @@ resource "google_container_node_pool" "node_pool" {
       EOT
     }
     precondition {
-      condition     = (var.max_pods_per_node != 0) && (var.networking_mode == "VPC_NATIVE")
+      condition     = (var.max_pods_per_node != null) && (var.networking_mode == "VPC_NATIVE")
       error_message = "default_max_pods_per_node does not work on `routes-based` clusters, that don't have IP Aliasing enabled."
     }
     precondition {
