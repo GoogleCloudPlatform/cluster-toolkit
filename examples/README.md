@@ -583,7 +583,7 @@ An example benchmarking job for PyTorch can be run under Slurm:
 
 ```shell
 cp /var/tmp/torch_test.* .
-sbatch -N 1 torch_test.sh
+sbatch -N 1 --gpus-per-node=1 torch_test.sh
 ```
 
 When you are done, clean up the resources in reverse order of creation:
@@ -632,7 +632,7 @@ An example benchmarking job for PyTorch can be run under Slurm:
 
 ```shell
 cp /var/tmp/torch_test.* .
-sbatch -N 1 torch_test.sh
+sbatch -N 1 --gpus-per-node=1 torch_test.sh
 ```
 
 When you are done, clean up the resources in reverse order of creation:
