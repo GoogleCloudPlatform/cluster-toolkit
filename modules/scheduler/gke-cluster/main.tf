@@ -75,7 +75,7 @@ resource "google_container_cluster" "gke_cluster" {
   }
 
   private_ipv6_google_access = var.enable_private_ipv6_google_access ? "PRIVATE_IPV6_GOOGLE_ACCESS_TO_GOOGLE" : null
-  default_max_pods_per_node  = var.max_pods_per_node
+  default_max_pods_per_node  = var.default_max_pods_per_node
   master_auth {
     client_certificate_config {
       issue_client_certificate = false
@@ -177,6 +177,10 @@ resource "google_container_cluster" "gke_cluster" {
     ignore_changes = [
       node_config
     ]
+    precondition {
+      condition     = (var.default_max_pods_per_node != 0) && (var.networking_mode == "VPC_NATIVE")
+      error_message = "default_max_pods_per_node does not work on `routes-based` clusters, that don't have IP Aliasing enabled."
+    }
     precondition {
       condition     = !(!coalesce(var.enable_dataplane_v2, true) && local.derived_enable_multi_networking)
       error_message = "'enable_dataplane_v2' cannot be false when enabling multi networking."
