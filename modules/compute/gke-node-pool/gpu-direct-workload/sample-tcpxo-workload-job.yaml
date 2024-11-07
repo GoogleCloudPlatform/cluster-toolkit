@@ -17,8 +17,8 @@ kind: Job
 metadata:
   name: my-sample-job
 spec:
-  parallelism: 2
-  completions: 2
+  parallelism: 8
+  completions: 8
   completionMode: Indexed
   template:
     spec:
@@ -40,16 +40,11 @@ spec:
           pushd /scripts;
           /scripts/gen_hostfiles.sh \${@};
           popd;
-          BENCHMARK=all_gather_perf NHOSTS=2 NCCL_LIB_DIR="${LD_LIBRARY_PATH}" LD_LIBRARY_PATH="${LD_LIBRARY_PATH}" /scripts/demo-run-nccl-test-tcpxo-via-mpi.sh
+          BENCHMARK=all_gather_perf NHOSTS=8 NCCL_LIB_DIR="${LD_LIBRARY_PATH}" LD_LIBRARY_PATH="${LD_LIBRARY_PATH}" /scripts/demo-run-nccl-test-tcpxo-via-mpi.sh
           EOF
           chmod +x /scripts/allgather.sh
           service ssh restart;
           sleep infinity;
-        env:
-        - name: LD_LIBRARY_PATH
-          value: /usr/local/nvidia/lib64
-        - name: NCCL_FASTRAK_LLCM_DEVICE_DIRECTORY
-          value: /dev/aperture_devices
         volumeMounts:
         - name: nvidia
           mountPath: /usr/local/nvidia/lib64
