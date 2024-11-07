@@ -183,7 +183,6 @@
 
     - name: Run Integration tests for Cluster Toolkit
       ansible.builtin.include_tasks: "{{ test }}"
-      ignore_unreachable: false # end the play when the host is unreachable
       vars:
         remote_node: "{{ remote_node }}"
         deployment_name: "{{ deployment_name }}"
