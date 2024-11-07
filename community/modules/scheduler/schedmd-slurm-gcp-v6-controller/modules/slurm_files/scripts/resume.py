@@ -15,7 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Optional
+from typing import List, Optional, Dict
 import argparse
 import collections
 from datetime import timedelta
@@ -508,7 +508,7 @@ def create_placement_request(pg_name, region):
     return request
 
 
-def create_placement_groups(node_list: list[str], job_id:int=0) -> dict[str, list[str]]:
+def create_placement_groups(node_list: List[str], job_id:int=0) -> Dict[str, List[str]]:
     pgs = {}
     node_map = lookup().nodeset_map(node_list)
     for _, nodes in node_map.items():
@@ -516,7 +516,7 @@ def create_placement_groups(node_list: list[str], job_id:int=0) -> dict[str, lis
     return pgs
 
 
-def create_nodeset_placement_groups(node_list: list[str], job_id:int) -> dict[str, list[str]]:
+def create_nodeset_placement_groups(node_list: List[str], job_id:int) -> Dict[str, List[str]]:
     no_pg = {None: node_list} # canned result for no placement policies created
 
     if len(node_list) < 2:
