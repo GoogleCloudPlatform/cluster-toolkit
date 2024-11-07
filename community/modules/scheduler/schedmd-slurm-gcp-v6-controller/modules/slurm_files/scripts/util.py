@@ -1950,7 +1950,7 @@ class Lookup:
         else:
             duration = None
 
-        if match := re.search(r"JobName=(\w+)", job_info):
+        if match := re.search(r"JobName=([^\n]+)", job_info):
             name = match.group(1)
         else:
             name = None

@@ -268,6 +268,20 @@ def test_nodeset_reservation_ok(nodeset, policies, expected):
                 required_nodes="node-[1-10],grob-pop-[2,1,44-77]"
             ),
         ),
+        (
+            """JobId=131415
+            TimeLimit=1-00:30:00
+            JobName=mynode-1_maintenance
+            JobState=COMPLETED,
+            ReqNodeList=node-[1-10],grob-pop-[2,1,44-77]""",
+            util.Job(
+                id=131415,
+                duration=timedelta(days=1, hours=0, minutes=30, seconds=0),
+                name="mynode-1_maintenance",
+                job_state="COMPLETED",
+                required_nodes="node-[1-10],grob-pop-[2,1,44-77]"
+            ),
+        ),
     ],
 )
 def test_parse_job_info(job_info, expected_job):
