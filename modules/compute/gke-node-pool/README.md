@@ -151,7 +151,7 @@ The following is an example of
       guest_accelerator:
       - gpu_partition_size: 1g.5gb
         gpu_sharing_config:
-        - gpu_sharing_strategy: TIME_SHARING
+          gpu_sharing_strategy: TIME_SHARING
           max_shared_clients_per_gpu: 3
 ```
 
@@ -181,9 +181,9 @@ The following is an example of using a GPU (with sharing config) attached to an 
       - type: nvidia-tesla-t4
         count: 2
         gpu_driver_installation_config:
-        - gpu_driver_version: "LATEST"
+          gpu_driver_version: "LATEST"
         gpu_sharing_config:
-        - max_shared_clients_per_gpu: 2
+          max_shared_clients_per_gpu: 2
           gpu_sharing_strategy: "TIME_SHARING"
 ```
 
