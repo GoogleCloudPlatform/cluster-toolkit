@@ -59,7 +59,6 @@ deployment_groups:
       - cidr_block: $(vars.authorized_cidr)  # Allows your machine run kubectl command. It's required for the multi-network setup.
         display_name: "kubectl-access-network"
       system_node_pool_machine_type: "e2-standard-32"
-      system_node_pool_taints: []
     outputs: [instructions]
 
   - id: group_placement_0
@@ -73,6 +72,19 @@ deployment_groups:
     settings:
       name: $(vars.deployment_name)-gp-np-1
       group_placement_max_distance: 2
+
+  - id: system_pool
+    source: modules/compute/gke-node-pool
+    use: [gke_cluster]
+    settings:
+      name: system-pool
+      machine_type: "e2-standard-16"
+      autoscaling_total_min_nodes: 2
+      autoscaling_total_max_nodes: 8
+      initial_node_count: 2
+      zones: [$(vars.zone)]
+      host_maintenance_interval: PERIODIC
+    outputs: [instructions]
 
   - id: a3_megagpu_pool_np_0
     source: modules/compute/gke-node-pool
