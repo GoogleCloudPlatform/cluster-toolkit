@@ -35,8 +35,15 @@ locals {
   module_unique_id = replace(lower(var.internal_ghpc_module_id), "/[^a-z0-9\\-]/", "")
 }
 
+
+locals {
+  cluster_id_parts = split("/", var.cluster_id)
+  cluster_name     = local.cluster_id_parts[5]
+}
+
+
 data "google_container_cluster" "gke_cluster" {
-  name = split("/", var.cluster_id)[5]
+  name = local.cluster_name
 }
 
 resource "google_container_node_pool" "node_pool" {
