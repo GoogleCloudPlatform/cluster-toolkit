@@ -20,8 +20,7 @@ locals {
 }
 
 locals {
-  preattached_gpu_machine_family = contains(["a2", "a3", "g2"], local.machine_family)
-  has_gpu                        = (local.guest_accelerator != null && length(local.guest_accelerator) > 0) || local.preattached_gpu_machine_family
+  has_gpu = length(local.guest_accelerator) > 0
   gpu_taint = local.has_gpu ? [{
     key    = "nvidia.com/gpu"
     value  = "present"
@@ -86,12 +85,29 @@ resource "google_container_node_pool" "node_pool" {
 
     dynamic "guest_accelerator" {
       for_each = local.guest_accelerator
+      iterator = ga
       content {
-        type                           = coalesce(guest_accelerator.value.type, try(local.generated_guest_accelerator[0].type, ""))
-        count                          = coalesce(try(guest_accelerator.value.count, 0) > 0 ? guest_accelerator.value.count : try(local.generated_guest_accelerator[0].count, "0"))
-        gpu_driver_installation_config = coalescelist(try(guest_accelerator.value.gpu_driver_installation_config, []), [{ gpu_driver_version = "DEFAULT" }])
-        gpu_partition_size             = try(guest_accelerator.value.gpu_partition_size, "")
-        gpu_sharing_config             = try(guest_accelerator.value.gpu_sharing_config, null)
+        type  = coalesce(ga.value.type, try(local.generated_guest_accelerator[0].type, ""))
+        count = coalesce(try(ga.value.count, 0) > 0 ? ga.value.count : try(local.generated_guest_accelerator[0].count, "0"))
+
+        gpu_partition_size = try(ga.value.gpu_partition_size, null)
+
+        dynamic "gpu_driver_installation_config" {
+          for_each = try([ga.gpu_driver_installation_config], [{ gpu_driver_version = "DEFAULT" }])
+          iterator = gdic
+          content {
+            gpu_driver_version = gdic.value.gpu_driver_version
+          }
+        }
+
+        dynamic "gpu_sharing_config" {
+          for_each = try(ga.value.gpu_sharing_config == null, true) ? [] : [ga.value.gpu_sharing_config]
+          iterator = gsc
+          content {
+            gpu_sharing_strategy       = gsc.value.gpu_sharing_strategy
+            max_shared_clients_per_gpu = gsc.value.max_shared_clients_per_gpu
+          }
+        }
       }
     }
 
