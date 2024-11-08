@@ -35,6 +35,10 @@ locals {
   module_unique_id = replace(lower(var.internal_ghpc_module_id), "/[^a-z0-9\\-]/", "")
 }
 
+data "google_container_cluster" "gke_cluster" {
+  name = split("/", var.cluster_id)[5]
+}
+
 resource "google_container_node_pool" "node_pool" {
   provider = google-beta
 
@@ -194,6 +198,10 @@ resource "google_container_node_pool" "node_pool" {
       node_config[0].labels,
       initial_node_count,
     ]
+    precondition {
+      condition     = (var.max_pods_per_node == null) || (data.google_container_cluster.gke_cluster.networking_mode == "VPC_NATIVE")
+      error_message = "max_pods_per_node does not work on `routes-based` clusters, that don't have IP Aliasing enabled."
+    }
     precondition {
       condition     = !local.static_node_set || !local.autoscale_set
       error_message = "static_node_count cannot be set with either autoscaling_total_min_nodes or autoscaling_total_max_nodes."
