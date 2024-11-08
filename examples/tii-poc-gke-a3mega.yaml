@@ -16,6 +16,12 @@
 
 blueprint_name: gke-a3-mega-tii
 
+# GCS bucket for persisting the Terraform state
+terraform_backend_defaults:
+  type: gcs
+  configuration:
+    bucket: <<GCS_BUCKET_NAME>>
+
 vars:
   project_id:  ## Set GCP Project ID Here ##
   deployment_name: gke-a3-mega-tii
