@@ -54,7 +54,6 @@ deployment_groups:
     source: modules/scheduler/gke-cluster
     use: [network1, gpunets]
     settings:
-      enable_private_endpoint: false
       master_authorized_networks:
       - cidr_block: $(vars.authorized_cidr)  # Allows your machine run kubectl command. It's required for the multi-network setup.
         display_name: "kubectl-access-network"
@@ -94,7 +93,6 @@ deployment_groups:
       machine_type: a3-megagpu-8g
       autoscaling_total_min_nodes: 2
       autoscaling_total_max_nodes: 150
-      taints: []
       initial_node_count: 2
       zones: [$(vars.zone)]
       host_maintenance_interval: PERIODIC
@@ -108,7 +106,6 @@ deployment_groups:
       machine_type: a3-megagpu-8g
       autoscaling_total_min_nodes: 2
       autoscaling_total_max_nodes: 150
-      taints: []
       initial_node_count: 2
       zones: [$(vars.zone)]
       host_maintenance_interval: PERIODIC
