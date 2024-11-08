@@ -50,7 +50,7 @@ resource "google_container_cluster" "gke_cluster" {
   name            = local.name
   location        = var.region
   resource_labels = local.labels
-
+  networking_mode = var.networking_mode
   # decouple node pool lifecycle from cluster life cycle
   remove_default_node_pool = true
   initial_node_count       = 1 # must be set when remove_default_node_pool is set
