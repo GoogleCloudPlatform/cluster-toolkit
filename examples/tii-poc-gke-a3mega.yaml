@@ -78,6 +78,10 @@ deployment_groups:
         display_name: "kubectl-access-network"
     outputs: [instructions]
 
+  - id: topology_aware_scheduler_install
+    source: community/modules/compute/gke-topology-scheduler
+    use: [gke_cluster]
+
   - id: a3_megagpu_pool
     source: modules/compute/gke-node-pool
     use: [gke_cluster, gpunets, gke_service_account]
@@ -85,6 +89,7 @@ deployment_groups:
       machine_type: a3-megagpu-8g
       static_node_count: 8
       local_ssd_count_nvme_block: 16
+      disk_size_gb: 200
       reservation_affinity:
         consume_reservation_type: SPECIFIC_RESERVATION
         specific_reservations:
