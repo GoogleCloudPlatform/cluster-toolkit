@@ -161,7 +161,10 @@ resource "google_container_node_pool" "node_pool" {
     reservation_affinity {
       consume_reservation_type = var.reservation_affinity.consume_reservation_type
       key                      = length(local.verified_specific_reservations) != 1 ? null : local.reservation_resource_api_label
-      values                   = length(local.verified_specific_reservations) != 1 ? null : [for i, r in local.verified_specific_reservations : "projects/${r.project}/reservations/${format("%s%s", r.name, local.input_reservation_suffixes[i])}"]
+      values = length(local.verified_specific_reservations) != 1 ? null : [
+        for i, r in local.verified_specific_reservations :
+        (length(local.input_reservation_suffixes[i]) > 0 ? format("%s%s", r.name, local.input_reservation_suffixes[i]) : "projects/${r.project}/reservations/${r.name}")
+      ]
     }
 
     dynamic "host_maintenance_policy" {
@@ -230,6 +233,14 @@ resource "google_container_node_pool" "node_pool" {
       2. Its consumption type must be "specific"
       3. Its VM Properties must match with those of the Node Pool; Machine type, Accelerators (GPU Type and count), Local SSD disk type and count
       EOT
+    }
+    precondition {
+      condition = (
+        (local.input_specific_reservations_count == 0) ||
+        (local.input_specific_reservations_count == 1 && length(local.input_reservation_suffixes) == 0) ||
+        (local.input_specific_reservations_count == 1 && length(local.input_reservation_suffixes) > 0 && try(local.input_reservation_projects[0], var.project_id) == var.project_id)
+      )
+      error_message = "Shared Extended reservations are not supported by GKE."
     }
   }
 }
