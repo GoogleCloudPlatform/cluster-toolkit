@@ -238,7 +238,6 @@ limitations under the License.
 | <a name="module_daos_network_storage_scripts"></a> [daos\_network\_storage\_scripts](#module\_daos\_network\_storage\_scripts) | ../../../../modules/scripts/startup-script | n/a |
 | <a name="module_nodeset_cleanup"></a> [nodeset\_cleanup](#module\_nodeset\_cleanup) | ./modules/cleanup_compute | n/a |
 | <a name="module_nodeset_cleanup_tpu"></a> [nodeset\_cleanup\_tpu](#module\_nodeset\_cleanup\_tpu) | ./modules/cleanup_tpu | n/a |
-| <a name="module_slurm_controller_instance"></a> [slurm\_controller\_instance](#module\_slurm\_controller\_instance) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/_slurm_instance | 6.8.5 |
 | <a name="module_slurm_controller_template"></a> [slurm\_controller\_template](#module\_slurm\_controller\_template) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template | 6.8.5 |
 | <a name="module_slurm_files"></a> [slurm\_files](#module\_slurm\_files) | ./modules/slurm_files | n/a |
 | <a name="module_slurm_login_instance"></a> [slurm\_login\_instance](#module\_slurm\_login\_instance) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/_slurm_instance | 6.8.5 |
@@ -250,6 +249,7 @@ limitations under the License.
 
 | Name | Type |
 |------|------|
+| [google_compute_instance_from_template.controller](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_instance_from_template) | resource |
 | [google_secret_manager_secret.cloudsql](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/secret_manager_secret) | resource |
 | [google_secret_manager_secret_iam_member.cloudsql_secret_accessor](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/secret_manager_secret_iam_member) | resource |
 | [google_secret_manager_secret_version.cloudsql_version](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/secret_manager_secret_version) | resource |
