@@ -28,6 +28,8 @@ vars:
     family: ml-slurm
     project: $(vars.project_id)
   disk_size_gb: 200
+  metadata: # Workaround for https://github.com/GoogleCloudPlatform/cluster-toolkit/discussions/3243
+    VmDnsSetting: GlobalOnly
 
 # Recommended to use GCS backend for Terraform state
 # See https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/examples#optional-setting-up-a-remote-terraform-state
