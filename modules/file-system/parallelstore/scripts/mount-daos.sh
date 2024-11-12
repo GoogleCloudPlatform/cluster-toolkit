@@ -92,7 +92,7 @@ Description=DAOS Mount Service
 After=network-online.target daos_agent.service
 
 [Service]
-Type=oneshot
+Type=simple
 User=root
 Group=root
 ExecStart=/bin/bash -c '$mount_command'
