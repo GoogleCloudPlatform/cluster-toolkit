@@ -16,6 +16,7 @@ import pytest
 from mock import Mock
 from common import TstNodeset, TstCfg # needed to import util
 import util
+from datetime import timedelta
 from google.api_core.client_options import ClientOptions  # noqa: E402
 
 # Note: need to install pytest-mock
@@ -158,14 +159,14 @@ def test_nodeset_reservation_err(nodeset, err):
     with pytest.raises(err):
         lkp.nodeset_reservation(nodeset)
     lkp._get_reservation.assert_not_called()
-    
+
 @pytest.mark.parametrize(
         "nodeset,policies,expected",
         [
             (TstNodeset(), [], None), # no reservation
             (TstNodeset(
                 reservation_name="projects/bobin/reservations/robin",
-                zone_policy_allow=["eine"]), 
+                zone_policy_allow=["eine"]),
                 [],
                 util.ReservationDetails(
                     project="bobin",
@@ -175,7 +176,7 @@ def test_nodeset_reservation_err(nodeset, err):
                     bulk_insert_name="projects/bobin/reservations/robin")),
             (TstNodeset(
                 reservation_name="projects/bobin/reservations/robin",
-                zone_policy_allow=["eine"]), 
+                zone_policy_allow=["eine"]),
                 ["seven/wanders", "five/red/apples", "yum"],
                 util.ReservationDetails(
                     project="bobin",
@@ -185,7 +186,7 @@ def test_nodeset_reservation_err(nodeset, err):
                     bulk_insert_name="projects/bobin/reservations/robin")),
             (TstNodeset(
                 reservation_name="projects/bobin/reservations/robin/snek/cheese-brie-6",
-                zone_policy_allow=["eine"]), 
+                zone_policy_allow=["eine"]),
                 [],
                 util.ReservationDetails(
                     project="bobin",
@@ -199,16 +200,90 @@ def test_nodeset_reservation_err(nodeset, err):
 def test_nodeset_reservation_ok(nodeset, policies, expected):
     lkp = util.Lookup(TstCfg())
     lkp._get_reservation = Mock()
-    
+
     if not expected:
         assert lkp.nodeset_reservation(nodeset) is None
         lkp._get_reservation.assert_not_called()
         return
-    
+
     lkp._get_reservation.return_value = {
         "resourcePolicies": {i: p for i, p in enumerate(policies)},
     }
     assert lkp.nodeset_reservation(nodeset) == expected
     lkp._get_reservation.assert_called_once_with(expected.project, expected.zone, expected.name)
-    
-    
+
+
+@pytest.mark.parametrize(
+    "job_info,expected_job",
+    [
+        (
+            """JobId=123
+            TimeLimit=02:00:00
+            JobName=myjob
+            JobState=PENDING
+            ReqNodeList=node-[1-10]""",
+            util.Job(
+                id=123,
+                duration=timedelta(days=0, hours=2, minutes=0, seconds=0),
+                name="myjob",
+                job_state="PENDING",
+                required_nodes="node-[1-10]"
+            ),
+        ),
+        (
+            """JobId=456
+            JobName=anotherjob
+            JobState=PENDING
+            ReqNodeList=node-group1""",
+            util.Job(
+                id=456,
+                duration=None,
+                name="anotherjob",
+                job_state="PENDING",
+                required_nodes="node-group1"
+            ),
+        ),
+        (
+            """JobId=789
+            TimeLimit=00:30:00
+            JobState=COMPLETED""",
+            util.Job(
+                id=789,
+                duration=timedelta(minutes=30),
+                name=None,
+                job_state="COMPLETED",
+                required_nodes=None
+            ),
+        ),
+        (
+            """JobId=101112
+            TimeLimit=1-00:30:00
+            JobState=COMPLETED,
+            ReqNodeList=node-[1-10],grob-pop-[2,1,44-77]""",
+            util.Job(
+                id=101112,
+                duration=timedelta(days=1, hours=0, minutes=30, seconds=0),
+                name=None,
+                job_state="COMPLETED",
+                required_nodes="node-[1-10],grob-pop-[2,1,44-77]"
+            ),
+        ),
+        (
+            """JobId=131415
+            TimeLimit=1-00:30:00
+            JobName=mynode-1_maintenance
+            JobState=COMPLETED,
+            ReqNodeList=node-[1-10],grob-pop-[2,1,44-77]""",
+            util.Job(
+                id=131415,
+                duration=timedelta(days=1, hours=0, minutes=30, seconds=0),
+                name="mynode-1_maintenance",
+                job_state="COMPLETED",
+                required_nodes="node-[1-10],grob-pop-[2,1,44-77]"
+            ),
+        ),
+    ],
+)
+def test_parse_job_info(job_info, expected_job):
+    lkp = util.Lookup(TstCfg())
+    assert lkp._parse_job_info(job_info) == expected_job

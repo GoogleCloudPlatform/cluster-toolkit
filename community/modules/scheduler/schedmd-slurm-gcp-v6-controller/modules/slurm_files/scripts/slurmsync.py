@@ -334,13 +334,14 @@ def sync_placement_groups():
             "STOPPED",
             "SUSPENDED",
             "COMPLETING",
+            "PENDING",
         ]
     )
 
     keep_jobs = {
-        str(job["job_id"])
-        for job in json.loads(run(f"{lookup().scontrol} show jobs --json").stdout)["jobs"]
-        if "job_state" in job and set(job["job_state"]) & keep_states
+        str(job.id)
+        for job in lookup().get_jobs()
+        if job.job_state in keep_states
     }
     keep_jobs.add("0")  # Job 0 is a placeholder for static node placement
 
