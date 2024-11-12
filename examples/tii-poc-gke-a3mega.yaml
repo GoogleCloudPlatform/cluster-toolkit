@@ -78,6 +78,16 @@ deployment_groups:
         display_name: "kubectl-access-network"
     outputs: [instructions]
 
+  - id: default_pool # default node pool for non GPU workload
+    source: modules/compute/gke-node-pool
+    use: [gke_cluster, gke_service_account]
+    settings:
+      name: default-pool
+      machine_type: e2-standard-4
+      autoscaling_total_min_nodes: 2
+      zones: [$(vars.zone)]
+    outputs: [instructions]
+
   - id: topology_aware_scheduler_install
     source: community/modules/compute/gke-topology-scheduler
     use: [gke_cluster]
