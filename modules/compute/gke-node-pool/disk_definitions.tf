@@ -22,8 +22,8 @@
 locals {
 
   local_ssd_machines = {
-    "a3-highgpu-8g"  = { local_ssd_count_ephemeral_storage = 16, local_ssd_count_nvme_block = null },
-    "a3-megagpu-8g"  = { local_ssd_count_ephemeral_storage = 16, local_ssd_count_nvme_block = null },
+    "a3-highgpu-8g"  = { local_ssd_count_ephemeral_storage = null, local_ssd_count_nvme_block = 16 },
+    "a3-megagpu-8g"  = { local_ssd_count_ephemeral_storage = null, local_ssd_count_nvme_block = 16 },
     "a3-ultragpu-8g" = { local_ssd_count_ephemeral_storage = 32, local_ssd_count_nvme_block = null },
   }
 

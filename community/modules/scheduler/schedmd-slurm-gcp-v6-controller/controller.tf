@@ -99,7 +99,7 @@ locals {
 }
 
 module "slurm_controller_instance" {
-  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/_slurm_instance?ref=6.8.2"
+  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/_slurm_instance?ref=6.8.5"
 
   access_config       = var.enable_controller_public_ips ? [local.access_config] : []
   add_hostname_suffix = false

@@ -70,9 +70,9 @@ deployment_groups:
       machine_type: g2-standard-4
       guest_accelerator:
       - gpu_driver_installation_config:
-        - gpu_driver_version: "LATEST"
+          gpu_driver_version: "LATEST"
         gpu_sharing_config:
-        - max_shared_clients_per_gpu: 2
+          max_shared_clients_per_gpu: 2
           gpu_sharing_strategy: "MPS"
 
   - id: job_template_g2_latest_driver
@@ -131,9 +131,9 @@ deployment_groups:
       - type: nvidia-tesla-t4
         count: 2
         gpu_driver_installation_config:
-        - gpu_driver_version: "LATEST"
+          gpu_driver_version: "LATEST"
         gpu_sharing_config:
-        - max_shared_clients_per_gpu: 2
+          max_shared_clients_per_gpu: 2
           gpu_sharing_strategy: "TIME_SHARING"
 
   - id: job_template_n1_pool_full_spec

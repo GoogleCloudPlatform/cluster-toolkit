@@ -216,7 +216,7 @@ the experimental badge (![experimental-badge]).
 >
 > ```shell
 > # Install Python3 and run
-> pip3 install -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/5.12.1/scripts/requirements.txt
+> pip3 install -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/5.12.2/scripts/requirements.txt
 > ```
 
 Creates a basic auto-scaling Slurm cluster with mostly default settings. The
@@ -583,7 +583,7 @@ An example benchmarking job for PyTorch can be run under Slurm:
 
 ```shell
 cp /var/tmp/torch_test.* .
-sbatch -N 1 torch_test.sh
+sbatch -N 1 --gpus-per-node=1 torch_test.sh
 ```
 
 When you are done, clean up the resources in reverse order of creation:
@@ -632,7 +632,7 @@ An example benchmarking job for PyTorch can be run under Slurm:
 
 ```shell
 cp /var/tmp/torch_test.* .
-sbatch -N 1 torch_test.sh
+sbatch -N 1 --gpus-per-node=1 torch_test.sh
 ```
 
 When you are done, clean up the resources in reverse order of creation:
@@ -1149,7 +1149,7 @@ The blueprint contains 3 groups:
 >
 > ```shell
 > # Install Python3 and run
-> pip3 install -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/5.12.1/scripts/requirements.txt
+> pip3 install -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/5.12.2/scripts/requirements.txt
 > ```
 
 Similar to the [hpc-slurm-v5-legacy.yaml] example, but using Ubuntu 20.04 instead of CentOS 7.
@@ -1463,10 +1463,10 @@ guest_accelerator:
 - type: nvidia-l4
   count: 1
   gpu_sharing_config:
-  - max_shared_clients_per_gpu: 2
+    max_shared_clients_per_gpu: 2
     gpu_sharing_strategy: "TIME_SHARING"
   gpu_driver_installation_config:
-  - gpu_driver_version: "LATEST"
+    gpu_driver_version: "LATEST"
 ```
 
 * Configuration of the cluster using default drivers provided by GKE.

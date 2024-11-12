@@ -79,16 +79,32 @@ variable "guest_accelerator" {
   type = list(object({
     type  = optional(string)
     count = optional(number, 0)
-    gpu_driver_installation_config = optional(list(object({
+    gpu_driver_installation_config = optional(object({
       gpu_driver_version = string
-    })))
+    }), { gpu_driver_version = "DEFAULT" })
     gpu_partition_size = optional(string)
-    gpu_sharing_config = optional(list(object({
-      gpu_sharing_strategy       = optional(string)
-      max_shared_clients_per_gpu = optional(number)
-    })))
+    gpu_sharing_config = optional(object({
+      gpu_sharing_strategy       = string
+      max_shared_clients_per_gpu = number
+    }))
   }))
-  default = null
+  default  = []
+  nullable = false
+
+  validation {
+    condition     = alltrue([for ga in var.guest_accelerator : ga.count != null])
+    error_message = "var.guest_accelerator[*].count cannot be null"
+  }
+
+  validation {
+    condition     = alltrue([for ga in var.guest_accelerator : ga.count >= 0])
+    error_message = "var.guest_accelerator[*].count must never be negative"
+  }
+
+  validation {
+    condition     = alltrue([for ga in var.guest_accelerator : ga.gpu_driver_installation_config != null])
+    error_message = "var.guest_accelerator[*].gpu_driver_installation_config must not be null; leave unset to enable GKE to select default GPU driver installation"
+  }
 }
 
 variable "image_type" {
@@ -230,11 +246,7 @@ variable "taints" {
     value  = any
     effect = string
   }))
-  default = [{
-    key    = "user-workload"
-    value  = true
-    effect = "NO_SCHEDULE"
-  }]
+  default = []
 }
 
 variable "labels" {
