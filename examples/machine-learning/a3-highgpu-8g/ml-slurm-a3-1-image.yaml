@@ -82,7 +82,7 @@ deployment_groups:
             "reboot": false,
             "install_cuda": false,
             "install_gcsfuse": true,
-            "install_lustre": true,
+            "install_lustre": false,
             "install_ompi": true,
             "monitoring_agent": "cloud-ops",
             "nvidia_version": "latest",
