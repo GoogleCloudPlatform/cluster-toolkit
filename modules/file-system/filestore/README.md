@@ -12,7 +12,7 @@ Toolkit, see the extended [Network Storage documentation](../../../docs/network_
 We recommend considering enabling [Filestore deletion protection][fdp]. Deletion
 protection will prevent unintentional deletion of an entire Filestore instance.
 It does not prevent deletion of files within the Filestore instance when mounted
-by a VM. It ss not available on some [tiers](#filestore-tiers), including the
+by a VM. It is not available on some [tiers](#filestore-tiers), including the
 default BASIC\_HDD tier or BASIC\_SSD tier. Follow the documentation link for
 up to date details.
 
