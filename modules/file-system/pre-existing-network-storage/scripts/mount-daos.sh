@@ -41,6 +41,17 @@ sed -i "s/#.*transport_config/transport_config/g" $daos_config
 sed -i "s/#.*allow_insecure:.*false/  allow_insecure: true/g" $daos_config
 sed -i "s/.*access_points.*/access_points: $access_points/g" $daos_config
 
+# Get interface names with "s0f0" suffix
+if ifconfig -a | grep 's0f0'; then
+	sof0_interfaces=$(ifconfig -a | grep 's0f0:' | awk '{print $1}' | tr ':' '\n' | grep -v '^$' | awk '!a[$0]++' | sed 's/^/"/g' | sed 's/$/"/g' | paste -sd, -)
+
+	# Append the sof0_interfaces to the existing list
+	exclude_fabric_ifaces="lo,$sof0_interfaces"
+
+	# Update the file with the new list
+	sed -i "s/#.*exclude_fabric_ifaces: \[.*/exclude_fabric_ifaces: [$exclude_fabric_ifaces]/" $daos_config
+fi
+
 # Start service
 if { [ "${OS_ID}" = "rocky" ] || [ "${OS_ID}" = "rhel" ]; } && { [ "${OS_VERSION_MAJOR}" = "8" ] || [ "${OS_VERSION_MAJOR}" = "9" ]; }; then
 	# TODO: Update script to change default log destination folder, after daos_agent user is supported in debian and ubuntu.
@@ -69,39 +80,33 @@ sed -i "s/#.*user_allow_other/user_allow_other/g" $fuse_config
 # make sure limit of open files is high enough for dfuse (1M of open files)
 ulimit -n 1048576
 
-for i in {1..10}; do
-	# To parse mount_options as --disable-wb-cache --eq-count=8.
-	# shellcheck disable=SC2086
-	dfuse -m "$local_mount" --pool default-pool --container default-container --multi-user $mount_options && break
-
-	echo "dfuse failed, retrying in 1 seconds (attempt $i/10)..."
-	sleep 1
-done
-
-if ! mountpoint -q "$local_mount"; then
-	exit 1
-fi
-
 # Store the mounting logic in a variable
-mount_command='for i in {1..10}; do /bin/dfuse -m '$local_mount' --pool default-pool --container default-container --multi-user '$mount_options' --foreground && break; echo \"dfuse, failed, retrying in 1 second (attempt '$i'/10)\"; sleep 1; done'
+mount_command="if mountpoint -q '$local_mount'; then fusermount3 -u '$local_mount'; fi; for i in {1..10}; do /bin/dfuse -m '$local_mount' --pool default-pool --container default-container --multi-user $mount_options --foreground && break; sleep 1; done"
+
+# Construct the service name with the local_mount suffix
+service_name="mount_parallelstore_${local_mount//\//_}.service"
 
 # --- Begin: Add systemd service creation ---
-cat >/usr/lib/systemd/system/mount_parallelstore.service <<EOF
+cat >/usr/lib/systemd/system/"${service_name}" <<EOF
 [Unit]
 Description=DAOS Mount Service
 After=network-online.target daos_agent.service
 
 [Service]
-Type=oneshot
+Type=simple
 User=root
 Group=root
-ExecStart=/bin/bash -c '$mount_command'
+Restart=always
+RestartSec=1
+ExecStart=/bin/bash -c "$mount_command"
+ExecStop=fusermount3 -u '$local_mount'
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-systemctl enable mount_parallelstore.service
+systemctl enable "${service_name}"
+systemctl start "${service_name}"
 # --- End: Add systemd service creation ---
 
 exit 0
