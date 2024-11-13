@@ -25,7 +25,7 @@ tags:
 - m.startup-script
 - slurm5
 
-timeout: 14400s  # 4hr
+timeout: 18000s  # 5hr
 steps:
 # test image creation by provisioning a new VPC and using Packer to build an
 # image in it

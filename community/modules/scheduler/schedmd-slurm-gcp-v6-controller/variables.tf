@@ -196,18 +196,19 @@ variable "nodeset" {
       auto_delete  = optional(bool, true)
       boot         = optional(bool, false)
     })), [])
-    bandwidth_tier                 = optional(string, "platform_default")
-    can_ip_forward                 = optional(bool, false)
-    disable_smt                    = optional(bool, false)
-    disk_auto_delete               = optional(bool, true)
-    disk_labels                    = optional(map(string), {})
-    disk_size_gb                   = optional(number)
-    disk_type                      = optional(string)
-    enable_confidential_vm         = optional(bool, false)
-    enable_placement               = optional(bool, false)
-    enable_oslogin                 = optional(bool, true)
-    enable_shielded_vm             = optional(bool, false)
-    enable_maintenance_reservation = optional(bool, true)
+    bandwidth_tier                   = optional(string, "platform_default")
+    can_ip_forward                   = optional(bool, false)
+    disable_smt                      = optional(bool, false)
+    disk_auto_delete                 = optional(bool, true)
+    disk_labels                      = optional(map(string), {})
+    disk_size_gb                     = optional(number)
+    disk_type                        = optional(string)
+    enable_confidential_vm           = optional(bool, false)
+    enable_placement                 = optional(bool, false)
+    enable_oslogin                   = optional(bool, true)
+    enable_shielded_vm               = optional(bool, false)
+    enable_maintenance_reservation   = optional(bool, false)
+    enable_opportunistic_maintenance = optional(bool, false)
     gpu = optional(object({
       count = number
       type  = string
@@ -425,8 +426,6 @@ variable "cloud_parameters" {
 variable "enable_default_mounts" {
   description = <<-EOD
     Enable default global network storage from the controller
-    - /usr/local/etc/slurm
-    - /etc/munge
     - /home
     - /apps
     Warning: If these are disabled, the slurm etc and munge dirs must be added

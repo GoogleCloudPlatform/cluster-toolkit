@@ -76,4 +76,16 @@ locals {
   # Know that in map comparison the order of keys does not matter. That is {NVME: x, SCSI: y} and {SCSI: y, NVME: x} are equal
   # As of this writing, there is only one reservation supported by the Node Pool API. So, directly accessing it from the list
   specific_reservation_requirement_violations = length(local.reservation_vm_properties) == 0 ? [] : [for k, v in local.nodepool_vm_properties : k if v != local.reservation_vm_properties[0][k]]
+
+  specific_reservation_requirement_violation_messages = {
+    "machine_type" : <<-EOT
+    The reservation has "${try(local.reservation_vm_properties[0].machine_type, "")}" machine type and the node pool has "${local.nodepool_vm_properties.machine_type}". Check the relevant node pool setting: "machine_type"
+    EOT
+    "guest_accelerators" : <<-EOT
+    The reservation has ${jsonencode(try(local.reservation_vm_properties[0].guest_accelerators, {}))} accelerators and the node pool has ${jsonencode(try(local.nodepool_vm_properties.guest_accelerators, {}))}. Check the relevant node pool setting: "guest_accelerator". When unspecified, for the machine_type=${var.machine_type}, the default is guest_accelerator=${jsonencode(try(local.generated_guest_accelerator, [{}]))}.
+    EOT
+    "local_ssds" : <<-EOT
+    The reservation has ${jsonencode(try(local.reservation_vm_properties[0].local_ssds, {}))} local SSDs and the node pool has ${jsonencode(try(local.nodepool_vm_properties.local_ssds, {}))}. Check the relevant node pool settings: {local_ssd_count_ephemeral_storage, local_ssd_count_nvme_block}. When unspecified, for the machine_type=${var.machine_type} the defaults are: {local_ssd_count_ephemeral_storage=${coalesce(local.generated_local_ssd_config.local_ssd_count_ephemeral_storage, 0)}, local_ssd_count_nvme_block=${coalesce(local.generated_local_ssd_config.local_ssd_count_nvme_block, 0)}}.
+    EOT
+  }
 }

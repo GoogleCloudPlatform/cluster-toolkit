@@ -1,4 +1,5 @@
-# Copyright 2023 Google LLC
+#!/bin/bash
+# Copyright 2024 "Google LLC"
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,24 +13,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-terraform {
-  required_version = ">= 1.5"
+#filename: install.sh
+#submit with `sbatch install.sh`
 
-  required_providers {
-    google = {
-      source  = "hashicorp/google"
-      version = "> 5"
-    }
-    google-beta = {
-      source  = "hashicorp/google-beta"
-      version = "> 5"
-    }
-    null = {
-      source  = "hashicorp/null"
-      version = "~> 3.0"
-    }
-  }
-  provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:gke-node-pool/v1.41.0"
-  }
-}
+#SBATCH --partition=a3mega
+#SBATCH --gpus-per-node=8
+#SBATCH --ntasks-per-node=1
+#SBATCH --nodes 1
+
+python3 -m venv env
+source env/bin/activate
+pip3 install --pre torch torchvision torchaudio
