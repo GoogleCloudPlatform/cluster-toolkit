@@ -41,7 +41,7 @@ steps:
     cd /workspace && make
     BUILD_ID_FULL=$BUILD_ID
     BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
-    SG_EXAMPLE=examples/storage-gke.yaml
+    SG_EXAMPLE=tools/cloud-build/daily-tests/blueprints/storage-gke.yaml/storage-gke.yaml
 
     # adding vm to act as remote node
     echo '  - id: remote-node'                     >> $${SG_EXAMPLE}
