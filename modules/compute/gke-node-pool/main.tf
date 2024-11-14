@@ -94,7 +94,7 @@ resource "google_container_node_pool" "node_pool" {
 
         dynamic "gpu_driver_installation_config" {
           # in case user did not specify guest_accelerator settings, we need a try to default to []
-          for_each = coalescelist(try([ga.value.gpu_driver_installation_config], []), [{ gpu_driver_version = "DEFAULT" }])
+          for_each = try([ga.value.gpu_driver_installation_config], [{ gpu_driver_version = "DEFAULT" }])
           iterator = gdic
           content {
             gpu_driver_version = gdic.value.gpu_driver_version
