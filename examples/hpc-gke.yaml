@@ -52,6 +52,7 @@ deployment_groups:
     use: [network1, gke_service_account]
     settings:
       enable_private_endpoint: false  # Allows for access from authorized public IPs
+      gcp_public_cidrs_access_enabled: $(vars.gcp_public_cidrs_access_enabled)
     outputs: [instructions]
 
   - id: compute_pool

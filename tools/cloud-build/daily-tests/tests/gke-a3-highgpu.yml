@@ -19,7 +19,7 @@
 test_name: gke-a3high
 deployment_name: gke-a3high-{{ build }}
 workspace: /workspace
-blueprint_yaml: "{{ workspace }}/tools/cloud-build/daily-tests/blueprints/gke-a3-highgpu.yaml"
+blueprint_yaml: "{{ workspace }}/examples/gke-a3-highgpu.yaml"
 network: "gke-a3high-net-{{ build }}"
 region: us-west1
 zone: us-west1-a

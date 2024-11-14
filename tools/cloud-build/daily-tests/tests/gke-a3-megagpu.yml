@@ -19,7 +19,7 @@
 test_name: gke-a3mega
 deployment_name: gke-a3mega-{{ build }}
 workspace: /workspace
-blueprint_yaml: "{{ workspace }}/tools/cloud-build/daily-tests/blueprints/gke-a3-megagpu.yaml"
+blueprint_yaml: "{{ workspace }}/examples/gke-a3-megagpu.yaml"
 network: "gke-a3mega-net-{{ build }}"
 region: us-west4
 zone: us-west4-a
