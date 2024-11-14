@@ -81,6 +81,8 @@ deployment_groups:
     source: modules/scheduler/gke-cluster
     use: [network1, gpunets, gke_service_account]
     settings:
+      release_channel: RAPID
+      min_master_version: 1.31.2-gke.1384000 # latest release with GKE support for Report & Repair
       enable_parallelstore_csi: true # enable Parallelstore for the cluster
       enable_private_endpoint: false  # Allows for access from authorized public IPs
       master_authorized_networks:
