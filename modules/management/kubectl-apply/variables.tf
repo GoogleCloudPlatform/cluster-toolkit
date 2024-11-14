@@ -49,7 +49,7 @@ variable "kueue" {
 
   validation {
     condition     = !var.kueue.install || contains(["v0.9.0", "v0.8.1"], var.kueue.version)
-    error_message = "Supported version of Kueue is v0.9.0"
+    error_message = "Default Supported version of Kueue is v0.9.0. Cluster toolkit also supports v0.8.1"
   }
 }
 
