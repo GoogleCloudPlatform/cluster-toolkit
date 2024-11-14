@@ -77,4 +77,4 @@ RUN echo $PATH
 
 # Command to execute when running the container (placeholder)
 ENTRYPOINT ["gcluster"]
-CMD ["--version"]
+CMD ["--help"]
