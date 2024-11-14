@@ -142,7 +142,7 @@ variable "disk_labels" {
 }
 
 variable "additional_disks" {
-  description = "Configurations of additional disks to be included on the partition nodes. (do not use \"disk_type: local-ssd\"; known issue being addressed)"
+  description = "Configurations of additional disks to be included on the partition nodes."
   type = list(object({
     disk_name    = string
     device_name  = string
