@@ -93,7 +93,7 @@ resource "google_container_node_pool" "node_pool" {
         gpu_partition_size = try(ga.value.gpu_partition_size, null)
 
         dynamic "gpu_driver_installation_config" {
-          for_each = try([ga.gpu_driver_installation_config], [{ gpu_driver_version = "DEFAULT" }])
+          for_each = coalescelist([ga.value.gpu_driver_installation_config], [{ gpu_driver_version = "DEFAULT" }])
           iterator = gdic
           content {
             gpu_driver_version = gdic.value.gpu_driver_version
