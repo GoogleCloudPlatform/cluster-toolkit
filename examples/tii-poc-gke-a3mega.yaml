@@ -33,13 +33,13 @@ vars:
   authorized_cidr: <your-ip-address>/32
 
 deployment_groups:
-- group: primary
+- group: setup
   modules:
   - id: network1
     source: modules/network/vpc
     settings:
       subnetwork_name: gke-subnet-a3-mega-tii
-      mtu: 8244
+      mtu: 8896
       secondary_ranges:
         gke-subnet-a3-mega-tii:
         - range_name: pods
@@ -47,6 +47,15 @@ deployment_groups:
         - range_name: services
           ip_cidr_range: 10.0.32.0/20
 
+  - id: private_service_access # required for parallelstore
+    source: community/modules/network/private-service-access
+    use: [network1]
+    settings:
+      prefix_length: 24
+
+
+- group: primary
+  modules:
   - id: gke_service_account
     source: community/modules/project/service-account
     settings:
@@ -72,11 +81,25 @@ deployment_groups:
     source: modules/scheduler/gke-cluster
     use: [network1, gpunets, gke_service_account]
     settings:
+      enable_parallelstore_csi: true # enable Parallelstore for the cluster
       enable_private_endpoint: false  # Allows for access from authorized public IPs
       master_authorized_networks:
       - cidr_block: $(vars.authorized_cidr)  # Allows your machine run kubectl command. It's required for the multi-network setup.
         display_name: "kubectl-access-network"
     outputs: [instructions]
+
+  ### Set up storage class and persistent volume claim for Parallelstore ###
+  - id: parallelstore-setup
+    source: modules/file-system/gke-storage
+    use: [gke_cluster, private_service_access]
+    settings:
+      storage_type: Parallelstore
+      access_mode: ReadWriteMany
+      sc_volume_binding_mode: Immediate
+      sc_reclaim_policy: Retain # Use Retain if you want to volume and parallelstore resource will remain after
+      sc_topology_zones: [$(vars.zone)]
+      pvc_count: 1
+      capacity_gb: 100000 # from 12,000 GiB to 100,000 GiB, in multiples of 4,000 GiB
 
   - id: default_pool # default node pool for non GPU workload
     source: modules/compute/gke-node-pool
