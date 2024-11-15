@@ -39,11 +39,13 @@ locals {
 locals {
   cluster_id_parts = split("/", var.cluster_id)
   cluster_name     = local.cluster_id_parts[5]
+  cluster_location = local.cluster_id_parts[5]
 }
 
 
 data "google_container_cluster" "gke_cluster" {
-  name = local.cluster_name
+  name     = local.cluster_name
+  location = local.cluster_location
 }
 
 resource "google_container_node_pool" "node_pool" {

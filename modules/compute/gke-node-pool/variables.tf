@@ -371,7 +371,7 @@ variable "gke_version" {
 }
 
 variable "max_pods_per_node" {
-  description = "The maximum number of pods per node in this node pool. This setting is immutable."
+  description = "The maximum number of pods per node in this node pool. This will force replacement."
   type        = number
   default     = null
 }
