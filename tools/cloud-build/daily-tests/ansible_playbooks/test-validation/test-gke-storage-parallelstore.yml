@@ -39,3 +39,15 @@
 - name: Print job_completion debug output
   ansible.builtin.debug:
     var: job_completion.stdout_lines
+
+- name: Get job detail on failure
+  delegate_to: localhost
+  ansible.builtin.command: |
+    kubectl get job
+  register: job_detail
+  when: job_completion.stdout_lines | length <= 1
+
+- name: Print job_detail debug output
+  ansible.builtin.debug:
+    var: job_detail.stdout_lines
+  when: job_detail.stdout_lines is defined
