@@ -58,8 +58,8 @@ ENV GOPATH /go
 ENV PATH $PATH:/usr/local/go/bin:$GOPATH/bin
 
 # Clone the Cluster Toolkit repository
-ARG CLUSTER_TOOLKIT_VERSION=main
-RUN git clone --branch ${CLUSTER_TOOLKIT_VERSION} https://github.com/GoogleCloudPlatform/cluster-toolkit.git /cluster-toolkit
+ARG CLUSTER_TOOLKIT_REF=main
+RUN git clone --branch ${CLUSTER_TOOLKIT_REF} https://github.com/GoogleCloudPlatform/cluster-toolkit.git /cluster-toolkit
 
 # Create and activate the virtual environment within the gcluster folder
 WORKDIR /cluster-toolkit
