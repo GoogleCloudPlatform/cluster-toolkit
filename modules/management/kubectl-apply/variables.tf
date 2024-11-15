@@ -14,6 +14,19 @@
   * limitations under the License.
   */
 
+locals {
+  supported_versions = ["v0.9.0", "v0.8.1"]
+}
+
+resource "terraform_data" "kueue_validations" {
+  lifecycle {
+    precondition {
+      condition     = !var.kueue.install || contains(local.supported_versions, var.kueue.version)
+      error_message = "Supported version of Kueue are ${join(", ", local.supported_versions)}"
+    }
+  }
+}
+
 variable "project_id" {
   description = "The project ID that hosts the gke cluster."
   type        = string
@@ -37,20 +50,17 @@ variable "apply_manifests" {
   default = []
 }
 
+
 variable "kueue" {
   description = "Install and configure [Kueue](https://kueue.sigs.k8s.io/docs/overview/) workload scheduler. A configuration yaml/template file can be provided with config_path to be applied right after kueue installation. If a template file provided, its variables can be set to config_template_vars."
   type = object({
     install              = optional(bool, false)
-    version              = optional(string, "v0.9.0")
+    version              = optional(string, "v0.8.1")
     config_path          = optional(string, null)
     config_template_vars = optional(map(any), null)
   })
   default = {}
 
-  validation {
-    condition     = !var.kueue.install || contains(["v0.9.0", "v0.8.1"], var.kueue.version)
-    error_message = "Default Supported version of Kueue is v0.9.0. Cluster toolkit also supports v0.8.1"
-  }
 }
 
 variable "jobset" {
