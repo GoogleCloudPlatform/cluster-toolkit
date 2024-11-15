@@ -39,7 +39,7 @@ locals {
 locals {
   cluster_id_parts = split("/", var.cluster_id)
   cluster_name     = local.cluster_id_parts[5]
-  cluster_location = local.cluster_id_parts[5]
+  cluster_location = local.cluster_id_parts[3]
 }
 
 
