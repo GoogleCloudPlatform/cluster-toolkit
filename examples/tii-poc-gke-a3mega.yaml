@@ -57,6 +57,19 @@ deployment_groups:
 
 - group: primary
   modules:
+  # allow parallelstore connection
+  - id: parallelstore_firewall_rule
+    source: modules/network/firewall-rules
+    use: [network1]
+    settings:
+      ingress_rules:
+      - name: $(vars.deployment_name)-allow-parallelstore-traffic
+        description: Allow parallelstore traffic
+        source_ranges:
+        - $(private_service_access.cidr_range)
+        allow:
+        - protocol: tcp
+
   - id: gke_service_account
     source: community/modules/project/service-account
     settings:
@@ -109,7 +122,7 @@ deployment_groups:
     use: [gke_cluster, gke_service_account]
     settings:
       name: default-pool
-      machine_type: e2-standard-4
+      machine_type: e2-standard-16
       autoscaling_total_min_nodes: 2
       zones: [$(vars.zone)]
     outputs: [instructions]
@@ -134,3 +147,12 @@ deployment_groups:
           project: $(vars.project_id)
       zones: [$(vars.zone)]
     outputs: [instructions]
+
+  - id: workload_manager_install
+    source: modules/management/kubectl-apply
+    use: [gke_cluster]
+    settings:
+      kueue:
+        install: true
+      jobset:
+        install: true
