@@ -353,7 +353,7 @@ def sync_placement_groups():
     op = act.aggregatedList(project=lookup().project, fields=fields, filter=flt)
     placement_groups = {}
     pg_regex = re.compile(
-        rf"{lookup().cfg.slurm_cluster_name}-(?P<partition>[^\s\-]+)-(?P<job_id>\d+)-(?P<index>\d+)"
+        rf"{lookup().cfg.slurm_cluster_name}-slurmgcp-managed-(?P<partition>[^\s\-]+)-(?P<job_id>\d+)-(?P<index>\d+)"
     )
     while op is not None:
         result = ensure_execute(op)
