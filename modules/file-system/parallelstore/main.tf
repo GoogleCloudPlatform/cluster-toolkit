@@ -42,7 +42,7 @@ locals {
       local_mount       = var.local_mount
       mount_options     = join(" ", [for opt in split(",", var.mount_options) : "--${opt}"])
     })
-    "destination" = "mount_daos.sh"
+    "destination" = "mount_filesystem${replace(var.local_mount, "/", "_")}.sh"
   }
 }
 
