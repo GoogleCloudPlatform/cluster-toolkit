@@ -88,6 +88,7 @@ No modules.
 
 | Name | Description |
 |------|-------------|
+| <a name="output_cidr_range"></a> [cidr\_range](#output\_cidr\_range) | CIDR range of the created google\_compute\_global\_address |
 | <a name="output_connect_mode"></a> [connect\_mode](#output\_connect\_mode) | Services that use Private Service Access typically specify connect\_mode<br/>"PRIVATE\_SERVICE\_ACCESS". This output value sets connect\_mode and additionally<br/>blocks terraform actions until the VPC connection has been created. |
 | <a name="output_private_vpc_connection_peering"></a> [private\_vpc\_connection\_peering](#output\_private\_vpc\_connection\_peering) | The name of the VPC Network peering connection that was created by the service provider. |
 | <a name="output_reserved_ip_range"></a> [reserved\_ip\_range](#output\_reserved\_ip\_range) | Named IP range to be used by services connected with Private Service Access. |
