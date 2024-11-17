@@ -98,6 +98,7 @@ deployment_groups:
       min_master_version: 1.30.4-gke.1348000
       enable_gcsfuse_csi: true
       enable_parallelstore_csi: true
+      enable_dcgm_monitoring: true
       enable_private_endpoint: false  # Allows for access from authorized public IPs
       master_authorized_networks:
       - cidr_block: $(vars.authorized_cidr)  # Allows your machine run kubectl command. It's required for the multi-network setup.
