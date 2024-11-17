@@ -116,6 +116,29 @@ compute API. You can update the API version from your blueprint,
         compute: "alpha"
 ```
 
+## Opportunistic GCP maintenance in Slurm
+
+Customers can also enable running GCP maintenance as Slurm job opportunistically
+to perform early maintenance. If a node is detected for maintenance, Slurm will
+create a job to perform maintenance and put it in the job queue.
+
+If [backfill](https://slurm.schedmd.com/sched_config.html#backfill) scheduler is
+used, Slurm will backfill maintenance job if it can find any empty time window.
+
+Customer can also choose builtin scheduler type. In this case, Slurm would run
+maintenance job in strictly priority order. If the maintenance job doesn't kick
+in, then forced maintenance will take place at scheduled window.
+
+Customer can enable this feature at nodeset level by,
+
+```yaml
+  - id: debug_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network]
+    settings:
+      enable_opportunistic_maintenance: true
+```
+
 ## Placement Max Distance
 
 When using
