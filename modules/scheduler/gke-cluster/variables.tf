@@ -139,6 +139,12 @@ variable "enable_dcgm_monitoring" {
   default     = false
 }
 
+variable "enable_node_local_dns_cache" {
+  description = "Enable GKE NodeLocal DNSCache addon to improve DNS lookup latency"
+  type        = bool
+  default     = false
+}
+
 variable "system_node_pool_enabled" {
   description = "Create a system node pool."
   type        = bool
