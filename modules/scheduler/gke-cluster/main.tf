@@ -37,6 +37,23 @@ locals {
 
   # multi networking needs enabled Dataplane v2
   derived_enable_dataplane_v2 = coalesce(var.enable_dataplane_v2, local.derived_enable_multi_networking)
+
+  default_monitoring_component = [
+    "SYSTEM_COMPONENTS",
+    "POD",
+    "DAEMONSET",
+    "DEPLOYMENT",
+    "STATEFULSET",
+    "STORAGE",
+    "HPA",
+    "CADVISOR",
+    "KUBELET"
+  ]
+
+  default_logging_component = [
+    "SYSTEM_COMPONENTS",
+    "WORKLOADS"
+  ]
 }
 
 data "google_project" "project" {
@@ -187,8 +204,16 @@ resource "google_container_cluster" "gke_cluster" {
     }
   }
 
-  logging_service    = "logging.googleapis.com/kubernetes"
-  monitoring_service = "monitoring.googleapis.com/kubernetes"
+  monitoring_config {
+    enable_components = var.enable_dcgm_monitoring ? concat(local.default_monitoring_component, ["DCGM"]) : local.default_monitoring_component
+    managed_prometheus {
+      enabled = true
+    }
+  }
+
+  logging_config {
+    enable_components = local.default_logging_component
+  }
 }
 
 # We define explicit node pools, so that it can be modified without

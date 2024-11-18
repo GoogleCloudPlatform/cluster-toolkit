@@ -133,6 +133,12 @@ variable "enable_parallelstore_csi" {
   default     = false
 }
 
+variable "enable_dcgm_monitoring" {
+  description = "Enable GKE to collect DCGM metrics"
+  type        = bool
+  default     = false
+}
+
 variable "system_node_pool_enabled" {
   description = "Create a system node pool."
   type        = bool
