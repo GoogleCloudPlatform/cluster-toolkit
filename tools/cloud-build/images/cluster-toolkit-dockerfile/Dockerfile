@@ -28,10 +28,7 @@ RUN apt-get update && \
         git \
         make \
         unzip \
-        wget \
-        python3 \
-        python3-pip \
-        python3-venv
+        wget
 
 # Install Terraform
 ARG TERRAFORM_VERSION=1.5.2
@@ -61,19 +58,17 @@ ENV PATH $PATH:/usr/local/go/bin:$GOPATH/bin
 ARG CLUSTER_TOOLKIT_REF=main
 RUN git clone --branch ${CLUSTER_TOOLKIT_REF} https://github.com/GoogleCloudPlatform/cluster-toolkit.git /cluster-toolkit
 
-# Create and activate the virtual environment within the gcluster folder
+# Build the gcluster binary
 WORKDIR /cluster-toolkit
-ENV VIRTUAL_ENV /cluster-toolkit/venv 
-RUN python3 -m venv $VIRTUAL_ENV
-ENV PATH "$VIRTUAL_ENV/bin:$PATH"
-
-# Build the Cluster Toolkit
-RUN make install-dev-deps
 RUN make
 
 # Make gcluster available
 RUN cp /cluster-toolkit/gcluster  /usr/local/bin/gcluster 
 RUN echo $PATH
+
+# Create /out directory
+RUN mkdir /out
+WORKDIR /out
 
 # Command to execute when running the container (placeholder)
 ENTRYPOINT ["gcluster"]
