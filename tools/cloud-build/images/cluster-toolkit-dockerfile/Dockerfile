@@ -63,7 +63,7 @@ WORKDIR /cluster-toolkit
 RUN make
 
 # Make gcluster available
-RUN cp /cluster-toolkit/gcluster  /usr/local/bin/gcluster 
+RUN cp /cluster-toolkit/gcluster /usr/local/bin/gcluster
 RUN echo $PATH
 
 # Create /out directory

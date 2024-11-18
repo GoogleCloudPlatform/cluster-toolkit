@@ -12,7 +12,7 @@ The following build arguments can be used to customize the build process:
 * **`TERRAFORM_VERSION`**: The version of Terraform to install. Defaults to `1.5.2`.
 * **`PACKER_VERSION`**: The version of Packer to install. Defaults to `1.8.6`.
 * **`GO_VERSION`**: The version of Go to install. Defaults to `1.21.0`.
-* **`CLUSTER_TOOLKIT_REF`**: The [Cluster Toolkit repository's](https://github.com/GoogleCloudPlatform/cluster-toolkit/releases) branch or tag from which to build Cluster Toolkit.  Defaults to the `main` branch.
+* **`CLUSTER_TOOLKIT_REF`**: The [Cluster Toolkit repository's](https://github.com/GoogleCloudPlatform/cluster-toolkit/releases) branch or tag from which to build Cluster Toolkit.  Defaults to the `main` branch, which is the latest official release.
 
 ## Build the Cluster Toolkit Docker Image
 To build the Cluster Toolkit Docker image, navigate to the directory the Dockerfile is present in and run the following command:
@@ -29,10 +29,10 @@ docker build --build-arg BASE_IMAGE=<base_image> \
 Example:
 
 ```bash
-docker build --build-arg CLUSTER_TOOLKIT_REF=v1.40.0 -t my-cluster-toolkit-image .
+docker build --build-arg CLUSTER_TOOLKIT_REF=v1.40.0 -t gcluster -t ghpc .
 ```
 
-The above example builds an image tagged `my-cluster-toolkit-image` and sets the CLUSTER_TOOLKIT_REF to v1.40.0 while using the default values for other arguments.
+The above example builds an image tagged `gcluster` and sets the `CLUSTER_TOOLKIT_REF` to the Git tag `v1.40.0` while using the default values for other arguments.
 
 ## Run the Cluster Toolkit Docker Image
 To run the Cluster Toolkit Docker image, use the following command:
@@ -44,14 +44,14 @@ docker run -v ~/.config/gcloud/:/root/.config/gcloud -v $(pwd):/out <image_name>
 This command runs the Cluster Toolkit Docker image and allows the `gcluster` binary to access your Google Cloud credentials and local files. Here's a breakdown:
 
 * `-v ~/.config/gcloud/:/root/.config/gcloud`: This argument mounts your local Google Cloud configuration directory `(~/.config/gcloud)` to the `/root/.config/gcloud` directory inside the container. This allows the `gcluster` binary to access your credentials and interact with Google Cloud resources when needed.
-* `-v $(pwd):/out`: This argument mounts your current working directory `($(pwd))` to the `/out` directory inside the container. This is important because the Cluster Toolkit Dockerfile is designed to automatically output deployment folders to the `/out` directory. Due to this automatic output behavior, you should not provide the `--out` argument to the `create` and `deploy` gcluster subcommands when using this Dockerfile. Instead, mount a local directory (as shown in the example above with $(pwd)) to the   `/out` directory within the container. This ensures that the deployment folder persists even after the container exits, allowing you to access and manage the deployment artifacts even after the container is removed. Additionally, this allows the container to access any files in your current directory (like blueprint files) from within the container. You can then reference these files in your `<gcluster_command>` using the `/out` path.
+* `-v $(pwd):/out`: This argument mounts your current working directory `$(pwd)` to the `/out` directory inside the container. This is important because the Cluster Toolkit Dockerfile is designed to automatically output deployment folders to the `/out` directory. Due to this automatic output behavior, you should not provide the `--out` argument to the `create` and `deploy` gcluster subcommands when using this Dockerfile. Instead, mount a local directory (as shown in the example above with $(pwd)) to the   `/out` directory within the container. This ensures that the deployment folder persists even after the container exits, allowing you to access and manage the deployment artifacts even after the container is removed. Additionally, this allows the container to access any files in your current directory (like blueprint files) from within the container. You can then reference these files in your `<gcluster_command>` using the `/out` path.
 * `<image_name>`: Replace this with the name of your Docker image.
 * `<gcluster_command>`: Replace this with the `gcluster` command you want to execute. The Cluster Toolkit Docker image has `ENTRYPOINT ["gcluster"]` in its Dockerfile. This means that the `gcluster` command is automatically executed when the container starts, and any arguments provided after `<image_name>` in the `docker run` command are passed as arguments to `gcluster`.
 
 Example:
 
 ```bash
-docker run -v ~/.config/gcloud/:/root/.config/gcloud -v $(pwd):/out my-cluster-toolkit-image deploy /out/my-blueprint.yaml --auto-approve
+docker run -v ~/.config/gcloud/:/root/.config/gcloud -v $(pwd):/out gcluster deploy /out/my-blueprint.yaml --auto-approve
 ```
 
 This example runs the `deploy` command with the blueprint file `my-blueprint.yaml` located in your current directory. The deployment folder generated by `gcluster deploy` will be saved to your current directory (which is mounted to `/out`). `--auto-approve` automatically approves any prompts from `gcluster`, streamlining the deployment process.
