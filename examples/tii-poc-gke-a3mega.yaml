@@ -79,7 +79,8 @@ deployment_groups:
       - monitoring.metricWriter
       - monitoring.viewer
       - stackdriver.resourceMetadata.writer
-      - storage.objectViewer
+      - storage.objectAdmin
+      - parallelstore.admin
       - artifactregistry.reader
 
   - id: gpunets
