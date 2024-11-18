@@ -49,6 +49,11 @@ locals {
     "CADVISOR",
     "KUBELET"
   ]
+
+  default_logging_component = [
+    "SYSTEM_COMPONENTS",
+    "WORKLOADS"
+  ]
 }
 
 data "google_project" "project" {
@@ -177,6 +182,9 @@ resource "google_container_cluster" "gke_cluster" {
     gce_persistent_disk_csi_driver_config {
       enabled = var.enable_persistent_disk_csi
     }
+    dns_cache_config {
+      enabled = var.enable_node_local_dns_cache
+    }
   }
 
   timeouts {
@@ -199,14 +207,15 @@ resource "google_container_cluster" "gke_cluster" {
     }
   }
 
-  logging_service    = "logging.googleapis.com/kubernetes"
-  monitoring_service = "monitoring.googleapis.com/kubernetes"
-
   monitoring_config {
     enable_components = var.enable_dcgm_monitoring ? concat(local.default_monitoring_component, ["DCGM"]) : local.default_monitoring_component
     managed_prometheus {
       enabled = true
     }
+  }
+
+  logging_config {
+    enable_components = local.default_logging_component
   }
 }
 
