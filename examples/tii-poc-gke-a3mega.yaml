@@ -14,7 +14,7 @@
 
 ---
 
-blueprint_name: gke-a3-mega-tii-poc
+blueprint_name: tii-on-gke-a3mega
 
 # GCS bucket for persisting the Terraform state
 terraform_backend_defaults:
@@ -24,7 +24,7 @@ terraform_backend_defaults:
 
 vars:
   project_id:  ## Set GCP Project ID Here ##
-  deployment_name: gke-a3-mega-tii-poc
+  deployment_name: tii-on-gke-a3mega
   region: us-west1
   zone: us-west1-a
 
@@ -38,11 +38,11 @@ deployment_groups:
   - id: network1
     source: modules/network/vpc
     settings:
-      subnetwork_name: gke-subnet-a3-mega-tii-poc
+      subnetwork_name: tii-on-gke-a3mega-subnet
       mtu: 8896
       default_primary_subnetwork_size: 13 # This is CIDR /22, up to 1020 nodes -> cidrsubnet(var.network_address_range, var.default_primary_subnetwork_size, 0) -> 9+13=22
       secondary_ranges:
-        gke-subnet-a3-mega-tii-poc:
+        tii-on-gke-a3mega-subnet:
         - range_name: pods
           ip_cidr_range: 10.4.0.0/14
         - range_name: services
