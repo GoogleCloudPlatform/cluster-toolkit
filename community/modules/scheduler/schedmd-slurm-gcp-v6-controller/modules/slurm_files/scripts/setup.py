@@ -83,7 +83,7 @@ SSSSSSSSSSSSS   SSS   SSSSSSSSSSSSSSS   SSSS        SSSS     SSSS     SSSS
 SSSSSSSSSSSS    SSS    SSSSSSSSSSSSS    SSSS        SSSS     SSSS     SSSS
 
 """
-
+_MAINTENANCE_SBATCH_SCRIPT_PATH = dirs.custom_scripts / "perform_maintenance.sh"
 
 def start_motd():
     """advise in motd that slurm is currently configuring"""
@@ -224,6 +224,26 @@ slurm ALL= NOPASSWD: /usr/bin/systemctl restart slurmctld.service
     sudoers_file.chmod(0o0440)
 
 
+def setup_maintenance_script():
+    perform_maintenance = """#!/bin/bash
+
+#SBATCH --priority=low
+#SBATCH --time=180
+
+VM_NAME=$(curl -s "http://metadata.google.internal/computeMetadata/v1/instance/name" -H "Metadata-Flavor: Google")
+ZONE=$(curl -s "http://metadata.google.internal/computeMetadata/v1/instance/zone" -H "Metadata-Flavor: Google" | cut -d '/' -f 4)
+
+gcloud compute instances perform-maintenance $VM_NAME \
+  --zone=$ZONE
+"""
+
+
+    with open(_MAINTENANCE_SBATCH_SCRIPT_PATH, "w") as f:
+        f.write(perform_maintenance)
+
+    util.chown_slurm(_MAINTENANCE_SBATCH_SCRIPT_PATH, mode=0o755)
+
+
 def update_system_config(file, content):
     """Add system defaults options for service files"""
     sysconfig = Path("/etc/sysconfig")
@@ -279,10 +299,10 @@ innodb_lock_wait_timeout=900
 def configure_dirs():
     for p in dirs.values():
         util.mkdirp(p)
-    
+
     for p in (dirs.slurm, dirs.scripts, dirs.custom_scripts):
         util.chown_slurm(p)
-    
+
     for p in slurmdirs.values():
         util.mkdirp(p)
         util.chown_slurm(p)
@@ -357,6 +377,9 @@ def setup_controller():
     run("systemctl start slurm_load_bq.timer", timeout=30)
     run("systemctl status slurm_load_bq.timer", timeout=30)
 
+    # Add script to perform maintenance
+    setup_maintenance_script()
+
     log.info("Done setting up controller")
     pass
 
@@ -400,7 +423,7 @@ def setup_compute():
     slurmd_options = [
         f'--conf-server="{slurmctld_host}:{lookup().control_host_port}"',
     ]
-    
+
     try:
         slurmd_feature = util.instance_metadata("attributes/slurmd_feature")
     except Exception:
@@ -439,7 +462,7 @@ def setup_compute():
 
 def main():
     start_motd()
-    
+
     log.info("Starting setup, fetching config")
     sleep_seconds = 5
     while True:

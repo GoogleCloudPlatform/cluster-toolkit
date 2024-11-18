@@ -513,6 +513,14 @@ variable "enable_maintenance_reservation" {
   default     = false
 }
 
+
+variable "enable_opportunistic_maintenance" {
+  type        = bool
+  description = "On receiving maintenance notification, maintenance will be performed as soon as nodes becomes idle."
+  default     = false
+}
+
+
 variable "dws_flex" {
   description = <<-EOD
   If set and `enabled = true`, will utilize the DWS Flex Start to provision nodes.
@@ -521,7 +529,7 @@ variable "dws_flex" {
   - enable: Enable DWS Flex Start
   - max_run_duration: Maximum duration in seconds for the job to run, should not exceed 1,209,600 (2 weeks).
   - use_job_duration: Use the job duration to determine the max_run_duration, if job duration is not set, max_run_duration will be used.
-  
+
  Limitations:
   - CAN NOT be used with reservations;
   - CAN NOT be used with placement groups;
