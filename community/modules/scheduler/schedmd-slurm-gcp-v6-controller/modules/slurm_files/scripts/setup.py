@@ -22,6 +22,7 @@ import shutil
 import subprocess
 import stat
 import time
+import yaml
 from pathlib import Path
 
 import util
@@ -459,6 +460,38 @@ def setup_compute():
 
     log.info("Done setting up compute")
 
+def setup_cloud_ops() -> None:
+    """add deployment info to cloud ops config"""
+    cloudOpsStatus = run(
+        "systemctl is-active --quiet google-cloud-ops-agent.service", check=False
+    ).returncode
+    
+    if cloudOpsStatus != 0:
+        return
+
+    with open("/etc/google-cloud-ops-agent/config.yaml", "r") as f:
+        file = yaml.safe_load(f)
+
+    cluster_info = {
+        'type':'modify_fields',
+        'fields': {
+            'labels."cluster_name"':{
+                'static_value':f"{lookup().cfg.slurm_cluster_name}"
+            },
+            'labels."hostname"':{
+                'static_value': f"{lookup().hostname}"
+            }
+        }
+    }
+
+    file["logging"]["processors"]["add_cluster_info"] = cluster_info
+    file["logging"]["service"]["pipelines"]["slurmlog_pipeline"]["processors"].append("add_cluster_info")
+    file["logging"]["service"]["pipelines"]["slurmlog2_pipeline"]["processors"].append("add_cluster_info")
+
+    with open("/etc/google-cloud-ops-agent/config.yaml", "w") as f:
+        yaml.safe_dump(file, f, sort_keys=False)
+
+    run("systemctl restart google-cloud-ops-agent.service", timeout=30)
 
 def main():
     start_motd()
@@ -476,7 +509,7 @@ def main():
             log.exception(f"unexpected error while fetching config, sleeping for {sleep_seconds}s")
         time.sleep(sleep_seconds)
     log.info("Config fetched")
-
+    setup_cloud_ops()
     configure_dirs()
     # call the setup function for the instance type
     {
