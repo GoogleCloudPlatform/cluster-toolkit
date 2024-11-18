@@ -49,6 +49,11 @@ locals {
     "CADVISOR",
     "KUBELET"
   ]
+
+  default_logging_component = [
+    "SYSTEM_COMPONENTS",
+    "WORKLOADS"
+  ]
 }
 
 data "google_project" "project" {
@@ -202,14 +207,15 @@ resource "google_container_cluster" "gke_cluster" {
     }
   }
 
-  logging_service    = "logging.googleapis.com/kubernetes"
-  monitoring_service = "monitoring.googleapis.com/kubernetes"
-
   monitoring_config {
     enable_components = var.enable_dcgm_monitoring ? concat(local.default_monitoring_component, ["DCGM"]) : local.default_monitoring_component
     managed_prometheus {
       enabled = true
     }
+  }
+
+  logging_config {
+    enable_components = local.default_logging_component
   }
 }
 
@@ -243,6 +249,8 @@ resource "google_container_node_pool" "system_node_pools" {
     service_account = var.service_account_email
     oauth_scopes    = var.service_account_scopes
     machine_type    = var.system_node_pool_machine_type
+    disk_size_gb    = var.system_node_pool_disk_size_gb
+    disk_type       = var.system_node_pool_disk_type
 
     dynamic "taint" {
       for_each = var.system_node_pool_taints
