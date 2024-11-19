@@ -84,7 +84,7 @@ blueprint:
 Users may want to be able to guarantee that an image has not been changed across
 multiple HPC deployments. One way to guarantee that the same image is used,
 would be to either create a custom image
-([Image Building](docs/image-building.md)), or to copy an image to a personal or
+([Image Building](image-building.md)), or to copy an image to a personal or
 team project and reference that.
 
 The following command will copy a specified image from a source project to your
