@@ -4,7 +4,11 @@ This repository contains a Dockerfile for building a Docker image with Cluster T
 
 ## System Requirements
 
-* [Docker Engine](https://docs.docker.com/engine/) needs to be installed to build a Docker image from this Dockerfile.
+To build and use this Dockerfile, you'll need:
+
+1. Docker: [Docker Engine](https://docs.docker.com/engine/) needs to be installed to build a Docker image from this Dockerfile.
+
+2. Google Cloud Platform: Configure a Google Cloud Project with the necessary APIs, permissions, and credentials needed by the `gcluster` binary. See the [setup guide](https://cloud.google.com/cluster-toolkit/docs/setup/configure-environment) for instructions.
 
 ## Build Arguments
 The following build arguments can be used to customize the build process:
@@ -43,7 +47,7 @@ docker run -v ~/.config/gcloud/:/root/.config/gcloud -v $(pwd):/out <image_name>
 
 This command runs the Cluster Toolkit Docker image and allows the `gcluster` binary to access your Google Cloud credentials and local files. Here's a breakdown:
 
-* `-v ~/.config/gcloud/:/root/.config/gcloud`: This argument mounts your local Google Cloud configuration directory `(~/.config/gcloud)` to the `/root/.config/gcloud` directory inside the container. This allows the `gcluster` binary to access your credentials and interact with Google Cloud resources when needed.
+* `-v ~/.config/gcloud/:/root/.config/gcloud`: This argument mounts your local Google Cloud configuration directory (i.e. `~/.config/gcloud`) to the `/root/.config/gcloud` directory inside the container. This allows the `gcluster` binary to access your credentials and interact with Google Cloud resources when needed. If not already done, running `gcloud auth application-default login` should generate the Application Default Credentials in the `~/.config/gcloud/` directory on your local machine.
 * `-v $(pwd):/out`: This argument mounts your current working directory `$(pwd)` to the `/out` directory inside the container. This is important because the Cluster Toolkit Dockerfile is designed to automatically output deployment folders to the `/out` directory. Due to this automatic output behavior, you should not provide the `--out` argument to the `create` and `deploy` gcluster subcommands when using this Dockerfile. Instead, mount a local directory (as shown in the example above with $(pwd)) to the   `/out` directory within the container. This ensures that the deployment folder persists even after the container exits, allowing you to access and manage the deployment artifacts even after the container is removed. Additionally, this allows the container to access any files in your current directory (like blueprint files) from within the container. You can then reference these files in your `<gcluster_command>` using the `/out` path.
 * `<image_name>`: Replace this with the name of your Docker image.
 * `<gcluster_command>`: Replace this with the `gcluster` command you want to execute. The Cluster Toolkit Docker image has `ENTRYPOINT ["gcluster"]` in its Dockerfile. This means that the `gcluster` command is automatically executed when the container starts, and any arguments provided after `<image_name>` in the `docker run` command are passed as arguments to `gcluster`.
