@@ -93,6 +93,14 @@ locals {
     }
   ]
 
+  rdma_runner = !var.enable_cloud_rdma ? [] : [
+    {
+      type        = "shell"
+      source      = "${path.module}/files/install_cloud_rdma.sh"
+      destination = "install_cloud_rdma.sh"
+    }
+  ]
+
   docker_runner = !var.docker.enabled ? [] : [
     {
       type        = "data"
@@ -145,6 +153,7 @@ locals {
     local.warnings,
     local.hotfix_runner,
     local.proxy_runner,
+    local.rdma_runner,
     local.monitoring_agent_installer,
     local.ansible_installer,
     local.raid_setup, # order RAID early to ensure filesystem is ready for subsequent runners
