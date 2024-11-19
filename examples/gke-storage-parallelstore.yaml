@@ -23,6 +23,8 @@ vars:
   # The following line must be updated for this example to work.
   authorized_cidr: <your-ip-address>/32
 
+  gcp_public_cidrs_access_enabled: false
+
 deployment_groups:
 - group: setup
   modules:
@@ -65,6 +67,7 @@ deployment_groups:
       enable_parallelstore_csi: true # enable Parallelstore for the cluster
       configure_workload_identity_sa: true
       enable_private_endpoint: false  # Allows for access from authorized public IPs
+      gcp_public_cidrs_access_enabled: $(vars.gcp_public_cidrs_access_enabled)
       master_authorized_networks:
       - display_name: deployment-machine
         cidr_block: $(vars.authorized_cidr)
