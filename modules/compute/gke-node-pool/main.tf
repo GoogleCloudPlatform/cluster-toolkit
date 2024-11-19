@@ -235,6 +235,21 @@ resource "google_container_node_pool" "node_pool" {
       On the other hand, with SPECIFIC_RESERVATION you must set `specific_reservations`.
       EOT
     }
+    precondition {
+      condition = (
+        (local.input_specific_reservations_count == 0) ||
+        (local.input_specific_reservations_count == 1 && length(local.verified_specific_reservations) > 0 && length(local.specific_reservation_requirement_violations) == 0)
+      )
+      error_message = <<-EOT
+      Check if your reservation is configured correctly:
+      - A reservation with the name must exist in the specified project and one of the specified zones
+
+      - Its consumption type must be "specific"
+      %{for property in local.specific_reservation_requirement_violations}
+      - ${local.specific_reservation_requirement_violation_messages[property]}
+      %{endfor}
+      EOT
+    }
   }
 }
 
