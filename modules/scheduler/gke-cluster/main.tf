@@ -67,7 +67,7 @@ resource "google_container_cluster" "gke_cluster" {
   name            = local.name
   location        = var.region
   resource_labels = local.labels
-
+  networking_mode = var.networking_mode
   # decouple node pool lifecycle from cluster life cycle
   remove_default_node_pool = true
   initial_node_count       = 1 # must be set when remove_default_node_pool is set
@@ -92,7 +92,7 @@ resource "google_container_cluster" "gke_cluster" {
   }
 
   private_ipv6_google_access = var.enable_private_ipv6_google_access ? "PRIVATE_IPV6_GOOGLE_ACCESS_TO_GOOGLE" : null
-
+  default_max_pods_per_node  = var.default_max_pods_per_node
   master_auth {
     client_certificate_config {
       issue_client_certificate = false
@@ -197,6 +197,10 @@ resource "google_container_cluster" "gke_cluster" {
     ignore_changes = [
       node_config
     ]
+    precondition {
+      condition     = (var.default_max_pods_per_node == null) || (var.networking_mode == "VPC_NATIVE")
+      error_message = "default_max_pods_per_node does not work on `routes-based` clusters, that don't have IP Aliasing enabled."
+    }
     precondition {
       condition     = !(!coalesce(var.enable_dataplane_v2, true) && local.derived_enable_multi_networking)
       error_message = "'enable_dataplane_v2' cannot be false when enabling multi networking."

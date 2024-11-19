@@ -357,3 +357,15 @@ variable "additional_networks" {
     }))
   }))
 }
+
+variable "default_max_pods_per_node" {
+  description = "The default maximum number of pods per node in this cluster."
+  type        = number
+  default     = null
+}
+
+variable "networking_mode" {
+  description = "Determines whether alias IPs or routes will be used for pod IPs in the cluster. Options are VPC_NATIVE or ROUTES. VPC_NATIVE enables IP aliasing. The default is VPC_NATIVE."
+  type        = string
+  default     = "VPC_NATIVE"
+}
