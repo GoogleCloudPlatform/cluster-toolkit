@@ -182,6 +182,9 @@ resource "google_container_cluster" "gke_cluster" {
     gce_persistent_disk_csi_driver_config {
       enabled = var.enable_persistent_disk_csi
     }
+    dns_cache_config {
+      enabled = var.enable_node_local_dns_cache
+    }
   }
 
   timeouts {
