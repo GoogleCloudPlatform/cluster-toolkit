@@ -140,7 +140,7 @@ deployment_groups:
     settings:
       name: a3mega-np-1
       machine_type: a3-megagpu-8g
-      static_node_count: 512
+      static_node_count: 640
       disk_size_gb: 200
       reservation_affinity:
         consume_reservation_type: SPECIFIC_RESERVATION
