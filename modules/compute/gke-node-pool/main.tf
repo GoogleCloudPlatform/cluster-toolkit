@@ -53,6 +53,7 @@ resource "google_container_node_pool" "node_pool" {
   name           = coalesce(var.name, "${var.machine_type}-${local.module_unique_id}")
   cluster        = var.cluster_id
   node_locations = var.zones
+  version        = var.node_version
 
   node_count = var.static_node_count
   dynamic "autoscaling" {
@@ -192,7 +193,10 @@ resource "google_container_node_pool" "node_pool" {
     reservation_affinity {
       consume_reservation_type = var.reservation_affinity.consume_reservation_type
       key                      = length(local.verified_specific_reservations) != 1 ? null : local.reservation_resource_api_label
-      values                   = length(local.verified_specific_reservations) != 1 ? null : [for r in local.verified_specific_reservations : "projects/${r.project}/reservations/${r.name}"]
+      values = length(local.verified_specific_reservations) != 1 ? null : [
+        for i, r in local.verified_specific_reservations :
+        (length(local.input_reservation_suffixes[i]) > 0 ? format("%s%s", r.name, local.input_reservation_suffixes[i]) : "projects/${r.project}/reservations/${r.name}")
+      ]
     }
 
     dynamic "host_maintenance_policy" {
@@ -268,6 +272,14 @@ resource "google_container_node_pool" "node_pool" {
       - ${local.specific_reservation_requirement_violation_messages[property]}
       %{endfor}
       EOT
+    }
+    precondition {
+      condition = (
+        (local.input_specific_reservations_count == 0) ||
+        (local.input_specific_reservations_count == 1 && length(local.input_reservation_suffixes) == 0) ||
+        (local.input_specific_reservations_count == 1 && length(local.input_reservation_suffixes) > 0 && try(local.input_reservation_projects[0], var.project_id) == var.project_id)
+      )
+      error_message = "Shared Extended reservations are not supported by GKE."
     }
   }
 }

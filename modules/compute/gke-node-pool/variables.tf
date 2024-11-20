@@ -386,6 +386,11 @@ variable "gke_version" {
   type        = string
 }
 
+variable "node_version" {
+  description = "Temporary variable to explicitly set the node version"
+  type        = string
+}
+
 variable "max_pods_per_node" {
   description = "The maximum number of pods per node in this node pool. This will force replacement."
   type        = number
