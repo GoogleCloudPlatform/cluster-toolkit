@@ -389,6 +389,7 @@ variable "gke_version" {
 variable "node_version" {
   description = "Temporary variable to explicitly set the node version"
   type        = string
+  default     = null
 }
 
 variable "max_pods_per_node" {
