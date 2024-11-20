@@ -36,9 +36,9 @@ limitations under the License.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_firewall_rules"></a> [firewall\_rules](#module\_firewall\_rules) | github.com/terraform-google-modules/terraform-google-network.git//modules/firewall-rules?depth=1&ref=v9.0.0 | n/a |
-| <a name="module_routes"></a> [routes](#module\_routes) | github.com/terraform-google-modules/terraform-google-network.git//modules/routes?depth=1&ref=v9.0.0 | n/a |
-| <a name="module_subnets"></a> [subnets](#module\_subnets) | github.com/terraform-google-modules/terraform-google-network.git//modules/subnets?depth=1&ref=v9.0.0 | n/a |
+| <a name="module_firewall_rules"></a> [firewall\_rules](#module\_firewall\_rules) | terraform-google-modules/network/google//modules/firewall-rules | ~> 9.3 |
+| <a name="module_routes"></a> [routes](#module\_routes) | terraform-google-modules/network/google//modules/routes | ~> 9.3 |
+| <a name="module_subnets"></a> [subnets](#module\_subnets) | terraform-google-modules/network/google//modules/subnets | ~> 9.3 |
 
 ## Resources
 
