@@ -14,17 +14,17 @@
 
 ---
 
-blueprint_name: tii-on-gke-a3mega
+blueprint_name: training-on-gke-a3mega
 
 # GCS bucket for persisting the Terraform state
 terraform_backend_defaults:
   type: gcs
   configuration:
-    bucket: <<GCS_BUCKET_NAME>> # tii-poc-gke-a3mega-bucket
+    bucket: <<GCS_BUCKET_NAME>>
 
 vars:
   project_id:  ## Set GCP Project ID Here ##
-  deployment_name: tii-on-gke-a3mega
+  deployment_name: training-on-gke-a3mega
   region: us-west1
   zone: us-west1-a
 
@@ -38,11 +38,11 @@ deployment_groups:
   - id: network1
     source: modules/network/vpc
     settings:
-      subnetwork_name: tii-on-gke-a3mega-subnet
+      subnetwork_name: training-on-gke-a3mega-subnet
       mtu: 8896
       default_primary_subnetwork_size: 13 # This is CIDR /22, up to 1020 nodes -> cidrsubnet(var.network_address_range, var.default_primary_subnetwork_size, 0) -> 9+13=22
       secondary_ranges:
-        tii-on-gke-a3mega-subnet:
+        training-on-gke-a3mega-subnet:
         - range_name: pods
           ip_cidr_range: 10.4.0.0/14
         - range_name: services
@@ -145,7 +145,7 @@ deployment_groups:
       reservation_affinity:
         consume_reservation_type: SPECIFIC_RESERVATION
         specific_reservations:
-        - name: <<RESERVATION_NAME>> # tii-gke-poc
+        - name: <<RESERVATION_NAME>>
           project: $(vars.project_id)
       zones: [$(vars.zone)]
     outputs: [instructions]
