@@ -46,7 +46,8 @@ resource "google_compute_shared_vpc_host_project" "shared_vpc_host" {
 	Subnet configuration
  *****************************************/
 module "subnets" {
-  source           = "github.com/terraform-google-modules/terraform-google-network.git//modules/subnets?depth=1&ref=v9.0.0"
+  source           = "terraform-google-modules/network/google//modules/subnets"
+  version          = "~> 9.3"
   project_id       = var.project_id
   network_name     = google_compute_network.network.name
   subnets          = var.subnets
@@ -57,7 +58,8 @@ module "subnets" {
 	Routes
  *****************************************/
 module "routes" {
-  source            = "github.com/terraform-google-modules/terraform-google-network.git//modules/routes?depth=1&ref=v9.0.0"
+  source            = "terraform-google-modules/network/google//modules/routes"
+  version           = "~> 9.3"
   project_id        = var.project_id
   network_name      = google_compute_network.network.name
   routes            = var.routes
@@ -88,7 +90,8 @@ locals {
 }
 
 module "firewall_rules" {
-  source        = "github.com/terraform-google-modules/terraform-google-network.git//modules/firewall-rules?depth=1&ref=v9.0.0"
+  source        = "terraform-google-modules/network/google//modules/firewall-rules"
+  version       = "~> 9.3"
   project_id    = var.project_id
   network_name  = google_compute_network.network.name
   rules         = local.rules

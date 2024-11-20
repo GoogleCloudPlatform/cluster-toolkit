@@ -143,8 +143,7 @@ locals {
 }
 
 module "vpc" {
-  source = "./vpc-submodule"
-
+  source                                 = "./vpc-submodule"
   network_name                           = local.network_name
   project_id                             = var.project_id
   auto_create_subnetworks                = false
