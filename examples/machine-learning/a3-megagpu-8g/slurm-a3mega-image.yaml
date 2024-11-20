@@ -49,8 +49,9 @@ deployment_groups:
       - 10.6.0.*
       - 10.7.0.*
       - $(vars.slurm_cluster_name)*
-      enable_docker_world_writable: true
-      install_docker: true
+      docker:
+        enabled: true
+        world_writable: true
       runners:
       # it is important that kernel upgrades do not occur before running the
       # solution for building Slurm (which doesn't handle them well on the fly)
@@ -83,6 +84,11 @@ deployment_groups:
               ansible.builtin.get_url:
                 url: "{{ package_url }}"
                 dest: "{{ package_filename }}"
+              retries: 3
+              delay: 60
+              register: result
+              until: result is success
+              failed_when: result is failure
             - name: Install kernel headers
               ansible.builtin.apt:
                 deb: "{{ package_filename }}"
@@ -108,7 +114,7 @@ deployment_groups:
           apt-get install -y git
           ansible-galaxy role install googlecloudplatform.google_cloud_ops_agents
           ansible-pull \
-              -U https://github.com/GoogleCloudPlatform/slurm-gcp -C 6.8.2 \
+              -U https://github.com/GoogleCloudPlatform/slurm-gcp -C 6.8.5 \
               -i localhost, --limit localhost --connection=local \
               -e @/var/tmp/slurm_vars.json \
               ansible/playbook.yml

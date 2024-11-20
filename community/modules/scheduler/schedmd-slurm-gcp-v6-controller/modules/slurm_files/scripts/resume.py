@@ -15,9 +15,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List
+from typing import List, Optional, Dict
 import argparse
 import collections
+from datetime import timedelta
+import shlex
 import json
 import logging
 import os
@@ -57,7 +59,7 @@ PLACEMENT_MAX_CNT = 150
 BULK_INSERT_LIMIT = 5000
 
 
-def instance_properties(nodeset, model, placement_group, labels=None):
+def instance_properties(nodeset:object, model:str, placement_group:Optional[str], labels:Optional[dict], job_id:Optional[int]):
     props = NSDict()
 
     if labels: # merge in extra labels on instance and disks
@@ -99,18 +101,28 @@ def instance_properties(nodeset, model, placement_group, labels=None):
         props.scheduling.maintenanceInterval = nodeset.maintenance_interval
 
     if nodeset.dws_flex.enabled:
-        update_props_dws(props,nodeset.dws_flex)
+        update_props_dws(props, nodeset.dws_flex, job_id)
 
     # Override with properties explicit specified in the nodeset
     props.update(nodeset.get("instance_properties") or {})
     
     return props
 
-def update_props_dws(props:dict,dws_flex:dict) -> None:
+def update_props_dws(props:object, dws_flex:object, job_id: Optional[int]) -> None:
     props.scheduling.onHostMaintenance = "TERMINATE"
     props.scheduling.instanceTerminationAction = "DELETE"
-    props.scheduling.maxRunDuration['seconds'] = dws_flex.max_run_duration
     props.reservationAffinity['consumeReservationType'] = "NO_RESERVATION"
+    props.scheduling.maxRunDuration['seconds'] = dws_flex_duration(dws_flex, job_id)
+
+def dws_flex_duration(dws_flex:object, job_id: Optional[int]) -> int:
+    max_duration = dws_flex.max_run_duration
+    if dws_flex.use_job_duration and job_id is not None and (job := lookup().job(job_id)) and job.duration:
+        if timedelta(seconds=30) <= job.duration <= timedelta(weeks=2):
+            max_duration = int(job.duration.total_seconds())
+        else:
+            log.info("Job TimeLimit cannot be less than 30 seconds or exceed 2 weeks")
+    return max_duration
+
 
 def per_instance_properties(node):
     props = NSDict()
@@ -120,11 +132,7 @@ def per_instance_properties(node):
 
 def create_instances_request(nodes, partition_name, placement_group, job_id=None):
     """Call regionInstances.bulkInsert to create instances"""
-    assert len(nodes) > 0
-    if placement_group:
-        assert len(nodes) <= min(PLACEMENT_MAX_CNT, BULK_INSERT_LIMIT)
-    else:
-        assert len(nodes) <= BULK_INSERT_LIMIT
+    assert 0 < len(nodes) <= BULK_INSERT_LIMIT
 
     # model here indicates any node that can be used to describe the rest
     model = next(iter(nodes))
@@ -134,8 +142,14 @@ def create_instances_request(nodes, partition_name, placement_group, job_id=None
     log.debug(f"create_instances_request: {model} placement: {placement_group}")
 
     body = NSDict()
+
     body.count = len(nodes)
-    body.minCount = 1
+
+    if placement_group:
+        assert len(nodes) <= PLACEMENT_MAX_CNT
+        pass # do not set minCount to force "all or nothing" behavior
+    else:
+        body.minCount = 1
 
     # source of instance properties
     body.sourceInstanceTemplate = template
@@ -147,7 +161,7 @@ def create_instances_request(nodes, partition_name, placement_group, job_id=None
     )
     # overwrites properties across all instances
     body.instanceProperties = instance_properties(
-        nodeset, model, placement_group, labels
+        nodeset, model, placement_group, labels, job_id
     )
 
     # key is instance name, value overwrites properties
@@ -467,7 +481,9 @@ def down_nodes(nodelist, reason):
     if isinstance(nodelist, list):
         nodelist = util.to_hostlist(nodelist)
     update_job_comment(nodelist, reason)
-    run(f"{lookup().scontrol} update nodename={nodelist} state=down reason='{reason}'")
+    reason_quoted = shlex.quote(reason)
+    log.error(f"Marking nodes {nodelist} as DOWN, reason: {reason}")
+    run(f"{lookup().scontrol} update nodename={nodelist} state=down reason={reason_quoted}")
 
 
 def hold_job(job_id, reason):
@@ -495,21 +511,25 @@ def create_placement_request(pg_name, region):
     return request
 
 
-def create_placement_groups(node_list: list, job_id=0):
+def create_placement_groups(node_list: List[str], job_id:int=0) -> Dict[str, List[str]]:
     pgs = {}
     node_map = lookup().nodeset_map(node_list)
     for _, nodes in node_map.items():
-        pgs.update(create_nodeset_placement_groups(nodes, job_id=job_id))
+        pgs.update(create_nodeset_placement_groups(nodes, job_id))
     return pgs
 
 
-def create_nodeset_placement_groups(node_list: list, job_id=0):
+def create_nodeset_placement_groups(node_list: List[str], job_id:int) -> Dict[str, List[str]]:
+    no_pg = {None: node_list} # canned result for no placement policies created
+
+    if len(node_list) < 2:
+        return no_pg # don't create placement_policy for just one node
+    
     model = next(iter(node_list))
     nodeset = lookup().node_nodeset(model)
-    if not nodeset.enable_placement:
-        return {None: node_list}
-    if not valid_placement_nodes(node_list):
-        return {None: node_list}
+    if not (nodeset.enable_placement and valid_placement_nodes(node_list)):
+        return no_pg
+    
     region = lookup().node_region(model)
 
     groups = {
@@ -525,8 +545,7 @@ def create_nodeset_placement_groups(node_list: list, job_id=0):
             f"creating {len(groups)} placement groups: \n{yaml.safe_dump(debug_groups).rstrip()}"
         )
     requests = {
-        group: create_placement_request(group, region)
-        for group, incl_nodes in groups.items()
+        group: create_placement_request(group, region) for group in groups.keys()
     }
     ops = dict(
         zip(requests.keys(), map_with_futures(ensure_execute, requests.values()))

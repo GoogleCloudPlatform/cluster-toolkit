@@ -57,7 +57,7 @@ data "google_compute_default_service_account" "default" {
 }
 
 module "slurm_login_template" {
-  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=5.12.0"
+  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=5.12.2"
 
   additional_disks         = local.additional_disks
   can_ip_forward           = var.can_ip_forward
@@ -85,7 +85,7 @@ module "slurm_login_template" {
   source_image_project     = local.source_image_project_normalized # requires source_image_logic.tf
   source_image             = local.source_image                    # requires source_image_logic.tf
   network                  = var.network_self_link == null ? "" : var.network_self_link
-  subnetwork_project       = var.subnetwork_project == null ? "" : var.subnetwork_project
+  subnetwork_project       = var.subnetwork_project
   subnetwork               = var.subnetwork_self_link == null ? "" : var.subnetwork_self_link
   tags                     = concat([local.slurm_cluster_name], var.tags)
   service_account = var.service_account != null ? var.service_account : {
@@ -95,7 +95,7 @@ module "slurm_login_template" {
 }
 
 module "slurm_login_instance" {
-  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_login_instance?ref=5.12.0"
+  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_login_instance?ref=5.12.2"
 
   access_config         = local.access_config
   slurm_cluster_name    = local.slurm_cluster_name

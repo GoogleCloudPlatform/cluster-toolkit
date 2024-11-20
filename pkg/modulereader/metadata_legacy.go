@@ -62,19 +62,8 @@ func defaultAPIList(source string) []string {
 			"iam.googleapis.com",
 			"runtimeconfig.googleapis.com",
 		},
-		"community/modules/file-system/Intel-DAOS": {
-			"compute.googleapis.com",
-			"iam.googleapis.com",
-			"secretmanager.googleapis.com",
-		},
 		"community/modules/file-system/nfs-server": {
 			"compute.googleapis.com",
-		},
-		"community/modules/project/new-project": {
-			"admin.googleapis.com",
-			"cloudresourcemanager.googleapis.com",
-			"cloudbilling.googleapis.com",
-			"iam.googleapis.com",
 		},
 		"community/modules/project/service-account": {
 			"iam.googleapis.com",

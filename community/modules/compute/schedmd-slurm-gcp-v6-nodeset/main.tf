@@ -105,7 +105,8 @@ locals {
     startup_script  = local.ghpc_startup_script
     network_storage = var.network_storage
 
-    enable_maintenance_reservation = var.enable_maintenance_reservation
+    enable_maintenance_reservation   = var.enable_maintenance_reservation
+    enable_opportunistic_maintenance = var.enable_opportunistic_maintenance
   }
 }
 
@@ -130,26 +131,22 @@ data "google_compute_zones" "available" {
 }
 
 locals {
-  res_name_split = split("/", var.reservation_name)
-  reservation = var.reservation_name == "" ? null : (
-    length(local.res_name_split) == 4 ? {
-      project : local.res_name_split[1],
-      name : local.res_name_split[3]
-      } : {
-      project : var.project_id,
-      name : var.reservation_name
-    }
-  )
+  res_match = regex("^(?P<whole>(?P<prefix>projects/(?P<project>[a-z0-9-]+)/reservations/)?(?P<name>[a-z0-9-]+)(?P<suffix>/[a-z0-9-]+/[a-z0-9-]+)?)?$", var.reservation_name)
 
-  reservation_name = local.reservation == null ? "" : "projects/${local.reservation.project}/reservations/${local.reservation.name}"
+  res_short_name = local.res_match.name
+  res_project    = coalesce(local.res_match.project, var.project_id)
+  res_prefix     = coalesce(local.res_match.prefix, "projects/${local.res_project}/reservations/")
+  res_suffix     = local.res_match.suffix == null ? "" : local.res_match.suffix
+
+  reservation_name = local.res_match.whole == null ? "" : "${local.res_prefix}${local.res_short_name}${local.res_suffix}"
 }
 
 # tflint-ignore: terraform_unused_declarations
 data "google_compute_reservation" "reservation" {
-  count = local.reservation != null ? 1 : 0
+  count = length(local.reservation_name) > 0 ? 1 : 0
 
-  name    = local.reservation.name
-  project = local.reservation.project
+  name    = local.res_short_name
+  project = local.res_project
   zone    = var.zone
 
   lifecycle {

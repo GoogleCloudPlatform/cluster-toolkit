@@ -28,6 +28,7 @@ import yaml
 import datetime as dt
 from datetime import datetime
 from typing import Dict, Tuple
+from functools import lru_cache
 
 import util
 from util import (
@@ -41,6 +42,7 @@ from util import (
     NSDict,
     TPU,
     chunked,
+    dirs,
 )
 from util import lookup
 from suspend import delete_instances
@@ -50,7 +52,7 @@ import conf
 log = logging.getLogger()
 
 TOT_REQ_CNT = 1000
-
+_MAINTENANCE_SBATCH_SCRIPT_PATH = dirs.custom_scripts / "perform_maintenance.sh"
 
 NodeStatus = Enum(
     "NodeStatus",
@@ -334,13 +336,14 @@ def sync_placement_groups():
             "STOPPED",
             "SUSPENDED",
             "COMPLETING",
+            "PENDING",
         ]
     )
 
     keep_jobs = {
-        str(job["job_id"])
-        for job in json.loads(run(f"{lookup().scontrol} show jobs --json").stdout)["jobs"]
-        if "job_state" in job and set(job["job_state"]) & keep_states
+        str(job.id)
+        for job in lookup().get_jobs()
+        if job.job_state in keep_states
     }
     keep_jobs.add("0")  # Job 0 is a placeholder for static node placement
 
@@ -350,7 +353,7 @@ def sync_placement_groups():
     op = act.aggregatedList(project=lookup().project, fields=fields, filter=flt)
     placement_groups = {}
     pg_regex = re.compile(
-        rf"{lookup().cfg.slurm_cluster_name}-(?P<partition>[^\s\-]+)-(?P<job_id>\d+)-(?P<index>\d+)"
+        rf"{lookup().cfg.slurm_cluster_name}-slurmgcp-managed-(?P<partition>[^\s\-]+)-(?P<job_id>\d+)-(?P<index>\d+)"
     )
     while op is not None:
         result = ensure_execute(op)
@@ -482,7 +485,7 @@ def get_slurm_reservation_maintenance(lkp: util.Lookup) -> Dict[str, datetime]:
 
     return reservation_map
 
-
+@lru_cache
 def get_upcoming_maintenance(lkp: util.Lookup) -> Dict[str, Tuple[str, datetime]]:
     upc_maint_map = {}
 
@@ -534,6 +537,65 @@ def sync_maintenance_reservation(lkp: util.Lookup) -> None:
       create_reservation(lkp, res_name, node, start_time)
 
 
+def delete_maintenance_job(job_name: str) -> None:
+    util.run(f"scancel --name={job_name}")
+
+
+def create_maintenance_job(job_name: str, node: str) -> None:
+    util.run(f"sbatch --job-name={job_name} --nodelist={node} {_MAINTENANCE_SBATCH_SCRIPT_PATH}")
+
+
+def get_slurm_maintenance_job(lkp: util.Lookup) -> Dict[str, str]:
+    jobs = {}
+
+    for job in lkp.get_jobs():
+        if job.name is None or job.required_nodes is None or job.job_state is None:
+          continue
+
+        if job.name != f"{job.required_nodes}_maintenance":
+          continue
+
+        if job.job_state != "PENDING":
+          continue
+
+        jobs[job.name] = job.required_nodes
+
+    return jobs
+
+
+def sync_opportunistic_maintenance(lkp: util.Lookup) -> None:
+    upc_maint_map = get_upcoming_maintenance(lkp)  # map job_name -> (node_name, time)
+    log.debug(f"upcoming-maintenance-vms: {upc_maint_map}")
+
+    curr_jobs = get_slurm_maintenance_job(lkp)  # map job_name -> node.
+    log.debug(f"curr-maintenance-job-map: {curr_jobs}")
+
+    del_jobs = set(curr_jobs.keys() - upc_maint_map.keys())
+    create_jobs = {}
+
+    for job_name, (node, _) in upc_maint_map.items():
+      try:
+          enabled = lkp.node_nodeset(node).enable_opportunistic_maintenance
+      except Exception:
+          enabled = False
+
+      if not enabled:
+          if job_name in curr_jobs:
+              del_jobs.add(job_name)
+          continue
+
+      if job_name not in curr_jobs:
+          create_jobs[job_name] = node
+
+    log.debug(f"del-maintenance-job: {del_jobs}")
+    for job_name in del_jobs:
+        delete_maintenance_job(job_name)
+
+    log.debug(f"create-maintenance-job: {create_jobs}")
+    for job_name, node in create_jobs.items():
+        create_maintenance_job(job_name, node)
+
+
 def main():
     try:
         reconfigure_slurm()
@@ -560,6 +622,12 @@ def main():
             sync_maintenance_reservation(lookup())
         except Exception:
             log.exception("failed to sync slurm reservation for scheduled maintenance")
+
+        try:
+            sync_opportunistic_maintenance(lookup())
+        except Exception:
+            log.exception("failed to sync opportunistic reservation for scheduled maintenance")
+
 
     try:
         # TODO: it performs 1 to 4 GCS list requests,

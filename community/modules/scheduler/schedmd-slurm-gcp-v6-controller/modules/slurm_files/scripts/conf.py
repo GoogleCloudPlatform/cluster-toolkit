@@ -83,9 +83,6 @@ def conflines(lkp: util.Lookup) -> str:
 
     any_dynamic = any(bool(p.partition_feature) for p in lkp.cfg.partitions.values())
     comma_params = {
-        "PrivateData": [
-            "cloud",
-        ],
         "LaunchParameters": [
             "enable_nss_slurm",
             "use_interactive_step",
@@ -94,11 +91,6 @@ def conflines(lkp: util.Lookup) -> str:
             "cloud_reg_addrs" if any_dynamic or any_tpu else "cloud_dns",
             "enable_configless",
             "idle_on_node_suspend",
-        ],
-        "SchedulerParameters": [
-            "bf_continue",
-            "salloc_wait_nodes",
-            "ignore_prefer_validation",
         ],
         "GresTypes": [
             "gpu" if any_gpus else None,
@@ -114,11 +106,17 @@ def conflines(lkp: util.Lookup) -> str:
         **(comma_params if not no_comma_params else {}),
         "Prolog": f"{prolog_path}/*" if lkp.cfg.prolog_scripts else None,
         "Epilog": f"{epilog_path}/*" if lkp.cfg.epilog_scripts else None,
-        "SuspendProgram": f"{scripts_dir}/suspend.py",
+        "PrivateData": get("private_data", []),
+        "SchedulerParameters": get("scheduler_parameters", [
+            "bf_continue",
+            "salloc_wait_nodes",
+            "ignore_prefer_validation",
+        ]),
         "ResumeProgram": f"{scripts_dir}/resume.py",
         "ResumeFailProgram": f"{scripts_dir}/suspend.py",
         "ResumeRate": get("resume_rate", 0),
         "ResumeTimeout": get("resume_timeout", 300),
+        "SuspendProgram": f"{scripts_dir}/suspend.py",
         "SuspendRate": get("suspend_rate", 0),
         "SuspendTimeout": get("suspend_timeout", 300),
         "TreeWidth": get("tree_width", default_tree_width),

@@ -151,7 +151,7 @@ limitations under the License.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_slurm_partition"></a> [slurm\_partition](#module\_slurm\_partition) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_partition | 5.12.0 |
+| <a name="module_slurm_partition"></a> [slurm\_partition](#module\_slurm\_partition) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_partition | 5.12.2 |
 
 ## Resources
 
@@ -178,7 +178,7 @@ limitations under the License.
 | <a name="input_region"></a> [region](#input\_region) | The default region for Cloud resources. | `string` | n/a | yes |
 | <a name="input_slurm_cluster_name"></a> [slurm\_cluster\_name](#input\_slurm\_cluster\_name) | Cluster name, used for resource naming and slurm accounting. If not provided it will default to the first 8 characters of the deployment name (removing any invalid characters). | `string` | `null` | no |
 | <a name="input_startup_script"></a> [startup\_script](#input\_startup\_script) | Startup script that will be used by the partition VMs. | `string` | `""` | no |
-| <a name="input_subnetwork_project"></a> [subnetwork\_project](#input\_subnetwork\_project) | The project the subnetwork belongs to. | `string` | `""` | no |
+| <a name="input_subnetwork_project"></a> [subnetwork\_project](#input\_subnetwork\_project) | The project the subnetwork belongs to. | `string` | `null` | no |
 | <a name="input_subnetwork_self_link"></a> [subnetwork\_self\_link](#input\_subnetwork\_self\_link) | Subnet to deploy to. | `string` | `null` | no |
 | <a name="input_zone"></a> [zone](#input\_zone) | Zone in which to create compute VMs. Additional zones in the same region can be specified in var.zones. | `string` | n/a | yes |
 | <a name="input_zone_target_shape"></a> [zone\_target\_shape](#input\_zone\_target\_shape) | Strategy for distributing VMs across zones in a region.<br/>ANY<br/>  GCE picks zones for creating VM instances to fulfill the requested number of VMs<br/>  within present resource constraints and to maximize utilization of unused zonal<br/>  reservations.<br/>ANY\_SINGLE\_ZONE (default)<br/>  GCE always selects a single zone for all the VMs, optimizing for resource quotas,<br/>  available reservations and general capacity.<br/>BALANCED<br/>  GCE prioritizes acquisition of resources, scheduling VMs in zones where resources<br/>  are available while distributing VMs as evenly as possible across allowed zones<br/>  to minimize the impact of zonal failure. | `string` | `"ANY_SINGLE_ZONE"` | no |

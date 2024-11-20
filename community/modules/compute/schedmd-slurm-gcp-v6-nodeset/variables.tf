@@ -88,7 +88,7 @@ variable "instance_image" {
     EOD
   type        = map(string)
   default = {
-    family  = "slurm-gcp-6-7-hpc-rocky-linux-8"
+    family  = "slurm-gcp-6-8-hpc-rocky-linux-8"
     project = "schedmd-slurm-public"
   }
 
@@ -161,7 +161,7 @@ variable "disk_labels" {
 }
 
 variable "additional_disks" {
-  description = "Configurations of additional disks to be included on the partition nodes. (do not use \"disk_type: local-ssd\"; known issue being addressed)"
+  description = "Configurations of additional disks to be included on the partition nodes."
   type = list(object({
     disk_name    = string
     device_name  = string
@@ -447,8 +447,8 @@ variable "access_config" {
 variable "reservation_name" {
   description = <<-EOD
     Name of the reservation to use for VM resources, should be in one of the following formats:
-    - projects/PROJECT_ID/reservations/RESERVATION_NAME
-    - RESERVATION_NAME
+    - projects/PROJECT_ID/reservations/RESERVATION_NAME[/SUFF/IX]
+    - RESERVATION_NAME[/SUFF/IX]
 
     Must be a "SPECIFIC" reservation
     Set to empty string if using no reservation or automatically-consumed reservations
@@ -458,8 +458,8 @@ variable "reservation_name" {
   nullable    = false
 
   validation {
-    condition     = var.reservation_name == "" || length(regexall("^projects/[a-z0-9-]+/reservations/[a-z0-9-]+$", var.reservation_name)) > 0 || length(regexall("^[a-z0-9-]+$", var.reservation_name)) > 0
-    error_message = "Reservation name must be in the format 'projects/PROJECT_ID/reservations/RESERVATION_NAME' or 'RESERVATION_NAME'."
+    condition     = length(regexall("^((projects/([a-z0-9-]+)/reservations/)?([a-z0-9-]+)(/[a-z0-9-]+/[a-z0-9-]+)?)?$", var.reservation_name)) > 0
+    error_message = "Reservation name must be either empty or in the format '[projects/PROJECT_ID/reservations/]RESERVATION_NAME[/SUFF/IX]', [...] are optional parts."
   }
 }
 
@@ -513,6 +513,14 @@ variable "enable_maintenance_reservation" {
   default     = false
 }
 
+
+variable "enable_opportunistic_maintenance" {
+  type        = bool
+  description = "On receiving maintenance notification, maintenance will be performed as soon as nodes becomes idle."
+  default     = false
+}
+
+
 variable "dws_flex" {
   description = <<-EOD
   If set and `enabled = true`, will utilize the DWS Flex Start to provision nodes.
@@ -520,16 +528,19 @@ variable "dws_flex" {
   Options:
   - enable: Enable DWS Flex Start
   - max_run_duration: Maximum duration in seconds for the job to run, should not exceed 1,209,600 (2 weeks).
-  
+  - use_job_duration: Use the job duration to determine the max_run_duration, if job duration is not set, max_run_duration will be used.
+
  Limitations:
   - CAN NOT be used with reservations;
   - CAN NOT be used with placement groups;
+  - If `use_job_duration` is enabled nodeset can be used in "exclusive" partitions only
 
  EOD
 
   type = object({
     enabled          = optional(bool, true)
     max_run_duration = optional(number, 1209600) # 2 weeks
+    use_job_duration = optional(bool, false)
   })
   default = {
     enabled = false

@@ -20,8 +20,7 @@ locals {
 }
 
 locals {
-  preattached_gpu_machine_family = contains(["a2", "a3", "g2"], local.machine_family)
-  has_gpu                        = (local.guest_accelerator != null && (length([for ga in local.guest_accelerator : ga if ga.count > 0]) > 0)) || local.preattached_gpu_machine_family
+  has_gpu = length(local.guest_accelerator) > 0
   gpu_taint = local.has_gpu ? [{
     key    = "nvidia.com/gpu"
     value  = "present"
@@ -85,13 +84,31 @@ resource "google_container_node_pool" "node_pool" {
     image_type      = var.image_type
 
     dynamic "guest_accelerator" {
-      for_each = { for idx, ga in local.guest_accelerator : idx => ga if ga.count > 0 }
+      for_each = local.guest_accelerator
+      iterator = ga
       content {
-        type                           = coalesce(guest_accelerator.value.type, try(local.generated_guest_accelerator[0].type, ""))
-        count                          = coalesce(try(guest_accelerator.value.count, 0) > 0 ? guest_accelerator.value.count : try(local.generated_guest_accelerator[0].count, "0"))
-        gpu_driver_installation_config = coalescelist(try(guest_accelerator.value.gpu_driver_installation_config, []), [{ gpu_driver_version = "DEFAULT" }])
-        gpu_partition_size             = try(guest_accelerator.value.gpu_partition_size, "")
-        gpu_sharing_config             = try(guest_accelerator.value.gpu_sharing_config, null)
+        type  = coalesce(ga.value.type, try(local.generated_guest_accelerator[0].type, ""))
+        count = coalesce(try(ga.value.count, 0) > 0 ? ga.value.count : try(local.generated_guest_accelerator[0].count, "0"))
+
+        gpu_partition_size = try(ga.value.gpu_partition_size, null)
+
+        dynamic "gpu_driver_installation_config" {
+          # in case user did not specify guest_accelerator settings, we need a try to default to []
+          for_each = try([ga.value.gpu_driver_installation_config], [{ gpu_driver_version = "DEFAULT" }])
+          iterator = gdic
+          content {
+            gpu_driver_version = gdic.value.gpu_driver_version
+          }
+        }
+
+        dynamic "gpu_sharing_config" {
+          for_each = try(ga.value.gpu_sharing_config == null, true) ? [] : [ga.value.gpu_sharing_config]
+          iterator = gsc
+          content {
+            gpu_sharing_strategy       = gsc.value.gpu_sharing_strategy
+            max_shared_clients_per_gpu = gsc.value.max_shared_clients_per_gpu
+          }
+        }
       }
     }
 
@@ -225,9 +242,12 @@ resource "google_container_node_pool" "node_pool" {
       )
       error_message = <<-EOT
       Check if your reservation is configured correctly:
-      1. A reservation with the name must exist in the specified project and one of the specified zones
-      2. Its consumption type must be "specific"
-      3. Its VM Properties must match with those of the Node Pool; Machine type, Accelerators (GPU Type and count), Local SSD disk type and count
+      - A reservation with the name must exist in the specified project and one of the specified zones
+
+      - Its consumption type must be "specific"
+      %{for property in local.specific_reservation_requirement_violations}
+      - ${local.specific_reservation_requirement_violation_messages[property]}
+      %{endfor}
       EOT
     }
   }

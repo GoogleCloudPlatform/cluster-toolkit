@@ -7,6 +7,32 @@ mounted to one or more compute VMs.
 For more information on this and other network storage options in the Cluster
 Toolkit, see the extended [Network Storage documentation](../../../docs/network_storage.md).
 
+### Deletion protection
+
+We recommend considering enabling [Filestore deletion protection][fdp]. Deletion
+protection will prevent unintentional deletion of an entire Filestore instance.
+It does not prevent deletion of files within the Filestore instance when mounted
+by a VM. It is not available on some [tiers](#filestore-tiers), including the
+default BASIC\_HDD tier or BASIC\_SSD tier. Follow the documentation link for
+up to date details.
+
+Usage can be enabled in a blueprint with, for example:
+
+```yaml
+  - id: homefs
+    source: modules/file-system/filestore
+    use: [network]
+    settings:
+      deletion_protection:
+        enabled: true
+        reason: Avoid data loss
+      filestore_tier: ZONAL
+      local_mount: /home
+      size_gb: 1024
+```
+
+[fdp]: https://cloud.google.com/filestore/docs/deletion-protection
+
 ### Filestore tiers
 
 At the time of writing, Filestore supports 5 [tiers of service][tiers] that are
@@ -149,14 +175,14 @@ limitations under the License.
 | Name | Version |
 |------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 0.14.0 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | >= 4.19 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.4 |
 | <a name="requirement_random"></a> [random](#requirement\_random) | ~> 3.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google"></a> [google](#provider\_google) | >= 4.19 |
+| <a name="provider_google"></a> [google](#provider\_google) | >= 6.4 |
 | <a name="provider_random"></a> [random](#provider\_random) | ~> 3.0 |
 
 ## Modules
@@ -175,6 +201,7 @@ No modules.
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | <a name="input_connect_mode"></a> [connect\_mode](#input\_connect\_mode) | Used to select mode - supported values DIRECT\_PEERING and PRIVATE\_SERVICE\_ACCESS. | `string` | `"DIRECT_PEERING"` | no |
+| <a name="input_deletion_protection"></a> [deletion\_protection](#input\_deletion\_protection) | Configure Filestore instance deletion protection | <pre>object({<br/>    enabled = optional(bool, false)<br/>    reason  = optional(string)<br/>  })</pre> | <pre>{<br/>  "enabled": false<br/>}</pre> | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the HPC deployment, used as name of the filestore instance if no name is specified. | `string` | n/a | yes |
 | <a name="input_filestore_share_name"></a> [filestore\_share\_name](#input\_filestore\_share\_name) | Name of the file system share on the instance. | `string` | `"nfsshare"` | no |
 | <a name="input_filestore_tier"></a> [filestore\_tier](#input\_filestore\_tier) | The service tier of the instance. | `string` | `"BASIC_HDD"` | no |

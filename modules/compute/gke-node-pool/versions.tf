@@ -13,16 +13,16 @@
 # limitations under the License.
 
 terraform {
-  required_version = ">= 1.2"
+  required_version = ">= 1.5"
 
   required_providers {
     google = {
       source  = "hashicorp/google"
-      version = "~> 5.0"
+      version = "> 5"
     }
     google-beta = {
       source  = "hashicorp/google-beta"
-      version = "~> 5.0"
+      version = "> 5"
     }
     null = {
       source  = "hashicorp/null"
@@ -30,6 +30,6 @@ terraform {
     }
   }
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:gke-node-pool/v1.41.0"
+    module_name = "blueprints/terraform/hpc-toolkit:gke-node-pool/v1.42.0"
   }
 }

@@ -35,6 +35,17 @@ VM will be created.
 > **_NOTE:_** The `project_id` and `region` settings would be inferred from the
 > deployment variables of the same name, but they are included here for clarity.
 
+### Use shared-vpc
+
+If a network is created in different project, this module can be used to
+reference the network. To use a network from a different project first make sure
+you have a [cloud nat][cloudnat] and [IAP][iap] forwarding. For more details,
+refer [shared-vpc][shared-vpc-doc]
+
+[cloudnat]: https://cloud.google.com/nat/docs/overview
+[iap]: https://cloud.google.com/iap/docs/using-tcp-forwarding
+[shared-vpc-doc]: ../../../examples/README.md#hpc-slurm-sharedvpcyaml-community-badge-experimental-badge
+
 ## License
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

@@ -39,8 +39,6 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [hpc-build-slurm-image.yaml](#hpc-build-slurm-imageyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-ubuntu2004-v5-legacy.yaml](#hpc-slurm-ubuntu2004-v5-legacyyaml--) ![community-badge] ![deprecated-badge]
   * [hpc-slurm-ubuntu2004.yaml](#hpc-slurm-ubuntu2004yaml--) ![community-badge]
-  * [pfs-daos.yaml](#pfs-daosyaml-) ![community-badge]
-  * [hpc-slurm-daos.yaml](#hpc-slurm-daosyaml-) ![community-badge]
   * [hpc-amd-slurm-v5-legacy.yaml](#hpc-amd-slurm-v5-legacyyaml--) ![community-badge] ![deprecated-badge]
   * [hpc-amd-slurm.yaml](#hpc-amd-slurmyaml-) ![community-badge]
   * [hpc-slurm-sharedvpc.yaml](#hpc-slurm-sharedvpcyaml--) ![community-badge] ![experimental-badge]
@@ -218,7 +216,7 @@ the experimental badge (![experimental-badge]).
 >
 > ```shell
 > # Install Python3 and run
-> pip3 install -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/5.12.0/scripts/requirements.txt
+> pip3 install -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/5.12.2/scripts/requirements.txt
 > ```
 
 Creates a basic auto-scaling Slurm cluster with mostly default settings. The
@@ -585,7 +583,7 @@ An example benchmarking job for PyTorch can be run under Slurm:
 
 ```shell
 cp /var/tmp/torch_test.* .
-sbatch -N 1 torch_test.sh
+sbatch -N 1 --gpus-per-node=1 torch_test.sh
 ```
 
 When you are done, clean up the resources in reverse order of creation:
@@ -634,7 +632,7 @@ An example benchmarking job for PyTorch can be run under Slurm:
 
 ```shell
 cp /var/tmp/torch_test.* .
-sbatch -N 1 torch_test.sh
+sbatch -N 1 --gpus-per-node=1 torch_test.sh
 ```
 
 When you are done, clean up the resources in reverse order of creation:
@@ -1151,7 +1149,7 @@ The blueprint contains 3 groups:
 >
 > ```shell
 > # Install Python3 and run
-> pip3 install -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/5.12.0/scripts/requirements.txt
+> pip3 install -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/5.12.2/scripts/requirements.txt
 > ```
 
 Similar to the [hpc-slurm-v5-legacy.yaml] example, but using Ubuntu 20.04 instead of CentOS 7.
@@ -1213,22 +1211,6 @@ For this example the following is needed in the selected region:
   needed for `compute` partition_
 * Compute Engine API: Resource policies: **one for each job in parallel** -
   _only needed for `compute` partition_
-
-### [pfs-daos.yaml] ![community-badge]
-
-This example provisions a DAOS cluster with [managed instance groups][migs] for the servers and for clients. It is more extensively discussed in a dedicated [README for Intel
-examples][intel-examples-readme].
-
-[pfs-daos.yaml]: ../community/examples/intel/pfs-daos.yaml
-[migs]: https://cloud.google.com/compute/docs/instance-groups
-
-### [hpc-slurm-daos.yaml] ![community-badge]
-
-This example provisions DAOS servers and a Slurm cluster. It is
-more extensively discussed in a dedicated [README for Intel
-examples][intel-examples-readme].
-
-[hpc-slurm-daos.yaml]: ../community/examples/intel/hpc-slurm-daos.yaml
 
 ### [hpc-amd-slurm-v5-legacy.yaml] ![community-badge] ![deprecated-badge]
 
@@ -1481,10 +1463,10 @@ guest_accelerator:
 - type: nvidia-l4
   count: 1
   gpu_sharing_config:
-  - max_shared_clients_per_gpu: 2
+    max_shared_clients_per_gpu: 2
     gpu_sharing_strategy: "TIME_SHARING"
   gpu_driver_installation_config:
-  - gpu_driver_version: "LATEST"
+    gpu_driver_version: "LATEST"
 ```
 
 * Configuration of the cluster using default drivers provided by GKE.
@@ -1694,6 +1676,28 @@ the controller and login nodes. Also since this blueprint doesn't use external
 IPs for compute nodes, one must needs to [set up cloud nat][cloudnat] and
 [set up iap][iap].
 
+Now, one needs to update the blueprint to include shared vpc details. In the
+network configuration, update the details for shared vpc as mentioned below,
+
+```yaml
+vars:
+  project_id:  <service-project> # update /w the service project id in which shared network will be used.
+  host_project_id: <host-project> # update /w the host project id in which shared network is created.
+  deployment_name: hpc-small-shared-vpc
+  region: us-central1
+  zone: us-central1-c
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: network1
+    source: modules/network/pre-existing-vpc
+    settings:
+      project_id: $(vars.host_project_id)
+      network_name: <shared-network> # update /w shared network name
+      subnetwork_name: <shared-subnetwork> # update /w shared sub-net name
+```
+
 [hpc-slurm-sharedvpc.yaml]: ../community/examples/hpc-slurm-sharedvpc.yaml
 [fs-shared-vpc]: https://cloud.google.com/filestore/docs/shared-vpc
 
@@ -1751,7 +1755,7 @@ deployment_groups:
   # GitHub module over HTTPS, prefixed with github.com
   - source: github.com/org/repo//path/to/module
 
-  # Local absolute source, prefixed with / 
+  # Local absolute source, prefixed with /
   - source: /path/to/module
 
   # Local relative (to current working directory) source, prefixed with ./ or ../

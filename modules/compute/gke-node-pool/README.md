@@ -151,7 +151,7 @@ The following is an example of
       guest_accelerator:
       - gpu_partition_size: 1g.5gb
         gpu_sharing_config:
-        - gpu_sharing_strategy: TIME_SHARING
+          gpu_sharing_strategy: TIME_SHARING
           max_shared_clients_per_gpu: 3
 ```
 
@@ -181,9 +181,9 @@ The following is an example of using a GPU (with sharing config) attached to an 
       - type: nvidia-tesla-t4
         count: 2
         gpu_driver_installation_config:
-        - gpu_driver_version: "LATEST"
+          gpu_driver_version: "LATEST"
         gpu_sharing_config:
-        - max_shared_clients_per_gpu: 2
+          max_shared_clients_per_gpu: 2
           gpu_sharing_strategy: "TIME_SHARING"
 ```
 
@@ -223,6 +223,40 @@ Finally, the following is adding multivpc to a node pool:
       ...
 ```
 
+## Using GCE Reservations
+You can reserve Google Compute Engine instances in a specific zone to ensure resources are available for their workloads when needed. For more details on how to manage reservations, see [Reserving Compute Engine zonal resources](https://cloud.google.com/compute/docs/instances/reserving-zonal-resources).
+
+After creating a reservation, you can consume the reserved GCE VM instances in GKE. GKE clusters deployed using Cluster Toolkit support the same consumption modes as Compute Engine: NO_RESERVATION(default), ANY_RESERVATION, SPECIFIC_RESERVATION.
+
+This can be accomplished using [`reservation_affinity`](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/modules/compute/gke-node-pool/README.md#input_reservation_affinity).
+
+```yaml
+# Target any reservation
+reservation_affinity:
+  consume_reservation_type: ANY_RESERVATION
+
+# Target a specific reservation
+reservation_affinity:
+  consume_reservation_type: SPECIFIC_RESERVATION
+  specific_reservations:
+  - name: specific-reservation-1
+```
+
+The following requirements need to be satisfied for the node pool nodes to be able to use a specific reservation:
+1. A reservation with the name must exist in the specified project(`var.project_id`) and one of the specified zones(`var.zones`).
+2. Its consumption type must be `specific`.
+3. Its GCE VM Properties must match with those of the Node Pool; Machine type, Accelerators (GPU Type and count), Local SSD disk type and count.
+
+If you want to utilise a shared reservation, the owner project of the shared reservation needs to be explicitly specified like the following. Note that a shared reservation can be used by the project that hosts the reservation (owner project) and by the projects the reservation is shared with (consumer projects). See how to [create and use a shared reservation](https://cloud.google.com/compute/docs/instances/reservations-shared).
+
+```yaml
+reservation_affinity:
+  consume_reservation_type: SPECIFIC_RESERVATION
+  specific_reservations:
+  - name: specific-reservation-shared
+    project: shared_reservation_owner_project_id
+```
+
 ## License
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
@@ -244,17 +278,17 @@ limitations under the License.
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.2 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | ~> 5.0 |
-| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | ~> 5.0 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.5 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | > 5 |
+| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | > 5 |
 | <a name="requirement_null"></a> [null](#requirement\_null) | ~> 3.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google"></a> [google](#provider\_google) | ~> 5.0 |
-| <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | ~> 5.0 |
+| <a name="provider_google"></a> [google](#provider\_google) | > 5 |
+| <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | > 5 |
 | <a name="provider_null"></a> [null](#provider\_null) | ~> 3.0 |
 
 ## Modules
@@ -288,7 +322,7 @@ limitations under the License.
 | <a name="input_enable_gcfs"></a> [enable\_gcfs](#input\_enable\_gcfs) | Enable the Google Container Filesystem (GCFS). See [restrictions](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/container_cluster#gcfs_config). | `bool` | `false` | no |
 | <a name="input_enable_secure_boot"></a> [enable\_secure\_boot](#input\_enable\_secure\_boot) | Enable secure boot for the nodes.  Keep enabled unless custom kernel modules need to be loaded. See [here](https://cloud.google.com/compute/shielded-vm/docs/shielded-vm#secure-boot) for more info. | `bool` | `true` | no |
 | <a name="input_gke_version"></a> [gke\_version](#input\_gke\_version) | GKE version | `string` | n/a | yes |
-| <a name="input_guest_accelerator"></a> [guest\_accelerator](#input\_guest\_accelerator) | List of the type and count of accelerator cards attached to the instance. | <pre>list(object({<br/>    type  = optional(string)<br/>    count = optional(number, 0)<br/>    gpu_driver_installation_config = optional(list(object({<br/>      gpu_driver_version = string<br/>    })))<br/>    gpu_partition_size = optional(string)<br/>    gpu_sharing_config = optional(list(object({<br/>      gpu_sharing_strategy       = optional(string)<br/>      max_shared_clients_per_gpu = optional(number)<br/>    })))<br/>  }))</pre> | `null` | no |
+| <a name="input_guest_accelerator"></a> [guest\_accelerator](#input\_guest\_accelerator) | List of the type and count of accelerator cards attached to the instance. | <pre>list(object({<br/>    type  = optional(string)<br/>    count = optional(number, 0)<br/>    gpu_driver_installation_config = optional(object({<br/>      gpu_driver_version = string<br/>    }), { gpu_driver_version = "DEFAULT" })<br/>    gpu_partition_size = optional(string)<br/>    gpu_sharing_config = optional(object({<br/>      gpu_sharing_strategy       = string<br/>      max_shared_clients_per_gpu = number<br/>    }))<br/>  }))</pre> | `[]` | no |
 | <a name="input_host_maintenance_interval"></a> [host\_maintenance\_interval](#input\_host\_maintenance\_interval) | Specifies the frequency of planned maintenance events. | `string` | `""` | no |
 | <a name="input_image_type"></a> [image\_type](#input\_image\_type) | The default image type used by NAP once a new node pool is being created. Use either COS\_CONTAINERD or UBUNTU\_CONTAINERD. | `string` | `"COS_CONTAINERD"` | no |
 | <a name="input_initial_node_count"></a> [initial\_node\_count](#input\_initial\_node\_count) | The initial number of nodes for the pool. In regional clusters, this is the number of nodes per zone. Changing this setting after node pool creation will not make any effect. It cannot be set with static\_node\_count and must be set to a value between autoscaling\_total\_min\_nodes and autoscaling\_total\_max\_nodes. | `number` | `null` | no |
@@ -307,7 +341,7 @@ limitations under the License.
 | <a name="input_service_account_scopes"></a> [service\_account\_scopes](#input\_service\_account\_scopes) | Scopes to to use with the node pool. | `set(string)` | <pre>[<br/>  "https://www.googleapis.com/auth/cloud-platform"<br/>]</pre> | no |
 | <a name="input_spot"></a> [spot](#input\_spot) | Provision VMs using discounted Spot pricing, allowing for preemption | `bool` | `false` | no |
 | <a name="input_static_node_count"></a> [static\_node\_count](#input\_static\_node\_count) | The static number of nodes in the node pool. If set, autoscaling will be disabled. | `number` | `null` | no |
-| <a name="input_taints"></a> [taints](#input\_taints) | Taints to be applied to the system node pool. | <pre>list(object({<br/>    key    = string<br/>    value  = any<br/>    effect = string<br/>  }))</pre> | <pre>[<br/>  {<br/>    "effect": "NO_SCHEDULE",<br/>    "key": "user-workload",<br/>    "value": true<br/>  }<br/>]</pre> | no |
+| <a name="input_taints"></a> [taints](#input\_taints) | Taints to be applied to the system node pool. | <pre>list(object({<br/>    key    = string<br/>    value  = any<br/>    effect = string<br/>  }))</pre> | `[]` | no |
 | <a name="input_threads_per_core"></a> [threads\_per\_core](#input\_threads\_per\_core) | Sets the number of threads per physical core. By setting threads\_per\_core<br/>to 2, Simultaneous Multithreading (SMT) is enabled extending the total number<br/>of virtual cores. For example, a machine of type c2-standard-60 will have 60<br/>virtual cores with threads\_per\_core equal to 2. With threads\_per\_core equal<br/>to 1 (SMT turned off), only the 30 physical cores will be available on the VM.<br/><br/>The default value of \"0\" will turn off SMT for supported machine types, and<br/>will fall back to GCE defaults for unsupported machine types (t2d, shared-core<br/>instances, or instances with less than 2 vCPU).<br/><br/>Disabling SMT can be more performant in many HPC workloads, therefore it is<br/>disabled by default where compatible.<br/><br/>null = SMT configuration will use the GCE defaults for the machine type<br/>0 = SMT will be disabled where compatible (default)<br/>1 = SMT will always be disabled (will fail on incompatible machine types)<br/>2 = SMT will always be enabled (will fail on incompatible machine types) | `number` | `0` | no |
 | <a name="input_timeout_create"></a> [timeout\_create](#input\_timeout\_create) | Timeout for creating a node pool | `string` | `null` | no |
 | <a name="input_timeout_update"></a> [timeout\_update](#input\_timeout\_update) | Timeout for updating a node pool | `string` | `null` | no |

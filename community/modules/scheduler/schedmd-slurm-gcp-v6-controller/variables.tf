@@ -196,18 +196,19 @@ variable "nodeset" {
       auto_delete  = optional(bool, true)
       boot         = optional(bool, false)
     })), [])
-    bandwidth_tier                 = optional(string, "platform_default")
-    can_ip_forward                 = optional(bool, false)
-    disable_smt                    = optional(bool, false)
-    disk_auto_delete               = optional(bool, true)
-    disk_labels                    = optional(map(string), {})
-    disk_size_gb                   = optional(number)
-    disk_type                      = optional(string)
-    enable_confidential_vm         = optional(bool, false)
-    enable_placement               = optional(bool, false)
-    enable_oslogin                 = optional(bool, true)
-    enable_shielded_vm             = optional(bool, false)
-    enable_maintenance_reservation = optional(bool, true)
+    bandwidth_tier                   = optional(string, "platform_default")
+    can_ip_forward                   = optional(bool, false)
+    disable_smt                      = optional(bool, false)
+    disk_auto_delete                 = optional(bool, true)
+    disk_labels                      = optional(map(string), {})
+    disk_size_gb                     = optional(number)
+    disk_type                        = optional(string)
+    enable_confidential_vm           = optional(bool, false)
+    enable_placement                 = optional(bool, false)
+    enable_oslogin                   = optional(bool, true)
+    enable_shielded_vm               = optional(bool, false)
+    enable_maintenance_reservation   = optional(bool, false)
+    enable_opportunistic_maintenance = optional(bool, false)
     gpu = optional(object({
       count = number
       type  = string
@@ -215,6 +216,7 @@ variable "nodeset" {
     dws_flex = object({
       enabled          = bool
       max_run_duration = number
+      use_job_duration = bool
     })
     labels                   = optional(map(string), {})
     machine_type             = optional(string)
@@ -406,23 +408,24 @@ EOD
 variable "cloud_parameters" {
   description = "cloud.conf options. Defaults inherited from [Slurm GCP repo](https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/terraform/slurm_cluster/modules/slurm_files/README_TF.md#input_cloud_parameters)"
   type = object({
-    no_comma_params = optional(bool)
-    resume_rate     = optional(number)
-    resume_timeout  = optional(number)
-    suspend_rate    = optional(number)
-    suspend_timeout = optional(number)
-    topology_plugin = optional(string)
-    topology_param  = optional(string)
-    tree_width      = optional(number)
+    no_comma_params      = optional(bool, false)
+    private_data         = optional(list(string))
+    scheduler_parameters = optional(list(string))
+    resume_rate          = optional(number)
+    resume_timeout       = optional(number)
+    suspend_rate         = optional(number)
+    suspend_timeout      = optional(number)
+    topology_plugin      = optional(string)
+    topology_param       = optional(string)
+    tree_width           = optional(number)
   })
-  default = {}
+  default  = {}
+  nullable = false
 }
 
 variable "enable_default_mounts" {
   description = <<-EOD
     Enable default global network storage from the controller
-    - /usr/local/etc/slurm
-    - /etc/munge
     - /home
     - /apps
     Warning: If these are disabled, the slurm etc and munge dirs must be added

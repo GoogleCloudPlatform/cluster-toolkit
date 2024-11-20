@@ -56,7 +56,7 @@ locals {
 }
 
 module "slurm_nodeset_template" {
-  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=6.8.2"
+  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=6.8.5"
 
   project_id          = var.project_id
   region              = var.region

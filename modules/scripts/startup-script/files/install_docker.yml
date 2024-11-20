@@ -17,6 +17,8 @@
   hosts: all
   become: true
   vars:
+    docker_data_root: ''
+    docker_daemon_config: ''
     enable_docker_world_writable: false
   tasks:
   - name: Check if docker is installed
@@ -29,25 +31,54 @@
       dest: /tmp/get-docker.sh
       owner: root
       group: root
-      mode: 0644
+      mode: '0644'
     when: not docker_binary.stat.exists
   - name: Install Docker
     ansible.builtin.command: sh /tmp/get-docker.sh
     register: docker_installed
     changed_when: docker_installed.rc != 0
     when: not docker_binary.stat.exists
+  - name: Create Docker daemon configuration
+    ansible.builtin.copy:
+      dest: /etc/docker/daemon.json
+      mode: '0644'
+      content: '{{ docker_daemon_config }}'
+      # validate flag requires Docker server version 23.0 and above
+      # can add this back after private A3 DLVM image is deprecated
+      # this image comes with Docker version 20.10.17
+      # validate: /usr/bin/dockerd --validate --config-file %s
+    when: docker_daemon_config
+    notify:
+    - Restart Docker
+  - name: Create Docker service override directory
+    ansible.builtin.file:
+      path: /etc/systemd/system/docker.service.d
+      state: directory
+      owner: root
+      group: root
+      mode: '0755'
+  - name: Create Docker service override configuration
+    ansible.builtin.copy:
+      dest: /etc/systemd/system/docker.service.d/data-root.conf
+      mode: '0644'
+      content: |
+        [Unit]
+        {% if docker_data_root %}
+        RequiresMountsFor={{ docker_data_root }}
+        {% endif %}
+        After=create-localssd-raid.service
   - name: Create Docker socket override directory
     ansible.builtin.file:
       path: /etc/systemd/system/docker.socket.d
       state: directory
       owner: root
       group: root
-      mode: 0755
+      mode: '0755'
     when: enable_docker_world_writable
   - name: Create Docker socket override configuration
     ansible.builtin.copy:
       dest: /etc/systemd/system/docker.socket.d/world-writable.conf
-      mode: 0644
+      mode: '0644'
       content: |
         [Socket]
         SocketMode=0666
@@ -72,10 +103,14 @@
     ansible.builtin.service:
       name: docker.socket
       state: restarted
+  - name: Restart Docker
+    ansible.builtin.service:
+      name: docker.service
+      state: restarted
 
   post_tasks:
   - name: Start Docker
     ansible.builtin.service:
-      name: docker
+      name: docker.service
       state: started
       enabled: true
