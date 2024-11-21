@@ -53,7 +53,6 @@ resource "google_container_node_pool" "node_pool" {
   name           = coalesce(var.name, "${var.machine_type}-${local.module_unique_id}")
   cluster        = var.cluster_id
   node_locations = var.zones
-  version        = var.node_version
 
   node_count = var.static_node_count
   dynamic "autoscaling" {
@@ -261,7 +260,9 @@ resource "google_container_node_pool" "node_pool" {
     precondition {
       condition = (
         (local.input_specific_reservations_count == 0) ||
-        (local.input_specific_reservations_count == 1 && length(local.verified_specific_reservations) > 0 && length(local.specific_reservation_requirement_violations) == 0)
+        (local.input_specific_reservations_count == 1 &&
+          length(local.verified_specific_reservations) > 0 &&
+        length(local.specific_reservation_requirement_violations) == 0)
       )
       error_message = <<-EOT
       Check if your reservation is configured correctly:
