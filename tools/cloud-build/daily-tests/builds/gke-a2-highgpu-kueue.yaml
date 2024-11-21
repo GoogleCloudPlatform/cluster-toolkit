@@ -24,7 +24,7 @@ tags:
 
 timeout: 14400s  # 4hr
 steps:
-- id: gke-a3-highgpu-kueue-test
+- id: gke-a2-highgpu-kueue-test
   name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
   entrypoint: /bin/bash
   env:
@@ -37,10 +37,10 @@ steps:
     cd /workspace && make
     BUILD_ID_FULL=$BUILD_ID
     BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
-    EXAMPLE_BP=tools/cloud-build/daily-tests/blueprints/a3high-gke-kueue.yaml
+    EXAMPLE_BP=tools/cloud-build/daily-tests/blueprints/gke-a2-highgpu.yaml
 
     # Replacing the static subnet name to prevent collisions
-    sed  -i "s/gke-subnet-a3-high/gke-subnet-a3-high-$${BUILD_ID_SHORT}/" $${EXAMPLE_BP}
+    sed  -i "s/gke-subnet-a2-high/gke-subnet-a2-high-$${BUILD_ID_SHORT}/" $${EXAMPLE_BP}
     echo '  - id: remote-node'                           >> $${EXAMPLE_BP}
     echo '    source: modules/compute/vm-instance'       >> $${EXAMPLE_BP}
     echo '    use: [network1]'                           >> $${EXAMPLE_BP}
@@ -50,4 +50,4 @@ steps:
     echo '      add_deployment_name_before_prefix: true' >> $${EXAMPLE_BP}
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
         --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
-        --extra-vars="@tools/cloud-build/daily-tests/tests/gke-a3-highgpu-kueue.yml"
+        --extra-vars="@tools/cloud-build/daily-tests/tests/gke-a2-highgpu-kueue.yml"

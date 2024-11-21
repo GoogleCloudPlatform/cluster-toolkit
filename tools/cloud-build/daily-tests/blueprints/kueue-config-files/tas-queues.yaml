@@ -29,7 +29,7 @@ metadata:
   name: "tas-flavor"
 spec:
   nodeLabels:
-    cloud.google.com/gke-nodepool: "tas-node-pool"
+    cloud.google.com/gke-nodepool: "a2-highgpu-2g-a2highgpupool"
   topologyName: "gke-default"
 ---
 apiVersion: kueue.x-k8s.io/v1beta1
@@ -44,7 +44,7 @@ spec:
     - name: "tas-flavor"
       resources:
       - name: "nvidia.com/gpu"
-        nominalQuota: 20        # 10 nodes, 2 GPU each
+        nominalQuota: 12        # 6 nodes, 2 GPU each
 ---
 apiVersion: kueue.x-k8s.io/v1beta1
 kind: LocalQueue
