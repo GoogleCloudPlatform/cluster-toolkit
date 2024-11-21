@@ -184,10 +184,12 @@ def partitionlines(partition, lkp: util.Lookup) -> str:
     """Make a partition line for the slurm.conf"""
     MIN_MEM_PER_CPU = 100
 
-    def defmempercpu(nodeset: str) -> int:
-        template = lkp.cfg.nodeset.get(nodeset).instance_template
+    def defmempercpu(nodeset_name: str) -> int:
+        nodeset = lkp.cfg.nodeset.get(nodeset_name)
+        template = nodeset.instance_template
         machine = lkp.template_machine_conf(template)
-        return max(MIN_MEM_PER_CPU, machine.memory // machine.cpus)
+        mem_spec_limit = int(nodeset.node_conf.get("MemSpecLimit", 0))
+        return max(MIN_MEM_PER_CPU, (machine.memory - mem_spec_limit) // machine.cpus)
 
     defmem = min(
         map(defmempercpu, partition.partition_nodeset), default=MIN_MEM_PER_CPU
