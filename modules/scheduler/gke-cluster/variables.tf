@@ -41,6 +41,12 @@ variable "region" {
   type        = string
 }
 
+variable "zone" {
+  description = "Zone for a zonal cluster."
+  default     = null
+  type        = string
+}
+
 variable "network_id" {
   description = "The ID of the GCE VPC network to host the cluster given in the format: `projects/<project_id>/global/networks/<network_name>`."
   type        = string
@@ -356,6 +362,28 @@ variable "additional_networks" {
       subnetwork_range_name = string
     }))
   }))
+}
+
+variable "cluster_reference_type" {
+  description = "How the google_container_node_pool.system_node_pools refers to the cluster. Possible values are: {SELF_LINK, NAME}"
+  default     = "SELF_LINK"
+  type        = string
+  nullable    = false
+  validation {
+    condition     = contains(["SELF_LINK", "NAME"], var.cluster_reference_type)
+    error_message = "`cluster_reference_type` must be one of {SELF_LINK, NAME}"
+  }
+}
+
+variable "cluster_availability_type" {
+  description = "Type of cluster availability. Possible values are: {REGIONAL, ZONAL}"
+  default     = "REGIONAL"
+  type        = string
+  nullable    = false
+  validation {
+    condition     = contains(["REGIONAL", "ZONAL"], var.cluster_availability_type)
+    error_message = "`cluster_availability_type` must be one of {REGIONAL, ZONAL}"
+  }
 }
 
 variable "default_max_pods_per_node" {
