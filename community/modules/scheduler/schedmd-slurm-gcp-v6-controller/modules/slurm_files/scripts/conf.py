@@ -184,9 +184,10 @@ def partitionlines(partition, lkp: util.Lookup) -> str:
     MIN_MEM_PER_CPU = 100
 
     def defmempercpu(nodeset: str) -> int:
+        mem_spec_limit = int(lkp.cfg.nodeset.get(nodeset).node_conf.get("MemSpecLimit", 0))
         template = lkp.cfg.nodeset.get(nodeset).instance_template
         machine = lkp.template_machine_conf(template)
-        return max(MIN_MEM_PER_CPU, machine.memory // machine.cpus)
+        return max(MIN_MEM_PER_CPU, (machine.memory - mem_spec_limit) // machine.cpus)
 
     defmem = min(
         map(defmempercpu, partition.partition_nodeset), default=MIN_MEM_PER_CPU
