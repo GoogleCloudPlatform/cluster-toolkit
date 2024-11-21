@@ -65,7 +65,7 @@ resource "google_container_cluster" "gke_cluster" {
 
   project         = var.project_id
   name            = local.name
-  location        = var.region
+  location        = var.cluster_availability_type == "ZONAL" ? var.zone : var.region
   resource_labels = local.labels
   networking_mode = var.networking_mode
   # decouple node pool lifecycle from cluster life cycle
@@ -198,15 +198,15 @@ resource "google_container_cluster" "gke_cluster" {
       node_config
     ]
     precondition {
-      condition     = (var.default_max_pods_per_node == null) || (var.networking_mode == "VPC_NATIVE")
+      condition     = var.default_max_pods_per_node == null || var.networking_mode == "VPC_NATIVE"
       error_message = "default_max_pods_per_node does not work on `routes-based` clusters, that don't have IP Aliasing enabled."
     }
     precondition {
-      condition     = !(!coalesce(var.enable_dataplane_v2, true) && local.derived_enable_multi_networking)
+      condition     = coalesce(var.enable_dataplane_v2, true) || !local.derived_enable_multi_networking
       error_message = "'enable_dataplane_v2' cannot be false when enabling multi networking."
     }
     precondition {
-      condition     = !(!coalesce(var.enable_multi_networking, true) && length(var.additional_networks) > 0)
+      condition     = coalesce(var.enable_multi_networking, true) || length(var.additional_networks) == 0
       error_message = "'enable_multi_networking' cannot be false when using multivpc module, which passes additional_networks."
     }
   }
@@ -229,9 +229,12 @@ resource "google_container_node_pool" "system_node_pools" {
   provider = google-beta
   count    = var.system_node_pool_enabled ? 1 : 0
 
-  project = var.project_id
-  name    = var.system_node_pool_name
-  cluster = google_container_cluster.gke_cluster.self_link
+  project  = var.project_id
+  name     = var.system_node_pool_name
+  cluster  = var.cluster_reference_type == "NAME" ? google_container_cluster.gke_cluster.name : google_container_cluster.gke_cluster.self_link
+  location = var.cluster_availability_type == "ZONAL" ? var.zone : var.region
+  version  = var.min_master_version
+
   autoscaling {
     total_min_node_count = var.system_node_pool_node_count.total_min_nodes
     total_max_node_count = var.system_node_pool_node_count.total_max_nodes
@@ -350,14 +353,15 @@ module "kubectl_apply" {
       {
         source = "${path.module}/templates/gke-network-paramset.yaml.tftpl",
         template_vars = {
-          name            = "vpc${idx + 1}",
+          name            = network_info.subnetwork,
           network_name    = network_info.network
-          subnetwork_name = network_info.subnetwork
+          subnetwork_name = network_info.subnetwork,
+          device_mode     = strcontains(upper(network_info.nic_type), "RDMA") ? "RDMA" : "NetDevice"
         }
       },
       {
         source        = "${path.module}/templates/network-object.yaml.tftpl",
-        template_vars = { name = "vpc${idx + 1}" }
+        template_vars = { name = network_info.subnetwork }
       }
     ]
   ])
