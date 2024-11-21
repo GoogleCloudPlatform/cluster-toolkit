@@ -14,6 +14,16 @@
  * limitations under the License.
 */
 
+# Split the input into three different lists where the details of a given reservation are at the same index across these lists. 
+locals {
+  # Specific block of an extended reservation can be targeted with exr-one/reservationBlocks/exr-one-block-1
+  # Data source needs to be queried with the reservation name only. So, we extract the reservation name
+  input_reservation_names    = [for r in try(var.reservation_affinity.specific_reservations, []) : split("/", r.name)[0]]
+  input_reservation_projects = [for r in try(var.reservation_affinity.specific_reservations, []) : coalesce(r.project, var.project_id)]
+  # We, also, remember the suffix "/reservationBlocks/exr-one-block-1" for use elsewhere afterwards
+  input_reservation_suffixes = [for r in try(var.reservation_affinity.specific_reservations, []) : substr(r.name, length(split("/", r.name)[0]), -1)]
+}
+
 data "google_compute_reservation" "specific_reservations" {
   for_each = (
     local.input_specific_reservations_count == 0 ?
@@ -21,11 +31,11 @@ data "google_compute_reservation" "specific_reservations" {
     {
       for pair in flatten([
         for zone in try(var.zones, []) : [
-          for reservation in try(var.reservation_affinity.specific_reservations, []) : {
-            key : "${coalesce(reservation.project, var.project_id)}/${zone}/${reservation.name}"
+          for i, reservation_name in try(local.input_reservation_names, []) : {
+            key : "${local.input_reservation_projects[i]}/${zone}/${reservation_name}"
             zone : zone
-            reservation_name : reservation.name
-            project : reservation.project == null ? var.project_id : reservation.project
+            reservation_name : reservation_name
+            project : local.input_reservation_projects[i]
           }
         ]
       ]) :
