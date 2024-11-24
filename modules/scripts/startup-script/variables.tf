@@ -262,3 +262,9 @@ variable "http_no_proxy" {
   default     = ".google.com,.googleapis.com,metadata.google.internal,localhost,127.0.0.1"
   nullable    = false
 }
+
+variable "enable_cloud_rdma" {
+  description = "If true, will install and enable Cloud RDMA drivers. Currently only supported on Rocky 8 Linux."
+  type        = bool
+  default     = false
+}

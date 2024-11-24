@@ -319,6 +319,7 @@ No modules.
 | <a name="input_debug_file"></a> [debug\_file](#input\_debug\_file) | Path to an optional local to be written with 'startup\_script'. | `string` | `null` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the HPC deployment, used to name GCS bucket for startup scripts. | `string` | n/a | yes |
 | <a name="input_docker"></a> [docker](#input\_docker) | Install and configure Docker | <pre>object({<br/>    enabled        = optional(bool, false)<br/>    world_writable = optional(bool, false)<br/>    daemon_config  = optional(string, "")<br/>  })</pre> | <pre>{<br/>  "enabled": false<br/>}</pre> | no |
+| <a name="input_enable_cloud_rdma"></a> [enable\_cloud\_rdma](#input\_enable\_cloud\_rdma) | If true, will install and enable Cloud RDMA drivers. Currently only supported on Rocky 8 Linux. | `bool` | `false` | no |
 | <a name="input_enable_docker_world_writable"></a> [enable\_docker\_world\_writable](#input\_enable\_docker\_world\_writable) | DEPRECATED: use var.docker | `bool` | `null` | no |
 | <a name="input_gcs_bucket_path"></a> [gcs\_bucket\_path](#input\_gcs\_bucket\_path) | The GCS path for storage bucket and the object, starting with `gs://`. | `string` | `null` | no |
 | <a name="input_http_no_proxy"></a> [http\_no\_proxy](#input\_http\_no\_proxy) | Domains for which to disable http\_proxy behavior. Honored only if var.http\_proxy is set | `string` | `".google.com,.googleapis.com,metadata.google.internal,localhost,127.0.0.1"` | no |
