@@ -27,5 +27,5 @@ In order to make use of DWS Flex Start mode with SlurmGCP, you must use the `dws
 ```
 
 > [!WARNING]
-> DWS Flex Start cannot be used in tandem with a reservation or placement policy
+> DWS Flex Start cannot be used in tandem with a reservation or placement policy.
 > While this feature was tested at the time of publication, it is not regression tested and may cease to work based on changes in the bulkInsert API.
