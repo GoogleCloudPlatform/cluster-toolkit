@@ -2011,4 +2011,4 @@ def update_config(cfg: NSDict) -> None:
 
 def scontrol_reconfigure(lkp: Lookup) -> None:
     log.info("Running scontrol reconfigure")
-    run(f"{lkp.scontrol} reconfigure", timeout=30)
+    run(f"{lkp.scontrol} reconfigure")
