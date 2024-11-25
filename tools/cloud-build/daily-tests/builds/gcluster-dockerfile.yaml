@@ -27,31 +27,10 @@ steps:
   args:
   - 'create'
   - 'tools/cloud-build/daily-tests/blueprints/e2e.yaml'
-  - '--vars'
-  - 'project_id=$PROJECT_ID'
-  - '--vars'
-  - 'deployment_name=dockerfile-test'
-  - '--vars'
-  - 'region=us-central1'
-  - '--vars'
-  - 'zone=us-central1-a'
   - '--out'
   - '/workspace'
-
-- id: check-deployment-folder-exists
-  name: 'bash'
-  automapSubstitutions: true
-  script: |
-    #!/usr/bin/env bash
-    set -ex
-    folder_path="/workspace/dockerfile-test"
-
-    # Check if the folder exists
-    if [ -d "$folder_path" ]; then
-      echo "Folder exists: $folder_path"
-    else
-      echo "Folder does not exist: $folder_path"
-    fi
+  - '--vars'
+  - 'project_id=$PROJECT_ID,deployment_name=dockerfile-test,region=us-central1,zone=us-central1-a'
 
 - id: deploy-resources
   name: 'gcluster'
