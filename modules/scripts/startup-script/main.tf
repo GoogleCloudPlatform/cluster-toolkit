@@ -93,11 +93,11 @@ locals {
     }
   ]
 
-  rdma_runner = !var.enable_cloud_rdma ? [] : [
+  rdma_runner = !var.install_cloud_rdma_drivers ? [] : [
     {
       type        = "shell"
-      source      = "${path.module}/files/install_cloud_rdma.sh"
-      destination = "install_cloud_rdma.sh"
+      source      = "${path.module}/files/install_cloud_rdma_drivers.sh"
+      destination = "install_cloud_rdma_drivers.sh"
     }
   ]
 

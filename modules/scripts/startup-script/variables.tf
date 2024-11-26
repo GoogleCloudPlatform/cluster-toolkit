@@ -263,8 +263,8 @@ variable "http_no_proxy" {
   nullable    = false
 }
 
-variable "enable_cloud_rdma" {
-  description = "If true, will install and enable Cloud RDMA drivers. Currently only supported on Rocky Linux 8."
+variable "install_cloud_rdma_drivers" {
+  description = "If true, will install and reload Cloud RDMA drivers. Currently only supported on Rocky Linux 8."
   type        = bool
   default     = false
 }
