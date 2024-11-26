@@ -61,7 +61,7 @@ deployment_groups:
       network_name_prefix: $(vars.deployment_name)-gpunet
       global_ip_address_range: 192.169.0.0/16
       network_count: 4
-      subnetwork_cidr_suffix: 24
+      subnetwork_cidr_suffix: 20 # the subnet can support upto 4k nodes
       mtu: 8244
 
   - id: gke_cluster
