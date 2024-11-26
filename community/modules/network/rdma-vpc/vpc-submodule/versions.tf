@@ -21,9 +21,9 @@ terraform {
       source  = "hashicorp/google"
       version = ">= 4.64"
     }
-    google-private = {
-      source  = "hashicorp/google-private"
-      version = ">= 0.0.1962"
+    google-beta = {
+      source  = "hashicorp/google-beta"
+      version = ">= 6.13.0"
     }
   }
 
