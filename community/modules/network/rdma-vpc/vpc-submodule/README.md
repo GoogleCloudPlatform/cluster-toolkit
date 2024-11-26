@@ -23,14 +23,14 @@ limitations under the License.
 |------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.3 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 4.64 |
-| <a name="requirement_google-private"></a> [google-private](#requirement\_google-private) | >= 0.0.1962 |
+| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 6.13.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
 | <a name="provider_google"></a> [google](#provider\_google) | >= 4.64 |
-| <a name="provider_google-private"></a> [google-private](#provider\_google-private) | >= 0.0.1962 |
+| <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 6.13.0 |
 
 ## Modules
 
@@ -44,7 +44,7 @@ limitations under the License.
 
 | Name | Type |
 |------|------|
-| [google-private_google_compute_network.network](https://registry.terraform.io/providers/hashicorp/google-private/latest/docs/resources/google_compute_network) | resource |
+| [google-beta_google_compute_network.network](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_compute_network) | resource |
 | [google_compute_shared_vpc_host_project.shared_vpc_host](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_shared_vpc_host_project) | resource |
 
 ## Inputs
