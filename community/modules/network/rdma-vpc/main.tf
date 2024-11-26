@@ -116,7 +116,7 @@ locals {
       network            = null
       subnetwork         = subnet.self_link
       subnetwork_project = null # will populate from subnetwork_self_link
-      network_ip         = ""
+      network_ip         = null
       nic_type           = var.nic_type
       stack_type         = null
       queue_count        = null
