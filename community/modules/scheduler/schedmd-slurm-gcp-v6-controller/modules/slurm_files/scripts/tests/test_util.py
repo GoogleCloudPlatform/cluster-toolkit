@@ -173,6 +173,7 @@ def test_nodeset_reservation_err(nodeset, err):
                     zone="eine",
                     name="robin",
                     policies=[],
+                    deployment_type=None,
                     bulk_insert_name="projects/bobin/reservations/robin")),
             (TstNodeset(
                 reservation_name="projects/bobin/reservations/robin",
@@ -183,6 +184,7 @@ def test_nodeset_reservation_err(nodeset, err):
                     zone="eine",
                     name="robin",
                     policies=["wanders", "apples", "yum"],
+                    deployment_type=None,
                     bulk_insert_name="projects/bobin/reservations/robin")),
             (TstNodeset(
                 reservation_name="projects/bobin/reservations/robin/snek/cheese-brie-6",
@@ -193,6 +195,7 @@ def test_nodeset_reservation_err(nodeset, err):
                     zone="eine",
                     name="robin",
                     policies=[],
+                    deployment_type=None,
                     bulk_insert_name="projects/bobin/reservations/robin/snek/cheese-brie-6")),
 
         ])
