@@ -446,10 +446,12 @@ def reconfigure_slurm():
 def update_topology(lkp: util.Lookup) -> None:
     if conf.topology_plugin(lkp) != conf.TOPOLOGY_PLUGIN_TREE:
         return
-    updated = conf.gen_topology_conf(lkp)
+    updated, summary = conf.gen_topology_conf(lkp)
     if updated:
-        log.debug("Topology configuration updated. Reconfiguring Slurm.")
+        log.info("Topology configuration updated. Reconfiguring Slurm.")
         util.scontrol_reconfigure(lkp)
+        # Safe summary only after Slurm got reconfigured, so summary reflects Slurm POV
+        summary.dump(lkp)
 
 
 def delete_reservation(lkp: util.Lookup, reservation_name: str) -> None:
