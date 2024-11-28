@@ -28,7 +28,8 @@ RUN apt-get update && \
         git \
         make \
         unzip \
-        wget
+        wget \
+        python3-pip
 
 # Install Terraform
 ARG TERRAFORM_VERSION=1.5.2
