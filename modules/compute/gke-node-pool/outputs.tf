@@ -46,7 +46,7 @@ output "has_gpu" {
 }
 
 output "allocatable_gpu_per_node" {
-  description = "Min number of GPUs available for scheduling pods among all nodes in a pool."
+  description = "Min number of GPUs available for scheduling pods across all nodes in a pool."
   value       = local.min_allocatable_gpu_per_node
 }
 
