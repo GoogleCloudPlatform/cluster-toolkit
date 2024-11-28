@@ -28,6 +28,8 @@ vars:
     family: ml-slurm
     project: $(vars.project_id)
   disk_size_gb: 200
+  metadata: # Workaround for https://github.com/GoogleCloudPlatform/cluster-toolkit/discussions/3243
+    VmDnsSetting: GlobalOnly
 
 # Recommended to use GCS backend for Terraform state
 # See https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/examples#optional-setting-up-a-remote-terraform-state
@@ -94,9 +96,8 @@ deployment_groups:
         content: |
           #!/bin/bash
           # this script is designed to execute on Slurm images published by SchedMD that:
-          # - are based on Debian 11 distribution of Linux
-          # - have NVIDIA Drivers v530 pre-installed
-          # - have CUDA Toolkit 12.1 pre-installed.
+          # - are based on Debian distribution of Linux
+          # - have NVIDIA drivers pre-installed
 
           set -e -o pipefail
 
@@ -112,8 +113,8 @@ deployment_groups:
 
           DL_DIR=\$(mktemp -d)
           cd $DL_DIR
-          curl -O https://repo.anaconda.com/miniconda/Miniconda3-py310_23.3.1-0-Linux-x86_64.sh
-          HOME=$DL_DIR bash Miniconda3-py310_23.3.1-0-Linux-x86_64.sh -b -p $CONDA_BASE
+          curl -L -O https://github.com/conda-forge/miniforge/releases/download/24.7.1-2/Miniforge3-24.7.1-2-Linux-x86_64.sh
+          HOME=$DL_DIR bash Miniforge3-24.7.1-2-Linux-x86_64.sh -b -p $CONDA_BASE
           cd -
           rm -rf $DL_DIR
           unset DL_DIR
@@ -123,39 +124,12 @@ deployment_groups:
           conda config --system --set auto_activate_base False
           # following channel ordering is important! use strict_priority!
           conda config --system --set channel_priority strict
-          conda config --system --remove channels defaults
-          conda config --system --add channels conda-forge
-          conda config --system --add channels nvidia
-          conda config --system --add channels nvidia/label/cuda-11.8.0
-
           conda update -n base conda --yes
 
           ### create a virtual environment for tensorflow
-          conda create -n tf python=3.10 --yes
+          conda create -n tf python=3.11 --yes
           conda activate tf
-          conda install -n tf cuda-toolkit --yes
-          pip install nvidia-cudnn-cu11 nvidia-nccl-cu11
-
-          cd $CONDA_PREFIX/lib/python3.10/site-packages/nvidia/nccl/lib/
-          ln -s libnccl.so.2 libnccl.so
-          cd -
-
-          mkdir -p $CONDA_PREFIX/etc/conda/activate.d
-          echo 'export OLD_LD_LIBRARY_PATH=$LD_LIBRARY_PATH' > $CONDA_PREFIX/etc/conda/activate.d/env_vars.sh
-          echo 'NVIDIA_PYTHON_PATH=$CONDA_PREFIX/lib/python3.10/site-packages/nvidia' >> $CONDA_PREFIX/etc/conda/activate.d/env_vars.sh
-          echo 'export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$CONDA_PREFIX/lib/:$NVIDIA_PYTHON_PATH/cudnn/lib/:$NVIDIA_PYTHON_PATH/nccl/lib/' >> $CONDA_PREFIX/etc/conda/activate.d/env_vars.sh
-          mkdir -p $CONDA_PREFIX/etc/conda/deactivate.d
-          echo 'export LD_LIBRARY_PATH=${OLD_LD_LIBRARY_PATH}' > $CONDA_PREFIX/etc/conda/deactivate.d/env_vars.sh
-          echo 'unset OLD_LD_LIBRARY_PATH' >> $CONDA_PREFIX/etc/conda/deactivate.d/env_vars.sh
-
-          pip install tensorflow==2.12.*
-          pip install tensorrt==8.6.*
-
-          ### create a virtual environment for pytorch
-          conda create -n pytorch python=3.10 --yes
-          conda activate pytorch
-          conda config --env --add channels pytorch
-          conda install -n pytorch pytorch torchvision torchaudio pytorch-cuda=11.8 --yes
+          pip install tensorflow[and-cuda]==2.18.*
 
 - group: packer
   modules:
@@ -175,6 +149,7 @@ deployment_groups:
       # You can find size of source image by using following command
       # gcloud compute images describe-from-family <source_image_family> --project schedmd-slurm-public
       disk_size: $(vars.disk_size_gb)
+      disk_type: pd-ssd
       image_family: $(vars.new_image.family)
       # building this image does not require a GPU-enabled VM
       machine_type: c2-standard-4

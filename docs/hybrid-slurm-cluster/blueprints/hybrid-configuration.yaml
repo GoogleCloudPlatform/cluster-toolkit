@@ -15,8 +15,6 @@
 ---
 
 blueprint_name: hpc-cluster-hybrid-v5
-toolkit_modules_url: github.com/GoogleCloudPlatform/cluster-toolkit
-toolkit_modules_version: v1.41.0
 
 vars:
   project_id:  ## <<bursting project (Project B)>>

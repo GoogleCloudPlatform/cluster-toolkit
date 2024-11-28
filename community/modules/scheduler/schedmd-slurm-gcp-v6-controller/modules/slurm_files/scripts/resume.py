@@ -15,10 +15,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Optional
+from typing import List, Optional, Dict
 import argparse
 import collections
 from datetime import timedelta
+import shlex
 import json
 import logging
 import os
@@ -83,6 +84,9 @@ def instance_properties(nodeset:object, model:str, placement_group:Optional[str]
             "key": f"compute.{util.universe_domain()}/reservation-name",
             "values": [reservation.bulk_insert_name],
         }
+
+        if reservation.deployment_type == "DENSE":
+            props.scheduling.provisioning_model = "RESERVATION_BOUND"
 
         if reservation.policies:
             props.scheduling.onHostMaintenance = "TERMINATE"
@@ -480,7 +484,9 @@ def down_nodes(nodelist, reason):
     if isinstance(nodelist, list):
         nodelist = util.to_hostlist(nodelist)
     update_job_comment(nodelist, reason)
-    run(f"{lookup().scontrol} update nodename={nodelist} state=down reason='{reason}'")
+    reason_quoted = shlex.quote(reason)
+    log.error(f"Marking nodes {nodelist} as DOWN, reason: {reason}")
+    run(f"{lookup().scontrol} update nodename={nodelist} state=down reason={reason_quoted}")
 
 
 def hold_job(job_id, reason):
@@ -508,21 +514,25 @@ def create_placement_request(pg_name, region):
     return request
 
 
-def create_placement_groups(node_list: list, job_id=0):
+def create_placement_groups(node_list: List[str], job_id:int=0) -> Dict[str, List[str]]:
     pgs = {}
     node_map = lookup().nodeset_map(node_list)
     for _, nodes in node_map.items():
-        pgs.update(create_nodeset_placement_groups(nodes, job_id=job_id))
+        pgs.update(create_nodeset_placement_groups(nodes, job_id))
     return pgs
 
 
-def create_nodeset_placement_groups(node_list: list, job_id=0):
+def create_nodeset_placement_groups(node_list: List[str], job_id:int) -> Dict[str, List[str]]:
+    no_pg = {None: node_list} # canned result for no placement policies created
+
+    if len(node_list) < 2:
+        return no_pg # don't create placement_policy for just one node
+    
     model = next(iter(node_list))
     nodeset = lookup().node_nodeset(model)
-    if not nodeset.enable_placement:
-        return {None: node_list}
-    if not valid_placement_nodes(node_list):
-        return {None: node_list}
+    if not (nodeset.enable_placement and valid_placement_nodes(node_list)):
+        return no_pg
+    
     region = lookup().node_region(model)
 
     groups = {
@@ -538,8 +548,7 @@ def create_nodeset_placement_groups(node_list: list, job_id=0):
             f"creating {len(groups)} placement groups: \n{yaml.safe_dump(debug_groups).rstrip()}"
         )
     requests = {
-        group: create_placement_request(group, region)
-        for group, incl_nodes in groups.items()
+        group: create_placement_request(group, region) for group in groups.keys()
     }
     ops = dict(
         zip(requests.keys(), map_with_futures(ensure_execute, requests.values()))
