@@ -45,6 +45,11 @@ output "has_gpu" {
   value       = local.has_gpu
 }
 
+output "allocatable_gpu_per_node" {
+  description = "Min number of GPUs available for scheduling pods on each node."
+  value       = local.min_allocatable_gpu_per_node
+}
+
 locals {
   translate_toleration = {
     PREFER_NO_SCHEDULE = "PreferNoSchedule"

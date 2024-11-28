@@ -61,9 +61,19 @@ locals {
     value = "true"
   }] : []
 
-  # arbitrarily, user can edit in template.
-  # May come from node pool in future.
-  gpu_limit_string = alltrue(var.has_gpu) ? "1" : null
+  # arbitrarily, user can edit gpu limit per pod in template.
+  # start with the minimum gpu available across nodes in each pool
+  min_allocatable_gpu = min(var.allocatable_gpu_per_node...)
+  gpu_limit_string = (
+    alltrue(var.has_gpu) ?                  # if nodes in each pool are configured with GPUs
+    var.requested_gpu_per_pod > 0 ?         # if user supplied requested gpu
+    tostring(var.requested_gpu_per_pod) :   # then honor it
+    (                                       # else
+      local.min_allocatable_gpu > 0 ?       # if allocatable gpu was supplied
+      tostring(local.min_allocatable_gpu) : # then honor it
+      null                                  # else gpu limit is unset
+    ) : null                                # all node pool are configured without gpu, so gpu limit is unset
+  )
 
   empty_dir_volumes = [for ed in var.ephemeral_volumes :
     {
