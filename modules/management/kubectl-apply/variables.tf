@@ -60,7 +60,6 @@ variable "kueue" {
     config_template_vars = optional(map(any), null)
   })
   default = {}
-
 }
 
 variable "jobset" {
