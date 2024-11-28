@@ -61,8 +61,7 @@ locals {
     value = "true"
   }] : []
 
-  # arbitrarily, user can edit gpu limit per pod in template.
-  # start with the minimum gpu available across nodes in each pool
+  # Start with the minimum gpu available across nodes in each pool
   min_allocatable_gpu = min(var.allocatable_gpu_per_node...)
   gpu_limit_string = (
     alltrue(var.has_gpu) ?                  # if nodes in each pool are configured with GPUs
