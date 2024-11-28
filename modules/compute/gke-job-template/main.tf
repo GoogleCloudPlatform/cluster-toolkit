@@ -72,7 +72,7 @@ locals {
       local.min_allocatable_gpu > 0 ?       # if allocatable gpu was supplied
       tostring(local.min_allocatable_gpu) : # then honor it
       null                                  # else gpu limit is unset
-    ) : null                                # all node pool are configured without gpu, so gpu limit is unset
+    ) : null                                # all node pools are configured without gpu, so gpu limit is unset
   )
 
   empty_dir_volumes = [for ed in var.ephemeral_volumes :
