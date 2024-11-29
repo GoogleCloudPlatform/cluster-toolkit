@@ -15,7 +15,7 @@
   */
 
 locals {
-  supported_versions = ["v0.9.0", "v0.8.1"]
+  supported_versions = ["v0.9.1", "v0.9.0", "v0.8.1"]
 }
 
 resource "terraform_data" "kueue_validations" {
