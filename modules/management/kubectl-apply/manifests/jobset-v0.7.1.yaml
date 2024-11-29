@@ -8813,6 +8813,11 @@ spec:
         secret:
           defaultMode: 420
           secretName: jobset-webhook-server-cert
+      tolerations:
+      - effect: NoSchedule
+        key: components.gke.io/gke-managed-components
+        operator: Equal
+        value: "true"
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingWebhookConfiguration
