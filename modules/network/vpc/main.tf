@@ -152,6 +152,11 @@ locals {
     var.enable_internal_traffic ? [local.allow_internal_traffic] : [],
     length(local.iap_ports) > 0 ? [local.allow_iap_ingress] : []
   )
+
+  secondary_ranges_map = {
+    for secondary_range in var.secondary_ranges :
+    secondary_range.subnetwork_name => secondary_range.ranges
+  }
 }
 
 module "vpc" {
@@ -162,7 +167,7 @@ module "vpc" {
   project_id                             = var.project_id
   auto_create_subnetworks                = false
   subnets                                = local.subnetworks
-  secondary_ranges                       = var.secondary_ranges
+  secondary_ranges                       = local.secondary_ranges_map
   routing_mode                           = var.network_routing_mode
   mtu                                    = var.mtu
   description                            = var.network_description

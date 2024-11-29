@@ -148,9 +148,9 @@ variable "additional_subnetworks" {
 }
 
 variable "secondary_ranges" {
-  type        = map(list(object({ range_name = string, ip_cidr_range = string })))
-  description = "Secondary ranges that will be used in some of the subnets. Please see https://goo.gle/hpc-toolkit-vpc-deprecation for migration instructions."
-  default     = {}
+  type        = list(object({ subnetwork_name = string, ranges = list(object({ range_name = string, ip_cidr_range = string })) }))
+  description = "Secondary ranges associated with subnets."
+  default     = []
 }
 
 variable "network_routing_mode" {

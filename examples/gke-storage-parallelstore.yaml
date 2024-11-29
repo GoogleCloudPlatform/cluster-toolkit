@@ -33,7 +33,8 @@ deployment_groups:
     settings:
       subnetwork_name: gke-subnet-parallelstore
       secondary_ranges:
-        gke-subnet-parallelstore:
+      - subnetwork_name: gke-subnet-parallelstore
+        ranges:
         - range_name: pods
           ip_cidr_range: 10.4.0.0/14
         - range_name: services
