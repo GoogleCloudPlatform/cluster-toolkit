@@ -61,18 +61,11 @@ locals {
     value = "true"
   }] : []
 
-  # Start with the minimum gpu available across nodes in each pool
-  min_allocatable_gpu = min(var.allocatable_gpu_per_node...)
-  gpu_limit_string = (
-    alltrue(var.has_gpu) ?                  # if nodes in each pool are configured with GPUs
-    var.requested_gpu_per_pod > 0 ?         # if user supplied requested gpu
-    tostring(var.requested_gpu_per_pod) :   # then honor it
-    (                                       # else
-      local.min_allocatable_gpu > 0 ?       # if allocatable gpu was supplied
-      tostring(local.min_allocatable_gpu) : # then honor it
-      null                                  # else gpu limit is unset
-    ) : null                                # all node pools are configured without gpu, so gpu limit is unset
-  )
+  # Setup limit for GPUs per pod
+  min_allocatable_gpu         = min(var.allocatable_gpu_per_node...)
+  min_allocatable_gpu_per_pod = local.min_allocatable_gpu > 0 ? local.min_allocatable_gpu : null
+  gpu_limit_per_pod           = var.requested_gpu_per_pod > 0 ? var.requested_gpu_per_pod : local.min_allocatable_gpu_per_pod
+  gpu_limit_string            = alltrue(var.has_gpu) ? tostring(local.gpu_limit_per_pod) : null
 
   empty_dir_volumes = [for ed in var.ephemeral_volumes :
     {
