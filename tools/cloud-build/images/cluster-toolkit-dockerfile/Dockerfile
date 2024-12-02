@@ -74,8 +74,6 @@ WORKDIR /out
 RUN echo "[global]" >> /etc/pip.conf
 RUN echo "break-system-packages = true" >> /etc/pip.conf
 
-ARG GOOGLE_APPLICATION_CREDENTIALS="/root/.config/gcloud/application_default_credentials.json" 
-
 # Command to execute when running the container (placeholder)
 ENTRYPOINT ["gcluster"]
 CMD ["--help"]
