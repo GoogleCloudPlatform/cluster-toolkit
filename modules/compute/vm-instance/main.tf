@@ -174,7 +174,7 @@ resource "google_compute_address" "compute_ip" {
 
 resource "google_compute_instance" "compute_vm" {
   project  = var.project_id
-  provider = google-private
+  provider = google-beta
 
   count = var.instance_count
 
