@@ -19,6 +19,7 @@ from typing import List, Optional, Dict
 import argparse
 import collections
 from datetime import timedelta
+import shlex
 import json
 import logging
 import os
@@ -480,7 +481,9 @@ def down_nodes(nodelist, reason):
     if isinstance(nodelist, list):
         nodelist = util.to_hostlist(nodelist)
     update_job_comment(nodelist, reason)
-    run(f"{lookup().scontrol} update nodename={nodelist} state=down reason='{reason}'")
+    reason_quoted = shlex.quote(reason)
+    log.error(f"Marking nodes {nodelist} as DOWN, reason: {reason}")
+    run(f"{lookup().scontrol} update nodename={nodelist} state=down reason={reason_quoted}")
 
 
 def hold_job(job_id, reason):

@@ -1463,10 +1463,10 @@ guest_accelerator:
 - type: nvidia-l4
   count: 1
   gpu_sharing_config:
-  - max_shared_clients_per_gpu: 2
+    max_shared_clients_per_gpu: 2
     gpu_sharing_strategy: "TIME_SHARING"
   gpu_driver_installation_config:
-  - gpu_driver_version: "LATEST"
+    gpu_driver_version: "LATEST"
 ```
 
 * Configuration of the cluster using default drivers provided by GKE.

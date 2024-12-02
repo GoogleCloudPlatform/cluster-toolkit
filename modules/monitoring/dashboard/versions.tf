@@ -22,7 +22,7 @@ terraform {
     }
   }
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:dashboard/v1.41.0"
+    module_name = "blueprints/terraform/hpc-toolkit:dashboard/v1.42.0"
   }
 
   required_version = ">= 0.14.0"

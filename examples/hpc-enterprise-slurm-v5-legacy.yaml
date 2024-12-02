@@ -36,6 +36,8 @@ vars:
   # When set, active compute nodes will be cleaned up on destroy.
   # Note that setting this option requires additional dependencies to be installed locally.
   enable_cleanup_compute: true
+  metadata: # Workaround for https://github.com/GoogleCloudPlatform/cluster-toolkit/discussions/3243
+    VmDnsSetting: GlobalOnly
 
 # Recommended to use GCS backend for Terraform state
 # See https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/examples#optional-setting-up-a-remote-terraform-state
