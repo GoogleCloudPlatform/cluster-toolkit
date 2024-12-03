@@ -154,6 +154,8 @@ No modules.
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created. | `string` | n/a | yes |
 | <a name="input_size_gb"></a> [size\_gb](#input\_size\_gb) | Storage size of the parallelstore instance in GB. | `number` | `12000` | no |
 | <a name="input_zone"></a> [zone](#input\_zone) | Location for parallelstore instance. | `string` | n/a | yes |
+| <a name="input_file_stripe"></a> [file\_stripe](#input\_file\_stripe) | File-level stripping setting, must be `"FILE_STRIPE_LEVEL_UNSPECIFIED"`, `"FILE_STRIPE_LEVEL_MIN"`, `"FILE_STRIPE_LEVEL_BALANCED"` or `"FILE_STRIPE_LEVEL_MAX"`. More details in the [documentation](https://cloud.google.com/parallelstore/docs/performance#file_striping_setting). | `string` | `"FILE_STRIPE_LEVEL_UNSPECIFIED"` | no |
+| <a name="input_directory_stripe"></a> [directory\_stripe](#input\_directory\_stripe) | Directory-level stripping setting, must be `"DIRECTORY_STRIPE_LEVEL_UNSPECIFIED"`, `"DIRECTORY_STRIPE_LEVEL_MIN"`, `"DIRECTORY_STRIPE_LEVEL_BALANCED"` or `"DIRECTORY_STRIPE_LEVEL_MAX"`. More details in the [documentation](https://cloud.google.com/parallelstore/docs/performance#directory_striping_setting).  | `string` | `"DIRECTORY_STRIPE_LEVEL_UNSPECIFIED"` | no |
 
 ## Outputs
 
