@@ -38,6 +38,12 @@ class TstNodeset:
     zone_policy_allow: Optional[list[str]] = field(default_factory=list)
 
 @dataclass
+class TstPartition:
+    partition_name: str = "euler"
+    partition_nodeset: list[str] = field(default_factory=list)
+    partition_nodeset_tpu: list[str] = field(default_factory=list)
+
+@dataclass
 class TstCfg:
     slurm_cluster_name: str = "m22"
     cloud_parameters: dict[str, Any] = field(default_factory=dict)
