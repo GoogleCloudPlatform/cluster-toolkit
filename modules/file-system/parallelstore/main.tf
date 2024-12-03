@@ -54,10 +54,10 @@ resource "google_parallelstore_instance" "instance" {
   file_stripe_level      = var.file_stripe
   directory_stripe_level = var.directory_stripe
 
-  labels = local.labels
+  labels                 = local.labels
 
-  provider   = google-beta
-  depends_on = [var.private_vpc_connection_peering]
+  provider               = google-beta
+  depends_on             = [var.private_vpc_connection_peering]
 }
 
 resource "null_resource" "hydration" {
