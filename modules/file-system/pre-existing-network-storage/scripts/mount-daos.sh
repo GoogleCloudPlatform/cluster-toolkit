@@ -16,6 +16,7 @@
 set -e -o pipefail
 
 OS_ID=$(awk -F '=' '/^ID=/ {print $2}' /etc/os-release | sed -e 's/"//g')
+OS_ID_LIKE=$(awk -F '=' '/^ID_LIKE=/ {print $2}' /etc/os-release | sed -e 's/"//g')
 OS_VERSION=$(awk -F '=' '/VERSION_ID/ {print $2}' /etc/os-release | sed -e 's/"//g')
 OS_VERSION_MAJOR=$(awk -F '=' '/VERSION_ID/ {print $2}' /etc/os-release | sed -e 's/"//g' -e 's/\..*$//')
 
@@ -41,14 +42,17 @@ sed -i "s/#.*transport_config/transport_config/g" $daos_config
 sed -i "s/#.*allow_insecure:.*false/  allow_insecure: true/g" $daos_config
 sed -i "s/.*access_points.*/access_points: $access_points/g" $daos_config
 
-# Get interface names with "s0f0" suffix
-if ifconfig -a | grep 's0f0'; then
-	sof0_interfaces=$(ifconfig -a | grep 's0f0:' | awk '{print $1}' | tr ':' '\n' | grep -v '^$' | awk '!a[$0]++' | sed 's/^/"/g' | sed 's/$/"/g' | paste -sd, -)
+# Get names of network interfaces not in first PCI slot
+# The first PCI slot is a standard network adapter while remaining interfaces
+# are typically network cards dedicated to GPU or workload communication
+if [[ "$OS_ID_LIKE" == "debian" ]]; then
+	extra_interfaces=$(find /sys/class/net/ -not -name 'enp0s*' -regextype posix-extended -regex '.*/enp[0-9]+s.*' -printf '"%f"\n' | paste -s -d ',')
+elif [[ "$OS_ID_LIKE" =~ "rhel" ]]; then
+	extra_interfaces=$(find /sys/class/net/ -not -name eth0 -regextype posix-extended -regex '.*/eth[0-9]+' -printf '"%f"\n' | paste -s -d ',')
+fi
 
-	# Append the sof0_interfaces to the existing list
-	exclude_fabric_ifaces="lo,$sof0_interfaces"
-
-	# Update the file with the new list
+if [[ -n "$extra_interfaces" ]]; then
+	exclude_fabric_ifaces="lo,$extra_interfaces"
 	sed -i "s/#.*exclude_fabric_ifaces: \[.*/exclude_fabric_ifaces: [$exclude_fabric_ifaces]/" $daos_config
 fi
 
@@ -80,31 +84,32 @@ sed -i "s/#.*user_allow_other/user_allow_other/g" $fuse_config
 # make sure limit of open files is high enough for dfuse (1M of open files)
 ulimit -n 1048576
 
-# Store the mounting logic in a variable
-mount_command="if mountpoint -q '$local_mount'; then fusermount3 -u '$local_mount'; fi; for i in {1..10}; do /bin/dfuse -m '$local_mount' --pool default-pool --container default-container --multi-user $mount_options --foreground && break; sleep 1; done"
-
 # Construct the service name with the local_mount suffix
-service_name="mount_parallelstore_${local_mount//\//_}.service"
+safe_mount_name=$(systemd-escape -p "${local_mount}")
+service_name="mount_parallelstore_${safe_mount_name}.service"
 
 # --- Begin: Add systemd service creation ---
-cat >/usr/lib/systemd/system/"${service_name}" <<EOF
+cat >/etc/systemd/system/"${service_name}" <<EOF
 [Unit]
 Description=DAOS Mount Service
 After=network-online.target daos_agent.service
+Before=slurmd.service
+ConditionPathIsMountPoint=!${local_mount}
 
 [Service]
 Type=simple
 User=root
 Group=root
-Restart=always
-RestartSec=1
-ExecStart=/bin/bash -c "$mount_command"
-ExecStop=fusermount3 -u '$local_mount'
+Restart=on-failure
+RestartSec=10
+ExecStart=/bin/dfuse -m $local_mount --pool default-pool --container default-container --multi-user $mount_options --foreground
+ExecStop=/usr/bin/fusermount3 -u $local_mount
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
+systemctl daemon-reload
 systemctl enable "${service_name}"
 systemctl start "${service_name}"
 # --- End: Add systemd service creation ---
