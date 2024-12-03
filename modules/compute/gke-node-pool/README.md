@@ -356,6 +356,7 @@ limitations under the License.
 | Name | Description |
 |------|-------------|
 | <a name="output_allocatable_cpu_per_node"></a> [allocatable\_cpu\_per\_node](#output\_allocatable\_cpu\_per\_node) | Number of CPUs available for scheduling pods on each node. |
+| <a name="output_allocatable_gpu_per_node"></a> [allocatable\_gpu\_per\_node](#output\_allocatable\_gpu\_per\_node) | Number of GPUs available for scheduling pods on each node. |
 | <a name="output_has_gpu"></a> [has\_gpu](#output\_has\_gpu) | Boolean value indicating whether nodes in the pool are configured with GPUs. |
 | <a name="output_instructions"></a> [instructions](#output\_instructions) | Instructions for submitting the sample GPUDirect enabled job. |
 | <a name="output_node_pool_name"></a> [node\_pool\_name](#output\_node\_pool\_name) | Name of the node pool. |

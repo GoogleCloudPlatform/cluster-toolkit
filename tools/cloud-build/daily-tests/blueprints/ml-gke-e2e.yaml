@@ -93,6 +93,7 @@ deployment_groups:
           "value": "g2-latest-driver"
         }
       ]
+      requested_gpu_per_pod: 1
     outputs: [instructions]
 
   - id: n1_pool_default
@@ -154,6 +155,7 @@ deployment_groups:
           "value": "n1-pool-full-spec"
         }
       ]
+      requested_gpu_per_pod: 1
     outputs: [instructions]
 
   - id: default_settings_pool

@@ -20,7 +20,8 @@ locals {
 }
 
 locals {
-  has_gpu = length(local.guest_accelerator) > 0
+  has_gpu                  = length(local.guest_accelerator) > 0
+  allocatable_gpu_per_node = local.has_gpu ? max(local.guest_accelerator[*].count...) : -1
   gpu_taint = local.has_gpu ? [{
     key    = "nvidia.com/gpu"
     value  = "present"
