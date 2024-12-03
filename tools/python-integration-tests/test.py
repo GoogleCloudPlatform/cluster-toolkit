@@ -33,7 +33,7 @@ class Test(unittest.TestCase):  # Inherit from unittest.TestCase
 
     def setUp(self):
         self.deployment.deploy()
-        time.sleep(60)
+        time.sleep(90)
 
     def tearDown(self):
         self.deployment.destroy()

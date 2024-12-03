@@ -45,14 +45,17 @@ class SSHManager:
         time.sleep(3)
 
     def get_keypath(self):
-        # Use existing SSH key pair (assuming it's already in ~/.ssh/google_compute_engine)
         key_path = os.path.expanduser("~/.ssh/google_compute_engine")
+        os.makedirs(os.path.dirname(key_path), exist_ok=True)
+
+        cmd = ["ssh-keygen", "-t", "rsa", "-f", key_path, "-N", ""]
+        subprocess.run(cmd, capture_output=True, text=True, check=True)
 
         # Add the public key to OS Login
         public_key_path = key_path + ".pub"
         subprocess.run(
             [
-                "gcloud", "compute", "os-login", "ssh-keys", "describe", 
+                "gcloud", "compute", "os-login", "ssh-keys", "add", 
                 "--key-file", public_key_path
             ], 
             check=True, capture_output=True
