@@ -6,6 +6,7 @@ metadata:
 data:
   schedule-daemon.py: |
     #!/usr/bin/env python
+    """schedule-daemon.py is a Topology-aware Kubernetes pod scheduler."""
 
     # Copyright 2024 Google Inc. All Rights Reserved.
     #
@@ -20,7 +21,6 @@ data:
     # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
     # See the License for the specific language governing permissions and
     # limitations under the License.
-    """schedule-daemon.py is a Topology-aware Kubernetes pod scheduler."""
 
     import argparse
     import collections
@@ -191,25 +191,14 @@ data:
         A tuple of the node's topology labels, or an empty tuple if the node does
         not have topology labels.
       """
-      node_labels = node.get('node_labels', {})
+      node_labels = node['node_labels']
       for labels in [
           (CLUSTER_LABEL, RACK_LABEL, HOST_LABEL),
           (PRERELEASE_CLUSTER_LABEL, PRERELEASE_RACK_LABEL, PRERELEASE_HOST_LABEL),
       ]:
         if all(label in node_labels for label in labels):
-          labels_triplet = tuple(node_labels[label] for label in labels)
-          # A3U uses with single superblock for now, rewriting suberblock label
-          if (
-              node_labels.get('node.kubernetes.io/instance-type', '')
-              == 'a3-ultragpu-8g'
-          ):
-            labels_triplet = tuple(
-                ('a3-ultragpu-8g', labels_triplet[1], labels_triplet[2])
-            )
-          return labels_triplet
-      logging.info(
-          'Node %s does not have topology labels', node.get('name', 'unknown_name')
-      )
+          return tuple(node_labels[label] for label in labels)
+      logging.info('Node %s does not have topology labels', node['name'])
       return ()
 
 
@@ -822,6 +811,7 @@ data:
       run_scheduling_loop()
   label-nodes-daemon.py: |
     #!/usr/bin/env python
+    """Daemon to update Kubernetes node labels based on GCE VM metadata."""
 
     # Copyright 2024 Google Inc. All Rights Reserved.
     #
@@ -836,7 +826,6 @@ data:
     # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
     # See the License for the specific language governing permissions and
     # limitations under the License.
-    """Daemon to update Kubernetes node labels based on GCE VM metadata."""
 
     import time
     from typing import Dict
