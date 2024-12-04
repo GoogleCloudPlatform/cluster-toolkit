@@ -947,11 +947,7 @@ def to_hostlist_fast(names: Iterable[str]) -> str:
             res.append(f"{p}[{','.join(cs)}]")
     return ",".join(res)
 
-
-def part_is_tpu(part):
-    """check if partition with name part contains a nodeset of type tpu"""
-    return len(lookup().cfg.partitions[part].partition_nodeset_tpu) > 0
-
+@lru_cache(maxsize=None)
 def to_hostnames(nodelist: str) -> List[str]:
     """make list of hostnames from hostlist expression"""
     if not nodelist:
@@ -1570,10 +1566,14 @@ class Lookup:
 
     def node_nodeset(self, node_name=None):
         nodeset_name = self.node_nodeset_name(node_name)
-        ns = self.cfg.nodeset.get(nodeset_name)
-        if ns:
-            return ns
-        return self.cfg.nodeset_tpu.get(nodeset_name)
+        if nodeset_name in self.cfg.nodeset_tpu:
+            return self.cfg.nodeset_tpu[nodeset_name]
+        return self.cfg.nodeset[nodeset_name]
+
+    def partition_is_tpu(self, part: str) -> bool:
+        """check if partition with name part contains a nodeset of type tpu"""
+        return len(self.cfg.partitions[part].partition_nodeset_tpu) > 0
+
 
     def node_is_tpu(self, node_name=None):
         nodeset_name = self.node_nodeset_name(node_name)
@@ -1582,11 +1582,6 @@ class Lookup:
     def node_is_dyn(self, node_name=None) -> bool:
         nodeset = self.node_nodeset_name(node_name)
         return self.cfg.nodeset_dyn.get(nodeset) is not None
-
-    def chunk_tpu_nodes(self, tpu_nodes):
-        model = tpu_nodes[0]
-        tpu = TPU(self.node_nodeset(model))
-        return chunked(tpu_nodes, n=tpu.vmcount)
 
     def node_template(self, node_name=None):
         return self.node_nodeset(node_name).instance_template
