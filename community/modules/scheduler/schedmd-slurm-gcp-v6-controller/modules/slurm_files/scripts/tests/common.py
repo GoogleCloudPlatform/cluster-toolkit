@@ -42,6 +42,7 @@ class TstPartition:
     partition_name: str = "euler"
     partition_nodeset: list[str] = field(default_factory=list)
     partition_nodeset_tpu: list[str] = field(default_factory=list)
+    enable_job_exclusive: bool = False
 
 @dataclass
 class TstCfg:
