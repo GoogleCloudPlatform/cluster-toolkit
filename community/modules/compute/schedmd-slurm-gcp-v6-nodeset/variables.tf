@@ -161,7 +161,7 @@ variable "disk_labels" {
 }
 
 variable "additional_disks" {
-  description = "Configurations of additional disks to be included on the partition nodes. (do not use \"disk_type: local-ssd\"; known issue being addressed)"
+  description = "Configurations of additional disks to be included on the partition nodes."
   type = list(object({
     disk_name    = string
     device_name  = string
@@ -414,24 +414,24 @@ variable "additional_networks" {
   description = "Additional network interface details for GCE, if any."
   default     = []
   type = list(object({
-    network            = string
+    network            = optional(string)
     subnetwork         = string
-    subnetwork_project = string
-    network_ip         = string
-    nic_type           = string
-    stack_type         = string
-    queue_count        = number
-    access_config = list(object({
+    subnetwork_project = optional(string)
+    network_ip         = optional(string, "")
+    nic_type           = optional(string)
+    stack_type         = optional(string)
+    queue_count        = optional(number)
+    access_config = optional(list(object({
       nat_ip       = string
       network_tier = string
-    }))
-    ipv6_access_config = list(object({
+    })), [])
+    ipv6_access_config = optional(list(object({
       network_tier = string
-    }))
-    alias_ip_range = list(object({
+    })), [])
+    alias_ip_range = optional(list(object({
       ip_cidr_range         = string
       subnetwork_range_name = string
-    }))
+    })), [])
   }))
 }
 
@@ -513,6 +513,14 @@ variable "enable_maintenance_reservation" {
   default     = false
 }
 
+
+variable "enable_opportunistic_maintenance" {
+  type        = bool
+  description = "On receiving maintenance notification, maintenance will be performed as soon as nodes becomes idle."
+  default     = false
+}
+
+
 variable "dws_flex" {
   description = <<-EOD
   If set and `enabled = true`, will utilize the DWS Flex Start to provision nodes.
@@ -521,7 +529,7 @@ variable "dws_flex" {
   - enable: Enable DWS Flex Start
   - max_run_duration: Maximum duration in seconds for the job to run, should not exceed 1,209,600 (2 weeks).
   - use_job_duration: Use the job duration to determine the max_run_duration, if job duration is not set, max_run_duration will be used.
-  
+
  Limitations:
   - CAN NOT be used with reservations;
   - CAN NOT be used with placement groups;

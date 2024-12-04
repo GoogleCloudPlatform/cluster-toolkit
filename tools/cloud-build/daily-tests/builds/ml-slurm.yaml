@@ -24,7 +24,7 @@ tags:
 - m.startup-script
 - slurm6
 
-timeout: 14400s  # 4hr
+timeout: 18000s  # 5hr
 steps:
 # While using static network names we are gaurding against more than 1 instance running at a time (for multi-group tests)
 - id: check_for_running_build

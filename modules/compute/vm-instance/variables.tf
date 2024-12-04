@@ -409,3 +409,22 @@ variable "allow_automatic_updates" {
   default     = true
   nullable    = false
 }
+
+variable "reservation_name" {
+  description = <<-EOD
+    Name of the reservation to use for VM resources, should be in one of the following formats:
+    - projects/PROJECT_ID/reservations/RESERVATION_NAME
+    - RESERVATION_NAME
+
+    Must be a "SPECIFIC_RESERVATION"
+    Set to empty string if using no reservation or automatically-consumed reservations
+  EOD
+  type        = string
+  default     = ""
+  nullable    = false
+
+  validation {
+    condition     = length(regexall("^((projects/([a-z0-9-]+)/reservations/)?([a-z0-9-]+))?$", var.reservation_name)) > 0
+    error_message = "Reservation name must be either empty or in the format '[projects/PROJECT_ID/reservations/]RESERVATION_NAME', [...] is an optional part."
+  }
+}

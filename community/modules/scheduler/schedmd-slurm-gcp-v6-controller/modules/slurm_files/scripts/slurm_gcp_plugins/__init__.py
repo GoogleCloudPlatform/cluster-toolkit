@@ -100,14 +100,6 @@ def register_instance_information_fields(*pos_args, **keyword_args):
     )
 
 
-# Called just after VM instances have been created and are up
-def post_main_resume_nodes(*pos_args, **keyword_args):
-    run_plugins_for_function(
-        plugin_function_name="post_main_resume_nodes",
-        pos_args=pos_args,
-        keyword_args=keyword_args,
-    )
-
 
 # Called just before VM instances are deleted should be still up
 # (NOTE: if a node has failed it might not be up or unresponsive)
@@ -141,7 +133,6 @@ def pre_placement_group_insert(*pos_args, **keyword_args):
 
 
 __all__ = [
-    "post_main_resume_nodes",
     "pre_main_suspend_nodes",
     "register_instance_information_fields",
     "pre_instance_bulk_insert",

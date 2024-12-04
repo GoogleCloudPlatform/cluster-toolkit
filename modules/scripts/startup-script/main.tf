@@ -93,6 +93,14 @@ locals {
     }
   ]
 
+  rdma_runner = !var.install_cloud_rdma_drivers ? [] : [
+    {
+      type        = "shell"
+      source      = "${path.module}/files/install_cloud_rdma_drivers.sh"
+      destination = "install_cloud_rdma_drivers.sh"
+    }
+  ]
+
   docker_runner = !var.docker.enabled ? [] : [
     {
       type        = "data"
@@ -145,6 +153,7 @@ locals {
     local.warnings,
     local.hotfix_runner,
     local.proxy_runner,
+    local.rdma_runner,
     local.monitoring_agent_installer,
     local.ansible_installer,
     local.raid_setup, # order RAID early to ensure filesystem is ready for subsequent runners
@@ -205,9 +214,9 @@ check "health_check" {
   assert {
     condition     = local.docker_config == {}
     error_message = <<-EOT
-      This message is only a warning. The Toolkit performs no validation of the Docker
-      daemon configuration. VM startup scripts will fail if the configuration file is
-      not a valid Docker JSON configuration. Please review the Docker documentation:
+      This message is only a warning. The Toolkit performs no validation of the
+      Docker daemon configuration. VM startup scripts will fail if the file is not
+      a valid Docker JSON configuration. Please review the Docker documentation:
 
       https://docs.docker.com/engine/daemon/
     EOT

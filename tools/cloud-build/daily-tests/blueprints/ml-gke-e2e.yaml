@@ -26,6 +26,8 @@ vars:
   # The following line must be updated for this example to work.
   authorized_cidr: <your-ip-address>/32
 
+  gcp_public_cidrs_access_enabled: false
+
 deployment_groups:
 - group: primary
   modules:
@@ -57,6 +59,7 @@ deployment_groups:
     use: [network1, gke_service_account]
     settings:
       enable_private_endpoint: false  # Allows for access from authorized public IPs
+      gcp_public_cidrs_access_enabled: $(vars.gcp_public_cidrs_access_enabled)
       master_authorized_networks:
       - display_name: deployment-machine
         cidr_block: $(vars.authorized_cidr)
@@ -70,9 +73,9 @@ deployment_groups:
       machine_type: g2-standard-4
       guest_accelerator:
       - gpu_driver_installation_config:
-        - gpu_driver_version: "LATEST"
+          gpu_driver_version: "LATEST"
         gpu_sharing_config:
-        - max_shared_clients_per_gpu: 2
+          max_shared_clients_per_gpu: 2
           gpu_sharing_strategy: "MPS"
 
   - id: job_template_g2_latest_driver
@@ -90,6 +93,7 @@ deployment_groups:
           "value": "g2-latest-driver"
         }
       ]
+      requested_gpu_per_pod: 1
     outputs: [instructions]
 
   - id: n1_pool_default
@@ -131,9 +135,9 @@ deployment_groups:
       - type: nvidia-tesla-t4
         count: 2
         gpu_driver_installation_config:
-        - gpu_driver_version: "LATEST"
+          gpu_driver_version: "LATEST"
         gpu_sharing_config:
-        - max_shared_clients_per_gpu: 2
+          max_shared_clients_per_gpu: 2
           gpu_sharing_strategy: "TIME_SHARING"
 
   - id: job_template_n1_pool_full_spec
@@ -151,6 +155,7 @@ deployment_groups:
           "value": "n1-pool-full-spec"
         }
       ]
+      requested_gpu_per_pod: 1
     outputs: [instructions]
 
   - id: default_settings_pool

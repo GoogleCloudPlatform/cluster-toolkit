@@ -41,6 +41,8 @@ if [ ! -f "${SLURM_EXTERNAL_ROOT}/${SLURM_MUX_FILE}" ]; then
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+set -e
+
 CMD="${0##*/}"
 # Locate script
 BASE=$(readlink -f $0)

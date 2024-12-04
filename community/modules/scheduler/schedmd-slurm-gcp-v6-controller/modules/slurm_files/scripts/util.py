@@ -411,7 +411,7 @@ def _fill_cfg_defaults(cfg: NSDict) -> NSDict:
                 "mount_options": "defaults,hard,intr,_netdev",
             }
         )
-    
+
     network_storage_iter = filter(
         None,
         (
@@ -474,8 +474,8 @@ def _fetch_config(old_hash: Optional[str]) -> Optional[Tuple[NSDict, str]]:
     ), hash
 
 def _assemble_config(
-        core: Any, 
-        partitions: List[Any], 
+        core: Any,
+        partitions: List[Any],
         nodesets: List[Any],
         nodesets_dyn: List[Any],
         nodesets_tpu: List[Any],
@@ -510,17 +510,17 @@ def _assemble_config(
         for ns_name in chain(p.partition_nodeset, p.partition_nodeset_dyn, p.partition_nodeset_tpu):
             if ns_name not in ns_names:
                 raise DeffetiveStoredConfigError(f"nodeset {ns_name} not defined in config")
-        
+
     return _fill_cfg_defaults(cfg)
 
 def fetch_config() -> Tuple[bool, NSDict]:
     """
-    Fetches config from bucket and saves it locally 
+    Fetches config from bucket and saves it locally
     Returns True if new (updated) config was fetched
     """
     hash_file = Path("/slurm/scripts/.config.hash")
     old_hash = hash_file.read_text() if hash_file.exists() else None
-    
+
     cfg_and_hash = _fetch_config(old_hash=old_hash)
     if not cfg_and_hash:
         return False, _load_config()
@@ -947,11 +947,7 @@ def to_hostlist_fast(names: Iterable[str]) -> str:
             res.append(f"{p}[{','.join(cs)}]")
     return ",".join(res)
 
-
-def part_is_tpu(part):
-    """check if partition with name part contains a nodeset of type tpu"""
-    return len(lookup().cfg.partitions[part].partition_nodeset_tpu) > 0
-
+@lru_cache(maxsize=None)
 def to_hostnames(nodelist: str) -> List[str]:
     """make list of hostnames from hostlist expression"""
     if not nodelist:
@@ -1148,6 +1144,10 @@ def machine_type_sockets(template) -> int:
         "h3": 2,
         "c2d": 2 if guestCpus > 56 else 1,
         "a3": 2,
+        "c2": 2 if guestCpus > 30 else 1,
+        "c3": 2 if guestCpus > 88 else 1,
+        "c3d": 2 if guestCpus > 180 else 1,
+        "c4": 2 if guestCpus > 96 else 1,
     }.get(
         machine_type_family(template.machineType),
         1,  # assume 1 socket for all other families
@@ -1456,11 +1456,16 @@ class ReservationDetails:
     name: str
     policies: List[str] # names (not URLs) of resource policies
     bulk_insert_name: str # name in format suitable for bulk insert (currently identical to user supplied name in long format)
+    deployment_type: Optional[str]
 
 @dataclass
 class Job:
     id: int
+    name: Optional[str] = None
+    required_nodes: Optional[str] = None
+    job_state: Optional[str] = None
     duration: Optional[timedelta] = None
+
 
 class Lookup:
     """Wrapper class for cached data access"""
@@ -1561,10 +1566,14 @@ class Lookup:
 
     def node_nodeset(self, node_name=None):
         nodeset_name = self.node_nodeset_name(node_name)
-        ns = self.cfg.nodeset.get(nodeset_name)
-        if ns:
-            return ns
-        return self.cfg.nodeset_tpu.get(nodeset_name)
+        if nodeset_name in self.cfg.nodeset_tpu:
+            return self.cfg.nodeset_tpu[nodeset_name]
+        return self.cfg.nodeset[nodeset_name]
+
+    def partition_is_tpu(self, part: str) -> bool:
+        """check if partition with name part contains a nodeset of type tpu"""
+        return len(self.cfg.partitions[part].partition_nodeset_tpu) > 0
+
 
     def node_is_tpu(self, node_name=None):
         nodeset_name = self.node_nodeset_name(node_name)
@@ -1573,11 +1582,6 @@ class Lookup:
     def node_is_dyn(self, node_name=None) -> bool:
         nodeset = self.node_nodeset_name(node_name)
         return self.cfg.nodeset_dyn.get(nodeset) is not None
-
-    def chunk_tpu_nodes(self, tpu_nodes):
-        model = tpu_nodes[0]
-        tpu = TPU(self.node_nodeset(model))
-        return chunked(tpu_nodes, n=tpu.vmcount)
 
     def node_template(self, node_name=None):
         return self.node_nodeset(node_name).instance_template
@@ -1757,11 +1761,11 @@ class Lookup:
         """See https://cloud.google.com/compute/docs/reference/rest/v1/reservations"""
         return self.compute.reservations().get(
             project=project, zone=zone, reservation=name).execute()
-    
+
     def nodeset_reservation(self, nodeset: object) -> Optional[ReservationDetails]:
         if not nodeset.reservation_name:
             return None
-        
+
         zones = list(nodeset.zone_policy_allow or [])
         assert len(zones) == 1, "Only single zone is supported if using a reservation"
         zone = zones[0]
@@ -1771,7 +1775,7 @@ class Lookup:
             raise ValueError(
                 f"Invalid reservation name: '{nodeset.reservation_name}', expected format is 'projects/PROJECT/reservations/NAME'"
             )
-        
+
         project, name = match.group("project", "reservation")
         reservation = self._get_reservation(project, zone, name)
 
@@ -1784,6 +1788,7 @@ class Lookup:
             zone=zone,
             name=name,
             policies=policies,
+            deployment_type=reservation.get("deploymentType"),
             bulk_insert_name=nodeset.reservation_name)
 
     @lru_cache(maxsize=1)
@@ -1928,26 +1933,54 @@ class Lookup:
             nodeset_map[self.node_nodeset_name(node)].append(node)
         return nodeset_map
 
+    def _parse_job_info(self, job_info: str) -> Job:
+        """Extract job details"""
+        if match:= re.search(r"JobId=(\d+)", job_info):
+            job_id = int(match.group(1))
+        else:
+            raise ValueError(f"Job ID not found in the job info: {job_info}")
+
+        if match:= re.search(r"TimeLimit=(?:(\d+)-)?(\d{2}):(\d{2}):(\d{2})", job_info):
+          days, hours, minutes, seconds = match.groups()
+          duration = timedelta(
+              days=int(days) if days else 0,
+              hours=int(hours),
+              minutes=int(minutes),
+              seconds=int(seconds)
+          )
+        else:
+            duration = None
+
+        if match := re.search(r"JobName=([^\n]+)", job_info):
+            name = match.group(1)
+        else:
+            name = None
+
+        if match := re.search(r"JobState=(\w+)", job_info):
+            job_state = match.group(1)
+        else:
+            job_state = None
+
+        if match := re.search(r"ReqNodeList=([^ ]+)", job_info):
+            required_nodes = match.group(1)
+        else:
+            required_nodes = None
+
+        return Job(id=job_id, duration=duration, name=name, job_state=job_state, required_nodes=required_nodes)
+
+    @lru_cache
+    def get_jobs(self) -> List[Job]:
+        res = run(f"{self.scontrol} show jobs", timeout=30)
+
+        return [self._parse_job_info(job) for job in res.stdout.split("\n\n")[:-1]]
+
     @lru_cache
     def job(self, job_id: int) -> Optional[Job]:
-        jobInfo = run(f"{self.scontrol} show jobid {job_id}", check=False).stdout.rstrip()
-        if not jobInfo:
+        job_info = run(f"{self.scontrol} show jobid {job_id}", check=False).stdout.rstrip()
+        if not job_info:
             return None
 
-        timePattern = r"TimeLimit=(?:(\d+)-)?(\d{2}):(\d{2}):(\d{2})"
-        match = re.search(timePattern, jobInfo)
-
-        if not match:
-            return Job(id=job_id)
-
-        days, hours, minutes, seconds = match.groups()
-        job_duration = timedelta(
-            days=int(days) if days else 0,
-            hours=int(hours),
-            minutes=int(minutes),
-            seconds=int(seconds)
-        )
-        return Job(id=job_id, duration=job_duration)
+        return self._parse_job_info(job_info=job_info)
 
     @property
     def etc_dir(self) -> Path:
@@ -1975,4 +2008,4 @@ def update_config(cfg: NSDict) -> None:
 
 def scontrol_reconfigure(lkp: Lookup) -> None:
     log.info("Running scontrol reconfigure")
-    run(f"{lkp.scontrol} reconfigure", timeout=30)
+    run(f"{lkp.scontrol} reconfigure")
