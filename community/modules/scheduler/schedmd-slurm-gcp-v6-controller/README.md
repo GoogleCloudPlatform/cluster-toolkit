@@ -11,9 +11,9 @@ The [user guide][slurm-ug] provides detailed instructions on customizing and
 enhancing the Slurm on GCP cluster as well as recommendations on configuring the
 controller for optimal performance at different scales.
 
-[slurm-gcp]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.8.5
-[slurm\_controller\_instance]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.8.5/terraform/slurm_cluster/modules/slurm_controller_instance
-[slurm\_instance\_template]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.8.5/terraform/slurm_cluster/modules/slurm_instance_template
+[slurm-gcp]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.8.6
+[slurm\_controller\_instance]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.8.6/terraform/slurm_cluster/modules/slurm_controller_instance
+[slurm\_instance\_template]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.8.6/terraform/slurm_cluster/modules/slurm_instance_template
 [slurm-ug]: https://goo.gle/slurm-gcp-user-guide.
 [enable\_cleanup\_compute]: #input\_enable\_cleanup\_compute
 [enable\_cleanup\_subscriptions]: #input\_enable\_cleanup\_subscriptions
@@ -114,6 +114,29 @@ compute API. You can update the API version from your blueprint,
     settings:
       endpoint_versions:
         compute: "alpha"
+```
+
+## Opportunistic GCP maintenance in Slurm
+
+Customers can also enable running GCP maintenance as Slurm job opportunistically
+to perform early maintenance. If a node is detected for maintenance, Slurm will
+create a job to perform maintenance and put it in the job queue.
+
+If [backfill](https://slurm.schedmd.com/sched_config.html#backfill) scheduler is
+used, Slurm will backfill maintenance job if it can find any empty time window.
+
+Customer can also choose builtin scheduler type. In this case, Slurm would run
+maintenance job in strictly priority order. If the maintenance job doesn't kick
+in, then forced maintenance will take place at scheduled window.
+
+Customer can enable this feature at nodeset level by,
+
+```yaml
+  - id: debug_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network]
+    settings:
+      enable_opportunistic_maintenance: true
 ```
 
 ## Placement Max Distance
@@ -238,12 +261,12 @@ limitations under the License.
 | <a name="module_daos_network_storage_scripts"></a> [daos\_network\_storage\_scripts](#module\_daos\_network\_storage\_scripts) | ../../../../modules/scripts/startup-script | n/a |
 | <a name="module_nodeset_cleanup"></a> [nodeset\_cleanup](#module\_nodeset\_cleanup) | ./modules/cleanup_compute | n/a |
 | <a name="module_nodeset_cleanup_tpu"></a> [nodeset\_cleanup\_tpu](#module\_nodeset\_cleanup\_tpu) | ./modules/cleanup_tpu | n/a |
-| <a name="module_slurm_controller_template"></a> [slurm\_controller\_template](#module\_slurm\_controller\_template) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template | 6.8.5 |
+| <a name="module_slurm_controller_template"></a> [slurm\_controller\_template](#module\_slurm\_controller\_template) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template | 6.8.6 |
 | <a name="module_slurm_files"></a> [slurm\_files](#module\_slurm\_files) | ./modules/slurm_files | n/a |
-| <a name="module_slurm_login_instance"></a> [slurm\_login\_instance](#module\_slurm\_login\_instance) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/_slurm_instance | 6.8.5 |
-| <a name="module_slurm_login_template"></a> [slurm\_login\_template](#module\_slurm\_login\_template) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template | 6.8.5 |
-| <a name="module_slurm_nodeset_template"></a> [slurm\_nodeset\_template](#module\_slurm\_nodeset\_template) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template | 6.8.5 |
-| <a name="module_slurm_nodeset_tpu"></a> [slurm\_nodeset\_tpu](#module\_slurm\_nodeset\_tpu) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_nodeset_tpu | 6.8.5 |
+| <a name="module_slurm_login_instance"></a> [slurm\_login\_instance](#module\_slurm\_login\_instance) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/_slurm_instance | 6.8.6 |
+| <a name="module_slurm_login_template"></a> [slurm\_login\_template](#module\_slurm\_login\_template) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template | 6.8.6 |
+| <a name="module_slurm_nodeset_template"></a> [slurm\_nodeset\_template](#module\_slurm\_nodeset\_template) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template | 6.8.6 |
+| <a name="module_slurm_nodeset_tpu"></a> [slurm\_nodeset\_tpu](#module\_slurm\_nodeset\_tpu) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_nodeset_tpu | 6.8.6 |
 
 ## Resources
 

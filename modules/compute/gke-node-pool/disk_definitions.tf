@@ -22,8 +22,9 @@
 locals {
 
   local_ssd_machines = {
-    "a3-highgpu-8g" = { local_ssd_count_ephemeral_storage = null, local_ssd_count_nvme_block = 16 },
-    "a3-megagpu-8g" = { local_ssd_count_ephemeral_storage = null, local_ssd_count_nvme_block = 16 },
+    "a3-highgpu-8g"  = { local_ssd_count_ephemeral_storage = null, local_ssd_count_nvme_block = 16 },
+    "a3-megagpu-8g"  = { local_ssd_count_ephemeral_storage = null, local_ssd_count_nvme_block = 16 },
+    "a3-ultragpu-8g" = { local_ssd_count_ephemeral_storage = null, local_ssd_count_nvme_block = 32 },
   }
 
   generated_local_ssd_config = lookup(local.local_ssd_machines, var.machine_type, { local_ssd_count_ephemeral_storage = null, local_ssd_count_nvme_block = null })

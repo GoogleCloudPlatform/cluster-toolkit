@@ -1460,6 +1460,7 @@ class ReservationDetails:
     name: str
     policies: List[str] # names (not URLs) of resource policies
     bulk_insert_name: str # name in format suitable for bulk insert (currently identical to user supplied name in long format)
+    deployment_type: Optional[str]
 
 @dataclass
 class Job:
@@ -1792,6 +1793,7 @@ class Lookup:
             zone=zone,
             name=name,
             policies=policies,
+            deployment_type=reservation.get("deploymentType"),
             bulk_insert_name=nodeset.reservation_name)
 
     @lru_cache(maxsize=1)
@@ -2011,4 +2013,4 @@ def update_config(cfg: NSDict) -> None:
 
 def scontrol_reconfigure(lkp: Lookup) -> None:
     log.info("Running scontrol reconfigure")
-    run(f"{lkp.scontrol} reconfigure", timeout=30)
+    run(f"{lkp.scontrol} reconfigure")

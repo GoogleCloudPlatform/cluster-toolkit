@@ -34,6 +34,19 @@ locals {
   module_unique_id = replace(lower(var.internal_ghpc_module_id), "/[^a-z0-9\\-]/", "")
 }
 
+
+locals {
+  cluster_id_parts = split("/", var.cluster_id)
+  cluster_name     = local.cluster_id_parts[5]
+  cluster_location = local.cluster_id_parts[3]
+}
+
+
+data "google_container_cluster" "gke_cluster" {
+  name     = local.cluster_name
+  location = local.cluster_location
+}
+
 resource "google_container_node_pool" "node_pool" {
   provider = google-beta
 
@@ -52,6 +65,8 @@ resource "google_container_node_pool" "node_pool" {
   }
 
   initial_node_count = var.initial_node_count
+
+  max_pods_per_node = var.max_pods_per_node
 
   management {
     auto_repair  = true
@@ -177,7 +192,10 @@ resource "google_container_node_pool" "node_pool" {
     reservation_affinity {
       consume_reservation_type = var.reservation_affinity.consume_reservation_type
       key                      = length(local.verified_specific_reservations) != 1 ? null : local.reservation_resource_api_label
-      values                   = length(local.verified_specific_reservations) != 1 ? null : [for r in local.verified_specific_reservations : "projects/${r.project}/reservations/${r.name}"]
+      values = length(local.verified_specific_reservations) != 1 ? null : [
+        for i, r in local.verified_specific_reservations :
+        (length(local.input_reservation_suffixes[i]) > 0 ? format("%s%s", r.name, local.input_reservation_suffixes[i]) : "projects/${r.project}/reservations/${r.name}")
+      ]
     }
 
     dynamic "host_maintenance_policy" {
@@ -210,6 +228,10 @@ resource "google_container_node_pool" "node_pool" {
       initial_node_count,
     ]
     precondition {
+      condition     = (var.max_pods_per_node == null) || (data.google_container_cluster.gke_cluster.networking_mode == "VPC_NATIVE")
+      error_message = "max_pods_per_node does not work on `routes-based` clusters, that don't have IP Aliasing enabled."
+    }
+    precondition {
       condition     = !local.static_node_set || !local.autoscale_set
       error_message = "static_node_count cannot be set with either autoscaling_total_min_nodes or autoscaling_total_max_nodes."
     }
@@ -238,7 +260,9 @@ resource "google_container_node_pool" "node_pool" {
     precondition {
       condition = (
         (local.input_specific_reservations_count == 0) ||
-        (local.input_specific_reservations_count == 1 && length(local.verified_specific_reservations) > 0 && length(local.specific_reservation_requirement_violations) == 0)
+        (local.input_specific_reservations_count == 1 &&
+          length(local.verified_specific_reservations) > 0 &&
+        length(local.specific_reservation_requirement_violations) == 0)
       )
       error_message = <<-EOT
       Check if your reservation is configured correctly:
@@ -249,6 +273,14 @@ resource "google_container_node_pool" "node_pool" {
       - ${local.specific_reservation_requirement_violation_messages[property]}
       %{endfor}
       EOT
+    }
+    precondition {
+      condition = (
+        (local.input_specific_reservations_count == 0) ||
+        (local.input_specific_reservations_count == 1 && length(local.input_reservation_suffixes) == 0) ||
+        (local.input_specific_reservations_count == 1 && length(local.input_reservation_suffixes) > 0 && try(local.input_reservation_projects[0], var.project_id) == var.project_id)
+      )
+      error_message = "Shared extended reservations are not supported by GKE."
     }
   }
 }

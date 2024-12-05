@@ -85,6 +85,9 @@ def instance_properties(nodeset:object, model:str, placement_group:Optional[str]
             "values": [reservation.bulk_insert_name],
         }
 
+        if reservation.deployment_type == "DENSE":
+            props.scheduling.provisioning_model = "RESERVATION_BOUND"
+
         if reservation.policies:
             props.scheduling.onHostMaintenance = "TERMINATE"
             props.resourcePolicies = reservation.policies
