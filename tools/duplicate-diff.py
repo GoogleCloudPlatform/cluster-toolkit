@@ -83,8 +83,8 @@ duplicates = [
         "modules/file-system/pre-existing-network-storage/scripts/install-daos-client.sh",
     ],
     [
-        "modules/file-system/parallelstore/scripts/mount-daos.sh",
-        "modules/file-system/pre-existing-network-storage/scripts/mount-daos.sh",
+        "modules/file-system/parallelstore/templates/mount-daos.sh.tftpl",
+        "modules/file-system/pre-existing-network-storage/templates/mount-daos.sh.tftpl",
     ],
     [
         "modules/compute/vm-instance/compute_image.tf"
