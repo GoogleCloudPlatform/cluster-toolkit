@@ -19,7 +19,7 @@ import tempfile
 
 from common import TstCfg, TstNodeset, TstPartition, TstTPU # needed to import util
 import util
-from resume import get_resume_file_data, ResumeData, ResumeJobData, group_nodes_bulk, BulkChunk
+from resume import get_resume_file_data, ResumeData, ResumeJobData, group_nodes_bulk, BulkChunk, PlacementAndNodes
 
 def test_get_resume_file_data_no_env():
   with unittest.mock.patch.dict(os.environ, {"SLURM_RESUME_FILE": ""}):
@@ -70,24 +70,35 @@ def test_group_nodes_bulk(mock_create_placement_groups, mock_tpu):
         "t": TstNodeset(nodeset_name="t"),
       },
       partitions={
-        "p1": TstPartition(partition_name="p1"),
+        "p1": TstPartition(
+          partition_name="p1",
+          enable_job_exclusive=True,
+        ),
         "p2": TstPartition(
           partition_name="p2", 
           partition_nodeset_tpu=["t"],
+          enable_job_exclusive=True,
         )
       }
   )
   lkp = util.Lookup(cfg)
 
-  def mock_create_placement_groups_se(nodes, job_id):
+  def mock_create_placement_groups_se(nodes, job_id, lkp):
     args = (set(nodes), job_id)
-    if ({"c-n-1", "c-n-2"}, 0) == args:
-      return { "g0": ["c-n-1", "c-n-2"] }
+    if ({'c-n-1', 'c-n-2', 'c-t-8', 'c-t-9'}, 0) == args:
+      return [
+        PlacementAndNodes("g0", ["c-n-1", "c-n-2"]),
+        PlacementAndNodes(None, ['c-t-8', 'c-t-9']),
+      ]
     if ({"c-n-0", "c-n-8"}, 1) == args:
-      return { 
-        "g10": ["c-n-0"],
-        "g11": ["c-n-8"], 
-      }
+      return [
+        PlacementAndNodes("g10", ["c-n-0"]),
+        PlacementAndNodes("g11", ["c-n-8"]), 
+      ]
+    if ({'c-t-0', 'c-t-1', 'c-t-2', 'c-t-3', 'c-t-4', 'c-t-5'}, 2) == args:
+      return [
+        PlacementAndNodes(None, ['c-t-0', 'c-t-1', 'c-t-2', 'c-t-3', 'c-t-4', 'c-t-5'])
+      ]
     raise AssertionError(f"unexpected invocation: '{args}'")
   mock_create_placement_groups.side_effect = mock_create_placement_groups_se
 
@@ -106,13 +117,13 @@ def test_group_nodes_bulk(mock_create_placement_groups, mock_tpu):
   mock_create_placement_groups.assert_called()
   assert got == {
     "c-n:jobNone:g0:0": BulkChunk(
-      nodes=["c-n-1", "c-n-2"], prefix="c-n", chunk_idx=0, job_id=None, partition=None, placement_group="g0"),
+      nodes=["c-n-1", "c-n-2"], prefix="c-n", chunk_idx=0, excl_job_id=None, placement_group="g0"),
     "c-n:job1:g10:0": BulkChunk(
-      nodes=["c-n-0"], prefix="c-n", chunk_idx=0, job_id=1, partition="p1", placement_group="g10"),
+      nodes=["c-n-0"], prefix="c-n", chunk_idx=0, excl_job_id=1, placement_group="g10"),
     "c-t:0": BulkChunk(
-      nodes=["c-t-8", "c-t-9"], prefix="c-t", chunk_idx=0, job_id=None, partition=None, placement_group=None),
+      nodes=["c-t-8", "c-t-9"], prefix="c-t", chunk_idx=0, excl_job_id=None, placement_group=None),
     "c-t:job2:0": BulkChunk(
-      nodes=["c-t-0", "c-t-1"], prefix="c-t", chunk_idx=0, job_id=2, partition="p2", placement_group=None),
+      nodes=["c-t-0", "c-t-1"], prefix="c-t", chunk_idx=0, excl_job_id=2, placement_group=None),
     "c-t:job2:1": BulkChunk(
-      nodes=["c-t-2", "c-t-3"], prefix="c-t", chunk_idx=1, job_id=2, partition="p2", placement_group=None),
+      nodes=["c-t-2", "c-t-3"], prefix="c-t", chunk_idx=1, excl_job_id=2, placement_group=None),
   }
