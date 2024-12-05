@@ -31,8 +31,4 @@ steps:
   - |
     set -x -e
     cd /workspace && make
-
-    # Install paramiko
-    pip3 install paramiko
-
     python3 tools/python-integration-tests/slurm_topology.py
