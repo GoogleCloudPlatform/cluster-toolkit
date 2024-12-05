@@ -99,7 +99,6 @@ def instance_properties(nodeset:object, model:str, placement_group:Optional[str]
         props.disks = template_info.disks
 
     if placement_group:
-        props.scheduling.onHostMaintenance = "TERMINATE"
         props.resourcePolicies = [placement_group]
 
     if reservation := lookup().nodeset_reservation(nodeset):
@@ -109,21 +108,22 @@ def instance_properties(nodeset:object, model:str, placement_group:Optional[str]
             "values": [reservation.bulk_insert_name],
         }
 
-        if reservation.deployment_type == "DENSE":
+        if reservation.dense:
             props.scheduling.provisioning_model = "RESERVATION_BOUND"
 
-        if reservation.policies:
-            props.scheduling.onHostMaintenance = "TERMINATE"
+        # Figure out `resourcePolicies`
+        if reservation.policies: # use ones already attached to reservations
             props.resourcePolicies = reservation.policies
-            log.info(
-                f"reservation {reservation.bulk_insert_name} is being used with policies {props.resourcePolicies}"
-            )
-        else:
+        elif reservation.dense: # use once created by Slurm
+            props.resourcePolicies = [placement_group]
+        else: # vanilla reservations don't support external policies
             props.resourcePolicies = []
-            log.info(
-                f"reservation {reservation.bulk_insert_name} is being used without any policies"
-            )
+        log.info(
+            f"reservation {reservation.bulk_insert_name} is being used with resourcePolicies: {props.resourcePolicies}")
 
+    if props.resourcePolicies:
+       props.scheduling.onHostMaintenance = "TERMINATE"
+    
     if nodeset.maintenance_interval:
         props.scheduling.maintenanceInterval = nodeset.maintenance_interval
 
