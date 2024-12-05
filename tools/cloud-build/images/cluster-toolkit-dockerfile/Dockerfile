@@ -28,7 +28,8 @@ RUN apt-get update && \
         git \
         make \
         unzip \
-        wget
+        wget \
+        python3-pip
 
 # Install Terraform
 ARG TERRAFORM_VERSION=1.5.2
@@ -69,6 +70,9 @@ RUN echo $PATH
 # Create /out directory
 RUN mkdir /out
 WORKDIR /out
+
+RUN echo "[global]" >> /etc/pip.conf
+RUN echo "break-system-packages = true" >> /etc/pip.conf
 
 # Command to execute when running the container (placeholder)
 ENTRYPOINT ["gcluster"]
