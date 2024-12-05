@@ -16,6 +16,9 @@
 # This blueprint uses private preview functionality in limited availability,
 # see README.md for further information
 
+# This blueprint requires a Cluster Toolkit binary built from a
+# release >= 1.43.0
+
 blueprint_name: a3ultra-slurm
 
 vars:
