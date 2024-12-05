@@ -1458,6 +1458,10 @@ class ReservationDetails:
     bulk_insert_name: str # name in format suitable for bulk insert (currently identical to user supplied name in long format)
     deployment_type: Optional[str]
 
+    @property
+    def dense(self) -> bool:
+        return self.deployment_type == "DENSE"
+
 @dataclass
 class Job:
     id: int
