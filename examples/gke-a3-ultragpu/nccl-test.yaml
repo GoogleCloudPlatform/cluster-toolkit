@@ -1,0 +1,149 @@
+# Copyright 2024 Google Inc. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: nccl-host-1
+spec:
+  selector:
+    name: nccl-host-1
+  clusterIP: None
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nccl-host-2
+spec:
+  selector:
+    name: nccl-host-2
+  clusterIP: None
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nccl-test-host-1
+  labels:
+    name: nccl-host-1
+  annotations:
+    networking.gke.io/default-interface: 'eth0'
+    networking.gke.io/interfaces: |
+      [
+        {"interfaceName":"eth0","network":"default"},
+        {"interfaceName":"eth1","network":"gke-a3-ultra-sub-1"},
+        {"interfaceName":"eth2","network":"gke-a3-ultra-rdma-sub-0"},
+        {"interfaceName":"eth3","network":"gke-a3-ultra-rdma-sub-1"},
+        {"interfaceName":"eth4","network":"gke-a3-ultra-rdma-sub-2"},
+        {"interfaceName":"eth5","network":"gke-a3-ultra-rdma-sub-3"},
+        {"interfaceName":"eth6","network":"gke-a3-ultra-rdma-sub-4"},
+        {"interfaceName":"eth7","network":"gke-a3-ultra-rdma-sub-5"},
+        {"interfaceName":"eth8","network":"gke-a3-ultra-rdma-sub-6"},
+        {"interfaceName":"eth9","network":"gke-a3-ultra-rdma-sub-7"}
+      ]
+spec:
+  volumes:
+    - name: library-dir-host
+      hostPath:
+        path: /home/kubernetes/bin/nvidia
+    - name: gib
+      hostPath:
+        path: /home/kubernetes/bin/gib
+    - name: shared-memory
+      emptyDir:
+        medium: "Memory"
+        sizeLimit: 250Gi
+  containers:
+    - image: us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib:v1.0.2
+      name: test
+      resources:
+        requests:
+          cpu: 150m
+      volumeMounts:
+        - name: library-dir-host
+          mountPath: /usr/local/nvidia
+        - name: gib
+          mountPath: /usr/local/gib
+        - name: shared-memory
+          mountPath: /dev/shm
+      env:
+        - name: LD_LIBRARY_PATH
+          value: /usr/local/nvidia/lib64
+      resources:
+        limits:
+          nvidia.com/gpu: 8
+      command: ["/bin/bash", "-c"]
+      args:
+        - |
+          /scripts/container_entry.sh shell
+          source /usr/local/gib/scripts/set_nccl_env.sh
+          sleep infinity
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nccl-test-host-2
+  labels:
+    name: nccl-host-2
+  annotations:
+    networking.gke.io/default-interface: 'eth0'
+    networking.gke.io/interfaces: |
+      [
+        {"interfaceName":"eth0","network":"default"},
+        {"interfaceName":"eth1","network":"gke-a3-ultra-sub-1"},
+        {"interfaceName":"eth2","network":"gke-a3-ultra-rdma-sub-0"},
+        {"interfaceName":"eth3","network":"gke-a3-ultra-rdma-sub-1"},
+        {"interfaceName":"eth4","network":"gke-a3-ultra-rdma-sub-2"},
+        {"interfaceName":"eth5","network":"gke-a3-ultra-rdma-sub-3"},
+        {"interfaceName":"eth6","network":"gke-a3-ultra-rdma-sub-4"},
+        {"interfaceName":"eth7","network":"gke-a3-ultra-rdma-sub-5"},
+        {"interfaceName":"eth8","network":"gke-a3-ultra-rdma-sub-6"},
+        {"interfaceName":"eth9","network":"gke-a3-ultra-rdma-sub-7"}
+      ]
+spec:
+  volumes:
+    - name: library-dir-host
+      hostPath:
+        path: /home/kubernetes/bin/nvidia
+    - name: gib
+      hostPath:
+        path: /home/kubernetes/bin/gib
+    - name: shared-memory
+      emptyDir:
+        medium: "Memory"
+        sizeLimit: 250Gi
+  containers:
+    - image: us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib:v1.0.2
+      name: test
+      resources:
+        requests:
+          cpu: 150m
+      volumeMounts:
+        - name: library-dir-host
+          mountPath: /usr/local/nvidia
+        - name: gib
+          mountPath: /usr/local/gib
+        - name: shared-memory
+          mountPath: /dev/shm
+      env:
+        - name: LD_LIBRARY_PATH
+          value: /usr/local/nvidia/lib64
+      resources:
+        limits:
+          nvidia.com/gpu: 8
+      command: ["/bin/bash", "-c"]
+      args:
+        - |
+          /scripts/container_entry.sh shell
+          source /usr/local/gib/scripts/set_nccl_env.sh
+          sleep infinity
