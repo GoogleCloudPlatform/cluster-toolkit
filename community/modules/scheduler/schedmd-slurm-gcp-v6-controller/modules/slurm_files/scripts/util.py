@@ -1466,6 +1466,10 @@ class Job:
     job_state: Optional[str] = None
     duration: Optional[timedelta] = None
 
+@dataclass(frozen=True)
+class NodeState:
+    base: str
+    flags: frozenset
 
 class Lookup:
     """Wrapper class for cached data access"""
@@ -1641,15 +1645,14 @@ class Lookup:
 
     @lru_cache(maxsize=None)
     def slurm_nodes(self):
-        StateTuple = namedtuple("StateTuple", "base,flags")
 
         def make_node_tuple(node_line):
-            """turn node,state line to (node, StateTuple(state))"""
+            """turn node,state line to (node, NodeState(state))"""
             # state flags include: CLOUD, COMPLETING, DRAIN, FAIL, POWERED_DOWN,
             #   POWERING_DOWN
             node, fullstate = node_line.split(",")
             state = fullstate.split("+")
-            state_tuple = StateTuple(state[0], set(state[1:]))
+            state_tuple = NodeState(base=state[0], flags=frozenset(state[1:]))
             return (node, state_tuple)
 
         cmd = (
