@@ -19,6 +19,15 @@ OS_ID=$(awk -F '=' '/^ID=/ {print $2}' /etc/os-release | sed -e 's/"//g')
 OS_VERSION=$(awk -F '=' '/VERSION_ID/ {print $2}' /etc/os-release | sed -e 's/"//g')
 OS_VERSION_MAJOR=$(awk -F '=' '/VERSION_ID/ {print $2}' /etc/os-release | sed -e 's/"//g' -e 's/\..*$//')
 
+if ! {
+	{ [[ "${OS_ID}" = "rocky" ]] || [[ "${OS_ID}" = "rhel" ]]; } && { [[ "${OS_VERSION_MAJOR}" = "8" ]] || [[ "${OS_VERSION_MAJOR}" = "9" ]]; } ||
+		{ [[ "${OS_ID}" = "ubuntu" ]] && [[ "${OS_VERSION}" = "22.04" ]]; } ||
+		{ [[ "${OS_ID}" = "debian" ]] && [[ "${OS_VERSION_MAJOR}" = "12" ]]; }
+}; then
+	echo "Unsupported operating system ${OS_ID} ${OS_VERSION}. This script only supports Rocky Linux 8, Redhat 8, Redhat 9, Ubuntu 22.04, and Debian 12."
+	exit 1
+fi
+
 if [ -x /bin/daos ]; then
 	echo "DAOS already installed"
 	daos version
@@ -27,29 +36,15 @@ else
 	# The following commands should be executed on each client vm.
 	## For Rocky linux 8 / RedHat 8.
 	if [ "${OS_ID}" = "rocky" ] || [ "${OS_ID}" = "rhel" ]; then
-		if [ "${OS_VERSION_MAJOR}" = "8" ]; then
-			# 1) Add the Parallelstore package repository
-			cat >/etc/yum.repos.d/parallelstore-v2-6-el8.repo <<EOF
-[parallelstore-v2-6-el8]
-name=Parallelstore EL8 v2.6
-baseurl=https://us-central1-yum.pkg.dev/projects/parallelstore-packages/v2-6-el8
-enabled=1
-repo_gpgcheck=0
-gpgcheck=0
-EOF
-		elif [ "${OS_VERSION_MAJOR}" -eq "9" ]; then
-			cat >/etc/yum.repos.d/parallelstore-v2-6-el9.repo <<EOF
-[parallelstore-v2-6-el9]
-name=Parallelstore EL9 v2.6
-baseurl=https://packages.daos.io/v2.6/EL9/packages/x86_64/
-enabled=1
-repo_gpgcheck=0
-gpgcheck=0
-EOF
-		else
-			echo "Unsupported RedHat / Rocky Linux system version ${OS_VERSION_MAJOR}. This script only supports version 8 and 9."
-			exit 1
-		fi
+		# 1) Add the Parallelstore package repository
+		cat >/etc/yum.repos.d/parallelstore-v2-6-el"${OS_VERSION_MAJOR}".repo <<-EOF
+			[parallelstore-v2-6-el${OS_VERSION_MAJOR}]
+			name=Parallelstore EL${OS_VERSION_MAJOR} v2.6
+			baseurl=https://us-central1-yum.pkg.dev/projects/parallelstore-packages/v2-6-el${OS_VERSION_MAJOR}
+			enabled=1
+			repo_gpgcheck=0
+			gpgcheck=0
+		EOF
 
 		## TODO: Remove disable automatic update script after issue is fixed.
 		if [ -x /usr/bin/google_disable_automatic_updates ]; then
@@ -65,7 +60,7 @@ EOF
 		dnf upgrade -y libfabric
 
 	# For Ubuntu 22.04 and debian 12,
-	elif { [ "${OS_ID}" = "ubuntu" ] && [ "${OS_VERSION}" = "22.04" ]; } || { [ "${OS_ID}" = "debian" ] && [ "${OS_VERSION_MAJOR}" = "12" ]; }; then
+	elif [[ "${OS_ID}" = "ubuntu" ]] || [[ "${OS_ID}" = "debian" ]]; then
 		# shellcheck disable=SC2034
 		DEBIAN_FRONTEND=noninteractive
 
