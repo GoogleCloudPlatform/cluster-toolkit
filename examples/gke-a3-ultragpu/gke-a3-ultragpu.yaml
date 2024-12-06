@@ -21,7 +21,7 @@ vars:
   zone: # add this
   # Cidr block containing the IP of the machine calling terraform.
   # The following line must be updated for this example to work.
-  authorized_cidr: 0.0.0.0/0
+  authorized_cidr: # add this
   extended_reservation: # add this
   # Installs NCCL library and Google NCCL plugin
   # Runs an init container on all H200 GPU nodes with the NCCL plugin image
