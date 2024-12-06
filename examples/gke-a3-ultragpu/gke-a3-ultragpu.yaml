@@ -14,26 +14,25 @@
 
 blueprint_name: gke-a3-ultra
 
-terraform_backend_defaults:
-  type: gcs
-  configuration:
-    bucket: TERRAFORM_BUCKET_NAME
-
 vars:
-  project_id: PROJECT_ID
-  deployment_name: gke-a3-ultra
-  region: COMPUTE_REGION
-  zone: COMPUTE_ZONE
+  project_id: # add this
+  deployment_name: # add this
+  region: # add this
+  zone: # add this
   # Cidr block containing the IP of the machine calling terraform.
   # The following line must be updated for this example to work.
-  authorized_cidr: <IP_ADDRESS>/<SUFFIX>
-  extended_reservation: RESERVATION_NAME/reservationBlocks/BLOCK_NAME
+  authorized_cidr: 0.0.0.0/0
+  extended_reservation: # add this
   # Installs NCCL library and Google NCCL plugin
   # Runs an init container on all H200 GPU nodes with the NCCL plugin image
   nccl_installer_path: $(ghpc_stage("./nccl-installer.yaml"))
+  # Temporary fix for COS issue, will be fixed in next release
   mglru_disable_path: $(ghpc_stage("./mglru-disable.yaml"))
   mtu_size: 8896
-  static_node_count: NODE_COUNT
+  static_node_count:  # add this
+  system_node_pool_disk_size_gb: 200
+  a3ultra_node_pool_disk_size_gb: 100
+  gke_min_version: 1.31.2-gke.1384000
 
 deployment_groups:
 - group: primary
@@ -98,9 +97,9 @@ deployment_groups:
     source: github.com/GoogleCloudPlatform/cluster-toolkit.git//modules/scheduler/gke-cluster?ref=e0c690b
     use: [gke-a3-ultra-net-0]
     settings:
-      cluster_reference_type: NAME
-      min_master_version: 1.31.2
+      min_master_version: $(vars.gke_min_version)
       system_node_pool_machine_type: "e2-standard-16"
+      system_node_pool_disk_size_gb: $(vars.system_node_pool_disk_size_gb)
       system_node_pool_taints: []
       enable_dcgm_monitoring: true
       enable_gcsfuse_csi: true
@@ -133,6 +132,7 @@ deployment_groups:
       machine_type: a3-ultragpu-8g
       zones: [$(vars.zone)]
       disk_type: hyperdisk-balanced
+      disk_size_gb: $(vars.a3ultra_node_pool_disk_size_gb)
       static_node_count: $(vars.static_node_count)
       guest_accelerator:
       - type: nvidia-h200-141gb
