@@ -114,7 +114,7 @@ limitations under the License.
 | Name | Version |
 |------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 0.13 |
-| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 5.25.0 |
+| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 5.42.0 |
 | <a name="requirement_null"></a> [null](#requirement\_null) | ~> 3.0 |
 | <a name="requirement_random"></a> [random](#requirement\_random) | ~> 3.0 |
 
@@ -122,7 +122,7 @@ limitations under the License.
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 5.25.0 |
+| <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 5.42.0 |
 | <a name="provider_null"></a> [null](#provider\_null) | ~> 3.0 |
 | <a name="provider_random"></a> [random](#provider\_random) | ~> 3.0 |
 
@@ -143,8 +143,8 @@ No modules.
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the HPC deployment. | `string` | n/a | yes |
-| <a name="input_directory_stripe"></a> [directory\_stripe](#input\_directory\_stripe) | Directory-level stripping setting, must be `"DIRECTORY_STRIPE_LEVEL_UNSPECIFIED"`, `"DIRECTORY_STRIPE_LEVEL_MIN"`, `"DIRECTORY_STRIPE_LEVEL_BALANCED"` or `"DIRECTORY_STRIPE_LEVEL_MAX"`. More details in the [documentation](https://cloud.google.com/parallelstore/docs/performance#directory_striping_setting).  | `string` | `"DIRECTORY_STRIPE_LEVEL_UNSPECIFIED"` | no |
-| <a name="input_file_stripe"></a> [file\_stripe](#input\_file\_stripe) | File-level stripping setting, must be `"FILE_STRIPE_LEVEL_UNSPECIFIED"`, `"FILE_STRIPE_LEVEL_MIN"`, `"FILE_STRIPE_LEVEL_BALANCED"` or `"FILE_STRIPE_LEVEL_MAX"`. More details in the [documentation](https://cloud.google.com/parallelstore/docs/performance#file_striping_setting). | `string` | `"FILE_STRIPE_LEVEL_UNSPECIFIED"` | no |
+| <a name="input_directory_stripe"></a> [directory\_stripe](#input\_directory\_stripe) | The parallelstore stripe level for directories. | `string` | `"DIRECTORY_STRIPE_LEVEL_UNSPECIFIED"` | no |
+| <a name="input_file_stripe"></a> [file\_stripe](#input\_file\_stripe) | The parallelstore stripe level for files. | `string` | `"FILE_STRIPE_LEVEL_UNSPECIFIED"` | no |
 | <a name="input_import_destination_path"></a> [import\_destination\_path](#input\_import\_destination\_path) | The name of local path to import data on parallelstore instance from GCS bucket. | `string` | `null` | no |
 | <a name="input_import_gcs_bucket_uri"></a> [import\_gcs\_bucket\_uri](#input\_import\_gcs\_bucket\_uri) | The name of the GCS bucket to import data from to parallelstore. | `string` | `null` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to parallel store instance. | `map(string)` | `{}` | no |
