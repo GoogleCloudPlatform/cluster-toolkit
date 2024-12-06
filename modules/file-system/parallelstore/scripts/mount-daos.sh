@@ -16,9 +16,18 @@
 set -e -o pipefail
 
 OS_ID=$(awk -F '=' '/^ID=/ {print $2}' /etc/os-release | sed -e 's/"//g')
-OS_ID_LIKE=$(awk -F '=' '/^ID_LIKE=/ {print $2}' /etc/os-release | sed -e 's/"//g')
 OS_VERSION=$(awk -F '=' '/VERSION_ID/ {print $2}' /etc/os-release | sed -e 's/"//g')
 OS_VERSION_MAJOR=$(awk -F '=' '/VERSION_ID/ {print $2}' /etc/os-release | sed -e 's/"//g' -e 's/\..*$//')
+
+if ! {
+	{ [[ "${OS_ID}" = "rocky" ]] || [[ "${OS_ID}" = "rhel" ]]; } && { [[ "${OS_VERSION_MAJOR}" = "8" ]] || [[ "${OS_VERSION_MAJOR}" = "9" ]]; } ||
+		{ [[ "${OS_ID}" = "ubuntu" ]] && [[ "${OS_VERSION}" = "22.04" ]]; } ||
+		{ [[ "${OS_ID}" = "debian" ]] && [[ "${OS_VERSION_MAJOR}" = "12" ]]; }
+}; then
+	echo "Unsupported operating system ${OS_ID} ${OS_VERSION}. This script only supports Rocky Linux 8, Redhat 8, Redhat 9, Ubuntu 22.04, and Debian 12."
+	exit 1
+
+fi
 
 # Parse local_mount, mount_options from argument.
 # Format mount-options string to be compatible to dfuse mount command.
@@ -45,9 +54,9 @@ sed -i "s/.*access_points.*/access_points: $access_points/g" $daos_config
 # Get names of network interfaces not in first PCI slot
 # The first PCI slot is a standard network adapter while remaining interfaces
 # are typically network cards dedicated to GPU or workload communication
-if [[ "$OS_ID_LIKE" == "debian" ]]; then
+if [[ "$OS_ID" == "debian" ]]; then
 	extra_interfaces=$(find /sys/class/net/ -not -name 'enp0s*' -regextype posix-extended -regex '.*/enp[0-9]+s.*' -printf '"%f"\n' | paste -s -d ',')
-elif [[ "$OS_ID_LIKE" =~ "rhel" ]]; then
+elif [[ "${OS_ID}" = "rocky" ]] || [[ "${OS_ID}" = "rhel" ]]; then
 	extra_interfaces=$(find /sys/class/net/ -not -name eth0 -regextype posix-extended -regex '.*/eth[0-9]+' -printf '"%f"\n' | paste -s -d ',')
 fi
 
@@ -56,22 +65,10 @@ if [[ -n "$extra_interfaces" ]]; then
 	sed -i "s/#.*exclude_fabric_ifaces: \[.*/exclude_fabric_ifaces: [$exclude_fabric_ifaces]/" $daos_config
 fi
 
-# Start service
-if { [ "${OS_ID}" = "rocky" ] || [ "${OS_ID}" = "rhel" ]; } && { [ "${OS_VERSION_MAJOR}" = "8" ] || [ "${OS_VERSION_MAJOR}" = "9" ]; }; then
-	# TODO: Update script to change default log destination folder, after daos_agent user is supported in debian and ubuntu.
-	# Move agent log destination from /tmp/ (default) to /var/log/daos_agent/
-	mkdir -p /var/log/daos_agent
-	chown daos_agent:daos_agent /var/log/daos_agent
-	sed -i "s/#.*log_file:.*/log_file: \/var\/log\/daos_agent\/daos_agent.log/g" $daos_config
-	systemctl enable daos_agent.service
-	systemctl start daos_agent.service
-elif { [ "${OS_ID}" = "ubuntu" ] && [ "${OS_VERSION}" = "22.04" ]; } || { [ "${OS_ID}" = "debian" ] && [ "${OS_VERSION_MAJOR}" = "12" ]; }; then
-	mkdir -p /var/run/daos_agent
-	daos_agent -o /etc/daos/daos_agent.yml >/dev/null 2>&1 &
-else
-	echo "Unsupported operating system ${OS_ID} ${OS_VERSION}. This script only supports Rocky Linux 8, Redhat 8, Redhat 9, Ubuntu 22.04, and Debian 12."
-	exit 1
-fi
+# reroute logs from /tmp (default) to daos_agent dedicated directory
+mkdir -p /var/log/daos_agent
+chown daos_agent:daos_agent /var/log/daos_agent
+sed -i "s/#.*log_file:.*/log_file: \/var\/log\/daos_agent\/daos_agent.log/g" $daos_config
 
 # Mount parallelstore instance to client vm.
 mkdir -p "$local_mount"
@@ -93,6 +90,7 @@ cat >/etc/systemd/system/"${service_name}" <<EOF
 [Unit]
 Description=DAOS Mount Service
 After=network-online.target daos_agent.service
+BindsTo=daos_agent.service
 Before=slurmd.service
 ConditionPathIsMountPoint=!${local_mount}
 
@@ -109,7 +107,10 @@ ExecStop=/usr/bin/fusermount3 -u $local_mount
 WantedBy=multi-user.target
 EOF
 
+# it is not necessary to explicitly start daos_agent because it will be
+# brought in automatically by the mount units
 systemctl daemon-reload
+systemctl enable daos_agent.service
 systemctl enable "${service_name}"
 systemctl start "${service_name}"
 # --- End: Add systemd service creation ---

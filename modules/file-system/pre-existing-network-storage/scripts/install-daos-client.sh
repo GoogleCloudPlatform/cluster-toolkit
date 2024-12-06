@@ -78,6 +78,35 @@ EOF
 		# 2) Install daos-client
 		apt-get install -y daos-client
 
+		# 3) Create daos_agent.service (comes pre-installed with RedHat)
+		if ! getent passwd daos_agent >/dev/null 2>&1; then
+			useradd daos_agent
+		fi
+		cat >/etc/systemd/system/daos_agent.service <<-EOF
+			[Unit]
+			Description=DAOS Agent
+			StartLimitIntervalSec=60
+			Wants=network-online.target
+			After=network-online.target
+
+			[Service]
+			Type=notify
+			User=daos_agent
+			Group=daos_agent
+			RuntimeDirectory=daos_agent
+			RuntimeDirectoryMode=0755
+			ExecStart=/usr/bin/daos_agent -o /etc/daos/daos_agent.yml
+			StandardOutput=journal
+			StandardError=journal
+			Restart=always
+			RestartSec=10
+			LimitMEMLOCK=infinity
+			LimitCORE=infinity
+			StartLimitBurst=5
+
+			[Install]
+			WantedBy=multi-user.target
+		EOF
 	else
 		echo "Unsupported operating system ${OS_ID} ${OS_VERSION}. This script only supports Rocky Linux 8, Redhat 8, Redhat 9, Ubuntu 22.04, and Debian 12."
 		exit 1
