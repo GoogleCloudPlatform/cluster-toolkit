@@ -71,7 +71,7 @@ EOF
 
 		# 1) Add the Parallelstore package repository
 		curl -o /etc/apt/trusted.gpg.d/us-central1-apt.pkg.dev.asc https://us-central1-apt.pkg.dev/doc/repo-signing-key.gpg
-		echo "deb https://us-central1-apt.pkg.dev/projects/parallelstore-packages v2-6-deb main" >>/etc/apt/sources.list.d/artifact-registry.list
+		echo "deb https://us-central1-apt.pkg.dev/projects/parallelstore-packages v2-6-deb main" >/etc/apt/sources.list.d/artifact-registry.list
 
 		apt-get update
 
