@@ -391,3 +391,25 @@ variable "max_pods_per_node" {
   type        = number
   default     = null
 }
+
+variable "upgrade_settings" {
+  description = "define node pool upgrade settings"
+  type = object({
+    strategy        = string,
+    max_surge       = optional(number),
+    max_unavailable = optional(number)
+  })
+  default = {
+    strategy        = "SURGE",
+    max_surge       = 0,
+    max_unavailable = 1
+  }
+  validation {
+    condition = (
+      contains(["SURGE"], var.upgrade_settings.strategy) &&
+      var.upgrade_settings.max_unavailable >= 0 &&
+      var.upgrade_settings.max_surge >= 0 &&
+    (var.upgrade_settings.max_unavailable > 0 || var.upgrade_settings.max_surge > 0))
+    error_message = "upgrade settings are invalid"
+  }
+}

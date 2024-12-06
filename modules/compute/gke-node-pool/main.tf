@@ -75,9 +75,9 @@ resource "google_container_node_pool" "node_pool" {
   }
 
   upgrade_settings {
-    strategy        = "SURGE"
-    max_surge       = 0
-    max_unavailable = 1
+    strategy        = var.upgrade_settings.strategy
+    max_surge       = var.upgrade_settings.max_surge
+    max_unavailable = var.upgrade_settings.max_unavailable
   }
 
   dynamic "placement_policy" {
