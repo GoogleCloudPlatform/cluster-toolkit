@@ -1,0 +1,16 @@
+---
+    terraform_backend_defaults:
+      type: gcs
+      configuration:
+        bucket: BUCKET_NAME
+
+    vars:
+      deployment_name: gke-a3-ultra
+      project_id: PROJECT_ID
+      region: COMPUTE_REGION
+      zone: COMPUTE_ZONE
+      authorized_cidr: <IP_ADDRESS>/<SUFFIX>
+      # In order to not target a BLOCK_NAME, extended_reservation can be inputed as 
+      # extended_reservation: RESERVATION_NAME
+      extended_reservation: RESERVATION_NAME/reservationBlocks/BLOCK_NAME
+      static_node_count: NODE_COUNT
