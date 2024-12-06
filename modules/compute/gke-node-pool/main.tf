@@ -283,6 +283,22 @@ resource "google_container_node_pool" "node_pool" {
       )
       error_message = "Shared extended reservations are not supported by GKE."
     }
+    precondition {
+      condition     = contains(["SURGE"], var.upgrade_settings.strategy)
+      error_message = "Only SURGE strategy is supported"
+    }
+    precondition {
+      condition     = var.upgrade_settings.max_unavailable >= 0
+      error_message = "max_unavailable should be set to 0 or greater"
+    }
+    precondition {
+      condition     = var.upgrade_settings.max_surge >= 0
+      error_message = "max_surge should be set to 0 or greater"
+    }
+    precondition {
+      condition     = (var.upgrade_settings.max_unavailable > 0 || var.upgrade_settings.max_surge > 0)
+      error_message = "At least one of max_unavailable or max_surge must greater than 0"
+    }
   }
 }
 
