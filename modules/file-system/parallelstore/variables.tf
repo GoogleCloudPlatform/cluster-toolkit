@@ -91,7 +91,7 @@ variable "import_destination_path" {
   type        = string
   default     = null
 }
-  
+
 variable "file_stripe" {
   description = "The parallelstore stripe level for files."
   type        = string
