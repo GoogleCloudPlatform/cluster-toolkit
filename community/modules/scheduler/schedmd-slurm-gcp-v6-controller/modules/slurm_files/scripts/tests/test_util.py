@@ -64,6 +64,24 @@ def test_node_desc(name, expected):
 
 
 @pytest.mark.parametrize(
+    "name,expected",
+    [
+        ("az-buka-23", 23),
+        ("az-buka-0", 0),
+        ("az-buka", Exception),
+        ("az-buka-xyzf", ValueError),
+        ("az-buka-[2-3]", ValueError),
+    ],
+)
+def test_node_index(name, expected):
+    if  type(expected) is type and issubclass(expected, Exception):
+        with pytest.raises(expected):
+            util.lookup().node_index(name) 
+    else:
+        assert util.lookup().node_index(name) == expected
+
+
+@pytest.mark.parametrize(
     "name",
     [
         "az-buka",
