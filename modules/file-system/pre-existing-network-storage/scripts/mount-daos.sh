@@ -52,7 +52,7 @@ elif [[ "$OS_ID_LIKE" =~ "rhel" ]]; then
 fi
 
 if [[ -n "$extra_interfaces" ]]; then
-	exclude_fabric_ifaces="lo,$extra_interfaces"
+	exclude_fabric_ifaces="\"lo\",$extra_interfaces"
 	sed -i "s/#.*exclude_fabric_ifaces: \[.*/exclude_fabric_ifaces: [$exclude_fabric_ifaces]/" $daos_config
 fi
 
