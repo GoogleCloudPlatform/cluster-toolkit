@@ -26,16 +26,17 @@ class Test(unittest.TestCase):  # Inherit from unittest.TestCase
         self.ssh_manager = None
         self.ssh_client = None
 
-    def run_command(self, cmd: str, err_msg: str = None) -> subprocess.CompletedProcess:
-         res = subprocess.run(cmd, shell=True, universal_newlines=True, check=True,
-                          stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-         return res
+    def run_command(self, cmd: str) -> subprocess.CompletedProcess:
+        res = subprocess.run(cmd, shell=True, text=True, check=True,
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        return res
 
     def setUp(self):
+        self.addCleanup(self.clean_up)
         self.deployment.deploy()
         time.sleep(90)
 
-    def tearDown(self):
+    def clean_up(self):
         self.deployment.destroy()
 
 class SlurmTest(Test):
@@ -49,8 +50,16 @@ class SlurmTest(Test):
     def close_ssh(self):
         self.ssh_manager.close()
 
-    def tearDown(self):
-        super().tearDown()
+    def setUp(self):
+        try:
+            super().setUp()
+            hostname = self.get_login_node()
+            self.ssh(hostname)
+        except Exception as err:
+            self.fail(f"Unexpected error encountered. stderr: {err.stderr}")
+
+    def clean_up(self):
+        super().clean_up()
         self.close_ssh()
 
     def get_login_node(self):

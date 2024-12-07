@@ -32,6 +32,9 @@ class SSHManager:
             self.key = None
             self.ssh_client = None
 
+    def run_command(self, cmd: str) -> subprocess.CompletedProcess:
+        res = subprocess.run(cmd, text=True, check=True, capture_output=True)
+
     def create_tunnel(self, instance_name, port, project_id, zone):
         iap_tunnel_cmd = [
             "gcloud", "compute", "start-iap-tunnel", instance_name,
@@ -48,18 +51,12 @@ class SSHManager:
         key_path = os.path.expanduser("~/.ssh/google_compute_engine")
         os.makedirs(os.path.dirname(key_path), exist_ok=True)
 
-        cmd = ["ssh-keygen", "-t", "rsa", "--ttl", "1h", "-f", key_path, "-N", ""]
-        subprocess.run(cmd, capture_output=True, text=True, check=True)
+        self.run_command(["ssh-keygen", "-t", "rsa", "-f", key_path, "-N", ""])
 
         # Add the public key to OS Login
         public_key_path = key_path + ".pub"
-        subprocess.run(
-            [
-                "gcloud", "compute", "os-login", "ssh-keys", "add", 
-                "--key-file", public_key_path
-            ], 
-            check=True, capture_output=True
-        )
+        self.run_command(["gcloud", "compute", "os-login", "ssh-keys", "add", "--key-file", public_key_path, "--ttl", "60m"])
+
         return key_path
 
     def setup_connection(self, instance_name, port, project_id, zone):
@@ -70,8 +67,13 @@ class SSHManager:
 
     def close(self):
         # Closes existing SSH connection and tunnel
-        if self.tunnel:
-            self.tunnel.terminate()
-            self.tunnel = None
         if self.ssh_client:
             self.ssh_client.close()
+        if self.tunnel:
+            self.tunnel.terminate()
+            time.sleep(1) # give a second to terminate
+            if self.tunnel.poll() is None: 
+                self.tunnel.kill() # kill leftover process if still running
+            self.tunnel.stdout.close()
+            self.tunnel.stderr.close()
+            self.tunnel = None
