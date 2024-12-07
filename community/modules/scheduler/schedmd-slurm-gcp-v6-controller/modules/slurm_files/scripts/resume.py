@@ -178,7 +178,6 @@ def create_instances_request(nodes: List[str], placement_group: Optional[str], e
     )
 
     if placement_group:
-        assert len(nodes) <= PLACEMENT_MAX_CNT
         pass # do not set minCount to force "all or nothing" behavior
     else:
         body["minCount"] = 1

@@ -375,7 +375,16 @@ variable "disable_public_ips" { # tflint-ignore: terraform_unused_declarations
 
 
 variable "enable_placement" {
-  description = "Enable placement groups."
+  description = <<-EOD
+  Use placement policy for VMs in this nodeset.
+  See: https://cloud.google.com/compute/docs/instances/placement-policies-overview
+  To set max_distance of used policy, use `placement_max_distance` variable.
+
+  Enabled by default, reasons for users to disable it:
+  - If non-dense reservation is used, user can avoid extra-cost of creating placement policies;
+  - If user wants to avoid "all or nothing" VM provisioning behaviour;
+  - If user wants to intentionally have "spread" VMs (e.g. for reliability reasons)
+  EOD
   type        = bool
   default     = true
 }
