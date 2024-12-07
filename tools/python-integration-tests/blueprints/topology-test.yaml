@@ -36,7 +36,6 @@ deployment_groups:
       node_count_dynamic_max: 0
       node_count_static: 5
       allow_automatic_updates: false
-      enable_placement: true
 
   - id: partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
