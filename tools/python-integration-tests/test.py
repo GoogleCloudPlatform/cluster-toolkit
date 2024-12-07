@@ -26,10 +26,15 @@ class Test(unittest.TestCase):  # Inherit from unittest.TestCase
         self.ssh_manager = None
         self.ssh_client = None
 
-    def run_command(self, cmd: str, err_msg: str = None) -> subprocess.CompletedProcess:
-         res = subprocess.run(cmd, shell=True, universal_newlines=True, check=True,
-                          stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-         return res
+    def run_command(self, cmd: str) -> subprocess.CompletedProcess:
+        try: 
+            res = subprocess.run(cmd, shell=True, text=True, check=True,
+                         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        except Exception as err:
+            logging.error(f"Error running command: {cmd}")
+            logging.error(f"Error message: {err.stderr.strip()}") 
+            raise
+        return res
 
     def setUp(self):
         self.deployment.deploy()

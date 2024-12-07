@@ -22,7 +22,7 @@ import json
 class SlurmSimpleJobCompletionTest(SlurmTest):
     # Class to test simple slurm job completion
     def __init__(self, deployment):
-        super().__init__(deployment)
+        super().__init__(Deployment("tools/python-integration-tests/blueprints/slurm-simple.yaml"))
         self.job_list = {}
 
     def runTest(self):
@@ -80,5 +80,4 @@ class SlurmSimpleJobCompletionTest(SlurmTest):
         self.job_list[jobID] = {}
 
 if __name__ == "__main__":
-    deployment = Deployment("tools/python-integration-tests/blueprints/slurm-simple.yaml")
-    unittest.TextTestRunner().run(SlurmSimpleJobCompletionTest(deployment)) 
+    unittest.main()
