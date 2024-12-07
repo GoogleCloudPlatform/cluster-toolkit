@@ -102,24 +102,10 @@ def instance_properties(nodeset:object, model:str, placement_group:Optional[str]
         props.resourcePolicies = [placement_group]
 
     if reservation := lookup().nodeset_reservation(nodeset):
-        props.reservationAffinity = {
-            "consumeReservationType": "SPECIFIC_RESERVATION",
-            "key": f"compute.{util.universe_domain()}/reservation-name",
-            "values": [reservation.bulk_insert_name],
-        }
+        update_reservation_props(reservation, props, placement_group, False)
 
-        if reservation.dense:
-            props.scheduling.provisioning_model = "RESERVATION_BOUND"
-
-        # Figure out `resourcePolicies`
-        if reservation.policies: # use ones already attached to reservations
-            props.resourcePolicies = reservation.policies
-        elif reservation.dense: # use once created by Slurm
-            props.resourcePolicies = [placement_group]
-        else: # vanilla reservations don't support external policies
-            props.resourcePolicies = []
-        log.info(
-            f"reservation {reservation.bulk_insert_name} is being used with resourcePolicies: {props.resourcePolicies}")
+    if (fr := lookup().future_reservation(nodeset)) and fr.specific:
+        update_reservation_props(fr.active_reservation, props, placement_group, True)
 
     if props.resourcePolicies:
        props.scheduling.onHostMaintenance = "TERMINATE"
@@ -132,8 +118,27 @@ def instance_properties(nodeset:object, model:str, placement_group:Optional[str]
 
     # Override with properties explicit specified in the nodeset
     props.update(nodeset.get("instance_properties") or {})
-    
     return props
+
+def update_reservation_props(reservation:object, props:object, placement_group:Optional[str], reservation_from_fr:bool) -> None:
+    props.reservationAffinity = {
+        "consumeReservationType": "SPECIFIC_RESERVATION",
+        "key": f"compute.{util.universe_domain()}/reservation-name",
+        "values": [reservation.bulk_insert_name],
+    }
+
+    if reservation.dense or reservation_from_fr:
+        props.scheduling.provisioning_model = "RESERVATION_BOUND"
+
+    # Figure out `resourcePolicies`
+    if reservation.policies: # use ones already attached to reservations
+        props.resourcePolicies = reservation.policies
+    elif reservation.dense and placement_group: # use once created by Slurm
+        props.resourcePolicies = [placement_group]
+    else: # vanilla reservations don't support external policies
+        props.resourcePolicies = []
+    log.info(
+        f"reservation {reservation.bulk_insert_name} is being used with resourcePolicies: {props.resourcePolicies}")
 
 def update_props_dws(props:object, dws_flex:object, job_id: Optional[int]) -> None:
     props.scheduling.onHostMaintenance = "TERMINATE"
@@ -149,7 +154,6 @@ def dws_flex_duration(dws_flex:object, job_id: Optional[int]) -> int:
         else:
             log.info("Job TimeLimit cannot be less than 30 seconds or exceed 2 weeks")
     return max_duration
-
 
 def per_instance_properties(node):
     props = NSDict()
@@ -320,6 +324,13 @@ def start_tpu(data):
 
 def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
     """resume nodes in nodelist"""
+    # Prevent dormant nodes associated with a future reservation from being resumed
+    nodes, dormant_fr_nodes = util.separate(lookup().is_dormant_fr_node, nodes)
+    
+    if dormant_fr_nodes:
+        log.warning(f"Resume was unable to resume future reservation nodes={dormant_fr_nodes}")
+        down_nodes_notify_jobs(dormant_fr_nodes, "Reservation is not active, nodes cannot be resumed", resume_data)
+
     if not nodes:
         log.info("No nodes to resume")
         return

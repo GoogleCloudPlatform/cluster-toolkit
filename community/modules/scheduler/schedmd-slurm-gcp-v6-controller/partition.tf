@@ -89,6 +89,7 @@ locals {
     node_count_static                = ns.node_count_static
     subnetwork                       = ns.subnetwork_self_link
     reservation_name                 = ns.reservation_name
+    future_reservation               = ns.future_reservation
     maintenance_interval             = ns.maintenance_interval
     instance_properties_json         = ns.instance_properties_json
     enable_placement                 = ns.enable_placement

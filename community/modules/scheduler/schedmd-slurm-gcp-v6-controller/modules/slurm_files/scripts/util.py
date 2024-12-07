@@ -19,7 +19,7 @@ import argparse
 import base64
 import collections
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import timedelta, datetime
 import hashlib
 import inspect
 import json
@@ -1462,6 +1462,17 @@ class ReservationDetails:
     def dense(self) -> bool:
         return self.deployment_type == "DENSE"
 
+@dataclass(frozen=True)
+class FutureReservation:
+    project: str
+    zone: str
+    name: str
+    specific: bool
+    start_time: datetime
+    end_time: datetime
+    active_reservation: Optional[ReservationDetails]
+
+
 @dataclass
 class Job:
     id: int
@@ -1586,6 +1597,15 @@ class Lookup:
     def node_is_tpu(self, node_name=None):
         nodeset_name = self.node_nodeset_name(node_name)
         return self.cfg.nodeset_tpu.get(nodeset_name) is not None
+    
+    def node_is_fr(self, node_name:str) -> bool:
+        return self.node_nodeset(node_name).future_reservation is not None
+
+    def is_dormant_fr_node(self, node_name:str) -> bool:
+        fr = self.future_reservation(self.node_nodeset(node_name))
+        if not fr:
+            return False
+        return fr.active_reservation is None
 
     def node_is_dyn(self, node_name=None) -> bool:
         nodeset = self.node_nodeset_name(node_name)
@@ -1768,7 +1788,27 @@ class Lookup:
         """See https://cloud.google.com/compute/docs/reference/rest/v1/reservations"""
         return self.compute.reservations().get(
             project=project, zone=zone, reservation=name).execute()
+    
+    @lru_cache()
+    def _get_future_reservation(self, project:str, zone:str, name: str) -> object:
+        """See https://cloud.google.com/compute/docs/reference/rest/v1/futureReservations"""
+        return self.compute.futureReservations().get(project=project, zone=zone, futureReservation=name).execute()
 
+    def get_reservation_details(self, project:str, zone:str, name:str, bulk_insert_name:str) -> ReservationDetails:
+        reservation = self._get_reservation(project, zone, name)
+    
+        # Converts policy URLs to names, e.g.:
+        # projects/111111/regions/us-central1/resourcePolicies/zebra -> zebra
+        policies = [u.split("/")[-1] for u in reservation.get("resourcePolicies", {}).values()]
+
+        return ReservationDetails(
+            project=project,
+            zone=zone,
+            name=name,
+            policies=policies,
+            deployment_type=reservation.get("deploymentType"),
+            bulk_insert_name=bulk_insert_name)
+    
     def nodeset_reservation(self, nodeset: object) -> Optional[ReservationDetails]:
         if not nodeset.reservation_name:
             return None
@@ -1784,19 +1824,37 @@ class Lookup:
             )
 
         project, name = match.group("project", "reservation")
-        reservation = self._get_reservation(project, zone, name)
+        return self.get_reservation_details(project, zone, name, nodeset.reservation_name)
+    
+    def future_reservation(self, nodeset:object) -> Optional[FutureReservation]:
+        if not nodeset.future_reservation:
+            return None
 
-        # Converts policy URLs to names, e.g.:
-        # projects/111111/regions/us-central1/resourcePolicies/zebra -> zebra
-        policies = [u.split("/")[-1] for u in reservation.get("resourcePolicies", {}).values()]
+        active_reservation = None
+        match = re.search(r'^projects/(?P<project>[^/]+)/zones/(?P<zone>[^/]+)/futureReservations/(?P<name>[^/]+)(/.*)?$', nodeset.future_reservation)
+        project, zone, name = match.group("project","zone","name")
+        fr = self._get_future_reservation(project,zone,name)
 
-        return ReservationDetails(
+        # TODO: Remove this "hack" of trimming the Z from timestamps once we move to Python 3.11 (context: https://discuss.python.org/t/parse-z-timezone-suffix-in-datetime/2220/30)
+        start_time = datetime.fromisoformat(fr["timeWindow"]["startTime"][:-1])
+        end_time = datetime.fromisoformat(fr["timeWindow"]["endTime"][:-1])
+
+        if "autoCreatedReservations" in fr["status"] and (fr_res:=fr["status"]["autoCreatedReservations"][0]):
+            if (start_time<=datetime.utcnow()<=end_time):
+                match = re.search(r'projects/(?P<project>[^/]+)/zones/(?P<zone>[^/]+)/reservations/(?P<name>[^/]+)(/.*)?$',fr_res)
+                res_name = match.group("name")
+                bulk_insert_name = f"projects/{project}/reservations/{res_name}"
+                active_reservation = self.get_reservation_details(project, zone, res_name, bulk_insert_name)
+
+        return FutureReservation(
             project=project,
             zone=zone,
             name=name,
-            policies=policies,
-            deployment_type=reservation.get("deploymentType"),
-            bulk_insert_name=nodeset.reservation_name)
+            specific=fr["specificReservationRequired"],
+            start_time=start_time,
+            end_time=end_time,
+            active_reservation=active_reservation
+        )
 
     @lru_cache(maxsize=1)
     def machine_types(self):

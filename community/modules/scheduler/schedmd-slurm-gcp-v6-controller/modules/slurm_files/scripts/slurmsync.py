@@ -15,18 +15,16 @@
 # limitations under the License.
 
 import argparse
-import datetime
 import fcntl
 import json
 import logging
 import re
 import sys
 import shlex
+from datetime import datetime, timedelta
 from enum import Enum
 from itertools import chain
 from pathlib import Path
-import datetime as dt
-from datetime import datetime
 from dataclasses import dataclass
 from typing import Dict, Tuple, List, Optional, Protocol
 from functools import lru_cache
@@ -36,6 +34,7 @@ from util import (
     batch_execute,
     ensure_execute,
     execute_with_futures,
+    FutureReservation,
     install_custom_scripts,
     run,
     separate,
@@ -152,6 +151,17 @@ def _find_dynamic_node_status() -> NodeAction:
     # * delete orhpaned instances
     return NodeActionUnchanged()  # don't touch dynamic nodes
 
+def get_fr_action(fr: FutureReservation, nodename:str, state:NodeState) -> Optional[NodeAction]:
+    now = datetime.utcnow()
+    if fr.start_time < now < fr.end_time:
+        return None # handle like any other node
+    if state.base == "DOWN":
+        return NodeActionUnchanged()
+    if fr.start_time >= now:
+        msg = f"Waiting for reservation:{fr.name} to start at {fr.start_time}" 
+    else:
+        msg = f"Reservation:{fr.name} is after its end-time"
+    return NodeActionDown(reason=msg)
 
 def _find_tpu_node_action(nodename, state) -> NodeAction:
     ns = lookup().node_nodeset(nodename)
@@ -216,6 +226,11 @@ def _find_tpu_node_action(nodename, state) -> NodeAction:
 def get_node_action(nodename: str) -> NodeAction:
     """Determine node/instance status that requires action"""
     state = lookup().slurm_node(nodename)
+
+    if lookup().node_is_fr(nodename):
+        fr = lookup().future_reservation(lookup().node_nodeset(nodename))
+        if action := get_fr_action(fr, nodename, state):
+            return action
 
     if lookup().node_is_dyn(nodename):
         return _find_dynamic_node_status()
@@ -502,7 +517,7 @@ def sync_maintenance_reservation(lkp: util.Lookup) -> None:
 
       if res_name in curr_reservation_map:
         diff = curr_reservation_map[res_name] - start_time
-        if abs(diff) <= dt.timedelta(seconds=1):
+        if abs(diff) <= timedelta(seconds=1):
           continue
         else:
           del_reservation.add(res_name)

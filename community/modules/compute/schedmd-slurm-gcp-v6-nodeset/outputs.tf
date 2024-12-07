@@ -54,4 +54,28 @@ output "nodeset" {
     condition     = !var.enable_placement || !var.dws_flex.enabled
     error_message = "Cannot use DWS Flex with `enable_placement`."
   }
+
+  precondition {
+    condition     = var.reservation_name == "" || var.future_reservation == ""
+    error_message = "Cannot use reservations and future reservations in the same nodeset"
+  }
+
+  precondition {
+    condition     = !var.enable_placement || var.future_reservation == ""
+    error_message = "Cannot use `enable_placement` with future reservations."
+  }
+
+  precondition {
+    condition     = var.future_reservation == "" || length(var.zones) == 0
+    error_message = <<-EOD
+      If a future reservation is specified, `var.zones` should be empty.
+    EOD
+  }
+
+  precondition {
+    condition     = var.future_reservation == "" || local.fr_zone == var.zone
+    error_message = <<-EOD
+      The zone of the deployment must match that of the future reservation"
+    EOD
+  }
 }
