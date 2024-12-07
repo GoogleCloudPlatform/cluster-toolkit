@@ -15,7 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Optional, Dict, Collection
+from typing import List, Optional
 import argparse
 from datetime import timedelta
 import shlex
@@ -23,7 +23,7 @@ import json
 import logging
 import os
 import yaml
-from itertools import chain
+import collections
 from pathlib import Path
 from dataclasses import dataclass
 
@@ -47,7 +47,7 @@ import slurm_gcp_plugins
 
 log = logging.getLogger()
 
-PLACEMENT_MAX_CNT = 150
+PLACEMENT_MAX_CNT = 1500
 # Placement group needs to be the same for an entire bulk_insert hence
 # if placement is used the actual BULK_INSERT_LIMIT will be
 # max([1000, PLACEMENT_MAX_CNT])
@@ -262,7 +262,7 @@ def group_nodes_bulk(nodes: List[str], resume_data: Optional[ResumeData], lkp: u
 
         groups[job.job_id] = []
         # placement group assignment is based on all allocated nodes, ...
-        for pn in create_placement_groups(job.nodes_alloc, job.job_id, lkp):
+        for pn in create_placements(job.nodes_alloc, job.job_id, lkp):
             groups[job.job_id].append(
                 PlacementAndNodes(
                     placement=pn.placement,
@@ -271,7 +271,7 @@ def group_nodes_bulk(nodes: List[str], resume_data: Optional[ResumeData], lkp: u
                 ))
         non_excl.difference_update(job.nodes_alloc)
 
-    groups[None] = create_placement_groups(sorted(non_excl), job_id=0, lkp=lkp)
+    groups[None] = create_placements(sorted(non_excl), excl_job_id=None, lkp=lkp)
 
     def chunk_nodes(nodes: List[str]):
         chunk_size = BULK_INSERT_LIMIT
@@ -483,45 +483,79 @@ def create_placement_request(pg_name, region):
     return request
 
 
-def create_placement_groups(nodes: List[str], job_id:int, lkp: util.Lookup) -> List[PlacementAndNodes]:
-    res = []
-    for _, ns_nodes in lkp.nodeset_map(nodes).items():
-        res.extend(create_nodeset_placement_groups(ns_nodes, job_id, lkp))
-    return res
+def create_placements(nodes: List[str], excl_job_id:Optional[int], lkp: util.Lookup) -> List[PlacementAndNodes]:
+    nodeset_map = collections.defaultdict(list)
+    for node in nodes: # split nodes on nodesets
+        nodeset_map[lkp.node_nodeset_name(node)].append(node)
+
+    placements = []
+    for _, ns_nodes in nodeset_map.items():
+        placements.extend(create_nodeset_placements(ns_nodes, excl_job_id, lkp))
+    return placements
 
 
-def create_nodeset_placement_groups(nodes: List[str], job_id:int, lkp: util.Lookup) -> List[PlacementAndNodes]:
+def _allocate_nodes_to_placements(nodes: List[str], excl_job_id:Optional[int], lkp: util.Lookup) -> List[PlacementAndNodes]:
     # canned result for no placement policies created
     no_pp = [PlacementAndNodes(placement=None, nodes=nodes)]
-
-    if len(nodes) < 2:
+    
+    if excl_job_id and len(nodes) < 2:
         return no_pp # don't create placement_policy for just one node
     
     model = nodes[0]
     nodeset = lkp.node_nodeset(model)
-    if not (nodeset.enable_placement and valid_placement_node(model)):
-        return no_pp
+
     if lkp.node_is_tpu(model):
         return no_pp
+    if not (nodeset.enable_placement and valid_placement_node(model)):
+        return no_pp
     
-    region = lkp.node_region(model)
+    name_prefix = f"{lkp.cfg.slurm_cluster_name}-slurmgcp-managed-{nodeset.nodeset_name}"
+    if excl_job_id: # simply chunk given nodes by max size of placement
+        return [
+            PlacementAndNodes(placement=f"{name_prefix}-{excl_job_id}-{i}", nodes=chunk)
+            for i, chunk in enumerate(chunked(nodes, n=PLACEMENT_MAX_CNT))
+        ]
 
-    groups = [
-        PlacementAndNodes(
-            placement=f"{lkp.cfg.slurm_cluster_name}-slurmgcp-managed-{nodeset.nodeset_name}-{job_id}-{i}",
-            nodes=chunk
-        )
-        for i, chunk in enumerate(chunked(nodes, n=PLACEMENT_MAX_CNT))
+    # split whole nodeset (not only nodes to resume) into chunks of max size of placement
+    # create placements (most likely already exists) placements for requested nodes
+    chunks = collections.defaultdict(list) # chunk_id -> nodes
+    invalid = []
+
+    for node in nodes:
+        try:
+            chunk = lkp.node_index(node) // PLACEMENT_MAX_CNT
+            chunks[chunk].append(node)
+        except:
+            invalid.append(node)
+    
+    placements = [
+        # NOTE: use 0 instead of job_id for consistency with previous SlurmGCP behavior
+        PlacementAndNodes(placement=f"{name_prefix}-0-{c_id}", nodes=c_nodes) 
+        for c_id, c_nodes in chunks.items() 
     ]
 
+    if invalid:
+        placements.append(PlacementAndNodes(placement=None, nodes=invalid))
+        log.error(f"Could not find placement for nodes with unexpected names: {to_hostlist_fast(invalid)}")
+
+    return placements
+
+def create_nodeset_placements(nodes: List[str], excl_job_id:Optional[int], lkp: util.Lookup) -> List[PlacementAndNodes]:    
+    placements = _allocate_nodes_to_placements(nodes, excl_job_id, lkp)
+    region = lkp.node_region(nodes[0])
+
     if log.isEnabledFor(logging.DEBUG):
-        debug_groups = {g.placement: to_hostlist_fast(g.nodes) for g in groups}
+        debug_p = {p.placement: to_hostlist_fast(p.nodes) for p in placements}
         log.debug(
-            f"creating {len(groups)} placement groups: \n{yaml.safe_dump(debug_groups).rstrip()}"
+            f"creating {len(placements)} placement groups: \n{yaml.safe_dump(debug_p).rstrip()}"
         )
+    
     requests = {
-        g.placement: create_placement_request(g.placement, region) for g in groups
+        p.placement: create_placement_request(p.placement, region) for p in placements if p.placement
     }
+    if not requests:
+        return placements
+    # TODO: aggregate all requests for whole resume and execute them at once (don't limit to nodeset/job)
     ops = dict(
         zip(requests.keys(), map_with_futures(ensure_execute, requests.values()))
     )
@@ -559,7 +593,7 @@ def create_nodeset_placement_groups(nodes: List[str], job_id:int, lkp: util.Look
     log.info(
         f"created {len(operations)} placement groups ({to_hostlist_fast(operations.keys())})"
     )
-    return groups
+    return placements
 
 
 def valid_placement_node(node: str) -> bool:

@@ -12,18 +12,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Optional
+
 import os
+import pytest
 import unittest.mock
 import unittest
 import tempfile
 
 from common import TstCfg, TstNodeset, TstPartition, TstTPU # needed to import util
 import util
-from resume import get_resume_file_data, ResumeData, ResumeJobData, group_nodes_bulk, BulkChunk, PlacementAndNodes
+import resume
+from resume import ResumeData, ResumeJobData, BulkChunk, PlacementAndNodes
 
 def test_get_resume_file_data_no_env():
   with unittest.mock.patch.dict(os.environ, {"SLURM_RESUME_FILE": ""}):
-    assert get_resume_file_data() is None
+    assert resume.get_resume_file_data() is None
 
 
 def test_get_resume_file_data():
@@ -49,7 +53,7 @@ def test_get_resume_file_data():
       unittest.mock.patch("util.to_hostnames") as mock_to_hostnames,
     ):
       mock_to_hostnames.return_value = ["green-0", "green-1", "green-2"]
-      assert get_resume_file_data() == ResumeData(jobs=[
+      assert resume.get_resume_file_data() == ResumeData(jobs=[
         ResumeJobData(
           job_id = 1,
           partition="red",
@@ -60,8 +64,8 @@ def test_get_resume_file_data():
 
 
 @unittest.mock.patch("util.TPU")
-@unittest.mock.patch("resume.create_placement_groups")
-def test_group_nodes_bulk(mock_create_placement_groups, mock_tpu):
+@unittest.mock.patch("resume.create_placements")
+def test_group_nodes_bulk(mock_create_placements, mock_tpu):
   cfg = TstCfg(
       nodeset={
         "n": TstNodeset(nodeset_name="n"),
@@ -83,9 +87,9 @@ def test_group_nodes_bulk(mock_create_placement_groups, mock_tpu):
   )
   lkp = util.Lookup(cfg)
 
-  def mock_create_placement_groups_se(nodes, job_id, lkp):
-    args = (set(nodes), job_id)
-    if ({'c-n-1', 'c-n-2', 'c-t-8', 'c-t-9'}, 0) == args:
+  def mock_create_placements_se(nodes, excl_job_id, lkp):
+    args = (set(nodes), excl_job_id)
+    if ({'c-n-1', 'c-n-2', 'c-t-8', 'c-t-9'}, None) == args:
       return [
         PlacementAndNodes("g0", ["c-n-1", "c-n-2"]),
         PlacementAndNodes(None, ['c-t-8', 'c-t-9']),
@@ -100,7 +104,7 @@ def test_group_nodes_bulk(mock_create_placement_groups, mock_tpu):
         PlacementAndNodes(None, ['c-t-0', 'c-t-1', 'c-t-2', 'c-t-3', 'c-t-4', 'c-t-5'])
       ]
     raise AssertionError(f"unexpected invocation: '{args}'")
-  mock_create_placement_groups.side_effect = mock_create_placement_groups_se
+  mock_create_placements.side_effect = mock_create_placements_se
 
   def mock_tpu_se(ns: TstNodeset) -> TstTPU:
     if ns.nodeset_name == "t":
@@ -108,13 +112,13 @@ def test_group_nodes_bulk(mock_create_placement_groups, mock_tpu):
     raise AssertionError(f"unexpected invocation: '{ns}'")
   mock_tpu.side_effect = mock_tpu_se
 
-  got = group_nodes_bulk(
+  got = resume.group_nodes_bulk(
     ["c-n-0", "c-n-1", "c-n-2", "c-t-0", "c-t-1", "c-t-2", "c-t-3", "c-t-8", "c-t-9"], 
     ResumeData(jobs=[
       ResumeJobData(job_id=1, partition="p1", nodes_alloc=["c-n-0", "c-n-8"]),
       ResumeJobData(job_id=2, partition="p2", nodes_alloc=["c-t-0", "c-t-1", "c-t-2", "c-t-3", "c-t-4", "c-t-5"]),
     ]), lkp)
-  mock_create_placement_groups.assert_called()
+  mock_create_placements.assert_called()
   assert got == {
     "c-n:jobNone:g0:0": BulkChunk(
       nodes=["c-n-1", "c-n-2"], prefix="c-n", chunk_idx=0, excl_job_id=None, placement_group="g0"),
@@ -127,3 +131,43 @@ def test_group_nodes_bulk(mock_create_placement_groups, mock_tpu):
     "c-t:job2:1": BulkChunk(
       nodes=["c-t-2", "c-t-3"], prefix="c-t", chunk_idx=1, excl_job_id=2, placement_group=None),
   }
+
+
+@pytest.mark.parametrize(
+    "nodes,excl_job_id,expected",
+    [
+        ( # TPU - no placements
+          ["c-t-0", "c-t-2"], 4, [PlacementAndNodes(None, ["c-t-0", "c-t-2"])]
+        ),
+        ( # disabled placements - no placemens
+          ["c-x-0", "c-x-2"], 4, [PlacementAndNodes(None, ["c-x-0", "c-x-2"])]
+        ),
+        ( # excl_job
+          ["c-n-0", "c-n-uno", "c-n-2", "c-n-2011"], 4, [
+            PlacementAndNodes("c-slurmgcp-managed-n-4-0", ["c-n-0", "c-n-uno", "c-n-2", "c-n-2011"])
+          ]
+        ),
+        ( # no excl_job
+          ["c-n-0", "c-n-uno", "c-n-2", "c-n-2011"], None, [
+            PlacementAndNodes("c-slurmgcp-managed-n-0-0", ["c-n-0", "c-n-2"]),
+            PlacementAndNodes('c-slurmgcp-managed-n-0-1', ['c-n-2011']),
+            PlacementAndNodes(None, ["c-n-uno"]),
+          ]
+        ),
+    ],
+)
+def test_allocate_nodes_to_placements(nodes: list[str], excl_job_id: Optional[int], expected: list[PlacementAndNodes]):
+  cfg = TstCfg(
+      slurm_cluster_name="c",
+      nodeset={
+        "n": TstNodeset(nodeset_name="n", enable_placement=True),
+        "x": TstNodeset(nodeset_name="x", enable_placement=False)
+      },
+      nodeset_tpu={
+        "t": TstNodeset(nodeset_name="t")
+      })
+  lkp = util.Lookup(cfg)
+
+  with unittest.mock.patch("resume.valid_placement_node") as mock_valid_placement_node:
+    mock_valid_placement_node.return_value = True
+    assert resume._allocate_nodes_to_placements(nodes, excl_job_id, lkp) == expected

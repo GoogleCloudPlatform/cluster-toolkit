@@ -1579,6 +1579,14 @@ class Lookup:
 
     def node_prefix(self, node_name=None):
         return self._node_desc(node_name)["prefix"]
+    
+    def node_index(self, node: str) -> int:
+        """ node_index("cluster-nodeset-45") == 45 """
+        suff = self._node_desc(node)["suffix"]
+        
+        if suff is None:
+            raise ValueError(f"Node {node} name does not end with numeric index")
+        return int(suff)
 
     def node_nodeset_name(self, node_name=None):
         return self._node_desc(node_name)["nodeset"]
@@ -1991,12 +1999,6 @@ class Lookup:
 
         return template
 
-    def nodeset_map(self, hostnames: list):
-        """Convert a list of nodes into a map of nodeset_name to hostnames"""
-        nodeset_map = collections.defaultdict(list)
-        for node in hostnames:
-            nodeset_map[self.node_nodeset_name(node)].append(node)
-        return nodeset_map
 
     def _parse_job_info(self, job_info: str) -> Job:
         """Extract job details"""

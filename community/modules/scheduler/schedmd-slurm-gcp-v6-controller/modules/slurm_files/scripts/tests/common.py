@@ -36,6 +36,7 @@ class TstNodeset:
     instance_template: Optional[str] = None
     reservation_name: Optional[str] = ""
     zone_policy_allow: Optional[list[str]] = field(default_factory=list)
+    enable_placement: bool = True
 
 @dataclass
 class TstPartition:
