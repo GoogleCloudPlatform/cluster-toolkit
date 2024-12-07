@@ -46,11 +46,13 @@ resource "random_id" "resource_name_suffix" {
 }
 
 resource "google_parallelstore_instance" "instance" {
-  project      = var.project_id
-  instance_id  = local.id
-  location     = var.zone
-  capacity_gib = var.size_gb
-  network      = var.network_id
+  project                = var.project_id
+  instance_id            = local.id
+  location               = var.zone
+  capacity_gib           = var.size_gb
+  network                = var.network_id
+  file_stripe_level      = var.file_stripe
+  directory_stripe_level = var.directory_stripe
 
   labels = local.labels
 
