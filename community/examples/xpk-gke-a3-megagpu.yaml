@@ -35,7 +35,8 @@ deployment_groups:
       subnetwork_name: xpk-gke-a3-megagpu-subnet
       mtu: 8244
       secondary_ranges:
-        xpk-gke-a3-megagpu-subnet:
+      - subnetwork_name: xpk-gke-a3-megagpu-subnet
+        ranges:
         - range_name: pods
           ip_cidr_range: 10.4.0.0/14
         - range_name: services
