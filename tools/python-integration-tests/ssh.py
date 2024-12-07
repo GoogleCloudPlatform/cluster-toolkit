@@ -48,7 +48,7 @@ class SSHManager:
         key_path = os.path.expanduser("~/.ssh/google_compute_engine")
         os.makedirs(os.path.dirname(key_path), exist_ok=True)
 
-        cmd = ["ssh-keygen", "-t", "rsa", "-f", key_path, "-N", ""]
+        cmd = ["ssh-keygen", "-t", "rsa", "--ttl", "1h", "-f", key_path, "-N", ""]
         subprocess.run(cmd, capture_output=True, text=True, check=True)
 
         # Add the public key to OS Login
