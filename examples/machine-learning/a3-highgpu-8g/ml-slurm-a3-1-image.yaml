@@ -82,7 +82,7 @@ deployment_groups:
             "reboot": false,
             "install_cuda": false,
             "install_gcsfuse": true,
-            "install_lustre": true,
+            "install_lustre": false,
             "install_ompi": true,
             "monitoring_agent": "cloud-ops",
             "nvidia_version": "latest",
@@ -95,7 +95,7 @@ deployment_groups:
           set -e -o pipefail
           ansible-galaxy role install googlecloudplatform.google_cloud_ops_agents
           ansible-pull \
-              -U https://github.com/GoogleCloudPlatform/slurm-gcp -C 6.8.5 \
+              -U https://github.com/GoogleCloudPlatform/slurm-gcp -C 6.8.6 \
               -i localhost, --limit localhost --connection=local \
               -e @/var/tmp/slurm_vars.json \
               ansible/playbook.yml

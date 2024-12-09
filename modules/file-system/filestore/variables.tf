@@ -147,3 +147,20 @@ variable "mount_options" {
   type        = string
   default     = "defaults,_netdev"
 }
+
+variable "deletion_protection" {
+  description = "Configure Filestore instance deletion protection"
+  type = object({
+    enabled = optional(bool, false)
+    reason  = optional(string)
+  })
+  default = {
+    enabled = false
+  }
+  nullable = false
+
+  validation {
+    condition     = !can(coalesce(var.deletion_protection.reason)) || var.deletion_protection.enabled
+    error_message = "Cannot set Filestore var.deletion_protection.reason unless var.deletion_protection.enabled is true"
+  }
+}

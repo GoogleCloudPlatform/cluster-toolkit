@@ -36,3 +36,8 @@ output "reserved_ip_range" {
   description = "Named IP range to be used by services connected with Private Service Access."
   value       = google_compute_global_address.private_ip_alloc.name
 }
+
+output "cidr_range" {
+  description = "CIDR range of the created google_compute_global_address"
+  value       = "${google_compute_global_address.private_ip_alloc.address}/${google_compute_global_address.private_ip_alloc.prefix_length}"
+}

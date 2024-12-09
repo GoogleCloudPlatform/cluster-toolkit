@@ -26,6 +26,8 @@ vars:
   # The following line must be updated for this example to work.
   authorized_cidr: <your-ip-address>/32
 
+  gcp_public_cidrs_access_enabled: false
+
 deployment_groups:
 - group: primary
   modules:
@@ -59,7 +61,7 @@ deployment_groups:
       network_name_prefix: $(vars.deployment_name)-gpunet
       global_ip_address_range: 192.169.0.0/16
       network_count: 4
-      subnetwork_cidr_suffix: 24
+      subnetwork_cidr_suffix: 20 # the subnet can support upto 4k nodes
       mtu: 8244
 
   - id: gke_cluster
@@ -67,6 +69,7 @@ deployment_groups:
     use: [network1, gpunets, gke_service_account]
     settings:
       enable_private_endpoint: false  # Allows for access from authorized public IPs
+      gcp_public_cidrs_access_enabled: $(vars.gcp_public_cidrs_access_enabled)
       master_authorized_networks:
       - cidr_block: $(vars.authorized_cidr)  # Allows your machine run kubectl command. It's required for the multi-network setup.
         display_name: "kubectl-access-network"

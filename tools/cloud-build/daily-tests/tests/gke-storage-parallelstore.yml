@@ -26,3 +26,4 @@ custom_vars:
   project: "{{ project }}"
 cli_deployment_vars:
   region: "{{ region }}"
+  gcp_public_cidrs_access_enabled: true

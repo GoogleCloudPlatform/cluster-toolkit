@@ -27,6 +27,16 @@
     executable: /bin/bash
   changed_when: False
 
+- name: Get job detail
+  delegate_to: localhost
+  ansible.builtin.command: |
+    kubectl get job
+  register: job_detail
+
+- name: Print job_detail debug output
+  ansible.builtin.debug:
+    var: job_detail.stdout_lines
+
 - name: Wait for job to complete
   delegate_to: localhost
   ansible.builtin.command: |
