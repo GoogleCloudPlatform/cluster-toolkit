@@ -1607,7 +1607,7 @@ class Lookup:
         return self.cfg.nodeset_tpu.get(nodeset_name) is not None
     
     def node_is_fr(self, node_name:str) -> bool:
-        return self.node_nodeset(node_name).future_reservation is not None
+        return bool(self.node_nodeset(node_name).future_reservation)
 
     def is_dormant_fr_node(self, node_name:str) -> bool:
         fr = self.future_reservation(self.node_nodeset(node_name))
