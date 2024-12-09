@@ -20,6 +20,14 @@ locals {
 }
 
 locals {
+  upgrade_settings = {
+    strategy        = var.upgrade_settings.strategy
+    max_surge       = coalesce(var.upgrade_settings.max_surge, 0)
+    max_unavailable = coalesce(var.upgrade_settings.max_unavailable, 1)
+  }
+}
+
+locals {
   has_gpu                  = length(local.guest_accelerator) > 0
   allocatable_gpu_per_node = local.has_gpu ? max(local.guest_accelerator[*].count...) : -1
   gpu_taint = local.has_gpu ? [{
@@ -75,9 +83,9 @@ resource "google_container_node_pool" "node_pool" {
   }
 
   upgrade_settings {
-    strategy        = var.upgrade_settings.strategy
-    max_surge       = var.upgrade_settings.max_surge
-    max_unavailable = var.upgrade_settings.max_unavailable
+    strategy        = local.upgrade_settings.strategy
+    max_surge       = local.upgrade_settings.max_surge
+    max_unavailable = local.upgrade_settings.max_unavailable
   }
 
   dynamic "placement_policy" {
@@ -284,19 +292,19 @@ resource "google_container_node_pool" "node_pool" {
       error_message = "Shared extended reservations are not supported by GKE."
     }
     precondition {
-      condition     = contains(["SURGE"], var.upgrade_settings.strategy)
+      condition     = contains(["SURGE"], local.upgrade_settings.strategy)
       error_message = "Only SURGE strategy is supported"
     }
     precondition {
-      condition     = var.upgrade_settings.max_unavailable >= 0
+      condition     = local.upgrade_settings.max_unavailable >= 0
       error_message = "max_unavailable should be set to 0 or greater"
     }
     precondition {
-      condition     = var.upgrade_settings.max_surge >= 0
+      condition     = local.upgrade_settings.max_surge >= 0
       error_message = "max_surge should be set to 0 or greater"
     }
     precondition {
-      condition     = (var.upgrade_settings.max_unavailable > 0 || var.upgrade_settings.max_surge > 0)
+      condition     = local.upgrade_settings.max_unavailable > 0 || local.upgrade_settings.max_surge > 0
       error_message = "At least one of max_unavailable or max_surge must greater than 0"
     }
   }
