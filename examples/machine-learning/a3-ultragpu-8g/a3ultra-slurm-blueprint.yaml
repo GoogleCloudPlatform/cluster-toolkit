@@ -376,7 +376,6 @@ deployment_groups:
     - a3_ultra_partition
     - slurm_login
     - homefs
-    - parallelstore
     settings:
       enable_controller_public_ips: true
       instance_image_custom: true
