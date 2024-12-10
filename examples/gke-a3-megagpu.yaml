@@ -37,7 +37,8 @@ deployment_groups:
       subnetwork_name: gke-subnet-a3-mega
       mtu: 8244
       secondary_ranges:
-        gke-subnet-a3-mega:
+      - subnetwork_name: gke-subnet-a3-mega
+        ranges:
         - range_name: pods
           ip_cidr_range: 10.4.0.0/14
         - range_name: services
