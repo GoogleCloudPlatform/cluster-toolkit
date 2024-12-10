@@ -1,0 +1,208 @@
+apiVersion: jobset.x-k8s.io/v1alpha2
+kind: JobSet
+metadata:
+  generateName: ag-4-
+  namespace: default
+spec:
+  ttlSecondsAfterFinished: 1200
+  suspend: False
+  network:
+    enableDNSHostnames: true
+  replicatedJobs:
+    - name: w
+      template:
+        spec:
+          parallelism: 4
+          completions: 4
+
+          template:
+            metadata:
+              annotations:
+                networking.gke.io/default-interface: 'eth0'
+                networking.gke.io/interfaces: |
+                  [
+                    {"interfaceName":"eth0","network":"default"},
+                    {"interfaceName":"eth1","network":"gke-a3-ultra-sub-1"},
+                    {"interfaceName":"eth2","network":"gke-a3-ultra-rdma-sub-0"},
+                    {"interfaceName":"eth3","network":"gke-a3-ultra-rdma-sub-1"},
+                    {"interfaceName":"eth4","network":"gke-a3-ultra-rdma-sub-2"},
+                    {"interfaceName":"eth5","network":"gke-a3-ultra-rdma-sub-3"},
+                    {"interfaceName":"eth6","network":"gke-a3-ultra-rdma-sub-4"},
+                    {"interfaceName":"eth7","network":"gke-a3-ultra-rdma-sub-5"},
+                    {"interfaceName":"eth8","network":"gke-a3-ultra-rdma-sub-6"},
+                    {"interfaceName":"eth9","network":"gke-a3-ultra-rdma-sub-7"}
+                  ]
+            spec:
+              # Limit benchmark run duration
+              activeDeadlineSeconds: 3600
+              restartPolicy: Never
+              nodeSelector:
+                cloud.google.com/gke-nodepool: a3-ultragpu-8g-a3-ultragpu-pool
+              tolerations:
+              - key: cloud.google.com/gke-queued
+                effect: NoSchedule
+                value: "true"
+
+              - key: "nvidia.com/gpu"
+                operator: "Exists"
+                effect: "NoSchedule"
+
+              setHostnameAsFQDN: true
+              volumes:
+              - name: gib
+                hostPath:
+                  path: /home/kubernetes/bin/gib
+              - name: nvidia
+                hostPath:
+                  path: /home/kubernetes/bin/nvidia
+              - name: lib64
+                hostPath:
+                  path: /lib64
+              - name: shared-memory
+                emptyDir:
+                  medium: "Memory"
+                  sizeLimit: 250Gi
+              - name: sys
+                hostPath:
+                  path: /sys
+              - name: proc-sys
+                hostPath:
+                  path: /proc/sys
+              schedulingGates:
+              # Set this to a unique name per job.
+              - name: "gke.io/topology-aware-auto-ag-4"
+
+              initContainers:
+              - name: gpu-healthcheck
+                image: alpine:latest
+                command: ["/bin/sh", "-c"]
+                args:
+                  - |
+                    apk add --no-cache bash  # Install bash
+                    /bin/bash -c "set -ex
+                    NUM_GPUS=$(/usr/local/nvidia/bin/nvidia-smi --query-gpu=driver_version --format=csv,noheader,nounits | wc -l)
+                    if [ \${NUM_GPUS} -lt 8 ]; then
+                      echo \"Error: Only \${NUM_GPUS} GPUs and expected 8\"
+                      exit 1
+                    fi
+                    gpu_errors=(\$(/usr/local/nvidia/bin/nvidia-smi --query-gpu=ecc.errors.uncorrected.volatile.total --format=csv,noheader,nounits))
+                    for gpu_index in \${!gpu_errors[@]}; do
+                        if [ \${gpu_errors[\$gpu_index]} == '[N/A]' ]; then
+                            echo 'Error: ERR detected in GPU index '\$gpu_index
+                            exit 1
+                        elif [ \${gpu_errors[\$gpu_index]} -gt 0 ]; then
+                            echo 'Error: Unrecoverable ECC errors detected in GPU index '\$gpu_index
+                            exit 1
+                        fi
+                    done
+                    echo \${NUM_GPUS} GPUs found with no ERR or Unrecoverable ECC errors"
+
+                volumeMounts:
+                - name: nvidia
+                  mountPath: /usr/local/nvidia
+                - name: lib64
+                  mountPath: /lib64
+                securityContext:
+                  privileged: true
+                env:
+                - name: LD_LIBRARY_PATH
+                  value: /usr/local/nvidia/lib64
+
+              containers:
+              - name: nccl
+                stdin: true
+                tty: true
+                image: us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib:v1.0.2
+                securityContext:
+                  privileged: true
+                env:
+                - name: MY_NODE_NAME
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: spec.nodeName
+                - name: OMPI_ALLOW_RUN_AS_ROOT
+                  value: "1"
+                - name: OMPI_ALLOW_RUN_AS_ROOT_CONFIRM
+                  value: "1"
+                command:
+                - bash
+                - -c
+                - |
+                  set -x
+                  export N_NODES=4
+                  echo "Starting workload container on ${MY_NODE_NAME} for $N_NODES benchmark"
+
+                  # Load all the cuda libs
+                  /sbin/ldconfig
+
+                  # Install ping
+                  apt update -y
+                  apt install -y iputils-ping
+
+                  # Start sshd
+                  /scripts/container_entry.sh daemon &
+
+                  # Get helper variables to form all hostnames
+                  export POSTFIX=$(hostname | cut -d . -f 2-)
+                  export WORKERS_BASENAME=$(hostname | cut -d . -f 1 | rev | cut -d - -f 2- | rev )
+                  export NODE_RANK=$JOB_COMPLETION_INDEX
+
+
+                  # For every worker, wait till online and add to hostfile
+                  for i in `seq 0 $(($N_NODES-1))`; do
+                    OTHER=${WORKERS_BASENAME}-${i}.${POSTFIX}
+                    until ssh -p 222 -o StrictHostKeyChecking=no $OTHER hostname; do
+                      echo Waiting for ${OTHER}...
+                      sleep 10
+                    done
+                    echo ${OTHER} port=222 slots=8 | tee -a /tmp/hostfile;
+                  done
+
+                  cat /tmp/hostfile
+
+                  # Launch from head node
+                  if [[ "${NODE_RANK}" -eq "0" ]]; then
+
+                      # World Level = 0x0, Rail Aligned = 0x7
+                      export NCCL_TESTS_SPLIT_MASK="0x0";
+
+                      # Force use of libnccl-gib
+                      export NCCL_NET=gIB
+
+                      # Set all the correct libnccl-gib environment variables
+                      source /usr/local/gib/scripts/set_nccl_env.sh
+
+                      # Get all relevant NCCL / env vars to pass to all workers
+                      ENV_VARS=$(echo ${!NCCL*} ${!OMPI*} LD_LIBRARY_PATH PATH | sed 's/ / -x /g')
+
+                      mpirun --hostfile /tmp/hostfile \
+                        -x $ENV_VARS  \
+                        -mca plm_rsh_no_tree_spawn 1 \
+                        --mca orte_keep_fqdn_hostnames 1 \
+                        --mca btl self,tcp \
+                        --mca btl_tcp_if_include eth0 \
+                        --bind-to none \
+                        --mca plm_rsh_agent "ssh -q -o LogLevel=ERROR -o StrictHostKeyChecking=no -p 222" \
+                        /third_party/nccl-tests/build/all_gather_perf -b 1K -e 8G -f 2 -g 1 -w 5 --iters 100 -c 1
+
+                  else
+                      while ping -c 1 ${WORKERS_BASENAME}-0.${POSTFIX}; do
+                      sleep 5
+                  done
+                  fi
+
+                  exit 0
+
+                volumeMounts:
+                - name: nvidia
+                  mountPath: /usr/local/nvidia
+                - name: gib
+                  mountPath: /usr/local/gib
+                - name: shared-memory
+                  mountPath: /dev/shm
+                resources:
+                  limits:
+                    nvidia.com/gpu: 8
+                  requests:
+                    nvidia.com/gpu: 8
+              restartPolicy: Never
