@@ -31,8 +31,8 @@ fi
 
 # Exit if GPU isn't H100
 GPU_MODEL=$(nvidia-smi --query-gpu=name --format=csv,noheader)
-if [[ "$GPU_MODEL" != *"H100"* ]]; then
-    echo "Non-H100 GPU detected" >&2
+if [[ "$GPU_MODEL" != *"H100"* ]] && [[ "$GPU_MODEL" != *"H200"* ]]; then
+    echo "No H100 or H200 GPU detected" >&2
     exit 0
 fi
 
@@ -80,7 +80,7 @@ if [ $NUMGPUS -gt 0 ]; then
     if [ $DCGM_FAILED -eq 0 ] || \
        [ $ECC_ERRORS -gt 0 ] || \
        [ $NVLINK_ERRORS -gt 0 ]; then
-        REASON="H100 GPU issues detected: "
+        REASON="GPU issues detected: "
         [ $DCGM_FAILED -eq 0 ] && REASON+="DCGM test failed, "
         [ $ECC_ERRORS -gt 0 ] && REASON+="ECC errors found ($ECC_ERRORS double-bit errors), "
         [ $NVLINK_ERRORS -gt 0 ] && REASON+="NVLink errors detected ($NVLINK_ERRORS errors), "
