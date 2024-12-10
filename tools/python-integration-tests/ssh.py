@@ -70,8 +70,13 @@ class SSHManager:
 
     def close(self):
         # Closes existing SSH connection and tunnel
-        if self.tunnel:
-            self.tunnel.terminate()
-            self.tunnel = None
         if self.ssh_client:
             self.ssh_client.close()
+        if self.tunnel:
+            self.tunnel.terminate()
+            time.sleep(1) # give a second to terminate
+            if self.tunnel.poll() is None: 
+                self.tunnel.kill() # kill leftover process if still running
+            self.tunnel.stdout.close()
+            self.tunnel.stderr.close()
+            self.tunnel = None

@@ -21,6 +21,9 @@ import logging
 
 class SlurmTopologyTest(SlurmTest):
     # Class to test Slurm topology
+    def __init__(self, deployment):
+        super().__init__(Deployment("tools/python-integration-tests/blueprints/topology-test.yaml"))
+
     def runTest(self):
         hostname = self.get_login_node()
         self.ssh(hostname)
@@ -58,5 +61,4 @@ class SlurmTopologyTest(SlurmTest):
         return switch_name
 
 if __name__ == "__main__":
-    deployment = Deployment("tools/python-integration-tests/blueprints/topology-test.yaml")
-    unittest.TextTestRunner().run(SlurmTopologyTest(deployment)) 
+    unittest.main()
