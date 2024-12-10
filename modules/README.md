@@ -586,5 +586,5 @@ than having to set it manually.
 
 ## Writing Custom Cluster Toolkit Modules
 
-Modules are flexible by design, however we do define some [best practices](../docs/module-guidelines.md) when
+Modules are flexible by design, however we define some [best practices](../docs/module-guidelines.md) when
 creating a new module meant to be used with the Cluster Toolkit.
