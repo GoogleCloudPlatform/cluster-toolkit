@@ -26,7 +26,7 @@ locals {
 # NODESET
 # TODO: remove dependency on slurm-gcp repo, move to local template module
 module "slurm_nodeset_template" {
-  source   = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=6.8.6"
+  source   = "../../internal/slurm-gcp-v6/instance_template"
   for_each = local.nodeset_map
 
   project_id          = var.project_id
