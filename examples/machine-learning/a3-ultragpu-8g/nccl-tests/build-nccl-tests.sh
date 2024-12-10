@@ -13,10 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+#SBATCH --exclusive
 #SBATCH --ntasks=1
 #SBATCH --partition=a3ultra
 #SBATCH --ntasks-per-node=1
 #SBATCH --gpus-per-node=8
+
 
 # Usage: sbatch build-nccl-tests.sh
 
@@ -35,7 +37,6 @@ fi
 # Install nccl-tests using openmpi from within pytorch container
 srun --container-mounts="$PWD:/nccl" \
 	--container-image=${CONTAINER_IMAGE} \
-	--container-name="nccl" \
 	bash -c "
        cd /nccl &&
        git clone https://github.com/NVIDIA/nccl-tests.git &&

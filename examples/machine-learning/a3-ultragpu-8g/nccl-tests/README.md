@@ -3,10 +3,11 @@ to launch containerized workloads via Slurm.
 
 Contents:
 
-* `import_container.sh`: Uses enroot to create a squashfs container image.
 * `build-nccl-tests.sh`: A Slurm batch script for building the nccl-tests.
 * `run-nccl-tests.sh`: A Slurm batch script for running the nccl-tests
   `all_reduce_perf` benchmark.
+* `import_container.sh`: Uses enroot to create a squashfs container image. Added
+  for reference only. enroot import happens within the `build-nccl-tests.sh`.
 
 # Running NCCL-Tests via Enroot/Pyxis
 
@@ -24,10 +25,10 @@ For an end-to-end example, copy the `build-nccl-tests.sh` and
 
 And run the following:
 
-	sbatch build-nccl-tests.sh # takes ~4 minutes
-	sbatch run-nccl-tests.sh # takes ~3 minutes
+	BUILD_JOB=$(sbatch --parsable build-nccl-tests.sh) # takes ~4 minutes
+	sbatch -d afterok:${BUILD_JOB} run-nccl-tests.sh # takes ~3 minutes
 
-That should result in a slurm-XX.out file that contains the result of the nccl
+The latter should result in a slurm-XX.out file that contains the result of the nccl
 `all_gather_perf` benchmark:
 
 ```
@@ -48,29 +49,27 @@ That should result in a slurm-XX.out file that contains the result of the nccl
 
 For more details, follow the remainder of this README.
 
-## Convert container to squashfs image
+# Detailed Instructions
 
 All of the following should be done on the login node of your slurm cluster,
 and while somewhere on the shared Filestore filesystem (typically the user's
 home directory).
 
-First we'll want to create a squash-fs version of the container we want to
-launch. We do this because otherwise we'd be pulling the (typically >10GB)
-image multiple times from the source on each node, converting to sqsh each
-time, etc, which would make the job launch longer. For example, to use nvidia's
-latest pytorch container, we run:
-
-	enroot import docker://nvcr.io#nvidia/pytorch:24.09-py3
-
-This will create a (large) file named "nvidia+pytorch+24.09-py3.sqsh".
-
 ## Building NCCL-tests
 
-For building the nccl-tests binaries, we spawn a job that runs on the a3-ultra nodes
-within the same application container. See build-nccl-tests.sh for an example,
-which can be run with:
+See build-nccl-tests.sh for an example. Within it, you will see that first we'll
+create a squashfs version of the container using we want to launch using `enroot
+import`. We do this because otherwise we'd be pulling the (typically more than
+10GB) image multiple times from the source on each node, converting to sqsh each
+time, etc, which would make the job launch longer.
 
-       sbatch build-nccl-tests.sh
+For building the nccl-tests binaries, we use `pyxis` to run the enroot container
+and build the nccl-tests within that container to ensure the resulting binarier
+are compatiblel with the container enviornment.
+
+Both of the above (importing and building) are accomplished by running:
+
+	sbatch build-nccl-tests.sh
 
 ## Running your application on a3-ultra instances
 
@@ -80,5 +79,5 @@ For a complete example, run:
 
 The output will appear in in a `slurm-<job#>.log` file. If the name of your a3-ultragpu
 nodeset is different than "a3ultra", you will need to modify the `build-nccl-tests.sh`
-and `run-nccl-tests.sh` scripts's  `#SBATCH --partition` setting. Alternativel, you
+and `run-nccl-tests.sh` scripts's  `#SBATCH --partition` setting. Alternatively, you
 can run `sbatch -p <your partition> <script>`.
