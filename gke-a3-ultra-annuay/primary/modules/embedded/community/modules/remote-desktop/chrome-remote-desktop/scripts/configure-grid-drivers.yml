@@ -1,0 +1,163 @@
+# Copyright 2022 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+- name: Ensure nvidia grid drivers and other binaries are installed
+  hosts: localhost
+  become: true
+  vars:
+    dist_settings:
+      bullseye:
+        packages:
+        - build-essential
+        - gdebi-core
+        - mesa-utils
+        - gdm3
+        - linux-headers-{{ ansible_kernel }}
+        grid_fn: NVIDIA-Linux-x86_64-510.85.02-grid.run
+        grid_ver: vGPU14.2
+      bookworm:
+        packages:
+        - build-essential
+        - gdebi-core
+        - mesa-utils
+        - gdm3
+        - linux-headers-{{ ansible_kernel }}
+        grid_fn: NVIDIA-Linux-x86_64-550.54.15-grid.run
+        grid_ver: vGPU17.1
+      jammy:
+        packages:
+        - build-essential
+        - gdebi-core
+        - mesa-utils
+        - gdm3
+        - gcc-12 # must match compiler used to build kernel on latest Ubuntu 22
+        - pkg-config # observed to be necessary for GRID driver installation on latest Ubuntu 22
+        - libglvnd-dev # observed to be necessary for GRID driver installation on latest Ubuntu 22
+        - linux-headers-{{ ansible_kernel }}
+        grid_fn: NVIDIA-Linux-x86_64-525.125.06-grid.run
+        grid_ver: vGPU15.3
+  tasks:
+  - name: Fail if using wrong OS
+    ansible.builtin.assert:
+      that:
+      - ansible_os_family in ["Debian", "Ubuntu"]
+      - ansible_distribution_release in {{ dist_settings.keys()|list }}
+      fail_msg: "ansible_os_family: {{ ansible_os_family }} or ansible_distribution_release: {{ansible_distribution_release}} was not acceptable."
+
+  - name: Check if GRID driver installed
+    ansible.builtin.command: which nvidia-smi
+    register: nvidiasmi_result
+    ignore_errors: true
+    changed_when: false
+
+  - name: Install binaries for GRID drivers
+    ansible.builtin.apt:
+      name: '{{ dist_settings[ansible_distribution_release]["packages"] }}'
+      state: present
+      update_cache: true
+    register: apt_result
+    retries: 6
+    delay: 10
+    until: apt_result is success
+
+  - name: Install GRID driver if not existing
+    when: nvidiasmi_result is failed
+    block:
+    - name: Download GPU driver
+      ansible.builtin.get_url:
+        url: https://storage.googleapis.com/nvidia-drivers-us-public/GRID/{{ dist_settings[ansible_distribution_release]["grid_ver"] }}/{{ dist_settings[ansible_distribution_release]["grid_fn"] }}
+        dest: /tmp/
+        mode: "0755"
+        timeout: 30
+
+    - name: Stop gdm service
+      ansible.builtin.systemd:
+        name: gdm
+        state: stopped
+
+    - name: Install GPU driver
+      ansible.builtin.shell: |
+        #jinja2: trim_blocks: "True"
+        {% if ansible_distribution_release == "jammy"  %}
+        CC=gcc-12 /tmp/{{ dist_settings[ansible_distribution_release]["grid_fn"] }} --silent
+        {% else %}
+        /tmp/{{ dist_settings[ansible_distribution_release]["grid_fn"] }} --silent
+        {% endif %}
+      register: result
+      changed_when: result.rc == 0
+
+  - name: Download VirtualGL driver
+    ansible.builtin.get_url:
+      url: https://sourceforge.net/projects/virtualgl/files/3.0.2/virtualgl_3.0.2_amd64.deb/download
+      dest: /tmp/virtualgl_3.0.2_amd64.deb
+      mode: "0755"
+      timeout: 30
+
+  - name: Install VirtualGL
+    ansible.builtin.command: gdebi /tmp/virtualgl_3.0.2_amd64.deb --non-interactive
+    register: result
+    changed_when: result.rc == 0
+
+  - name: Fix headless Nvidia issue
+    block:
+    - name: Lookup gpu info
+      ansible.builtin.command: nvidia-xconfig --query-gpu-info
+      register: gpu_info
+      failed_when: gpu_info.rc != 0
+      changed_when: false
+
+    - name: Extract PCI ID
+      ansible.builtin.shell: |
+        set -o pipefail
+        echo "{{ gpu_info.stdout }}" | grep "PCI BusID " | head -n 1 | cut -d':' -f2-99 | xargs
+      args:
+        executable: /bin/bash
+      register: pci_id
+      changed_when: false
+
+    - name: Configure nvidia-xconfig
+      ansible.builtin.command: nvidia-xconfig -a --allow-empty-initial-configuration --enable-all-gpus --virtual=1920x1200 --busid={{ pci_id.stdout }}
+      register: result
+      changed_when: result.rc == 0
+
+    - name: Set HardDPMS to false
+      ansible.builtin.replace:
+        path: /etc/X11/xorg.conf
+        regexp: "Section \"Device\""
+        replace: "Section \"Device\"\n    Option      \"HardDPMS\" \"false\""
+
+  - name: Configure VirtualGL for X
+    ansible.builtin.command: vglserver_config +glx +s +f -t
+    register: result
+    changed_when: result.rc == 0
+
+  - name: Configure gdm for X
+    block:
+    - name: Configure default display manager
+      ansible.builtin.copy:
+        dest: /etc/X11/default-display-manager
+        content: "/usr/sbin/gdm3"
+        mode: 0644
+
+    - name: Switch boot target to gui
+      ansible.builtin.command: systemctl set-default graphical.target
+      register: result
+      changed_when: result.rc == 0
+
+    - name: Start gdm service
+      ansible.builtin.systemd:
+        name: gdm
+        daemon_reload: true
+        state: started

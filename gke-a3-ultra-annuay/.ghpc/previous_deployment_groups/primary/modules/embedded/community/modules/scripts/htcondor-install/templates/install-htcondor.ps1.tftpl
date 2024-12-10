@@ -1,0 +1,59 @@
+#Requires -RunAsAdministrator
+
+# Windows 2016 needs forced upgrade to TLS 1.2
+[Net.ServicePointManager]::SecurityProtocol = 'Tls12'
+
+# important for catching exception in Invoke-WebRequest
+Set-StrictMode -Version latest
+$ErrorActionPreference = 'Stop'
+
+%{ if http_proxy != "" ~}
+[System.Net.WebRequest]::DefaultWebProxy = New-Object System.Net.WebProxy("${http_proxy}")
+%{ endif ~}
+
+# do not show progress bar when running Invoke-WebRequest
+$ProgressPreference = 'SilentlyContinue'
+
+# download C Runtime DLL necessary for HTCondor installer
+$runtime_installer = 'C:\vc_redist.x64.exe'
+Invoke-WebRequest https://aka.ms/vs/17/release/vc_redist.x64.exe -OutFile "$runtime_installer"
+Start-Process -FilePath "$runtime_installer" -Wait -ArgumentList "/norestart /quiet /log c:\vc_redist_log.txt"
+Remove-Item "$runtime_installer"
+
+# download HTCondor installer
+$htcondor_installer = 'C:\htcondor.msi'
+%{ if condor_version == "23.*" }
+Invoke-WebRequest https://research.cs.wisc.edu/htcondor/tarball/23.0/current/condor-Windows-x64.msi -OutFile "$htcondor_installer"
+%{ else ~}
+Invoke-WebRequest https://research.cs.wisc.edu/htcondor/tarball/23.0/${condor_version}/release/condor-${condor_version}-Windows-x64.msi -OutFile "$htcondor_installer"
+%{ endif ~}
+$args='/qn /l* condor-install-log.txt /i'
+$args=$args + " $htcondor_installer"
+$args=$args + ' NEWPOOL="N"'
+$args=$args + ' RUNJOBS="N"'
+$args=$args + ' SUBMITJOBS="N"'
+$args=$args + ' INSTALLDIR="C:\Condor"'
+Start-Process "msiexec.exe" -Wait -ArgumentList "$args"
+Remove-Item "$htcondor_installer"
+
+# do not start HTCondor on boot by default. Allow startup script to download
+# configuration first and then start HTCondor
+Set-Service -StartupType Manual condor
+
+# remove settings from condor_config that we want to override in configuration step
+Set-Content -Path "C:\Condor\condor_config" -Value (Get-Content -Path "C:\Condor\condor_config" | Select-String -Pattern '^CONDOR_HOST' -NotMatch)
+Set-Content -Path "C:\Condor\condor_config" -Value (Get-Content -Path "C:\Condor\condor_config" | Select-String -Pattern '^INSTALL_USER' -NotMatch)
+Set-Content -Path "C:\Condor\condor_config" -Value (Get-Content -Path "C:\Condor\condor_config" | Select-String -Pattern '^DAEMON_LIST' -NotMatch)
+Set-Content -Path "C:\Condor\condor_config" -Value (Get-Content -Path "C:\Condor\condor_config" | Select-String -Pattern '^use SECURITY' -NotMatch)
+
+# install Python so that custom ClassAd hooks can execute
+$python_installer = 'C:\python-installer.exe'
+Invoke-WebRequest -Uri "${python_windows_installer_url}" -OutFile "$python_installer"
+Start-Process -FilePath "$python_installer" -Wait -ArgumentList '/quiet InstallAllUsers=1 PrependPath=1 Include_test=0'
+%{ if http_proxy == "" ~}
+Start-Process "py.exe" -Wait -ArgumentList "-3.11 -m pip install --no-warn-script-location requests"
+%{ else ~}
+Start-Process "py.exe" -Wait -ArgumentList "-3.11 -m pip install --proxy ${http_proxy} --no-warn-script-location requests"
+%{ endif ~}
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/htcondor/htcondor/main/src/condor_scripts/common-cloud-attributes-google.py" -OutFile "C:\Condor\bin\common-cloud-attributes-google.py"
+Remove-Item "$python_installer"

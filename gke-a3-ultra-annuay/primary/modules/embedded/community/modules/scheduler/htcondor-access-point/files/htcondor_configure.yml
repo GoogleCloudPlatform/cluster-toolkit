@@ -1,0 +1,119 @@
+# Copyright 2022 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+- name: Configure HTCondor Access Point
+  hosts: localhost
+  become: true
+  vars:
+    spool_dir: /var/lib/condor/spool
+    condor_config_root: /etc/condor
+    ghpc_config_file: 50-ghpc-managed
+    htcondor_spool_disk_device: /dev/disk/by-id/google-htcondor-spool-disk
+  tasks:
+  - name: Ensure necessary variables are set
+    ansible.builtin.assert:
+      that:
+      - htcondor_role is defined
+      - config_object is defined
+  - name: Remove default HTCondor configuration
+    ansible.builtin.file:
+      path: "{{ condor_config_root }}/config.d/00-htcondor-9.0.config"
+      state: absent
+    notify:
+    - Reload HTCondor
+  - name: Create Toolkit configuration file
+    register: config_update
+    changed_when: config_update.rc == 137
+    failed_when: config_update.rc != 0 and config_update.rc != 137
+    ansible.builtin.shell: |
+      set -e -o pipefail
+      REMOTE_HASH=$(gcloud --format="value(md5_hash)" storage hash {{ config_object }})
+
+      CONFIG_FILE="{{ condor_config_root }}/config.d/{{ ghpc_config_file }}"
+      if [ -f "${CONFIG_FILE}" ]; then
+          LOCAL_HASH=$(gcloud --format="value(md5_hash)" storage hash "${CONFIG_FILE}")
+      else
+          LOCAL_HASH="INVALID-HASH"
+      fi
+
+      if [ "${REMOTE_HASH}" != "${LOCAL_HASH}" ]; then
+          gcloud storage cp {{ config_object }} "${CONFIG_FILE}"
+          chmod 0644 "${CONFIG_FILE}"
+          exit 137
+      fi
+    args:
+      executable: /bin/bash
+    notify:
+    - Reload HTCondor
+  - name: Configure HTCondor SchedD
+    when: htcondor_role == 'get_htcondor_submit'
+    block:
+    - name: Format spool disk
+      community.general.filesystem:
+        fstype: ext4
+        state: present
+        dev: "{{ htcondor_spool_disk_device }}"
+    # RUN TUNE2FS
+    - name: Mount spool (creates mount point)
+      ansible.posix.mount:
+        path: "{{ spool_dir }}"
+        src: "{{ htcondor_spool_disk_device }}"
+        fstype: ext4
+        opts: defaults
+        state: mounted
+    - name: Ensure spool free space
+      ansible.builtin.command: tune2fs -r 0 {{ htcondor_spool_disk_device }}
+    - name: Setup spool directory
+      ansible.builtin.file:
+        path: "{{ spool_dir }}"
+        state: directory
+        owner: condor
+        group: condor
+        mode: 0755
+    - name: Create SystemD override directory for HTCondor
+      ansible.builtin.file:
+        path: /etc/systemd/system/condor.service.d
+        state: directory
+        owner: root
+        group: root
+        mode: 0755
+    - name: Ensure HTCondor starts after shared filesystem is mounted
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/condor.service.d/mount-spool.conf
+        mode: 0644
+        content: |
+          [Unit]
+          RequiresMountsFor={{ spool_dir }}
+      notify:
+      - Reload SystemD
+  handlers:
+  - name: Reload SystemD
+    ansible.builtin.systemd:
+      daemon_reload: true
+  - name: Reload HTCondor
+    ansible.builtin.service:
+      name: condor
+      state: reloaded
+  post_tasks:
+  - name: Start HTCondor
+    ansible.builtin.service:
+      name: condor
+      state: started
+      enabled: true
+  - name: Inform users
+    changed_when: false
+    ansible.builtin.shell: |
+      set -e -o pipefail
+      wall "******* HTCondor configuration complete; startup-script may still be executing ********"
