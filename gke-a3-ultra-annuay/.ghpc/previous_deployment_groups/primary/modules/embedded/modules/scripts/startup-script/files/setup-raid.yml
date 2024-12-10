@@ -1,0 +1,100 @@
+# Copyright 2024 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+- name: Configure local SSDs
+  become: true
+  hosts: localhost
+  vars:
+    raid_name: localssd
+    array_dev: /dev/md/{{ raid_name }}
+    fstype: ext4
+    interface: nvme
+    mode: '0755'
+    mountpoint: /mnt/{{ raid_name }}
+  tasks:
+  - name: Get local SSD devices
+    ansible.builtin.find:
+      file_type: link
+      path: /dev/disk/by-id
+      patterns: google-local-{{ "nvme-" if interface == "nvme" else "" }}ssd-*
+    register: local_ssd_devices
+
+  - name: Exit if zero local ssd found
+    ansible.builtin.meta: end_play
+    when: local_ssd_devices.files | length == 0
+
+  - name: Install mdadm
+    ansible.builtin.package:
+      name: mdadm
+      state: present
+
+  # this service will act during the play and upon reboots to ensure that local
+  # SSD volumes are always assembled into a RAID and re-formatted if necessary;
+  # there are many scenarios where a VM can be stopped or migrated during
+  # maintenance and the contents of local SSD will be discarded
+  - name: Install service to create local SSD RAID and format it
+    ansible.builtin.copy:
+      dest: /etc/systemd/system/create-localssd-raid.service
+      mode: 0644
+      content: |
+        [Unit]
+        After=local-fs.target
+        Before=slurmd.service
+        ConditionPathExists=!{{ array_dev }}
+
+        [Service]
+        Type=oneshot
+        RemainAfterExit=yes
+        ExecStart=/usr/bin/bash -c "/usr/sbin/mdadm --create {{ array_dev }} --name={{ raid_name }} --homehost=any --level=0 --raid-devices={{ local_ssd_devices.files | length }} /dev/disk/by-id/google-local-nvme-ssd-*{{ " --force" if local_ssd_devices.files | length == 1 else "" }}"
+        ExecStartPost=/usr/sbin/mkfs -t {{ fstype }}{{ " -m 0" if fstype == "ext4" else "" }} {{ array_dev }}
+
+        [Install]
+        WantedBy=slurmd.service
+
+  - name: Create RAID array and format
+    ansible.builtin.systemd:
+      name: create-localssd-raid.service
+      state: started
+      enabled: true
+      daemon_reload: true
+
+  - name: Install service to mount local SSD array
+    ansible.builtin.copy:
+      dest: /etc/systemd/system/mount-localssd-raid.service
+      mode: 0644
+      content: |
+        [Unit]
+        After=local-fs.target create-localssd-raid.service
+        Before=slurmd.service
+        Wants=create-localssd-raid.service
+        ConditionPathIsMountPoint=!{{ mountpoint }}
+
+        [Service]
+        Type=oneshot
+        RemainAfterExit=yes
+        ExecStart=/usr/bin/systemd-mount -t {{ fstype }} -o discard,defaults,nofail {{ array_dev }} {{ mountpoint }}
+        ExecStartPost=/usr/bin/chmod {{ mode }} {{ mountpoint }}
+        ExecStop=/usr/bin/systemd-umount {{ mountpoint }}
+
+        [Install]
+        WantedBy=slurmd.service
+
+  - name: Mount RAID array and set permissions
+    ansible.builtin.systemd:
+      name: mount-localssd-raid.service
+      state: started
+      enabled: true
+      daemon_reload: true

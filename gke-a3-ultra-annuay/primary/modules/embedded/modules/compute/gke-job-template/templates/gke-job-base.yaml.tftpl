@@ -1,0 +1,120 @@
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ${name}${suffix}
+  labels:
+  %{~ for key, val in labels ~}
+    ${key}: ${val}
+  %{~ endfor ~}
+spec:
+  parallelism: ${node_count}
+  completions: ${node_count}
+  completionMode: ${completion_mode}
+  template:
+    %{~ if gcs_annotation ~}
+    metadata:
+      annotations:
+        gke-gcsfuse/volumes: "true"
+    %{~ endif ~}
+    spec:
+      %{~ if length(security_context) > 0 ~}
+      securityContext:
+      %{~ for context in security_context ~}
+        ${context.key}: ${context.value}
+      %{~ endfor ~}
+      %{~ endif ~}
+      %{~ if k8s_service_account_name != null ~}
+      serviceAccountName: ${k8s_service_account_name}
+      %{~ endif ~}
+      %{~ if length(node_pool_names) > 0 ~}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: cloud.google.com/gke-nodepool
+                operator: In
+                values:
+                %{~ for node_pool in node_pool_names ~}
+                - ${node_pool}
+                %{~ endfor ~}
+      %{~ endif ~}
+      %{~ if length(node_selectors) > 0 ~}
+      nodeSelector:
+      %{~ for selector in node_selectors ~}
+        ${selector.key}: "${selector.value}"
+      %{~ endfor ~}
+      %{~ endif ~}
+      tolerations:
+      %{~ for toleration in tolerations ~}
+      - key: ${toleration.key}
+        operator: ${toleration.operator}
+        value: "${toleration.value}"
+        effect: ${toleration.effect}
+      %{~ endfor ~}
+      containers:
+      - name: ${name}-container
+        image: ${image}
+        command:
+        %{for s in command}- ${indent(8, yamlencode(s))}%{~ endfor }
+        %{~ if gpu_limit != null || cpu_request != null ~}
+        resources:
+          %{~ if gpu_limit != null ~}
+          limits:
+            # GPUs should only be specified as limits
+            # https://kubernetes.io/docs/tasks/manage-gpus/scheduling-gpus/
+            nvidia.com/gpu: ${gpu_limit}
+          %{~ endif ~}
+          %{~ if cpu_request != null || memory_request != null || ephemeral_request != null ~}
+          requests:
+            %{~ if full_node_request ~}
+            # cpu request attempts full node per pod
+            %{~ endif ~}
+            %{~ if cpu_request != null ~}
+            cpu: ${cpu_request}
+            %{~ endif ~}
+            %{~ if memory_request != null ~}
+            memory: ${memory_request}
+            %{~ endif ~}
+            %{~ if ephemeral_request != null ~}
+            ephemeral-storage: ${ephemeral_request}
+            %{~ endif ~}
+          %{~ endif ~}
+        %{~ endif ~}
+        %{~ if length(volume_mounts) > 0 ~}
+        volumeMounts:
+        %{~ for v in volume_mounts ~}
+        - name: ${v.name}
+          mountPath: ${v.mount_path}
+        %{~ endfor ~}
+        %{~ endif ~}
+      %{~ if length(volume_mounts) > 0 ~}
+      volumes:
+      %{~ for ed in empty_dir_volumes ~}
+      - name: ${ed.name}
+        emptyDir:
+          sizeLimit: ${ed.size_limit}
+          %{~ if ed.in_memory ~}
+          medium: "Memory"
+          %{~ endif ~}
+      %{~ endfor ~}
+      %{~ for pd in ephemeral_pd_volumes ~}
+      - name: ${pd.name}
+        ephemeral:
+          volumeClaimTemplate:
+            spec:
+              accessModes: [ "ReadWriteOnce" ]
+              storageClassName: ${pd.storage_class_name}
+              resources:
+                requests:
+                  storage: ${pd.storage}
+      %{~ endfor ~}
+      %{~ for pvc in pvc_volumes ~}
+      - name: ${pvc.name}
+        persistentVolumeClaim:
+          claimName: ${pvc.claim_name}
+      %{~ endfor ~}
+      %{~ endif ~}
+      restartPolicy: ${restart_policy}
+  backoffLimit: ${backoff_limit}
