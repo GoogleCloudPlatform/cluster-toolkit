@@ -40,6 +40,7 @@ vars:
     project: $(vars.project_id)
     family: $(vars.deployment_name)-u22
   disk_size_gb: 200
+  nccl_plugin_version: v1.0.2
 
 terraform_providers:
   google:
@@ -316,7 +317,45 @@ deployment_groups:
           ENROOT_CACHE_PATH      $(vars.local_ssd_mountpoint)/${UID}/enroot/cache
           ENROOT_DATA_PATH       $(vars.local_ssd_mountpoint)/${UID}/enroot/data
           ENROOT_TEMP_PATH       $(vars.local_ssd_mountpoint)/${UID}/enroot
+      - type: ansible-local
+        destination: nccl_plugin.yml
+        content: |
+          ---
+          - name: Install NCCL plugin for A3 Ultra series
+            hosts: all
+            become: true
+            tasks:
+            - name: Add SystemD unit for NCCL plugin installation
+              ansible.builtin.copy:
+                dest: /etc/systemd/system/nccl-plugin@.service
+                mode: 0o0644
+                content: |
+                  [Unit]
+                  After=network-online.target
+                  Before=slurmd.service
 
+                  [Service]
+                  Type=oneshot
+                  ExecStartPre=/usr/bin/rm -rf /var/lib/gib
+                  ExecStartPre=/usr/bin/mkdir -p /var/lib/gib
+                  ExecStartPre=/snap/bin/gcloud auth configure-docker --quiet us-docker.pkg.dev
+                  ExecStart=/usr/bin/docker run --rm --name nccl-gib-installer --volume /var/lib/gib:/var/lib/gib \
+                      us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib:%i install --install-nccl
+
+                  [Install]
+                  WantedBy=slurmd.service
+              notify:
+              - Reload SystemD
+            handlers:
+            - name: Reload SystemD
+              ansible.builtin.systemd:
+                daemon_reload: true
+            post_tasks:
+            - name: Enable NCCL plugin SystemD unit
+              ansible.builtin.service:
+                name: nccl-plugin@$(vars.nccl_plugin_version).service
+                state: started
+                enabled: true
   - id: a3_ultra_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [a3ultra-slurm-net-0, a3ultra_startup]
