@@ -96,7 +96,7 @@ resource "google_compute_instance_template" "tpl" {
       source       = lookup(disk.value, "source", null)
       source_image = lookup(disk.value, "source_image", null)
       type         = lookup(disk.value, "disk_type", null) == "local-ssd" ? "SCRATCH" : "PERSISTENT"
-      labels       = lookup(disk.value, "disk_labels", null)
+      labels       = lookup(disk.value, "disk_type", null) == "local-ssd" ? null : lookup(disk.value, "disk_labels", null)
 
       dynamic "disk_encryption_key" {
         for_each = compact([var.disk_encryption_key == null ? null : 1])
