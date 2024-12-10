@@ -14,7 +14,7 @@
 
 # TEMPLATE
 module "slurm_login_template" {
-  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=6.8.6"
+  source = "../../internal/slurm-gcp-v6/instance_template"
 
   for_each = { for x in var.login_nodes : x.name_prefix => x }
 
