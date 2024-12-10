@@ -178,7 +178,7 @@ locals {
       no_proxy   = var.http_no_proxy,
       runners = [
         for runner in local.runners : {
-          object      = google_storage_bucket_object.scripts[basename(runner["destination"])].output_name
+          object      = google_storage_bucket_object.scripts[runner["destination"]].output_name
           type        = runner["type"]
           destination = runner["destination"]
           args        = contains(keys(runner), "args") ? runner["args"] : ""
@@ -203,7 +203,7 @@ locals {
   stdlib = join("", local.stdlib_list)
 
   runners_map = { for runner in local.runners :
-    basename(runner["destination"]) => {
+    runner["destination"] => {
       content = lookup(runner, "content", null)
       source  = lookup(runner, "source", null)
     }
