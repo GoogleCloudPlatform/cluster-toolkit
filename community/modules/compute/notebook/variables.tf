@@ -48,8 +48,8 @@ variable "instance_image" {
   description = "Instance Image"
   type        = map(string)
   default = {
-    project = "deeplearning-platform-release"
-    family  = "tf-latest-cpu"
+    project = "cloud-notebooks-managed"
+    family  = "workbench-instances"
     name    = null
   }
 
