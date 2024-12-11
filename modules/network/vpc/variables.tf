@@ -266,3 +266,12 @@ variable "firewall_log_config" {
     error_message = "var.firewall_log_config must be set to \"DISABLE_LOGGING\", or enable logging with \"INCLUDE_ALL_METADATA\" or \"EXCLUDE_ALL_METADATA\""
   }
 }
+
+resource "terraform_data" "secondary_ranges_validation" {
+  lifecycle {
+    precondition {
+      condition     = var.secondary_ranges != null && var.secondary_ranges_list != null
+      error_message = "Only one of var.secondary_ranges or var.secondary_ranges_list should be specified"
+    }
+  }
+}
