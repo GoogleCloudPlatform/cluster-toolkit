@@ -61,7 +61,6 @@ deployment_groups:
     settings:
       node_count_dynamic_max: 4
       machine_type: n2-standard-2
-      enable_placement: false  # the default is: true
       allow_automatic_updates: false
 
   - id: debug_partition
