@@ -32,10 +32,10 @@ deployment_groups:
   - id: network1
     source: modules/network/vpc
     settings:
-      subnetwork_name: gke-subnet-a2-highgpu
+      subnetwork_name: $(vars.deployment_name)-subnet
       mtu: 8244
       secondary_ranges:
-      - subnetwork_name: gke-subnet-a2-highgpu
+      - subnetwork_name: $(vars.deployment_name)-subnet
         ranges:
         - range_name: pods
           ip_cidr_range: 10.4.0.0/14

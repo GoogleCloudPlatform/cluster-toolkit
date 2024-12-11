@@ -21,11 +21,9 @@ vars:
   region: asia-southeast1
   zones:
   - asia-southeast1-b  # g2 machine has better availability in this zone
-
   # Cidr block containing the IP of the machine calling terraform.
   # The following line must be updated for this example to work.
   authorized_cidr: <your-ip-address>/32
-
   gcp_public_cidrs_access_enabled: false
 
 deployment_groups:
@@ -34,9 +32,9 @@ deployment_groups:
   - id: network1
     source: modules/network/vpc
     settings:
-      subnetwork_name: gke-subnet1
-      secondary_ranges:
-      - subnetwork_name: gke-subnet1
+      subnetwork_name: $(vars.deployment_name)-subnet
+      secondary_ranges_list:
+      - subnetwork_name: $(vars.deployment_name)-subnet
         ranges:
         - range_name: pods
           ip_cidr_range: 10.4.0.0/14

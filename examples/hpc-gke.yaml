@@ -28,9 +28,9 @@ deployment_groups:
   - id: network1
     source: modules/network/vpc
     settings:
-      subnetwork_name: gke-subnet
-      secondary_ranges:
-      - subnetwork_name: gke-subnet
+      subnetwork_name: $(vars.deployment_name)-subnet
+      secondary_ranges_list:
+      - subnetwork_name: $(vars.deployment_name)-subnet
         ranges:
         - range_name: pods
           ip_cidr_range: 10.4.0.0/14
@@ -40,7 +40,7 @@ deployment_groups:
   - id: gke_service_account
     source: community/modules/project/service-account
     settings:
-      name: gke-service-account
+      name: gke-sa
       project_roles:
       - logging.logWriter
       - monitoring.metricWriter
