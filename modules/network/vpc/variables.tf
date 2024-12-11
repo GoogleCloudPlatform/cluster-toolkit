@@ -166,7 +166,7 @@ variable "secondary_ranges_list" {
     }))
   }))
   description = "List of secondary ranges associated with the subnets."
-  default     = {}
+  default     = []
 }
 
 variable "network_routing_mode" {
@@ -270,7 +270,7 @@ variable "firewall_log_config" {
 resource "terraform_data" "secondary_ranges_validation" {
   lifecycle {
     precondition {
-      condition     = var.secondary_ranges != null && var.secondary_ranges_list != null
+      condition     = length(secondary_ranges) > 0 && length(secondary_ranges_list) > 0
       error_message = "Only one of var.secondary_ranges or var.secondary_ranges_list should be specified"
     }
   }
