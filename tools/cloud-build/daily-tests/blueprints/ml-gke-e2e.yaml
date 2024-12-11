@@ -36,7 +36,8 @@ deployment_groups:
     settings:
       subnetwork_name: gke-subnet1
       secondary_ranges:
-        gke-subnet1:
+      - subnetwork_name: gke-subnet1
+        ranges:
         - range_name: pods
           ip_cidr_range: 10.4.0.0/14
         - range_name: services

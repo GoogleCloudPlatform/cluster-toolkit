@@ -147,10 +147,33 @@ variable "additional_subnetworks" {
   }
 }
 
+
 variable "secondary_ranges" {
-  type        = map(list(object({ range_name = string, ip_cidr_range = string })))
-  description = "Secondary ranges that will be used in some of the subnets. Please see https://goo.gle/hpc-toolkit-vpc-deprecation for migration instructions."
-  default     = {}
+  type        = list(object({ subnetwork_name = string, ranges = list(object({ range_name = string, ip_cidr_range = string })) }))
+  description = <<-EOD
+    Secondary ranges associated with subnets.
+    This field used to be a map, but is now a list, to better support consistent naming. To migrate, please change as suggested in below example:
+    
+    Old configuration (map):
+
+    secondary_ranges:
+      gke-subnet:
+      - range_name: pods
+        ip_cidr_range: 10.4.0.0/14
+      - range_name: services
+        ip_cidr_range: 10.0.32.0/20
+
+    New configuration (list):
+
+    secondary_ranges:
+    - subnetwork_name: gke-subnet
+      ranges:
+      - range_name: pods
+        ip_cidr_range: 10.4.0.0/14
+      - range_name: services
+        ip_cidr_range: 10.0.32.0/20
+    EOD
+  default     = []
 }
 
 variable "network_routing_mode" {
