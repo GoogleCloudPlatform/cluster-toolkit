@@ -151,7 +151,7 @@ variable "secondary_ranges" {
   type        = map(list(object({ range_name = string, ip_cidr_range = string })))
   description = <<-EOT
   "Secondary ranges associated with the subnets.
-  This will be deprecated in favour of secondary_ranges_list going forward.
+  This will be deprecated in favour of secondary_ranges_list at a later date.
   Please migrate to using the same."
   EOT
   default     = {}
