@@ -409,3 +409,9 @@ variable "upgrade_settings" {
     max_unavailable = 1
   }
 }
+
+variable "run_workload_script" {
+  description = "Whether execute the script to create a sample workload and inject rxdm sidecar into workload. Currently, implemented for A3-Highgpu and A3-Megagpu only."
+  type        = bool
+  default     = true
+}
