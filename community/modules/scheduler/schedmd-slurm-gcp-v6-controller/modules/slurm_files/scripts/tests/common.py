@@ -53,6 +53,7 @@ class TstCfg:
     partitions: dict[str, Placeholder] = field(default_factory=dict)
     nodeset: dict[str, TstNodeset] = field(default_factory=dict)
     nodeset_tpu: dict[str, TstNodeset] = field(default_factory=dict)
+    nodeset_dyn: dict[str, TstNodeset] = field(default_factory=dict)
     
     install_dir: Optional[str] = None
     output_dir: Optional[str] = None

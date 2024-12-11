@@ -12,10 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Optional, Type
+
 import pytest
 from mock import Mock
 from common import TstNodeset, TstCfg # needed to import util
 import util
+from util import NodeState
 from datetime import timedelta
 from google.api_core.client_options import ClientOptions  # noqa: E402
 
@@ -308,3 +311,40 @@ def test_nodeset_reservation_ok(nodeset, policies, expected):
 def test_parse_job_info(job_info, expected_job):
     lkp = util.Lookup(TstCfg())
     assert lkp._parse_job_info(job_info) == expected_job
+
+
+
+@pytest.mark.parametrize(
+    "node,state,want",
+    [
+        ("c-n-2", NodeState("DOWN", {}), NodeState("DOWN", {})), # happy scenario
+        ("c-d-vodoo", None, None), # dynamic nodeset
+        ("c-x-44", None, None), # unknown(removed) nodeset
+        ("c-n-7", None, None), # Out of bounds: c-n-[0-4] - downsized nodeset
+        ("c-t-7", None, None), # Out of bounds: c-t-[0-4] - downsized nodeset TPU
+        ("c-n-2", None, RuntimeError), # something is wrong
+        ("c-t-2", None, RuntimeError), # something is wrong, but TPU
+        
+        # Check boundaries match [0-5)
+        ("c-n-5", None, None), # out of boundaries
+        ("c-n-4", None, RuntimeError), # within boundaries
+    ])
+def test_node_state(node: str, state: Optional[NodeState], want: NodeState | None | Type[Exception]):
+    cfg = TstCfg(
+        slurm_cluster_name="c",
+        nodeset={
+            "n": TstNodeset(node_count_static=2, node_count_dynamic_max=3)},
+        nodeset_tpu={
+            "t": TstNodeset(node_count_static=2, node_count_dynamic_max=3)},
+        nodeset_dyn={
+            "d": TstNodeset()},
+    )
+    lkp = util.Lookup(cfg)
+    lkp.slurm_nodes = lambda: {node: state} if state else {}
+        
+    if  type(want) is type and issubclass(want, Exception):
+        with pytest.raises(want):
+            lkp.node_state(node)
+    else:
+        assert lkp.node_state(node) == want
+        
