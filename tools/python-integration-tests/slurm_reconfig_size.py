@@ -20,9 +20,9 @@ import time
 
 class SlurmReconfigureSize(SlurmTest):
     # Class to test simple reconfiguration
-    def __init__(self, deployment, reconfig_blueprint):
-        super().__init__(deployment)
-        self.reconfig_blueprint = reconfig_blueprint
+    def __init__(self, deployment):
+        super().__init__(Deployment("tools/python-integration-tests/blueprints/slurm-simple.yaml"))
+        self.reconfig_blueprint = "tools/python-integration-tests/blueprints/slurm-simple-reconfig.yaml"
     
     def runTest(self):
         hostname = self.get_login_node()
@@ -43,5 +43,4 @@ class SlurmReconfigureSize(SlurmTest):
         self.assert_equal(len(self.get_nodes()), 3)
 
 if __name__ == "__main__":
-    deployment = Deployment("tools/python-integration-tests/blueprints/slurm-simple.yaml")
-    unittest.TextTestRunner().run(SlurmReconfigureSize(deployment, "tools/python-integration-tests/blueprints/slurm-simple-reconfig.yaml")) 
+    unittest.main()
