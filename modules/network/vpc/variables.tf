@@ -158,10 +158,10 @@ variable "secondary_ranges" {
 }
 
 variable "secondary_ranges_list" {
-  type        = list(object({
+  type = list(object({
     subnetwork_name = string,
     ranges = list(object({
-      range_name = string,
+      range_name    = string,
       ip_cidr_range = string
     }))
   }))
@@ -270,7 +270,7 @@ variable "firewall_log_config" {
 resource "terraform_data" "secondary_ranges_validation" {
   lifecycle {
     precondition {
-      condition     = length(secondary_ranges) > 0 && length(secondary_ranges_list) > 0
+      condition     = length(var.secondary_ranges) == 0 || length(var.secondary_ranges_list) == 0
       error_message = "Only one of var.secondary_ranges or var.secondary_ranges_list should be specified"
     }
   }

@@ -154,7 +154,7 @@ locals {
   )
 
   secondary_ranges_map = {
-    for secondary_range in var.secondary_ranges :
+    for secondary_range in var.secondary_ranges_list :
     secondary_range.subnetwork_name => secondary_range.ranges
   }
 }
@@ -167,7 +167,7 @@ module "vpc" {
   project_id                             = var.project_id
   auto_create_subnetworks                = false
   subnets                                = local.subnetworks
-  secondary_ranges                       = local.secondary_ranges_map.length > 0 ? local.secondary_ranges_map : var.secondary_ranges
+  secondary_ranges                       = length(local.secondary_ranges_map) > 0 ? local.secondary_ranges_map : var.secondary_ranges
   routing_mode                           = var.network_routing_mode
   mtu                                    = var.mtu
   description                            = var.network_description

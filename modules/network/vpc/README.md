@@ -165,7 +165,9 @@ limitations under the License.
 
 ## Providers
 
-No providers.
+| Name | Version |
+|------|---------|
+| <a name="provider_terraform"></a> [terraform](#provider\_terraform) | n/a |
 
 ## Modules
 
@@ -177,7 +179,9 @@ No providers.
 
 ## Resources
 
-No resources.
+| Name | Type |
+|------|------|
+| [terraform_data.secondary_ranges_validation](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
 
 ## Inputs
 
@@ -205,7 +209,8 @@ No resources.
 | <a name="input_primary_subnetwork"></a> [primary\_subnetwork](#input\_primary\_subnetwork) | DEPRECATED: please see https://goo.gle/hpc-toolkit-vpc-deprecation for migration instructions | `map(string)` | `null` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | The default region for Cloud resources | `string` | n/a | yes |
-| <a name="input_secondary_ranges"></a> [secondary\_ranges](#input\_secondary\_ranges) | Secondary ranges associated with subnets.<br/>This field used to be a map, but is now a list, to better support consistent naming. To migrate, please change as suggested in below example:<br/><br/>Old configuration (map):<br/><br/>secondary\_ranges:<br/>  gke-subnet:<br/>  - range\_name: pods<br/>    ip\_cidr\_range: 10.4.0.0/14<br/>  - range\_name: services<br/>    ip\_cidr\_range: 10.0.32.0/20<br/><br/>New configuration (list):<br/><br/>secondary\_ranges:<br/>- subnetwork\_name: gke-subnet<br/>  ranges:<br/>  - range\_name: pods<br/>    ip\_cidr\_range: 10.4.0.0/14<br/>  - range\_name: services<br/>    ip\_cidr\_range: 10.0.32.0/20 | `list(object({ subnetwork_name = string, ranges = list(object({ range_name = string, ip_cidr_range = string })) }))` | `[]` | no |
+| <a name="input_secondary_ranges"></a> [secondary\_ranges](#input\_secondary\_ranges) | "Secondary ranges associated with the subnets.<br/>This will be deprecated in favour of secondary\_ranges\_list going forward.<br/>Please migrate to using the same." | `map(list(object({ range_name = string, ip_cidr_range = string })))` | `{}` | no |
+| <a name="input_secondary_ranges_list"></a> [secondary\_ranges\_list](#input\_secondary\_ranges\_list) | List of secondary ranges associated with the subnets. | <pre>list(object({<br/>    subnetwork_name = string,<br/>    ranges = list(object({<br/>      range_name    = string,<br/>      ip_cidr_range = string<br/>    }))<br/>  }))</pre> | `[]` | no |
 | <a name="input_shared_vpc_host"></a> [shared\_vpc\_host](#input\_shared\_vpc\_host) | Makes this project a Shared VPC host if 'true' (default 'false') | `bool` | `false` | no |
 | <a name="input_subnetwork_name"></a> [subnetwork\_name](#input\_subnetwork\_name) | The name of the network to be created (if unsupplied, will default to "{deployment\_name}-primary-subnet") | `string` | `null` | no |
 | <a name="input_subnetwork_size"></a> [subnetwork\_size](#input\_subnetwork\_size) | DEPRECATED: please see https://goo.gle/hpc-toolkit-vpc-deprecation for migration instructions | `number` | `null` | no |
