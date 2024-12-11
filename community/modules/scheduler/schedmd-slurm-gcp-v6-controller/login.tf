@@ -56,7 +56,7 @@ module "slurm_login_template" {
 
 # INSTANCE
 module "slurm_login_instance" {
-  source   = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/_slurm_instance?ref=6.8.6"
+  source   = "../../internal/slurm-gcp-v6/instance"
   for_each = { for x in var.login_nodes : x.name_prefix => x }
 
   access_config       = each.value.access_config
