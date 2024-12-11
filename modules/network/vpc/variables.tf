@@ -275,3 +275,15 @@ resource "terraform_data" "secondary_ranges_validation" {
     }
   }
 }
+
+variable "network_profile" {
+  type        = string
+  description = <<-EOT
+  A full or partial URL of the network profile to apply to this network.
+  This field can be set only at resource creation time. For example, the
+  following are valid URLs:
+  - https://www.googleapis.com/compute/beta/projects/{projectId}/global/networkProfiles/{network_profile_name}
+  - projects/{projectId}/global/networkProfiles/{network_profile_name}}
+  EOT
+  default     = null
+}

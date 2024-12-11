@@ -175,7 +175,7 @@ limitations under the License.
 |------|--------|---------|
 | <a name="module_cloud_router"></a> [cloud\_router](#module\_cloud\_router) | terraform-google-modules/cloud-router/google | ~> 6.0 |
 | <a name="module_nat_ip_addresses"></a> [nat\_ip\_addresses](#module\_nat\_ip\_addresses) | terraform-google-modules/address/google | ~> 4.1 |
-| <a name="module_vpc"></a> [vpc](#module\_vpc) | terraform-google-modules/network/google | ~> 9.0 |
+| <a name="module_vpc"></a> [vpc](#module\_vpc) | terraform-google-modules/network/google | ~> 10.0 |
 
 ## Resources
 
@@ -205,6 +205,7 @@ limitations under the License.
 | <a name="input_network_address_range"></a> [network\_address\_range](#input\_network\_address\_range) | IP address range (CIDR) for global network | `string` | `"10.0.0.0/9"` | no |
 | <a name="input_network_description"></a> [network\_description](#input\_network\_description) | An optional description of this resource (changes will trigger resource destroy/create) | `string` | `""` | no |
 | <a name="input_network_name"></a> [network\_name](#input\_network\_name) | The name of the network to be created (if unsupplied, will default to "{deployment\_name}-net") | `string` | `null` | no |
+| <a name="input_network_profile"></a> [network\_profile](#input\_network\_profile) | A full or partial URL of the network profile to apply to this network.<br/>This field can be set only at resource creation time. For example, the<br/>following are valid URLs:<br/>- https://www.googleapis.com/compute/beta/projects/{projectId}/global/networkProfiles/{network_profile_name}<br/>- projects/{projectId}/global/networkProfiles/{network\_profile\_name}} | `string` | `null` | no |
 | <a name="input_network_routing_mode"></a> [network\_routing\_mode](#input\_network\_routing\_mode) | The network routing mode (default "GLOBAL") | `string` | `"GLOBAL"` | no |
 | <a name="input_primary_subnetwork"></a> [primary\_subnetwork](#input\_primary\_subnetwork) | DEPRECATED: please see https://goo.gle/hpc-toolkit-vpc-deprecation for migration instructions | `map(string)` | `null` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created | `string` | n/a | yes |

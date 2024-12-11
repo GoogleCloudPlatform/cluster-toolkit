@@ -74,4 +74,5 @@ module "vpcs" {
   mtu                                    = var.mtu
   network_description                    = var.network_description
   network_routing_mode                   = var.network_routing_mode
+  network_profile                        = var.network_profile
 }
