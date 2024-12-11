@@ -26,18 +26,21 @@ vars:
   project_id: # supply project ID
   region: # supply region
   zone: # supply zone
-  a3u_cluster_size: # supply cluster size
-  a3u_reservation_name: # supply reservation name
+  # Image settings
   base_image:
     project: ubuntu-os-accelerator-images
     family: ubuntu-accelerator-2204-amd64-with-nvidia-550
   image_build_machine_type: n2-standard-16
   build_slurm_from_git_ref: 6.8.7
+  # Cluster env settings
   # net0 and filestore ranges must not overlap
   net0_range: 192.168.0.0/19
-  filestore_ip_range: 192.168.32.0/24
+  # filestore_ip_range: 192.168.32.0/24
   net1_range: 192.168.64.0/18
   rdma_net_range: 192.168.128.0/18
+  # Cluster Settings
+  a3u_cluster_size: 2
+  a3u_reservation_name: slurm-gcp-a3u-gsc
   local_ssd_mountpoint: /mnt/localssd
   instance_image:
     project: $(vars.project_id)
@@ -359,6 +362,7 @@ deployment_groups:
                 name: nccl-plugin@$(vars.nccl_plugin_version).service
                 state: started
                 enabled: true
+
   - id: a3_ultra_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [a3ultra-slurm-net-0, a3ultra_startup]
@@ -420,9 +424,10 @@ deployment_groups:
         content: |
           #!/bin/bash
           SLURM_ROOT=/opt/apps/adm/slurm
+          PARTITION_NAME=$(a3_ultra_partition.partitions[0].partition_name)
           mkdir -m 0755 -p "${SLURM_ROOT}/scripts"
-          mkdir -p "${SLURM_ROOT}/partition-$(vars.a3mega_partition_name)-epilog_slurmd.d"
-          ln -s "/slurm/scripts/tools/gpu-test" "${SLURM_ROOT}/partition-$(a3_ultra_partition.partitions[0].partition_name)-epilog_slurmd.d/gpu-test.epilog_slurmd"
+          mkdir -p "${SLURM_ROOT}/partition-${PARTITION_NAME}-epilog_slurmd.d"
+          ln -s "/slurm/scripts/tools/gpu-test" "${SLURM_ROOT}/partition-${PARTITION_NAME}-epilog_slurmd.d/gpu-test.epilog_slurmd"
 
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
