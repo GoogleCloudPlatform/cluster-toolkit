@@ -315,7 +315,7 @@ locals {
 }
 
 resource "null_resource" "install_dependencies" {
-  count = contains(local.supported_machine_types_for_install_dependencies, var.machine_type) ? 1 : 0
+  count = var.run_workload_script && contains(local.supported_machine_types_for_install_dependencies, var.machine_type) ? 1 : 0
   provisioner "local-exec" {
     command = "pip3 install pyyaml"
   }
@@ -327,7 +327,7 @@ locals {
 
 # execute script to inject rxdm sidecar into workload to enable tcpx for a3-highgpu-8g VM workload
 resource "null_resource" "enable_tcpx_in_workload" {
-  count = var.machine_type == "a3-highgpu-8g" ? 1 : 0
+  count = var.run_workload_script && var.machine_type == "a3-highgpu-8g" ? 1 : 0
   triggers = {
     always_run = timestamp()
   }
@@ -340,7 +340,7 @@ resource "null_resource" "enable_tcpx_in_workload" {
 
 # execute script to inject rxdm sidecar into workload to enable tcpxo for a3-megagpu-8g VM workload
 resource "null_resource" "enable_tcpxo_in_workload" {
-  count = var.machine_type == "a3-megagpu-8g" ? 1 : 0
+  count = var.run_workload_script && var.machine_type == "a3-megagpu-8g" ? 1 : 0
   triggers = {
     always_run = timestamp()
   }
