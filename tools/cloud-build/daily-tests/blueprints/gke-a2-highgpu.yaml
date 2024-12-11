@@ -34,7 +34,7 @@ deployment_groups:
     settings:
       subnetwork_name: $(vars.deployment_name)-subnet
       mtu: 8244
-      secondary_ranges:
+      secondary_ranges_list:
       - subnetwork_name: $(vars.deployment_name)-subnet
         ranges:
         - range_name: pods

@@ -34,7 +34,7 @@ deployment_groups:
     settings:
       subnetwork_name: xpk-gke-a3-megagpu-subnet
       mtu: 8244
-      secondary_ranges:
+      secondary_ranges_list:
       - subnetwork_name: xpk-gke-a3-megagpu-subnet
         ranges:
         - range_name: pods
