@@ -225,7 +225,7 @@ def _find_tpu_node_action(nodename, state) -> NodeAction:
 
 def get_node_action(nodename: str) -> NodeAction:
     """Determine node/instance status that requires action"""
-    state = lookup().slurm_node(nodename)
+    state = lookup().node_state(nodename)
 
     if lookup().node_is_fr(nodename):
         fr = lookup().future_reservation(lookup().node_nodeset(nodename))
@@ -381,24 +381,13 @@ def sync_placement_groups():
 
 
 def sync_slurm():
-    compute_instances = [
+    compute_instances = {
         name for name, inst in lookup().instances().items() if inst.role == "compute"
-    ]
-    slurm_nodes = list(lookup().slurm_nodes().keys())
+    }
+    slurm_nodes = set(lookup().slurm_nodes().keys())
+    log.debug(f"reconciling {len(compute_instances)} GCP instances and {len(slurm_nodes)} Slurm nodes.")
 
-    all_nodes = list(
-        set(
-            chain(
-                compute_instances,
-                slurm_nodes,
-            )
-        )
-    )
-    log.debug(
-        f"reconciling {len(compute_instances)} ({len(all_nodes)-len(compute_instances)}) GCP instances and {len(slurm_nodes)} Slurm nodes ({len(all_nodes)-len(slurm_nodes)})."
-    )
-
-    for action, nodes in util.groupby_unsorted(all_nodes, get_node_action):
+    for action, nodes in util.groupby_unsorted(compute_instances | slurm_nodes, get_node_action):
         action.apply(list(nodes))
 
 
