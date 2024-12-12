@@ -93,7 +93,7 @@ deployment_groups:
         region: $(vars.region)
 
   - id: a3-ultragpu-cluster
-    source: github.com/GoogleCloudPlatform/cluster-toolkit.git//modules/scheduler/gke-cluster?ref=e0c690b
+    source: github.com/GoogleCloudPlatform/cluster-toolkit.git//modules/scheduler/gke-cluster?ref=8d3c524
     use: [gke-a3-ultra-net-0]
     settings:
       release_channel: RAPID
@@ -110,7 +110,7 @@ deployment_groups:
       - name: no-minor-or-node-upgrades-indefinite
         start_time: "2024-12-01T00:00:00Z"
         end_time: "2025-12-22T00:00:00Z"
-        exclusion_scope: NO_MINOR_OR_NODE_UPGRADES      
+        exclusion_scope: NO_MINOR_OR_NODE_UPGRADES
       additional_networks:
         $(concat(
           [{
