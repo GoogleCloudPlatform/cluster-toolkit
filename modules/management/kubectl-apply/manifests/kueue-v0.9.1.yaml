@@ -12395,6 +12395,11 @@ spec:
       - configMap:
           name: kueue-manager-config
         name: manager-config
+      tolerations:
+      - effect: NoSchedule
+        key: components.gke.io/gke-managed-components
+        operator: Equal
+        value: "true"
 ---
 apiVersion: apiregistration.k8s.io/v1
 kind: APIService
