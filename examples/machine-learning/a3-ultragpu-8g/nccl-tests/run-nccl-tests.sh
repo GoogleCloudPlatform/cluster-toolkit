@@ -33,7 +33,7 @@ CONTAINER_IMAGE=./nvidia+pytorch+24.09-py3.sqsh
 # These parameters should not be modified
 source /var/lib/gib/scripts/set_nccl_env.sh
 export NCCL_NET=gIB
-export NCCL_SOCKET_IFNAME==enp0s19,enp192s20
+export NCCL_SOCKET_IFNAME=enp0s19,enp192s20
 export NCCL_SHIMNET_GUEST_CONFIG_CHECKER_CONFIG_FILE=/var/lib/gib/configs/guest_config.txtpb
 export NCCL_TUNER_CONFIG_PATH=/var/lib/gib/configs/tuner_config.txtpb
 
