@@ -104,7 +104,7 @@ locals {
 
 # NODESET TPU
 module "slurm_nodeset_tpu" {
-  source   = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_nodeset_tpu?ref=6.8.6"
+  source   = "../../internal/slurm-gcp-v6/nodeset_tpu"
   for_each = local.nodeset_tpu_map
 
   project_id             = var.project_id
