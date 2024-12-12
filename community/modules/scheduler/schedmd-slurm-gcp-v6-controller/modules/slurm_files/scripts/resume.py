@@ -37,7 +37,7 @@ from util import (
     map_with_futures,
     run,
     separate,
-    to_hostlist_fast,
+    to_hostlist,
     trim_self_link,
     wait_for_operation,
 )
@@ -220,7 +220,7 @@ def create_instances_request(nodes: List[str], placement_group: Optional[str], e
         project=lookup().project, 
         body=body.to_dict(), 
         **method_args)
-    log.debug(f"new request: endpoint={req.methodId} nodes={to_hostlist_fast(nodes)}")
+    log.debug(f"new request: endpoint={req.methodId} nodes={to_hostlist(nodes)}")
     log_api_request(req)
     return req
 
@@ -340,7 +340,7 @@ def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
 
     if log.isEnabledFor(logging.DEBUG):
         grouped_nodelists = {
-            group: to_hostlist_fast(chunk.nodes) for group, chunk in grouped_nodes.items()
+            group: to_hostlist(chunk.nodes) for group, chunk in grouped_nodes.items()
         }
         log.debug(
             "node bulk groups: \n{}".format(yaml.safe_dump(grouped_nodelists).rstrip())
@@ -401,7 +401,7 @@ def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
         bulk_op_name = bulk_op["name"]
         if "error" in bulk_op:
             error = bulk_op["error"]["errors"][0]
-            group_nodes = to_hostlist_fast(grouped_nodes[group].nodes)
+            group_nodes = to_hostlist(grouped_nodes[group].nodes)
             log.warning(
                 f"bulkInsert operation errors: {error['code']} name={bulk_op_name} operationGroupId={group_id} nodes={group_nodes}"
             )
@@ -433,14 +433,14 @@ def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
 
         ready_nodes = {trim_self_link(op["targetLink"]) for op in successful_inserts}
         if len(ready_nodes) > 0:
-            ready_nodelist = to_hostlist_fast(ready_nodes)
+            ready_nodelist = to_hostlist(ready_nodes)
             log.info(f"created {len(ready_nodes)} instances: nodes={ready_nodelist}")
             all_successful_inserts.extend(successful_inserts)
 
 
 def down_nodes_notify_jobs(nodes: List[str], reason: str, resume_data: Optional[ResumeData]) -> None:
     """set nodes down with reason"""
-    nodelist = util.to_hostlist_fast(nodes)
+    nodelist = util.to_hostlist(nodes)
     reason_quoted = shlex.quote(reason)
     
     log.error(f"Marking nodes {nodelist} as DOWN, reason: {reason}")
@@ -536,7 +536,7 @@ def _allocate_nodes_to_placements(nodes: List[str], excl_job_id:Optional[int], l
 
     if invalid:
         placements.append(PlacementAndNodes(placement=None, nodes=invalid))
-        log.error(f"Could not find placement for nodes with unexpected names: {to_hostlist_fast(invalid)}")
+        log.error(f"Could not find placement for nodes with unexpected names: {to_hostlist(invalid)}")
 
     return placements
 
@@ -545,7 +545,7 @@ def create_nodeset_placements(nodes: List[str], excl_job_id:Optional[int], lkp: 
     region = lkp.node_region(nodes[0])
 
     if log.isEnabledFor(logging.DEBUG):
-        debug_p = {p.placement: to_hostlist_fast(p.nodes) for p in placements}
+        debug_p = {p.placement: to_hostlist(p.nodes) for p in placements}
         log.debug(
             f"creating {len(placements)} placement groups: \n{yaml.safe_dump(debug_p).rstrip()}"
         )
@@ -591,7 +591,7 @@ def create_nodeset_placements(nodes: List[str], excl_job_id:Optional[int], lkp: 
             )
 
     log.info(
-        f"created {len(operations)} placement groups ({to_hostlist_fast(operations.keys())})"
+        f"created {len(operations)} placement groups ({to_hostlist(operations.keys())})"
     )
     return placements
 
@@ -617,7 +617,7 @@ def main(nodelist: str) -> None:
     )
     if other_nodes:
         log.error(
-            f"Ignoring non-power-managed nodes '{to_hostlist_fast(other_nodes)}' from '{nodelist}'"
+            f"Ignoring non-power-managed nodes '{to_hostlist(other_nodes)}' from '{nodelist}'"
         )
 
     if not nodes:
@@ -625,7 +625,7 @@ def main(nodelist: str) -> None:
         return
 
     resume_data = get_resume_file_data()
-    log.info(f"resume {util.to_hostlist_fast(nodes)}")
+    log.info(f"resume {util.to_hostlist(nodes)}")
     resume_nodes(nodes, resume_data)
     
 if __name__ == "__main__":

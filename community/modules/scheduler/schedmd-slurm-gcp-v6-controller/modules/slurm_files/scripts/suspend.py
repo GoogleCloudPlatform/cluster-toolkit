@@ -24,7 +24,7 @@ from util import (
     groupby_unsorted,
     log_api_request,
     batch_execute,
-    to_hostlist_fast,
+    to_hostlist,
     wait_for_operations,
     separate,
     execute_with_futures,
@@ -96,14 +96,14 @@ def delete_instances(instances):
 
     requests = {inst: delete_instance_request(inst) for inst in valid}
 
-    log.info(f"delete {len(valid)} instances ({to_hostlist_fast(valid)})")
+    log.info(f"delete {len(valid)} instances ({to_hostlist(valid)})")
     done, failed = batch_execute(requests)
     if failed:
         for err, nodes in groupby_unsorted(lambda n: failed[n][1], failed.keys()):
-            log.error(f"instances failed to delete: {err} ({to_hostlist_fast(nodes)})")
+            log.error(f"instances failed to delete: {err} ({to_hostlist(nodes)})")
     wait_for_operations(done.values())
     # TODO do we need to check each operation for success? That is a lot more API calls
-    log.info(f"deleted {len(done)} instances {to_hostlist_fast(done.keys())}")
+    log.info(f"deleted {len(done)} instances {to_hostlist(done.keys())}")
 
 
 def suspend_nodes(nodes: List[str]) -> None:
@@ -128,10 +128,10 @@ def main(nodelist):
     )
     if other_nodes:
         log.debug(
-            f"Ignoring non-power-managed nodes '{to_hostlist_fast(other_nodes)}' from '{nodelist}'"
+            f"Ignoring non-power-managed nodes '{to_hostlist(other_nodes)}' from '{nodelist}'"
         )
     if pm_nodes:
-        log.debug(f"Suspending nodes '{to_hostlist_fast(pm_nodes)}' from '{nodelist}'")
+        log.debug(f"Suspending nodes '{to_hostlist(pm_nodes)}' from '{nodelist}'")
     else:
         log.debug("No cloud nodes to suspend")
         return

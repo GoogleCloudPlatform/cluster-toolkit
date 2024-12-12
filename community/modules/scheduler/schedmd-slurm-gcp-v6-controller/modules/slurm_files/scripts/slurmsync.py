@@ -38,7 +38,7 @@ from util import (
     install_custom_scripts,
     run,
     separate,
-    to_hostlist_fast,
+    to_hostlist,
     NSDict,
     NodeState,
     TPU,
@@ -65,28 +65,28 @@ class NodeAction(Protocol):
 @dataclass(frozen=True)
 class NodeActionPowerUp():
     def apply(self, nodes:List[str]) -> None:
-        hostlist = util.to_hostlist_fast(nodes)
+        hostlist = util.to_hostlist(nodes)
         log.info(f"{len(nodes)} instances to resume ({hostlist})")
         run(f"{lookup().scontrol} update nodename={hostlist} state=power_up")
 
 @dataclass(frozen=True)
 class NodeActionIdle():
     def apply(self, nodes:List[str]) -> None:
-        hostlist = util.to_hostlist_fast(nodes)
+        hostlist = util.to_hostlist(nodes)
         log.info(f"{len(nodes)} nodes to idle ({hostlist})")
         run(f"{lookup().scontrol} update nodename={hostlist} state=resume")
 
 @dataclass(frozen=True)
 class NodeActionPowerDown():
     def apply(self, nodes:List[str]) -> None:
-        hostlist = util.to_hostlist_fast(nodes)
+        hostlist = util.to_hostlist(nodes)
         log.info(f"{len(nodes)} instances to power down ({hostlist})")
         run(f"{lookup().scontrol} update nodename={hostlist} state=power_down")
 
 @dataclass(frozen=True)
 class NodeActionDelete():
     def apply(self, nodes:List[str]) -> None:
-        hostlist = util.to_hostlist_fast(nodes)
+        hostlist = util.to_hostlist(nodes)
         log.info(f"{len(nodes)} instances to delete ({hostlist})")
         delete_instances(nodes)
 
@@ -94,7 +94,7 @@ class NodeActionDelete():
 class NodeActionPrempt():
     def apply(self, nodes:List[str]) -> None:
         NodeActionDown(reason="Preempted instance").apply(nodes)
-        hostlist = util.to_hostlist_fast(nodes)
+        hostlist = util.to_hostlist(nodes)
         log.info(f"{len(nodes)} instances restarted ({hostlist})")
         start_instances(nodes)
 
@@ -108,7 +108,7 @@ class NodeActionDown():
     reason: str
 
     def apply(self, nodes: List[str]) -> None:
-        hostlist = util.to_hostlist_fast(nodes)
+        hostlist = util.to_hostlist(nodes)
         log.info(f"{len(nodes)} nodes set down ({hostlist}) with reason={self.reason}")
         run(f"{lookup().scontrol} update nodename={hostlist} state=down reason={shlex.quote(self.reason)}")
 
@@ -118,7 +118,7 @@ class NodeActionUnknown():
     instance_state: Optional[str]
 
     def apply(self, nodes:List[str]) -> None:
-        hostlist = util.to_hostlist_fast(nodes)    
+        hostlist = util.to_hostlist(nodes)    
         log.error(f"{len(nodes)} nodes have unexpected {self.slurm_state} and instance state:{self.instance_state}, ({hostlist})")
 
 def start_instance_op(inst):
@@ -327,7 +327,7 @@ def delete_placement_groups(placement_groups):
         if failures:
             log.error(f"some placement groups failed to delete: {failures}")
     log.info(
-        f"deleted {len(done)} of {len(placement_groups)} placement groups ({to_hostlist_fast(done.keys())})"
+        f"deleted {len(done)} of {len(placement_groups)} placement groups ({to_hostlist(done.keys())})"
     )
 
 
