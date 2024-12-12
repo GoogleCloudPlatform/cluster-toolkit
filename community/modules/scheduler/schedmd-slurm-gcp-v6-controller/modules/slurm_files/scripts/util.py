@@ -1584,6 +1584,7 @@ class Lookup:
         nodeset_name = self.node_nodeset_name(node_name)
         if nodeset_name in self.cfg.nodeset_tpu:
             return self.cfg.nodeset_tpu[nodeset_name]
+
         return self.cfg.nodeset[nodeset_name]
 
     def partition_is_tpu(self, part: str) -> bool:
@@ -1689,8 +1690,39 @@ class Lookup:
         }
         return nodes
 
-    def slurm_node(self, nodename):
-        return self.slurm_nodes().get(nodename)
+    def node_state(self, nodename: str) -> Optional[NodeState]:
+        state = self.slurm_nodes().get(nodename)
+        if state is not None:
+            return state
+        
+        # state is None => Slurm doesn't know this node,
+        # there are two reasons:
+        # * happy: 
+        #   * node belongs to removed nodeset
+        #   * node belongs to downsized portion of nodeset
+        #   * dynamic node that didn't register itself
+        # * unhappy:
+        #   * there is a drift in Slurm and SlurmGCP configurations
+        #   * `slurm_nodes` function failed to handle `scontrol show nodes`,
+        #      TODO: make `slurm_nodes` robust by using `scontrol show nodes --json`
+        # In either of "unhappy" cases it's too dangerous to proceed - abort slurmsync.
+        try:
+            ns = self.node_nodeset(nodename)
+        except:
+            log.info(f"Unknown node {nodename}, belongs to unknown nodeset")
+            return None # Can't find nodeset, may be belongs to removed nodeset
+        
+        if self.node_is_dyn(nodename):
+            log.info(f"Unknown node {nodename}, belongs to dynamic nodeset")
+            return None # we can't make any judjment for dynamic nodes
+        
+        cnt = sum(self.static_dynamic_sizes(ns))
+        if self.node_index(nodename) >= cnt:
+            log.info(f"Unknown node {nodename}, out of nodeset size boundaries ({cnt})")
+            return None # node belongs to downsized nodeset
+        
+        raise RuntimeError(f"Slurm does not recognize node {nodename}, potential misconfiguration.")
+
 
     @lru_cache(maxsize=1)
     def instances(self) -> Dict[str, object]:
