@@ -108,8 +108,8 @@ def test_node_desc_fail(name):
         ("seas7-0,seas7-1", "seas7-[0-1]"),
     ],
 )
-def test_to_hostlist_fast(names, expected):
-    assert util.to_hostlist_fast(names.split(",")) == expected
+def test_to_hostlist(names, expected):
+    assert util.to_hostlist(names.split(",")) == expected
 
 
 @pytest.mark.parametrize(

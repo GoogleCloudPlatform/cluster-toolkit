@@ -410,9 +410,9 @@ class Switch:
     def conf_line(self) -> str:
         d = {"SwitchName": self.name}
         if self.nodes:
-            d["Nodes"] = util.to_hostlist_fast(self.nodes)
+            d["Nodes"] = util.to_hostlist(self.nodes)
         if self.switches:
-            d["Switches"] = util.to_hostlist_fast(self.switches.keys())
+            d["Switches"] = util.to_hostlist(self.switches.keys())
         return dict_to_conf(d)
 
     def render_conf_lines(self) -> Iterable[str]:

@@ -878,25 +878,13 @@ def natural_sort(text):
 
     return [atoi(w) for w in re.split(r"(\d+)", text)]
 
-# TODO: replace with to_hostlist_fast
-def to_hostlist(nodenames) -> str:
-    """make hostlist from list of node names"""
-    # use tmp file because list could be large
-    tmp_file = tempfile.NamedTemporaryFile(mode="w+t", delete=False)
-    tmp_file.writelines("\n".join(sorted(nodenames, key=natural_sort)))
-    tmp_file.close()
 
-    hostlist = run(f"{lookup().scontrol} show hostlist {tmp_file.name}").stdout.rstrip()
-    os.remove(tmp_file.name)
-    return hostlist
-
-
-def to_hostlist_fast(names: Iterable[str]) -> str:
+def to_hostlist(names: Iterable[str]) -> str:
     """
-    Fast implementation of to_hostlist that doesn't invoke `scontrol`
+    Fast implementation of `hostlist` that doesn't invoke `scontrol`
     IMPORTANT:
     * Acts as `scontrol show hostlistsorted`, i.e. original order is not preserved
-    * Achieves worse compression than `to_hostlist` for some cases
+    * Achieves worse compression than `scontrol show hostlist` for some cases
     """
     pref = defaultdict(list)
     tokenizer = re.compile(r"^(.*?)(\d*)$")
