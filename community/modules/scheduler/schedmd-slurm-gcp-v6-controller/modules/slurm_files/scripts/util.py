@@ -373,6 +373,7 @@ def compute_service(version="beta"):
         requestBuilder=build_request,
         credentials=credentials,
         discoveryServiceUrl=disc_url,
+        cache_discovery=False, # See https://github.com/googleapis/google-api-python-client/issues/299
     )
 
 def storage_client() -> storage.Client:
