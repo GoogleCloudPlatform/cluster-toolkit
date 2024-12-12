@@ -12331,6 +12331,7 @@ spec:
       - args:
         - --config=/controller_manager_config.yaml
         - --zap-log-level=2
+        - --feature-gates=TopologyAwareScheduling=true
         command:
         - /manager
         image: registry.k8s.io/kueue/kueue:v0.9.1
@@ -12394,11 +12395,6 @@ spec:
       - configMap:
           name: kueue-manager-config
         name: manager-config
-      tolerations:
-      - effect: NoSchedule
-        key: components.gke.io/gke-managed-components
-        operator: Equal
-        value: "true"
 ---
 apiVersion: apiregistration.k8s.io/v1
 kind: APIService
