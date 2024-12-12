@@ -141,7 +141,12 @@ variable "network_profile" {
   - projects/{projectId}/global/networkProfiles/{network_profile_name}}
   EOT
   type        = string
-  default     = null
+  nullable    = false
+
+  validation {
+    condition     = can(coalesce(var.network_profile))
+    error_message = "var.network_profile must be specified and not an empty string"
+  }
 }
 
 variable "nic_type" {
@@ -151,7 +156,7 @@ variable "nic_type" {
   default     = "MRDMA"
 
   validation {
-    condition     = contains(["GVNIC", "VIRTIO", "MRDMA", "IRDMA", null], var.nic_type)
-    error_message = "The nic_type must be \"GVNIC\", \"VIRTIO\", \"MRDMA\", or \"IRDMA\"."
+    condition     = contains(["MRDMA"], var.nic_type)
+    error_message = "The nic_type must be \"MRDMA\"."
   }
 }
