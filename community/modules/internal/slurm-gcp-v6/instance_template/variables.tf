@@ -340,14 +340,10 @@ variable "additional_disks" {
 variable "slurm_instance_role" {
   type        = string
   description = "Slurm instance type. Must be one of: controller; login; compute; or null."
-  default     = null
 
   validation {
-    condition = (
-      var.slurm_instance_role == null
-      ? true
-    : contains(["controller", "login", "compute"], lower(var.slurm_instance_role)))
-    error_message = "Must be one of: controller; login; compute; or null."
+    condition     = contains(["controller", "login", "compute"], var.slurm_instance_role)
+    error_message = "Must be one of: controller; login; compute."
   }
 }
 
@@ -370,17 +366,4 @@ variable "disable_smt" {
 variable "slurm_bucket_path" {
   description = "GCS Bucket URI of Slurm cluster file storage."
   type        = string
-}
-
-variable "resource_policies" {
-  description = <<-EOD
-  A list of self_links of resource policies to attach to the instance.
-  Currently a max of 1 resource policy is supported.
-  EOD
-  type        = list(string)
-  default     = null
-  validation {
-    condition     = try(length(var.resource_policies) <= 1, true)
-    error_message = "Only one resource policy can be attached to the instance."
-  }
 }
