@@ -72,8 +72,7 @@ resource "google_container_cluster" "gke_cluster" {
   remove_default_node_pool = true
   initial_node_count       = 1 # must be set when remove_default_node_pool is set
 
-  # Sets default to false so terraform deletion is not prevented
-  deletion_protection = false
+  deletion_protection = var.deletion_protection
 
   network    = var.network_id
   subnetwork = var.subnetwork_self_link
