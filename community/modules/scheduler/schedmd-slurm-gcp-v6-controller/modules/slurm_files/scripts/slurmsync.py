@@ -387,7 +387,7 @@ def sync_slurm():
     slurm_nodes = set(lookup().slurm_nodes().keys())
     log.debug(f"reconciling {len(compute_instances)} GCP instances and {len(slurm_nodes)} Slurm nodes.")
 
-    for action, nodes in util.groupby_unsorted(compute_instances | slurm_nodes, get_node_action):
+    for action, nodes in util.groupby_unsorted(list(compute_instances | slurm_nodes), get_node_action):
         action.apply(list(nodes))
 
 
