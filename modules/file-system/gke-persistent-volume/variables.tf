@@ -14,11 +14,6 @@
  * limitations under the License.
 */
 
-variable "cluster_id" {
-  description = "An identifier for the GKE cluster in the format `projects/{{project}}/locations/{{location}}/clusters/{{cluster}}`"
-  type        = string
-}
-
 variable "network_storage" {
   description = "Network attached storage mount to be configured."
   type = object({

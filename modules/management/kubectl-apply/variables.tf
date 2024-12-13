@@ -37,17 +37,6 @@ resource "terraform_data" "jobset_validations" {
   }
 }
 
-variable "project_id" {
-  description = "The project ID that hosts the gke cluster."
-  type        = string
-}
-
-variable "cluster_id" {
-  description = "An identifier for the gke cluster resource with format projects/<project_id>/locations/<region>/clusters/<name>."
-  type        = string
-  nullable    = false
-}
-
 variable "apply_manifests" {
   description = "A list of manifests to apply to GKE cluster using kubectl. For more details see [kubectl module's inputs](kubectl/README.md)."
   type = list(object({
