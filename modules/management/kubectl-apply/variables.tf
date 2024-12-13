@@ -15,14 +15,24 @@
   */
 
 locals {
-  supported_versions = ["v0.9.0", "v0.8.1"]
+  kueue_supported_versions  = ["v0.9.1", "v0.9.0", "v0.8.1"]
+  jobset_supported_versions = ["v0.7.1", "v0.5.2"]
 }
 
 resource "terraform_data" "kueue_validations" {
   lifecycle {
     precondition {
-      condition     = !var.kueue.install || contains(local.supported_versions, var.kueue.version)
-      error_message = "Supported version of Kueue are ${join(", ", local.supported_versions)}"
+      condition     = !var.kueue.install || contains(local.kueue_supported_versions, var.kueue.version)
+      error_message = "Supported version of Kueue are ${join(", ", local.kueue_supported_versions)}"
+    }
+  }
+}
+
+resource "terraform_data" "jobset_validations" {
+  lifecycle {
+    precondition {
+      condition     = !var.jobset.install || contains(local.jobset_supported_versions, var.jobset.version)
+      error_message = "Supported version of Jobset are ${join(", ", local.jobset_supported_versions)}"
     }
   }
 }
@@ -60,7 +70,6 @@ variable "kueue" {
     config_template_vars = optional(map(any), null)
   })
   default = {}
-
 }
 
 variable "jobset" {
@@ -70,9 +79,4 @@ variable "jobset" {
     version = optional(string, "v0.5.2")
   })
   default = {}
-
-  validation {
-    condition     = !var.jobset.install || contains(["v0.5.2"], var.jobset.version)
-    error_message = "Supported version of Jobset is v0.5.2"
-  }
 }

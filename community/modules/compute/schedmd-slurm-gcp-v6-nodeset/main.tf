@@ -95,6 +95,7 @@ locals {
     spot                     = var.enable_spot_vm
     termination_action       = try(var.spot_instance_config.termination_action, null)
     reservation_name         = local.reservation_name
+    future_reservation       = local.future_reservation
     maintenance_interval     = var.maintenance_interval
     instance_properties_json = jsonencode(var.instance_properties)
 
@@ -140,6 +141,17 @@ locals {
 
   reservation_name = local.res_match.whole == null ? "" : "${local.res_prefix}${local.res_short_name}${local.res_suffix}"
 }
+
+locals {
+  fr_match = regex("^(?P<whole>projects/(?P<project>[a-z0-9-]+)/zones/(?P<zone>[a-z0-9-]+)/futureReservations/)?(?P<name>[a-z0-9-]+)?$", var.future_reservation)
+
+  fr_name    = local.fr_match.name
+  fr_project = coalesce(local.fr_match.project, var.project_id)
+  fr_zone    = coalesce(local.fr_match.zone, var.zone)
+
+  future_reservation = var.future_reservation == "" ? "" : "projects/${local.fr_project}/zones/${local.fr_zone}/futureReservations/${local.fr_name}"
+}
+
 
 # tflint-ignore: terraform_unused_declarations
 data "google_compute_reservation" "reservation" {

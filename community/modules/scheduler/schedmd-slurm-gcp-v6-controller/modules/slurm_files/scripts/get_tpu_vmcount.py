@@ -57,7 +57,7 @@ if __name__ == "__main__":
             valid = PART_INVALID
             break
         else:
-            if util.part_is_tpu(part):
+            if util.lookup().partition_is_tpu(part):
                 vmcount = get_vmcount_of_tpu_part(part)
                 if vmcount == -1:
                     valid = DIFF_VMCOUNTS_SAME_PART

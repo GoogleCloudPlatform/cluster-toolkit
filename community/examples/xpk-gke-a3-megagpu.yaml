@@ -34,8 +34,9 @@ deployment_groups:
     settings:
       subnetwork_name: xpk-gke-a3-megagpu-subnet
       mtu: 8244
-      secondary_ranges:
-        xpk-gke-a3-megagpu-subnet:
+      secondary_ranges_list:
+      - subnetwork_name: xpk-gke-a3-megagpu-subnet
+        ranges:
         - range_name: pods
           ip_cidr_range: 10.4.0.0/14
         - range_name: services
@@ -54,6 +55,7 @@ deployment_groups:
     source: modules/scheduler/gke-cluster
     use: [network1, gpunets]
     settings:
+      enable_private_endpoint: false
       master_authorized_networks:
       - cidr_block: $(vars.authorized_cidr)  # Allows your machine run kubectl command. It's required for the multi-network setup.
         display_name: "kubectl-access-network"

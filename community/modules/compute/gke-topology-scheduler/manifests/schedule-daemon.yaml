@@ -39,7 +39,7 @@ spec:
         effect: NoSchedule
       containers:
       - name: topology-scheduler-container
-        image: python:3.9
+        image: python:3.10
         command: ["/bin/sh", "-c", "pip install google-auth google-api-python-client kubernetes; python /scripts/schedule-daemon.py --ignored-namespace kube-system gmp-public gmp-system"]
         volumeMounts:
         - name: scripts-volume

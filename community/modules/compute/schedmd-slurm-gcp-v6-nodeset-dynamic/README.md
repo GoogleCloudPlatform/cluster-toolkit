@@ -74,7 +74,7 @@ modules. For support with the underlying modules, see the instructions in the
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_slurm_nodeset_template"></a> [slurm\_nodeset\_template](#module\_slurm\_nodeset\_template) | github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template | 6.8.6 |
+| <a name="module_slurm_nodeset_template"></a> [slurm\_nodeset\_template](#module\_slurm\_nodeset\_template) | ../../internal/slurm-gcp-v6/instance_template | n/a |
 
 ## Resources
 

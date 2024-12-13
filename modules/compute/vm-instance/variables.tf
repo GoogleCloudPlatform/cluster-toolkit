@@ -223,9 +223,9 @@ variable "network_interfaces" {
   }
   validation {
     condition = alltrue([
-      for ni in var.network_interfaces : ni.nic_type == "GVNIC" || ni.nic_type == "VIRTIO_NET" || ni.nic_type == null
+      for ni in var.network_interfaces : ni.nic_type == "GVNIC" || ni.nic_type == "VIRTIO_NET" || ni.nic_type == "MRDMA" || ni.nic_type == "IRDMA" || ni.nic_type == null
     ])
-    error_message = "In the variable network_interfaces, field \"nic_type\" must be either \"GVNIC\", \"VIRTIO_NET\" or null."
+    error_message = "In the variable network_interfaces, field \"nic_type\" must be \"GVNIC\", \"VIRTIO_NET\", \"MRDMA\", \"IRDMA\", or null."
   }
   validation {
     condition = alltrue([
@@ -408,4 +408,23 @@ variable "allow_automatic_updates" {
   type        = bool
   default     = true
   nullable    = false
+}
+
+variable "reservation_name" {
+  description = <<-EOD
+    Name of the reservation to use for VM resources, should be in one of the following formats:
+    - projects/PROJECT_ID/reservations/RESERVATION_NAME
+    - RESERVATION_NAME
+
+    Must be a "SPECIFIC_RESERVATION"
+    Set to empty string if using no reservation or automatically-consumed reservations
+  EOD
+  type        = string
+  default     = ""
+  nullable    = false
+
+  validation {
+    condition     = length(regexall("^((projects/([a-z0-9-]+)/reservations/)?([a-z0-9-]+))?$", var.reservation_name)) > 0
+    error_message = "Reservation name must be either empty or in the format '[projects/PROJECT_ID/reservations/]RESERVATION_NAME', [...] is an optional part."
+  }
 }

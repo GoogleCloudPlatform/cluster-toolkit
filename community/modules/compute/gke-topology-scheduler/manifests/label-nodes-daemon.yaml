@@ -32,7 +32,7 @@ spec:
       hostNetwork: true
       containers:
       - name: label-nodes-daemon
-        image: python:3.9
+        image: python:3.10
         command:
         - bash
         - -c

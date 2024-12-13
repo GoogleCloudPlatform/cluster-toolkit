@@ -28,7 +28,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [ml-slurm-v5-legacy.yaml](#ml-slurm-v5-legacyyaml--) ![core-badge] ![deprecated-badge]
   * [ml-slurm.yaml](#ml-slurmyaml-) ![core-badge]
   * [image-builder-v5-legacy.yaml](#image-builder-v5-legacyyaml--) ![core-badge] ![deprecated-badge]
-  * [image-builder.yaml](#image-builderyaml--) ![core-badge]
+  * [image-builder.yaml](#image-builderyaml-) ![core-badge]
   * [serverless-batch.yaml](#serverless-batchyaml-) ![core-badge]
   * [serverless-batch-mpi.yaml](#serverless-batch-mpiyaml-) ![core-badge]
   * [pfs-lustre.yaml](#pfs-lustreyaml-) ![core-badge]

@@ -414,24 +414,24 @@ variable "additional_networks" {
   description = "Additional network interface details for GCE, if any."
   default     = []
   type = list(object({
-    network            = string
+    network            = optional(string)
     subnetwork         = string
-    subnetwork_project = string
-    network_ip         = string
-    nic_type           = string
-    stack_type         = string
-    queue_count        = number
-    access_config = list(object({
+    subnetwork_project = optional(string)
+    network_ip         = optional(string, "")
+    nic_type           = optional(string)
+    stack_type         = optional(string)
+    queue_count        = optional(number)
+    access_config = optional(list(object({
       nat_ip       = string
       network_tier = string
-    }))
-    ipv6_access_config = list(object({
+    })), [])
+    ipv6_access_config = optional(list(object({
       network_tier = string
-    }))
-    alias_ip_range = list(object({
+    })), [])
+    alias_ip_range = optional(list(object({
       ip_cidr_range         = string
       subnetwork_range_name = string
-    }))
+    })), [])
   }))
 }
 
@@ -460,6 +460,21 @@ variable "reservation_name" {
   validation {
     condition     = length(regexall("^((projects/([a-z0-9-]+)/reservations/)?([a-z0-9-]+)(/[a-z0-9-]+/[a-z0-9-]+)?)?$", var.reservation_name)) > 0
     error_message = "Reservation name must be either empty or in the format '[projects/PROJECT_ID/reservations/]RESERVATION_NAME[/SUFF/IX]', [...] are optional parts."
+  }
+}
+
+variable "future_reservation" {
+  description = <<-EOD
+  If set, will make use of the future reservation for the nodeset. Input can be either the future reservation name or its selfLink in the format 'projects/PROJECT_ID/zones/ZONE/futureReservations/FUTURE_RESERVATION_NAME'.
+  See https://cloud.google.com/compute/docs/instances/future-reservations-overview
+  EOD
+  type        = string
+  default     = ""
+  nullable    = false
+
+  validation {
+    condition     = length(regexall("^(projects/([a-z0-9-]+)/zones/([a-z0-9-]+)/futureReservations/([a-z0-9-]+))?$", var.future_reservation)) > 0 || length(regexall("^([a-z0-9-]+)$", var.future_reservation)) > 0
+    error_message = "Future reservation must be either the future reservation name or its selfLink in the format 'projects/PROJECT_ID/zone/ZONE/futureReservations/FUTURE_RESERVATION_NAME'."
   }
 }
 

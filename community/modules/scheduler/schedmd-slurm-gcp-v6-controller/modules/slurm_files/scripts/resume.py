@@ -15,22 +15,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Optional, Dict
+from typing import List, Optional
 import argparse
-import collections
 from datetime import timedelta
 import shlex
 import json
 import logging
 import os
 import yaml
-from itertools import chain
+import collections
 from pathlib import Path
+from dataclasses import dataclass
 
 import util
 from util import (
     chunked,
-    dirs,
     ensure_execute,
     execute_with_futures,
     get_insert_operations,
@@ -38,26 +37,51 @@ from util import (
     map_with_futures,
     run,
     separate,
-    to_hostlist,
     to_hostlist_fast,
     trim_self_link,
     wait_for_operation,
 )
-from util import lookup, NSDict, TPU
+from util import lookup, NSDict
 
 import slurm_gcp_plugins
 
 log = logging.getLogger()
 
-
-global_resume_data = None
-
-PLACEMENT_MAX_CNT = 150
+PLACEMENT_MAX_CNT = 1500
 # Placement group needs to be the same for an entire bulk_insert hence
 # if placement is used the actual BULK_INSERT_LIMIT will be
 # max([1000, PLACEMENT_MAX_CNT])
 BULK_INSERT_LIMIT = 5000
 
+
+@dataclass(frozen=True)
+class ResumeJobData:
+    job_id: int
+    partition: str
+    nodes_alloc: List[str]
+
+@dataclass(frozen=True)
+class ResumeData:
+    jobs: List[ResumeJobData]
+
+def get_resume_file_data() -> Optional[ResumeData]:
+    if not (path := os.getenv("SLURM_RESUME_FILE")):
+        log.error("SLURM_RESUME_FILE was not in environment. Cannot get detailed job, node, partition allocation data.")
+        return None
+    blob = Path(path).read_text()
+    log.debug(f"Resume data: {blob}")
+    data = json.loads(blob)
+
+    jobs = []
+    for jo in data.get("jobs", []):
+
+        job = ResumeJobData(
+            job_id = jo.get("job_id"),
+            partition = jo.get("partition"),
+            nodes_alloc = util.to_hostnames(jo.get("nodes_alloc")),
+        )
+        jobs.append(job)
+    return ResumeData(jobs=jobs)
 
 def instance_properties(nodeset:object, model:str, placement_group:Optional[str], labels:Optional[dict], job_id:Optional[int]):
     props = NSDict()
@@ -75,31 +99,17 @@ def instance_properties(nodeset:object, model:str, placement_group:Optional[str]
         props.disks = template_info.disks
 
     if placement_group:
-        props.scheduling.onHostMaintenance = "TERMINATE"
         props.resourcePolicies = [placement_group]
 
     if reservation := lookup().nodeset_reservation(nodeset):
-        props.reservationAffinity = {
-            "consumeReservationType": "SPECIFIC_RESERVATION",
-            "key": f"compute.{util.universe_domain()}/reservation-name",
-            "values": [reservation.bulk_insert_name],
-        }
+        update_reservation_props(reservation, props, placement_group, False)
 
-        if reservation.deployment_type == "DENSE":
-            props.scheduling.provisioning_model = "RESERVATION_BOUND"
+    if (fr := lookup().future_reservation(nodeset)) and fr.specific:
+        update_reservation_props(fr.active_reservation, props, placement_group, True)
 
-        if reservation.policies:
-            props.scheduling.onHostMaintenance = "TERMINATE"
-            props.resourcePolicies = reservation.policies
-            log.info(
-                f"reservation {reservation.bulk_insert_name} is being used with policies {props.resourcePolicies}"
-            )
-        else:
-            props.resourcePolicies = []
-            log.info(
-                f"reservation {reservation.bulk_insert_name} is being used without any policies"
-            )
-
+    if props.resourcePolicies:
+       props.scheduling.onHostMaintenance = "TERMINATE"
+    
     if nodeset.maintenance_interval:
         props.scheduling.maintenanceInterval = nodeset.maintenance_interval
 
@@ -108,8 +118,27 @@ def instance_properties(nodeset:object, model:str, placement_group:Optional[str]
 
     # Override with properties explicit specified in the nodeset
     props.update(nodeset.get("instance_properties") or {})
-    
     return props
+
+def update_reservation_props(reservation:object, props:object, placement_group:Optional[str], reservation_from_fr:bool) -> None:
+    props.reservationAffinity = {
+        "consumeReservationType": "SPECIFIC_RESERVATION",
+        "key": f"compute.{util.universe_domain()}/reservation-name",
+        "values": [reservation.bulk_insert_name],
+    }
+
+    if reservation.dense or reservation_from_fr:
+        props.scheduling.provisioning_model = "RESERVATION_BOUND"
+
+    # Figure out `resourcePolicies`
+    if reservation.policies: # use ones already attached to reservations
+        props.resourcePolicies = reservation.policies
+    elif reservation.dense and placement_group: # use once created by Slurm
+        props.resourcePolicies = [placement_group]
+    else: # vanilla reservations don't support external policies
+        props.resourcePolicies = []
+    log.info(
+        f"reservation {reservation.bulk_insert_name} is being used with resourcePolicies: {props.resourcePolicies}")
 
 def update_props_dws(props:object, dws_flex:object, job_id: Optional[int]) -> None:
     props.scheduling.onHostMaintenance = "TERMINATE"
@@ -126,14 +155,13 @@ def dws_flex_duration(dws_flex:object, job_id: Optional[int]) -> int:
             log.info("Job TimeLimit cannot be less than 30 seconds or exceed 2 weeks")
     return max_duration
 
-
 def per_instance_properties(node):
     props = NSDict()
     # No properties beyond name are supported yet.
 
     return props
 
-def create_instances_request(nodes, partition_name, placement_group, job_id=None):
+def create_instances_request(nodes: List[str], placement_group: Optional[str], excl_job_id: Optional[int]):
     """Call regionInstances.bulkInsert to create instances"""
     assert 0 < len(nodes) <= BULK_INSERT_LIMIT
 
@@ -141,7 +169,6 @@ def create_instances_request(nodes, partition_name, placement_group, job_id=None
     model = next(iter(nodes))
     nodeset = lookup().node_nodeset(model)
     template = lookup().node_template(model)
-    partition = lookup().cfg.partitions[partition_name]
     log.debug(f"create_instances_request: {model} placement: {placement_group}")
 
     body = NSDict()
@@ -157,14 +184,10 @@ def create_instances_request(nodes, partition_name, placement_group, job_id=None
     # source of instance properties
     body.sourceInstanceTemplate = template
 
-    labels = (
-        dict(slurm_job_id=job_id)
-        if job_id is not None and partition.enable_job_exclusive
-        else None
-    )
+    labels = {"slurm_job_id": excl_job_id} if excl_job_id else None
     # overwrites properties across all instances
     body.instanceProperties = instance_properties(
-        nodeset, model, placement_group, labels, job_id
+        nodeset, model, placement_group, labels, excl_job_id
     )
 
     # key is instance name, value overwrites properties
@@ -201,114 +224,74 @@ def create_instances_request(nodes, partition_name, placement_group, job_id=None
     log_api_request(req)
     return req
 
+@dataclass()
+class PlacementAndNodes:
+    placement: Optional[str]
+    nodes: List[str]
 
-def group_nodes_bulk(nodes, resume_data=None):
-    """group nodes by job_id, placement_group, node_group, and max bulkInsert size"""
-    if resume_data is None:
-        # all nodes will be considered jobless
-        jobs = {}
-    else:
-        jobs = {job.job_id: job for job in resume_data.jobs}
+@dataclass(frozen=True)
+class BulkChunk:
+    nodes: List[str]
+    prefix: str # <cluster_name>-<nodeset_name>
+    chunk_idx: int
+    excl_job_id: Optional[int]
+    placement_group: Optional[str] = None
 
-    # expand all job nodelists
-    for job in jobs.values():
-        job.nodelist_alloc = job.nodes_alloc
-        job.nodes_alloc = util.to_hostnames(job.nodelist_alloc)
-        job.nodelist_resume = job.nodes_resume
-        job.nodes_resume = util.to_hostnames(job.nodelist_resume)
-        job.tpu = util.part_is_tpu(job.partition)
-        if not job.tpu:
-            # create placement groups if nodes for job need it
-            job.placement_groups = create_placement_groups(
-                node_list=job.nodes_alloc,
-                job_id=job.job_id,
-            )
-            # placement group assignment is based on all allocated nodes, but we only want to
-            # handle nodes in nodes_resume in this run.
-            for pg, pg_nodes in job.placement_groups.items():
-                job.placement_groups[pg] = list(
-                    set(pg_nodes).intersection(job.nodes_resume)
-                )
-    # a bit of a hack, but nodes resumed using scontrol instead of through job scheduling do not have a job
-    jobless_nodes = list(
-        set(nodes).difference(
-            chain.from_iterable(job.nodes_resume for job in jobs.values())
-        )
-    )
-    jobless_nodes_tpu = []
-    for jobless_node in jobless_nodes[:]:
-        if lookup().node_is_tpu(jobless_node):
-            jobless_nodes.remove(jobless_node)
-            jobless_nodes_tpu.append(jobless_node)
+    @property
+    def name(self):
+        if self.placement_group is not None:
+            return f"{self.prefix}:job{self.excl_job_id}:{self.placement_group}:{self.chunk_idx}"
+        if self.excl_job_id is not None:
+            return f"{self.prefix}:job{self.excl_job_id}:{self.chunk_idx}"
+        return f"{self.prefix}:{self.chunk_idx}"
+    
 
-    jobs["Normal_None"] = NSDict(
-        job_id=None,
-        nodes_resume=jobless_nodes,
-        nodes_alloc=jobless_nodes,
-        placement_groups=create_placement_groups(node_list=jobless_nodes),
-        partition=None,
-        tpu=False,
-    )
-    jobs["TPU_None"] = NSDict(
-        job_id=None,
-        nodes_resume=jobless_nodes_tpu,
-        nodes_alloc=jobless_nodes_tpu,
-        partition=None,
-        tpu=True,
-    )
+def group_nodes_bulk(nodes: List[str], resume_data: Optional[ResumeData], lkp: util.Lookup):
+    """group nodes by nodeset, placement_group, exclusive_job_id if any"""
+    if resume_data is None: # all nodes will be considered jobless
+        resume_data = ResumeData(jobs=[])
+        
+    nodes = set(nodes) # turn into set to simplify intersection
+    non_excl = nodes.copy()
+    groups = {} # excl_job_id|none -> PlacementAndNodes
 
-    BulkChunk = collections.namedtuple(
-        "BulkChunk",
-        ["prefix", "job_id", "partition_name", "placement_group", "nodes", "i"],
-    )
-    BulkChunkTPU = collections.namedtuple(
-        "BulkChunkTPU",
-        ["prefix", "job_id", "partition_name", "nodes", "i"],
-    )
-    grouped_nodes = [
+    # expand all exclusive job nodelists
+    for job in resume_data.jobs:
+        if not lkp.cfg.partitions[job.partition].enable_job_exclusive: 
+            continue
+
+        groups[job.job_id] = []
+        # placement group assignment is based on all allocated nodes, ...
+        for pn in create_placements(job.nodes_alloc, job.job_id, lkp):
+            groups[job.job_id].append(
+                PlacementAndNodes(
+                    placement=pn.placement,
+                    #... but we only want to handle nodes in nodes_resume in this run.
+                    nodes = sorted(set(pn.nodes) & nodes)
+                ))
+        non_excl.difference_update(job.nodes_alloc)
+
+    groups[None] = create_placements(sorted(non_excl), excl_job_id=None, lkp=lkp)
+
+    def chunk_nodes(nodes: List[str]):
+        chunk_size = BULK_INSERT_LIMIT
+        if nodes and lkp.node_is_tpu(nodes[0]):
+            chunk_size = util.TPU(lkp.node_nodeset(nodes[0])).vmcount
+        return chunked(nodes, n=chunk_size)
+    
+    chunks = [
         BulkChunk(
-            prefix,
-            job_id if job_id != "Normal_None" else None,
-            jobs[job_id].partition,
-            placement_group,
-            chunk_nodes,
-            i,
-        )
-        for job_id, job in jobs.items()
-        if not job.tpu
-        for placement_group, pg_nodes in job.placement_groups.items()
-        for prefix, nodes in util.groupby_unsorted(pg_nodes, lookup().node_prefix)
-        for i, chunk_nodes in enumerate(chunked(nodes, n=BULK_INSERT_LIMIT))
+            nodes=nodes_chunk,
+            prefix=lkp.node_prefix(nodes_chunk[0]), # <cluster_name>-<nodeset_name>
+            excl_job_id = job_id,
+            placement_group=pn.placement,
+            chunk_idx=i)
+
+        for job_id, placements in groups.items()
+        for pn in placements if pn.nodes
+        for i, nodes_chunk in enumerate(chunk_nodes(pn.nodes))
     ]
-    grouped_nodes_tpu = [
-        BulkChunkTPU(
-            prefix,
-            job_id if job_id != "TPU_None" else None,
-            jobs[job_id].partition,
-            chunk_nodes,
-            i,
-        )
-        for job_id, job in jobs.items()
-        if job.tpu
-        for prefix, nodes in util.groupby_unsorted(job.nodes_resume, lookup().node_prefix)
-        for i, chunk_nodes in enumerate(lookup().chunk_tpu_nodes(list(nodes)))
-    ]
-
-    def group_name(chunk: BulkChunk):
-        if chunk.placement_group is not None:
-            return f"{chunk.prefix}:job{chunk.job_id}:{chunk.placement_group}:{chunk.i}"
-        if chunk.job_id is not None:
-            return f"{chunk.prefix}:job{chunk.job_id}:{chunk.i}"
-        return f"{chunk.prefix}:{chunk.i}"
-
-    def group_name_tpu(chunk: BulkChunkTPU):
-        if chunk.job_id is not None:
-            return f"{chunk.prefix}:job{chunk.job_id}:{chunk.i}"
-        return f"{chunk.prefix}:{chunk.i}"
-
-    grouped_nodes = {group_name(chunk): chunk for chunk in grouped_nodes}
-    grouped_nodes_tpu = {group_name_tpu(chunk): chunk for chunk in grouped_nodes_tpu}
-    return grouped_nodes, grouped_nodes_tpu
+    return {chunk.name: chunk for chunk in chunks}
 
 
 def start_tpu(data):
@@ -339,55 +322,49 @@ def start_tpu(data):
             log.error("Error creating tpu node {node}")
 
 
-def resume_nodes(nodes: List[str], resume_data=None):
+def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
     """resume nodes in nodelist"""
+    # Prevent dormant nodes associated with a future reservation from being resumed
+    nodes, dormant_fr_nodes = util.separate(lookup().is_dormant_fr_node, nodes)
+    
+    if dormant_fr_nodes:
+        log.warning(f"Resume was unable to resume future reservation nodes={dormant_fr_nodes}")
+        down_nodes_notify_jobs(dormant_fr_nodes, "Reservation is not active, nodes cannot be resumed", resume_data)
+
     if not nodes:
         log.info("No nodes to resume")
         return
 
-    if resume_data is None and global_resume_data is not None:
-        resume_data = global_resume_data.deepcopy()
-
     nodes = sorted(nodes, key=lookup().node_prefix)
-    grouped_nodes, grouped_tpu_nodes = group_nodes_bulk(nodes, resume_data)
+    grouped_nodes = group_nodes_bulk(nodes, resume_data, lookup())
 
     if log.isEnabledFor(logging.DEBUG):
-        # grouped_nodelists is used in later debug logs too
         grouped_nodelists = {
-            group: to_hostlist(chunk.nodes) for group, chunk in grouped_nodes.items()
-        }
-        grouped_tpu_nodelists = {
-            group: to_hostlist(chunk.nodes)
-            for group, chunk in grouped_tpu_nodes.items()
+            group: to_hostlist_fast(chunk.nodes) for group, chunk in grouped_nodes.items()
         }
         log.debug(
             "node bulk groups: \n{}".format(yaml.safe_dump(grouped_nodelists).rstrip())
         )
-        log.debug(
-            "TPU node bulk groups: \n{}".format(
-                yaml.safe_dump(grouped_tpu_nodelists).rstrip()
-            )
-        )
+
     tpu_start_data = []
     tpu_objs = {}
-    for group, chunk in grouped_tpu_nodes.items():
-        # do not create multiple tpu_objs if nodes with the same prefix are used
-        if chunk.prefix not in tpu_objs.keys():
-            model = chunk.nodes[0]
-            tpu_objs[chunk.prefix] = TPU(lookup().node_nodeset(model))
+    bi_inserts = {}
 
-        tpu_start_data.append({"tpu": tpu_objs[chunk.prefix], "node": chunk.nodes})
+    for group, chunk in grouped_nodes.items():
+        model = chunk.nodes[0]
+        if lookup().node_is_tpu(model):
+            # do not create multiple tpu_objs if nodes with the same prefix are used
+            if chunk.prefix not in tpu_objs.keys():
+                tpu_objs[chunk.prefix] = util.TPU(lookup().node_nodeset(model))
+            tpu_start_data.append({"tpu": tpu_objs[chunk.prefix], "node": chunk.nodes})
+        else:
+            bi_inserts[group] = create_instances_request(
+                chunk.nodes, chunk.placement_group, chunk.excl_job_id
+            )
 
-    # make all bulkInsert requests and execute with batch
-    inserts = {
-        group: create_instances_request(
-            chunk.nodes, chunk.partition_name, chunk.placement_group, chunk.job_id
-        )
-        for group, chunk in grouped_nodes.items()
-    }
-
+    # execute all bulkInsert requests  with batch
     bulk_ops = dict(
-        zip(inserts.keys(), map_with_futures(ensure_execute, inserts.values()))
+        zip(bi_inserts.keys(), map_with_futures(ensure_execute, bi_inserts.values()))
     )
     log.debug(f"bulk_ops={yaml.safe_dump(bulk_ops)}")
     started = {
@@ -400,7 +377,7 @@ def resume_nodes(nodes: List[str], resume_data=None):
         failed_reqs = [str(e) for e in failed.items()]
         log.error("bulkInsert API failures: {}".format("; ".join(failed_reqs)))
         for ident, exc in failed.items():
-            down_nodes(grouped_nodes[ident].nodes, f"GCP Error: {exc._get_reason()}")
+            down_nodes_notify_jobs(grouped_nodes[ident].nodes, f"GCP Error: {exc._get_reason()}", resume_data)
 
     if log.isEnabledFor(logging.DEBUG):
         for group, op in started.items():
@@ -449,7 +426,7 @@ def resume_nodes(nodes: List[str], resume_data=None):
                 for err in failed_op["error"]["errors"]
             )
             if code != "RESOURCE_ALREADY_EXISTS":
-                down_nodes(hostlist, f"GCP Error: {msg}")
+                down_nodes_notify_jobs(failed_nodes, f"GCP Error: {msg}", resume_data)
             log.error(
                 f"errors from insert for node '{failed_node}' ({failed_op['name']}): {msg}"
             )
@@ -461,32 +438,24 @@ def resume_nodes(nodes: List[str], resume_data=None):
             all_successful_inserts.extend(successful_inserts)
 
 
-def update_job_comment(nodelist: str, comment: str):
-    if global_resume_data is None:
-        log.warning(
-            "Cannot update and notify jobs with API failures as no valid resume file is present."
-        )
-        return
-
-    nodes = util.to_hostnames(nodelist)
-    job_list = (
-        job
-        for job in global_resume_data.jobs
-        if any(map(lambda node: node in nodes, util.to_hostnames(job.nodelist_resume)))
-    )
-    for job in job_list:
-        run(f"{lookup().scontrol} update jobid={job.job_id} admincomment='{comment}'")
-        run(f"{lookup().scontrol} notify {job.job_id} '{comment}'")
-
-
-def down_nodes(nodelist, reason):
+def down_nodes_notify_jobs(nodes: List[str], reason: str, resume_data: Optional[ResumeData]) -> None:
     """set nodes down with reason"""
-    if isinstance(nodelist, list):
-        nodelist = util.to_hostlist(nodelist)
-    update_job_comment(nodelist, reason)
+    nodelist = util.to_hostlist_fast(nodes)
     reason_quoted = shlex.quote(reason)
+    
     log.error(f"Marking nodes {nodelist} as DOWN, reason: {reason}")
     run(f"{lookup().scontrol} update nodename={nodelist} state=down reason={reason_quoted}")
+
+    if resume_data is None:
+        log.warning("Cannot update and notify jobs with API failures as no valid resume file is present.")
+        return
+    
+    nodes = set(nodes) # turn into set to speed up intersection
+    for job in resume_data.jobs:
+        if not (set(job.nodes_alloc) & nodes):
+            continue
+        run(f"{lookup().scontrol} update jobid={job.job_id} admincomment='{reason_quoted}'")
+        run(f"{lookup().scontrol} notify {job.job_id} '{reason_quoted}'")
 
 
 def hold_job(job_id, reason):
@@ -514,42 +483,79 @@ def create_placement_request(pg_name, region):
     return request
 
 
-def create_placement_groups(node_list: List[str], job_id:int=0) -> Dict[str, List[str]]:
-    pgs = {}
-    node_map = lookup().nodeset_map(node_list)
-    for _, nodes in node_map.items():
-        pgs.update(create_nodeset_placement_groups(nodes, job_id))
-    return pgs
+def create_placements(nodes: List[str], excl_job_id:Optional[int], lkp: util.Lookup) -> List[PlacementAndNodes]:
+    nodeset_map = collections.defaultdict(list)
+    for node in nodes: # split nodes on nodesets
+        nodeset_map[lkp.node_nodeset_name(node)].append(node)
+
+    placements = []
+    for _, ns_nodes in nodeset_map.items():
+        placements.extend(create_nodeset_placements(ns_nodes, excl_job_id, lkp))
+    return placements
 
 
-def create_nodeset_placement_groups(node_list: List[str], job_id:int) -> Dict[str, List[str]]:
-    no_pg = {None: node_list} # canned result for no placement policies created
-
-    if len(node_list) < 2:
-        return no_pg # don't create placement_policy for just one node
+def _allocate_nodes_to_placements(nodes: List[str], excl_job_id:Optional[int], lkp: util.Lookup) -> List[PlacementAndNodes]:
+    # canned result for no placement policies created
+    no_pp = [PlacementAndNodes(placement=None, nodes=nodes)]
     
-    model = next(iter(node_list))
-    nodeset = lookup().node_nodeset(model)
-    if not (nodeset.enable_placement and valid_placement_nodes(node_list)):
-        return no_pg
+    if excl_job_id and len(nodes) < 2:
+        return no_pp # don't create placement_policy for just one node
     
-    region = lookup().node_region(model)
+    model = nodes[0]
+    nodeset = lkp.node_nodeset(model)
 
-    groups = {
-        f"{lookup().cfg.slurm_cluster_name}-slurmgcp-managed-{nodeset.nodeset_name}-{job_id}-{i}": nodes
-        for i, nodes in enumerate(chunked(node_list, n=PLACEMENT_MAX_CNT))
-    }
+    if lkp.node_is_tpu(model):
+        return no_pp
+    if not (nodeset.enable_placement and valid_placement_node(model)):
+        return no_pp
+    
+    name_prefix = f"{lkp.cfg.slurm_cluster_name}-slurmgcp-managed-{nodeset.nodeset_name}"
+    if excl_job_id: # simply chunk given nodes by max size of placement
+        return [
+            PlacementAndNodes(placement=f"{name_prefix}-{excl_job_id}-{i}", nodes=chunk)
+            for i, chunk in enumerate(chunked(nodes, n=PLACEMENT_MAX_CNT))
+        ]
+
+    # split whole nodeset (not only nodes to resume) into chunks of max size of placement
+    # create placements (most likely already exists) placements for requested nodes
+    chunks = collections.defaultdict(list) # chunk_id -> nodes
+    invalid = []
+
+    for node in nodes:
+        try:
+            chunk = lkp.node_index(node) // PLACEMENT_MAX_CNT
+            chunks[chunk].append(node)
+        except:
+            invalid.append(node)
+    
+    placements = [
+        # NOTE: use 0 instead of job_id for consistency with previous SlurmGCP behavior
+        PlacementAndNodes(placement=f"{name_prefix}-0-{c_id}", nodes=c_nodes) 
+        for c_id, c_nodes in chunks.items() 
+    ]
+
+    if invalid:
+        placements.append(PlacementAndNodes(placement=None, nodes=invalid))
+        log.error(f"Could not find placement for nodes with unexpected names: {to_hostlist_fast(invalid)}")
+
+    return placements
+
+def create_nodeset_placements(nodes: List[str], excl_job_id:Optional[int], lkp: util.Lookup) -> List[PlacementAndNodes]:    
+    placements = _allocate_nodes_to_placements(nodes, excl_job_id, lkp)
+    region = lkp.node_region(nodes[0])
 
     if log.isEnabledFor(logging.DEBUG):
-        debug_groups = {
-            group: to_hostlist_fast(nodes) for group, nodes in groups.items()
-        }
+        debug_p = {p.placement: to_hostlist_fast(p.nodes) for p in placements}
         log.debug(
-            f"creating {len(groups)} placement groups: \n{yaml.safe_dump(debug_groups).rstrip()}"
+            f"creating {len(placements)} placement groups: \n{yaml.safe_dump(debug_p).rstrip()}"
         )
+    
     requests = {
-        group: create_placement_request(group, region) for group in groups.keys()
+        p.placement: create_placement_request(p.placement, region) for p in placements if p.placement
     }
+    if not requests:
+        return placements
+    # TODO: aggregate all requests for whole resume and execute them at once (don't limit to nodeset/job)
     ops = dict(
         zip(requests.keys(), map_with_futures(ensure_execute, requests.values()))
     )
@@ -587,68 +593,43 @@ def create_nodeset_placement_groups(node_list: List[str], job_id:int) -> Dict[st
     log.info(
         f"created {len(operations)} placement groups ({to_hostlist_fast(operations.keys())})"
     )
-    return groups
+    return placements
 
 
-def valid_placement_nodes(nodelist):
+def valid_placement_node(node: str) -> bool:
     invalid_types = frozenset(["e2", "t2d", "n1", "t2a", "m1", "m2", "m3"])
-    for node in nodelist:
-        mt = lookup().node_template_info(node).machineType
-        if mt.split("-")[0] in invalid_types:
-            log.warn(f"Unsupported machine type for placement policy: {mt}.")
-            log.warn(
-                f"Please do not use any the following machine types with placement policy: ({','.join(invalid_types)})"
-            )
-            return False
+    mt = lookup().node_template_info(node).machineType
+    if mt.split("-")[0] in invalid_types:
+        log.warn(f"Unsupported machine type for placement policy: {mt}.")
+        log.warn(
+            f"Please do not use any the following machine types with placement policy: ({','.join(invalid_types)})"
+        )
+        return False
     return True
 
 
-def get_resume_file_data():
-    SLURM_RESUME_FILE = os.getenv("SLURM_RESUME_FILE")
-    if SLURM_RESUME_FILE is None:
-        log.warning(
-            "SLURM_RESUME_FILE was not in environment. Cannot get detailed job, node, partition allocation data."
-        )
-        return None
-    resume_file = Path(SLURM_RESUME_FILE)
-    resume_json = resume_file.read_text()
-    if log.isEnabledFor(logging.DEBUG):
-        (dirs.scripts / "resume_data.json").write_text(resume_json)
-    return NSDict(json.loads(resume_json))
-
-
-def main(nodelist):
+def main(nodelist: str) -> None:
     """main called when run as script"""
     log.debug(f"ResumeProgram {nodelist}")
     # Filter out nodes not in config.yaml
-    other_nodes, pm_nodes = separate(
+    other_nodes, nodes = separate(
         lookup().is_power_managed_node, util.to_hostnames(nodelist)
     )
     if other_nodes:
-        log.debug(
+        log.error(
             f"Ignoring non-power-managed nodes '{to_hostlist_fast(other_nodes)}' from '{nodelist}'"
         )
 
-    pm_nodelist = util.to_hostlist_fast(pm_nodes)
-    if pm_nodes:
-        log.debug(f"Resuming nodes '{pm_nodelist}' from '{nodelist}'")
-    else:
-        log.debug("No nodes to resume")
+    if not nodes:
+        log.info("No nodes to resume")
         return
 
-    log.info(f"resume {pm_nodelist}")
-    resume_nodes(pm_nodes, global_resume_data)
-    # TODO only run below if resume_nodes succeeds but
-    # resume_nodes does not currently return any status.
-    if lookup().cfg.enable_slurm_gcp_plugins:
-        slurm_gcp_plugins.post_main_resume_nodes(
-            lkp=lookup(), nodelist=nodelist, global_resume_data=global_resume_data
-        )
-
+    resume_data = get_resume_file_data()
+    log.info(f"resume {util.to_hostlist_fast(nodes)}")
+    resume_nodes(nodes, resume_data)
+    
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("nodelist", help="list of nodes to resume")
     args = util.init_log_and_parse(parser)
-
-    global_resume_data = get_resume_file_data()
     main(args.nodelist)

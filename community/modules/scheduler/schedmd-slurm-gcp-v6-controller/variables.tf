@@ -278,6 +278,7 @@ variable "nodeset" {
     tags               = optional(list(string), [])
     termination_action = optional(string)
     reservation_name   = optional(string)
+    future_reservation = string
     startup_script = optional(list(object({
       filename = string
     content = string })), [])
