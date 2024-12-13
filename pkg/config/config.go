@@ -698,14 +698,15 @@ func (bp *Blueprint) checkToolkitModulesUrlAndVersion() error {
 func (bp *Blueprint) checkReferences() error {
 	errs := Errors{}
 	bp.visitDicts(func(dp dictPath, d *Dict) {
-		isModSettings := IsModuleSettingsPath(dp)
+		// isModSettings := IsModuleSettingsPath(dp)
 		for k, v := range d.Items() {
 			for ref, rp := range valueReferences(v) {
 				path := dp.Dot(k).Cty(rp)
+				// fmt.Println("GlobalVar", ref.GlobalVar, "Name", ref.Name, "Module", ref.Module, "rp", rp, "path", path)
 				if !ref.GlobalVar {
-					if !isModSettings {
-						errs.At(path, fmt.Errorf("module output %q can only be referenced in other module settings", ref))
-					}
+					// if !isModSettings {
+					// 	errs.At(path, fmt.Errorf("module output %q can only be referenced in other module settings", ref))
+					// }
 					// module to module references are checked by validateModuleSettingReferences later
 					return
 				}

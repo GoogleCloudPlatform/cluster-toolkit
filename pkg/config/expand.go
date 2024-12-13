@@ -207,23 +207,6 @@ func getDefaultGoogleProviders(bp Blueprint) map[string]TerraformProvider {
 			Configuration: gglConf}}
 }
 
-// func getDefaultKubectlProviders() map[string]TerraformProvider {
-// 	kubectlConf := Dict{}
-// 	for s, v := range map[string]string{
-// 		"cluster_ca_certificate": "cluster_ca_certificate",
-// 		"host":                   "gke_cluster_endpoint",
-// 		"token":                  "access_token"} {
-// 		kubectlConf = kubectlConf.With(s, ModuleRef("gke_cluster", v).AsValue())
-// 	}
-// 	kubectlConf = kubectlConf.With("apply_retry_count", cty.NumberIntVal(15))
-// 	kubectlConf = kubectlConf.With("load_config_file", cty.BoolVal(false))
-// 	return map[string]TerraformProvider{
-// 		"kubectl": {
-// 			Source:        "gavinbunney/kubectl",
-// 			Version:       ">= 1.7.0",
-// 			Configuration: kubectlConf}}
-// }
-
 func (bp Blueprint) expandProviders(grp *Group) {
 	// 1. DEFAULT: use TerraformProviders provider dictionary (if supplied)
 	// 2. If top-level TerraformProviders is defined, insert that
@@ -233,7 +216,6 @@ func (bp Blueprint) expandProviders(grp *Group) {
 	pv := &grp.TerraformProviders
 	if defaults == nil {
 		defaults = getDefaultGoogleProviders(bp)
-		// maps.Copy(defaults, getDefaultKubectlProviders())
 	}
 	if (*pv) == nil {
 		(*pv) = maps.Clone(defaults)
