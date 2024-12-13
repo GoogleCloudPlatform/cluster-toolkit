@@ -82,3 +82,9 @@ variable "viewers" {
     ])
   }
 }
+
+variable "existing_gcs_bucket_name" {
+  description = "Name of the already existing GCS Bucket."
+  type        = string
+  default     = null
+}

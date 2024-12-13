@@ -26,7 +26,7 @@ locals {
   first_dash     = (local.prefix != "" && (local.deployment != "" || local.suffix != "")) ? "-" : ""
   second_dash    = local.deployment != "" && local.suffix != "" ? "-" : ""
   composite_name = "${local.prefix}${local.first_dash}${local.deployment}${local.second_dash}${local.suffix}"
-  name           = local.composite_name == "" ? "no-bucket-name-provided" : local.composite_name
+  name           = var.existing_gcs_bucket_name != null ? var.existing_gcs_bucket_name : (local.composite_name == "" ? "no-bucket-name-provided" : local.composite_name)
 }
 
 resource "random_id" "resource_name_suffix" {
@@ -34,6 +34,8 @@ resource "random_id" "resource_name_suffix" {
 }
 
 resource "google_storage_bucket" "bucket" {
+  count = var.existing_gcs_bucket_name == null ? 1 : 0
+
   project                     = var.project_id
   name                        = local.name
   uniform_bucket_level_access = true
@@ -44,7 +46,7 @@ resource "google_storage_bucket" "bucket" {
 }
 
 resource "google_storage_bucket_iam_binding" "viewers" {
-  bucket  = google_storage_bucket.bucket.name
+  bucket  = length(google_storage_bucket.bucket) == 0 ? var.existing_gcs_bucket_name : google_storage_bucket.bucket[0].name
   role    = "roles/storage.objectViewer"
   members = var.viewers
 }
