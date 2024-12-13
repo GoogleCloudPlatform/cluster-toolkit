@@ -42,6 +42,7 @@ from util import (
     wait_for_operation,
 )
 from util import lookup, NSDict
+import tpu
 
 import slurm_gcp_plugins
 
@@ -269,7 +270,8 @@ def group_nodes_bulk(nodes: List[str], resume_data: Optional[ResumeData], lkp: u
     def chunk_nodes(nodes: List[str]):
         chunk_size = BULK_INSERT_LIMIT
         if nodes and lkp.node_is_tpu(nodes[0]):
-            chunk_size = util.TPU(lkp.node_nodeset(nodes[0])).vmcount
+            ns = lkp.node_nodeset_name(nodes[0])
+            chunk_size = tpu.TPU.make(ns, lkp).vmcount
         return chunked(nodes, n=chunk_size)
     
     chunks = [
@@ -285,34 +287,6 @@ def group_nodes_bulk(nodes: List[str], resume_data: Optional[ResumeData], lkp: u
         for i, nodes_chunk in enumerate(chunk_nodes(pn.nodes))
     ]
     return {chunk.name: chunk for chunk in chunks}
-
-
-def start_tpu(data):
-    tpu = data["tpu"]
-    node = data["node"]
-    if len(node) == 1:
-        node = node[0]
-        log.debug(
-            f"Will create a TPU of type {tpu.node_type} tf_version {tpu.tf_version} in zone {tpu.zone} with name {node}"
-        )
-        tpunode = tpu.get_node(node)
-        if tpunode is None:
-            if not tpu.create_node(nodename=node):
-                log.error("Error creating tpu node {node}")
-        else:
-            if tpu.preserve_tpu:
-                if not tpu.start_node(nodename=node):
-                    log.error("Error starting tpu node {node}")
-            else:
-                log.info(
-                    f"Tpu node {node} is already created, but will not start it because nodeset does not have preserve_tpu option active."
-                )
-    else:
-        log.debug(
-            f"Will create a multi-vm TPU of type {tpu.node_type} tf_version {tpu.tf_version} in zone {tpu.zone} with name {node[0]}"
-        )
-        if not tpu.create_node(nodename=node):
-            log.error("Error creating tpu node {node}")
 
 
 def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
@@ -339,17 +313,13 @@ def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
             "node bulk groups: \n{}".format(yaml.safe_dump(grouped_nodelists).rstrip())
         )
 
-    tpu_start_data = []
-    tpu_objs = {}
+    tpu_chunks = []
     bi_inserts = {}
 
     for group, chunk in grouped_nodes.items():
         model = chunk.nodes[0]
         if lookup().node_is_tpu(model):
-            # do not create multiple tpu_objs if nodes with the same prefix are used
-            if chunk.prefix not in tpu_objs.keys():
-                tpu_objs[chunk.prefix] = util.TPU(lookup().node_nodeset(model))
-            tpu_start_data.append({"tpu": tpu_objs[chunk.prefix], "node": chunk.nodes})
+            tpu_chunks.append(chunk.nodes)
         else:
             bi_inserts[group] = create_instances_request(
                 chunk.nodes, chunk.placement_group, chunk.excl_job_id
@@ -384,8 +354,7 @@ def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
     bulk_operations = {group: wait_for_operation(op) for group, op in started.items()}
 
     # Start TPU after regular nodes so that regular nodes are not affected by the slower TPU nodes
-    log.debug(f"tpu_start_data={yaml.safe_dump(tpu_start_data)}")
-    execute_with_futures(start_tpu, tpu_start_data)
+    execute_with_futures(tpu.start_tpu, tpu_chunks)
 
     all_successful_inserts = []
 

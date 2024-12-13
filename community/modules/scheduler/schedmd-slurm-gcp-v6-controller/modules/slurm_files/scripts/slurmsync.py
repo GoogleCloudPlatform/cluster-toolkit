@@ -22,7 +22,6 @@ import re
 import sys
 import shlex
 from datetime import datetime, timedelta
-from enum import Enum
 from itertools import chain
 from pathlib import Path
 from dataclasses import dataclass
@@ -40,13 +39,12 @@ from util import (
     separate,
     to_hostlist,
     NodeState,
-    TPU,
     chunked,
     dirs,
 )
 from util import lookup
 from suspend import delete_instances
-from resume import start_tpu
+import tpu
 import conf
 
 log = logging.getLogger()
@@ -130,18 +128,19 @@ def start_instance_op(inst):
 
 def start_instances(node_list):
     log.info("{} instances to start ({})".format(len(node_list), ",".join(node_list)))
-
-    normal, tpu_nodes = separate(lookup().node_is_tpu, node_list)
+    lkp = lookup()
+    # TODO: use code from resume.py to assign proper placement
+    normal, tpu_nodes = separate(lkp.node_is_tpu, node_list)
     ops = {inst: start_instance_op(inst) for inst in normal}
 
     done, failed = batch_execute(ops)
 
     tpu_start_data = []
-    for ns, nodes in util.groupby_unsorted(tpu_nodes, lookup().node_nodeset_name):
-        tpuobj = TPU(lookup().cfg.nodeset_tpu[ns])
+    for ns, nodes in util.groupby_unsorted(tpu_nodes, lkp.node_nodeset_name):
+        tpuobj = tpu.TPU.make(ns, lkp)
         for snodes in chunked(nodes, n=tpuobj.vmcount):
             tpu_start_data.append({"tpu": tpuobj, "node": snodes})
-    execute_with_futures(start_tpu, tpu_start_data)
+    execute_with_futures(tpu.start_tpu, tpu_start_data)
 
 
 def _find_dynamic_node_status() -> NodeAction:
@@ -163,14 +162,14 @@ def get_fr_action(fr: FutureReservation, nodename:str, state:NodeState) -> Optio
     return NodeActionDown(reason=msg)
 
 def _find_tpu_node_action(nodename, state) -> NodeAction:
-    ns = lookup().node_nodeset(nodename)
-    tpuobj = TPU(ns)
+    lkp = lookup()
+    tpuobj = tpu.TPU.make(lkp.node_nodeset_name(nodename), lkp)
     inst = tpuobj.get_node(nodename)
     # If we do not find the node but it is from a Tpu that has multiple vms look for the master node
     if inst is None and tpuobj.vmcount > 1:
         # Get the tpu slurm nodelist of the nodes in the same tpu group as nodename
         nodelist = run(
-            f"{lookup().scontrol} show topo {nodename}"
+            f"{lkp.scontrol} show topo {nodename}"
             + " | awk -F'=' '/Level=0/ { print $NF }'",
             shell=True,
         ).stdout
@@ -200,13 +199,13 @@ def _find_tpu_node_action(nodename, state) -> NodeAction:
             & state.flags
         ):
             return NodeActionDown(reason="Unbacked instance")
-        if lookup().is_static_node(nodename):
+        if lkp.is_static_node(nodename):
             return NodeActionPowerUp()
     elif (
         state is not None
         and "POWERED_DOWN" not in state.flags
         and "POWERING_DOWN" not in state.flags
-        and inst.state == TPU.State.STOPPED
+        and inst.state == tpu.TPU.State.STOPPED
     ):
         if tpuobj.preemptible:
             return NodeActionPrempt()
@@ -214,7 +213,7 @@ def _find_tpu_node_action(nodename, state) -> NodeAction:
             return NodeActionDown(reason="Instance terminated")
     elif (
         state is None or "POWERED_DOWN" in state.flags
-    ) and inst.state == TPU.State.READY:
+    ) and inst.state == tpu.TPU.State.READY:
         return NodeActionDelete()
     elif state is None:
         # if state is None here, the instance exists but it's not in Slurm

@@ -21,6 +21,7 @@ import json
 from pathlib import Path
 import util
 from util import dirs, slurmdirs
+import tpu
 
 FILE_PREAMBLE = """
 # Warning:
@@ -519,7 +520,7 @@ class TopologyBuilder:
 
 
 def add_tpu_nodeset_topology(nodeset: object, bldr: TopologyBuilder, lkp: util.Lookup):
-    tpuobj = util.TPU(nodeset)
+    tpuobj = tpu.TPU.make(nodeset.nodeset_name, lkp)
     static, dynamic = lkp.nodenames(nodeset)
 
     pref = ["tpu-root",  f"ns_{nodeset.nodeset_name}"]
