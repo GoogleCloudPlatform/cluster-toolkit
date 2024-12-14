@@ -114,7 +114,7 @@ limitations under the License.
 | <a name="output_access_token"></a> [access\_token](#output\_access\_token) | Google client config access token. |
 | <a name="output_cluster_ca_certificate"></a> [cluster\_ca\_certificate](#output\_cluster\_ca\_certificate) | GKE cluster CA certificate. |
 | <a name="output_cluster_id"></a> [cluster\_id](#output\_cluster\_id) | An identifier for the gke cluster with format projects/{{project\_id}}/locations/{{region}}/clusters/{{name}}. |
-| <a name="output_gke_cluster_endpoint"></a> [gke\_cluster\_endpoint](#output\_gke\_cluster\_endpoint) | GKE cluster endpoint. |
 | <a name="output_gke_cluster_exists"></a> [gke\_cluster\_exists](#output\_gke\_cluster\_exists) | A static flag that signals to downstream modules that a cluster exists. |
 | <a name="output_gke_version"></a> [gke\_version](#output\_gke\_version) | GKE cluster's version. |
+| <a name="output_host_endpoint"></a> [host\_endpoint](#output\_host\_endpoint) | GKE cluster endpoint. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

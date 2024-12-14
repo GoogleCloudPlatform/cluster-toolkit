@@ -92,7 +92,7 @@ resource "kubectl_manifest" "pv" {
 
   lifecycle {
     precondition {
-      condition     = (var.gcs_bucket_name != null) != (var.filestore_id != null)
+      condition     = var.gke_cluster_exists && (var.gcs_bucket_name != null) != (var.filestore_id != null)
       error_message = "Either gcs_bucket_name or filestore_id must be set."
     }
   }

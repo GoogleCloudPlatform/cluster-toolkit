@@ -17,6 +17,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"hpc-toolkit/pkg/modulereader"
 	"hpc-toolkit/pkg/sourcereader"
@@ -186,6 +187,34 @@ func (bp Blueprint) expandBackend(grp *Group) {
 	}
 }
 
+func kubectlProviderRequiredModules(grp *Group) []Module {
+	mods := []Module{}
+	for _, mod := range grp.Modules {
+		if strings.Contains(mod.Source, "gke-cluster") || strings.Contains(mod.Source, "pre-existing-gke-cluster") {
+			mods = append(mods, mod)
+		}
+	}
+	return mods
+}
+
+func getModuleKubectlProviders(mod Module) map[string]TerraformProvider {
+	kubectlConf := Dict{}
+	for s, v := range map[string]string{
+		"cluster_ca_certificate": "cluster_ca_certificate",
+		"host":                   "host_endpoint",
+		"token":                  "access_token"} {
+		kubectlConf = kubectlConf.With(s, ModuleRef(mod.ID, v).AsValue())
+	}
+	// kubectlConf = kubectlConf.With("alias", cty.StringVal(string(mod.ID)))
+	kubectlConf = kubectlConf.With("apply_retry_count", cty.NumberIntVal(15))
+	kubectlConf = kubectlConf.With("load_config_file", cty.BoolVal(false))
+	return map[string]TerraformProvider{
+		"kubectl": {
+			Source:        "gavinbunney/kubectl",
+			Version:       ">= 1.7.0",
+			Configuration: kubectlConf}}
+}
+
 func getDefaultGoogleProviders(bp Blueprint) map[string]TerraformProvider {
 	gglConf := Dict{}
 	for s, v := range map[string]string{
@@ -219,6 +248,10 @@ func (bp Blueprint) expandProviders(grp *Group) {
 	}
 	if (*pv) == nil {
 		(*pv) = maps.Clone(defaults)
+	}
+	mods := kubectlProviderRequiredModules(grp)
+	for _, mod := range mods {
+		maps.Copy((*pv), getModuleKubectlProviders(mod))
 	}
 }
 

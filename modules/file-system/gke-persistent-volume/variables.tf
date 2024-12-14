@@ -14,6 +14,11 @@
  * limitations under the License.
 */
 
+variable "gke_cluster_exists" {
+  description = "A static flag that signals to modules that a cluster has been created."
+  type        = bool
+}
+
 variable "network_storage" {
   description = "Network attached storage mount to be configured."
   type = object({

@@ -32,7 +32,7 @@ output "gke_version" {
   value       = data.google_container_cluster.existing_gke_cluster.master_version
 }
 
-output "gke_cluster_endpoint" {
+output "host_endpoint" {
   description = "GKE cluster endpoint."
   value       = "https://${data.google_container_cluster.existing_gke_cluster.endpoint}"
 }

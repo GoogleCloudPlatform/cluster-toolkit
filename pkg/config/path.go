@@ -194,14 +194,14 @@ func init() {
 	initPath(&Root, nil, "")
 }
 
-// func IsModuleSettingsPath(p Path) bool {
-// 	parent := p.Parent()
-// 	if parent == nil {
-// 		return false
-// 	}
-// 	mp, ok := parent.(*ModulePath)
-// 	if !ok {
-// 		return false
-// 	}
-// 	return p == mp.Settings
-// }
+func IsModuleSettingsPath(p Path) bool {
+	parent := p.Parent()
+	if parent == nil {
+		return false
+	}
+	mp, ok := parent.(*ModulePath)
+	if !ok {
+		return false
+	}
+	return p == mp.Settings
+}
