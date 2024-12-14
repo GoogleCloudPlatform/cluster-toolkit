@@ -353,6 +353,7 @@ resource "null_resource" "enable_tcpxo_in_workload" {
 
 # apply manifest to enable tcpx
 module "kubectl_apply" {
+  count  = var.gke_cluster_exists ? 1 : 0
   source = "../../management/kubectl-apply"
 
   apply_manifests = flatten([
