@@ -34,6 +34,7 @@ module "kubectl_apply_manifests" {
   template_vars     = each.value.template_vars
   server_side_apply = each.value.server_side_apply
   wait_for_rollout  = each.value.wait_for_rollout
+  depends_on        = [var.gke_cluster_exists]
 
   providers = {
     http = http.h
@@ -44,6 +45,7 @@ module "install_kueue" {
   source            = "./kubectl"
   source_path       = local.install_kueue ? local.kueue_install_source : null
   server_side_apply = true
+  depends_on        = [var.gke_cluster_exists]
 
   providers = {
     http = http.h
@@ -54,6 +56,7 @@ module "install_jobset" {
   source            = "./kubectl"
   source_path       = local.install_jobset ? local.jobset_install_source : null
   server_side_apply = true
+  depends_on        = [var.gke_cluster_exists]
 
   providers = {
     http = http.h

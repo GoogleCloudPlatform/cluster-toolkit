@@ -37,6 +37,11 @@ resource "terraform_data" "jobset_validations" {
   }
 }
 
+variable "gke_cluster_exists" {
+  description = "A static flag that signals to modules that a cluster has been created."
+  type        = bool
+}
+
 variable "apply_manifests" {
   description = "A list of manifests to apply to GKE cluster using kubectl. For more details see [kubectl module's inputs](kubectl/README.md)."
   type = list(object({
