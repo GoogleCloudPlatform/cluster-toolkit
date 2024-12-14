@@ -88,12 +88,13 @@ resource "local_file" "debug_file" {
 }
 
 resource "kubectl_manifest" "pv" {
+  count     = var.gke_cluster_exists ? 1 : 0
   yaml_body = local.is_gcs ? local.gcs_pv_contents : local.filestore_pv_contents
 
   lifecycle {
     precondition {
-      condition     = var.gke_cluster_exists && (var.gcs_bucket_name != null) != (var.filestore_id != null)
-      error_message = "GKE cluster should exists and either gcs_bucket_name or filestore_id must be set."
+      condition     = (var.gcs_bucket_name != null) != (var.filestore_id != null)
+      error_message = "Either gcs_bucket_name or filestore_id must be set."
     }
   }
 }

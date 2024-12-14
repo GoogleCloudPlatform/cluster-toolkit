@@ -13,8 +13,9 @@
 # limitations under the License.
 
 module "kubectl_apply" {
-  count  = var.gke_cluster_exists ? 1 : 0
   source = "../../../../modules/management/kubectl-apply"
+
+  gke_cluster_exists = var.gke_cluster_exists
 
   apply_manifests = [
     { source = "${path.module}/manifests/topology-scheduler-scripts.yaml" },
