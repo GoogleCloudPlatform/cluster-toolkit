@@ -353,4 +353,6 @@ module "kubectl_apply" {
       }
     ]
   ])
+
+  depends_on = [google_container_cluster.gke_cluster]
 }

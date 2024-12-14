@@ -40,6 +40,7 @@ resource "terraform_data" "jobset_validations" {
 variable "gke_cluster_exists" {
   description = "A static flag that signals to modules that a cluster has been created."
   type        = bool
+  default     = false
 }
 
 variable "apply_manifests" {

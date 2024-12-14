@@ -26,7 +26,7 @@ locals {
 }
 
 module "kubectl_apply_manifests" {
-  for_each = local.apply_manifests_map
+  for_each = var.gke_cluster_exists ? local.apply_manifests_map : {}
   source   = "./kubectl"
 
   content           = each.value.content
@@ -34,7 +34,6 @@ module "kubectl_apply_manifests" {
   template_vars     = each.value.template_vars
   server_side_apply = each.value.server_side_apply
   wait_for_rollout  = each.value.wait_for_rollout
-  depends_on        = [var.gke_cluster_exists]
 
   providers = {
     http = http.h
@@ -42,10 +41,10 @@ module "kubectl_apply_manifests" {
 }
 
 module "install_kueue" {
+  count             = var.gke_cluster_exists ? 1 : 0
   source            = "./kubectl"
   source_path       = local.install_kueue ? local.kueue_install_source : null
   server_side_apply = true
-  depends_on        = [var.gke_cluster_exists]
 
   providers = {
     http = http.h
@@ -53,10 +52,10 @@ module "install_kueue" {
 }
 
 module "install_jobset" {
+  count             = var.gke_cluster_exists ? 1 : 0
   source            = "./kubectl"
   source_path       = local.install_jobset ? local.jobset_install_source : null
   server_side_apply = true
-  depends_on        = [var.gke_cluster_exists]
 
   providers = {
     http = http.h
@@ -64,6 +63,7 @@ module "install_jobset" {
 }
 
 module "configure_kueue" {
+  count         = var.gke_cluster_exists ? 1 : 0
   source        = "./kubectl"
   source_path   = local.install_kueue ? try(var.kueue.config_path, "") : null
   template_vars = local.install_kueue ? try(var.kueue.config_template_vars, null) : null

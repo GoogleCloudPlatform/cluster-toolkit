@@ -187,14 +187,13 @@ func (bp Blueprint) expandBackend(grp *Group) {
 	}
 }
 
-func kubectlProviderRequiredModules(grp *Group) []Module {
-	mods := []Module{}
+func kubectlProviderRequiredModule(grp *Group) (bool, Module) {
 	for _, mod := range grp.Modules {
 		if strings.Contains(mod.Source, "gke-cluster") || strings.Contains(mod.Source, "pre-existing-gke-cluster") {
-			mods = append(mods, mod)
+			return true, mod
 		}
 	}
-	return mods
+	return false, Module{}
 }
 
 func getModuleKubectlProviders(mod Module) map[string]TerraformProvider {
@@ -249,8 +248,7 @@ func (bp Blueprint) expandProviders(grp *Group) {
 	if (*pv) == nil {
 		(*pv) = maps.Clone(defaults)
 	}
-	mods := kubectlProviderRequiredModules(grp)
-	for _, mod := range mods {
+	if ok, mod := kubectlProviderRequiredModule(grp); ok {
 		maps.Copy((*pv), getModuleKubectlProviders(mod))
 	}
 }

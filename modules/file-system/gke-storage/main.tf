@@ -37,10 +37,8 @@ check "private_vpc_connection_peering" {
 }
 
 module "kubectl_apply" {
+  count  = var.gke_cluster_exists ? 1 : 0
   source = "../../management/kubectl-apply"
-
-  cluster_id = var.cluster_id
-  project_id = var.project_id
 
   # count = var.pvc_count
   apply_manifests = flatten(
