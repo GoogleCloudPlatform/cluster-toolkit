@@ -129,6 +129,65 @@ class ApiEndpoint(Enum):
     SECRET = "secret_manager"
 
 
+@dataclass(frozen=True)
+class AcceleratorInfo:
+    type: str
+    count: int
+
+    @classmethod
+    def from_json(cls, jo: dict) -> "AcceleratorInfo":
+        return cls(
+            type=jo["guestAcceleratorType"],
+            count=jo["guestAcceleratorCount"])
+
+@dataclass(frozen=True)
+class MachineType:
+    name: str
+    guest_cpus: int
+    memory_mb: int
+    accelerators: List[AcceleratorInfo]
+    
+    @classmethod
+    def from_json(cls, jo: dict) -> "MachineType":
+        return cls(
+            name=jo["name"],
+            guest_cpus=jo["guestCpus"],
+            memory_mb=jo["memoryMb"],
+            accelerators=[
+                AcceleratorInfo.from_json(a) for a in jo.get("accelerators", [])],
+        )
+
+    @property
+    def family(self) -> str:
+        # TODO: doesn't work with N1 custom machine types
+        # See https://cloud.google.com/compute/docs/instances/creating-instance-with-custom-machine-type#create
+        return self.name.split("-")[0]
+    
+    @property
+    def supports_smt(self) -> bool:
+        # https://cloud.google.com/compute/docs/cpu-platforms
+        if self.family in  ("t2a", "t2d", "h3", "c4a",):
+            return False
+        if self.guest_cpus == 1:
+            return False
+        return True
+    
+    @property
+    def sockets(self) -> int:
+        return {
+            "h3": 2,
+            "c2d": 2 if self.guest_cpus > 56 else 1,
+            "a3": 2,
+            "c2": 2 if self.guest_cpus > 30 else 1,
+            "c3": 2 if self.guest_cpus > 88 else 1,
+            "c3d": 2 if self.guest_cpus > 180 else 1,
+            "c4": 2 if self.guest_cpus > 96 else 1,
+        }.get(
+            self.family, 1,  # assume 1 socket for all other families
+        )
+
+
+
 @lru_cache(maxsize=1)
 def default_credentials():
     return google.auth.default()[0]
@@ -1111,46 +1170,8 @@ def get_insert_operations(group_ids):
     return get_filtered_operations(" AND ".join(f"({f})" for f in filters if f))
 
 
-def machine_type_family(mt: str) -> str:
-    """get machine type family from machine type"""
-    # TODO: doesn't work with N1 custom machine types
-    # See https://cloud.google.com/compute/docs/instances/creating-instance-with-custom-machine-type#create
-    return mt.split("-")[0]
-
-
-def machine_type_sockets(template) -> int:
-    guestCpus: int = int(template.machine_info.guestCpus)
-    return {
-        "h3": 2,
-        "c2d": 2 if guestCpus > 56 else 1,
-        "a3": 2,
-        "c2": 2 if guestCpus > 30 else 1,
-        "c3": 2 if guestCpus > 88 else 1,
-        "c3d": 2 if guestCpus > 180 else 1,
-        "c4": 2 if guestCpus > 96 else 1,
-    }.get(
-        machine_type_family(template.machineType),
-        1,  # assume 1 socket for all other families
-    )
-
-
-def isSmt(template) -> bool:
-    # https://cloud.google.com/compute/docs/cpu-platforms
-    noSmtFamily = (
-        "t2a",
-        "t2d",
-        "h3",
-        "c4a",
-    )
-    if machine_type_family(template.machineType) in noSmtFamily:
-        return False
-    if template.machine_info.guestCpus == 1:
-        return False
-    return True
-
-
 def getThreadsPerCore(template) -> int:
-    if not isSmt(template):
+    if not template.machine_type.supports_smt:
         return 1
     return template.advancedMachineFeatures.threadsPerCore or 2
 
@@ -1650,53 +1671,48 @@ class Lookup:
             op = act.aggregatedList_next(op, result)
         return machines
 
-    def machine_type(self, machine_type: str):
-        """ """
+    def machine_type(self, name: str) -> MachineType:
         custom_patt = re.compile(
             r"((?P<family>\w+)-)?custom-(?P<cpus>\d+)-(?P<mem>\d+)"
         )
-        custom_match = custom_patt.match(machine_type)
-        if custom_match is not None:
-            groups = custom_match.groupdict()
-            cpus, mem = (groups[k] for k in ["cpus", "mem"])
-            machine_info = {
-                "guestCpus": int(cpus),
-                "memoryMb": int(mem),
-            }
-        else:
-            machines = self.machine_types()
-            if machine_type not in machines:
-                raise Exception(f"machine type {machine_type} not found")
-            per_zone = machines[machine_type]
-            assert per_zone
-            machine_info = next(iter(per_zone.values())) # pick the first/any zone
-        return NSDict(machine_info)
+        if match := custom_patt.match(name):
+            return MachineType(
+                name=name,
+                guest_cpus=int(match.group("cpus")),
+                memory_mb=int(match.group("mem")),
+                accelerators=[],
+            )
+        
+        machines = self.machine_types()
+        if name not in machines:
+            raise Exception(f"machine type {name} not found")
+        per_zone = machines[name]
+        assert per_zone
+        return MachineType.from_json(
+            next(iter(per_zone.values())) # pick the first/any zone
+        )
 
     def template_machine_conf(self, template_link):
         template = self.template_info(template_link)
-        if not template.machineType:
-            temp_name = trim_self_link(template_link)
-            raise Exception(f"instance template {temp_name} has no machine type")
-        template.machine_info = self.machine_type(template.machineType)
-        machine = template.machine_info
+        machine = template.machine_type
 
         machine_conf = NSDict()
         machine_conf.boards = 1  # No information, assume 1
-        machine_conf.sockets = machine_type_sockets(template)
+        machine_conf.sockets = machine.sockets
         # the value below for SocketsPerBoard must be type int
         machine_conf.sockets_per_board = machine_conf.sockets // machine_conf.boards
         machine_conf.threads_per_core = 1
         _div = 2 if getThreadsPerCore(template) == 1 else 1
         machine_conf.cpus = (
-            int(machine.guestCpus / _div) if isSmt(template) else machine.guestCpus
+            int(machine.guest_cpus / _div) if machine.supports_smt else machine.guest_cpus
         )
         machine_conf.cores_per_socket = int(machine_conf.cpus / machine_conf.sockets)
         # Because the actual memory on the host will be different than
         # what is configured (e.g. kernel will take it). From
         # experiments, about 16 MB per GB are used (plus about 400 MB
         # buffer for the first couple of GB's. Using 30 MB to be safe.
-        gb = machine.memoryMb // 1024
-        machine_conf.memory = machine.memoryMb - (400 + (30 * gb))
+        gb = machine.memory_mb // 1024
+        machine_conf.memory = machine.memory_mb - (400 + (30 * gb))
         return machine_conf
 
     @contextmanager
@@ -1741,20 +1757,20 @@ class Lookup:
         # name and link are not in properties, so stick them in
         template.name = template_name
         template.link = template_link
+        template.machine_type = self.machine_type(template.machineType)
         # TODO delete metadata to reduce memory footprint?
         # del template.metadata
 
         # translate gpus into an easier-to-read format
-        machine_info = self.machine_type(template.machineType)
-        if machine_info.accelerators:
-            template.gpu_type = machine_info.accelerators[0].guestAcceleratorType
-            template.gpu_count = machine_info.accelerators[0].guestAcceleratorCount
+        if template.machine_type.accelerators:
+            template.gpu = template.machine_type.accelerators[0]
         elif template.guestAccelerators:
-            template.gpu_type = template.guestAccelerators[0].acceleratorType
-            template.gpu_count = template.guestAccelerators[0].acceleratorCount
+            tga = template.guestAccelerators[0]
+            template.gpu = AcceleratorInfo(
+                type=tga.acceleratorType,
+                count=tga.acceleratorCount)
         else:
-            template.gpu_type = None
-            template.gpu_count = 0
+            template.gpu = None
 
         # keep write access open for minimum time
         with self.template_cache(writeback=True) as cache:
