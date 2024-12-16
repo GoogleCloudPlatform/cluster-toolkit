@@ -53,6 +53,12 @@ locals {
   # Select in priority order:
   # (1) var.guest_accelerator if not empty
   # (2) local.generated_guest_accelerator if not empty
-  # (3) default to empty list if both are empty
-  guest_accelerator = try(coalescelist(var.guest_accelerator, local.generated_guest_accelerator), [])
+  # (3) default to list with no-accelerator list entry to allow mixing GPU and non-GPU nodesets in one partition
+  guest_accelerator = try(
+    coalescelist(var.guest_accelerator, local.generated_guest_accelerator),
+    [{
+      type  = ""
+      count = 0
+    }]
+  )
 }
