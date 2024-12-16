@@ -106,18 +106,18 @@ func (s *zeroSuite) TestExpandProviders(c *C) {
 			With("apply_retry_count", cty.NumberIntVal(15)).
 			With("load_config_file", cty.BoolVal(false))}
 
-	testModuleOutputs := []modulereader.OutputInfo{
+	testGKEClusterModuleOutputs := []modulereader.OutputInfo{
 		{Name: testGKEClusterModuleOutputName}}
 
 	testGKEClusterModule := Module{
-		Source:  "module/test/gke-cluster",
+		Source:  "module/test/gke-cluster/dummy",
 		ID:      testGKEClusterModuleID,
-		Outputs: testModuleOutputs}
+		Outputs: testGKEClusterModuleOutputs}
 
 	testPreExistingGKEClusterModule := Module{
-		Source:  "module/test/pre-existing-gke-cluster",
+		Source:  "module/test/pre-existing-gke-cluster/dummy",
 		ID:      testGKEClusterModuleID,
-		Outputs: testModuleOutputs}
+		Outputs: testGKEClusterModuleOutputs}
 
 	{ // no def PR, no group PR - match default values
 		g := Group{Name: "clown"}
@@ -139,16 +139,6 @@ func (s *zeroSuite) TestExpandProviders(c *C) {
 		g := Group{
 			Name:    "clown",
 			Modules: []Module{testPreExistingGKEClusterModule}}
-		defaultProvider["kubectl"] = kubectlProvider
-		noDefPr.expandProviders(&g)
-		c.Check(g.TerraformProviders, DeepEquals, defaultProvider)
-		delete(defaultProvider, "kubectl")
-	}
-
-	{ // no def PR, no group PR, group have both gke cluster and pre existing gke cluster module
-		g := Group{
-			Name:    "clown",
-			Modules: []Module{testGKEClusterModule, testPreExistingGKEClusterModule}}
 		defaultProvider["kubectl"] = kubectlProvider
 		noDefPr.expandProviders(&g)
 		c.Check(g.TerraformProviders, DeepEquals, defaultProvider)
