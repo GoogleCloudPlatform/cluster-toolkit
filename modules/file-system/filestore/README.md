@@ -74,7 +74,8 @@ mentioned below.
 Filestore supports NFS protocols `NFS_V3` (default) and `NFS_V4_1`. Protocol support depends on the selected tier:
 - `NFS_V3`: Supported on all tiers (`BASIC_HDD`, `BASIC_SSD`, `HIGH_SCALE_SSD`, `ZONAL`, `ENTERPRISE`).
 - `NFS_V4_1`: Supported only on `HIGH_SCALE_SSD`, `ZONAL`, `REGIONAL`, and `ENTERPRISE`.
-This can be specified at creation time via the `protocol` variable. By default, `NFS_V3` is used for compatibility. See the example below and [this page](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/filestore_instance#protocol-1) for more information.
+This can be specified at creation time via the `protocol` variable. By default, `NFS_V3` is used for compatibility.
+See the example below and [this page](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/filestore_instance#protocol-1) for more information.
 
 ```yaml
 - id: homefs
@@ -83,6 +84,7 @@ This can be specified at creation time via the `protocol` variable. By default, 
   settings:
     local_mount: /homefs
     protocol: NFS_V4_1
+    filestore_tier: ZONAL
 ```
 
 ### Filestore quota
