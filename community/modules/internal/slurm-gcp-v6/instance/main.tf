@@ -20,20 +20,13 @@
 ##########
 
 locals {
-  hostname      = var.hostname == "" ? "default" : var.hostname
   num_instances = length(var.static_ips) == 0 ? var.num_instances : length(var.static_ips)
 
   # local.static_ips is the same as var.static_ips with a dummy element appended
   # at the end of the list to work around "list does not have any elements so cannot
   # determine type" error when var.static_ips is empty
   static_ips = concat(var.static_ips, ["NOT_AN_IP"])
-}
 
-#################
-# LOCALS: SLURM #
-#################
-
-locals {
   network_interfaces = [for index in range(local.num_instances) :
     concat([
       {
@@ -52,9 +45,6 @@ locals {
       var.additional_networks
     )
   ]
-
-  slurm_instance_role = lower(var.slurm_instance_role)
-
 }
 
 ################
@@ -71,10 +61,6 @@ data "google_compute_instance_template" "base" {
   name    = var.instance_template
 }
 
-data "local_file" "startup" {
-  filename = "${path.module}/../instance_template/files/startup_sh_unlinted"
-}
-
 #############
 # INSTANCES #
 #############
@@ -86,7 +72,7 @@ resource "null_resource" "replace_trigger" {
 
 resource "google_compute_instance_from_template" "slurm_instance" {
   count   = local.num_instances
-  name    = var.add_hostname_suffix ? format("%s%s%s", local.hostname, var.hostname_suffix_separator, format("%03d", count.index + 1)) : local.hostname
+  name    = format("%s-%s", var.hostname, format("%03d", count.index + 1))
   project = var.project_id
   zone    = var.zone == null ? data.google_compute_zones.available.names[count.index % length(data.google_compute_zones.available.names)] : var.zone
 
@@ -127,25 +113,6 @@ resource "google_compute_instance_from_template" "slurm_instance" {
   }
 
   source_instance_template = data.google_compute_instance_template.base.self_link
-
-  # Slurm
-  labels = merge(
-    data.google_compute_instance_template.base.labels,
-    var.labels,
-    {
-      slurm_cluster_name  = var.slurm_cluster_name
-      slurm_instance_role = local.slurm_instance_role
-    },
-  )
-  metadata = merge(
-    data.google_compute_instance_template.base.metadata,
-    var.metadata,
-    {
-      slurm_cluster_name  = var.slurm_cluster_name
-      slurm_instance_role = local.slurm_instance_role
-      startup-script      = data.local_file.startup.content
-    },
-  )
 
   lifecycle {
     replace_triggered_by = [null_resource.replace_trigger.id]

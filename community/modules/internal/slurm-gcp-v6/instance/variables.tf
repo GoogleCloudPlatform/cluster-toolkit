@@ -42,13 +42,6 @@ variable "subnetwork_project" {
 variable "hostname" {
   description = "Hostname of instances"
   type        = string
-  default     = ""
-}
-
-variable "add_hostname_suffix" {
-  description = "Adds a suffix to the hostname"
-  type        = bool
-  default     = true
 }
 
 variable "additional_networks" {
@@ -115,44 +108,9 @@ variable "zone" {
   default     = null
 }
 
-variable "hostname_suffix_separator" {
-  description = "Separator character to compose hostname when add_hostname_suffix is set to true."
-  type        = string
-  default     = "-"
-}
-
-variable "metadata" {
-  type        = map(string)
-  description = "Metadata, provided as a map"
-  default     = {}
-}
-
-variable "labels" {
-  type        = map(string)
-  description = "Labels, provided as a map. Merged and takes precedence over labels on instance template"
-  default     = {}
-}
-
 #########
 # SLURM #
 #########
-
-variable "slurm_instance_role" {
-  description = "Slurm instance type. Must be one of: controller; login; compute."
-  type        = string
-  default     = null
-
-  validation {
-    condition     = contains(["controller", "login", "compute"], lower(var.slurm_instance_role))
-    error_message = "Must be one of: controller; login; compute."
-  }
-}
-
-variable "slurm_cluster_name" {
-  description = "Cluster name, used for resource naming."
-  type        = string
-}
-
 
 variable "replace_trigger" {
   description = "Trigger value to replace the instances."

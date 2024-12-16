@@ -21,7 +21,6 @@ variable "project_id" {
 variable "name_prefix" {
   description = "Name prefix for the instance template"
   type        = string
-  default     = "default-instance-template"
 }
 
 variable "machine_type" {
@@ -94,12 +93,6 @@ variable "region" {
   type        = string
   description = "Region where the instance template should be created."
   default     = null
-}
-
-variable "enable_nested_virtualization" {
-  type        = bool
-  description = "Defines whether the instance should have nested virtualization enabled."
-  default     = false
 }
 
 variable "threads_per_core" {
@@ -347,18 +340,4 @@ EOF
     subnetwork_range_name = string
   })
   default = null
-}
-
-
-variable "resource_policies" {
-  description = <<-EOD
-  A list of self_links of resource policies to attach to the instance.
-  Currently a max of 1 resource policy is supported.
-  EOD
-  type        = list(string)
-  default     = null
-  validation {
-    condition     = try(length(var.resource_policies) <= 1, true)
-    error_message = "Only one resource policy can be attached to the instance."
-  }
 }
