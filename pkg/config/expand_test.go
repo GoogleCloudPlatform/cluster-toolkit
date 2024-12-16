@@ -87,6 +87,32 @@ func (s *zeroSuite) TestExpandProviders(c *C) {
 				With("zone", cty.StringVal("zone1")).
 				With("universe_domain", cty.StringVal("test-universe.com"))}}
 
+	testGKEClusterModuleID := ModuleID("dummy_cluster")
+
+	testKubectlConf := Dict{}
+	for s, v := range map[string]string{
+		"cluster_ca_certificate": "cluster_ca_certificate",
+		"host":                   "host_endpoint",
+		"token":                  "access_token"} {
+		testKubectlConf = testKubectlConf.With(s, ModuleRef(testGKEClusterModuleID, v).AsValue())
+	}
+	testKubectlConf = testKubectlConf.
+		With("apply_retry_count", cty.NumberIntVal(15)).
+		With("load_config_file", cty.BoolVal(false))
+
+	testKubectlProvider := PR{
+		Source:        "gavinbunney/kubectl",
+		Version:       ">= 1.7.0",
+		Configuration: testKubectlConf}
+
+	testGKEClusterModule := Module{
+		Source: "module/test/gke-cluster/dummy",
+		ID:     testGKEClusterModuleID}
+
+	testPreExistingGKEClusterModule := Module{
+		Source: "module/test/pre-existing-gke-cluster/dummy",
+		ID:     testGKEClusterModuleID}
+
 	defaultProvider := map[string]PR{
 		"google": TerraformProvider{
 			Source:  "hashicorp/google",
@@ -94,30 +120,6 @@ func (s *zeroSuite) TestExpandProviders(c *C) {
 		"google-beta": TerraformProvider{
 			Source:  "hashicorp/google-beta",
 			Version: "~> 6.13.0"}}
-
-	testGKEClusterModuleID := ModuleID("dummy_cluster")
-	testGKEClusterModuleOutputName := "host_endpoint"
-
-	kubectlProvider := PR{
-		Source:  "gavinbunney/kubectl",
-		Version: ">= 1.7.0",
-		Configuration: Dict{}.
-			With("host", ModuleRef(testGKEClusterModuleID, testGKEClusterModuleOutputName).AsValue()).
-			With("apply_retry_count", cty.NumberIntVal(15)).
-			With("load_config_file", cty.BoolVal(false))}
-
-	testGKEClusterModuleOutputs := []modulereader.OutputInfo{
-		{Name: testGKEClusterModuleOutputName}}
-
-	testGKEClusterModule := Module{
-		Source:  "module/test/gke-cluster/dummy",
-		ID:      testGKEClusterModuleID,
-		Outputs: testGKEClusterModuleOutputs}
-
-	testPreExistingGKEClusterModule := Module{
-		Source:  "module/test/pre-existing-gke-cluster/dummy",
-		ID:      testGKEClusterModuleID,
-		Outputs: testGKEClusterModuleOutputs}
 
 	{ // no def PR, no group PR - match default values
 		g := Group{Name: "clown"}
@@ -129,7 +131,7 @@ func (s *zeroSuite) TestExpandProviders(c *C) {
 		g := Group{
 			Name:    "clown",
 			Modules: []Module{testGKEClusterModule}}
-		defaultProvider["kubectl"] = kubectlProvider
+		defaultProvider["kubectl"] = testKubectlProvider
 		noDefPr.expandProviders(&g)
 		c.Check(g.TerraformProviders, DeepEquals, defaultProvider)
 		delete(defaultProvider, "kubectl")
@@ -139,7 +141,7 @@ func (s *zeroSuite) TestExpandProviders(c *C) {
 		g := Group{
 			Name:    "clown",
 			Modules: []Module{testPreExistingGKEClusterModule}}
-		defaultProvider["kubectl"] = kubectlProvider
+		defaultProvider["kubectl"] = testKubectlProvider
 		noDefPr.expandProviders(&g)
 		c.Check(g.TerraformProviders, DeepEquals, defaultProvider)
 		delete(defaultProvider, "kubectl")
