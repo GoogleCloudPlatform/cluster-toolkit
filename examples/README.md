@@ -1528,8 +1528,8 @@ The blueprint contains the following:
 * A K8s Job that demonstrates ML training workload with parallelstore storage disk ops.
 
 > **Warning**: In this example, when storage type `Parallelstore` is specified in `gke-storage` module.
-> The lifecycle of the parallelstore is not managed by the blueprint.
-> On glcuster destroy ops, the Parallelstore created will also be destroyed.
+> The lifecycle of the parallelstore is managed by the blueprint.
+> On glcuster destroy ops, the Parallelstore storage created will also be destroyed.
 >
 > [!Note]
 > The Kubernetes API server will only allow requests from authorized networks.
