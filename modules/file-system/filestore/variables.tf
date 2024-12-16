@@ -97,7 +97,7 @@ variable "filestore_tier" {
     error_message = "Allowed values for filestore_tier are 'BASIC_HDD','BASIC_SSD','HIGH_SCALE_SSD','ZONAL','ENTERPRISE'.\nhttps://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/filestore_instance#tier\nhttps://cloud.google.com/filestore/docs/reference/rest/v1beta1/Tier."
   }
   validation {
-    condition = !(var.protocol == "NFS_V4_1" && !contains(["HIGH_SCALE_SSD", "ZONAL", "REGIONAL", "ENTERPRISE"], var.filestore_tier))
+    condition     = !(var.protocol == "NFS_V4_1" && !contains(["HIGH_SCALE_SSD", "ZONAL", "REGIONAL", "ENTERPRISE"], var.filestore_tier))
     error_message = "NFS_V4_1 is only supported with HIGH_SCALE_SSD, ZONAL, REGIONAL, or ENTERPRISE tiers."
   }
 }
