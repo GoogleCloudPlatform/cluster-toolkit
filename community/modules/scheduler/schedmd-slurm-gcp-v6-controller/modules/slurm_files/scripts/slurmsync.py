@@ -22,7 +22,6 @@ import re
 import sys
 import shlex
 from datetime import datetime, timedelta
-from enum import Enum
 from itertools import chain
 from pathlib import Path
 from dataclasses import dataclass
@@ -48,6 +47,7 @@ from util import lookup
 from suspend import delete_instances
 from resume import start_tpu
 import conf
+import ops_watch
 
 log = logging.getLogger()
 
@@ -379,7 +379,7 @@ def sync_placement_groups():
         delete_placement_groups(list(placement_groups.values()))
 
 
-def sync_slurm():
+def sync_nodes():
     compute_instances = {
         name for name, inst in lookup().instances().items() if inst.role == "compute"
     }
@@ -580,16 +580,21 @@ def sync_opportunistic_maintenance(lkp: util.Lookup) -> None:
     for job_name, node in create_jobs.items():
         create_maintenance_job(job_name, node)
 
-
 def main():
     try:
         reconfigure_slurm()
     except Exception:
         log.exception("failed to reconfigure slurm")
 
-    if lookup().is_controller:
+    lkp = lookup()
+    if lkp.is_controller:
         try:
-            sync_slurm()
+            ops_watch.sync_ops(lkp)
+        except Exception:
+            log.exception("failed to sync long running operations")
+
+        try:
+            sync_nodes()
         except Exception:
             log.exception("failed to sync instances")
 
@@ -599,17 +604,17 @@ def main():
             log.exception("failed to sync placement groups")
 
         try:
-            update_topology(lookup())
+            update_topology(lkp)
         except Exception:
             log.exception("failed to update topology")
 
         try:
-            sync_maintenance_reservation(lookup())
+            sync_maintenance_reservation(lkp)
         except Exception:
             log.exception("failed to sync slurm reservation for scheduled maintenance")
 
         try:
-            sync_opportunistic_maintenance(lookup())
+            sync_opportunistic_maintenance(lkp)
         except Exception:
             log.exception("failed to sync opportunistic reservation for scheduled maintenance")
 

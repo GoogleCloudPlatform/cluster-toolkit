@@ -980,13 +980,11 @@ def ensure_execute(request):
         break
 
 
-def batch_execute(requests, retry_cb=None, log_err=log.error):
+def batch_execute(requests: Dict, retry_cb=None, log_err=log.error):
     """execute list or dict<req_id, request> as batch requests
     retry if retry_cb returns true
     """
     BATCH_LIMIT = 1000
-    if not isinstance(requests, dict):
-        requests = {str(k): v for k, v in enumerate(requests)}  # rid generated here
     done = {}
     failed = {}
     timestamps = []
@@ -1776,6 +1774,10 @@ class Lookup:
         fields = f"items.zones.instances({instance_fields}),nextPageToken"
         flt = f"labels.slurm_cluster_name={self.cfg.slurm_cluster_name} AND name:{self.cfg.slurm_cluster_name}-*"
         act = self.compute.instances()
+        # https://cloud.google.com/compute/docs/reference/rest/v1/instances/aggregatedList
+        # > The performance of this method degrades when a filter is specified on a project
+        # > that has a very large number of instances.
+        # TODO: consider issuing in parallel multiple zonal list requests
         op = act.aggregatedList(project=self.project, fields=fields, filter=flt)
 
         def properties(inst):
