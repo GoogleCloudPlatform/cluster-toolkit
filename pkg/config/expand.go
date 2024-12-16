@@ -197,16 +197,23 @@ func kubectlProviderRequiredModule(grp *Group) (bool, Module) {
 }
 
 func getModuleKubectlProviders(mod Module) map[string]TerraformProvider {
+	modOutputs := []string{}
+	for idx := range mod.Outputs {
+		modOutputs = append(modOutputs, mod.Outputs[idx].Name)
+	}
+
 	kubectlConf := Dict{}
 	for s, v := range map[string]string{
 		"cluster_ca_certificate": "cluster_ca_certificate",
 		"host":                   "host_endpoint",
 		"token":                  "access_token"} {
-		kubectlConf = kubectlConf.With(s, ModuleRef(mod.ID, v).AsValue())
+		if slices.Contains(modOutputs, v) {
+			kubectlConf = kubectlConf.With(s, ModuleRef(mod.ID, v).AsValue())
+		}
 	}
-	// kubectlConf = kubectlConf.With("alias", cty.StringVal(string(mod.ID)))
-	kubectlConf = kubectlConf.With("apply_retry_count", cty.NumberIntVal(15))
-	kubectlConf = kubectlConf.With("load_config_file", cty.BoolVal(false))
+	kubectlConf = kubectlConf.
+		With("apply_retry_count", cty.NumberIntVal(15)).
+		With("load_config_file", cty.BoolVal(false))
 	return map[string]TerraformProvider{
 		"kubectl": {
 			Source:        "gavinbunney/kubectl",

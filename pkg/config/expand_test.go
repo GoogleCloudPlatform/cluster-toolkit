@@ -87,16 +87,72 @@ func (s *zeroSuite) TestExpandProviders(c *C) {
 				With("zone", cty.StringVal("zone1")).
 				With("universe_domain", cty.StringVal("test-universe.com"))}}
 
+	defaultProvider := map[string]PR{
+		"google": TerraformProvider{
+			Source:  "hashicorp/google",
+			Version: "~> 6.13.0"},
+		"google-beta": TerraformProvider{
+			Source:  "hashicorp/google-beta",
+			Version: "~> 6.13.0"}}
+
+	testGKEClusterModuleID := ModuleID("dummy_cluster")
+	testGKEClusterModuleOutputName := "host_endpoint"
+
+	kubectlProvider := PR{
+		Source:  "gavinbunney/kubectl",
+		Version: ">= 1.7.0",
+		Configuration: Dict{}.
+			With("host", ModuleRef(testGKEClusterModuleID, testGKEClusterModuleOutputName).AsValue()).
+			With("apply_retry_count", cty.NumberIntVal(15)).
+			With("load_config_file", cty.BoolVal(false))}
+
+	testModuleOutputs := []modulereader.OutputInfo{
+		{Name: testGKEClusterModuleOutputName}}
+
+	testGKEClusterModule := Module{
+		Source:  "module/test/gke-cluster",
+		ID:      testGKEClusterModuleID,
+		Outputs: testModuleOutputs}
+
+	testPreExistingGKEClusterModule := Module{
+		Source:  "module/test/pre-existing-gke-cluster",
+		ID:      testGKEClusterModuleID,
+		Outputs: testModuleOutputs}
+
 	{ // no def PR, no group PR - match default values
 		g := Group{Name: "clown"}
 		noDefPr.expandProviders(&g)
-		c.Check(g.TerraformProviders, DeepEquals, map[string]PR{
-			"google": TerraformProvider{
-				Source:  "hashicorp/google",
-				Version: "~> 6.13.0"},
-			"google-beta": TerraformProvider{
-				Source:  "hashicorp/google-beta",
-				Version: "~> 6.13.0"}})
+		c.Check(g.TerraformProviders, DeepEquals, defaultProvider)
+	}
+
+	{ // no def PR, no group PR, group only have gke cluster module
+		g := Group{
+			Name:    "clown",
+			Modules: []Module{testGKEClusterModule}}
+		defaultProvider["kubectl"] = kubectlProvider
+		noDefPr.expandProviders(&g)
+		c.Check(g.TerraformProviders, DeepEquals, defaultProvider)
+		delete(defaultProvider, "kubectl")
+	}
+
+	{ // no def PR, no group PR, group only have pre existing gke cluster module
+		g := Group{
+			Name:    "clown",
+			Modules: []Module{testPreExistingGKEClusterModule}}
+		defaultProvider["kubectl"] = kubectlProvider
+		noDefPr.expandProviders(&g)
+		c.Check(g.TerraformProviders, DeepEquals, defaultProvider)
+		delete(defaultProvider, "kubectl")
+	}
+
+	{ // no def PR, no group PR, group have both gke cluster and pre existing gke cluster module
+		g := Group{
+			Name:    "clown",
+			Modules: []Module{testGKEClusterModule, testPreExistingGKEClusterModule}}
+		defaultProvider["kubectl"] = kubectlProvider
+		noDefPr.expandProviders(&g)
+		c.Check(g.TerraformProviders, DeepEquals, defaultProvider)
+		delete(defaultProvider, "kubectl")
 	}
 
 	{ // no def PR, group PR
