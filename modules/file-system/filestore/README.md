@@ -53,7 +53,7 @@ creation will fail when you run `terraform apply`.
 
 [tiers]: https://cloud.google.com/filestore/docs/service-tiers
 
-### Filestore mount options
+### Filestore protocols and mount options
 After Filestore instance is created, you can mount this to the compute node
 using different mount options. Toolkit uses [default mount options](https://linux.die.net/man/8/mount)
 for all tier services. Filestore has recommended mount options for different
@@ -69,6 +69,20 @@ mentioned below.
   settings:
     local_mount: /homefs
     mount_options: defaults,hard,timeo=600,retrans=3,_netdev
+```
+
+Filestore supports NFS protocols `NFS_V3` (default) and `NFS_V4_1`. Protocol support depends on the selected tier:
+- `NFS_V3`: Supported on all tiers (`BASIC_HDD`, `BASIC_SSD`, `HIGH_SCALE_SSD`, `ZONAL`, `ENTERPRISE`).
+- `NFS_V4_1`: Supported only on `HIGH_SCALE_SSD`, `ZONAL`, `REGIONAL`, and `ENTERPRISE`.
+This can be specified at creation time via the `protocol` variable. By default, `NFS_V3` is used for compatibility. See the example below and [this page](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/filestore_instance#protocol-1) for more information.
+
+```yaml
+- id: homefs
+  source: modules/file-system/filestore
+  use: [network1]
+  settings:
+    local_mount: /homefs
+    protocol: NFS_V4_1
 ```
 
 ### Filestore quota
