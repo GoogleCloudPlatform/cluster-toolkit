@@ -1527,7 +1527,7 @@ The blueprint contains the following:
 * A K8s Job that uses a parallelstore storage volume option.
 * A K8s Job that demonstrates ML training workload with parallelstore storage disk ops.
 
-> **Warning**: In this example, when storage type `Parallelstore` is specified in `gke-storage` module.
+> **Warning**: In this example blueprint, when storage type `Parallelstore` is specified in `gke-storage` module.
 > The lifecycle of the parallelstore is managed by the blueprint.
 > On glcuster destroy ops, the Parallelstore storage created will also be destroyed.
 >
