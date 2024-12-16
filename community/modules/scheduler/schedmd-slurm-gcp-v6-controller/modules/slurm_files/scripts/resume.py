@@ -155,11 +155,6 @@ def dws_flex_duration(dws_flex:object, job_id: Optional[int]) -> int:
             log.info("Job TimeLimit cannot be less than 30 seconds or exceed 2 weeks")
     return max_duration
 
-def per_instance_properties(node):
-    props = NSDict()
-    # No properties beyond name are supported yet.
-
-    return props
 
 def create_instances_request(nodes: List[str], placement_group: Optional[str], excl_job_id: Optional[int]):
     """Call regionInstances.bulkInsert to create instances"""
@@ -167,31 +162,27 @@ def create_instances_request(nodes: List[str], placement_group: Optional[str], e
 
     # model here indicates any node that can be used to describe the rest
     model = next(iter(nodes))
-    nodeset = lookup().node_nodeset(model)
-    template = lookup().node_template(model)
     log.debug(f"create_instances_request: {model} placement: {placement_group}")
 
-    body = NSDict()
+    nodeset = lookup().node_nodeset(model)
+    template = lookup().node_template(model)
+    labels = {"slurm_job_id": excl_job_id} if excl_job_id else None
 
-    body.count = len(nodes)
+    body = dict(
+        count = len(nodes),
+        sourceInstanceTemplate = template,
+        # key is instance name, value overwrites properties (no overwrites)
+        perInstanceProperties = {k: {} for k in nodes},
+        instanceProperties = instance_properties(
+            nodeset, model, placement_group, labels, excl_job_id
+        ),
+    )
 
     if placement_group:
         assert len(nodes) <= PLACEMENT_MAX_CNT
         pass # do not set minCount to force "all or nothing" behavior
     else:
-        body.minCount = 1
-
-    # source of instance properties
-    body.sourceInstanceTemplate = template
-
-    labels = {"slurm_job_id": excl_job_id} if excl_job_id else None
-    # overwrites properties across all instances
-    body.instanceProperties = instance_properties(
-        nodeset, model, placement_group, labels, excl_job_id
-    )
-
-    # key is instance name, value overwrites properties
-    body.perInstanceProperties = {k: per_instance_properties(k) for k in nodes}
+        body["minCount"] = 1
 
     zone_allow = nodeset.zone_policy_allow or []
     zone_deny = nodeset.zone_policy_deny or []
@@ -203,10 +194,12 @@ def create_instances_request(nodes: List[str], placement_group: Optional[str], e
         api_method = lookup().compute.regionInstances().bulkInsert
         method_args = {"region": lookup().node_region(model)}
         
-        body.locationPolicy.locations = {
-            **{ f"zones/{z}": {"preference": "ALLOW"} for z in zone_allow },
-            **{ f"zones/{z}": {"preference": "DENY"} for z in zone_deny }}
-        body.locationPolicy.targetShape = nodeset.zone_target_shape
+        body["locationPolicy"] = dict(
+            locations = {
+                **{ f"zones/{z}": {"preference": "ALLOW"} for z in zone_allow },
+                **{ f"zones/{z}": {"preference": "DENY"} for z in zone_deny }},
+            targetShape = nodeset.zone_target_shape,
+        )
     
     if lookup().cfg.enable_slurm_gcp_plugins:
         slurm_gcp_plugins.pre_instance_bulk_insert(
@@ -218,7 +211,7 @@ def create_instances_request(nodes: List[str], placement_group: Optional[str], e
 
     req = api_method(
         project=lookup().project, 
-        body=body.to_dict(), 
+        body=body, 
         **method_args)
     log.debug(f"new request: endpoint={req.methodId} nodes={to_hostlist(nodes)}")
     log_api_request(req)
