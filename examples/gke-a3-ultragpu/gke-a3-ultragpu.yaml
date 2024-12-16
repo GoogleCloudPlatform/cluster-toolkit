@@ -1,0 +1,212 @@
+# Copyright 2024 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+blueprint_name: gke-a3-ultra
+
+vars:
+  project_id: # add this
+  deployment_name: # add this
+  region: # add this
+  zone: # add this
+  # Cidr block containing the IP of the machine calling terraform.
+  # The following line must be updated for this example to work.
+  authorized_cidr: # add this
+  extended_reservation: # add this
+  # Installs NCCL library and Google NCCL plugin
+  # Runs an init container on all H200 GPU nodes with the NCCL plugin image
+  nccl_installer_path: $(ghpc_stage("./nccl-installer.yaml"))
+  # Temporary fix for COS issue, will be fixed in next release
+  mglru_disable_path: $(ghpc_stage("./mglru-disable.yaml"))
+  mtu_size: 8896
+  static_node_count:  # add this
+  system_node_pool_disk_size_gb: 200
+  a3ultra_node_pool_disk_size_gb: 100
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: gke-a3-ultra-net-0
+    source: github.com/GoogleCloudPlatform/cluster-toolkit.git//modules/network/vpc?ref=e0c690b
+    settings:
+      network_name: gke-a3-ultra-net-0
+      subnetworks:
+      - subnet_name: gke-a3-ultra-sub-0
+        subnet_region: $(vars.region)
+        subnet_ip: 192.168.0.0/18
+      secondary_ranges:
+        gke-a3-ultra-sub-0:
+        - range_name: pods
+          ip_cidr_range: 10.4.0.0/14
+        - range_name: services
+          ip_cidr_range: 10.0.32.0/20
+      firewall_rules:
+      - name: gke-a3-ultra-internal-0
+        ranges: [192.168.0.0/16]
+        allow:
+        - protocol: tcp
+          ports: ["0-65535"]
+        - protocol: udp
+          ports: ["0-65535"]
+        - protocol: icmp
+
+  - id: gke-a3-ultra-net-1
+    source: github.com/GoogleCloudPlatform/cluster-toolkit.git//modules/network/vpc?ref=e0c690b
+    settings:
+      network_name: gke-a3-ultra-net-1
+      mtu: $(vars.mtu_size)
+      subnetworks:
+      - subnet_name: gke-a3-ultra-sub-1
+        subnet_region: $(vars.region)
+        subnet_ip: 192.168.64.0/18
+      firewall_rules:
+      - name: gke-a3-ultra-internal-1
+        ranges: [192.168.0.0/16]
+        allow:
+        - protocol: tcp
+          ports: ["0-65535"]
+        - protocol: udp
+          ports: ["0-65535"]
+        - protocol: icmp
+
+  - id: gke-a3-ultra-rdma-net
+    source: github.com/GoogleCloudPlatform/cluster-toolkit.git//community/modules/network/rdma-vpc?ref=98c49fe
+    settings:
+      network_name: gke-a3-ultra-rdma-net
+      mtu: $(vars.mtu_size)
+      network_profile: https://www.googleapis.com/compute/beta/projects/$(vars.project_id)/global/networkProfiles/$(vars.zone)-vpc-roce
+      network_routing_mode: REGIONAL
+      subnetworks_template:
+        name_prefix: gke-a3-ultra-rdma-sub
+        count: 8
+        ip_range: 192.168.128.0/18
+        region: $(vars.region)
+
+  - id: a3-ultragpu-cluster
+    source: github.com/GoogleCloudPlatform/cluster-toolkit.git//modules/scheduler/gke-cluster?ref=e0c690b
+    use: [gke-a3-ultra-net-0]
+    settings:
+      release_channel: RAPID
+      system_node_pool_machine_type: "e2-standard-16"
+      system_node_pool_disk_size_gb: $(vars.system_node_pool_disk_size_gb)
+      system_node_pool_taints: []
+      enable_dcgm_monitoring: true
+      enable_gcsfuse_csi: true
+      enable_private_endpoint: false # Allows access from authorized public IPs
+      master_authorized_networks:
+      - cidr_block: $(vars.authorized_cidr) # Allows your machine to run the kubectl command. Required for multi network setup.
+        display_name: "kubectl-access-network"
+      maintenance_exclusions:
+      - name: no-minor-or-node-upgrades-indefinite
+        start_time: "2024-12-01T00:00:00Z"
+        end_time: "2025-12-22T00:00:00Z"
+        exclusion_scope: NO_MINOR_OR_NODE_UPGRADES      
+      additional_networks:
+        $(concat(
+          [{
+            network=gke-a3-ultra-net-1.network_name,
+            subnetwork=gke-a3-ultra-net-1.subnetwork_name,
+            subnetwork_project=vars.project_id,
+            nic_type="GVNIC",
+            queue_count=null,
+            network_ip=null,
+            stack_type=null,
+            access_config=[{nat_ip=null, public_ptr_domain_name=null, network_tier=null}],
+            ipv6_access_config=[],
+            alias_ip_range=[]
+          }],
+         gke-a3-ultra-rdma-net.subnetwork_interfaces_gke
+        ))
+    outputs: [instructions]
+
+  - id: a3-ultragpu-pool
+    source: github.com/GoogleCloudPlatform/cluster-toolkit.git//modules/compute/gke-node-pool?ref=e0c690b
+    use: [a3-ultragpu-cluster]
+    settings:
+      machine_type: a3-ultragpu-8g
+      auto_upgrade: true
+      zones: [$(vars.zone)]
+      disk_type: hyperdisk-balanced
+      disk_size_gb: $(vars.a3ultra_node_pool_disk_size_gb)
+      static_node_count: $(vars.static_node_count)
+      guest_accelerator:
+      - type: nvidia-h200-141gb
+        count: 8
+        gpu_driver_installation_config:
+          gpu_driver_version: "LATEST"
+      reservation_affinity:
+        consume_reservation_type: SPECIFIC_RESERVATION
+        specific_reservations:
+        - name: $(vars.extended_reservation)
+      additional_networks:
+        $(concat(
+          [{
+            network=gke-a3-ultra-net-1.network_name,
+            subnetwork=gke-a3-ultra-net-1.subnetwork_name,
+            subnetwork_project=vars.project_id,
+            nic_type="GVNIC",
+            queue_count=null,
+            network_ip=null,
+            stack_type=null,
+            access_config=[{nat_ip=null, public_ptr_domain_name=null, network_tier=null}],
+            ipv6_access_config=[],
+            alias_ip_range=[]
+          }],
+         gke-a3-ultra-rdma-net.subnetwork_interfaces_gke
+        ))
+    outputs: [instructions]
+
+  - id: topology-aware-scheduler-install
+    source: github.com/GoogleCloudPlatform/cluster-toolkit.git//community/modules/compute/gke-topology-scheduler?ref=e0c690b
+    use: [a3-ultragpu-cluster]
+
+  - id: workload-manager-install
+    source: github.com/GoogleCloudPlatform/cluster-toolkit.git//modules/management/kubectl-apply?ref=e0c690b
+    use: [a3-ultragpu-cluster]
+    settings:
+      kueue:
+        install: true
+        version: v0.9.1
+      jobset:
+        install: true
+        version: v0.7.1
+      apply_manifests:
+      - source: $(vars.nccl_installer_path)
+      - source: $(vars.mglru_disable_path)
+
+  - id: job-template
+    source: modules/compute/gke-job-template
+    use: [a3-ultragpu-pool]
+    settings:
+      image: nvidia/cuda:11.0.3-runtime-ubuntu20.04
+      command:
+      - nvidia-smi
+      node_count: 2
+      name: run-nvidia-smi
+    outputs: [instructions]
+
+terraform_providers:
+  google:
+    source: hashicorp/google
+    version: 6.13.0
+    configuration:
+      project: $(vars.project_id)
+      region: $(vars.region)
+      zone: $(vars.zone)
+  google-beta:
+    source: hashicorp/google-beta
+    version: 6.13.0
+    configuration:
+      project: $(vars.project_id)
+      region: $(vars.region)
+      zone: $(vars.zone)
