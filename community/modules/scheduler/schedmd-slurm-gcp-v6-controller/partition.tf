@@ -93,6 +93,7 @@ locals {
     maintenance_interval             = ns.maintenance_interval
     instance_properties_json         = ns.instance_properties_json
     enable_placement                 = ns.enable_placement
+    placement_max_distance           = ns.placement_max_distance
     network_storage                  = ns.network_storage
     zone_target_shape                = ns.zone_target_shape
     zone_policy_allow                = ns.zone_policy_allow

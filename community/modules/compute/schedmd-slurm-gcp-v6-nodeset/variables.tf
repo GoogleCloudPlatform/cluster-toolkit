@@ -565,3 +565,15 @@ variable "dws_flex" {
     error_message = "Max duration must be more than 30 seconds, and cannot be more than two weeks."
   }
 }
+
+variable "placement_max_distance" {
+  type        = number
+  description = "Maximum distance between nodes in the placement group. Requires enable_placement to be true. Values must be supported by the chosen machine type."
+  nullable    = true
+  default     = null
+
+  validation {
+    condition     = coalesce(var.placement_max_distance, 1) >= 1 && coalesce(var.placement_max_distance, 3) <= 3
+    error_message = "Invalid value for placement_max_distance. Valid values are null, 1, 2, or 3."
+  }
+}
