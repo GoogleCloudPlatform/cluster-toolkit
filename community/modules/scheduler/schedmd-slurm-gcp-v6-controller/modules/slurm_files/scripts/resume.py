@@ -444,12 +444,13 @@ def hold_job(job_id, reason):
     run(f"{lookup().scontrol} update jobid={job_id} comment='{reason}'")
 
 
-def create_placement_request(pg_name, region):
+def create_placement_request(pg_name: str, region: str, max_distance: Optional[int]):
     config = {
         "name": pg_name,
         "region": region,
         "groupPlacementPolicy": {
             "collocation": "COLLOCATED",
+            "maxDistance": max_distance
         },
     }
     if lookup().cfg.enable_slurm_gcp_plugins:
@@ -489,11 +490,13 @@ def _allocate_nodes_to_placements(nodes: List[str], excl_job_id:Optional[int], l
     if not (nodeset.enable_placement and valid_placement_node(model)):
         return no_pp
     
+    max_count = calculate_chunk_size(nodeset, lkp)
+
     name_prefix = f"{lkp.cfg.slurm_cluster_name}-slurmgcp-managed-{nodeset.nodeset_name}"
     if excl_job_id: # simply chunk given nodes by max size of placement
         return [
             PlacementAndNodes(placement=f"{name_prefix}-{excl_job_id}-{i}", nodes=chunk)
-            for i, chunk in enumerate(chunked(nodes, n=PLACEMENT_MAX_CNT))
+            for i, chunk in enumerate(chunked(nodes, n=max_count))
         ]
 
     # split whole nodeset (not only nodes to resume) into chunks of max size of placement
@@ -503,7 +506,7 @@ def _allocate_nodes_to_placements(nodes: List[str], excl_job_id:Optional[int], l
 
     for node in nodes:
         try:
-            chunk = lkp.node_index(node) // PLACEMENT_MAX_CNT
+            chunk = lkp.node_index(node) // max_count
             chunks[chunk].append(node)
         except:
             invalid.append(node)
@@ -520,18 +523,35 @@ def _allocate_nodes_to_placements(nodes: List[str], excl_job_id:Optional[int], l
 
     return placements
 
+def calculate_chunk_size(nodeset: NSDict, lkp: util.Lookup) -> int:
+    # Calculates the chunk size based on max distance value received
+    machine_type = lkp.template_info(nodeset.instance_template).machine_type.family
+    max_distance = nodeset.placement_max_distance
+    if max_distance == 1:
+        return 22
+    elif max_distance == 2:
+        if machine_type.startswith("a3"):
+            return 256
+        else:
+            return 150
+    elif max_distance == 3:
+        return 1500
+    else:
+        return PLACEMENT_MAX_CNT
+
 def create_nodeset_placements(nodes: List[str], excl_job_id:Optional[int], lkp: util.Lookup) -> List[PlacementAndNodes]:    
     placements = _allocate_nodes_to_placements(nodes, excl_job_id, lkp)
     region = lkp.node_region(nodes[0])
+    max_distance = lkp.node_nodeset(nodes[0]).get('placement_max_distance')
 
     if log.isEnabledFor(logging.DEBUG):
         debug_p = {p.placement: to_hostlist(p.nodes) for p in placements}
         log.debug(
             f"creating {len(placements)} placement groups: \n{yaml.safe_dump(debug_p).rstrip()}"
         )
-    
+
     requests = {
-        p.placement: create_placement_request(p.placement, region) for p in placements if p.placement
+        p.placement: create_placement_request(p.placement, region, max_distance) for p in placements if p.placement
     }
     if not requests:
         return placements
