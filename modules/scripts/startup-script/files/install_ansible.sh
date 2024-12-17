@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+set -e
 REQ_ANSIBLE_VERSION=2.11
 REQ_ANSIBLE_PIP_VERSION=4.10.0
 REQ_PIP_WHEEL_VERSION=0.37.1
@@ -197,13 +198,13 @@ main() {
 	fi
 
 	# upgrade wheel if necessary
-	wheel_pkg=$(${venv_python_path} -m pip list --format=freeze | grep "^wheel")
+	wheel_pkg=$(${venv_python_path} -m pip list --format=freeze | grep "^wheel" || true)
 	if [ "$wheel_pkg" != "wheel==${REQ_PIP_WHEEL_VERSION}" ]; then
 		${venv_python_path} -m pip install -U wheel==${REQ_PIP_WHEEL_VERSION}
 	fi
 
 	# upgrade setuptools if necessary
-	setuptools_pkg=$(${venv_python_path} -m pip list --format=freeze | grep "^setuptools")
+	setuptools_pkg=$(${venv_python_path} -m pip list --format=freeze | grep "^setuptools" || true)
 	if [ "$setuptools_pkg" != "setuptools==${REQ_PIP_SETUPTOOLS_VERSION}" ]; then
 		${venv_python_path} -m pip install -U setuptools==${REQ_PIP_SETUPTOOLS_VERSION}
 	fi
