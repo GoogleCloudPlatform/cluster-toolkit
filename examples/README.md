@@ -1518,14 +1518,14 @@ cleaned up when the job is deleted.
 
 [storage-gke.yaml]: ../examples/storage-gke.yaml
 
-### [gke-storage-parallelstore.yaml] ![core-badge] ![experimental-badge]
+### [gke-storage-managed-parallelstore.yaml] ![core-badge] ![experimental-badge]
 
-This blueprint shows how to use parallelstore storage options with GKE in the toolkit.
+This blueprint shows how to use managed parallelstore storage options with GKE in the toolkit.
 
 The blueprint contains the following:
 
-* A K8s Job that uses a parallelstore storage volume option.
-* A K8s Job that demonstrates ML training workload with parallelstore storage disk ops.
+* A K8s Job that uses a managed parallelstore storage volume option.
+* A K8s Job that demonstrates ML training workload with managed parallelstore storage disk ops.
 
 > **Warning**: In this example blueprint, when storage type `Parallelstore` is specified in `gke-storage` module.
 > The lifecycle of the parallelstore is managed by the blueprint.
@@ -1540,7 +1540,7 @@ The blueprint contains the following:
 > `--vars authorized_cidr=<your-ip-address>/32`.** You can use a service like
 > [whatismyip.com](https://whatismyip.com) to determine your IP address.
 
-[gke-storage-parallelstore.yaml]: ../examples/gke-storage-parallelstore.yaml
+[gke-storage-managed-parallelstore.yaml]: ../examples/gke-storage-managed-parallelstore.yaml
 
 ### [gke-a3-megagpu.yaml] ![core-badge] ![experimental-badge]
 
