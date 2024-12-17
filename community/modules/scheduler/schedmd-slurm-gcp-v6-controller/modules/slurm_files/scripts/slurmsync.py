@@ -303,13 +303,11 @@ def _seconds_since_timestamp(timestamp):
 
 
 def delete_placement_groups(placement_groups):
-    def delete_placement_request(pg_name, region):
-        return lookup().compute.resourcePolicies().delete(
-            project=lookup().project, region=region, resourcePolicy=pg_name
-        )
-
     requests = {
-        pg.name: delete_placement_request(pg["name"], util.trim_self_link(pg["region"]))
+        pg["name"]: lookup().compute.resourcePolicies().delete(
+            project=lookup().project,
+            region=util.trim_self_link(pg["region"]),
+            resourcePolicy=pg["name"])
         for pg in placement_groups
     }
 
