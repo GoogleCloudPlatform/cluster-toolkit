@@ -15,7 +15,7 @@
   */
 
 locals {
-  kueue_supported_versions  = ["v0.9.1", "v0.9.0", "v0.8.1"]
+  kueue_supported_versions  = ["v0.10.0", "v0.9.1", "v0.9.0", "v0.8.1"]
   jobset_supported_versions = ["v0.7.1", "v0.5.2"]
 }
 
