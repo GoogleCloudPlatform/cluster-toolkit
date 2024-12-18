@@ -34,8 +34,6 @@ CONTAINER_IMAGE=./nvidia+pytorch+24.09-py3.sqsh
 source /usr/local/gib/scripts/set_nccl_env.sh
 export NCCL_NET=gIB
 export NCCL_SOCKET_IFNAME=enp0s19,enp192s20
-export NCCL_SHIMNET_GUEST_CONFIG_CHECKER_CONFIG_FILE=/usr/local/gib/configs/guest_config.txtpb
-export NCCL_TUNER_CONFIG_PATH=/usr/local/gib/configs/tuner_config.txtpb
 
 # Mount /var/tmp to allow the rest of the enroot container to be read-only, and
 # mount current $PWD to /nccl to for accessing nccl-tests binary
