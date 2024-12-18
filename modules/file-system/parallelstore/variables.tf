@@ -91,3 +91,33 @@ variable "import_destination_path" {
   type        = string
   default     = null
 }
+
+variable "file_stripe" {
+  description = "The parallelstore stripe level for files."
+  type        = string
+  default     = "FILE_STRIPE_LEVEL_UNSPECIFIED"
+  validation {
+    condition = contains([
+      "FILE_STRIPE_LEVEL_UNSPECIFIED",
+      "FILE_STRIPE_LEVEL_MIN",
+      "FILE_STRIPE_LEVEL_BALANCED",
+      "FILE_STRIPE_LEVEL_MAX",
+    ], var.file_stripe)
+    error_message = "var.file_stripe must be set to \"FILE_STRIPE_LEVEL_UNSPECIFIED\", \"FILE_STRIPE_LEVEL_MIN\", \"FILE_STRIPE_LEVEL_BALANCED\",  or \"FILE_STRIPE_LEVEL_MAX\""
+  }
+}
+
+variable "directory_stripe" {
+  description = "The parallelstore stripe level for directories."
+  type        = string
+  default     = "DIRECTORY_STRIPE_LEVEL_UNSPECIFIED"
+  validation {
+    condition = contains([
+      "DIRECTORY_STRIPE_LEVEL_UNSPECIFIED",
+      "DIRECTORY_STRIPE_LEVEL_MIN",
+      "DIRECTORY_STRIPE_LEVEL_BALANCED",
+      "DIRECTORY_STRIPE_LEVEL_MAX",
+    ], var.directory_stripe)
+    error_message = "var.directory_stripe must be set to \"DIRECTORY_STRIPE_LEVEL_UNSPECIFIED\", \"DIRECTORY_STRIPE_LEVEL_MIN\", \"DIRECTORY_STRIPE_LEVEL_BALANCED\",  or \"DIRECTORY_STRIPE_LEVEL_MAX\""
+  }
+}
