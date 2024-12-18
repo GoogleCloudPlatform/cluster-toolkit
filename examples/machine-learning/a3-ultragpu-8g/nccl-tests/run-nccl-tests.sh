@@ -31,11 +31,11 @@ CONTAINER_IMAGE=./nvidia+pytorch+24.09-py3.sqsh
 # export NCCL_DEBUG_SUBSYS=INIT,NET
 
 # These parameters should not be modified
-source /var/lib/gib/scripts/set_nccl_env.sh
+source /usr/local/gib/scripts/set_nccl_env.sh
 export NCCL_NET=gIB
 export NCCL_SOCKET_IFNAME=enp0s19,enp192s20
-export NCCL_SHIMNET_GUEST_CONFIG_CHECKER_CONFIG_FILE=/var/lib/gib/configs/guest_config.txtpb
-export NCCL_TUNER_CONFIG_PATH=/var/lib/gib/configs/tuner_config.txtpb
+export NCCL_SHIMNET_GUEST_CONFIG_CHECKER_CONFIG_FILE=/usr/local/gib/configs/guest_config.txtpb
+export NCCL_TUNER_CONFIG_PATH=/usr/local/gib/configs/tuner_config.txtpb
 
 # Mount /var/tmp to allow the rest of the enroot container to be read-only, and
 # mount current $PWD to /nccl to for accessing nccl-tests binary
@@ -45,7 +45,7 @@ CONTAINER_MOUNTS="/var/tmp:/var/tmp"
 CONTAINER_MOUNTS=${CONTAINER_MOUNTS},"$PWD:/nccl"
 
 # Mount required directories for gIB libnccl-net
-CONTAINER_MOUNTS=${CONTAINER_MOUNTS},"/var/lib/gib"
+CONTAINER_MOUNTS=${CONTAINER_MOUNTS},"/usr/local/gib"
 
 # Run the workload
 srun -l \
@@ -55,6 +55,6 @@ srun -l \
 	--container-image="${CONTAINER_IMAGE}" \
 	--container-mounts="${CONTAINER_MOUNTS}" \
 	sh -c "
-  export LD_LIBRARY_PATH=/var/lib/gib/lib64:/usr/lib/x86_64-linux-gnu:\$LD_LIBRARY_PATH;
+  export LD_LIBRARY_PATH=/usr/local/gib/lib64:/usr/lib/x86_64-linux-gnu:\$LD_LIBRARY_PATH;
   /nccl/nccl-tests/build/all_gather_perf -b 256M -e 8G -f 2 -g 1 -w 5 --iters 200;
   "
