@@ -106,11 +106,11 @@ func (s *zeroSuite) TestExpandProviders(c *C) {
 		Configuration: testKubectlConf}
 
 	testGKEClusterModule := Module{
-		Source: "module/test/gke-cluster/dummy",
+		Source: "modules/scheduler/gke-cluster",
 		ID:     testGKEClusterModuleID}
 
 	testPreExistingGKEClusterModule := Module{
-		Source: "module/test/pre-existing-gke-cluster/dummy",
+		Source: "modules/scheduler/pre-existing-gke-cluster",
 		ID:     testGKEClusterModuleID}
 
 	defaultProvider := map[string]PR{

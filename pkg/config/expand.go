@@ -189,7 +189,7 @@ func (bp Blueprint) expandBackend(grp *Group) {
 
 func kubectlProviderRequiredModule(grp *Group) (bool, Module) {
 	for _, mod := range grp.Modules {
-		if strings.Contains(mod.Source, "gke-cluster") || strings.Contains(mod.Source, "pre-existing-gke-cluster") {
+		if strings.Contains(mod.Source, "modules/scheduler/gke-cluster") || strings.Contains(mod.Source, "modules/scheduler/pre-existing-gke-cluster") {
 			return true, mod
 		}
 	}
