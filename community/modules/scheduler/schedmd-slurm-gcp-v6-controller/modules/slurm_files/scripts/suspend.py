@@ -27,9 +27,9 @@ from util import (
     to_hostlist,
     wait_for_operations,
     separate,
-    execute_with_futures,
 )
-from util import lookup, TPU
+from util import lookup
+import tpu
 
 import slurm_gcp_plugins
 
@@ -58,33 +58,6 @@ def delete_instance_request(instance):
     return request
 
 
-def stop_tpu(data):
-    tpu_nodeset = data["nodeset"]
-    node = data["node"]
-    tpu = data["tpu"]
-    if tpu_nodeset.preserve_tpu and tpu.vmcount == 1:
-        log.info(f"stopping node {node}")
-        if tpu.stop_node(node):
-            return
-        log.error("Error stopping node {node} will delete instead")
-    log.info(f"deleting node {node}")
-    if not tpu.delete_node(node):
-        log.error("Error deleting node {node}")
-
-
-def delete_tpu_instances(instances):
-    stop_data = []
-    for prefix, nodes in util.groupby_unsorted(instances, lookup().node_prefix):
-        log.info(f"Deleting TPU nodes from prefix {prefix}")
-        lnodes = list(nodes)
-        tpu_nodeset = lookup().node_nodeset(lnodes[0])
-        tpu = TPU(tpu_nodeset)
-        stop_data.extend(
-            [{"tpu": tpu, "node": node, "nodeset": tpu_nodeset} for node in lnodes]
-        )
-    execute_with_futures(stop_tpu, stop_data)
-
-
 def delete_instances(instances):
     """delete instances individually"""
     invalid, valid = separate(lambda inst: bool(lookup().instance(inst)), instances)
@@ -106,15 +79,11 @@ def delete_instances(instances):
 
 
 def suspend_nodes(nodes: List[str]) -> None:
-    tpu_nodes, other_nodes = [], []
-    for node in nodes[:]:
-        if lookup().node_is_tpu(node):
-            tpu_nodes.append(node)
-        else:
-            other_nodes.append(node)
+    lkp = lookup()
+    other_nodes, tpu_nodes = util.separate(lkp.node_is_tpu, nodes)
 
     delete_instances(other_nodes)
-    delete_tpu_instances(tpu_nodes)
+    tpu.delete_tpu_instances(tpu_nodes)
 
 
 def main(nodelist):
