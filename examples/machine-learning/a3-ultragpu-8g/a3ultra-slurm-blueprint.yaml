@@ -26,6 +26,8 @@ vars:
   project_id: # supply project ID
   region: # supply region
   zone: # supply zone
+  a3u_cluster_size: # supply cluster size
+  a3u_reservation_name: # supply reservation name
   # Image settings
   base_image:
     project: ubuntu-os-accelerator-images
@@ -35,12 +37,10 @@ vars:
   # Cluster env settings
   # net0 and filestore ranges must not overlap
   net0_range: 192.168.0.0/19
-  # filestore_ip_range: 192.168.32.0/24
+  filestore_ip_range: 192.168.32.0/24
   net1_range: 192.168.64.0/18
   rdma_net_range: 192.168.128.0/18
   # Cluster Settings
-  a3u_cluster_size: 2
-  a3u_reservation_name: slurm-gcp-a3u-gsc
   local_ssd_mountpoint: /mnt/localssd
   instance_image:
     project: $(vars.project_id)
@@ -273,12 +273,11 @@ deployment_groups:
         subnet_ip: $(vars.net1_range)
 
   - id: a3ultra-slurm-rdma-net
-    source: github.com/GoogleCloudPlatform/cluster-toolkit.git//community/modules/network/rdma-vpc?ref=98c49fe
+    source: modules/network/gpu-rdma-vpc
     settings:
       network_name: $(vars.deployment_name)-rdma-net
       network_profile: https://www.googleapis.com/compute/beta/projects/$(vars.project_id)/global/networkProfiles/$(vars.zone)-vpc-roce
       network_routing_mode: REGIONAL
-      nic_type: MRDMA
       subnetworks_template:
         name_prefix: $(vars.deployment_name)-mrdma-sub
         count: 8
@@ -342,10 +341,10 @@ deployment_groups:
 
                   [Service]
                   Type=oneshot
-                  ExecStartPre=/usr/bin/rm -rf /var/lib/gib
-                  ExecStartPre=/usr/bin/mkdir -p /var/lib/gib
+                  ExecStartPre=/usr/bin/rm -rf /usr/local/gib
+                  ExecStartPre=/usr/bin/mkdir -p /usr/local/gib
                   ExecStartPre=/snap/bin/gcloud auth configure-docker --quiet us-docker.pkg.dev
-                  ExecStart=/usr/bin/docker run --rm --name nccl-gib-installer --volume /var/lib/gib:/var/lib/gib \
+                  ExecStart=/usr/bin/docker run --rm --name nccl-gib-installer --volume /usr/local/gib:/var/lib/gib \
                       us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib:%i install --install-nccl
 
                   [Install]
