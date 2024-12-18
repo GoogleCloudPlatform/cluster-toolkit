@@ -98,9 +98,8 @@ def delete_instances(instances):
 
     log.info(f"delete {len(valid)} instances ({to_hostlist(valid)})")
     done, failed = batch_execute(requests)
-    if failed:
-        for err, nodes in groupby_unsorted(lambda n: failed[n][1], failed.keys()):
-            log.error(f"instances failed to delete: {err} ({to_hostlist(nodes)})")
+    for node, (_, err) in failed.items():
+        log.error(f"instance {node} failed to delete: {err}")
     wait_for_operations(done.values())
     # TODO do we need to check each operation for success? That is a lot more API calls
     log.info(f"deleted {len(done)} instances {to_hostlist(done.keys())}")

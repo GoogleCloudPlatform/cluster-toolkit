@@ -48,7 +48,6 @@ limitations under the License.
 |------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.0 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 3.43 |
-| <a name="requirement_local"></a> [local](#requirement\_local) | ~> 2.0 |
 | <a name="requirement_null"></a> [null](#requirement\_null) | ~> 3.0 |
 
 ## Providers
@@ -56,7 +55,6 @@ limitations under the License.
 | Name | Version |
 |------|---------|
 | <a name="provider_google"></a> [google](#provider\_google) | >= 3.43 |
-| <a name="provider_local"></a> [local](#provider\_local) | ~> 2.0 |
 | <a name="provider_null"></a> [null](#provider\_null) | ~> 3.0 |
 
 ## Modules
@@ -71,27 +69,20 @@ No modules.
 | [null_resource.replace_trigger](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
 | [google_compute_instance_template.base](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_instance_template) | data source |
 | [google_compute_zones.available](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_zones) | data source |
-| [local_file.startup](https://registry.terraform.io/providers/hashicorp/local/latest/docs/data-sources/file) | data source |
 
 ## Inputs
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | <a name="input_access_config"></a> [access\_config](#input\_access\_config) | Access configurations, i.e. IPs via which the VM instance can be accessed via the Internet. | <pre>list(object({<br/>    nat_ip       = string<br/>    network_tier = string<br/>  }))</pre> | `[]` | no |
-| <a name="input_add_hostname_suffix"></a> [add\_hostname\_suffix](#input\_add\_hostname\_suffix) | Adds a suffix to the hostname | `bool` | `true` | no |
 | <a name="input_additional_networks"></a> [additional\_networks](#input\_additional\_networks) | Additional network interface details for GCE, if any. | <pre>list(object({<br/>    access_config = optional(list(object({<br/>      nat_ip       = string<br/>      network_tier = string<br/>    })), [])<br/>    alias_ip_range = optional(list(object({<br/>      ip_cidr_range         = string<br/>      subnetwork_range_name = string<br/>    })), [])<br/>    ipv6_access_config = optional(list(object({<br/>      network_tier = string<br/>    })), [])<br/>    network            = optional(string)<br/>    network_ip         = optional(string, "")<br/>    nic_type           = optional(string)<br/>    queue_count        = optional(number)<br/>    stack_type         = optional(string)<br/>    subnetwork         = optional(string)<br/>    subnetwork_project = optional(string)<br/>  }))</pre> | `[]` | no |
-| <a name="input_hostname"></a> [hostname](#input\_hostname) | Hostname of instances | `string` | `""` | no |
-| <a name="input_hostname_suffix_separator"></a> [hostname\_suffix\_separator](#input\_hostname\_suffix\_separator) | Separator character to compose hostname when add\_hostname\_suffix is set to true. | `string` | `"-"` | no |
+| <a name="input_hostname"></a> [hostname](#input\_hostname) | Hostname of instances | `string` | n/a | yes |
 | <a name="input_instance_template"></a> [instance\_template](#input\_instance\_template) | Instance template self\_link used to create compute instances | `string` | n/a | yes |
-| <a name="input_labels"></a> [labels](#input\_labels) | Labels, provided as a map. Merged and takes precedence over labels on instance template | `map(string)` | `{}` | no |
-| <a name="input_metadata"></a> [metadata](#input\_metadata) | Metadata, provided as a map | `map(string)` | `{}` | no |
 | <a name="input_network"></a> [network](#input\_network) | Network to deploy to. Only one of network or subnetwork should be specified. | `string` | `""` | no |
 | <a name="input_num_instances"></a> [num\_instances](#input\_num\_instances) | Number of instances to create. This value is ignored if static\_ips is provided. | `number` | `1` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The GCP project ID | `string` | `null` | no |
 | <a name="input_region"></a> [region](#input\_region) | Region where the instances should be created. | `string` | `null` | no |
 | <a name="input_replace_trigger"></a> [replace\_trigger](#input\_replace\_trigger) | Trigger value to replace the instances. | `string` | `""` | no |
-| <a name="input_slurm_cluster_name"></a> [slurm\_cluster\_name](#input\_slurm\_cluster\_name) | Cluster name, used for resource naming. | `string` | n/a | yes |
-| <a name="input_slurm_instance_role"></a> [slurm\_instance\_role](#input\_slurm\_instance\_role) | Slurm instance type. Must be one of: controller; login; compute. | `string` | `null` | no |
 | <a name="input_static_ips"></a> [static\_ips](#input\_static\_ips) | List of static IPs for VM instances | `list(string)` | `[]` | no |
 | <a name="input_subnetwork"></a> [subnetwork](#input\_subnetwork) | Subnet to deploy to. Only one of network or subnetwork should be specified. | `string` | `""` | no |
 | <a name="input_subnetwork_project"></a> [subnetwork\_project](#input\_subnetwork\_project) | The project that subnetwork belongs to | `string` | `null` | no |

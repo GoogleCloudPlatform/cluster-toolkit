@@ -59,16 +59,12 @@ module "slurm_login_instance" {
   source   = "../../internal/slurm-gcp-v6/instance"
   for_each = { for x in var.login_nodes : x.name_prefix => x }
 
-  access_config       = each.value.access_config
-  add_hostname_suffix = true
-  hostname            = "${local.slurm_cluster_name}-${each.key}"
-  slurm_instance_role = "login"
+  access_config = each.value.access_config
+  hostname      = "${local.slurm_cluster_name}-${each.key}"
 
-  project_id         = var.project_id
-  slurm_cluster_name = local.slurm_cluster_name
+  project_id = var.project_id
 
   instance_template = module.slurm_login_template[each.key].self_link
-  labels            = each.value.labels
   num_instances     = each.value.num_instances
 
   additional_networks = each.value.additional_networks

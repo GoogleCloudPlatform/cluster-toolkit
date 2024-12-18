@@ -29,7 +29,7 @@ locals {
         disk.disk_labels,
         {
           slurm_cluster_name  = var.slurm_cluster_name
-          slurm_instance_role = local.slurm_instance_role
+          slurm_instance_role = var.slurm_instance_role
         },
       )
     }
@@ -57,13 +57,8 @@ locals {
     : ""
   )
 
-  slurm_instance_role = var.slurm_instance_role != null ? lower(var.slurm_instance_role) : null
 
-  name_prefix = (
-    local.slurm_instance_role != null
-    ? "${var.slurm_cluster_name}-${local.slurm_instance_role}-${var.name_prefix}"
-    : "${var.slurm_cluster_name}-${var.name_prefix}"
-  )
+  name_prefix = "${var.slurm_cluster_name}-${var.slurm_instance_role}-${var.name_prefix}"
 
   total_egress_bandwidth_tier = var.bandwidth_tier == "tier_1_enabled" ? "TIER_1" : "DEFAULT"
 
@@ -123,7 +118,7 @@ module "instance_template" {
     var.labels,
     {
       slurm_cluster_name  = var.slurm_cluster_name
-      slurm_instance_role = local.slurm_instance_role
+      slurm_instance_role = var.slurm_instance_role
     },
   )
   instance_termination_action = var.termination_action
@@ -136,7 +131,7 @@ module "instance_template" {
       enable-oslogin      = upper(var.enable_oslogin)
       slurm_bucket_path   = var.slurm_bucket_path
       slurm_cluster_name  = var.slurm_cluster_name
-      slurm_instance_role = local.slurm_instance_role
+      slurm_instance_role = var.slurm_instance_role
     },
   )
 
@@ -152,10 +147,9 @@ module "instance_template" {
   disk_labels = merge(
     {
       slurm_cluster_name  = var.slurm_cluster_name
-      slurm_instance_role = local.slurm_instance_role
+      slurm_instance_role = var.slurm_instance_role
     },
     var.disk_labels,
   )
-  additional_disks  = local.additional_disks
-  resource_policies = var.resource_policies
+  additional_disks = local.additional_disks
 }

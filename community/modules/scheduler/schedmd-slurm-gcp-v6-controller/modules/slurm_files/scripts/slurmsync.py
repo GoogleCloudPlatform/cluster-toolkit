@@ -39,7 +39,6 @@ from util import (
     run,
     separate,
     to_hostlist,
-    NSDict,
     NodeState,
     TPU,
     chunked,
@@ -304,13 +303,11 @@ def _seconds_since_timestamp(timestamp):
 
 
 def delete_placement_groups(placement_groups):
-    def delete_placement_request(pg_name, region):
-        return lookup().compute.resourcePolicies().delete(
-            project=lookup().project, region=region, resourcePolicy=pg_name
-        )
-
     requests = {
-        pg.name: delete_placement_request(pg["name"], util.trim_self_link(pg["region"]))
+        pg["name"]: lookup().compute.resourcePolicies().delete(
+            project=lookup().project,
+            region=util.trim_self_link(pg["region"]),
+            resourcePolicy=pg["name"])
         for pg in placement_groups
     }
 
@@ -363,7 +360,7 @@ def sync_placement_groups():
         result = ensure_execute(op)
         # merge placement group info from API and job_id,partition,index parsed from the name
         pgs = (
-            NSDict({**pg, **pg_regex.match(pg["name"]).groupdict()})
+            {**pg, **pg_regex.match(pg["name"]).groupdict()}
             for pg in chain.from_iterable(
                 item["resourcePolicies"]
                 for item in result.get("items", {}).values()
@@ -387,7 +384,7 @@ def sync_slurm():
     slurm_nodes = set(lookup().slurm_nodes().keys())
     log.debug(f"reconciling {len(compute_instances)} GCP instances and {len(slurm_nodes)} Slurm nodes.")
 
-    for action, nodes in util.groupby_unsorted(compute_instances | slurm_nodes, get_node_action):
+    for action, nodes in util.groupby_unsorted(list(compute_instances | slurm_nodes), get_node_action):
         action.apply(list(nodes))
 
 

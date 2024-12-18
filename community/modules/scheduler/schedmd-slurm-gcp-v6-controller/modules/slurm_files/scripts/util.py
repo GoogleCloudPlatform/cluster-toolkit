@@ -14,10 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Iterable, List, Tuple, Optional, Any, Dict
+from typing import Iterable, List, Tuple, Optional, Any, Dict, Sequence
 import argparse
 import base64
-import collections
 from dataclasses import dataclass
 from datetime import timedelta, datetime
 import hashlib
@@ -36,7 +35,7 @@ import subprocess
 import sys
 import tempfile
 from enum import Enum
-from collections import defaultdict, namedtuple
+from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
 from functools import lru_cache, reduce, wraps
@@ -746,8 +745,7 @@ def chunked(iterable, n=API_REQ_LIMIT):
             return
         yield chunk
 
-
-def groupby_unsorted(seq, key):
+def groupby_unsorted(seq: Sequence[Any], key):
     indices = defaultdict(list)
     for i, el in enumerate(seq):
         indices[key(el)].append(i)

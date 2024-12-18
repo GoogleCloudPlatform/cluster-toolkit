@@ -75,7 +75,6 @@ resource "google_compute_instance_template" "tpl" {
   metadata_startup_script = var.startup_script
   region                  = var.region
   min_cpu_platform        = var.min_cpu_platform
-  resource_policies       = var.resource_policies
 
   service_account {
     email  = coalesce(var.service_account.email, "${data.google_project.this.number}-compute@developer.gserviceaccount.com")
@@ -177,7 +176,7 @@ resource "google_compute_instance_template" "tpl" {
   }
 
   advanced_machine_features {
-    enable_nested_virtualization = var.enable_nested_virtualization
+    enable_nested_virtualization = false
     threads_per_core             = var.threads_per_core
   }
 
