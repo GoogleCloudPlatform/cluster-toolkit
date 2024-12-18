@@ -93,6 +93,6 @@ deployment_groups:
     settings:
       kueue:
         install: true
-        version: v0.9.0
+        version: v0.10.0
       jobset:
         install: true
