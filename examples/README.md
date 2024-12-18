@@ -1525,11 +1525,11 @@ This blueprint shows how to use managed parallelstore storage options with GKE i
 The blueprint contains the following:
 
 * A K8s Job that uses a managed parallelstore storage volume option.
-* A K8s Job that demonstrates ML training workload with managed parallelstore storage disk ops.
+* A K8s Job that demonstrates ML training workload with managed parallelstore storage disk operation.
 
 > **Warning**: In this example blueprint, when storage type `Parallelstore` is specified in `gke-storage` module.
 > The lifecycle of the parallelstore is managed by the blueprint.
-> On glcuster destroy ops, the Parallelstore storage created will also be destroyed.
+> On glcuster destroy operation, the Parallelstore storage created will also be destroyed.
 >
 > [!Note]
 > The Kubernetes API server will only allow requests from authorized networks.
