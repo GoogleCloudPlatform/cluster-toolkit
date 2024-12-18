@@ -21,16 +21,14 @@ import logging
 
 import util
 from util import (
-    groupby_unsorted,
     log_api_request,
     batch_execute,
     to_hostlist,
-    wait_for_operations,
     separate,
     execute_with_futures,
 )
 from util import lookup, TPU
-
+import ops_watch
 import slurm_gcp_plugins
 
 log = logging.getLogger()
@@ -87,22 +85,23 @@ def delete_tpu_instances(instances):
 
 def delete_instances(instances):
     """delete instances individually"""
+    # TODO: consider not doing an expensive call to `instances()`
     invalid, valid = separate(lambda inst: bool(lookup().instance(inst)), instances)
     if len(invalid) > 0:
-        log.debug("instances do not exist: {}".format(",".join(invalid)))
+        log.info(f"instances do not exist: {to_hostlist(invalid)}")
     if len(valid) == 0:
-        log.debug("No instances to delete")
+        log.info("No instances to delete")
         return
 
     requests = {inst: delete_instance_request(inst) for inst in valid}
 
-    log.info(f"delete {len(valid)} instances ({to_hostlist(valid)})")
-    done, failed = batch_execute(requests)
+    log.info(f"to delete {len(valid)} instances ({to_hostlist(valid)})")
+    submitted, failed = batch_execute(requests)
     for node, (_, err) in failed.items():
         log.error(f"instance {node} failed to delete: {err}")
-    wait_for_operations(done.values())
-    # TODO do we need to check each operation for success? That is a lot more API calls
-    log.info(f"deleted {len(done)} instances {to_hostlist(done.keys())}")
+    log.info(f"deleting {len(submitted)} instances {to_hostlist(submitted.keys())}")
+    for node, op in submitted.items(): # Track status of submitted operations
+        ops_watch.watch_delete_op(op, node)
 
 
 def suspend_nodes(nodes: List[str]) -> None:

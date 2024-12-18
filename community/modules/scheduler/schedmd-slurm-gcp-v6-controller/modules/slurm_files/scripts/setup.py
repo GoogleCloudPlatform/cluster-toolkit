@@ -35,7 +35,7 @@ from util import (
 )
 import conf
 
-from slurmsync import sync_slurm
+import slurmsync
 
 from setup_network_storage import (
     setup_network_storage,
@@ -373,7 +373,7 @@ def setup_controller():
     run("systemctl status slurmctld", timeout=30)
     run("systemctl status slurmrestd", timeout=30)
 
-    sync_slurm()
+    slurmsync.sync_nodes()
     run("systemctl enable slurm_load_bq.timer", timeout=30)
     run("systemctl start slurm_load_bq.timer", timeout=30)
     run("systemctl status slurm_load_bq.timer", timeout=30)
