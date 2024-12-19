@@ -20,6 +20,7 @@ SCRIPTS_DIR = "community/modules/scheduler/schedmd-slurm-gcp-v6-controller/modul
 if SCRIPTS_DIR not in sys.path:
     sys.path.append(SCRIPTS_DIR)  # TODO: make this more robust
 
+import util
 
 # TODO: use "real" classes once they are defined (instead of NSDict)
 
@@ -79,7 +80,7 @@ class TstMachineConf:
 
 @dataclass
 class TstTemplateInfo:
-    gpu_count: int = 0
+    gpu: Optional[util.AcceleratorInfo]
 
 @dataclass
 class TstInstance:

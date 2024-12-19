@@ -18,7 +18,7 @@ import pytest
 from mock import Mock
 from common import TstNodeset, TstCfg # needed to import util
 import util
-from util import NodeState
+from util import NodeState, MachineType, AcceleratorInfo
 from datetime import timedelta
 from google.api_core.client_options import ClientOptions  # noqa: E402
 
@@ -348,3 +348,55 @@ def test_node_state(node: str, state: Optional[NodeState], want: NodeState | Non
     else:
         assert lkp.node_state(node) == want
         
+
+
+@pytest.mark.parametrize(
+    "jo,want",
+    [
+        ({
+            "accelerators": [ { "guestAcceleratorCount": 1, "guestAcceleratorType": "nvidia-tesla-a100" } ],
+            "creationTimestamp": "1969-12-31T16:00:00.000-08:00",
+            "description": "Accelerator Optimized: 1 NVIDIA Tesla A100 GPU, 12 vCPUs, 85GB RAM",
+            "guestCpus": 12,
+            "id": "1000012",
+            "imageSpaceGb": 0,
+            "isSharedCpu": False,
+            "kind": "compute#machineType",
+            "maximumPersistentDisks": 128,
+            "maximumPersistentDisksSizeGb": "263168",
+            "memoryMb": 87040,
+            "name": "a2-highgpu-1g",
+            "selfLink": "https://www.googleapis.com/compute/v1/projects/io-playground/zones/us-central1-a/machineTypes/a2-highgpu-1g",
+            "zone": "us-central1-a"
+        }, MachineType(
+            name="a2-highgpu-1g",
+            guest_cpus=12,
+            memory_mb=87040,
+            accelerators=[
+                AcceleratorInfo(type="nvidia-tesla-a100", count=1)
+            ]
+        )),
+        ({
+            "architecture": "X86_64",
+            "creationTimestamp": "1969-12-31T16:00:00.000-08:00",
+            "description": "8 vCPUs, 32 GB RAM",
+            "guestCpus": 8,
+            "id": "1210008",
+            "imageSpaceGb": 0,
+            "isSharedCpu": False,
+            "kind": "compute#machineType",
+            "maximumPersistentDisks": 128,
+            "maximumPersistentDisksSizeGb": "263168",
+            "memoryMb": 32768,
+            "name": "t2d-standard-8",
+            "selfLink": "https://www.googleapis.com/compute/v1/projects/io-playground/zones/europe-north2-b/machineTypes/t2d-standard-8",
+            "zone": "europe-north2-b"
+        }, MachineType(
+            name="t2d-standard-8",
+            guest_cpus=8,
+            memory_mb=32768,
+            accelerators=[]
+        )),
+    ])
+def test_MachineType_from_json(jo: dict, want: MachineType):
+    assert MachineType.from_json(jo) == want
