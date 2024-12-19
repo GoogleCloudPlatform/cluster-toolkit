@@ -27,7 +27,7 @@ timeout: 14400s  # 4hr
 
 steps:
 ## Test GKE
-- id: gke-storage-parallelstore
+- id: gke-managed-parallelstore
   name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
   entrypoint: /bin/bash
   env:
@@ -40,7 +40,7 @@ steps:
     cd /workspace && make
     BUILD_ID_FULL=$BUILD_ID
     BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
-    SG_EXAMPLE=examples/gke-storage-parallelstore.yaml
+    SG_EXAMPLE=examples/gke-managed-parallelstore.yaml
 
     # adding vm to act as remote node
     echo '  - id: remote-node'                     >> $${SG_EXAMPLE}
@@ -58,4 +58,4 @@ steps:
 
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
       --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
-      --extra-vars="@tools/cloud-build/daily-tests/tests/gke-storage-parallelstore.yml"
+      --extra-vars="@tools/cloud-build/daily-tests/tests/gke-managed-parallelstore.yml"
