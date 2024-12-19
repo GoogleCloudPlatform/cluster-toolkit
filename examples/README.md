@@ -1518,7 +1518,7 @@ cleaned up when the job is deleted.
 
 [storage-gke.yaml]: ../examples/storage-gke.yaml
 
-### [gke-storage-managed-parallelstore.yaml] ![core-badge] ![experimental-badge]
+### [gke-managed-parallelstore.yaml] ![core-badge] ![experimental-badge]
 
 This blueprint shows how to use managed parallelstore storage options with GKE in the toolkit.
 
@@ -1540,7 +1540,7 @@ The blueprint contains the following:
 > `--vars authorized_cidr=<your-ip-address>/32`.** You can use a service like
 > [whatismyip.com](https://whatismyip.com) to determine your IP address.
 
-[gke-storage-managed-parallelstore.yaml]: ../examples/gke-storage-managed-parallelstore.yaml
+[gke-managed-parallelstore.yaml]: ../examples/gke-managed-parallelstore.yaml
 
 ### [gke-a3-megagpu.yaml] ![core-badge] ![experimental-badge]
 
