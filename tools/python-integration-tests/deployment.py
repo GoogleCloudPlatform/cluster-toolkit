@@ -26,7 +26,7 @@ class Deployment:
         self.workspace = None
         self.instance_name = None
         self.username = None
-        self.deployment_name = None
+        self.deployment_name = os.environ.get('BUILD_ID_SHORT') 
         self.zone = None
 
     def run_command(self, cmd: str, err_msg: str = None) -> subprocess.CompletedProcess:
@@ -37,7 +37,6 @@ class Deployment:
     def parse_blueprint(self, file_path: str):
         with open(file_path, 'r') as file:
             content = yaml.safe_load(file)
-        self.deployment_name = content["vars"]["deployment_name"]
         self.zone = content["vars"]["zone"]
 
     def get_posixAccount_info(self):
