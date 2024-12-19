@@ -152,23 +152,29 @@ locals {
     var.enable_internal_traffic ? [local.allow_internal_traffic] : [],
     length(local.iap_ports) > 0 ? [local.allow_iap_ingress] : []
   )
+
+  secondary_ranges_map = {
+    for secondary_range in var.secondary_ranges_list :
+    secondary_range.subnetwork_name => secondary_range.ranges
+  }
 }
 
 module "vpc" {
   source  = "terraform-google-modules/network/google"
-  version = "~> 9.0"
+  version = "~> 10.0"
 
   network_name                           = local.network_name
   project_id                             = var.project_id
   auto_create_subnetworks                = false
   subnets                                = local.subnetworks
-  secondary_ranges                       = var.secondary_ranges
+  secondary_ranges                       = length(local.secondary_ranges_map) > 0 ? local.secondary_ranges_map : var.secondary_ranges
   routing_mode                           = var.network_routing_mode
   mtu                                    = var.mtu
   description                            = var.network_description
   shared_vpc_host                        = var.shared_vpc_host
   delete_default_internet_gateway_routes = var.delete_default_internet_gateway_routes
   firewall_rules                         = local.firewall_rules
+  network_profile                        = var.network_profile
 }
 
 # This use of the module may appear odd when var.ips_per_nat = 0. The module

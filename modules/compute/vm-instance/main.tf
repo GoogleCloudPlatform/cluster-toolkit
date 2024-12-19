@@ -261,6 +261,17 @@ resource "google_compute_instance" "compute_vm" {
     }
   }
 
+  dynamic "reservation_affinity" {
+    for_each = var.reservation_name == "" ? [] : [1]
+    content {
+      type = "SPECIFIC_RESERVATION"
+      specific_reservation {
+        key    = "compute.googleapis.com/reservation-name"
+        values = [var.reservation_name]
+      }
+    }
+  }
+
   metadata = merge(
     local.network_storage,
     local.startup_script,

@@ -36,6 +36,14 @@ class TstNodeset:
     instance_template: Optional[str] = None
     reservation_name: Optional[str] = ""
     zone_policy_allow: Optional[list[str]] = field(default_factory=list)
+    enable_placement: bool = True
+
+@dataclass
+class TstPartition:
+    partition_name: str = "euler"
+    partition_nodeset: list[str] = field(default_factory=list)
+    partition_nodeset_tpu: list[str] = field(default_factory=list)
+    enable_job_exclusive: bool = False
 
 @dataclass
 class TstCfg:
