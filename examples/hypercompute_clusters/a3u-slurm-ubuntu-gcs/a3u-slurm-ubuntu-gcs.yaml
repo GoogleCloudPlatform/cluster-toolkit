@@ -13,8 +13,6 @@
 # limitations under the License.
 
 ---
-# This blueprint uses private preview functionality in limited availability,
-# see README.md for further information
 
 blueprint_name: a3u-slurm-ubuntu-gcs
 
@@ -52,7 +50,6 @@ vars:
   disk_size_gb: 200
   nccl_plugin_version: v1.0.2
 
-
   # Here we define a set of startup script runners that are used to configure
   # the controller node
   controller_runners:
@@ -61,14 +58,14 @@ vars:
     content: |
       #!/bin/bash
       SLURM_ROOT=/opt/apps/adm/slurm
-      PARTITION_NAME=$(a3_ultra_partition.partitions[0].partition_name)
+      PARTITION_NAME=a3ultra
       mkdir -m 0755 -p "${SLURM_ROOT}/scripts"
       mkdir -p "${SLURM_ROOT}/partition-${PARTITION_NAME}-epilog_slurmd.d"
       ln -s "/slurm/scripts/tools/gpu-test" "${SLURM_ROOT}/partition-${PARTITION_NAME}-epilog_slurmd.d/gpu-test.epilog_slurmd"
 
   # Shared runners between login and controller:
-  shared_runners:
   # Configure an enroot config path
+  shared_runners:
   - type: data
     destination: /etc/enroot/enroot.conf
     content: |
@@ -76,8 +73,8 @@ vars:
 
   # Here we define a set of startup script runners that are used to configure
   # the A3-Ultra nodes
-  a3u_runners:
   # Set up enroot, using the local ssds for runtime/cache/data/temp storage.
+  a3u_runners:
   - type: data
     destination: /etc/enroot/enroot.conf
     content: |
@@ -615,4 +612,4 @@ deployment_groups:
       machine_type: n2-standard-80
       controller_startup_script: $(controller_startup.startup_script)
       login_startup_script: $(login_startup.startup_script)
-      enable_external_prolo_epilog: true
+      enable_external_prolog_epilog: true
