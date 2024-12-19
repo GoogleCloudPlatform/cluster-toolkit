@@ -31,15 +31,17 @@ gcloud storage buckets create gs://${TF_STATE_BUCKET_NAME} \
 gcloud storage buckets update gs://${TF_STATE_BUCKET_NAME} --versioning
 ```
 
-### Create and configure a GCS Bucket used for input data and checkpoint/restart
-data. This bucket should be created with Hierarchical Namespace enabled. See
+### Create and configure a GCS Bucket
+
+This will be used for input data and checkpoint/restart data. This bucket should
+be created with Hierarchical Namespace enabled. See
 [here](https://cloud.google.com/storage/docs/hns-overview) for more details.
 
 ```bash
 #!/bin/bash
 PROJECT_ID=<your-gcp-project>
 REGION=<your-preferred-region>
-HNS_BUCKET_NAME==<training-bucket-name>
+HNS_BUCKET_NAME=<training-bucket-name>
 PROJECT_NUMER=<your-project-number>
 
 gcloud storage buckets create gs://${HNS_BUCKET_NAME} \
@@ -48,9 +50,10 @@ gcloud storage buckets create gs://${HNS_BUCKET_NAME} \
 
 ```
 
-### Create/modify the deployment.yaml file with your preferred configuration, such as
-size, reservation to be used, etc, as well as the name of the bucket that you
-just created. Below is an example
+### Create/modify the deployment.yaml file with your preferred configuration
+
+For example, set the such as size, reservation to be used, etc, as well as the
+name of the bucket that you just created. Below is an example
 
 ```yaml
 ---
@@ -134,8 +137,9 @@ data input loading.
 
 To run a series of NCCL test benchmarks on your cluster, you can use
 the use the following script: `run-nccl-tests-via-ramble.sh`,
-which will automate the building and running of nccl tests from 2
-nodes up to 32 node scales.
+which will use [ramble](https://github.com/GoogleCloudPlatform/ramble) to
+automate the building and running of nccl tests from 2 nodes up to 32 node
+scales.
 
 Copy the contents of `run-nccl-tests-via-ramble.sh` to your slurm
 login or controller node, for example:
@@ -145,4 +149,5 @@ login or controller node, for example:
 wget -np -nd https://raw.githubusercontent.com/GoogleCloudPlatform/cluster-toolkit/refs/heads/develop/examples/hypercompute_clusters/a3u-slurm-ubuntu-gcs/run-nccl-tests-via-ramble.sh
 ```
 
-and then launch with `bash run-nccl-tests-via-ramble.sh`.
+and then launch with `bash run-nccl-tests-via-ramble.sh`. The entire process
+will take ~30 minutes.
