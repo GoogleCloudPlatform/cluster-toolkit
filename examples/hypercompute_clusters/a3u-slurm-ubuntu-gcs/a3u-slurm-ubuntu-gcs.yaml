@@ -52,22 +52,6 @@ vars:
   disk_size_gb: 200
   nccl_plugin_version: v1.0.2
 
-  terraform_providers:
-    google:
-      source: hashicorp/google
-      version: 6.13.0
-      configuration:
-        project: $(vars.project_id)
-        region: $(vars.region)
-        zone: $(vars.zone)
-
-    google-beta:
-      source: hashicorp/google-beta
-      version: 6.13.0
-      configuration:
-        project: $(vars.project_id)
-        region: $(vars.region)
-        zone: $(vars.zone)
 
   # Here we define a set of startup script runners that are used to configure
   # the controller node
@@ -535,7 +519,6 @@ deployment_groups:
         reason: Avoid data loss
     outputs:
     - network_storage
-
 
 - group: cluster
   modules:
