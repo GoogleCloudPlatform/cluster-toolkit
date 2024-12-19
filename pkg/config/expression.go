@@ -88,6 +88,14 @@ func bpTraversalToTerraform(t hcl.Traversal) (hcl.Traversal, error) {
 
 // BlueprintExpressionLiteralToExpression takes  a content of `$(...)`-literal and transforms it to `Expression`
 func BlueprintExpressionLiteralToExpression(s string) (Expression, error) {
+	// TODO: FIX: this function relies on assumption that
+	// `epxrToTokens(toExpression(tokenize(X))) == tokenize(X)`
+	// This is not correct, e.g.:
+	// ```
+	// epxrToTokens(toExpression(tokenize("pink.lime.0.salmon"))) ==
+	//     tokenize("pink.lime[0].salmon") != tokenize("pink.lime.0.salmon")
+	// ```
+	// As a result `pink.lime.0.salmon` can not be properly translated.
 	bpExp, diag := hclsyntax.ParseExpression([]byte(s), "", hcl.Pos{})
 	if diag.HasErrors() {
 		return nil, diag
