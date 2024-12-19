@@ -18,11 +18,6 @@ output "partitions" {
   value = [local.partition]
 
   precondition {
-    condition     = (length(local.non_static_ns_with_placement) == 0) || var.exclusive
-    error_message = "If any non-static nodesets has `enable_placement`, `var.exclusive` must be set true"
-  }
-
-  precondition {
     condition     = (length(local.use_static) == 0) || !var.exclusive
     error_message = <<-EOD
     Can't use static nodes within partition with `var.exclusive` set to `true`.
