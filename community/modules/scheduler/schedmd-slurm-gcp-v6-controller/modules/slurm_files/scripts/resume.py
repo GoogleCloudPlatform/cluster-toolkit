@@ -129,7 +129,7 @@ def update_reservation_props(reservation:object, props:object, placement_group:O
     }
 
     if reservation.dense or reservation_from_fr:
-        props.scheduling.provisioning_model = "RESERVATION_BOUND"
+        props.scheduling.provisioningModel = "RESERVATION_BOUND"
 
     # Figure out `resourcePolicies`
     if reservation.policies: # use ones already attached to reservations
