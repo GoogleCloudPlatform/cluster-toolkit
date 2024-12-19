@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ---
-blueprint_name: gke-storage-managed-parallelstore
+blueprint_name: gke-managed-parallelstore
 vars:
   project_id:  ## Set GCP Project ID Here ##
   deployment_name: gke-storage-managed-ps

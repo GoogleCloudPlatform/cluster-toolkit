@@ -39,7 +39,7 @@ then use them in a `gke-job-template` to dynamically provision the resource.
 ```
 
 See example
-[gke-storage-managed-parallelstore.yaml](../../../examples/README.md#gke-storage-managed-parallelstoreyaml--) blueprint
+[gke-managed-parallelstore.yaml](../../../examples/README.md#gke-managed-parallelstoreyaml--) blueprint
 for a complete example.
 
 ### Authorized Network
