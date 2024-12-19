@@ -12465,6 +12465,7 @@ spec:
       - configMap:
           name: kueue-manager-config
         name: manager-config
+      tolerations:
       - effect: NoSchedule
         key: components.gke.io/gke-managed-components
         operator: Equal

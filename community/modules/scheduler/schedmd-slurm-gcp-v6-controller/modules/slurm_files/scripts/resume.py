@@ -42,6 +42,7 @@ from util import (
     wait_for_operation,
 )
 from util import lookup, NSDict
+import tpu
 
 import slurm_gcp_plugins
 
@@ -269,7 +270,8 @@ def group_nodes_bulk(nodes: List[str], resume_data: Optional[ResumeData], lkp: u
     def chunk_nodes(nodes: List[str]):
         chunk_size = BULK_INSERT_LIMIT
         if nodes and lkp.node_is_tpu(nodes[0]):
-            chunk_size = util.TPU(lkp.node_nodeset(nodes[0])).vmcount
+            ns = lkp.node_nodeset_name(nodes[0])
+            chunk_size = tpu.TPU.make(ns, lkp).vmcount
         return chunked(nodes, n=chunk_size)
     
     chunks = [
@@ -285,34 +287,6 @@ def group_nodes_bulk(nodes: List[str], resume_data: Optional[ResumeData], lkp: u
         for i, nodes_chunk in enumerate(chunk_nodes(pn.nodes))
     ]
     return {chunk.name: chunk for chunk in chunks}
-
-
-def start_tpu(data):
-    tpu = data["tpu"]
-    node = data["node"]
-    if len(node) == 1:
-        node = node[0]
-        log.debug(
-            f"Will create a TPU of type {tpu.node_type} tf_version {tpu.tf_version} in zone {tpu.zone} with name {node}"
-        )
-        tpunode = tpu.get_node(node)
-        if tpunode is None:
-            if not tpu.create_node(nodename=node):
-                log.error("Error creating tpu node {node}")
-        else:
-            if tpu.preserve_tpu:
-                if not tpu.start_node(nodename=node):
-                    log.error("Error starting tpu node {node}")
-            else:
-                log.info(
-                    f"Tpu node {node} is already created, but will not start it because nodeset does not have preserve_tpu option active."
-                )
-    else:
-        log.debug(
-            f"Will create a multi-vm TPU of type {tpu.node_type} tf_version {tpu.tf_version} in zone {tpu.zone} with name {node[0]}"
-        )
-        if not tpu.create_node(nodename=node):
-            log.error("Error creating tpu node {node}")
 
 
 def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
@@ -339,17 +313,13 @@ def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
             "node bulk groups: \n{}".format(yaml.safe_dump(grouped_nodelists).rstrip())
         )
 
-    tpu_start_data = []
-    tpu_objs = {}
+    tpu_chunks = []
     bi_inserts = {}
 
     for group, chunk in grouped_nodes.items():
         model = chunk.nodes[0]
         if lookup().node_is_tpu(model):
-            # do not create multiple tpu_objs if nodes with the same prefix are used
-            if chunk.prefix not in tpu_objs.keys():
-                tpu_objs[chunk.prefix] = util.TPU(lookup().node_nodeset(model))
-            tpu_start_data.append({"tpu": tpu_objs[chunk.prefix], "node": chunk.nodes})
+            tpu_chunks.append(chunk.nodes)
         else:
             bi_inserts[group] = create_instances_request(
                 chunk.nodes, chunk.placement_group, chunk.excl_job_id
@@ -384,51 +354,68 @@ def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
     bulk_operations = {group: wait_for_operation(op) for group, op in started.items()}
 
     # Start TPU after regular nodes so that regular nodes are not affected by the slower TPU nodes
-    log.debug(f"tpu_start_data={yaml.safe_dump(tpu_start_data)}")
-    execute_with_futures(start_tpu, tpu_start_data)
+    execute_with_futures(tpu.start_tpu, tpu_chunks)
 
-    all_successful_inserts = []
+    for group, op in bulk_operations.items():
+        _handle_bulk_insert_op(op, grouped_nodes[group].nodes, resume_data)
+        
 
-    for group, bulk_op in bulk_operations.items():
-        group_id = bulk_op["operationGroupId"]
-        bulk_op_name = bulk_op["name"]
-        if "error" in bulk_op:
-            error = bulk_op["error"]["errors"][0]
-            group_nodes = to_hostlist(grouped_nodes[group].nodes)
-            log.warning(
-                f"bulkInsert operation errors: {error['code']} name={bulk_op_name} operationGroupId={group_id} nodes={group_nodes}"
-            )
-        successful_inserts, failed_inserts = separate(
-            lambda op: "error" in op, get_insert_operations(group_id)
+def _handle_bulk_insert_op(op: object, nodes: List[str], resume_data: Optional[ResumeData]) -> None:
+    """
+    Handles **DONE** BulkInsert operations
+    """
+    assert op["operationType"] == "bulkInsert" and op["status"] == "DONE", f"unexpected op: {op}"
+
+    group_id = op["operationGroupId"]
+    if "error" in op:
+        error = op["error"]["errors"][0]
+        log.warning(
+            f"bulkInsert operation error: {error['code']} name={op['name']} operationGroupId={group_id} nodes={to_hostlist(nodes)}"
         )
-        # Apparently multiple errors are possible... so join with +.
-        by_error_inserts = util.groupby_unsorted(
-            failed_inserts,
-            lambda op: "+".join(err["code"] for err in op["error"]["errors"]),
-        )
-        for code, failed_ops in by_error_inserts:
-            failed_nodes = {trim_self_link(op["targetLink"]): op for op in failed_ops}
-            hostlist = util.to_hostlist(failed_nodes)
-            count = len(failed_nodes)
-            log.error(
-                f"{count} instances failed to start: {code} ({hostlist}) operationGroupId={group_id}"
-            )
-            failed_node, failed_op = next(iter(failed_nodes.items()))
-            msg = "; ".join(
-                f"{err['code']}: {err['message'] if 'message' in err else 'no message'}"
-                for err in failed_op["error"]["errors"]
-            )
-            if code != "RESOURCE_ALREADY_EXISTS":
-                down_nodes_notify_jobs(failed_nodes, f"GCP Error: {msg}", resume_data)
-            log.error(
-                f"errors from insert for node '{failed_node}' ({failed_op['name']}): {msg}"
-            )
+        # TODO: does it make sense to query for insert-ops in case of bulkInsert-op error?
+    
+    created = 0
+    for status in op["instancesBulkInsertOperationMetadata"]["perLocationStatus"].values():
+        created += status.get("createdVmCount", 0)
+    if created == len(nodes):
+        log.info(f"created {len(nodes)} instances: nodes={to_hostlist(nodes)}")
+        return # no need to gather status of insert-operations.
 
-        ready_nodes = {trim_self_link(op["targetLink"]) for op in successful_inserts}
-        if len(ready_nodes) > 0:
-            ready_nodelist = to_hostlist(ready_nodes)
-            log.info(f"created {len(ready_nodes)} instances: nodes={ready_nodelist}")
-            all_successful_inserts.extend(successful_inserts)
+    # TODO:
+    # * don't perform globalOperations aggregateList request to gather insert-operations,
+    #   instead use specific locations from `instancesBulkInsertOperationMetadata`,
+    #   most of the time single zone should be sufficient.
+    # * don't gather insert-operations per bulkInsert request, instead aggregate it across
+    #   all bulkInserts (goes one level above this function) 
+    successful_inserts, failed_inserts = separate(
+        lambda op: "error" in op, get_insert_operations(group_id)
+    )
+    # Apparently multiple errors are possible... so join with +.
+    by_error_inserts = util.groupby_unsorted(
+        failed_inserts,
+        lambda op: "+".join(err["code"] for err in op["error"]["errors"]),
+    )
+    for code, failed_ops in by_error_inserts:
+        failed_nodes = {trim_self_link(op["targetLink"]): op for op in failed_ops}
+        hostlist = util.to_hostlist(failed_nodes)
+        count = len(failed_nodes)
+        log.error(
+            f"{count} instances failed to start: {code} ({hostlist}) operationGroupId={group_id}"
+        )
+        failed_node, failed_op = next(iter(failed_nodes.items()))
+        msg = "; ".join(
+            f"{err['code']}: {err['message'] if 'message' in err else 'no message'}"
+            for err in failed_op["error"]["errors"]
+        )
+        if code != "RESOURCE_ALREADY_EXISTS":
+            down_nodes_notify_jobs(failed_nodes, f"GCP Error: {msg}", resume_data)
+        log.error(
+            f"errors from insert for node '{failed_node}' ({failed_op['name']}): {msg}"
+        )
+
+    ready_nodes = {trim_self_link(op["targetLink"]) for op in successful_inserts}
+    if len(ready_nodes) > 0:
+        log.info(f"created {len(ready_nodes)} instances: nodes={to_hostlist(ready_nodes)}")
 
 
 def down_nodes_notify_jobs(nodes: List[str], reason: str, resume_data: Optional[ResumeData]) -> None:

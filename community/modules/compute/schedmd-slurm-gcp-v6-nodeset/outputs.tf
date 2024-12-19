@@ -75,7 +75,14 @@ output "nodeset" {
   precondition {
     condition     = var.future_reservation == "" || local.fr_zone == var.zone
     error_message = <<-EOD
-      The zone of the deployment must match that of the future reservation"
+      The zone of the deployment must match that of the future reservation
+    EOD
+  }
+
+  precondition {
+    condition     = var.node_count_dynamic_max > 0 || var.node_count_static > 0
+    error_message = <<-EOD
+      This nodeset contains zero nodes, there should be at least one static or dynamic node
     EOD
   }
 }

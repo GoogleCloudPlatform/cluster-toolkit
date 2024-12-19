@@ -16,12 +16,14 @@
 
 import argparse
 import util
+import tpu
 
 
 def get_vmcount_of_tpu_part(part):
     res = 0
-    for ns in util.lookup().cfg.partitions[part].partition_nodeset_tpu:
-        tpu_obj = util.TPU(util.lookup().cfg.nodeset_tpu[ns])
+    lkp = util.lookup()
+    for ns in lkp.cfg.partitions[part].partition_nodeset_tpu:
+        tpu_obj = tpu.TPU.make(ns, lkp)
         if res == 0:
             res = tpu_obj.vmcount
         else:
