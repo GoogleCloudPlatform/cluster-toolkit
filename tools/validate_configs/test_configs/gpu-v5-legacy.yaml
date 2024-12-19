@@ -167,7 +167,6 @@ deployment_groups:
     - auto_nodegroup
     settings:
       partition_name: debug
-      enable_placement: false
       is_default: true
 
   - id: slurm_controller

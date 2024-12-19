@@ -117,7 +117,6 @@ deployment_groups:
       - nodeset_name: expl
         node_count_static: 0
         node_count_dynamic_max: 4
-        enable_placement: false
         node_conf: {}
         additional_disks: []
         additional_networks: []
