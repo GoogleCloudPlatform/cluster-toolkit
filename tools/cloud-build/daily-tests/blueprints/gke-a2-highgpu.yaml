@@ -20,7 +20,7 @@ vars:
   project_id: hpc-toolkit-dev ## Set GCP Project ID Here ##
   deployment_name: gke-a2-highgpu
   region: us-central1
-  zone: us-central1-c
+  zone: us-central1-f
 
   # Cidr block containing the IP of the machine calling terraform.
   # The following line must be updated for this example to work.
@@ -84,6 +84,7 @@ deployment_groups:
       zones: [$(vars.zone)]
       image_type: UBUNTU_CONTAINERD
       placement_policy:
+        name: a2-highgpu-compact
         type: "COMPACT"
     outputs: [instructions]
 
