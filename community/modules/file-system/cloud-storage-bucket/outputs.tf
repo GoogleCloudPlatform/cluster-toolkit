@@ -65,5 +65,5 @@ output "gcs_bucket_path" {
 
 output "gcs_bucket_name" {
   description = "Bucket name."
-  value       = google_storage_bucket.bucket.name
+  value       = length(google_storage_bucket.bucket) != 0 ? google_storage_bucket.bucket[0].name : var.existing_gcs_bucket_name
 }
