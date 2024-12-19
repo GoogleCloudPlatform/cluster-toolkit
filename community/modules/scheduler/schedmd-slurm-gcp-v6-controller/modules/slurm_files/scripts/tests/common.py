@@ -38,6 +38,8 @@ class TstNodeset:
     reservation_name: Optional[str] = ""
     zone_policy_allow: Optional[list[str]] = field(default_factory=list)
     enable_placement: bool = True
+    placement_max_distance: Optional[int] = None
+    machine_type: Optional[str] = ""
 
 @dataclass
 class TstPartition:
