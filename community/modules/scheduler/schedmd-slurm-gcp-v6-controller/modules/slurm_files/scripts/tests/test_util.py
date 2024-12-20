@@ -12,10 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Optional, Type
+
 import pytest
 from mock import Mock
 from common import TstNodeset, TstCfg # needed to import util
 import util
+from util import NodeState, MachineType, AcceleratorInfo
 from datetime import timedelta
 from google.api_core.client_options import ClientOptions  # noqa: E402
 
@@ -64,6 +67,24 @@ def test_node_desc(name, expected):
 
 
 @pytest.mark.parametrize(
+    "name,expected",
+    [
+        ("az-buka-23", 23),
+        ("az-buka-0", 0),
+        ("az-buka", Exception),
+        ("az-buka-xyzf", ValueError),
+        ("az-buka-[2-3]", ValueError),
+    ],
+)
+def test_node_index(name, expected):
+    if  type(expected) is type and issubclass(expected, Exception):
+        with pytest.raises(expected):
+            util.lookup().node_index(name) 
+    else:
+        assert util.lookup().node_index(name) == expected
+
+
+@pytest.mark.parametrize(
     "name",
     [
         "az-buka",
@@ -90,8 +111,8 @@ def test_node_desc_fail(name):
         ("seas7-0,seas7-1", "seas7-[0-1]"),
     ],
 )
-def test_to_hostlist_fast(names, expected):
-    assert util.to_hostlist_fast(names.split(",")) == expected
+def test_to_hostlist(names, expected):
+    assert util.to_hostlist(names.split(",")) == expected
 
 
 @pytest.mark.parametrize(
@@ -290,3 +311,92 @@ def test_nodeset_reservation_ok(nodeset, policies, expected):
 def test_parse_job_info(job_info, expected_job):
     lkp = util.Lookup(TstCfg())
     assert lkp._parse_job_info(job_info) == expected_job
+
+
+
+@pytest.mark.parametrize(
+    "node,state,want",
+    [
+        ("c-n-2", NodeState("DOWN", {}), NodeState("DOWN", {})), # happy scenario
+        ("c-d-vodoo", None, None), # dynamic nodeset
+        ("c-x-44", None, None), # unknown(removed) nodeset
+        ("c-n-7", None, None), # Out of bounds: c-n-[0-4] - downsized nodeset
+        ("c-t-7", None, None), # Out of bounds: c-t-[0-4] - downsized nodeset TPU
+        ("c-n-2", None, RuntimeError), # something is wrong
+        ("c-t-2", None, RuntimeError), # something is wrong, but TPU
+        
+        # Check boundaries match [0-5)
+        ("c-n-5", None, None), # out of boundaries
+        ("c-n-4", None, RuntimeError), # within boundaries
+    ])
+def test_node_state(node: str, state: Optional[NodeState], want: NodeState | None | Type[Exception]):
+    cfg = TstCfg(
+        slurm_cluster_name="c",
+        nodeset={
+            "n": TstNodeset(node_count_static=2, node_count_dynamic_max=3)},
+        nodeset_tpu={
+            "t": TstNodeset(node_count_static=2, node_count_dynamic_max=3)},
+        nodeset_dyn={
+            "d": TstNodeset()},
+    )
+    lkp = util.Lookup(cfg)
+    lkp.slurm_nodes = lambda: {node: state} if state else {}
+        
+    if  type(want) is type and issubclass(want, Exception):
+        with pytest.raises(want):
+            lkp.node_state(node)
+    else:
+        assert lkp.node_state(node) == want
+        
+
+
+@pytest.mark.parametrize(
+    "jo,want",
+    [
+        ({
+            "accelerators": [ { "guestAcceleratorCount": 1, "guestAcceleratorType": "nvidia-tesla-a100" } ],
+            "creationTimestamp": "1969-12-31T16:00:00.000-08:00",
+            "description": "Accelerator Optimized: 1 NVIDIA Tesla A100 GPU, 12 vCPUs, 85GB RAM",
+            "guestCpus": 12,
+            "id": "1000012",
+            "imageSpaceGb": 0,
+            "isSharedCpu": False,
+            "kind": "compute#machineType",
+            "maximumPersistentDisks": 128,
+            "maximumPersistentDisksSizeGb": "263168",
+            "memoryMb": 87040,
+            "name": "a2-highgpu-1g",
+            "selfLink": "https://www.googleapis.com/compute/v1/projects/io-playground/zones/us-central1-a/machineTypes/a2-highgpu-1g",
+            "zone": "us-central1-a"
+        }, MachineType(
+            name="a2-highgpu-1g",
+            guest_cpus=12,
+            memory_mb=87040,
+            accelerators=[
+                AcceleratorInfo(type="nvidia-tesla-a100", count=1)
+            ]
+        )),
+        ({
+            "architecture": "X86_64",
+            "creationTimestamp": "1969-12-31T16:00:00.000-08:00",
+            "description": "8 vCPUs, 32 GB RAM",
+            "guestCpus": 8,
+            "id": "1210008",
+            "imageSpaceGb": 0,
+            "isSharedCpu": False,
+            "kind": "compute#machineType",
+            "maximumPersistentDisks": 128,
+            "maximumPersistentDisksSizeGb": "263168",
+            "memoryMb": 32768,
+            "name": "t2d-standard-8",
+            "selfLink": "https://www.googleapis.com/compute/v1/projects/io-playground/zones/europe-north2-b/machineTypes/t2d-standard-8",
+            "zone": "europe-north2-b"
+        }, MachineType(
+            name="t2d-standard-8",
+            guest_cpus=8,
+            memory_mb=32768,
+            accelerators=[]
+        )),
+    ])
+def test_MachineType_from_json(jo: dict, want: MachineType):
+    assert MachineType.from_json(jo) == want

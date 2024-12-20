@@ -110,7 +110,6 @@ limitations under the License.
 | <a name="requirement_google"></a> [google](#requirement\_google) | > 5.0 |
 | <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | > 5.0 |
 | <a name="requirement_kubernetes"></a> [kubernetes](#requirement\_kubernetes) | ~> 2.23 |
-| <a name="requirement_null"></a> [null](#requirement\_null) | ~> 3.0 |
 
 ## Providers
 
@@ -118,7 +117,6 @@ limitations under the License.
 |------|---------|
 | <a name="provider_google"></a> [google](#provider\_google) | > 5.0 |
 | <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | > 5.0 |
-| <a name="provider_null"></a> [null](#provider\_null) | ~> 3.0 |
 
 ## Modules
 
@@ -133,7 +131,6 @@ limitations under the License.
 |------|------|
 | [google-beta_google_container_cluster.gke_cluster](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_container_cluster) | resource |
 | [google-beta_google_container_node_pool.system_node_pools](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_container_node_pool) | resource |
-| [null_resource.enable_parallelstore_csi](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
 | [google_client_config.default](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/client_config) | data source |
 | [google_project.project](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/project) | data source |
 
@@ -148,6 +145,7 @@ limitations under the License.
 | <a name="input_cluster_reference_type"></a> [cluster\_reference\_type](#input\_cluster\_reference\_type) | How the google\_container\_node\_pool.system\_node\_pools refers to the cluster. Possible values are: {SELF\_LINK, NAME} | `string` | `"SELF_LINK"` | no |
 | <a name="input_configure_workload_identity_sa"></a> [configure\_workload\_identity\_sa](#input\_configure\_workload\_identity\_sa) | When true, a kubernetes service account will be created and bound using workload identity to the service account used to create the cluster. | `bool` | `false` | no |
 | <a name="input_default_max_pods_per_node"></a> [default\_max\_pods\_per\_node](#input\_default\_max\_pods\_per\_node) | The default maximum number of pods per node in this cluster. | `number` | `null` | no |
+| <a name="input_deletion_protection"></a> [deletion\_protection](#input\_deletion\_protection) | "Determines if the cluster can be deleted by gcluster commands or not".<br/>To delete a cluster provisioned with deletion\_protection set to true, you must first set it to false and apply the changes.<br/>Then proceed with deletion as usual. | `bool` | `false` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the HPC deployment. Used in the GKE cluster name by default and can be configured with `prefix_with_deployment_name`. | `string` | n/a | yes |
 | <a name="input_enable_dataplane_v2"></a> [enable\_dataplane\_v2](#input\_enable\_dataplane\_v2) | Enables [Dataplane v2](https://cloud.google.com/kubernetes-engine/docs/concepts/dataplane-v2). This setting is immutable on clusters. If null, will default to false unless using multi-networking, in which case it will default to true | `bool` | `null` | no |
 | <a name="input_enable_dcgm_monitoring"></a> [enable\_dcgm\_monitoring](#input\_enable\_dcgm\_monitoring) | Enable GKE to collect DCGM metrics | `bool` | `false` | no |

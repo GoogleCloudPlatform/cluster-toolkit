@@ -14,12 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Iterable, List, Tuple, Optional, Any, Dict
+from typing import Iterable, List, Tuple, Optional, Any, Dict, Sequence
 import argparse
 import base64
-import collections
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import timedelta, datetime
 import hashlib
 import inspect
 import json
@@ -36,7 +35,7 @@ import subprocess
 import sys
 import tempfile
 from enum import Enum
-from collections import defaultdict, namedtuple
+from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
 from functools import lru_cache, reduce, wraps
@@ -56,13 +55,6 @@ import google_auth_httplib2  # noqa: E402
 from googleapiclient.http import set_user_agent  # noqa: E402
 from google.api_core.client_options import ClientOptions  # noqa: E402
 import httplib2  # noqa: E402
-
-try:
-    from google.cloud import tpu_v2 as tpu  # noqa: E402
-    can_tpu = True
-except ImportError: # TODO: remove once CentOS 7 is deprecated or dependency is added
-    f"WARNING: Missing Python module 'google.cloud.tpu_v2 (pip:google-cloud-tpu)', TPU support will not work."
-    can_tpu = False
 
 import google.api_core.exceptions as gExceptions  # noqa: E402
 
@@ -135,6 +127,65 @@ class ApiEndpoint(Enum):
     STORAGE = "storage"
     TPU = "tpu"
     SECRET = "secret_manager"
+
+
+@dataclass(frozen=True)
+class AcceleratorInfo:
+    type: str
+    count: int
+
+    @classmethod
+    def from_json(cls, jo: dict) -> "AcceleratorInfo":
+        return cls(
+            type=jo["guestAcceleratorType"],
+            count=jo["guestAcceleratorCount"])
+
+@dataclass(frozen=True)
+class MachineType:
+    name: str
+    guest_cpus: int
+    memory_mb: int
+    accelerators: List[AcceleratorInfo]
+    
+    @classmethod
+    def from_json(cls, jo: dict) -> "MachineType":
+        return cls(
+            name=jo["name"],
+            guest_cpus=jo["guestCpus"],
+            memory_mb=jo["memoryMb"],
+            accelerators=[
+                AcceleratorInfo.from_json(a) for a in jo.get("accelerators", [])],
+        )
+
+    @property
+    def family(self) -> str:
+        # TODO: doesn't work with N1 custom machine types
+        # See https://cloud.google.com/compute/docs/instances/creating-instance-with-custom-machine-type#create
+        return self.name.split("-")[0]
+    
+    @property
+    def supports_smt(self) -> bool:
+        # https://cloud.google.com/compute/docs/cpu-platforms
+        if self.family in  ("t2a", "t2d", "h3", "c4a",):
+            return False
+        if self.guest_cpus == 1:
+            return False
+        return True
+    
+    @property
+    def sockets(self) -> int:
+        return {
+            "h3": 2,
+            "c2d": 2 if self.guest_cpus > 56 else 1,
+            "a3": 2,
+            "c2": 2 if self.guest_cpus > 30 else 1,
+            "c3": 2 if self.guest_cpus > 88 else 1,
+            "c3d": 2 if self.guest_cpus > 180 else 1,
+            "c4": 2 if self.guest_cpus > 96 else 1,
+        }.get(
+            self.family, 1,  # assume 1 socket for all other families
+        )
+
 
 
 @lru_cache(maxsize=1)
@@ -373,6 +424,7 @@ def compute_service(version="beta"):
         requestBuilder=build_request,
         credentials=credentials,
         discoveryServiceUrl=disc_url,
+        cache_discovery=False, # See https://github.com/googleapis/google-api-python-client/issues/299
     )
 
 def storage_client() -> storage.Client:
@@ -745,8 +797,7 @@ def chunked(iterable, n=API_REQ_LIMIT):
             return
         yield chunk
 
-
-def groupby_unsorted(seq, key):
+def groupby_unsorted(seq: Sequence[Any], key):
     indices = defaultdict(list)
     for i, el in enumerate(seq):
         indices[key(el)].append(i)
@@ -877,25 +928,13 @@ def natural_sort(text):
 
     return [atoi(w) for w in re.split(r"(\d+)", text)]
 
-# TODO: replace with to_hostlist_fast
-def to_hostlist(nodenames) -> str:
-    """make hostlist from list of node names"""
-    # use tmp file because list could be large
-    tmp_file = tempfile.NamedTemporaryFile(mode="w+t", delete=False)
-    tmp_file.writelines("\n".join(sorted(nodenames, key=natural_sort)))
-    tmp_file.close()
 
-    hostlist = run(f"{lookup().scontrol} show hostlist {tmp_file.name}").stdout.rstrip()
-    os.remove(tmp_file.name)
-    return hostlist
-
-
-def to_hostlist_fast(names: Iterable[str]) -> str:
+def to_hostlist(names: Iterable[str]) -> str:
     """
-    Fast implementation of to_hostlist that doesn't invoke `scontrol`
+    Fast implementation of `hostlist` that doesn't invoke `scontrol`
     IMPORTANT:
     * Acts as `scontrol show hostlistsorted`, i.e. original order is not preserved
-    * Achieves worse compression than `to_hostlist` for some cases
+    * Achieves worse compression than `scontrol show hostlist` for some cases
     """
     pref = defaultdict(list)
     tokenizer = re.compile(r"^(.*?)(\d*)$")
@@ -947,11 +986,7 @@ def to_hostlist_fast(names: Iterable[str]) -> str:
             res.append(f"{p}[{','.join(cs)}]")
     return ",".join(res)
 
-
-def part_is_tpu(part):
-    """check if partition with name part contains a nodeset of type tpu"""
-    return len(lookup().cfg.partitions[part].partition_nodeset_tpu) > 0
-
+@lru_cache(maxsize=None)
 def to_hostnames(nodelist: str) -> List[str]:
     """make list of hostnames from hostlist expression"""
     if not nodelist:
@@ -1135,46 +1170,8 @@ def get_insert_operations(group_ids):
     return get_filtered_operations(" AND ".join(f"({f})" for f in filters if f))
 
 
-def machine_type_family(mt: str) -> str:
-    """get machine type family from machine type"""
-    # TODO: doesn't work with N1 custom machine types
-    # See https://cloud.google.com/compute/docs/instances/creating-instance-with-custom-machine-type#create
-    return mt.split("-")[0]
-
-
-def machine_type_sockets(template) -> int:
-    guestCpus: int = int(template.machine_info.guestCpus)
-    return {
-        "h3": 2,
-        "c2d": 2 if guestCpus > 56 else 1,
-        "a3": 2,
-        "c2": 2 if guestCpus > 30 else 1,
-        "c3": 2 if guestCpus > 88 else 1,
-        "c3d": 2 if guestCpus > 180 else 1,
-        "c4": 2 if guestCpus > 96 else 1,
-    }.get(
-        machine_type_family(template.machineType),
-        1,  # assume 1 socket for all other families
-    )
-
-
-def isSmt(template) -> bool:
-    # https://cloud.google.com/compute/docs/cpu-platforms
-    noSmtFamily = (
-        "t2a",
-        "t2d",
-        "h3",
-        "c4a",
-    )
-    if machine_type_family(template.machineType) in noSmtFamily:
-        return False
-    if template.machine_info.guestCpus == 1:
-        return False
-    return True
-
-
 def getThreadsPerCore(template) -> int:
-    if not isSmt(template):
+    if not template.machine_type.supports_smt:
         return 1
     return template.advancedMachineFeatures.threadsPerCore or 2
 
@@ -1206,253 +1203,6 @@ class Dumper(yaml.SafeDumper):
         return dumper.represent_scalar("tag:yaml.org,2002:str", str(path))
 
 
-class TPU:
-    """Class for handling the TPU-vm nodes"""
-
-    if can_tpu:
-        State = tpu.types.cloud_tpu.Node.State
-        TPUS_PER_VM = 4
-        __expected_states = {
-            "create": State.READY,
-            "start": State.READY,
-            "stop": State.STOPPED,
-        }
-
-        __tpu_version_mapping = {
-            "V2": tpu.AcceleratorConfig().Type.V2,
-            "V3": tpu.AcceleratorConfig().Type.V3,
-            "V4": tpu.AcceleratorConfig().Type.V4,
-        }
-
-    def __init__(self, nodeset):
-        if not can_tpu:
-            raise Exception("TPU pip package not installed")
-        self._nodeset = nodeset
-        self._parent = f"projects/{lookup().project}/locations/{nodeset.zone}"
-        co = create_client_options(ApiEndpoint.TPU)
-        self._client = tpu.TpuClient(client_options=co)
-        self.data_disks = []
-        for data_disk in nodeset.data_disks:
-            ad = tpu.AttachedDisk()
-            ad.source_disk = data_disk
-            ad.mode = tpu.AttachedDisk.DiskMode.DISK_MODE_UNSPECIFIED
-            self.data_disks.append(ad)
-        ns_ac = nodeset.accelerator_config
-        if ns_ac.topology != "" and ns_ac.version != "":
-            ac = tpu.AcceleratorConfig()
-            ac.topology = ns_ac.topology
-            ac.type_ = self.__tpu_version_mapping[ns_ac.version]
-            self.ac = ac
-        else:
-            req = tpu.GetAcceleratorTypeRequest(
-                name=f"{self._parent}/acceleratorTypes/{nodeset.node_type}"
-            )
-            self.ac = self._client.get_accelerator_type(req).accelerator_configs[0]
-        self.vmcount = self.__calc_vm_from_topology(self.ac.topology)
-
-    @property
-    def nodeset(self):
-        return self._nodeset
-
-    @property
-    def preserve_tpu(self):
-        return self._nodeset.preserve_tpu
-
-    @property
-    def node_type(self):
-        return self._nodeset.node_type
-
-    @property
-    def tf_version(self):
-        return self._nodeset.tf_version
-
-    @property
-    def enable_public_ip(self):
-        return self._nodeset.enable_public_ip
-
-    @property
-    def preemptible(self):
-        return self._nodeset.preemptible
-
-    @property
-    def reserved(self):
-        return self._nodeset.reserved
-
-    @property
-    def service_account(self):
-        return self._nodeset.service_account
-
-    @property
-    def zone(self):
-        return self._nodeset.zone
-
-    def check_node_type(self):
-        if self.node_type is None:
-            return False
-        try:
-            request = tpu.GetAcceleratorTypeRequest(
-                name=f"{self._parent}/acceleratorTypes/{self.node_type}"
-            )
-            return self._client.get_accelerator_type(request=request) is not None
-        except Exception:
-            return False
-
-    def check_tf_version(self):
-        try:
-            request = tpu.GetRuntimeVersionRequest(
-                name=f"{self._parent}/runtimeVersions/{self.tf_version}"
-            )
-            return self._client.get_runtime_version(request=request) is not None
-        except Exception:
-            return False
-
-    def __calc_vm_from_topology(self, topology):
-        topo = topology.split("x")
-        tot = 1
-        for num in topo:
-            tot = tot * int(num)
-        return tot // self.TPUS_PER_VM
-
-    def __check_resp(self, response, op_name):
-        des_state = self.__expected_states.get(op_name)
-        # If the state is not in the table just print the response
-        if des_state is None:
-            return False
-        if response.__class__.__name__ != "Node":  # If the response is not a node fail
-            return False
-        if response.state == des_state:
-            return True
-        return False
-
-    def list_nodes(self):
-        try:
-            request = tpu.ListNodesRequest(parent=self._parent)
-            res = self._client.list_nodes(request=request)
-        except gExceptions.NotFound:
-            res = None
-        return res
-
-    def list_node_names(self):
-        return [node.name.split("/")[-1] for node in self.list_nodes()]
-
-    def start_node(self, nodename):
-        request = tpu.StartNodeRequest(name=f"{self._parent}/nodes/{nodename}")
-        resp = self._client.start_node(request=request).result()
-        return self.__check_resp(resp, "start")
-
-    def stop_node(self, nodename):
-        request = tpu.StopNodeRequest(name=f"{self._parent}/nodes/{nodename}")
-        resp = self._client.stop_node(request=request).result()
-        return self.__check_resp(resp, "stop")
-
-    def get_node(self, nodename):
-        try:
-            request = tpu.GetNodeRequest(name=f"{self._parent}/nodes/{nodename}")
-            res = self._client.get_node(request=request)
-        except gExceptions.NotFound:
-            res = None
-        return res
-
-    def _register_node(self, nodename, ip_addr):
-        dns_name = socket.getnameinfo((ip_addr, 0), 0)[0]
-        run(
-            f"{lookup().scontrol} update nodename={nodename} nodeaddr={ip_addr} nodehostname={dns_name}"
-        )
-
-    def create_node(self, nodename):
-        if self.vmcount > 1 and not isinstance(nodename, list):
-            log.error(
-                f"Tried to create a {self.vmcount} node TPU on nodeset {self._nodeset.nodeset_name} but only received one nodename {nodename}"
-            )
-            return False
-        if self.vmcount > 1 and (
-            isinstance(nodename, list) and len(nodename) != self.vmcount
-        ):
-            log.error(
-                f"Expected to receive a list of {self.vmcount} nodenames for TPU node creation in nodeset {self._nodeset.nodeset_name}, but received this list {nodename}"
-            )
-            return False
-
-        node = tpu.Node()
-        node.accelerator_config = self.ac
-        node.runtime_version = f"tpu-vm-tf-{self.tf_version}"
-        startup_script = """
-        #!/bin/bash
-        echo "startup script not found > /var/log/startup_error.log"
-        """
-        with open(
-            Path(lookup().cfg.slurm_scripts_dir or dirs.scripts) / "startup.sh", "r"
-        ) as script:
-            startup_script = script.read()
-        if isinstance(nodename, list):
-            node_id = nodename[0]
-            slurm_names = []
-            wid = 0
-            for node_wid in nodename:
-                slurm_names.append(f"WORKER_{wid}:{node_wid}")
-                wid += 1
-        else:
-            node_id = nodename
-            slurm_names = [f"WORKER_0:{nodename}"]
-        node.metadata = {
-            "slurm_docker_image": self.nodeset.docker_image,
-            "startup-script": startup_script,
-            "slurm_instance_role": "compute",
-            "slurm_cluster_name": lookup().cfg.slurm_cluster_name,
-            "slurm_bucket_path": lookup().cfg.bucket_path,
-            "slurm_names": ";".join(slurm_names),
-            "universe_domain": universe_domain(),
-        }
-        node.tags = [lookup().cfg.slurm_cluster_name]
-        if self.nodeset.service_account:
-            node.service_account.email = self.nodeset.service_account.email
-            node.service_account.scope = self.nodeset.service_account.scopes
-        node.scheduling_config.preemptible = self.preemptible
-        node.scheduling_config.reserved = self.reserved
-        node.network_config.subnetwork = self.nodeset.subnetwork
-        node.network_config.enable_external_ips = self.enable_public_ip
-        if self.data_disks:
-            node.data_disks = self.data_disks
-
-        request = tpu.CreateNodeRequest(parent=self._parent, node=node, node_id=node_id)
-        resp = self._client.create_node(request=request).result()
-        if not self.__check_resp(resp, "create"):
-            return False
-        if isinstance(nodename, list):
-            for node_id, net_endpoint in zip(nodename, resp.network_endpoints):
-                self._register_node(node_id, net_endpoint.ip_address)
-        else:
-            ip_add = resp.network_endpoints[0].ip_address
-            self._register_node(nodename, ip_add)
-        return True
-
-    def delete_node(self, nodename):
-        request = tpu.DeleteNodeRequest(name=f"{self._parent}/nodes/{nodename}")
-        try:
-            resp = self._client.delete_node(request=request).result()
-            if resp:
-                return self.get_node(nodename=nodename) is None
-            return False
-        except gExceptions.NotFound:
-            # log only error if vmcount is 1 as for other tpu vm count, this could be "phantom" nodes
-            if self.vmcount == 1:
-                log.error(f"Tpu single node {nodename} not found")
-            else:
-                # for the TPU nodes that consist in more than one vm, only the first node of the TPU a.k.a. the master node will
-                # exist as real TPU nodes, so the other ones are expected to not be found, check the hostname of the node that has
-                # not been found, and if it ends in 0, it means that is the master node and it should have been found, and in consequence
-                # log an error
-                nodehostname = yaml.safe_load(
-                    run(f"{lookup().scontrol} --yaml show node {nodename}").stdout.rstrip()
-                )["nodes"][0]["hostname"]
-                if nodehostname.split("-")[-1] == "0":
-                    log.error(f"TPU master node {nodename} not found")
-                else:
-                    log.info(f"Deleted TPU 'phantom' node {nodename}")
-            # If the node is not found it is tecnichally deleted, so return success.
-            return True
-
-
 @dataclass(frozen=True)
 class ReservationDetails:
     project: str
@@ -1462,6 +1212,21 @@ class ReservationDetails:
     bulk_insert_name: str # name in format suitable for bulk insert (currently identical to user supplied name in long format)
     deployment_type: Optional[str]
 
+    @property
+    def dense(self) -> bool:
+        return self.deployment_type == "DENSE"
+
+@dataclass(frozen=True)
+class FutureReservation:
+    project: str
+    zone: str
+    name: str
+    specific: bool
+    start_time: datetime
+    end_time: datetime
+    active_reservation: Optional[ReservationDetails]
+
+
 @dataclass
 class Job:
     id: int
@@ -1470,6 +1235,10 @@ class Job:
     job_state: Optional[str] = None
     duration: Optional[timedelta] = None
 
+@dataclass(frozen=True)
+class NodeState:
+    base: str
+    flags: frozenset
 
 class Lookup:
     """Wrapper class for cached data access"""
@@ -1564,29 +1333,46 @@ class Lookup:
 
     def node_prefix(self, node_name=None):
         return self._node_desc(node_name)["prefix"]
+    
+    def node_index(self, node: str) -> int:
+        """ node_index("cluster-nodeset-45") == 45 """
+        suff = self._node_desc(node)["suffix"]
+        
+        if suff is None:
+            raise ValueError(f"Node {node} name does not end with numeric index")
+        return int(suff)
 
     def node_nodeset_name(self, node_name=None):
         return self._node_desc(node_name)["nodeset"]
 
     def node_nodeset(self, node_name=None):
         nodeset_name = self.node_nodeset_name(node_name)
-        ns = self.cfg.nodeset.get(nodeset_name)
-        if ns:
-            return ns
-        return self.cfg.nodeset_tpu.get(nodeset_name)
+        if nodeset_name in self.cfg.nodeset_tpu:
+            return self.cfg.nodeset_tpu[nodeset_name]
+
+        return self.cfg.nodeset[nodeset_name]
+
+    def partition_is_tpu(self, part: str) -> bool:
+        """check if partition with name part contains a nodeset of type tpu"""
+        return len(self.cfg.partitions[part].partition_nodeset_tpu) > 0
+
 
     def node_is_tpu(self, node_name=None):
         nodeset_name = self.node_nodeset_name(node_name)
         return self.cfg.nodeset_tpu.get(nodeset_name) is not None
+    
+    def node_is_fr(self, node_name:str) -> bool:
+        return bool(self.node_nodeset(node_name).future_reservation)
+
+    def is_dormant_fr_node(self, node_name:str) -> bool:
+        fr = self.future_reservation(self.node_nodeset(node_name))
+        if not fr:
+            return False
+        return fr.active_reservation is None
 
     def node_is_dyn(self, node_name=None) -> bool:
         nodeset = self.node_nodeset_name(node_name)
         return self.cfg.nodeset_dyn.get(nodeset) is not None
-
-    def chunk_tpu_nodes(self, tpu_nodes):
-        model = tpu_nodes[0]
-        tpu = TPU(self.node_nodeset(model))
-        return chunked(tpu_nodes, n=tpu.vmcount)
 
     def node_template(self, node_name=None):
         return self.node_nodeset(node_name).instance_template
@@ -1646,15 +1432,14 @@ class Lookup:
 
     @lru_cache(maxsize=None)
     def slurm_nodes(self):
-        StateTuple = namedtuple("StateTuple", "base,flags")
 
         def make_node_tuple(node_line):
-            """turn node,state line to (node, StateTuple(state))"""
+            """turn node,state line to (node, NodeState(state))"""
             # state flags include: CLOUD, COMPLETING, DRAIN, FAIL, POWERED_DOWN,
             #   POWERING_DOWN
             node, fullstate = node_line.split(",")
             state = fullstate.split("+")
-            state_tuple = StateTuple(state[0], set(state[1:]))
+            state_tuple = NodeState(base=state[0], flags=frozenset(state[1:]))
             return (node, state_tuple)
 
         cmd = (
@@ -1670,8 +1455,39 @@ class Lookup:
         }
         return nodes
 
-    def slurm_node(self, nodename):
-        return self.slurm_nodes().get(nodename)
+    def node_state(self, nodename: str) -> Optional[NodeState]:
+        state = self.slurm_nodes().get(nodename)
+        if state is not None:
+            return state
+        
+        # state is None => Slurm doesn't know this node,
+        # there are two reasons:
+        # * happy: 
+        #   * node belongs to removed nodeset
+        #   * node belongs to downsized portion of nodeset
+        #   * dynamic node that didn't register itself
+        # * unhappy:
+        #   * there is a drift in Slurm and SlurmGCP configurations
+        #   * `slurm_nodes` function failed to handle `scontrol show nodes`,
+        #      TODO: make `slurm_nodes` robust by using `scontrol show nodes --json`
+        # In either of "unhappy" cases it's too dangerous to proceed - abort slurmsync.
+        try:
+            ns = self.node_nodeset(nodename)
+        except:
+            log.info(f"Unknown node {nodename}, belongs to unknown nodeset")
+            return None # Can't find nodeset, may be belongs to removed nodeset
+        
+        if self.node_is_dyn(nodename):
+            log.info(f"Unknown node {nodename}, belongs to dynamic nodeset")
+            return None # we can't make any judjment for dynamic nodes
+        
+        cnt = sum(self.static_dynamic_sizes(ns))
+        if self.node_index(nodename) >= cnt:
+            log.info(f"Unknown node {nodename}, out of nodeset size boundaries ({cnt})")
+            return None # node belongs to downsized nodeset
+        
+        raise RuntimeError(f"Slurm does not recognize node {nodename}, potential misconfiguration.")
+
 
     @lru_cache(maxsize=1)
     def instances(self) -> Dict[str, object]:
@@ -1766,7 +1582,27 @@ class Lookup:
         """See https://cloud.google.com/compute/docs/reference/rest/v1/reservations"""
         return self.compute.reservations().get(
             project=project, zone=zone, reservation=name).execute()
+    
+    @lru_cache()
+    def _get_future_reservation(self, project:str, zone:str, name: str) -> object:
+        """See https://cloud.google.com/compute/docs/reference/rest/v1/futureReservations"""
+        return self.compute.futureReservations().get(project=project, zone=zone, futureReservation=name).execute()
 
+    def get_reservation_details(self, project:str, zone:str, name:str, bulk_insert_name:str) -> ReservationDetails:
+        reservation = self._get_reservation(project, zone, name)
+    
+        # Converts policy URLs to names, e.g.:
+        # projects/111111/regions/us-central1/resourcePolicies/zebra -> zebra
+        policies = [u.split("/")[-1] for u in reservation.get("resourcePolicies", {}).values()]
+
+        return ReservationDetails(
+            project=project,
+            zone=zone,
+            name=name,
+            policies=policies,
+            deployment_type=reservation.get("deploymentType"),
+            bulk_insert_name=bulk_insert_name)
+    
     def nodeset_reservation(self, nodeset: object) -> Optional[ReservationDetails]:
         if not nodeset.reservation_name:
             return None
@@ -1782,19 +1618,37 @@ class Lookup:
             )
 
         project, name = match.group("project", "reservation")
-        reservation = self._get_reservation(project, zone, name)
+        return self.get_reservation_details(project, zone, name, nodeset.reservation_name)
+    
+    def future_reservation(self, nodeset:object) -> Optional[FutureReservation]:
+        if not nodeset.future_reservation:
+            return None
 
-        # Converts policy URLs to names, e.g.:
-        # projects/111111/regions/us-central1/resourcePolicies/zebra -> zebra
-        policies = [u.split("/")[-1] for u in reservation.get("resourcePolicies", {}).values()]
+        active_reservation = None
+        match = re.search(r'^projects/(?P<project>[^/]+)/zones/(?P<zone>[^/]+)/futureReservations/(?P<name>[^/]+)(/.*)?$', nodeset.future_reservation)
+        project, zone, name = match.group("project","zone","name")
+        fr = self._get_future_reservation(project,zone,name)
 
-        return ReservationDetails(
+        # TODO: Remove this "hack" of trimming the Z from timestamps once we move to Python 3.11 (context: https://discuss.python.org/t/parse-z-timezone-suffix-in-datetime/2220/30)
+        start_time = datetime.fromisoformat(fr["timeWindow"]["startTime"][:-1])
+        end_time = datetime.fromisoformat(fr["timeWindow"]["endTime"][:-1])
+
+        if "autoCreatedReservations" in fr["status"] and (fr_res:=fr["status"]["autoCreatedReservations"][0]):
+            if (start_time<=datetime.utcnow()<=end_time):
+                match = re.search(r'projects/(?P<project>[^/]+)/zones/(?P<zone>[^/]+)/reservations/(?P<name>[^/]+)(/.*)?$',fr_res)
+                res_name = match.group("name")
+                bulk_insert_name = f"projects/{project}/reservations/{res_name}"
+                active_reservation = self.get_reservation_details(project, zone, res_name, bulk_insert_name)
+
+        return FutureReservation(
             project=project,
             zone=zone,
             name=name,
-            policies=policies,
-            deployment_type=reservation.get("deploymentType"),
-            bulk_insert_name=nodeset.reservation_name)
+            specific=fr["specificReservationRequired"],
+            start_time=start_time,
+            end_time=end_time,
+            active_reservation=active_reservation
+        )
 
     @lru_cache(maxsize=1)
     def machine_types(self):
@@ -1817,53 +1671,48 @@ class Lookup:
             op = act.aggregatedList_next(op, result)
         return machines
 
-    def machine_type(self, machine_type: str):
-        """ """
+    def machine_type(self, name: str) -> MachineType:
         custom_patt = re.compile(
             r"((?P<family>\w+)-)?custom-(?P<cpus>\d+)-(?P<mem>\d+)"
         )
-        custom_match = custom_patt.match(machine_type)
-        if custom_match is not None:
-            groups = custom_match.groupdict()
-            cpus, mem = (groups[k] for k in ["cpus", "mem"])
-            machine_info = {
-                "guestCpus": int(cpus),
-                "memoryMb": int(mem),
-            }
-        else:
-            machines = self.machine_types()
-            if machine_type not in machines:
-                raise Exception(f"machine type {machine_type} not found")
-            per_zone = machines[machine_type]
-            assert per_zone
-            machine_info = next(iter(per_zone.values())) # pick the first/any zone
-        return NSDict(machine_info)
+        if match := custom_patt.match(name):
+            return MachineType(
+                name=name,
+                guest_cpus=int(match.group("cpus")),
+                memory_mb=int(match.group("mem")),
+                accelerators=[],
+            )
+        
+        machines = self.machine_types()
+        if name not in machines:
+            raise Exception(f"machine type {name} not found")
+        per_zone = machines[name]
+        assert per_zone
+        return MachineType.from_json(
+            next(iter(per_zone.values())) # pick the first/any zone
+        )
 
     def template_machine_conf(self, template_link):
         template = self.template_info(template_link)
-        if not template.machineType:
-            temp_name = trim_self_link(template_link)
-            raise Exception(f"instance template {temp_name} has no machine type")
-        template.machine_info = self.machine_type(template.machineType)
-        machine = template.machine_info
+        machine = template.machine_type
 
         machine_conf = NSDict()
         machine_conf.boards = 1  # No information, assume 1
-        machine_conf.sockets = machine_type_sockets(template)
+        machine_conf.sockets = machine.sockets
         # the value below for SocketsPerBoard must be type int
         machine_conf.sockets_per_board = machine_conf.sockets // machine_conf.boards
         machine_conf.threads_per_core = 1
         _div = 2 if getThreadsPerCore(template) == 1 else 1
         machine_conf.cpus = (
-            int(machine.guestCpus / _div) if isSmt(template) else machine.guestCpus
+            int(machine.guest_cpus / _div) if machine.supports_smt else machine.guest_cpus
         )
         machine_conf.cores_per_socket = int(machine_conf.cpus / machine_conf.sockets)
         # Because the actual memory on the host will be different than
         # what is configured (e.g. kernel will take it). From
         # experiments, about 16 MB per GB are used (plus about 400 MB
         # buffer for the first couple of GB's. Using 30 MB to be safe.
-        gb = machine.memoryMb // 1024
-        machine_conf.memory = machine.memoryMb - (400 + (30 * gb))
+        gb = machine.memory_mb // 1024
+        machine_conf.memory = machine.memory_mb - (400 + (30 * gb))
         return machine_conf
 
     @contextmanager
@@ -1908,20 +1757,20 @@ class Lookup:
         # name and link are not in properties, so stick them in
         template.name = template_name
         template.link = template_link
+        template.machine_type = self.machine_type(template.machineType)
         # TODO delete metadata to reduce memory footprint?
         # del template.metadata
 
         # translate gpus into an easier-to-read format
-        machine_info = self.machine_type(template.machineType)
-        if machine_info.accelerators:
-            template.gpu_type = machine_info.accelerators[0].guestAcceleratorType
-            template.gpu_count = machine_info.accelerators[0].guestAcceleratorCount
+        if template.machine_type.accelerators:
+            template.gpu = template.machine_type.accelerators[0]
         elif template.guestAccelerators:
-            template.gpu_type = template.guestAccelerators[0].acceleratorType
-            template.gpu_count = template.guestAccelerators[0].acceleratorCount
+            tga = template.guestAccelerators[0]
+            template.gpu = AcceleratorInfo(
+                type=tga.acceleratorType,
+                count=tga.acceleratorCount)
         else:
-            template.gpu_type = None
-            template.gpu_count = 0
+            template.gpu = None
 
         # keep write access open for minimum time
         with self.template_cache(writeback=True) as cache:
@@ -1931,12 +1780,6 @@ class Lookup:
 
         return template
 
-    def nodeset_map(self, hostnames: list):
-        """Convert a list of nodes into a map of nodeset_name to hostnames"""
-        nodeset_map = collections.defaultdict(list)
-        for node in hostnames:
-            nodeset_map[self.node_nodeset_name(node)].append(node)
-        return nodeset_map
 
     def _parse_job_info(self, job_info: str) -> Job:
         """Extract job details"""

@@ -20,7 +20,16 @@ locals {
 }
 
 locals {
-  has_gpu = length(local.guest_accelerator) > 0
+  upgrade_settings = {
+    strategy        = var.upgrade_settings.strategy
+    max_surge       = coalesce(var.upgrade_settings.max_surge, 0)
+    max_unavailable = coalesce(var.upgrade_settings.max_unavailable, 1)
+  }
+}
+
+locals {
+  has_gpu                  = length(local.guest_accelerator) > 0
+  allocatable_gpu_per_node = local.has_gpu ? max(local.guest_accelerator[*].count...) : -1
   gpu_taint = local.has_gpu ? [{
     key    = "nvidia.com/gpu"
     value  = "present"
@@ -74,9 +83,9 @@ resource "google_container_node_pool" "node_pool" {
   }
 
   upgrade_settings {
-    strategy        = "SURGE"
-    max_surge       = 0
-    max_unavailable = 1
+    strategy        = local.upgrade_settings.strategy
+    max_surge       = local.upgrade_settings.max_surge
+    max_unavailable = local.upgrade_settings.max_unavailable
   }
 
   dynamic "placement_policy" {
@@ -282,12 +291,33 @@ resource "google_container_node_pool" "node_pool" {
       )
       error_message = "Shared extended reservations are not supported by GKE."
     }
+    precondition {
+      condition     = contains(["SURGE"], local.upgrade_settings.strategy)
+      error_message = "Only SURGE strategy is supported"
+    }
+    precondition {
+      condition     = local.upgrade_settings.max_unavailable >= 0
+      error_message = "max_unavailable should be set to 0 or greater"
+    }
+    precondition {
+      condition     = local.upgrade_settings.max_surge >= 0
+      error_message = "max_surge should be set to 0 or greater"
+    }
+    precondition {
+      condition     = local.upgrade_settings.max_unavailable > 0 || local.upgrade_settings.max_surge > 0
+      error_message = "At least one of max_unavailable or max_surge must greater than 0"
+    }
   }
 }
 
+locals {
+  supported_machine_types_for_install_dependencies = ["a3-highgpu-8g", "a3-megagpu-8g"]
+}
+
 resource "null_resource" "install_dependencies" {
+  count = var.run_workload_script && contains(local.supported_machine_types_for_install_dependencies, var.machine_type) ? 1 : 0
   provisioner "local-exec" {
-    command = "pip3 install pyyaml argparse"
+    command = "pip3 install pyyaml"
   }
 }
 
@@ -297,7 +327,7 @@ locals {
 
 # execute script to inject rxdm sidecar into workload to enable tcpx for a3-highgpu-8g VM workload
 resource "null_resource" "enable_tcpx_in_workload" {
-  count = var.machine_type == "a3-highgpu-8g" ? 1 : 0
+  count = var.run_workload_script && var.machine_type == "a3-highgpu-8g" ? 1 : 0
   triggers = {
     always_run = timestamp()
   }
@@ -310,7 +340,7 @@ resource "null_resource" "enable_tcpx_in_workload" {
 
 # execute script to inject rxdm sidecar into workload to enable tcpxo for a3-megagpu-8g VM workload
 resource "null_resource" "enable_tcpxo_in_workload" {
-  count = var.machine_type == "a3-megagpu-8g" ? 1 : 0
+  count = var.run_workload_script && var.machine_type == "a3-megagpu-8g" ? 1 : 0
   triggers = {
     always_run = timestamp()
   }

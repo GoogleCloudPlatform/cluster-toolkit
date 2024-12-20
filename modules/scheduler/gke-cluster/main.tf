@@ -72,8 +72,7 @@ resource "google_container_cluster" "gke_cluster" {
   remove_default_node_pool = true
   initial_node_count       = 1 # must be set when remove_default_node_pool is set
 
-  # Sets default to false so terraform deletion is not prevented
-  deletion_protection = false
+  deletion_protection = var.deletion_protection
 
   network    = var.network_id
   subnetwork = var.subnetwork_self_link
@@ -184,6 +183,9 @@ resource "google_container_cluster" "gke_cluster" {
     }
     dns_cache_config {
       enabled = var.enable_node_local_dns_cache
+    }
+    parallelstore_csi_driver_config {
+      enabled = var.enable_parallelstore_csi
     }
   }
 
@@ -303,17 +305,6 @@ resource "google_container_node_pool" "system_node_pools" {
       node_config[0].taint,
     ]
   }
-}
-
-### TODO: remove this after Terraform support for GKE Parallelstore CSI is added. ###
-###       Instead use addons_config above to enable the CSI                       ###
-resource "null_resource" "enable_parallelstore_csi" {
-  count = var.enable_parallelstore_csi == true ? 1 : 0
-
-  provisioner "local-exec" {
-    command = "gcloud container clusters update ${local.name} --location=${var.region} --project=${var.project_id} --update-addons=ParallelstoreCsiDriver=ENABLED"
-  }
-  depends_on = [google_container_node_pool.system_node_pools] # avoid cluster operation conflict
 }
 
 data "google_client_config" "default" {}

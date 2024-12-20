@@ -20,6 +20,7 @@ SCRIPTS_DIR = "community/modules/scheduler/schedmd-slurm-gcp-v6-controller/modul
 if SCRIPTS_DIR not in sys.path:
     sys.path.append(SCRIPTS_DIR)  # TODO: make this more robust
 
+import util
 
 # TODO: use "real" classes once they are defined (instead of NSDict)
 
@@ -36,6 +37,14 @@ class TstNodeset:
     instance_template: Optional[str] = None
     reservation_name: Optional[str] = ""
     zone_policy_allow: Optional[list[str]] = field(default_factory=list)
+    enable_placement: bool = True
+
+@dataclass
+class TstPartition:
+    partition_name: str = "euler"
+    partition_nodeset: list[str] = field(default_factory=list)
+    partition_nodeset_tpu: list[str] = field(default_factory=list)
+    enable_job_exclusive: bool = False
 
 @dataclass
 class TstCfg:
@@ -45,6 +54,7 @@ class TstCfg:
     partitions: dict[str, Placeholder] = field(default_factory=dict)
     nodeset: dict[str, TstNodeset] = field(default_factory=dict)
     nodeset_tpu: dict[str, TstNodeset] = field(default_factory=dict)
+    nodeset_dyn: dict[str, TstNodeset] = field(default_factory=dict)
     
     install_dir: Optional[str] = None
     output_dir: Optional[str] = None
@@ -70,7 +80,7 @@ class TstMachineConf:
 
 @dataclass
 class TstTemplateInfo:
-    gpu_count: int = 0
+    gpu: Optional[util.AcceleratorInfo]
 
 @dataclass
 class TstInstance:

@@ -397,3 +397,13 @@ variable "networking_mode" {
   type        = string
   default     = "VPC_NATIVE"
 }
+
+variable "deletion_protection" {
+  description = <<-EOT
+  "Determines if the cluster can be deleted by gcluster commands or not".
+  To delete a cluster provisioned with deletion_protection set to true, you must first set it to false and apply the changes.
+  Then proceed with deletion as usual.
+  EOT
+  type        = bool
+  default     = false
+}

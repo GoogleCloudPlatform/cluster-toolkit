@@ -28,7 +28,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [ml-slurm-v5-legacy.yaml](#ml-slurm-v5-legacyyaml--) ![core-badge] ![deprecated-badge]
   * [ml-slurm.yaml](#ml-slurmyaml-) ![core-badge]
   * [image-builder-v5-legacy.yaml](#image-builder-v5-legacyyaml--) ![core-badge] ![deprecated-badge]
-  * [image-builder.yaml](#image-builderyaml--) ![core-badge]
+  * [image-builder.yaml](#image-builderyaml-) ![core-badge]
   * [serverless-batch.yaml](#serverless-batchyaml-) ![core-badge]
   * [serverless-batch-mpi.yaml](#serverless-batch-mpiyaml-) ![core-badge]
   * [pfs-lustre.yaml](#pfs-lustreyaml-) ![core-badge]
@@ -1517,6 +1517,30 @@ cleaned up when the job is deleted.
 > [whatismyip.com](https://whatismyip.com) to determine your IP address.
 
 [storage-gke.yaml]: ../examples/storage-gke.yaml
+
+### [gke-managed-parallelstore.yaml] ![core-badge] ![experimental-badge]
+
+This blueprint shows how to use managed parallelstore storage options with GKE in the toolkit.
+
+The blueprint contains the following:
+
+* A K8s Job that uses a managed parallelstore storage volume option.
+* A K8s Job that demonstrates ML training workload with managed parallelstore storage disk operation.
+
+> **Warning**: In this example blueprint, when storage type `Parallelstore` is specified in `gke-storage` module.
+> The lifecycle of the parallelstore is managed by the blueprint.
+> On glcuster destroy operation, the Parallelstore storage created will also be destroyed.
+>
+> [!Note]
+> The Kubernetes API server will only allow requests from authorized networks.
+> The `gke-cluster` module needs access to the Kubernetes API server
+> to create a Persistent Volume and a Persistent Volume Claim. **You must use
+> the `authorized_cidr` variable to supply an authorized network which contains
+> the IP address of the machine deploying the blueprint, for example
+> `--vars authorized_cidr=<your-ip-address>/32`.** You can use a service like
+> [whatismyip.com](https://whatismyip.com) to determine your IP address.
+
+[gke-managed-parallelstore.yaml]: ../examples/gke-managed-parallelstore.yaml
 
 ### [gke-a3-megagpu.yaml] ![core-badge] ![experimental-badge]
 

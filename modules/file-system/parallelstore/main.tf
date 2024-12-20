@@ -56,7 +56,6 @@ resource "google_parallelstore_instance" "instance" {
 
   labels = local.labels
 
-  provider   = google-beta
   depends_on = [var.private_vpc_connection_peering]
 }
 
