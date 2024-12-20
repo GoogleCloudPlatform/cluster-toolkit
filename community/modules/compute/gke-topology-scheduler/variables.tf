@@ -12,12 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-variable "project_id" {
-  description = "The project ID to host the cluster in."
-  type        = string
-}
-
-variable "cluster_id" {
-  description = "projects/{{project}}/locations/{{location}}/clusters/{{cluster}}"
-  type        = string
+variable "gke_cluster_exists" {
+  description = "A static flag that signals to modules that a cluster has been created."
+  type        = bool
+  default     = false
 }
