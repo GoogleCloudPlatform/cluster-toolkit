@@ -226,6 +226,8 @@ resource "google_container_node_pool" "node_pool" {
     ignore_changes = [
       node_config[0].labels,
       initial_node_count,
+      node_config[0].ephemeral_storage_local_ssd_config[0].local_ssd_count,
+      node_config[0].local_nvme_ssd_block_config[0].local_ssd_count,
     ]
     precondition {
       condition     = (var.max_pods_per_node == null) || (data.google_container_cluster.gke_cluster.networking_mode == "VPC_NATIVE")
