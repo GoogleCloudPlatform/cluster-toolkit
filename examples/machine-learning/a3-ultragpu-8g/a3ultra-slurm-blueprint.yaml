@@ -17,7 +17,7 @@
 # see README.md for further information
 
 # This blueprint requires a Cluster Toolkit binary built from a
-# release >= 1.43.0
+# release >= 1.44.0
 
 blueprint_name: a3ultra-slurm
 
@@ -257,20 +257,36 @@ deployment_groups:
     settings:
       network_name: $(vars.deployment_name)-net-0
       mtu: 8896
+      enable_internal_traffic: false # Setting firewall below instead
       subnetworks:
       - subnet_name: $(vars.deployment_name)-sub-0
         subnet_region: $(vars.region)
         subnet_ip: $(vars.net0_range)
+      firewall_rules:
+      - name: $(vars.deployment_name)-internal-0
+        ranges: [$(vars.net0_range)]
+        allow:
+        - protocol: tcp
+        - protocol: udp
+        - protocol: icmp
 
   - id: a3ultra-slurm-net-1
     source: modules/network/vpc
     settings:
       network_name: $(vars.deployment_name)-net-1
       mtu: 8896
+      enable_internal_traffic: false # Setting firewall below instead
       subnetworks:
       - subnet_name: $(vars.deployment_name)-sub-1
         subnet_region: $(vars.region)
         subnet_ip: $(vars.net1_range)
+      firewall_rules:
+      - name: $(vars.deployment_name)-internal-1
+        ranges: [$(vars.net1_range)]
+        allow:
+        - protocol: tcp
+        - protocol: udp
+        - protocol: icmp
 
   - id: a3ultra-slurm-rdma-net
     source: modules/network/gpu-rdma-vpc
@@ -283,6 +299,13 @@ deployment_groups:
         count: 8
         ip_range: $(vars.rdma_net_range)
         region: $(vars.region)
+      firewall_rules:
+      - name: $(vars.deployment_name)-internal-rdma
+        ranges: [$(vars.rdma_net_range)]
+        allow:
+        - protocol: tcp
+        - protocol: udp
+        - protocol: icmp
 
   - id: homefs
     source: modules/file-system/filestore
