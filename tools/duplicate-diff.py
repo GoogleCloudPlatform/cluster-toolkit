@@ -36,16 +36,9 @@ duplicates = [
         "modules/compute/vm-instance/startup_from_network_storage.tf",
     ],
     [
-        "modules/compute/vm-instance/gpu_definition.tf",
-        "community/modules/compute/htcondor-execute-point/gpu_definition.tf",
         "community/modules/compute/schedmd-slurm-gcp-v5-node-group/gpu_definition.tf",
         "community/modules/scheduler/schedmd-slurm-gcp-v5-login/gpu_definition.tf",
         "community/modules/scheduler/schedmd-slurm-gcp-v5-controller/gpu_definition.tf",
-        "community/modules/compute/schedmd-slurm-gcp-v6-nodeset/gpu_definition.tf",
-        "community/modules/compute/schedmd-slurm-gcp-v6-nodeset-dynamic/gpu_definition.tf",
-        "community/modules/scheduler/schedmd-slurm-gcp-v6-controller/gpu_definition.tf",
-        "community/modules/scheduler/schedmd-slurm-gcp-v6-login/gpu_definition.tf",
-        "modules/compute/gke-node-pool/gpu_definition.tf",
     ],
     [
         "modules/compute/gke-node-pool/threads_per_core_calc.tf",

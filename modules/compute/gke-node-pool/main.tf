@@ -27,7 +27,16 @@ locals {
   }
 }
 
+module "gpu" {
+  source = "../../internal/gpu-definition"
+
+  machine_type      = var.machine_type
+  guest_accelerator = var.guest_accelerator
+}
+
 locals {
+  guest_accelerator = module.gpu.guest_accelerator
+
   has_gpu                  = length(local.guest_accelerator) > 0
   allocatable_gpu_per_node = local.has_gpu ? max(local.guest_accelerator[*].count...) : -1
   gpu_taint = local.has_gpu ? [{
