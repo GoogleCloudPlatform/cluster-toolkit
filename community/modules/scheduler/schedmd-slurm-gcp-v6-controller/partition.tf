@@ -26,7 +26,7 @@ locals {
 # NODESET
 # TODO: remove dependency on slurm-gcp repo, move to local template module
 module "slurm_nodeset_template" {
-  source   = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=6.8.6"
+  source   = "../../internal/slurm-gcp-v6/instance_template"
   for_each = local.nodeset_map
 
   project_id          = var.project_id
@@ -89,6 +89,7 @@ locals {
     node_count_static                = ns.node_count_static
     subnetwork                       = ns.subnetwork_self_link
     reservation_name                 = ns.reservation_name
+    future_reservation               = ns.future_reservation
     maintenance_interval             = ns.maintenance_interval
     instance_properties_json         = ns.instance_properties_json
     enable_placement                 = ns.enable_placement
@@ -103,7 +104,7 @@ locals {
 
 # NODESET TPU
 module "slurm_nodeset_tpu" {
-  source   = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_nodeset_tpu?ref=6.8.6"
+  source   = "../../internal/slurm-gcp-v6/nodeset_tpu"
   for_each = local.nodeset_tpu_map
 
   project_id             = var.project_id

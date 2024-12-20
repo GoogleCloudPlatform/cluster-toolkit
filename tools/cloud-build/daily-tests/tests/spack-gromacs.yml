@@ -20,7 +20,7 @@ slurm_cluster_name: "groma{{ build[0:5] }}"
 zone: us-central1-c
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/community/examples/hpc-slurm-gromacs.yaml"
-network: "{{ test_name }}-net"
+network: "{{ deployment_name }}-net"
 login_node: "{{ slurm_cluster_name }}-slurm-login-*"
 # Image name to be used to filter logs from /var/log/messages for startup script.
 image_name: "slurm-gcp-dev-hpc-rocky-linux-8-*"

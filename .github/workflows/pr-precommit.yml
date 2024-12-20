@@ -41,6 +41,10 @@ jobs:
       with:
         go-version: '1.22'
         check-latest: true
+    - uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: "1.5.7"
+        terraform_wrapper: false
     - run: make install-dev-deps
     - uses: terraform-linters/setup-tflint@v4
       with:

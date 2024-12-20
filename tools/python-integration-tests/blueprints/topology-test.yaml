@@ -1,0 +1,61 @@
+# Copyright 2024 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+blueprint_name: topology-test
+
+vars:
+  project_id: ## Set GCP Project ID Here ##
+  deployment_name: topology-test
+  region: us-central1
+  zone: us-central1-a
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: network
+    source: modules/network/pre-existing-vpc
+
+  - id: nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network]
+    settings:
+      bandwidth_tier: gvnic_enabled
+      machine_type: n2-standard-4
+      node_count_dynamic_max: 0
+      node_count_static: 5
+      allow_automatic_updates: false
+      enable_placement: true
+
+  - id: partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use: [nodeset]
+    settings:
+      is_default: true
+      partition_name: topo
+      exclusive: false
+
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    use: [network]
+    settings:
+      machine_type: n1-standard-4
+      enable_login_public_ips: true
+
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    use: [network, slurm_login, partition]
+    settings:
+      machine_type: n1-standard-4
+      enable_controller_public_ips: true
