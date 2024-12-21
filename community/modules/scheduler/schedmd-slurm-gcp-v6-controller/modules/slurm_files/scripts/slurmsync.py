@@ -441,6 +441,7 @@ def delete_reservation(lkp: util.Lookup, reservation_name: str) -> None:
 def create_reservation(lkp: util.Lookup, reservation_name: str, node: str, start_time: datetime) -> None:
     # Format time to be compatible with slurm reservation.
     formatted_start_time = start_time.strftime('%Y-%m-%dT%H:%M:%S')
+    
     util.run(f"{lkp.scontrol} create reservation user=slurm starttime={formatted_start_time} duration=180 nodes={node} reservationname={reservation_name} flags=maint,ignore_jobs")
 
 
