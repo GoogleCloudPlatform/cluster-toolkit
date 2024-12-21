@@ -12,6 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+module "gpu" {
+  source = "../../../../modules/internal/gpu-definition"
+
+  machine_type      = var.machine_type
+  guest_accelerator = var.guest_accelerator
+}
+
 locals {
   additional_disks = [
     for ad in var.additional_disks : {
@@ -67,7 +74,7 @@ module "slurm_controller_template" {
   enable_shielded_vm       = var.enable_shielded_vm
   shielded_instance_config = var.shielded_instance_config
 
-  gpu = one(local.guest_accelerator)
+  gpu = one(module.gpu.guest_accelerator)
 
   machine_type     = var.machine_type
   metadata         = local.metadata

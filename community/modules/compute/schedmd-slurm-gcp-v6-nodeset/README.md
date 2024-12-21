@@ -142,7 +142,9 @@ modules. For support with the underlying modules, see the instructions in the
 
 ## Modules
 
-No modules.
+| Name | Source | Version |
+|------|--------|---------|
+| <a name="module_gpu"></a> [gpu](#module\_gpu) | ../../../../modules/internal/gpu-definition | n/a |
 
 ## Resources
 
