@@ -108,7 +108,6 @@ deployment_groups:
       node_count_dynamic_max: 4
       machine_type: n2-standard-2
       instance_image: $(vars.slurm_image)
-      enable_placement: false  # the default is: true
       allow_automatic_updates: false
 
   - id: n2_partition
@@ -128,7 +127,6 @@ deployment_groups:
       node_count_dynamic_max: 20
       machine_type: c2-standard-60  # this is the default
       instance_image: $(vars.slurm_image)
-      enable_placement: true
       bandwidth_tier: tier_1_enabled
       disk_type: pd-ssd
       disk_size_gb: 100
