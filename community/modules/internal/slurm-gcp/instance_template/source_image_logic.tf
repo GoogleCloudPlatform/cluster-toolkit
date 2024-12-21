@@ -31,12 +31,14 @@ locals {
   #
   # https://github.com/terraform-google-modules/terraform-google-vm/blob/735bd415fc5f034d46aa0de7922e8fada2327c0c/modules/instance_template/main.tf#L28
   # https://cloud.google.com/apis/design/resource_names#relative_resource_name
-  source_image_project_normalized = (can(var.instance_image.family) ?
-    "projects/${data.google_compute_image.slurm.project}/global/images/family" :
-    "projects/${data.google_compute_image.slurm.project}/global/images"
+  si_project = data.google_compute_image.slurm.project
+  si_family  = can(var.instance_image.family) ? data.google_compute_image.slurm.family : ""
+  si_image   = can(var.instance_image.name) ? data.google_compute_image.slurm.name : ""
+
+  source_image = (can(var.instance_image.family) ?
+    "projects/${local.si_project}/global/images/family/${local.si_family}" :
+    "projects/${local.si_project}/global/images/${local.si_image}"
   )
-  source_image_family = can(var.instance_image.family) ? data.google_compute_image.slurm.family : ""
-  source_image        = can(var.instance_image.name) ? data.google_compute_image.slurm.name : ""
 }
 
 data "google_compute_image" "slurm" {

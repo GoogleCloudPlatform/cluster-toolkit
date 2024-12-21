@@ -56,12 +56,6 @@ duplicates = [
         "community/modules/scheduler/schedmd-slurm-gcp-v5-controller/source_image_logic.tf",
         "community/modules/scheduler/schedmd-slurm-gcp-v5-login/source_image_logic.tf",
     ],
-    [ # Slurm V6
-        "community/modules/scheduler/schedmd-slurm-gcp-v6-controller/source_image_logic.tf",
-        "community/modules/scheduler/schedmd-slurm-gcp-v6-login/source_image_logic.tf",
-        "community/modules/compute/schedmd-slurm-gcp-v6-nodeset/source_image_logic.tf",
-        "community/modules/compute/schedmd-slurm-gcp-v6-nodeset-dynamic/source_image_logic.tf",
-    ],
     [
         "community/modules/scripts/ramble-execute/templates/ramble_execute.yml.tpl",
         "community/modules/scripts/spack-execute/templates/execute_commands.yml.tpl",

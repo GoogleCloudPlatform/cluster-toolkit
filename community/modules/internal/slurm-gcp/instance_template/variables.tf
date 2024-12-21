@@ -273,22 +273,60 @@ variable "metadata" {
 # SOURCE IMAGE #
 ################
 
-variable "source_image_project" {
-  type        = string
-  description = "Project where the source image comes from. If it is not provided, the provider project is used."
-  default     = ""
+variable "instance_image" {
+  description = <<-EOD
+    Defines the image that will be used in the Slurm controller VM instance.
+
+    Expected Fields:
+    name: The name of the image. Mutually exclusive with family.
+    family: The image family to use. Mutually exclusive with name.
+    project: The project where the image is hosted.
+
+    For more information on creating custom images that comply with Slurm on GCP
+    see the "Slurm on GCP Custom Images" section in docs/vm-images.md.
+    EOD
+  type        = map(string)
+  default = {
+    family  = "slurm-gcp-6-8-hpc-rocky-linux-8"
+    project = "schedmd-slurm-public"
+  }
+
+  validation {
+    condition     = can(coalesce(var.instance_image.project))
+    error_message = "In var.instance_image, the `project` field must be a string set to the Cloud project ID."
+  }
+
+  validation {
+    condition     = can(coalesce(var.instance_image.name)) != can(coalesce(var.instance_image.family))
+    error_message = "In var.instance_image, exactly one of `family` or `name` fields must be set to desired image family or name."
+  }
 }
 
-variable "source_image_family" {
-  type        = string
-  description = "Source image family."
-  default     = ""
+variable "instance_image_custom" {
+  description = <<-EOD
+    A flag that designates that the user is aware that they are requesting
+    to use a custom and potentially incompatible image for this Slurm on
+    GCP module.
+
+    If the field is set to false, only the compatible families and project
+    names will be accepted.  The deployment will fail with any other image
+    family or name.  If set to true, no checks will be done.
+
+    See: https://goo.gle/hpc-slurm-images
+    EOD
+  type        = bool
+  default     = false
 }
 
-variable "source_image" {
-  type        = string
-  description = "Source disk image."
-  default     = ""
+variable "allow_automatic_updates" {
+  description = <<-EOT
+  If false, disables automatic system package updates on the created instances.  This feature is
+  only available on supported images (or images derived from them).  For more details, see
+  https://cloud.google.com/compute/docs/instances/create-hpc-vm#disable_automatic_updates
+  EOT
+  type        = bool
+  default     = true
+  nullable    = false
 }
 
 ########

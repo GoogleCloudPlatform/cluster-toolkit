@@ -18,13 +18,6 @@ locals {
 }
 
 locals {
-  disable_automatic_updates_metadata = var.allow_automatic_updates ? {} : { google_disable_automatic_updates = "TRUE" }
-
-  metadata = merge(
-    local.disable_automatic_updates_metadata,
-    var.metadata
-  )
-
   name = substr(replace(var.name, "/[^a-z0-9]/", ""), 0, 14)
 
   additional_disks = [
@@ -77,7 +70,7 @@ locals {
 
     labels           = local.labels
     machine_type     = terraform_data.machine_type_zone_validation.output
-    metadata         = local.metadata
+    metadata         = var.metadata
     min_cpu_platform = var.min_cpu_platform
 
     on_host_maintenance      = var.on_host_maintenance
@@ -85,9 +78,11 @@ locals {
     region                   = var.region
     service_account          = local.service_account
     shielded_instance_config = var.shielded_instance_config
-    source_image_family      = local.source_image_family             # requires source_image_logic.tf
-    source_image_project     = local.source_image_project_normalized # requires source_image_logic.tf
-    source_image             = local.source_image                    # requires source_image_logic.tf
+
+    instance_image          = var.instance_image
+    instance_image_custom   = var.instance_image_custom
+    allow_automatic_updates = var.allow_automatic_updates
+
     subnetwork_self_link     = var.subnetwork_self_link
     additional_networks      = var.additional_networks
     access_config            = local.access_config

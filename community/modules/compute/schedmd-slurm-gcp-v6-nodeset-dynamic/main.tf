@@ -21,10 +21,7 @@ locals {
   nodeset_name = substr(replace(var.name, "/[^a-z0-9]/", ""), 0, 14)
   feature      = coalesce(var.feature, local.nodeset_name)
 
-  disable_automatic_updates_metadata = var.allow_automatic_updates ? {} : { google_disable_automatic_updates = "TRUE" }
-
   metadata = merge(
-    local.disable_automatic_updates_metadata,
     { slurmd_feature = local.feature },
     var.metadata
   )
@@ -84,16 +81,18 @@ module "slurm_nodeset_template" {
   labels       = local.labels
   machine_type = var.machine_type
 
-  min_cpu_platform     = var.min_cpu_platform
-  on_host_maintenance  = var.on_host_maintenance
-  termination_action   = try(var.spot_instance_config.termination_action, null)
-  preemptible          = var.preemptible
-  spot                 = var.enable_spot_vm
-  service_account      = local.service_account
-  gpu                  = one(local.guest_accelerator)          # requires gpu_definition.tf
-  source_image_family  = local.source_image_family             # requires source_image_logic.tf
-  source_image_project = local.source_image_project_normalized # requires source_image_logic.tf
-  source_image         = local.source_image                    # requires source_image_logic.tf
+  min_cpu_platform    = var.min_cpu_platform
+  on_host_maintenance = var.on_host_maintenance
+  termination_action  = try(var.spot_instance_config.termination_action, null)
+  preemptible         = var.preemptible
+  spot                = var.enable_spot_vm
+  service_account     = local.service_account
+  gpu                 = one(local.guest_accelerator) # requires gpu_definition.tf
+
+  instance_image          = var.instance_image
+  instance_image_custom   = var.instance_image_custom
+  allow_automatic_updates = var.allow_automatic_updates
+
 
   subnetwork          = var.subnetwork_self_link
   additional_networks = var.additional_networks

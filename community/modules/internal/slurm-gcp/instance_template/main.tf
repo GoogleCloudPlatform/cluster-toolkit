@@ -17,45 +17,19 @@
 ##########
 
 locals {
-  additional_disks = [
-    for disk in var.additional_disks : {
-      disk_name    = disk.disk_name
-      device_name  = disk.device_name
-      auto_delete  = disk.auto_delete
-      boot         = disk.boot
-      disk_size_gb = disk.disk_size_gb
-      disk_type    = disk.disk_type
-      disk_labels = merge(
-        disk.disk_labels,
-        {
-          slurm_cluster_name  = var.slurm_cluster_name
-          slurm_instance_role = var.slurm_instance_role
-        },
-      )
-    }
-  ]
+  boot_disk = {
+    source_image = local.source_image
+    disk_size_gb = var.disk_size_gb
+    disk_type    = var.disk_type
+    disk_labels  = var.disk_labels
+    auto_delete  = var.disk_auto_delete
+    boot         = "true"
+  }
 
   service_account = {
     email  = try(var.service_account.email, null)
     scopes = try(var.service_account.scopes, ["https://www.googleapis.com/auth/cloud-platform"])
   }
-
-  source_image_family = (
-    var.source_image_family != "" && var.source_image_family != null
-    ? var.source_image_family
-    : "slurm-gcp-6-8-hpc-rocky-linux-8"
-  )
-  source_image_project = (
-    var.source_image_project != "" && var.source_image_project != null
-    ? var.source_image_project
-    : "projects/schedmd-slurm-public/global/images/family"
-  )
-
-  source_image = (
-    var.source_image != null
-    ? var.source_image
-    : ""
-  )
 
 
   name_prefix = "${var.slurm_cluster_name}-${var.slurm_instance_role}-${var.name_prefix}"
@@ -69,6 +43,8 @@ locals {
     tier_1_enabled   = "GVNIC"
   }
   nic_type = lookup(local.nic_type_map, var.bandwidth_tier, null)
+
+  automatic_updates_metadata = var.allow_automatic_updates ? {} : { google_disable_automatic_updates = "TRUE" }
 }
 
 ########
@@ -133,23 +109,13 @@ module "instance_template" {
       slurm_cluster_name  = var.slurm_cluster_name
       slurm_instance_role = var.slurm_instance_role
     },
+    local.automatic_updates_metadata,
   )
 
-  # Image
-  source_image_project = local.source_image_project
-  source_image_family  = local.source_image_family
-  source_image         = local.source_image
-
-  # Disk
-  disk_type    = var.disk_type
-  disk_size_gb = var.disk_size_gb
-  auto_delete  = var.disk_auto_delete
-  disk_labels = merge(
-    {
-      slurm_cluster_name  = var.slurm_cluster_name
-      slurm_instance_role = var.slurm_instance_role
-    },
-    var.disk_labels,
-  )
-  additional_disks = local.additional_disks
+  # Disk  
+  disks = concat([local.boot_disk], var.additional_disks)
+  disks_labels = {
+    slurm_cluster_name  = var.slurm_cluster_name
+    slurm_instance_role = var.slurm_instance_role
+  }
 }
