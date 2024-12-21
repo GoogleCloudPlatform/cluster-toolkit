@@ -184,7 +184,14 @@ deployment_groups:
       remote_mount: $(vars.training_bucket_name)
       local_mount: /training-data
       fs_type: gcsfuse
-      mount_options: "implicit-dirs, metadata-cache:ttl-secs:-1, metadata-cache:stat-cache-max-size-mb:-1, metadata-cache:type-cache-max-size-mb:-1, file-cache:max-size-mb:-1, file-cache:cache-file-for-range-read:true, file-system:kernel-list-cache-ttl-secs:-1"
+      mount_options: >-
+        implicit-dirs,
+        metadata-cache:ttl-secs:-1,
+        metadata-cache:stat-cache-max-size-mb:-1,
+        metadata-cache:type-cache-max-size-mb:-1,
+        file-cache:max-size-mb:-1,
+        file-cache:cache-file-for-range-read:true,
+        file-system:kernel-list-cache-ttl-secs:-1
 
   # Create a remote mount of $(vars.checkpoint_bucket_name)
   # using mount options optimized for writing and reading
@@ -195,7 +202,14 @@ deployment_groups:
       remote_mount: $(vars.checkpoint_bucket_name)
       local_mount: /checkpoint-data
       fs_type: gcsfuse
-      mount_options: "implicit-dirs, metadata-cache:ttl-secs:0, file-cache:max-size-mb:-1, file-cache:cache-file-for-range-read:true, file-system:kernel-list-cache-ttl-secs:0, file-cache:enable-parallel-downloads:true, rename-dir-limit=200000"
+      mount_options: >-
+        implicit-dirs,
+        metadata-cache:ttl-secs:0,
+        file-cache:max-size-mb:-1,
+        file-cache:cache-file-for-range-read:true,
+        file-system:kernel-list-cache-ttl-secs:0,
+        file-cache:enable-parallel-downloads:true,
+        rename-dir-limit=200000
 
   # Persistent Volume for training data
   - id: training-pv
