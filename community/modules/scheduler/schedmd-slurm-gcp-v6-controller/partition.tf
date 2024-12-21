@@ -57,9 +57,9 @@ module "slurm_nodeset_template" {
   termination_action       = each.value.termination_action
   service_account          = each.value.service_account
   shielded_instance_config = each.value.shielded_instance_config
-  source_image_family      = each.value.source_image_family
-  source_image_project     = each.value.source_image_project
-  source_image             = each.value.source_image
+  instance_image           = each.value.instance_image
+  instance_image_custom    = each.value.instance_image_custom
+  allow_automatic_updates  = each.value.allow_automatic_updates
   subnetwork               = each.value.subnetwork_self_link
   additional_networks      = each.value.additional_networks
   access_config            = each.value.access_config
