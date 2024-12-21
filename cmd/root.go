@@ -262,6 +262,6 @@ func checkErr(err error, ctx *config.YamlCtx) {
 		ctx = &config.YamlCtx{}
 	}
 	if err != nil {
-		logging.Fatal(renderError(err, *ctx))
+		logging.Fatal("%s", renderError(err, *ctx))
 	}
 }
