@@ -94,6 +94,30 @@ Here you can replace `import_gcs_bucket_uri` with the uri of sub folder within G
 bucket and `import_destination_path` with local directory within parallelstore
 instance.
 
+### Additional configuration for DAOS agent and dfuse
+Use `daos_agent_config` to provide additional configuration for `daos_agent`, for example:
+
+```yaml
+- id: parallelstorefs
+  source: modules/file-system/pre-existing-network-storage
+  settings:
+    daos_agent_config: |
+      credential_config:
+        cache_expiration: 1m
+```
+
+Use `dfuse_environment` to provide additional environment variables for `dfuse` process, for example:
+
+```yaml
+- id: parallelstorefs
+  source: modules/file-system/parallelstore
+  settings:
+    dfuse_environment:
+      D_LOG_FILE: /tmp/client.log
+      D_APPEND_PID_TO_LOG: 1
+      D_LOG_MASK: debug
+```
+
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 Copyright 2024 Google LLC
 
@@ -142,7 +166,9 @@ No modules.
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
+| <a name="input_daos_agent_config"></a> [daos\_agent\_config](#input\_daos\_agent\_config) | Additional configuration to be added to daos\_config.yml | `string` | `""` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the HPC deployment. | `string` | n/a | yes |
+| <a name="input_dfuse_environment"></a> [dfuse\_environment](#input\_dfuse\_environment) | Additional environment variables for DFuse process | `map(string)` | `{}` | no |
 | <a name="input_directory_stripe"></a> [directory\_stripe](#input\_directory\_stripe) | The parallelstore stripe level for directories. | `string` | `"DIRECTORY_STRIPE_LEVEL_UNSPECIFIED"` | no |
 | <a name="input_file_stripe"></a> [file\_stripe](#input\_file\_stripe) | The parallelstore stripe level for files. | `string` | `"FILE_STRIPE_LEVEL_UNSPECIFIED"` | no |
 | <a name="input_import_destination_path"></a> [import\_destination\_path](#input\_import\_destination\_path) | The name of local path to import data on parallelstore instance from GCS bucket. | `string` | `null` | no |
