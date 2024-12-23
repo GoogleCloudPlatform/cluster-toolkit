@@ -156,7 +156,7 @@ variable "nic_type" {
   default     = "MRDMA"
 
   validation {
-    condition     = contains(["MRDMA"], var.nic_type)
-    error_message = "The nic_type must be \"MRDMA\"."
+    condition     = contains(["MRDMA", "IRDMA"], var.nic_type)
+    error_message = "The nic_type must be \"MRDMA\" or \"IRDMA\"."
   }
 }
