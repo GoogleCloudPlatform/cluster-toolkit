@@ -307,6 +307,14 @@ resource "google_container_node_pool" "node_pool" {
       condition     = local.upgrade_settings.max_unavailable > 0 || local.upgrade_settings.max_surge > 0
       error_message = "At least one of max_unavailable or max_surge must greater than 0"
     }
+    precondition {
+      condition     = var.placement_policy.type != "COMPACT" || length(var.zones) == 1
+      error_message = "Compact placement is only available for node pools operating in a single zone."
+    }
+    precondition {
+      condition     = var.placement_policy.type != "COMPACT" || local.upgrade_settings.strategy != "BLUE_GREEN"
+      error_message = "Compact placement is not supported with blue-green upgrades."
+    }
   }
 }
 
