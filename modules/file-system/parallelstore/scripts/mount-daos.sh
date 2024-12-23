@@ -54,7 +54,7 @@ sed -i "s/.*access_points.*/access_points: $access_points/g" $daos_config
 # Get names of network interfaces not in first PCI slot
 # The first PCI slot is a standard network adapter while remaining interfaces
 # are typically network cards dedicated to GPU or workload communication
-if [[ "$OS_ID" == "debian" ]]; then
+if [[ "$OS_ID" == "debian" ]] || [[ "${OS_ID}" = "ubuntu" ]]; then
 	extra_interfaces=$(find /sys/class/net/ -not -name 'enp0s*' -regextype posix-extended -regex '.*/enp[0-9]+s.*' -printf '"%f"\n' | paste -s -d ',')
 elif [[ "${OS_ID}" = "rocky" ]] || [[ "${OS_ID}" = "rhel" ]]; then
 	extra_interfaces=$(find /sys/class/net/ -not -name eth0 -regextype posix-extended -regex '.*/eth[0-9]+' -printf '"%f"\n' | paste -s -d ',')
