@@ -74,6 +74,38 @@ for `parallelstore` instance.
     mount_options: disable-wb-cache,thread-count=16,eq-count=8
 ```
 
+Parallelstore supports additional options for its mountpoints under `parallelstore_options` setting.
+Use `daos_agent_config` to provide additional configuration for `daos_agent`, for example:
+
+```yaml
+- id: parallelstorefs
+  source: modules/file-system/pre-existing-network-storage
+  settings:
+    fs_type: daos
+    remote_mount: "[10.246.99.2,10.246.99.3,10.246.99.4]"
+    mount_options: disable-wb-cache,thread-count=16,eq-count=8
+    parallelstore_options:
+      daos_agent_config: |
+        credential_config:
+          cache_expiration: 1m
+```
+
+Use `dfuse_environment` to provide additional environment variables for `dfuse` process, for example:
+
+```yaml
+- id: parallelstorefs
+  source: modules/file-system/pre-existing-network-storage
+  settings:
+    fs_type: daos
+    remote_mount: "[10.246.99.2,10.246.99.3,10.246.99.4]"
+    mount_options: disable-wb-cache,thread-count=16,eq-count=8
+    parallelstore_options:
+      dfuse_environment:
+        D_LOG_FILE: /tmp/client.log
+        D_APPEND_PID_TO_LOG: 1
+        D_LOG_MASK: debug
+```
+
 ### Mounting
 
 For the `fs_type` listed below, this module will provide `client_install_runner`
@@ -126,6 +158,7 @@ No resources.
 | <a name="input_fs_type"></a> [fs\_type](#input\_fs\_type) | Type of file system to be mounted (e.g., nfs, lustre) | `string` | `"nfs"` | no |
 | <a name="input_local_mount"></a> [local\_mount](#input\_local\_mount) | The mount point where the contents of the device may be accessed after mounting. | `string` | `"/mnt"` | no |
 | <a name="input_mount_options"></a> [mount\_options](#input\_mount\_options) | Options describing various aspects of the file system. Consider adding setting to 'defaults,\_netdev,implicit\_dirs' when using gcsfuse. | `string` | `"defaults,_netdev"` | no |
+| <a name="input_parallelstore_options"></a> [parallelstore\_options](#input\_parallelstore\_options) | Parallelstore specific options | <pre>object({<br/>    daos_agent_config = optional(string, "")<br/>    dfuse_environment = optional(map(string), {})<br/>  })</pre> | `{}` | no |
 | <a name="input_remote_mount"></a> [remote\_mount](#input\_remote\_mount) | Remote FS name or export. This is the exported directory for nfs, fs name for lustre, and bucket name (without gs://) for gcsfuse. | `string` | n/a | yes |
 | <a name="input_server_ip"></a> [server\_ip](#input\_server\_ip) | The device name as supplied to fs-tab, excluding remote fs-name(for nfs, that is the server IP, for lustre <MGS NID>[:<MGS NID>]). This can be omitted for gcsfuse. | `string` | `""` | no |
 

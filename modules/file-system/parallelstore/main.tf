@@ -34,10 +34,15 @@ locals {
   }
 
   mount_runner = {
-    "type"        = "shell"
-    "source"      = "${path.module}/scripts/mount-daos.sh"
-    "args"        = "--access_points=\"${local.access_points}\" --local_mount=\"${var.local_mount}\" --mount_options=\"${var.mount_options}\""
-    "destination" = "mount_daos.sh"
+    "type" = "shell"
+    "content" = templatefile("${path.module}/templates/mount-daos.sh.tftpl", {
+      access_points     = local.access_points
+      daos_agent_config = var.daos_agent_config
+      dfuse_environment = var.dfuse_environment
+      local_mount       = var.local_mount
+      mount_options     = join(" ", [for opt in split(",", var.mount_options) : "--${opt}"])
+    })
+    "destination" = "mount_filesystem${replace(var.local_mount, "/", "_")}.sh"
   }
 }
 
