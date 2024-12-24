@@ -189,6 +189,7 @@ limitations under the License.
 | <a name="input_system_node_pool_taints"></a> [system\_node\_pool\_taints](#input\_system\_node\_pool\_taints) | Taints to be applied to the system node pool. | <pre>list(object({<br/>    key    = string<br/>    value  = any<br/>    effect = string<br/>  }))</pre> | <pre>[<br/>  {<br/>    "effect": "NO_SCHEDULE",<br/>    "key": "components.gke.io/gke-managed-components",<br/>    "value": true<br/>  }<br/>]</pre> | no |
 | <a name="input_timeout_create"></a> [timeout\_create](#input\_timeout\_create) | Timeout for creating a node pool | `string` | `null` | no |
 | <a name="input_timeout_update"></a> [timeout\_update](#input\_timeout\_update) | Timeout for updating a node pool | `string` | `null` | no |
+| <a name="input_upgrade_settings"></a> [upgrade\_settings](#input\_upgrade\_settings) | Defines gke cluster upgrade settings. It is highly recommended that you define all max\_surge and max\_unavailable.<br/>If max\_surge is not specified, it would be set to a default value of 0.<br/>If max\_unavailable is not specified, it would be set to a default value of 1. | <pre>object({<br/>    strategy        = string<br/>    max_surge       = optional(number)<br/>    max_unavailable = optional(number)<br/>  })</pre> | <pre>{<br/>  "max_surge": 0,<br/>  "max_unavailable": 1,<br/>  "strategy": "SURGE"<br/>}</pre> | no |
 | <a name="input_zone"></a> [zone](#input\_zone) | Zone for a zonal cluster | `string` | `null` | no |
 
 ## Outputs
