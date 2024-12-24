@@ -235,6 +235,9 @@ resource "google_container_node_pool" "node_pool" {
     ignore_changes = [
       node_config[0].labels,
       initial_node_count,
+      # Ignore local/ephemeral ssd configs as they are tied to machine types.
+      node_config[0].ephemeral_storage_local_ssd_config,
+      node_config[0].local_nvme_ssd_block_config,
     ]
     precondition {
       condition     = (var.max_pods_per_node == null) || (data.google_container_cluster.gke_cluster.networking_mode == "VPC_NATIVE")
@@ -306,6 +309,14 @@ resource "google_container_node_pool" "node_pool" {
     precondition {
       condition     = local.upgrade_settings.max_unavailable > 0 || local.upgrade_settings.max_surge > 0
       error_message = "At least one of max_unavailable or max_surge must greater than 0"
+    }
+    precondition {
+      condition     = var.placement_policy.type != "COMPACT" || (var.zones != null ? (length(var.zones) == 1) : false)
+      error_message = "Compact placement is only available for node pools operating in a single zone."
+    }
+    precondition {
+      condition     = var.placement_policy.type != "COMPACT" || local.upgrade_settings.strategy != "BLUE_GREEN"
+      error_message = "Compact placement is not supported with blue-green upgrades."
     }
   }
 }

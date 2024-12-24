@@ -43,7 +43,7 @@ locals {
 
 # INSTANCE TEMPLATE
 module "slurm_controller_template" {
-  source = "../../internal/slurm-gcp-v6/instance_template"
+  source = "../../internal/slurm-gcp/instance_template"
 
   project_id          = var.project_id
   region              = var.region

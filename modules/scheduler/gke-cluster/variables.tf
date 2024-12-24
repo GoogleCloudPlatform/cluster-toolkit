@@ -407,3 +407,21 @@ variable "deletion_protection" {
   type        = bool
   default     = false
 }
+
+variable "upgrade_settings" {
+  description = <<-EOT
+  Defines gke cluster upgrade settings. It is highly recommended that you define all max_surge and max_unavailable.
+  If max_surge is not specified, it would be set to a default value of 0.
+  If max_unavailable is not specified, it would be set to a default value of 1.  
+  EOT
+  type = object({
+    strategy        = string
+    max_surge       = optional(number)
+    max_unavailable = optional(number)
+  })
+  default = {
+    strategy        = "SURGE"
+    max_surge       = 0
+    max_unavailable = 1
+  }
+}
