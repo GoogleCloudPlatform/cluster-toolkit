@@ -17,6 +17,10 @@ spec:
   nodeLabels:
     cloud.google.com/gke-nodepool: ${nodepool_name}
   topologyName: "gke-default"
+  tolerations:
+  - key: "nvidia.com/gpu"
+    operator: "Exists"
+    effect: NoSchedule
 ---
 apiVersion: kueue.x-k8s.io/v1beta1
 kind: ClusterQueue
@@ -30,7 +34,7 @@ spec:
     - name: "tas-flavor"
       resources:
       - name: "nvidia.com/gpu"
-        nominalQuota: ${num_chips}
+        nominalQuota: 10000000  # infinite quota
 ---
 apiVersion: kueue.x-k8s.io/v1beta1
 kind: LocalQueue
