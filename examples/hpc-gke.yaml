@@ -20,6 +20,7 @@ vars:
   project_id:  ## Set GCP Project ID Here ##
   deployment_name: cluster-01
   region: us-central1
+  gcp_public_cidrs_access_enabled: false
 
 deployment_groups:
 - group: primary
@@ -27,9 +28,10 @@ deployment_groups:
   - id: network1
     source: modules/network/vpc
     settings:
-      subnetwork_name: gke-subnet
-      secondary_ranges:
-        gke-subnet:
+      subnetwork_name: $(vars.deployment_name)-subnet
+      secondary_ranges_list:
+      - subnetwork_name: $(vars.deployment_name)-subnet
+        ranges:
         - range_name: pods
           ip_cidr_range: 10.4.0.0/14
         - range_name: services
@@ -38,7 +40,7 @@ deployment_groups:
   - id: gke_service_account
     source: community/modules/project/service-account
     settings:
-      name: gke-service-account
+      name: gke-sa
       project_roles:
       - logging.logWriter
       - monitoring.metricWriter
@@ -52,6 +54,7 @@ deployment_groups:
     use: [network1, gke_service_account]
     settings:
       enable_private_endpoint: false  # Allows for access from authorized public IPs
+      gcp_public_cidrs_access_enabled: $(vars.gcp_public_cidrs_access_enabled)
     outputs: [instructions]
 
   - id: compute_pool

@@ -22,6 +22,7 @@ import shutil
 import subprocess
 import stat
 import time
+import yaml
 from pathlib import Path
 
 import util
@@ -83,7 +84,7 @@ SSSSSSSSSSSSS   SSS   SSSSSSSSSSSSSSS   SSSS        SSSS     SSSS     SSSS
 SSSSSSSSSSSS    SSS    SSSSSSSSSSSSS    SSSS        SSSS     SSSS     SSSS
 
 """
-
+_MAINTENANCE_SBATCH_SCRIPT_PATH = dirs.custom_scripts / "perform_maintenance.sh"
 
 def start_motd():
     """advise in motd that slurm is currently configuring"""
@@ -224,6 +225,26 @@ slurm ALL= NOPASSWD: /usr/bin/systemctl restart slurmctld.service
     sudoers_file.chmod(0o0440)
 
 
+def setup_maintenance_script():
+    perform_maintenance = """#!/bin/bash
+
+#SBATCH --priority=low
+#SBATCH --time=180
+
+VM_NAME=$(curl -s "http://metadata.google.internal/computeMetadata/v1/instance/name" -H "Metadata-Flavor: Google")
+ZONE=$(curl -s "http://metadata.google.internal/computeMetadata/v1/instance/zone" -H "Metadata-Flavor: Google" | cut -d '/' -f 4)
+
+gcloud compute instances perform-maintenance $VM_NAME \
+  --zone=$ZONE
+"""
+
+
+    with open(_MAINTENANCE_SBATCH_SCRIPT_PATH, "w") as f:
+        f.write(perform_maintenance)
+
+    util.chown_slurm(_MAINTENANCE_SBATCH_SCRIPT_PATH, mode=0o755)
+
+
 def update_system_config(file, content):
     """Add system defaults options for service files"""
     sysconfig = Path("/etc/sysconfig")
@@ -279,10 +300,10 @@ innodb_lock_wait_timeout=900
 def configure_dirs():
     for p in dirs.values():
         util.mkdirp(p)
-    
+
     for p in (dirs.slurm, dirs.scripts, dirs.custom_scripts):
         util.chown_slurm(p)
-    
+
     for p in slurmdirs.values():
         util.mkdirp(p)
         util.chown_slurm(p)
@@ -357,6 +378,9 @@ def setup_controller():
     run("systemctl start slurm_load_bq.timer", timeout=30)
     run("systemctl status slurm_load_bq.timer", timeout=30)
 
+    # Add script to perform maintenance
+    setup_maintenance_script()
+
     log.info("Done setting up controller")
     pass
 
@@ -400,7 +424,7 @@ def setup_compute():
     slurmd_options = [
         f'--conf-server="{slurmctld_host}:{lookup().control_host_port}"',
     ]
-    
+
     try:
         slurmd_feature = util.instance_metadata("attributes/slurmd_feature")
     except Exception:
@@ -436,10 +460,42 @@ def setup_compute():
 
     log.info("Done setting up compute")
 
+def setup_cloud_ops() -> None:
+    """add deployment info to cloud ops config"""
+    cloudOpsStatus = run(
+        "systemctl is-active --quiet google-cloud-ops-agent.service", check=False
+    ).returncode
+    
+    if cloudOpsStatus != 0:
+        return
+
+    with open("/etc/google-cloud-ops-agent/config.yaml", "r") as f:
+        file = yaml.safe_load(f)
+
+    cluster_info = {
+        'type':'modify_fields',
+        'fields': {
+            'labels."cluster_name"':{
+                'static_value':f"{lookup().cfg.slurm_cluster_name}"
+            },
+            'labels."hostname"':{
+                'static_value': f"{lookup().hostname}"
+            }
+        }
+    }
+
+    file["logging"]["processors"]["add_cluster_info"] = cluster_info
+    file["logging"]["service"]["pipelines"]["slurmlog_pipeline"]["processors"].append("add_cluster_info")
+    file["logging"]["service"]["pipelines"]["slurmlog2_pipeline"]["processors"].append("add_cluster_info")
+
+    with open("/etc/google-cloud-ops-agent/config.yaml", "w") as f:
+        yaml.safe_dump(file, f, sort_keys=False)
+
+    run("systemctl restart google-cloud-ops-agent.service", timeout=30)
 
 def main():
     start_motd()
-    
+
     log.info("Starting setup, fetching config")
     sleep_seconds = 5
     while True:
@@ -453,7 +509,7 @@ def main():
             log.exception(f"unexpected error while fetching config, sleeping for {sleep_seconds}s")
         time.sleep(sleep_seconds)
     log.info("Config fetched")
-
+    setup_cloud_ops()
     configure_dirs()
     # call the setup function for the instance type
     {

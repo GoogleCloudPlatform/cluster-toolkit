@@ -38,6 +38,7 @@ locals {
     "a2-ultragpu-8g" = { type = "nvidia-a100-80gb", count = 8 },
     "a3-highgpu-8g"  = { type = "nvidia-h100-80gb", count = 8 },
     "a3-megagpu-8g"  = { type = "nvidia-h100-mega-80gb", count = 8 },
+    "a3-ultragpu-8g" = { type = "nvidia-h200-141gb", count = 8 },
     "g2-standard-4"  = { type = "nvidia-l4", count = 1 },
     "g2-standard-8"  = { type = "nvidia-l4", count = 1 },
     "g2-standard-12" = { type = "nvidia-l4", count = 1 },
@@ -47,11 +48,11 @@ locals {
     "g2-standard-48" = { type = "nvidia-l4", count = 4 },
     "g2-standard-96" = { type = "nvidia-l4", count = 8 },
   }
-  generated_guest_accelerator = try([local.accelerator_machines[var.machine_type]], [{ count = 0, type = "" }])
+  generated_guest_accelerator = try([local.accelerator_machines[var.machine_type]], [])
 
   # Select in priority order:
   # (1) var.guest_accelerator if not empty
   # (2) local.generated_guest_accelerator if not empty
   # (3) default to empty list if both are empty
-  guest_accelerator = try(coalescelist(var.guest_accelerator, local.generated_guest_accelerator), [{ count = 0, type = "" }])
+  guest_accelerator = try(coalescelist(var.guest_accelerator, local.generated_guest_accelerator), [])
 }

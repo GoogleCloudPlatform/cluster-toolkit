@@ -1,0 +1,91 @@
+#!/bin/bash
+# Copyright 2024 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Fail gracefully if nvidia-smi or dcgmi doesn't exist
+if ! type -P nvidia-smi 1>/dev/null; then
+    echo "nvidia-smi not found - this script requires nvidia-smi to function" >&2
+    exit 0
+fi
+
+if ! type -P dcgmi 1>/dev/null; then
+    echo "dcgmi not found - this script requires dcgmi to function" >&2
+    exit 0
+fi
+
+if ! type -P nv-hostengine 1>/dev/null; then
+    echo "nv-hostengine not found - this script requires nv-hostengine to function" >&2
+    exit 0
+fi
+
+# Exit if GPU isn't H100
+GPU_MODEL=$(nvidia-smi --query-gpu=name --format=csv,noheader)
+if ! [[ "$GPU_MODEL" =~ H[1-2]00 ]]; then
+    echo "No H100 or H200 GPU detected" >&2
+    exit 0
+fi
+
+NUMGPUS=$(nvidia-smi -L | wc -l)
+
+# Check that all GPUs are healthy via DCGM and check for ECC errors
+if [ $NUMGPUS -gt 0 ]; then
+    echo "Execute DCGM health check and ECC error check for GPUs"
+    GPULIST=$(nvidia-smi --query-gpu=index --format=csv,noheader | tr '\n' ',' | sed 's/,$//')
+    rm -f /tmp/dcgm.out
+    rm -f /tmp/ecc_errors.out
+
+    # Run DCGM checks
+    START_HOSTENGINE=false
+    if ! pidof nv-hostengine > /dev/null; then
+        echo "Starting nv-hostengine..."
+        nv-hostengine
+        sleep 1  # Give it a moment to start up
+        START_HOSTENGINE=true
+    fi
+    GROUPID=$(dcgmi group -c gpuinfo | awk '{print $NF}' | tr -d ' ')
+    dcgmi group -g $GROUPID -a $GPULIST
+    dcgmi diag -g $GROUPID -r 1 1> /tmp/dcgm.out
+    dcgmi group -d $GROUPID
+
+    # Terminate the host engine if it was manually started
+    if [ "$START_HOSTENGINE" = true ]; then
+        echo "Terminating nv-hostengine..."
+        nv-hostengine -t
+    fi
+
+    # Check for DCGM failures
+    DCGM_FAILED=0
+    grep -i fail /tmp/dcgm.out > /dev/null || DCGM_FAILED=$?
+
+    # Check for ECC errors
+    nvidia-smi --query-gpu=ecc.errors.uncorrected.volatile.total --format=csv,noheader > /tmp/ecc_errors.out
+    ECC_ERRORS=$(awk -F', ' '{sum += $2} END {print sum}' /tmp/ecc_errors.out)
+
+    # Check for NVLink errors
+    NVLINK_ERRORS=$(nvidia-smi nvlink -sc 0bz -i 0 2>/dev/null | grep -i "Error Count" | awk '{sum += $3} END {print sum}')
+    # Set to 0 if empty/null
+    NVLINK_ERRORS=${NVLINK_ERRORS:-0}
+
+    if [ $DCGM_FAILED -eq 0 ] || \
+       [ $ECC_ERRORS -gt 0 ] || \
+       [ $NVLINK_ERRORS -gt 0 ]; then
+        REASON="GPU issues detected: "
+        [ $DCGM_FAILED -eq 0 ] && REASON+="DCGM test failed, "
+        [ $ECC_ERRORS -gt 0 ] && REASON+="ECC errors found ($ECC_ERRORS double-bit errors), "
+        [ $NVLINK_ERRORS -gt 0 ] && REASON+="NVLink errors detected ($NVLINK_ERRORS errors), "
+        REASON+="see /tmp/dcgm.out and /tmp/ecc_errors.out"
+        echo "$REASON"
+        exit 1
+    fi
+fi

@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Optional, Iterable, Dict, Set
+from typing import List, Optional, Iterable, Dict, Set, Tuple
 from itertools import chain
 from collections import defaultdict
 import json
@@ -83,9 +83,6 @@ def conflines(lkp: util.Lookup) -> str:
 
     any_dynamic = any(bool(p.partition_feature) for p in lkp.cfg.partitions.values())
     comma_params = {
-        "PrivateData": [
-            "cloud",
-        ],
         "LaunchParameters": [
             "enable_nss_slurm",
             "use_interactive_step",
@@ -94,11 +91,6 @@ def conflines(lkp: util.Lookup) -> str:
             "cloud_reg_addrs" if any_dynamic or any_tpu else "cloud_dns",
             "enable_configless",
             "idle_on_node_suspend",
-        ],
-        "SchedulerParameters": [
-            "bf_continue",
-            "salloc_wait_nodes",
-            "ignore_prefer_validation",
         ],
         "GresTypes": [
             "gpu" if any_gpus else None,
@@ -114,11 +106,17 @@ def conflines(lkp: util.Lookup) -> str:
         **(comma_params if not no_comma_params else {}),
         "Prolog": f"{prolog_path}/*" if lkp.cfg.prolog_scripts else None,
         "Epilog": f"{epilog_path}/*" if lkp.cfg.epilog_scripts else None,
-        "SuspendProgram": f"{scripts_dir}/suspend.py",
+        "PrivateData": get("private_data", []),
+        "SchedulerParameters": get("scheduler_parameters", [
+            "bf_continue",
+            "salloc_wait_nodes",
+            "ignore_prefer_validation",
+        ]),
         "ResumeProgram": f"{scripts_dir}/resume.py",
         "ResumeFailProgram": f"{scripts_dir}/suspend.py",
         "ResumeRate": get("resume_rate", 0),
         "ResumeTimeout": get("resume_timeout", 300),
+        "SuspendProgram": f"{scripts_dir}/suspend.py",
         "SuspendRate": get("suspend_rate", 0),
         "SuspendTimeout": get("suspend_timeout", 300),
         "TreeWidth": get("tree_width", default_tree_width),
@@ -439,6 +437,10 @@ class TopologySummary:
 
 
     @classmethod
+    def path(cls, lkp: util.Lookup) -> Path:
+        return lkp.etc_dir / "cloud_topology.summary.json"
+
+    @classmethod
     def loads(cls, s: str) -> "TopologySummary":
         d = json.loads(s)
         return cls(
@@ -446,6 +448,13 @@ class TopologySummary:
             down_nodes=d.get("down_nodes"),
             tpu_nodes=d.get("tpu_nodes"),
         )
+    
+    @classmethod
+    def load(cls, lkp: util.Lookup) -> "TopologySummary":
+        p = cls.path(lkp)
+        if not p.exists():
+            return cls() # Return empty instance
+        return cls.loads(p.read_text())
     
     def dumps(self) -> str:
         return json.dumps(
@@ -455,6 +464,9 @@ class TopologySummary:
                 "tpu_nodes": list(self.tpu_nodes),
             },
             indent=2)
+    
+    def dump(self, lkp: util.Lookup) -> None:
+        TopologySummary.path(lkp).write_text(self.dumps())
     
     def _nodenames(self) -> Set[str]:
         return set(self.physical_host) | self.down_nodes | self.tpu_nodes
@@ -574,15 +586,13 @@ def gen_topology(lkp: util.Lookup) -> TopologyBuilder:
         add_nodeset_topology(ns, bldr, lkp)
     return bldr
 
-
-def gen_topology_conf(lkp: util.Lookup) -> bool:
+def gen_topology_conf(lkp: util.Lookup) -> Tuple[bool, TopologySummary]:
     """
     Generates slurm topology.conf.
     Returns whether the topology.conf got updated.
     """
     topo = gen_topology(lkp).compress()
     conf_file = lkp.etc_dir / "cloud_topology.conf"
-
 
     with open(conf_file, "w") as f:
         f.writelines(FILE_PREAMBLE + "\n")
@@ -591,13 +601,8 @@ def gen_topology_conf(lkp: util.Lookup) -> bool:
             f.write("\n")
         f.write("\n")
 
-    summary_file = lkp.etc_dir / "cloud_topology.summary.json"
-    prev_summary = TopologySummary()
-    if summary_file.exists():
-        prev_summary = TopologySummary.loads(summary_file.read_text())
-    summary_file.write_text(topo.summary.dumps())
-    
-    return topo.summary.requires_reconfigure(prev_summary)
+    prev_summary = TopologySummary.load(lkp)
+    return topo.summary.requires_reconfigure(prev_summary), topo.summary
 
 def install_topology_conf(lkp: util.Lookup) -> None:
     conf_file = lkp.etc_dir / "cloud_topology.conf"
@@ -621,5 +626,6 @@ def gen_controller_configs(lkp: util.Lookup) -> None:
     install_jobsubmit_lua(lkp)
 
     if topology_plugin(lkp) == TOPOLOGY_PLUGIN_TREE:
-        gen_topology_conf(lkp)
+        _, summary = gen_topology_conf(lkp)
+        summary.dump(lkp)
         install_topology_conf(lkp)

@@ -102,6 +102,11 @@
         - --ttl
         - 2h
         - "--key-file=/builder/home/.ssh/id_rsa.pub"
+    - name: Wait for host tasks
+      ansible.builtin.include_tasks: tasks/wait-for-host.yml
+      vars:
+        host_ip: "{{ access_ip.stdout }}"
+        ansible_ssh_private_key_file: "/builder/home/.ssh/id_rsa"
     rescue:
     - name: Delete Firewall Rule
       register: fw_deleted
@@ -146,10 +151,6 @@
     vars:
       ansible_ssh_private_key_file: "/builder/home/.ssh/id_rsa"
     block:
-    - name: Wait until host is reachable
-      ansible.builtin.wait_for_connection:
-        delay: 60
-        timeout: 300
     - name: Gather facts
       ansible.builtin.setup:
     - name: Wait until HTCondor daemon is up

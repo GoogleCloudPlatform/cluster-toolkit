@@ -30,6 +30,7 @@ vars:
     project: $(vars.project_id)
   enable_login_public_ips: true
   enable_controller_public_ips: true
+  localssd_mountpoint: /mnt/localssd
 
 deployment_groups:
 - group: cluster
@@ -89,8 +90,17 @@ deployment_groups:
       # Failure to do will result in VMs that lose data and do not automatically
       # mount local SSD filesystems
       local_ssd_filesystem:
-        mountpoint: /mnt/localssd
+        mountpoint: $(vars.localssd_mountpoint)
         permissions: "1777" # must quote numeric filesystem permissions!
+      # Docker was successfully installed in the image, this configures it
+      # to use the A3-specific local SSD volumes to store container images
+      docker:
+        enabled: true
+        world_writable: true
+        daemon_config: |
+          {
+            "data-root": "$(vars.localssd_mountpoint)/docker"
+          }
       runners:
       - type: ansible-local
         destination: slurm_aperture.yml
@@ -216,6 +226,8 @@ deployment_groups:
           chmod 0755 "${SLURM_ROOT}/scripts/rxdm"
           ln -s "${SLURM_ROOT}/scripts/rxdm" "${SLURM_ROOT}/partition-$(vars.a3mega_partition_name)-prolog_slurmd.d/rxdm.prolog_slurmd"
           ln -s "${SLURM_ROOT}/scripts/rxdm" "${SLURM_ROOT}/partition-$(vars.a3mega_partition_name)-epilog_slurmd.d/rxdm.epilog_slurmd"
+          # Uncomment the line below to enable epilog that will check health of GPUs and drain node if problem is detected.
+          # ln -s "/slurm/scripts/tools/gpu-test" "${SLURM_ROOT}/partition-$(vars.a3mega_partition_name)-epilog_slurmd.d/gpu-test.epilog_slurmd"
       - type: shell
         destination: reset_enroot.sh
         content: |

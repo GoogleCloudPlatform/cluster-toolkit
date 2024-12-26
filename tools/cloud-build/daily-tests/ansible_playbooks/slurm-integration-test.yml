@@ -133,7 +133,7 @@
         - --rules=tcp:22
         - --source-ranges={{ build_ip.stdout }}
 
-    - name: 'Add SSH Keys to OS-Login'
+    - name: Add SSH Keys to OS-Login
       register: key_created
       changed_when: key_created.rc == 0
       ansible.builtin.command:
@@ -152,6 +152,12 @@
         hostname: "{{ login_ip }}"
         groups: [remote_host]
       when: login_ip | ansible.utils.ipaddr
+
+    - name: Wait for host tasks
+      ansible.builtin.include_tasks: tasks/wait-for-host.yml
+      vars:
+        host_ip: "{{ login_ip }}"
+        ansible_ssh_private_key_file: "/builder/home/.ssh/id_rsa"
 
     ## Cleanup and fail gracefully
     rescue:
@@ -186,14 +192,9 @@
   tasks:
   - name: Slurm Test Block
     vars:
-      ansible_ssh_private_key_file: "/builder/home/.ssh/id_rsa"
       ansible_remote_tmp: "/tmp/gcluster/"
+      ansible_ssh_private_key_file: "/builder/home/.ssh/id_rsa"
     block:
-    - name: Wait until host is reachable
-      ansible.builtin.wait_for_connection:
-        delay: 60
-        timeout: 300
-
     - name: Gather facts
       ansible.builtin.setup:
 

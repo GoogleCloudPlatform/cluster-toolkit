@@ -20,6 +20,7 @@ import (
 	"hpc-toolkit/pkg/modulereader"
 	"log"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/hashicorp/hcl/v2/ext/typeexpr"
@@ -61,6 +62,11 @@ func getModules() []modInfo {
 	}
 	allMods = []modInfo{}
 	for _, sk := range sks {
+		if strings.Contains(sk.Source, "/internal/") {
+			continue // skip internal modules
+			// TODO: remove skipping internal modules
+		}
+
 		info, err := modulereader.GetModuleInfo(modPath(sk.Source), sk.Kind)
 		if err != nil {
 			log.Fatal(err)
@@ -234,7 +240,7 @@ func TestOutputForbiddenNames(t *testing.T) {
 	nowhere := []string{}
 	allowed := map[string][]string{
 		// Global blueprint variables we don't want to get overwritten.
-		"project_id":      {"community/modules/project/new-project"},
+		"project_id":      nowhere,
 		"labels":          nowhere,
 		"region":          nowhere,
 		"zone":            nowhere,

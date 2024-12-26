@@ -16,6 +16,10 @@
 
 blueprint_name: hcls-cluster-v5
 
+validators:
+- validator: test_apis_enabled
+  skip: true # skipping this validator, since "service-enablement" will take care of it.
+
 vars:
   project_id:  ## Set GCP Project ID Here ##
   deployment_name: hcls-01

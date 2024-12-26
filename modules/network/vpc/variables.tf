@@ -19,6 +19,13 @@ variable "project_id" {
   type        = string
 }
 
+variable "labels" {
+  description = "Labels to add to network resources that support labels. Key-value pairs of strings."
+  type        = map(string)
+  default     = {}
+  nullable    = false
+}
+
 variable "network_name" {
   description = "The name of the network to be created (if unsupplied, will default to \"{deployment_name}-net\")"
   type        = string
@@ -142,8 +149,24 @@ variable "additional_subnetworks" {
 
 variable "secondary_ranges" {
   type        = map(list(object({ range_name = string, ip_cidr_range = string })))
-  description = "Secondary ranges that will be used in some of the subnets. Please see https://goo.gle/hpc-toolkit-vpc-deprecation for migration instructions."
+  description = <<-EOT
+  "Secondary ranges associated with the subnets.
+  This will be deprecated in favour of secondary_ranges_list at a later date.
+  Please migrate to using the same."
+  EOT
   default     = {}
+}
+
+variable "secondary_ranges_list" {
+  type = list(object({
+    subnetwork_name = string,
+    ranges = list(object({
+      range_name    = string,
+      ip_cidr_range = string
+    }))
+  }))
+  description = "List of secondary ranges associated with the subnets."
+  default     = []
 }
 
 variable "network_routing_mode" {
@@ -242,4 +265,25 @@ variable "firewall_log_config" {
     ], var.firewall_log_config)
     error_message = "var.firewall_log_config must be set to \"DISABLE_LOGGING\", or enable logging with \"INCLUDE_ALL_METADATA\" or \"EXCLUDE_ALL_METADATA\""
   }
+}
+
+resource "terraform_data" "secondary_ranges_validation" {
+  lifecycle {
+    precondition {
+      condition     = length(var.secondary_ranges) == 0 || length(var.secondary_ranges_list) == 0
+      error_message = "Only one of var.secondary_ranges or var.secondary_ranges_list should be specified"
+    }
+  }
+}
+
+variable "network_profile" {
+  type        = string
+  description = <<-EOT
+  A full or partial URL of the network profile to apply to this network.
+  This field can be set only at resource creation time. For example, the
+  following are valid URLs:
+  - https://www.googleapis.com/compute/beta/projects/{projectId}/global/networkProfiles/{network_profile_name}
+  - projects/{projectId}/global/networkProfiles/{network_profile_name}}
+  EOT
+  default     = null
 }

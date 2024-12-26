@@ -15,6 +15,11 @@
 */
 
 locals {
+  # This label allows for billing report tracking based on module.
+  labels = merge(var.labels, { ghpc_module = "vpc", ghpc_role = "network" })
+}
+
+locals {
   autoname        = replace(var.deployment_name, "_", "-")
   network_name    = var.network_name == null ? "${local.autoname}-net" : var.network_name
   subnetwork_name = var.subnetwork_name == null ? "${local.autoname}-primary-subnet" : var.subnetwork_name
@@ -147,23 +152,29 @@ locals {
     var.enable_internal_traffic ? [local.allow_internal_traffic] : [],
     length(local.iap_ports) > 0 ? [local.allow_iap_ingress] : []
   )
+
+  secondary_ranges_map = {
+    for secondary_range in var.secondary_ranges_list :
+    secondary_range.subnetwork_name => secondary_range.ranges
+  }
 }
 
 module "vpc" {
   source  = "terraform-google-modules/network/google"
-  version = "~> 9.0"
+  version = "~> 10.0"
 
   network_name                           = local.network_name
   project_id                             = var.project_id
   auto_create_subnetworks                = false
   subnets                                = local.subnetworks
-  secondary_ranges                       = var.secondary_ranges
+  secondary_ranges                       = length(local.secondary_ranges_map) > 0 ? local.secondary_ranges_map : var.secondary_ranges
   routing_mode                           = var.network_routing_mode
   mtu                                    = var.mtu
   description                            = var.network_description
   shared_vpc_host                        = var.shared_vpc_host
   delete_default_internet_gateway_routes = var.delete_default_internet_gateway_routes
   firewall_rules                         = local.firewall_rules
+  network_profile                        = var.network_profile
 }
 
 # This use of the module may appear odd when var.ips_per_nat = 0. The module
@@ -175,7 +186,7 @@ module "vpc" {
 # https://github.com/terraform-google-modules/terraform-google-address/blob/v3.1.1/outputs.tf
 module "nat_ip_addresses" {
   source  = "terraform-google-modules/address/google"
-  version = "~> 3.1"
+  version = "~> 4.1"
 
   for_each = toset(local.regions)
 
@@ -184,6 +195,7 @@ module "nat_ip_addresses" {
   # an external, regional (not global) IP address is suited for a regional NAT
   address_type = "EXTERNAL"
   global       = false
+  labels       = local.labels
   names        = [for idx in range(var.ips_per_nat) : "${local.network_name}-nat-ips-${each.value}-${idx}"]
 }
 

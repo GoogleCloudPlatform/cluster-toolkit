@@ -45,6 +45,11 @@ output "has_gpu" {
   value       = local.has_gpu
 }
 
+output "allocatable_gpu_per_node" {
+  description = "Number of GPUs available for scheduling pods on each node."
+  value       = local.allocatable_gpu_per_node
+}
+
 locals {
   translate_toleration = {
     PREFER_NO_SCHEDULE = "PreferNoSchedule"

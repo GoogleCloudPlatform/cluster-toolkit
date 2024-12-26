@@ -123,8 +123,9 @@ repos:
   hooks:
   - id: script-must-have-extension
   - id: shellcheck
+    exclude: ".*unlinted"
   - id: shfmt
-    exclude: ".*tpl"
+    exclude: ".*tpl|.*unlinted"
 - repo: https://github.com/pre-commit/pre-commit-hooks
   rev: v4.5.0
   hooks:

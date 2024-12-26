@@ -169,23 +169,23 @@ limitations under the License.
 | Name | Version |
 |------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.3.0 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | >= 4.73.0, <6.0 |
-| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 4.73.0, <6.0 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 4.73.0 |
+| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 6.13.0 |
 | <a name="requirement_null"></a> [null](#requirement\_null) | >= 3.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google"></a> [google](#provider\_google) | >= 4.73.0, <6.0 |
-| <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 4.73.0, <6.0 |
+| <a name="provider_google"></a> [google](#provider\_google) | >= 4.73.0 |
+| <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 6.13.0 |
 | <a name="provider_null"></a> [null](#provider\_null) | >= 3.0 |
 
 ## Modules
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_netstorage_startup_script"></a> [netstorage\_startup\_script](#module\_netstorage\_startup\_script) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | v1.39.0 |
+| <a name="module_netstorage_startup_script"></a> [netstorage\_startup\_script](#module\_netstorage\_startup\_script) | ../../scripts/startup-script | n/a |
 
 ## Resources
 
@@ -231,6 +231,7 @@ limitations under the License.
 | <a name="input_placement_policy"></a> [placement\_policy](#input\_placement\_policy) | Control where your VM instances are physically located relative to each other within a zone.<br/>See https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_resource_policy#nested_group_placement_policy | `any` | `null` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | The region to deploy to | `string` | n/a | yes |
+| <a name="input_reservation_name"></a> [reservation\_name](#input\_reservation\_name) | Name of the reservation to use for VM resources, should be in one of the following formats:<br/>- projects/PROJECT\_ID/reservations/RESERVATION\_NAME<br/>- RESERVATION\_NAME<br/><br/>Must be a "SPECIFIC\_RESERVATION"<br/>Set to empty string if using no reservation or automatically-consumed reservations | `string` | `""` | no |
 | <a name="input_service_account"></a> [service\_account](#input\_service\_account) | DEPRECATED - Use `service_account_email` and `service_account_scopes` instead. | <pre>object({<br/>    email  = string,<br/>    scopes = set(string)<br/>  })</pre> | `null` | no |
 | <a name="input_service_account_email"></a> [service\_account\_email](#input\_service\_account\_email) | Service account e-mail address to use with the node pool | `string` | `null` | no |
 | <a name="input_service_account_scopes"></a> [service\_account\_scopes](#input\_service\_account\_scopes) | Scopes to to use with the node pool. | `set(string)` | <pre>[<br/>  "https://www.googleapis.com/auth/cloud-platform"<br/>]</pre> | no |
