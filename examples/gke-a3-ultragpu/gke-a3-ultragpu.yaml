@@ -15,7 +15,7 @@
 blueprint_name: gke-a3-ultra
 
 toolkit_modules_url: github.com/GoogleCloudPlatform/cluster-toolkit
-toolkit_modules_version: 81e63e6be3defa2eab22988ebb649c0ea46ba80c
+toolkit_modules_version: develop
 
 vars:
   project_id: # add this
