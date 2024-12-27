@@ -14,14 +14,7 @@
 
 ---
 tags:
-- m.gke-job-template
 - gke
-- m.gke-cluster
-- m.gke-node-pool
-- m.gke-topology-scheduler
-- m.gpu-rdma-vpc
-- m.kubectl-apply
-- m.vpc
 
 timeout: 14400s  # 4hr
 steps:
