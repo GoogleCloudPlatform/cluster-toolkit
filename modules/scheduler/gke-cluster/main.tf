@@ -75,7 +75,7 @@ data "google_container_engine_versions" "version_prefix_filter" {
 }
 
 locals {
-  version = var.min_master_version != null ? var.min_master_version : data.google_container_engine_versions.version_prefix_filter.latest_node_version
+  master_version = var.min_master_version != null ? var.min_master_version : data.google_container_engine_versions.version_prefix_filter.latest_master_version
 }
 
 resource "google_container_cluster" "gke_cluster" {
@@ -169,7 +169,7 @@ resource "google_container_cluster" "gke_cluster" {
   release_channel {
     channel = var.release_channel
   }
-  min_master_version = local.version
+  min_master_version = local.master_version
 
   maintenance_policy {
     daily_maintenance_window {
@@ -253,7 +253,7 @@ resource "google_container_node_pool" "system_node_pools" {
   name     = var.system_node_pool_name
   cluster  = var.cluster_reference_type == "NAME" ? google_container_cluster.gke_cluster.name : google_container_cluster.gke_cluster.self_link
   location = var.cluster_availability_type == "ZONAL" ? var.zone : var.region
-  version  = local.version
+  version  = local.master_version
 
   autoscaling {
     total_min_node_count = var.system_node_pool_node_count.total_min_nodes
