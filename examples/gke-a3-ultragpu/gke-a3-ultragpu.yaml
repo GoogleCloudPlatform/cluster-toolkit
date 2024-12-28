@@ -113,7 +113,7 @@ deployment_groups:
     source: modules/scheduler/gke-cluster
     use: [gke-a3-ultra-net-0]
     settings:
-      release_channel: RAPID
+      version_prefix: "1.31."
       system_node_pool_machine_type: "e2-standard-16"
       system_node_pool_disk_size_gb: $(vars.system_node_pool_disk_size_gb)
       system_node_pool_taints: []
@@ -151,7 +151,6 @@ deployment_groups:
     use: [a3-ultragpu-cluster]
     settings:
       machine_type: a3-ultragpu-8g
-      auto_upgrade: true
       zones: [$(vars.zone)]
       disk_type: hyperdisk-balanced
       disk_size_gb: $(vars.a3ultra_node_pool_disk_size_gb)

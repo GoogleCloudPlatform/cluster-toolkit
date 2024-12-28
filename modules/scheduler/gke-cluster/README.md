@@ -131,6 +131,7 @@ limitations under the License.
 |------|------|
 | [google-beta_google_container_cluster.gke_cluster](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_container_cluster) | resource |
 | [google-beta_google_container_node_pool.system_node_pools](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_container_node_pool) | resource |
+| [google-beta_google_container_engine_versions.version_prefix_filter](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/data-sources/google_container_engine_versions) | data source |
 | [google_client_config.default](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/client_config) | data source |
 | [google_project.project](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/project) | data source |
 
@@ -192,6 +193,7 @@ limitations under the License.
 | <a name="input_timeout_create"></a> [timeout\_create](#input\_timeout\_create) | Timeout for creating a node pool | `string` | `null` | no |
 | <a name="input_timeout_update"></a> [timeout\_update](#input\_timeout\_update) | Timeout for updating a node pool | `string` | `null` | no |
 | <a name="input_upgrade_settings"></a> [upgrade\_settings](#input\_upgrade\_settings) | Defines gke cluster upgrade settings. It is highly recommended that you define all max\_surge and max\_unavailable.<br/>If max\_surge is not specified, it would be set to a default value of 0.<br/>If max\_unavailable is not specified, it would be set to a default value of 1. | <pre>object({<br/>    strategy        = string<br/>    max_surge       = optional(number)<br/>    max_unavailable = optional(number)<br/>  })</pre> | <pre>{<br/>  "max_surge": 0,<br/>  "max_unavailable": 1,<br/>  "strategy": "SURGE"<br/>}</pre> | no |
+| <a name="input_version_prefix"></a> [version\_prefix](#input\_version\_prefix) | If provided, Terraform will only return versions that match the string prefix. For example value should in the form of 1.31. to avoid min\_version mismatch | `string` | `null` | no |
 | <a name="input_zone"></a> [zone](#input\_zone) | Zone for a zonal cluster. | `string` | `null` | no |
 
 ## Outputs
