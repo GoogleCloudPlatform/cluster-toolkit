@@ -53,41 +53,38 @@ metadata:
       ]
 spec:
   volumes:
-    - name: library-dir-host
-      hostPath:
-        path: /home/kubernetes/bin/nvidia
-    - name: gib
-      hostPath:
-        path: /home/kubernetes/bin/gib
-    - name: shared-memory
-      emptyDir:
-        medium: "Memory"
-        sizeLimit: 250Gi
+  - name: library-dir-host
+    hostPath:
+      path: /home/kubernetes/bin/nvidia
+  - name: gib
+    hostPath:
+      path: /home/kubernetes/bin/gib
+  - name: shared-memory
+    emptyDir:
+      medium: "Memory"
+      sizeLimit: 250Gi
   containers:
-    - image: us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib:v1.0.2
-      name: test
-      resources:
-        requests:
-          cpu: 150m
-      volumeMounts:
-        - name: library-dir-host
-          mountPath: /usr/local/nvidia
-        - name: gib
-          mountPath: /usr/local/gib
-        - name: shared-memory
-          mountPath: /dev/shm
-      env:
-        - name: LD_LIBRARY_PATH
-          value: /usr/local/nvidia/lib64
-      resources:
-        limits:
-          nvidia.com/gpu: 8
-      command: ["/bin/bash", "-c"]
-      args:
-        - |
-          /scripts/container_entry.sh shell
-          source /usr/local/gib/scripts/set_nccl_env.sh
-          sleep infinity
+  - image: us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib-diagnostic:v1.0.3
+    name: test
+    volumeMounts:
+    - name: library-dir-host
+      mountPath: /usr/local/nvidia
+    - name: gib
+      mountPath: /usr/local/gib
+    - name: shared-memory
+      mountPath: /dev/shm
+    env:
+    - name: LD_LIBRARY_PATH
+      value: /usr/local/nvidia/lib64
+    resources:
+      limits:
+        nvidia.com/gpu: 8
+    command: ["/bin/bash", "-c"]
+    args:
+    - |
+      /scripts/container_entry.sh shell
+      source /usr/local/gib/scripts/set_nccl_env.sh
+      sleep infinity
 ---
 apiVersion: v1
 kind: Pod
@@ -112,38 +109,35 @@ metadata:
       ]
 spec:
   volumes:
-    - name: library-dir-host
-      hostPath:
-        path: /home/kubernetes/bin/nvidia
-    - name: gib
-      hostPath:
-        path: /home/kubernetes/bin/gib
-    - name: shared-memory
-      emptyDir:
-        medium: "Memory"
-        sizeLimit: 250Gi
+  - name: library-dir-host
+    hostPath:
+      path: /home/kubernetes/bin/nvidia
+  - name: gib
+    hostPath:
+      path: /home/kubernetes/bin/gib
+  - name: shared-memory
+    emptyDir:
+      medium: "Memory"
+      sizeLimit: 250Gi
   containers:
-    - image: us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib:v1.0.2
-      name: test
-      resources:
-        requests:
-          cpu: 150m
-      volumeMounts:
-        - name: library-dir-host
-          mountPath: /usr/local/nvidia
-        - name: gib
-          mountPath: /usr/local/gib
-        - name: shared-memory
-          mountPath: /dev/shm
-      env:
-        - name: LD_LIBRARY_PATH
-          value: /usr/local/nvidia/lib64
-      resources:
-        limits:
-          nvidia.com/gpu: 8
-      command: ["/bin/bash", "-c"]
-      args:
-        - |
-          /scripts/container_entry.sh shell
-          source /usr/local/gib/scripts/set_nccl_env.sh
-          sleep infinity
+  - image: us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib-diagnostic:v1.0.3
+    name: test
+    volumeMounts:
+    - name: library-dir-host
+      mountPath: /usr/local/nvidia
+    - name: gib
+      mountPath: /usr/local/gib
+    - name: shared-memory
+      mountPath: /dev/shm
+    env:
+    - name: LD_LIBRARY_PATH
+      value: /usr/local/nvidia/lib64
+    resources:
+      limits:
+        nvidia.com/gpu: 8
+    command: ["/bin/bash", "-c"]
+    args:
+    - |
+      /scripts/container_entry.sh shell
+      source /usr/local/gib/scripts/set_nccl_env.sh
+      sleep infinity
