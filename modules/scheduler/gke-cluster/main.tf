@@ -215,7 +215,8 @@ resource "google_container_cluster" "gke_cluster" {
   lifecycle {
     # Ignore all changes to the default node pool. It's being removed after creation.
     ignore_changes = [
-      node_config
+      node_config,
+      min_master_version,
     ]
     precondition {
       condition     = var.default_max_pods_per_node == null || var.networking_mode == "VPC_NATIVE"
@@ -322,6 +323,7 @@ resource "google_container_node_pool" "system_node_pools" {
     ignore_changes = [
       node_config[0].labels,
       node_config[0].taint,
+      version,
     ]
     precondition {
       condition     = contains(["SURGE"], local.upgrade_settings.strategy)
