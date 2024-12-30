@@ -33,22 +33,6 @@ vars:
   system_node_pool_disk_size_gb: 200
   a3ultra_node_pool_disk_size_gb: 100
 
-terraform_providers:
-  google:
-    source: hashicorp/google
-    version: 6.13.0
-    configuration:
-      project: $(vars.project_id)
-      region: $(vars.region)
-      zone: $(vars.zone)
-  google-beta:
-    source: hashicorp/google-beta
-    version: 6.13.0
-    configuration:
-      project: $(vars.project_id)
-      region: $(vars.region)
-      zone: $(vars.zone)
-
 deployment_groups:
 - group: primary
   modules:
