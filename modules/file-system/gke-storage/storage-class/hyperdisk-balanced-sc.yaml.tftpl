@@ -1,0 +1,25 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: ${name}
+  labels:
+  %{~ for key, val in labels ~}
+    ${key}: ${val}
+  %{~ endfor ~}
+provisioner: pd.csi.storage.gke.io
+allowVolumeExpansion: true
+parameters:
+  type: hyperdisk-balanced
+  provisioned-throughput-on-create: "250Mi"
+  provisioned-iops-on-create: "7000"
+volumeBindingMode: ${volume_binding_mode}
+reclaimPolicy: ${reclaim_policy}
+  %{~ if topology_zones != null ~}
+allowedTopologies:
+- matchLabelExpressions:
+  - key: topology.gke.io/zone
+    values:
+    %{~ for z in topology_zones ~}
+    - ${z}
+    %{~ endfor ~}
+  %{~ endif ~}
