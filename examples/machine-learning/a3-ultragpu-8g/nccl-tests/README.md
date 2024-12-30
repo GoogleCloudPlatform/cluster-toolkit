@@ -14,9 +14,9 @@ Contents:
 In general the workflow to deploy GPUDirect-RDMA-enabled workloads via enroot-pyxis is
 the following:
 
-	1. Convert your container into a squashfs based container image
-	2. Set required environment variables
-	3. Run your application workload
+1. Convert your container into a squashfs based container image
+2. Set required environment variables
+3. Run your application workload
 
 ## TLDR
 
@@ -25,13 +25,15 @@ For an end-to-end example, copy the `build-nccl-tests.sh` and
 
 And run the following:
 
-	BUILD_JOB=$(sbatch --parsable build-nccl-tests.sh) # takes ~4 minutes
-	sbatch -d afterok:${BUILD_JOB} run-nccl-tests.sh # takes ~3 minutes
+```text
+BUILD_JOB=$(sbatch --parsable build-nccl-tests.sh) # takes ~4 minutes
+sbatch -d afterok:${BUILD_JOB} run-nccl-tests.sh # takes ~3 minutes
+```
 
 The latter should result in a slurm-XX.out file that contains the result of the nccl
 `all_gather_perf` benchmark:
 
-```
+```text
 #
 #                                                              out-of-place                       in-place
 #       size         count      type   redop    root     time   algbw   busbw #wrong     time   algbw   busbw #wrong
@@ -49,13 +51,13 @@ The latter should result in a slurm-XX.out file that contains the result of the 
 
 For more details, follow the remainder of this README.
 
-# Detailed Instructions
+## Detailed Instructions
 
 All of the following should be done on the login node of your slurm cluster,
 and while somewhere on the shared Filestore filesystem (typically the user's
 home directory).
 
-## Building NCCL-tests
+### Building NCCL-tests
 
 See build-nccl-tests.sh for an example. Within it, you will see that first we'll
 create a squashfs version of the container using we want to launch using `enroot
@@ -65,17 +67,21 @@ time, etc, which would make the job launch longer.
 
 For building the nccl-tests binaries, we use `pyxis` to run the enroot container
 and build the nccl-tests within that container to ensure the resulting binarier
-are compatiblel with the container enviornment.
+are compatible with the container environment.
 
 Both of the above (importing and building) are accomplished by running:
 
-	sbatch build-nccl-tests.sh
+```text
+sbatch build-nccl-tests.sh
+```
 
-## Running your application on a3-ultra instances
+### Running your application on a3-ultra instances
 
 For a complete example, run:
 
-	sbatch run-nccl-tests.sh
+```text
+sbatch run-nccl-tests.sh
+```
 
 The output will appear in in a `slurm-<job#>.log` file. If the name of your a3-ultragpu
 partition is different than "a3ultra", you will need to modify the `build-nccl-tests.sh`
