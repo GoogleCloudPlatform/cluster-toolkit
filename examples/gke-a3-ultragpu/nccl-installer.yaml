@@ -36,45 +36,60 @@ spec:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
             nodeSelectorTerms:
-              - matchExpressions:
-                  - key: cloud.google.com/gke-accelerator
-                    operator: In
-                    values:
-                      - nvidia-h200-141gb
+            - matchExpressions:
+              - key: cloud.google.com/gke-accelerator
+                operator: In
+                values:
+                - nvidia-h200-141gb
       tolerations:
-        - operator: "Exists"
+      - operator: "Exists"
       hostNetwork: true
       hostPID: true
       volumes:
-        - name: library-dir-host
-          hostPath:
-            path: /home/kubernetes/bin/nvidia/lib64
-            type: DirectoryOrCreate
-        - name: gib
-          hostPath:
-            path: /home/kubernetes/bin/gib
+      - name: library-dir-host
+        hostPath:
+          path: /home/kubernetes/bin/nvidia/lib64
+          type: DirectoryOrCreate
+      - name: gib
+        hostPath:
+          path: /home/kubernetes/bin/gib
       initContainers:
-        - image: us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib:v1.0.2
-          name: nccl-rdma-installer
-          resources:
-            requests:
-              cpu: 150m
-          securityContext:
-            privileged: true
-          volumeMounts:
-            - name: library-dir-host
-              mountPath: /usr/local/home/kubernetes/bin/nvidia/lib64
-            - name: gib
-              mountPath: /usr/local/home/kubernetes/bin/gib
-          command: ["/bin/sh", "-c"]
-          args:
-            - |
-              set -ex
-              /scripts/container_entry.sh install --install-nccl
-              cp -r /var/lib/gib/lib64/. /usr/local/home/kubernetes/bin/nvidia/lib64
-              cp -r /var/lib/gib/. /usr/local/home/kubernetes/bin/gib
-              ibv_devinfo || exit 1
-              echo "installation finishes"
+      - name: disable-log-martian
+        image: alpine:latest
+        command: ["/bin/sh"]
+        securityContext:
+          privileged: true
+        args:
+        - -c
+        - |
+          sysctl -w net.ipv4.conf.gpu0rdma0.log_martians=0
+          sysctl -w net.ipv4.conf.gpu1rdma0.log_martians=0
+          sysctl -w net.ipv4.conf.gpu2rdma0.log_martians=0
+          sysctl -w net.ipv4.conf.gpu3rdma0.log_martians=0
+          sysctl -w net.ipv4.conf.gpu4rdma0.log_martians=0
+          sysctl -w net.ipv4.conf.gpu5rdma0.log_martians=0
+          sysctl -w net.ipv4.conf.gpu6rdma0.log_martians=0
+          sysctl -w net.ipv4.conf.gpu7rdma0.log_martians=0
+      - image: us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib:v1.0.3
+        name: nccl-rdma-installer
+        resources:
+          requests:
+            cpu: 150m
+        securityContext:
+          privileged: true
+        volumeMounts:
+        - name: library-dir-host
+          mountPath: /usr/local/home/kubernetes/bin/nvidia/lib64
+        - name: gib
+          mountPath: /usr/local/home/kubernetes/bin/gib
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          set -ex
+          /scripts/container_entry.sh install --install-nccl
+          cp -r /var/lib/gib/lib64/. /usr/local/home/kubernetes/bin/nvidia/lib64
+          cp -r /var/lib/gib/. /usr/local/home/kubernetes/bin/gib
+          echo "installation finishes"
       containers:
-        - image: "gke.gcr.io/pause:3.8@sha256:880e63f94b145e46f1b1082bb71b85e21f16b99b180b9996407d61240ceb9830"
-          name: pause
+      - image: "gke.gcr.io/pause:3.8@sha256:880e63f94b145e46f1b1082bb71b85e21f16b99b180b9996407d61240ceb9830"
+        name: pause
