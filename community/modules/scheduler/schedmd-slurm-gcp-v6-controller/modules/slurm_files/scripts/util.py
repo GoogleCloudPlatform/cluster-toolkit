@@ -254,6 +254,8 @@ class NSMount:
     remote_mount: Path
     fs_type: str
     mount_options: str
+    local_mount_owner: Optional[str] = None
+    local_mount_permissions: Optional[str] = None
 
 @lru_cache(maxsize=1)
 def default_credentials():
@@ -2114,6 +2116,8 @@ class Lookup:
         return NSMount(
             server_ip=server_ip,
             local_mount=Path(ns["local_mount"]),
+            local_mount_owner=ns.get("local_mount_owner"),
+            local_mount_permissions=ns.get("local_mount_permissions"),
             remote_mount=Path(ns["remote_mount"]),
             fs_type=ns["fs_type"],
             mount_options=ns["mount_options"],
