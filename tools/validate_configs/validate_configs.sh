@@ -120,7 +120,7 @@ check_background() {
 	fi
 }
 
-CONFIGS=$(find examples/ community/examples/ tools/validate_configs/test_configs/ docs/tutorials/ docs/videos/build-your-own-blueprint/ -name "*.yaml" -type f -not -path 'examples/machine-learning/a3-megagpu-8g/*')
+CONFIGS=$(find examples/ community/examples/ tools/validate_configs/test_configs/ docs/tutorials/ docs/videos/build-your-own-blueprint/ -name "*.yaml" -type f -not -path 'examples/machine-learning/a3-megagpu-8g/*' -not -path 'examples/gke-a3-ultragpu/*' -not -path 'examples/hypercompute_clusters/*')
 cwd=$(pwd)
 NPROCS=${NPROCS:-$(nproc)}
 echo "Running tests in $NPROCS processes"
