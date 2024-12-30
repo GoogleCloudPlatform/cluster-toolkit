@@ -189,7 +189,7 @@ limitations under the License.
 ## Requirements
 
 | Name | Version |
-| ---- | ------- |
+|------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.12.2 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.4 |
 | <a name="requirement_random"></a> [random](#requirement\_random) | ~> 3.0 |
@@ -197,7 +197,7 @@ limitations under the License.
 ## Providers
 
 | Name | Version |
-| ---- | ------- |
+|------|---------|
 | <a name="provider_google"></a> [google](#provider\_google) | >= 6.4 |
 | <a name="provider_random"></a> [random](#provider\_random) | ~> 3.0 |
 
@@ -208,14 +208,14 @@ No modules.
 ## Resources
 
 | Name | Type |
-| ---- | ---- |
+|------|------|
 | [google_filestore_instance.filestore_instance](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/filestore_instance) | resource |
 | [random_id.resource_name_suffix](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/id) | resource |
 
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-| ---- | ----------- | ---- | ------- | :------: |
+|------|-------------|------|---------|:--------:|
 | <a name="input_connect_mode"></a> [connect\_mode](#input\_connect\_mode) | Used to select mode - supported values DIRECT\_PEERING and PRIVATE\_SERVICE\_ACCESS. | `string` | `"DIRECT_PEERING"` | no |
 | <a name="input_deletion_protection"></a> [deletion\_protection](#input\_deletion\_protection) | Configure Filestore instance deletion protection | <pre>object({<br/>    enabled = optional(bool, false)<br/>    reason  = optional(string)<br/>  })</pre> | <pre>{<br/>  "enabled": false<br/>}</pre> | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the HPC deployment, used as name of the filestore instance if no name is specified. | `string` | n/a | yes |
@@ -224,6 +224,8 @@ No modules.
 | <a name="input_filestore_tier"></a> [filestore\_tier](#input\_filestore\_tier) | The service tier of the instance. | `string` | `"BASIC_SSD"` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the filestore instance. Key-value pairs. | `map(string)` | n/a | yes |
 | <a name="input_local_mount"></a> [local\_mount](#input\_local\_mount) | Mountpoint for this filestore instance. Note: If set to the same as the `filestore_share_name`, it will trigger a known Slurm bug ([troubleshooting](../../../docs/slurm-troubleshooting.md)). | `string` | `"/shared"` | no |
+| <a name="input_local_mount_owner"></a> [local\_mount\_owner](#input\_local\_mount\_owner) | Local mount owner, string in format <user>:<group>. | `string` | `""` | no |
+| <a name="input_local_mount_permissions"></a> [local\_mount\_permissions](#input\_local\_mount\_permissions) | Local mount permissions, specified as mode according to chmod(2). | `string` | `""` | no |
 | <a name="input_mount_options"></a> [mount\_options](#input\_mount\_options) | NFS mount options to mount file system. | `string` | `"defaults,_netdev"` | no |
 | <a name="input_name"></a> [name](#input\_name) | The resource name of the instance. | `string` | `null` | no |
 | <a name="input_network_id"></a> [network\_id](#input\_network\_id) | The ID of the GCE VPC network to which the instance is connected given in the format:<br/>`projects/<project_id>/global/networks/<network_name>`" | `string` | n/a | yes |
@@ -238,7 +240,7 @@ No modules.
 ## Outputs
 
 | Name | Description |
-| ---- | ----------- |
+|------|-------------|
 | <a name="output_capacity_gib"></a> [capacity\_gib](#output\_capacity\_gib) | File share capacity in GiB. |
 | <a name="output_filestore_id"></a> [filestore\_id](#output\_filestore\_id) | An identifier for the resource with format `projects/{{project}}/locations/{{location}}/instances/{{name}}` |
 | <a name="output_install_nfs_client"></a> [install\_nfs\_client](#output\_install\_nfs\_client) | Script for installing NFS client |

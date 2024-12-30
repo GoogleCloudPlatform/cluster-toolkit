@@ -16,7 +16,7 @@ limitations under the License.
 ## Requirements
 
 | Name | Version |
-| ---- | ------- |
+|------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.12.2 |
 | <a name="requirement_archive"></a> [archive](#requirement\_archive) | ~> 2.0 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.41 |
@@ -26,7 +26,7 @@ limitations under the License.
 ## Providers
 
 | Name | Version |
-| ---- | ------- |
+|------|---------|
 | <a name="provider_archive"></a> [archive](#provider\_archive) | ~> 2.0 |
 | <a name="provider_google"></a> [google](#provider\_google) | >= 6.41 |
 | <a name="provider_local"></a> [local](#provider\_local) | ~> 2.0 |
@@ -39,7 +39,7 @@ No modules.
 ## Resources
 
 | Name | Type |
-| ---- | ---- |
+|------|------|
 | [google_storage_bucket_object.config](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_object) | resource |
 | [google_storage_bucket_object.controller_startup_scripts](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_object) | resource |
 | [google_storage_bucket_object.devel](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_object) | resource |
@@ -64,7 +64,7 @@ No modules.
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-| ---- | ----------- | ---- | ------- | :------: |
+|------|-------------|------|---------|:--------:|
 | <a name="input_accounting_storage_backup_host"></a> [accounting\_storage\_backup\_host](#input\_accounting\_storage\_backup\_host) | The backup accounting storage host. | `string` | `null` | no |
 | <a name="input_backup_controller_key_timeout"></a> [backup\_controller\_key\_timeout](#input\_backup\_controller\_key\_timeout) | The time in seconds for the backup controller to wait for the shared key to become available. | `number` | `300` | no |
 | <a name="input_bucket_dir"></a> [bucket\_dir](#input\_bucket\_dir) | Bucket directory for cluster files to be put into. | `string` | `null` | no |
@@ -91,7 +91,7 @@ No modules.
 | <a name="input_google_app_cred_path"></a> [google\_app\_cred\_path](#input\_google\_app\_cred\_path) | Path to Google Application Credentials. | `string` | `null` | no |
 | <a name="input_install_dir"></a> [install\_dir](#input\_install\_dir) | Directory where the hybrid configuration directory will be installed on the<br/>on-premise controller (e.g. /etc/slurm/hybrid). This updates the prefix path<br/>for the resume and suspend scripts in the generated `cloud.conf` file.<br/><br/>This variable should be used when the TerraformHost and the SlurmctldHost<br/>are different.<br/><br/>This will default to var.output\_dir if null. | `string` | `null` | no |
 | <a name="input_munge_mount"></a> [munge\_mount](#input\_munge\_mount) | Remote munge mount for compute and login nodes to acquire the munge.key.<br/>By default, the munge mount server will be assumed to be the<br/>`var.slurm_control_host` (or `var.slurm_control_addr` if non-null) when<br/>`server_ip=null`. | <pre>object({<br/>    server_ip     = string<br/>    remote_mount  = string<br/>    fs_type       = string<br/>    mount_options = string<br/>  })</pre> | <pre>{<br/>  "fs_type": "nfs",<br/>  "mount_options": "",<br/>  "remote_mount": "/etc/munge/",<br/>  "server_ip": null<br/>}</pre> | no |
-| <a name="input_network_storage"></a> [network\_storage](#input\_network\_storage) | Storage to mounted on all instances.<br/>- server\_ip     : Address of the storage server.<br/>- remote\_mount  : The location in the remote instance filesystem to mount from.<br/>- local\_mount   : The location on the instance filesystem to mount to.<br/>- fs\_type       : Filesystem type (e.g. "nfs").<br/>- mount\_options : Options to mount with. | <pre>list(object({<br/>    server_ip     = string<br/>    remote_mount  = string<br/>    local_mount   = string<br/>    fs_type       = string<br/>    mount_options = string<br/>  }))</pre> | `[]` | no |
+| <a name="input_network_storage"></a> [network\_storage](#input\_network\_storage) | Storage to mounted on all instances.<br/>- server\_ip     : Address of the storage server.<br/>- remote\_mount  : The location in the remote instance filesystem to mount from.<br/>- local\_mount   : The location on the instance filesystem to mount to.<br/>- fs\_type       : Filesystem type (e.g. "nfs").<br/>- mount\_options : Options to mount with. | <pre>list(object({<br/>    server_ip               = string<br/>    remote_mount            = string<br/>    local_mount             = string<br/>    local_mount_owner       = optional(string)<br/>    local_mount_permissions = optional(string)<br/>    fs_type                 = string<br/>    mount_options           = string<br/>  }))</pre> | `[]` | no |
 | <a name="input_nodeset"></a> [nodeset](#input\_nodeset) | Cluster nodenets, as a list. | `list(any)` | `[]` | no |
 | <a name="input_nodeset_dyn"></a> [nodeset\_dyn](#input\_nodeset\_dyn) | Cluster nodenets (dynamic), as a list. | `list(any)` | `[]` | no |
 | <a name="input_nodeset_startup_scripts"></a> [nodeset\_startup\_scripts](#input\_nodeset\_startup\_scripts) | List of scripts to be ran on compute VM startup in the specific nodeset. | <pre>map(list(object({<br/>    filename = string<br/>    content  = string<br/>  })))</pre> | `{}` | no |
@@ -117,7 +117,7 @@ No modules.
 ## Outputs
 
 | Name | Description |
-| ---- | ----------- |
+|------|-------------|
 | <a name="output_bucket_dir"></a> [bucket\_dir](#output\_bucket\_dir) | Path directory within `bucket_name` for Slurm cluster file storage. |
 | <a name="output_bucket_name"></a> [bucket\_name](#output\_bucket\_name) | GCS Bucket name of Slurm cluster file storage. |
 | <a name="output_config"></a> [config](#output\_config) | Cluster configuration. |
