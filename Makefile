@@ -3,12 +3,15 @@ MIN_PACKER_VERSION=1.7.9 # for building images
 MIN_TERRAFORM_VERSION=1.2 # for deploying modules
 MIN_GOLANG_VERSION=1.18 # for building gcluster
 
+EXECUTABLE_BINS = gcluster
+
 .PHONY: install install-user tests format install-dev-deps \
         warn-go-missing warn-terraform-missing warn-packer-missing \
         warn-go-version warn-terraform-version warn-packer-version \
         test-engine validate_configs validate_golden_copy packer-check \
         terraform-format packer-format \
-        check-tflint check-pre-commit
+        check-tflint check-pre-commit \
+		clean
 
 SHELL=/bin/bash -o pipefail
 ENG = ./cmd/... ./pkg/...
@@ -29,12 +32,16 @@ endif
 
 # RULES MEANT TO BE USED DIRECTLY
 
+
 gcluster: warn-go-version warn-terraform-version warn-packer-version $(shell find ./cmd ./pkg gcluster.go -type f)
 	$(info **************** building gcluster ************************)
 	@go build -ldflags="-X 'main.gitTagVersion=$(GIT_TAG_VERSION)' -X 'main.gitBranch=$(GIT_BRANCH)' -X 'main.gitCommitInfo=$(GIT_COMMIT_INFO)' -X 'main.gitCommitHash=$(GIT_COMMIT_HASH)' -X 'main.gitInitialHash=$(GIT_INITIAL_HASH)'" gcluster.go
 	@ln -sf gcluster ghpc
 
 ghpc: gcluster
+
+clean:
+	rm -f $(EXECUTABLE_BINS)
 
 install-user:
 	$(info ******** installing gcluster in ~/bin *********************)
