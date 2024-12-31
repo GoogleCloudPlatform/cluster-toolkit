@@ -143,7 +143,7 @@ recommends using the _Cloud Ops Agent_, it is recommended to use
 #### Stackdriver Agent Installation
 
 If an image or machine already has Cloud Ops Agent installed and you would like
-to instead use the Stackdrier Agent, the following script will remove the Cloud
+to instead use the Stackdriver Agent, the following script will remove the Cloud
 Ops Agent and install the Stackdriver Agent.
 
 ```bash
