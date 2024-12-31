@@ -109,9 +109,9 @@ variable "import_destination_path" {
 variable "file_stripe" {
   description = "The parallelstore stripe level for files."
   type        = string
-  default     = "FILE_STRIPE_LEVEL_UNSPECIFIED"
+  default     = null
   validation {
-    condition = contains([
+    condition = var.file_stripe == null ? true : contains([
       "FILE_STRIPE_LEVEL_UNSPECIFIED",
       "FILE_STRIPE_LEVEL_MIN",
       "FILE_STRIPE_LEVEL_BALANCED",
@@ -124,9 +124,9 @@ variable "file_stripe" {
 variable "directory_stripe" {
   description = "The parallelstore stripe level for directories."
   type        = string
-  default     = "DIRECTORY_STRIPE_LEVEL_UNSPECIFIED"
+  default     = null
   validation {
-    condition = contains([
+    condition = var.directory_stripe == null ? true : contains([
       "DIRECTORY_STRIPE_LEVEL_UNSPECIFIED",
       "DIRECTORY_STRIPE_LEVEL_MIN",
       "DIRECTORY_STRIPE_LEVEL_BALANCED",
