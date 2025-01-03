@@ -1936,6 +1936,10 @@ To learn more about how to refer to a module in a blueprint file, please consult
 Variables can be used to refer both to values defined elsewhere in the blueprint
 and to the output and structure of other modules.
 
+> [!NOTE]
+> "Brackets-less" access to elements of collection is not supported, use brackets.
+> E.g. `pink.lime[0].salmon` instead of `pink.lime.0.salmon`.
+
 ### Blueprint expressions
 
 Expressions in a blueprint file can refer to deployment variables or the outputs
