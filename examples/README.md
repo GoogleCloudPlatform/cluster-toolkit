@@ -1526,6 +1526,8 @@ The blueprint contains the following:
 
 * A K8s Job that uses a managed hyperdisk storage volume option.
 * A K8s Job that demonstrates ML training workload with managed hyperdisk storage disk operation.
+  * The sample training workload manifest will be generated under the gke-managed-hyperdisk/primary folder, as tensorflow-GUID.yaml
+  * You can deploy this sample training workload using "kubectl apply -f tensorflow-GUID.yaml" to start the training
 
 > **Warning**: In this example blueprint, when storage type `Hyperdisk-balanced`, `Hyperdisk-extreme` or `Hyperdisk-throughput` is specified in `gke-storage` module.
 > The lifecycle of the hyperdisk is managed by the blueprint.
@@ -1550,6 +1552,8 @@ The blueprint contains the following:
 
 * A K8s Job that uses a managed parallelstore storage volume option.
 * A K8s Job that demonstrates ML training workload with managed parallelstore storage disk operation.
+  * The sample training workload manifest will be generated under the gke-managed-parallelstore/primary folder, as tensorflow-GUID.yaml
+  * You can deploy this sample training workload using "kubectl apply -f tensorflow-GUID.yaml" to start the training
 
 > **Warning**: In this example blueprint, when storage type `Parallelstore` is specified in `gke-storage` module.
 > The lifecycle of the parallelstore is managed by the blueprint.
