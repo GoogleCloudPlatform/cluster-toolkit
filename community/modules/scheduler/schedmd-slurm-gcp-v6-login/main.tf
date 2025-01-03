@@ -54,7 +54,7 @@ locals {
   }
 
   # lower, replace `_` with `-`, and remove any non-alphanumeric characters
-  name_prefix = replace(
+  group_name = replace(
     replace(
       lower(var.name_prefix),
     "_", "-"),
@@ -62,7 +62,7 @@ locals {
 
 
   login_node = {
-    name_prefix         = local.name_prefix
+    group_name          = local.group_name
     disk_auto_delete    = var.disk_auto_delete
     disk_labels         = merge(var.disk_labels, local.labels)
     disk_size_gb        = var.disk_size_gb
