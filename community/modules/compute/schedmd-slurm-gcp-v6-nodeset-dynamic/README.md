@@ -74,6 +74,7 @@ modules. For support with the underlying modules, see the instructions in the
 
 | Name | Source | Version |
 |------|--------|---------|
+| <a name="module_gpu"></a> [gpu](#module\_gpu) | ../../../../modules/internal/gpu-definition | n/a |
 | <a name="module_slurm_nodeset_template"></a> [slurm\_nodeset\_template](#module\_slurm\_nodeset\_template) | ../../internal/slurm-gcp/instance_template | n/a |
 
 ## Resources
