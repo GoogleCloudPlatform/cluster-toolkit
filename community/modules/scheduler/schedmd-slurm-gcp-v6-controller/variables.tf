@@ -159,15 +159,15 @@ variable "login_nodes" {
       enable_secure_boot          = optional(bool, true)
       enable_vtpm                 = optional(bool, true)
     }))
-    source_image_family  = optional(string)
-    source_image_project = optional(string)
-    source_image         = optional(string)
-    static_ips           = optional(list(string), [])
-    subnetwork           = string
-    spot                 = optional(bool, false)
-    tags                 = optional(list(string), [])
-    zone                 = optional(string)
-    termination_action   = optional(string)
+    instance_image          = optional(map(string))
+    instance_image_custom   = bool
+    allow_automatic_updates = bool
+    static_ips              = optional(list(string), [])
+    subnetwork              = string
+    spot                    = optional(bool, false)
+    tags                    = optional(list(string), [])
+    zone                    = optional(string)
+    termination_action      = optional(string)
   }))
   default = []
   validation {
@@ -246,10 +246,10 @@ variable "nodeset" {
       enable_secure_boot          = optional(bool, true)
       enable_vtpm                 = optional(bool, true)
     }))
-    source_image_family  = optional(string)
-    source_image_project = optional(string)
-    source_image         = optional(string)
-    subnetwork_self_link = string
+    instance_image          = optional(map(string))
+    instance_image_custom   = bool
+    allow_automatic_updates = bool
+    subnetwork_self_link    = string
     additional_networks = optional(list(object({
       network            = string
       subnetwork         = string

@@ -17,29 +17,6 @@
 #########
 
 locals {
-  source_image         = var.source_image != "" ? var.source_image : "centos-7-v20201112"
-  source_image_family  = var.source_image_family != "" ? var.source_image_family : "centos-7"
-  source_image_project = var.source_image_project != "" ? var.source_image_project : "centos-cloud"
-
-  boot_disk = [
-    {
-      source_image = var.source_image != "" ? format("${local.source_image_project}/${local.source_image}") : format("${local.source_image_project}/${local.source_image_family}")
-      disk_size_gb = var.disk_size_gb
-      disk_type    = var.disk_type
-      disk_labels  = var.disk_labels
-      auto_delete  = var.auto_delete
-      boot         = "true"
-    },
-  ]
-
-  all_disks = concat(local.boot_disk, var.additional_disks)
-
-  # NOTE: Even if all the shielded_instance_config or confidential_instance_config
-  # values are false, if the config block exists and an unsupported image is chosen,
-  # the apply will fail so we use a single-value array with the default value to
-  # initialize the block only if it is enabled.
-  shielded_vm_configs = var.enable_shielded_vm ? [true] : []
-
   gpu_enabled            = var.gpu != null
   alias_ip_range_enabled = var.alias_ip_range != null
   preemptible            = var.preemptible || var.spot
@@ -82,27 +59,20 @@ resource "google_compute_instance_template" "tpl" {
   }
 
   dynamic "disk" {
-    for_each = local.all_disks
+    for_each = var.disks
     content {
       auto_delete  = lookup(disk.value, "auto_delete", null)
       boot         = lookup(disk.value, "boot", null)
       device_name  = lookup(disk.value, "device_name", null)
       disk_name    = lookup(disk.value, "disk_name", null)
-      disk_size_gb = lookup(disk.value, "disk_size_gb", lookup(disk.value, "disk_type", null) == "local-ssd" ? "375" : null)
-      disk_type    = lookup(disk.value, "disk_type", null)
-      interface    = lookup(disk.value, "interface", lookup(disk.value, "disk_type", null) == "local-ssd" ? "NVME" : null)
+      disk_size_gb = lookup(disk.value, "disk_size_gb", disk.value.disk_type == "local-ssd" ? "375" : null)
+      disk_type    = disk.value.disk_type
+      interface    = lookup(disk.value, "interface", disk.value.disk_type == "local-ssd" ? "NVME" : null)
       mode         = lookup(disk.value, "mode", null)
       source       = lookup(disk.value, "source", null)
       source_image = lookup(disk.value, "source_image", null)
-      type         = lookup(disk.value, "disk_type", null) == "local-ssd" ? "SCRATCH" : "PERSISTENT"
-      labels       = lookup(disk.value, "disk_type", null) == "local-ssd" ? null : lookup(disk.value, "disk_labels", null)
-
-      dynamic "disk_encryption_key" {
-        for_each = compact([var.disk_encryption_key == null ? null : 1])
-        content {
-          kms_key_self_link = var.disk_encryption_key
-        }
-      }
+      type         = disk.value.disk_type == "local-ssd" ? "SCRATCH" : "PERSISTENT"
+      labels       = disk.value.disk_type == "local-ssd" ? null : merge(disk.value.disk_labels, var.disks_labels)
     }
   }
 
@@ -181,7 +151,11 @@ resource "google_compute_instance_template" "tpl" {
   }
 
   dynamic "shielded_instance_config" {
-    for_each = local.shielded_vm_configs
+    # NOTE: Even if all the shielded_instance_config or confidential_instance_config
+    # values are false, if the config block exists and an unsupported image is chosen,
+    # the apply will fail so we use a single-value array with the default value to
+    # initialize the block only if it is enabled.
+    for_each = var.enable_shielded_vm ? [true] : []
     content {
       enable_secure_boot          = lookup(var.shielded_instance_config, "enable_secure_boot", shielded_instance_config.value)
       enable_vtpm                 = lookup(var.shielded_instance_config, "enable_vtpm", shielded_instance_config.value)

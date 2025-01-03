@@ -45,9 +45,7 @@ module "slurm_login_template" {
   region                   = each.value.region
   service_account          = each.value.service_account
   shielded_instance_config = each.value.shielded_instance_config
-  source_image_family      = each.value.source_image_family
-  source_image_project     = each.value.source_image_project
-  source_image             = each.value.source_image
+  instance_image           = each.value.instance_image
   spot                     = each.value.spot
   subnetwork               = each.value.subnetwork
   tags                     = concat([local.slurm_cluster_name], each.value.tags)

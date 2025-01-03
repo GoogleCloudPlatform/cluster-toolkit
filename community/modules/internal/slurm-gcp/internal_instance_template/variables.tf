@@ -104,57 +104,10 @@ variable "threads_per_core" {
 #######
 # disk
 #######
-variable "source_image" {
-  description = "Source disk image. If neither source_image nor source_image_family is specified, defaults to the latest public CentOS image."
-  type        = string
-  default     = ""
-}
-
-variable "source_image_family" {
-  description = "Source image family. If neither source_image nor source_image_family is specified, defaults to the latest public CentOS image."
-  type        = string
-  default     = "centos-7"
-}
-
-variable "source_image_project" {
-  description = "Project where the source image comes from. The default project contains CentOS images."
-  type        = string
-  default     = "centos-cloud"
-}
-
-variable "disk_size_gb" {
-  description = "Boot disk size in GB"
-  type        = string
-  default     = "100"
-}
-
-variable "disk_type" {
-  description = "Boot disk type, can be either pd-ssd, local-ssd, or pd-standard"
-  type        = string
-  default     = "pd-standard"
-}
-
-variable "disk_labels" {
-  description = "Labels to be assigned to boot disk, provided as a map"
-  type        = map(string)
-  default     = {}
-}
-
-variable "disk_encryption_key" {
-  description = "The id of the encryption key that is stored in Google Cloud KMS to use to encrypt all the disks on this instance"
-  type        = string
-  default     = null
-}
-
-variable "auto_delete" {
-  description = "Whether or not the boot disk should be auto-deleted"
-  type        = string
-  default     = "true"
-}
-
-variable "additional_disks" {
+variable "disks" {
   description = "List of maps of additional disks. See https://www.terraform.io/docs/providers/google/r/compute_instance_template#disk_name"
   type = list(object({
+    source_image = optional(string)
     disk_name    = string
     device_name  = string
     auto_delete  = bool
@@ -163,7 +116,12 @@ variable "additional_disks" {
     disk_type    = string
     disk_labels  = map(string)
   }))
-  default = []
+}
+
+variable "disks_labels" {
+  description = "Labels to be added to all disk."
+  type        = map(string)
+  default     = {}
 }
 
 ####################
