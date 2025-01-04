@@ -1,0 +1,230 @@
+# Copyright 2024 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+# See instructions at
+# https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/examples#image-custom-slurmyaml-
+
+blueprint_name: image-custom-slurm
+
+vars:
+  project_id: wns-gsk-hpc # ## Set GCP Project ID Here ##
+  deployment_name: image-custom-slurm-001
+  region: us-central1
+  zone: us-central1-c
+  # Image settings
+  base_image:
+    project: rhel-cloud
+    family: rhel-9
+  image_build_machine_type: n2-standard-16
+  build_slurm_from_git_ref: 6.8.6
+  intermediary_image:
+    family: base-image-updated
+  custom_image:
+    family: my-slurm-image
+    project: $(vars.project_id)
+  disk_size_gb: 32
+
+# Documentation for each of the modules used below can be found at
+# https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: slurm-image-network
+    source: modules/network/vpc
+
+  - id: imagebuilder_sa
+    source: community/modules/project/service-account
+    settings:
+      name: builder
+      display_name: image builder
+      project_roles:
+      - compute.instanceAdmin.v1
+      - iam.serviceAccountUser
+      - logging.logWriter
+      - monitoring.metricWriter
+      - storage.objectViewer
+
+  - id: prepare-image
+    source: modules/scripts/startup-script
+    settings:
+      install_ansible: true
+      runners:
+      - type: ansible-local
+        destination: update_os.yml
+        content: |
+          ---
+          - name: Update all packages
+            hosts: all
+            become: true
+            gather_facts: true
+            tasks:
+            - name: Update all packages
+              ansible.builtin.package:
+                name: "*"
+                state: latest
+            - name: Install git
+              ansible.builtin.package:
+                name: git
+                state: latest
+            - name: Install bottle python package
+              ansible.builtin.pip:
+                name: selinux
+                executable: "{{ ansible_python.executable | dirname }}/pip3"
+
+  - id: build-image
+    source: modules/scripts/startup-script
+    settings:
+      runners:
+      - type: data
+        destination: /tmp/slurm_vars.json
+        content: |
+          {
+            "reboot": false,
+            "install_cuda": false,
+            "install_gcsfuse": true,
+            "install_lustre": false,
+            "install_ompi": false,
+            "update_kernel": false,
+            "monitoring_agent": "cloud-ops",
+          }
+
+      - type: shell
+        destination: install_slurm.sh
+        content: |
+          #!/bin/bash
+          set -e -o pipefail
+          ansible-pull \
+              -U https://github.com/GoogleCloudPlatform/slurm-gcp -C $(vars.build_slurm_from_git_ref) \
+              -i localhost, --limit localhost --connection=local \
+              -e @/tmp/slurm_vars.json \
+              ansible/playbook.yml
+
+# Create intermediary image with all packages updated, so slurm-gcp build
+# will run on current kernel and there will be no issues installing DKMS
+# modules. Hence, we can set `reboot` and `update_kernel` to false.
+- group: image-prepare
+  modules:
+  - id: base-image-updated
+    source: modules/packer/custom-image
+    kind: packer
+    settings:
+      disk_size: $(vars.disk_size_gb)
+      machine_type: $(vars.image_build_machine_type)
+      source_image_family: $(vars.base_image.family)
+      source_image_project_id: [$(vars.base_image.project)]
+      image_family: $(vars.intermediary_image.family)
+      service_account_email: $(imagebuilder_sa.service_account_email)
+      service_account_scopes: ["https://www.googleapis.com/auth/cloud-platform"]
+    use:
+    - slurm-image-network
+    - prepare-image
+
+- group: image
+  modules:
+  - id: slurm-image
+    source: modules/packer/custom-image
+    kind: packer
+    settings:
+      disk_size: $(vars.disk_size_gb)
+      machine_type: $(vars.image_build_machine_type)
+      source_image_family: $(vars.intermediary_image.family)
+      source_image_project_id: [$(vars.project_id)]
+      image_family: $(vars.custom_image.family)
+      service_account_email: $(imagebuilder_sa.service_account_email)
+      service_account_scopes: ["https://www.googleapis.com/auth/cloud-platform"]
+    use:
+    - slurm-image-network
+    - build-image
+
+- group: cluster
+  modules:
+  - id: controller_sa
+    source: community/modules/project/service-account
+    settings:
+      name: ctrlr
+      display_name: Slurm Controller
+      project_roles:
+      - compute.instanceAdmin.v1
+      - iam.serviceAccountUser
+      - logging.logWriter
+      - monitoring.metricWriter
+      - pubsub.admin
+      - storage.objectViewer
+
+  - id: login_sa
+    source: community/modules/project/service-account
+    settings:
+      name: login
+      display_name: Slurm Login
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
+      - storage.objectViewer
+      - storage.objectUser
+
+  - id: compute_sa
+    source: community/modules/project/service-account
+    settings:
+      name: compute
+      display_name: Slurm Compute
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
+      - storage.objectUser
+      - storage.objectViewer
+
+  - id: compute_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [slurm-image-network]
+    settings:
+      node_count_dynamic_max: 20
+      disk_size_gb: $(vars.disk_size_gb)
+      instance_image: $(vars.custom_image)
+      instance_image_custom: true
+      bandwidth_tier: gvnic_enabled
+      service_account_email: $(compute_sa.service_account_email)
+      service_account_scopes: ["https://www.googleapis.com/auth/cloud-platform"]
+
+  - id: compute_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use: [compute_nodeset]
+    settings:
+      partition_name: compute
+      is_default: true
+
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    use: [slurm-image-network]
+    settings:
+      disk_size_gb: $(vars.disk_size_gb)
+      instance_image: $(vars.custom_image)
+      instance_image_custom: true
+      service_account_email: $(login_sa.service_account_email)
+      service_account_scopes: ["https://www.googleapis.com/auth/cloud-platform"]
+
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    use:
+    - slurm-image-network
+    - compute_partition
+    - slurm_login
+    settings:
+      disk_size_gb: $(vars.disk_size_gb)
+      instance_image: $(vars.custom_image)
+      instance_image_custom: true
+      service_account_email: $(controller_sa.service_account_email)
+      service_account_scopes: ["https://www.googleapis.com/auth/cloud-platform"]

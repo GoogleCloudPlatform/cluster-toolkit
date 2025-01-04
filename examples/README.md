@@ -29,6 +29,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [ml-slurm.yaml](#ml-slurmyaml-) ![core-badge]
   * [image-builder-v5-legacy.yaml](#image-builder-v5-legacyyaml--) ![core-badge] ![deprecated-badge]
   * [image-builder.yaml](#image-builderyaml-) ![core-badge]
+  * [image-custom-slurm.yaml](#image-custom-slurmyaml) ![community-badge]
   * [serverless-batch.yaml](#serverless-batchyaml-) ![core-badge]
   * [serverless-batch-mpi.yaml](#serverless-batch-mpiyaml-) ![core-badge]
   * [pfs-lustre.yaml](#pfs-lustreyaml-) ![core-badge]
@@ -670,7 +671,7 @@ Create the deployment folder from the blueprint:
 
 ```text
 ./gcluster create examples/image-builder-v5-legacy.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
-./gcluster deploy image-builder-001"
+./gcluster deploy image-builder-001
 ```
 
 Follow the on-screen prompts to approve the creation of each deployment group.
@@ -795,7 +796,7 @@ Create the deployment folder from the blueprint:
 
 ```text
 ./gcluster create examples/image-builder.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
-./gcluster deploy image-builder-v6-001"
+./gcluster deploy image-builder-v6-001
 ```
 
 Follow the on-screen prompts to approve the creation of each deployment group.
@@ -880,6 +881,89 @@ partition is using the custom image. Each compute node should contain the
   Hello World
   Hello World
   ```
+
+#### Quota Requirements for image-builder.yaml
+
+For this example the following is needed in the selected region:
+
+* Compute Engine API: Images (global, not regional quota): 1 image per invocation of `packer build`
+* Compute Engine API: Persistent Disk SSD (GB): **~50 GB**
+* Compute Engine API: Persistent Disk Standard (GB): **~64 GB static + 32
+  GB/node** up to 704 GB
+* Compute Engine API: N2 CPUs: **4** (for short-lived Packer VM and Slurm login node)
+* Compute Engine API: C2 CPUs: **4** for controller node and **60/node** active
+  in `compute` partition up to 1,204
+* Compute Engine API: Affinity Groups: **one for each job in parallel** - _only
+  needed for `compute` partition_
+* Compute Engine API: Resource policies: **one for each job in parallel** -
+  _only needed for `compute` partition_
+
+### [image-custom-slurm.yaml] ![community-badge]
+
+This blueprint uses the [Packer template module][pkr] to create a custom VM
+image and uses it to provision an HPC cluster using the Slurm scheduler. It
+is variation of [image-builder.yaml] blueprint that allows building on top
+of different base image (for example - on top of RedHat Enterprise Linux).
+
+It differs from [image-builder.yaml] in following aspects:
+1. Creates intermediary image with updated packages(see
+   [Intermediary Image](#intermediary-image-deployment-group-2)).
+2. Runs [slurm-gcp] Ansible
+   playbooks (see [Custom Image](#custom-image-deployment-group-3).
+
+#### Building and using the custom image
+
+Create the deployment folder from the blueprint:
+
+```text
+./gcluster create examples/image-custom-slurm.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
+./gcluster deploy image-custom-slurm-001
+```
+
+Follow the on-screen prompts to approve the creation of each deployment group.
+For example, the network is created in the first deployment group, the VM image
+is created in the second group and third group, and the fourth group uses the
+image to create an HPC cluster using the Slurm scheduler.
+
+When you are done, clean up the resources in reverse order of creation:
+
+```text
+terraform -chdir=image-custom-slurm-001/cluster destroy --auto-approve
+terraform -chdir=image-custom-slurm-001/primary destroy --auto-approve
+```
+
+Finally, browse to the [Cloud Console][console-images] to delete your custom
+image. It will be named beginning with `my-slurm-image` and `base-image-updated`
+followed by a date and timestamp for uniqueness.
+
+[console-images]: https://console.cloud.google.com/compute/images
+
+#### Why use different base image?
+
+This targeted to the users that are obliged to use their organization provided
+images for the Compute Engine images. The base image has to have
+[Google Guest Environment] installed and have [Guest OS Features] enabled that
+match your use case.
+
+[image-custom-slurm.yaml]: ./image-custom-slurm.yaml
+[slurm-gcp]: https://github.com/GoogleCloudPlatform/slurm-gcp
+[Google Guest Environment]: https://cloud.google.com/compute/docs/images/install-guest-environment#installing_guest_environment
+[Guest OS Features]: https://cloud.google.com/compute/docs/images/create-custom#guest-os-features
+
+#### Intermediary image (deployment group 2)
+
+The Packer module uses the startup-script module from the first deployment group
+and executes the script to produce an intermediary image with all the packages
+updated and installs [git](https://git-scm.com/), which is required to run the
+[slurm-gcp] Ansible playbooks.
+
+This step is necessary to ensure that [slurm-gcp] playbooks is run with current
+kernel version.
+
+#### Custom image (deployment group 3)
+The Packer module uses the startup-script module from the first deployment group
+and executes the script to produce a final image with [slurm-gcp] installed.
+This script can be further extended to add customizations as required.
 
 #### Quota Requirements for image-builder.yaml
 
