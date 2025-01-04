@@ -17,6 +17,7 @@ import shutil
 import os
 import subprocess
 import yaml
+import uuid
 
 class Deployment:
     def __init__(self, blueprint: str):
@@ -37,7 +38,6 @@ class Deployment:
     def parse_blueprint(self, file_path: str):
         with open(file_path, 'r') as file:
             content = yaml.safe_load(file)
-        self.deployment_name = content["vars"]["deployment_name"]
         self.zone = content["vars"]["zone"]
 
     def get_posixAccount_info(self):
@@ -50,8 +50,16 @@ class Deployment:
                 self.project_id = account['accountId']
                 self.username = account['username']
 
+    def generate_uniq_deployment_name(self):
+        BUILD_ID = os.environ.get('BUILD_ID')
+        if BUILD_ID:
+            return BUILD_ID[:6]
+        else:
+            return str(uuid.uuid4())[:6]
+
     def set_deployment_variables(self):
         self.workspace = os.path.abspath(os.getcwd().strip())
+        self.deployment_name = self.generate_uniq_deployment_name()
         self.parse_blueprint(self.blueprint_yaml)
         self.get_posixAccount_info()
         self.instance_name = self.deployment_name.replace("-", "")[:10] + "-slurm-login-001"

@@ -17,7 +17,7 @@ blueprint_name: topology-test
 
 vars:
   project_id: ## Set GCP Project ID Here ##
-  deployment_name: topology-test
+  deployment_name: ## Set Deployment Name Here ##
   region: us-central1
   zone: us-central1-a
 
