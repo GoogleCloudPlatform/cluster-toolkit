@@ -195,7 +195,7 @@ If the largest partition was 200 nodes, configure the blueprint as follows:
 
 ```yaml
   - id: slurm_controller
-    source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     ...
     settings:
       cloud_parameters:
@@ -205,13 +205,6 @@ If the largest partition was 200 nodes, configure the blueprint as follows:
 The default has been set to 128. Values above this have not been fully tested
 and may cause congestion on the controller. A more scalable solution is under
 way.
-
-## Hybrid Slurm Clusters
-For more information on how to configure an on premise slurm cluster with hybrid
-cloud partitions, see the [schedmd-slurm-gcp-v5-hybrid] module and our
-extended instructions in our [docs](../../../../docs/hybrid-slurm-cluster/).
-
-[schedmd-slurm-gcp-v5-hybrid]: ../schedmd-slurm-gcp-v5-hybrid/README.md
 
 ## Support
 The Cluster Toolkit team maintains the wrapper around the [slurm-on-gcp] terraform
