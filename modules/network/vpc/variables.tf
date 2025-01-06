@@ -228,6 +228,18 @@ variable "enable_internal_traffic" {
   default     = true
 }
 
+variable "enable_cloud_router" {
+  type        = bool
+  description = "Enable the creation of a Cloud Router for your VPC. For more information on Cloud Routers see https://cloud.google.com/network-connectivity/docs/router/concepts/overview"
+  default     = true
+}
+
+variable "enable_cloud_nat" {
+  type        = bool
+  description = "Enable the creation of Cloud NATs."
+  default     = true
+}
+
 variable "extra_iap_ports" {
   type        = list(string)
   description = "A list of TCP ports for which to create firewall rules that enable IAP for TCP forwarding (use dedicated enable_iap variables for standard ports)"
