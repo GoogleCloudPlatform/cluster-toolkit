@@ -15,27 +15,45 @@
 blueprint_name: a3u-gke-gcs
 
 vars:
-  project_id: # Insert GCP project
-  deployment_name: # Unique name of this cluster, like a3u-gke-gcs
-  region: # Region, e.g. europe-west1
-  zone: # Zone, e.g. europe-west1-b
+  # The following variables should be over-written in the deployment.yaml file.
+  # Your GCP Project ID
+  project_id:
 
-  # Cidr block containing the IP of the machine calling terraform and kubectl
-  # The value can be more specific if the IPs are known which will run kubectl
-  # e.g. the local system running Terraform or a remote node
-  authorized_cidr: 0.0.0.0/0
-  extended_reservation:  # Reservation name, e.g. <project>/<reservation-name>/reservationBlocks/<reservation-block-name>
+  # This should be unique across all of your Cluster
+  # Toolkit Deployments.
+  deployment_name: a3u-gke-gcs
 
+  # The GCP Region used for this deployment.
+  region:
+
+  # The GCP Zone used for this deployment.
+  zone:
+
+  # The number of nodes to be created
+  static_node_count:
+
+  # Number of H200 GPUs (for later use by Kueue), which
+  # This should be 8 x static_node_count.
+  num_gpus:
+
+  # Cidr block containing the IP of the machine calling terraform.
+  # To allow all (IAM restrictions still enforced), use 0.0.0.0/0
+  # To allow only your IP address, use <YOUR-IP-ADDRESS>/32
+  authorized_cidr:
+
+  # The name of the compute engine reservation of A3-Ultra nodes in the form of
+  # <project>/<reservation-name>/reservationBlocks/<reservation-block-name>
+  extended_reservation:
+
+  # The name of the GCS bucket used for training data
+  training_bucket_name:
+
+  # The following variables do not need to be modified
   nccl_installer_path: $(ghpc_stage("./nccl-rdma-installer.yaml"))
   mtu_size: 8896
-  static_node_count: # Number of A3-Ultra nodes, e.g. 2
-  # Number of H200 GPUs (for later use by Kueue), which
-  # should be 8 x `static_node_count`
-  num_gpus:
-  training_bucket_name: # Name of bucket that holds training data
-  checkpoint_bucket_name: # Name of bucket used for checkpoints
   system_node_pool_disk_size_gb: 200
   a3ultra_node_pool_disk_size_gb: 100
+
 
 deployment_groups:
 - group: primary
@@ -68,7 +86,7 @@ deployment_groups:
         subnet_ip: 192.168.64.0/18
 
   - id: gke-a3-ultra-rdma-net
-    source: github.com/GoogleCloudPlatform/cluster-toolkit.git//community/modules/network/rdma-vpc?ref=98c49fe
+    source: github.com/GoogleCloudPlatform/cluster-toolkit.git//community/modules/network/rdma-vpc
     settings:
       network_name: $(vars.deployment_name)-rdma-net
       mtu: $(vars.mtu_size)
@@ -81,7 +99,7 @@ deployment_groups:
         region: $(vars.region)
 
   - id: a3-ultragpu-cluster
-    source: github.com/GoogleCloudPlatform/cluster-toolkit.git//modules/scheduler/gke-cluster?ref=e0c690b
+    source: github.com/GoogleCloudPlatform/cluster-toolkit.git//modules/scheduler/gke-cluster
     use: [gke-a3-ultra-net-0]
     settings:
       release_channel: RAPID
@@ -118,7 +136,7 @@ deployment_groups:
     outputs: [instructions]
 
   - id: a3-ultragpu-pool
-    source: github.com/GoogleCloudPlatform/cluster-toolkit.git//modules/compute/gke-node-pool?ref=e0c690b
+    source: github.com/GoogleCloudPlatform/cluster-toolkit.git//modules/compute/gke-node-pool
     use: [a3-ultragpu-cluster]
     settings:
       machine_type: a3-ultragpu-8g
@@ -155,17 +173,17 @@ deployment_groups:
     outputs: [instructions]
 
   - id: topology-aware-scheduler-install
-    source: github.com/GoogleCloudPlatform/cluster-toolkit.git//community/modules/compute/gke-topology-scheduler?ref=e0c690b
+    source: github.com/GoogleCloudPlatform/cluster-toolkit.git//community/modules/compute/gke-topology-scheduler
     use: [a3-ultragpu-cluster]
 
   # Install Kueue, Jobset, and NCCL installer
   - id: workload-manager-install
-    source: github.com/GoogleCloudPlatform/cluster-toolkit.git//modules/management/kubectl-apply?ref=e0c690b
+    source: github.com/GoogleCloudPlatform/cluster-toolkit.git//modules/management/kubectl-apply
     use: [a3-ultragpu-cluster]
     settings:
       kueue:
         install: true
-        version: v0.9.1
+        version: v0.10.0
         config_path: $(ghpc_stage("kueue-configuration.yaml.tftpl"))
         config_template_vars:
           num_gpus: $(vars.num_gpus)
@@ -233,6 +251,11 @@ deployment_groups:
     source: modules/compute/gke-job-template
     use: [checkpointing-pv, training-pv, a3-ultragpu-pool]
     settings:
+
+      # By adding an ephemeral volume, this will ensure that the job adds:
+      # nodeSelector:
+      #   cloud.google.com/gke-ephemeral-storage-local-ssd: "true"
+      # which is the best practice for using local-ssd for ephemeral storage.
       ephemeral_volumes:
       - type: local-ssd
         mount_path: /scratch-data
@@ -291,6 +314,6 @@ deployment_groups:
           --name=checkpoint --blocksize=100m --iodepth=64 --readwrite=read
 
         # Clean up temporary directories for fio benchmarks
-        rm -rf /{scratch-training,checkpoint}-data/fio-benchmarks-${TAG}
+        rm -rf /{scratch,training,checkpoint}-data/fio-benchmarks-${TAG}
 
     outputs: [instructions]

@@ -1,28 +1,59 @@
----
-apiVersion: kueue.x-k8s.io/v1beta1
-kind: ResourceFlavor
+# Copyright 2024 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+apiVersion: kueue.x-k8s.io/v1alpha1
+kind: Topology
 metadata:
-  name: "default-flavor"
+  name: "gke-default"
+spec:
+  levels:
+  - nodeLabel: "cloud.google.com/gce-topology-block"
+  - nodeLabel: "cloud.google.com/gce-topology-subblock"
+  - nodeLabel: "cloud.google.com/gce-topology-host"
+  - nodeLabel: "kubernetes.io/hostname"
+---
+kind: ResourceFlavor
+apiVersion: kueue.x-k8s.io/v1beta1
+metadata:
+  name: "a3u"
+spec:
+  nodeLabels:
+    cloud.google.com/gke-nodepool: "a3-ultragpu-8g-a3-ultragpu-pool"
+  topologyName: "gke-default"
+  tolerations:
+  - key: "nvidia.com/gpu"
+    operator: "Exists"
+    effect: NoSchedule
 ---
 apiVersion: kueue.x-k8s.io/v1beta1
 kind: ClusterQueue
 metadata:
-  name: "cluster-queue"
+  name: "a3u"
 spec:
-  namespaceSelector: {}
+  namespaceSelector: {} # match all.
   resourceGroups:
   - coveredResources: ["nvidia.com/gpu"]
     flavors:
-    - name: "default-flavor"
+    - name: "a3u"
       resources:
       - name: "nvidia.com/gpu"
         nominalQuota: ${num_gpus}
-
 ---
 apiVersion: kueue.x-k8s.io/v1beta1
 kind: LocalQueue
 metadata:
   namespace: "default"
-  name: "local-queue"
+  name: "a3u"
 spec:
-  clusterQueue: "cluster-queue"
+  clusterQueue: "a3u"

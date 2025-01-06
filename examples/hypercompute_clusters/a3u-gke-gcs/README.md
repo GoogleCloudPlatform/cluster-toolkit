@@ -13,7 +13,7 @@ Storage (GCS).
   Storage Fuse is configured to utilize the 12 TB of Local SSD
 * **Hierarchical Namespace Buckets:** Leverages GCS buckets with Hierarchical
   Namespace enabled, optimizing performance for checkpointing and restarting
-  workloads.
+  workloads. (Requires GKE 1.31 or later).
 * **Kueue for Workload Scheduling:** Provides a robust and flexible system for
   managing your AI/ML training jobs.
 * **Jobset API for Tightly Coupled Workloads:** Facilitates running tightly
