@@ -24,6 +24,23 @@ vars:
   region: us-central1
   zone: us-central1-c
 
+terraform_providers:
+  google:
+    source: hashicorp/google
+    version: 5.45.0
+    configuration:
+      project: $(vars.project_id)
+      region: $(vars.region)
+      zone: $(vars.zone)
+
+  google-beta:
+    source: hashicorp/google-beta
+    version: 5.45.0
+    configuration:
+      project: $(vars.project_id)
+      region: $(vars.region)
+      zone: $(vars.zone)
+
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
 
