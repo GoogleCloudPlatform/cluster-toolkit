@@ -1,4 +1,5 @@
-# Copyright 2024 Google LLC
+#!/bin/bash
+# Copyright 2024 "Google LLC"
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,19 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
----
-terraform_backend_defaults:
-  type: gcs
-  configuration:
-    bucket: BUCKET_NAME
-
-vars:
-  deployment_name: gke-a3-ultra
-  project_id: PROJECT_ID
-  region: COMPUTE_REGION
-  zone: COMPUTE_ZONE
-  authorized_cidr: <IP_ADDRESS>/<SUFFIX>
-  # In order to not target a BLOCK_NAME, extended_reservation can be inputted as
-  # extended_reservation: RESERVATION_NAME
-  extended_reservation: RESERVATION_NAME/reservationBlocks/BLOCK_NAME
-  static_node_count: NODE_COUNT
+# This creates a file named "nvidia+pytorch+24.09-py3.sqsh", which
+# uses ~18 GB of disk space. This should be run on a filesystem that
+# can be seen by all worker nodes
+enroot import docker://nvcr.io#nvidia/pytorch:24.09-py3
