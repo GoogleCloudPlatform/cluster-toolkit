@@ -28,6 +28,23 @@ vars:
   network_name: compute-vpc-network
   subnetwork_name: primary-subnet
 
+terraform_providers:
+  google:
+    source: hashicorp/google
+    version: 5.45.0
+    configuration:
+      project: $(vars.project_id)
+      region: $(vars.region)
+      zone: $(vars.zone)
+
+  google-beta:
+    source: hashicorp/google-beta
+    version: 5.45.0
+    configuration:
+      project: $(vars.project_id)
+      region: $(vars.region)
+      zone: $(vars.zone)
+
 deployment_groups:
 # Uncomment the below section if network used for bursting has not been created
 # - group: create_network
