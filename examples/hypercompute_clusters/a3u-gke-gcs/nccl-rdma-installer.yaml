@@ -70,7 +70,7 @@ spec:
           sysctl -w net.ipv4.conf.eth7.log_martians=0
           sysctl -w net.ipv4.conf.eth8.log_martians=0
           sysctl -w net.ipv4.conf.eth9.log_martians=0
-      - image: us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib:v1.0.2
+      - image: us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib:v1.0.3
         name: nccl-rdma-installer
         resources:
           requests:
