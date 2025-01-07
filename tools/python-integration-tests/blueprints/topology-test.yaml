@@ -13,7 +13,7 @@
 # limitations under the License.
 
 ---
-blueprint_name: topology-test
+blueprint_name: topology
 
 vars:
   project_id: ## Set GCP Project ID Here ##

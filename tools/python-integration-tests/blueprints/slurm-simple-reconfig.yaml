@@ -13,7 +13,7 @@
 # limitations under the License.
 
 ---
-blueprint_name: slurm-test
+blueprint_name: slurm-simple
 
 vars:
   project_id: ## Set GCP Project ID Here ##
