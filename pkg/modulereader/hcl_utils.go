@@ -15,6 +15,7 @@
 package modulereader
 
 import (
+	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/sourcereader"
@@ -136,7 +137,7 @@ func ReadHclAttributes(file string) (map[string]cty.Value, error) {
 		// work around ugly <nil> in error message missing d.Subject
 		// https://github.com/hashicorp/hcl2/blob/fb75b3253c80b3bc7ca99c4bfa2ad6743841b1af/hcl/diagnostic.go#L76-L78
 		if len(diags) == 1 {
-			return nil, fmt.Errorf(diags[0].Detail)
+			return nil, errors.New(diags[0].Detail)
 		}
 		return nil, diags
 	}

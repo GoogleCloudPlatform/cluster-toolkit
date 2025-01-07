@@ -1,4 +1,4 @@
-# Copyright 2024 Google LLC
+# Copyright 2024 "Google LLC"
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,15 +16,15 @@
 terraform_backend_defaults:
   type: gcs
   configuration:
-    bucket: BUCKET_NAME
+    bucket: gke-a3u-manual-test
 
 vars:
   deployment_name: gke-a3-ultra
-  project_id: PROJECT_ID
-  region: COMPUTE_REGION
-  zone: COMPUTE_ZONE
-  authorized_cidr: <IP_ADDRESS>/<SUFFIX>
+  project_id: hpc-toolkit-dev
+  region: europe-west1
+  zone: europe-west1-b
+  authorized_cidr: 0.0.0.0/0
   # In order to not target a BLOCK_NAME, extended_reservation can be inputted as
   # extended_reservation: RESERVATION_NAME
-  extended_reservation: RESERVATION_NAME/reservationBlocks/BLOCK_NAME
-  static_node_count: NODE_COUNT
+  extended_reservation: slurm-dev-gcp-a3u-gsc
+  static_node_count: 0

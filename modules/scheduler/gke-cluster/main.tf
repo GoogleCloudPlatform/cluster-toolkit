@@ -20,6 +20,14 @@ locals {
 }
 
 locals {
+  upgrade_settings = {
+    strategy        = var.upgrade_settings.strategy
+    max_surge       = coalesce(var.upgrade_settings.max_surge, 0)
+    max_unavailable = coalesce(var.upgrade_settings.max_unavailable, 1)
+  }
+}
+
+locals {
   dash             = var.prefix_with_deployment_name && var.name_suffix != "" ? "-" : ""
   prefix           = var.prefix_with_deployment_name ? var.deployment_name : ""
   name_maybe_empty = "${local.prefix}${local.dash}${var.name_suffix}"
@@ -72,8 +80,7 @@ resource "google_container_cluster" "gke_cluster" {
   remove_default_node_pool = true
   initial_node_count       = 1 # must be set when remove_default_node_pool is set
 
-  # Sets default to false so terraform deletion is not prevented
-  deletion_protection = false
+  deletion_protection = var.deletion_protection
 
   network    = var.network_id
   subnetwork = var.subnetwork_self_link
@@ -244,8 +251,9 @@ resource "google_container_node_pool" "system_node_pools" {
   }
 
   upgrade_settings {
-    max_surge       = 1
-    max_unavailable = 0
+    strategy        = local.upgrade_settings.strategy
+    max_surge       = local.upgrade_settings.max_surge
+    max_unavailable = local.upgrade_settings.max_unavailable
   }
 
   management {
@@ -305,6 +313,22 @@ resource "google_container_node_pool" "system_node_pools" {
       node_config[0].labels,
       node_config[0].taint,
     ]
+    precondition {
+      condition     = contains(["SURGE"], local.upgrade_settings.strategy)
+      error_message = "Only SURGE strategy is supported"
+    }
+    precondition {
+      condition     = local.upgrade_settings.max_unavailable >= 0
+      error_message = "max_unavailable should be set to 0 or greater"
+    }
+    precondition {
+      condition     = local.upgrade_settings.max_surge >= 0
+      error_message = "max_surge should be set to 0 or greater"
+    }
+    precondition {
+      condition     = local.upgrade_settings.max_unavailable > 0 || local.upgrade_settings.max_surge > 0
+      error_message = "At least one of max_unavailable or max_surge must greater than 0"
+    }
   }
 }
 
@@ -337,8 +361,7 @@ module "workload_identity" {
 module "kubectl_apply" {
   source = "../../management/kubectl-apply"
 
-  cluster_id = google_container_cluster.gke_cluster.id
-  project_id = var.project_id
+  gke_cluster_exists = true
 
   apply_manifests = flatten([
     for idx, network_info in var.additional_networks : [
@@ -357,4 +380,6 @@ module "kubectl_apply" {
       }
     ]
   ])
+
+  depends_on = [google_container_cluster.gke_cluster]
 }

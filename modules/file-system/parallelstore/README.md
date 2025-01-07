@@ -94,6 +94,30 @@ Here you can replace `import_gcs_bucket_uri` with the uri of sub folder within G
 bucket and `import_destination_path` with local directory within parallelstore
 instance.
 
+### Additional configuration for DAOS agent and dfuse
+Use `daos_agent_config` to provide additional configuration for `daos_agent`, for example:
+
+```yaml
+- id: parallelstorefs
+  source: modules/file-system/pre-existing-network-storage
+  settings:
+    daos_agent_config: |
+      credential_config:
+        cache_expiration: 1m
+```
+
+Use `dfuse_environment` to provide additional environment variables for `dfuse` process, for example:
+
+```yaml
+- id: parallelstorefs
+  source: modules/file-system/parallelstore
+  settings:
+    dfuse_environment:
+      D_LOG_FILE: /tmp/client.log
+      D_APPEND_PID_TO_LOG: 1
+      D_LOG_MASK: debug
+```
+
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 Copyright 2024 Google LLC
 
@@ -114,7 +138,7 @@ limitations under the License.
 | Name | Version |
 |------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 0.13 |
-| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 5.25.0 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.13.0 |
 | <a name="requirement_null"></a> [null](#requirement\_null) | ~> 3.0 |
 | <a name="requirement_random"></a> [random](#requirement\_random) | ~> 3.0 |
 
@@ -122,7 +146,7 @@ limitations under the License.
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 5.25.0 |
+| <a name="provider_google"></a> [google](#provider\_google) | >= 6.13.0 |
 | <a name="provider_null"></a> [null](#provider\_null) | ~> 3.0 |
 | <a name="provider_random"></a> [random](#provider\_random) | ~> 3.0 |
 
@@ -134,7 +158,7 @@ No modules.
 
 | Name | Type |
 |------|------|
-| [google-beta_google_parallelstore_instance.instance](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_parallelstore_instance) | resource |
+| [google_parallelstore_instance.instance](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/parallelstore_instance) | resource |
 | [null_resource.hydration](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
 | [random_id.resource_name_suffix](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/id) | resource |
 
@@ -142,7 +166,11 @@ No modules.
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
+| <a name="input_daos_agent_config"></a> [daos\_agent\_config](#input\_daos\_agent\_config) | Additional configuration to be added to daos\_config.yml | `string` | `""` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the HPC deployment. | `string` | n/a | yes |
+| <a name="input_dfuse_environment"></a> [dfuse\_environment](#input\_dfuse\_environment) | Additional environment variables for DFuse process | `map(string)` | `{}` | no |
+| <a name="input_directory_stripe"></a> [directory\_stripe](#input\_directory\_stripe) | The parallelstore stripe level for directories. | `string` | `null` | no |
+| <a name="input_file_stripe"></a> [file\_stripe](#input\_file\_stripe) | The parallelstore stripe level for files. | `string` | `null` | no |
 | <a name="input_import_destination_path"></a> [import\_destination\_path](#input\_import\_destination\_path) | The name of local path to import data on parallelstore instance from GCS bucket. | `string` | `null` | no |
 | <a name="input_import_gcs_bucket_uri"></a> [import\_gcs\_bucket\_uri](#input\_import\_gcs\_bucket\_uri) | The name of the GCS bucket to import data from to parallelstore. | `string` | `null` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to parallel store instance. | `map(string)` | `{}` | no |

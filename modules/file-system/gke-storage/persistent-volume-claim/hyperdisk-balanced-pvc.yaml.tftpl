@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ${pvc_name}
+  labels:
+  %{~ for key, val in labels ~}
+    ${key}: ${val}
+  %{~ endfor ~}
+spec:
+  accessModes:
+    - ${access_mode}
+  resources:
+    requests:
+      storage: ${capacity}
+  storageClassName: ${storage_class_name}

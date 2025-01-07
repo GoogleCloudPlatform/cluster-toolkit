@@ -6,7 +6,6 @@ metadata:
 data:
   schedule-daemon.py: |
     #!/usr/bin/env python
-    """schedule-daemon.py is a Topology-aware Kubernetes pod scheduler."""
 
     # Copyright 2024 Google Inc. All Rights Reserved.
     #
@@ -21,6 +20,7 @@ data:
     # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
     # See the License for the specific language governing permissions and
     # limitations under the License.
+    """schedule-daemon.py is a Topology-aware Kubernetes pod scheduler."""
 
     import argparse
     import collections
@@ -293,6 +293,16 @@ data:
           )
           continue
 
+        # skip nodes that is not in Ready state
+        if any(
+          condition.type == "Ready" and condition.status != "True" for condition in node.status.conditions
+          ):
+            logging.info(
+              'Skipping node %s because it is NotReady',
+              node_name
+            )
+            continue
+
         allocatable = node.status.allocatable
         used_cpu, used_memory, used_gpu = 0, 0, 0
 
@@ -445,7 +455,7 @@ data:
         v1: kubernetes.client.CoreV1Api,
         pod_name: str,
         pod_namespace: str,
-        node_name: str,
+        node: dict[str, Any],
         gate_name: str,
     ) -> bool:
       """Schedules a pod on a given node using affinity for direct assignment.
@@ -454,7 +464,7 @@ data:
         v1: The kubernetes client.
         pod_name: The name of the pod to schedule.
         pod_namespace: The namespace of the pod to schedule.
-        node_name: The name of the node to schedule the pod on.
+        node: The node to schedule the pod on.
         gate_name: The name of the gate to remove from the pod.
 
       Returns:
@@ -473,7 +483,7 @@ data:
                           'matchExpressions': [{
                               'key': 'kubernetes.io/hostname',
                               'operator': 'In',
-                              'values': [node_name],
+                              'values': [node['name']],
                           }]
                       }]
                   }
@@ -484,7 +494,7 @@ data:
           v1.replace_namespaced_pod(pod_name, pod_namespace, pod)
 
           logging.info(
-              'Pod %s/%s scheduled on %s', pod_namespace, pod_name, node_name
+              'Pod %s/%s scheduled on %s with topology %s', pod_namespace, pod_name, node['name'], node_topology_key(node)
           )
       except kubernetes.client.rest.ApiException as e:
         logging.exception(
@@ -727,7 +737,7 @@ data:
           for i, pod in enumerate(sorted_pods):
             node = sorted_nodes[best_assignment[i]]
             if not schedule_pod_on_node(
-                v1, pod['name'], pod['namespace'], node['name'], gate_name
+                v1, pod['name'], pod['namespace'], node, gate_name
             ):
               logging.error(
                   'Failed to schedule pod %s on node %s. Skipping job %s',

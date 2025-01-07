@@ -54,23 +54,7 @@ spec:
         hostPath:
           path: /home/kubernetes/bin/gib
       initContainers:
-      - name: disable-log-martian
-        image: alpine:latest
-        command: ["/bin/sh"]
-        securityContext:
-          privileged: true
-        args:
-        - -c
-        - |
-          sysctl -w net.ipv4.conf.gpu0rdma0.log_martians=0
-          sysctl -w net.ipv4.conf.gpu1rdma0.log_martians=0
-          sysctl -w net.ipv4.conf.gpu2rdma0.log_martians=0
-          sysctl -w net.ipv4.conf.gpu3rdma0.log_martians=0
-          sysctl -w net.ipv4.conf.gpu4rdma0.log_martians=0
-          sysctl -w net.ipv4.conf.gpu5rdma0.log_martians=0
-          sysctl -w net.ipv4.conf.gpu6rdma0.log_martians=0
-          sysctl -w net.ipv4.conf.gpu7rdma0.log_martians=0
-      - image: us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib:v1.0.3
+      - image: us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib:v1.0.2
         name: nccl-rdma-installer
         resources:
           requests:

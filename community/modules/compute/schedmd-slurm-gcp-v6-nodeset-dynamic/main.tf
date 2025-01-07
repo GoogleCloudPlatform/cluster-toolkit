@@ -17,7 +17,16 @@ locals {
   labels = merge(var.labels, { ghpc_module = "schedmd-slurm-gcp-v6-nodeset-dynamic", ghpc_role = "compute" })
 }
 
+module "gpu" {
+  source = "../../../../modules/internal/gpu-definition"
+
+  machine_type      = var.machine_type
+  guest_accelerator = var.guest_accelerator
+}
+
 locals {
+  guest_accelerator = module.gpu.guest_accelerator
+
   nodeset_name = substr(replace(var.name, "/[^a-z0-9]/", ""), 0, 14)
   feature      = coalesce(var.feature, local.nodeset_name)
 
@@ -56,7 +65,7 @@ locals {
 }
 
 module "slurm_nodeset_template" {
-  source = "../../internal/slurm-gcp-v6/instance_template"
+  source = "../../internal/slurm-gcp/instance_template"
 
   project_id          = var.project_id
   region              = var.region

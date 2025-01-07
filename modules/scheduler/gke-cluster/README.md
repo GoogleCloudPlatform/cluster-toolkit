@@ -145,6 +145,7 @@ limitations under the License.
 | <a name="input_cluster_reference_type"></a> [cluster\_reference\_type](#input\_cluster\_reference\_type) | How the google\_container\_node\_pool.system\_node\_pools refers to the cluster. Possible values are: {SELF\_LINK, NAME} | `string` | `"SELF_LINK"` | no |
 | <a name="input_configure_workload_identity_sa"></a> [configure\_workload\_identity\_sa](#input\_configure\_workload\_identity\_sa) | When true, a kubernetes service account will be created and bound using workload identity to the service account used to create the cluster. | `bool` | `false` | no |
 | <a name="input_default_max_pods_per_node"></a> [default\_max\_pods\_per\_node](#input\_default\_max\_pods\_per\_node) | The default maximum number of pods per node in this cluster. | `number` | `null` | no |
+| <a name="input_deletion_protection"></a> [deletion\_protection](#input\_deletion\_protection) | "Determines if the cluster can be deleted by gcluster commands or not".<br/>To delete a cluster provisioned with deletion\_protection set to true, you must first set it to false and apply the changes.<br/>Then proceed with deletion as usual. | `bool` | `false` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the HPC deployment. Used in the GKE cluster name by default and can be configured with `prefix_with_deployment_name`. | `string` | n/a | yes |
 | <a name="input_enable_dataplane_v2"></a> [enable\_dataplane\_v2](#input\_enable\_dataplane\_v2) | Enables [Dataplane v2](https://cloud.google.com/kubernetes-engine/docs/concepts/dataplane-v2). This setting is immutable on clusters. If null, will default to false unless using multi-networking, in which case it will default to true | `bool` | `null` | no |
 | <a name="input_enable_dcgm_monitoring"></a> [enable\_dcgm\_monitoring](#input\_enable\_dcgm\_monitoring) | Enable GKE to collect DCGM metrics | `bool` | `false` | no |
@@ -190,15 +191,19 @@ limitations under the License.
 | <a name="input_system_node_pool_taints"></a> [system\_node\_pool\_taints](#input\_system\_node\_pool\_taints) | Taints to be applied to the system node pool. | <pre>list(object({<br/>    key    = string<br/>    value  = any<br/>    effect = string<br/>  }))</pre> | <pre>[<br/>  {<br/>    "effect": "NO_SCHEDULE",<br/>    "key": "components.gke.io/gke-managed-components",<br/>    "value": true<br/>  }<br/>]</pre> | no |
 | <a name="input_timeout_create"></a> [timeout\_create](#input\_timeout\_create) | Timeout for creating a node pool | `string` | `null` | no |
 | <a name="input_timeout_update"></a> [timeout\_update](#input\_timeout\_update) | Timeout for updating a node pool | `string` | `null` | no |
+| <a name="input_upgrade_settings"></a> [upgrade\_settings](#input\_upgrade\_settings) | Defines gke cluster upgrade settings. It is highly recommended that you define all max\_surge and max\_unavailable.<br/>If max\_surge is not specified, it would be set to a default value of 0.<br/>If max\_unavailable is not specified, it would be set to a default value of 1. | <pre>object({<br/>    strategy        = string<br/>    max_surge       = optional(number)<br/>    max_unavailable = optional(number)<br/>  })</pre> | <pre>{<br/>  "max_surge": 0,<br/>  "max_unavailable": 1,<br/>  "strategy": "SURGE"<br/>}</pre> | no |
 | <a name="input_zone"></a> [zone](#input\_zone) | Zone for a zonal cluster. | `string` | `null` | no |
 
 ## Outputs
 
 | Name | Description |
 |------|-------------|
+| <a name="output_access_token"></a> [access\_token](#output\_access\_token) | Google client config access token. |
+| <a name="output_cluster_ca_certificate"></a> [cluster\_ca\_certificate](#output\_cluster\_ca\_certificate) | GKE cluster CA certificate. |
 | <a name="output_cluster_id"></a> [cluster\_id](#output\_cluster\_id) | An identifier for the resource with format projects/{{project\_id}}/locations/{{region}}/clusters/{{name}}. |
 | <a name="output_gke_cluster_exists"></a> [gke\_cluster\_exists](#output\_gke\_cluster\_exists) | A static flag that signals to downstream modules that a cluster has been created. Needed by community/modules/scripts/kubernetes-operations. |
 | <a name="output_gke_version"></a> [gke\_version](#output\_gke\_version) | GKE cluster's version. |
+| <a name="output_host_endpoint"></a> [host\_endpoint](#output\_host\_endpoint) | GKE cluster endpoint. |
 | <a name="output_instructions"></a> [instructions](#output\_instructions) | Instructions on how to connect to the created cluster. |
 | <a name="output_k8s_service_account_name"></a> [k8s\_service\_account\_name](#output\_k8s\_service\_account\_name) | Name of k8s service account. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

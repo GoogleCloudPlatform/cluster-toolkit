@@ -28,16 +28,31 @@ vars:
   nccl_installer_path: $(ghpc_stage("./nccl-installer.yaml"))
   # Temporary fix for COS issue, will be fixed in next release
   mglru_disable_path: $(ghpc_stage("./mglru-disable.yaml"))
-  mtu_size: 8896
   static_node_count:  # add this
   system_node_pool_disk_size_gb: 200
   a3ultra_node_pool_disk_size_gb: 100
+
+terraform_providers:
+  google:
+    source: hashicorp/google
+    version: 6.13.0
+    configuration:
+      project: $(vars.project_id)
+      region: $(vars.region)
+      zone: $(vars.zone)
+  google-beta:
+    source: hashicorp/google-beta
+    version: 6.13.0
+    configuration:
+      project: $(vars.project_id)
+      region: $(vars.region)
+      zone: $(vars.zone)
 
 deployment_groups:
 - group: primary
   modules:
   - id: gke-a3-ultra-net-0
-    source: github.com/GoogleCloudPlatform/cluster-toolkit.git//modules/network/vpc?ref=e17bb15
+    source: modules/network/vpc
     settings:
       network_name: $(vars.deployment_name)-net-0
       subnetworks:
@@ -62,10 +77,10 @@ deployment_groups:
         - protocol: icmp
 
   - id: gke-a3-ultra-net-1
-    source: github.com/GoogleCloudPlatform/cluster-toolkit.git//modules/network/vpc?ref=e17bb15
+    source: modules/network/vpc
     settings:
       network_name: $(vars.deployment_name)-net-1
-      mtu: $(vars.mtu_size)
+      mtu: 8896
       subnetworks:
       - subnet_name: $(vars.deployment_name)-sub-1
         subnet_region: $(vars.region)
@@ -81,10 +96,10 @@ deployment_groups:
         - protocol: icmp
 
   - id: gke-a3-ultra-rdma-net
-    source: github.com/GoogleCloudPlatform/cluster-toolkit.git//modules/network/gpu-rdma-vpc?ref=e17bb15
+    source: modules/network/gpu-rdma-vpc
     settings:
       network_name: $(vars.deployment_name)-rdma-net
-      mtu: $(vars.mtu_size)
+      mtu: 8896
       network_profile: https://www.googleapis.com/compute/beta/projects/$(vars.project_id)/global/networkProfiles/$(vars.zone)-vpc-roce
       network_routing_mode: REGIONAL
       subnetworks_template:
@@ -94,7 +109,7 @@ deployment_groups:
         region: $(vars.region)
 
   - id: a3-ultragpu-cluster
-    source: github.com/GoogleCloudPlatform/cluster-toolkit.git//modules/scheduler/gke-cluster?ref=e17bb15
+    source: modules/scheduler/gke-cluster
     use: [gke-a3-ultra-net-0]
     settings:
       release_channel: RAPID
@@ -131,7 +146,7 @@ deployment_groups:
     outputs: [instructions]
 
   - id: a3-ultragpu-pool
-    source: github.com/GoogleCloudPlatform/cluster-toolkit.git//modules/compute/gke-node-pool?ref=e17bb15
+    source: modules/compute/gke-node-pool
     use: [a3-ultragpu-cluster]
     settings:
       machine_type: a3-ultragpu-8g
@@ -168,11 +183,11 @@ deployment_groups:
     outputs: [instructions]
 
   - id: topology-aware-scheduler-install
-    source: github.com/GoogleCloudPlatform/cluster-toolkit.git//community/modules/compute/gke-topology-scheduler?ref=e17bb15
+    source: community/modules/compute/gke-topology-scheduler
     use: [a3-ultragpu-cluster]
 
   - id: workload-manager-install
-    source: github.com/GoogleCloudPlatform/cluster-toolkit.git//modules/management/kubectl-apply?ref=e17bb15
+    source: modules/management/kubectl-apply
     use: [a3-ultragpu-cluster]
     settings:
       kueue:
@@ -186,7 +201,7 @@ deployment_groups:
       - source: $(vars.mglru_disable_path)
 
   - id: job-template
-    source: github.com/GoogleCloudPlatform/cluster-toolkit.git//modules/compute/gke-job-template?ref=e17bb15
+    source: modules/compute/gke-job-template
     use: [a3-ultragpu-pool]
     settings:
       image: nvidia/cuda:11.0.3-runtime-ubuntu20.04

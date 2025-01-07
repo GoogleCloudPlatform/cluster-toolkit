@@ -64,7 +64,7 @@ spec:
       medium: "Memory"
       sizeLimit: 250Gi
   containers:
-  - image: us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib-diagnostic:v1.0.3
+  - image: us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib:v1.0.2
     name: test
     volumeMounts:
     - name: library-dir-host
@@ -120,7 +120,7 @@ spec:
       medium: "Memory"
       sizeLimit: 250Gi
   containers:
-  - image: us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib-diagnostic:v1.0.3
+  - image: us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib:v1.0.2
     name: test
     volumeMounts:
     - name: library-dir-host

@@ -19,7 +19,16 @@ locals {
   labels = merge(var.labels, { ghpc_module = "vm-instance", ghpc_role = "compute" })
 }
 
+module "gpu" {
+  source = "../../internal/gpu-definition"
+
+  machine_type      = var.machine_type
+  guest_accelerator = var.guest_accelerator
+}
+
 locals {
+  guest_accelerator = module.gpu.guest_accelerator
+
   native_fstype = []
   startup_script = local.startup_from_network_storage != null ? (
   { startup-script = local.startup_from_network_storage }) : {}

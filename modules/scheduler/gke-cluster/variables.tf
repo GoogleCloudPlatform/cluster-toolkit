@@ -397,3 +397,31 @@ variable "networking_mode" {
   type        = string
   default     = "VPC_NATIVE"
 }
+
+variable "deletion_protection" {
+  description = <<-EOT
+  "Determines if the cluster can be deleted by gcluster commands or not".
+  To delete a cluster provisioned with deletion_protection set to true, you must first set it to false and apply the changes.
+  Then proceed with deletion as usual.
+  EOT
+  type        = bool
+  default     = false
+}
+
+variable "upgrade_settings" {
+  description = <<-EOT
+  Defines gke cluster upgrade settings. It is highly recommended that you define all max_surge and max_unavailable.
+  If max_surge is not specified, it would be set to a default value of 0.
+  If max_unavailable is not specified, it would be set to a default value of 1.  
+  EOT
+  type = object({
+    strategy        = string
+    max_surge       = optional(number)
+    max_unavailable = optional(number)
+  })
+  default = {
+    strategy        = "SURGE"
+    max_surge       = 0
+    max_unavailable = 1
+  }
+}

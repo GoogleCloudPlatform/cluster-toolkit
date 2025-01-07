@@ -22,7 +22,6 @@ import re
 import sys
 import shlex
 from datetime import datetime, timedelta
-from enum import Enum
 from itertools import chain
 from pathlib import Path
 from dataclasses import dataclass
@@ -38,16 +37,14 @@ from util import (
     install_custom_scripts,
     run,
     separate,
-    to_hostlist_fast,
-    NSDict,
+    to_hostlist,
     NodeState,
-    TPU,
     chunked,
     dirs,
 )
 from util import lookup
 from suspend import delete_instances
-from resume import start_tpu
+import tpu
 import conf
 
 log = logging.getLogger()
@@ -65,28 +62,28 @@ class NodeAction(Protocol):
 @dataclass(frozen=True)
 class NodeActionPowerUp():
     def apply(self, nodes:List[str]) -> None:
-        hostlist = util.to_hostlist_fast(nodes)
+        hostlist = util.to_hostlist(nodes)
         log.info(f"{len(nodes)} instances to resume ({hostlist})")
         run(f"{lookup().scontrol} update nodename={hostlist} state=power_up")
 
 @dataclass(frozen=True)
 class NodeActionIdle():
     def apply(self, nodes:List[str]) -> None:
-        hostlist = util.to_hostlist_fast(nodes)
+        hostlist = util.to_hostlist(nodes)
         log.info(f"{len(nodes)} nodes to idle ({hostlist})")
         run(f"{lookup().scontrol} update nodename={hostlist} state=resume")
 
 @dataclass(frozen=True)
 class NodeActionPowerDown():
     def apply(self, nodes:List[str]) -> None:
-        hostlist = util.to_hostlist_fast(nodes)
+        hostlist = util.to_hostlist(nodes)
         log.info(f"{len(nodes)} instances to power down ({hostlist})")
         run(f"{lookup().scontrol} update nodename={hostlist} state=power_down")
 
 @dataclass(frozen=True)
 class NodeActionDelete():
     def apply(self, nodes:List[str]) -> None:
-        hostlist = util.to_hostlist_fast(nodes)
+        hostlist = util.to_hostlist(nodes)
         log.info(f"{len(nodes)} instances to delete ({hostlist})")
         delete_instances(nodes)
 
@@ -94,7 +91,7 @@ class NodeActionDelete():
 class NodeActionPrempt():
     def apply(self, nodes:List[str]) -> None:
         NodeActionDown(reason="Preempted instance").apply(nodes)
-        hostlist = util.to_hostlist_fast(nodes)
+        hostlist = util.to_hostlist(nodes)
         log.info(f"{len(nodes)} instances restarted ({hostlist})")
         start_instances(nodes)
 
@@ -108,7 +105,7 @@ class NodeActionDown():
     reason: str
 
     def apply(self, nodes: List[str]) -> None:
-        hostlist = util.to_hostlist_fast(nodes)
+        hostlist = util.to_hostlist(nodes)
         log.info(f"{len(nodes)} nodes set down ({hostlist}) with reason={self.reason}")
         run(f"{lookup().scontrol} update nodename={hostlist} state=down reason={shlex.quote(self.reason)}")
 
@@ -118,7 +115,7 @@ class NodeActionUnknown():
     instance_state: Optional[str]
 
     def apply(self, nodes:List[str]) -> None:
-        hostlist = util.to_hostlist_fast(nodes)    
+        hostlist = util.to_hostlist(nodes)    
         log.error(f"{len(nodes)} nodes have unexpected {self.slurm_state} and instance state:{self.instance_state}, ({hostlist})")
 
 def start_instance_op(inst):
@@ -131,18 +128,19 @@ def start_instance_op(inst):
 
 def start_instances(node_list):
     log.info("{} instances to start ({})".format(len(node_list), ",".join(node_list)))
-
-    normal, tpu_nodes = separate(lookup().node_is_tpu, node_list)
+    lkp = lookup()
+    # TODO: use code from resume.py to assign proper placement
+    normal, tpu_nodes = separate(lkp.node_is_tpu, node_list)
     ops = {inst: start_instance_op(inst) for inst in normal}
 
     done, failed = batch_execute(ops)
 
     tpu_start_data = []
-    for ns, nodes in util.groupby_unsorted(tpu_nodes, lookup().node_nodeset_name):
-        tpuobj = TPU(lookup().cfg.nodeset_tpu[ns])
+    for ns, nodes in util.groupby_unsorted(tpu_nodes, lkp.node_nodeset_name):
+        tpuobj = tpu.TPU.make(ns, lkp)
         for snodes in chunked(nodes, n=tpuobj.vmcount):
             tpu_start_data.append({"tpu": tpuobj, "node": snodes})
-    execute_with_futures(start_tpu, tpu_start_data)
+    execute_with_futures(tpu.start_tpu, tpu_start_data)
 
 
 def _find_dynamic_node_status() -> NodeAction:
@@ -164,14 +162,14 @@ def get_fr_action(fr: FutureReservation, nodename:str, state:NodeState) -> Optio
     return NodeActionDown(reason=msg)
 
 def _find_tpu_node_action(nodename, state) -> NodeAction:
-    ns = lookup().node_nodeset(nodename)
-    tpuobj = TPU(ns)
+    lkp = lookup()
+    tpuobj = tpu.TPU.make(lkp.node_nodeset_name(nodename), lkp)
     inst = tpuobj.get_node(nodename)
     # If we do not find the node but it is from a Tpu that has multiple vms look for the master node
     if inst is None and tpuobj.vmcount > 1:
         # Get the tpu slurm nodelist of the nodes in the same tpu group as nodename
         nodelist = run(
-            f"{lookup().scontrol} show topo {nodename}"
+            f"{lkp.scontrol} show topo {nodename}"
             + " | awk -F'=' '/Level=0/ { print $NF }'",
             shell=True,
         ).stdout
@@ -201,13 +199,13 @@ def _find_tpu_node_action(nodename, state) -> NodeAction:
             & state.flags
         ):
             return NodeActionDown(reason="Unbacked instance")
-        if lookup().is_static_node(nodename):
+        if lkp.is_static_node(nodename):
             return NodeActionPowerUp()
     elif (
         state is not None
         and "POWERED_DOWN" not in state.flags
         and "POWERING_DOWN" not in state.flags
-        and inst.state == TPU.State.STOPPED
+        and inst.state == tpu.TPU.State.STOPPED
     ):
         if tpuobj.preemptible:
             return NodeActionPrempt()
@@ -215,7 +213,7 @@ def _find_tpu_node_action(nodename, state) -> NodeAction:
             return NodeActionDown(reason="Instance terminated")
     elif (
         state is None or "POWERED_DOWN" in state.flags
-    ) and inst.state == TPU.State.READY:
+    ) and inst.state == tpu.TPU.State.READY:
         return NodeActionDelete()
     elif state is None:
         # if state is None here, the instance exists but it's not in Slurm
@@ -225,7 +223,7 @@ def _find_tpu_node_action(nodename, state) -> NodeAction:
 
 def get_node_action(nodename: str) -> NodeAction:
     """Determine node/instance status that requires action"""
-    state = lookup().slurm_node(nodename)
+    state = lookup().node_state(nodename)
 
     if lookup().node_is_fr(nodename):
         fr = lookup().future_reservation(lookup().node_nodeset(nodename))
@@ -304,13 +302,11 @@ def _seconds_since_timestamp(timestamp):
 
 
 def delete_placement_groups(placement_groups):
-    def delete_placement_request(pg_name, region):
-        return lookup().compute.resourcePolicies().delete(
-            project=lookup().project, region=region, resourcePolicy=pg_name
-        )
-
     requests = {
-        pg.name: delete_placement_request(pg["name"], util.trim_self_link(pg["region"]))
+        pg["name"]: lookup().compute.resourcePolicies().delete(
+            project=lookup().project,
+            region=util.trim_self_link(pg["region"]),
+            resourcePolicy=pg["name"])
         for pg in placement_groups
     }
 
@@ -327,7 +323,7 @@ def delete_placement_groups(placement_groups):
         if failures:
             log.error(f"some placement groups failed to delete: {failures}")
     log.info(
-        f"deleted {len(done)} of {len(placement_groups)} placement groups ({to_hostlist_fast(done.keys())})"
+        f"deleted {len(done)} of {len(placement_groups)} placement groups ({to_hostlist(done.keys())})"
     )
 
 
@@ -363,7 +359,7 @@ def sync_placement_groups():
         result = ensure_execute(op)
         # merge placement group info from API and job_id,partition,index parsed from the name
         pgs = (
-            NSDict({**pg, **pg_regex.match(pg["name"]).groupdict()})
+            {**pg, **pg_regex.match(pg["name"]).groupdict()}
             for pg in chain.from_iterable(
                 item["resourcePolicies"]
                 for item in result.get("items", {}).values()
@@ -381,24 +377,13 @@ def sync_placement_groups():
 
 
 def sync_slurm():
-    compute_instances = [
+    compute_instances = {
         name for name, inst in lookup().instances().items() if inst.role == "compute"
-    ]
-    slurm_nodes = list(lookup().slurm_nodes().keys())
+    }
+    slurm_nodes = set(lookup().slurm_nodes().keys())
+    log.debug(f"reconciling {len(compute_instances)} GCP instances and {len(slurm_nodes)} Slurm nodes.")
 
-    all_nodes = list(
-        set(
-            chain(
-                compute_instances,
-                slurm_nodes,
-            )
-        )
-    )
-    log.debug(
-        f"reconciling {len(compute_instances)} ({len(all_nodes)-len(compute_instances)}) GCP instances and {len(slurm_nodes)} Slurm nodes ({len(all_nodes)-len(slurm_nodes)})."
-    )
-
-    for action, nodes in util.groupby_unsorted(all_nodes, get_node_action):
+    for action, nodes in util.groupby_unsorted(list(compute_instances | slurm_nodes), get_node_action):
         action.apply(list(nodes))
 
 
@@ -456,6 +441,7 @@ def delete_reservation(lkp: util.Lookup, reservation_name: str) -> None:
 def create_reservation(lkp: util.Lookup, reservation_name: str, node: str, start_time: datetime) -> None:
     # Format time to be compatible with slurm reservation.
     formatted_start_time = start_time.strftime('%Y-%m-%dT%H:%M:%S')
+    
     util.run(f"{lkp.scontrol} create reservation user=slurm starttime={formatted_start_time} duration=180 nodes={node} reservationname={reservation_name} flags=maint,ignore_jobs")
 
 
