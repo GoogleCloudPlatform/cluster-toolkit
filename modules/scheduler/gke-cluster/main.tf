@@ -202,6 +202,13 @@ resource "google_container_cluster" "gke_cluster" {
     update = var.timeout_update
   }
 
+  node_config {
+    shielded_instance_config {
+      enable_secure_boot          = var.system_node_pool_enable_secure_boot
+      enable_integrity_monitoring = true
+    }
+  }
+
   lifecycle {
     # Ignore all changes to the default node pool. It's being removed after creation.
     ignore_changes = [
