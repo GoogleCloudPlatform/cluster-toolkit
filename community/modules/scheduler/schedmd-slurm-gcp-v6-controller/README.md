@@ -151,23 +151,21 @@ flag which can used to control the maximum spreading allowed. Read more about
 [official docs](https://cloud.google.com/compute/docs/instances/use-compact-placement-policies
 ).
 
-You can use the `enable_slurm_gcp_plugins.max_hops.max_hops` setting on the
-controller module to control the `max-distance` behavior. See the following
-example:
+You can use the `placement_max_distance` setting on the nodeset module to control the `max-distance` behavior. See the following example:
 
 ```yaml
-  - id: controller
-    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
-    use: [ network, partition ]
+  - id: nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [ network ]
     settings:
-      enable_slurm_gcp_plugins:
-        max_hops:
-          max_hops: 1
-```
+      machine_type: c2-standard-4
+      node_count_dynamic_max: 30
+      enable_placement: true
+      placement_max_distance: 1
 
 > [!NOTE]
 > `schedmd-slurm-gcp-v6-nodeset.settings.enable_placement: true` must also be
-> set for max-distance to take effect.
+> set for placement_max_distance to take effect.
 
 In the above case using a value of 1 will restrict VM to be placed on the same
 rack. You can confirm that the `max-distance` was applied by calling the
