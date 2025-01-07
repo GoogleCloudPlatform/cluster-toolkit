@@ -621,6 +621,10 @@ Enables calling hooks in scripts/slurm_gcp_plugins during cluster resume and sus
 EOD
   type        = any
   default     = false
+  validation {
+    condition     = !can(var.enable_slurm_gcp_plugins.max_hops)
+    error_message = "The 'max_hops' plugin is no longer supported. Please use the 'placement_max_distance' nodeset property instead."
+  }
 }
 
 variable "universe_domain" {
