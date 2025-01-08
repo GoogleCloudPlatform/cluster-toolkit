@@ -21,6 +21,9 @@ vars:
   deployment_name: slurm6-tpu
   region: us-central1
   zone: us-central1-a
+  instance_image:
+    project: "schedmd-public-292016"
+    family: "slurm-gcp-6-8-hpc-rocky-linux-8"
 
 deployment_groups:
 - group: primary
@@ -43,13 +46,14 @@ deployment_groups:
       # If set to false, suspended VM will be deleted.
       preserve_tpu: false
       node_count_dynamic_max: 1
+      docker_image: us-docker.pkg.dev/schedmd-slurm-public/tpu-test/slurm-gcp-6-8:tf-2.14.0
 
   - id: tpu_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
     use: [tpu_nodeset]
     settings:
       partition_name: tpu
-      resume_timeout: 600
+      resume_timeout: 3600
 
   - id: slurm_login
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login

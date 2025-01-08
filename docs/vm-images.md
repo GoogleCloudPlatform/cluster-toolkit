@@ -43,7 +43,7 @@ instance_image:
 
 The `project` setting defines the space where the image will be found. Either
 this is set to a known project where HPC images are hosted (e.g
-`cloud-hpc-image-public`, `schedmd-slurm-public`, etc.) or a private project
+`cloud-hpc-image-public`, `schedmd-public-292016`, etc.) or a private project
 owned by you or your team.
 
 The `family` setting defines a group of images built with the same label, and

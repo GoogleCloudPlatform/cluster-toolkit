@@ -41,7 +41,7 @@ vars:
   # and the Chrome Remote Desktop (CRD) need to have the same Slurm base.
   instance_image:
     family: slurm-gcp-6-8-hpc-rocky-linux-8
-    project: schedmd-slurm-public
+    project: schedmd-public-292016
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md

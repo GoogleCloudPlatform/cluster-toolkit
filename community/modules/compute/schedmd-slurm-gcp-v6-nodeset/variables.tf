@@ -89,7 +89,7 @@ variable "instance_image" {
   type        = map(string)
   default = {
     family  = "slurm-gcp-6-8-hpc-rocky-linux-8"
-    project = "schedmd-slurm-public"
+    project = "schedmd-public-292016"
   }
 
   validation {
