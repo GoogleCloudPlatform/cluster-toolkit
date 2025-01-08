@@ -15,12 +15,31 @@
 ---
 
 blueprint_name: static-slurm-cluster
+toolkit_modules_url: github.com/GoogleCloudPlatform/cluster-toolkit
+toolkit_modules_version: v1.41.0
 
 vars:
   project_id:  ## <<PROJECT_A>>
   deployment_name: cluster
   region: us-central1
   zone: us-central1-c
+
+terraform_providers:
+  google:
+    source: hashicorp/google
+    version: 5.45.0
+    configuration:
+      project: $(vars.project_id)
+      region: $(vars.region)
+      zone: $(vars.zone)
+
+  google-beta:
+    source: hashicorp/google-beta
+    version: 5.45.0
+    configuration:
+      project: $(vars.project_id)
+      region: $(vars.region)
+      zone: $(vars.zone)
 
 deployment_groups:
 - group: primary
