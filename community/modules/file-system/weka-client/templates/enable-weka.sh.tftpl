@@ -1,0 +1,5 @@
+#!/bin/bash
+
+chmod 755 "/etc/${service_name}.sh"
+systemctl daemon-reload 
+systemctl enable --now ${service_name}
