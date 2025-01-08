@@ -202,9 +202,6 @@ deployment_groups:
       remote_mount: $(vars.training_bucket_name)
       local_mount: /training-data
       fs_type: gcsfuse
-      # In addition to the mount options below, if the dataset is a large
-      # compressed files, `file-cache:enable-parallel-downloads:true` can boost
-      # perf (at the cost of each node pulling the file to each node's lssd)
       mount_options: >-
         implicit-dirs,
         metadata-cache:ttl-secs:-1,
