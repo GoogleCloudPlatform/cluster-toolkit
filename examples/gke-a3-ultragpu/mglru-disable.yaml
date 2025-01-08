@@ -40,14 +40,14 @@ spec:
         - -c
         - |
           echo n | tee /sys/kernel/mm/lru_gen/enabled
-          sysctl -w net.ipv4.conf.eth2.log_martians=0
-          sysctl -w net.ipv4.conf.eth3.log_martians=0
-          sysctl -w net.ipv4.conf.eth4.log_martians=0
-          sysctl -w net.ipv4.conf.eth5.log_martians=0
-          sysctl -w net.ipv4.conf.eth6.log_martians=0
-          sysctl -w net.ipv4.conf.eth7.log_martians=0
-          sysctl -w net.ipv4.conf.eth8.log_martians=0
-          sysctl -w net.ipv4.conf.eth9.log_martians=0
+          sysctl -w net.ipv4.conf.gpu0rdma0.log_martians=0
+          sysctl -w net.ipv4.conf.gpu1rdma0.log_martians=0
+          sysctl -w net.ipv4.conf.gpu2rdma0.log_martians=0
+          sysctl -w net.ipv4.conf.gpu3rdma0.log_martians=0
+          sysctl -w net.ipv4.conf.gpu4rdma0.log_martians=0
+          sysctl -w net.ipv4.conf.gpu5rdma0.log_martians=0
+          sysctl -w net.ipv4.conf.gpu6rdma0.log_martians=0
+          sysctl -w net.ipv4.conf.gpu7rdma0.log_martians=0
           sleep infinity
         volumeMounts:
         - name: sys-kernel-mm-lru-gen
