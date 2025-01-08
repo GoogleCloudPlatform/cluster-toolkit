@@ -41,8 +41,8 @@ resource "google_storage_bucket" "bucket" {
   storage_class               = "REGIONAL"
   labels                      = local.labels
   force_destroy               = var.force_destroy
-  hierarchical_namespace      = {
-                                enabled = var.enable_hierarchical_namespace
+  hierarchical_namespace {
+    enabled = var.enable_hierarchical_namespace
   }
 }
 
