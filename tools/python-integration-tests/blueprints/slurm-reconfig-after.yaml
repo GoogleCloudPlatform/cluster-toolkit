@@ -13,7 +13,7 @@
 # limitations under the License.
 
 ---
-blueprint_name: slurm-simple
+blueprint_name: slurm-reconfig
 
 vars:
   project_id: ## Set GCP Project ID Here ##
