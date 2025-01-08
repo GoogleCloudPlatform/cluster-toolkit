@@ -9,8 +9,8 @@ Storage (GCS).
 * **Multi-VPC Design:** Utilizes three VPCs: two for GKE nodes and one dedicated
   for GPU RDMA networks.
 * **Cloud Storage Fuse Integration:** Enables seamless access to GCS buckets
-  from within your containers using the Cloud Storage Fuse CSI Driver. Cloud
-  Storage Fuse is configured to utilize the 12 TB of Local SSD
+  from within your containers using the [Cloud Storage Fuse CSI Driver](https://cloud.google.com/kubernetes-engine/docs/how-to/persistent-volumes/cloud-storage-fuse-csi-driver).
+  Cloud Storage Fuse is configured to utilize the 12 TB of Local SSD
 * **Hierarchical Namespace Buckets:** Leverages GCS buckets with Hierarchical
   Namespace enabled, optimizing performance for checkpointing and restarting
   workloads. (Requires GKE 1.31 or later).
