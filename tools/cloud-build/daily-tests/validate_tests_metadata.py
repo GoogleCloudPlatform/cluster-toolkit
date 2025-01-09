@@ -127,7 +127,7 @@ class TestIntegrationTestsMeta(unittest.TestCase):
         if missing_mod_tags:
             hint = "\n- ".join([""] + sorted(missing_mod_tags))
             self.fail(msg=f"Some used modules aren't declared\nHINT: add following tags to {build_path}: {hint}")
-        self.assertEquals(declared_mod_tags, required_mod_tags)
+        self.assertEqual(declared_mod_tags, required_mod_tags)
 
         self.assertNotEqual(tags & CATEGORICAL_TAGS, set(), msg=f"No categorical tags, pick/add one: {CATEGORICAL_TAGS}")
 
