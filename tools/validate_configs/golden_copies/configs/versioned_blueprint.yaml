@@ -217,7 +217,7 @@ deployment_groups:
       node_count_dynamic_max: 16
       machine_type: a2-megagpu-16g
       # This makes this nodeset look for machines in any of the following zones
-      # https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/develop/community/modules/compute/schedmd-slurm-gcp-v5-partition#compute-vm-zone-policies // !!!
+      # https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/develop/community/modules/compute/schedmd-slurm-gcp-v6-nodeset#compute-vm-zone-policies // !!!
       zones: $(vars.gpu_zones)
       bandwidth_tier: gvnic_enabled
       instance_image: $(vars.slurm_image)

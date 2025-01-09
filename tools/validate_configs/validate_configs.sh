@@ -121,12 +121,20 @@ check_background() {
 }
 
 CONFIGS=$(find examples/ community/examples/ tools/validate_configs/test_configs/ docs/tutorials/ docs/videos/build-your-own-blueprint/ -name "*.yaml" -type f -not -path 'examples/machine-learning/a3-megagpu-8g/*' -not -path 'examples/machine-learning/a3-ultragpu-8g/*' -not -path 'examples/gke-a3-ultragpu/*' -not -path 'examples/hypercompute_clusters/*')
+# Exclude blueprints that use v5 modules.
+declare -A EXCLUDE_EXAMPLE
+EXCLUDE_EXAMPLE["tools/validate_configs/test_configs/two-clusters-sql.yaml"]=
 
 cwd=$(pwd)
 NPROCS=${NPROCS:-$(nproc)}
 echo "Running tests in $NPROCS processes"
 pids=()
 for example in $CONFIGS; do
+	if [[ ${EXCLUDE_EXAMPLE[$example]+_} ]]; then
+		echo "Skipping example: $example"
+		continue
+	fi
+
 	JNUM=$(jobs | wc -l)
 	# echo "$JNUM jobs running"
 	if [ "$JNUM" -ge "$NPROCS" ]; then
