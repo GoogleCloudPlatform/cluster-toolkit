@@ -91,6 +91,12 @@ variable "min_master_version" {
   default     = null
 }
 
+variable "version_prefix" {
+  description = "If provided, Terraform will only return versions that match the string prefix. For example, `1.31.` will match all `1.31` series releases. Since this is just a string match, it's recommended that you append a `.` after minor versions to ensure that prefixes such as `1.3` don't match versions like `1.30.1-gke.10` accidentally."
+  type        = string
+  default     = "1.31."
+}
+
 variable "maintenance_start_time" {
   description = "Start time for daily maintenance operations. Specified in GMT with `HH:MM` format."
   type        = string

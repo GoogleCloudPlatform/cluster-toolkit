@@ -96,7 +96,6 @@ deployment_groups:
     source: modules/scheduler/gke-cluster
     use: [gke-a3-ultra-net-0]
     settings:
-      release_channel: RAPID
       system_node_pool_machine_type: "e2-standard-16"
       system_node_pool_disk_size_gb: $(vars.system_node_pool_disk_size_gb)
       system_node_pool_taints: []
@@ -106,11 +105,6 @@ deployment_groups:
       master_authorized_networks:
       - cidr_block: $(vars.authorized_cidr) # Allows your machine to run the kubectl command. Required for multi network setup.
         display_name: "kubectl-access-network"
-      maintenance_exclusions:
-      - name: no-minor-or-node-upgrades-indefinite
-        start_time: "2024-12-01T00:00:00Z"
-        end_time: "2025-12-22T00:00:00Z"
-        exclusion_scope: NO_MINOR_OR_NODE_UPGRADES
       additional_networks:
         $(concat(
           [{
@@ -127,6 +121,15 @@ deployment_groups:
           }],
          gke-a3-ultra-rdma-net.subnetwork_interfaces_gke
         ))
+      # Cluster versions cannot be updated through the toolkit after creation
+      # Please manage cluster version from the Google Cloud Console directly
+      version_prefix: "1.31."
+      release_channel: RAPID
+      maintenance_exclusions:
+      - name: no-minor-or-node-upgrades-indefinite
+        start_time: "2024-12-01T00:00:00Z"
+        end_time: "2025-12-22T00:00:00Z"
+        exclusion_scope: NO_MINOR_OR_NODE_UPGRADES
     outputs: [instructions]
 
   - id: a3-ultragpu-pool
