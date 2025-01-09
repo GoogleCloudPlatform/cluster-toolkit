@@ -20,12 +20,19 @@ terraform {
       source  = "hashicorp/google"
       version = ">= 3.83"
     }
+    google-beta = {
+      source  = "hashicorp/google-beta"
+      version = ">= 6.13.0"
+    }
     random = {
       source  = "hashicorp/random"
       version = "~> 3.0"
     }
   }
   provider_meta "google" {
+    module_name = "blueprints/terraform/hpc-toolkit:cloud-storage-bucket/v1.44.0"
+  }
+  provider_meta "google-beta" {
     module_name = "blueprints/terraform/hpc-toolkit:cloud-storage-bucket/v1.44.0"
   }
   required_version = ">= 0.14.0"
