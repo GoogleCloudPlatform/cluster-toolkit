@@ -33,18 +33,22 @@ deployment_groups:
   modules:
   # Source is an embedded module, denoted by "modules/*" without ./, ../, /
   # as a prefix. To refer to a local module, prefix with ./, ../ or /
-  - id: network1
+  - id: network
     source: modules/network/vpc
+
+  - id: private_service_access
+    source: community/modules/network/private-service-access
+    use: [network]
 
   - id: homefs
     source: modules/file-system/filestore
-    use: [network1]
+    use: [network, private_service_access]
     settings:
       local_mount: /home
 
   - id: debug_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [network1]
+    use: [network]
     settings:
       instance_image: $(vars.slurm_image)
       enable_placement: false # the default is: true
@@ -61,7 +65,7 @@ deployment_groups:
 
   - id: compute_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [network1]
+    use: [network]
     settings:
       instance_image: $(vars.slurm_image)
       node_count_dynamic_max: 20
@@ -76,7 +80,7 @@ deployment_groups:
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     use:
-    - network1
+    - network
     - slurm_login
     - debug_partition
     - compute_partition
@@ -87,7 +91,7 @@ deployment_groups:
 
   - id: slurm_login
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
-    use: [network1]
+    use: [network]
     settings:
       instance_image: $(vars.slurm_image)
       machine_type: n2-standard-4

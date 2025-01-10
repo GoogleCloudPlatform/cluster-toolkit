@@ -16,6 +16,7 @@
 tags:
 - m.custom-image
 - m.filestore
+- m.private-service-access
 - m.vpc
 - m.schedmd-slurm-gcp-v6-controller
 - m.schedmd-slurm-gcp-v6-login
