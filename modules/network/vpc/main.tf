@@ -14,6 +14,15 @@
  * limitations under the License.
 */
 
+resource "terraform_data" "secondary_ranges_validation" {
+  lifecycle {
+    precondition {
+      condition     = !(length(var.secondary_ranges) > 0 && length(var.secondary_ranges_list) > 0)
+      error_message = "Only one of var.secondary_ranges or var.secondary_ranges_list should be specified"
+    }
+  }
+}
+
 locals {
   # This label allows for billing report tracking based on module.
   labels = merge(var.labels, { ghpc_module = "vpc", ghpc_role = "network" })
