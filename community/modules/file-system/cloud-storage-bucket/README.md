@@ -109,6 +109,7 @@ limitations under the License.
 |------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 0.14.0 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 3.83 |
+| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 6.9.0 |
 | <a name="requirement_random"></a> [random](#requirement\_random) | ~> 3.0 |
 
 ## Providers
@@ -116,6 +117,7 @@ limitations under the License.
 | Name | Version |
 |------|---------|
 | <a name="provider_google"></a> [google](#provider\_google) | >= 3.83 |
+| <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 6.9.0 |
 | <a name="provider_random"></a> [random](#provider\_random) | ~> 3.0 |
 
 ## Modules
@@ -126,7 +128,7 @@ No modules.
 
 | Name | Type |
 |------|------|
-| [google_storage_bucket.bucket](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket) | resource |
+| [google-beta_google_storage_bucket.bucket](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_storage_bucket) | resource |
 | [google_storage_bucket_iam_binding.viewers](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_iam_binding) | resource |
 | [random_id.resource_name_suffix](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/id) | resource |
 
@@ -135,6 +137,7 @@ No modules.
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the HPC deployment; used as part of name of the GCS bucket. | `string` | n/a | yes |
+| <a name="input_enable_hierarchical_namespace"></a> [enable\_hierarchical\_namespace](#input\_enable\_hierarchical\_namespace) | If true, enables hierarchical namespace for the bucket. This option must be configured during the initial creation of the bucket. | `bool` | `false` | no |
 | <a name="input_force_destroy"></a> [force\_destroy](#input\_force\_destroy) | If true will destroy bucket with all objects stored within. | `bool` | `false` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the GCS bucket. Key-value pairs. | `map(string)` | n/a | yes |
 | <a name="input_local_mount"></a> [local\_mount](#input\_local\_mount) | The mount point where the contents of the device may be accessed after mounting. | `string` | `"/mnt"` | no |
