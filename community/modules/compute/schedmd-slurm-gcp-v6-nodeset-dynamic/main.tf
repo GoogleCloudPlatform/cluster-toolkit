@@ -84,11 +84,11 @@ module "slurm_nodeset_template" {
   bandwidth_tier = var.bandwidth_tier
   can_ip_forward = var.can_ip_forward
 
-  disable_smt              = !var.enable_smt
-  enable_confidential_vm   = var.enable_confidential_vm
-  enable_oslogin           = var.enable_oslogin
-  enable_shielded_vm       = var.enable_shielded_vm
-  shielded_instance_config = var.shielded_instance_config
+  advanced_machine_features = var.advanced_machine_features
+  enable_confidential_vm    = var.enable_confidential_vm
+  enable_oslogin            = var.enable_oslogin
+  enable_shielded_vm        = var.enable_shielded_vm
+  shielded_instance_config  = var.shielded_instance_config
 
   labels       = local.labels
   machine_type = var.machine_type

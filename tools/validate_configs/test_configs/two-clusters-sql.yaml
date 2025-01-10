@@ -71,7 +71,6 @@ deployment_groups:
     id: c1partition_0_group
     use:
     settings:
-      enable_smt: False
       machine_type: c2-standard-60
       node_count_dynamic_max: 4
       node_count_static: 0
@@ -130,7 +129,6 @@ deployment_groups:
   - source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
     id: c2partition_0_group
     settings:
-      enable_smt: False
       machine_type: c2-standard-60
       node_count_dynamic_max: 4
       node_count_static: 0

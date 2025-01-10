@@ -323,7 +323,8 @@ deployment_groups:
     use: [network]
     settings:
       name: gpu
-      enable_smt: true
+      advanced_machine_features:
+        threads_per_core: null # Use platform default value
       node_count_dynamic_max: 20
       machine_type: g2-standard-4
       enable_placement: False

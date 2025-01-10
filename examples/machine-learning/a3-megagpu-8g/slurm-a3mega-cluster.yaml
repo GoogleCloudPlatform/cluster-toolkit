@@ -181,7 +181,8 @@ deployment_groups:
       disk_type: pd-ssd
       machine_type: a3-megagpu-8g
       enable_public_ips: false
-      enable_smt: true
+      advanced_machine_features:
+        threads_per_core: null # Use platform default value
       node_conf:
         CoresPerSocket: 52
         ThreadsPerCore: 2

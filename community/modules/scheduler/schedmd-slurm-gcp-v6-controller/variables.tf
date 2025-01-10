@@ -130,7 +130,6 @@ variable "login_nodes" {
     })), [])
     bandwidth_tier         = optional(string, "platform_default")
     can_ip_forward         = optional(bool, false)
-    disable_smt            = optional(bool, false)
     disk_auto_delete       = optional(bool, true)
     disk_labels            = optional(map(string), {})
     disk_size_gb           = optional(number)
@@ -142,8 +141,16 @@ variable "login_nodes" {
       count = number
       type  = string
     }))
-    labels              = optional(map(string), {})
-    machine_type        = optional(string)
+    labels       = optional(map(string), {})
+    machine_type = optional(string)
+    advanced_machine_features = object({
+      enable_nested_virtualization = optional(bool)
+      threads_per_core             = optional(number)
+      turbo_mode                   = optional(string)
+      visible_core_count           = optional(number)
+      performance_monitoring_unit  = optional(string)
+      enable_uefi_networking       = optional(bool)
+    })
     metadata            = optional(map(string), {})
     min_cpu_platform    = optional(string)
     num_instances       = optional(number, 1)
@@ -198,7 +205,6 @@ variable "nodeset" {
     })), [])
     bandwidth_tier                   = optional(string, "platform_default")
     can_ip_forward                   = optional(bool, false)
-    disable_smt                      = optional(bool, false)
     disk_auto_delete                 = optional(bool, true)
     disk_labels                      = optional(map(string), {})
     disk_size_gb                     = optional(number)
@@ -219,8 +225,16 @@ variable "nodeset" {
       max_run_duration = number
       use_job_duration = bool
     })
-    labels                   = optional(map(string), {})
-    machine_type             = optional(string)
+    labels       = optional(map(string), {})
+    machine_type = optional(string)
+    advanced_machine_features = object({
+      enable_nested_virtualization = optional(bool)
+      threads_per_core             = optional(number)
+      turbo_mode                   = optional(string)
+      visible_core_count           = optional(number)
+      performance_monitoring_unit  = optional(string)
+      enable_uefi_networking       = optional(bool)
+    })
     maintenance_interval     = optional(string)
     instance_properties_json = string
     metadata                 = optional(map(string), {})
