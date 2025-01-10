@@ -103,6 +103,42 @@ deployment_groups:
         family: rocky-linux-8-optimized-gcp
         project: rocky-linux-cloud
 
+  - id: workstation-rocky-9
+    source: modules/compute/vm-instance
+    use:
+    - network1
+    - startup-script
+    settings:
+      name_prefix: rocky9
+      add_deployment_name_before_prefix: true
+      instance_image:
+        family: rocky-linux-9-optimized-gcp
+        project: rocky-linux-cloud
+
+  - id: workstation-rhel-8
+    source: modules/compute/vm-instance
+    use:
+    - network1
+    - startup-script
+    settings:
+      name_prefix: rhel8
+      add_deployment_name_before_prefix: true
+      instance_image:
+        family: rhel-8
+        project: rhel-cloud
+
+  - id: workstation-rhel-9
+    source: modules/compute/vm-instance
+    use:
+    - network1
+    - startup-script
+    settings:
+      name_prefix: rhel9
+      add_deployment_name_before_prefix: true
+      instance_image:
+        family: rhel-9
+        project: rhel-cloud
+
   - id: wait-for-startup
     source: community/modules/scripts/wait-for-startup
     settings:
@@ -112,4 +148,7 @@ deployment_groups:
       - $(workstation-ubuntu-2204.name[0])
       - $(workstation-debian.name[0])
       - $(workstation-rocky-8.name[0])
+      - $(workstation-rocky-9.name[0])
+      - $(workstation-rhel-8.name[0])
+      - $(workstation-rhel-9.name[0])
       timeout: 7200
