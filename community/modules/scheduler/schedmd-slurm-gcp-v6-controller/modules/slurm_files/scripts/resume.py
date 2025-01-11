@@ -44,8 +44,6 @@ from util import (
 from util import lookup, NSDict
 import tpu
 
-import slurm_gcp_plugins
-
 log = logging.getLogger()
 
 PLACEMENT_MAX_CNT = 1500
@@ -202,14 +200,6 @@ def create_instances_request(nodes: List[str], placement_group: Optional[str], e
             targetShape = nodeset.zone_target_shape,
         )
     
-    if lookup().cfg.enable_slurm_gcp_plugins:
-        slurm_gcp_plugins.pre_instance_bulk_insert(
-            lkp=lookup(),
-            nodes=nodes,
-            placement_group=placement_group,
-            request_body=body,
-        )
-
     req = api_method(
         project=lookup().project, 
         body=body, 
@@ -453,10 +443,7 @@ def create_placement_request(pg_name: str, region: str, max_distance: Optional[i
             "maxDistance": max_distance
         },
     }
-    if lookup().cfg.enable_slurm_gcp_plugins:
-        slurm_gcp_plugins.pre_placement_group_insert(
-            lkp=lookup(), pg_name=pg_name, region=region, request_body=config
-        )
+    
     request = lookup().compute.resourcePolicies().insert(
         project=lookup().project, region=region, body=config
     )
