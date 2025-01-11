@@ -90,7 +90,7 @@ vars:
         tasks:
         - name: Create gcsfuse rwx configuration
           ansible.builtin.copy:
-            dest: /etc/gcsfuse-rwx.yml
+            dest: /etc/gcsfuse.yml
             owner: root
             group: root
             mode: 0o644
@@ -130,37 +130,58 @@ vars:
                 kernel-list-cache-ttl-secs: 60
               foreground: true
 
-        - name: Create gcsfuse@ systemd service
+        - name: Create gcsfuse systemd service
           ansible.builtin.copy:
-            dest: /etc/systemd/system/gcsfuse@.service
+            dest: /etc/systemd/system/gcsfuse.service
             owner: root
             group: root
             mode: 0o644
             content: |
               [Unit]
-              Description=gcsfuse %i mount of all buckets
+              Description=gcsfuse mount of all buckets
               After=local-fs.target
 
               [Service]
               Type=simple
               User=root
-              ExecStartPre=/bin/mkdir -p /gcs-%i
-              ExecStart=gcsfuse --config-file /etc/gcsfuse-%i.yml /gcs-%i
-              ExecStop=fusermount3 -u /gcs-%i
+              ExecStartPre=/bin/mkdir -p /gcs
+              ExecStart=gcsfuse --config-file /etc/gcsfuse.yml /gcs
+              ExecStop=fusermount3 -u /gcs
+
+              [Install]
+              WantedBy=slurmd.service multi-user.target
+
+        - name: Create gcsfuse-ro systemd service
+          ansible.builtin.copy:
+            dest: /etc/systemd/system/gcsfuse-ro.service
+            owner: root
+            group: root
+            mode: 0o644
+            content: |
+              [Unit]
+              Description=gcsfuse ro mount of all buckets
+              After=local-fs.target
+
+              [Service]
+              Type=simple
+              User=root
+              ExecStartPre=/bin/mkdir -p /gcs-ro
+              ExecStart=gcsfuse --config-file /etc/gcsfuse-ro.yml /gcs-ro
+              ExecStop=fusermount3 -u /gcs-ro
 
               [Install]
               WantedBy=slurmd.service multi-user.target
 
         post_tasks:
-        - name: Enable and restart gcsfuse@rwx
+        - name: Enable and restart gcsfuse
           ansible.builtin.service:
-            name: gcsfuse@rwx.service
+            name: gcsfuse.service
             state: restarted
             enabled: true
 
-        - name: Enable and restart gcsfuse@ro
+        - name: Enable and restart gcsfuse-ro
           ansible.builtin.service:
-            name: gcsfuse@ro.service
+            name: gcsfuse-ro.service
             state: restarted
             enabled: true
 
