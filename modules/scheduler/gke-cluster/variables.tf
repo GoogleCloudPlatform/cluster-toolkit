@@ -370,6 +370,31 @@ variable "additional_networks" {
   }))
 }
 
+variable "additional_networks_rdma" {
+  description = "Additional rdma network interface details for GKE, if any. Providing additional networks enables multi networking and creates relevat network objects on the cluster."
+  default     = []
+  type = list(object({
+    network            = string
+    subnetwork         = string
+    subnetwork_project = string
+    network_ip         = string
+    nic_type           = string
+    stack_type         = string
+    queue_count        = number
+    access_config = list(object({
+      nat_ip       = string
+      network_tier = string
+    }))
+    ipv6_access_config = list(object({
+      network_tier = string
+    }))
+    alias_ip_range = list(object({
+      ip_cidr_range         = string
+      subnetwork_range_name = string
+    }))
+  }))
+}
+
 variable "cluster_reference_type" {
   description = "How the google_container_node_pool.system_node_pools refers to the cluster. Possible values are: {SELF_LINK, NAME}"
   default     = "SELF_LINK"

@@ -27,6 +27,13 @@ locals {
   }
 }
 
+locals {
+  all_additional_networks = concat(
+    var.additional_networks,
+    var.additional_networks_rdma
+  )
+}
+
 module "gpu" {
   source = "../../internal/gpu-definition"
 
@@ -226,7 +233,7 @@ resource "google_container_node_pool" "node_pool" {
 
   network_config {
     dynamic "additional_node_network_configs" {
-      for_each = var.additional_networks
+      for_each = local.all_additional_networks
 
       content {
         network    = additional_node_network_configs.value.network

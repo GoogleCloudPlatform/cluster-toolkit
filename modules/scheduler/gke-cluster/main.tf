@@ -28,6 +28,13 @@ locals {
 }
 
 locals {
+  all_additional_networks = concat(
+    var.additional_networks,
+    var.additional_networks_rdma
+  )
+}
+
+locals {
   dash             = var.prefix_with_deployment_name && var.name_suffix != "" ? "-" : ""
   prefix           = var.prefix_with_deployment_name ? var.deployment_name : ""
   name_maybe_empty = "${local.prefix}${local.dash}${var.name_suffix}"
@@ -41,7 +48,7 @@ locals {
   sa_email         = coalesce(var.service_account_email, local.default_sa_email)
 
   # additional VPCs enable multi networking 
-  derived_enable_multi_networking = coalesce(var.enable_multi_networking, length(var.additional_networks) > 0)
+  derived_enable_multi_networking = coalesce(var.enable_multi_networking, length(local.all_additional_networks) > 0)
 
   # multi networking needs enabled Dataplane v2
   derived_enable_dataplane_v2 = coalesce(var.enable_dataplane_v2, local.derived_enable_multi_networking)
@@ -234,7 +241,7 @@ resource "google_container_cluster" "gke_cluster" {
       error_message = "'enable_dataplane_v2' cannot be false when enabling multi networking."
     }
     precondition {
-      condition     = coalesce(var.enable_multi_networking, true) || length(var.additional_networks) == 0
+      condition     = coalesce(var.enable_multi_networking, true) || length(local.all_additional_networks) == 0
       error_message = "'enable_multi_networking' cannot be false when using multivpc module, which passes additional_networks."
     }
   }
@@ -383,7 +390,7 @@ module "kubectl_apply" {
   gke_cluster_exists = true
 
   apply_manifests = flatten([
-    for idx, network_info in var.additional_networks : [
+    for idx, network_info in local.all_additional_networks : [
       {
         source = "${path.module}/templates/gke-network-paramset.yaml.tftpl",
         template_vars = {
