@@ -104,5 +104,10 @@ resource "google_filestore_instance" "filestore_instance" {
         BASIC_HDD or BASIC_SSD tiers. Otherwise the range size must be 24.
         EOT
     }
+
+    precondition {
+      condition     = !startswith(var.filestore_tier, "BASIC") || var.protocol != "NFS_V4_1"
+      error_message = "NFS_V4_1 is not supported on BASIC Filestore tiers."
+    }
   }
 }
