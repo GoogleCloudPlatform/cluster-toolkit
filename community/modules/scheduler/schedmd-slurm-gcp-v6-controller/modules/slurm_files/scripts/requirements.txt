@@ -14,5 +14,5 @@ grpcio==1.56.2
 grpcio-status==1.56.0
 httplib2==0.22.0
 more-executors==2.11.4
-pyyaml==6.0
+pyyaml==6.0.2
 requests==2.32.0
