@@ -171,20 +171,40 @@ locals {
 
   slurm_gcp_devel_zip        = "slurm-gcp-devel.zip"
   slurm_gcp_devel_zip_bucket = format("%s/%s", local.bucket_dir, local.slurm_gcp_devel_zip)
+  slurm_gcp_devel_zip_files = toset([
+    for f in fileset(local.scripts_dir, "**") : f if !startswith(f, "tests/")
+  ])
+}
+
+data "local_file" "startup_sh" {
+  filename = "${path.module}/../../../../internal/slurm-gcp/instance_template/files/startup_sh_unlinted"
+}
+
+data "local_file" "slurm_gcp_devel" {
+  for_each = local.slurm_gcp_devel_zip_files
+  filename = "${local.scripts_dir}/${each.key}"
 }
 
 data "archive_file" "slurm_gcp_devel_zip" {
   output_path = "${local.build_dir}/${local.slurm_gcp_devel_zip}"
   type        = "zip"
-  source_dir  = local.scripts_dir
+  source {
+    content  = data.local_file.startup_sh.content
+    filename = "startup.sh"
+  }
 
-  excludes = flatten([
-    fileset(local.scripts_dir, "tests/**"),
-    # TODO: consider removing (including nested) __pycache__ and all .* files
-    # Though it only affects developers
-  ])
-
+  # this approach has disadvantage of creating a zip file where all files have date modification of epoch
+  # but it is the only way to mix multiple data sources?
+  dynamic "source" {
+    for_each = local.slurm_gcp_devel_zip_files
+    content {
+      content  = data.local_file.slurm_gcp_devel[source.key].content
+      filename = source.key
+    }
+  }
 }
+
+
 
 resource "google_storage_bucket_object" "devel" {
   bucket = var.bucket_name

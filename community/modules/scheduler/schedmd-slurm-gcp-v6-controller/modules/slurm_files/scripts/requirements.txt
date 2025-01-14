@@ -7,7 +7,7 @@ google-cloud-bigquery==3.11.3
 google-cloud-core==2.3.3
 google-cloud-secret-manager~=2.22
 google-cloud-storage==2.10.0
-google-cloud-tpu==1.10.0
+google-cloud-tpu==1.21.0
 google-resumable-media==2.5.0
 googleapis-common-protos==1.59.1
 grpcio==1.56.2

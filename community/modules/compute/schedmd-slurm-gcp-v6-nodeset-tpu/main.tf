@@ -32,7 +32,7 @@ locals {
     node_type              = var.node_type
 
     accelerator_config = var.accelerator_config
-    tf_version         = var.tf_version
+    runtime_version    = var.runtime_version
     preemptible        = var.preemptible
     preserve_tpu       = var.preserve_tpu
 

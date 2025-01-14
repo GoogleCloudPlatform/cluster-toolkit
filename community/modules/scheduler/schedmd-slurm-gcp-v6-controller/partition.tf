@@ -125,11 +125,12 @@ module "slurm_nodeset_tpu" {
   zone                   = each.value.zone
   node_type              = each.value.node_type
   accelerator_config     = each.value.accelerator_config
-  tf_version             = each.value.tf_version
+  runtime_version        = each.value.runtime_version
   preemptible            = each.value.preemptible
   preserve_tpu           = each.value.preserve_tpu
   enable_public_ip       = each.value.enable_public_ip
   service_account        = each.value.service_account
+  spot                   = each.value.spot
   data_disks             = each.value.data_disks
   docker_image           = each.value.docker_image
   subnetwork             = each.value.subnetwork

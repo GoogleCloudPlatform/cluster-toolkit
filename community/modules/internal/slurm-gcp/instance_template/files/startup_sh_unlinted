@@ -14,6 +14,7 @@
 # limitations under the License.
 
 set -e
+set -o xtrace
 
 SLURM_DIR=/slurm
 FLAGFILE=$SLURM_DIR/slurm_configured_do_not_remove
@@ -115,17 +116,20 @@ function tpu_setup {
 		echo "$word"
 	}
 
-	input_string=$($CURL $URL/instance/attributes/slurm_names)
-	worker_id=$($CURL $URL/instance/attributes/tpu-env | awk '/WORKER_ID/ {print $2}' | tr -d \')
-	real_name=$(parse_metadata $worker_id $input_string)
+	# enable transparent hugepages
+	# TPU runtime startup and shutdown time should be significantly improved on TPU v5e and newer.
 
+	echo always >/sys/kernel/mm/transparent_hugepage/enabled
+
+	# remove everything after a slash from docker_image
+	docker_image_host=${docker_image/\/*/}
 	#Prepare to docker pull with gcloud
 	mkdir -p /root/.docker
 	cat << EOF > /root/.docker/config.json
 {
   "credHelpers": {
     "gcr.io": "gcloud",
-	"us-docker.pkg.dev": "gcloud"
+    "${docker_image_host}": "gcloud"
   }
 }
 EOF
@@ -136,7 +140,7 @@ EOF
 		CGV=2
 	fi
 	if [ $CGV == 2 ]; then
-		CGROUP_FLAGS="--cgroup-parent=docker.slice --cgroupns=private --tmpfs /run --tmpfs /run/lock --tmpfs /tmp"
+		CGROUP_FLAGS="--cgroup-parent=docker.slice --cgroupns=private --tmpfs /run --tmpfs /run/lock --tmpfs /tmp:exec,nosuid,mode=1777"
 		if [ ! -f /etc/systemd/system/docker.slice ]; then #In case that there is no slice prepared for hosting the containers create it
 			printf "[Unit]\nDescription=docker slice\nBefore=slices.target\n[Slice]\nCPUAccounting=true\nMemoryAccounting=true" > /etc/systemd/system/docker.slice
 			systemctl start docker.slice
@@ -149,7 +153,9 @@ EOF
 	# 	TPU_FLAGS="--privileged"
 	# fi
 
-	docker run -d $CGROUP_FLAGS $TPU_FLAGS --net=host --name=slurmd --hostname=$real_name --entrypoint=/usr/bin/systemd --restart unless-stopped $docker_image
+	# pass the hostname into slurmd container, so the work distribution frameworks will be able to correctly
+	# identify local address and hostname and coordinate the work
+	docker run -d $CGROUP_FLAGS $TPU_FLAGS --net=host --name=slurmd --hostname="$(hostname -s)" --domainname="$(hostname -d)" --entrypoint=/usr/bin/systemd --restart unless-stopped $docker_image
 	exit 0
 }
 
