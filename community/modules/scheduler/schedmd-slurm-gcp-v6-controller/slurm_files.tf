@@ -116,6 +116,7 @@ locals {
   }
   ghpc_startup_script_compute = length(local.daos_ns) > 0 ? [local.daos_install_mount_script, local.ghpc_startup_compute] : [local.ghpc_startup_compute]
 
+  login_startup_scripts   = { for g in var.login_nodes : g.group_name => local.ghpc_startup_script_login }
   nodeset_startup_scripts = { for k, v in local.nodeset_map : k => v.startup_script }
 }
 
@@ -151,7 +152,7 @@ module "slurm_files" {
   nodeset_startup_scripts            = local.nodeset_startup_scripts
   compute_startup_scripts            = local.ghpc_startup_script_compute
   compute_startup_scripts_timeout    = var.compute_startup_scripts_timeout
-  login_startup_scripts              = local.ghpc_startup_script_login
+  login_startup_scripts              = local.login_startup_scripts
   login_startup_scripts_timeout      = var.login_startup_scripts_timeout
 
   enable_debug_logging = var.enable_debug_logging

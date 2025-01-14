@@ -104,15 +104,6 @@ variable "cloudsql_secret" {
   default     = null
 }
 
-variable "login_startup_scripts" {
-  description = "List of scripts to be ran on login VM startup."
-  type = list(object({
-    filename = string
-    content  = string
-  }))
-  default = []
-}
-
 variable "login_startup_scripts_timeout" {
   description = <<EOD
 The timeout (seconds) applied to each script in login_startup_scripts. If
@@ -153,6 +144,15 @@ variable "compute_startup_scripts" {
     content  = string
   }))
   default = []
+}
+
+variable "login_startup_scripts" {
+  description = "List of scripts to be ran on login VM startup in the specific group."
+  type = map(list(object({
+    filename = string
+    content  = string
+  })))
+  default = {}
 }
 
 variable "nodeset_startup_scripts" {

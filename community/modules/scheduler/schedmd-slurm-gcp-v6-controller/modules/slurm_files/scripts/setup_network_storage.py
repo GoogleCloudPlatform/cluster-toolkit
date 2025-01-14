@@ -74,7 +74,7 @@ def resolve_network_storage(nodeset=None):
     # On non-controller instances, entries in network_storage could overwrite
     # default exports from the controller. Be careful, of course
     mounts.update(mounts_by_local(lookup().cfg.network_storage))
-    if lookup().instance_role in ("login", "controller"):
+    if lookup().is_login_node or lookup().is_controller:
         mounts.update(mounts_by_local(lookup().cfg.login_network_storage))
 
     if nodeset is not None:

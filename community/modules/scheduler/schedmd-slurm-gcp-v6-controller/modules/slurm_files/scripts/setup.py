@@ -132,7 +132,7 @@ def run_custom_scripts():
     elif lookup().instance_role == "compute":
         # compute setup with compute.d and nodeset.d
         custom_dirs = [custom_dir / "compute.d", custom_dir / "nodeset.d"]
-    elif lookup().instance_role == "login":
+    elif lookup().is_login_node:
         # login setup with only login.d
         custom_dirs = [custom_dir / "login.d"]
     else:

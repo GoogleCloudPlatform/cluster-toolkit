@@ -16,13 +16,13 @@
 module "slurm_login_template" {
   source = "../../internal/slurm-gcp/instance_template"
 
-  for_each = { for x in var.login_nodes : x.name_prefix => x }
+  for_each = { for x in var.login_nodes : x.group_name => x }
 
   project_id          = var.project_id
   slurm_cluster_name  = local.slurm_cluster_name
   slurm_instance_role = "login"
   slurm_bucket_path   = module.slurm_files.slurm_bucket_path
-  name_prefix         = each.value.name_prefix
+  name_prefix         = each.value.group_name
 
   additional_disks         = each.value.additional_disks
   bandwidth_tier           = each.value.bandwidth_tier
@@ -57,7 +57,7 @@ module "slurm_login_template" {
 # INSTANCE
 module "slurm_login_instance" {
   source   = "../../internal/slurm-gcp/instance"
-  for_each = { for x in var.login_nodes : x.name_prefix => x }
+  for_each = { for x in var.login_nodes : x.group_name => x }
 
   access_config = each.value.access_config
   hostname      = "${local.slurm_cluster_name}-${each.key}"
