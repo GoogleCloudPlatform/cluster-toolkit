@@ -100,12 +100,12 @@ vars:
                 enable-parallel-downloads: true
                 download-chunk-size-mb: 50
                 parallel-downloads-per-file: 16
-              cache-dir: /mnt/localssd
+              cache-dir: $(vars.localssd_mountpoint)
               file-system:
                 dir-mode: "777"
                 file-mode: "777"
                 rename-dir-limit: 0  # Set to 20000 for hierarchical buckets
-                temp-dir: /mnt/localssd
+                temp-dir: $(vars.localssd_mountpoint)
                 fuse-options: allow_other
               foreground: true
 
@@ -120,12 +120,12 @@ vars:
                 max-size-mb: -1
               metadata-cache:
                 ttl-secs: 3600
-              cache-dir: /mnt/localssd
+              cache-dir: $(vars.localssd_mountpoint)
               file-system:
                 dir-mode: "555" # need 5 on dir to enable ls
                 file-mode: "444"
                 rename-dir-limit: 0  # Set to 20000 for hierarchical buckets
-                temp-dir: /mnt/localssd
+                temp-dir: $(vars.localssd_mountpoint)
                 fuse-options: allow_other
                 kernel-list-cache-ttl-secs: 60
               foreground: true
