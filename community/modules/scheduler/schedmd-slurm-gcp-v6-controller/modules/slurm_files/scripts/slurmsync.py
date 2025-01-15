@@ -149,10 +149,13 @@ def _find_dynamic_node_status() -> NodeAction:
     # * delete orhpaned instances
     return NodeActionUnchanged()  # don't touch dynamic nodes
 
-def get_fr_action(fr: FutureReservation, nodename:str, state:NodeState) -> Optional[NodeAction]:
+def get_fr_action(fr: FutureReservation, state:Optional[NodeState]) -> Optional[NodeAction]:
     now = datetime.utcnow()
+    if state is None:
+        return None # handle like any other node
     if fr.start_time < now < fr.end_time:
         return None # handle like any other node
+    
     if state.base == "DOWN":
         return NodeActionUnchanged()
     if fr.start_time >= now:
@@ -227,7 +230,8 @@ def get_node_action(nodename: str) -> NodeAction:
 
     if lookup().node_is_fr(nodename):
         fr = lookup().future_reservation(lookup().node_nodeset(nodename))
-        if action := get_fr_action(fr, nodename, state):
+        assert fr
+        if action := get_fr_action(fr, state):
             return action
 
     if lookup().node_is_dyn(nodename):
@@ -242,7 +246,7 @@ def get_node_action(nodename: str) -> NodeAction:
         ("POWER_DOWN", "POWERING_UP", "POWERING_DOWN", "POWERED_DOWN")
     ) & (state.flags if state is not None else set())
 
-    if inst is None:
+    if (inst is None) and (state is not None):
         if "POWERING_UP" in state.flags:
             return NodeActionUnchanged()
         if state.base == "DOWN" and "POWERED_DOWN" in state.flags:

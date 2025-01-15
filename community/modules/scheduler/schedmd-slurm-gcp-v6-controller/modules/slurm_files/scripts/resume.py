@@ -15,7 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Optional
+from typing import List, Optional, Dict
 import argparse
 from datetime import timedelta
 import shlex
@@ -245,9 +245,9 @@ def group_nodes_bulk(nodes: List[str], resume_data: Optional[ResumeData], lkp: u
     if resume_data is None: # all nodes will be considered jobless
         resume_data = ResumeData(jobs=[])
         
-    nodes = set(nodes) # turn into set to simplify intersection
-    non_excl = nodes.copy()
-    groups = {} # excl_job_id|none -> PlacementAndNodes
+    nodes_set = set(nodes) # turn into set to simplify intersection
+    non_excl = nodes_set.copy()
+    groups : Dict[Optional[int], List[PlacementAndNodes]] = {} # excl_job_id|none -> PlacementAndNodes
 
     # expand all exclusive job nodelists
     for job in resume_data.jobs:
@@ -261,7 +261,7 @@ def group_nodes_bulk(nodes: List[str], resume_data: Optional[ResumeData], lkp: u
                 PlacementAndNodes(
                     placement=pn.placement,
                     #... but we only want to handle nodes in nodes_resume in this run.
-                    nodes = sorted(set(pn.nodes) & nodes)
+                    nodes = sorted(set(pn.nodes) & nodes_set)
                 ))
         non_excl.difference_update(job.nodes_alloc)
 
@@ -396,21 +396,21 @@ def _handle_bulk_insert_op(op: object, nodes: List[str], resume_data: Optional[R
         lambda op: "+".join(err["code"] for err in op["error"]["errors"]),
     )
     for code, failed_ops in by_error_inserts:
-        failed_nodes = {trim_self_link(op["targetLink"]): op for op in failed_ops}
+        failed_ops = list(failed_ops)
+        failed_nodes = [trim_self_link(op["targetLink"]) for op in failed_ops]
         hostlist = util.to_hostlist(failed_nodes)
-        count = len(failed_nodes)
         log.error(
-            f"{count} instances failed to start: {code} ({hostlist}) operationGroupId={group_id}"
+            f"{len(failed_nodes)} instances failed to start: {code} ({hostlist}) operationGroupId={group_id}"
         )
-        failed_node, failed_op = next(iter(failed_nodes.items()))
+
         msg = "; ".join(
             f"{err['code']}: {err['message'] if 'message' in err else 'no message'}"
-            for err in failed_op["error"]["errors"]
+            for err in failed_ops[0]["error"]["errors"]
         )
         if code != "RESOURCE_ALREADY_EXISTS":
             down_nodes_notify_jobs(failed_nodes, f"GCP Error: {msg}", resume_data)
         log.error(
-            f"errors from insert for node '{failed_node}' ({failed_op['name']}): {msg}"
+            f"errors from insert for node '{failed_nodes[0]}' ({failed_ops[0]['name']}): {msg}"
         )
 
     ready_nodes = {trim_self_link(op["targetLink"]) for op in successful_inserts}
@@ -430,9 +430,9 @@ def down_nodes_notify_jobs(nodes: List[str], reason: str, resume_data: Optional[
         log.warning("Cannot update and notify jobs with API failures as no valid resume file is present.")
         return
     
-    nodes = set(nodes) # turn into set to speed up intersection
+    nodes_set = set(nodes) # turn into set to speed up intersection
     for job in resume_data.jobs:
-        if not (set(job.nodes_alloc) & nodes):
+        if not (set(job.nodes_alloc) & nodes_set):
             continue
         run(f"{lookup().scontrol} update jobid={job.job_id} admincomment='{reason_quoted}'")
         run(f"{lookup().scontrol} notify {job.job_id} '{reason_quoted}'")
