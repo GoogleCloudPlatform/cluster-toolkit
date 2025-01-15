@@ -21,6 +21,7 @@ import json
 from pathlib import Path
 import util
 from util import dirs, slurmdirs
+import tpu
 
 FILE_PREAMBLE = """
 # Warning:
@@ -71,7 +72,7 @@ def conflines(lkp: util.Lookup) -> str:
     no_comma_params = get("no_comma_params", False)
 
     any_gpus = any(
-        lkp.template_info(nodeset.instance_template).gpu_count > 0
+        lkp.template_info(nodeset.instance_template).gpu
         for nodeset in lkp.cfg.nodeset.values()
     )
 
@@ -135,7 +136,7 @@ def nodeset_lines(nodeset, lkp: util.Lookup) -> str:
 
     # follow https://slurm.schedmd.com/slurm.conf.html#OPT_Boards
     # by setting Boards, SocketsPerBoard, CoresPerSocket, and ThreadsPerCore
-    gres = f"gpu:{template_info.gpu_count}" if template_info.gpu_count else None
+    gres = f"gpu:{template_info.gpu.count}" if template_info.gpu else None
     node_conf = {
         "RealMemory": machine_conf.memory,
         "Boards": machine_conf.boards,
@@ -183,10 +184,12 @@ def partitionlines(partition, lkp: util.Lookup) -> str:
     """Make a partition line for the slurm.conf"""
     MIN_MEM_PER_CPU = 100
 
-    def defmempercpu(nodeset: str) -> int:
-        template = lkp.cfg.nodeset.get(nodeset).instance_template
+    def defmempercpu(nodeset_name: str) -> int:
+        nodeset = lkp.cfg.nodeset.get(nodeset_name)
+        template = nodeset.instance_template
         machine = lkp.template_machine_conf(template)
-        return max(MIN_MEM_PER_CPU, machine.memory // machine.cpus)
+        mem_spec_limit = int(nodeset.node_conf.get("MemSpecLimit", 0))
+        return max(MIN_MEM_PER_CPU, (machine.memory - mem_spec_limit) // machine.cpus)
 
     defmem = min(
         map(defmempercpu, partition.partition_nodeset), default=MIN_MEM_PER_CPU
@@ -359,11 +362,10 @@ def gen_cloud_gres_conf(lkp: util.Lookup) -> None:
 
     gpu_nodes = defaultdict(list)
     for nodeset in lkp.cfg.nodeset.values():
-        template_info = lkp.template_info(nodeset.instance_template)
-        gpu_count = template_info.gpu_count
-        if gpu_count == 0:
-            continue
-        gpu_nodes[gpu_count].append(lkp.nodelist(nodeset))
+        ti = lkp.template_info(nodeset.instance_template)
+        gpu_count = ti.gpu.count if ti.gpu  else 0
+        if gpu_count:
+            gpu_nodes[gpu_count].append(lkp.nodelist(nodeset))
 
     lines = [
         dict_to_conf(
@@ -410,9 +412,9 @@ class Switch:
     def conf_line(self) -> str:
         d = {"SwitchName": self.name}
         if self.nodes:
-            d["Nodes"] = util.to_hostlist_fast(self.nodes)
+            d["Nodes"] = util.to_hostlist(self.nodes)
         if self.switches:
-            d["Switches"] = util.to_hostlist_fast(self.switches.keys())
+            d["Switches"] = util.to_hostlist(self.switches.keys())
         return dict_to_conf(d)
 
     def render_conf_lines(self) -> Iterable[str]:
@@ -519,7 +521,7 @@ class TopologyBuilder:
 
 
 def add_tpu_nodeset_topology(nodeset: object, bldr: TopologyBuilder, lkp: util.Lookup):
-    tpuobj = util.TPU(nodeset)
+    tpuobj = tpu.TPU.make(nodeset.nodeset_name, lkp)
     static, dynamic = lkp.nodenames(nodeset)
 
     pref = ["tpu-root",  f"ns_{nodeset.nodeset_name}"]

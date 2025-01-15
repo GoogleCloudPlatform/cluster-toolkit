@@ -151,23 +151,21 @@ flag which can used to control the maximum spreading allowed. Read more about
 [official docs](https://cloud.google.com/compute/docs/instances/use-compact-placement-policies
 ).
 
-You can use the `enable_slurm_gcp_plugins.max_hops.max_hops` setting on the
-controller module to control the `max-distance` behavior. See the following
-example:
+You can use the `placement_max_distance` setting on the nodeset module to control the `max-distance` behavior. See the following example:
 
 ```yaml
-  - id: controller
-    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
-    use: [ network, partition ]
+  - id: nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [ network ]
     settings:
-      enable_slurm_gcp_plugins:
-        max_hops:
-          max_hops: 1
-```
+      machine_type: c2-standard-4
+      node_count_dynamic_max: 30
+      enable_placement: true
+      placement_max_distance: 1
 
 > [!NOTE]
 > `schedmd-slurm-gcp-v6-nodeset.settings.enable_placement: true` must also be
-> set for max-distance to take effect.
+> set for placement_max_distance to take effect.
 
 In the above case using a value of 1 will restrict VM to be placed on the same
 rack. You can confirm that the `max-distance` was applied by calling the
@@ -197,7 +195,7 @@ If the largest partition was 200 nodes, configure the blueprint as follows:
 
 ```yaml
   - id: slurm_controller
-    source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     ...
     settings:
       cloud_parameters:
@@ -207,13 +205,6 @@ If the largest partition was 200 nodes, configure the blueprint as follows:
 The default has been set to 128. Values above this have not been fully tested
 and may cause congestion on the controller. A more scalable solution is under
 way.
-
-## Hybrid Slurm Clusters
-For more information on how to configure an on premise slurm cluster with hybrid
-cloud partitions, see the [schedmd-slurm-gcp-v5-hybrid] module and our
-extended instructions in our [docs](../../../../docs/hybrid-slurm-cluster/).
-
-[schedmd-slurm-gcp-v5-hybrid]: ../schedmd-slurm-gcp-v5-hybrid/README.md
 
 ## Support
 The Cluster Toolkit team maintains the wrapper around the [slurm-on-gcp] terraform
@@ -259,14 +250,15 @@ limitations under the License.
 |------|--------|---------|
 | <a name="module_bucket"></a> [bucket](#module\_bucket) | terraform-google-modules/cloud-storage/google | ~> 6.1 |
 | <a name="module_daos_network_storage_scripts"></a> [daos\_network\_storage\_scripts](#module\_daos\_network\_storage\_scripts) | ../../../../modules/scripts/startup-script | n/a |
+| <a name="module_gpu"></a> [gpu](#module\_gpu) | ../../../../modules/internal/gpu-definition | n/a |
 | <a name="module_nodeset_cleanup"></a> [nodeset\_cleanup](#module\_nodeset\_cleanup) | ./modules/cleanup_compute | n/a |
 | <a name="module_nodeset_cleanup_tpu"></a> [nodeset\_cleanup\_tpu](#module\_nodeset\_cleanup\_tpu) | ./modules/cleanup_tpu | n/a |
-| <a name="module_slurm_controller_template"></a> [slurm\_controller\_template](#module\_slurm\_controller\_template) | ../../internal/slurm-gcp-v6/instance_template | n/a |
+| <a name="module_slurm_controller_template"></a> [slurm\_controller\_template](#module\_slurm\_controller\_template) | ../../internal/slurm-gcp/instance_template | n/a |
 | <a name="module_slurm_files"></a> [slurm\_files](#module\_slurm\_files) | ./modules/slurm_files | n/a |
-| <a name="module_slurm_login_instance"></a> [slurm\_login\_instance](#module\_slurm\_login\_instance) | ../../internal/slurm-gcp-v6/instance | n/a |
-| <a name="module_slurm_login_template"></a> [slurm\_login\_template](#module\_slurm\_login\_template) | ../../internal/slurm-gcp-v6/instance_template | n/a |
-| <a name="module_slurm_nodeset_template"></a> [slurm\_nodeset\_template](#module\_slurm\_nodeset\_template) | ../../internal/slurm-gcp-v6/instance_template | n/a |
-| <a name="module_slurm_nodeset_tpu"></a> [slurm\_nodeset\_tpu](#module\_slurm\_nodeset\_tpu) | ../../internal/slurm-gcp-v6/nodeset_tpu | n/a |
+| <a name="module_slurm_login_instance"></a> [slurm\_login\_instance](#module\_slurm\_login\_instance) | ../../internal/slurm-gcp/instance | n/a |
+| <a name="module_slurm_login_template"></a> [slurm\_login\_template](#module\_slurm\_login\_template) | ../../internal/slurm-gcp/instance_template | n/a |
+| <a name="module_slurm_nodeset_template"></a> [slurm\_nodeset\_template](#module\_slurm\_nodeset\_template) | ../../internal/slurm-gcp/instance_template | n/a |
+| <a name="module_slurm_nodeset_tpu"></a> [slurm\_nodeset\_tpu](#module\_slurm\_nodeset\_tpu) | ../../internal/slurm-gcp/nodeset_tpu | n/a |
 
 ## Resources
 
@@ -336,7 +328,7 @@ limitations under the License.
 | <a name="input_metadata"></a> [metadata](#input\_metadata) | Metadata, provided as a map. | `map(string)` | `{}` | no |
 | <a name="input_min_cpu_platform"></a> [min\_cpu\_platform](#input\_min\_cpu\_platform) | Specifies a minimum CPU platform. Applicable values are the friendly names of<br/>CPU platforms, such as Intel Haswell or Intel Skylake. See the complete list:<br/>https://cloud.google.com/compute/docs/instances/specify-min-cpu-platform | `string` | `null` | no |
 | <a name="input_network_storage"></a> [network\_storage](#input\_network\_storage) | An array of network attached storage mounts to be configured on all instances. | <pre>list(object({<br/>    server_ip             = string,<br/>    remote_mount          = string,<br/>    local_mount           = string,<br/>    fs_type               = string,<br/>    mount_options         = string,<br/>    client_install_runner = optional(map(string))<br/>    mount_runner          = optional(map(string))<br/>  }))</pre> | `[]` | no |
-| <a name="input_nodeset"></a> [nodeset](#input\_nodeset) | Define nodesets, as a list. | <pre>list(object({<br/>    node_count_static      = optional(number, 0)<br/>    node_count_dynamic_max = optional(number, 1)<br/>    node_conf              = optional(map(string), {})<br/>    nodeset_name           = string<br/>    additional_disks = optional(list(object({<br/>      disk_name    = optional(string)<br/>      device_name  = optional(string)<br/>      disk_size_gb = optional(number)<br/>      disk_type    = optional(string)<br/>      disk_labels  = optional(map(string), {})<br/>      auto_delete  = optional(bool, true)<br/>      boot         = optional(bool, false)<br/>    })), [])<br/>    bandwidth_tier                   = optional(string, "platform_default")<br/>    can_ip_forward                   = optional(bool, false)<br/>    disable_smt                      = optional(bool, false)<br/>    disk_auto_delete                 = optional(bool, true)<br/>    disk_labels                      = optional(map(string), {})<br/>    disk_size_gb                     = optional(number)<br/>    disk_type                        = optional(string)<br/>    enable_confidential_vm           = optional(bool, false)<br/>    enable_placement                 = optional(bool, false)<br/>    enable_oslogin                   = optional(bool, true)<br/>    enable_shielded_vm               = optional(bool, false)<br/>    enable_maintenance_reservation   = optional(bool, false)<br/>    enable_opportunistic_maintenance = optional(bool, false)<br/>    gpu = optional(object({<br/>      count = number<br/>      type  = string<br/>    }))<br/>    dws_flex = object({<br/>      enabled          = bool<br/>      max_run_duration = number<br/>      use_job_duration = bool<br/>    })<br/>    labels                   = optional(map(string), {})<br/>    machine_type             = optional(string)<br/>    maintenance_interval     = optional(string)<br/>    instance_properties_json = string<br/>    metadata                 = optional(map(string), {})<br/>    min_cpu_platform         = optional(string)<br/>    network_tier             = optional(string, "STANDARD")<br/>    network_storage = optional(list(object({<br/>      server_ip             = string<br/>      remote_mount          = string<br/>      local_mount           = string<br/>      fs_type               = string<br/>      mount_options         = string<br/>      client_install_runner = optional(map(string))<br/>      mount_runner          = optional(map(string))<br/>    })), [])<br/>    on_host_maintenance = optional(string)<br/>    preemptible         = optional(bool, false)<br/>    region              = optional(string)<br/>    service_account = optional(object({<br/>      email  = optional(string)<br/>      scopes = optional(list(string), ["https://www.googleapis.com/auth/cloud-platform"])<br/>    }))<br/>    shielded_instance_config = optional(object({<br/>      enable_integrity_monitoring = optional(bool, true)<br/>      enable_secure_boot          = optional(bool, true)<br/>      enable_vtpm                 = optional(bool, true)<br/>    }))<br/>    source_image_family  = optional(string)<br/>    source_image_project = optional(string)<br/>    source_image         = optional(string)<br/>    subnetwork_self_link = string<br/>    additional_networks = optional(list(object({<br/>      network            = string<br/>      subnetwork         = string<br/>      subnetwork_project = string<br/>      network_ip         = string<br/>      nic_type           = string<br/>      stack_type         = string<br/>      queue_count        = number<br/>      access_config = list(object({<br/>        nat_ip       = string<br/>        network_tier = string<br/>      }))<br/>      ipv6_access_config = list(object({<br/>        network_tier = string<br/>      }))<br/>      alias_ip_range = list(object({<br/>        ip_cidr_range         = string<br/>        subnetwork_range_name = string<br/>      }))<br/>    })))<br/>    access_config = optional(list(object({<br/>      nat_ip       = string<br/>      network_tier = string<br/>    })))<br/>    spot               = optional(bool, false)<br/>    tags               = optional(list(string), [])<br/>    termination_action = optional(string)<br/>    reservation_name   = optional(string)<br/>    future_reservation = string<br/>    startup_script = optional(list(object({<br/>      filename = string<br/>    content = string })), [])<br/><br/>    zone_target_shape = string<br/>    zone_policy_allow = set(string)<br/>    zone_policy_deny  = set(string)<br/>  }))</pre> | `[]` | no |
+| <a name="input_nodeset"></a> [nodeset](#input\_nodeset) | Define nodesets, as a list. | <pre>list(object({<br/>    node_count_static      = optional(number, 0)<br/>    node_count_dynamic_max = optional(number, 1)<br/>    node_conf              = optional(map(string), {})<br/>    nodeset_name           = string<br/>    additional_disks = optional(list(object({<br/>      disk_name    = optional(string)<br/>      device_name  = optional(string)<br/>      disk_size_gb = optional(number)<br/>      disk_type    = optional(string)<br/>      disk_labels  = optional(map(string), {})<br/>      auto_delete  = optional(bool, true)<br/>      boot         = optional(bool, false)<br/>    })), [])<br/>    bandwidth_tier                   = optional(string, "platform_default")<br/>    can_ip_forward                   = optional(bool, false)<br/>    disable_smt                      = optional(bool, false)<br/>    disk_auto_delete                 = optional(bool, true)<br/>    disk_labels                      = optional(map(string), {})<br/>    disk_size_gb                     = optional(number)<br/>    disk_type                        = optional(string)<br/>    enable_confidential_vm           = optional(bool, false)<br/>    enable_placement                 = optional(bool, false)<br/>    placement_max_distance           = optional(number, null)<br/>    enable_oslogin                   = optional(bool, true)<br/>    enable_shielded_vm               = optional(bool, false)<br/>    enable_maintenance_reservation   = optional(bool, false)<br/>    enable_opportunistic_maintenance = optional(bool, false)<br/>    gpu = optional(object({<br/>      count = number<br/>      type  = string<br/>    }))<br/>    dws_flex = object({<br/>      enabled          = bool<br/>      max_run_duration = number<br/>      use_job_duration = bool<br/>    })<br/>    labels                   = optional(map(string), {})<br/>    machine_type             = optional(string)<br/>    maintenance_interval     = optional(string)<br/>    instance_properties_json = string<br/>    metadata                 = optional(map(string), {})<br/>    min_cpu_platform         = optional(string)<br/>    network_tier             = optional(string, "STANDARD")<br/>    network_storage = optional(list(object({<br/>      server_ip             = string<br/>      remote_mount          = string<br/>      local_mount           = string<br/>      fs_type               = string<br/>      mount_options         = string<br/>      client_install_runner = optional(map(string))<br/>      mount_runner          = optional(map(string))<br/>    })), [])<br/>    on_host_maintenance = optional(string)<br/>    preemptible         = optional(bool, false)<br/>    region              = optional(string)<br/>    service_account = optional(object({<br/>      email  = optional(string)<br/>      scopes = optional(list(string), ["https://www.googleapis.com/auth/cloud-platform"])<br/>    }))<br/>    shielded_instance_config = optional(object({<br/>      enable_integrity_monitoring = optional(bool, true)<br/>      enable_secure_boot          = optional(bool, true)<br/>      enable_vtpm                 = optional(bool, true)<br/>    }))<br/>    source_image_family  = optional(string)<br/>    source_image_project = optional(string)<br/>    source_image         = optional(string)<br/>    subnetwork_self_link = string<br/>    additional_networks = optional(list(object({<br/>      network            = string<br/>      subnetwork         = string<br/>      subnetwork_project = string<br/>      network_ip         = string<br/>      nic_type           = string<br/>      stack_type         = string<br/>      queue_count        = number<br/>      access_config = list(object({<br/>        nat_ip       = string<br/>        network_tier = string<br/>      }))<br/>      ipv6_access_config = list(object({<br/>        network_tier = string<br/>      }))<br/>      alias_ip_range = list(object({<br/>        ip_cidr_range         = string<br/>        subnetwork_range_name = string<br/>      }))<br/>    })))<br/>    access_config = optional(list(object({<br/>      nat_ip       = string<br/>      network_tier = string<br/>    })))<br/>    spot               = optional(bool, false)<br/>    tags               = optional(list(string), [])<br/>    termination_action = optional(string)<br/>    reservation_name   = optional(string)<br/>    future_reservation = string<br/>    startup_script = optional(list(object({<br/>      filename = string<br/>    content = string })), [])<br/><br/>    zone_target_shape = string<br/>    zone_policy_allow = set(string)<br/>    zone_policy_deny  = set(string)<br/>  }))</pre> | `[]` | no |
 | <a name="input_nodeset_dyn"></a> [nodeset\_dyn](#input\_nodeset\_dyn) | Defines dynamic nodesets, as a list. | <pre>list(object({<br/>    nodeset_name    = string<br/>    nodeset_feature = string<br/>  }))</pre> | `[]` | no |
 | <a name="input_nodeset_tpu"></a> [nodeset\_tpu](#input\_nodeset\_tpu) | Define TPU nodesets, as a list. | <pre>list(object({<br/>    node_count_static      = optional(number, 0)<br/>    node_count_dynamic_max = optional(number, 5)<br/>    nodeset_name           = string<br/>    enable_public_ip       = optional(bool, false)<br/>    node_type              = string<br/>    accelerator_config = optional(object({<br/>      topology = string<br/>      version  = string<br/>      }), {<br/>      topology = ""<br/>      version  = ""<br/>    })<br/>    tf_version   = string<br/>    preemptible  = optional(bool, false)<br/>    preserve_tpu = optional(bool, false)<br/>    zone         = string<br/>    data_disks   = optional(list(string), [])<br/>    docker_image = optional(string, "")<br/>    network_storage = optional(list(object({<br/>      server_ip             = string<br/>      remote_mount          = string<br/>      local_mount           = string<br/>      fs_type               = string<br/>      mount_options         = string<br/>      client_install_runner = optional(map(string))<br/>      mount_runner          = optional(map(string))<br/>    })), [])<br/>    subnetwork = string<br/>    service_account = optional(object({<br/>      email  = optional(string)<br/>      scopes = optional(list(string), ["https://www.googleapis.com/auth/cloud-platform"])<br/>    }))<br/>    project_id = string<br/>    reserved   = optional(string, false)<br/>  }))</pre> | `[]` | no |
 | <a name="input_on_host_maintenance"></a> [on\_host\_maintenance](#input\_on\_host\_maintenance) | Instance availability Policy. | `string` | `"MIGRATE"` | no |

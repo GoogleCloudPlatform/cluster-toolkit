@@ -63,7 +63,7 @@ def test_get_resume_file_data():
       mock_to_hostnames.assert_called_once_with("green-[0-2]")
 
 
-@unittest.mock.patch("util.TPU")
+@unittest.mock.patch("tpu.TPU.make")
 @unittest.mock.patch("resume.create_placements")
 def test_group_nodes_bulk(mock_create_placements, mock_tpu):
   cfg = TstCfg(
@@ -106,8 +106,8 @@ def test_group_nodes_bulk(mock_create_placements, mock_tpu):
     raise AssertionError(f"unexpected invocation: '{args}'")
   mock_create_placements.side_effect = mock_create_placements_se
 
-  def mock_tpu_se(ns: TstNodeset) -> TstTPU:
-    if ns.nodeset_name == "t":
+  def mock_tpu_se(ns: str, lkp) -> TstTPU:
+    if ns == "t":
       return TstTPU(vmcount=2)
     raise AssertionError(f"unexpected invocation: '{ns}'")
   mock_tpu.side_effect = mock_tpu_se
@@ -170,4 +170,6 @@ def test_allocate_nodes_to_placements(nodes: list[str], excl_job_id: Optional[in
 
   with unittest.mock.patch("resume.valid_placement_node") as mock_valid_placement_node:
     mock_valid_placement_node.return_value = True
+    lkp.template_info = unittest.mock.Mock(return_value=unittest.mock.Mock(machine_type=unittest.mock.Mock(family="n1")))
+
     assert resume._allocate_nodes_to_placements(nodes, excl_job_id, lkp) == expected

@@ -35,7 +35,7 @@ def test_gen_topology_conf_empty():
     assert open(cfg.output_dir + "/cloud_topology.conf").read() == PRELUDE + "\n"
 
 
-@mock.patch("util.TPU")
+@mock.patch("tpu.TPU.make")
 def test_gen_topology_conf(tpu_mock):
     cfg = TstCfg(
         nodeset_tpu={
@@ -50,12 +50,12 @@ def test_gen_topology_conf(tpu_mock):
         output_dir=tempfile.mkdtemp(),
     )
 
-    def tpu_se(ns: TstNodeset) -> TstTPU:
-        if ns.nodeset_name == "bold":
+    def tpu_se(ns: str, lkp) -> TstTPU:
+        if ns == "bold":
             return TstTPU(vmcount=3)
-        if ns.nodeset_name == "slim":
+        if ns == "slim":
             return TstTPU(vmcount=1)
-        raise AssertionError(f"unexpected TPU name: '{ns.nodeset_name}'")
+        raise AssertionError(f"unexpected TPU name: '{ns}'")
 
     tpu_mock.side_effect = tpu_se
 

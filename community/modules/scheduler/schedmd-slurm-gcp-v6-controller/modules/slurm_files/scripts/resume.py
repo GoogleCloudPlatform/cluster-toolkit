@@ -37,11 +37,12 @@ from util import (
     map_with_futures,
     run,
     separate,
-    to_hostlist_fast,
+    to_hostlist,
     trim_self_link,
     wait_for_operation,
 )
 from util import lookup, NSDict
+import tpu
 
 import slurm_gcp_plugins
 
@@ -155,11 +156,6 @@ def dws_flex_duration(dws_flex:object, job_id: Optional[int]) -> int:
             log.info("Job TimeLimit cannot be less than 30 seconds or exceed 2 weeks")
     return max_duration
 
-def per_instance_properties(node):
-    props = NSDict()
-    # No properties beyond name are supported yet.
-
-    return props
 
 def create_instances_request(nodes: List[str], placement_group: Optional[str], excl_job_id: Optional[int]):
     """Call regionInstances.bulkInsert to create instances"""
@@ -167,31 +163,27 @@ def create_instances_request(nodes: List[str], placement_group: Optional[str], e
 
     # model here indicates any node that can be used to describe the rest
     model = next(iter(nodes))
-    nodeset = lookup().node_nodeset(model)
-    template = lookup().node_template(model)
     log.debug(f"create_instances_request: {model} placement: {placement_group}")
 
-    body = NSDict()
+    nodeset = lookup().node_nodeset(model)
+    template = lookup().node_template(model)
+    labels = {"slurm_job_id": excl_job_id} if excl_job_id else None
 
-    body.count = len(nodes)
+    body = dict(
+        count = len(nodes),
+        sourceInstanceTemplate = template,
+        # key is instance name, value overwrites properties (no overwrites)
+        perInstanceProperties = {k: {} for k in nodes},
+        instanceProperties = instance_properties(
+            nodeset, model, placement_group, labels, excl_job_id
+        ),
+    )
 
     if placement_group:
         assert len(nodes) <= PLACEMENT_MAX_CNT
         pass # do not set minCount to force "all or nothing" behavior
     else:
-        body.minCount = 1
-
-    # source of instance properties
-    body.sourceInstanceTemplate = template
-
-    labels = {"slurm_job_id": excl_job_id} if excl_job_id else None
-    # overwrites properties across all instances
-    body.instanceProperties = instance_properties(
-        nodeset, model, placement_group, labels, excl_job_id
-    )
-
-    # key is instance name, value overwrites properties
-    body.perInstanceProperties = {k: per_instance_properties(k) for k in nodes}
+        body["minCount"] = 1
 
     zone_allow = nodeset.zone_policy_allow or []
     zone_deny = nodeset.zone_policy_deny or []
@@ -203,10 +195,12 @@ def create_instances_request(nodes: List[str], placement_group: Optional[str], e
         api_method = lookup().compute.regionInstances().bulkInsert
         method_args = {"region": lookup().node_region(model)}
         
-        body.locationPolicy.locations = {
-            **{ f"zones/{z}": {"preference": "ALLOW"} for z in zone_allow },
-            **{ f"zones/{z}": {"preference": "DENY"} for z in zone_deny }}
-        body.locationPolicy.targetShape = nodeset.zone_target_shape
+        body["locationPolicy"] = dict(
+            locations = {
+                **{ f"zones/{z}": {"preference": "ALLOW"} for z in zone_allow },
+                **{ f"zones/{z}": {"preference": "DENY"} for z in zone_deny }},
+            targetShape = nodeset.zone_target_shape,
+        )
     
     if lookup().cfg.enable_slurm_gcp_plugins:
         slurm_gcp_plugins.pre_instance_bulk_insert(
@@ -218,9 +212,9 @@ def create_instances_request(nodes: List[str], placement_group: Optional[str], e
 
     req = api_method(
         project=lookup().project, 
-        body=body.to_dict(), 
+        body=body, 
         **method_args)
-    log.debug(f"new request: endpoint={req.methodId} nodes={to_hostlist_fast(nodes)}")
+    log.debug(f"new request: endpoint={req.methodId} nodes={to_hostlist(nodes)}")
     log_api_request(req)
     return req
 
@@ -276,7 +270,8 @@ def group_nodes_bulk(nodes: List[str], resume_data: Optional[ResumeData], lkp: u
     def chunk_nodes(nodes: List[str]):
         chunk_size = BULK_INSERT_LIMIT
         if nodes and lkp.node_is_tpu(nodes[0]):
-            chunk_size = util.TPU(lkp.node_nodeset(nodes[0])).vmcount
+            ns = lkp.node_nodeset_name(nodes[0])
+            chunk_size = tpu.TPU.make(ns, lkp).vmcount
         return chunked(nodes, n=chunk_size)
     
     chunks = [
@@ -292,34 +287,6 @@ def group_nodes_bulk(nodes: List[str], resume_data: Optional[ResumeData], lkp: u
         for i, nodes_chunk in enumerate(chunk_nodes(pn.nodes))
     ]
     return {chunk.name: chunk for chunk in chunks}
-
-
-def start_tpu(data):
-    tpu = data["tpu"]
-    node = data["node"]
-    if len(node) == 1:
-        node = node[0]
-        log.debug(
-            f"Will create a TPU of type {tpu.node_type} tf_version {tpu.tf_version} in zone {tpu.zone} with name {node}"
-        )
-        tpunode = tpu.get_node(node)
-        if tpunode is None:
-            if not tpu.create_node(nodename=node):
-                log.error("Error creating tpu node {node}")
-        else:
-            if tpu.preserve_tpu:
-                if not tpu.start_node(nodename=node):
-                    log.error("Error starting tpu node {node}")
-            else:
-                log.info(
-                    f"Tpu node {node} is already created, but will not start it because nodeset does not have preserve_tpu option active."
-                )
-    else:
-        log.debug(
-            f"Will create a multi-vm TPU of type {tpu.node_type} tf_version {tpu.tf_version} in zone {tpu.zone} with name {node[0]}"
-        )
-        if not tpu.create_node(nodename=node):
-            log.error("Error creating tpu node {node}")
 
 
 def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
@@ -340,23 +307,19 @@ def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
 
     if log.isEnabledFor(logging.DEBUG):
         grouped_nodelists = {
-            group: to_hostlist_fast(chunk.nodes) for group, chunk in grouped_nodes.items()
+            group: to_hostlist(chunk.nodes) for group, chunk in grouped_nodes.items()
         }
         log.debug(
             "node bulk groups: \n{}".format(yaml.safe_dump(grouped_nodelists).rstrip())
         )
 
-    tpu_start_data = []
-    tpu_objs = {}
+    tpu_chunks = []
     bi_inserts = {}
 
     for group, chunk in grouped_nodes.items():
         model = chunk.nodes[0]
         if lookup().node_is_tpu(model):
-            # do not create multiple tpu_objs if nodes with the same prefix are used
-            if chunk.prefix not in tpu_objs.keys():
-                tpu_objs[chunk.prefix] = util.TPU(lookup().node_nodeset(model))
-            tpu_start_data.append({"tpu": tpu_objs[chunk.prefix], "node": chunk.nodes})
+            tpu_chunks.append(chunk.nodes)
         else:
             bi_inserts[group] = create_instances_request(
                 chunk.nodes, chunk.placement_group, chunk.excl_job_id
@@ -391,56 +354,73 @@ def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
     bulk_operations = {group: wait_for_operation(op) for group, op in started.items()}
 
     # Start TPU after regular nodes so that regular nodes are not affected by the slower TPU nodes
-    log.debug(f"tpu_start_data={yaml.safe_dump(tpu_start_data)}")
-    execute_with_futures(start_tpu, tpu_start_data)
+    execute_with_futures(tpu.start_tpu, tpu_chunks)
 
-    all_successful_inserts = []
+    for group, op in bulk_operations.items():
+        _handle_bulk_insert_op(op, grouped_nodes[group].nodes, resume_data)
+        
 
-    for group, bulk_op in bulk_operations.items():
-        group_id = bulk_op["operationGroupId"]
-        bulk_op_name = bulk_op["name"]
-        if "error" in bulk_op:
-            error = bulk_op["error"]["errors"][0]
-            group_nodes = to_hostlist_fast(grouped_nodes[group].nodes)
-            log.warning(
-                f"bulkInsert operation errors: {error['code']} name={bulk_op_name} operationGroupId={group_id} nodes={group_nodes}"
-            )
-        successful_inserts, failed_inserts = separate(
-            lambda op: "error" in op, get_insert_operations(group_id)
+def _handle_bulk_insert_op(op: object, nodes: List[str], resume_data: Optional[ResumeData]) -> None:
+    """
+    Handles **DONE** BulkInsert operations
+    """
+    assert op["operationType"] == "bulkInsert" and op["status"] == "DONE", f"unexpected op: {op}"
+
+    group_id = op["operationGroupId"]
+    if "error" in op:
+        error = op["error"]["errors"][0]
+        log.warning(
+            f"bulkInsert operation error: {error['code']} name={op['name']} operationGroupId={group_id} nodes={to_hostlist(nodes)}"
         )
-        # Apparently multiple errors are possible... so join with +.
-        by_error_inserts = util.groupby_unsorted(
-            failed_inserts,
-            lambda op: "+".join(err["code"] for err in op["error"]["errors"]),
-        )
-        for code, failed_ops in by_error_inserts:
-            failed_nodes = {trim_self_link(op["targetLink"]): op for op in failed_ops}
-            hostlist = util.to_hostlist(failed_nodes)
-            count = len(failed_nodes)
-            log.error(
-                f"{count} instances failed to start: {code} ({hostlist}) operationGroupId={group_id}"
-            )
-            failed_node, failed_op = next(iter(failed_nodes.items()))
-            msg = "; ".join(
-                f"{err['code']}: {err['message'] if 'message' in err else 'no message'}"
-                for err in failed_op["error"]["errors"]
-            )
-            if code != "RESOURCE_ALREADY_EXISTS":
-                down_nodes_notify_jobs(failed_nodes, f"GCP Error: {msg}", resume_data)
-            log.error(
-                f"errors from insert for node '{failed_node}' ({failed_op['name']}): {msg}"
-            )
+        # TODO: does it make sense to query for insert-ops in case of bulkInsert-op error?
+    
+    created = 0
+    for status in op["instancesBulkInsertOperationMetadata"]["perLocationStatus"].values():
+        created += status.get("createdVmCount", 0)
+    if created == len(nodes):
+        log.info(f"created {len(nodes)} instances: nodes={to_hostlist(nodes)}")
+        return # no need to gather status of insert-operations.
 
-        ready_nodes = {trim_self_link(op["targetLink"]) for op in successful_inserts}
-        if len(ready_nodes) > 0:
-            ready_nodelist = to_hostlist_fast(ready_nodes)
-            log.info(f"created {len(ready_nodes)} instances: nodes={ready_nodelist}")
-            all_successful_inserts.extend(successful_inserts)
+    # TODO:
+    # * don't perform globalOperations aggregateList request to gather insert-operations,
+    #   instead use specific locations from `instancesBulkInsertOperationMetadata`,
+    #   most of the time single zone should be sufficient.
+    # * don't gather insert-operations per bulkInsert request, instead aggregate it across
+    #   all bulkInserts (goes one level above this function) 
+    successful_inserts, failed_inserts = separate(
+        lambda op: "error" in op, get_insert_operations(group_id)
+    )
+    # Apparently multiple errors are possible... so join with +.
+    by_error_inserts = util.groupby_unsorted(
+        failed_inserts,
+        lambda op: "+".join(err["code"] for err in op["error"]["errors"]),
+    )
+    for code, failed_ops in by_error_inserts:
+        failed_nodes = {trim_self_link(op["targetLink"]): op for op in failed_ops}
+        hostlist = util.to_hostlist(failed_nodes)
+        count = len(failed_nodes)
+        log.error(
+            f"{count} instances failed to start: {code} ({hostlist}) operationGroupId={group_id}"
+        )
+        failed_node, failed_op = next(iter(failed_nodes.items()))
+        msg = "; ".join(
+            f"{err['code']}: {err['message'] if 'message' in err else 'no message'}"
+            for err in failed_op["error"]["errors"]
+        )
+        if code != "RESOURCE_ALREADY_EXISTS":
+            down_nodes_notify_jobs(failed_nodes, f"GCP Error: {msg}", resume_data)
+        log.error(
+            f"errors from insert for node '{failed_node}' ({failed_op['name']}): {msg}"
+        )
+
+    ready_nodes = {trim_self_link(op["targetLink"]) for op in successful_inserts}
+    if len(ready_nodes) > 0:
+        log.info(f"created {len(ready_nodes)} instances: nodes={to_hostlist(ready_nodes)}")
 
 
 def down_nodes_notify_jobs(nodes: List[str], reason: str, resume_data: Optional[ResumeData]) -> None:
     """set nodes down with reason"""
-    nodelist = util.to_hostlist_fast(nodes)
+    nodelist = util.to_hostlist(nodes)
     reason_quoted = shlex.quote(reason)
     
     log.error(f"Marking nodes {nodelist} as DOWN, reason: {reason}")
@@ -464,12 +444,13 @@ def hold_job(job_id, reason):
     run(f"{lookup().scontrol} update jobid={job_id} comment='{reason}'")
 
 
-def create_placement_request(pg_name, region):
+def create_placement_request(pg_name: str, region: str, max_distance: Optional[int]):
     config = {
         "name": pg_name,
         "region": region,
         "groupPlacementPolicy": {
             "collocation": "COLLOCATED",
+            "maxDistance": max_distance
         },
     }
     if lookup().cfg.enable_slurm_gcp_plugins:
@@ -509,11 +490,13 @@ def _allocate_nodes_to_placements(nodes: List[str], excl_job_id:Optional[int], l
     if not (nodeset.enable_placement and valid_placement_node(model)):
         return no_pp
     
+    max_count = calculate_chunk_size(nodeset, lkp)
+
     name_prefix = f"{lkp.cfg.slurm_cluster_name}-slurmgcp-managed-{nodeset.nodeset_name}"
     if excl_job_id: # simply chunk given nodes by max size of placement
         return [
             PlacementAndNodes(placement=f"{name_prefix}-{excl_job_id}-{i}", nodes=chunk)
-            for i, chunk in enumerate(chunked(nodes, n=PLACEMENT_MAX_CNT))
+            for i, chunk in enumerate(chunked(nodes, n=max_count))
         ]
 
     # split whole nodeset (not only nodes to resume) into chunks of max size of placement
@@ -523,7 +506,7 @@ def _allocate_nodes_to_placements(nodes: List[str], excl_job_id:Optional[int], l
 
     for node in nodes:
         try:
-            chunk = lkp.node_index(node) // PLACEMENT_MAX_CNT
+            chunk = lkp.node_index(node) // max_count
             chunks[chunk].append(node)
         except:
             invalid.append(node)
@@ -536,22 +519,39 @@ def _allocate_nodes_to_placements(nodes: List[str], excl_job_id:Optional[int], l
 
     if invalid:
         placements.append(PlacementAndNodes(placement=None, nodes=invalid))
-        log.error(f"Could not find placement for nodes with unexpected names: {to_hostlist_fast(invalid)}")
+        log.error(f"Could not find placement for nodes with unexpected names: {to_hostlist(invalid)}")
 
     return placements
+
+def calculate_chunk_size(nodeset: NSDict, lkp: util.Lookup) -> int:
+    # Calculates the chunk size based on max distance value received
+    machine_type = lkp.template_info(nodeset.instance_template).machine_type.family
+    max_distance = nodeset.placement_max_distance
+    if max_distance == 1:
+        return 22
+    elif max_distance == 2:
+        if machine_type.startswith("a3"):
+            return 256
+        else:
+            return 150
+    elif max_distance == 3:
+        return 1500
+    else:
+        return PLACEMENT_MAX_CNT
 
 def create_nodeset_placements(nodes: List[str], excl_job_id:Optional[int], lkp: util.Lookup) -> List[PlacementAndNodes]:    
     placements = _allocate_nodes_to_placements(nodes, excl_job_id, lkp)
     region = lkp.node_region(nodes[0])
+    max_distance = lkp.node_nodeset(nodes[0]).get('placement_max_distance')
 
     if log.isEnabledFor(logging.DEBUG):
-        debug_p = {p.placement: to_hostlist_fast(p.nodes) for p in placements}
+        debug_p = {p.placement: to_hostlist(p.nodes) for p in placements}
         log.debug(
             f"creating {len(placements)} placement groups: \n{yaml.safe_dump(debug_p).rstrip()}"
         )
-    
+
     requests = {
-        p.placement: create_placement_request(p.placement, region) for p in placements if p.placement
+        p.placement: create_placement_request(p.placement, region, max_distance) for p in placements if p.placement
     }
     if not requests:
         return placements
@@ -591,7 +591,7 @@ def create_nodeset_placements(nodes: List[str], excl_job_id:Optional[int], lkp: 
             )
 
     log.info(
-        f"created {len(operations)} placement groups ({to_hostlist_fast(operations.keys())})"
+        f"created {len(operations)} placement groups ({to_hostlist(operations.keys())})"
     )
     return placements
 
@@ -617,7 +617,7 @@ def main(nodelist: str) -> None:
     )
     if other_nodes:
         log.error(
-            f"Ignoring non-power-managed nodes '{to_hostlist_fast(other_nodes)}' from '{nodelist}'"
+            f"Ignoring non-power-managed nodes '{to_hostlist(other_nodes)}' from '{nodelist}'"
         )
 
     if not nodes:
@@ -625,7 +625,7 @@ def main(nodelist: str) -> None:
         return
 
     resume_data = get_resume_file_data()
-    log.info(f"resume {util.to_hostlist_fast(nodes)}")
+    log.info(f"resume {util.to_hostlist(nodes)}")
     resume_nodes(nodes, resume_data)
     
 if __name__ == "__main__":

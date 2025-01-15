@@ -21,8 +21,8 @@ import time
 class SlurmReconfigureSize(SlurmTest):
     # Class to test simple reconfiguration
     def __init__(self, deployment):
-        super().__init__(Deployment("tools/python-integration-tests/blueprints/slurm-simple.yaml"))
-        self.reconfig_blueprint = "tools/python-integration-tests/blueprints/slurm-simple-reconfig.yaml"
+        super().__init__(Deployment("tools/python-integration-tests/blueprints/slurm-reconfig-before.yaml"))
+        self.reconfig_blueprint = "tools/python-integration-tests/blueprints/slurm-reconfig-after.yaml"
     
     def runTest(self):
         # Check 5 nodes are available

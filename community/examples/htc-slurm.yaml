@@ -45,15 +45,19 @@ deployment_groups:
   - id: network
     source: modules/network/vpc
 
+  - id: private_service_access
+    source: community/modules/network/private-service-access
+    use: [network]
+
   - id: homefs
     source: modules/file-system/filestore
-    use: [network]
+    use: [network, private_service_access]
     settings:
       local_mount: /home
 
   - id: projectsfs
     source: modules/file-system/filestore
-    use: [network]
+    use: [network, private_service_access]
     settings:
       filestore_tier: HIGH_SCALE_SSD
       size_gb: 10240

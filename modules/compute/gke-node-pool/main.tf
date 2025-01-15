@@ -27,7 +27,16 @@ locals {
   }
 }
 
+module "gpu" {
+  source = "../../internal/gpu-definition"
+
+  machine_type      = var.machine_type
+  guest_accelerator = var.guest_accelerator
+}
+
 locals {
+  guest_accelerator = module.gpu.guest_accelerator
+
   has_gpu                  = length(local.guest_accelerator) > 0
   allocatable_gpu_per_node = local.has_gpu ? max(local.guest_accelerator[*].count...) : -1
   gpu_taint = local.has_gpu ? [{
@@ -235,6 +244,9 @@ resource "google_container_node_pool" "node_pool" {
     ignore_changes = [
       node_config[0].labels,
       initial_node_count,
+      # Ignore local/ephemeral ssd configs as they are tied to machine types.
+      node_config[0].ephemeral_storage_local_ssd_config,
+      node_config[0].local_nvme_ssd_block_config,
     ]
     precondition {
       condition     = (var.max_pods_per_node == null) || (data.google_container_cluster.gke_cluster.networking_mode == "VPC_NATIVE")
@@ -307,6 +319,14 @@ resource "google_container_node_pool" "node_pool" {
       condition     = local.upgrade_settings.max_unavailable > 0 || local.upgrade_settings.max_surge > 0
       error_message = "At least one of max_unavailable or max_surge must greater than 0"
     }
+    precondition {
+      condition     = var.placement_policy.type != "COMPACT" || (var.zones != null ? (length(var.zones) == 1) : false)
+      error_message = "Compact placement is only available for node pools operating in a single zone."
+    }
+    precondition {
+      condition     = var.placement_policy.type != "COMPACT" || local.upgrade_settings.strategy != "BLUE_GREEN"
+      error_message = "Compact placement is not supported with blue-green upgrades."
+    }
   }
 }
 
@@ -355,8 +375,7 @@ resource "null_resource" "enable_tcpxo_in_workload" {
 module "kubectl_apply" {
   source = "../../management/kubectl-apply"
 
-  cluster_id = var.cluster_id
-  project_id = var.project_id
+  gke_cluster_exists = var.gke_cluster_exists
 
   apply_manifests = flatten([
     for manifest in local.gpu_direct_setting.gpu_direct_manifests : [

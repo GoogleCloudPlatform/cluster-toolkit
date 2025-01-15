@@ -82,3 +82,9 @@ variable "viewers" {
     ])
   }
 }
+
+variable "enable_hierarchical_namespace" {
+  description = "If true, enables hierarchical namespace for the bucket. This option must be configured during the initial creation of the bucket."
+  type        = bool
+  default     = false
+}

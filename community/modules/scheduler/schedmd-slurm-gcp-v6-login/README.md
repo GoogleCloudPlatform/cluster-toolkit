@@ -3,7 +3,7 @@
 This module creates a login node for a Slurm cluster based on the
 [slurm-gcp] [slurm\_instance\_template] and [slurm\_login\_instance]
 terraform modules. The login node is used in conjunction with the
-[Slurm controller](../schedmd-slurm-gcp-v5-controller/README.md).
+[Slurm controller](../schedmd-slurm-gcp-v6-controller/README.md).
 
 [slurm-gcp]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.8.6
 [slurm\_login\_instance]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.8.6/terraform/slurm_cluster/modules/slurm_login_instance
@@ -71,7 +71,9 @@ modules. For support with the underlying modules, see the instructions in the
 
 ## Modules
 
-No modules.
+| Name | Source | Version |
+|------|--------|---------|
+| <a name="module_gpu"></a> [gpu](#module\_gpu) | ../../../../modules/internal/gpu-definition | n/a |
 
 ## Resources
 

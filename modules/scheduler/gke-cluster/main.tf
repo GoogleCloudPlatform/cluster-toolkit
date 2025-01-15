@@ -20,6 +20,14 @@ locals {
 }
 
 locals {
+  upgrade_settings = {
+    strategy        = var.upgrade_settings.strategy
+    max_surge       = coalesce(var.upgrade_settings.max_surge, 0)
+    max_unavailable = coalesce(var.upgrade_settings.max_unavailable, 1)
+  }
+}
+
+locals {
   dash             = var.prefix_with_deployment_name && var.name_suffix != "" ? "-" : ""
   prefix           = var.prefix_with_deployment_name ? var.deployment_name : ""
   name_maybe_empty = "${local.prefix}${local.dash}${var.name_suffix}"
@@ -60,6 +68,16 @@ data "google_project" "project" {
   project_id = var.project_id
 }
 
+data "google_container_engine_versions" "version_prefix_filter" {
+  provider       = google-beta
+  location       = var.cluster_availability_type == "ZONAL" ? var.zone : var.region
+  version_prefix = var.version_prefix
+}
+
+locals {
+  master_version = var.min_master_version != null ? var.min_master_version : data.google_container_engine_versions.version_prefix_filter.latest_master_version
+}
+
 resource "google_container_cluster" "gke_cluster" {
   provider = google-beta
 
@@ -72,8 +90,7 @@ resource "google_container_cluster" "gke_cluster" {
   remove_default_node_pool = true
   initial_node_count       = 1 # must be set when remove_default_node_pool is set
 
-  # Sets default to false so terraform deletion is not prevented
-  deletion_protection = false
+  deletion_protection = var.deletion_protection
 
   network    = var.network_id
   subnetwork = var.subnetwork_self_link
@@ -152,7 +169,7 @@ resource "google_container_cluster" "gke_cluster" {
   release_channel {
     channel = var.release_channel
   }
-  min_master_version = var.min_master_version
+  min_master_version = local.master_version
 
   maintenance_policy {
     daily_maintenance_window {
@@ -195,10 +212,18 @@ resource "google_container_cluster" "gke_cluster" {
     update = var.timeout_update
   }
 
+  node_config {
+    shielded_instance_config {
+      enable_secure_boot          = var.system_node_pool_enable_secure_boot
+      enable_integrity_monitoring = true
+    }
+  }
+
   lifecycle {
     # Ignore all changes to the default node pool. It's being removed after creation.
     ignore_changes = [
-      node_config
+      node_config,
+      min_master_version,
     ]
     precondition {
       condition     = var.default_max_pods_per_node == null || var.networking_mode == "VPC_NATIVE"
@@ -236,7 +261,7 @@ resource "google_container_node_pool" "system_node_pools" {
   name     = var.system_node_pool_name
   cluster  = var.cluster_reference_type == "NAME" ? google_container_cluster.gke_cluster.name : google_container_cluster.gke_cluster.self_link
   location = var.cluster_availability_type == "ZONAL" ? var.zone : var.region
-  version  = var.min_master_version
+  version  = local.master_version
 
   autoscaling {
     total_min_node_count = var.system_node_pool_node_count.total_min_nodes
@@ -244,8 +269,9 @@ resource "google_container_node_pool" "system_node_pools" {
   }
 
   upgrade_settings {
-    max_surge       = 1
-    max_unavailable = 0
+    strategy        = local.upgrade_settings.strategy
+    max_surge       = local.upgrade_settings.max_surge
+    max_unavailable = local.upgrade_settings.max_unavailable
   }
 
   management {
@@ -304,7 +330,24 @@ resource "google_container_node_pool" "system_node_pools" {
     ignore_changes = [
       node_config[0].labels,
       node_config[0].taint,
+      version,
     ]
+    precondition {
+      condition     = contains(["SURGE"], local.upgrade_settings.strategy)
+      error_message = "Only SURGE strategy is supported"
+    }
+    precondition {
+      condition     = local.upgrade_settings.max_unavailable >= 0
+      error_message = "max_unavailable should be set to 0 or greater"
+    }
+    precondition {
+      condition     = local.upgrade_settings.max_surge >= 0
+      error_message = "max_surge should be set to 0 or greater"
+    }
+    precondition {
+      condition     = local.upgrade_settings.max_unavailable > 0 || local.upgrade_settings.max_surge > 0
+      error_message = "At least one of max_unavailable or max_surge must greater than 0"
+    }
   }
 }
 
@@ -337,8 +380,7 @@ module "workload_identity" {
 module "kubectl_apply" {
   source = "../../management/kubectl-apply"
 
-  cluster_id = google_container_cluster.gke_cluster.id
-  project_id = var.project_id
+  gke_cluster_exists = true
 
   apply_manifests = flatten([
     for idx, network_info in var.additional_networks : [
@@ -357,4 +399,6 @@ module "kubectl_apply" {
       }
     ]
   ])
+
+  depends_on = [google_container_cluster.gke_cluster]
 }

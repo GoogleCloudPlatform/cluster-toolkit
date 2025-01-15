@@ -26,7 +26,7 @@ locals {
 # NODESET
 # TODO: remove dependency on slurm-gcp repo, move to local template module
 module "slurm_nodeset_template" {
-  source   = "../../internal/slurm-gcp-v6/instance_template"
+  source   = "../../internal/slurm-gcp/instance_template"
   for_each = local.nodeset_map
 
   project_id          = var.project_id
@@ -93,6 +93,7 @@ locals {
     maintenance_interval             = ns.maintenance_interval
     instance_properties_json         = ns.instance_properties_json
     enable_placement                 = ns.enable_placement
+    placement_max_distance           = ns.placement_max_distance
     network_storage                  = ns.network_storage
     zone_target_shape                = ns.zone_target_shape
     zone_policy_allow                = ns.zone_policy_allow
@@ -104,7 +105,7 @@ locals {
 
 # NODESET TPU
 module "slurm_nodeset_tpu" {
-  source   = "../../internal/slurm-gcp-v6/nodeset_tpu"
+  source   = "../../internal/slurm-gcp/nodeset_tpu"
   for_each = local.nodeset_tpu_map
 
   project_id             = var.project_id

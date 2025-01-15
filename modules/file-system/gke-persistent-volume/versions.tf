@@ -15,10 +15,6 @@
 terraform {
   required_version = ">= 1.0"
   required_providers {
-    google = {
-      source  = "hashicorp/google"
-      version = ">= 4.42"
-    }
     kubectl = {
       source  = "gavinbunney/kubectl"
       version = ">= 1.7.0"
@@ -29,6 +25,6 @@ terraform {
     }
   }
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:gke-persistent-volume/v1.44.0"
+    module_name = "blueprints/terraform/hpc-toolkit:gke-persistent-volume/v1.45.0"
   }
 }

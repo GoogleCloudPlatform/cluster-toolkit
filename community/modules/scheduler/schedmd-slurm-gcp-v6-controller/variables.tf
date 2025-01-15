@@ -205,6 +205,7 @@ variable "nodeset" {
     disk_type                        = optional(string)
     enable_confidential_vm           = optional(bool, false)
     enable_placement                 = optional(bool, false)
+    placement_max_distance           = optional(number, null)
     enable_oslogin                   = optional(bool, true)
     enable_shielded_vm               = optional(bool, false)
     enable_maintenance_reservation   = optional(bool, false)
@@ -620,6 +621,10 @@ Enables calling hooks in scripts/slurm_gcp_plugins during cluster resume and sus
 EOD
   type        = any
   default     = false
+  validation {
+    condition     = !can(var.enable_slurm_gcp_plugins.max_hops)
+    error_message = "The 'max_hops' plugin is no longer supported. Please use the 'placement_max_distance' nodeset property instead."
+  }
 }
 
 variable "universe_domain" {
