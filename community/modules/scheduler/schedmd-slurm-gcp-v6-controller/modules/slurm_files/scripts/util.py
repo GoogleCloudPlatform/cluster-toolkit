@@ -278,6 +278,7 @@ def parse_bucket_uri(uri: str):
     """
     pattern = re.compile(r"gs://(?P<bucket>[^/\s]+)/(?P<path>([^/\s]+)(/[^/\s]+)*)")
     matches = pattern.match(uri)
+    assert matches, f"Unexpected bucker URI: '{uri}'"
     return matches.group("bucket"), matches.group("path")
 
 
@@ -1394,7 +1395,7 @@ class Lookup:
             return f"{pref}-{start}"
         return f"{pref}-[{start}-{start + count - 1}]"
 
-    def static_dynamic_sizes(self, nodeset: object) -> int:
+    def static_dynamic_sizes(self, nodeset: object) -> Tuple[int, int]:
         return (nodeset.node_count_static or 0, nodeset.node_count_dynamic_max or 0)
 
     def nodelist(self, nodeset) -> str:
@@ -1626,6 +1627,7 @@ class Lookup:
 
         active_reservation = None
         match = re.search(r'^projects/(?P<project>[^/]+)/zones/(?P<zone>[^/]+)/futureReservations/(?P<name>[^/]+)(/.*)?$', nodeset.future_reservation)
+        assert match, f"Invalid future reservation name '{nodeset.future_reservation}'"
         project, zone, name = match.group("project","zone","name")
         fr = self._get_future_reservation(project,zone,name)
 
@@ -1633,9 +1635,10 @@ class Lookup:
         start_time = datetime.fromisoformat(fr["timeWindow"]["startTime"][:-1])
         end_time = datetime.fromisoformat(fr["timeWindow"]["endTime"][:-1])
 
-        if "autoCreatedReservations" in fr["status"] and (fr_res:=fr["status"]["autoCreatedReservations"][0]):
+        if "autoCreatedReservations" in fr["status"] and (res:=fr["status"]["autoCreatedReservations"][0]):
             if (start_time<=datetime.utcnow()<=end_time):
-                match = re.search(r'projects/(?P<project>[^/]+)/zones/(?P<zone>[^/]+)/reservations/(?P<name>[^/]+)(/.*)?$',fr_res)
+                match = re.search(r'projects/(?P<project>[^/]+)/zones/(?P<zone>[^/]+)/reservations/(?P<name>[^/]+)(/.*)?$',res)
+                assert match, f"Unexpected reservation name '{res}'"
                 res_name = match.group("name")
                 bulk_insert_name = f"projects/{project}/reservations/{res_name}"
                 active_reservation = self.get_reservation_details(project, zone, res_name, bulk_insert_name)
