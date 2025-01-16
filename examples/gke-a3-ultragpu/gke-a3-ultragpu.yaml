@@ -28,7 +28,8 @@ vars:
   nccl_installer_path: $(ghpc_stage("./nccl-installer.yaml"))
   # Temporary fix for COS issue, will be fixed in next release
   mglru_disable_path: $(ghpc_stage("./mglru-disable.yaml"))
-  static_node_count:  # add this
+  kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
+  static_node_count: # add this
   system_node_pool_disk_size_gb: 200
   a3ultra_node_pool_disk_size_gb: 100
 
@@ -169,10 +170,6 @@ deployment_groups:
         ))
     outputs: [instructions]
 
-  - id: topology-aware-scheduler-install
-    source: community/modules/compute/gke-topology-scheduler
-    use: [a3-ultragpu-cluster]
-
   - id: workload-manager-install
     source: modules/management/kubectl-apply
     use: [a3-ultragpu-cluster]
@@ -180,6 +177,10 @@ deployment_groups:
       kueue:
         install: true
         version: v0.10.0
+        config_path: $(vars.kueue_configuration_path)
+        config_template_vars:
+          num_gpus: $(a3-ultragpu-pool.static_gpu_count)
+          node_pool_name: $(a3-ultragpu-pool.node_pool_name)
       jobset:
         install: true
         version: v0.7.2
