@@ -81,7 +81,7 @@ deployment_groups:
       network_name: $(vars.deployment_name)-net-1
       mtu: $(vars.mtu_size)
       subnetworks:
-      - subnet_name: gke-a3u-gcs-sub-1
+      - subnet_name: $(vars.deployment_name)-sub-1
         subnet_region: $(vars.region)
         subnet_ip: 192.168.64.0/18
 
@@ -189,7 +189,7 @@ deployment_groups:
           num_gpus: $(vars.num_gpus)
       jobset:
         install: true
-        version: v0.7.1
+        version: v0.7.2
       apply_manifests:
       - source: $(vars.nccl_installer_path)
 
