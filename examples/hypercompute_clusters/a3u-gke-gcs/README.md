@@ -107,3 +107,8 @@ Use the following commands to:
 Submit your job:
   kubectl create -f <PATH/TO/DEPLOYMENT_DIR>/primary/my-job-<some-id>.yaml
 ```
+
+## Running System Benchmarks with Ramble
+
+To run a series of NCCL, HPL, and NeMo test benchmarks on your cluster, see
+`system_benchmarks/README.md`.
