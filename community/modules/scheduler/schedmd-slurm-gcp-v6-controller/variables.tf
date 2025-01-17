@@ -629,18 +629,6 @@ EOD
   sensitive = true
 }
 
-variable "enable_slurm_gcp_plugins" {
-  description = <<EOD
-Enables calling hooks in scripts/slurm_gcp_plugins during cluster resume and suspend.
-EOD
-  type        = any
-  default     = false
-  validation {
-    condition     = !can(var.enable_slurm_gcp_plugins.max_hops)
-    error_message = "The 'max_hops' plugin is no longer supported. Please use the 'placement_max_distance' nodeset property instead."
-  }
-}
-
 variable "universe_domain" {
   description = "Domain address for alternate API universe"
   type        = string
@@ -685,5 +673,24 @@ variable "disable_default_mounts" { # tflint-ignore: terraform_unused_declaratio
   validation {
     condition     = var.disable_default_mounts == null
     error_message = "DEPRECATED: Use `enable_default_mounts` instead."
+  }
+}
+
+variable "enable_slurm_gcp_plugins" { # tflint-ignore: terraform_unused_declarations
+  description = <<EOD
+DEPRECATED: Slurm GCP plugins have been deprecated.
+Instead of 'max_hops' plugin please use the 'placement_max_distance' nodeset property.
+Instead of 'enable_vpmu' plugin please use 'advanced_machine_features.performance_monitoring_unit' nodeset property.
+EOD
+  type        = any
+  default     = null
+
+  validation {
+    condition     = var.enable_slurm_gcp_plugins == null
+    error_message = <<EOD
+DEPRECATED: Slurm GCP plugins have been deprecated.
+Instead of 'max_hops' plugin please use the 'placement_max_distance' nodeset property.
+Instead of 'enable_vpmu' plugin please use 'advanced_machine_features.performance_monitoring_unit' nodeset property.
+EOD
   }
 }

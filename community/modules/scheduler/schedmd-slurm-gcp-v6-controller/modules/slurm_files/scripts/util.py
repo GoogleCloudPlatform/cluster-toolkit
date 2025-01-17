@@ -43,8 +43,6 @@ from itertools import chain, islice
 from pathlib import Path
 from time import sleep, time
 
-import slurm_gcp_plugins
-
 from google.cloud import secretmanager
 from google.cloud import storage
 
@@ -1526,14 +1524,7 @@ class Lookup:
             # "deletionProtection",
             # "startRestricted",
         ]
-        if lookup().cfg.enable_slurm_gcp_plugins:
-            slurm_gcp_plugins.register_instance_information_fields(
-                lkp=lookup(),
-                project=self.project,
-                slurm_cluster_name=self.cfg.slurm_cluster_name,
-                instance_information_fields=instance_information_fields,
-            )
-
+        
         # TODO: Merge this with all fields when upcoming maintenance is
         # supported in beta.
         if endpoint_version(ApiEndpoint.COMPUTE) == 'alpha':
