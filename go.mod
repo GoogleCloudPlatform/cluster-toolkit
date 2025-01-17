@@ -1,6 +1,6 @@
 module hpc-toolkit
 
-go 1.22
+go 1.22.0
 
 require (
 	cloud.google.com/go/storage v1.41.0 // indirect
