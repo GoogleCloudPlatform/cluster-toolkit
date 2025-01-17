@@ -49,19 +49,30 @@ For any of the above, the following will be created:
   series of `Jobset` objects for each individual benchmark.
 
 Once created, this will first create a K8s job called
-"ramble-{nccl,hpl,nemo}-runner". This controller job orchestrates the running
-and analysis of the benchmarks. It installs everything it needs within a
-self-contained pod, creates an ssh keypair for multi-node communication, and
-uses Ramble to create JobSet's for each benchmark. Once those benchmarks
-are complete, it provides a summary of the results. Full benchmark logs can
-otherwise be found in the logs for each of the created JobSet/Job/Pod's
+"ramble-{nccl,hpl,nemo}-runner" in the ramble workspace. This controller job
+orchestrates the running and analysis of the benchmarks. It installs everything
+it needs within a self-contained pod, creates an ssh keypair for multi-node
+communication, and uses Ramble to create JobSet's for each benchmark. Once those
+benchmarks are complete, it provides a summary of the results. Full benchmark
+logs can otherwise be found in the logs for each of the created JobSet/Job/Pod's
 themselves.
+
+If you were to run all of the above commands, you would initially see something
+like this:
+
+   ```bash
+   $ kubectl -n ramble get jobs
+   NAME                 STATUS    COMPLETIONS   DURATION   AGE
+   ramble-hpl-runner    Running   0/1           30s        30s
+   ramble-nccl-runner   Running   0/1           43s        43s
+   ramble-nemo-runner   Running   0/1           22s        22s
+   ```
 
 For each benchmark, multiple node scales will be submitted, up to your maximum
 node scale of your cluster.  This can be controlled with the `n_nodes` variable
 in the `ramble.yaml` configMap.
 
-Note: The following depends on several tightly coupled settings, in particular
+Note: The benchmarks depends on several tightly coupled settings, in particular
 making sure that the subnet names in your GKE cluster match those defined in
 the "ramble.yaml" config file. If you modify the names of your subnets
 (including by changing the "deployment" name), then you will need to modify
@@ -74,8 +85,8 @@ ramble-{nccl,hpl,nemo}.yaml files:
         gpu_subnet_prefix: a3u-gke-gcs-rdma-sub
         cluster_queue: a3u
 
-Expected Results
-----------------
+Viewing the Results
+-------------------
 
 For ramble-nccl.yaml, at the end of the logs of the created `ramble-nccl-runner`
 job, you should see something like:
