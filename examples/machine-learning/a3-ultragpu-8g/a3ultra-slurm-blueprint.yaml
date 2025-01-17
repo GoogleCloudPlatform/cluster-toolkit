@@ -62,9 +62,6 @@ deployment_groups:
         enabled: true
       runners:
       - type: data
-        destination: /etc/cluster_toolkit/a3ultra-prod-slurm-image.yaml
-        source: ../.ghpc/artifacts/expanded_blueprint.yaml
-      - type: data
         destination: /var/tmp/slurm_vars.json
         content: |
           {
