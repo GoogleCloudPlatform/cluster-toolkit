@@ -26,26 +26,38 @@ spec:
 kind: ResourceFlavor
 apiVersion: kueue.x-k8s.io/v1beta1
 metadata:
-  name: "a3u"
+  name: "a3-ultra-tas"
 spec:
   nodeLabels:
-    cloud.google.com/gke-nodepool: "a3-ultragpu-8g-a3-ultragpu-pool"
+    cloud.google.com/gke-nodepool: ${node_pool_name}
   topologyName: "gke-default"
   tolerations:
   - key: "nvidia.com/gpu"
     operator: "Exists"
     effect: NoSchedule
 ---
+kind: ResourceFlavor
+apiVersion: kueue.x-k8s.io/v1beta1
+metadata:
+  name: "a3-ultra"
+spec:
+  nodeLabels:
+    cloud.google.com/gke-nodepool: ${node_pool_name}
+---
 apiVersion: kueue.x-k8s.io/v1beta1
 kind: ClusterQueue
 metadata:
-  name: "a3u"
+  name: "a3-ultra"
 spec:
   namespaceSelector: {} # match all.
   resourceGroups:
   - coveredResources: ["nvidia.com/gpu"]
     flavors:
-    - name: "a3u"
+    - name: "a3-ultra"
+      resources:
+      - name: "nvidia.com/gpu"
+        nominalQuota: ${num_gpus}
+    - name: "a3-ultra-tas"
       resources:
       - name: "nvidia.com/gpu"
         nominalQuota: ${num_gpus}
@@ -54,6 +66,6 @@ apiVersion: kueue.x-k8s.io/v1beta1
 kind: LocalQueue
 metadata:
   namespace: "default"
-  name: "a3u"
+  name: "a3-ultra"
 spec:
-  clusterQueue: "a3u"
+  clusterQueue: "a3-ultra"
