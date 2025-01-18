@@ -137,7 +137,7 @@ data:
         gke_nodepool: a3-ultragpu-8g-a3-ultragpu-pool
         sysnet_subnet_prefix: a3u-gke-gcs-sub
         gpu_subnet_prefix: a3u-gke-gcs-rdma-sub
-        cluster_queue: a3u
+        cluster_queue: a3-ultra-tas
 
       env_vars:
         set:
@@ -256,6 +256,7 @@ data:
                   restartPolicy: Never
                   nodeSelector:
                     cloud.google.com/gke-nodepool: {gke_nodepool}
+                    cloud.google.com/gke-ephemeral-storage-local-ssd: "true"
                   tolerations:
                   - key: cloud.google.com/gke-queued
                     effect: NoSchedule
