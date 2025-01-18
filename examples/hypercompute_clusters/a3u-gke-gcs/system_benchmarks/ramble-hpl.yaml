@@ -129,7 +129,6 @@ data:
           ${!UCX*}
           | sed 's/ / -x /g')
 
-
         container_name: hpl
         container_uri: "nvcr.io/nvidia/hpc-benchmarks:24.09"
         gke_container_name: hpl
@@ -142,6 +141,7 @@ data:
         sysnet_subnet_prefix: a3u-gke-gcs-sub
         gpu_subnet_prefix: a3u-gke-gcs-rdma-sub
         cluster_queue: a3u
+
       env_vars:
         set:
           CUDA_VISIBLE_DEVICES: 0,1,2,3,4,5,6,7
@@ -157,7 +157,6 @@ data:
         prepend:
         - paths:
             LD_LIBRARY_PATH: /usr/local/gib/lib64
-
 
       applications:
         nvidia-hpl:
@@ -536,6 +535,9 @@ spec:
           printf "\n------- Analyzing benchmark logs ------\n"
           ramble workspace analyze -f json --where '{n_nodes} <= '"${N_NODES}"
 
+          printf "\n------- Archiving ramble workspace ------\n"
+          ramble workspace archive -t --where '{n_nodes} <= '"${N_NODES}"
+
           printf "\n--------------- SUMMARY ---------------\n"
           jq -r '["workload","n_nodes","GFlop/s   ","GFlops/s/GPU"], (.experiments[] as $exp | $exp.CONTEXTS[] as $context |
           {
@@ -548,6 +550,28 @@ spec:
           | [.workload, .n_nodes, .GFlops, ."Per GPU GFlops"])
           | @tsv' results.latest.json
           printf "\n-------- Benchmarking Complete -------\n"
+
+          ARCHIVE_TAR=$(readlink archive/archive.latest.tar.gz)
+          ARCHIVE_PATH=${RAMBLE_WORKSPACE}/archive/${ARCHIVE_TAR}
+          RESULTS_FILE=$(basename $(readlink results.latest.json))
+          RESULTS_PATH=${RAMBLE_WORKSPACE}/${RESULTS_FILE}
+
+          printf "\n# To copy the full results from container:\n"
+          printf "kubectl cp %s:%s %s\n" $(hostname) ${RESULTS_PATH} ${RESULTS_FILE}
+          printf "\n# To copy the ramble workspace archive from container:\n"
+          printf "kubectl cp %s:%s ./%s\n" $(hostname) ${ARCHIVE_PATH} ${ARCHIVE_TAR}
+
+          printf "\n# To re-activate ramble workspace, first access runner:\n"
+          printf "kubectl exec -it %s -- /bin/bash\n" $(hostname)
+          printf "# Then run:\n"
+          printf "cd ${RAMBLE_WORKSPACE}\n"
+          printf "source "${SOFTWARE_INSTALL}"/ramble/env/bin/activate\n"
+          printf ". ${SOFTWARE_INSTALL}/ramble/share/ramble/setup-env.sh\n"
+          printf "ramble workspace activate .\n"
+
+          printf "\n- Sleeping for 1 day to allow introspection -\n"
+          sleep 86400
+
 
       restartPolicy: Never
   backoffLimit: 4
