@@ -62,6 +62,7 @@ from requests.exceptions import RequestException  # noqa: E402
 import yaml  # noqa: E402
 from addict import Dict as NSDict  # noqa: E402
 
+from base import Instance, ReservationDetails, FutureReservation, parse_gcp_timestamp
 
 USER_AGENT = "Slurm_GCP_Scripts/1.5 (GPN:SchedMD)"
 ENV_CONFIG_YAML = os.getenv("SLURM_CONFIG_YAML")
@@ -183,7 +184,6 @@ class MachineType:
         }.get(
             self.family, 1,  # assume 1 socket for all other families
         )
-
 
 
 @lru_cache(maxsize=1)
@@ -1201,31 +1201,6 @@ class Dumper(yaml.SafeDumper):
     def represent_path(dumper, path):
         return dumper.represent_scalar("tag:yaml.org,2002:str", str(path))
 
-
-@dataclass(frozen=True)
-class ReservationDetails:
-    project: str
-    zone: str
-    name: str
-    policies: List[str] # names (not URLs) of resource policies
-    bulk_insert_name: str # name in format suitable for bulk insert (currently identical to user supplied name in long format)
-    deployment_type: Optional[str]
-
-    @property
-    def dense(self) -> bool:
-        return self.deployment_type == "DENSE"
-
-@dataclass(frozen=True)
-class FutureReservation:
-    project: str
-    zone: str
-    name: str
-    specific: bool
-    start_time: datetime
-    end_time: datetime
-    active_reservation: Optional[ReservationDetails]
-
-
 @dataclass
 class Job:
     id: int
@@ -1489,84 +1464,35 @@ class Lookup:
 
 
     @lru_cache(maxsize=1)
-    def instances(self) -> Dict[str, object]:
-        instance_information_fields = [
-            "advancedMachineFeatures",
-            "cpuPlatform",
+    def instances(self) -> Dict[str, Instance]:
+        instance_fields = ",".join([
             "creationTimestamp",
-            "disks",
-            "disks",
-            "fingerprint",
-            "guestAccelerators",
-            "hostname",
-            "id",
-            "kind",
-            "labelFingerprint",
-            "labels",
-            "lastStartTimestamp",
-            "lastStopTimestamp",
-            "lastSuspendedTimestamp",
-            "machineType",
-            "metadata",
             "name",
-            "networkInterfaces",
             "resourceStatus",
             "scheduling",
-            "selfLink",
-            "serviceAccounts",
-            "shieldedInstanceConfig",
-            "shieldedInstanceIntegrityPolicy",
-            "sourceMachineImage",
             "status",
-            "statusMessage",
-            "tags",
-            "zone",
-            # "deletionProtection",
-            # "startRestricted",
-        ]
+            "upcomingMaintenance",
+        ])
         
-        # TODO: Merge this with all fields when upcoming maintenance is
-        # supported in beta.
-        if endpoint_version(ApiEndpoint.COMPUTE) == 'alpha':
-          instance_information_fields.append("upcomingMaintenance")
-
-        instance_information_fields = sorted(set(instance_information_fields))
-        instance_fields = ",".join(instance_information_fields)
         fields = f"items.zones.instances({instance_fields}),nextPageToken"
         flt = f"labels.slurm_cluster_name={self.cfg.slurm_cluster_name} AND name:{self.cfg.slurm_cluster_name}-*"
         act = self.compute.instances()
         op = act.aggregatedList(project=self.project, fields=fields, filter=flt)
 
-        def properties(inst):
-            """change instance properties to a preferred format"""
-            inst["zone"] = trim_self_link(inst["zone"])
-            inst["machineType"] = trim_self_link(inst["machineType"])
-            # metadata is fetched as a dict of dicts like:
-            # {'key': key, 'value': value}, kinda silly
-            metadata = {i["key"]: i["value"] for i in inst["metadata"].get("items", [])}
-            if "slurm_instance_role" not in metadata:
-                return None
-            inst["role"] = metadata["slurm_instance_role"]
-            inst["metadata"] = metadata
-            # del inst["metadata"]  # no need to store all the metadata
-            return NSDict(inst)
-
         instances = {}
         while op is not None:
             result = ensure_execute(op)
-            instance_iter = (
-                (inst["name"], properties(inst))
-                for inst in chain.from_iterable(
-                    zone.get("instances", []) for zone in result.get("items", {}).values()
-                )
-            )
-            instances.update(
-                {name: props for name, props in instance_iter if props is not None}
-            )
+            for zone in result.get("items", {}).values():
+                for inst_o in zone.get("instances", []):
+                    inst = Instance.from_json(inst_o)
+                    if inst.name in instances:
+                        log.error(f"Duplicate VM name {inst.name} across multiple zones")
+                    instances[inst.name] = inst
+
             op = act.aggregatedList_next(op, result)
         return instances
 
-    def instance(self, instance_name: str) -> Optional[object]:
+    def instance(self, instance_name: str) -> Optional[Instance]:
         return self.instances().get(instance_name)
 
     @lru_cache()
@@ -1622,12 +1548,11 @@ class Lookup:
         project, zone, name = match.group("project","zone","name")
         fr = self._get_future_reservation(project,zone,name)
 
-        # TODO: Remove this "hack" of trimming the Z from timestamps once we move to Python 3.11 (context: https://discuss.python.org/t/parse-z-timezone-suffix-in-datetime/2220/30)
-        start_time = datetime.fromisoformat(fr["timeWindow"]["startTime"][:-1])
-        end_time = datetime.fromisoformat(fr["timeWindow"]["endTime"][:-1])
+        start_time = parse_gcp_timestamp(fr["timeWindow"]["startTime"])
+        end_time = parse_gcp_timestamp(fr["timeWindow"]["endTime"])
 
         if "autoCreatedReservations" in fr["status"] and (res:=fr["status"]["autoCreatedReservations"][0]):
-            if (start_time<=datetime.utcnow()<=end_time):
+            if (start_time<=datetime.now()<=end_time):
                 match = re.search(r'projects/(?P<project>[^/]+)/zones/(?P<zone>[^/]+)/reservations/(?P<name>[^/]+)(/.*)?$',res)
                 assert match, f"Unexpected reservation name '{res}'"
                 res_name = match.group("name")
