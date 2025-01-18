@@ -146,11 +146,36 @@ data:
         nemo_version: 24.07
         processes_per_node: 8
 
+        # Shared NeMo Configurations
+        trainer.max_steps: 10
+        trainer.val_check_interval: null
+        trainer.limit_val_batches: 0.0
+        trainer.log_every_n_steps: 1
+        trainer.enable_model_summary: false
+
+        model.tokenizer.library: megatron
+        model.tokenizer.type: GPT2BPETokenizer
+        model.tokenizer.model: null
+        model.tokenizer.delimiter : null
+        model.tokenizer.vocab_file: gpt2-vocab.json
+        model.tokenizer.merge_file: gpt2-merges.txt
+        model.data.data_impl: mock
+        model.data.data_prefix: []
+        model.data.splits_string: 98,1,1
+
+        exp_manager.resume_if_exists: false
+        exp_manager.create_checkpoint_callback: false
+        exp_manager.create_dllogger_logger: false
+        exp_manager.checkpoint_callback_params.save_top_k: 1
+        exp_manager.checkpoint_callback_params.model_parallel_size: ${multiply:$\{model.tensor_model_parallel_size}, $\{model.pipeline_model_parallel_size}}
+        exp_manager.exp_dir: '{experiment_run_dir}'
+
         # Potentially need to be modified
         gke_nodepool: a3-ultragpu-8g-a3-ultragpu-pool
         sysnet_subnet_prefix: a3u-gke-gcs-sub
         gpu_subnet_prefix: a3u-gke-gcs-rdma-sub
         cluster_queue: a3u
+
       env_vars:
         set:
           CUDA_VISIBLE_DEVICES: 0,1,2,3,4,5,6,7
@@ -168,7 +193,6 @@ data:
         - paths:
             LD_LIBRARY_PATH: /usr/local/gib/lib64
 
-
       applications:
         py-nemo:
           workloads:
@@ -176,106 +200,44 @@ data:
               experiments:
                 mixtral-{n_nodes}-nodes:
                   variables:
-                    n_nodes: [8,16,32]
+                    n_nodes: [8, 16, 32]
                     jobset_name: 'm8x7b-{n_nodes}'
 
                     nemo_stage: training
                     nemo_model: mixtral
                     nemo_config_name: mixtral_8x7b
 
-                    max_steps: 10
-                    trainer.max_steps: '{max_steps}'
-                    trainer.val_check_interval: 50
-                    trainer.log_every_n_steps: 1
-                    trainer.enable_model_summary: false
-
-                    model.tokenizer.library: megatron
-                    model.tokenizer.type: GPT2BPETokenizer
-                    model.tokenizer.model: null
-                    model.tokenizer.delimiter : null
-                    model.tokenizer.vocab_file: gpt2-vocab.json
-                    model.tokenizer.merge_file: gpt2-merges.txt
-
-                    exp_manager.exp_dir: '{experiment_run_dir}'
-
-                    run.time_limit: 01:00:00
-
-                    model.data.data_impl: mock
-                    model.data.data_prefix: []
-                    model.data.splits_string: 90,8,2
                     model.data.num_workers: 4
-
-                    model.optim.contiguous_grad_buffer: true
-                    model.optim.contiguous_param_buffer: true
-
+                    model.fp8_params: true
+                    model.gc_interval: 0
                     model.global_batch_size: 1024
                     model.micro_batch_size: 2
-                    model.virtual_pipeline_model_parallel_size: null
+                    model.moe_grouped_gemm: false
+                    model.optim.contiguous_grad_buffer: true
+                    model.optim.contiguous_param_buffer: true
                     model.pipeline_model_parallel_size: 1
-                    model.gc_interval: 100
-                    model.fp8_params: true
-
-                    model.nsys_profile.ranks: [0, 8]
-                    model.nsys_profile.start_step: 27
-                    model.nsys_profile.end_step: 29
-
-                    # Checkpoint saving & logging
-                    exp_manager.resume_if_exists: false
-                    exp_manager.create_checkpoint_callback: false
+                    model.virtual_pipeline_model_parallel_size: null
 
                 llama3-{n_nodes}-nodes:
                   variables:
-                    n_nodes: [8,16,32]
+                    n_nodes: [8, 16, 32]
 
                     jobset_name: 'llama-{n_nodes}'
                     nemo_stage: training
                     nemo_model: llama
                     nemo_config_name: llama3_1_70b
 
-                    max_steps: 10
-                    trainer.max_steps: '{max_steps}'
-                    trainer.val_check_interval: 200
-                    trainer.log_every_n_steps: 1
-                    trainer.limit_val_batches: 5
-                    trainer.limit_test_batches: 5
-
-                    model.tokenizer.library: megatron
-                    model.tokenizer.type: GPT2BPETokenizer
-                    model.tokenizer.model: null
-                    model.tokenizer.delimiter : null
-                    model.tokenizer.vocab_file: gpt2-vocab.json
-                    model.tokenizer.merge_file: gpt2-merges.txt
-
-                    exp_manager.exp_dir: '{experiment_run_dir}'
-                    exp_manager.checkpoint_callback_params.model_parallel_size: ${multiply:$\{model.tensor_model_parallel_size}, $\{model.pipeline_model_parallel_size}}
-                    run.time_limit: 0-03:30:00
-
-                    model.data.data_impl: mock
-                    model.data.data_prefix: []
-                    model.data.splits_string: 90,8,2
-
-                    model.optim.grad_sync_dtype: bf16
-
-                    model.global_batch_size: 1024
-                    model.virtual_pipeline_model_parallel_size: 20
-                    model.tensor_model_parallel_size: 2
+                    model.data.num_workers: 2
                     model.context_parallel_size: 1
-
                     model.fp8: true
                     model.fp8_e4m3: true
                     model.fp8_hybrid: true
                     model.fp8_params: true
-
+                    model.global_batch_size: 1024
+                    model.optim.grad_sync_dtype: bf16
+                    model.tensor_model_parallel_size: 2
                     model.ub_tp_comm_overlap: false
-
-                    model.nsys_profile.ranks: [0, 8]
-                    model.nsys_profile.start_step: 17
-                    model.nsys_profile.end_step: 19
-
-                    # Checkpoint saving & logging
-                    exp_manager.resume_if_exists: false
-                    exp_manager.create_checkpoint_callback: false
-                    exp_manager.create_dllogger_logger: false
+                    model.virtual_pipeline_model_parallel_size: 20
 
           internals:
             custom_executables:
@@ -628,6 +590,9 @@ spec:
           printf "\n------- Analyzing benchmark logs ------\n"
           ramble workspace analyze -f json --where '{n_nodes} <= '"${N_NODES}"
 
+          printf "\n------- Archiving ramble workspace ------\n"
+          ramble workspace archive -t --where '{n_nodes} <= '"${N_NODES}"
+
           printf "\n--------------- SUMMARY ---------------\n"
           jq -r '["nemo_config","n_nodes","step","train_step_timing"], (.experiments[] as $exp | $exp.CONTEXTS[] as $context |
           {
@@ -637,10 +602,32 @@ spec:
             Context: $context.name
           } +
           ($context.foms | from_entries )
-          | select (.Context == "0-5/5")
+          | select (.Context == "0-10/10")
           | [.name, .n_nodes, .Context, .train_step_timing])
           | @tsv' results.latest.json
           printf "\n-------- Benchmarking Complete -------\n"
+
+          ARCHIVE_TAR=$(readlink archive/archive.latest.tar.gz)
+          ARCHIVE_PATH=${RAMBLE_WORKSPACE}/archive/${ARCHIVE_TAR}
+          RESULTS_FILE=$(basename $(readlink results.latest.json))
+          RESULTS_PATH=${RAMBLE_WORKSPACE}/${RESULTS_FILE}
+
+          printf "\n# To copy the full results from container:\n"
+          printf "kubectl cp %s:%s %s\n" $(hostname) ${RESULTS_PATH} ${RESULTS_FILE}
+          printf "\n# To copy the ramble workspace archive from container:\n"
+          printf "kubectl cp %s:%s ./%s\n" $(hostname) ${ARCHIVE_PATH} ${ARCHIVE_TAR}
+
+          printf "\n# To re-activate ramble workspace, first access runner:\n"
+          printf "kubectl exec -it %s -- /bin/bash\n" $(hostname)
+          printf "# Then run:\n"
+          printf "cd ${RAMBLE_WORKSPACE}\n"
+          printf "source "${SOFTWARE_INSTALL}"/ramble/env/bin/activate\n"
+          printf ". ${SOFTWARE_INSTALL}/ramble/share/ramble/setup-env.sh\n"
+          printf "ramble workspace activate .\n"
+
+          printf "\n- Sleeping for 1 day to allow introspection -\n"
+          sleep 86400
+
 
       restartPolicy: Never
   backoffLimit: 4
