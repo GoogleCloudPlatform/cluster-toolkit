@@ -13,8 +13,12 @@ spec:
     storage: ${capacity}
   accessModes:
   - ReadWriteMany
+  %{~ if mount_options != null ~}
   mountOptions:
-    - implicit-dirs
+  %{~ for key in mount_options ~}
+  - ${key}
+  %{~ endfor ~}
+  %{~ endif ~}
   csi:
     driver: gcsfuse.csi.storage.gke.io
     volumeHandle: ${bucket_name}
