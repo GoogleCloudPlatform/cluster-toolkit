@@ -48,7 +48,6 @@ deployment_groups:
       node_count_dynamic_max: 4
       machine_type: n2-standard-2
       enable_public_ips: true
-      enable_placement: false
 
   - id: zonal_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
@@ -63,7 +62,6 @@ deployment_groups:
     settings:
       node_count_dynamic_max: 4
       machine_type: n2-standard-2
-      enable_placement: false
       zones: $(vars.additional_zones)
 
   - id: multizonal_partition

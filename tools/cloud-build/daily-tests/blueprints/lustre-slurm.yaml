@@ -23,8 +23,6 @@ vars:
   zone: us-central1-a
   machine_type: n2-standard-2
   disk_type: pd-ssd
-  # enable_placement: false
-  # on_host_maintenance: MIGRATE
   num_nodes: 1
   rocky_image:
     family: slurm-gcp-6-8-hpc-rocky-linux-8

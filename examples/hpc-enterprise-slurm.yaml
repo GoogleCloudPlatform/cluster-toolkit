@@ -118,7 +118,6 @@ deployment_groups:
       node_count_dynamic_max: 4
       machine_type: n2-standard-2
       instance_image: $(vars.slurm_image)
-      enable_placement: false  # the default is: true
       allow_automatic_updates: false
 
   - id: n2_partition
@@ -138,7 +137,6 @@ deployment_groups:
       node_count_dynamic_max: 20
       machine_type: c2-standard-60  # this is the default
       instance_image: $(vars.slurm_image)
-      enable_placement: true
       bandwidth_tier: tier_1_enabled
       disk_type: pd-ssd
       disk_size_gb: 100
@@ -152,7 +150,7 @@ deployment_groups:
     settings:
       partition_name: c2
       # the following two are true by default
-      exclusive: true  # this must be true if nodeset.enable_placement is true
+      exclusive: true
 
   - id: c2d_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset

@@ -208,7 +208,6 @@ deployment_groups:
     use: [network]
     settings:
       node_count_dynamic_max: 20
-      enable_placement: false
       bandwidth_tier: gvnic_enabled
       machine_type: g2-standard-4
       instance_image: $(vars.new_image)

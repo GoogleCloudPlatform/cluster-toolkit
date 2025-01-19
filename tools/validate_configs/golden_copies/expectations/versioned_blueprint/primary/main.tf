@@ -81,7 +81,6 @@ module "scratchfs" {
 module "n2_nodeset" {
   source                  = "github.com/GoogleCloudPlatform/cluster-toolkit//community/modules/compute/schedmd-slurm-gcp-v6-nodeset?ref=v1.38.0&depth=1"
   allow_automatic_updates = false
-  enable_placement        = false
   instance_image          = var.slurm_image
   instance_image_custom   = var.instance_image_custom
   labels                  = var.labels
@@ -112,7 +111,6 @@ module "c2_nodeset" {
   bandwidth_tier          = "tier_1_enabled"
   disk_size_gb            = 100
   disk_type               = "pd-ssd"
-  enable_placement        = true
   instance_image          = var.slurm_image
   instance_image_custom   = var.instance_image_custom
   labels                  = var.labels
