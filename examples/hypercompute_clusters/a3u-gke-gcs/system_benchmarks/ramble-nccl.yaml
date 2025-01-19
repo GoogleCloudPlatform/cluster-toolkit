@@ -23,9 +23,9 @@ apiVersion: kueue.x-k8s.io/v1beta1
 kind: LocalQueue
 metadata:
   namespace: "ramble"
-  name: "a3u"
+  name: "a3-ultra-tas"
 spec:
-  clusterQueue: "a3u"
+  clusterQueue: "a3-ultra"
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -488,7 +488,7 @@ spec:
           # Get number of GPUs / nodes available in this cluster from Kueue:
           AVAILABLE_GPUS=$(
             kubectl get clusterqueues.kueue.x-k8s.io -o json |
-            jq -r '.items[].spec.resourceGroups[].flavors[] | select (.name="a3u") |
+            jq -r '.items[].spec.resourceGroups[].flavors[] | select (.name=="a3-ultra-tas") |
             .resources[] | select (.name="nvidia.com/gpu") | .nominalQuota'
           )
 
