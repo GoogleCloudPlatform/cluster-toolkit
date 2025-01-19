@@ -43,6 +43,7 @@ from util import (
 )
 from util import lookup, NSDict
 import tpu
+from base import ReservationDetails
 
 log = logging.getLogger()
 
@@ -104,6 +105,7 @@ def instance_properties(nodeset:object, model:str, placement_group:Optional[str]
         update_reservation_props(reservation, props, placement_group)
 
     if (fr := lookup().future_reservation(nodeset)) and fr.specific:
+        assert fr.active_reservation
         update_reservation_props(fr.active_reservation, props, placement_group)
 
     if props.resourcePolicies:
@@ -119,7 +121,7 @@ def instance_properties(nodeset:object, model:str, placement_group:Optional[str]
     props.update(nodeset.get("instance_properties") or {})
     return props
 
-def update_reservation_props(reservation:object, props:object, placement_group:Optional[str]) -> None:
+def update_reservation_props(reservation:ReservationDetails, props:object, placement_group:Optional[str]) -> None:
     props.reservationAffinity = {
         "consumeReservationType": "SPECIFIC_RESERVATION",
         "key": f"compute.{util.universe_domain()}/reservation-name",

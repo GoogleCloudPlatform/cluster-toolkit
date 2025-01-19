@@ -15,14 +15,20 @@
 from typing import Optional, Any
 import sys
 from dataclasses import dataclass, field
+from datetime import datetime
+import addict
+
 
 SCRIPTS_DIR = "community/modules/scheduler/schedmd-slurm-gcp-v6-controller/modules/slurm_files/scripts"
 if SCRIPTS_DIR not in sys.path:
     sys.path.append(SCRIPTS_DIR)  # TODO: make this more robust
 
 import util
+from base import Instance
 
 # TODO: use "real" classes once they are defined (instead of NSDict)
+
+SOME_TS = datetime.fromisoformat("2018-09-03T20:56:35.450686+00:00")
 
 @dataclass
 class Placeholder:
@@ -83,17 +89,17 @@ class TstMachineConf:
 class TstTemplateInfo:
     gpu: Optional[util.AcceleratorInfo]
 
-@dataclass
-class TstInstance:
-    name: str
-    region: str = "gondor"
-    zone: str = "anorien"
-    placementPolicyId: Optional[str] = None
-    physicalHost: Optional[str] = None
-
-    @property
-    def resourceStatus(self):
-        return {"physicalHost": self.physicalHost}
+def tstInstance(name: str, physical_host: Optional[str] = None):
+    return Instance(
+        name=name,
+        status="RUNNING",
+        creation_timestamp=SOME_TS,
+        resource_status=addict.Dict(
+            physicalHost = physical_host
+        ),
+        scheduling=addict.Dict(),
+        upcoming_maintenance=None,
+    )
 
 def make_to_hostnames_mock(tbl: Optional[dict[str, list[str]]]):
     tbl = tbl or {}
