@@ -41,6 +41,7 @@ from util import (
     NodeState,
     chunked,
     dirs,
+    parse_gcp_timestamp,
 )
 from util import lookup
 from suspend import delete_instances
@@ -150,7 +151,7 @@ def _find_dynamic_node_status() -> NodeAction:
     return NodeActionUnchanged()  # don't touch dynamic nodes
 
 def get_fr_action(fr: FutureReservation, state:Optional[NodeState]) -> Optional[NodeAction]:
-    now = datetime.utcnow()
+    now = datetime.now()
     if state is None:
         return None # handle like any other node
     if fr.start_time < now < fr.end_time:
@@ -246,7 +247,12 @@ def get_node_action(nodename: str) -> NodeAction:
         ("POWER_DOWN", "POWERING_UP", "POWERING_DOWN", "POWERED_DOWN")
     ) & (state.flags if state is not None else set())
 
-    if (inst is None) and (state is not None):
+    if (state is None) and (inst is None):
+        # Should never happen
+        return NodeActionUnknown(None, None)
+
+    if inst is None:
+        assert state is not None # to keep type-checker happy
         if "POWERING_UP" in state.flags:
             return NodeActionUnchanged()
         if state.base == "DOWN" and "POWERED_DOWN" in state.flags:
@@ -273,16 +279,11 @@ def get_node_action(nodename: str) -> NodeAction:
             return NodeActionDown(reason="Instance terminated")
     elif (state is None or "POWERED_DOWN" in state.flags) and inst.status == "RUNNING":
         log.info("%s is potential orphan node", nodename)
-        age_threshold_seconds = 90
-        inst_seconds_old = _seconds_since_timestamp(inst.creationTimestamp)
-        log.info("%s state: %s, age: %0.1fs", nodename, state, inst_seconds_old)
-        if inst_seconds_old < age_threshold_seconds:
-            log.info(
-                "%s not marked as orphan, it started less than %ds ago (%0.1fs)",
-                nodename,
-                age_threshold_seconds,
-                inst_seconds_old,
-            )
+        threshold = timedelta(seconds=90)
+        age = datetime.now() - parse_gcp_timestamp(inst.creationTimestamp)
+        log.info(f"{nodename} state: {state}, age: {age}")
+        if age < threshold:
+            log.info(f"{nodename} not marked as orphan, it started less than {threshold.seconds}s ago ({age.seconds}s)")
             return NodeActionUnchanged()
         return NodeActionDelete()
     elif state is None:
@@ -290,19 +291,6 @@ def get_node_action(nodename: str) -> NodeAction:
         return NodeActionUnknown(slurm_state=state, instance_state=inst.status)
 
     return NodeActionUnchanged()
-
-
-def _seconds_since_timestamp(timestamp):
-    """Returns duration in seconds since a timestamp
-    Args:
-        timestamp: A formatted timestamp string (%Y-%m-%dT%H:%M:%S.%f%z)
-    Returns:
-        number of seconds that have past since the timestamp (float)
-    """
-    if timestamp[-3] == ":":  # python 36 datetime does not support the colon
-        timestamp = timestamp[:-3] + timestamp[-2:]
-    creation_dt = datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%S.%f%z")
-    return datetime.now().timestamp() - creation_dt.timestamp()
 
 
 def delete_placement_groups(placement_groups):
@@ -478,7 +466,7 @@ def get_upcoming_maintenance(lkp: util.Lookup) -> Dict[str, Tuple[str, datetime]
 
     for node, properties in lkp.instances().items():
         if 'upcomingMaintenance' in properties:
-          start_time = datetime.strptime(properties['upcomingMaintenance']['startTimeWindow']['earliest'], '%Y-%m-%dT%H:%M:%S%z')
+          start_time = parse_gcp_timestamp(properties['upcomingMaintenance']['startTimeWindow']['earliest'])
           upc_maint_map[node + "_maintenance"] = (node, start_time)
 
     return upc_maint_map
