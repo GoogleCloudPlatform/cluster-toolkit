@@ -199,6 +199,17 @@ def authentication_project():
 DEFAULT_UNIVERSE_DOMAIN = "googleapis.com"
 
 
+def parse_gcp_timestamp(s: str) -> datetime:
+  """
+  Parse timestamp strings returned by GCP API into datetime.
+  Works with both Zulu and non-Zulu timestamps.
+  """
+  # Requires Python >= 3.7
+  # TODO: Remove this "hack" of trimming the Z from timestamps once we move to Python 3.11 
+  # (context: https://discuss.python.org/t/parse-z-timezone-suffix-in-datetime/2220/30)
+  return datetime.fromisoformat(s.replace('Z', '+00:00'))
+
+
 def universe_domain() -> str:
     try:
         return instance_metadata("attributes/universe_domain")
@@ -1622,12 +1633,11 @@ class Lookup:
         project, zone, name = match.group("project","zone","name")
         fr = self._get_future_reservation(project,zone,name)
 
-        # TODO: Remove this "hack" of trimming the Z from timestamps once we move to Python 3.11 (context: https://discuss.python.org/t/parse-z-timezone-suffix-in-datetime/2220/30)
-        start_time = datetime.fromisoformat(fr["timeWindow"]["startTime"][:-1])
-        end_time = datetime.fromisoformat(fr["timeWindow"]["endTime"][:-1])
+        start_time = parse_gcp_timestamp(fr["timeWindow"]["startTime"])
+        end_time = parse_gcp_timestamp(fr["timeWindow"]["endTime"])
 
         if "autoCreatedReservations" in fr["status"] and (res:=fr["status"]["autoCreatedReservations"][0]):
-            if (start_time<=datetime.utcnow()<=end_time):
+            if (start_time<=datetime.now()<=end_time):
                 match = re.search(r'projects/(?P<project>[^/]+)/zones/(?P<zone>[^/]+)/reservations/(?P<name>[^/]+)(/.*)?$',res)
                 assert match, f"Unexpected reservation name '{res}'"
                 res_name = match.group("name")
