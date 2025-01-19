@@ -4,7 +4,7 @@ This module creates a DDN EXAScaler Cloud Lustre file system using
 [exascaler-cloud-terraform](https://github.com/DDNStorage/exascaler-cloud-terraform/tree/master/gcp).
 
 More information about the architecture can be found at
-[Architecture: Lustre file system in Google Cloud using DDN EXAScaler][architecture].
+[Overview of Lustre and EXAScaler Cloud][architecture].
 
 For more information on this and other network storage options in the Cluster
 Toolkit, see the extended [Network Storage documentation](../../../../docs/network_storage.md).
@@ -22,7 +22,7 @@ Toolkit, see the extended [Network Storage documentation](../../../../docs/netwo
 
 [private-google-access]: https://cloud.google.com/vpc/docs/configure-private-google-access
 [marketplace]: https://console.developers.google.com/marketplace/product/ddnstorage/exascaler-cloud
-[architecture]: https://cloud.google.com/architecture/lustre-architecture
+[architecture]: https://cloud.google.com/architecture/parallel-file-systems-for-hpc#overview_of_lustre_and_exascaler_cloud
 
 ## Mounting
 
