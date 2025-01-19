@@ -42,7 +42,7 @@ RUN curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add -  && \
     apt-get clean && rm -rf /var/lib/apt/lists/* && \
     # install ansible and python dependencies
     pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/v5/scripts/requirements.txt && \
+    pip install --no-cache-dir -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/master/scripts/requirements.txt && \
     pip install --no-cache-dir ansible && \
     pip install --no-cache-dir paramiko && \
     rm -rf ~/.cache/pip/* && \
