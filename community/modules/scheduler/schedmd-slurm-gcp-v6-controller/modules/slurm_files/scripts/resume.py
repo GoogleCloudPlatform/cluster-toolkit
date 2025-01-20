@@ -240,7 +240,7 @@ def group_nodes_bulk(nodes: List[str], resume_data: Optional[ResumeData], lkp: u
 
     # expand all exclusive job nodelists
     for job in resume_data.jobs:
-        if not lkp.cfg.partitions[job.partition].enable_job_exclusive: 
+        if not lkp.partition(job.partition).enable_job_exclusive: 
             continue
 
         groups[job.job_id] = []
