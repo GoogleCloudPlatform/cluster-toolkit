@@ -17,12 +17,12 @@
 import argparse
 import util
 import tpu
+from base import Partition
 
-
-def get_vmcount_of_tpu_part(part):
+def get_vmcount_of_part(part: Partition):
     res = 0
     lkp = util.lookup()
-    for ns in lkp.cfg.partitions[part].partition_nodeset_tpu:
+    for ns in part.nodesets_tpu:
         tpu_obj = tpu.TPU.make(ns, lkp)
         if res == 0:
             res = tpu_obj.vmcount
@@ -54,19 +54,19 @@ if __name__ == "__main__":
     vmcounts = []
     # valid equals to 0 means that we are ok, otherwise it will be set to one of the previously defined exit codes
     valid = 0
-    for part in args.partitions.split(","):
-        if part not in util.lookup().cfg.partitions:
+    for part_name in args.partitions.split(","):
+        try:
+            part = util.lookup().partition(part_name)
+        except:
             valid = PART_INVALID
             break
         else:
-            if util.lookup().partition_is_tpu(part):
-                vmcount = get_vmcount_of_tpu_part(part)
-                if vmcount == -1:
-                    valid = DIFF_VMCOUNTS_SAME_PART
-                    break
-                vmcounts.append(vmcount)
-            else:
-                vmcounts.append(0)
+            vmcount = get_vmcount_of_part(part)
+            if vmcount == -1:
+                valid = DIFF_VMCOUNTS_SAME_PART
+                break
+            vmcounts.append(vmcount)
+            
     # this means that there are different vmcounts for these partitions
     if valid == 0 and len(set(vmcounts)) != 1:
         valid = DIFF_PART_DIFFERENT_VMCOUNTS

@@ -20,7 +20,7 @@ import unittest.mock
 import unittest
 import tempfile
 
-from common import TstCfg, TstNodeset, TstPartition, TstTPU # needed to import util
+from common import TstCfg, TstNodeset, TstTPU # needed to import util
 import util
 import resume
 from resume import ResumeData, ResumeJobData, BulkChunk, PlacementAndNodes
@@ -74,11 +74,11 @@ def test_group_nodes_bulk(mock_create_placements, mock_tpu):
         "t": TstNodeset(nodeset_name="t"),
       },
       partitions={
-        "p1": TstPartition(
+        "p1": dict(
           partition_name="p1",
           enable_job_exclusive=True,
         ),
-        "p2": TstPartition(
+        "p2": dict(
           partition_name="p2", 
           partition_nodeset_tpu=["t"],
           enable_job_exclusive=True,

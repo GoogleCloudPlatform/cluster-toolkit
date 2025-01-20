@@ -22,6 +22,7 @@ from pathlib import Path
 import util
 from util import dirs, slurmdirs
 import tpu
+from base import Partition
 
 FILE_PREAMBLE = """
 # Warning:
@@ -76,13 +77,9 @@ def conflines(lkp: util.Lookup) -> str:
         for nodeset in lkp.cfg.nodeset.values()
     )
 
-    any_tpu = any(
-        tpu_nodeset is not None
-        for part in lkp.cfg.partitions.values()
-        for tpu_nodeset in part.partition_nodeset_tpu
-    )
+    any_tpu = any(p.is_tpu for p in lkp.partitions)
+    any_dynamic = any(p.any_dynamic for p in lkp.partitions)
 
-    any_dynamic = any(bool(p.partition_feature) for p in lkp.cfg.partitions.values())
     comma_params = {
         "LaunchParameters": [
             "enable_nss_slurm",
@@ -180,7 +177,7 @@ def nodeset_dyn_lines(nodeset):
     )
 
 
-def partitionlines(partition, lkp: util.Lookup) -> str:
+def partitionlines(partition: Partition, lkp: util.Lookup) -> str:
     """Make a partition line for the slurm.conf"""
     MIN_MEM_PER_CPU = 100
 
@@ -192,32 +189,23 @@ def partitionlines(partition, lkp: util.Lookup) -> str:
         return max(MIN_MEM_PER_CPU, (machine.memory - mem_spec_limit) // machine.cpus)
 
     defmem = min(
-        map(defmempercpu, partition.partition_nodeset), default=MIN_MEM_PER_CPU
+        map(defmempercpu, partition.nodesets), default=MIN_MEM_PER_CPU
     )
 
-    nodesets = list(
-        chain(
-            partition.partition_nodeset,
-            partition.partition_nodeset_dyn,
-            partition.partition_nodeset_tpu,
-        )
-    )
+    nodesets = list(chain(partition.nodesets, partition.nodesets_dyn, partition.nodesets_tpu))
 
-    is_tpu = len(partition.partition_nodeset_tpu) > 0
-    is_dyn = len(partition.partition_nodeset_dyn) > 0
-
-    oversub_exlusive = partition.enable_job_exclusive or is_tpu
-    power_down_on_idle = partition.enable_job_exclusive and not is_dyn
+    oversub_exlusive = partition.enable_job_exclusive or partition.is_tpu
+    power_down_on_idle = partition.enable_job_exclusive and not partition.any_dynamic
 
     line_elements = {
-        "PartitionName": partition.partition_name,
+        "PartitionName": partition.name,
         "Nodes": ",".join(nodesets),
         "State": "UP",
         "DefMemPerCPU": defmem,
         "SuspendTime": 300,
         "Oversubscribe": "Exclusive" if oversub_exlusive else None,
         "PowerDownOnIdle": "YES" if power_down_on_idle else None,
-        **partition.partition_conf,
+        **partition.conf,
     }
 
     return dict_to_conf(line_elements)
@@ -231,12 +219,8 @@ def suspend_exc_lines(lkp: util.Lookup) -> Iterable[str]:
             static_nodelists.append(nodelist)
     suspend_exc_nodes = {"SuspendExcNodes": static_nodelists}
 
-    dyn_parts = [
-        p.partition_name
-        for p in lkp.cfg.partitions.values()
-        if len(p.partition_nodeset_dyn) > 0
-    ]
-    suspend_exc_parts = {"SuspendExcParts": [*dyn_parts]}
+    dyn_parts = [p.name for p in lkp.partitions if p.any_dynamic]
+    suspend_exc_parts = {"SuspendExcParts": dyn_parts}
 
     return filter(
         None,
@@ -255,7 +239,7 @@ def make_cloud_conf(lkp: util.Lookup) -> str:
         *(nodeset_lines(n, lkp) for n in lkp.cfg.nodeset.values()),
         *(nodeset_dyn_lines(n) for n in lkp.cfg.nodeset_dyn.values()),
         *(nodeset_tpu_lines(n, lkp) for n in lkp.cfg.nodeset_tpu.values()),
-        *(partitionlines(p, lkp) for p in lkp.cfg.partitions.values()),
+        *(partitionlines(p, lkp) for p in lkp.partitions),
         *(suspend_exc_lines(lkp)),
     ]
     return "\n\n".join(filter(None, lines))
@@ -341,11 +325,7 @@ def install_cgroup_conf(lkp: util.Lookup) -> None:
 
 def install_jobsubmit_lua(lkp: util.Lookup) -> None:
     """install job_submit.lua if there are tpu nodes in the cluster"""
-    if not any(
-        tpu_nodeset is not None
-        for part in lkp.cfg.partitions.values()
-        for tpu_nodeset in part.partition_nodeset_tpu
-    ):
+    if not any(p.is_tpu for p in lkp.partitions):
         return # No TPU partitions, no need for job_submit.lua
     
     scripts_dir = lkp.cfg.slurm_scripts_dir or dirs.scripts

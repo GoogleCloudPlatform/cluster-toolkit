@@ -41,13 +41,6 @@ class TstNodeset:
     placement_max_distance: Optional[int] = None
 
 @dataclass
-class TstPartition:
-    partition_name: str = "euler"
-    partition_nodeset: list[str] = field(default_factory=list)
-    partition_nodeset_tpu: list[str] = field(default_factory=list)
-    enable_job_exclusive: bool = False
-
-@dataclass
 class TstCfg:
     slurm_cluster_name: str = "m22"
     cloud_parameters: dict[str, Any] = field(default_factory=dict)

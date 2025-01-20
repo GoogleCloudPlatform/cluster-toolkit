@@ -61,7 +61,7 @@ from requests.exceptions import RequestException  # noqa: E402
 
 import yaml  # noqa: E402
 from addict import Dict as NSDict  # noqa: E402
-
+from base import Partition
 
 USER_AGENT = "Slurm_GCP_Scripts/1.5 (GPN:SchedMD)"
 ENV_CONFIG_YAML = os.getenv("SLURM_CONFIG_YAML")
@@ -536,8 +536,7 @@ def _assemble_config(
     # add partition configs
     for p_yaml in partitions:
         p_cfg = NSDict(p_yaml)
-        assert p_cfg.get("partition_name"), "partition_name is required"
-        p_name = p_cfg.partition_name
+        p_name = Partition.from_json(p_cfg).name # + de-serialization check
         assert p_name not in cfg.partitions, f"partition {p_name} already defined"
         cfg.partitions[p_name] = p_cfg
 
@@ -1314,6 +1313,15 @@ class Lookup:
     def zone(self):
         return instance_metadata("zone")
 
+
+    @property
+    def partitions(self) -> List[Partition]:
+        return [Partition.from_json(jo) for jo in self.cfg.partitions]
+    
+    def partition(self, name: str) -> Partition:
+        return Partition.from_json(self.cfg.partitions[name])
+
+
     node_desc_regex = re.compile(
         r"^(?P<prefix>(?P<cluster>[^\s\-]+)-(?P<nodeset>\S+))-(?P<node>(?P<suffix>\w+)|(?P<range>\[[\d,-]+\]))$"
     )
@@ -1350,11 +1358,6 @@ class Lookup:
             return self.cfg.nodeset_tpu[nodeset_name]
 
         return self.cfg.nodeset[nodeset_name]
-
-    def partition_is_tpu(self, part: str) -> bool:
-        """check if partition with name part contains a nodeset of type tpu"""
-        return len(self.cfg.partitions[part].partition_nodeset_tpu) > 0
-
 
     def node_is_tpu(self, node_name=None):
         nodeset_name = self.node_nodeset_name(node_name)
