@@ -318,7 +318,7 @@ def test_parse_job_info(job_info, expected_job):
 @pytest.mark.parametrize(
     "node,state,want",
     [
-        ("c-n-2", NodeState("DOWN", {}), NodeState("DOWN", {})), # happy scenario
+        ("c-n-2", NodeState("DOWN", frozenset([])), NodeState("DOWN", frozenset([]))), # happy scenario
         ("c-d-vodoo", None, None), # dynamic nodeset
         ("c-x-44", None, None), # unknown(removed) nodeset
         ("c-n-7", None, None), # Out of bounds: c-n-[0-4] - downsized nodeset
@@ -341,7 +341,8 @@ def test_node_state(node: str, state: Optional[NodeState], want: NodeState | Non
             "d": TstNodeset()},
     )
     lkp = util.Lookup(cfg)
-    lkp.slurm_nodes = lambda: {node: state} if state else {}
+    lkp.slurm_nodes = lambda: {node: state} if state else {} # type: ignore[assignment]
+    # ... see https://github.com/python/typeshed/issues/6347    
         
     if  type(want) is type and issubclass(want, Exception):
         with pytest.raises(want):
