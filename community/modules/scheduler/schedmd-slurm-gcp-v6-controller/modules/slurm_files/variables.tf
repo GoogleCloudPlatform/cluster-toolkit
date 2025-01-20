@@ -58,18 +58,6 @@ variable "slurm_cluster_name" {
   }
 }
 
-variable "enable_slurm_gcp_plugins" {
-  description = <<EOD
-Enables calling hooks in scripts/slurm_gcp_plugins during cluster resume and suspend.
-EOD
-  type        = any
-  default     = false
-  validation {
-    condition     = !can(var.enable_slurm_gcp_plugins.max_hops)
-    error_message = "The 'max_hops' plugin is no longer supported. Please use the 'placement_max_distance' nodeset property instead."
-  }
-}
-
 variable "enable_bigquery_load" {
   description = <<EOD
 Enables loading of cluster job usage into big query.

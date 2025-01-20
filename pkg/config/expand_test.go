@@ -116,10 +116,10 @@ func (s *zeroSuite) TestExpandProviders(c *C) {
 	defaultProvider := map[string]PR{
 		"google": TerraformProvider{
 			Source:  "hashicorp/google",
-			Version: "~> 6.14.0"},
+			Version: "~> 6.16.0"},
 		"google-beta": TerraformProvider{
 			Source:  "hashicorp/google-beta",
-			Version: "~> 6.14.0"}}
+			Version: "~> 6.16.0"}}
 
 	{ // no def PR, no group PR - match default values
 		g := Group{Name: "clown"}

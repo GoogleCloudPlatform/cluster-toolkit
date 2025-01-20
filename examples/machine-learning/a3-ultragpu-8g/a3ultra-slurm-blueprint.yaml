@@ -62,9 +62,6 @@ deployment_groups:
         enabled: true
       runners:
       - type: data
-        destination: /etc/cluster_toolkit/a3ultra-prod-slurm-image.yaml
-        source: ../.ghpc/artifacts/expanded_blueprint.yaml
-      - type: data
         destination: /var/tmp/slurm_vars.json
         content: |
           {
@@ -96,52 +93,6 @@ deployment_groups:
           * - nofile 1048576
           * - cpu unlimited
           * - rtprio unlimited
-      - type: data
-        destination: /etc/systemd/system/slurmd.service.d/file_ulimit.conf
-        content: |
-          [Service]
-          LimitNOFILE=infinity
-      - type: data
-        destination: /etc/netplan/60-cloud-mrdma-init.yaml
-        content: |
-          network:
-            ethernets:
-              primary:
-                match:
-                  name: enp0s*
-                  driver: gve
-                dhcp4: true
-                dhcp4-overrides:
-                  use-domains: true
-                dhcp6: true
-                dhcp6-overrides:
-                  use-domains: true
-                optional: true
-              secondary:
-                match:
-                  driver: gve
-                dhcp4: true
-                dhcp4-overrides:
-                  use-domains: false
-                  use-dns: false
-                  use-ntp: false
-                dhcp6: true
-                dhcp6-overrides:
-                  use-domains: false
-                  use-dns: false
-                  use-ntp: false
-                optional: true
-              mrdma_devices:
-                match:
-                  driver: mlx5_core
-                dhcp-identifier: mac
-                dhcp4: true
-                dhcp4-overrides:
-                  use-domains: true
-                  use-dns: false
-                  use-ntp: false
-                optional: true
-            version: 2
       - type: ansible-local
         destination: configure_gpu.yml
         content: |
@@ -202,10 +153,10 @@ deployment_groups:
                 state: stopped
                 enabled: false
       - type: ansible-local
-        destination: install_mellanox_drivers.yml
+        destination: install_ibverbs_utils.yml
         content: |
           ---
-          - name: Update Netplan and Install Network Utils
+          - name: Install ibverbs-utils
             hosts: all
             become: true
             tasks:
@@ -214,8 +165,6 @@ deployment_groups:
                 name:
                 - ibverbs-utils
                 state: present
-            - name: Apply netplan
-              ansible.builtin.command: netplan apply
 
 - group: image
   modules:

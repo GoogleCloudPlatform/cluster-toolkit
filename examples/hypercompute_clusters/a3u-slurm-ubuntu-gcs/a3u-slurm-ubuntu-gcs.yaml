@@ -331,11 +331,6 @@ deployment_groups:
           * - cpu unlimited
           * - rtprio unlimited
       - type: data
-        destination: /etc/systemd/system/slurmd.service.d/file_ulimit.conf
-        content: |
-          [Service]
-          LimitNOFILE=infinity
-      - type: data
         destination: /etc/netplan/60-cloud-mrdma-init.yaml
         content: |
           network:

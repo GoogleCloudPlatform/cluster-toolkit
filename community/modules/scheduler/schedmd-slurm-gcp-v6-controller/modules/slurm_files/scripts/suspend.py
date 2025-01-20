@@ -31,8 +31,6 @@ from util import (
 from util import lookup
 import tpu
 
-import slurm_gcp_plugins
-
 log = logging.getLogger()
 
 TOT_REQ_CNT = 1000
@@ -105,8 +103,6 @@ def main(nodelist):
         return
 
     log.info(f"suspend {nodelist}")
-    if lookup().cfg.enable_slurm_gcp_plugins:
-        slurm_gcp_plugins.pre_main_suspend_nodes(lkp=lookup(), nodelist=nodelist)
     suspend_nodes(pm_nodes)
 
 

@@ -531,14 +531,17 @@ if __name__ == "__main__":
     try:
         main()
     except subprocess.TimeoutExpired as e:
+        stdout = (e.stdout or b"").decode().strip()
+        stderr = (e.stderr or b"").decode().strip()
+
         log.error(
             f"""TimeoutExpired:
     command={e.cmd}
     timeout={e.timeout}
     stdout:
-{e.stdout.strip()}
+{stdout}
     stderr:
-{e.stderr.strip()}
+{stderr}
 """
         )
         log.error("Aborting setup...")

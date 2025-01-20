@@ -70,8 +70,8 @@ locals {
     additional_disks    = local.additional_disks
     additional_networks = var.additional_networks
 
-    can_ip_forward = var.can_ip_forward
-    disable_smt    = !var.enable_smt
+    can_ip_forward            = var.can_ip_forward
+    advanced_machine_features = var.advanced_machine_features
 
     enable_confidential_vm   = var.enable_confidential_vm
     access_config            = var.enable_login_public_ips ? local.public_access_config : []

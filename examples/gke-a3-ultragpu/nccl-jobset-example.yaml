@@ -17,6 +17,8 @@ kind: JobSet
 metadata:
   generateName: ag-4-
   namespace: default
+  labels:
+    kueue.x-k8s.io/queue-name: a3-ultra
 spec:
   ttlSecondsAfterFinished: 1200
   suspend: False
@@ -32,6 +34,7 @@ spec:
         template:
           metadata:
             annotations:
+              kueue.x-k8s.io/podset-preferred-topology: "kubernetes.io/hostname"
               networking.gke.io/default-interface: 'eth0'
               networking.gke.io/interfaces: |
                 [
@@ -82,9 +85,6 @@ spec:
             - name: proc-sys
               hostPath:
                 path: /proc/sys
-            schedulingGates:
-            # Set this to a unique name per job.
-            - name: "gke.io/topology-aware-auto-ag-4"
 
             initContainers:
             - name: gpu-healthcheck

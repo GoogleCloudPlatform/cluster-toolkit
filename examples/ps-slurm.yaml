@@ -39,6 +39,10 @@ deployment_groups:
   - id: network
     source: modules/network/vpc
 
+  # Private Service Access (PSA) requires the compute.networkAdmin role which is
+  # included in the Owner role, but not Editor.
+  # PSA is required for all Parallelstore functionality.
+  # https://cloud.google.com/vpc/docs/configure-private-services-access#permissions
   - id: private_service_access
     source: community/modules/network/private-service-access
     use: [network]
@@ -55,7 +59,6 @@ deployment_groups:
     settings:
       node_count_dynamic_max: 4
       machine_type: $(vars.compute_node_machine_type)
-      enable_placement: false  # the default is: true
       allow_automatic_updates: false
 
   - id: debug_partition
