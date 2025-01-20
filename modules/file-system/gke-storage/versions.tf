@@ -13,7 +13,7 @@
 # limitations under the License.
 
 terraform {
-  required_version = ">= 1.0"
+  required_version = ">= 1.5"
 
   provider_meta "google" {
     module_name = "blueprints/terraform/hpc-toolkit:gke-storage/v1.45.0"
