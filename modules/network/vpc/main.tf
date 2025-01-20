@@ -167,6 +167,21 @@ locals {
     for secondary_range in var.secondary_ranges_list :
     secondary_range.subnetwork_name => secondary_range.ranges
   }
+
+  output_additional_networks_gke = [
+    {
+      network            = local.network_name
+      subnetwork         = local.output_primary_subnetwork_name
+      subnetwork_project = var.project_id
+      network_ip         = null
+      nic_type           = "GVNIC"
+      stack_type         = null
+      queue_count        = null
+      access_config      = []
+      ipv6_access_config = []
+      alias_ip_range     = []
+    }
+  ]
 }
 
 module "vpc" {

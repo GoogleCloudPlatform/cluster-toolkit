@@ -345,6 +345,32 @@ variable "additional_networks" {
   nullable = false
 }
 
+variable "additional_networks_rdma" {
+  description = "Additional rdma network interface details for GKE, if any. Providing additional networks adds additional node networks to the node pool"
+  default     = []
+  type = list(object({
+    network            = string
+    subnetwork         = string
+    subnetwork_project = string
+    network_ip         = string
+    nic_type           = string
+    stack_type         = string
+    queue_count        = number
+    access_config = list(object({
+      nat_ip       = string
+      network_tier = string
+    }))
+    ipv6_access_config = list(object({
+      network_tier = string
+    }))
+    alias_ip_range = list(object({
+      ip_cidr_range         = string
+      subnetwork_range_name = string
+    }))
+  }))
+  nullable = false
+}
+
 variable "reservation_affinity" {
   description = <<-EOT
   Reservation resource to consume. When targeting SPECIFIC_RESERVATION, specific_reservations needs be specified.
