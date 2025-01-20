@@ -515,7 +515,7 @@ spec:
           # Get number of GPUs / nodes available in this cluster from Kueue:
           AVAILABLE_GPUS=$(
             kubectl get clusterqueues.kueue.x-k8s.io -o json |
-            jq -r '.items[].spec.resourceGroups[].flavors[] | select (.name="a3u") |
+            jq -r '.items[].spec.resourceGroups[].flavors[] | select (.name=="a3-ultra-tas") |
             .resources[] | select (.name="nvidia.com/gpu") | .nominalQuota'
           )
 
