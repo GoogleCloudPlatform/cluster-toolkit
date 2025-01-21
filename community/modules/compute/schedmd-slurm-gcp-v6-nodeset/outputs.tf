@@ -33,11 +33,6 @@ output "nodeset" {
   }
 
   precondition {
-    condition     = !var.enable_placement || var.node_count_static == 0 || var.node_count_dynamic_max == 0
-    error_message = "Cannot use placement with static and auto-scaling nodes in the same node set."
-  }
-
-  precondition {
     condition     = var.placement_max_distance == null || var.enable_placement
     error_message = "placement_max_distance requires enable_placement to be set to true."
   }
