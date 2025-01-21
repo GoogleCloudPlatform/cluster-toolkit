@@ -25,5 +25,5 @@ terraform {
     module_name = "blueprints/terraform/hpc-toolkit:pre-existing-vpc/v1.45.0"
   }
 
-  required_version = ">= 0.14.0"
+  required_version = ">= 1.5"
 }
