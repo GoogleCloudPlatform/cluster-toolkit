@@ -35,6 +35,8 @@ locals {
   pv_name  = "${local.base_name}-pv"
   pvc_name = "${local.base_name}-pvc"
 
+  list_mount_options = split(",", var.network_storage.mount_options)
+
   filestore_pv_contents = templatefile(
     "${path.module}/templates/filestore-pv.yaml.tftpl",
     {
@@ -61,10 +63,11 @@ locals {
   gcs_pv_contents = templatefile(
     "${path.module}/templates/gcs-pv.yaml.tftpl",
     {
-      pv_name     = local.pv_name
-      capacity    = "${var.capacity_gb}Gi"
-      labels      = local.labels
-      bucket_name = local.is_gcs ? var.gcs_bucket_name : ""
+      pv_name       = local.pv_name
+      capacity      = "${var.capacity_gb}Gi"
+      labels        = local.labels
+      mount_options = local.is_gcs ? local.list_mount_options : null
+      bucket_name   = local.is_gcs ? var.gcs_bucket_name : ""
     }
   )
 
