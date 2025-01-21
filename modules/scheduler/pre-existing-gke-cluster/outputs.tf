@@ -31,18 +31,3 @@ output "gke_version" {
   description = "GKE cluster's version."
   value       = data.google_container_cluster.existing_gke_cluster.master_version
 }
-
-output "host_endpoint" {
-  description = "GKE cluster endpoint."
-  value       = "https://${data.google_container_cluster.existing_gke_cluster.endpoint}"
-}
-
-output "cluster_ca_certificate" {
-  description = "GKE cluster CA certificate."
-  value       = base64decode(data.google_container_cluster.existing_gke_cluster.master_auth[0].cluster_ca_certificate)
-}
-
-output "access_token" {
-  description = "Google client config access token."
-  value       = data.google_client_config.default.access_token
-}

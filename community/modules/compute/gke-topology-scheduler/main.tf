@@ -15,7 +15,8 @@
 module "kubectl_apply" {
   source = "../../../../modules/management/kubectl-apply"
 
-  gke_cluster_exists = var.gke_cluster_exists
+  cluster_id = var.cluster_id
+  project_id = var.project_id
 
   apply_manifests = [
     { source = "${path.module}/manifests/topology-scheduler-scripts.yaml" },
