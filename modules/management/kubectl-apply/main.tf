@@ -15,6 +15,11 @@
   */
 
 locals {
+  cluster_id_parts = split("/", var.cluster_id)
+  cluster_name     = local.cluster_id_parts[5]
+  cluster_location = local.cluster_id_parts[3]
+  project_id       = var.project_id != null ? var.project_id : local.cluster_id_parts[1]
+
   apply_manifests_map = tomap({
     for index, manifest in var.apply_manifests : index => manifest
   })
@@ -25,8 +30,16 @@ locals {
   jobset_install_source = format("${path.module}/manifests/jobset-%s.yaml", try(var.jobset.version, ""))
 }
 
+data "google_container_cluster" "gke_cluster" {
+  project  = local.project_id
+  name     = local.cluster_name
+  location = local.cluster_location
+}
+
+data "google_client_config" "default" {}
+
 module "kubectl_apply_manifests" {
-  for_each = var.gke_cluster_exists ? local.apply_manifests_map : {}
+  for_each = local.apply_manifests_map
   source   = "./kubectl"
 
   content           = each.value.content
@@ -36,34 +49,34 @@ module "kubectl_apply_manifests" {
   wait_for_rollout  = each.value.wait_for_rollout
 
   providers = {
-    http = http.h
+    kubectl = kubectl
+    http    = http.h
   }
 }
 
 module "install_kueue" {
-  count             = var.gke_cluster_exists ? 1 : 0
   source            = "./kubectl"
   source_path       = local.install_kueue ? local.kueue_install_source : null
   server_side_apply = true
 
   providers = {
-    http = http.h
+    kubectl = kubectl
+    http    = http.h
   }
 }
 
 module "install_jobset" {
-  count             = var.gke_cluster_exists ? 1 : 0
   source            = "./kubectl"
   source_path       = local.install_jobset ? local.jobset_install_source : null
   server_side_apply = true
 
   providers = {
-    http = http.h
+    kubectl = kubectl
+    http    = http.h
   }
 }
 
 module "configure_kueue" {
-  count         = var.gke_cluster_exists ? 1 : 0
   source        = "./kubectl"
   source_path   = local.install_kueue ? try(var.kueue.config_path, "") : null
   template_vars = local.install_kueue ? try(var.kueue.config_template_vars, null) : null
@@ -73,6 +86,7 @@ module "configure_kueue" {
   wait_for_rollout  = true
 
   providers = {
-    http = http.h
+    kubectl = kubectl
+    http    = http.h
   }
 }
