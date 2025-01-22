@@ -80,6 +80,9 @@ locals {
       capacity = "${var.capacity_gb}Gi"
     }
   )
+
+  cluster_name     = split("/", var.cluster_id)[5]
+  cluster_location = split("/", var.cluster_id)[3]
 }
 
 resource "local_file" "debug_file" {
@@ -90,8 +93,21 @@ resource "local_file" "debug_file" {
   filename = "${path.root}/pv-pvc-debug-file-${local.filestore_name}.yaml"
 }
 
+data "google_container_cluster" "gke_cluster" {
+  name     = local.cluster_name
+  location = local.cluster_location
+}
+
+data "google_client_config" "default" {}
+
+provider "kubectl" {
+  host                   = "https://${data.google_container_cluster.gke_cluster.endpoint}"
+  cluster_ca_certificate = base64decode(data.google_container_cluster.gke_cluster.master_auth[0].cluster_ca_certificate)
+  token                  = data.google_client_config.default.access_token
+  load_config_file       = false
+}
+
 resource "kubectl_manifest" "pv" {
-  count     = var.gke_cluster_exists ? 1 : 0
   yaml_body = local.is_gcs ? local.gcs_pv_contents : local.filestore_pv_contents
 
   lifecycle {

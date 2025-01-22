@@ -87,64 +87,16 @@ func (s *zeroSuite) TestExpandProviders(c *C) {
 				With("zone", cty.StringVal("zone1")).
 				With("universe_domain", cty.StringVal("test-universe.com"))}}
 
-	testGKEClusterModuleID := ModuleID("dummy_cluster")
-
-	testKubectlConf := Dict{}
-	for s, v := range map[string]string{
-		"cluster_ca_certificate": "cluster_ca_certificate",
-		"host":                   "host_endpoint",
-		"token":                  "access_token"} {
-		testKubectlConf = testKubectlConf.With(s, ModuleRef(testGKEClusterModuleID, v).AsValue())
-	}
-	testKubectlConf = testKubectlConf.
-		With("apply_retry_count", cty.NumberIntVal(15)).
-		With("load_config_file", cty.BoolVal(false))
-
-	testKubectlProvider := PR{
-		Source:        "gavinbunney/kubectl",
-		Version:       ">= 1.7.0",
-		Configuration: testKubectlConf}
-
-	testGKEClusterModule := Module{
-		Source: "modules/scheduler/gke-cluster",
-		ID:     testGKEClusterModuleID}
-
-	testPreExistingGKEClusterModule := Module{
-		Source: "modules/scheduler/pre-existing-gke-cluster",
-		ID:     testGKEClusterModuleID}
-
-	defaultProvider := map[string]PR{
-		"google": TerraformProvider{
-			Source:  "hashicorp/google",
-			Version: "~> 6.16.0"},
-		"google-beta": TerraformProvider{
-			Source:  "hashicorp/google-beta",
-			Version: "~> 6.16.0"}}
-
 	{ // no def PR, no group PR - match default values
 		g := Group{Name: "clown"}
 		noDefPr.expandProviders(&g)
-		c.Check(g.TerraformProviders, DeepEquals, defaultProvider)
-	}
-
-	{ // no def PR, no group PR, group only have gke cluster module
-		g := Group{
-			Name:    "clown",
-			Modules: []Module{testGKEClusterModule}}
-		defaultProvider["kubectl"] = testKubectlProvider
-		noDefPr.expandProviders(&g)
-		c.Check(g.TerraformProviders, DeepEquals, defaultProvider)
-		delete(defaultProvider, "kubectl")
-	}
-
-	{ // no def PR, no group PR, group only have pre existing gke cluster module
-		g := Group{
-			Name:    "clown",
-			Modules: []Module{testPreExistingGKEClusterModule}}
-		defaultProvider["kubectl"] = testKubectlProvider
-		noDefPr.expandProviders(&g)
-		c.Check(g.TerraformProviders, DeepEquals, defaultProvider)
-		delete(defaultProvider, "kubectl")
+		c.Check(g.TerraformProviders, DeepEquals, map[string]PR{
+			"google": TerraformProvider{
+				Source:  "hashicorp/google",
+				Version: "~> 6.16.0"},
+			"google-beta": TerraformProvider{
+				Source:  "hashicorp/google-beta",
+				Version: "~> 6.16.0"}})
 	}
 
 	{ // no def PR, group PR
