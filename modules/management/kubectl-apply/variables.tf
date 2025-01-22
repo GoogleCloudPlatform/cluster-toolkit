@@ -37,10 +37,15 @@ resource "terraform_data" "jobset_validations" {
   }
 }
 
-variable "gke_cluster_exists" {
-  description = "A static flag that signals to modules that a cluster has been created."
-  type        = bool
-  default     = false
+variable "project_id" {
+  description = "The project ID that hosts the gke cluster."
+  type        = string
+}
+
+variable "cluster_id" {
+  description = "An identifier for the gke cluster resource with format projects/<project_id>/locations/<region>/clusters/<name>."
+  type        = string
+  nullable    = false
 }
 
 variable "apply_manifests" {
