@@ -89,7 +89,7 @@ resource "google_container_node_pool" "node_pool" {
   max_pods_per_node = var.max_pods_per_node
 
   management {
-    auto_repair  = true
+    auto_repair  = var.auto_repair
     auto_upgrade = var.auto_upgrade
   }
 
@@ -104,6 +104,13 @@ resource "google_container_node_pool" "node_pool" {
     content {
       type        = var.placement_policy.type
       policy_name = var.placement_policy.name
+    }
+  }
+
+  dynamic "queued_provisioning" {
+    for_each = var.enable_queued_provisioning ? [1] : []
+    content {
+      enabled = true
     }
   }
 
@@ -328,6 +335,18 @@ resource "google_container_node_pool" "node_pool" {
     precondition {
       condition     = var.placement_policy.type != "COMPACT" || local.upgrade_settings.strategy != "BLUE_GREEN"
       error_message = "Compact placement is not supported with blue-green upgrades."
+    }
+    precondition {
+      condition     = !(var.enable_queued_provisioning == true && var.placement_policy.type == "COMPACT")
+      error_message = "placement_policy cannot be COMPACT when enable_queued_provisioning is true."
+    }
+    precondition {
+      condition     = !(var.enable_queued_provisioning == true && var.reservation_affinity.consume_reservation_type != "NO_RESERVATION")
+      error_message = "reservation_affinity should be NO_RESERVATION when enable_queued_provisioning is true."
+    }
+    precondition {
+      condition     = !(var.enable_queued_provisioning == true && var.autoscaling_total_min_nodes != 0)
+      error_message = "autoscaling_total_min_nodes should be 0 when enable_queued_provisioning is true."
     }
   }
 }
