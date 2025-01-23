@@ -201,7 +201,6 @@ deployment_groups:
     settings:
       kueue:
         install: true
-        version: v0.10.0
         config_path: $(vars.kueue_configuration_path)
         config_template_vars:
           num_gpus: $(a3-ultragpu-pool.static_gpu_count)
