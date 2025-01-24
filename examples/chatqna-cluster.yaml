@@ -15,9 +15,9 @@
 
 blueprint_name: chatqna-cluster
 vars:
-  project_id: PROJECT_ID
+  project_id: #  your project id
   deployment_name: chatqna-cluster
-  region: REGION
+  region: # your project region
   authorized_cidr: <IP_CIDR>
   gcp_public_cidrs_access_enabled: false
   chatqna_installer_path: $(ghpc_stage("./chatqna.yaml"))
