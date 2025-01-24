@@ -184,7 +184,35 @@ class MachineType:
             self.family, 1,  # assume 1 socket for all other families
         )
 
+@dataclass(frozen=True)
+class Instance:
+  name: str
+  zone: str
+  status: str
+  creation_timestamp: datetime
+  role: Optional[str]
 
+  # TODO: use proper InstanceResourceStatus class
+  resource_status: NSDict
+  # TODO: use proper InstanceScheduling class
+  scheduling: NSDict
+  # TODO: use proper UpcomingMaintenance class
+  upcoming_maintenance: Optional[NSDict] = None
+
+  @classmethod
+  def from_json(cls, jo: dict) -> "Instance":
+    labels = jo.get("labels", {})
+
+    return cls(
+      name=jo["name"],
+      zone=trim_self_link(jo["zone"]),
+      status=jo["status"],
+      creation_timestamp=parse_gcp_timestamp(jo["creationTimestamp"]),
+      resource_status=NSDict(jo.get("resourceStatus")),
+      scheduling=NSDict(jo.get("scheduling")),
+      upcoming_maintenance=NSDict(jo["upcomingMaintenance"]) if "upcomingMaintenance" in jo else None,
+      role = labels.get("slurm_instance_role"),
+    )
 
 @lru_cache(maxsize=1)
 def default_credentials():
@@ -1500,40 +1528,15 @@ class Lookup:
 
 
     @lru_cache(maxsize=1)
-    def instances(self) -> Dict[str, object]:
+    def instances(self) -> Dict[str, Instance]:
         instance_information_fields = [
-            "advancedMachineFeatures",
-            "cpuPlatform",
             "creationTimestamp",
-            "disks",
-            "disks",
-            "fingerprint",
-            "guestAccelerators",
-            "hostname",
-            "id",
-            "kind",
-            "labelFingerprint",
-            "labels",
-            "lastStartTimestamp",
-            "lastStopTimestamp",
-            "lastSuspendedTimestamp",
-            "machineType",
-            "metadata",
             "name",
-            "networkInterfaces",
             "resourceStatus",
             "scheduling",
-            "selfLink",
-            "serviceAccounts",
-            "shieldedInstanceConfig",
-            "shieldedInstanceIntegrityPolicy",
-            "sourceMachineImage",
             "status",
-            "statusMessage",
-            "tags",
+            "labels.slurm_instance_role",
             "zone",
-            # "deletionProtection",
-            # "startRestricted",
         ]
         
         # TODO: Merge this with all fields when upcoming maintenance is
@@ -1541,43 +1544,25 @@ class Lookup:
         if endpoint_version(ApiEndpoint.COMPUTE) == 'alpha':
           instance_information_fields.append("upcomingMaintenance")
 
-        instance_information_fields = sorted(set(instance_information_fields))
-        instance_fields = ",".join(instance_information_fields)
+        instance_fields = ",".join(sorted(instance_information_fields))
         fields = f"items.zones.instances({instance_fields}),nextPageToken"
         flt = f"labels.slurm_cluster_name={self.cfg.slurm_cluster_name} AND name:{self.cfg.slurm_cluster_name}-*"
         act = self.compute.instances()
         op = act.aggregatedList(project=self.project, fields=fields, filter=flt)
 
-        def properties(inst):
-            """change instance properties to a preferred format"""
-            inst["zone"] = trim_self_link(inst["zone"])
-            inst["machineType"] = trim_self_link(inst["machineType"])
-            # metadata is fetched as a dict of dicts like:
-            # {'key': key, 'value': value}, kinda silly
-            metadata = {i["key"]: i["value"] for i in inst["metadata"].get("items", [])}
-            if "slurm_instance_role" not in metadata:
-                return None
-            inst["role"] = metadata["slurm_instance_role"]
-            inst["metadata"] = metadata
-            # del inst["metadata"]  # no need to store all the metadata
-            return NSDict(inst)
-
         instances = {}
         while op is not None:
             result = ensure_execute(op)
-            instance_iter = (
-                (inst["name"], properties(inst))
-                for inst in chain.from_iterable(
-                    zone.get("instances", []) for zone in result.get("items", {}).values()
-                )
-            )
-            instances.update(
-                {name: props for name, props in instance_iter if props is not None}
-            )
+            for zone in result.get("items", {}).values():
+                for jo in zone.get("instances", []):
+                    inst = Instance.from_json(jo)
+                    if inst.name in instances:
+                        log.error(f"Duplicate VM name {inst.name} across multiple zones")
+                    instances[inst.name] = inst
             op = act.aggregatedList_next(op, result)
         return instances
 
-    def instance(self, instance_name: str) -> Optional[object]:
+    def instance(self, instance_name: str) -> Optional[Instance]:
         return self.instances().get(instance_name)
 
     @lru_cache()

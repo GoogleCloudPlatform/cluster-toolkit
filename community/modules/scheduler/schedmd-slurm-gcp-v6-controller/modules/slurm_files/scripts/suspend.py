@@ -15,7 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List
+from typing import List, Any
 import argparse
 import logging
 
@@ -46,11 +46,14 @@ def truncate_iter(iterable, max_count):
         yield el
 
 
-def delete_instance_request(instance):
+def delete_instance_request(name: str) -> Any:
+    inst = lookup().instance(name)
+    assert inst
+
     request = lookup().compute.instances().delete(
         project=lookup().project,
-        zone=lookup().instance(instance).zone,
-        instance=instance,
+        zone=inst.zone,
+        instance=name,
     )
     log_api_request(request)
     return request

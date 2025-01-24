@@ -16,7 +16,7 @@ import pytest
 import json
 import mock
 from pytest_unordered import unordered
-from common import TstCfg, TstNodeset, TstTPU, TstInstance
+from common import TstCfg, TstNodeset, TstTPU, tstInstance
 import sort_nodes
 
 import util
@@ -62,13 +62,13 @@ def test_gen_topology_conf(tpu_mock):
     lkp = util.Lookup(cfg)
     lkp.instances = lambda: { n.name: n for n in [
         # nodeset blue
-        TstInstance("m22-blue-0"),  # no physicalHost
-        TstInstance("m22-blue-0", physicalHost="/a/a/a"),
-        TstInstance("m22-blue-1", physicalHost="/a/a/b"),
-        TstInstance("m22-blue-2", physicalHost="/a/b/a"),
-        TstInstance("m22-blue-3", physicalHost="/b/a/a"),
+        tstInstance("m22-blue-0"),  # no physicalHost
+        tstInstance("m22-blue-0", physical_host="/a/a/a"),
+        tstInstance("m22-blue-1", physical_host="/a/a/b"),
+        tstInstance("m22-blue-2", physical_host="/a/b/a"),
+        tstInstance("m22-blue-3", physical_host="/b/a/a"),
         # nodeset green
-        TstInstance("m22-green-3", physicalHost="/a/a/c"),
+        tstInstance("m22-green-3", physical_host="/a/a/c"),
     ]}
 
     uncompressed = conf.gen_topology(lkp)
@@ -173,19 +173,19 @@ def test_gen_topology_conf_update():
     # don't dump
 
     # set empty physicalHost - no reconfigure
-    lkp.instances = lambda: { n.name: n for n in [TstInstance("m22-green-0", physicalHost="")]}
+    lkp.instances = lambda: { n.name: n for n in [tstInstance("m22-green-0", physical_host="")]}
     upd, sum = conf.gen_topology_conf(lkp)
     assert upd == False
     # don't dump
 
     # set physicalHost - reconfigure
-    lkp.instances = lambda: { n.name: n for n in [TstInstance("m22-green-0", physicalHost="/a/b/c")]}
+    lkp.instances = lambda: { n.name: n for n in [tstInstance("m22-green-0", physical_host="/a/b/c")]}
     upd, sum = conf.gen_topology_conf(lkp)
     assert upd == True
     sum.dump(lkp)
 
     # change physicalHost - reconfigure
-    lkp.instances = lambda: { n.name: n for n in [TstInstance("m22-green-0", physicalHost="/a/b/z")]}
+    lkp.instances = lambda: { n.name: n for n in [tstInstance("m22-green-0", physical_host="/a/b/z")]}
     upd, sum = conf.gen_topology_conf(lkp)
     assert upd == True
     sum.dump(lkp)
