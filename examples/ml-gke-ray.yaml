@@ -16,15 +16,15 @@
 blueprint_name: ml-gke-ray
 
 vars:
-  project_id: ## Set GCP Project ID Here ##
-  deployment_name: ml-gke-ray-01
+  project_id: raushankr-gke-dev
+  deployment_name: ml-gke-ray-02
   region: asia-southeast1
   zones:
   - asia-southeast1-b  # g2 machine has better availability in this zone
   # Cidr block containing the IP of the machine calling terraform.
   # The following line must be updated for this example to work.
-  authorized_cidr: <your-ip-address>/32
-  gcp_public_cidrs_access_enabled: false
+  authorized_cidr: 34.145.39.32/32
+  gcp_public_cidrs_access_enabled: true
 
 deployment_groups:
 - group: primary
@@ -66,9 +66,23 @@ deployment_groups:
       configure_workload_identity_sa: true
     outputs: [instructions]
 
-  - id: g2_pool
+  - id: c3d_pool
     source: modules/compute/gke-node-pool
     use: [gke_cluster, gke_service_account]
     settings:
       disk_type: pd-balanced
-      machine_type: g2-standard-4
+      machine_type: c3d-standard-4
+
+  - id: job_template
+    source: modules/compute/gke-job-template
+    use: [c3d_pool]
+    settings:
+      image: python:3.8
+      command:
+      - bash
+      - -c
+      - |
+        pip install ray
+        python -c 'import ray; ray.init(); print(ray.cluster_resources())'
+      node_count: 1
+    outputs: [instructions]
