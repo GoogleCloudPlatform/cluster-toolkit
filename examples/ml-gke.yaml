@@ -25,7 +25,6 @@ vars:
   # The following line must be updated for this example to work.
   authorized_cidr: <your-ip-address>/32
   gcp_public_cidrs_access_enabled: false
-  enable_ray_operator: false
 
 deployment_groups:
 - group: primary
@@ -70,7 +69,6 @@ deployment_groups:
     source: modules/scheduler/gke-cluster
     use: [network1, workload_service_account]
     settings:
-      enable_ray_operator: $(vars.enable_ray_operator)
       enable_private_endpoint: false  # Allows for access from authorized public IPs
       gcp_public_cidrs_access_enabled: $(vars.gcp_public_cidrs_access_enabled)
       master_authorized_networks:
