@@ -468,9 +468,8 @@ def get_upcoming_maintenance(lkp: util.Lookup) -> Dict[str, Tuple[str, datetime]
     upc_maint_map = {}
 
     for node, inst in lkp.instances().items():
-        if inst.upcoming_maintenance:
-          start_time = parse_gcp_timestamp(inst.upcoming_maintenance['startTimeWindow']['earliest'])
-          upc_maint_map[node + "_maintenance"] = (node, start_time)
+        if inst.resource_status.upcoming_maintenance:
+          upc_maint_map[node + "_maintenance"] = (node, inst.resource_status.upcoming_maintenance.window_start_time)
 
     return upc_maint_map
 
