@@ -563,7 +563,7 @@ def add_nodeset_topology(
         except Exception:
             continue
     
-        phys_host = inst.resource_status.get("physicalHost", "")
+        phys_host = inst.resource_status.physical_host or ""
         bldr.summary.physical_host[inst.name] = phys_host
         up_nodes.add(inst.name)
 
