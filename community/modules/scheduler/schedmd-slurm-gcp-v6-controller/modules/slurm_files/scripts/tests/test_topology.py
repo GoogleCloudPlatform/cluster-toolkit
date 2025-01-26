@@ -203,6 +203,6 @@ def test_gen_topology_conf_update():
         (["z/n-0", "z/n-1", "z/n-2", "z/n-3", "z/n-4", "z/n-10"], ['n-0', 'n-1', 'n-2', 'n-3', 'n-4', 'n-10']),
         (["y/n-0", "z/n-1", "x/n-2", "x/n-3", "y/n-4", "g/n-10"], ['n-0', 'n-4', 'n-1', 'n-2', 'n-3', 'n-10']),
     ])
-def test_sort_nodes_order(paths: list[list[str]], expected: list[str]) -> None:
-    paths = [l.split("/") for l in paths]
-    assert sort_nodes.order(paths) == expected
+def test_sort_nodes_order(paths: list[str], expected: list[str]) -> None:
+    paths_expanded = [l.split("/") for l in paths]
+    assert sort_nodes.order(paths_expanded) == expected

@@ -14,10 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Iterable, List, Tuple, Optional, Any, Dict, Sequence
+from typing import Iterable, List, Tuple, Optional, Any, Dict, Sequence, Type, Callable
 import argparse
 import base64
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import timedelta, datetime
 import hashlib
 import inspect
@@ -43,24 +43,26 @@ from itertools import chain, islice
 from pathlib import Path
 from time import sleep, time
 
+
+# TODO: remove "type: ignore" once moved to newer version of libraries
 from google.cloud import secretmanager
-from google.cloud import storage
+from google.cloud import storage # type: ignore
 
-import google.auth  # noqa: E402
-from google.oauth2 import service_account  # noqa: E402
-import googleapiclient.discovery  # noqa: E402
-import google_auth_httplib2  # noqa: E402
-from googleapiclient.http import set_user_agent  # noqa: E402
-from google.api_core.client_options import ClientOptions  # noqa: E402
-import httplib2  # noqa: E402
+import google.auth
+from google.oauth2 import service_account
+import googleapiclient.discovery # type: ignore
+import google_auth_httplib2 # type: ignore
+from googleapiclient.http import set_user_agent # type: ignore
+from google.api_core.client_options import ClientOptions
+import httplib2
 
-import google.api_core.exceptions as gExceptions  # noqa: E402
+import google.api_core.exceptions as gExceptions
 
-from requests import get as get_url  # noqa: E402
-from requests.exceptions import RequestException  # noqa: E402
+from requests import get as get_url
+from requests.exceptions import RequestException
 
-import yaml  # noqa: E402
-from addict import Dict as NSDict  # noqa: E402
+import yaml
+from addict import Dict as NSDict # type: ignore
 
 
 USER_AGENT = "Slurm_GCP_Scripts/1.5 (GPN:SchedMD)"
@@ -83,40 +85,28 @@ scripts_dir = next(
 
 # load all directories as Paths into a dict-like namespace
 dirs = NSDict(
-    {
-        n: Path(p)
-        for n, p in dict.items(
-            {
-                "home": "/home",
-                "apps": "/opt/apps",
-                "slurm": "/slurm",
-                "scripts": scripts_dir,
-                "custom_scripts": "/slurm/custom_scripts",
-                "munge": "/etc/munge",
-                "secdisk": "/mnt/disks/sec",
-                "log": "/var/log/slurm",
-            }
-        )
-    }
+    home = Path("/home"),
+    apps = Path("/opt/apps"),
+    slurm = Path("/slurm"),
+    scripts = scripts_dir,
+    custom_scripts = Path("/slurm/custom_scripts"),
+    munge = Path("/etc/munge"),
+    secdisk = Path("/mnt/disks/sec"),
+    log = Path("/var/log/slurm"),
 )
 
 slurmdirs = NSDict(
-    {
-        n: Path(p)
-        for n, p in dict.items(
-            {
-                "prefix": "/usr/local",
-                "etc": "/usr/local/etc/slurm",
-                "state": "/var/spool/slurm",
-            }
-        )
-    }
+    prefix = Path("/usr/local"),
+    etc = Path("/usr/local/etc/slurm"),
+    state = Path("/var/spool/slurm"),
 )
 
 
+# TODO: Remove this hack (relies on undocumented behavior of PyYAML)
+# No need to represent NSDict and Path once we move to properly typed & serializable config.
 yaml.SafeDumper.yaml_representers[
-    None
-] = lambda self, data: yaml.representer.SafeRepresenter.represent_str(self, str(data))
+    None # type: ignore
+] = lambda self, data: yaml.representer.SafeRepresenter.represent_str(self, str(data)) # type: ignore
 
 
 class ApiEndpoint(Enum):
@@ -520,48 +510,59 @@ def _fill_cfg_defaults(cfg: NSDict) -> NSDict:
             netstore.server_ip = cfg.slurm_control_host
     return cfg
 
-def _list_config_blobs() -> Tuple[Any, str]:
+@dataclass
+class _ConfigBlobs:
+    """
+    "Private" class that represent a collection of GCS blobs for configuration
+    """
+    core: storage.Blob
+    partition: List[storage.Blob] = field(default_factory=list)
+    nodeset: List[storage.Blob] = field(default_factory=list)
+    nodeset_dyn: List[storage.Blob] = field(default_factory=list)
+    nodeset_tpu: List[storage.Blob] = field(default_factory=list)
+
+    @property
+    def hash(self) -> str:
+        h = hashlib.md5()
+        all = [self.core] + self.partition + self.nodeset + self.nodeset_dyn + self.nodeset_tpu    
+        # sort blobs so hash is consistent
+        for blob in sorted(all, key=lambda b: b.name): 
+            h.update(blob.md5_hash.encode("utf-8"))
+        return h.hexdigest() 
+
+def _list_config_blobs() -> _ConfigBlobs:
     _, common_prefix = _get_bucket_and_common_prefix()
-    res = { # TODO: use a dataclass once we move to python 3.7
-        "core": None,
-        "partition": [],
-        "nodeset": [],
-        "nodeset_dyn": [],
-        "nodeset_tpu": [],
-    }
-    hash = hashlib.md5()
-    blobs = list(blob_list(prefix=""))
-    # sort blobs so hash is consistent
-    for blob in sorted(blobs, key=lambda b: b.name):
+    
+    core: Optional[storage.Blob] = None
+    rest: Dict[str, List[storage.Blob]] = {"partition": [], "nodeset": [], "nodeset_dyn": [], "nodeset_tpu": []}
+
+    for blob in blob_list(prefix=""):
         if blob.name == f"{common_prefix}/config.yaml":
-            res["core"] = blob
-            hash.update(blob.md5_hash.encode("utf-8"))
-        for key in ("partition", "nodeset", "nodeset_dyn", "nodeset_tpu"):
+            core = blob
+        for key in rest.keys():
             if blob.name.startswith(f"{common_prefix}/{key}_configs/"):
-                res[key].append(blob)
-                hash.update(blob.md5_hash.encode("utf-8"))
+                rest[key].append(blob)
 
-    if res["core"] is None:
-        raise DeffetiveStoredConfigError("config.yaml not found in bucket")
-    return res, hash.hexdigest()
-
+    if core is None:
+        raise DeffetiveStoredConfigError(f"{common_prefix}/config.yaml not found in bucket")
+    return _ConfigBlobs(core=core, **rest)
 
 def _fetch_config(old_hash: Optional[str]) -> Optional[Tuple[NSDict, str]]:
     """Fetch config from bucket, returns None if no changes are detected."""
-    blobs, hash = _list_config_blobs()
-    if old_hash == hash:
+    blobs = _list_config_blobs()
+    if old_hash == blobs.hash:
         return None
 
     def _download(bs) -> List[Any]:
         return [yaml.safe_load(b.download_as_text()) for b in bs]
 
     return _assemble_config(
-        core=_download([blobs["core"]])[0],
-        partitions=_download(blobs["partition"]),
-        nodesets=_download(blobs["nodeset"]),
-        nodesets_dyn=_download(blobs["nodeset_dyn"]),
-        nodesets_tpu=_download(blobs["nodeset_tpu"]),
-    ), hash
+        core=_download([blobs.core])[0],
+        partitions=_download(blobs.partition),
+        nodesets=_download(blobs.nodeset),
+        nodesets_dyn=_download(blobs.nodeset_dyn),
+        nodesets_tpu=_download(blobs.nodeset_tpu),
+    ), blobs.hash
 
 def _assemble_config(
         core: Any,
@@ -781,7 +782,7 @@ def cached_property(f):
     return property(lru_cache()(f))
 
 
-def retry(max_retries: int, init_wait_time: float, warn_msg: str, exc_type: Exception):
+def retry(max_retries: int, init_wait_time: float, warn_msg: str, exc_type: Type[Exception]):
     """Retries functions that raises the exception exc_type.
     Retry time is increased by a factor of two for every iteration.
 
@@ -802,7 +803,7 @@ def retry(max_retries: int, init_wait_time: float, warn_msg: str, exc_type: Exce
         def wrapper(*args, **kwargs):
             retry = 0
             secs = init_wait_time
-            captured_exc = None
+            captured_exc: Optional[BaseException] = None
             while retry < max_retries:
                 try:
                     return f(*args, **kwargs)
@@ -812,6 +813,7 @@ def retry(max_retries: int, init_wait_time: float, warn_msg: str, exc_type: Exce
                     sleep(secs)
                     retry += 1
                     secs *= 2
+            assert captured_exc
             raise captured_exc
 
         return wrapper
@@ -819,11 +821,14 @@ def retry(max_retries: int, init_wait_time: float, warn_msg: str, exc_type: Exce
     return decorator
 
 
-def separate(pred, coll):
+def separate(pred: Callable[[Any], bool], coll: Iterable[Any]) -> Tuple[List[Any], List[Any]]:
     """filter into 2 lists based on pred returning True or False
     returns ([False], [True])
     """
-    return reduce(lambda acc, el: acc[pred(el)].append(el) or acc, coll, ([], []))
+    res: Tuple[List[Any], List[Any]] = ([],[])
+    for el in coll:
+        res[pred(el)].append(el)
+    return res
 
 
 def chunked(iterable, n=API_REQ_LIMIT):
@@ -977,7 +982,9 @@ def to_hostlist(names: Iterable[str]) -> str:
     pref = defaultdict(list)
     tokenizer = re.compile(r"^(.*?)(\d*)$")
     for name in filter(None, names):
-        p, s = tokenizer.match(name).groups()
+        matches = tokenizer.match(name)
+        assert matches, name
+        p, s = matches.groups()
         pref[p].append(s)
 
     def _compress_suffixes(ss: List[str]) -> List[str]:
@@ -1079,7 +1086,7 @@ def batch_execute(requests, retry_cb=None, log_err=log.error):
         requests = {str(k): v for k, v in enumerate(requests)}  # rid generated here
     done = {}
     failed = {}
-    timestamps = []
+    timestamps: List[float] = []
     rate_limited = False
 
     def batch_callback(rid, resp, exc):
@@ -1175,7 +1182,7 @@ def wait_for_operations(operations):
 def get_filtered_operations(op_filter):
     """get list of operations associated with group id"""
     project = lookup().project
-    operations = []
+    operations: List[Any] = []
 
     def get_aggregated_operations(items):
         # items is a dict of location key to value: dict(operations=<list of operations>) or an empty dict
@@ -1469,10 +1476,9 @@ class Lookup:
         return idx < self.node_nodeset(node_name).node_count_static
 
     @lru_cache(maxsize=None)
-    def slurm_nodes(self):
-
-        def make_node_tuple(node_line):
-            """turn node,state line to (node, NodeState(state))"""
+    def slurm_nodes(self) -> Dict[str, NodeState]:
+        def parse_line(node_line) -> Tuple[str, NodeState]:
+            """turn node,state line to (node, NodeState)"""
             # state flags include: CLOUD, COMPLETING, DRAIN, FAIL, POWERED_DOWN,
             #   POWERING_DOWN
             node, fullstate = node_line.split(",")
@@ -1488,7 +1494,7 @@ class Lookup:
         node_lines = run(cmd, shell=True).stdout.rstrip().splitlines()
         nodes = {
             node: state
-            for node, state in map(make_node_tuple, node_lines)
+            for node, state in map(parse_line, node_lines)
             if "CLOUD" in state.flags or "DYNAMIC_NORM" in state.flags
         }
         return nodes
@@ -1566,13 +1572,13 @@ class Lookup:
         return self.instances().get(instance_name)
 
     @lru_cache()
-    def _get_reservation(self, project: str, zone: str, name: str) -> object:
+    def _get_reservation(self, project: str, zone: str, name: str) -> Any:
         """See https://cloud.google.com/compute/docs/reference/rest/v1/reservations"""
         return self.compute.reservations().get(
             project=project, zone=zone, reservation=name).execute()
     
     @lru_cache()
-    def _get_future_reservation(self, project:str, zone:str, name: str) -> object:
+    def _get_future_reservation(self, project:str, zone:str, name: str) -> Any:
         """See https://cloud.google.com/compute/docs/reference/rest/v1/futureReservations"""
         return self.compute.futureReservations().get(project=project, zone=zone, futureReservation=name).execute()
 
@@ -1644,7 +1650,7 @@ class Lookup:
         field_names = "name,zone,guestCpus,memoryMb,accelerators"
         fields = f"items.zones.machineTypes({field_names}),nextPageToken"
 
-        machines = defaultdict(dict)
+        machines: Dict[str, Dict[str, Any]] = defaultdict(dict)
         act = self.compute.machineTypes()
         op = act.aggregatedList(project=self.project, fields=fields)
         while op is not None:
