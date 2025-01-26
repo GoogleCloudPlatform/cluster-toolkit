@@ -1,0 +1,93 @@
+# Cluster Toolkit Examples
+
+This repository provides various example configurations for deploying and managing workloads using Kubernetes. The focus is on leveraging Intel optimizations for workload execution. Below is a detailed description of the `chatqna.yaml` example file.
+
+## `chatqna.yaml`
+
+The `chatqna.yaml` file demonstrates the deployment of a Q&A application powered by Intel hardware optimizations. This configuration is designed to run efficiently on Kubernetes clusters with Intel-specific workloads.
+
+### Key Features
+
+- **Optimized for Intel Hardware**: Utilizes Intel's hardware capabilities to enhance performance.
+- **Scalable Architecture**: Configured for horizontal scaling to handle varying traffic loads.
+- **Resource Customization**: Fine-tuned CPU and memory resource allocation for optimal performance.
+- **Portable Setup**: Easily deployable on any Kubernetes cluster with minimal configuration changes.
+
+### Prerequisites
+
+- A Kubernetes cluster (1.22+ recommended).
+- Intel-optimized nodes or Intel-specific hardware in the cluster.
+- `kubectl` installed and configured to access your Kubernetes cluster.
+
+### Deployment Instructions
+
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/GoogleCloudPlatform/cluster-toolkit.git
+   cd cluster-toolkit/community/examples/intel
+
+1.  **Apply the `chatqna.yaml` file** to your Kubernetes cluster:
+
+    bash
+
+    CopyEdit
+
+    `kubectl apply -f chatqna.yaml`
+
+2.  **Verify the deployment**:
+
+    bash
+
+    CopyEdit
+
+    `kubectl get pods`
+
+    Ensure all pods are in the `Running` state.
+
+3.  **Access the application**:
+
+    -   **Check the service created**:
+
+        bash
+
+        CopyEdit
+
+        `kubectl get services`
+
+    -   Use the service's external IP or load balancer to access the application.
+
+### Configuration Details
+
+The `chatqna.yaml` file includes the following components:
+
+-   **Deployment**: Specifies the number of replicas and the container configuration.
+-   **Service**: Exposes the application for external access.
+-   **Resource Requests and Limits**: Ensures efficient usage of Intel hardware capabilities.
+
+### Customization
+
+You can customize the deployment by modifying the `chatqna.yaml` file:
+
+-   **Replica Count**: Adjust the `replicas` value in the deployment.
+-   **Resource Allocation**: Modify `resources.requests` and `resources.limits` to match your workload requirements.
+-   **Environment Variables**: Add or update environment variables for the application under `env`.
+
+### Contributing
+
+Contributions to the repository are welcome. If you have improvements or additional examples, feel free to submit a pull request.
+
+# Using Sample Manifests for ChatQnA (v1.1)
+
+The sample manifests are pulled from the following location:
+
+> [chatqna.yaml (v1.1)](https://github.com/opea-project/GenAIExamples/blob/v1.1/ChatQnA/kubernetes/intel/hpu/gaudi/manifest/chatqna.yaml)
+
+> **Note**: We are deploying version **1.1**, so make sure to use the **v1.1** branch or tag for consistency.
+
+## Applying the Manifests
+
+1. **Download** or **clone** the repository at the **v1.1** tag/branch.
+2. Navigate to the folder containing the `chatqna.yaml`.
+3. Apply the manifest to your Kubernetes cluster:
+   ```bash
+   kubectl apply -f chatqna.yaml
