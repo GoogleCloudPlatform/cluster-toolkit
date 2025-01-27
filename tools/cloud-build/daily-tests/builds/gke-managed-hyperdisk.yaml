@@ -18,6 +18,7 @@ tags:
 - m.gke-job-template
 - m.gke-node-pool
 - m.gke-storage
+- m.service-account
 - m.vpc
 - gke
 
