@@ -1313,8 +1313,12 @@ class FutureReservation:
     specific: bool
     start_time: datetime
     end_time: datetime
+    reservation_mode: Optional[str]
     active_reservation: Optional[ReservationDetails]
 
+    @property
+    def calendar(self) -> bool:
+        return self.reservation_mode == "CALENDAR"
 
 @dataclass
 class Job:
@@ -1681,6 +1685,7 @@ class Lookup:
             specific=fr["specificReservationRequired"],
             start_time=start_time,
             end_time=end_time,
+            reservation_mode=fr.get("reservationMode"),
             active_reservation=active_reservation
         )
 
