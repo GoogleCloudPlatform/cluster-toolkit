@@ -365,16 +365,19 @@ module "workload_identity" {
   version = "~> 34.0"
 
   use_existing_gcp_sa = true
-  name                = "workload-identity-k8-sa"
+  name                = "workload-identity-k8s-sa"
   gcp_sa_name         = local.sa_email
   project_id          = var.project_id
-  roles               = var.enable_gcsfuse_csi ? ["roles/storage.admin"] : []
 
   # https://github.com/terraform-google-modules/terraform-google-kubernetes-engine/issues/1059
   depends_on = [
     data.google_project.project,
     google_container_cluster.gke_cluster
   ]
+}
+
+locals {
+  k8s_service_account_name = one(module.workload_identity[*].k8s_service_account_name)
 }
 
 module "kubectl_apply" {

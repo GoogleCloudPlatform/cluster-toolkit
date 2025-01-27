@@ -93,9 +93,33 @@ deployment_groups:
         ip_range: 192.168.128.0/18
         region: $(vars.region)
 
+  - id: node_pool_service_account
+    source: community/modules/project/service-account
+    settings:
+      name: gke-np-sa
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
+      - monitoring.viewer
+      - stackdriver.resourceMetadata.writer
+      - storage.objectViewer
+      - artifactregistry.reader
+
+  - id: workload_service_account
+    source: community/modules/project/service-account
+    settings:
+      name: gke-wl-sa
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
+      - monitoring.viewer
+      - stackdriver.resourceMetadata.writer
+      - storage.objectAdmin
+      - artifactregistry.reader
+
   - id: a3-ultragpu-cluster
     source: modules/scheduler/gke-cluster
-    use: [gke-a3-ultra-net-0]
+    use: [gke-a3-ultra-net-0, workload_service_account]
     settings:
       system_node_pool_machine_type: "e2-standard-16"
       system_node_pool_disk_size_gb: $(vars.system_node_pool_disk_size_gb)
@@ -103,6 +127,7 @@ deployment_groups:
       enable_dcgm_monitoring: true
       enable_gcsfuse_csi: true
       enable_private_endpoint: false # Allows access from authorized public IPs
+      configure_workload_identity_sa: true
       master_authorized_networks:
       - cidr_block: $(vars.authorized_cidr) # Allows your machine to run the kubectl command. Required for multi network setup.
         display_name: "kubectl-access-network"
@@ -135,7 +160,7 @@ deployment_groups:
 
   - id: a3-ultragpu-pool
     source: modules/compute/gke-node-pool
-    use: [a3-ultragpu-cluster]
+    use: [a3-ultragpu-cluster, node_pool_service_account]
     settings:
       machine_type: a3-ultragpu-8g
       auto_upgrade: true

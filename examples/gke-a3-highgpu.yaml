@@ -42,16 +42,28 @@ deployment_groups:
         - range_name: services
           ip_cidr_range: 10.0.32.0/20
 
-  - id: gke_service_account
+  - id: node_pool_service_account
     source: community/modules/project/service-account
     settings:
-      name: gke-sa
+      name: gke-np-sa
       project_roles:
       - logging.logWriter
       - monitoring.metricWriter
       - monitoring.viewer
       - stackdriver.resourceMetadata.writer
       - storage.objectViewer
+      - artifactregistry.reader
+
+  - id: workload_service_account
+    source: community/modules/project/service-account
+    settings:
+      name: gke-wl-sa
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
+      - monitoring.viewer
+      - stackdriver.resourceMetadata.writer
+      - storage.objectAdmin
       - artifactregistry.reader
 
   - id: gpunets
@@ -65,10 +77,11 @@ deployment_groups:
 
   - id: gke_cluster
     source: modules/scheduler/gke-cluster
-    use: [network1, gpunets, gke_service_account]
+    use: [network1, gpunets, workload_service_account]
     settings:
       enable_private_endpoint: false  # Allows for access from authorized public IPs
       gcp_public_cidrs_access_enabled: $(vars.gcp_public_cidrs_access_enabled)
+      configure_workload_identity_sa: true
       master_authorized_networks:
       - cidr_block: $(vars.authorized_cidr)  # Allows your machine run kubectl command. It's required for the multi-network setup.
         display_name: "kubectl-access-network"
@@ -76,7 +89,7 @@ deployment_groups:
 
   - id: a3_highgpu_pool
     source: modules/compute/gke-node-pool
-    use: [gke_cluster, gpunets, gke_service_account]
+    use: [gke_cluster, gpunets, node_pool_service_account]
     settings:
       machine_type: a3-highgpu-8g
       autoscaling_total_min_nodes: 2
