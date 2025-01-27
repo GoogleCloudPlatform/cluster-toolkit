@@ -101,11 +101,11 @@ def instance_properties(nodeset: NSDict, model:str, placement_group:Optional[str
         props.resourcePolicies = [placement_group]
 
     if reservation := lookup().nodeset_reservation(nodeset):
-        update_reservation_props(reservation, props, placement_group)
+        update_reservation_props(reservation, props, placement_group, reservation.calendar)
 
     if (fr := lookup().future_reservation(nodeset)) and fr.specific:
         assert fr.active_reservation
-        update_reservation_props(fr.active_reservation, props, placement_group)
+        update_reservation_props(fr.active_reservation, props, placement_group, fr.calendar)
 
     if props.resourcePolicies:
        props.scheduling.onHostMaintenance = "TERMINATE"
@@ -120,14 +120,14 @@ def instance_properties(nodeset: NSDict, model:str, placement_group:Optional[str
     props.update(nodeset.get("instance_properties") or {})
     return props
 
-def update_reservation_props(reservation:ReservationDetails, props:NSDict, placement_group:Optional[str]) -> None:
+def update_reservation_props(reservation:ReservationDetails, props:NSDict, placement_group:Optional[str], calendar_mode:bool) -> None:
     props.reservationAffinity = {
         "consumeReservationType": "SPECIFIC_RESERVATION",
         "key": f"compute.{util.universe_domain()}/reservation-name",
         "values": [reservation.bulk_insert_name],
     }
 
-    if reservation.dense:
+    if reservation.dense or calendar_mode:
         props.scheduling.provisioningModel = "RESERVATION_BOUND"
 
     # Figure out `resourcePolicies`

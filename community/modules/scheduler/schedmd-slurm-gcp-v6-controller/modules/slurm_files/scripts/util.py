@@ -1317,10 +1317,15 @@ class ReservationDetails:
     policies: List[str] # names (not URLs) of resource policies
     bulk_insert_name: str # name in format suitable for bulk insert (currently identical to user supplied name in long format)
     deployment_type: Optional[str]
+    reservation_mode: Optional[str]
 
     @property
     def dense(self) -> bool:
         return self.deployment_type == "DENSE"
+    
+    @property
+    def calendar(self) -> bool:
+        return self.reservation_mode == "CALENDAR"
 
 @dataclass(frozen=True)
 class FutureReservation:
@@ -1330,8 +1335,12 @@ class FutureReservation:
     specific: bool
     start_time: datetime
     end_time: datetime
+    reservation_mode: Optional[str]
     active_reservation: Optional[ReservationDetails]
 
+    @property
+    def calendar(self) -> bool:
+        return self.reservation_mode == "CALENDAR"
 
 @dataclass
 class Job:
@@ -1659,6 +1668,7 @@ class Lookup:
             name=name,
             policies=policies,
             deployment_type=reservation.get("deploymentType"),
+            reservation_mode=reservation.get("reservationMode"),
             bulk_insert_name=bulk_insert_name)
     
     def nodeset_reservation(self, nodeset: NSDict) -> Optional[ReservationDetails]:
@@ -1706,6 +1716,7 @@ class Lookup:
             specific=fr["specificReservationRequired"],
             start_time=start_time,
             end_time=end_time,
+            reservation_mode=fr.get("reservationMode"),
             active_reservation=active_reservation
         )
 
