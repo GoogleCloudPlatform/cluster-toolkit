@@ -17,7 +17,7 @@
 # region, zone must be defined
 # in build file with --extra-vars flag!
 test_name: gke-a2high-kueue
-deployment_name: gke-a2high-kueue-{{ build }}
+deployment_name: gke-a2high-{{ build }}
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/tools/cloud-build/daily-tests/blueprints/gke-a2-highgpu.yaml"
 network: "gke-a2high-net-{{ build }}"
