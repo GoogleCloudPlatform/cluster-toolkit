@@ -205,6 +205,9 @@ resource "google_container_cluster" "gke_cluster" {
     parallelstore_csi_driver_config {
       enabled = var.enable_parallelstore_csi
     }
+    ray_operator_config {
+      enabled = var.enable_ray_operator
+    }
   }
 
   timeouts {
