@@ -44,6 +44,7 @@ deployment_groups:
     source: modules/network/vpc
     settings:
       network_name: h4d-rdma-net
+      mtu: 8896
       network_profile: https://www.googleapis.com/compute/beta/projects/$(vars.project_id)/global/networkProfiles/$(vars.zone)-vpc-falcon
       network_routing_mode: REGIONAL
       enable_cloud_router: false
@@ -81,7 +82,7 @@ deployment_groups:
     use: [h4d_startup, h4d-slurm-net-0]
     settings:
       bandwidth_tier: gvnic_enabled
-      machine_type: h4d-standard-192
+      machine_type: h4d-highmem-192-lssd
       node_count_static: 2
       node_count_dynamic_max: 0
       enable_placement: false
