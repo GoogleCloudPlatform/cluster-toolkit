@@ -26,7 +26,7 @@ from pprint import pprint
 import util
 from google.api_core import exceptions, retry
 from google.cloud import bigquery as bq
-from google.cloud.bigquery import SchemaField
+from google.cloud.bigquery import SchemaField # type: ignore
 from util import lookup, run
 
 SACCT = "sacct"
@@ -175,7 +175,8 @@ slurm_field_map = {
 # creating the job rows
 job_schema = {field.name: field for field in schema_fields}
 # Order is important here, as that is how they are parsed from sacct output
-Job = namedtuple("Job", job_schema.keys())
+Job = namedtuple("Job", job_schema.keys()) # type: ignore 
+# ... see https://github.com/python/mypy/issues/848
 
 client = bq.Client(
     project=lookup().cfg.project,

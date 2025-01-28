@@ -130,7 +130,6 @@ variable "login_nodes" {
     })), [])
     bandwidth_tier         = optional(string, "platform_default")
     can_ip_forward         = optional(bool, false)
-    disable_smt            = optional(bool, false)
     disk_auto_delete       = optional(bool, true)
     disk_labels            = optional(map(string), {})
     disk_size_gb           = optional(number)
@@ -142,8 +141,16 @@ variable "login_nodes" {
       count = number
       type  = string
     }))
-    labels              = optional(map(string), {})
-    machine_type        = optional(string)
+    labels       = optional(map(string), {})
+    machine_type = optional(string)
+    advanced_machine_features = object({
+      enable_nested_virtualization = optional(bool)
+      threads_per_core             = optional(number)
+      turbo_mode                   = optional(string)
+      visible_core_count           = optional(number)
+      performance_monitoring_unit  = optional(string)
+      enable_uefi_networking       = optional(bool)
+    })
     metadata            = optional(map(string), {})
     min_cpu_platform    = optional(string)
     num_instances       = optional(number, 1)
@@ -198,13 +205,13 @@ variable "nodeset" {
     })), [])
     bandwidth_tier                   = optional(string, "platform_default")
     can_ip_forward                   = optional(bool, false)
-    disable_smt                      = optional(bool, false)
     disk_auto_delete                 = optional(bool, true)
     disk_labels                      = optional(map(string), {})
     disk_size_gb                     = optional(number)
     disk_type                        = optional(string)
     enable_confidential_vm           = optional(bool, false)
     enable_placement                 = optional(bool, false)
+    placement_max_distance           = optional(number, null)
     enable_oslogin                   = optional(bool, true)
     enable_shielded_vm               = optional(bool, false)
     enable_maintenance_reservation   = optional(bool, false)
@@ -218,8 +225,16 @@ variable "nodeset" {
       max_run_duration = number
       use_job_duration = bool
     })
-    labels                   = optional(map(string), {})
-    machine_type             = optional(string)
+    labels       = optional(map(string), {})
+    machine_type = optional(string)
+    advanced_machine_features = object({
+      enable_nested_virtualization = optional(bool)
+      threads_per_core             = optional(number)
+      turbo_mode                   = optional(string)
+      visible_core_count           = optional(number)
+      performance_monitoring_unit  = optional(string)
+      enable_uefi_networking       = optional(bool)
+    })
     maintenance_interval     = optional(string)
     instance_properties_json = string
     metadata                 = optional(map(string), {})
@@ -614,14 +629,6 @@ EOD
   sensitive = true
 }
 
-variable "enable_slurm_gcp_plugins" {
-  description = <<EOD
-Enables calling hooks in scripts/slurm_gcp_plugins during cluster resume and suspend.
-EOD
-  type        = any
-  default     = false
-}
-
 variable "universe_domain" {
   description = "Domain address for alternate API universe"
   type        = string
@@ -666,5 +673,24 @@ variable "disable_default_mounts" { # tflint-ignore: terraform_unused_declaratio
   validation {
     condition     = var.disable_default_mounts == null
     error_message = "DEPRECATED: Use `enable_default_mounts` instead."
+  }
+}
+
+variable "enable_slurm_gcp_plugins" { # tflint-ignore: terraform_unused_declarations
+  description = <<EOD
+DEPRECATED: Slurm GCP plugins have been deprecated.
+Instead of 'max_hops' plugin please use the 'placement_max_distance' nodeset property.
+Instead of 'enable_vpmu' plugin please use 'advanced_machine_features.performance_monitoring_unit' nodeset property.
+EOD
+  type        = any
+  default     = null
+
+  validation {
+    condition     = var.enable_slurm_gcp_plugins == null
+    error_message = <<EOD
+DEPRECATED: Slurm GCP plugins have been deprecated.
+Instead of 'max_hops' plugin please use the 'placement_max_distance' nodeset property.
+Instead of 'enable_vpmu' plugin please use 'advanced_machine_features.performance_monitoring_unit' nodeset property.
+EOD
   }
 }

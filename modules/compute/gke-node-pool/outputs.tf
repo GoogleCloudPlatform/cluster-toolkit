@@ -50,6 +50,11 @@ output "allocatable_gpu_per_node" {
   value       = local.allocatable_gpu_per_node
 }
 
+output "static_gpu_count" {
+  description = "Total number of GPUs in the node pool. Available only for static node pools."
+  value       = local.static_gpu_count
+}
+
 locals {
   translate_toleration = {
     PREFER_NO_SCHEDULE = "PreferNoSchedule"

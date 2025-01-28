@@ -96,7 +96,6 @@ deployment_groups:
       node_count_static: 0
       node_count_dynamic_max: 4
       machine_type: n2-standard-2
-      enable_placement: false
 
   - id: debug_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
@@ -182,13 +181,13 @@ deployment_groups:
     settings:
       reservation_name: $(vars.a3_reservation_name)
       maintenance_interval: $(vars.a3_maintenance_interval)
-      enable_placement: false
       node_count_static: $(vars.a3_static_cluster_size)
       node_count_dynamic_max: 0
       disk_type: pd-ssd
       machine_type: a3-highgpu-8g
       enable_public_ips: false
-      enable_smt: true
+      advanced_machine_features:
+        threads_per_core: null # Use platform default value
       node_conf:
         CoresPerSocket: 52
         ThreadsPerCore: 2

@@ -39,10 +39,10 @@ deployment_groups:
         - range_name: services
           ip_cidr_range: 10.0.32.0/20
 
-  - id: gke_service_account
+  - id: node_pool_service_account
     source: community/modules/project/service-account
     settings:
-      name: gke-sa
+      name: gke-np-sa
       project_roles:
       - logging.logWriter
       - monitoring.metricWriter
@@ -51,9 +51,21 @@ deployment_groups:
       - storage.objectViewer
       - artifactregistry.reader
 
+  - id: workload_service_account
+    source: community/modules/project/service-account
+    settings:
+      name: gke-wl-sa
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
+      - monitoring.viewer
+      - stackdriver.resourceMetadata.writer
+      - storage.objectAdmin
+      - artifactregistry.reader
+
   - id: gke_cluster
     source: modules/scheduler/gke-cluster
-    use: [network1, gke_service_account]
+    use: [network1, workload_service_account]
     settings:
       enable_filestore_csi: true
       enable_gcsfuse_csi: true
@@ -67,7 +79,7 @@ deployment_groups:
 
   - id: debug_pool
     source: modules/compute/gke-node-pool
-    use: [gke_cluster, gke_service_account]
+    use: [gke_cluster, node_pool_service_account]
     settings:
       name: debug
       zones: [$(vars.zone)]
@@ -132,7 +144,7 @@ deployment_groups:
 
   - id: local-ssd-pool
     source: modules/compute/gke-node-pool
-    use: [gke_cluster, gke_service_account]
+    use: [gke_cluster, node_pool_service_account]
     settings:
       name: local-ssd
       machine_type: n2d-standard-2

@@ -13,11 +13,11 @@
 # limitations under the License.
 
 ---
-blueprint_name: topology-test
+blueprint_name: topology
 
 vars:
   project_id: ## Set GCP Project ID Here ##
-  deployment_name: topology-test
+  deployment_name: ## Set Deployment Name Here ##
   region: us-central1
   zone: us-central1-a
 
@@ -36,7 +36,6 @@ deployment_groups:
       node_count_dynamic_max: 0
       node_count_static: 5
       allow_automatic_updates: false
-      enable_placement: true
 
   - id: partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition

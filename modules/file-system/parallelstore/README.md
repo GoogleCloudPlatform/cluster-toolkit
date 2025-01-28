@@ -40,6 +40,10 @@ for this newly created network.
  - id: network
     source: modules/network/vpc
 
+  # Private Service Access (PSA) requires the compute.networkAdmin role which is
+  # included in the Owner role, but not Editor.
+  # PSA is required for all Parallelstore functionality.
+  # https://cloud.google.com/vpc/docs/configure-private-services-access#permissions
   - id: private_service_access
     source: community/modules/network/private-service-access
     use: [network]
@@ -169,8 +173,8 @@ No modules.
 | <a name="input_daos_agent_config"></a> [daos\_agent\_config](#input\_daos\_agent\_config) | Additional configuration to be added to daos\_config.yml | `string` | `""` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the HPC deployment. | `string` | n/a | yes |
 | <a name="input_dfuse_environment"></a> [dfuse\_environment](#input\_dfuse\_environment) | Additional environment variables for DFuse process | `map(string)` | `{}` | no |
-| <a name="input_directory_stripe"></a> [directory\_stripe](#input\_directory\_stripe) | The parallelstore stripe level for directories. | `string` | `"DIRECTORY_STRIPE_LEVEL_UNSPECIFIED"` | no |
-| <a name="input_file_stripe"></a> [file\_stripe](#input\_file\_stripe) | The parallelstore stripe level for files. | `string` | `"FILE_STRIPE_LEVEL_UNSPECIFIED"` | no |
+| <a name="input_directory_stripe"></a> [directory\_stripe](#input\_directory\_stripe) | The parallelstore stripe level for directories. | `string` | `null` | no |
+| <a name="input_file_stripe"></a> [file\_stripe](#input\_file\_stripe) | The parallelstore stripe level for files. | `string` | `null` | no |
 | <a name="input_import_destination_path"></a> [import\_destination\_path](#input\_import\_destination\_path) | The name of local path to import data on parallelstore instance from GCS bucket. | `string` | `null` | no |
 | <a name="input_import_gcs_bucket_uri"></a> [import\_gcs\_bucket\_uri](#input\_import\_gcs\_bucket\_uri) | The name of the GCS bucket to import data from to parallelstore. | `string` | `null` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to parallel store instance. | `map(string)` | `{}` | no |

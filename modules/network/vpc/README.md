@@ -181,6 +181,7 @@ limitations under the License.
 
 | Name | Type |
 |------|------|
+| [terraform_data.cloud_nat_validation](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
 | [terraform_data.secondary_ranges_validation](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
 
 ## Inputs
@@ -192,6 +193,8 @@ limitations under the License.
 | <a name="input_default_primary_subnetwork_size"></a> [default\_primary\_subnetwork\_size](#input\_default\_primary\_subnetwork\_size) | The size, in CIDR bits, of the default primary subnetwork unless explicitly defined in var.subnetworks | `number` | `15` | no |
 | <a name="input_delete_default_internet_gateway_routes"></a> [delete\_default\_internet\_gateway\_routes](#input\_delete\_default\_internet\_gateway\_routes) | If set, ensure that all routes within the network specified whose names begin with 'default-route' and with a next hop of 'default-internet-gateway' are deleted | `bool` | `false` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | The name of the current deployment | `string` | n/a | yes |
+| <a name="input_enable_cloud_nat"></a> [enable\_cloud\_nat](#input\_enable\_cloud\_nat) | Enable the creation of Cloud NATs. | `bool` | `true` | no |
+| <a name="input_enable_cloud_router"></a> [enable\_cloud\_router](#input\_enable\_cloud\_router) | Enable the creation of a Cloud Router for your VPC. For more information on Cloud Routers see https://cloud.google.com/network-connectivity/docs/router/concepts/overview | `bool` | `true` | no |
 | <a name="input_enable_iap_rdp_ingress"></a> [enable\_iap\_rdp\_ingress](#input\_enable\_iap\_rdp\_ingress) | Enable a firewall rule to allow Windows Remote Desktop Protocol access using IAP tunnels | `bool` | `false` | no |
 | <a name="input_enable_iap_ssh_ingress"></a> [enable\_iap\_ssh\_ingress](#input\_enable\_iap\_ssh\_ingress) | Enable a firewall rule to allow SSH access using IAP tunnels | `bool` | `true` | no |
 | <a name="input_enable_iap_winrm_ingress"></a> [enable\_iap\_winrm\_ingress](#input\_enable\_iap\_winrm\_ingress) | Enable a firewall rule to allow Windows Remote Management (WinRM) access using IAP tunnels | `bool` | `false` | no |
@@ -211,7 +214,7 @@ limitations under the License.
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | The default region for Cloud resources | `string` | n/a | yes |
 | <a name="input_secondary_ranges"></a> [secondary\_ranges](#input\_secondary\_ranges) | "Secondary ranges associated with the subnets.<br/>This will be deprecated in favour of secondary\_ranges\_list at a later date.<br/>Please migrate to using the same." | `map(list(object({ range_name = string, ip_cidr_range = string })))` | `{}` | no |
-| <a name="input_secondary_ranges_list"></a> [secondary\_ranges\_list](#input\_secondary\_ranges\_list) | List of secondary ranges associated with the subnets. | <pre>list(object({<br/>    subnetwork_name = string,<br/>    ranges = list(object({<br/>      range_name    = string,<br/>      ip_cidr_range = string<br/>    }))<br/>  }))</pre> | `[]` | no |
+| <a name="input_secondary_ranges_list"></a> [secondary\_ranges\_list](#input\_secondary\_ranges\_list) | "List of secondary ranges associated with the subnetworks.<br/>Each subnetwork must be specified at most once in this list." | <pre>list(object({<br/>    subnetwork_name = string,<br/>    ranges = list(object({<br/>      range_name    = string,<br/>      ip_cidr_range = string<br/>    }))<br/>  }))</pre> | `[]` | no |
 | <a name="input_shared_vpc_host"></a> [shared\_vpc\_host](#input\_shared\_vpc\_host) | Makes this project a Shared VPC host if 'true' (default 'false') | `bool` | `false` | no |
 | <a name="input_subnetwork_name"></a> [subnetwork\_name](#input\_subnetwork\_name) | The name of the network to be created (if unsupplied, will default to "{deployment\_name}-primary-subnet") | `string` | `null` | no |
 | <a name="input_subnetwork_size"></a> [subnetwork\_size](#input\_subnetwork\_size) | DEPRECATED: please see https://goo.gle/hpc-toolkit-vpc-deprecation for migration instructions | `number` | `null` | no |

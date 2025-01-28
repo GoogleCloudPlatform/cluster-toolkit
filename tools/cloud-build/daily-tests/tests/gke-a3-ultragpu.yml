@@ -24,7 +24,7 @@ network: "{{ deployment_name }}-net-0"
 region: europe-west1
 zone: europe-west1-b
 remote_node: "{{ deployment_name }}-remote-node-0"
-extended_reservation: slurm-dev-gcp-a3u-gsc
+extended_reservation: hpc-exfr-2
 static_node_count: 1
 cli_deployment_vars:
   region: "{{ region }}"

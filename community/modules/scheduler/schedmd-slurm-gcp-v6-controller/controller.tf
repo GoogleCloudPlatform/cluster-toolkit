@@ -12,6 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+module "gpu" {
+  source = "../../../../modules/internal/gpu-definition"
+
+  machine_type      = var.machine_type
+  guest_accelerator = var.guest_accelerator
+}
+
 locals {
   additional_disks = [
     for ad in var.additional_disks : {
@@ -57,17 +64,17 @@ module "slurm_controller_template" {
   disk_type        = var.disk_type
   additional_disks = local.additional_disks
 
-  bandwidth_tier    = var.bandwidth_tier
-  slurm_bucket_path = module.slurm_files.slurm_bucket_path
-  can_ip_forward    = var.can_ip_forward
-  disable_smt       = !var.enable_smt
+  bandwidth_tier            = var.bandwidth_tier
+  slurm_bucket_path         = module.slurm_files.slurm_bucket_path
+  can_ip_forward            = var.can_ip_forward
+  advanced_machine_features = var.advanced_machine_features
 
   enable_confidential_vm   = var.enable_confidential_vm
   enable_oslogin           = var.enable_oslogin
   enable_shielded_vm       = var.enable_shielded_vm
   shielded_instance_config = var.shielded_instance_config
 
-  gpu = one(local.guest_accelerator)
+  gpu = one(module.gpu.guest_accelerator)
 
   machine_type     = var.machine_type
   metadata         = local.metadata

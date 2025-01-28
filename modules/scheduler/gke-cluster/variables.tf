@@ -91,6 +91,12 @@ variable "min_master_version" {
   default     = null
 }
 
+variable "version_prefix" {
+  description = "If provided, Terraform will only return versions that match the string prefix. For example, `1.31.` will match all `1.31` series releases. Since this is just a string match, it's recommended that you append a `.` after minor versions to ensure that prefixes such as `1.3` don't match versions like `1.30.1-gke.10` accidentally."
+  type        = string
+  default     = "1.31."
+}
+
 variable "maintenance_start_time" {
   description = "Start time for daily maintenance operations. Specified in GMT with `HH:MM` format."
   type        = string
@@ -135,6 +141,12 @@ variable "enable_persistent_disk_csi" {
 
 variable "enable_parallelstore_csi" {
   description = "The status of the Google Compute Engine Parallelstore Container Storage Interface (CSI) driver addon, which allows the usage of a parallelstore as volumes."
+  type        = bool
+  default     = false
+}
+
+variable "enable_ray_operator" {
+  description = "The status of the Ray operator addon, This feature enables Kubernetes APIs for managing and scaling Ray clusters and jobs. You control and are responsible for managing ray.io custom resources in your cluster. This feature is not compatible with GKE clusters that already have another Ray operator installed. Supports clusters on Kubernetes version 1.29.8-gke.1054000 or later."
   type        = bool
   default     = false
 }

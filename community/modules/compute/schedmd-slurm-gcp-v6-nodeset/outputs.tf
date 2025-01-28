@@ -26,14 +26,6 @@ output "nodeset" {
   }
 
   precondition {
-    condition     = var.reservation_name == "" || !var.enable_placement
-    error_message = <<-EOD
-      If a reservation is specified, `var.enable_placement` must be `false`.
-      If the specified reservation has a placement policy then it will be used automatically.
-    EOD
-  }
-
-  precondition {
     condition     = var.reservation_name == "" || length(var.zones) == 0
     error_message = <<-EOD
       If a reservation is specified, `var.zones` should be empty.
@@ -41,8 +33,13 @@ output "nodeset" {
   }
 
   precondition {
-    condition     = !var.enable_placement || var.node_count_static == 0 || var.node_count_dynamic_max == 0
-    error_message = "Cannot use placement with static and auto-scaling nodes in the same node set."
+    condition     = var.placement_max_distance == null || var.enable_placement
+    error_message = "placement_max_distance requires enable_placement to be set to true."
+  }
+
+  precondition {
+    condition     = !(startswith(var.machine_type, "a3-") && var.placement_max_distance == 1)
+    error_message = "A3 machines do not support a placement_max_distance of 1."
   }
 
   precondition {
