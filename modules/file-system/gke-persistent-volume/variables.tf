@@ -14,10 +14,9 @@
  * limitations under the License.
 */
 
-variable "gke_cluster_exists" {
-  description = "A static flag that signals to modules that a cluster has been created."
-  type        = bool
-  default     = false
+variable "cluster_id" {
+  description = "An identifier for the GKE cluster in the format `projects/{{project}}/locations/{{location}}/clusters/{{cluster}}`"
+  type        = string
 }
 
 variable "network_storage" {
