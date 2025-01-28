@@ -386,8 +386,7 @@ locals {
 module "kubectl_apply" {
   source = "../../management/kubectl-apply"
 
-  cluster_id = google_container_cluster.gke_cluster.id
-  project_id = var.project_id
+  gke_cluster_exists = true
 
   apply_manifests = flatten([
     for idx, network_info in var.additional_networks : [
@@ -406,4 +405,6 @@ module "kubectl_apply" {
       }
     ]
   ])
+
+  depends_on = [google_container_cluster.gke_cluster]
 }

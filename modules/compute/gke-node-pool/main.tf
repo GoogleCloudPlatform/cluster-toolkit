@@ -377,8 +377,7 @@ resource "null_resource" "enable_tcpxo_in_workload" {
 module "kubectl_apply" {
   source = "../../management/kubectl-apply"
 
-  cluster_id = var.cluster_id
-  project_id = var.project_id
+  gke_cluster_exists = var.gke_cluster_exists
 
   apply_manifests = flatten([
     for manifest in local.gpu_direct_setting.gpu_direct_manifests : [
