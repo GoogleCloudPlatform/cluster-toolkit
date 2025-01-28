@@ -34,7 +34,6 @@ resource "random_id" "resource_name_suffix" {
 }
 
 resource "google_storage_bucket" "bucket" {
-  provider                    = google-beta
   project                     = var.project_id
   name                        = local.name
   uniform_bucket_level_access = true
@@ -42,9 +41,6 @@ resource "google_storage_bucket" "bucket" {
   storage_class               = "REGIONAL"
   labels                      = local.labels
   force_destroy               = var.force_destroy
-  hierarchical_namespace {
-    enabled = var.enable_hierarchical_namespace
-  }
 }
 
 resource "google_storage_bucket_iam_binding" "viewers" {

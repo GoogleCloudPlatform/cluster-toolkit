@@ -15,7 +15,6 @@
 from typing import Optional, Any
 import sys
 from dataclasses import dataclass, field
-from datetime import datetime
 
 SCRIPTS_DIR = "community/modules/scheduler/schedmd-slurm-gcp-v6-controller/modules/slurm_files/scripts"
 if SCRIPTS_DIR not in sys.path:
@@ -23,8 +22,6 @@ if SCRIPTS_DIR not in sys.path:
 
 import util
 
-
-SOME_TS = datetime.fromisoformat("2018-09-03T20:56:35.450686+00:00")
 # TODO: use "real" classes once they are defined (instead of NSDict)
 
 @dataclass
@@ -41,7 +38,6 @@ class TstNodeset:
     reservation_name: Optional[str] = ""
     zone_policy_allow: Optional[list[str]] = field(default_factory=list)
     enable_placement: bool = True
-    placement_max_distance: Optional[int] = None
 
 @dataclass
 class TstPartition:
@@ -86,19 +82,17 @@ class TstMachineConf:
 class TstTemplateInfo:
     gpu: Optional[util.AcceleratorInfo]
 
-def tstInstance(name: str, physical_host: Optional[str] = None):
-    return util.Instance(
-        name=name,
-        zone="anorien",
-        status="RUNNING",
-        creation_timestamp=SOME_TS,
-        resource_status=util.NSDict(
-            physicalHost = physical_host
-        ),
-        scheduling=util.NSDict(),
-        upcoming_maintenance=None,
-        role="compute",
-    )
+@dataclass
+class TstInstance:
+    name: str
+    region: str = "gondor"
+    zone: str = "anorien"
+    placementPolicyId: Optional[str] = None
+    physicalHost: Optional[str] = None
+
+    @property
+    def resourceStatus(self):
+        return {"physicalHost": self.physicalHost}
 
 def make_to_hostnames_mock(tbl: Optional[dict[str, list[str]]]):
     tbl = tbl or {}

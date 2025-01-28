@@ -68,16 +68,6 @@ data "google_project" "project" {
   project_id = var.project_id
 }
 
-data "google_container_engine_versions" "version_prefix_filter" {
-  provider       = google-beta
-  location       = var.cluster_availability_type == "ZONAL" ? var.zone : var.region
-  version_prefix = var.version_prefix
-}
-
-locals {
-  master_version = var.min_master_version != null ? var.min_master_version : data.google_container_engine_versions.version_prefix_filter.latest_master_version
-}
-
 resource "google_container_cluster" "gke_cluster" {
   provider = google-beta
 
@@ -169,7 +159,7 @@ resource "google_container_cluster" "gke_cluster" {
   release_channel {
     channel = var.release_channel
   }
-  min_master_version = local.master_version
+  min_master_version = var.min_master_version
 
   maintenance_policy {
     daily_maintenance_window {
@@ -205,9 +195,6 @@ resource "google_container_cluster" "gke_cluster" {
     parallelstore_csi_driver_config {
       enabled = var.enable_parallelstore_csi
     }
-    ray_operator_config {
-      enabled = var.enable_ray_operator
-    }
   }
 
   timeouts {
@@ -215,18 +202,10 @@ resource "google_container_cluster" "gke_cluster" {
     update = var.timeout_update
   }
 
-  node_config {
-    shielded_instance_config {
-      enable_secure_boot          = var.system_node_pool_enable_secure_boot
-      enable_integrity_monitoring = true
-    }
-  }
-
   lifecycle {
     # Ignore all changes to the default node pool. It's being removed after creation.
     ignore_changes = [
-      node_config,
-      min_master_version,
+      node_config
     ]
     precondition {
       condition     = var.default_max_pods_per_node == null || var.networking_mode == "VPC_NATIVE"
@@ -264,7 +243,7 @@ resource "google_container_node_pool" "system_node_pools" {
   name     = var.system_node_pool_name
   cluster  = var.cluster_reference_type == "NAME" ? google_container_cluster.gke_cluster.name : google_container_cluster.gke_cluster.self_link
   location = var.cluster_availability_type == "ZONAL" ? var.zone : var.region
-  version  = local.master_version
+  version  = var.min_master_version
 
   autoscaling {
     total_min_node_count = var.system_node_pool_node_count.total_min_nodes
@@ -333,7 +312,6 @@ resource "google_container_node_pool" "system_node_pools" {
     ignore_changes = [
       node_config[0].labels,
       node_config[0].taint,
-      version,
     ]
     precondition {
       condition     = contains(["SURGE"], local.upgrade_settings.strategy)
@@ -368,9 +346,10 @@ module "workload_identity" {
   version = "~> 34.0"
 
   use_existing_gcp_sa = true
-  name                = "workload-identity-k8s-sa"
+  name                = "workload-identity-k8-sa"
   gcp_sa_name         = local.sa_email
   project_id          = var.project_id
+  roles               = var.enable_gcsfuse_csi ? ["roles/storage.admin"] : []
 
   # https://github.com/terraform-google-modules/terraform-google-kubernetes-engine/issues/1059
   depends_on = [
@@ -379,15 +358,10 @@ module "workload_identity" {
   ]
 }
 
-locals {
-  k8s_service_account_name = one(module.workload_identity[*].k8s_service_account_name)
-}
-
 module "kubectl_apply" {
   source = "../../management/kubectl-apply"
 
-  cluster_id = google_container_cluster.gke_cluster.id
-  project_id = var.project_id
+  gke_cluster_exists = true
 
   apply_manifests = flatten([
     for idx, network_info in var.additional_networks : [
@@ -406,4 +380,6 @@ module "kubectl_apply" {
       }
     ]
   ])
+
+  depends_on = [google_container_cluster.gke_cluster]
 }

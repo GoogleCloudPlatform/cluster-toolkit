@@ -76,28 +76,16 @@ get_python_minor_version() {
 # newly installed packaged.
 install_python3_yum() {
 	major_version=$(rpm -E "%{rhel}")
-	set -- "--disablerepo=*" "--enablerepo=baseos,appstream"
-
-	if grep -qi 'ID="rhel"' /etc/os-release && {
-		[ "${major_version}" -eq "7" ] || [ "${major_version}" -eq "8" ] ||
-			[ "${major_version}" -eq "9" ]
-	}; then
-		# Do not set --disablerepo / --enablerepo on RedHat, due to complex repo names
-		# clear array
-		set --
-	elif [ "${major_version}" -eq "7" ]; then
-		set -- "--disablerepo=*" "--enablerepo=base,epel"
+	enable_repo=""
+	if [ "${major_version}" -eq "7" ]; then
+		enable_repo="base,epel"
 	elif [ "${major_version}" -eq "8" ]; then
-		# use defaults
-		true
-	elif [ "${major_version}" -eq "9" ]; then
-		# use defaults
-		true
+		enable_repo="baseos"
 	else
 		echo "Unsupported version of centos/RHEL/Rocky"
 		return 1
 	fi
-	yum install "$@" -y python3 python3-pip
+	yum install --disablerepo="*" --enablerepo="${enable_repo}" -y python3 python3-pip python3-venv
 	python_path=$(rpm -ql python3 | grep 'bin/python3$')
 }
 
@@ -127,28 +115,16 @@ install_python3() {
 # newly installed packaged.
 install_pip3_yum() {
 	major_version=$(rpm -E "%{rhel}")
-	set -- "--disablerepo=*" "--enablerepo=baseos,appstream"
-
-	if grep -qi 'ID="rhel"' /etc/os-release && {
-		[ "${major_version}" -eq "7" ] || [ "${major_version}" -eq "8" ] ||
-			[ "${major_version}" -eq "9" ]
-	}; then
-		# Do not set --disablerepo / --enablerepo on RedHat, due to complex repo names
-		# clear array
-		set --
-	elif [ "${major_version}" -eq "7" ]; then
-		set -- "--disablerepo=*" "--enablerepo=base,epel"
+	enable_repo=""
+	if [ "${major_version}" -eq "7" ]; then
+		enable_repo="base,epel"
 	elif [ "${major_version}" -eq "8" ]; then
-		# use defaults
-		true
-	elif [ "${major_version}" -eq "9" ]; then
-		# use defaults
-		true
+		enable_repo="baseos"
 	else
 		echo "Unsupported version of centos/RHEL/Rocky"
 		return 1
 	fi
-	yum install "$@" -y python3-pip
+	yum install --disablerepo="*" --enablerepo="${enable_repo}" -y python3-pip
 }
 
 # Install python3 with the apt package manager. Updates python_path to the

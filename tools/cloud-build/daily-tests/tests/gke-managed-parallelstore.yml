@@ -13,7 +13,7 @@
 # limitations under the License.
 ---
 test_name: gke-managed-parallelstore
-deployment_name: gke-ps-{{ build }}
+deployment_name: gke-managed-parallelstore-{{ build }}
 zone: us-central1-a  # for remote node
 region: us-central1
 workspace: /workspace

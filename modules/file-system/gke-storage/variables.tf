@@ -14,14 +14,10 @@
  * limitations under the License.
 */
 
-variable "project_id" {
-  description = "The project ID to host the cluster in."
-  type        = string
-}
-
-variable "cluster_id" {
-  description = "An identifier for the GKE cluster in the format `projects/{{project}}/locations/{{location}}/clusters/{{cluster}}`"
-  type        = string
+variable "gke_cluster_exists" {
+  description = "A static flag that signals to modules that a cluster has been created."
+  type        = bool
+  default     = false
 }
 
 variable "labels" {
@@ -34,15 +30,12 @@ variable "storage_type" {
   The type of [GKE supported storage options](https://cloud.google.com/kubernetes-engine/docs/concepts/storage-overview)
   to used. This module currently support dynamic provisioning for the below storage options
   - Parallelstore
-  - Hyperdisk-balanced
-  - Hyperdisk-throughput
-  - Hyperdisk-extreme
   EOT 
   type        = string
   nullable    = false
   validation {
-    condition     = var.storage_type == null ? false : contains(["parallelstore", "hyperdisk-balanced", "hyperdisk-throughput", "hyperdisk-extreme"], lower(var.storage_type))
-    error_message = "Allowed string values for var.storage_type are \"Parallelstore\", \"Hyperdisk-balanced\", \"Hyperdisk-throughput\", \"Hyperdisk-extreme\"."
+    condition     = var.storage_type == null ? false : contains(["parallelstore"], lower(var.storage_type))
+    error_message = "Allowed string values for var.storage_type are \"Parallelstore\"."
   }
 }
 

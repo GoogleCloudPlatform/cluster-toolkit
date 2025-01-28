@@ -16,11 +16,10 @@ from typing import Optional, Type
 
 import pytest
 from mock import Mock
-from datetime import datetime, timezone, timedelta
-
 from common import TstNodeset, TstCfg # needed to import util
 import util
 from util import NodeState, MachineType, AcceleratorInfo
+from datetime import timedelta
 from google.api_core.client_options import ClientOptions  # noqa: E402
 
 # Note: need to install pytest-mock
@@ -318,7 +317,7 @@ def test_parse_job_info(job_info, expected_job):
 @pytest.mark.parametrize(
     "node,state,want",
     [
-        ("c-n-2", NodeState("DOWN", frozenset([])), NodeState("DOWN", frozenset([]))), # happy scenario
+        ("c-n-2", NodeState("DOWN", {}), NodeState("DOWN", {})), # happy scenario
         ("c-d-vodoo", None, None), # dynamic nodeset
         ("c-x-44", None, None), # unknown(removed) nodeset
         ("c-n-7", None, None), # Out of bounds: c-n-[0-4] - downsized nodeset
@@ -341,8 +340,7 @@ def test_node_state(node: str, state: Optional[NodeState], want: NodeState | Non
             "d": TstNodeset()},
     )
     lkp = util.Lookup(cfg)
-    lkp.slurm_nodes = lambda: {node: state} if state else {} # type: ignore[assignment]
-    # ... see https://github.com/python/typeshed/issues/6347    
+    lkp.slurm_nodes = lambda: {node: state} if state else {}
         
     if  type(want) is type and issubclass(want, Exception):
         with pytest.raises(want):
@@ -402,18 +400,3 @@ def test_node_state(node: str, state: Optional[NodeState], want: NodeState | Non
     ])
 def test_MachineType_from_json(jo: dict, want: MachineType):
     assert MachineType.from_json(jo) == want
-
-UTC, PST = timezone.utc, timezone(timedelta(hours=-8))
-
-@pytest.mark.parametrize(
-    "got,want",
-    [
-        # from instance.creationTimestamp: 
-        ("2024-11-30T12:47:51.676-08:00", datetime(2024, 11, 30, 12, 47, 51, 676000, tzinfo=PST)),
-        # from futureReservation.creationTimestamp
-        ("2024-11-05T15:23:33.702-08:00", datetime(2024, 11, 5, 15, 23, 33, 702000, tzinfo=PST)), 
-        # from futureReservation.timeWindow.endTime
-        ("2025-01-15T00:00:00Z", datetime(2025, 1, 15, 0, 0, tzinfo=UTC)),
-    ])
-def test_parse_gcp_timestamp(got: str, want: datetime):
-    assert util.parse_gcp_timestamp(got) == want

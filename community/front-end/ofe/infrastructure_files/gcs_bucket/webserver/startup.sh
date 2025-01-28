@@ -76,6 +76,7 @@ EOL
 
 dnf install -y grafana
 
+# Packages for https://github.com/GoogleCloudPlatform/cluster-toolkit/tree/main/community/modules/scheduler/schedmd-slurm-gcp-v5-controller#input_enable_cleanup_compute
 pip3.8 install google-api-python-client \
 	google-cloud-secret-manager \
 	google.cloud.pubsub \

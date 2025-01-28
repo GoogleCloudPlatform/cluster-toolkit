@@ -66,21 +66,31 @@ output "instructions" {
         gcloud container clusters get-credentials ${google_container_cluster.gke_cluster.name} \
           --region ${google_container_cluster.gke_cluster.location} \
           --project ${var.project_id}
-
-      Use the following Kubernetes Service Account in the default namespace to run your workloads:
-        ${local.k8s_service_account_name}
-      The GCP Service Account mapped to this Kubernetes Service Account is:
-        ${local.sa_email}
     EOT
   )
 }
 
 output "k8s_service_account_name" {
   description = "Name of k8s service account."
-  value       = local.k8s_service_account_name
+  value       = one(module.workload_identity[*].k8s_service_account_name)
 }
 
 output "gke_version" {
   description = "GKE cluster's version."
   value       = google_container_cluster.gke_cluster.master_version
+}
+
+output "host_endpoint" {
+  description = "GKE cluster endpoint."
+  value       = "https://${google_container_cluster.gke_cluster.endpoint}"
+}
+
+output "cluster_ca_certificate" {
+  description = "GKE cluster CA certificate."
+  value       = base64decode(google_container_cluster.gke_cluster.master_auth[0].cluster_ca_certificate)
+}
+
+output "access_token" {
+  description = "Google client config access token."
+  value       = data.google_client_config.default.access_token
 }

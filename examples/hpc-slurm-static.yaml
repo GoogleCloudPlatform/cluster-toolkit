@@ -47,6 +47,7 @@ deployment_groups:
     settings:
       node_count_static: $(vars.static_node_count)
       node_count_dynamic_max: 0
+      enable_placement: false  # placement is done on reservation
       reservation_name: $(vars.static_reservation_name)
       machine_type: $(vars.static_reservation_machine_type)
       instance_image: $(vars.slurm_instance_image)

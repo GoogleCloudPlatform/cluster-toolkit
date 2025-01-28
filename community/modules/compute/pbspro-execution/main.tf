@@ -70,8 +70,8 @@ module "execution_startup_script" {
 module "pbs_execution" {
   source = "../../../../modules/compute/vm-instance"
 
-  instance_count     = var.instance_count
-  provisioning_model = var.spot ? "SPOT" : null
+  instance_count = var.instance_count
+  spot           = var.spot
 
   deployment_name = var.deployment_name
   name_prefix     = local.resource_prefix

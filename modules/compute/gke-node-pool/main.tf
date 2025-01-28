@@ -27,20 +27,9 @@ locals {
   }
 }
 
-module "gpu" {
-  source = "../../internal/gpu-definition"
-
-  machine_type      = var.machine_type
-  guest_accelerator = var.guest_accelerator
-}
-
 locals {
-  guest_accelerator = module.gpu.guest_accelerator
-
-  has_gpu                       = length(local.guest_accelerator) > 0
-  allocatable_gpu_per_node      = local.has_gpu ? max(local.guest_accelerator[*].count...) : -1
-  is_static_node_pool_with_gpus = var.static_node_count != null && local.allocatable_gpu_per_node != -1
-  static_gpu_count              = local.is_static_node_pool_with_gpus ? var.static_node_count * local.allocatable_gpu_per_node : 0
+  has_gpu                  = length(local.guest_accelerator) > 0
+  allocatable_gpu_per_node = local.has_gpu ? max(local.guest_accelerator[*].count...) : -1
   gpu_taint = local.has_gpu ? [{
     key    = "nvidia.com/gpu"
     value  = "present"
@@ -377,8 +366,7 @@ resource "null_resource" "enable_tcpxo_in_workload" {
 module "kubectl_apply" {
   source = "../../management/kubectl-apply"
 
-  cluster_id = var.cluster_id
-  project_id = var.project_id
+  gke_cluster_exists = var.gke_cluster_exists
 
   apply_manifests = flatten([
     for manifest in local.gpu_direct_setting.gpu_direct_manifests : [

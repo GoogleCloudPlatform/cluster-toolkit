@@ -14,15 +14,6 @@
  * limitations under the License.
 */
 
-resource "terraform_data" "secondary_ranges_validation" {
-  lifecycle {
-    precondition {
-      condition     = !(length(var.secondary_ranges) > 0 && length(var.secondary_ranges_list) > 0)
-      error_message = "Only one of var.secondary_ranges or var.secondary_ranges_list should be specified"
-    }
-  }
-}
-
 locals {
   # This label allows for billing report tracking based on module.
   labels = merge(var.labels, { ghpc_module = "vpc", ghpc_role = "network" })
@@ -73,8 +64,7 @@ locals {
   ]
 
   # gather the unique regions for purposes of creating Router/NAT
-  cloud_router_regions = var.enable_cloud_router ? distinct([for subnet in local.subnetworks : subnet.subnet_region]) : []
-  cloud_nat_regions    = var.enable_cloud_nat ? local.cloud_router_regions : []
+  regions = distinct([for subnet in local.subnetworks : subnet.subnet_region])
 
   # this comprehension should have 1 and only 1 match
   output_primary_subnetwork               = one([for k, v in module.vpc.subnets : v if k == "${local.subnetworks[0].subnet_region}/${local.subnetworks[0].subnet_name}"])
@@ -187,17 +177,6 @@ module "vpc" {
   network_profile                        = var.network_profile
 }
 
-resource "terraform_data" "cloud_nat_validation" {
-  lifecycle {
-    precondition {
-      condition     = var.enable_cloud_router == true || var.enable_cloud_nat == false
-      error_message = <<-EOD
-        "Cannot have Cloud NAT without a Cloud Router. If you desire Cloud NAT functionality please set `enable_cloud_router` to true."
-      EOD
-    }
-  }
-}
-
 # This use of the module may appear odd when var.ips_per_nat = 0. The module
 # will be called for all regions with subnetworks but names will be set to the
 # empty list. This is a perfectly valid value (the default!). In this scenario,
@@ -209,9 +188,7 @@ module "nat_ip_addresses" {
   source  = "terraform-google-modules/address/google"
   version = "~> 4.1"
 
-  depends_on = [terraform_data.cloud_nat_validation]
-
-  for_each = toset(local.cloud_nat_regions)
+  for_each = toset(local.regions)
 
   project_id = var.project_id
   region     = each.value
@@ -226,9 +203,7 @@ module "cloud_router" {
   source  = "terraform-google-modules/cloud-router/google"
   version = "~> 6.0"
 
-  depends_on = [terraform_data.cloud_nat_validation]
-
-  for_each = toset(local.cloud_router_regions)
+  for_each = toset(local.regions)
 
   project = var.project_id
   name    = "${local.network_name}-router"

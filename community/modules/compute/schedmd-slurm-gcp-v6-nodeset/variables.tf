@@ -227,29 +227,10 @@ variable "can_ip_forward" {
   default     = false
 }
 
-variable "advanced_machine_features" {
-  description = "See https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_instance_template#nested_advanced_machine_features"
-  type = object({
-    enable_nested_virtualization = optional(bool)
-    threads_per_core             = optional(number)
-    turbo_mode                   = optional(string)
-    visible_core_count           = optional(number)
-    performance_monitoring_unit  = optional(string)
-    enable_uefi_networking       = optional(bool)
-  })
-  default = {
-    threads_per_core = 1 # disable SMT by default
-  }
-}
-
-variable "enable_smt" { # tflint-ignore: terraform_unused_declarations
+variable "enable_smt" {
   type        = bool
-  description = "DEPRECATED: Use `advanced_machine_features.threads_per_core` instead."
-  default     = null
-  validation {
-    condition     = var.enable_smt == null
-    error_message = "DEPRECATED: Use `advanced_machine_features.threads_per_core` instead."
-  }
+  description = "Enables Simultaneous Multi-Threading (SMT) on instance."
+  default     = false
 }
 
 variable "labels" {
@@ -375,16 +356,7 @@ variable "disable_public_ips" { # tflint-ignore: terraform_unused_declarations
 
 
 variable "enable_placement" {
-  description = <<-EOD
-  Use placement policy for VMs in this nodeset.
-  See: https://cloud.google.com/compute/docs/instances/placement-policies-overview
-  To set max_distance of used policy, use `placement_max_distance` variable.
-
-  Enabled by default, reasons for users to disable it:
-  - If non-dense reservation is used, user can avoid extra-cost of creating placement policies;
-  - If user wants to avoid "all or nothing" VM provisioning behaviour;
-  - If user wants to intentionally have "spread" VMs (e.g. for reliability reasons)
-  EOD
+  description = "Enable placement groups."
   type        = bool
   default     = true
 }
@@ -591,17 +563,5 @@ variable "dws_flex" {
   validation {
     condition     = var.dws_flex.max_run_duration >= 30 && var.dws_flex.max_run_duration <= 1209600
     error_message = "Max duration must be more than 30 seconds, and cannot be more than two weeks."
-  }
-}
-
-variable "placement_max_distance" {
-  type        = number
-  description = "Maximum distance between nodes in the placement group. Requires enable_placement to be true. Values must be supported by the chosen machine type."
-  nullable    = true
-  default     = null
-
-  validation {
-    condition     = coalesce(var.placement_max_distance, 1) >= 1 && coalesce(var.placement_max_distance, 3) <= 3
-    error_message = "Invalid value for placement_max_distance. Valid values are null, 1, 2, or 3."
   }
 }

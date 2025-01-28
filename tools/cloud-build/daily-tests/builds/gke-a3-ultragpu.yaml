@@ -18,7 +18,7 @@ tags:
 - gke
 - m.gke-cluster
 - m.gke-node-pool
-- m.service-account
+- m.gke-topology-scheduler
 - m.gpu-rdma-vpc
 - m.kubectl-apply
 - m.vpc

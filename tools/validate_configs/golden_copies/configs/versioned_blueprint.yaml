@@ -108,6 +108,7 @@ deployment_groups:
       node_count_dynamic_max: 4
       machine_type: n2-standard-2
       instance_image: $(vars.slurm_image)
+      enable_placement: false  # the default is: true
       allow_automatic_updates: false
 
   - id: n2_partition
@@ -127,6 +128,7 @@ deployment_groups:
       node_count_dynamic_max: 20
       machine_type: c2-standard-60  # this is the default
       instance_image: $(vars.slurm_image)
+      enable_placement: true
       bandwidth_tier: tier_1_enabled
       disk_type: pd-ssd
       disk_size_gb: 100
@@ -140,7 +142,7 @@ deployment_groups:
     settings:
       partition_name: c2
       # the following two are true by default
-      exclusive: true
+      exclusive: true  # this must be true if nodeset.enable_placement is true
 
   - id: c2d_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
@@ -215,7 +217,7 @@ deployment_groups:
       node_count_dynamic_max: 16
       machine_type: a2-megagpu-16g
       # This makes this nodeset look for machines in any of the following zones
-      # https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/develop/community/modules/compute/schedmd-slurm-gcp-v6-nodeset#compute-vm-zone-policies // !!!
+      # https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/develop/community/modules/compute/schedmd-slurm-gcp-v5-partition#compute-vm-zone-policies // !!!
       zones: $(vars.gpu_zones)
       bandwidth_tier: gvnic_enabled
       instance_image: $(vars.slurm_image)

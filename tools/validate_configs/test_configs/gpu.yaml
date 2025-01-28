@@ -139,6 +139,7 @@ deployment_groups:
     use: [network_slurm]
     settings:
       name: nogpu
+      enable_placement: false
       node_count_dynamic_max: 4
       machine_type: n2-standard-2
 
@@ -147,6 +148,7 @@ deployment_groups:
     use: [network_slurm]
     settings:
       name: man
+      enable_placement: false
       node_count_dynamic_max: 4
       machine_type: a2-ultragpu-2g
       guest_accelerator:
@@ -158,6 +160,7 @@ deployment_groups:
     use: [network_slurm]
     settings:
       name: auto
+      enable_placement: false
       node_count_dynamic_max: 4
       machine_type: a2-ultragpu-2g
 

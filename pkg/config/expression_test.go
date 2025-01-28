@@ -85,7 +85,6 @@ func TestParseBpLit(t *testing.T) {
 		{"$(vars.green.sleeve)", "var.green.sleeve", false},
 		{`$(vars.green["sleeve"])`, `var.green["sleeve"]`, false},
 		{"$(vars.green.sleeve[3])", "var.green.sleeve[3]", false},
-		{"$(vars.green[3].sleeve)", "var.green[3].sleeve", false},
 
 		{"$(var.green)", "module.var.green", false},
 		{"$(box.green)", "module.box.green", false},
@@ -136,9 +135,6 @@ echo "Hello $(vars.project_id)"
 		{"$(vars[3]])", "", true},      // can't index vars
 		{`$(vars["green"])`, "", true}, // can't index module
 
-		// TODO: uncomment
-		// see comment to `BlueprintExpressionLiteralToExpression`
-		// {"$(pink.lime.0.salmon)", "module.pink.lime[0].salmon", false},
 	}
 	for _, tc := range tests {
 		t.Run(tc.input, func(t *testing.T) {
