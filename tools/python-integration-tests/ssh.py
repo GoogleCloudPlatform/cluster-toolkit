@@ -14,7 +14,6 @@
 
 import os
 import subprocess
-import socket
 import time
 import paramiko
 
@@ -32,23 +31,15 @@ class SSHManager:
             self.tunnel = None
             self.key = None
             self.ssh_client = None
-            self.local_port = None
 
     def run_command(self, cmd: str) -> subprocess.CompletedProcess:
         res = subprocess.run(cmd, text=True, check=True, capture_output=True)
 
-    def get_available_port(self):
-        sock = socket.socket()
-        sock.bind(('', 0))
-        port = sock.getsockname()[1]
-        sock.close()
-        return port
-
-    def create_tunnel(self, instance_name, project_id, zone):
+    def create_tunnel(self, instance_name, port, project_id, zone):
         iap_tunnel_cmd = [
             "gcloud", "compute", "start-iap-tunnel", instance_name,
             "22", "--project", project_id, "--zone", zone,
-            f"--local-host-port=localhost:{self.local_port}"
+            f"--local-host-port=localhost:{port}"
         ]
 
         self.tunnel = subprocess.Popen(iap_tunnel_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -68,12 +59,11 @@ class SSHManager:
 
         return key_path
 
-    def setup_connection(self, instance_name, project_id, zone):
+    def setup_connection(self, instance_name, port, project_id, zone):
         self.ssh_client = paramiko.SSHClient()
         self.ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         self.key = paramiko.RSAKey.from_private_key_file(self.get_keypath())
-        self.local_port = self.get_available_port()
-        self.create_tunnel(instance_name, project_id, zone)
+        self.create_tunnel(instance_name, port, project_id, zone)
 
     def close(self):
         # Closes existing SSH connection and tunnel

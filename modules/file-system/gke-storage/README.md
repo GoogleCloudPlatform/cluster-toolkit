@@ -15,10 +15,6 @@ then use them in a `gke-job-template` to dynamically provision the resource.
     settings:
       enable_parallelstore_csi: true
 
-  # Private Service Access (PSA) requires the compute.networkAdmin role which is
-  # included in the Owner role, but not Editor.
-  # PSA is required for all Parallelstore functionality.
-  # https://cloud.google.com/vpc/docs/configure-private-services-access#permissions
   - id: private_service_access
     source: community/modules/network/private-service-access
     use: [network]
@@ -91,7 +87,7 @@ limitations under the License.
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.5 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.0 |
 
 ## Providers
 
@@ -113,17 +109,16 @@ No resources.
 |------|-------------|------|---------|:--------:|
 | <a name="input_access_mode"></a> [access\_mode](#input\_access\_mode) | The access mode that the volume can be mounted to the host/pod. More details in [Access Modes](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#access-modes)<br/>Valid access modes:<br/>- ReadWriteOnce<br/>- ReadOnlyMany<br/>- ReadWriteMany<br/>- ReadWriteOncePod | `string` | n/a | yes |
 | <a name="input_capacity_gb"></a> [capacity\_gb](#input\_capacity\_gb) | The storage capacity with which to create the persistent volume. | `number` | n/a | yes |
-| <a name="input_cluster_id"></a> [cluster\_id](#input\_cluster\_id) | An identifier for the GKE cluster in the format `projects/{{project}}/locations/{{location}}/clusters/{{cluster}}` | `string` | n/a | yes |
+| <a name="input_gke_cluster_exists"></a> [gke\_cluster\_exists](#input\_gke\_cluster\_exists) | A static flag that signals to modules that a cluster has been created. | `bool` | `false` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | GCE resource labels to be applied to resources. Key-value pairs. | `map(string)` | n/a | yes |
 | <a name="input_mount_options"></a> [mount\_options](#input\_mount\_options) | Controls the mountOptions for dynamically provisioned PersistentVolumes of this storage class. | `string` | `null` | no |
 | <a name="input_private_vpc_connection_peering"></a> [private\_vpc\_connection\_peering](#input\_private\_vpc\_connection\_peering) | The name of the VPC Network peering connection.<br/>If using new VPC, please use community/modules/network/private-service-access to create private-service-access and<br/>If using existing VPC with private-service-access enabled, set this manually follow [user guide](https://cloud.google.com/parallelstore/docs/vpc). | `string` | `null` | no |
-| <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The project ID to host the cluster in. | `string` | n/a | yes |
 | <a name="input_pv_mount_path"></a> [pv\_mount\_path](#input\_pv\_mount\_path) | Path within the container at which the volume should be mounted. Must not contain ':'. | `string` | `"/data"` | no |
 | <a name="input_pvc_count"></a> [pvc\_count](#input\_pvc\_count) | How many PersistentVolumeClaims that will be created | `number` | `1` | no |
 | <a name="input_sc_reclaim_policy"></a> [sc\_reclaim\_policy](#input\_sc\_reclaim\_policy) | Indicate whether to keep the dynamically provisioned PersistentVolumes of this storage class after the bound PersistentVolumeClaim is deleted.<br/>[More details about reclaiming](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#reclaiming)<br/>Supported value:<br/>- Retain<br/>- Delete | `string` | n/a | yes |
 | <a name="input_sc_topology_zones"></a> [sc\_topology\_zones](#input\_sc\_topology\_zones) | Zone location that allow the volumes to be dynamically provisioned. | `list(string)` | `null` | no |
 | <a name="input_sc_volume_binding_mode"></a> [sc\_volume\_binding\_mode](#input\_sc\_volume\_binding\_mode) | Indicates when volume binding and dynamic provisioning should occur and how PersistentVolumeClaims should be provisioned and bound.<br/>Supported value:<br/>- Immediate<br/>- WaitForFirstConsumer | `string` | `"WaitForFirstConsumer"` | no |
-| <a name="input_storage_type"></a> [storage\_type](#input\_storage\_type) | The type of [GKE supported storage options](https://cloud.google.com/kubernetes-engine/docs/concepts/storage-overview)<br/>to used. This module currently support dynamic provisioning for the below storage options<br/>- Parallelstore<br/>- Hyperdisk-balanced<br/>- Hyperdisk-throughput<br/>- Hyperdisk-extreme | `string` | n/a | yes |
+| <a name="input_storage_type"></a> [storage\_type](#input\_storage\_type) | The type of [GKE supported storage options](https://cloud.google.com/kubernetes-engine/docs/concepts/storage-overview)<br/>to used. This module currently support dynamic provisioning for the below storage options<br/>- Parallelstore | `string` | n/a | yes |
 
 ## Outputs
 

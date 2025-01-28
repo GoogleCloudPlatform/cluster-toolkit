@@ -16,7 +16,7 @@ import pytest
 from mock import Mock
 from common import TstNodeset, TstCfg, TstMachineConf, TstTemplateInfo
 
-import addict # type: ignore
+import addict
 import conf
 import util
 

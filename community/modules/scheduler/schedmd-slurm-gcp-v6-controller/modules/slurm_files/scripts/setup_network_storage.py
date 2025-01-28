@@ -24,7 +24,7 @@ import logging
 import shutil
 from pathlib import Path
 from concurrent.futures import as_completed
-from addict import Dict as NSDict # type: ignore
+from addict import Dict as NSDict
 
 import util
 from util import lookup, run, dirs, separate

@@ -185,7 +185,7 @@ variable "network_interfaces" {
     subnetwork         (string, required if network is not supplied)
     subnetwork_project (string, optional)
     network_ip         (string, optional)
-    nic_type           (string, optional, choose from ["GVNIC", "VIRTIO_NET", "MRDMA", "IRDMA"])
+    nic_type           (string, optional, choose from ["GVNIC", "VIRTIO_NET"])
     stack_type         (string, optional, choose from ["IPV4_ONLY", "IPV4_IPV6"])
     queue_count        (number, optional)
     access_config      (object, optional)
@@ -327,22 +327,10 @@ variable "placement_policy" {
   }
 }
 
-# tflint-ignore: terraform_unused_declarations
 variable "spot" {
-  description = "DEPRECATED - Use `provisioning_model` instead."
+  description = "Provision VMs using discounted Spot pricing, allowing for preemption"
   type        = bool
-  default     = null
-
-  validation {
-    condition     = var.spot == null
-    error_message = "The 'spot' setting is deprecated. If you intend to use Spot pricing, please set 'var.provisioning_model' to \"SPOT\" and do not set 'var.spot' at all."
-  }
-}
-
-variable "provisioning_model" {
-  description = "Provisioning model for cloud instance."
-  type        = string
-  default     = null
+  default     = false
 }
 
 variable "min_cpu_platform" {

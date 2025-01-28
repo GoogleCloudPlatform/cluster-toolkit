@@ -16,7 +16,7 @@
 
 locals {
   kueue_supported_versions  = ["v0.10.0", "v0.9.1", "v0.9.0", "v0.8.1"]
-  jobset_supported_versions = ["v0.7.2", "v0.5.2"]
+  jobset_supported_versions = ["v0.7.1", "v0.5.2"]
 }
 
 resource "terraform_data" "kueue_validations" {
@@ -37,15 +37,10 @@ resource "terraform_data" "jobset_validations" {
   }
 }
 
-variable "project_id" {
-  description = "The project ID that hosts the gke cluster."
-  type        = string
-}
-
-variable "cluster_id" {
-  description = "An identifier for the gke cluster resource with format projects/<project_id>/locations/<region>/clusters/<name>."
-  type        = string
-  nullable    = false
+variable "gke_cluster_exists" {
+  description = "A static flag that signals to modules that a cluster has been created."
+  type        = bool
+  default     = false
 }
 
 variable "apply_manifests" {

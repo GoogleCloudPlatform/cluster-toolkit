@@ -19,16 +19,7 @@ locals {
   labels = merge(var.labels, { ghpc_module = "htcondor-execute-point", ghpc_role = "compute" })
 }
 
-module "gpu" {
-  source = "../../../../modules/internal/gpu-definition"
-
-  machine_type      = var.machine_type
-  guest_accelerator = var.guest_accelerator
-}
-
 locals {
-  guest_accelerator = module.gpu.guest_accelerator
-
   zones                    = coalescelist(var.zones, data.google_compute_zones.available.names)
   network_storage_metadata = var.network_storage == null ? {} : { network_storage = jsonencode(var.network_storage) }
 
