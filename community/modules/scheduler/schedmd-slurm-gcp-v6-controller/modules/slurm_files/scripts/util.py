@@ -154,7 +154,7 @@ class MachineType:
     @property
     def supports_smt(self) -> bool:
         # https://cloud.google.com/compute/docs/cpu-platforms
-        if self.family in  ("t2a", "t2d", "h3", "c4a",):
+        if self.family in  ("t2a", "t2d", "h3", "c4a", "h4d",):
             return False
         if self.guest_cpus == 1:
             return False
@@ -164,6 +164,7 @@ class MachineType:
     def sockets(self) -> int:
         return {
             "h3": 2,
+            "h4d": 2,
             "c2d": 2 if self.guest_cpus > 56 else 1,
             "a3": 2,
             "c2": 2 if self.guest_cpus > 30 else 1,
