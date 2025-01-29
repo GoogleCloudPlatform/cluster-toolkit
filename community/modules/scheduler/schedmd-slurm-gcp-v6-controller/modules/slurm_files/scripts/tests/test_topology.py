@@ -30,13 +30,15 @@ PRELUDE = """
 """
 
 def test_gen_topology_conf_empty():
-    cfg = TstCfg(output_dir=tempfile.mkdtemp())
+    out_dir = tempfile.mkdtemp()
+    cfg = TstCfg(output_dir=out_dir)
     conf.gen_topology_conf(util.Lookup(cfg))
-    assert open(cfg.output_dir + "/cloud_topology.conf").read() == PRELUDE + "\n"
+    assert open(out_dir + "/cloud_topology.conf").read() == PRELUDE + "\n"
 
 
 @mock.patch("tpu.TPU.make")
 def test_gen_topology_conf(tpu_mock):
+    output_dir = tempfile.mkdtemp()
     cfg = TstCfg(
         nodeset_tpu={
             "a": TstNodeset("bold", node_count_static=4, node_count_dynamic_max=5),
@@ -47,7 +49,7 @@ def test_gen_topology_conf(tpu_mock):
             "d": TstNodeset("blue", node_count_static=7),
             "e": TstNodeset("pink", node_count_dynamic_max=4),
         },
-        output_dir=tempfile.mkdtemp(),
+        output_dir=output_dir,
     )
 
     def tpu_se(ns: str, lkp) -> TstTPU:
@@ -60,7 +62,7 @@ def test_gen_topology_conf(tpu_mock):
     tpu_mock.side_effect = tpu_se
 
     lkp = util.Lookup(cfg)
-    lkp.instances = lambda: { n.name: n for n in [
+    lkp.instances = lambda: { n.name: n for n in [ # type: ignore[assignment]
         # nodeset blue
         tstInstance("m22-blue-0"),  # no physicalHost
         tstInstance("m22-blue-0", physical_host="/a/a/a"),
@@ -122,10 +124,10 @@ def test_gen_topology_conf(tpu_mock):
     upd, summary = conf.gen_topology_conf(lkp)
     assert upd == True
     want_written = PRELUDE + "\n".join(want_compressed) + "\n\n"
-    assert open(cfg.output_dir + "/cloud_topology.conf").read() == want_written
+    assert open(output_dir + "/cloud_topology.conf").read() == want_written
 
     summary.dump(lkp)
-    summary_got = json.loads(open(cfg.output_dir + "/cloud_topology.summary.json").read())
+    summary_got = json.loads(open(output_dir + "/cloud_topology.summary.json").read())
     
     assert summary_got == {
         "down_nodes": unordered(
@@ -153,7 +155,9 @@ def test_gen_topology_conf_update():
         output_dir=tempfile.mkdtemp(),
     )
     lkp = util.Lookup(cfg)
-    lkp.instances = lambda: {} # no instances
+    lkp.instances = lambda: { # type: ignore[assignment]
+        # no instances
+    } 
 
     # initial generation - reconfigure
     upd, sum = conf.gen_topology_conf(lkp)
@@ -173,25 +177,28 @@ def test_gen_topology_conf_update():
     # don't dump
 
     # set empty physicalHost - no reconfigure
-    lkp.instances = lambda: { n.name: n for n in [tstInstance("m22-green-0", physical_host="")]}
+    lkp.instances = lambda: { # type: ignore[assignment]
+        n.name: n for n in [tstInstance("m22-green-0", physical_host="")]}
     upd, sum = conf.gen_topology_conf(lkp)
     assert upd == False
     # don't dump
 
     # set physicalHost - reconfigure
-    lkp.instances = lambda: { n.name: n for n in [tstInstance("m22-green-0", physical_host="/a/b/c")]}
+    lkp.instances = lambda: { # type: ignore[assignment]
+        n.name: n for n in [tstInstance("m22-green-0", physical_host="/a/b/c")]}
     upd, sum = conf.gen_topology_conf(lkp)
     assert upd == True
     sum.dump(lkp)
 
     # change physicalHost - reconfigure
-    lkp.instances = lambda: { n.name: n for n in [tstInstance("m22-green-0", physical_host="/a/b/z")]}
+    lkp.instances = lambda: { # type: ignore[assignment]
+        n.name: n for n in [tstInstance("m22-green-0", physical_host="/a/b/z")]}
     upd, sum = conf.gen_topology_conf(lkp)
     assert upd == True
     sum.dump(lkp)
 
     # shut down node - no reconfigure
-    lkp.instances = lambda: {}
+    lkp.instances = lambda: {} # type: ignore[assignment]
     upd, sum = conf.gen_topology_conf(lkp)
     assert upd == False
     # don't dump
