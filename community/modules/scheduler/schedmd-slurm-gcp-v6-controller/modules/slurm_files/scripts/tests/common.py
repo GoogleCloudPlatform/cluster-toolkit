@@ -55,7 +55,7 @@ class TstCfg:
     slurm_cluster_name: str = "m22"
     cloud_parameters: dict[str, Any] = field(default_factory=dict)
 
-    partitions: dict[str, Placeholder] = field(default_factory=dict)
+    partitions: dict[str, TstPartition] = field(default_factory=dict)
     nodeset: dict[str, TstNodeset] = field(default_factory=dict)
     nodeset_tpu: dict[str, TstNodeset] = field(default_factory=dict)
     nodeset_dyn: dict[str, TstNodeset] = field(default_factory=dict)
