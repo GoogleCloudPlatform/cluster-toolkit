@@ -92,11 +92,11 @@ def tstInstance(name: str, physical_host: Optional[str] = None):
         zone="anorien",
         status="RUNNING",
         creation_timestamp=SOME_TS,
-        resource_status=util.NSDict(
-            physicalHost = physical_host
+        resource_status=util.InstanceResourceStatus(
+            physical_host=physical_host,
+            upcoming_maintenance=None,
         ),
         scheduling=util.NSDict(),
-        upcoming_maintenance=None,
         role="compute",
     )
 

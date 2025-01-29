@@ -20,7 +20,7 @@ from datetime import datetime, timezone, timedelta
 
 from common import TstNodeset, TstCfg # needed to import util
 import util
-from util import NodeState, MachineType, AcceleratorInfo
+from util import NodeState, MachineType, AcceleratorInfo, UpcomingMaintenance, InstanceResourceStatus
 from google.api_core.client_options import ClientOptions  # noqa: E402
 
 # Note: need to install pytest-mock
@@ -417,3 +417,72 @@ UTC, PST = timezone.utc, timezone(timedelta(hours=-8))
     ])
 def test_parse_gcp_timestamp(got: str, want: datetime):
     assert util.parse_gcp_timestamp(got) == want
+
+
+@pytest.mark.parametrize(
+    "got,want",
+    [
+        (None, None),
+        (dict(
+            windowStartTime="2025-01-15T00:00:00Z",
+            somethingToIgnore="past failures",
+        ), UpcomingMaintenance(window_start_time=datetime(2025, 1, 15, 0, 0, tzinfo=UTC))),
+        (dict(
+            startTimeWindow=dict(
+                earliest="2025-01-15T00:00:00Z"),
+            somethingToIgnore="past failures",
+        ), UpcomingMaintenance(window_start_time=datetime(2025, 1, 15, 0, 0, tzinfo=UTC))),
+        (dict(
+            windowStartTime="2025-01-15T00:00:00Z",
+            startTimeWindow=dict(
+                earliest="2025-01-25T00:00:00Z"), # ignored
+            somethingToIgnore="past failures",
+        ), UpcomingMaintenance(window_start_time=datetime(2025, 1, 15, 0, 0, tzinfo=UTC))),
+    ])
+def tests_parse_UpcomingMaintenance_OK(got: dict, want: Optional[UpcomingMaintenance]):
+    assert UpcomingMaintenance.from_json(got) == want
+
+
+@pytest.mark.parametrize(
+    "got",
+    [
+        {},
+        dict(
+            windowStartTime=dict(
+                earliest="2025-01-15T00:00:00Z")),
+    ])
+def tests_parse_UpcomingMaintenance_FAIL(got: dict):
+    with pytest.raises(ValueError):
+            UpcomingMaintenance.from_json(got)
+
+
+@pytest.mark.parametrize(
+    "got,want",
+    [
+        (None,  InstanceResourceStatus(
+            physical_host=None,
+            upcoming_maintenance=None)),
+        ({}, InstanceResourceStatus(
+            physical_host=None,
+            upcoming_maintenance=None)),
+        (dict(
+            physicalHost="/aaa/bbb/ccc"), 
+        InstanceResourceStatus(
+            physical_host="/aaa/bbb/ccc",
+            upcoming_maintenance=None)),
+        (dict(  # invalid upcomingMaintenance field to be ignored
+            physicalHost="/aaa/bbb/ccc",
+            upcomingMaintenance="maintenance is upon us"),
+        InstanceResourceStatus(
+            physical_host="/aaa/bbb/ccc",
+            upcoming_maintenance=None)),
+        (dict(
+            physicalHost="/aaa/bbb/ccc",
+            upcomingMaintenance=dict(windowStartTime="2025-01-15T00:00:00Z")), 
+        InstanceResourceStatus(
+            physical_host="/aaa/bbb/ccc",
+            upcoming_maintenance=UpcomingMaintenance(
+                window_start_time=datetime(2025, 1, 15, 0, 0, tzinfo=UTC)))),
+    ])
+def test_parse_InstanceResourceStatus(got: dict, want: Optional[InstanceResourceStatus]):
+    assert InstanceResourceStatus.from_json(got) == want

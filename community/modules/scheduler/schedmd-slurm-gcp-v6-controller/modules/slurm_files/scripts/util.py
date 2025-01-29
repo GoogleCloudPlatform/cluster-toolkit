@@ -175,6 +175,51 @@ class MachineType:
             self.family, 1,  # assume 1 socket for all other families
         )
 
+
+@dataclass(frozen=True)
+class UpcomingMaintenance:
+    window_start_time: datetime
+
+    @classmethod
+    def from_json(cls, jo: Optional[dict]) -> Optional["UpcomingMaintenance"]:
+        if jo is None:
+            return None
+        try:
+            if "windowStartTime" in jo:
+                ts = parse_gcp_timestamp(jo["windowStartTime"])
+            elif "startTimeWindow" in jo:
+                ts = parse_gcp_timestamp(jo["startTimeWindow"]["earliest"])
+            else:
+                raise Exception("Neither windowStartTime nor startTimeWindow are found")
+        except BaseException as e:
+            raise ValueError(f"Unexpected format for upcomingMaintenance: {jo}") from e
+        return cls(window_start_time=ts)
+
+@dataclass(frozen=True)
+class InstanceResourceStatus:
+    physical_host: Optional[str]
+    upcoming_maintenance: Optional[UpcomingMaintenance]
+
+    @classmethod
+    def from_json(cls, jo: Optional[dict]) -> "InstanceResourceStatus":
+        if not jo:
+            return cls(
+                physical_host=None,
+                upcoming_maintenance=None,
+            )
+        
+        try:
+            maint = UpcomingMaintenance.from_json(jo.get("upcomingMaintenance"))
+        except ValueError as e:
+            log.exception("Failed to parse upcomingMaintenance, ignoring")
+            maint = None # intentionally swallow exception
+        
+        return cls(
+            physical_host=jo.get("physicalHost"),
+            upcoming_maintenance=maint,
+        )
+
+
 @dataclass(frozen=True)
 class Instance:
   name: str
@@ -182,13 +227,9 @@ class Instance:
   status: str
   creation_timestamp: datetime
   role: Optional[str]
-
-  # TODO: use proper InstanceResourceStatus class
-  resource_status: NSDict
+  resource_status: InstanceResourceStatus
   # TODO: use proper InstanceScheduling class
   scheduling: NSDict
-  # TODO: use proper UpcomingMaintenance class
-  upcoming_maintenance: Optional[NSDict] = None
 
   @classmethod
   def from_json(cls, jo: dict) -> "Instance":
@@ -199,9 +240,8 @@ class Instance:
       zone=trim_self_link(jo["zone"]),
       status=jo["status"],
       creation_timestamp=parse_gcp_timestamp(jo["creationTimestamp"]),
-      resource_status=NSDict(jo.get("resourceStatus")),
+      resource_status=InstanceResourceStatus.from_json(jo.get("resourceStatus")),
       scheduling=NSDict(jo.get("scheduling")),
-      upcoming_maintenance=NSDict(jo["upcomingMaintenance"]) if "upcomingMaintenance" in jo else None,
       role = labels.get("slurm_instance_role"),
     )
 
@@ -1546,11 +1586,6 @@ class Lookup:
             "zone",
         ]
         
-        # TODO: Merge this with all fields when upcoming maintenance is
-        # supported in beta.
-        if endpoint_version(ApiEndpoint.COMPUTE) == 'alpha':
-          instance_information_fields.append("upcomingMaintenance")
-
         instance_fields = ",".join(sorted(instance_information_fields))
         fields = f"items.zones.instances({instance_fields}),nextPageToken"
         flt = f"labels.slurm_cluster_name={self.cfg.slurm_cluster_name} AND name:{self.cfg.slurm_cluster_name}-*"
