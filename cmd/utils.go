@@ -82,6 +82,20 @@ func filterYaml(cmd *cobra.Command, args []string, toComplete string) ([]string,
 	return []string{"yaml", "yml"}, cobra.ShellCompDirectiveFilterFileExt
 }
 
+var flagJsonOutput bool
+
+func getJsonOutputBehavior() shell.OutputFormat {
+	if flagJsonOutput {
+		return shell.JsonOutput
+	}
+	return shell.TextOutput
+}
+
+func addJsonOutputFlag(c *cobra.Command) *cobra.Command {
+	c.Flags().BoolVar(&flagJsonOutput, "json-output", false, "Output errors in JSON format")
+	return c
+}
+
 var flagSkipGroups []string
 var flagOnlyGroups []string
 
