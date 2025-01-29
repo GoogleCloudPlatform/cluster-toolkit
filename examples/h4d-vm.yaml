@@ -49,6 +49,7 @@ deployment_groups:
     source: modules/network/vpc
     settings:
       network_name: $(vars.deployment_name)-rdma-net-0
+      mtu: 8896
       network_profile: https://www.googleapis.com/compute/beta/projects/$(vars.project_id)/global/networkProfiles/$(vars.zone)-vpc-falcon
       network_routing_mode: REGIONAL
       enable_cloud_router: false
@@ -78,7 +79,7 @@ deployment_groups:
     source: modules/compute/vm-instance
     use: [h4d_startup, homefs]
     settings:
-      machine_type: h4d-standard-192
+      machine_type: h4d-highmem-192-lssd
       instance_count: 2
       disk_type: hyperdisk-balanced
       on_host_maintenance: TERMINATE
