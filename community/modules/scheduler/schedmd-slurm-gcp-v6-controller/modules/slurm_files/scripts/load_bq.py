@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
+from typing import Dict, Callable, Any
 import argparse
 import os
 import shelve
@@ -71,7 +71,7 @@ def make_time_interval(seconds):
     return f"{d}D {h:02}:{m:02}:{s}"
 
 
-converters = {
+converters: Dict[str, Callable[[Any], Any]] = {
     "DATETIME": make_datetime,
     "INTERVAL": make_time_interval,
     "STRING": str,
@@ -196,7 +196,7 @@ class JobInsertionFailed(Exception):
 
 def make_job_row(job):
     job_row = {
-        field_name: dict.get(converters, field.field_type)(job[field_name])
+        field_name: converters[field.field_type](job[field_name])
         for field_name, field in job_schema.items()
         if field_name in job
     }
