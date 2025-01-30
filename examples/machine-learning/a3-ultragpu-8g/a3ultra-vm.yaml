@@ -105,6 +105,14 @@ deployment_groups:
     settings:
       configure_ssh_host_patterns:
       - $(vars.hostname_prefix)-*
+      runners:
+      - type: shell
+        destination: install-cuda-toolkit.sh
+        content: |
+          #!/bin/bash
+          set -e -o pipefail
+          sudo add-nvidia-repositories -y
+          sudo apt install -y cuda-toolkit-12-8
 
   - id: a3ultra-vms
     source: modules/compute/vm-instance
