@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Iterable, List, Tuple, Optional, Any, Dict, Sequence, Type, Callable
+from typing import Iterable, List, Tuple, Optional, Any, Dict, Sequence, Type, Callable, Literal
 import argparse
 import base64
 from dataclasses import dataclass, field
@@ -1032,6 +1032,7 @@ def to_hostlist(names: Iterable[str]) -> str:
         cur, res = None, []
 
         def cur_repr():
+            assert cur
             nums, strs = cur
             if nums[0] == nums[1]:
                 return strs[0]
@@ -1748,7 +1749,7 @@ class Lookup:
 
     @contextmanager
     def template_cache(self, writeback=False):
-        flag = "c" if writeback else "r"
+        flag: Literal["c", "r"] = "c" if writeback else "r"
         err = None
         for wait in backoff_delay(0.125, timeout=60, count=20):
             try:
