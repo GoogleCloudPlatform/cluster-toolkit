@@ -42,6 +42,9 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [hpc-gke.yaml](#hpc-gkeyaml--) ![core-badge] ![experimental-badge]
   * [ml-gke](#ml-gkeyaml--) ![core-badge] ![experimental-badge]
   * [storage-gke](#storage-gkeyaml--) ![core-badge] ![experimental-badge]
+  * [gke-managed-hyperdisk.yaml](#gke-managed-hyperdiskyaml--) ![core-badge] ![experimental-badge]
+  * [gke-managed-parallelstore.yaml](#gke-managed-parallelstoreyaml--) ![core-badge] ![experimental-badge]
+  * [gke-a3-ultragpu.yaml](#gke-a3-ultragpuyaml--) ![core-badge] ![experimental-badge]
   * [gke-a3-megagpu](#gke-a3-megagpuyaml--) ![core-badge] ![experimental-badge]
   * [gke-a3-highgpu](#gke-a3-highgpuyaml--) ![core-badge] ![experimental-badge]
   * [htc-slurm.yaml](#htc-slurmyaml-) ![community-badge]
@@ -1140,6 +1143,12 @@ The blueprint contains the following:
 > [whatismyip.com](https://whatismyip.com) to determine your IP address.
 
 [gke-managed-parallelstore.yaml]: ../examples/gke-managed-parallelstore.yaml
+
+### [gke-a3-ultragpu.yaml] ![core-badge] ![experimental-badge]
+
+Refer to [AI Hypercomputer Documentation](https://cloud.google.com/ai-hypercomputer/docs/create/gke-ai-hypercompute#create-cluster) for instructions.
+
+[gke-a3-ultragpu.yaml]: ../examples/gke-a3-ultragpu/gke-a3-ultragpu.yaml
 
 ### [gke-a3-megagpu.yaml] ![core-badge] ![experimental-badge]
 
