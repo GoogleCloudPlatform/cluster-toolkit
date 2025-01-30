@@ -369,3 +369,4 @@ deployment_groups:
       source_image: $(vars.source_image)
       image_family: $(vars.final_image_family)
       disk_size: $(vars.disk_size_gb)
+      omit_external_ip: false
