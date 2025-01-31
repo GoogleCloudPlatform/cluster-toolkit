@@ -134,7 +134,7 @@ class MachineType:
     guest_cpus: int
     memory_mb: int
     accelerators: List[AcceleratorInfo]
-    
+
     @classmethod
     def from_json(cls, jo: dict) -> "MachineType":
         return cls(
@@ -150,7 +150,7 @@ class MachineType:
         # TODO: doesn't work with N1 custom machine types
         # See https://cloud.google.com/compute/docs/instances/creating-instance-with-custom-machine-type#create
         return self.name.split("-")[0]
-    
+
     @property
     def supports_smt(self) -> bool:
         # https://cloud.google.com/compute/docs/cpu-platforms
@@ -159,7 +159,7 @@ class MachineType:
         if self.guest_cpus == 1:
             return False
         return True
-    
+
     @property
     def sockets(self) -> int:
         return {
@@ -171,8 +171,10 @@ class MachineType:
             "c3": 2 if self.guest_cpus > 88 else 1,
             "c3d": 2 if self.guest_cpus > 180 else 1,
             "c4": 2 if self.guest_cpus > 96 else 1,
+            "c4d": 2 if self.guest_cpus > 192 else 1,
         }.get(
-            self.family, 1,  # assume 1 socket for all other families
+            self.family,
+            1,  # assume 1 socket for all other families
         )
 
 
