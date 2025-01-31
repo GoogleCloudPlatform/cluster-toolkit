@@ -36,6 +36,20 @@ import (
 	"github.com/zclconf/go-cty/cty/gocty"
 )
 
+// OutputFormat determines the format in which the errors are reported.
+// Current supported format are text (default option) and JSON. Future
+// format could be protobuf
+type OutputFormat uint
+
+// 2 output formats are currently supported:
+//   - Text
+//   - JSON
+//   - Future option is ProtoBuf
+const (
+	TextOutput OutputFormat = iota
+	JsonOutput
+)
+
 // ApplyBehavior abstracts behaviors for making changes to cloud infrastructure
 // when gcluster believes that they may be necessary
 type ApplyBehavior uint
@@ -224,6 +238,31 @@ func promptForApply(tf *tfexec.Terraform, path string, b ApplyBehavior) bool {
 	}
 }
 
+// This function applies the terraform plan, but generates outputs in JSON format
+// (instead of text)
+func applyPlanJsonOutput(tf *tfexec.Terraform, path string) error {
+	planFileOpt := tfexec.DirOrPlan(path)
+	logging.Info("Running terraform apply on deployment group %s", tf.WorkingDir())
+	// To do: Make file name as a user input
+	// Make the JSON file name unique by having the Terraform group as a substring
+	jsonFilename := "cluster_toolkit_output-" + strings.ReplaceAll(tf.WorkingDir(), "/", ".") + ".json"
+	logging.Info("Writing to JSON file %s", jsonFilename)
+	jsonFile, err := os.Create(jsonFilename)
+	defer jsonFile.Close()
+	if err != nil {
+		logging.Info("Cannot create JSON output file %s", jsonFilename)
+		return err
+	}
+	tf.SetStdout(os.Stdout)
+	tf.SetStderr(os.Stderr)
+	if err := tf.ApplyJSON(context.Background(), jsonFile, planFileOpt); err != nil {
+		return err
+	}
+	tf.SetStdout(nil)
+	tf.SetStderr(nil)
+	return nil
+}
+
 func applyPlanConsoleOutput(tf *tfexec.Terraform, path string) error {
 	planFileOpt := tfexec.DirOrPlan(path)
 	logging.Info("Running terraform apply on deployment group %s", tf.WorkingDir())
@@ -240,7 +279,7 @@ func applyPlanConsoleOutput(tf *tfexec.Terraform, path string) error {
 // generate a Terraform plan to apply or destroy a module
 // recall "destroy" is just an alias for "apply -destroy"!
 // apply the plan automatically or after prompting the user
-func applyOrDestroy(tf *tfexec.Terraform, b ApplyBehavior, destroy bool) error {
+func applyOrDestroy(tf *tfexec.Terraform, b ApplyBehavior, of OutputFormat, destroy bool) error {
 	action := "adding or changing"
 	pastTense := "applied"
 	if destroy {
@@ -256,6 +295,7 @@ func applyOrDestroy(tf *tfexec.Terraform, b ApplyBehavior, destroy bool) error {
 	// capture Terraform plan in a file
 	f, err := os.CreateTemp("", "plan-)")
 	if err != nil {
+		logging.Info("deploy.go.0000: applyOrDestroy()")
 		return err
 	}
 	defer os.Remove(f.Name())
@@ -263,7 +303,6 @@ func applyOrDestroy(tf *tfexec.Terraform, b ApplyBehavior, destroy bool) error {
 	if err != nil {
 		return err
 	}
-
 	var apply bool
 	if wantsChange {
 		logging.Info("Deployment group %s requires %s cloud infrastructure", tf.WorkingDir(), action)
@@ -276,15 +315,25 @@ func applyOrDestroy(tf *tfexec.Terraform, b ApplyBehavior, destroy bool) error {
 		return nil
 	}
 
-	if err := applyPlanConsoleOutput(tf, f.Name()); err != nil {
-		return err
+	switch of {
+
+	case JsonOutput:
+		if err := applyPlanJsonOutput(tf, f.Name()); err != nil {
+			return err
+		}
+	case TextOutput: // Text output to the console is also the default choice
+		fallthrough
+	default:
+		if err := applyPlanConsoleOutput(tf, f.Name()); err != nil {
+			return err
+		}
 	}
 
 	return nil
 }
 
-func getOutputs(tf *tfexec.Terraform, b ApplyBehavior) (map[string]cty.Value, error) {
-	err := applyOrDestroy(tf, b, false)
+func getOutputs(tf *tfexec.Terraform, b ApplyBehavior, o OutputFormat) (map[string]cty.Value, error) {
+	err := applyOrDestroy(tf, b, o, false)
 	if err != nil {
 		return nil, err
 	}
@@ -302,11 +351,11 @@ func outputsFile(artifactsDir string, group config.GroupName) string {
 
 // ExportOutputs will run terraform output and capture data needed for
 // subsequent deployment groups
-func ExportOutputs(tf *tfexec.Terraform, artifactsDir string, applyBehavior ApplyBehavior) error {
+func ExportOutputs(tf *tfexec.Terraform, artifactsDir string, applyBehavior ApplyBehavior, outputFormat OutputFormat) error {
 	thisGroup := config.GroupName(filepath.Base(tf.WorkingDir()))
 	filepath := outputsFile(artifactsDir, thisGroup)
 
-	outputValues, err := getOutputs(tf, applyBehavior)
+	outputValues, err := getOutputs(tf, applyBehavior, outputFormat)
 	if err != nil {
 		return err
 	}
@@ -428,8 +477,8 @@ func ImportInputs(groupDir string, artifactsDir string, bp config.Blueprint) err
 }
 
 // Destroy destroys all infrastructure in the module working directory
-func Destroy(tf *tfexec.Terraform, b ApplyBehavior) error {
-	return applyOrDestroy(tf, b, true)
+func Destroy(tf *tfexec.Terraform, b ApplyBehavior, o OutputFormat) error {
+	return applyOrDestroy(tf, b, o, true)
 }
 
 func TfVersion() (string, error) {
