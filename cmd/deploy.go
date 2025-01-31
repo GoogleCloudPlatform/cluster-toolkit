@@ -94,7 +94,7 @@ func doDeploy(deplRoot string) {
 			moduleDir := filepath.Join(groupDir, subPath)
 			checkErr(deployPackerGroup(moduleDir, getApplyBehavior()), ctx)
 		case config.TerraformKind:
-			checkErr(deployTerraformGroup(groupDir, artDir, getApplyBehavior(), getJsonOutputBehavior()), ctx)
+			checkErr(deployTerraformGroup(groupDir, artDir, getApplyBehavior(), getOutputFormat()), ctx)
 		default:
 			checkErr(
 				config.BpError{

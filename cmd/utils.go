@@ -84,7 +84,7 @@ func filterYaml(cmd *cobra.Command, args []string, toComplete string) ([]string,
 
 var flagJsonOutput bool
 
-func getJsonOutputBehavior() shell.OutputFormat {
+func getOutputFormat() shell.OutputFormat {
 	if flagJsonOutput {
 		return shell.JsonOutput
 	}
@@ -92,7 +92,7 @@ func getJsonOutputBehavior() shell.OutputFormat {
 }
 
 func addJsonOutputFlag(c *cobra.Command) *cobra.Command {
-	c.Flags().BoolVar(&flagJsonOutput, "json-output", false, "Output errors in JSON format")
+	c.Flags().BoolVar(&flagJsonOutput, "json-output", false, "Write program output in JSON format (instead of default: english text)")
 	return c
 }
 

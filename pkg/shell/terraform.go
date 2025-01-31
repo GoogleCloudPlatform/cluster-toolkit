@@ -29,6 +29,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 
 	"github.com/hashicorp/terraform-exec/tfexec"
@@ -41,14 +42,13 @@ import (
 // format could be protobuf
 type OutputFormat uint
 
-// 2 output formats are currently supported:
-//   - Text
-//   - JSON
-//   - Future option is ProtoBuf
+// Future option could be ProtoBuf
 const (
 	TextOutput OutputFormat = iota
 	JsonOutput
 )
+
+const supportedOutputFormats = "Text , JSON "
 
 // ApplyBehavior abstracts behaviors for making changes to cloud infrastructure
 // when gcluster believes that they may be necessary
@@ -243,10 +243,22 @@ func promptForApply(tf *tfexec.Terraform, path string, b ApplyBehavior) bool {
 func applyPlanJsonOutput(tf *tfexec.Terraform, path string) error {
 	planFileOpt := tfexec.DirOrPlan(path)
 	logging.Info("Running terraform apply on deployment group %s", tf.WorkingDir())
+
+	replaceChar := ""
+	switch runtime.GOOS {
+	case "darwin":
+		fallthrough
+	case "linux":
+		replaceChar = "/"
+	case "windows":
+		replaceChar = "\\"
+	}
+
 	// To do: Make file name as a user input
 	// Make the JSON file name unique by having the Terraform group as a substring
-	jsonFilename := "cluster_toolkit_output-" + strings.ReplaceAll(tf.WorkingDir(), "/", ".") + ".json"
-	logging.Info("Writing to JSON file %s", jsonFilename)
+	jsonFilename := "cluster_toolkit_output-" + strings.ReplaceAll(tf.WorkingDir(), replaceChar, ".") + ".json"
+
+	logging.Info("Writing output to JSON file %s", jsonFilename)
 	jsonFile, err := os.Create(jsonFilename)
 	defer jsonFile.Close()
 	if err != nil {
@@ -316,17 +328,16 @@ func applyOrDestroy(tf *tfexec.Terraform, b ApplyBehavior, of OutputFormat, dest
 	}
 
 	switch of {
-
 	case JsonOutput:
 		if err := applyPlanJsonOutput(tf, f.Name()); err != nil {
 			return err
 		}
 	case TextOutput: // Text output to the console is also the default choice
-		fallthrough
-	default:
 		if err := applyPlanConsoleOutput(tf, f.Name()); err != nil {
 			return err
 		}
+	default:
+		panic(fmt.Sprintf("Unsupported output format requested. Supported output formats: %s", supportedOutputFormats))
 	}
 
 	return nil
