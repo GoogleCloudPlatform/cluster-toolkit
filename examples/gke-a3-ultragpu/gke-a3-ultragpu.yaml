@@ -65,7 +65,6 @@ deployment_groups:
     source: modules/network/vpc
     settings:
       network_name: $(vars.deployment_name)-net-1
-      mtu: 8896
       subnetworks:
       - subnet_name: $(vars.deployment_name)-sub-1
         subnet_region: $(vars.region)
@@ -84,7 +83,6 @@ deployment_groups:
     source: modules/network/gpu-rdma-vpc
     settings:
       network_name: $(vars.deployment_name)-rdma-net
-      mtu: 8896
       network_profile: https://www.googleapis.com/compute/beta/projects/$(vars.project_id)/global/networkProfiles/$(vars.zone)-vpc-roce
       network_routing_mode: REGIONAL
       subnetworks_template:
