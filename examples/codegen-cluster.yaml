@@ -61,12 +61,12 @@ deployment_groups:
       configure_workload_identity_sa: true
     outputs: [instructions]
 
-  - id: n2_pool
+  - id: c4_pool
     source: modules/compute/gke-node-pool
     use: [gke_cluster, gke_service_account]
     settings:
       disk_type: pd-balanced
-      machine_type: n2-standard-64
+      machine_type: c4-standard-48
       static_node_count: 2
 
   - id: workload-manager-install
