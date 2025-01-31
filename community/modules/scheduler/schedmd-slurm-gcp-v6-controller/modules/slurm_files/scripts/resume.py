@@ -120,7 +120,7 @@ def instance_properties(nodeset:object, model:str, placement_group:Optional[str]
     props.update(nodeset.get("instance_properties") or {})
     return props
 
-def update_reservation_props(reservation:ReservationDetails, props:object, placement_group:Optional[str]) -> None:
+def update_reservation_props(reservation:ReservationDetails, props:NSDict, placement_group:Optional[str]) -> None:
     props.reservationAffinity = {
         "consumeReservationType": "SPECIFIC_RESERVATION",
         "key": f"compute.{util.universe_domain()}/reservation-name",
