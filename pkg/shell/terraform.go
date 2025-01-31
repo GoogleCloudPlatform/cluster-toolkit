@@ -307,7 +307,6 @@ func applyOrDestroy(tf *tfexec.Terraform, b ApplyBehavior, of OutputFormat, dest
 	// capture Terraform plan in a file
 	f, err := os.CreateTemp("", "plan-)")
 	if err != nil {
-		logging.Info("deploy.go.0000: applyOrDestroy()")
 		return err
 	}
 	defer os.Remove(f.Name())
