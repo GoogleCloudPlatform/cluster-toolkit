@@ -1,0 +1,156 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+- name: Get RDMA interface
+  ansible.builtin.shell: |
+    raw_list=$(ls /sys/class/infiniband/*/device/net 2>/dev/null)
+    if [[ $? -ne 0 || -z "${raw_list}" ]]; then
+      echo "No RDMA interfaces found." >&2
+      exit 1
+    fi
+    rdma_iface=$(echo "${raw_list}" | awk '{print $1}')
+    if [[ -z $(ethtool -i "${rdma_iface}" | grep "driver.*idpf") ]]; then
+      echo "RDMA interface ${rdma_iface} does not load the IDPF driver." >&2
+      exit 1
+    fi
+    echo "${rdma_iface}"
+  args:
+    executable: /bin/bash
+  register: get_rdma_interface_output
+  changed_when: false
+
+- name: Set rdma_iface fact
+  ansible.builtin.set_fact:
+    rdma_iface: "{{ get_rdma_interface_output.stdout }}"
+
+- name: Debug RDMA interface
+  ansible.builtin.debug:
+    msg: "RDMA Interface: {{ rdma_iface }}"
+
+- name: Check RDMA interface existence
+  ansible.builtin.shell: ifconfig | grep "{{ rdma_iface }}"
+  args:
+    executable: /bin/bash
+  register: rdma_interface_check
+  ignore_errors: true
+  changed_when: false
+
+- name: Fail if RDMA interface not found
+  ansible.builtin.fail:
+    msg: "No RDMA interface found."
+  when: rdma_interface_check.rc != 0
+
+- name: Check for CQP failure
+  ansible.builtin.shell: dmesg | grep 'hardware initialization FAILED'
+  args:
+    executable: /bin/bash
+  register: cqp_failure_check
+  ignore_errors: true
+  changed_when: false
+
+- name: Fail if CQP failure found
+  ansible.builtin.fail:
+    msg: "CQP hardware initialization failed."
+  when: cqp_failure_check.rc == 0
+
+- name: Check for MAD QP failure
+  ansible.builtin.shell: dmesg | grep 'create ib_mad QP1'
+  args:
+    executable: /bin/bash
+  register: mad_qp_failure_check
+  ignore_errors: true
+  changed_when: false
+
+- name: Fail if MAD QP failure found
+  ansible.builtin.fail:
+    msg: "MAD QP registration failed."
+  when: mad_qp_failure_check.rc == 0
+
+- name: Check for QP async events
+  ansible.builtin.shell: dmesg | grep 'qp async event'
+  args:
+    executable: /bin/bash
+  register: qp_async_events_check
+  ignore_errors: true
+  changed_when: false
+
+- name: Fail if QP async events found
+  ansible.builtin.fail:
+    msg: "Async event error detected."
+  when: qp_async_events_check.rc == 0
+
+- name: Check for MAD agent error
+  ansible.builtin.shell: dmesg | grep 'MAD agent registration failed'
+  args:
+    executable: /bin/bash
+  register: mad_agent_error_check
+  ignore_errors: true
+  changed_when: false
+
+- name: Fail if MAD agent error found
+  ansible.builtin.fail:
+    msg: "MAD agent error detected."
+  when: mad_agent_error_check.rc == 0
+
+- name: Run rping loopback test
+  block:
+  - name: Kill any existing rping processes
+    ansible.builtin.shell: killall rping 2>/dev/null || true
+    args:
+      executable: /bin/bash
+    changed_when: false
+
+  - name: Get primary IP
+    ansible.builtin.shell: ip addr show "{{ rdma_iface }}" | grep -Po "inet \K[\d.]+"
+    args:
+      executable: /bin/bash
+    register: get_primary_ip_output
+    changed_when: false
+
+  - name: Set primary_ip fact
+    ansible.builtin.set_fact:
+      primary_ip: "{{ get_primary_ip_output.stdout }}"
+
+  - name: Debug primary IP
+    ansible.builtin.debug:
+      msg: "Listening on {{ primary_ip }}"
+
+  - name: Run rping server/client
+    ansible.builtin.shell: |
+      rping -d -s -P -a "{{ primary_ip }}" > /dev/null &
+      sleep 10
+      rping -d -c -C 1 -a "{{ primary_ip }}"
+    args:
+      executable: /bin/bash
+    register: rping_client_output
+    ignore_errors: true
+    changed_when: false
+
+  - name: Fail if rping loopback failed
+    ansible.builtin.fail:
+      msg: "rping loopback failed with return value of {{ rping_client_output.rc }}."
+    when: rping_client_output.rc != 0
+
+  always:
+  - name: Kill rping processes after test
+    ansible.builtin.shell: killall rping 2>/dev/null || true
+    args:
+      executable: /bin/bash
+    changed_when: false
+
+- name: Print success message
+  ansible.builtin.debug:
+    msg: "Basic local checks passed on"
