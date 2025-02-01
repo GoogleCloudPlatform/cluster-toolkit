@@ -125,6 +125,7 @@ data:
           ${!NCCL*}
           ${!OMPI*}
           LD_LIBRARY_PATH
+          WARMUP_END_PROG
           ${!HPL*}
           ${!UCX*}
           | sed 's/ / -x /g')
@@ -165,7 +166,7 @@ data:
               experiments:
                 hpl-{n_nodes}:
                   variables:
-                    n_nodes: [1,2,4,8,16,24,32]
+                    n_nodes: [1,2,4,8,16,32]
 
                     # 0 = ncclBcast, 1 = ncclSend/Recv
                     hpl_p2p_as_bcast: '0'
