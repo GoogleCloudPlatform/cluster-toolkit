@@ -15,6 +15,11 @@
   */
 
 locals {
+  cluster_id_parts = split("/", var.cluster_id)
+  cluster_name     = local.cluster_id_parts[5]
+  cluster_location = local.cluster_id_parts[3]
+  project_id       = var.project_id != null ? var.project_id : local.cluster_id_parts[1]
+
   apply_manifests_map = tomap({
     for index, manifest in var.apply_manifests : index => manifest
   })
@@ -25,8 +30,14 @@ locals {
   jobset_install_source = format("${path.module}/manifests/jobset-%s.yaml", try(var.jobset.version, ""))
 }
 
+data "google_container_cluster" "gke_cluster" {
+  project  = local.project_id
+  name     = local.cluster_name
+  location = local.cluster_location
+}
+
 module "kubectl_apply_manifests" {
-  for_each = var.gke_cluster_exists ? local.apply_manifests_map : {}
+  for_each = local.apply_manifests_map
   source   = "./kubectl"
 
   content           = each.value.content
@@ -35,16 +46,19 @@ module "kubectl_apply_manifests" {
   server_side_apply = each.value.server_side_apply
   wait_for_rollout  = each.value.wait_for_rollout
 
+  depends_on = [data.google_container_cluster.gke_cluster]
+
   providers = {
     http = http.h
   }
 }
 
 module "install_kueue" {
-  count             = var.gke_cluster_exists ? 1 : 0
   source            = "./kubectl"
   source_path       = local.install_kueue ? local.kueue_install_source : null
   server_side_apply = true
+
+  depends_on = [data.google_container_cluster.gke_cluster]
 
   providers = {
     http = http.h
@@ -52,10 +66,11 @@ module "install_kueue" {
 }
 
 module "install_jobset" {
-  count             = var.gke_cluster_exists ? 1 : 0
   source            = "./kubectl"
   source_path       = local.install_jobset ? local.jobset_install_source : null
   server_side_apply = true
+
+  depends_on = [data.google_container_cluster.gke_cluster]
 
   providers = {
     http = http.h
@@ -63,11 +78,10 @@ module "install_jobset" {
 }
 
 module "configure_kueue" {
-  count         = var.gke_cluster_exists ? 1 : 0
   source        = "./kubectl"
   source_path   = local.install_kueue ? try(var.kueue.config_path, "") : null
   template_vars = local.install_kueue ? try(var.kueue.config_template_vars, null) : null
-  depends_on    = [module.install_kueue]
+  depends_on    = [module.install_kueue, data.google_container_cluster.gke_cluster]
 
   server_side_apply = true
   wait_for_rollout  = true

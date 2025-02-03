@@ -24,12 +24,6 @@ variable "cluster_id" {
   type        = string
 }
 
-variable "gke_cluster_exists" {
-  description = "A static flag that signals to modules that a cluster has been created."
-  type        = bool
-  default     = false
-}
-
 variable "zones" {
   description = "A list of zones to be used. Zones must be in region of cluster. If null, cluster zones will be inherited. Note `zones` not `zone`; does not work with `zone` deployment variable."
   type        = list(string)

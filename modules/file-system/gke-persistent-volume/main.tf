@@ -80,6 +80,9 @@ locals {
       capacity = "${var.capacity_gb}Gi"
     }
   )
+
+  cluster_name     = split("/", var.cluster_id)[5]
+  cluster_location = split("/", var.cluster_id)[3]
 }
 
 resource "local_file" "debug_file" {
@@ -90,8 +93,12 @@ resource "local_file" "debug_file" {
   filename = "${path.root}/pv-pvc-debug-file-${local.filestore_name}.yaml"
 }
 
+data "google_container_cluster" "gke_cluster" {
+  name     = local.cluster_name
+  location = local.cluster_location
+}
+
 resource "kubectl_manifest" "pv" {
-  count     = var.gke_cluster_exists ? 1 : 0
   yaml_body = local.is_gcs ? local.gcs_pv_contents : local.filestore_pv_contents
 
   lifecycle {
@@ -100,6 +107,8 @@ resource "kubectl_manifest" "pv" {
       error_message = "Either gcs_bucket_name or filestore_id must be set."
     }
   }
+
+  depends_on = [data.google_container_cluster.gke_cluster]
 }
 
 resource "kubectl_manifest" "pvc" {
