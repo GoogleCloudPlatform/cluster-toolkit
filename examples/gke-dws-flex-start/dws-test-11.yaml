@@ -17,15 +17,15 @@
 blueprint_name: gke-dws
 
 vars:
-  project_id: ## Set GCP Project ID Here ##
-  deployment_name: gke-dws-a3-megagpu
+  project_id: hpc-toolkit-gsc ## Set GCP Project ID Here ##
+  deployment_name: gke-dws-swarnabm-11
   region: us-central1
   zone: us-central1-c
   # Cidr block containing the IP of the machine calling terraform.
   # The following line must be updated for this example to work.
-  authorized_cidr: # add this
+  authorized_cidr: 0.0.0.0/0 # add this
   gcp_public_cidrs_access_enabled: false
-  kueue_configuration_path: $(ghpc_stage("./dws-queues.yaml"))
+  kueue_configuration_path: $(ghpc_stage("./dws-queues.yaml.tftpl"))
   static_gpu_count: 512
 
 deployment_groups:
@@ -43,6 +43,18 @@ deployment_groups:
           ip_cidr_range: 10.4.0.0/14
         - range_name: services
           ip_cidr_range: 10.0.32.0/20
+
+  - id: node_pool_service_account
+    source: community/modules/project/service-account
+    settings:
+      name: gke-np-sa
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
+      - monitoring.viewer
+      - stackdriver.resourceMetadata.writer
+      - storage.objectViewer
+      - artifactregistry.reader
 
   - id: workload_service_account
     source: community/modules/project/service-account
@@ -78,7 +90,7 @@ deployment_groups:
 
   - id: a3_megagpu_pool
     source: modules/compute/gke-node-pool
-    use: [gke_cluster, gpunets, workload_service_account]
+    use: [gke_cluster, gpunets, node_pool_service_account]
     settings:
       machine_type: a3-megagpu-8g
       zones: [$(vars.zone)]
@@ -97,7 +109,7 @@ deployment_groups:
         version: v0.10.0
         config_path: $(vars.kueue_configuration_path)
         config_template_vars:
-          num_gpus: 64
+          num_gpus: $(vars.static_gpu_count)
       jobset:
         install: true
         version: v0.7.2

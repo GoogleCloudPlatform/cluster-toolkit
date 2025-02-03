@@ -22,16 +22,6 @@
   delegate_to: localhost
   ansible.builtin.command: gcloud container clusters get-credentials {{ deployment_name }} --region {{ region }} --project {{ custom_vars.project }}
 
-- name: Create the dws queues
-  delegate_to: localhost
-  ansible.builtin.shell: |
-    array=({{ workspace }}/examples/gke-dws-flex-start/dws-queues.yaml)
-    kubectl create -f ${array[0]}
-    echo ${array[0]}
-  args:
-    executable: /bin/bash
-  changed_when: False
-
 - name: Create a job
   delegate_to: localhost
   ansible.builtin.shell: |

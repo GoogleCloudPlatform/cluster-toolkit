@@ -49,7 +49,7 @@ spec:
     - name: "default-flavor"
       resources:
       - name: "nvidia.com/gpu"
-        nominalQuota: 512 #  96 nodes
+        nominalQuota: ${num_gpus}
   admissionChecks:
   - dws-prov
 ---

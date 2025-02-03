@@ -11,7 +11,25 @@ With Dynamic Workload Scheduler in Flex Start mode, you submit a GPU capacity re
 
 Cluster Toolkit supports DWS Flex Start mode with GKE nodepool and Kueue.
 
-**Step 1**: Include the following settings in the `gke-node-pool` module.
+**Step 1**: Deploy the blueprint gke-dws-flex-start.yaml using the `gcluster` command.
+
+**Step 2**: Use the correct context to run the job using `kubectl view config` and `kubectl config use-context <context-name>` commands.
+
+**Step 3**: Run the sample job.
+
+```text
+kubectl apply -f ./examples/gke-dws-flex-start/sample-job.yaml
+```
+
+To get details about the job, use
+
+```text
+kubectl describe job sample-job
+```
+
+## NOTE
+
+1. The `gke-node-pool` module requires these updates.
 
 - `enable_queued_provisioning` is set to `true`.
 - `autoscaling_total_min_nodes` is set to `0`.
@@ -20,89 +38,24 @@ Cluster Toolkit supports DWS Flex Start mode with GKE nodepool and Kueue.
 - Compact placement policy is not supported.
 - Reservations are not supported.
 
-```yaml
-  - id: gke_node_pool
-    source: modules/compute/gke-node-pool
-    use: [gke_cluster, gpunets, gke_service_account]
-    settings:
-      enable_queued_provisioning: true
-      autoscaling_total_min_nodes: 0
-      auto_repair: false
-      auto_upgrade: false
-      # the rest of the settings, e.g. zones, machine_type, etc.
-    outputs: [instructions]
-```
+1. The kueue configuration required for DWS Flex Start is included in the dws-queues.yaml file, and can be updated as required.
 
-**Step 2**: Create the Kueue resources for the DWS node pool.
+1. The job resource requests and limits must be aligned with the resources available under ClusterQueue (Kueue resource).
 
-```yaml
-apiVersion: kueue.x-k8s.io/v1beta1
-kind: ResourceFlavor
-metadata:
-  name: "default-flavor"
----
-apiVersion: kueue.x-k8s.io/v1beta1
-kind: AdmissionCheck
-metadata:
-  name: dws-prov
-spec:
-  controllerName: kueue.x-k8s.io/provisioning-request
-  parameters:
-    apiGroup: kueue.x-k8s.io
-    kind: ProvisioningRequestConfig
-    name: dws-config
----
-apiVersion: kueue.x-k8s.io/v1beta1
-kind: ProvisioningRequestConfig
-metadata:
-  name: dws-config
-spec:
-  provisioningClassName: queued-provisioning.gke.io
-  managedResources:
-  - nvidia.com/gpu
----
-apiVersion: kueue.x-k8s.io/v1beta1
-kind: ClusterQueue
-metadata:
-  name: "dws-cluster-queue"
-spec:
-  namespaceSelector: {}
-  resourceGroups:
-  - coveredResources: ["nvidia.com/gpu"]
-    flavors:
-    - name: "default-flavor"
-      resources:
-      - name: "nvidia.com/gpu"
-        nominalQuota: 512 #  96 nodes
-  admissionChecks:
-  - dws-prov
----
-apiVersion: kueue.x-k8s.io/v1beta1
-kind: LocalQueue
-metadata:
-  namespace: "default"
-  name: "dws-local-queue"
-spec:
-  clusterQueue: "dws-cluster-queue"
---- 
-```
+1. The job needs the following additions.
 
-**Step 3**: The jobset needs the following additions.  
-(a) Include the label and annotation under the jobset metadata.
+- Include the label and annotation under the jobset metadata.
 
-```yaml
-  labels:
-    kueue.x-k8s.io/queue-name: {dws kueue name}
-  annotations:
-    provreq.kueue.x-k8s.io/maxRunDurationSeconds: "7200" # This can probably be up to 7 days.
-```
+  ```yaml
+    labels:
+      kueue.x-k8s.io/queue-name: {dws kueue name}
+    annotations:
+      provreq.kueue.x-k8s.io/maxRunDurationSeconds: "7200" # This can probably be up to 7 days.
+  ```
 
-(b) Include the nodeSelector under the template spec.
+- Include the nodeSelector under the template spec.
 
-```yaml
-              nodeSelector:
-                cloud.google.com/gke-nodepool: {dws nodepool name}
-```
-
-> [!NOTE]
-> The jobset resource requests and limits must be aligned with the resources under ClusterQueue (Kueue resource).
+  ```yaml
+                nodeSelector:
+                  cloud.google.com/gke-nodepool: {dws nodepool name}
+  ```
