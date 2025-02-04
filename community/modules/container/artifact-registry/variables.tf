@@ -52,9 +52,9 @@ variable "user_managed_replication" {
       kms_key_name    = optional(string)
     If empty, auto replication is used.
   DOC
-  type    = list(object({
-    location        = string
-    kms_key_name    = optional(string)
+  type = list(object({
+    location     = string
+    kms_key_name = optional(string)
   }))
   default = []
 }
@@ -81,8 +81,8 @@ variable "repo_public_repository" {
     For REMOTE_REPOSITORY, name of a known public repo as per the Terraform module
     (e.g., DOCKER_HUB) or null for custom repo.
   DOC
-  type    = string
-  default = null
+  type        = string
+  default     = null
 
   validation {
     condition     = ((var.repo_mode != "REMOTE_REPOSITORY" && var.repo_public_repository == null) || (var.repo_mode == "REMOTE_REPOSITORY" && (var.repo_public_repository != null || var.repo_mirror_url != null)))
@@ -103,8 +103,8 @@ variable "use_upstream_credentials" {
     If false (or if repo_password == null), no password is created at all.
     Note: Blueprint credentials will be stored in Secrets Manager.
   DOC
-  type    = bool
-  default = false
+  type        = bool
+  default     = false
 
   validation {
     condition     = (var.use_upstream_credentials == false || var.repo_mode == "REMOTE_REPOSITORY")
@@ -124,7 +124,7 @@ variable "repository_base" {
   default     = null
 
   validation {
-    condition = ((!contains(["APT","YUM"], var.format) && var.repository_base == null) || (contains(["APT","YUM"], var.format) && var.repository_base != null))
+    condition     = ((!contains(["APT", "YUM"], var.format) && var.repository_base == null) || (contains(["APT", "YUM"], var.format) && var.repository_base != null))
     error_message = "repository_base is only valid if format is 'APT' or 'YUM' (must be null otherwise)."
   }
 }
@@ -135,7 +135,7 @@ variable "repository_path" {
   default     = null
 
   validation {
-    condition = ((!contains(["APT","YUM"], var.format) && var.repository_path == null) || (contains(["APT","YUM"], var.format) && var.repository_path != null))
+    condition     = ((!contains(["APT", "YUM"], var.format) && var.repository_path == null) || (contains(["APT", "YUM"], var.format) && var.repository_path != null))
     error_message = "repository_path is only valid if format is 'APT' or 'YUM' (must be null otherwise)."
   }
 }

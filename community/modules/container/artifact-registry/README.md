@@ -6,7 +6,7 @@ Currently this module is built to support repositories in Docker format although
 
 This module is best suited for managing artifact repositories in HPC/AI containerized environments where artifacts need to be shared across distributed systems. It includes IAM role configurations and secret access handling for seamless integration with CI/CD pipelines and other services too.
 
-It is designed to help facilitate containerized workloads running in the Cluster Toolkit with SLURM leveraging [Enroot](https://github.com/NVIDIA/enroot) and [Pyxis](https://github.com/NVIDIA/pyxis). Docker repositories can store container images that are used in job submissions, enabling efficient and scalable execution of containerized HPC or AI based workloads. 
+It is designed to help facilitate containerized workloads running in the Cluster Toolkit with SLURM leveraging [Enroot](https://github.com/NVIDIA/enroot) and [Pyxis](https://github.com/NVIDIA/pyxis). Docker repositories can store container images that are used in job submissions, enabling efficient and scalable execution of containerized HPC or AI based workloads.
 
 ## Usage
 
@@ -124,29 +124,28 @@ No modules.
 |------|------|
 | [google_artifact_registry_repository.artifact_registry](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/artifact_registry_repository) | resource |
 | [google_secret_manager_secret.repo_password_secret](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/secret_manager_secret) | resource |
-| [google_secret_manager_secret_iam_member.artifactregistry_secret_access_for_ar_sa](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/secret_manager_secret_iam_member) | resource |
 | [google_secret_manager_secret_version.repo_password_secret_version](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/secret_manager_secret_version) | resource |
 | [random_id.resource_name_suffix](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/id) | resource |
-| [google_project.this](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/project) | data source |
+| [random_password.repo_password](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/password) | resource |
 
 ## Inputs
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | The name of the current deployment. | `string` | n/a | yes |
-| <a name="input_format"></a> [format](#input\_format) | The format of packages stored in the repository:<br/>- DOCKER, MAVEN, NPM, PYTHON: public\_repository is a single attribute (e.g. DOCKER\_HUB, MAVEN\_CENTRAL, NPMJS, PYPI)<br/>- APT, YUM: public\_repository is a nested block requiring repository\_base and repository\_path<br/>- COMMON: uses a common\_repository with a uri | `string` | `"DOCKER"` | no |
+| <a name="input_format"></a> [format](#input\_format) | Artifact Registry format (e.g., DOCKER). | `string` | `"DOCKER"` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the artifact registry. Key-value pairs. | `map(string)` | `{}` | no |
-| <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project ID where the artifact registry is created. | `string` | n/a | yes |
+| <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project ID where the artifact registry and secret are created. | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | Region for the artifact registry. | `string` | n/a | yes |
-| <a name="input_repo_mirror_url"></a> [repo\_mirror\_url](#input\_repo\_mirror\_url) | URL for a custom repository if not using a public repository.<br/>Required if repo\_public\_repository is null and you want a remote custom repository.<br/>For COMMON, this must be a URI to another Artifact Registry or an external registry. | `string` | `null` | no |
-| <a name="input_repo_mode"></a> [repo\_mode](#input\_repo\_mode) | Mode of the artifact registry. Options: STANDARD\_REPOSITORY, VIRTUAL\_REPOSITORY, REMOTE\_REPOSITORY. | `string` | `"STANDARD_REPOSITORY"` | no |
-| <a name="input_repo_password"></a> [repo\_password](#input\_repo\_password) | The password or API key to be stored as a secret in Secret Manager. | `string` | `null` | no |
-| <a name="input_repo_password_version"></a> [repo\_password\_version](#input\_repo\_password\_version) | The Secret Manager version to use for the password. Default is 'latest'. | `string` | `"latest"` | no |
-| <a name="input_repo_public_repository"></a> [repo\_public\_repository](#input\_repo\_public\_repository) | Name of a known public repository to use:<br/>- For DOCKER: "DOCKER\_HUB"<br/>- For MAVEN: "MAVEN\_CENTRAL"<br/>- For NPM: "NPMJS"<br/>- For PYTHON: "PYPI"<br/>For APT/YUM: specify the public repository by providing repository\_base and repository\_path.<br/>If null, then use a custom or common repository. | `string` | `null` | no |
-| <a name="input_repo_secret_name"></a> [repo\_secret\_name](#input\_repo\_secret\_name) | The name of the secret to be created in Secret Manager. | `string` | `null` | no |
-| <a name="input_repo_username"></a> [repo\_username](#input\_repo\_username) | Username for the external repository if credentials are needed. | `string` | `null` | no |
-| <a name="input_repository_base"></a> [repository\_base](#input\_repository\_base) | Used for APT/YUM formats if using a public repository.<br/>E.g., for YUM: "ROCKY", "CENTOS", etc.<br/>for APT: "DEBIAN" or "UBUNTU".<br/>Leave null if not using APT/YUM public repositories. | `string` | `null` | no |
-| <a name="input_repository_path"></a> [repository\_path](#input\_repository\_path) | Used for APT/YUM formats if using a public repository.<br/>Example for YUM: "pub/rocky/9/BaseOS/x86\_64/os"<br/>Example for APT: "debian/dists/buster"<br/>Leave null if not using APT/YUM public repositories. | `string` | `null` | no |
+| <a name="input_repo_mirror_url"></a> [repo\_mirror\_url](#input\_repo\_mirror\_url) | For REMOTE\_REPOSITORY, URL for a custom or common mirror. | `string` | `null` | no |
+| <a name="input_repo_mode"></a> [repo\_mode](#input\_repo\_mode) | Artifact Registry mode (STANDARD\_REPOSITORY, REMOTE\_REPOSITORY, etc.). | `string` | `"STANDARD_REPOSITORY"` | no |
+| <a name="input_repo_password"></a> [repo\_password](#input\_repo\_password) | Optional password/API key. If null, one will be randomly generated. | `string` | `null` | no |
+| <a name="input_repo_public_repository"></a> [repo\_public\_repository](#input\_repo\_public\_repository) | For REMOTE\_REPOSITORY, name of a known public repo as per the Terraform module<br/>(e.g., DOCKER\_HUB) or null for custom repo. | `string` | `null` | no |
+| <a name="input_repo_username"></a> [repo\_username](#input\_repo\_username) | Username for external repository. | `string` | `null` | no |
+| <a name="input_repository_base"></a> [repository\_base](#input\_repository\_base) | For APT/YUM public repos, repository\_base (e.g., 'DEBIAN', 'UBUNTU'). | `string` | `null` | no |
+| <a name="input_repository_path"></a> [repository\_path](#input\_repository\_path) | For APT/YUM public repos, repository\_path (e.g., 'debian/dists/buster'). | `string` | `null` | no |
+| <a name="input_use_upstream_credentials"></a> [use\_upstream\_credentials](#input\_use\_upstream\_credentials) | Configure Service Account to use upstream credentials for REMOTE\_REPOSITORY:<br/>If true, a username/password is used for the REMOTE\_REPOSITORY mirror.<br/>If false (or if repo\_password == null), no password is created at all.<br/>Note: Blueprint credentials will be stored in Secrets Manager. | `bool` | `false` | no |
+| <a name="input_user_managed_replication"></a> [user\_managed\_replication](#input\_user\_managed\_replication) | (Optional) A list of objects to enable user-managed replication.<br/>Each object can have:<br/>  location        = string<br/>  kms\_key\_name    = optional(string)<br/>If empty, auto replication is used. | <pre>list(object({<br/>    location     = string<br/>    kms_key_name = optional(string)<br/>  }))</pre> | `[]` | no |
 
 ## Outputs
 

@@ -12,31 +12,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-data "google_project" "this" {
-  project_id = var.project_id
+locals {
+  # This label allows for billing report tracking based on module.
+  labels = merge(var.labels, { ghpc_module = "artifact-registry", ghpc_role = "container" })
 }
 
 locals {
-
-  labels = merge(var.labels, { ghpc_module = "artifact-registry", ghpc_role = "container"})
-
-  # If creating a random password, use that; else if user provided a password, use that; else null.
-  final_repo_password = can(random_password.repo_password[0])? random_password.repo_password[0].result : var.repo_password
-
   # Auto (i.e., empty) vs user-managed replication
   auto = length(var.user_managed_replication) == 0 ? true : false
 
   # For remote custom repositories, parse out host to create a base_component name
   mirror_url_no_proto = var.repo_mirror_url != null ? replace(replace(var.repo_mirror_url, "https://", ""), "http://", "") : ""
-  mirror_host = local.mirror_url_no_proto != "" ? split("/", local.mirror_url_no_proto)[0] : ""
+  mirror_host         = local.mirror_url_no_proto != "" ? split("/", local.mirror_url_no_proto)[0] : ""
 
   base_component = replace(
     replace(
       replace(
         lower(
           local.mirror_host != ""
-            ? "${var.format}-${var.repo_mode}-${local.mirror_host}"
-            : "${var.format}-${var.repo_mode}-nohost"
+          ? "${var.format}-${var.repo_mode}-${local.mirror_host}"
+          : "${var.format}-${var.repo_mode}-nohost"
         ),
         "\\.", "-"
       ),
@@ -61,9 +56,6 @@ locals {
   # The secret name is derived from the repository name
   # with a suffix like "-secret".
   derived_secret_name = format("%s-secret", local.repository_name)
-
-  # Define the Artifact Registry SA email for clarity:
-  artifact_registry_service_account_iam_email = "serviceAccount:service-${data.google_project.this.number}@gcp-sa-artifactregistry.iam.gserviceaccount.com"
 }
 
 ##############################
@@ -72,15 +64,15 @@ locals {
 
 # Only create a random password if user didn't supply one
 resource "random_password" "repo_password" {
-  count = var.use_upstream_credentials && var.repo_password == null ? 1 : 0
+  count            = var.use_upstream_credentials && var.repo_password == null ? 1 : 0
   length           = 24
   special          = true
   override_special = "_-#=."
 }
 
 resource "google_secret_manager_secret" "repo_password_secret" {
-  count     = var.use_upstream_credentials ? 1 : 0
-  project   = var.project_id
+  count   = var.use_upstream_credentials ? 1 : 0
+  project = var.project_id
 
   # Derive the secret ID from the repository name
   secret_id = local.derived_secret_name
@@ -133,12 +125,12 @@ resource "random_id" "resource_name_suffix" {
 }
 
 resource "google_artifact_registry_repository" "artifact_registry" {
-  project     = var.project_id
-  location    = var.region
-  format      = var.format
-  mode        = var.repo_mode
-  description = var.deployment_name
-  labels      = local.labels
+  project       = var.project_id
+  location      = var.region
+  format        = var.format
+  mode          = var.repo_mode
+  description   = var.deployment_name
+  labels        = local.labels
   repository_id = local.repository_name
 
   # Only create remote_repository_config if REMOTE_REPOSITORY

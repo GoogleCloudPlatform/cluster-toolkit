@@ -78,7 +78,7 @@ EOL
 dnf install -y grafana
 
 pip3.8 install google-api-python-client \
-  google-cloud-artifact-registry \
+	google-cloud-artifact-registry \
 	google-cloud-secret-manager \
 	google.cloud.pubsub \
 	pyyaml addict httplib2
