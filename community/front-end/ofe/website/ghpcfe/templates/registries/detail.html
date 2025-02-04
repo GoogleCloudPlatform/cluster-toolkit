@@ -1,0 +1,12 @@
+{% extends "base_generic.html" %}
+
+{% block content %}
+<h2>Container Registry Details</h2>
+<p><strong>Cluster:</strong> {{ object.cluster.name }}</p>
+<p><strong>Format:</strong> {{ object.get_format_display }}</p>
+<p><strong>Repo Mode:</strong> {{ object.get_repo_mode_display }}</p>
+<p><strong>Repo URL:</strong> {{ object.repo_mirror_url }}</p>
+<p><strong>Use Public Repository:</strong> {{ object.use_public_repository }}</p>
+
+<a href="{% url 'registries' %}" class="btn btn-primary">Back to List</a>
+{% endblock %}
