@@ -23,7 +23,7 @@ vars:
   zone: us-central1-c
   # Cidr block containing the IP of the machine calling terraform.
   # The following line must be updated for this example to work.
-  authorized_cidr: # add this
+  authorized_cidr: <your-ip-address>/32 # add this
   gcp_public_cidrs_access_enabled: false
   kueue_configuration_path: $(ghpc_stage("./dws-queues.yaml.tftpl"))
   static_gpu_count: 512
