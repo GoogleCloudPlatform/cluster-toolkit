@@ -22,7 +22,7 @@ for use with an on-premise slurm-cluster.
 > further testing is done, documentation on applying the hybrid module to
 > on-premise slurm clusters will be added and expanded.
 
-[slurm-gcp]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/5.12.0
+[slurm-gcp]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/5.12.2
 
 ## Definitions
 
@@ -140,14 +140,14 @@ command to install the pip packages outlined in
 pip install -r docs/hybrid-slurm-cluster/requirements.txt
 ```
 
-#### Build ghpc
+#### Build gcluster
 
-Before you begin, ensure that you have built the `ghpc` tool in the Cluster Toolkit.
+Before you begin, ensure that you have built the `gcluster` tool in the Cluster Toolkit.
 For more information see the [README.md](../../README.md#quickstart) Quickstart.
 
-The commands in these instructions assume the ghpc binary is installed in a
+The commands in these instructions assume the gcluster binary is installed in a
 directory represented in the PATH environment variable. To ensure this is the
-case, run `make install` after building `ghpc`:
+case, run `make install` after building `gcluster`:
 
 ```shell
 make
@@ -166,10 +166,10 @@ blueprint will do the following:
 * Create a subnetwork of `compute-vpc-network` named `primary-subnet` with an
   internal IP range of 10.1.0.0/16
 
-Create a deployment directory for the networks using `ghpc`:
+Create a deployment directory for the networks using `gcluster`:
 
 ```shell
-ghpc create docs/hybrid-slurm-cluster/blueprints/create-networks.yaml --vars project_id="<<Project_A_ID>>",project_id_compute="<<Project_B_ID>>"
+gcluster create docs/hybrid-slurm-cluster/blueprints/create-networks.yaml --vars project_id="<<Project_A_ID>>",project_id_compute="<<Project_B_ID>>"
 ```
 
 If successful, this command will provide 3 terraform operations that can be
@@ -299,7 +299,7 @@ First, use the Cluster Toolkit to create the deployment directory, replacing
 "<<Project A ID>>" with the ID of your project A:
 
 ```shell
-ghpc create docs/hybrid-slurm-cluster/blueprints/static-cluster.yaml --vars project_id="<<Project A ID>>"
+gcluster create docs/hybrid-slurm-cluster/blueprints/static-cluster.yaml --vars project_id="<<Project A ID>>"
 ```
 
 If successful, this command will provide 3 terraform operations that can be

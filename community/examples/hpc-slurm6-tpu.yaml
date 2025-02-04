@@ -29,7 +29,7 @@ deployment_groups:
     source: modules/network/vpc
 
   - id: tpu_nodeset
-    source: ./community/modules/compute/schedmd-slurm-gcp-v6-nodeset-tpu
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset-tpu
     use: [network]
     settings:
       node_type: v3-8
@@ -45,20 +45,21 @@ deployment_groups:
       node_count_dynamic_max: 1
 
   - id: tpu_partition
-    source: ./community/modules/compute/schedmd-slurm-gcp-v6-partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
     use: [tpu_nodeset]
     settings:
       partition_name: tpu
+      resume_timeout: 600
 
   - id: slurm_login
-    source: ./community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
     use: [network]
     settings:
       machine_type: n2-standard-4
       enable_login_public_ips: true
 
   - id: slurm_controller
-    source: ./community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     use:
     - tpu_partition
     - slurm_login

@@ -23,6 +23,9 @@ It will automatically perform the following steps, as described in the
   - source: modules/network/vpc
     id: network
 
+  # Private Service Access (PSA) requires the compute.networkAdmin role which is
+  # included in the Owner role, but not Editor.
+  # https://cloud.google.com/vpc/docs/configure-private-services-access#permissions
   - source: community/modules/network/private-service-access
     id: ps_connect
     use: [network]
@@ -80,14 +83,16 @@ No modules.
 |------|-------------|------|---------|:--------:|
 | <a name="input_address"></a> [address](#input\_address) | The IP address or beginning of the address range allocated for the private service access. | `string` | `null` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to supporting resources. Key-value pairs. | `map(string)` | n/a | yes |
-| <a name="input_network_id"></a> [network\_id](#input\_network\_id) | The ID of the GCE VPC network to configure private service Access.:<br>`projects/<project_id>/global/networks/<network_name>`" | `string` | n/a | yes |
+| <a name="input_network_id"></a> [network\_id](#input\_network\_id) | The ID of the GCE VPC network to configure private service Access.:<br/>`projects/<project_id>/global/networks/<network_name>`" | `string` | n/a | yes |
 | <a name="input_prefix_length"></a> [prefix\_length](#input\_prefix\_length) | The prefix length of the IP range allocated for the private service access. | `number` | `16` | no |
+| <a name="input_project_id"></a> [project\_id](#input\_project\_id) | ID of project in which Private Service Access will be created. | `string` | n/a | yes |
 
 ## Outputs
 
 | Name | Description |
 |------|-------------|
-| <a name="output_connect_mode"></a> [connect\_mode](#output\_connect\_mode) | Services that use Private Service Access typically specify connect\_mode<br>"PRIVATE\_SERVICE\_ACCESS". This output value sets connect\_mode and additionally<br>blocks terraform actions until the VPC connection has been created. |
+| <a name="output_cidr_range"></a> [cidr\_range](#output\_cidr\_range) | CIDR range of the created google\_compute\_global\_address |
+| <a name="output_connect_mode"></a> [connect\_mode](#output\_connect\_mode) | Services that use Private Service Access typically specify connect\_mode<br/>"PRIVATE\_SERVICE\_ACCESS". This output value sets connect\_mode and additionally<br/>blocks terraform actions until the VPC connection has been created. |
 | <a name="output_private_vpc_connection_peering"></a> [private\_vpc\_connection\_peering](#output\_private\_vpc\_connection\_peering) | The name of the VPC Network peering connection that was created by the service provider. |
 | <a name="output_reserved_ip_range"></a> [reserved\_ip\_range](#output\_reserved\_ip\_range) | Named IP range to be used by services connected with Private Service Access. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

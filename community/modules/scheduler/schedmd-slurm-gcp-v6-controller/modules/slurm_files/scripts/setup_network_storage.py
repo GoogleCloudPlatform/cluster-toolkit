@@ -24,7 +24,7 @@ import logging
 import shutil
 from pathlib import Path
 from concurrent.futures import as_completed
-from addict import Dict as NSDict
+from addict import Dict as NSDict # type: ignore
 
 import util
 from util import lookup, run, dirs, separate
@@ -213,8 +213,6 @@ def munge_mount_handler():
         else "defaults,hard,intr,_netdev"
     )
 
-    munge_key = Path(dirs.munge / "munge.key")
-
     log.info(f"Mounting munge share to: {local_mount}")
     local_mount.mkdir()
     if fs_type.lower() == "gcsfuse".lower():
@@ -228,7 +226,7 @@ def munge_mount_handler():
         ]
     else:
         if remote_mount is None:
-            remote_mount = Path("/etc/munge")
+            remote_mount = dirs.munge
         cmd = [
             "mount",
             f"--types={fs_type}",
@@ -252,6 +250,7 @@ def munge_mount_handler():
     else:
         raise err
 
+    munge_key = Path(dirs.munge / "munge.key")
     log.info(f"Copy munge.key from: {local_mount}")
     shutil.copy2(Path(local_mount / "munge.key"), munge_key)
 

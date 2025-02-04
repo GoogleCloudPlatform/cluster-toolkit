@@ -36,7 +36,7 @@ This can be achieved by one of the following 2 approaches:
 
 1. Using a public IP address on the VM
 
-- Set [var.omit_external_ip](#input_omit_external_ip) to `true`
+- Set [var.omit_external_ip](#input_omit_external_ip) to `false`
 
 1. Configuring a VPC with a Cloud NAT in the region of the VM
 
@@ -210,24 +210,14 @@ to the console. For example:
 ==> example.googlecompute.toolkit_image: Startup script, if any, has finished running.
 ```
 
-Using the default value for \[var.scopes\]\[#input_scopes\], the output of
-startup script execution will be stored in Cloud Logging. It can be examined
-using the [Cloud Logging Console][logging-console] or with a
-[gcloud logging read][logging-read-docs] command (substituting `<<PROJECT_ID>>`
-with your project ID):
+### Debugging startup-script failures
 
-```shell
-$ gcloud logging --project <<PROJECT_ID>> read \
-    'logName="projects/<<PROJECT_ID>>/logs/GCEMetadataScripts" AND jsonPayload.message=~"^startup-script: "' \
-    --format="table[box](timestamp, resource.labels.instance_id, jsonPayload.message)" --freshness 2h
-```
+> [!NOTE]
+> There can be a delay in the propagation of the logs from the instance to
+> Cloud Logging, so it may require waiting a few minutes to see the full logs.
 
-Note that this command will print **all** startup script entries within the
-project within the "freshness" window **in reverse order**. You may need to
-identify the instance ID of the Packer VM and filter further by that value using
-`gcloud` or `grep`. To print the entries in the order they would have appeared
-on your console, we recommend piping the output of this command to the standard
-Linux utility `tac`.
+If the Packer image build fails, the module will output a `gcloud` command
+that can be used directly to review startup-script execution.
 
 ## License
 
@@ -269,7 +259,7 @@ No resources.
 |------|-------------|------|---------|:--------:|
 | <a name="input_accelerator_count"></a> [accelerator\_count](#input\_accelerator\_count) | Number of accelerator cards to attach to the VM; not necessary for families that always include GPUs (A2). | `number` | `null` | no |
 | <a name="input_accelerator_type"></a> [accelerator\_type](#input\_accelerator\_type) | Type of accelerator cards to attach to the VM; not necessary for families that always include GPUs (A2). | `string` | `null` | no |
-| <a name="input_ansible_playbooks"></a> [ansible\_playbooks](#input\_ansible\_playbooks) | A list of Ansible playbook configurations that will be uploaded to customize the VM image | <pre>list(object({<br>    playbook_file   = string<br>    galaxy_file     = string<br>    extra_arguments = list(string)<br>  }))</pre> | `[]` | no |
+| <a name="input_ansible_playbooks"></a> [ansible\_playbooks](#input\_ansible\_playbooks) | A list of Ansible playbook configurations that will be uploaded to customize the VM image | <pre>list(object({<br/>    playbook_file   = string<br/>    galaxy_file     = string<br/>    extra_arguments = list(string)<br/>  }))</pre> | `[]` | no |
 | <a name="input_communicator"></a> [communicator](#input\_communicator) | Communicator to use for provisioners that require access to VM ("ssh" or "winrm") | `string` | `null` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Cluster Toolkit deployment name | `string` | n/a | yes |
 | <a name="input_disk_size"></a> [disk\_size](#input\_disk\_size) | Size of disk image in GB | `number` | `null` | no |
@@ -277,7 +267,7 @@ No resources.
 | <a name="input_enable_shielded_vm"></a> [enable\_shielded\_vm](#input\_enable\_shielded\_vm) | Enable the Shielded VM configuration (var.shielded\_instance\_config). | `bool` | `false` | no |
 | <a name="input_image_family"></a> [image\_family](#input\_image\_family) | The family name of the image to be built. Defaults to `deployment_name` | `string` | `null` | no |
 | <a name="input_image_name"></a> [image\_name](#input\_image\_name) | The name of the image to be built. If not supplied, it will be set to image\_family-$ISO\_TIMESTAMP | `string` | `null` | no |
-| <a name="input_image_storage_locations"></a> [image\_storage\_locations](#input\_image\_storage\_locations) | Storage location, either regional or multi-regional, where snapshot content is to be stored and only accepts 1 value.<br>See https://developer.hashicorp.com/packer/plugins/builders/googlecompute#image_storage_locations | `list(string)` | `null` | no |
+| <a name="input_image_storage_locations"></a> [image\_storage\_locations](#input\_image\_storage\_locations) | Storage location, either regional or multi-regional, where snapshot content is to be stored and only accepts 1 value.<br/>See https://developer.hashicorp.com/packer/plugins/builders/googlecompute#image_storage_locations | `list(string)` | `null` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to apply to the short-lived VM | `map(string)` | `null` | no |
 | <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | VM machine type on which to build new image | `string` | `"n2-standard-4"` | no |
 | <a name="input_manifest_file"></a> [manifest\_file](#input\_manifest\_file) | File to which to write Packer build manifest | `string` | `"packer-manifest.json"` | no |
@@ -288,12 +278,12 @@ No resources.
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which to create VM and image | `string` | n/a | yes |
 | <a name="input_scopes"></a> [scopes](#input\_scopes) | DEPRECATED: use var.service\_account\_scopes | `set(string)` | `null` | no |
 | <a name="input_service_account_email"></a> [service\_account\_email](#input\_service\_account\_email) | The service account email to use. If null or 'default', then the default Compute Engine service account will be used. | `string` | `null` | no |
-| <a name="input_service_account_scopes"></a> [service\_account\_scopes](#input\_service\_account\_scopes) | Service account scopes to attach to the instance. See<br>https://cloud.google.com/compute/docs/access/service-accounts. | `set(string)` | <pre>[<br>  "https://www.googleapis.com/auth/cloud-platform"<br>]</pre> | no |
+| <a name="input_service_account_scopes"></a> [service\_account\_scopes](#input\_service\_account\_scopes) | Service account scopes to attach to the instance. See<br/>https://cloud.google.com/compute/docs/access/service-accounts. | `set(string)` | <pre>[<br/>  "https://www.googleapis.com/auth/cloud-platform"<br/>]</pre> | no |
 | <a name="input_shell_scripts"></a> [shell\_scripts](#input\_shell\_scripts) | A list of paths to local shell scripts which will be uploaded to customize the VM image | `list(string)` | `[]` | no |
-| <a name="input_shielded_instance_config"></a> [shielded\_instance\_config](#input\_shielded\_instance\_config) | Shielded VM configuration for the instance (must set var.enabled\_shielded\_vm) | <pre>object({<br>    enable_secure_boot          = bool<br>    enable_vtpm                 = bool<br>    enable_integrity_monitoring = bool<br>  })</pre> | <pre>{<br>  "enable_integrity_monitoring": true,<br>  "enable_secure_boot": true,<br>  "enable_vtpm": true<br>}</pre> | no |
+| <a name="input_shielded_instance_config"></a> [shielded\_instance\_config](#input\_shielded\_instance\_config) | Shielded VM configuration for the instance (must set var.enabled\_shielded\_vm) | <pre>object({<br/>    enable_secure_boot          = bool<br/>    enable_vtpm                 = bool<br/>    enable_integrity_monitoring = bool<br/>  })</pre> | <pre>{<br/>  "enable_integrity_monitoring": true,<br/>  "enable_secure_boot": true,<br/>  "enable_vtpm": true<br/>}</pre> | no |
 | <a name="input_source_image"></a> [source\_image](#input\_source\_image) | Source OS image to build from | `string` | `null` | no |
 | <a name="input_source_image_family"></a> [source\_image\_family](#input\_source\_image\_family) | Alternative to source\_image. Specify image family to build from latest image in family | `string` | `"hpc-rocky-linux-8"` | no |
-| <a name="input_source_image_project_id"></a> [source\_image\_project\_id](#input\_source\_image\_project\_id) | A list of project IDs to search for the source image. Packer will search the<br>first project ID in the list first, and fall back to the next in the list,<br>until it finds the source image. | `list(string)` | `null` | no |
+| <a name="input_source_image_project_id"></a> [source\_image\_project\_id](#input\_source\_image\_project\_id) | A list of project IDs to search for the source image. Packer will search the<br/>first project ID in the list first, and fall back to the next in the list,<br/>until it finds the source image. | `list(string)` | `null` | no |
 | <a name="input_ssh_username"></a> [ssh\_username](#input\_ssh\_username) | Username to use for SSH access to VM | `string` | `"hpc-toolkit-packer"` | no |
 | <a name="input_startup_script"></a> [startup\_script](#input\_startup\_script) | Startup script (as raw string) used to build the custom Linux VM image (overridden by var.startup\_script\_file if both are set) | `string` | `null` | no |
 | <a name="input_startup_script_file"></a> [startup\_script\_file](#input\_startup\_script\_file) | File path to local shell script that will be used to customize the Linux VM image (overrides var.startup\_script) | `string` | `null` | no |

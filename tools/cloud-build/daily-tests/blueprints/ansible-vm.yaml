@@ -1,0 +1,154 @@
+# Copyright 2023 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: test-workstation-ansible
+
+vars:
+  project_id:  ## Set GCP Project ID Here ##
+  deployment_name: test-workstation-ansible
+  region: us-central1
+  zone: us-central1-a
+  machine_type: n2-standard-2
+  disk_type: pd-ssd
+  instance_count: 1
+
+deployment_groups:
+- group: primary
+  modules:
+
+  - id: network1
+    source: modules/network/pre-existing-vpc
+
+  - id: startup-script
+    source: modules/scripts/startup-script
+    settings:
+      install_ansible: true
+      runners:
+      - type: shell
+        destination: startup.sh
+        content: |
+          #!/bin/bash
+          set -ex
+          echo \$(ansible --version)
+
+  - id: workstation-centos
+    source: modules/compute/vm-instance
+    use:
+    - network1
+    - startup-script
+    settings:
+      name_prefix: centos
+      add_deployment_name_before_prefix: true
+      instance_image:
+        name: centos-7-v20240611
+        project: centos-cloud
+
+  - id: workstation-ubuntu-2004
+    source: modules/compute/vm-instance
+    use:
+    - network1
+    - startup-script
+    settings:
+      name_prefix: ubuntu2004
+      add_deployment_name_before_prefix: true
+      instance_image:
+        family: ubuntu-2004-lts
+        project: ubuntu-os-cloud
+
+  - id: workstation-ubuntu-2204
+    source: modules/compute/vm-instance
+    use:
+    - network1
+    - startup-script
+    settings:
+      name_prefix: ubuntu2204
+      add_deployment_name_before_prefix: true
+      instance_image:
+        family: ubuntu-2204-lts
+        project: ubuntu-os-cloud
+
+  - id: workstation-debian
+    source: modules/compute/vm-instance
+    use:
+    - network1
+    - startup-script
+    settings:
+      name_prefix: debian
+      instance_image:
+        family: debian-11
+        project: debian-cloud
+
+  - id: workstation-rocky-8
+    source: modules/compute/vm-instance
+    use:
+    - network1
+    - startup-script
+    settings:
+      name_prefix: rocky8
+      add_deployment_name_before_prefix: true
+      instance_image:
+        family: rocky-linux-8-optimized-gcp
+        project: rocky-linux-cloud
+
+  - id: workstation-rocky-9
+    source: modules/compute/vm-instance
+    use:
+    - network1
+    - startup-script
+    settings:
+      name_prefix: rocky9
+      add_deployment_name_before_prefix: true
+      instance_image:
+        family: rocky-linux-9-optimized-gcp
+        project: rocky-linux-cloud
+
+  - id: workstation-rhel-8
+    source: modules/compute/vm-instance
+    use:
+    - network1
+    - startup-script
+    settings:
+      name_prefix: rhel8
+      add_deployment_name_before_prefix: true
+      instance_image:
+        family: rhel-8
+        project: rhel-cloud
+
+  - id: workstation-rhel-9
+    source: modules/compute/vm-instance
+    use:
+    - network1
+    - startup-script
+    settings:
+      name_prefix: rhel9
+      add_deployment_name_before_prefix: true
+      instance_image:
+        family: rhel-9
+        project: rhel-cloud
+
+  - id: wait-for-startup
+    source: community/modules/scripts/wait-for-startup
+    settings:
+      instance_names:
+      - $(workstation-centos.name[0])
+      - $(workstation-ubuntu-2004.name[0])
+      - $(workstation-ubuntu-2204.name[0])
+      - $(workstation-debian.name[0])
+      - $(workstation-rocky-8.name[0])
+      - $(workstation-rocky-9.name[0])
+      - $(workstation-rhel-8.name[0])
+      - $(workstation-rhel-9.name[0])
+      timeout: 7200

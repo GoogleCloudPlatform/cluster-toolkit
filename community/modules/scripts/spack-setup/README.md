@@ -59,7 +59,7 @@ OR
     source: community/modules/scripts/spack-setup
 
   - id: slurm_controller
-    source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     use: [network1, partition1, spack-setup]
 ```
 
@@ -340,7 +340,7 @@ limitations under the License.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_startup_script"></a> [startup\_script](#module\_startup\_script) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | v1.36.0&depth=1 |
+| <a name="module_startup_script"></a> [startup\_script](#module\_startup\_script) | ../../../../modules/scripts/startup-script | n/a |
 
 ## Resources
 
@@ -353,26 +353,13 @@ limitations under the License.
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_caches_to_populate"></a> [caches\_to\_populate](#input\_caches\_to\_populate) | DEPRECATED<br><br>Use [spack-execute](../spack-execute/) module with the following `commands` can be used to populate a cache:<pre>MIRROR_URL=gs://my-bucket<br>spack buildcache create --mirror-url $MIRROR_URL -af \$(spack find --format /{hash});<br>spack gpg publish --mirror-url $MIRROR_URL;<br>spack buildcache update-index --mirror-url $MIRROR_URL --keys;</pre>Defines caches which will be populated with the installed packages.<br><br>NOTE: GPG Keys should be installed before trying to populate a cache<br>with packages.<br><br>NOTE: The gpg\_keys variable can be used to install existing GPG keys<br>and create new GPG keys, both of which are acceptable for populating a<br>cache. | `list(map(any))` | `null` | no |
-| <a name="input_chgrp_group"></a> [chgrp\_group](#input\_chgrp\_group) | Deprecated: installation will be owned by group of `system_user_name`. If special group is needed, supply user with group assigned. | `string` | `null` | no |
-| <a name="input_chmod_mode"></a> [chmod\_mode](#input\_chmod\_mode) | `chmod` to apply to the Spack installation. Adds group write by default. Set to `""` (empty string) to prevent modification.<br>For usage information see:<br>https://docs.ansible.com/ansible/latest/collections/ansible/builtin/file_module.html#parameter-mode | `string` | `"g+w"` | no |
-| <a name="input_chown_owner"></a> [chown\_owner](#input\_chown\_owner) | Deprecated: use `system_user_name`. | `string` | `null` | no |
-| <a name="input_compilers"></a> [compilers](#input\_compilers) | DEPRECATED<br><br>Use [spack-execute](../spack-execute/) module with the following `commands` can be used to install compilers:<pre>spack install gcc@10.3.0 target=x86_64<br>spack load gcc@10.3.0 target=x86_64<br>spack compiler find --scope site<br>spack clean -s<br>spack unload gcc@10.3.0</pre>Defines compilers for spack to install before installing packages. | `list(string)` | `null` | no |
-| <a name="input_concretize_flags"></a> [concretize\_flags](#input\_concretize\_flags) | DEPRECATED - spack concretize is now performed using the [spack-execute](../spack-execute/) module `commands` variable. | `string` | `null` | no |
-| <a name="input_configs"></a> [configs](#input\_configs) | DEPRECATED<br><br>Use [spack-execute](../spack-execute/) module with the following `commands` can be used to add a single config:<pre>spack config --scope defaults add config:default:true</pre>Alternatively, use `data_files` to transfer a config file and use the `spack config add -f <file>` command to add the config.<br><br>List of configuration options to set within spack. | `list(map(any))` | `null` | no |
+| <a name="input_chmod_mode"></a> [chmod\_mode](#input\_chmod\_mode) | `chmod` to apply to the Spack installation. Adds group write by default. Set to `""` (empty string) to prevent modification.<br/>For usage information see:<br/>https://docs.ansible.com/ansible/latest/collections/ansible/builtin/file_module.html#parameter-mode | `string` | `"g+w"` | no |
 | <a name="input_configure_for_google"></a> [configure\_for\_google](#input\_configure\_for\_google) | When true, the spack installation will be configured to pull from Google's Spack binary cache. | `bool` | `true` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of deployment, used to name bucket containing startup script. | `string` | n/a | yes |
-| <a name="input_environments"></a> [environments](#input\_environments) | DEPRECATED<br><br>Use [spack-execute](../spack-execute/) module with the following `commands` can be used to configure an environment:<pre>if ! spack env list \| grep -q my-env; then<br>  spack env create my-env<br>fi<br>spack env activate my-env<br>spack add intel-mpi@2018.4.274 %gcc@10.3.0<br>spack concretize<br>spack install</pre>Defines spack environments to configure.<br>For more information, see: https://spack.readthedocs.io/en/latest/environments.html. | `any` | `null` | no |
-| <a name="input_gpg_keys"></a> [gpg\_keys](#input\_gpg\_keys) | DEPRECATED<br><br>  Use [spack-execute](../spack-execute/) module with the following `commands` can be used to create a new GPG key:<pre>spack gpg init<br>  spack gpg create <name> <email></pre>Alternatively, `data_files` can be used to transfer an existing GPG key. Then use `spack gpg trust <file>` to add the key to the keyring.<br><br>  GPG Keys to trust within spack. | `list(map(any))` | `null` | no |
 | <a name="input_install_dir"></a> [install\_dir](#input\_install\_dir) | Directory to install spack into. | `string` | `"/sw/spack"` | no |
-| <a name="input_install_flags"></a> [install\_flags](#input\_install\_flags) | DEPRECATED - spack install is now performed using the [spack-execute](../spack-execute/) module `commands` variable. | `string` | `null` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Key-value pairs of labels to be added to created resources. | `map(string)` | n/a | yes |
-| <a name="input_licenses"></a> [licenses](#input\_licenses) | DEPRECATED<br><br>Use [spack-execute](../spack-execute/) module with `data_files` variable to install license files:<pre>data_files = [{<br>  source = "/abs/path/on/deployment/machine/license.lic"<br>  destination = "/sw/spack/etc/spack/licenses/license.lic"<br>}]</pre>List of software licenses to install within spack. | <pre>list(object({<br>    source = string<br>    dest   = string<br>  }))</pre> | `null` | no |
-| <a name="input_log_file"></a> [log\_file](#input\_log\_file) | DEPRECATED <br><br>All install logs are printed to stdout/stderr.<br>Execution log\_file location can be set on spack-execute module. | `string` | `null` | no |
-| <a name="input_packages"></a> [packages](#input\_packages) | DEPRECATED<br><br>Use [spack-execute](../spack-execute/) module with the following `commands` can be used to install a package:<pre>spack install intel-mpi@2018.4.274 %gcc@10.3.0</pre>Defines root packages for spack to install. | `list(string)` | `null` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created. | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | Region to place bucket containing startup script. | `string` | n/a | yes |
-| <a name="input_spack_cache_url"></a> [spack\_cache\_url](#input\_spack\_cache\_url) | DEPRECATED<br><br>Use [spack-execute](../spack-execute/) module with the following `commands` can be used to add a build cache:<pre>spack mirror add --scope site <mirror name> gs://my-build-cache<br>spack buildcache keys --install --trust</pre>List of build caches for Spack. | <pre>list(object({<br>    mirror_name = string<br>    mirror_url  = string<br>  }))</pre> | `null` | no |
 | <a name="input_spack_profile_script_path"></a> [spack\_profile\_script\_path](#input\_spack\_profile\_script\_path) | Path to the Spack profile.d script. Created by this module | `string` | `"/etc/profile.d/spack.sh"` | no |
 | <a name="input_spack_ref"></a> [spack\_ref](#input\_spack\_ref) | Git ref to checkout for spack. | `string` | `"v0.20.0"` | no |
 | <a name="input_spack_url"></a> [spack\_url](#input\_spack\_url) | URL to clone the spack repo from. | `string` | `"https://github.com/spack/spack"` | no |
@@ -389,7 +376,7 @@ limitations under the License.
 | <a name="output_gcs_bucket_path"></a> [gcs\_bucket\_path](#output\_gcs\_bucket\_path) | Bucket containing the startup scripts for spack, to be reused by spack-execute module. |
 | <a name="output_spack_path"></a> [spack\_path](#output\_spack\_path) | Path to the root of the spack installation |
 | <a name="output_spack_profile_script_path"></a> [spack\_profile\_script\_path](#output\_spack\_profile\_script\_path) | Path to the Spack profile.d script. |
-| <a name="output_spack_runner"></a> [spack\_runner](#output\_spack\_runner) | Runner to be used with startup-script module or passed to spack-execute module.<br>- installs Spack dependencies<br>- installs Spack <br>- generates profile.d script to enable access to Spack<br>This is safe to run in parallel by multiple machines. Use in place of deprecated `setup_spack_runner`. |
+| <a name="output_spack_runner"></a> [spack\_runner](#output\_spack\_runner) | Runner to be used with startup-script module or passed to spack-execute module.<br/>- installs Spack dependencies<br/>- installs Spack <br/>- generates profile.d script to enable access to Spack<br/>This is safe to run in parallel by multiple machines. Use in place of deprecated `setup_spack_runner`. |
 | <a name="output_startup_script"></a> [startup\_script](#output\_startup\_script) | Spack installation script. |
 | <a name="output_system_user_name"></a> [system\_user\_name](#output\_system\_user\_name) | The system user used to install Spack. It can be reused by spack-execute module to install spack packages. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

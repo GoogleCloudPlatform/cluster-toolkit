@@ -34,7 +34,7 @@ deployment_groups:
     settings:
       local_mount: /home
   - id: fluxfw-gcp
-    source: github.com/GoogleCloudPlatform/scientific-computing-examples//fluxfw-gcp/tf?ref=867e558
+    source: github.com/GoogleCloudPlatform/scientific-computing-examples//fluxfw-gcp/tf?ref=cb36377
     settings:
       compute_node_specs:
       - name_prefix: gfluxfw-compute

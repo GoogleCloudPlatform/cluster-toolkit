@@ -6,16 +6,13 @@ access, Service Accounts, and API enablement to follow best practices.
 
 This module is meant for use with Terraform 0.13.
 
+**Note:** This module has been removed from the Cluster Toolkit. The upstream module (`terraform-google-project-factory`) is now the recommended way to create and manage GCP projects.
+
 ### Example
 
 ```yaml
 - id: project
-  source: community/modules/project/new-project
-  settings:
-    project_id: test_project
-    folder_id: 334688113020 # random number
-    billing_account: "111110-M2N704-854685" # random billing number
-    org_id: 123456789 # random org id
+  source: github.com/terraform-google-modules/terraform-google-project-factory?rev=v17.0.0&depth=1
 ```
 
 This creates a new project with pre-defined project ID, a designated folder and
@@ -63,8 +60,8 @@ No resources.
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_activate_api_identities"></a> [activate\_api\_identities](#input\_activate\_api\_identities) | The list of service identities (Google Managed service account for the API) to force-create for the project (e.g. in order to grant additional roles).<br>    APIs in this list will automatically be appended to `activate_apis`.<br>    Not including the API in this list will follow the default behaviour for identity creation (which is usually when the first resource using the API is created).<br>    Any roles (e.g. service agent role) must be explicitly listed. See https://cloud.google.com/iam/docs/understanding-roles#service-agent-roles-roles for a list of related roles. | <pre>list(object({<br>    api   = string<br>    roles = list(string)<br>  }))</pre> | `[]` | no |
-| <a name="input_activate_apis"></a> [activate\_apis](#input\_activate\_apis) | The list of apis to activate within the project | `list(string)` | <pre>[<br>  "compute.googleapis.com",<br>  "serviceusage.googleapis.com",<br>  "storage.googleapis.com"<br>]</pre> | no |
+| <a name="input_activate_api_identities"></a> [activate\_api\_identities](#input\_activate\_api\_identities) | The list of service identities (Google Managed service account for the API) to force-create for the project (e.g. in order to grant additional roles).<br/>    APIs in this list will automatically be appended to `activate_apis`.<br/>    Not including the API in this list will follow the default behaviour for identity creation (which is usually when the first resource using the API is created).<br/>    Any roles (e.g. service agent role) must be explicitly listed. See https://cloud.google.com/iam/docs/understanding-roles#service-agent-roles-roles for a list of related roles. | <pre>list(object({<br/>    api   = string<br/>    roles = list(string)<br/>  }))</pre> | `[]` | no |
+| <a name="input_activate_apis"></a> [activate\_apis](#input\_activate\_apis) | The list of apis to activate within the project | `list(string)` | <pre>[<br/>  "compute.googleapis.com",<br/>  "serviceusage.googleapis.com",<br/>  "storage.googleapis.com"<br/>]</pre> | no |
 | <a name="input_auto_create_network"></a> [auto\_create\_network](#input\_auto\_create\_network) | Create the default network | `bool` | `false` | no |
 | <a name="input_billing_account"></a> [billing\_account](#input\_billing\_account) | The ID of the billing account to associate this project with | `string` | n/a | yes |
 | <a name="input_bucket_force_destroy"></a> [bucket\_force\_destroy](#input\_bucket\_force\_destroy) | Force the deletion of all objects within the GCS bucket when deleting the bucket (optional) | `bool` | `false` | no |
@@ -75,11 +72,11 @@ No resources.
 | <a name="input_bucket_ula"></a> [bucket\_ula](#input\_bucket\_ula) | Enable Uniform Bucket Level Access | `bool` | `true` | no |
 | <a name="input_bucket_versioning"></a> [bucket\_versioning](#input\_bucket\_versioning) | Enable versioning for a GCS bucket to create (optional) | `bool` | `false` | no |
 | <a name="input_budget_alert_pubsub_topic"></a> [budget\_alert\_pubsub\_topic](#input\_budget\_alert\_pubsub\_topic) | The name of the Cloud Pub/Sub topic where budget related messages will be published, in the form of `projects/{project_id}/topics/{topic_id}` | `string` | `null` | no |
-| <a name="input_budget_alert_spent_percents"></a> [budget\_alert\_spent\_percents](#input\_budget\_alert\_spent\_percents) | A list of percentages of the budget to alert on when threshold is exceeded | `list(number)` | <pre>[<br>  0.5,<br>  0.7,<br>  1<br>]</pre> | no |
+| <a name="input_budget_alert_spent_percents"></a> [budget\_alert\_spent\_percents](#input\_budget\_alert\_spent\_percents) | A list of percentages of the budget to alert on when threshold is exceeded | `list(number)` | <pre>[<br/>  0.5,<br/>  0.7,<br/>  1<br/>]</pre> | no |
 | <a name="input_budget_amount"></a> [budget\_amount](#input\_budget\_amount) | The amount to use for a budget alert | `number` | `null` | no |
 | <a name="input_budget_display_name"></a> [budget\_display\_name](#input\_budget\_display\_name) | The display name of the budget. If not set defaults to `Budget For <projects[0]|All Projects>` | `string` | `null` | no |
 | <a name="input_budget_monitoring_notification_channels"></a> [budget\_monitoring\_notification\_channels](#input\_budget\_monitoring\_notification\_channels) | A list of monitoring notification channels in the form `[projects/{project_id}/notificationChannels/{channel_id}]`. A maximum of 5 channels are allowed. | `list(string)` | `[]` | no |
-| <a name="input_consumer_quotas"></a> [consumer\_quotas](#input\_consumer\_quotas) | The quotas configuration you want to override for the project. | <pre>list(object({<br>    service = string,<br>    metric  = string,<br>    limit   = string,<br>    value   = string,<br>  }))</pre> | `[]` | no |
+| <a name="input_consumer_quotas"></a> [consumer\_quotas](#input\_consumer\_quotas) | The quotas configuration you want to override for the project. | <pre>list(object({<br/>    service = string,<br/>    metric  = string,<br/>    limit   = string,<br/>    value   = string,<br/>  }))</pre> | `[]` | no |
 | <a name="input_create_project_sa"></a> [create\_project\_sa](#input\_create\_project\_sa) | Whether the default service account for the project shall be created | `bool` | `true` | no |
 | <a name="input_default_network_tier"></a> [default\_network\_tier](#input\_default\_network\_tier) | Default Network Service Tier for resources created in this project. If unset, the value will not be modified. See https://cloud.google.com/network-tiers/docs/using-network-service-tiers and https://cloud.google.com/network-tiers. | `string` | `""` | no |
 | <a name="input_default_service_account"></a> [default\_service\_account](#input\_default\_service\_account) | Project default service account setting: can be one of `delete`, `deprivilege`, `disable`, or `keep`. | `string` | `"keep"` | no |

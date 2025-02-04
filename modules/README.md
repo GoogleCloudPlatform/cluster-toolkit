@@ -35,20 +35,17 @@ Modules that are still in development and less stable are labeled with the
 ### Compute
 
 * **[vm-instance]** ![core-badge] : Creates one or more VM instances.
-* **[schedmd-slurm-gcp-v5-partition]** ![community-badge] :
-  Creates a partition to be used by a [slurm-controller][schedmd-slurm-gcp-v5-controller].
-* **[schedmd-slurm-gcp-v5-node-group]** ![community-badge] :
-  Creates a node group to be used by the [schedmd-slurm-gcp-v5-partition] module.
-* **[schedmd-slurm-gcp-v6-partition]** ![community-badge] ![experimental-badge]:
+* **[schedmd-slurm-gcp-v6-partition]** ![core-badge] :
   Creates a partition to be used by a [slurm-controller][schedmd-slurm-gcp-v6-controller].
-* **[schedmd-slurm-gcp-v6-nodeset]** ![community-badge] ![experimental-badge]:
+* **[schedmd-slurm-gcp-v6-nodeset]** ![core-badge] :
   Creates a nodeset to be used by the [schedmd-slurm-gcp-v6-partition] module.
-* **[schedmd-slurm-gcp-v6-nodeset-tpu]** ![community-badge] ![experimental-badge]:
+* **[schedmd-slurm-gcp-v6-nodeset-tpu]** ![core-badge] :
   Creates a TPU nodeset to be used by the [schedmd-slurm-gcp-v6-partition] module.
-* **[schedmd-slurm-gcp-v6-nodeset-dynamic]** ![community-badge] ![experimental-badge]:
+* **[schedmd-slurm-gcp-v6-nodeset-dynamic]** ![core-badge] ![experimental-badge]:
   Creates a dynamic nodeset to be used by the [schedmd-slurm-gcp-v6-partition] module and instance template.
 * **[gke-node-pool]** ![core-badge] ![experimental-badge] : Creates a
   Kubernetes node pool using GKE.
+* **[resource-policy]** ![core-badge] ![experimental-badge] : Create a resource policy for compute engines that can be applied to gke-node-pool's nodes.
 * **[gke-job-template]** ![core-badge] ![experimental-badge] : Creates a
   Kubernetes job file to be used with a [gke-node-pool].
 * **[htcondor-execute-point]** ![community-badge] ![experimental-badge] :
@@ -62,9 +59,8 @@ Modules that are still in development and less stable are labeled with the
 
 [vm-instance]: compute/vm-instance/README.md
 [gke-node-pool]: ../modules/compute/gke-node-pool/README.md
+[resource-policy]: ../modules/compute/resource-policy/README.md
 [gke-job-template]: ../modules/compute/gke-job-template/README.md
-[schedmd-slurm-gcp-v5-partition]: ../community/modules/compute/schedmd-slurm-gcp-v5-partition/README.md
-[schedmd-slurm-gcp-v5-node-group]: ../community/modules/compute/schedmd-slurm-gcp-v5-node-group/README.md
 [schedmd-slurm-gcp-v6-partition]: ../community/modules/compute/schedmd-slurm-gcp-v6-partition/README.md
 [schedmd-slurm-gcp-v6-nodeset]: ../community/modules/compute/schedmd-slurm-gcp-v6-nodeset/README.md
 [schedmd-slurm-gcp-v6-nodeset-tpu]: ../community/modules/compute/schedmd-slurm-gcp-v6-nodeset-tpu/README.md
@@ -101,8 +97,6 @@ Modules that are still in development and less stable are labeled with the
   a [DDN EXAscaler lustre](https://www.ddn.com/partners/google-cloud-platform/)
   file system. This module has
   [license costs](https://console.developers.google.com/marketplace/product/ddnstorage/exascaler-cloud).
-* **[Intel-DAOS]** ![community-badge] : Creates
-  a [DAOS](https://docs.daos.io/) file system.
 * **[cloud-storage-bucket]** ![community-badge] ![experimental-badge] : Creates a Google Cloud Storage (GCS) bucket.
 * **[gke-persistent-volume]** ![core-badge] ![experimental-badge] : Creates persistent volumes and persistent volume claims for shared storage.
 * **[nfs-server]** ![community-badge] ![experimental-badge] : Creates a VM and
@@ -112,7 +106,6 @@ Modules that are still in development and less stable are labeled with the
 [parallelstore]: file-system/parallelstore/README.md
 [pre-existing-network-storage]: file-system/pre-existing-network-storage/README.md
 [ddn-exascaler]: ../community/modules/file-system/DDN-EXAScaler/README.md
-[intel-daos]: ../community/modules/file-system/Intel-DAOS/README.md
 [nfs-server]: ../community/modules/file-system/nfs-server/README.md
 [cloud-storage-bucket]: ../community/modules/file-system/cloud-storage-bucket/README.md
 [gke-persistent-volume]: ../modules/file-system/gke-persistent-volume/README.md
@@ -154,15 +147,12 @@ Modules that are still in development and less stable are labeled with the
 
 ### Project
 
-* **[new-project]** ![community-badge] ![experimental-badge] : Creates a Google
-  Cloud Project.
 * **[service-account]** ![community-badge] ![experimental-badge] : Creates [service
   accounts](https://cloud.google.com/iam/docs/service-accounts) for a GCP
   project.
 * **[service-enablement]** ![community-badge] ![experimental-badge] : Allows enabling
   various APIs for a Google Cloud Project.
 
-[new-project]: ../community/modules/project/new-project/README.md
 [service-account]: ../community/modules/project/service-account/README.md
 [service-enablement]: ../community/modules/project/service-enablement/README.md
 
@@ -192,15 +182,9 @@ Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial][fsi-monteca
 * **[gke-cluster]** ![core-badge] ![experimental-badge] : Creates a
   Kubernetes cluster using GKE.
 * **[pre-existing-gke-cluster]** ![core-badge] ![experimental-badge] : Retrieves an existing GKE cluster. Substitute for ([gke-cluster]) module.
-* **[schedmd-slurm-gcp-v5-controller]** ![community-badge] :
-  Creates a Slurm controller node using [slurm-gcp-version-5].
-* **[schedmd-slurm-gcp-v5-login]** ![community-badge] :
-  Creates a Slurm login node using [slurm-gcp-version-5].
-* **[schedmd-slurm-gcp-v5-hybrid]** ![community-badge] ![experimental-badge] :
-  Creates hybrid Slurm partition configuration files using [slurm-gcp-version-5].
-* **[schedmd-slurm-gcp-v6-controller]** ![community-badge] ![experimental-badge]:
+* **[schedmd-slurm-gcp-v6-controller]** ![core-badge] :
   Creates a Slurm controller node using [slurm-gcp-version-6].
-* **[schedmd-slurm-gcp-v6-login]** ![community-badge] ![experimental-badge]:
+* **[schedmd-slurm-gcp-v6-login]** ![core-badge] :
   Creates a Slurm login node using [slurm-gcp-version-6].
 * **[htcondor-setup]** ![community-badge] ![experimental-badge] : Creates the
   base infrastructure for an HTCondor pool (service accounts and Cloud Storage bucket).
@@ -224,11 +208,7 @@ Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial][fsi-monteca
 [htcondor-access-point]: ../community/modules/scheduler/htcondor-access-point/README.md
 [schedmd-slurm-gcp-v6-controller]: ../community/modules/scheduler/schedmd-slurm-gcp-v6-controller/README.md
 [schedmd-slurm-gcp-v6-login]: ../community/modules/scheduler/schedmd-slurm-gcp-v6-login/README.md
-[schedmd-slurm-gcp-v5-controller]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-controller/README.md
-[schedmd-slurm-gcp-v5-login]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-login/README.md
-[schedmd-slurm-gcp-v5-hybrid]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid/README.md
-[slurm-gcp-version-5]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/5.12.0
-[slurm-gcp-version-6]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.5.8
+[slurm-gcp-version-6]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.8.6
 [pbspro-client]: ../community/modules/scheduler/pbspro-client/README.md
 [pbspro-server]: ../community/modules/scheduler/pbspro-server/README.md
 
@@ -282,10 +262,14 @@ Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial][fsi-monteca
 [spack-execute]: ../community/modules/scripts/spack-execute/README.md
 [wait-for-startup]: ../community/modules/scripts/wait-for-startup/README.md
 
-> **_NOTE:_** Slurm V4 is deprecated. In case, you want to use V4 modules, please use
+> **_NOTE:_** Slurm-GCP V4 is deprecated. In case, you want to use V4 modules, please use
 [ghpc-v1.27.0](https://github.com/GoogleCloudPlatform/hpc-toolkit/releases/tag/v1.27.0)
 source code and build ghpc binary from this. This source code also contains
 deprecated examples using V4 modules for your reference.
+> **_NOTE:_** Slurm-GCP V5 is deprecated. In case, you want to use V5 modules, please use
+[ghpc-v1.44.1](https://github.com/GoogleCloudPlatform/hpc-toolkit/releases/tag/v1.44.1)
+source code and build ghpc binary from this. This source code also contains
+deprecated examples using V5 modules for your reference.
 
 ## Module Fields
 
@@ -307,7 +291,7 @@ Terraform modules. A source can either be a filesystem path or a URL to a git
 repository:
 
 * Filesystem paths
-  * modules embedded in the `ghpc` executable
+  * modules embedded in the `gcluster` executable
   * modules in the local filesystem
 * Remote modules using [Terraform URL syntax](https://developer.hashicorp.com/terraform/language/modules/sources)
   * Hosted on [GitHub](https://developer.hashicorp.com/terraform/language/modules/sources#github)
@@ -324,13 +308,13 @@ deployment folder on your behalf.
 
 #### Embedded Modules
 
-Embedded modules are added to the ghpc binary during compilation and cannot
+Embedded modules are added to the gcluster binary during compilation and cannot
 be edited. To refer to embedded modules, set the source path to
 `modules/<<MODULE_PATH>>` or `community/modules/<<MODULE_PATH>>`.
 
 The paths match the modules in the repository structure for [core modules](./)
 and [community modules](../community/modules/). Because the modules are embedded
-during compilation, your local copies may differ unless you recompile ghpc.
+during compilation, your local copies may differ unless you recompile gcluster.
 
 For example, this example snippet uses the embedded pre-existing-vpc module:
 
@@ -348,19 +332,15 @@ following module definition refers the local pre-existing-vpc modules.
 
 ```yaml
   - id: network1
-    source: ./modules/network/pre-existing-vpc
+    source: modules/network/pre-existing-vpc
 ```
 
 > **_NOTE:_** Relative paths (beginning with `.` or `..` must be relative to the
-> working directory from which `ghpc` is executed. This example would have to be
+> working directory from which `gcluster` is executed. This example would have to be
 > run from a local copy of the Cluster Toolkit repository. An alternative is to use
 > absolute paths to modules.
 
 #### GitHub-hosted Modules and Packages
-
-The [Intel DAOS blueprint][pfs-daos.yaml] makes extensive use of GitHub-hosted
-Terraform and Packer modules. You may wish to use it as an example reference for
-this documentation.
 
 To use a Terraform module available on GitHub, set the source to a path starting
 with `github.com` (HTTPS) or `git@github.com` (SSH). For instance, the following
@@ -392,35 +372,28 @@ release of the filestore module:
     source: github.com/GoogleCloudPlatform/hpc-toolkit//modules/file-system/filestore?ref=v1.22.1&depth=1
 ```
 
-Because Terraform modules natively support this syntax, ghpc will not copy
+Because Terraform modules natively support this syntax, gcluster will not copy
 GitHub-hosted modules into your deployment folder. Terraform will download them
 into a hidden folder when you run `terraform init`.
 
 [tfrev]: https://www.terraform.io/language/modules/sources#selecting-a-revision
 [gitref]: https://git-scm.com/book/en/v2/Git-Tools-Revision-Selection#_single_revisions
 [tfsubdir]: https://www.terraform.io/language/modules/sources#modules-in-package-sub-directories
-[pfs-daos.yaml]: ../community/examples/intel/pfs-daos.yaml
 
 ##### GitHub-hosted Packer modules
 
-Packer does not natively support GitHub-hosted modules so `ghpc create` will
+Packer does not natively support GitHub-hosted modules so `gcluster create` will
 copy modules into your deployment folder.
 
-If the module uses `//` package notation, `ghpc create` will copy the entire
+If the module uses `//` package notation, `gcluster create` will copy the entire
 repository to the module path: `deployment_name/group_name/module_id`. However,
-when `ghpc deploy` is invoked, it will run Packer from the subdirectory
+when `gcluster deploy` is invoked, it will run Packer from the subdirectory
 `deployment_name/group_name/module_id/subdirectory/after/double_slash`.
 
-Referring back to the [Intel DAOS blueprint][pfs-daos.yaml], we see that it will
-create 2 deployment groups at `pfs-daos/daos-client-image` and
-`pfs-daos/daos-server-image`. However, Packer will actually be invoked from
-a subdirectories ending in `daos-client-image/images` and
-`daos-server-image/images`.
-
-If the module does not use `//` package notation, `ghpc create` will copy
+If the module does not use `//` package notation, `gcluster create` will copy
 only the final directory in the path to `deployment_name/group_name/module_id`.
 
-In all cases, `ghpc create` will remove the `.git` directory from the packer
+In all cases, `gcluster create` will remove the `.git` directory from the packer
 module to ensure that you can manage the entire deployment directory with its
 own git versioning.
 
@@ -504,7 +477,7 @@ to `$(network1.network_self_link)` and `$(network1.subnetwork_self_link)` which
 refer to the [network1 outputs](network/vpc/README#Outputs)
 of the same names.
 
-The order of precedence that `ghpc` uses in determining when to infer a setting
+The order of precedence that `gcluster` uses in determining when to infer a setting
 value is in the following priority order:
 
 1. Explicitly set in the blueprint using the `settings` field
@@ -601,5 +574,5 @@ than having to set it manually.
 
 ## Writing Custom Cluster Toolkit Modules
 
-Modules are flexible by design, however we do define some [best practices](../docs/module-guidelines.md) when
+Modules are flexible by design, however we define some [best practices](../docs/module-guidelines.md) when
 creating a new module meant to be used with the Cluster Toolkit.

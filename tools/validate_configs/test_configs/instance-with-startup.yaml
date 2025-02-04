@@ -43,6 +43,6 @@ deployment_groups:
       machine_type: e2-standard-8
 
   - id: wait
-    source: ./community/modules/scripts/wait-for-startup
+    source: community/modules/scripts/wait-for-startup
     settings:
       instance_name: $(workstation.name[0])

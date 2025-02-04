@@ -126,15 +126,15 @@ No modules.
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the HPC deployment, used as name of the NFS instance if no name is specified. | `string` | n/a | yes |
 | <a name="input_disk_size"></a> [disk\_size](#input\_disk\_size) | Storage size gb | `number` | `"100"` | no |
 | <a name="input_image"></a> [image](#input\_image) | DEPRECATED: The VM image used by the nfs server | `string` | `null` | no |
-| <a name="input_instance_image"></a> [instance\_image](#input\_instance\_image) | The VM image used by the nfs server.<br><br>Expected Fields:<br>name: The name of the image. Mutually exclusive with family.<br>family: The image family to use. Mutually exclusive with name.<br>project: The project where the image is hosted. | `map(string)` | <pre>{<br>  "family": "hpc-rocky-linux-8",<br>  "project": "cloud-hpc-image-public"<br>}</pre> | no |
+| <a name="input_instance_image"></a> [instance\_image](#input\_instance\_image) | The VM image used by the nfs server.<br/><br/>Expected Fields:<br/>name: The name of the image. Mutually exclusive with family.<br/>family: The image family to use. Mutually exclusive with name.<br/>project: The project where the image is hosted. | `map(string)` | <pre>{<br/>  "family": "hpc-rocky-linux-8",<br/>  "project": "cloud-hpc-image-public"<br/>}</pre> | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the NFS instance. Key-value pairs. | `map(string)` | n/a | yes |
-| <a name="input_local_mounts"></a> [local\_mounts](#input\_local\_mounts) | Mountpoint for this NFS compute instance | `list(string)` | <pre>[<br>  "/data"<br>]</pre> | no |
+| <a name="input_local_mounts"></a> [local\_mounts](#input\_local\_mounts) | Mountpoint for this NFS compute instance | `list(string)` | <pre>[<br/>  "/data"<br/>]</pre> | no |
 | <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | Type of the VM instance to use | `string` | `"n2d-standard-2"` | no |
 | <a name="input_metadata"></a> [metadata](#input\_metadata) | Metadata, provided as a map | `map(string)` | `{}` | no |
 | <a name="input_name"></a> [name](#input\_name) | The resource name of the instance. | `string` | `null` | no |
 | <a name="input_network_self_link"></a> [network\_self\_link](#input\_network\_self\_link) | The self link of the network to attach the nfs VM. | `string` | `"default"` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created | `string` | n/a | yes |
-| <a name="input_scopes"></a> [scopes](#input\_scopes) | Scopes to apply to the controller | `list(string)` | <pre>[<br>  "https://www.googleapis.com/auth/cloud-platform"<br>]</pre> | no |
+| <a name="input_scopes"></a> [scopes](#input\_scopes) | Scopes to apply to the controller | `list(string)` | <pre>[<br/>  "https://www.googleapis.com/auth/cloud-platform"<br/>]</pre> | no |
 | <a name="input_service_account"></a> [service\_account](#input\_service\_account) | Service Account for the NFS Server | `string` | `null` | no |
 | <a name="input_subnetwork_self_link"></a> [subnetwork\_self\_link](#input\_subnetwork\_self\_link) | The self link of the subnetwork to attach the nfs VM. | `string` | `null` | no |
 | <a name="input_type"></a> [type](#input\_type) | The service tier of the instance. | `string` | `"pd-ssd"` | no |
@@ -146,6 +146,6 @@ No modules.
 |------|-------------|
 | <a name="output_install_nfs_client"></a> [install\_nfs\_client](#output\_install\_nfs\_client) | Script for installing NFS client |
 | <a name="output_install_nfs_client_runner"></a> [install\_nfs\_client\_runner](#output\_install\_nfs\_client\_runner) | Runner to install NFS client using the startup-script module |
-| <a name="output_mount_runner"></a> [mount\_runner](#output\_mount\_runner) | Runner to mount the file-system using an ansible playbook. The startup-script<br>module will automatically handle installation of ansible.<br>- id: example-startup-script<br>  source: modules/scripts/startup-script<br>  settings:<br>    runners:<br>    - $(your-fs-id.mount\_runner)<br>... |
+| <a name="output_mount_runner"></a> [mount\_runner](#output\_mount\_runner) | Runner to mount the file-system using an ansible playbook. The startup-script<br/>module will automatically handle installation of ansible.<br/>- id: example-startup-script<br/>  source: modules/scripts/startup-script<br/>  settings:<br/>    runners:<br/>    - $(your-fs-id.mount\_runner)<br/>... |
 | <a name="output_network_storage"></a> [network\_storage](#output\_network\_storage) | export of all desired folder directories |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

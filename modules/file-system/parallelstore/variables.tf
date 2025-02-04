@@ -24,6 +24,20 @@ variable "deployment_name" {
   type        = string
 }
 
+variable "daos_agent_config" {
+  description = "Additional configuration to be added to daos_config.yml"
+  type        = string
+  default     = ""
+  nullable    = false
+}
+
+variable "dfuse_environment" {
+  description = "Additional environment variables for DFuse process"
+  type        = map(string)
+  default     = {}
+  nullable    = false
+}
+
 variable "name" {
   description = "Name of parallelstore instance."
   type        = string
@@ -90,4 +104,34 @@ variable "import_destination_path" {
   description = "The name of local path to import data on parallelstore instance from GCS bucket."
   type        = string
   default     = null
+}
+
+variable "file_stripe" {
+  description = "The parallelstore stripe level for files."
+  type        = string
+  default     = null
+  validation {
+    condition = var.file_stripe == null ? true : contains([
+      "FILE_STRIPE_LEVEL_UNSPECIFIED",
+      "FILE_STRIPE_LEVEL_MIN",
+      "FILE_STRIPE_LEVEL_BALANCED",
+      "FILE_STRIPE_LEVEL_MAX",
+    ], var.file_stripe)
+    error_message = "var.file_stripe must be set to \"FILE_STRIPE_LEVEL_UNSPECIFIED\", \"FILE_STRIPE_LEVEL_MIN\", \"FILE_STRIPE_LEVEL_BALANCED\",  or \"FILE_STRIPE_LEVEL_MAX\""
+  }
+}
+
+variable "directory_stripe" {
+  description = "The parallelstore stripe level for directories."
+  type        = string
+  default     = null
+  validation {
+    condition = var.directory_stripe == null ? true : contains([
+      "DIRECTORY_STRIPE_LEVEL_UNSPECIFIED",
+      "DIRECTORY_STRIPE_LEVEL_MIN",
+      "DIRECTORY_STRIPE_LEVEL_BALANCED",
+      "DIRECTORY_STRIPE_LEVEL_MAX",
+    ], var.directory_stripe)
+    error_message = "var.directory_stripe must be set to \"DIRECTORY_STRIPE_LEVEL_UNSPECIFIED\", \"DIRECTORY_STRIPE_LEVEL_MIN\", \"DIRECTORY_STRIPE_LEVEL_BALANCED\",  or \"DIRECTORY_STRIPE_LEVEL_MAX\""
+  }
 }

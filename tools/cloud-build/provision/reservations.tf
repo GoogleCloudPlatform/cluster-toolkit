@@ -30,8 +30,8 @@ resource "google_compute_reservation" "c2standard60_us_west4_c" {
 }
 
 resource "google_compute_reservation" "n1standard8_with_tesla_t4_europe_west1_d" {
-  name        = "n1standard8-with-tesla-t4-europe-west1-d"
-  zone        = "europe-west1-d"
+  name        = "n1standard8-with-tesla-t4-europe-west1-c"
+  zone        = "europe-west1-c"
   description = local.reservation_description
 
   specific_reservation {

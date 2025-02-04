@@ -24,7 +24,7 @@ delete_image: false
 cli_deployment_vars:
   network_name_system: default
   subnetwork_name_system: default
-  region: us-east4
-  zone: us-east4-a
+  region: us-west1
+  zone: us-west1-a
   source_image_project_id: deeplearning-platform
-  source_image: dlvm-tcpd-cu120-648491853-ubuntu-2004-py310
+  source_image: dlvm-tcpd-cu120-677850957-ubuntu-2004-py310

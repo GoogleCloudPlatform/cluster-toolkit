@@ -21,6 +21,9 @@ locals {
   image_name_default = "${local.image_family}-${formatdate("YYYYMMDD't'hhmmss'z'", timestamp())}"
   image_name         = var.image_name != null ? var.image_name : local.image_name_default
 
+  # construct vm image name for use when getting logs
+  instance_name = "packer-${substr(uuidv4(), 0, 6)}"
+
   # default to explicit var.communicator, otherwise in-order: ssh/winrm/none
   shell_script_communicator      = length(var.shell_scripts) > 0 ? "ssh" : ""
   ansible_playbook_communicator  = length(var.ansible_playbooks) > 0 ? "ssh" : ""
@@ -96,6 +99,7 @@ source "googlecompute" "toolkit_image" {
   image_name                  = local.image_name
   image_family                = local.image_family
   image_labels                = local.labels
+  instance_name               = local.instance_name
   machine_type                = var.machine_type
   accelerator_type            = local.accelerator_type
   accelerator_count           = var.accelerator_count
@@ -189,12 +193,24 @@ build {
     }
   }
 
-  # if the jq command is present, this will print the image name to stdout
-  # if jq is not present, this exits silently with code 0
-  post-processor "shell-local" {
+  # If there is an error during image creation, print out command for getting packer VM logs
+  error-cleanup-provisioner "shell-local" {
+    environment_vars = [
+      "PRJ_ID=${var.project_id}",
+      "INST_NAME=${local.instance_name}",
+      "ZONE=${var.zone}",
+    ]
+    inline_shebang = "/bin/bash -e"
     inline = [
-      "command -v jq > /dev/null || exit 0",
-      "echo \"Image built: $(jq -r '.builds[-1].artifact_id' ${var.manifest_file} | cut -d ':' -f2)\"",
+      "type -P gcloud > /dev/null || exit 0",
+      "INST_ID=$(gcloud compute instances describe $INST_NAME --project $PRJ_ID --format=\"value(id)\" --zone=$ZONE)",
+      "echo 'Error building image try checking logs:'",
+      join(" ", ["echo \"gcloud logging --project $PRJ_ID read",
+        "'logName=(\\\"projects/$PRJ_ID/logs/GCEMetadataScripts\\\" OR \\\"projects/$PRJ_ID/logs/google_metadata_script_runner\\\") AND resource.labels.instance_id=$INST_ID'",
+        "--format=\\\"table(timestamp, resource.labels.instance_id, jsonPayload.message)\\\"",
+        "--order=asc\""
+        ]
+      )
     ]
   }
 }

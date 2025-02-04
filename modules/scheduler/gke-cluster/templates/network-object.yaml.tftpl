@@ -1,0 +1,11 @@
+---
+apiVersion: networking.gke.io/v1
+kind: Network
+metadata:
+  name: ${name}
+spec:
+  parametersRef:
+    group: networking.gke.io
+    kind: GKENetworkParamSet
+    name: ${name}
+  type: Device

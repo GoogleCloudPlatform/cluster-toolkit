@@ -1,0 +1,50 @@
+# Copyright 2024 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+# region, zone, nfs_ip, remote_mount_homefs, final_image_family must be defined
+# in build file with --extra-vars flag!
+test_name: a3m-cluster
+deployment_name: a3mc-{{ build }}
+slurm_cluster_name: "a3mc{{ build[0:4] }}"
+workspace: /workspace
+blueprint_yaml: "{{ workspace }}/examples/machine-learning/a3-megagpu-8g/slurm-a3mega-cluster.yaml"
+login_node: "{{ slurm_cluster_name }}-login-*"
+controller_node: "{{ slurm_cluster_name }}-controller"
+network: default
+post_deploy_tests:
+- test-validation/test-mounts.yml
+- test-validation/test-partitions.yml
+- test-validation/test-enroot.yml
+custom_vars:
+  partitions:
+  - a3mega
+  - debug
+  mounts:
+  - /home
+cli_deployment_vars:
+  network_name_system: default
+  subnetwork_name_system: default
+  region: "{{ region }}"
+  zone: "{{ zone }}"
+  server_ip_homefs: "{{ nfs_ip }}"
+  remote_mount_homefs: "{{ remote_mount_homefs }}"
+  slurm_cluster_name: "{{ slurm_cluster_name }}"
+  disk_size_gb: 200
+  a3mega_cluster_size: 2
+  enable_ops_agent: "true"
+  enable_nvidia_dcgm: "true"
+  a3mega_reservation_name: a3mega-reservation-0
+  final_image_family: "{{ final_image_family }}"

@@ -30,6 +30,10 @@ if [[ -z "${TIMEOUT}" ]]; then
 	exit 1
 fi
 
+if [[ -n "${GCLOUD_PATH}" ]]; then
+	export PATH="$GCLOUD_PATH:$PATH"
+fi
+
 echo "Waiting for startup: instance_name='${INSTANCE_NAME}', zone='${ZONE}', project_id='${PROJECT_ID}', timeout_seconds='${TIMEOUT}'"
 
 # Wrapper around grep that swallows the error status code 1
@@ -56,14 +60,29 @@ FINISH_LINE="startup-script exit status"
 # Match string for failures on the new guest agent
 FINISH_LINE_ERR="Script.*failed with error:"
 
+NON_FATAL_ERRORS=(
+	"Internal error"
+)
+
 until [[ now -gt deadline ]]; do
 	ser_log=$(
 		set -o pipefail
 		${fetch_cmd} 2>"${error_file}" |
 			c1grep "${FINISH_LINE}\|${FINISH_LINE_ERR}"
 	) || {
-		cat "${error_file}"
-		exit 1
+		err=$(cat "${error_file}")
+		echo "$err"
+		fatal_error="true"
+		for e in "${NON_FATAL_ERRORS[@]}"; do
+			if [[ $err = *"$e"* ]]; then
+				fatal_error="false"
+				break
+			fi
+		done
+
+		if [[ $fatal_error = "true" ]]; then
+			exit 1
+		fi
 	}
 	if [[ -n "${ser_log}" ]]; then break; fi
 	echo "Could not detect end of startup script. Sleeping."

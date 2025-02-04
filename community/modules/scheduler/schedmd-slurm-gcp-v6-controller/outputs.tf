@@ -19,7 +19,7 @@ output "slurm_cluster_name" {
 
 output "slurm_controller_instance" {
   description = "Compute instance of controller node"
-  value       = module.slurm_controller_instance.slurm_instances[0]
+  value       = google_compute_instance_from_template.controller
 }
 
 output "slurm_login_instances" {
@@ -36,6 +36,11 @@ output "instructions" {
   description = "Post deployment instructions."
   value       = <<-EOT
     To SSH to the controller (may need to add '--tunnel-through-iap'):
-      gcloud compute ssh ${module.slurm_controller_instance.instances_self_links[0]}
+      gcloud compute ssh ${google_compute_instance_from_template.controller.self_link}
+    
+    If you are using cloud ops agent with this deployment,
+    you can use the following command to see the logs for the entire cluster or any particular VM host:
+      gcloud logging read labels.cluster_name=${local.slurm_cluster_name}
+      gcloud logging read labels.hostname=${local.slurm_cluster_name}-controller
   EOT
 }

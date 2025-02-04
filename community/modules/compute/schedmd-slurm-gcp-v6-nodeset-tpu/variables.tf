@@ -13,15 +13,23 @@
 # limitations under the License.
 
 variable "node_count_static" {
-  description = "Number of nodes to be statically created."
+  description = <<-EOD
+    Number of worker nodes to be statically created. 
+    For larger TPU machines, there are multiple worker nodes required per machine (1 for every 8 cores).
+    See https://cloud.google.com/tpu/docs/v4#large-topologies, for more information about these machine types.
+    EOD
   type        = number
   default     = 0
 }
 
 variable "node_count_dynamic_max" {
-  description = "Maximum number of auto-scaling nodes allowed in this partition."
+  description = <<-EOD
+    Maximum number of auto-scaling worker nodes allowed in this partition. 
+    For larger TPU machines, there are multiple worker nodes required per machine (1 for every 8 cores).
+    See https://cloud.google.com/tpu/docs/v4#large-topologies, for more information about these machine types.
+    EOD
   type        = number
-  default     = 5
+  default     = 0
 }
 
 variable "name" {
@@ -51,6 +59,7 @@ variable "disable_public_ips" { # tflint-ignore: terraform_unused_declarations
 variable "node_type" {
   description = "Specify a node type to base the vm configuration upon it."
   type        = string
+  default     = ""
 }
 
 variable "accelerator_config" {
@@ -103,7 +112,7 @@ variable "data_disks" {
 }
 
 variable "docker_image" {
-  description = "The gcp container registry id docker image to use in the TPU vms, it defaults to gcr.io/schedmd-slurm-public/tpu:slurm-gcp-6-6-tf-<var.tf_version>"
+  description = "The gcp container registry id docker image to use in the TPU vms, it defaults to gcr.io/schedmd-slurm-public/tpu:slurm-gcp-6-8-tf-<var.tf_version>"
   type        = string
   default     = null
 }

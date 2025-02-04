@@ -26,6 +26,7 @@ resource "random_id" "resource_name_suffix" {
 resource "google_compute_global_address" "private_ip_alloc" {
   provider      = google-beta
   name          = "global-psconnect-ip-${random_id.resource_name_suffix.hex}"
+  project       = var.project_id
   purpose       = "VPC_PEERING"
   address_type  = "INTERNAL"
   network       = var.network_id

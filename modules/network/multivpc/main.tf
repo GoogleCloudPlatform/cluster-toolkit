@@ -24,7 +24,11 @@ locals {
   maximum_subnetworks   = pow(2, local.subnetwork_new_bits)
   additional_networks = [
     for vpc in module.vpcs :
-    merge(var.network_interface_defaults, { subnetwork = vpc.subnetwork_name, subnetwork_project = var.project_id })
+    merge(var.network_interface_defaults, {
+      network            = vpc.network_name
+      subnetwork         = vpc.subnetwork_name
+      subnetwork_project = var.project_id
+    })
   ]
 }
 
@@ -44,7 +48,7 @@ resource "terraform_data" "global_ip_cidr_suffix" {
 }
 
 module "vpcs" {
-  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/network/vpc?ref=v1.36.0&depth=1"
+  source = "../vpc"
 
   count = var.network_count
 
@@ -70,4 +74,5 @@ module "vpcs" {
   mtu                                    = var.mtu
   network_description                    = var.network_description
   network_routing_mode                   = var.network_routing_mode
+  network_profile                        = var.network_profile
 }

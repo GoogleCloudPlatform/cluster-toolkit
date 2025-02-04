@@ -45,23 +45,6 @@ Verify that your release of the Cluster Toolkit is 1.37.0 or later.
 gcluster --version
 ```
 
-The solution requires several Python packages to be available. We recommend
-installing them in a Python virtual environment:
-
-```shell
-python3 -m venv toolkit-a3
-source toolkit-a3/bin/activate
-pip3 install -r \
-    https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/6.5.13/scripts/requirements.txt
-```
-
-**Always** activate the environment before running any gcluster commands such as
-deploy or destroy.
-
-```shell
-source /absolute/path/to/toolkit-a3/bin/activate
-```
-
 ## Top-Level Design of Solution
 
 The solution is split into 3 Cluster Toolkit blueprints:

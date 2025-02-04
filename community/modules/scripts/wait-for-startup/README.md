@@ -74,6 +74,7 @@ No modules.
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
+| <a name="input_gcloud_path_override"></a> [gcloud\_path\_override](#input\_gcloud\_path\_override) | Directory of the gcloud executable to be used during cleanup | `string` | `""` | no |
 | <a name="input_instance_name"></a> [instance\_name](#input\_instance\_name) | Name of the instance we are waiting for (can be null if 'instance\_names' is not empty) | `string` | `null` | no |
 | <a name="input_instance_names"></a> [instance\_names](#input\_instance\_names) | A list of instance names we are waiting for, in addition to the one mentioned in 'instance\_name' (if any) | `list(string)` | `[]` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created | `string` | n/a | yes |

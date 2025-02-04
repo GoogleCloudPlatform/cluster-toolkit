@@ -39,7 +39,7 @@ import hashlib
 TO_SKIP = frozenset(["ofe-deployment"])
 
 # Seed for deterministic order of tests, change to other value to shuffle tests
-ORDER_SEED = b"Hakuna Matata"
+ORDER_SEED = b"What a wonderful phrase"
 
 def list_builds() -> list[str]:
     builds = [b[:-5] for b in glob.glob("*.yaml", root_dir="../daily-tests/builds/")]

@@ -18,15 +18,15 @@ deployment_name: "enter-{{ build }}"
 # Manually adding the slurm_cluster_name for use in node names, which filters
 # non-alphanumeric chars and is capped at 10 chars.
 slurm_cluster_name: "enter{{ build[0:5] }}"
-zone: europe-west1-d
+zone: europe-west4-c
 cli_deployment_vars:
   network_name: "{{ network }}"
-  region: europe-west1
+  region: europe-west4
   zone: "{{ zone }}"
-  gpu_zones: "[europe-west1-b,europe-west1-c,europe-west1-d]"
+  gpu_zones: "[europe-west4-a,europe-west4-b,europe-west4-c]"
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/examples/hpc-enterprise-slurm.yaml"
-network: "{{ test_name }}-net"
+network: "{{ deployment_name }}-net"
 
 # Note: Pattern matching in gcloud only supports 1 wildcard.
 login_node: "{{ slurm_cluster_name }}-slurm-login-*"

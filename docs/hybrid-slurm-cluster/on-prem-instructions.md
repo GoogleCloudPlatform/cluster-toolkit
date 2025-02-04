@@ -39,9 +39,9 @@ detail, as well as how to customize many of these assumptions to fit your needs.
 deployments in their [hybrid.md] documentation.
 
 [hybridmodule]: ../../community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid/README.md
-[slurm-gcp]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/5.12.0
+[slurm-gcp]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/5.12.2
 [slurm\_controller\_hybrid]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/master/terraform/slurm_cluster/modules/slurm_controller_hybrid
-[hybrid.md]: https://github.com/GoogleCloudPlatform/slurm-gcp/blob/5.12.0/docs/hybrid.md
+[hybrid.md]: https://github.com/GoogleCloudPlatform/slurm-gcp/blob/5.12.2/docs/hybrid.md
 
 ### NFS Mounts
 
@@ -142,14 +142,14 @@ a service account, see the [Setup Authentication](#setup-authentication) section
 and the Google Cloud documentation on
 [Service Accounts](https://cloud.google.com/iam/docs/service-accounts).
 
-#### Build ghpc
+#### Build gcluster
 
-Before you begin, ensure that you have built the `ghpc` tool in the Cluster Toolkit.
+Before you begin, ensure that you have built the `gcluster` tool in the Cluster Toolkit.
 For more information see the [README.md](../../README.md#quickstart) Quickstart.
 
-The commands in these instructions assume the ghpc binary is installed in a
+The commands in these instructions assume the gcluster binary is installed in a
 directory represented in the PATH environment variable. To ensure this is the
-case, run `make install` after building `ghpc`:
+case, run `make install` after building `gcluster`:
 
 ```shell
 make
@@ -235,12 +235,12 @@ image created with slurm 21.08.8:
     partition_name: compute
 ```
 
-[slurmgcppacker]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/5.12.0/packer
-[example.pkrvars.hcl]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/5.12.0/packer/example.pkrvars.hcl
-[slurmversion]: https://github.com/GoogleCloudPlatform/slurm-gcp/blob/5.12.0/packer/variables.pkr.hcl#L97
-[`service_account_scopes`]: https://github.com/GoogleCloudPlatform/slurm-gcp/blob/5.12.0/packer/variables.pkr.hcl#L166
-[`munge_user`]: https://github.com/GoogleCloudPlatform/slurm-gcp/blob/5.12.0/ansible/roles/munge/defaults/main.yml#L17
-[`slurm_user`]: https://github.com/GoogleCloudPlatform/slurm-gcp/blob/5.12.0/ansible/roles/slurm/defaults/main.yml#L31
+[slurmgcppacker]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/5.12.2/packer
+[example.pkrvars.hcl]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/5.12.2/packer/example.pkrvars.hcl
+[slurmversion]: https://github.com/GoogleCloudPlatform/slurm-gcp/blob/5.12.2/packer/variables.pkr.hcl#L97
+[`service_account_scopes`]: https://github.com/GoogleCloudPlatform/slurm-gcp/blob/5.12.2/packer/variables.pkr.hcl#L166
+[`munge_user`]: https://github.com/GoogleCloudPlatform/slurm-gcp/blob/5.12.2/ansible/roles/munge/defaults/main.yml#L17
+[`slurm_user`]: https://github.com/GoogleCloudPlatform/slurm-gcp/blob/5.12.2/ansible/roles/slurm/defaults/main.yml#L31
 
 ## On Premise Setup
 

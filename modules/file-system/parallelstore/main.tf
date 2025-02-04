@@ -30,15 +30,19 @@ locals {
   client_install_runner = {
     "type"        = "shell"
     "source"      = "${path.module}/scripts/install-daos-client.sh"
-    "args"        = "--access_points=\"${local.access_points}\""
     "destination" = "install_daos_client.sh"
   }
 
   mount_runner = {
-    "type"        = "shell"
-    "source"      = "${path.module}/scripts/mount-daos.sh"
-    "args"        = "--local_mount=\"${var.local_mount}\" --mount_options=\"${var.mount_options}\""
-    "destination" = "mount_daos.sh"
+    "type" = "shell"
+    "content" = templatefile("${path.module}/templates/mount-daos.sh.tftpl", {
+      access_points     = local.access_points
+      daos_agent_config = var.daos_agent_config
+      dfuse_environment = var.dfuse_environment
+      local_mount       = var.local_mount
+      mount_options     = join(" ", [for opt in split(",", var.mount_options) : "--${opt}"])
+    })
+    "destination" = "mount_filesystem${replace(var.local_mount, "/", "_")}.sh"
   }
 }
 
@@ -47,14 +51,16 @@ resource "random_id" "resource_name_suffix" {
 }
 
 resource "google_parallelstore_instance" "instance" {
-  instance_id  = local.id
-  location     = var.zone
-  capacity_gib = var.size_gb
-  network      = var.network_id
+  project                = var.project_id
+  instance_id            = local.id
+  location               = var.zone
+  capacity_gib           = var.size_gb
+  network                = var.network_id
+  file_stripe_level      = var.file_stripe
+  directory_stripe_level = var.directory_stripe
 
   labels = local.labels
 
-  provider   = google-beta
   depends_on = [var.private_vpc_connection_peering]
 }
 

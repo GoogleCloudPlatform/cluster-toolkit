@@ -40,16 +40,17 @@ resource "random_uuid" "cluster_id" {
 ##################
 
 locals {
+  tp = "${local.bucket_dir}/" # prefix to trim from the bucket path to get a "file name"
+
   config = {
-    enable_slurm_gcp_plugins = var.enable_slurm_gcp_plugins
-    enable_bigquery_load     = var.enable_bigquery_load
-    cloudsql_secret          = var.cloudsql_secret
-    cluster_id               = random_uuid.cluster_id.result
-    project                  = var.project_id
-    slurm_cluster_name       = var.slurm_cluster_name
-    bucket_path              = local.bucket_path
-    enable_debug_logging     = var.enable_debug_logging
-    extra_logging_flags      = var.extra_logging_flags
+    enable_bigquery_load = var.enable_bigquery_load
+    cloudsql_secret      = var.cloudsql_secret
+    cluster_id           = random_uuid.cluster_id.result
+    project              = var.project_id
+    slurm_cluster_name   = var.slurm_cluster_name
+    bucket_path          = local.bucket_path
+    enable_debug_logging = var.enable_debug_logging
+    extra_logging_flags  = var.extra_logging_flags
 
     # storage
     disable_default_mounts = var.disable_default_mounts
@@ -67,15 +68,6 @@ locals {
     epilog_scripts   = [for k, v in google_storage_bucket_object.epilog_scripts : k]
     cloud_parameters = var.cloud_parameters
 
-    partitions = { for p in var.partitions : p.partition_name => p }
-    nodeset = {
-      for n in var.nodeset : n.nodeset_name => merge(n, {
-        instance_properties = jsondecode(n.instance_properties_json)
-      })
-    }
-    nodeset_dyn = { for n in var.nodeset_dyn : n.nodeset_name => n }
-    nodeset_tpu = { for n in var.nodeset_tpu[*].nodeset : n.nodeset_name => n }
-
     # hybrid
     hybrid                  = var.enable_hybrid
     google_app_cred_path    = var.enable_hybrid ? local.google_app_cred_path : null
@@ -91,14 +83,33 @@ locals {
     slurmdbd_conf_tpl = file(coalesce(var.slurmdbd_conf_tpl, "${local.etc_dir}/slurmdbd.conf.tpl"))
     slurm_conf_tpl    = file(coalesce(var.slurm_conf_tpl, "${local.etc_dir}/slurm.conf.tpl"))
     cgroup_conf_tpl   = file(coalesce(var.cgroup_conf_tpl, "${local.etc_dir}/cgroup.conf.tpl"))
-    jobsubmit_lua_tpl = file(coalesce(var.job_submit_lua_tpl, "${local.etc_dir}/job_submit.lua.tpl"))
 
     # Providers
     endpoint_versions = var.endpoint_versions
-  }
 
-  config_yaml        = "config.yaml"
-  config_yaml_bucket = format("%s/%s", local.bucket_dir, local.config_yaml)
+    # Extra-files MD5 hashes
+    # Makes config file creation depend on the files
+    # Allows for informed updates & checks on slurmsync side
+    slurm_gcp_scripts_md5 = google_storage_bucket_object.devel.md5hash,
+    controller_startup_scripts_md5 = {
+      for o in values(google_storage_bucket_object.controller_startup_scripts) : trimprefix(o.name, local.tp) => o.md5hash
+    }
+    compute_startup_scripts_md5 = {
+      for o in values(google_storage_bucket_object.compute_startup_scripts) : trimprefix(o.name, local.tp) => o.md5hash
+    }
+    nodeset_startup_scripts_md5 = {
+      for o in values(google_storage_bucket_object.nodeset_startup_scripts) : trimprefix(o.name, local.tp) => o.md5hash
+    }
+    login_startup_scripts_md5 = {
+      for o in values(google_storage_bucket_object.login_startup_scripts) : trimprefix(o.name, local.tp) => o.md5hash
+    }
+    prolog_scripts_md5 = {
+      for o in values(google_storage_bucket_object.prolog_scripts) : trimprefix(o.name, local.tp) => o.md5hash
+    }
+    epilog_scripts_md5 = {
+      for o in values(google_storage_bucket_object.epilog_scripts) : trimprefix(o.name, local.tp) => o.md5hash
+    }
+  }
 
   x_nodeset         = toset(var.nodeset[*].nodeset_name)
   x_nodeset_dyn     = toset(var.nodeset_dyn[*].nodeset_name)
@@ -128,8 +139,42 @@ locals {
 
 resource "google_storage_bucket_object" "config" {
   bucket  = data.google_storage_bucket.this.name
-  name    = local.config_yaml_bucket
+  name    = "${local.bucket_dir}/config.yaml"
   content = yamlencode(local.config)
+}
+
+resource "google_storage_bucket_object" "parition_config" {
+  for_each = { for p in var.partitions : p.partition_name => p }
+
+  bucket  = data.google_storage_bucket.this.name
+  name    = "${local.bucket_dir}/partition_configs/${each.key}.yaml"
+  content = yamlencode(each.value)
+}
+
+resource "google_storage_bucket_object" "nodeset_config" {
+  for_each = { for ns in var.nodeset : ns.nodeset_name => merge(ns, {
+    instance_properties = jsondecode(ns.instance_properties_json)
+  }) }
+
+  bucket  = data.google_storage_bucket.this.name
+  name    = "${local.bucket_dir}/nodeset_configs/${each.key}.yaml"
+  content = yamlencode(each.value)
+}
+
+resource "google_storage_bucket_object" "nodeset_dyn_config" {
+  for_each = { for ns in var.nodeset_dyn : ns.nodeset_name => ns }
+
+  bucket  = data.google_storage_bucket.this.name
+  name    = "${local.bucket_dir}/nodeset_dyn_configs/${each.key}.yaml"
+  content = yamlencode(each.value)
+}
+
+resource "google_storage_bucket_object" "nodeset_tpu_config" {
+  for_each = { for n in var.nodeset_tpu[*].nodeset : n.nodeset_name => n }
+
+  bucket  = data.google_storage_bucket.this.name
+  name    = "${local.bucket_dir}/nodeset_tpu_configs/${each.key}.yaml"
+  content = yamlencode(each.value)
 }
 
 #########
@@ -255,17 +300,6 @@ data "local_file" "setup_external" {
 }
 
 locals {
-  checksum = md5(join("", flatten([
-    google_storage_bucket_object.config.md5hash,
-    google_storage_bucket_object.devel.md5hash,
-    [for k, f in google_storage_bucket_object.controller_startup_scripts : f.md5hash],
-    [for k, f in google_storage_bucket_object.compute_startup_scripts : f.md5hash],
-    [for k, f in google_storage_bucket_object.nodeset_startup_scripts : f.md5hash],
-    [for k, f in google_storage_bucket_object.login_startup_scripts : f.md5hash],
-    [for k, f in google_storage_bucket_object.prolog_scripts : f.md5hash],
-    [for k, f in google_storage_bucket_object.epilog_scripts : f.md5hash]
-  ])))
-
   external_epilog = [{
     filename = "z_external_epilog.sh"
     content  = data.local_file.external_epilog.content

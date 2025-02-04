@@ -17,6 +17,7 @@ tags:
 - m.gke-cluster
 - m.gke-job-template
 - m.gke-node-pool
+- m.service-account
 - m.vpc
 - gke
 
@@ -49,7 +50,7 @@ steps:
     echo '  - id: ubuntu_pool'                                         >> $${SG_EXAMPLE}
     echo '    source: modules/compute/gke-node-pool'         >> $${SG_EXAMPLE}
     echo '    use: [gke_cluster]'                                      >> $${SG_EXAMPLE}
-    echo '    settings: {name: ubuntu, image_type: UBUNTU_CONTAINERD}' >> $${SG_EXAMPLE}
+    echo '    settings: {name: ubuntu, image_type: UBUNTU_CONTAINERD, host_maintenance_interval: AS_NEEDED}' >> $${SG_EXAMPLE}
 
     # avoids conflict with other tests
     sed -i "s/gke-subnet/gke-subnet-$${BUILD_ID_SHORT}/" $${SG_EXAMPLE}

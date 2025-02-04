@@ -60,7 +60,7 @@ locals {
     "type"        = "shell"
     "content"     = lookup(local.install_scripts, var.fs_type, "echo 'skipping: client_install_runner not yet supported for ${var.fs_type}'")
     "destination" = "install_filesystem_client${replace(var.local_mount, "/", "_")}.sh"
-    "args"        = var.fs_type == "daos" ? "--access_points=\"${var.remote_mount}\"" : ""
+    "args"        = ""
   }
 
   mount_vanilla_supported_fstype = ["lustre", "nfs"]
@@ -83,9 +83,15 @@ locals {
   }
 
   mount_runner_daos = {
-    "type"        = "shell"
-    "content"     = file("${path.module}/scripts/mount-daos.sh")
-    "args"        = "--local_mount=\"${var.local_mount}\" --mount_options=\"${var.mount_options}\""
+    "type" = "shell"
+    "content" = templatefile("${path.module}/templates/mount-daos.sh.tftpl", {
+      access_points     = var.remote_mount
+      daos_agent_config = var.parallelstore_options.daos_agent_config
+      dfuse_environment = var.parallelstore_options.dfuse_environment
+      local_mount       = var.local_mount
+      # avoid passing "--" as mount option to dfuse
+      mount_options = length(var.mount_options) == 0 ? "" : join(" ", [for opt in split(",", var.mount_options) : "--${opt}"])
+    })
     "destination" = "mount_filesystem${replace(var.local_mount, "/", "_")}.sh"
   }
 

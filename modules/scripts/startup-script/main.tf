@@ -44,7 +44,11 @@ locals {
     host_name_prefix = var.configure_ssh_host_patterns
   }
 
-  prefix_file = "/tmp/prefix_file.json"
+  prefix_file                  = "/tmp/prefix_file.json"
+  ansible_docker_settings_file = "/tmp/ansible_docker_settings.json"
+
+  docker_config    = try(jsondecode(var.docker.daemon_config), {})
+  docker_data_root = try(local.docker_config.data-root, null)
 
   configure_ssh_runners = local.configure_ssh ? [
     {
@@ -89,12 +93,29 @@ locals {
     }
   ]
 
-  docker_runner = !var.install_docker ? [] : [
+  rdma_runner = !var.install_cloud_rdma_drivers ? [] : [
+    {
+      type        = "shell"
+      source      = "${path.module}/files/install_cloud_rdma_drivers.sh"
+      destination = "install_cloud_rdma_drivers.sh"
+    }
+  ]
+
+  docker_runner = !var.docker.enabled ? [] : [
+    {
+      type        = "data"
+      destination = local.ansible_docker_settings_file
+      content = jsonencode({
+        enable_docker_world_writable = var.docker.world_writable
+        docker_daemon_config         = var.docker.daemon_config
+        docker_data_root             = local.docker_data_root
+      })
+    },
     {
       type        = "ansible-local"
       destination = "install_docker.yml"
       content     = file("${path.module}/files/install_docker.yml")
-      args        = "-e enable_docker_world_writable=${var.enable_docker_world_writable}"
+      args        = "-e \"@${local.ansible_docker_settings_file}\""
     },
   ]
 
@@ -113,7 +134,7 @@ locals {
   ]
 
   supplied_ansible_runners = anytrue([for r in var.runners : r.type == "ansible-local"])
-  has_ansible_runners      = anytrue([local.supplied_ansible_runners, local.configure_ssh, var.install_docker, local.local_ssd_filesystem_enabled])
+  has_ansible_runners      = anytrue([local.supplied_ansible_runners, local.configure_ssh, var.docker.enabled, local.local_ssd_filesystem_enabled])
   install_ansible          = coalesce(var.install_ansible, local.has_ansible_runners)
   ansible_installer = local.install_ansible ? [{
     type        = "shell"
@@ -132,11 +153,12 @@ locals {
     local.warnings,
     local.hotfix_runner,
     local.proxy_runner,
+    local.rdma_runner,
     local.monitoring_agent_installer,
     local.ansible_installer,
+    local.raid_setup, # order RAID early to ensure filesystem is ready for subsequent runners
     local.configure_ssh_runners,
     local.docker_runner,
-    local.raid_setup,
     var.runners
   )
 
@@ -188,6 +210,19 @@ locals {
   }
 }
 
+check "health_check" {
+  assert {
+    condition     = local.docker_config == {}
+    error_message = <<-EOT
+      This message is only a warning. The Toolkit performs no validation of the
+      Docker daemon configuration. VM startup scripts will fail if the file is not
+      a valid Docker JSON configuration. Please review the Docker documentation:
+
+      https://docs.docker.com/engine/daemon/
+    EOT
+  }
+}
+
 resource "random_id" "resource_name_suffix" {
   byte_length = 4
 }
@@ -224,10 +259,6 @@ resource "google_storage_bucket_object" "scripts" {
     precondition {
       condition     = !(var.install_cloud_ops_agent && var.install_stackdriver_agent)
       error_message = "Only one of var.install_stackdriver_agent or var.install_cloud_ops_agent can be set. Stackdriver is recommended for best performance."
-    }
-    precondition {
-      condition     = !var.enable_docker_world_writable || var.install_docker
-      error_message = "If var.enable_docker_world_writable is set to true, var.install_docker must also be set to true."
     }
   }
 }

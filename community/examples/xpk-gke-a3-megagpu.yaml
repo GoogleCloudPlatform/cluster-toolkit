@@ -1,0 +1,137 @@
+# Copyright 2024 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: xpk-gke-a3-megagpu
+
+vars:
+  project_id:  ## Set GCP Project ID Here ##
+  deployment_name: xpk-gke-a3-megagpu
+  region: us-central1
+  zone: us-central1-c
+
+  # Cidr block containing the IP of the machine calling terraform.
+  # The following line must be updated for this example to work.
+  authorized_cidr: <your-ip-address>/32
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: network1
+    source: modules/network/vpc
+    settings:
+      subnetwork_name: xpk-gke-a3-megagpu-subnet
+      mtu: 8244
+      secondary_ranges_list:
+      - subnetwork_name: xpk-gke-a3-megagpu-subnet
+        ranges:
+        - range_name: pods
+          ip_cidr_range: 10.4.0.0/14
+        - range_name: services
+          ip_cidr_range: 10.0.32.0/20
+
+  - id: gpunets
+    source: modules/network/multivpc
+    settings:
+      network_name_prefix: $(vars.deployment_name)-gpunet
+      global_ip_address_range: 192.169.0.0/16
+      network_count: 8
+      subnetwork_cidr_suffix: 24
+      mtu: 8244
+
+  - id: gke_cluster
+    source: modules/scheduler/gke-cluster
+    use: [network1, gpunets]
+    settings:
+      enable_private_endpoint: false
+      master_authorized_networks:
+      - cidr_block: $(vars.authorized_cidr)  # Allows your machine run kubectl command. It's required for the multi-network setup.
+        display_name: "kubectl-access-network"
+      system_node_pool_machine_type: "e2-standard-32"
+    outputs: [instructions]
+
+  - id: group_placement_0
+    source: modules/compute/resource-policy
+    settings:
+      name: $(vars.deployment_name)-gp-np-0
+      group_placement_max_distance: 2
+
+  - id: group_placement_1
+    source: modules/compute/resource-policy
+    settings:
+      name: $(vars.deployment_name)-gp-np-1
+      group_placement_max_distance: 2
+
+  - id: system_pool
+    source: modules/compute/gke-node-pool
+    use: [gke_cluster]
+    settings:
+      name: system-pool
+      machine_type: "e2-standard-16"
+      autoscaling_total_min_nodes: 2
+      autoscaling_total_max_nodes: 8
+      initial_node_count: 2
+      zones: [$(vars.zone)]
+      host_maintenance_interval: PERIODIC
+    outputs: [instructions]
+
+  - id: a3_megagpu_pool_np_0
+    source: modules/compute/gke-node-pool
+    use: [gke_cluster, gpunets, group_placement_0]
+    settings:
+      name: a3-megagpu-pool-np-0  # xpk naming scheme
+      machine_type: a3-megagpu-8g
+      autoscaling_total_min_nodes: 2
+      autoscaling_total_max_nodes: 150
+      initial_node_count: 2
+      zones: [$(vars.zone)]
+      host_maintenance_interval: PERIODIC
+    outputs: [instructions]
+
+  - id: a3_megagpu_pool_np_1
+    source: modules/compute/gke-node-pool
+    use: [gke_cluster, gpunets, group_placement_1]
+    settings:
+      name: a3-megagpu-pool-np-1  # xpk naming scheme
+      machine_type: a3-megagpu-8g
+      autoscaling_total_min_nodes: 2
+      autoscaling_total_max_nodes: 150
+      initial_node_count: 2
+      zones: [$(vars.zone)]
+      host_maintenance_interval: PERIODIC
+    outputs: [instructions]
+
+  - id: workload_component_install
+    source: modules/management/kubectl-apply
+    use: [gke_cluster]
+    settings:
+      kueue:
+        install: true
+        config_path: $(ghpc_stage("xpk-gke-a3-megagpu-files"))/kueue-xpk-configuration.yaml.tftpl
+        config_template_vars: {num_chips: "32"}
+      jobset:
+        install: true
+
+  - id: topology_aware_scheduler_install
+    source: community/modules/compute/gke-topology-scheduler
+    use: [gke_cluster]
+
+  - id: workload_configmap
+    source: modules/management/kubectl-apply
+    use: [gke_cluster]
+    settings:
+      apply_manifests:
+      - source: $(ghpc_stage("xpk-gke-a3-megagpu-files"))/config-map.yaml.tftpl
+        template_vars: {name: "$(vars.deployment_name)-resources-configmap", num_nodes: "4"}

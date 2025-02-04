@@ -48,7 +48,8 @@ printf "####################\n#### Installing required packages\n###############
 dnf install -y epel-release
 dnf update -y --security
 dnf config-manager --add-repo https://rpm.releases.hashicorp.com/RHEL/hashicorp.repo
-dnf install -y terraform-1.4.6
+# dnf install -y terraform-1.4.6
+dnf install -y terraform
 dnf install --best -y google-cloud-sdk nano make gcc python38-devel unzip git \
 	rsync wget nginx bind-utils policycoreutils-python-utils \
 	packer supervisor python3-certbot-nginx jq
@@ -76,8 +77,8 @@ EOL
 
 dnf install -y grafana
 
-# Packages for https://github.com/GoogleCloudPlatform/cluster-toolkit/tree/main/community/modules/scheduler/schedmd-slurm-gcp-v5-controller#input_enable_cleanup_compute
 pip3.8 install google-api-python-client \
+	google-cloud-artifact-registry \
 	google-cloud-secret-manager \
 	google.cloud.pubsub \
 	pyyaml addict httplib2

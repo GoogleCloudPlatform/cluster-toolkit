@@ -112,18 +112,56 @@ EOT
   default = []
 }
 
-variable "enable_docker_world_writable" {
-  description = "Configure Docker daemon to be writable by all users (if var.install_docker is set to true)."
-  type        = bool
-  default     = false
-  nullable    = false
+variable "docker" {
+  description = "Install and configure Docker"
+  type = object({
+    enabled        = optional(bool, false)
+    world_writable = optional(bool, false)
+    daemon_config  = optional(string, "")
+  })
+  default = {
+    enabled = false
+  }
+
+  validation {
+    condition     = !coalesce(var.docker.world_writable) || var.docker.enabled
+    error_message = "var.docker.world_writable should only be set if var.docker.enabled is set to true"
+  }
+
+  validation {
+    condition     = !can(coalesce(var.docker.daemon_config)) || var.docker.enabled
+    error_message = "var.docker.daemon_config should only be set if var.docker.enabled is set to true"
+  }
+
+  validation {
+    condition     = !can(coalesce(var.docker.daemon_config)) || can(jsondecode(var.docker.daemon_config))
+    error_message = "var.docker.daemon_config should be set to a valid Docker daemon JSON configuration"
+  }
+
 }
 
-variable "install_docker" {
-  description = "Install Docker command line tool and daemon."
+# tflint-ignore: terraform_unused_declarations
+variable "enable_docker_world_writable" {
+  description = "DEPRECATED: use var.docker"
   type        = bool
-  default     = false
-  nullable    = false
+  default     = null
+
+  validation {
+    condition     = var.enable_docker_world_writable == null
+    error_message = "The variable enable_docker_world_writable has been removed. Use var.docker instead"
+  }
+}
+
+# tflint-ignore: terraform_unused_declarations
+variable "install_docker" {
+  description = "DEPRECATED: use var.docker."
+  type        = bool
+  default     = null
+
+  validation {
+    condition     = var.install_docker == null
+    error_message = "The variable install_docker has been removed. Use var.docker instead"
+  }
 }
 
 variable "local_ssd_filesystem" {
@@ -223,4 +261,10 @@ variable "http_no_proxy" {
   type        = string
   default     = ".google.com,.googleapis.com,metadata.google.internal,localhost,127.0.0.1"
   nullable    = false
+}
+
+variable "install_cloud_rdma_drivers" {
+  description = "If true, will install and reload Cloud RDMA drivers. Currently only supported on Rocky Linux 8."
+  type        = bool
+  default     = false
 }

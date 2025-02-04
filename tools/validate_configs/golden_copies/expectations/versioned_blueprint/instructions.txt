@@ -1,0 +1,23 @@
+Advanced Deployment Instructions
+================================
+
+Terraform group 'primary' was successfully created in directory golden_copy_deployment/primary
+To deploy, run the following commands:
+
+terraform -chdir=golden_copy_deployment/primary init
+terraform -chdir=golden_copy_deployment/primary validate
+terraform -chdir=golden_copy_deployment/primary apply
+
+Destroying infrastructure when no longer needed
+===============================================
+
+Automated
+---------
+
+gcluster destroy golden_copy_deployment
+
+Advanced / Manual
+-----------------
+Infrastructure should be destroyed in reverse order of creation:
+
+terraform -chdir=golden_copy_deployment/primary destroy

@@ -20,13 +20,16 @@ blueprint_name: a3mega-cluster
 vars:
   deployment_name: a3mega-cluster
   a3mega_partition_name: a3mega
-  enable_placement: false
+  a3mega_maintenance_interval: ""
   remote_mount_homefs: /nfsshare
   local_mount_homefs: /home
   instance_image_custom: true
   instance_image:
     family: $(vars.final_image_family)
     project: $(vars.project_id)
+  enable_login_public_ips: true
+  enable_controller_public_ips: true
+  localssd_mountpoint: /mnt/localssd
 
 deployment_groups:
 - group: cluster
@@ -86,37 +89,41 @@ deployment_groups:
       # Failure to do will result in VMs that lose data and do not automatically
       # mount local SSD filesystems
       local_ssd_filesystem:
-        mountpoint: /mnt/localssd
-        permissions: "0755" # must quote numeric filesystem permissions!
+        mountpoint: $(vars.localssd_mountpoint)
+        permissions: "1777" # must quote numeric filesystem permissions!
+      # Docker was successfully installed in the image, this configures it
+      # to use the A3-specific local SSD volumes to store container images
+      docker:
+        enabled: true
+        world_writable: true
+        daemon_config: |
+          {
+            "data-root": "$(vars.localssd_mountpoint)/docker"
+          }
       runners:
-      - type: shell
-        destination: setup_aperture.sh
+      - type: ansible-local
+        destination: slurm_aperture.yml
         content: |
-          #!/bin/bash
-          MAX_APERTURE_RETRIES=10
-          aperture_retries=0
-
-          until lspci -nn -D | grep -q '1ae0:0084' || [ $aperture_retries -eq $MAX_APERTURE_RETRIES ]; do
-            echo "\$(date): APERTURE devices not yet fully available (attempt $aperture_retries/$MAX_APERTURE_RETRIES). Retrying in 5 seconds..."
-            sleep 5
-            aperture_retries=\$((aperture_retries + 1))
-          done
-
-          if [ $aperture_retries -eq $MAX_APERTURE_RETRIES ]; then
-            echo "\$(date): ERROR: APERTURE devices failed to initialize after $MAX_APERTURE_RETRIES retries."
-            # Consider taking additional error-handling actions
-            exit 0
-          fi
-
-          echo "\$(date): Aperture devices ready!"
-          lspci -nn -D | grep '1ae0:0084' | awk '{print $1}' | xargs --no-run-if-empty -I {} -n 1 mkdir -p /dev/aperture_devices/{}
-          lspci -nn -D | grep '1ae0:0084' | awk '{print $1}' | xargs --no-run-if-empty -I {} -n 1 umount -f /dev/aperture_devices/{} || true
-          lspci -nn -D | grep '1ae0:0084' | awk '{print $1}' | xargs --no-run-if-empty -I {} -n 1 mount --bind /sys/bus/pci/devices/{} /dev/aperture_devices/{}
-          if [ -d /dev/aperture_devices ]; then
-              chmod -R a+r /dev/aperture_devices/
-              chmod a+rw /dev/aperture_devices/*/resource*
-          fi
-          echo "\$(date): Aperture devices mounted!"
+          ---
+          - name: Configure Slurm to depend upon aperture devices
+            hosts: all
+            become: true
+            vars: {}
+            tasks:
+            - name: Ensure slurmd starts after aperture devices are ready
+              ansible.builtin.copy:
+                dest: /etc/systemd/system/slurmd.service.d/aperture.conf
+                owner: root
+                group: root
+                mode: 0o644
+                content: |
+                  [Service]
+                  ExecCondition=/usr/bin/test -d /dev/aperture_devices/
+              notify: Reload SystemD
+            handlers:
+            - name: Reload SystemD
+              ansible.builtin.systemd:
+                daemon_reload: true
       - type: ansible-local
         destination: enable_dcgm.yml
         content: |
@@ -173,7 +180,8 @@ deployment_groups:
       disk_type: pd-ssd
       machine_type: a3-megagpu-8g
       enable_public_ips: false
-      enable_smt: true
+      advanced_machine_features:
+        threads_per_core: null # Use platform default value
       node_conf:
         CoresPerSocket: 52
         ThreadsPerCore: 2
@@ -218,6 +226,8 @@ deployment_groups:
           chmod 0755 "${SLURM_ROOT}/scripts/rxdm"
           ln -s "${SLURM_ROOT}/scripts/rxdm" "${SLURM_ROOT}/partition-$(vars.a3mega_partition_name)-prolog_slurmd.d/rxdm.prolog_slurmd"
           ln -s "${SLURM_ROOT}/scripts/rxdm" "${SLURM_ROOT}/partition-$(vars.a3mega_partition_name)-epilog_slurmd.d/rxdm.epilog_slurmd"
+          # Uncomment the line below to enable epilog that will check health of GPUs and drain node if problem is detected.
+          # ln -s "/slurm/scripts/tools/gpu-test" "${SLURM_ROOT}/partition-$(vars.a3mega_partition_name)-epilog_slurmd.d/gpu-test.epilog_slurmd"
       - type: shell
         destination: reset_enroot.sh
         content: |
@@ -234,7 +244,6 @@ deployment_groups:
       name_prefix: login
       disk_type: pd-balanced
       machine_type: c2-standard-4
-      enable_login_public_ips: false
 
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
@@ -250,7 +259,6 @@ deployment_groups:
       enable_cleanup_compute: true
       enable_external_prolog_epilog: true
       slurm_conf_tpl: modules/embedded/community/modules/scheduler/schedmd-slurm-gcp-v6-controller/etc/long-prolog-slurm.conf.tpl
-      enable_controller_public_ips: false
       controller_startup_script: $(controller_startup.startup_script)
       login_startup_script: |
         #!/bin/bash

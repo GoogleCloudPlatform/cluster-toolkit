@@ -315,6 +315,31 @@ func (s *zeroSuite) TestCheckBlueprintName(c *C) {
 	c.Check(errors.As(bp.checkBlueprintName(), &e), Equals, true)
 }
 
+func (s *zeroSuite) TestCheckToolkitModulesUrlAndVersion(c *C) {
+	bp := Blueprint{}
+	var e HintError
+
+	// Are toolkit_modules_url and toolkit_modules_version both provided?
+	bp.ToolkitModulesURL = "github.com/GoogleCloudPlatform/cluster-toolkit"
+	bp.ToolkitModulesVersion = "v1.15.0"
+	c.Check(bp.checkToolkitModulesUrlAndVersion(), IsNil)
+
+	// Are toolkit_modules_url and toolkit_modules_version both empty?
+	bp.ToolkitModulesURL = ""
+	bp.ToolkitModulesVersion = ""
+	c.Check(bp.checkToolkitModulesUrlAndVersion(), IsNil)
+
+	// Is toolkit_modules_url provided and toolkit_modules_version empty?
+	bp.ToolkitModulesURL = "github.com/GoogleCloudPlatform/cluster-toolkit"
+	bp.ToolkitModulesVersion = ""
+	c.Check(errors.As(bp.checkToolkitModulesUrlAndVersion(), &e), Equals, true)
+
+	// Is toolkit_modules_version provided and toolkit_modules_url empty?
+	bp.ToolkitModulesURL = ""
+	bp.ToolkitModulesVersion = "v1.15.0"
+	c.Check(errors.As(bp.checkToolkitModulesUrlAndVersion(), &e), Equals, true)
+}
+
 func (s *zeroSuite) TestNewBlueprint(c *C) {
 	bp := Blueprint{
 		Vars: NewDict(map[string]cty.Value{
@@ -512,9 +537,6 @@ func (s *zeroSuite) TestCheckMovedModules(c *C) {
 
 	// embedded moved
 	c.Check(checkMovedModule("community/modules/scheduler/cloud-batch-job"), NotNil)
-
-	// local moved
-	c.Assert(checkMovedModule("./community/modules/scheduler/cloud-batch-job"), NotNil)
 }
 
 func (s *zeroSuite) TestCheckStringLiteral(c *C) {

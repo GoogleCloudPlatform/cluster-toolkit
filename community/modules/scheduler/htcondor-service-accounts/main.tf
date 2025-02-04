@@ -21,7 +21,7 @@
 # require them
 
 module "access_point_service_account" {
-  source = "github.com/GoogleCloudPlatform/hpc-toolkit//community/modules/project/service-account?ref=v1.36.0&depth=1"
+  source = "../../../../community/modules/project/service-account"
 
   project_id      = var.project_id
   display_name    = "HTCondor Access Point"
@@ -31,7 +31,7 @@ module "access_point_service_account" {
 }
 
 module "execute_point_service_account" {
-  source = "github.com/GoogleCloudPlatform/hpc-toolkit//community/modules/project/service-account?ref=v1.36.0&depth=1"
+  source = "../../../../community/modules/project/service-account"
 
   project_id      = var.project_id
   display_name    = "HTCondor Execute Point"
@@ -41,7 +41,7 @@ module "execute_point_service_account" {
 }
 
 module "central_manager_service_account" {
-  source = "github.com/GoogleCloudPlatform/hpc-toolkit//community/modules/project/service-account?ref=v1.36.0&depth=1"
+  source = "../../../../community/modules/project/service-account"
 
   project_id      = var.project_id
   display_name    = "HTCondor Central Manager"

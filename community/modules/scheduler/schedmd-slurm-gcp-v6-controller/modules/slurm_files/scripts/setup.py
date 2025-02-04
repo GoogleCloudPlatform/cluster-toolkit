@@ -22,6 +22,7 @@ import shutil
 import subprocess
 import stat
 import time
+import yaml
 from pathlib import Path
 
 import util
@@ -83,7 +84,7 @@ SSSSSSSSSSSSS   SSS   SSSSSSSSSSSSSSS   SSSS        SSSS     SSSS     SSSS
 SSSSSSSSSSSS    SSS    SSSSSSSSSSSSS    SSSS        SSSS     SSSS     SSSS
 
 """
-
+_MAINTENANCE_SBATCH_SCRIPT_PATH = dirs.custom_scripts / "perform_maintenance.sh"
 
 def start_motd():
     """advise in motd that slurm is currently configuring"""
@@ -216,11 +217,32 @@ def setup_sudoers():
     content = """
 # Allow SlurmUser to manage the slurm daemons
 slurm ALL= NOPASSWD: /usr/bin/systemctl restart slurmd.service
+slurm ALL= NOPASSWD: /usr/bin/systemctl restart sackd.service
 slurm ALL= NOPASSWD: /usr/bin/systemctl restart slurmctld.service
 """
     sudoers_file = Path("/etc/sudoers.d/slurm")
     sudoers_file.write_text(content)
     sudoers_file.chmod(0o0440)
+
+
+def setup_maintenance_script():
+    perform_maintenance = """#!/bin/bash
+
+#SBATCH --priority=low
+#SBATCH --time=180
+
+VM_NAME=$(curl -s "http://metadata.google.internal/computeMetadata/v1/instance/name" -H "Metadata-Flavor: Google")
+ZONE=$(curl -s "http://metadata.google.internal/computeMetadata/v1/instance/zone" -H "Metadata-Flavor: Google" | cut -d '/' -f 4)
+
+gcloud compute instances perform-maintenance $VM_NAME \
+  --zone=$ZONE
+"""
+
+
+    with open(_MAINTENANCE_SBATCH_SCRIPT_PATH, "w") as f:
+        f.write(perform_maintenance)
+
+    util.chown_slurm(_MAINTENANCE_SBATCH_SCRIPT_PATH, mode=0o755)
 
 
 def update_system_config(file, content):
@@ -278,27 +300,22 @@ innodb_lock_wait_timeout=900
 def configure_dirs():
     for p in dirs.values():
         util.mkdirp(p)
-    util.chown_slurm(dirs.slurm)
-    util.chown_slurm(dirs.scripts)
+
+    for p in (dirs.slurm, dirs.scripts, dirs.custom_scripts):
+        util.chown_slurm(p)
 
     for p in slurmdirs.values():
         util.mkdirp(p)
         util.chown_slurm(p)
 
-    etc_slurm = Path("/etc/slurm")
-    if etc_slurm.exists() and etc_slurm.is_symlink():
-        etc_slurm.unlink()
-    etc_slurm.symlink_to(slurmdirs.etc)
-
-    scripts_etc = dirs.scripts / "etc"
-    if scripts_etc.exists() and scripts_etc.is_symlink():
-        scripts_etc.unlink()
-    scripts_etc.symlink_to(slurmdirs.etc)
-
-    scripts_log = dirs.scripts / "log"
-    if scripts_log.exists() and scripts_log.is_symlink():
-        scripts_log.unlink()
-    scripts_log.symlink_to(dirs.log)
+    for sl, tgt in ( # create symlinks
+        (Path("/etc/slurm"), slurmdirs.etc),
+        (dirs.scripts / "etc", slurmdirs.etc),
+        (dirs.scripts / "log", dirs.log),
+    ):
+        if sl.exists() and sl.is_symlink():
+            sl.unlink()
+        sl.symlink_to(tgt)
 
     for f in ("sort_nodes.py",): # copy auxiliary scripts
         dst = Path(lookup().cfg.slurm_bin_dir) / f
@@ -361,6 +378,9 @@ def setup_controller():
     run("systemctl start slurm_load_bq.timer", timeout=30)
     run("systemctl status slurm_load_bq.timer", timeout=30)
 
+    # Add script to perform maintenance
+    setup_maintenance_script()
+
     log.info("Done setting up controller")
     pass
 
@@ -371,27 +391,25 @@ def setup_login():
     slurmctld_host = f"{lookup().control_host}"
     if lookup().control_addr:
         slurmctld_host = f"{lookup().control_host}({lookup().control_addr})"
-    slurmd_options = [
+    sackd_options = [
         f'--conf-server="{slurmctld_host}:{lookup().control_host_port}"',
-        f'--conf="Feature={conf.login_nodeset}"',
-        "-Z",
     ]
-    sysconf = f"""SLURMD_OPTIONS='{" ".join(slurmd_options)}'"""
-    update_system_config("slurmd", sysconf)
+    sysconf = f"""SACKD_OPTIONS='{" ".join(sackd_options)}'"""
+    update_system_config("sackd", sysconf)
     install_custom_scripts()
 
     setup_network_storage()
     setup_sudoers()
     run("systemctl restart munge")
-    run("systemctl enable slurmd", timeout=30)
-    run("systemctl restart slurmd", timeout=30)
+    run("systemctl enable sackd", timeout=30)
+    run("systemctl restart sackd", timeout=30)
     run("systemctl enable --now slurmcmd.timer", timeout=30)
 
     run_custom_scripts()
 
     log.info("Check status of cluster services")
     run("systemctl status munge", timeout=30)
-    run("systemctl status slurmd", timeout=30)
+    run("systemctl status sackd", timeout=30)
 
     log.info("Done setting up login")
 
@@ -406,7 +424,7 @@ def setup_compute():
     slurmd_options = [
         f'--conf-server="{slurmctld_host}:{lookup().control_host_port}"',
     ]
-    
+
     try:
         slurmd_feature = util.instance_metadata("attributes/slurmd_feature")
     except Exception:
@@ -442,11 +460,57 @@ def setup_compute():
 
     log.info("Done setting up compute")
 
+def setup_cloud_ops() -> None:
+    """add deployment info to cloud ops config"""
+    cloudOpsStatus = run(
+        "systemctl is-active --quiet google-cloud-ops-agent.service", check=False
+    ).returncode
+    
+    if cloudOpsStatus != 0:
+        return
+
+    with open("/etc/google-cloud-ops-agent/config.yaml", "r") as f:
+        file = yaml.safe_load(f)
+
+    cluster_info = {
+        'type':'modify_fields',
+        'fields': {
+            'labels."cluster_name"':{
+                'static_value':f"{lookup().cfg.slurm_cluster_name}"
+            },
+            'labels."hostname"':{
+                'static_value': f"{lookup().hostname}"
+            }
+        }
+    }
+
+    file["logging"]["processors"]["add_cluster_info"] = cluster_info
+    file["logging"]["service"]["pipelines"]["slurmlog_pipeline"]["processors"].append("add_cluster_info")
+    file["logging"]["service"]["pipelines"]["slurmlog2_pipeline"]["processors"].append("add_cluster_info")
+
+    with open("/etc/google-cloud-ops-agent/config.yaml", "w") as f:
+        yaml.safe_dump(file, f, sort_keys=False)
+
+    run("systemctl restart google-cloud-ops-agent.service", timeout=30)
 
 def main():
     start_motd()
-    configure_dirs()
 
+    log.info("Starting setup, fetching config")
+    sleep_seconds = 5
+    while True:
+        try:
+            _, cfg = util.fetch_config()
+            util.update_config(cfg)
+            break
+        except util.DeffetiveStoredConfigError as e:
+            log.warning(f"config is not ready yet: {e}, sleeping for {sleep_seconds}s")
+        except Exception as e:
+            log.exception(f"unexpected error while fetching config, sleeping for {sleep_seconds}s")
+        time.sleep(sleep_seconds)
+    log.info("Config fetched")
+    setup_cloud_ops()
+    configure_dirs()
     # call the setup function for the instance type
     {
         "controller": setup_controller,
@@ -467,14 +531,17 @@ if __name__ == "__main__":
     try:
         main()
     except subprocess.TimeoutExpired as e:
+        stdout = (e.stdout or b"").decode().strip()
+        stderr = (e.stderr or b"").decode().strip()
+
         log.error(
             f"""TimeoutExpired:
     command={e.cmd}
     timeout={e.timeout}
     stdout:
-{e.stdout.strip()}
+{stdout}
     stderr:
-{e.stderr.strip()}
+{stderr}
 """
         )
         log.error("Aborting setup...")

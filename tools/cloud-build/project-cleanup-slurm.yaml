@@ -36,9 +36,8 @@ steps:
         fi
 
         # look only for tests that either use Slurm5, or Slurm6
-        # v5: clean project metadata
-        # v5+v6: clean resource policies
-        builds_filter="tags=m.schedmd-slurm-gcp-v6-controller OR tags=m.schedmd-slurm-gcp-v5-controller"
+        # v6: clean resource policies
+        builds_filter="tags=m.schedmd-slurm-gcp-v6-controller"
         builds_format="value(substitutions.TRIGGER_NAME,logUrl)"
         active_builds=$(gcloud builds list --project "${PROJECT_ID}" --filter="${builds_filter}" --format="${builds_format}" --ongoing 2>/dev/null)
         if [[ -n "$active_builds" ]]; then

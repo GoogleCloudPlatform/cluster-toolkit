@@ -19,7 +19,7 @@ deployment_name: "hcls-v6-{{ build }}"
 # No non-alphanumerical characters in the slurm cluster name - they will be
 # removed by Cluster Toolkit slurm wrappers, which will break the playbook
 slurm_cluster_name: "hclsv6{{ build[0:4] }}"
-zone: europe-west1-d
+zone: europe-west1-c
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/examples/hcls-blueprint.yaml"
 network: "{{ test_name }}-net"

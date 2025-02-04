@@ -37,30 +37,6 @@ variable "ramble_ref" {
   type        = string
 }
 
-# tflint-ignore: terraform_unused_declarations
-variable "chown_owner" {
-  description = "Deprecated: use `system_user_name`."
-  default     = null
-  type        = string
-
-  validation {
-    condition     = var.chown_owner == null
-    error_message = "chown_owner is deprecated. Use system_user_name to set the owner of the installation."
-  }
-}
-
-# tflint-ignore: terraform_unused_declarations
-variable "chgrp_group" {
-  description = "Deprecated: installation will be owned by group of `system_user_name`. If special group is needed, supply user with group assigned."
-  default     = null
-  type        = string
-
-  validation {
-    condition     = var.chgrp_group == null
-    error_message = "chgrp_group is deprecated. Use system_user_name to set owning user and group."
-  }
-}
-
 variable "chmod_mode" {
   description = <<-EOT
     Mode to chmod the Ramble clone to. Defaults to `""` (i.e. do not modify).

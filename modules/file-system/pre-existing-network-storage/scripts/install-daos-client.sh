@@ -15,75 +15,98 @@
 
 set -e -o pipefail
 
-# Parse access_points.
-for arg in "$@"; do
-	if [[ $arg == --access_points=* ]]; then
-		access_points="${arg#*=}"
-	fi
-done
+OS_ID=$(awk -F '=' '/^ID=/ {print $2}' /etc/os-release | sed -e 's/"//g')
+OS_VERSION=$(awk -F '=' '/VERSION_ID/ {print $2}' /etc/os-release | sed -e 's/"//g')
+OS_VERSION_MAJOR=$(awk -F '=' '/VERSION_ID/ {print $2}' /etc/os-release | sed -e 's/"//g' -e 's/\..*$//')
 
-# Install the DAOS client library
-# The following commands should be executed on each client vm.
-## For Rocky linux 8.
-if grep -q "ID=\"rocky\"" /etc/os-release && lsb_release -rs | grep -q "8\.[0-9]"; then
-
-	# 1) Add the Parallelstore package repository
-	tee /etc/yum.repos.d/parallelstore-v2-4-el8.repo <<EOF
-[parallelstore-v2-4-el8]
-name=Parallelstore EL8 v2.4
-baseurl=https://us-central1-yum.pkg.dev/projects/parallelstore-packages/v2-4-el8
-enabled=1
-repo_gpgcheck=0
-gpgcheck=0
-EOF
-	dnf makecache
-
-	# 2) Install daos-client
-	dnf install -y epel-release # needed for capstone
-	dnf install -y daos-client
-
-	# 3) Upgrade libfabric
-	dnf upgrade -y libfabric
-
-# For Ubuntu 22.04 and debian 12,
-elif (grep -q "ID=ubuntu" /etc/os-release && lsb_release -rs | grep -q "22\.04") || (grep -q "ID=debian" /etc/os-release && lsb_release -rs | grep -q "12"); then
-
-	# 1) Add the Parallelstore package repository
-	curl https://us-central1-apt.pkg.dev/doc/repo-signing-key.gpg | apt-key add -
-	echo "deb https://us-central1-apt.pkg.dev/projects/parallelstore-packages v2-4-deb main" | tee -a /etc/apt/sources.list.d/artifact-registry.list
-
-	apt update
-
-	# 2) Install daos-client
-	apt install -y daos-client
-
-else
-	echo "Unsupported operating system. This script only supports Rocky Linux 8, Ubuntu 22.04, and Debian 12."
+if ! {
+	{ [[ "${OS_ID}" = "rocky" ]] || [[ "${OS_ID}" = "rhel" ]]; } && { [[ "${OS_VERSION_MAJOR}" = "8" ]] || [[ "${OS_VERSION_MAJOR}" = "9" ]]; } ||
+		{ [[ "${OS_ID}" = "ubuntu" ]] && [[ "${OS_VERSION}" = "22.04" ]]; } ||
+		{ [[ "${OS_ID}" = "debian" ]] && [[ "${OS_VERSION_MAJOR}" = "12" ]]; }
+}; then
+	echo "Unsupported operating system ${OS_ID} ${OS_VERSION}. This script only supports Rocky Linux 8, Redhat 8, Redhat 9, Ubuntu 22.04, and Debian 12."
 	exit 1
 fi
 
-# Edit agent config
-daos_config=/etc/daos/daos_agent.yml
-sed -i "s/#.*transport_config/transport_config/g" $daos_config
-sed -i "s/#.*allow_insecure:.*false/  allow_insecure: true/g" $daos_config
-sed -i "s/.*access_points.*/access_points: $access_points/g" $daos_config
-
-# Move agent log destination from /tmp/ (default) to /var/log/daos_agent/
-mkdir -p /var/log/daos_agent
-chown daos_agent:daos_agent /var/log/daos_agent
-sed -i "s/#.*log_file:.*/log_file: \/var\/log\/daos_agent\/daos_agent.log/g" $daos_config
-
-# Start service
-if grep -q "ID=\"rocky\"" /etc/os-release && lsb_release -rs | grep -q "8\.[0-9]"; then
-	systemctl start daos_agent.service
-
-elif (grep -q "ID=ubuntu" /etc/os-release && lsb_release -rs | grep -q "22\.04") || (grep -q "ID=debian" /etc/os-release && lsb_release -rs | grep -q "12"); then
-	mkdir -p /var/run/daos_agent
-	daos_agent -o /etc/daos/daos_agent.yml &
-
+if [ -x /bin/daos ]; then
+	echo "DAOS already installed"
+	daos version
 else
-	echo "Unsupported operating system. This script only supports Rocky Linux 8, Ubuntu 22.04, and Debian 12."
-	exit 1
+	# Install the DAOS client library
+	# The following commands should be executed on each client vm.
+	## For Rocky linux 8 / RedHat 8.
+	if [ "${OS_ID}" = "rocky" ] || [ "${OS_ID}" = "rhel" ]; then
+		# 1) Add the Parallelstore package repository
+		cat >/etc/yum.repos.d/parallelstore-v2-6-el"${OS_VERSION_MAJOR}".repo <<-EOF
+			[parallelstore-v2-6-el${OS_VERSION_MAJOR}]
+			name=Parallelstore EL${OS_VERSION_MAJOR} v2.6
+			baseurl=https://us-central1-yum.pkg.dev/projects/parallelstore-packages/v2-6-el${OS_VERSION_MAJOR}
+			enabled=1
+			repo_gpgcheck=0
+			gpgcheck=0
+		EOF
+
+		## TODO: Remove disable automatic update script after issue is fixed.
+		if [ -x /usr/bin/google_disable_automatic_updates ]; then
+			/usr/bin/google_disable_automatic_updates
+		fi
+		dnf clean all
+		dnf makecache
+
+		# 2) Install daos-client
+		dnf install -y epel-release # needed for capstone
+		dnf install -y daos-client
+
+		# 3) Upgrade libfabric
+		dnf upgrade -y libfabric
+
+	# For Ubuntu 22.04 and debian 12,
+	elif [[ "${OS_ID}" = "ubuntu" ]] || [[ "${OS_ID}" = "debian" ]]; then
+		# shellcheck disable=SC2034
+		DEBIAN_FRONTEND=noninteractive
+
+		# 1) Add the Parallelstore package repository
+		curl -o /etc/apt/trusted.gpg.d/us-central1-apt.pkg.dev.asc https://us-central1-apt.pkg.dev/doc/repo-signing-key.gpg
+		echo "deb https://us-central1-apt.pkg.dev/projects/parallelstore-packages v2-6-deb main" >/etc/apt/sources.list.d/artifact-registry.list
+
+		apt-get update
+
+		# 2) Install daos-client
+		apt-get install -y daos-client
+
+		# 3) Create daos_agent.service (comes pre-installed with RedHat)
+		if ! getent passwd daos_agent >/dev/null 2>&1; then
+			useradd daos_agent
+		fi
+		cat >/etc/systemd/system/daos_agent.service <<-EOF
+			[Unit]
+			Description=DAOS Agent
+			StartLimitIntervalSec=60
+			Wants=network-online.target
+			After=network-online.target
+
+			[Service]
+			Type=notify
+			User=daos_agent
+			Group=daos_agent
+			RuntimeDirectory=daos_agent
+			RuntimeDirectoryMode=0755
+			ExecStart=/usr/bin/daos_agent -o /etc/daos/daos_agent.yml
+			StandardOutput=journal
+			StandardError=journal
+			Restart=always
+			RestartSec=10
+			LimitMEMLOCK=infinity
+			LimitCORE=infinity
+			StartLimitBurst=5
+
+			[Install]
+			WantedBy=multi-user.target
+		EOF
+	else
+		echo "Unsupported operating system ${OS_ID} ${OS_VERSION}. This script only supports Rocky Linux 8, Redhat 8, Redhat 9, Ubuntu 22.04, and Debian 12."
+		exit 1
+	fi
 fi
 
 exit 0

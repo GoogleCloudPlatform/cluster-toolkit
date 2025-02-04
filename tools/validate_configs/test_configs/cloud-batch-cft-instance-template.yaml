@@ -44,7 +44,7 @@ deployment_groups:
           echo "Hello World" > /sw/hello.txt
 
   - id: batch-compute-template
-    source: github.com/terraform-google-modules/terraform-google-vm//modules/instance_template?ref=v7.8.0
+    source: github.com/terraform-google-modules/terraform-google-vm//modules/instance_template?ref=v12.1.0
     use: [batch-startup-script]
     settings:
       # Boiler plate to work with Cloud Foundation Toolkit
@@ -55,11 +55,11 @@ deployment_groups:
       machine_type: n2-standard-4
       metadata:
         network_storage: ((jsonencode([module.appfs.network_storage])))
-      source_image_family: hpc-centos-7
+      source_image_family: hpc-rocky-linux-8
       source_image_project: cloud-hpc-image-public
 
   - id: batch-job
-    source: ./modules/scheduler/batch-job-template
+    source: modules/scheduler/batch-job-template
     use: [network1, appfs, batch-startup-script]
     settings:
       runnable: "cat /sw/hello.txt"

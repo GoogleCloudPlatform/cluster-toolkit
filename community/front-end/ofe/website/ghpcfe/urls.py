@@ -26,6 +26,7 @@ from .views.clusters import *
 from .views.applications import *
 from .views.jobs import *
 from .views.benchmarks import *
+from .views.registries import *
 from .views.workbench import *
 from .views.users import *
 from .views.vpc import *
@@ -346,6 +347,13 @@ urlpatterns += [
     path(
         "user/admin/<int:pk>", UserAdminUpdateView.as_view(), name="user-admin"
     ),
+]
+
+# Container registry bit
+urlpatterns += [
+    path("registries/", RegistryListView.as_view(), name="registries"),
+    path("registry/<int:pk>", RegistryDetailView.as_view(), name="registry-detail"),
+    path("registry/delete/<int:pk>", RegistryDeleteView.as_view(), name="registry-delete"),
 ]
 
 # For APIs

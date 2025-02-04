@@ -59,11 +59,11 @@ To build Cluster Toolkit binary from source run:
 make
 ```
 
-You should now have a binary named ghpc in the current directory. To verify the
+You should now have a binary named gcluster in the current directory. To verify the
 build run:
 
 ```bash
-./ghpc --version
+./gcluster --version
 ```
 
 This should show you the version of the Cluster Toolkit you are using.
@@ -91,11 +91,11 @@ This file describes the cluster you will deploy. It defines:
 [This diagram](https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/docs/tutorials#blueprint-diagram-for-application-tutorials)
 shows how the different modules relate to each other.
 
-After you have inspected the file, use the ghpc binary to create a deployment
+After you have inspected the file, use the gcluster binary to create a deployment
 folder by running:
 
 ```bash
-./ghpc create docs/tutorials/gromacs/spack-gromacs.yaml --vars project_id=<walkthrough-project-id/>
+./gcluster create docs/tutorials/gromacs/spack-gromacs.yaml --vars project_id=<walkthrough-project-id/>
 ```
 
 > **_NOTE:_** The `--vars` argument is used to override `project_id` in the
@@ -109,7 +109,7 @@ contains the terraform needed to deploy your cluster.
 Use below command to deploy your cluster.
 
 ```bash
-./ghpc deploy spack-gromacs
+./gcluster deploy spack-gromacs
 ```
 
 After the deployment is finished, you should see below message.
@@ -271,7 +271,7 @@ exit
 Run the following command in the cloud shell terminal to destroy the cluster:
 
 ```bash
-./ghpc destroy spack-gromacs
+./gcluster destroy spack-gromacs
 ```
 
 When complete you should see something like:

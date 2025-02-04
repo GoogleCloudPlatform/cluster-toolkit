@@ -17,9 +17,10 @@ deployment_name: gke-storage-{{ build }}
 zone: us-central1-a  # for remote node
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/examples/storage-gke.yaml"
-network: "{{ test_name }}-net"
+network: "{{ deployment_name }}-net"
 remote_node: "{{ deployment_name }}-0"
 post_deploy_tests: []
 cli_deployment_vars:
   network_name: "{{ network }}"
   authorized_cidr: "{{ build_ip.stdout }}/32"
+  gcp_public_cidrs_access_enabled: true

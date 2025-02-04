@@ -35,6 +35,13 @@ UPC_MAINT_CMD = "gcloud alpha compute instances list --project={}" \
                 "upcomingMaintenance.startTimeWindow.earliest," \
                 "upcomingMaintenance.startTimeWindow.latest," \
                 "upcomingMaintenance.canReschedule,upcomingMaintenance.type)'"
+
+UPDATED_UPC_MAINT_CMD = "gcloud alpha compute instances list --project={}" \
+                " --filter='upcomingMaintenance:*' --format='value(name," \
+                "upcomingMaintenance.latestWindowStartTime," \
+                "upcomingMaintenance.windowEndTime," \
+                "upcomingMaintenance.canReschedule,upcomingMaintenance.type)'"
+
 PER_MAINT_CMD = "gcloud alpha compute instances list --project={}" \
                 " --filter=scheduling.maintenanceInterval:PERIODIC " \
                 " --format='value(name)'"
@@ -72,6 +79,9 @@ def get_upcoming_maintenance(project: str) -> List[str]:
     err_msg = "Error getting upcoming maintenance list"
     res = run_command(UPC_MAINT_CMD.format(project), err_msg)
 
+    # Check if all output was received. If length is 3, two of the filters failed since the maintenance output is using new format.
+    if len(res.stdout.split()) == 3:
+        res = run_command(UPDATED_UPC_MAINT_CMD.format(project), err_msg)
     upc_maint = [x.split() for x in res.stdout.split("\n")[:-1]]
 
     return upc_maint

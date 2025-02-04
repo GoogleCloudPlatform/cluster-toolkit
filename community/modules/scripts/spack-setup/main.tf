@@ -79,8 +79,12 @@ locals {
     "destination" = "install_spack.yml"
   }
 
-  bucket_md5  = substr(md5("${var.project_id}.${var.deployment_name}.${local.script_content}"), 0, 8)
-  bucket_name = "spack-scripts-${local.bucket_md5}"
+  bucket_md5 = substr(md5("${var.project_id}.${var.deployment_name}.${local.script_content}"), 0, 8)
+  # Max bucket name length is 63, so truncate deployment_name if necessary.
+  #   The string "-spack-scripts-" is 15 characters and bucket_md5 is 8 characters,
+  #   leaving 63-15-8=40 chars for deployment_name.  Using 39 so it has the same prefix as the
+  #   ramble-setup module's GCS bucket.
+  bucket_name = "${substr(var.deployment_name, 0, 39)}-spack-scripts-${local.bucket_md5}"
   runners     = [local.install_spack_deps_runner, local.install_spack_runner]
 
   combined_runner = {
@@ -100,7 +104,7 @@ resource "google_storage_bucket" "bucket" {
 }
 
 module "startup_script" {
-  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=v1.36.0&depth=1"
+  source = "../../../../modules/scripts/startup-script"
 
   labels          = local.labels
   project_id      = var.project_id

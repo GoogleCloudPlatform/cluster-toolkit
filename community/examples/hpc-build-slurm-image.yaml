@@ -23,7 +23,7 @@ vars:
   image_build_machine_type: n2d-standard-16
   build_from_image_family: hpc-rocky-linux-8
   build_from_image_project: cloud-hpc-image-public
-  build_from_git_ref: 6.5.9
+  build_from_git_ref: 6.8.6
   built_image_family: my-custom-slurm
   built_instance_image:
     family: $(vars.built_image_family)

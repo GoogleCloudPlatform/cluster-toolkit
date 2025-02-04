@@ -12,6 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+module "gpu" {
+  source = "../../../../modules/internal/gpu-definition"
+
+  machine_type      = var.machine_type
+  guest_accelerator = var.guest_accelerator
+}
+
 locals {
   additional_disks = [
     for ad in var.additional_disks : {
@@ -25,11 +32,10 @@ locals {
     }
   ]
 
-  service_account_email = coalesce(var.service_account_email, data.google_compute_default_service_account.default.email)
+  synth_def_sa_email = "${data.google_project.this.number}-compute@developer.gserviceaccount.com"
 
-  # can't rely on `email=null` as it's used to instantiate `cloudsql_secret_accessor`
   service_account = {
-    email  = local.service_account_email
+    email  = coalesce(var.service_account_email, local.synth_def_sa_email)
     scopes = var.service_account_scopes
   }
 
@@ -44,7 +50,7 @@ locals {
 
 # INSTANCE TEMPLATE
 module "slurm_controller_template" {
-  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=6.6.1"
+  source = "../../internal/slurm-gcp/instance_template"
 
   project_id          = var.project_id
   region              = var.region
@@ -58,23 +64,22 @@ module "slurm_controller_template" {
   disk_type        = var.disk_type
   additional_disks = local.additional_disks
 
-  bandwidth_tier    = var.bandwidth_tier
-  slurm_bucket_path = module.slurm_files.slurm_bucket_path
-  can_ip_forward    = var.can_ip_forward
-  disable_smt       = !var.enable_smt
+  bandwidth_tier            = var.bandwidth_tier
+  slurm_bucket_path         = module.slurm_files.slurm_bucket_path
+  can_ip_forward            = var.can_ip_forward
+  advanced_machine_features = var.advanced_machine_features
 
   enable_confidential_vm   = var.enable_confidential_vm
   enable_oslogin           = var.enable_oslogin
   enable_shielded_vm       = var.enable_shielded_vm
   shielded_instance_config = var.shielded_instance_config
 
-  gpu = one(local.guest_accelerator)
+  gpu = one(module.gpu.guest_accelerator)
 
   machine_type     = var.machine_type
   metadata         = local.metadata
   min_cpu_platform = var.min_cpu_platform
 
-  # network_ip = TODO: add support for network_ip
   on_host_maintenance = var.on_host_maintenance
   preemptible         = var.preemptible
   service_account     = local.service_account
@@ -83,7 +88,6 @@ module "slurm_controller_template" {
   source_image_project = local.source_image_project_normalized # requires source_image_logic.tf
   source_image         = local.source_image                    # requires source_image_logic.tf
 
-  # spot = TODO: add support for spot (?)
   subnetwork = var.subnetwork_self_link
 
   tags = concat([local.slurm_cluster_name], var.tags)
@@ -91,37 +95,31 @@ module "slurm_controller_template" {
 }
 
 # INSTANCE
-locals {
-  # TODO: add support for proper access_config
-  access_config = {
-    nat_ip       = null
-    network_tier = null
+resource "google_compute_instance_from_template" "controller" {
+  name                     = "${local.slurm_cluster_name}-controller"
+  project                  = var.project_id
+  zone                     = var.zone
+  source_instance_template = module.slurm_controller_template.self_link
+
+  allow_stopping_for_update = true
+
+  # Can't rely on template to specify nics due to usage of static_ip
+  network_interface {
+    dynamic "access_config" {
+      for_each = var.enable_controller_public_ips ? ["unit"] : []
+      content {
+        nat_ip       = null
+        network_tier = null
+      }
+    }
+    network_ip = length(var.static_ips) == 0 ? "" : var.static_ips[0]
+    subnetwork = var.subnetwork_self_link
   }
 }
 
-module "slurm_controller_instance" {
-  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/_slurm_instance?ref=6.6.1"
-
-  access_config       = var.enable_controller_public_ips ? [local.access_config] : []
-  add_hostname_suffix = false
-  hostname            = "${local.slurm_cluster_name}-controller"
-  instance_template   = module.slurm_controller_template.self_link
-
-  project_id          = var.project_id
-  region              = var.region
-  slurm_cluster_name  = local.slurm_cluster_name
-  slurm_instance_role = "controller"
-  static_ips          = var.static_ips
-  subnetwork          = var.subnetwork_self_link
-  zone                = var.zone
-  metadata            = var.metadata
-
-  labels = merge(local.labels, local.files_cs_labels)
-
-  depends_on = [
-    # Ensure that controller is destroyed BEFORE doing cleanup
-    null_resource.cleanup_compute[0],
-  ]
+moved {
+  from = module.slurm_controller_instance.google_compute_instance_from_template.slurm_instance[0]
+  to   = google_compute_instance_from_template.controller
 }
 
 # SECRETS: CLOUDSQL

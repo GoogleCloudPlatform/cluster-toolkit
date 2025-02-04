@@ -19,7 +19,16 @@ locals {
   labels = merge(var.labels, { ghpc_module = "htcondor-execute-point", ghpc_role = "compute" })
 }
 
+module "gpu" {
+  source = "../../../../modules/internal/gpu-definition"
+
+  machine_type      = var.machine_type
+  guest_accelerator = var.guest_accelerator
+}
+
 locals {
+  guest_accelerator = module.gpu.guest_accelerator
+
   zones                    = coalescelist(var.zones, data.google_compute_zones.available.names)
   network_storage_metadata = var.network_storage == null ? {} : { network_storage = jsonencode(var.network_storage) }
 
@@ -120,7 +129,7 @@ resource "google_storage_bucket_object" "execute_config" {
 }
 
 module "startup_script" {
-  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=v1.36.0&depth=1"
+  source = "../../../../modules/scripts/startup-script"
 
   project_id      = var.project_id
   region          = var.region
@@ -132,7 +141,7 @@ module "startup_script" {
 
 module "execute_point_instance_template" {
   source  = "terraform-google-modules/vm/google//modules/instance_template"
-  version = "10.1.1"
+  version = "~> 12.1"
 
   name_prefix = local.name_prefix
   project_id  = var.project_id
@@ -160,7 +169,7 @@ module "execute_point_instance_template" {
 
 module "mig" {
   source  = "terraform-google-modules/vm/google//modules/mig"
-  version = "10.1.1"
+  version = "~> 12.1"
 
   project_id                       = var.project_id
   region                           = var.region

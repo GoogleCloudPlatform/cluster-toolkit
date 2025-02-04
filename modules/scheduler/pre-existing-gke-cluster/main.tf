@@ -19,3 +19,52 @@ data "google_container_cluster" "existing_gke_cluster" {
   project  = var.project_id
   location = var.region
 }
+
+locals {
+  rdma_networks     = [for network_info in var.additional_networks : network_info if strcontains(upper(network_info.nic_type), "RDMA")]
+  non_rdma_networks = [for network_info in var.additional_networks : network_info if !strcontains(upper(network_info.nic_type), "RDMA")]
+  apply_manifests_rdma_networks = flatten([
+    for idx, network_info in local.rdma_networks : [
+      {
+        source = "${path.module}/templates/gke-network-paramset.yaml.tftpl",
+        template_vars = {
+          name            = "${var.rdma_subnetwork_name_prefix}-${idx}",
+          network_name    = network_info.network
+          subnetwork_name = "${var.rdma_subnetwork_name_prefix}-${idx}",
+          device_mode     = "RDMA"
+        }
+      },
+      {
+        source        = "${path.module}/templates/network-object.yaml.tftpl",
+        template_vars = { name = "${var.rdma_subnetwork_name_prefix}-${idx}" }
+      }
+    ]
+  ])
+
+  apply_manifests_non_rdma_networks = flatten([
+    for idx, network_info in local.non_rdma_networks : [
+      {
+        source = "${path.module}/templates/gke-network-paramset.yaml.tftpl",
+        template_vars = {
+          name            = network_info.subnetwork
+          network_name    = network_info.network
+          subnetwork_name = network_info.subnetwork
+          device_mode     = "NetDevice"
+        }
+      },
+      {
+        source        = "${path.module}/templates/network-object.yaml.tftpl",
+        template_vars = { name = network_info.subnetwork }
+      }
+    ]
+  ])
+}
+
+module "kubectl_apply" {
+  source = "../../management/kubectl-apply"
+
+  cluster_id = data.google_container_cluster.existing_gke_cluster.id
+  project_id = var.project_id
+
+  apply_manifests = concat(local.apply_manifests_non_rdma_networks, local.apply_manifests_rdma_networks)
+}

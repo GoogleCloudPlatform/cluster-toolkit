@@ -61,9 +61,11 @@ locals {
     value = "true"
   }] : []
 
-  # arbitrarily, user can edit in template.
-  # May come from node pool in future.
-  gpu_limit_string = alltrue(var.has_gpu) ? "1" : null
+  # Setup limit for GPUs per pod
+  min_allocatable_gpu         = min(var.allocatable_gpu_per_node...)
+  min_allocatable_gpu_per_pod = local.min_allocatable_gpu > 0 ? local.min_allocatable_gpu : null
+  gpu_limit_per_pod           = var.requested_gpu_per_pod > 0 ? var.requested_gpu_per_pod : local.min_allocatable_gpu_per_pod
+  gpu_limit_string            = alltrue(var.has_gpu) ? tostring(local.gpu_limit_per_pod) : null
 
   empty_dir_volumes = [for ed in var.ephemeral_volumes :
     {
@@ -129,6 +131,7 @@ locals {
       restart_policy           = var.restart_policy
       backoff_limit            = var.backoff_limit
       tolerations              = distinct(var.tolerations)
+      security_context         = var.security_context
       labels                   = local.labels
 
       empty_dir_volumes    = local.empty_dir_volumes

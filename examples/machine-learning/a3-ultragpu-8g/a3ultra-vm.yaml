@@ -1,0 +1,162 @@
+# Copyright 2024 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: a3ultra-vm-instance
+
+vars:
+  project_id: # supply project ID
+  deployment_name: a3ultra-vm-instance
+  region: europe-west1
+  zone: europe-west1-b
+  a3u_reservation_name: # supply reservation name
+  a3u_provisioning_model: RESERVATION_BOUND
+  instance_image:
+    project: ubuntu-os-accelerator-images
+    family: ubuntu-accelerator-2204-amd64-with-nvidia-550
+  net0_range: 192.168.0.0/19
+  net1_range: 192.168.64.0/18
+  filestore_ip_range: 192.168.32.0/24
+  rdma_net_range: 192.168.128.0/18
+  hostname_prefix: $(vars.deployment_name)-beowulf
+
+deployment_groups:
+- group: primary
+  modules:
+
+  - id: a3ultra-net-0
+    source: modules/network/vpc
+    settings:
+      network_name: $(vars.deployment_name)-net-0
+      mtu: 8896
+      subnetworks:
+      - subnet_name: $(vars.deployment_name)-sub-0
+        subnet_region: $(vars.region)
+        subnet_ip: $(vars.net0_range)
+      firewall_rules:
+      - name: $(vars.deployment_name)-internal-0
+        ranges: [$(vars.net0_range)]
+        allow:
+        - protocol: tcp
+        - protocol: udp
+        - protocol: icmp
+
+  - id: a3ultra-net-1
+    source: modules/network/vpc
+    settings:
+      network_name: $(vars.deployment_name)-net-1
+      mtu: 8896
+      subnetworks:
+      - subnet_name: $(vars.deployment_name)-sub-1
+        subnet_region: $(vars.region)
+        subnet_ip: $(vars.net1_range)
+      firewall_rules:
+      - name: $(vars.deployment_name)-internal-1
+        ranges: [$(vars.net1_range)]
+        allow:
+        - protocol: tcp
+        - protocol: udp
+        - protocol: icmp
+
+  - id: a3ultra-rdma-net
+    source: modules/network/gpu-rdma-vpc
+    settings:
+      network_name: $(vars.deployment_name)-rdma-net
+      network_profile: https://www.googleapis.com/compute/beta/projects/$(vars.project_id)/global/networkProfiles/$(vars.zone)-vpc-roce
+      network_routing_mode: REGIONAL
+      subnetworks_template:
+        name_prefix: $(vars.deployment_name)-mrdma-sub
+        count: 8
+        ip_range: $(vars.rdma_net_range)
+        region: $(vars.region)
+      firewall_rules:
+      - name: $(vars.deployment_name)-internal-rdma
+        ranges: [$(vars.rdma_net_range)]
+        allow:
+        - protocol: tcp
+        - protocol: udp
+        - protocol: icmp
+
+  - id: homefs
+    source: modules/file-system/filestore
+    use: [a3ultra-net-0]
+    settings:
+      filestore_tier: HIGH_SCALE_SSD
+      size_gb: 10240
+      local_mount: /home
+      reserved_ip_range: $(vars.filestore_ip_range)
+    outputs:
+    - network_storage
+
+  - id: startup-script
+    source: modules/scripts/startup-script
+    settings:
+      configure_ssh_host_patterns:
+      - $(vars.hostname_prefix)-*
+      runners:
+      - type: shell
+        destination: install-cuda-toolkit.sh
+        content: |
+          #!/bin/bash
+          set -e -o pipefail
+          add-nvidia-repositories -y
+          apt install -y cuda-toolkit-12-8
+
+  - id: a3ultra-vms
+    source: modules/compute/vm-instance
+    use: [startup-script, homefs]
+    settings:
+      machine_type: a3-ultragpu-8g
+      instance_count: 2
+      name_prefix: $(vars.hostname_prefix)
+      disk_type: hyperdisk-balanced
+      automatic_restart: true
+      on_host_maintenance: TERMINATE
+      reservation_name: $(vars.a3u_reservation_name)
+      provisioning_model: $(vars.a3u_provisioning_model)
+      network_interfaces:
+        $(concat(
+          [{
+            network=null,
+            subnetwork=a3ultra-net-0.subnetwork_self_link,
+            subnetwork_project=vars.project_id,
+            nic_type="GVNIC",
+            queue_count=null,
+            network_ip=null,
+            stack_type=null,
+            access_config=[{nat_ip=null, public_ptr_domain_name=null, network_tier=null}],
+            ipv6_access_config=[],
+            alias_ip_range=[]
+          },
+          {
+            network=null,
+            subnetwork=a3ultra-net-1.subnetwork_self_link,
+            subnetwork_project=vars.project_id,
+            nic_type="GVNIC",
+            queue_count=null,
+            network_ip=null,
+            stack_type=null,
+            access_config=[{nat_ip=null, public_ptr_domain_name=null, network_tier=null}],
+            ipv6_access_config=[],
+            alias_ip_range=[]
+          }],
+          a3ultra-rdma-net.subnetwork_interfaces,
+        ))
+
+  - id: wait-for-vms
+    source: community/modules/scripts/wait-for-startup
+    settings:
+      instance_names: $(a3ultra-vms.name)
+      timeout: 7200

@@ -58,14 +58,6 @@ variable "slurm_cluster_name" {
   }
 }
 
-variable "enable_slurm_gcp_plugins" {
-  description = <<EOD
-Enables calling hooks in scripts/slurm_gcp_plugins during cluster resume and suspend.
-EOD
-  type        = any
-  default     = false
-}
-
 variable "enable_bigquery_load" {
   description = <<EOD
 Enables loading of cluster job usage into big query.
@@ -91,12 +83,6 @@ variable "slurm_conf_tpl" {
 variable "cgroup_conf_tpl" {
   type        = string
   description = "Slurm cgroup.conf template file path."
-  default     = null
-}
-
-variable "job_submit_lua_tpl" {
-  type        = string
-  description = "Slurm job_submit.lua template file path."
   default     = null
 }
 
@@ -272,11 +258,11 @@ EOD
 variable "login_network_storage" {
   description = <<EOD
 Storage to mounted on login and controller instances
-* server_ip     : Address of the storage server.
-* remote_mount  : The location in the remote instance filesystem to mount from.
-* local_mount   : The location on the instance filesystem to mount to.
-* fs_type       : Filesystem type (e.g. "nfs").
-* mount_options : Options to mount with.
+- server_ip     : Address of the storage server.
+- remote_mount  : The location in the remote instance filesystem to mount from.
+- local_mount   : The location on the instance filesystem to mount to.
+- fs_type       : Filesystem type (e.g. "nfs").
+- mount_options : Options to mount with.
 EOD
   type = list(object({
     server_ip     = string
@@ -322,15 +308,19 @@ variable "partitions" {
 variable "cloud_parameters" {
   description = "cloud.conf options. Default behavior defined in scripts/conf.py"
   type = object({
-    no_comma_params = optional(bool)
-    resume_rate     = optional(number)
-    resume_timeout  = optional(number)
-    suspend_rate    = optional(number)
-    suspend_timeout = optional(number)
-    topology_plugin = optional(string)
-    tree_width      = optional(number)
+    no_comma_params      = optional(bool, false)
+    private_data         = optional(list(string))
+    scheduler_parameters = optional(list(string))
+    resume_rate          = optional(number)
+    resume_timeout       = optional(number)
+    suspend_rate         = optional(number)
+    suspend_timeout      = optional(number)
+    topology_plugin      = optional(string)
+    topology_param       = optional(string)
+    tree_width           = optional(number)
   })
-  default = {}
+  default  = {}
+  nullable = false
 }
 
 ##########

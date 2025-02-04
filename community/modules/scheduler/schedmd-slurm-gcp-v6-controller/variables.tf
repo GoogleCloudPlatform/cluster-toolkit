@@ -130,7 +130,6 @@ variable "login_nodes" {
     })), [])
     bandwidth_tier         = optional(string, "platform_default")
     can_ip_forward         = optional(bool, false)
-    disable_smt            = optional(bool, false)
     disk_auto_delete       = optional(bool, true)
     disk_labels            = optional(map(string), {})
     disk_size_gb           = optional(number)
@@ -142,8 +141,16 @@ variable "login_nodes" {
       count = number
       type  = string
     }))
-    labels              = optional(map(string), {})
-    machine_type        = optional(string)
+    labels       = optional(map(string), {})
+    machine_type = optional(string)
+    advanced_machine_features = object({
+      enable_nested_virtualization = optional(bool)
+      threads_per_core             = optional(number)
+      turbo_mode                   = optional(string)
+      visible_core_count           = optional(number)
+      performance_monitoring_unit  = optional(string)
+      enable_uefi_networking       = optional(bool)
+    })
     metadata            = optional(map(string), {})
     min_cpu_platform    = optional(string)
     num_instances       = optional(number, 1)
@@ -196,23 +203,38 @@ variable "nodeset" {
       auto_delete  = optional(bool, true)
       boot         = optional(bool, false)
     })), [])
-    bandwidth_tier         = optional(string, "platform_default")
-    can_ip_forward         = optional(bool, false)
-    disable_smt            = optional(bool, false)
-    disk_auto_delete       = optional(bool, true)
-    disk_labels            = optional(map(string), {})
-    disk_size_gb           = optional(number)
-    disk_type              = optional(string)
-    enable_confidential_vm = optional(bool, false)
-    enable_placement       = optional(bool, false)
-    enable_oslogin         = optional(bool, true)
-    enable_shielded_vm     = optional(bool, false)
+    bandwidth_tier                   = optional(string, "platform_default")
+    can_ip_forward                   = optional(bool, false)
+    disk_auto_delete                 = optional(bool, true)
+    disk_labels                      = optional(map(string), {})
+    disk_size_gb                     = optional(number)
+    disk_type                        = optional(string)
+    enable_confidential_vm           = optional(bool, false)
+    enable_placement                 = optional(bool, false)
+    placement_max_distance           = optional(number, null)
+    enable_oslogin                   = optional(bool, true)
+    enable_shielded_vm               = optional(bool, false)
+    enable_maintenance_reservation   = optional(bool, false)
+    enable_opportunistic_maintenance = optional(bool, false)
     gpu = optional(object({
       count = number
       type  = string
     }))
-    labels                   = optional(map(string), {})
-    machine_type             = optional(string)
+    dws_flex = object({
+      enabled          = bool
+      max_run_duration = number
+      use_job_duration = bool
+    })
+    labels       = optional(map(string), {})
+    machine_type = optional(string)
+    advanced_machine_features = object({
+      enable_nested_virtualization = optional(bool)
+      threads_per_core             = optional(number)
+      turbo_mode                   = optional(string)
+      visible_core_count           = optional(number)
+      performance_monitoring_unit  = optional(string)
+      enable_uefi_networking       = optional(bool)
+    })
     maintenance_interval     = optional(string)
     instance_properties_json = string
     metadata                 = optional(map(string), {})
@@ -271,6 +293,7 @@ variable "nodeset" {
     tags               = optional(list(string), [])
     termination_action = optional(string)
     reservation_name   = optional(string)
+    future_reservation = string
     startup_script = optional(list(object({
       filename = string
     content = string })), [])
@@ -382,7 +405,7 @@ Enables automatic cleanup of compute nodes and resource policies (e.g.
 placement groups) managed by this module, when cluster is destroyed.
 
 *WARNING*: Toggling this off will impact the running workload.
-Deployed compute nodes and controller will be destroyed.
+Deployed compute nodes will be destroyed.
 EOD
   type        = bool
   default     = true
@@ -401,22 +424,24 @@ EOD
 variable "cloud_parameters" {
   description = "cloud.conf options. Defaults inherited from [Slurm GCP repo](https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/terraform/slurm_cluster/modules/slurm_files/README_TF.md#input_cloud_parameters)"
   type = object({
-    no_comma_params = optional(bool)
-    resume_rate     = optional(number)
-    resume_timeout  = optional(number)
-    suspend_rate    = optional(number)
-    suspend_timeout = optional(number)
-    topology_plugin = optional(string)
-    tree_width      = optional(number)
+    no_comma_params      = optional(bool, false)
+    private_data         = optional(list(string))
+    scheduler_parameters = optional(list(string))
+    resume_rate          = optional(number)
+    resume_timeout       = optional(number)
+    suspend_rate         = optional(number)
+    suspend_timeout      = optional(number)
+    topology_plugin      = optional(string)
+    topology_param       = optional(string)
+    tree_width           = optional(number)
   })
-  default = {}
+  default  = {}
+  nullable = false
 }
 
 variable "enable_default_mounts" {
   description = <<-EOD
     Enable default global network storage from the controller
-    - /usr/local/etc/slurm
-    - /etc/munge
     - /home
     - /apps
     Warning: If these are disabled, the slurm etc and munge dirs must be added
@@ -604,14 +629,6 @@ EOD
   sensitive = true
 }
 
-variable "enable_slurm_gcp_plugins" {
-  description = <<EOD
-Enables calling hooks in scripts/slurm_gcp_plugins during cluster resume and suspend.
-EOD
-  type        = any
-  default     = false
-}
-
 variable "universe_domain" {
   description = "Domain address for alternate API universe"
   type        = string
@@ -656,5 +673,24 @@ variable "disable_default_mounts" { # tflint-ignore: terraform_unused_declaratio
   validation {
     condition     = var.disable_default_mounts == null
     error_message = "DEPRECATED: Use `enable_default_mounts` instead."
+  }
+}
+
+variable "enable_slurm_gcp_plugins" { # tflint-ignore: terraform_unused_declarations
+  description = <<EOD
+DEPRECATED: Slurm GCP plugins have been deprecated.
+Instead of 'max_hops' plugin please use the 'placement_max_distance' nodeset property.
+Instead of 'enable_vpmu' plugin please use 'advanced_machine_features.performance_monitoring_unit' nodeset property.
+EOD
+  type        = any
+  default     = null
+
+  validation {
+    condition     = var.enable_slurm_gcp_plugins == null
+    error_message = <<EOD
+DEPRECATED: Slurm GCP plugins have been deprecated.
+Instead of 'max_hops' plugin please use the 'placement_max_distance' nodeset property.
+Instead of 'enable_vpmu' plugin please use 'advanced_machine_features.performance_monitoring_unit' nodeset property.
+EOD
   }
 }

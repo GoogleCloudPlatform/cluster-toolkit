@@ -6,15 +6,14 @@
   * HTCondor modules including [htcondor-install], [htcondor-setup] and
     [htcondor-execute-point].
   * [omnia-install]
-* Slurm on GCP modules where applicable, both version 5 and version 6
-  * `schedmd-slurm-gcp-v5-*`
+* Slurm on GCP modules version 6
   * `schedmd-slurm-gcp-v6-*`
 * PBS Pro modules (`pbspro-*`)
 * Cloud Batch modules through custom instance templates
 
 ## Accelerator definition automation
 
-The schedmd-slurm-gcp-v5 modules ([node-group], [controller] and [login]),
+The schedmd-slurm-gcp-v6 modules ([nodeset], [controller] and [login]),
 the [vm-instance] module and any module relying on [vm-instance] (HTCondor,
 Omnia, PBS Pro) support
 automation for defining the `guest_accelerator` config. If the user supplies any
@@ -42,9 +41,9 @@ also have guest accelerators attached, however the type and count
 cannot be determined automatically like with `a2`.
 
 [vm-instance]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/modules/compute/vm-instance
-[node-group]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/compute/schedmd-slurm-gcp-v5-node-group
-[controller]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/scheduler/schedmd-slurm-gcp-v5-controller
-[login]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/scheduler/schedmd-slurm-gcp-v5-login
+[nodeset]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+[controller]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+[login]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/scheduler/schedmd-slurm-gcp-v6-login
 [omnia-install]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/scripts/omnia-install
 [htcondor-install]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/scripts/htcondor-install
 [htcondor-setup]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/scheduler/htcondor-setup
@@ -62,14 +61,14 @@ cannot be determined automatically like with `a2`.
 ### Slurm on GCP
 
 When deploying a Slurm cluster with GPUs, we highly recommend using the
-modules based on Slurm on GCP version 5 (`schedmd-slurm-gcp-v5-*`). The
+modules based on Slurm on GCP version 5 (`schedmd-slurm-gcp-v6-*`). The
 interface is more consistent with Cluster Toolkit standards and more functionality
 is available to support, debug and workaround any issues related to GPU
 resources.
 
 #### Interface Considerations
 
-The Slurm on GCP v5 Cluster Toolkit modules (`schedmd-slurm-gcp-v5-*`) have two
+The Slurm on GCP v6 Cluster Toolkit modules (`schedmd-slurm-gcp-v6-*`) have two
 variables that can be used to define attached GPUs. The variable
 `guest_accelerators` is the recommended option as it is consistent with other
 modules in the Cluster Toolkit. The setting `gpus` can be set as well, which
@@ -81,16 +80,16 @@ provides consistency with the underlying terraform modules from the
 As mentioned above, VMs with many guest accelerators can take longer to deploy.
 Slurm sets timeouts for creating VMs, and it's possible for high GPU
 configurations to push past the default timeout. We recommend using the Slurm on
-GCP v5 modules.
+GCP v6 modules.
 
-The v5 Toolkit modules (`schedmd-slurm-gcp-v5-*`) allow Slurm configuration
+The v6 Toolkit modules (`schedmd-slurm-gcp-v6-*`) allow Slurm configuration
 timeouts to customized via the [cloud_parameters] variable on the [controller].
 See the example below which increases the `resume_timeout` from the default of
 300s to 600s:
 
 ```yaml
 - id: slurm_controller
-  source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
+  source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
   use: [...]
   settings:
     cloud_parameters:
@@ -133,7 +132,7 @@ information, see the SchedMD documentation:
 * [sbatch Documentation](https://slurm.schedmd.com/sbatch.html)
 
 [slurm-gcp]: https://github.com/GoogleCloudPlatform/slurm-gcp
-[cloud_parameters]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/scheduler/schedmd-slurm-gcp-v5-controller#input_cloud_parameters
+[cloud_parameters]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/scheduler/schedmd-slurm-gcp-v6-controller#input_cloud_parameters
 
 ## Further Reading
 

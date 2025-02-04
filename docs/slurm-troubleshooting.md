@@ -1,58 +1,5 @@
 ## Slurm Troubleshooting
 
-### Network is unreachable (Slurm V5)
-
-Slurm requires access to google APIs to function. This can be achieved through one of the following methods:
-
-1. Create a [Cloud NAT](https://cloud.google.com/nat) (preferred).
-2. Setting `disable_controller_public_ips: false` &
-   `disable_login_public_ips: false` on the controller and login nodes
-   respectively.
-3. Enable
-   [private access to Google APIs](https://cloud.google.com/vpc/docs/private-access-options).
-
-By default the Toolkit VPC module will create an associated Cloud NAT so this is
-typically seen when working with the pre-existing-vpc module. If no access
-exists you will see the following errors:
-
-When you ssh into the login node or controller you will see the following
-message:
-
-```text
-*** Slurm setup failed! Please view log: /slurm/scripts/setup.log ***
-```
-
-> **_NOTE:_**: Many different potential issues could be indicated by the above
-> message, so be sure to verify issue in logs.
-
-To confirm the issue, ssh onto the controller and call `sudo cat /slurm/scripts/setup.log`. Look for
-the following logs:
-
-```text
-google_metadata_script_runner: startup-script: ERROR: [Errno 101] Network is unreachable
-google_metadata_script_runner: startup-script: OSError: [Errno 101] Network is unreachable
-google_metadata_script_runner: startup-script: ERROR: Aborting setup...
-google_metadata_script_runner: startup-script exit status 0
-google_metadata_script_runner: Finished running startup scripts.
-```
-
-You may also notice mount failure logs on the login node:
-
-```text
-INFO: Waiting for '/usr/local/etc/slurm' to be mounted...
-INFO: Waiting for '/home' to be mounted...
-INFO: Waiting for '/opt/apps' to be mounted...
-INFO: Waiting for '/etc/munge' to be mounted...
-ERROR: mount of path '/usr/local/etc/slurm' failed: <class 'subprocess.CalledProcessError'>: Command '['mount', '/usr/local/etc/slurm']' returned non-zero exit status 32.
-ERROR: mount of path '/opt/apps' failed: <class 'subprocess.CalledProcessError'>: Command '['mount', '/opt/apps']' returned non-zero exit status 32.
-ERROR: mount of path '/home' failed: <class 'subprocess.CalledProcessError'>: Command '['mount', '/home']' returned non-zero exit status 32.
-ERROR: mount of path '/etc/munge' failed: <class 'subprocess.CalledProcessError'>: Command '['mount', '/etc/munge']' returned non-zero exit status 32.
-```
-
-> **_NOTE:_**: The above logs only indicate that something went wrong with the
-> startup of the controller. Check logs on the controller to be sure it is a
-> network issue.
-
 ### Failure to Create Auto Scale Nodes (Slurm)
 
 If your deployment succeeds but your jobs fail with the following error:
@@ -213,9 +160,9 @@ After creating the service account, it can be set via the
 [slurm-on-gcp-con]: community/modules/scheduler/schedmd-slurm-gcp-v6-controller/README.md
 [slurm-on-gcp-login]: community/modules/scheduler/schedmd-slurm-gcp-v6-login/README.md
 
-### Timeout Error / Startup Script Failure (Slurm V5)
+### Timeout Error / Startup Script Failure (Slurm V6)
 
-If you observe failure of startup scripts in version 5 of the Slurm module,
+If you observe failure of startup scripts in version 6 of the Slurm module,
 they may be due to a 300 second maximum timeout on scripts. All startup script
 logging is found in `/slurm/scripts/setup.log` on every node in a Slurm cluster.
 The error will appear similar to:
@@ -237,7 +184,7 @@ to execute scripts of significant duration. This pattern is demonstrated in the
 
 ### Slurm Controller Startup Fails with `exportfs` Error
 
-Example error in `/slurm/scripts/setup.log` (on Slurm V5 controller):
+Example error in `/slurm/scripts/setup.log` (on Slurm V6 controller):
 
 ```text
 exportfs: /****** does not support NFS export
@@ -262,9 +209,9 @@ the `local_mount` and `filestore_share_name`.
 
 ### `local-exec provisioner error` During Terraform Apply
 
-Using the `enable_reconfigure` setting with Slurm v5 modules uses `local-exec`
+Using the `enable_reconfigure` setting with Slurm v6 modules uses `local-exec`
 provisioners to perform additional cluster configuration. Some common issues
 experienced when using this feature are missing local python requirements and
 incorrectly configured gcloud cli. There is more information about these issues
 and fixes on the
-[`schedmd-slurm-gcp-v5-controller` documentation](../community/modules/scheduler/schedmd-slurm-gcp-v5-controller/README.md#live-cluster-reconfiguration-enable_reconfigure).
+[`schedmd-slurm-gcp-v6-controller` documentation](../community/modules/scheduler/schedmd-slurm-gcp-v6-controller/README.md#live-cluster-reconfiguration-enable_reconfigure).

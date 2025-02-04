@@ -71,12 +71,12 @@ limitations under the License.
 | <a name="input_folder_id"></a> [folder\_id](#input\_folder\_id) | Folder ID where the project should be created. It can be skipped if already setting organization\_id. Leave blank if the project should be created directly underneath the Organization node. | `string` | `""` | no |
 | <a name="input_image_family"></a> [image\_family](#input\_image\_family) | DEPRECATED: Image of the AI notebook. | `string` | `null` | no |
 | <a name="input_image_project"></a> [image\_project](#input\_image\_project) | DEPRECATED: Google Cloud project where the image is hosted. | `string` | `null` | no |
-| <a name="input_instance_image"></a> [instance\_image](#input\_instance\_image) | Image of the AI notebook.<br><br>Expected Fields:<br>name: The name of the image. Mutually exclusive with family.<br>family: The image family to use. Mutually exclusive with name.<br>project: The project where the image is hosted. | `map(string)` | <pre>{<br>  "family": "tf-latest-cpu",<br>  "project": "deeplearning-platform-release"<br>}</pre> | no |
+| <a name="input_instance_image"></a> [instance\_image](#input\_instance\_image) | Image of the AI notebook.<br/><br/>Expected Fields:<br/>name: The name of the image. Mutually exclusive with family.<br/>family: The image family to use. Mutually exclusive with name.<br/>project: The project where the image is hosted. | `map(string)` | <pre>{<br/>  "family": "tf-latest-cpu",<br/>  "project": "deeplearning-platform-release"<br/>}</pre> | no |
 | <a name="input_ip_cidr_range"></a> [ip\_cidr\_range](#input\_ip\_cidr\_range) | Unique IP CIDR Range for AI Notebooks subnet | `string` | `"10.142.190.0/24"` | no |
 | <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | Type of VM you would like to spin up | `string` | `"n1-standard-1"` | no |
 | <a name="input_network_name"></a> [network\_name](#input\_network\_name) | Name of the network to be created. | `string` | `"ai-notebook"` | no |
 | <a name="input_organization_id"></a> [organization\_id](#input\_organization\_id) | Organization ID where GCP Resources need to get spin up. It can be skipped if already setting folder\_id | `string` | `""` | no |
-| <a name="input_owner_id"></a> [owner\_id](#input\_owner\_id) | Billing Account associated to the GCP Resources | `list(any)` | <pre>[<br>  ""<br>]</pre> | no |
+| <a name="input_owner_id"></a> [owner\_id](#input\_owner\_id) | Billing Account associated to the GCP Resources | `list(any)` | <pre>[<br/>  ""<br/>]</pre> | no |
 | <a name="input_project"></a> [project](#input\_project) | Project in which to launch the AI Notebooks. | `string` | `""` | no |
 | <a name="input_project_name"></a> [project\_name](#input\_project\_name) | Project name or ID, if it's an existing project. | `string` | `"gcluster-discovery"` | no |
 | <a name="input_random_id"></a> [random\_id](#input\_random\_id) | Adds a suffix of 4 random characters to the `project_id` | `string` | `null` | no |

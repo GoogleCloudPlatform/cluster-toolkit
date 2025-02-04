@@ -41,4 +41,14 @@ variable "mount_options" {
   description = "Options describing various aspects of the file system. Consider adding setting to 'defaults,_netdev,implicit_dirs' when using gcsfuse."
   type        = string
   default     = "defaults,_netdev"
+  nullable    = false
+}
+
+variable "parallelstore_options" {
+  description = "Parallelstore specific options"
+  type = object({
+    daos_agent_config = optional(string, "")
+    dfuse_environment = optional(map(string), {})
+  })
+  default = {}
 }

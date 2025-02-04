@@ -24,8 +24,8 @@ delete_image: false
 cli_deployment_vars:
   network_name_system: default
   subnetwork_name_system: default
-  region: us-east4
-  zone: us-east4-a
+  region: us-west4
+  zone: us-west4-a
   enable_ops_agent: true
   enable_nvidia_dcgm: true
   slurm_cluster_name: a3mc{{ build[0:4] }}

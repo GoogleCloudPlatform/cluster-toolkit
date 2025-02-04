@@ -90,11 +90,11 @@ deployment_groups:
       machine_type: n2-standard-4
       metadata:
         network_storage: ((jsonencode([module.appfs.network_storage])))
-      source_image_family: hpc-centos-7
+      source_image_family: hpc-rocky-linux-8
       source_image_project: cloud-hpc-image-public
 
   - id: batch-job
-    source: ./modules/scheduler/batch-job-template
+    source: modules/scheduler/batch-job-template
     settings:
       instance_template: $(batch-compute-template.self_link)
     outputs: [instructions]
@@ -140,8 +140,8 @@ limitations under the License.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_instance_template"></a> [instance\_template](#module\_instance\_template) | terraform-google-modules/vm/google//modules/instance_template | ~> 10.1.1 |
-| <a name="module_netstorage_startup_script"></a> [netstorage\_startup\_script](#module\_netstorage\_startup\_script) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | v1.36.0 |
+| <a name="module_instance_template"></a> [instance\_template](#module\_instance\_template) | terraform-google-modules/vm/google//modules/instance_template | ~> 12.1 |
+| <a name="module_netstorage_startup_script"></a> [netstorage\_startup\_script](#module\_netstorage\_startup\_script) | ../../scripts/startup-script | n/a |
 
 ## Resources
 
@@ -157,27 +157,27 @@ limitations under the License.
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_allow_automatic_updates"></a> [allow\_automatic\_updates](#input\_allow\_automatic\_updates) | If false, disables automatic system package updates on the created instances.  This feature is<br>only available on supported images (or images derived from them).  For more details, see<br>https://cloud.google.com/compute/docs/instances/create-hpc-vm#disable_automatic_updates | `bool` | `true` | no |
+| <a name="input_allow_automatic_updates"></a> [allow\_automatic\_updates](#input\_allow\_automatic\_updates) | If false, disables automatic system package updates on the created instances.  This feature is<br/>only available on supported images (or images derived from them).  For more details, see<br/>https://cloud.google.com/compute/docs/instances/create-hpc-vm#disable_automatic_updates | `bool` | `true` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the deployment, used for the job\_id | `string` | n/a | yes |
 | <a name="input_enable_public_ips"></a> [enable\_public\_ips](#input\_enable\_public\_ips) | If set to true, instances will have public IPs | `bool` | `true` | no |
 | <a name="input_gcloud_version"></a> [gcloud\_version](#input\_gcloud\_version) | The version of the gcloud cli being used. Used for output instructions. Valid inputs are `"alpha"`, `"beta"` and "" (empty string for default version) | `string` | `""` | no |
 | <a name="input_image"></a> [image](#input\_image) | DEPRECATED: Google Cloud Batch compute node image. Ignored if `instance_template` is provided. | `any` | `null` | no |
-| <a name="input_instance_image"></a> [instance\_image](#input\_instance\_image) | Google Cloud Batch compute node image. Ignored if `instance_template` is provided.<br><br>Expected Fields:<br>name: The name of the image. Mutually exclusive with family.<br>family: The image family to use. Mutually exclusive with name.<br>project: The project where the image is hosted. | `map(string)` | <pre>{<br>  "family": "hpc-rocky-linux-8",<br>  "project": "cloud-hpc-image-public"<br>}</pre> | no |
+| <a name="input_instance_image"></a> [instance\_image](#input\_instance\_image) | Google Cloud Batch compute node image. Ignored if `instance_template` is provided.<br/><br/>Expected Fields:<br/>name: The name of the image. Mutually exclusive with family.<br/>family: The image family to use. Mutually exclusive with name.<br/>project: The project where the image is hosted. | `map(string)` | <pre>{<br/>  "family": "hpc-rocky-linux-8",<br/>  "project": "cloud-hpc-image-public"<br/>}</pre> | no |
 | <a name="input_instance_template"></a> [instance\_template](#input\_instance\_template) | Compute VM instance template self-link to be used for Google Cloud Batch compute node. If provided, a number of other variables will be ignored as noted by `Ignored if instance_template is provided` in descriptions. | `string` | `null` | no |
 | <a name="input_job_filename"></a> [job\_filename](#input\_job\_filename) | The filename of the generated job template file. Will default to `cloud-batch-<job_id>.json` if not specified | `string` | `null` | no |
 | <a name="input_job_id"></a> [job\_id](#input\_job\_id) | An id for the Google Cloud Batch job. Used for output instructions and file naming. Automatically populated by the module id if not set. If setting manually, ensure a unique value across all jobs. | `string` | n/a | yes |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the Google Cloud Batch compute nodes. Key-value pairs. Ignored if `instance_template` is provided. | `map(string)` | n/a | yes |
-| <a name="input_log_policy"></a> [log\_policy](#input\_log\_policy) | Create a block to define log policy.<br>When set to `CLOUD_LOGGING`, logs will be sent to Cloud Logging.<br>When set to `PATH`, path must be added to generated template.<br>When set to `DESTINATION_UNSPECIFIED`, logs will not be preserved. | `string` | `"CLOUD_LOGGING"` | no |
+| <a name="input_log_policy"></a> [log\_policy](#input\_log\_policy) | Create a block to define log policy.<br/>When set to `CLOUD_LOGGING`, logs will be sent to Cloud Logging.<br/>When set to `PATH`, path must be added to generated template.<br/>When set to `DESTINATION_UNSPECIFIED`, logs will not be preserved. | `string` | `"CLOUD_LOGGING"` | no |
 | <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | Machine type to use for Google Cloud Batch compute nodes. Ignored if `instance_template` is provided. | `string` | `"n2-standard-4"` | no |
 | <a name="input_mpi_mode"></a> [mpi\_mode](#input\_mpi\_mode) | Sets up barriers before and after each runnable. In addition, sets `permissiveSsh=true`, `requireHostsFile=true`, and `taskCountPerNode=1`. `taskCountPerNode` can be overridden by `task_count_per_node`. | `bool` | `false` | no |
 | <a name="input_native_batch_mounting"></a> [native\_batch\_mounting](#input\_native\_batch\_mounting) | Batch can mount some fs\_type nativly using the 'volumes' block in the job file. If set to false, all mounting will happen through Cluster Toolkit startup scripts. | `bool` | `true` | no |
-| <a name="input_network_storage"></a> [network\_storage](#input\_network\_storage) | An array of network attached storage mounts to be configured. Ignored if `instance_template` is provided. | <pre>list(object({<br>    server_ip             = string<br>    remote_mount          = string<br>    local_mount           = string<br>    fs_type               = string<br>    mount_options         = string<br>    client_install_runner = map(string)<br>    mount_runner          = map(string)<br>  }))</pre> | `[]` | no |
+| <a name="input_network_storage"></a> [network\_storage](#input\_network\_storage) | An array of network attached storage mounts to be configured. Ignored if `instance_template` is provided. | <pre>list(object({<br/>    server_ip             = string<br/>    remote_mount          = string<br/>    local_mount           = string<br/>    fs_type               = string<br/>    mount_options         = string<br/>    client_install_runner = map(string)<br/>    mount_runner          = map(string)<br/>  }))</pre> | `[]` | no |
 | <a name="input_on_host_maintenance"></a> [on\_host\_maintenance](#input\_on\_host\_maintenance) | Describes maintenance behavior for the instance. If left blank this will default to `MIGRATE` except the use of GPUs requires it to be `TERMINATE` | `string` | `null` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | The region in which to run the Google Cloud Batch job | `string` | n/a | yes |
 | <a name="input_runnable"></a> [runnable](#input\_runnable) | A simplified form of `var.runnables` that only takes a single script. Use either `runnables` or `runnable`. | `string` | `null` | no |
-| <a name="input_runnables"></a> [runnables](#input\_runnables) | A list of shell scripts to be executed in sequence as the main workload of the Google Batch job. These will be used to populate the generated template. | <pre>list(object({<br>    script = string<br>  }))</pre> | `null` | no |
-| <a name="input_service_account"></a> [service\_account](#input\_service\_account) | Service account to attach to the Google Cloud Batch compute node. Ignored if `instance_template` is provided. | <pre>object({<br>    email  = string,<br>    scopes = set(string)<br>  })</pre> | <pre>{<br>  "email": null,<br>  "scopes": [<br>    "https://www.googleapis.com/auth/devstorage.read_only",<br>    "https://www.googleapis.com/auth/logging.write",<br>    "https://www.googleapis.com/auth/monitoring.write",<br>    "https://www.googleapis.com/auth/servicecontrol",<br>    "https://www.googleapis.com/auth/service.management.readonly",<br>    "https://www.googleapis.com/auth/trace.append"<br>  ]<br>}</pre> | no |
+| <a name="input_runnables"></a> [runnables](#input\_runnables) | A list of shell scripts to be executed in sequence as the main workload of the Google Batch job. These will be used to populate the generated template. | <pre>list(object({<br/>    script = string<br/>  }))</pre> | `null` | no |
+| <a name="input_service_account"></a> [service\_account](#input\_service\_account) | Service account to attach to the Google Cloud Batch compute node. Ignored if `instance_template` is provided. | <pre>object({<br/>    email  = string,<br/>    scopes = set(string)<br/>  })</pre> | <pre>{<br/>  "email": null,<br/>  "scopes": [<br/>    "https://www.googleapis.com/auth/devstorage.read_only",<br/>    "https://www.googleapis.com/auth/logging.write",<br/>    "https://www.googleapis.com/auth/monitoring.write",<br/>    "https://www.googleapis.com/auth/servicecontrol",<br/>    "https://www.googleapis.com/auth/service.management.readonly",<br/>    "https://www.googleapis.com/auth/trace.append"<br/>  ]<br/>}</pre> | no |
 | <a name="input_startup_script"></a> [startup\_script](#input\_startup\_script) | Startup script run before Google Cloud Batch job starts. Ignored if `instance_template` is provided. | `string` | `null` | no |
 | <a name="input_submit"></a> [submit](#input\_submit) | When set to true, the generated job file will be submitted automatically to Google Cloud as part of terraform apply. | `bool` | `false` | no |
 | <a name="input_subnetwork"></a> [subnetwork](#input\_subnetwork) | The subnetwork that the Batch job should run on. Defaults to 'default' subnet. Ignored if `instance_template` is provided. | `any` | `null` | no |

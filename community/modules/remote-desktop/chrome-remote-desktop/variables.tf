@@ -58,7 +58,7 @@ variable "network_storage" {
 variable "instance_image" {
   description = <<-EOD
     Image used to build chrome remote desktop node. The default image is
-    name="debian-12-bookworm-v20240312" and project="debian-cloud".
+    name="debian-12-bookworm-v20240815" and project="debian-cloud".
     NOTE: uses fixed version of image to avoid NVIDIA driver compatibility issues.
 
     An alternative image is from name="ubuntu-2204-jammy-v20240126" and project="ubuntu-os-cloud".
@@ -71,7 +71,7 @@ variable "instance_image" {
   type        = map(string)
   default = {
     project = "debian-cloud"
-    name    = "debian-12-bookworm-v20240312"
+    name    = "debian-12-bookworm-v20240815"
   }
 }
 
@@ -95,9 +95,9 @@ variable "auto_delete_boot_disk" {
 
 variable "name_prefix" {
   description = <<-EOT
-    An optional name for all VM and disk resources. 
-    If not supplied, `deployment_name` will be used. 
-    When `name_prefix` is supplied, and `add_deployment_name_before_prefix` is set, 
+    An optional name for all VM and disk resources.
+    If not supplied, `deployment_name` will be used.
+    When `name_prefix` is supplied, and `add_deployment_name_before_prefix` is set,
     then resources are named by "<`deployment_name`>-<`name_prefix`>-<#>".
     EOT
   type        = string
@@ -172,7 +172,7 @@ variable "network_interfaces" {
     subnetwork         (string, required if network is not supplied)
     subnetwork_project (string, optional)
     network_ip         (string, optional)
-    nic_type           (string, optional, choose from ["GVNIC", "VIRTIO_NET"])
+    nic_type           (string, optional, choose from ["GVNIC", "VIRTIO_NET", "RDMA", "IRDMA", "MRDMA"])
     stack_type         (string, optional, choose from ["IPV4_ONLY", "IPV4_IPV6"])
     queue_count        (number, optional)
     access_config      (object, optional)

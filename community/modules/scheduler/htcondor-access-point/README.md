@@ -120,9 +120,9 @@ limitations under the License.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_access_point_instance_template"></a> [access\_point\_instance\_template](#module\_access\_point\_instance\_template) | github.com/terraform-google-modules/terraform-google-vm//modules/instance_template | 73dc845 |
-| <a name="module_htcondor_ap"></a> [htcondor\_ap](#module\_htcondor\_ap) | terraform-google-modules/vm/google//modules/mig | 10.1.1 |
-| <a name="module_startup_script"></a> [startup\_script](#module\_startup\_script) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | v1.36.0&depth=1 |
+| <a name="module_access_point_instance_template"></a> [access\_point\_instance\_template](#module\_access\_point\_instance\_template) | terraform-google-modules/vm/google//modules/instance_template | ~> 12.1 |
+| <a name="module_htcondor_ap"></a> [htcondor\_ap](#module\_htcondor\_ap) | terraform-google-modules/vm/google//modules/mig | ~> 12.1 |
+| <a name="module_startup_script"></a> [startup\_script](#module\_startup\_script) | ../../../../modules/scripts/startup-script | n/a |
 
 ## Resources
 
@@ -143,7 +143,7 @@ limitations under the License.
 |------|-------------|------|---------|:--------:|
 | <a name="input_access_point_runner"></a> [access\_point\_runner](#input\_access\_point\_runner) | A list of Toolkit runners for configuring an HTCondor access point | `list(map(string))` | `[]` | no |
 | <a name="input_access_point_service_account_email"></a> [access\_point\_service\_account\_email](#input\_access\_point\_service\_account\_email) | Service account for access point (e-mail format) | `string` | n/a | yes |
-| <a name="input_allow_automatic_updates"></a> [allow\_automatic\_updates](#input\_allow\_automatic\_updates) | If false, disables automatic system package updates on the created instances.  This feature is<br>only available on supported images (or images derived from them).  For more details, see<br>https://cloud.google.com/compute/docs/instances/create-hpc-vm#disable_automatic_updates | `bool` | `true` | no |
+| <a name="input_allow_automatic_updates"></a> [allow\_automatic\_updates](#input\_allow\_automatic\_updates) | If false, disables automatic system package updates on the created instances.  This feature is<br/>only available on supported images (or images derived from them).  For more details, see<br/>https://cloud.google.com/compute/docs/instances/create-hpc-vm#disable_automatic_updates | `bool` | `true` | no |
 | <a name="input_autoscaler_runner"></a> [autoscaler\_runner](#input\_autoscaler\_runner) | A list of Toolkit runners for configuring autoscaling daemons | `list(map(string))` | `[]` | no |
 | <a name="input_central_manager_ips"></a> [central\_manager\_ips](#input\_central\_manager\_ips) | List of IP addresses of HTCondor Central Managers | `list(string)` | n/a | yes |
 | <a name="input_default_mig_id"></a> [default\_mig\_id](#input\_default\_mig\_id) | Default MIG ID for HTCondor jobs; if unset, jobs must specify MIG id | `string` | `""` | no |
@@ -156,17 +156,17 @@ limitations under the License.
 | <a name="input_enable_public_ips"></a> [enable\_public\_ips](#input\_enable\_public\_ips) | Enable Public IPs on the access points | `bool` | `false` | no |
 | <a name="input_enable_shielded_vm"></a> [enable\_shielded\_vm](#input\_enable\_shielded\_vm) | Enable the Shielded VM configuration (var.shielded\_instance\_config). | `bool` | `false` | no |
 | <a name="input_htcondor_bucket_name"></a> [htcondor\_bucket\_name](#input\_htcondor\_bucket\_name) | Name of HTCondor configuration bucket | `string` | n/a | yes |
-| <a name="input_instance_image"></a> [instance\_image](#input\_instance\_image) | Custom VM image with HTCondor and Toolkit support installed."<br><br>Expected Fields:<br>name: The name of the image. Mutually exclusive with family.<br>family: The image family to use. Mutually exclusive with name.<br>project: The project where the image is hosted. | `map(string)` | n/a | yes |
+| <a name="input_instance_image"></a> [instance\_image](#input\_instance\_image) | Custom VM image with HTCondor and Toolkit support installed."<br/><br/>Expected Fields:<br/>name: The name of the image. Mutually exclusive with family.<br/>family: The image family to use. Mutually exclusive with name.<br/>project: The project where the image is hosted. | `map(string)` | n/a | yes |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to resources. List key, value pairs. | `map(string)` | n/a | yes |
 | <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | Machine type to use for HTCondor central managers | `string` | `"n2-standard-4"` | no |
 | <a name="input_metadata"></a> [metadata](#input\_metadata) | Metadata to add to HTCondor central managers | `map(string)` | `{}` | no |
 | <a name="input_mig_id"></a> [mig\_id](#input\_mig\_id) | List of Managed Instance Group IDs containing execute points in this pool (supplied by htcondor-execute-point module) | `list(string)` | `[]` | no |
 | <a name="input_network_self_link"></a> [network\_self\_link](#input\_network\_self\_link) | The self link of the network in which the HTCondor central manager will be created. | `string` | `null` | no |
-| <a name="input_network_storage"></a> [network\_storage](#input\_network\_storage) | An array of network attached storage mounts to be configured | <pre>list(object({<br>    server_ip             = string,<br>    remote_mount          = string,<br>    local_mount           = string,<br>    fs_type               = string,<br>    mount_options         = string,<br>    client_install_runner = map(string)<br>    mount_runner          = map(string)<br>  }))</pre> | `[]` | no |
+| <a name="input_network_storage"></a> [network\_storage](#input\_network\_storage) | An array of network attached storage mounts to be configured | <pre>list(object({<br/>    server_ip             = string,<br/>    remote_mount          = string,<br/>    local_mount           = string,<br/>    fs_type               = string,<br/>    mount_options         = string,<br/>    client_install_runner = map(string)<br/>    mount_runner          = map(string)<br/>  }))</pre> | `[]` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which HTCondor pool will be created | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | Default region for creating resources | `string` | n/a | yes |
-| <a name="input_service_account_scopes"></a> [service\_account\_scopes](#input\_service\_account\_scopes) | Scopes by which to limit service account attached to central manager. | `set(string)` | <pre>[<br>  "https://www.googleapis.com/auth/cloud-platform"<br>]</pre> | no |
-| <a name="input_shielded_instance_config"></a> [shielded\_instance\_config](#input\_shielded\_instance\_config) | Shielded VM configuration for the instance (must set var.enabled\_shielded\_vm) | <pre>object({<br>    enable_secure_boot          = bool<br>    enable_vtpm                 = bool<br>    enable_integrity_monitoring = bool<br>  })</pre> | <pre>{<br>  "enable_integrity_monitoring": true,<br>  "enable_secure_boot": true,<br>  "enable_vtpm": true<br>}</pre> | no |
+| <a name="input_service_account_scopes"></a> [service\_account\_scopes](#input\_service\_account\_scopes) | Scopes by which to limit service account attached to central manager. | `set(string)` | <pre>[<br/>  "https://www.googleapis.com/auth/cloud-platform"<br/>]</pre> | no |
+| <a name="input_shielded_instance_config"></a> [shielded\_instance\_config](#input\_shielded\_instance\_config) | Shielded VM configuration for the instance (must set var.enabled\_shielded\_vm) | <pre>object({<br/>    enable_secure_boot          = bool<br/>    enable_vtpm                 = bool<br/>    enable_integrity_monitoring = bool<br/>  })</pre> | <pre>{<br/>  "enable_integrity_monitoring": true,<br/>  "enable_secure_boot": true,<br/>  "enable_vtpm": true<br/>}</pre> | no |
 | <a name="input_spool_disk_size_gb"></a> [spool\_disk\_size\_gb](#input\_spool\_disk\_size\_gb) | Boot disk size in GB | `number` | `32` | no |
 | <a name="input_spool_disk_type"></a> [spool\_disk\_type](#input\_spool\_disk\_type) | Boot disk size in GB | `string` | `"pd-ssd"` | no |
 | <a name="input_spool_parent_dir"></a> [spool\_parent\_dir](#input\_spool\_parent\_dir) | HTCondor access point configuration SPOOL will be set to subdirectory named "spool" | `string` | `"/var/lib/condor"` | no |

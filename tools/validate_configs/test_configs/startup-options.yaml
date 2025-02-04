@@ -26,10 +26,10 @@ deployment_groups:
 - group: primary
   modules:
   - id: network1
-    source: ./modules/network/pre-existing-vpc
+    source: modules/network/pre-existing-vpc
 
   - id: startup
-    source: ./modules/scripts/startup-script
+    source: modules/scripts/startup-script
     settings:
       ansible_virtualenv_path: /usr/local/ghpc
       runners:
@@ -48,7 +48,7 @@ deployment_groups:
         destination: empty_tasks.yaml
 
   - id: instance-explicit-startup
-    source: ./modules/compute/vm-instance
+    source: modules/compute/vm-instance
     use: [network1]
     settings:
       name_prefix: explicit
@@ -56,21 +56,21 @@ deployment_groups:
       startup_script: $(startup.startup_script)
 
   - id: instance-no-startup
-    source: ./modules/compute/vm-instance
+    source: modules/compute/vm-instance
     use: [network1]
     settings:
       name_prefix: no-startup
       machine_type: e2-standard-4
 
   - id: instance-use-startup
-    source: ./modules/compute/vm-instance
+    source: modules/compute/vm-instance
     use: [network1, startup]
     settings:
       name_prefix: use-startup
       machine_type: e2-standard-4
 
   - id: instance-metadata-startup
-    source: ./modules/compute/vm-instance
+    source: modules/compute/vm-instance
     use: [network1]
     settings:
       name_prefix: metadata-startup

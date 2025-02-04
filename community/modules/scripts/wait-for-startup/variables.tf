@@ -45,3 +45,10 @@ variable "timeout" {
     error_message = "The timeout should be non-negative"
   }
 }
+
+variable "gcloud_path_override" {
+  description = "Directory of the gcloud executable to be used during cleanup"
+  type        = string
+  default     = ""
+  nullable    = false
+}

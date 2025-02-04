@@ -121,8 +121,8 @@ variable "instance_image" {
     EOD
   type        = map(string)
   default = {
-    family  = "hpc-centos-7"
     project = "cloud-hpc-image-public"
+    name    = "hpc-centos-7-v20240712"
   }
 
   validation {

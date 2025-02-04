@@ -20,28 +20,57 @@ locals {
 }
 
 locals {
-  sa_email = var.service_account_email != null ? var.service_account_email : data.google_compute_default_service_account.default_sa.email
+  upgrade_settings = {
+    strategy        = var.upgrade_settings.strategy
+    max_surge       = coalesce(var.upgrade_settings.max_surge, 0)
+    max_unavailable = coalesce(var.upgrade_settings.max_unavailable, 1)
+  }
+}
 
-  preattached_gpu_machine_family = contains(["a2", "a3", "g2"], local.machine_family)
-  has_gpu                        = (local.guest_accelerator != null && length(local.guest_accelerator) > 0) || local.preattached_gpu_machine_family
+module "gpu" {
+  source = "../../internal/gpu-definition"
+
+  machine_type      = var.machine_type
+  guest_accelerator = var.guest_accelerator
+}
+
+locals {
+  guest_accelerator = module.gpu.guest_accelerator
+
+  has_gpu                       = length(local.guest_accelerator) > 0
+  allocatable_gpu_per_node      = local.has_gpu ? max(local.guest_accelerator[*].count...) : -1
+  is_static_node_pool_with_gpus = var.static_node_count != null && local.allocatable_gpu_per_node != -1
+  static_gpu_count              = local.is_static_node_pool_with_gpus ? var.static_node_count * local.allocatable_gpu_per_node : 0
   gpu_taint = local.has_gpu ? [{
     key    = "nvidia.com/gpu"
     value  = "present"
     effect = "NO_SCHEDULE"
   }] : []
 
-  autoscale_set   = var.autoscaling_total_min_nodes != 0 || var.autoscaling_total_max_nodes != 1000
-  static_node_set = var.static_node_count != null
+  autoscale_set    = var.autoscaling_total_min_nodes != 0 || var.autoscaling_total_max_nodes != 1000
+  static_node_set  = var.static_node_count != null
+  initial_node_set = try(var.initial_node_count > 0, false)
+
+  module_unique_id = replace(lower(var.internal_ghpc_module_id), "/[^a-z0-9\\-]/", "")
 }
 
-data "google_compute_default_service_account" "default_sa" {
-  project = var.project_id
+
+locals {
+  cluster_id_parts = split("/", var.cluster_id)
+  cluster_name     = local.cluster_id_parts[5]
+  cluster_location = local.cluster_id_parts[3]
+}
+
+
+data "google_container_cluster" "gke_cluster" {
+  name     = local.cluster_name
+  location = local.cluster_location
 }
 
 resource "google_container_node_pool" "node_pool" {
   provider = google-beta
 
-  name           = var.name == null ? var.machine_type : var.name
+  name           = coalesce(var.name, "${var.machine_type}-${local.module_unique_id}")
   cluster        = var.cluster_id
   node_locations = var.zones
 
@@ -55,21 +84,33 @@ resource "google_container_node_pool" "node_pool" {
     }
   }
 
+  initial_node_count = var.initial_node_count
+
+  max_pods_per_node = var.max_pods_per_node
+
   management {
-    auto_repair  = true
+    auto_repair  = var.auto_repair
     auto_upgrade = var.auto_upgrade
   }
 
   upgrade_settings {
-    strategy        = "SURGE"
-    max_surge       = 0
-    max_unavailable = 1
+    strategy        = local.upgrade_settings.strategy
+    max_surge       = local.upgrade_settings.max_surge
+    max_unavailable = local.upgrade_settings.max_unavailable
   }
 
   dynamic "placement_policy" {
-    for_each = var.compact_placement ? [1] : []
+    for_each = var.placement_policy.type != null ? [1] : []
     content {
-      type = "COMPACT"
+      type        = var.placement_policy.type
+      policy_name = var.placement_policy.name
+    }
+  }
+
+  dynamic "queued_provisioning" {
+    for_each = var.enable_queued_provisioning ? [1] : []
+    content {
+      enabled = true
     }
   }
 
@@ -86,12 +127,30 @@ resource "google_container_node_pool" "node_pool" {
 
     dynamic "guest_accelerator" {
       for_each = local.guest_accelerator
+      iterator = ga
       content {
-        type                           = coalesce(guest_accelerator.value.type, try(local.generated_guest_accelerator[0].type, ""))
-        count                          = coalesce(try(guest_accelerator.value.count, 0) > 0 ? guest_accelerator.value.count : try(local.generated_guest_accelerator[0].count, "0"))
-        gpu_driver_installation_config = coalescelist(try(guest_accelerator.value.gpu_driver_installation_config, []), [{ gpu_driver_version = "DEFAULT" }])
-        gpu_partition_size             = try(guest_accelerator.value.gpu_partition_size, "")
-        gpu_sharing_config             = try(guest_accelerator.value.gpu_sharing_config, [])
+        type  = coalesce(ga.value.type, try(local.generated_guest_accelerator[0].type, ""))
+        count = coalesce(try(ga.value.count, 0) > 0 ? ga.value.count : try(local.generated_guest_accelerator[0].count, "0"))
+
+        gpu_partition_size = try(ga.value.gpu_partition_size, null)
+
+        dynamic "gpu_driver_installation_config" {
+          # in case user did not specify guest_accelerator settings, we need a try to default to []
+          for_each = try([ga.value.gpu_driver_installation_config], [{ gpu_driver_version = "DEFAULT" }])
+          iterator = gdic
+          content {
+            gpu_driver_version = gdic.value.gpu_driver_version
+          }
+        }
+
+        dynamic "gpu_sharing_config" {
+          for_each = try(ga.value.gpu_sharing_config == null, true) ? [] : [ga.value.gpu_sharing_config]
+          iterator = gsc
+          content {
+            gpu_sharing_strategy       = gsc.value.gpu_sharing_strategy
+            max_shared_clients_per_gpu = gsc.value.max_shared_clients_per_gpu
+          }
+        }
       }
     }
 
@@ -104,12 +163,18 @@ resource "google_container_node_pool" "node_pool" {
       }
     }
 
-    ephemeral_storage_local_ssd_config {
-      local_ssd_count = var.local_ssd_count_ephemeral_storage
+    dynamic "ephemeral_storage_local_ssd_config" {
+      for_each = local.local_ssd_config.local_ssd_count_ephemeral_storage != null ? [1] : []
+      content {
+        local_ssd_count = local.local_ssd_config.local_ssd_count_ephemeral_storage
+      }
     }
 
-    local_nvme_ssd_block_config {
-      local_ssd_count = var.local_ssd_count_nvme_block
+    dynamic "local_nvme_ssd_block_config" {
+      for_each = local.local_ssd_config.local_ssd_count_nvme_block != null ? [1] : []
+      content {
+        local_ssd_count = local.local_ssd_config.local_ssd_count_nvme_block
+      }
     }
 
     shielded_instance_config {
@@ -150,6 +215,33 @@ resource "google_container_node_pool" "node_pool" {
         "net.ipv4.tcp_wmem" = "4096 16384 16777216"
       }
     }
+
+    reservation_affinity {
+      consume_reservation_type = var.reservation_affinity.consume_reservation_type
+      key                      = length(local.verified_specific_reservations) != 1 ? null : local.reservation_resource_api_label
+      values = length(local.verified_specific_reservations) != 1 ? null : [
+        for i, r in local.verified_specific_reservations :
+        (length(local.input_reservation_suffixes[i]) > 0 ? format("%s%s", r.name, local.input_reservation_suffixes[i]) : "projects/${r.project}/reservations/${r.name}")
+      ]
+    }
+
+    dynamic "host_maintenance_policy" {
+      for_each = var.host_maintenance_interval != "" ? [1] : []
+      content {
+        maintenance_interval = var.host_maintenance_interval
+      }
+    }
+  }
+
+  network_config {
+    dynamic "additional_node_network_configs" {
+      for_each = var.additional_networks
+
+      content {
+        network    = additional_node_network_configs.value.network
+        subnetwork = additional_node_network_configs.value.subnetwork
+      }
+    }
   }
 
   timeouts {
@@ -160,53 +252,158 @@ resource "google_container_node_pool" "node_pool" {
   lifecycle {
     ignore_changes = [
       node_config[0].labels,
+      initial_node_count,
+      # Ignore local/ephemeral ssd configs as they are tied to machine types.
+      node_config[0].ephemeral_storage_local_ssd_config,
+      node_config[0].local_nvme_ssd_block_config,
     ]
+    precondition {
+      condition     = (var.max_pods_per_node == null) || (data.google_container_cluster.gke_cluster.networking_mode == "VPC_NATIVE")
+      error_message = "max_pods_per_node does not work on `routes-based` clusters, that don't have IP Aliasing enabled."
+    }
     precondition {
       condition     = !local.static_node_set || !local.autoscale_set
       error_message = "static_node_count cannot be set with either autoscaling_total_min_nodes or autoscaling_total_max_nodes."
     }
     precondition {
-      condition     = !(var.local_ssd_count_ephemeral_storage > 0 && var.local_ssd_count_nvme_block > 0)
+      condition     = !local.static_node_set || !local.initial_node_set
+      error_message = "initial_node_count cannot be set with static_node_count."
+    }
+    precondition {
+      condition     = !local.initial_node_set || (coalesce(var.initial_node_count, 0) >= var.autoscaling_total_min_nodes && coalesce(var.initial_node_count, 0) <= var.autoscaling_total_max_nodes)
+      error_message = "initial_node_count must be between autoscaling_total_min_nodes and autoscaling_total_max_nodes included."
+    }
+    precondition {
+      condition     = !(coalesce(local.local_ssd_config.local_ssd_count_ephemeral_storage, 0) > 0 && coalesce(local.local_ssd_config.local_ssd_count_nvme_block, 0) > 0)
       error_message = "Only one of local_ssd_count_ephemeral_storage or local_ssd_count_nvme_block can be set to a non-zero value."
+    }
+    precondition {
+      condition = (
+        (var.reservation_affinity.consume_reservation_type != "SPECIFIC_RESERVATION" && local.input_specific_reservations_count == 0) ||
+        (var.reservation_affinity.consume_reservation_type == "SPECIFIC_RESERVATION" && local.input_specific_reservations_count == 1)
+      )
+      error_message = <<-EOT
+      When using NO_RESERVATION or ANY_RESERVATION as the `consume_reservation_type`, `specific_reservations` cannot be set.
+      On the other hand, with SPECIFIC_RESERVATION you must set `specific_reservations`.
+      EOT
+    }
+    precondition {
+      condition = (
+        (local.input_specific_reservations_count == 0) ||
+        (local.input_specific_reservations_count == 1 &&
+          length(local.verified_specific_reservations) > 0 &&
+        length(local.specific_reservation_requirement_violations) == 0)
+      )
+      error_message = <<-EOT
+      Check if your reservation is configured correctly:
+      - A reservation with the name must exist in the specified project and one of the specified zones
+
+      - Its consumption type must be "specific"
+      %{for property in local.specific_reservation_requirement_violations}
+      - ${local.specific_reservation_requirement_violation_messages[property]}
+      %{endfor}
+      EOT
+    }
+    precondition {
+      condition = (
+        (local.input_specific_reservations_count == 0) ||
+        (local.input_specific_reservations_count == 1 && length(local.input_reservation_suffixes) == 0) ||
+        (local.input_specific_reservations_count == 1 && length(local.input_reservation_suffixes) > 0 && try(local.input_reservation_projects[0], var.project_id) == var.project_id)
+      )
+      error_message = "Shared extended reservations are not supported by GKE."
+    }
+    precondition {
+      condition     = contains(["SURGE"], local.upgrade_settings.strategy)
+      error_message = "Only SURGE strategy is supported"
+    }
+    precondition {
+      condition     = local.upgrade_settings.max_unavailable >= 0
+      error_message = "max_unavailable should be set to 0 or greater"
+    }
+    precondition {
+      condition     = local.upgrade_settings.max_surge >= 0
+      error_message = "max_surge should be set to 0 or greater"
+    }
+    precondition {
+      condition     = local.upgrade_settings.max_unavailable > 0 || local.upgrade_settings.max_surge > 0
+      error_message = "At least one of max_unavailable or max_surge must greater than 0"
+    }
+    precondition {
+      condition     = var.placement_policy.type != "COMPACT" || (var.zones != null ? (length(var.zones) == 1) : false)
+      error_message = "Compact placement is only available for node pools operating in a single zone."
+    }
+    precondition {
+      condition     = var.placement_policy.type != "COMPACT" || local.upgrade_settings.strategy != "BLUE_GREEN"
+      error_message = "Compact placement is not supported with blue-green upgrades."
+    }
+    precondition {
+      condition     = !(var.enable_queued_provisioning == true && var.placement_policy.type == "COMPACT")
+      error_message = "placement_policy cannot be COMPACT when enable_queued_provisioning is true."
+    }
+    precondition {
+      condition     = !(var.enable_queued_provisioning == true && var.reservation_affinity.consume_reservation_type != "NO_RESERVATION")
+      error_message = "reservation_affinity should be NO_RESERVATION when enable_queued_provisioning is true."
+    }
+    precondition {
+      condition     = !(var.enable_queued_provisioning == true && var.autoscaling_total_min_nodes != 0)
+      error_message = "autoscaling_total_min_nodes should be 0 when enable_queued_provisioning is true."
     }
   }
 }
 
-# For container logs to show up under Cloud Logging and GKE metrics to show up
-# on Cloud Monitoring console, some project level roles are needed for the
-# node_service_account
-resource "google_project_iam_member" "node_service_account_log_writer" {
-  project = var.project_id
-  role    = "roles/logging.logWriter"
-  member  = "serviceAccount:${local.sa_email}"
+locals {
+  supported_machine_types_for_install_dependencies = ["a3-highgpu-8g", "a3-megagpu-8g"]
 }
 
-resource "google_project_iam_member" "node_service_account_metric_writer" {
-  project = var.project_id
-  role    = "roles/monitoring.metricWriter"
-  member  = "serviceAccount:${local.sa_email}"
+resource "null_resource" "install_dependencies" {
+  count = var.run_workload_script && contains(local.supported_machine_types_for_install_dependencies, var.machine_type) ? 1 : 0
+  provisioner "local-exec" {
+    command = "pip3 install pyyaml"
+  }
 }
 
-resource "google_project_iam_member" "node_service_account_monitoring_viewer" {
-  project = var.project_id
-  role    = "roles/monitoring.viewer"
-  member  = "serviceAccount:${local.sa_email}"
+locals {
+  gpu_direct_setting = lookup(local.gpu_direct_settings, var.machine_type, { gpu_direct_manifests = [], updated_workload_path = "", rxdm_version = "" })
 }
 
-resource "google_project_iam_member" "node_service_account_resource_metadata_writer" {
-  project = var.project_id
-  role    = "roles/stackdriver.resourceMetadata.writer"
-  member  = "serviceAccount:${local.sa_email}"
+# execute script to inject rxdm sidecar into workload to enable tcpx for a3-highgpu-8g VM workload
+resource "null_resource" "enable_tcpx_in_workload" {
+  count = var.run_workload_script && var.machine_type == "a3-highgpu-8g" ? 1 : 0
+  triggers = {
+    always_run = timestamp()
+  }
+  provisioner "local-exec" {
+    command = "python3 ${path.module}/gpu-direct-workload/scripts/enable-tcpx-in-workload.py --file ${local.workload_path_tcpx} --rxdm ${local.gpu_direct_setting.rxdm_version}"
+  }
+
+  depends_on = [null_resource.install_dependencies]
 }
 
-resource "google_project_iam_member" "node_service_account_gcr" {
-  project = var.project_id
-  role    = "roles/storage.objectViewer"
-  member  = "serviceAccount:${local.sa_email}"
+# execute script to inject rxdm sidecar into workload to enable tcpxo for a3-megagpu-8g VM workload
+resource "null_resource" "enable_tcpxo_in_workload" {
+  count = var.run_workload_script && var.machine_type == "a3-megagpu-8g" ? 1 : 0
+  triggers = {
+    always_run = timestamp()
+  }
+  provisioner "local-exec" {
+    command = "python3 ${path.module}/gpu-direct-workload/scripts/enable-tcpxo-in-workload.py --file ${local.workload_path_tcpxo} --rxdm ${local.gpu_direct_setting.rxdm_version}"
+  }
+
+  depends_on = [null_resource.install_dependencies]
 }
 
-resource "google_project_iam_member" "node_service_account_artifact_registry" {
-  project = var.project_id
-  role    = "roles/artifactregistry.reader"
-  member  = "serviceAccount:${local.sa_email}"
+# apply manifest to enable tcpx
+module "kubectl_apply" {
+  source = "../../management/kubectl-apply"
+
+  cluster_id = var.cluster_id
+  project_id = var.project_id
+
+  apply_manifests = flatten([
+    for manifest in local.gpu_direct_setting.gpu_direct_manifests : [
+      {
+        source = manifest
+      }
+    ]
+  ])
 }

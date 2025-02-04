@@ -37,6 +37,5 @@ custom_vars:
   mounts:
   - /lustre
   partitions:
-  - centos
   - rocky
   # - ubuntu

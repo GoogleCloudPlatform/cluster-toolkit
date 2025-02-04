@@ -40,7 +40,7 @@ vars:
   # for a list of valid family options with Slurm; note: the image types for the compute nodes
   # and the Chrome Remote Desktop (CRD) need to have the same Slurm base.
   instance_image:
-    family: slurm-gcp-6-6-hpc-rocky-linux-8
+    family: slurm-gcp-6-8-hpc-rocky-linux-8
     project: schedmd-slurm-public
 
 # Documentation for each of the modules used below can be found at
@@ -131,13 +131,13 @@ deployment_groups:
       local_mount: /scratch
 
   # If you require maximum IO performance, you can consider to bring up a dedicated parallel
-  # file system, e.g. DDN Exascaler Lustre, Sycomp GPFS, or Intel DAOS.
+  # file system, e.g. DDN Exascaler Lustre, Sycomp GPFS, or Parallelstore.
   # Note: Those solutions may have associated license cost.
   #
   # Please visit here for more information
   # - DDN Exascaler Lustre: https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/community/modules/file-system/DDN-EXAScaler/README.md
   # - Sycomp IBM Spectrum Scale: https://console.developers.google.com/marketplace/product/sycomp/sycomp-storage-fueled-by-ibm-spectrum-scale
-  # - Intel DAOS: https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/community/modules/file-system/Intel-DAOS/README.md
+  # - Parallelstore: https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/modules/file-system/parallelstore/README.md
 
   ######## Remote Desktop(s) #######
   # This block creates chrome remote desktop.

@@ -185,7 +185,7 @@ variable "network_interfaces" {
     subnetwork         (string, required if network is not supplied)
     subnetwork_project (string, optional)
     network_ip         (string, optional)
-    nic_type           (string, optional, choose from ["GVNIC", "VIRTIO_NET"])
+    nic_type           (string, optional, choose from ["GVNIC", "VIRTIO_NET", "MRDMA", "IRDMA"])
     stack_type         (string, optional, choose from ["IPV4_ONLY", "IPV4_IPV6"])
     queue_count        (number, optional)
     access_config      (object, optional)
@@ -223,9 +223,9 @@ variable "network_interfaces" {
   }
   validation {
     condition = alltrue([
-      for ni in var.network_interfaces : ni.nic_type == "GVNIC" || ni.nic_type == "VIRTIO_NET" || ni.nic_type == null
+      for ni in var.network_interfaces : ni.nic_type == "GVNIC" || ni.nic_type == "VIRTIO_NET" || ni.nic_type == "MRDMA" || ni.nic_type == "IRDMA" || ni.nic_type == null
     ])
-    error_message = "In the variable network_interfaces, field \"nic_type\" must be either \"GVNIC\", \"VIRTIO_NET\" or null."
+    error_message = "In the variable network_interfaces, field \"nic_type\" must be \"GVNIC\", \"VIRTIO_NET\", \"MRDMA\", \"IRDMA\", or null."
   }
   validation {
     condition = alltrue([
@@ -327,10 +327,22 @@ variable "placement_policy" {
   }
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "spot" {
-  description = "Provision VMs using discounted Spot pricing, allowing for preemption"
+  description = "DEPRECATED - Use `provisioning_model` instead."
   type        = bool
-  default     = false
+  default     = null
+
+  validation {
+    condition     = var.spot == null
+    error_message = "The 'spot' setting is deprecated. If you intend to use Spot pricing, please set 'var.provisioning_model' to \"SPOT\" and do not set 'var.spot' at all."
+  }
+}
+
+variable "provisioning_model" {
+  description = "Provisioning model for cloud instance."
+  type        = string
+  default     = null
 }
 
 variable "min_cpu_platform" {
@@ -408,4 +420,23 @@ variable "allow_automatic_updates" {
   type        = bool
   default     = true
   nullable    = false
+}
+
+variable "reservation_name" {
+  description = <<-EOD
+    Name of the reservation to use for VM resources, should be in one of the following formats:
+    - projects/PROJECT_ID/reservations/RESERVATION_NAME
+    - RESERVATION_NAME
+
+    Must be a "SPECIFIC_RESERVATION"
+    Set to empty string if using no reservation or automatically-consumed reservations
+  EOD
+  type        = string
+  default     = ""
+  nullable    = false
+
+  validation {
+    condition     = length(regexall("^((projects/([a-z0-9-]+)/reservations/)?([a-z0-9-]+))?$", var.reservation_name)) > 0
+    error_message = "Reservation name must be either empty or in the format '[projects/PROJECT_ID/reservations/]RESERVATION_NAME', [...] is an optional part."
+  }
 }

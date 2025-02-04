@@ -21,10 +21,11 @@ vars:
   region: asia-southeast1
   zones:
   - asia-southeast1-b  # g2 machine has better availability in this zone
-
   # Cidr block containing the IP of the machine calling terraform.
   # The following line must be updated for this example to work.
   authorized_cidr: <your-ip-address>/32
+  gcp_public_cidrs_access_enabled: false
+  enable_ray_operator: false
 
 deployment_groups:
 - group: primary
@@ -32,19 +33,47 @@ deployment_groups:
   - id: network1
     source: modules/network/vpc
     settings:
-      subnetwork_name: gke-subnet1
-      secondary_ranges:
-        gke-subnet1:
+      subnetwork_name: $(vars.deployment_name)-subnet
+      secondary_ranges_list:
+      - subnetwork_name: $(vars.deployment_name)-subnet
+        ranges:
         - range_name: pods
           ip_cidr_range: 10.4.0.0/14
         - range_name: services
           ip_cidr_range: 10.0.32.0/20
 
+  - id: node_pool_service_account
+    source: community/modules/project/service-account
+    settings:
+      name: gke-np-sa
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
+      - monitoring.viewer
+      - stackdriver.resourceMetadata.writer
+      - storage.objectViewer
+      - artifactregistry.reader
+
+  - id: workload_service_account
+    source: community/modules/project/service-account
+    settings:
+      name: gke-wl-sa
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
+      - monitoring.viewer
+      - stackdriver.resourceMetadata.writer
+      - storage.objectAdmin
+      - artifactregistry.reader
+
   - id: gke_cluster
     source: modules/scheduler/gke-cluster
-    use: [network1]
+    use: [network1, workload_service_account]
     settings:
+      enable_ray_operator: $(vars.enable_ray_operator)
       enable_private_endpoint: false  # Allows for access from authorized public IPs
+      gcp_public_cidrs_access_enabled: $(vars.gcp_public_cidrs_access_enabled)
+      configure_workload_identity_sa: true
       master_authorized_networks:
       - display_name: deployment-machine
         cidr_block: $(vars.authorized_cidr)
@@ -52,15 +81,15 @@ deployment_groups:
 
   - id: g2_latest_driver
     source: modules/compute/gke-node-pool
-    use: [gke_cluster]
+    use: [gke_cluster, node_pool_service_account]
     settings:
       name: g2-latest-driver
       machine_type: g2-standard-4
       guest_accelerator:
       - gpu_driver_installation_config:
-        - gpu_driver_version: "LATEST"
+          gpu_driver_version: "LATEST"
         gpu_sharing_config:
-        - max_shared_clients_per_gpu: 2
+          max_shared_clients_per_gpu: 2
           gpu_sharing_strategy: "MPS"
 
   - id: job_template_g2_latest_driver
@@ -78,11 +107,12 @@ deployment_groups:
           "value": "g2-latest-driver"
         }
       ]
+      requested_gpu_per_pod: 1
     outputs: [instructions]
 
   - id: n1_pool_default
     source: modules/compute/gke-node-pool
-    use: [gke_cluster]
+    use: [gke_cluster, node_pool_service_account]
     settings:
       name: n1-pool-default
       disk_type: pd-balanced
@@ -110,7 +140,7 @@ deployment_groups:
 
   - id: n1_pool_full_spec
     source: modules/compute/gke-node-pool
-    use: [gke_cluster]
+    use: [gke_cluster, node_pool_service_account]
     settings:
       name: n1-pool-full-spec
       disk_type: pd-balanced
@@ -119,9 +149,9 @@ deployment_groups:
       - type: nvidia-tesla-t4
         count: 2
         gpu_driver_installation_config:
-        - gpu_driver_version: "LATEST"
+          gpu_driver_version: "LATEST"
         gpu_sharing_config:
-        - max_shared_clients_per_gpu: 2
+          max_shared_clients_per_gpu: 2
           gpu_sharing_strategy: "TIME_SHARING"
 
   - id: job_template_n1_pool_full_spec
@@ -139,11 +169,12 @@ deployment_groups:
           "value": "n1-pool-full-spec"
         }
       ]
+      requested_gpu_per_pod: 1
     outputs: [instructions]
 
   - id: default_settings_pool
     source: modules/compute/gke-node-pool
-    use: [gke_cluster]
+    use: [gke_cluster, node_pool_service_account]
     settings:
       name: default-settings-pool
 

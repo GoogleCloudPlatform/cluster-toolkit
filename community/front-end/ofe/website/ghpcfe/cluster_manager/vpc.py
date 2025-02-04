@@ -137,6 +137,7 @@ def create_subnet(subnet: VirtualSubnet) -> None:
         subnet_template = fp.read()
     subnet_template = subnet_template.replace("{SUBNET_ID}", str(subnet.id))
     subnet_template = subnet_template.replace("{CIDR_TEXT}", str(subnet.cidr))
+    subnet_template = subnet_template.replace("{PRIVATE_GOOGLE_ACCESS_ENABLED}", str(subnet.private_google_access_enabled).lower())
     fname = target_dir / f"subnet-{subnet.id}.tf"
     with open(fname, "w", encoding="utf-8") as fp:
         fp.write(subnet_template)

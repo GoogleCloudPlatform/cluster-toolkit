@@ -72,7 +72,7 @@ deployment_groups:
           python3 MaxText/train.py MaxText/configs/base.yml run_name=<RUN_NAME> base_output_directory=${PWD}/output/ dataset_path=<STORAGE_BUCKET> async_checkpointing=False attention=<ATTENTION> steps=<STEPS>
 
   - id: tpu_nodeset
-    source: ./community/modules/compute/schedmd-slurm-gcp-v6-nodeset-tpu
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset-tpu
     use: [network]
     settings:
       node_type: v4-8
@@ -88,7 +88,7 @@ deployment_groups:
       node_count_dynamic_max: 1
 
   - id: tpu_partition
-    source: ./community/modules/compute/schedmd-slurm-gcp-v6-partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
     use: [tpu_nodeset]
     settings:
       partition_name: tpu
@@ -110,14 +110,14 @@ deployment_groups:
       is_default: true
 
   - id: slurm_login
-    source: ./community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
     use: [network]
     settings:
       enable_login_public_ips: true
       machine_type: n2-standard-16
 
   - id: slurm_controller
-    source: ./community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     use:
     - tpu_partition
     - compute_partition

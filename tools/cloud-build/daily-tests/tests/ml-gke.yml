@@ -22,6 +22,7 @@ network: "{{ deployment_name }}-net"
 remote_node: "{{ deployment_name }}-0"
 cli_deployment_vars:
   region: "{{ region }}"
+  gcp_public_cidrs_access_enabled: true
 custom_vars:
   project: "{{ project }}"
 post_deploy_tests:

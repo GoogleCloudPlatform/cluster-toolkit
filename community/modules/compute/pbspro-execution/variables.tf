@@ -94,7 +94,7 @@ variable "instance_image" {
   type        = map(string)
   default = {
     project = "cloud-hpc-image-public"
-    family  = "hpc-centos-7"
+    name    = "hpc-centos-7-v20240712"
   }
 
   validation {
@@ -203,7 +203,7 @@ variable "network_interfaces" {
     subnetwork         (string, required if network is not supplied)
     subnetwork_project (string, optional)
     network_ip         (string, optional)
-    nic_type           (string, optional, choose from ["GVNIC", "VIRTIO_NET"])
+    nic_type           (string, optional, choose from ["GVNIC", "VIRTIO_NET", "RDMA", "IRDMA", "MRDMA"])
     stack_type         (string, optional, choose from ["IPV4_ONLY", "IPV4_IPV6"])
     queue_count        (number, optional)
     access_config      (object, optional)
