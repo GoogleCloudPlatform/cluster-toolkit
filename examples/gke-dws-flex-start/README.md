@@ -9,11 +9,15 @@
 
 With Dynamic Workload Scheduler in Flex Start mode, you submit a GPU capacity request for your AI/ML jobs by indicating how many you need, a duration, and your preferred region. It supports capacity requests for up to seven days, with no minimum duration requirement. You can request capacity for as little as a few minutes or hours; typically, the scheduler can fulfill shorter requests more quickly than longer ones.
 
-Cluster Toolkit supports DWS Flex Start mode with GKE nodepool and Kueue.
+## DWS Flex Start mode with GKE nodepool and Kueue
 
-**Step 1**: Deploy the blueprint gke-dws-flex-start.yaml using the `gcluster` command.
+**Step 1**: Deploy the blueprint `gke-dws-flex-start.yaml` using the `gcluster` command.
 
-**Step 2**: Use the correct context to run the job using `kubectl view config` and `kubectl config use-context <context-name>` commands.
+**Step 2**: Connect to the GKE cluster using gcloud command.
+
+```text
+gcloud container clusters get-credentials <cluster-name> --zone us-central1-staginga --project <project-name>
+```
 
 **Step 3**: Run the sample job.
 
@@ -50,7 +54,7 @@ kubectl describe job sample-job
     labels:
       kueue.x-k8s.io/queue-name: {dws kueue name}
     annotations:
-      provreq.kueue.x-k8s.io/maxRunDurationSeconds: "7200" # This can probably be up to 7 days.
+      provreq.kueue.x-k8s.io/maxRunDurationSeconds: "7200" # up to 7 days.
   ```
 
 - Include the nodeSelector under the template spec.
