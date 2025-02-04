@@ -58,7 +58,7 @@ The `chatqna.yaml` file demonstrates the deployment of a Q&A application powered
 
 ### Configuration Details
 
-The `chatqna.yaml` file includes the following components:
+The `chatqna.yaml` file includes the following components: 
 
 -   **Deployment**: Specifies the number of replicas and the container configuration.
 -   **Service**: Exposes the application for external access.
