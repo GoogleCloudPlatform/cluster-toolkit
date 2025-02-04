@@ -32,6 +32,7 @@ vars:
   static_node_count: # add this
   system_node_pool_disk_size_gb: 200
   a3ultra_node_pool_disk_size_gb: 100
+  k8s_service_account_name: # add this
 
 deployment_groups:
 - group: primary
@@ -126,6 +127,7 @@ deployment_groups:
       enable_gcsfuse_csi: true
       enable_private_endpoint: false # Allows access from authorized public IPs
       configure_workload_identity_sa: true
+      k8s_service_account_name: $(vars.k8s_service_account_name)
       master_authorized_networks:
       - cidr_block: $(vars.authorized_cidr) # Allows your machine to run the kubectl command. Required for multi network setup.
         display_name: "kubectl-access-network"
@@ -219,4 +221,5 @@ deployment_groups:
       - nvidia-smi
       node_count: 2
       name: run-nvidia-smi
+      k8s_service_account_name: $(vars.k8s_service_account_name)
     outputs: [instructions]
