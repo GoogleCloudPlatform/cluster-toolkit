@@ -2,11 +2,11 @@
 
 This module provides ways to create and manage Google Cloud Artifact Registry repositories.
 
-Currently this designed to support Docker repositories although there are placeholder variables for other types which may work too. Remote repositories with pull-through cache functionality integrated with Google Secret Manager is currently supported. The aim of this module is to eventually offer feature parity with this [Terraform module](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/artifact_registry_repository#nested_remote_repository_config), allowing creation of repositories in various formats, including Docker, Maven, NPM, Python, APT, YUM, and COMMON.
+Currently this module is built to support repositories in Docker format although there are placeholder variables for other types which may work too. Remote repositories with pull-through cache functionality integrated with Google Secret Manager is currently supported. The aim of this module is to eventually offer feature parity with this [Terraform module](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/artifact_registry_repository#nested_remote_repository_config), allowing creation of repositories in various formats, including Docker, Maven, NPM, Python, APT, YUM, and COMMON.
 
 This module is best suited for managing artifact repositories in HPC/AI containerized environments where artifacts need to be shared across distributed systems. It includes IAM role configurations and secret access handling for seamless integration with CI/CD pipelines and other services too.
 
-This module is designed to help facilitate containerized workloads running in the Cluster Toolkit with SLURM leveraging [Enroot](https://github.com/NVIDIA/enroot) and [Pyxis](https://github.com/NVIDIA/pyxis). Docker repositories can store container images that are used in job submissions, enabling efficient and scalable execution of containerized HPC or AI based workloads.
+It is designed to help facilitate containerized workloads running in the Cluster Toolkit with SLURM leveraging [Enroot](https://github.com/NVIDIA/enroot) and [Pyxis](https://github.com/NVIDIA/pyxis). Docker repositories can store container images that are used in job submissions, enabling efficient and scalable execution of containerized HPC or AI based workloads.
 
 ## Usage
 
