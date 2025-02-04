@@ -1,6 +1,6 @@
 # Cluster Toolkit Examples
 
-This repository provides various example configurations for deploying and managing workloads using Kubernetes. The focus is on leveraging Intel optimizations for workload execution. Below is a detailed description of the `chatqna.yaml` example file.
+This repository provides various example configurations for deploying and managing workloads using Kubernetes. The focus is on leveraging Intel optimizations for workload execution. Below is a detailed description of the `chatqna.yaml` example file. 
 
 ## `chatqna.yaml`
 
