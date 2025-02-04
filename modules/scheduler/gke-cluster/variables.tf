@@ -298,7 +298,7 @@ variable "configure_workload_identity_sa" {
 variable "k8s_service_account_name" {
   description = "Kubernetes service account name to use with the gke cluster"
   type        = string
-  default     = "workload-identity-k8s-sa"
+  default     = null
 }
 
 variable "autoscaling_profile" {
