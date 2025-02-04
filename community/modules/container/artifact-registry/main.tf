@@ -133,6 +133,31 @@ resource "google_artifact_registry_repository" "artifact_registry" {
   labels        = local.labels
   repository_id = local.repository_name
 
+  precondition {
+    condition     = (var.repo_password == null || (var.use_upstream_credentials == true && var.repo_mode == "REMOTE_REPOSITORY"))
+    error_message = "repo_password can only be set if repo_mode is REMOTE_REPOSITORY and use_upstream_credentials is true. Otherwise, leave it null."
+  }
+
+  precondition {
+    condition     = ((var.repo_mode != "REMOTE_REPOSITORY" && var.repo_public_repository == null) || (var.repo_mode == "REMOTE_REPOSITORY" && (var.repo_public_repository != null || var.repo_mirror_url != null)))
+    error_message = "If repo_mode is REMOTE_REPOSITORY, you must set either repo_public_repository or repo_mirror_url. Otherwise, leave them null."
+  }
+
+  precondition {
+    condition     = (var.use_upstream_credentials == false || var.repo_mode == "REMOTE_REPOSITORY")
+    error_message = "use_upstream_credentials can only be true if repo_mode is REMOTE_REPOSITORY."
+  }
+
+  precondition {
+    condition     = ((!contains(["APT", "YUM"], var.format) && var.repository_base == null) || (contains(["APT", "YUM"], var.format) && var.repository_base != null))
+    error_message = "repository_base is only valid if format is 'APT' or 'YUM' (must be null otherwise)."
+  }
+
+  precondition {
+    condition     = ((!contains(["APT", "YUM"], var.format) && var.repository_path == null) || (contains(["APT", "YUM"], var.format) && var.repository_path != null))
+    error_message = "repository_path is only valid if format is 'APT' or 'YUM' (must be null otherwise)."
+  }
+
   # Only create remote_repository_config if REMOTE_REPOSITORY
   dynamic "remote_repository_config" {
     for_each = var.repo_mode == "REMOTE_REPOSITORY" ? [1] : []
