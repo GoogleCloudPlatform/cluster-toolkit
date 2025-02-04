@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Todo: re-add the variable validation in a way that pre-commit/TF is happy with...
+
 variable "project_id" {
   description = "Project ID where the artifact registry and secret are created."
   type        = string
@@ -37,6 +39,11 @@ variable "repo_password" {
   description = "Optional password/API key. If null, one will be randomly generated."
   type        = string
   default     = null
+
+  # validation {
+  #   condition     = (var.repo_password == null || (var.use_upstream_credentials == true && var.repo_mode == "REMOTE_REPOSITORY"))
+  #   error_message = "repo_password can only be set if repo_mode is REMOTE_REPOSITORY and use_upstream_credentials is true. Otherwise, leave it null."
+  # }
 }
 
 variable "user_managed_replication" {
@@ -78,6 +85,11 @@ variable "repo_public_repository" {
   DOC
   type        = string
   default     = null
+
+  # validation {
+  #   condition     = ((var.repo_mode != "REMOTE_REPOSITORY" && var.repo_public_repository == null) || (var.repo_mode == "REMOTE_REPOSITORY" && (var.repo_public_repository != null || var.repo_mirror_url != null)))
+  #   error_message = "If repo_mode is REMOTE_REPOSITORY, you must set either repo_public_repository or repo_mirror_url. Otherwise, leave them null."
+  # }
 }
 
 variable "repo_mirror_url" {
@@ -95,6 +107,11 @@ variable "use_upstream_credentials" {
   DOC
   type        = bool
   default     = false
+
+  # validation {
+  #   condition     = (var.use_upstream_credentials == false || var.repo_mode == "REMOTE_REPOSITORY")
+  #   error_message = "use_upstream_credentials can only be true if repo_mode is REMOTE_REPOSITORY."
+  # }
 }
 
 variable "repo_username" {
@@ -107,10 +124,20 @@ variable "repository_base" {
   description = "For APT/YUM public repos, repository_base (e.g., 'DEBIAN', 'UBUNTU')."
   type        = string
   default     = null
+
+  # validation {
+  #   condition     = ((!contains(["APT", "YUM"], var.format) && var.repository_base == null) || (contains(["APT", "YUM"], var.format) && var.repository_base != null))
+  #   error_message = "repository_base is only valid if format is 'APT' or 'YUM' (must be null otherwise)."
+  # }
 }
 
 variable "repository_path" {
   description = "For APT/YUM public repos, repository_path (e.g., 'debian/dists/buster')."
   type        = string
   default     = null
+
+  # validation {
+  #   condition     = ((!contains(["APT", "YUM"], var.format) && var.repository_path == null) || (contains(["APT", "YUM"], var.format) && var.repository_path != null))
+  #   error_message = "repository_path is only valid if format is 'APT' or 'YUM' (must be null otherwise)."
+  # }
 }
