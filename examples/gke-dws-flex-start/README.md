@@ -38,32 +38,30 @@ kubectl describe job sample-job
 ## NOTE
 
 1. The `gke-node-pool` module requires these updates.
-
-- `enable_queued_provisioning` is set to `true`.
-- `autoscaling_total_min_nodes` is set to `0`.
-- `auto_repair` is set to `false`.
-- `auto-upgrade` is set to `false`.
-- Compact placement policy is not supported.
-- Reservations are not supported.
+   - `enable_queued_provisioning` is set to `true`.
+   - `autoscaling_total_min_nodes` is set to `0`.
+   - `auto_repair` is set to `false`.
+   - `auto-upgrade` is set to `false`.
+   - Compact placement policy is not supported.
+   - Reservations are not supported.
 
 1. The kueue configuration required for DWS Flex Start is included in the dws-queues.yaml file, and can be updated as required.
 
 1. The job resource requests and limits must be aligned with the resources available under ClusterQueue (Kueue resource).
 
 1. The job needs the following additions.
+   - Include the label and annotation under the jobset metadata.
 
-- Include the label and annotation under the jobset metadata.
+   ```yaml
+     labels:
+       kueue.x-k8s.io/queue-name: {dws kueue name}
+     annotations:
+       provreq.kueue.x-k8s.io/maxRunDurationSeconds: "7200" # up to 7 days.
+   ```
 
-  ```yaml
-    labels:
-      kueue.x-k8s.io/queue-name: {dws kueue name}
-    annotations:
-      provreq.kueue.x-k8s.io/maxRunDurationSeconds: "7200" # up to 7 days.
-  ```
+   - Include the nodeSelector under the template spec.
 
-- Include the nodeSelector under the template spec.
-
-  ```yaml
-                nodeSelector:
-                  cloud.google.com/gke-nodepool: {dws nodepool name}
-  ```
+   ```yaml
+                 nodeSelector:
+                   cloud.google.com/gke-nodepool: {dws nodepool name}
+   ```
