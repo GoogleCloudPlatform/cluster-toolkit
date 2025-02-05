@@ -455,13 +455,15 @@ variable "enable_default_mounts" {
 variable "network_storage" {
   description = "An array of network attached storage mounts to be configured on all instances."
   type = list(object({
-    server_ip             = string,
-    remote_mount          = string,
-    local_mount           = string,
-    fs_type               = string,
-    mount_options         = string,
-    client_install_runner = optional(map(string))
-    mount_runner          = optional(map(string))
+    server_ip               = string,
+    remote_mount            = string,
+    local_mount             = string,
+    local_mount_owner       = optional(string)
+    local_mount_permissions = optional(string)
+    fs_type                 = string,
+    mount_options           = string,
+    client_install_runner   = optional(map(string))
+    mount_runner            = optional(map(string))
   }))
   default = []
 }
@@ -469,11 +471,13 @@ variable "network_storage" {
 variable "login_network_storage" {
   description = "An array of network attached storage mounts to be configured on all login nodes."
   type = list(object({
-    server_ip     = string,
-    remote_mount  = string,
-    local_mount   = string,
-    fs_type       = string,
-    mount_options = string,
+    server_ip               = string,
+    remote_mount            = string,
+    local_mount             = string,
+    local_mount_owner       = optional(string)
+    local_mount_permissions = optional(string)
+    fs_type                 = string,
+    mount_options           = string,
   }))
   default = []
 }

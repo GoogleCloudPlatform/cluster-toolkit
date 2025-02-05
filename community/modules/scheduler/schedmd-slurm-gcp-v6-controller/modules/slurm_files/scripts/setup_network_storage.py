@@ -33,7 +33,7 @@ from more_executors import Executors, ExceptionRetryPolicy
 
 log = logging.getLogger()
 
-def mounts_by_local(mounts):
+def mounts_by_local(mounts) -> dict:
     """convert list of mounts to dict of mounts, local_mount as key"""
     return {str(Path(m.local_mount).resolve()): m for m in mounts}
 
@@ -160,7 +160,7 @@ def setup_network_storage():
     munge_mount_handler()
 
 
-def mount_fstab(mounts, log):
+def mount_fstab(mounts: dict, log):
     """Wait on each mount, then make sure all fstab is mounted"""
     def mount_path(path):
         log.info(f"Waiting for '{path}' to be mounted...")
@@ -190,6 +190,19 @@ def mount_fstab(mounts, log):
                 future.result()
             except Exception as e:
                 raise e
+
+    for path, mount_info in mounts.items():
+        if mount_info.local_mount_owner and ":" in mount_info.local_mount_owner:
+            user, group =  mount_info.local_mount_owner.split(":", 2)
+            try:
+                shutil.chown(path, user=user, group=group)
+            except LookupError:
+                # allow providing uid / gid, instead of username, password and handle: LookupError: no such user/group
+                os.chown(path, uid=int(user), gid=int(group)) # test
+
+        if mount_info.local_mount_permissions:
+            int_mode = int(mount_info.local_mount_permissions, 8)
+            os.chmod(path, int_mode)
 
 
 def munge_mount_handler():

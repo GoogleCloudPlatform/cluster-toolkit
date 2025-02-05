@@ -165,11 +165,13 @@ module "slurm_files" {
   disable_default_mounts = !var.enable_default_mounts
   network_storage = [
     for storage in var.network_storage : {
-      server_ip     = storage.server_ip,
-      remote_mount  = storage.remote_mount,
-      local_mount   = storage.local_mount,
-      fs_type       = storage.fs_type,
-      mount_options = storage.mount_options
+      server_ip               = storage.server_ip,
+      remote_mount            = storage.remote_mount,
+      local_mount             = storage.local_mount,
+      local_mount_owner       = storage.local_mount_owner
+      local_mount_permissions = storage.local_mount_permissions
+      fs_type                 = storage.fs_type,
+      mount_options           = storage.mount_options
     }
     if storage.fs_type != "daos"
   ]

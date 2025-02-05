@@ -17,9 +17,12 @@
 output "network_storage" {
   description = "Describes a filestore instance."
   value = {
-    server_ip             = local.server_ip
-    remote_mount          = local.remote_mount
-    local_mount           = var.local_mount
+    server_ip               = local.server_ip
+    remote_mount            = local.remote_mount
+    local_mount             = var.local_mount
+    local_mount_owner       = var.local_mount_owner
+    local_mount_permissions = var.local_mount_permissions
+
     fs_type               = local.fs_type
     mount_options         = local.mount_options
     client_install_runner = local.install_nfs_client_runner

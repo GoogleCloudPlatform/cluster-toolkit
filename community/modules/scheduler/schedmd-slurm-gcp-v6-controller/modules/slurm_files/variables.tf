@@ -246,11 +246,13 @@ Storage to mounted on all instances.
 - mount_options : Options to mount with.
 EOD
   type = list(object({
-    server_ip     = string
-    remote_mount  = string
-    local_mount   = string
-    fs_type       = string
-    mount_options = string
+    server_ip               = string
+    remote_mount            = string
+    local_mount             = string
+    local_mount_owner       = optional(string)
+    local_mount_permissions = optional(string)
+    fs_type                 = string
+    mount_options           = string
   }))
   default = []
 }
@@ -265,11 +267,13 @@ Storage to mounted on login and controller instances
 - mount_options : Options to mount with.
 EOD
   type = list(object({
-    server_ip     = string
-    remote_mount  = string
-    local_mount   = string
-    fs_type       = string
-    mount_options = string
+    server_ip               = string
+    remote_mount            = string
+    local_mount             = string
+    local_mount_owner       = optional(string)
+    local_mount_permissions = optional(string)
+    fs_type                 = string
+    mount_options           = string
   }))
   default = []
 }

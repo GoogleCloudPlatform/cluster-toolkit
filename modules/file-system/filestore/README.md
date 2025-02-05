@@ -223,6 +223,8 @@ No modules.
 | <a name="input_filestore_tier"></a> [filestore\_tier](#input\_filestore\_tier) | The service tier of the instance. | `string` | `"BASIC_HDD"` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the filestore instance. Key-value pairs. | `map(string)` | n/a | yes |
 | <a name="input_local_mount"></a> [local\_mount](#input\_local\_mount) | Mountpoint for this filestore instance. Note: If set to the same as the `filestore_share_name`, it will trigger a known Slurm bug ([troubleshooting](../../../docs/slurm-troubleshooting.md)). | `string` | `"/shared"` | no |
+| <a name="input_local_mount_owner"></a> [local\_mount\_owner](#input\_local\_mount\_owner) | Local mount owner, string in format <user>:<group>. | `string` | `""` | no |
+| <a name="input_local_mount_permissions"></a> [local\_mount\_permissions](#input\_local\_mount\_permissions) | Local mount permissions, specified as mode according to chmod(2). | `string` | `""` | no |
 | <a name="input_mount_options"></a> [mount\_options](#input\_mount\_options) | NFS mount options to mount file system. | `string` | `"defaults,_netdev"` | no |
 | <a name="input_name"></a> [name](#input\_name) | The resource name of the instance. | `string` | `null` | no |
 | <a name="input_network_id"></a> [network\_id](#input\_network\_id) | The ID of the GCE VPC network to which the instance is connected given in the format:<br/>`projects/<project_id>/global/networks/<network_name>`" | `string` | n/a | yes |

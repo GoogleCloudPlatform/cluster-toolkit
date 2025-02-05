@@ -179,6 +179,8 @@ No modules.
 | <a name="input_import_gcs_bucket_uri"></a> [import\_gcs\_bucket\_uri](#input\_import\_gcs\_bucket\_uri) | The name of the GCS bucket to import data from to parallelstore. | `string` | `null` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to parallel store instance. | `map(string)` | `{}` | no |
 | <a name="input_local_mount"></a> [local\_mount](#input\_local\_mount) | The mount point where the contents of the device may be accessed after mounting. | `string` | `"/parallelstore"` | no |
+| <a name="input_local_mount_owner"></a> [local\_mount\_owner](#input\_local\_mount\_owner) | Local mount owner, string in format <user>:<group>. | `string` | `""` | no |
+| <a name="input_local_mount_permissions"></a> [local\_mount\_permissions](#input\_local\_mount\_permissions) | Local mount permissions, specified as mode according to chmod(2). | `string` | `""` | no |
 | <a name="input_mount_options"></a> [mount\_options](#input\_mount\_options) | Options describing various aspects of the parallelstore instance. | `string` | `"disable-wb-cache,thread-count=16,eq-count=8"` | no |
 | <a name="input_name"></a> [name](#input\_name) | Name of parallelstore instance. | `string` | `null` | no |
 | <a name="input_network_id"></a> [network\_id](#input\_network\_id) | The ID of the GCE VPC network to which the instance is connected given in the format:<br/>`projects/<project_id>/global/networks/<network_name>`" | `string` | n/a | yes |

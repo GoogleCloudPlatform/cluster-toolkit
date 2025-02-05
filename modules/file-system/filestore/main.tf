@@ -38,7 +38,7 @@ locals {
   mount_runner = {
     "type"        = "shell"
     "source"      = "${path.module}/scripts/mount.sh"
-    "args"        = "\"${local.server_ip}\" \"${local.remote_mount}\" \"${var.local_mount}\" \"${local.fs_type}\" \"${local.mount_options}\""
+    "args"        = "\"${local.server_ip}\" \"${local.remote_mount}\" \"${var.local_mount}\" \"${local.fs_type}\" \"${local.mount_options}\" \"${var.local_mount_permissions}\" \"${var.local_mount_owner}\""
     "destination" = "mount${replace(var.local_mount, "/", "_")}.sh"
   }
 

@@ -157,6 +157,8 @@ No resources.
 |------|-------------|------|---------|:--------:|
 | <a name="input_fs_type"></a> [fs\_type](#input\_fs\_type) | Type of file system to be mounted (e.g., nfs, lustre) | `string` | `"nfs"` | no |
 | <a name="input_local_mount"></a> [local\_mount](#input\_local\_mount) | The mount point where the contents of the device may be accessed after mounting. | `string` | `"/mnt"` | no |
+| <a name="input_local_mount_owner"></a> [local\_mount\_owner](#input\_local\_mount\_owner) | Local mount owner, string in format <user>:<group>. Defaults to root:root. | `string` | `""` | no |
+| <a name="input_local_mount_permissions"></a> [local\_mount\_permissions](#input\_local\_mount\_permissions) | Local mount permissions, specified as mode according to chmod(2). Defaults to 0755. | `string` | `""` | no |
 | <a name="input_mount_options"></a> [mount\_options](#input\_mount\_options) | Options describing various aspects of the file system. Consider adding setting to 'defaults,\_netdev,implicit\_dirs' when using gcsfuse. | `string` | `"defaults,_netdev"` | no |
 | <a name="input_parallelstore_options"></a> [parallelstore\_options](#input\_parallelstore\_options) | Parallelstore specific options | <pre>object({<br/>    daos_agent_config = optional(string, "")<br/>    dfuse_environment = optional(map(string), {})<br/>  })</pre> | `{}` | no |
 | <a name="input_remote_mount"></a> [remote\_mount](#input\_remote\_mount) | Remote FS name or export. This is the exported directory for nfs, fs name for lustre, and bucket name (without gs://) for gcsfuse. | `string` | n/a | yes |
