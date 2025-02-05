@@ -28,17 +28,9 @@ The `chatqna.yaml` file demonstrates the deployment of a Q&A application powered
 
 1.  **Apply the `chatqna.yaml` file** to your Kubernetes cluster:
 
-    bash
-
-    CopyEdit
-
     `kubectl apply -f chatqna.yaml`
 
 2.  **Verify the deployment**:
-
-    bash
-
-    CopyEdit
 
     `kubectl get pods`
 
@@ -47,10 +39,6 @@ The `chatqna.yaml` file demonstrates the deployment of a Q&A application powered
 3.  **Access the application**:
 
     -   **Check the service created**:
-
-        bash
-
-        CopyEdit
 
         `kubectl get services`
 
