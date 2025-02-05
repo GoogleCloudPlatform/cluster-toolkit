@@ -61,7 +61,7 @@ Contributions to the repository are welcome. If you have improvements or additio
 
 The sample manifests are pulled from the following location:
 
-> [chatqna.yaml (v1.1)](https://github.com/opea-project/GenAIExamples/blob/v1.1/ChatQnA/kubernetes/intel/hpu/gaudi/manifest/chatqna.yaml)
+> [chatqna.yaml (v1.1)](https://github.com/opea-project/GenAIExamples/blob/v1.1/ChatQnA/kubernetes/intel/cpu/xeon/manifest/chatqna.yaml)
 
 > **Note**: We are deploying version **1.1**, so make sure to use the **v1.1** branch or tag for consistency.
 
