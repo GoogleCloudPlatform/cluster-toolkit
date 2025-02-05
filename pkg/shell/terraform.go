@@ -42,7 +42,6 @@ import (
 // format could be protobuf
 type OutputFormat uint
 
-// Future option could be ProtoBuf
 const (
 	TextOutput OutputFormat = iota
 	JsonOutput
