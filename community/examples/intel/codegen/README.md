@@ -1,6 +1,6 @@
 # Cluster Toolkit Examples
 
-This repository provides various example configurations for deploying and managing workloads using Kubernetes. The focus is on leveraging Intel optimizations for workload execution. Below is a detailed description of the `codegen.yaml` example file.
+This repository provides various example configurations for deploying and managing workloads using Kubernetes. The focus is on leveraging Intel optimizations for workload execution. Below is a detailed description of the `codegen.yaml` example file. 
 
 ## `codegen.yaml`
 
@@ -19,61 +19,62 @@ The `codegen.yaml` file demonstrates the deployment of a Q&A application powered
 - Intel-optimized nodes or Intel-specific hardware in the cluster.
 - `kubectl` installed and configured to access your Kubernetes cluster.
 
+### Configuration Details
+
+The `codegen.yaml` file includes the following components: 
+
+-   **Deployment**: Specifies the number of replicas and the container configuration.
+-   **Service**: Exposes the application for external access.
+-   **Resource Requests and Limits**: Ensures efficient usage of Intel hardware capabilities.
+
+### Customization
+
+You can customize the deployment by modifying the `codegen.yaml` file:
+
+-   **Replica Count**: Adjust the `replicas` value in the deployment.
+-   **Resource Allocation**: Modify `resources.requests` and `resources.limits` to match your workload requirements.
+-   **Environment Variables**: Add or update environment variables for the application under `env`.
+
 ### Deployment Instructions
 
 1. **Clone the repository**:
    ```bash
    git clone https://github.com/GoogleCloudPlatform/cluster-toolkit.git
-   cd cluster-toolkit/community/examples/intel
+   cd cluster-toolkit
 
-1.  **Apply the `codegen.yaml` file** to your Kubernetes cluster:
+1. **Deploy Cluster Toolkit**:
+   ./gcluster deploy community/examples/intel/codegen/codegen-cluster.yaml
 
-    bash
-
-    CopyEdit
-
-    `kubectl apply -f codegen.yaml`
-
-2.  **Verify the deployment**:
-
-    bash
-
-    CopyEdit
+1.  **Verify the deployment, pods and services in the default namespace**:
 
     `kubectl get pods`
+    `kubectl get services`
+    `kubectl get deployments`
 
-    Ensure all pods are in the `Running` state.
+    Ensure all pods, services and deployments are in the `Running` state.
 
-3.  **Access the application**:
-
-    -   **Check the service created**:
-
-        bash
-
-        CopyEdit
-
-        `kubectl get services`
-
-    -   Use the service's external IP or load balancer to access the application.
-### Configuration Details
-The `codegen.yaml` file includes the following components:
--   **Deployment**: Specifies the number of replicas and the container configuration.
--   **Service**: Exposes the application for external access.
--   **Resource Requests and Limits**: Ensures efficient usage of Intel hardware capabilities.
-### Customization
-You can customize the deployment by modifying the `codegen.yaml` file:
--   **Replica Count**: Adjust the `replicas` value in the deployment.
--   **Resource Allocation**: Modify `resources.requests` and `resources.limits` to match your workload requirements.
--   **Environment Variables**: Add or update environment variables for the application under `env`.
 ### Contributing
+
 Contributions to the repository are welcome. If you have improvements or additional examples, feel free to submit a pull request.
-# Using Sample Manifests for CodeGen (v1.1)
+
+# Using Sample Manifests for Codegen (v1.1)
+
 The sample manifests are pulled from the following location:
-> [codegen.yaml (v1.1)](https://github.com/opea-project/GenAIExamples/blob/v1.1/CodeGen/kubernetes/intel/cpu/xeon/manifest/codegen.yaml)
+
+> [codegen.yaml (v1.1)](https://github.com/opea-project/GenAIExamples/blob/v1.1/codegen/kubernetes/intel/hpu/gaudi/manifest/codegen.yaml)
+
 > **Note**: We are deploying version **1.1**, so make sure to use the **v1.1** branch or tag for consistency.
-## Applying the Manifests
-1. **Download** or **clone** the repository at the **v1.1** tag/branch.
-2. Navigate to the folder containing the `codegen.yaml`.
-3. Apply the manifest to your Kubernetes cluster:
-   ```bash
-   kubectl apply -f codegen.yaml
+
+### For Testing Codegen###
+
+1\.  **Port-forward the service:**
+
+kubectl port-forward svc/codegen 7778:7778
+
+1\.  **Run a test request:**
+
+curl  http://localhost:7778/v1/codegen  
+     -H  "Content-Type:  application/json"  
+     -d  '{  "messages":  "Generate  API  code  for  a  TODO  list."  }'
+
+### For Support ###
