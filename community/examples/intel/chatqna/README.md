@@ -65,6 +65,18 @@ The sample manifests are pulled from the following location:
 
 > **Note**: We are deploying version **1.1**, so make sure to use the **v1.1** branch or tag for consistency.
 
-### For Testing ###
+### For Testing ChatQNA###
 
+1\.  **Port-forward the service:**
 
+kubectl port-forward svc/chatqna 8888:8888
+
+1\.  **Run a test request:**
+
+curl http://localhost:8888/v1/chatqna
+
+    -H 'Content-Type: application/json'
+
+    -d '{"messages": "What is the revenue of X in 2023?"}'
+
+### For Support ###
