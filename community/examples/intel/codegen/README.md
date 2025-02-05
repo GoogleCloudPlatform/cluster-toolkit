@@ -44,7 +44,7 @@ The sample manifests are pulled from the following location:
 
 > **Note**: We are deploying version **1.1**, so make sure to use the **v1.1** branch or tag for consistency.
 
-### For Testing Codegen###
+### For Testing Codegen ###
 
 1\.  **Port-forward the service:**
 
