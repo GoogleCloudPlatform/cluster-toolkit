@@ -19,31 +19,6 @@ The `chatqna.yaml` file demonstrates the deployment of a Q&A application powered
 - Intel-optimized nodes or Intel-specific hardware in the cluster.
 - `kubectl` installed and configured to access your Kubernetes cluster.
 
-### Deployment Instructions
-
-1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/GoogleCloudPlatform/cluster-toolkit.git
-   cd cluster-toolkit/community/examples/intel
-
-1.  **Apply the `chatqna.yaml` file** to your Kubernetes cluster:
-
-    `kubectl apply -f chatqna.yaml`
-
-2.  **Verify the deployment**:
-
-    `kubectl get pods`
-
-    Ensure all pods are in the `Running` state.
-
-3.  **Access the application**:
-
-    -   **Check the service created**:
-
-        `kubectl get services`
-
-    -   Use the service's external IP or load balancer to access the application.
-
 ### Configuration Details
 
 The `chatqna.yaml` file includes the following components: 
@@ -60,6 +35,24 @@ You can customize the deployment by modifying the `chatqna.yaml` file:
 -   **Resource Allocation**: Modify `resources.requests` and `resources.limits` to match your workload requirements.
 -   **Environment Variables**: Add or update environment variables for the application under `env`.
 
+### Deployment Instructions
+
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/GoogleCloudPlatform/cluster-toolkit.git
+   cd cluster-toolkit
+
+1. **Deploy Cluster Toolkit**:
+   ./gcluster deploy community/examples/intel/chatqna/chatqna-cluster.yaml
+
+1.  **Verify the deployment, pods and services in the default namespace**:
+
+    `kubectl get pods`
+    `kubectl get services`
+    `kubectl get deployments`
+
+    Ensure all pods, services and deployments are in the `Running` state.
+
 ### Contributing
 
 Contributions to the repository are welcome. If you have improvements or additional examples, feel free to submit a pull request.
@@ -72,10 +65,6 @@ The sample manifests are pulled from the following location:
 
 > **Note**: We are deploying version **1.1**, so make sure to use the **v1.1** branch or tag for consistency.
 
-## Applying the Manifests
+### For Testing ###
 
-1. **Download** or **clone** the repository at the **v1.1** tag/branch.
-2. Navigate to the folder containing the `chatqna.yaml`.
-3. Apply the manifest to your Kubernetes cluster:
-   ```bash
-   kubectl apply -f chatqna.yaml
+
