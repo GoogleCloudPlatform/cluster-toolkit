@@ -18,7 +18,7 @@ from typing import Iterable, List, Tuple, Optional, Any, Dict, Sequence, Type, C
 import argparse
 import base64
 from dataclasses import dataclass, field
-from datetime import timedelta, datetime
+from datetime import timedelta, datetime, timezone
 import hashlib
 import inspect
 import json
@@ -1629,7 +1629,7 @@ class Lookup:
         end_time = parse_gcp_timestamp(fr["timeWindow"]["endTime"])
 
         if "autoCreatedReservations" in fr["status"] and (res:=fr["status"]["autoCreatedReservations"][0]):
-            if (start_time<=datetime.now()<=end_time):
+            if (start_time<=datetime.now(timezone.utc)<=end_time):
                 match = re.search(r'projects/(?P<project>[^/]+)/zones/(?P<zone>[^/]+)/reservations/(?P<name>[^/]+)(/.*)?$',res)
                 assert match, f"Unexpected reservation name '{res}'"
                 res_name = match.group("name")
