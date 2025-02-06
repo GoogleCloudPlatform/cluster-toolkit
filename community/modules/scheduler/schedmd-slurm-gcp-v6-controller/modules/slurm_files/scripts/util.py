@@ -218,6 +218,18 @@ def authentication_project():
 DEFAULT_UNIVERSE_DOMAIN = "googleapis.com"
 
 
+def now() -> datetime:
+    """
+    Return current time as timezone-aware datetime.
+
+    IMPORTANT: DO NOT use `datetime.now()`, unless you explicitly need to have tz-naive datetime.
+    Otherwise there is a risk of getting: "cannot compare naive and aware datetimes" error, 
+    since all timetstamps we receive from GCP API are tz-aware.
+
+    Another motivation  for this function is to allow to mock time in tests.
+    """
+    return datetime.now(timezone.utc)
+
 def parse_gcp_timestamp(s: str) -> datetime:
   """
   Parse timestamp strings returned by GCP API into datetime.
@@ -226,7 +238,11 @@ def parse_gcp_timestamp(s: str) -> datetime:
   # Requires Python >= 3.7
   # TODO: Remove this "hack" of trimming the Z from timestamps once we move to Python 3.11 
   # (context: https://discuss.python.org/t/parse-z-timezone-suffix-in-datetime/2220/30)
-  return datetime.fromisoformat(s.replace('Z', '+00:00'))
+  ts = datetime.fromisoformat(s.replace('Z', '+00:00'))
+  if ts.tzinfo is None: # fallback to UTC
+    log.error(f"Received timestamp without timezone info: {s}")
+    ts = ts.replace(tzinfo=timezone.utc)
+  return ts
 
 
 def universe_domain() -> str:
@@ -1629,7 +1645,7 @@ class Lookup:
         end_time = parse_gcp_timestamp(fr["timeWindow"]["endTime"])
 
         if "autoCreatedReservations" in fr["status"] and (res:=fr["status"]["autoCreatedReservations"][0]):
-            if (start_time<=datetime.now(timezone.utc)<=end_time):
+            if start_time <= now() <=end_time:
                 match = re.search(r'projects/(?P<project>[^/]+)/zones/(?P<zone>[^/]+)/reservations/(?P<name>[^/]+)(/.*)?$',res)
                 assert match, f"Unexpected reservation name '{res}'"
                 res_name = match.group("name")
