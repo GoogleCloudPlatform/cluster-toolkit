@@ -80,3 +80,5 @@ curl http://localhost:8888/v1/chatqna
     -d '{"messages": "What is the revenue of X in 2023?"}'
 
 ### For Support ###
+
+For any issues, please contact `info@opea.dev`
