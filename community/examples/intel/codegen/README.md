@@ -57,3 +57,5 @@ curl  http://localhost:7778/v1/codegen
      -d  '{  "messages":  "Generate  API  code  for  a  TODO  list."  }'
 
 ### For Support ###
+
+For any issues, please contact `info@opea.dev`
