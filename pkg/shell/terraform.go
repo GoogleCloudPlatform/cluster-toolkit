@@ -37,8 +37,7 @@ import (
 )
 
 // OutputFormat determines the format in which the errors are reported.
-// Current supported format are text (default option) and JSON. Future
-// format could be protobuf
+// Current supported format are text (default option) and JSON.
 type OutputFormat uint
 
 // Future option could be ProtoBuf
@@ -246,20 +245,20 @@ func applyPlanJsonOutput(tf *tfexec.Terraform, path string) error {
 	jsonFilename := "gcluster_output-" + strings.ReplaceAll(tf.WorkingDir(), string(os.PathSeparator), ".") + ".json"
 
 	logging.Info("Writing output to JSON file %s", jsonFilename)
-	jsonFile, err := os.Create(jsonFilename)
-	defer jsonFile.Close()
-	if err != nil {
+	if jsonFile, err := os.Create(jsonFilename); err != nil {
 		logging.Info("Cannot create JSON output file %s", jsonFilename)
 		return err
+	} else {
+		defer jsonFile.Close()
+		tf.SetStdout(os.Stdout)
+		tf.SetStderr(os.Stderr)
+		if err := tf.ApplyJSON(context.Background(), jsonFile, planFileOpt); err != nil {
+			return err
+		}
+		tf.SetStdout(nil)
+		tf.SetStderr(nil)
+		return nil
 	}
-	tf.SetStdout(os.Stdout)
-	tf.SetStderr(os.Stderr)
-	if err := tf.ApplyJSON(context.Background(), jsonFile, planFileOpt); err != nil {
-		return err
-	}
-	tf.SetStdout(nil)
-	tf.SetStderr(nil)
-	return nil
 }
 
 func applyPlanConsoleOutput(tf *tfexec.Terraform, path string) error {
