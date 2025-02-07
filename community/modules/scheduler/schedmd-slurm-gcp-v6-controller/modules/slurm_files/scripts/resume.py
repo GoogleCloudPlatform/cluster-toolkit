@@ -15,7 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Optional
+from typing import List, Optional, Dict
 import argparse
 from datetime import timedelta
 import shlex
@@ -41,10 +41,8 @@ from util import (
     trim_self_link,
     wait_for_operation,
 )
-from util import lookup, NSDict
+from util import lookup, NSDict, ReservationDetails
 import tpu
-
-import slurm_gcp_plugins
 
 log = logging.getLogger()
 
@@ -106,6 +104,7 @@ def instance_properties(nodeset:object, model:str, placement_group:Optional[str]
         update_reservation_props(reservation, props, placement_group)
 
     if (fr := lookup().future_reservation(nodeset)) and fr.specific:
+        assert fr.active_reservation
         update_reservation_props(fr.active_reservation, props, placement_group)
 
     if props.resourcePolicies:
@@ -121,7 +120,7 @@ def instance_properties(nodeset:object, model:str, placement_group:Optional[str]
     props.update(nodeset.get("instance_properties") or {})
     return props
 
-def update_reservation_props(reservation:object, props:object, placement_group:Optional[str]) -> None:
+def update_reservation_props(reservation:ReservationDetails, props:object, placement_group:Optional[str]) -> None:
     props.reservationAffinity = {
         "consumeReservationType": "SPECIFIC_RESERVATION",
         "key": f"compute.{util.universe_domain()}/reservation-name",
@@ -180,7 +179,6 @@ def create_instances_request(nodes: List[str], placement_group: Optional[str], e
     )
 
     if placement_group:
-        assert len(nodes) <= PLACEMENT_MAX_CNT
         pass # do not set minCount to force "all or nothing" behavior
     else:
         body["minCount"] = 1
@@ -202,14 +200,6 @@ def create_instances_request(nodes: List[str], placement_group: Optional[str], e
             targetShape = nodeset.zone_target_shape,
         )
     
-    if lookup().cfg.enable_slurm_gcp_plugins:
-        slurm_gcp_plugins.pre_instance_bulk_insert(
-            lkp=lookup(),
-            nodes=nodes,
-            placement_group=placement_group,
-            request_body=body,
-        )
-
     req = api_method(
         project=lookup().project, 
         body=body, 
@@ -245,9 +235,9 @@ def group_nodes_bulk(nodes: List[str], resume_data: Optional[ResumeData], lkp: u
     if resume_data is None: # all nodes will be considered jobless
         resume_data = ResumeData(jobs=[])
         
-    nodes = set(nodes) # turn into set to simplify intersection
-    non_excl = nodes.copy()
-    groups = {} # excl_job_id|none -> PlacementAndNodes
+    nodes_set = set(nodes) # turn into set to simplify intersection
+    non_excl = nodes_set.copy()
+    groups : Dict[Optional[int], List[PlacementAndNodes]] = {} # excl_job_id|none -> PlacementAndNodes
 
     # expand all exclusive job nodelists
     for job in resume_data.jobs:
@@ -261,7 +251,7 @@ def group_nodes_bulk(nodes: List[str], resume_data: Optional[ResumeData], lkp: u
                 PlacementAndNodes(
                     placement=pn.placement,
                     #... but we only want to handle nodes in nodes_resume in this run.
-                    nodes = sorted(set(pn.nodes) & nodes)
+                    nodes = sorted(set(pn.nodes) & nodes_set)
                 ))
         non_excl.difference_update(job.nodes_alloc)
 
@@ -396,21 +386,21 @@ def _handle_bulk_insert_op(op: object, nodes: List[str], resume_data: Optional[R
         lambda op: "+".join(err["code"] for err in op["error"]["errors"]),
     )
     for code, failed_ops in by_error_inserts:
-        failed_nodes = {trim_self_link(op["targetLink"]): op for op in failed_ops}
+        failed_ops = list(failed_ops)
+        failed_nodes = [trim_self_link(op["targetLink"]) for op in failed_ops]
         hostlist = util.to_hostlist(failed_nodes)
-        count = len(failed_nodes)
         log.error(
-            f"{count} instances failed to start: {code} ({hostlist}) operationGroupId={group_id}"
+            f"{len(failed_nodes)} instances failed to start: {code} ({hostlist}) operationGroupId={group_id}"
         )
-        failed_node, failed_op = next(iter(failed_nodes.items()))
+
         msg = "; ".join(
             f"{err['code']}: {err['message'] if 'message' in err else 'no message'}"
-            for err in failed_op["error"]["errors"]
+            for err in failed_ops[0]["error"]["errors"]
         )
         if code != "RESOURCE_ALREADY_EXISTS":
             down_nodes_notify_jobs(failed_nodes, f"GCP Error: {msg}", resume_data)
         log.error(
-            f"errors from insert for node '{failed_node}' ({failed_op['name']}): {msg}"
+            f"errors from insert for node '{failed_nodes[0]}' ({failed_ops[0]['name']}): {msg}"
         )
 
     ready_nodes = {trim_self_link(op["targetLink"]) for op in successful_inserts}
@@ -430,9 +420,9 @@ def down_nodes_notify_jobs(nodes: List[str], reason: str, resume_data: Optional[
         log.warning("Cannot update and notify jobs with API failures as no valid resume file is present.")
         return
     
-    nodes = set(nodes) # turn into set to speed up intersection
+    nodes_set = set(nodes) # turn into set to speed up intersection
     for job in resume_data.jobs:
-        if not (set(job.nodes_alloc) & nodes):
+        if not (set(job.nodes_alloc) & nodes_set):
             continue
         run(f"{lookup().scontrol} update jobid={job.job_id} admincomment='{reason_quoted}'")
         run(f"{lookup().scontrol} notify {job.job_id} '{reason_quoted}'")
@@ -453,10 +443,7 @@ def create_placement_request(pg_name: str, region: str, max_distance: Optional[i
             "maxDistance": max_distance
         },
     }
-    if lookup().cfg.enable_slurm_gcp_plugins:
-        slurm_gcp_plugins.pre_placement_group_insert(
-            lkp=lookup(), pg_name=pg_name, region=region, request_body=config
-        )
+    
     request = lookup().compute.resourcePolicies().insert(
         project=lookup().project, region=region, body=config
     )

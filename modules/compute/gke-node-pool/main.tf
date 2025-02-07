@@ -37,8 +37,10 @@ module "gpu" {
 locals {
   guest_accelerator = module.gpu.guest_accelerator
 
-  has_gpu                  = length(local.guest_accelerator) > 0
-  allocatable_gpu_per_node = local.has_gpu ? max(local.guest_accelerator[*].count...) : -1
+  has_gpu                       = length(local.guest_accelerator) > 0
+  allocatable_gpu_per_node      = local.has_gpu ? max(local.guest_accelerator[*].count...) : -1
+  is_static_node_pool_with_gpus = var.static_node_count != null && local.allocatable_gpu_per_node != -1
+  static_gpu_count              = local.is_static_node_pool_with_gpus ? var.static_node_count * local.allocatable_gpu_per_node : 0
   gpu_taint = local.has_gpu ? [{
     key    = "nvidia.com/gpu"
     value  = "present"

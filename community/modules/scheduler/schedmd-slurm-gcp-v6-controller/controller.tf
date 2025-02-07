@@ -64,10 +64,10 @@ module "slurm_controller_template" {
   disk_type        = var.disk_type
   additional_disks = local.additional_disks
 
-  bandwidth_tier    = var.bandwidth_tier
-  slurm_bucket_path = module.slurm_files.slurm_bucket_path
-  can_ip_forward    = var.can_ip_forward
-  disable_smt       = !var.enable_smt
+  bandwidth_tier            = var.bandwidth_tier
+  slurm_bucket_path         = module.slurm_files.slurm_bucket_path
+  can_ip_forward            = var.can_ip_forward
+  advanced_machine_features = var.advanced_machine_features
 
   enable_confidential_vm   = var.enable_confidential_vm
   enable_oslogin           = var.enable_oslogin

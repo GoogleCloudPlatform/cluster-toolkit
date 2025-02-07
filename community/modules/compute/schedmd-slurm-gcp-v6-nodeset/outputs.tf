@@ -26,23 +26,10 @@ output "nodeset" {
   }
 
   precondition {
-    condition     = var.reservation_name == "" || !var.enable_placement
-    error_message = <<-EOD
-      If a reservation is specified, `var.enable_placement` must be `false`.
-      If the specified reservation has a placement policy then it will be used automatically.
-    EOD
-  }
-
-  precondition {
     condition     = var.reservation_name == "" || length(var.zones) == 0
     error_message = <<-EOD
       If a reservation is specified, `var.zones` should be empty.
     EOD
-  }
-
-  precondition {
-    condition     = !var.enable_placement || var.node_count_static == 0 || var.node_count_dynamic_max == 0
-    error_message = "Cannot use placement with static and auto-scaling nodes in the same node set."
   }
 
   precondition {

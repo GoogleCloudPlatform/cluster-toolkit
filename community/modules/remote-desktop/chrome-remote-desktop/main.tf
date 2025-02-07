@@ -76,7 +76,7 @@ module "instances" {
   instance_count                    = var.instance_count
   name_prefix                       = var.name_prefix
   add_deployment_name_before_prefix = var.add_deployment_name_before_prefix
-  spot                              = var.spot
+  provisioning_model                = var.spot ? "SPOT" : null
 
   deployment_name = var.deployment_name
   project_id      = var.project_id

@@ -282,7 +282,7 @@ limitations under the License.
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.3 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.5 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 3.83 |
 | <a name="requirement_local"></a> [local](#requirement\_local) | >= 2.0.0 |
 | <a name="requirement_random"></a> [random](#requirement\_random) | ~> 3.0 |
@@ -334,6 +334,7 @@ No modules.
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | The region to deploy to | `string` | n/a | yes |
 | <a name="input_runners"></a> [runners](#input\_runners) | List of runners to run on remote VM.<br/>    Runners can be of type ansible-local, shell or data.<br/>    A runner must specify one of 'source' or 'content'.<br/>    All runners must specify 'destination'. If 'destination' does not include a<br/>    path, it will be copied in a temporary folder and deleted after running.<br/>    Runners may also pass 'args', which will be passed as argument to shell runners only. | `list(map(string))` | `[]` | no |
+| <a name="input_set_ofi_cloud_rdma_tunables"></a> [set\_ofi\_cloud\_rdma\_tunables](#input\_set\_ofi\_cloud\_rdma\_tunables) | Controls whether to enable specific OFI environment variables for workloads using Cloud RDMA networking. Should be false for non-RDMA workloads. | `bool` | `false` | no |
 
 ## Outputs
 

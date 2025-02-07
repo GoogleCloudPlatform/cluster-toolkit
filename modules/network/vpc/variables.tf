@@ -165,8 +165,16 @@ variable "secondary_ranges_list" {
       ip_cidr_range = string
     }))
   }))
-  description = "List of secondary ranges associated with the subnets."
+  description = <<-EOT
+  "List of secondary ranges associated with the subnetworks.
+  Each subnetwork must be specified at most once in this list."
+  EOT
   default     = []
+  validation {
+    condition = (length(var.secondary_ranges_list[*].subnetwork_name) ==
+    length(distinct(var.secondary_ranges_list[*].subnetwork_name)))
+    error_message = "Each subnetwork should be specified at most once in this list. Remove any duplicates."
+  }
 }
 
 variable "network_routing_mode" {
@@ -276,15 +284,6 @@ variable "firewall_log_config" {
       "DISABLE_LOGGING",
     ], var.firewall_log_config)
     error_message = "var.firewall_log_config must be set to \"DISABLE_LOGGING\", or enable logging with \"INCLUDE_ALL_METADATA\" or \"EXCLUDE_ALL_METADATA\""
-  }
-}
-
-resource "terraform_data" "secondary_ranges_validation" {
-  lifecycle {
-    precondition {
-      condition     = length(var.secondary_ranges) == 0 || length(var.secondary_ranges_list) == 0
-      error_message = "Only one of var.secondary_ranges or var.secondary_ranges_list should be specified"
-    }
   }
 }
 

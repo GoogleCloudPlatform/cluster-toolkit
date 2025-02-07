@@ -13,9 +13,9 @@
 # limitations under the License.
 ---
 test_name: gke-managed-hyperdisk
-deployment_name: gke-managed-hyperdisk-{{ build }}
-zone: us-central1-a  # for remote node
-region: us-central1
+deployment_name: gke-hyperdisk-{{ build }}
+zone: europe-west1-b  # for remote node
+region: europe-west1
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/examples/gke-managed-hyperdisk.yaml"
 network: "{{ deployment_name }}-net"

@@ -75,7 +75,6 @@ deployment_groups:
     settings:
       partition_name: debug
       exclusive: false
-      enable_placement: false
       is_default: false
 
   - id: compute_node_group

@@ -24,6 +24,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [hpc-slurm6-tpu-maxtext.yaml](#hpc-slurm6-tpu-maxtextyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm6-apptainer.yaml](#hpc-slurm6-apptaineryaml--) ![community-badge] ![experimental-badge]
   * [ml-slurm.yaml](#ml-slurmyaml-) ![core-badge]
+  * [h4d-vm.yaml](#h4d-vmyaml--) ![core-badge] ![experimental-badge]
   * [image-builder.yaml](#image-builderyaml-) ![core-badge]
   * [serverless-batch.yaml](#serverless-batchyaml-) ![core-badge]
   * [serverless-batch-mpi.yaml](#serverless-batch-mpiyaml-) ![core-badge]
@@ -38,6 +39,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [client-google-cloud-storage.yaml](#client-google-cloud-storageyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-gromacs.yaml](#hpc-slurm-gromacsyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-local-ssd.yaml](#hpc-slurm-local-ssdyaml--) ![community-badge] ![experimental-badge]
+  * [hpc-slurm-h4d.yaml](#hpc-slurm-h4dyaml--) ![community-badge] ![experimental-badge]
   * [hcls-blueprint.yaml](#hcls-blueprintyaml-) ![core-badge]
   * [hpc-gke.yaml](#hpc-gkeyaml--) ![core-badge] ![experimental-badge]
   * [ml-gke](#ml-gkeyaml--) ![core-badge] ![experimental-badge]
@@ -389,6 +391,12 @@ Follow [hpc-slurm-tpu-maxtext].
 This blueprint creates a custom [Apptainer](https:https://apptainer.org) enabled image and builds an auto-scaling Slurm cluster using that image. You can deploy containerized workloads on that cluster as described [here](https://github.com/GoogleCloudPlatform/scientific-computing-examples/tree/main/apptainer).
 
 [hpc-slurm6-apptainer.yaml]: ../community/examples/hpc-slurm6-apptainer.yaml
+
+### [h4d-vm.yaml] ![core-badge] ![experimental-badge]
+
+This blueprint deploys a cluster containing a pair of `h4d-highmem-192-lssd` VMs with RDMA networking enabled along with a filestore instance mounted to `/home`.
+
+[h4d-vm.yaml]: ../examples/h4d-vm.yaml
 
 ### [ml-slurm.yaml] ![core-badge]
 
@@ -968,6 +976,13 @@ This blueprint demonstrates the use of Slurm and Filestore, with compute nodes
 that have local ssd drives deployed.
 
 [hpc-slurm-local-ssd.yaml]: ../community/examples/hpc-slurm-local-ssd.yaml
+
+### [hpc-slurm-h4d.yaml] ![community-badge] ![experimental-badge]
+
+Creates a basic auto-scaling Slurm cluster with mostly default settings. The
+blueprint also creates two new VPC networks, one configured for RDMA networking and the other for non-RDMA networking, along with two filestore instances mounted to `/home` and `/apps`. There is an `h4d` partition that uses compute-optimized `h4d-highmem-192-lssd` machine type.
+
+[hpc-slurm-h4d.yaml]: ../community/examples/hpc-slurm-h4d.yaml
 
 ### [hcls-blueprint.yaml]: ![core-badge]
 

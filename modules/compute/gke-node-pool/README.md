@@ -363,5 +363,6 @@ limitations under the License.
 | <a name="output_has_gpu"></a> [has\_gpu](#output\_has\_gpu) | Boolean value indicating whether nodes in the pool are configured with GPUs. |
 | <a name="output_instructions"></a> [instructions](#output\_instructions) | Instructions for submitting the sample GPUDirect enabled job. |
 | <a name="output_node_pool_name"></a> [node\_pool\_name](#output\_node\_pool\_name) | Name of the node pool. |
+| <a name="output_static_gpu_count"></a> [static\_gpu\_count](#output\_static\_gpu\_count) | Total number of GPUs in the node pool. Available only for static node pools. |
 | <a name="output_tolerations"></a> [tolerations](#output\_tolerations) | Tolerations needed for a pod to be scheduled on this node pool. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

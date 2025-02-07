@@ -15,6 +15,10 @@ then use them in a `gke-job-template` to dynamically provision the resource.
     settings:
       enable_parallelstore_csi: true
 
+  # Private Service Access (PSA) requires the compute.networkAdmin role which is
+  # included in the Owner role, but not Editor.
+  # PSA is required for all Parallelstore functionality.
+  # https://cloud.google.com/vpc/docs/configure-private-services-access#permissions
   - id: private_service_access
     source: community/modules/network/private-service-access
     use: [network]
@@ -87,7 +91,7 @@ limitations under the License.
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.0 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.5 |
 
 ## Providers
 

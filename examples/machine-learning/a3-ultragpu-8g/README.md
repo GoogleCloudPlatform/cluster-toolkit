@@ -1,16 +1,19 @@
 # A3 Ultra Blueprints
 
+## Slurm compute clusters
 For further information on deploying an A3 Ultra cluster with Slurm, please
 see:
 
 [Create A3 Ultra Slurm Cluster](https://cloud.google.com/ai-hypercomputer/docs/create/create-slurm-cluster)
 
-If you are unable to access these documents, please contact your
-[Technical Account Manager (TAM)](https://cloud.google.com/tam).
+## VMs without scheduler
 
-## Deploy A3 Ultra compute VM with custom startup-scripts
+To test workloads directly on A3 Ultra VMs, you can deploy the [a3ultra-vm.yaml]:
 
-Customers can deploy [a3ultra-vm.yaml] blueprint to deploy 2 A3 Ultra VMs. You
-can also specify custom startup-scripts to run in the blueprint.
+- A configurable number of A3 Ultra VMs (default N=2)
+- RDMA networking and GPU drivers pre-configured on our Ubuntu 22.04 Accelerator Image
+- Additional software environment customization can be achieved by adding to the example startup-script
+
+The VMs can be consumed from a reservation by modifying the `reservation_name` parameter in the `a3ultra-vms` module.
 
 [a3ultra-vm.yaml]: ./a3ultra-vm.yaml

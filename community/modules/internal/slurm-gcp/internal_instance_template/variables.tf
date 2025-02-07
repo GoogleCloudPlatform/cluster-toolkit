@@ -95,10 +95,16 @@ variable "region" {
   default     = null
 }
 
-variable "threads_per_core" {
-  description = "The number of threads per physical core. To disable simultaneous multithreading (SMT) set this to 1."
-  type        = number
-  default     = null
+variable "advanced_machine_features" {
+  description = "See https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_instance_template#nested_advanced_machine_features"
+  type = object({
+    enable_nested_virtualization = optional(bool)
+    threads_per_core             = optional(number)
+    turbo_mode                   = optional(string)
+    visible_core_count           = optional(number)
+    performance_monitoring_unit  = optional(string)
+    enable_uefi_networking       = optional(bool)
+  })
 }
 
 #######

@@ -161,7 +161,6 @@ module "slurm_files" {
   enable_external_prolog_epilog = var.enable_external_prolog_epilog
   epilog_scripts                = var.epilog_scripts
   prolog_scripts                = var.prolog_scripts
-  enable_slurm_gcp_plugins      = var.enable_slurm_gcp_plugins
 
   disable_default_mounts = !var.enable_default_mounts
   network_storage = [

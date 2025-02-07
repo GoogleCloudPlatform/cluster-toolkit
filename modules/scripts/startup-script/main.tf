@@ -93,6 +93,20 @@ locals {
     }
   ]
 
+  ofi_runner = var.set_ofi_cloud_rdma_tunables == "" ? [] : [
+    {
+      type        = "data"
+      destination = "/etc/profile.d/set_ofi_cloud_rdma_tunables.sh"
+      content     = <<-EOT
+        #!/bin/bash
+        export FI_PROVIDER="verbs;ofi_rxm"
+        export FI_OFI_RXM_USE_RNDV_WRITE=1
+        export FI_VERBS_INLINE_SIZE=39
+        export I_MPI_FABRICS="shm:rxm"
+        EOT
+    },
+  ]
+
   rdma_runner = !var.install_cloud_rdma_drivers ? [] : [
     {
       type        = "shell"
@@ -153,6 +167,7 @@ locals {
     local.warnings,
     local.hotfix_runner,
     local.proxy_runner,
+    local.ofi_runner,
     local.rdma_runner,
     local.monitoring_agent_installer,
     local.ansible_installer,

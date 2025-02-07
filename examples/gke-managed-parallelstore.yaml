@@ -38,7 +38,11 @@ deployment_groups:
         - range_name: services
           ip_cidr_range: 10.0.32.0/20
 
-  - id: private_service_access # required for parallelstore
+  # Private Service Access (PSA) requires the compute.networkAdmin role which is
+  # included in the Owner role, but not Editor.
+  # PSA is required for all Parallelstore functionality.
+  # https://cloud.google.com/vpc/docs/configure-private-services-access#permissions
+  - id: private_service_access
     source: community/modules/network/private-service-access
     use: [network]
     settings:
@@ -59,9 +63,33 @@ deployment_groups:
         allow:
         - protocol: tcp
 
+  - id: node_pool_service_account
+    source: community/modules/project/service-account
+    settings:
+      name: gke-np-sa
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
+      - monitoring.viewer
+      - stackdriver.resourceMetadata.writer
+      - storage.objectViewer
+      - artifactregistry.reader
+
+  - id: workload_service_account
+    source: community/modules/project/service-account
+    settings:
+      name: gke-wl-sa
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
+      - monitoring.viewer
+      - stackdriver.resourceMetadata.writer
+      - storage.objectAdmin
+      - artifactregistry.reader
+
   - id: gke_cluster
     source: modules/scheduler/gke-cluster
-    use: [network]
+    use: [network, workload_service_account]
     settings:
       release_channel: RAPID
       enable_parallelstore_csi: true # enable Parallelstore for the cluster
@@ -93,7 +121,7 @@ deployment_groups:
 
   - id: sample-pool
     source: modules/compute/gke-node-pool
-    use: [gke_cluster]
+    use: [gke_cluster, node_pool_service_account]
     settings:
       name: sample-pool
       zones: [$(vars.zone)]
