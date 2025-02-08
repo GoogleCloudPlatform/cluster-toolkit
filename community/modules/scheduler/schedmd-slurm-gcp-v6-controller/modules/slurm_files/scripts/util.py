@@ -422,24 +422,23 @@ def hash_file(fullpath: Path) -> str:
 
 def install_custom_scripts(check_hash=False):
     """download custom scripts from gcs bucket"""
+    role, tokens = lookup().instance_role, []
 
-    compute_tokens = ["compute", "prolog", "epilog"]
-    if lookup().instance_role == "compute":
-        try:
-            compute_tokens.append(f"nodeset-{lookup().node_nodeset_name()}")
-        except Exception as e:
-            log.error(f"Failed to lookup nodeset: {e}")
+    if role == "controller":
+        tokens = ["controller", "prolog", "epilog"]
+    elif role == "compute":
+        tokens = [
+            "compute", 
+            "prolog", 
+            "epilog",
+            f"nodeset-{lookup().node_nodeset_name()}"
+        ]
+    elif role == "login":
+        tokens = [f"login-{lookup().login_group_name()}"]
 
-    prefix_tokens = dict.get(
-        {
-            "login": ["login"],
-            "compute": compute_tokens,
-            "controller": ["controller", "prolog", "epilog"],
-        },
-        lookup().instance_role,
-        [],
-    )
-    prefixes = [f"slurm-{tok}-script" for tok in prefix_tokens]
+    prefixes = [f"slurm-{tok}-script" for tok in tokens]
+
+    # TODO: use single `blob_list`, to reduce ~4x number of GCS requests
     blobs = list(chain.from_iterable(blob_list(prefix=p) for p in prefixes))
 
     script_pattern = re.compile(r"slurm-(?P<path>\S+)-script-(?P<name>\S+)")
@@ -1384,6 +1383,10 @@ class Lookup:
     @property
     def is_controller(self):
         return self.instance_role_safe == "controller"
+    
+    @property
+    def is_login_node(self):
+        return self.instance_role_safe == "login"
 
     @cached_property
     def compute(self):
@@ -1403,6 +1406,10 @@ class Lookup:
     @cached_property
     def zone(self):
         return instance_metadata("zone")
+
+    def login_group_name(self):
+        assert self.is_login_node, f"{self.hostname} is not a login node"
+        return self._node_desc(self.hostname)["nodeset"]
 
     node_desc_regex = re.compile(
         r"^(?P<prefix>(?P<cluster>[^\s\-]+)-(?P<nodeset>\S+))-(?P<node>(?P<suffix>\w+)|(?P<range>\[[\d,-]+\]))$"
