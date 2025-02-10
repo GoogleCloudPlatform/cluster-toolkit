@@ -75,7 +75,7 @@ Storage (GCS).
          --role roles/storage.objectUser
 
      gcloud storage buckets add-iam-policy-binding gs://${CHECKPOINT_BUCKET_NAME} \
-         --member "principal://iam.googleapis.com/projects/$PROJECT_NUMBER}/locations/global/workloadIdentityPools/${PROJECT_ID}.svc.id.goog/subject/ns/default/sa/default" \
+         --member "principal://iam.googleapis.com/projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/${PROJECT_ID}.svc.id.goog/subject/ns/default/sa/default" \
          --role roles/storage.objectUser
      ```
 
