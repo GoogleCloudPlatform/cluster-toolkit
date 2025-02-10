@@ -28,7 +28,7 @@ func (s *MySuite) TestDeployGroups(c *C) {
 	pathEnv := os.Getenv("PATH")
 	os.Setenv("PATH", "")
 
-	err = deployTerraformGroup(".", getArtifactsDir("."), shell.NeverApply)
+	err = deployTerraformGroup(".", getArtifactsDir("."), shell.NeverApply, shell.TextOutput)
 	c.Check(err, NotNil)
 
 	err = deployPackerGroup(".", shell.NeverApply)

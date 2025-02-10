@@ -28,10 +28,11 @@ import (
 )
 
 func addDeployFlags(c *cobra.Command) *cobra.Command {
-	return addGroupSelectionFlags(
-		addAutoApproveFlag(
-			addArtifactsDirFlag(
-				addCreateFlags(c))))
+	return addJsonOutputFlag(
+		addGroupSelectionFlags(
+			addAutoApproveFlag(
+				addArtifactsDirFlag(
+					addCreateFlags(c)))))
 }
 
 func init() {
@@ -93,7 +94,7 @@ func doDeploy(deplRoot string) {
 			moduleDir := filepath.Join(groupDir, subPath)
 			checkErr(deployPackerGroup(moduleDir, getApplyBehavior()), ctx)
 		case config.TerraformKind:
-			checkErr(deployTerraformGroup(groupDir, artDir, getApplyBehavior()), ctx)
+			checkErr(deployTerraformGroup(groupDir, artDir, getApplyBehavior(), getOutputFormat()), ctx)
 		default:
 			checkErr(
 				config.BpError{
@@ -152,10 +153,10 @@ func deployPackerGroup(moduleDir string, applyBehavior shell.ApplyBehavior) erro
 	return nil
 }
 
-func deployTerraformGroup(groupDir string, artifactsDir string, applyBehavior shell.ApplyBehavior) error {
+func deployTerraformGroup(groupDir string, artifactsDir string, applyBehavior shell.ApplyBehavior, outputFormat shell.OutputFormat) error {
 	tf, err := shell.ConfigureTerraform(groupDir)
 	if err != nil {
 		return err
 	}
-	return shell.ExportOutputs(tf, artifactsDir, applyBehavior)
+	return shell.ExportOutputs(tf, artifactsDir, applyBehavior, outputFormat)
 }

@@ -71,5 +71,6 @@ func runExportCmd(cmd *cobra.Command, args []string) {
 	tf, err := shell.ConfigureTerraform(groupDir)
 	checkErr(err, ctx)
 
-	checkErr(shell.ExportOutputs(tf, artifactsDir, shell.NeverApply), ctx)
+	// Always output text when exporting (never JSON)
+	checkErr(shell.ExportOutputs(tf, artifactsDir, shell.NeverApply, shell.TextOutput), ctx)
 }
