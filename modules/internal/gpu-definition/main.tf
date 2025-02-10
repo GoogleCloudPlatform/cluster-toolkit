@@ -22,8 +22,16 @@ variable "machine_type" {
 variable "guest_accelerator" {
   description = "List of the type and count of accelerator cards attached to the instance."
   type = list(object({
-    type  = string,
+    type  = string
     count = number
+    gpu_driver_installation_config = optional(object({
+      gpu_driver_version = string
+    }), { gpu_driver_version = "DEFAULT" })
+    gpu_partition_size = optional(string)
+    gpu_sharing_config = optional(object({
+      gpu_sharing_strategy       = string
+      max_shared_clients_per_gpu = number
+    }))
   }))
   default  = []
   nullable = false
