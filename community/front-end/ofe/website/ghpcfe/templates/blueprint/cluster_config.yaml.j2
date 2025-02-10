@@ -21,6 +21,18 @@ deployment_groups:
       subnetwork_name: {{ cluster.subnet.cloud_id }}
     id: hpc_network
 
+{% if artifact_registry_yaml %}
+  - id: services-api
+    source: community/modules/project/service-enablement
+    settings:
+      gcp_service_list:
+        - secretmanager.googleapis.com
+        - cloudbuild.googleapis.com
+        - artifactregistry.googleapis.com
+{% endif %}
+
+{{ artifact_registry_yaml | safe }}
+
 {{ filesystems_yaml | safe }}
 
   - source: community/modules/project/service-account
@@ -40,6 +52,9 @@ deployment_groups:
       - iam.serviceAccountAdmin
       - resourcemanager.projectIamAdmin
       - compute.networkAdmin
+      - artifactregistry.reader
+      - artifactregistry.writer
+      - secretmanager.secretAccessor
 
 {{ partitions_yaml | safe }}
 

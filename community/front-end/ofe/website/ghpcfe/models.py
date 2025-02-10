@@ -377,6 +377,11 @@ class VirtualSubnet(CloudResource):
         help_text="CIDR for this subnet",
         validators=[CIDRValidator],
     )
+    private_google_access_enabled = models.BooleanField(
+        default=True,
+        null=False,
+        help_text="Would you like to use Private Google Access with this subnet?"
+    )
 
     def __str__(self):
         return f"{self.vpc.name} - {self.name} - {self.cloud_region}"
@@ -1658,3 +1663,78 @@ class WorkbenchMountPoint(models.Model):
 
     def __str__(self):
         return f"{self.mount_path} on {self.workbench}"
+
+
+class ContainerRegistry(models.Model):
+    """Model to represent container registry settings for Terraform blueprints."""
+
+    REPO_MODES = [
+        ('REMOTE_REPOSITORY', 'Remote Repository'),
+        ('STANDARD_REPOSITORY', 'Standard Repository'),
+    ]
+
+    FORMATS = [
+        ('DOCKER', 'Docker'),
+    ]
+
+    cluster = models.ForeignKey(
+        Cluster,
+        on_delete=models.CASCADE,
+        related_name="container_registry_relations",
+        help_text="Cluster associated with this container registry"
+    )
+
+    repo_password = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        default='',
+        help_text="Optional repo password"
+    )
+
+    format = models.CharField(
+        max_length=20,
+        choices=FORMATS,
+        default="DOCKER"
+    )
+
+    repo_mode = models.CharField(
+        max_length=30,
+        choices=REPO_MODES,
+        default="REMOTE_REPOSITORY"
+    )
+
+    use_public_repository = models.BooleanField(
+        default=False
+    )
+
+    repo_mirror_url = models.URLField(
+        blank=True,
+        null=True,
+        default='',
+        help_text="URL for remote repository"
+    )
+
+    use_upstream_credentials = models.BooleanField(
+        default=False,
+        help_text="Use Service Account for usptream authentication to the remote repository"
+    )
+
+    repo_username = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        default='',
+        help_text="Username for remote repository"
+    )
+
+    def get_project_id(self):
+        """Retrieve project ID dynamically from the related cluster's credential."""
+        return self.cluster.project_id if self.cluster else None
+
+    # def __str__(self):
+    #     return f"{self.deployment_name} (Cluster: {self.cluster.name})"
+
+    class Meta:
+        verbose_name = "Container Registry"
+        verbose_name_plural = "Container Registries"

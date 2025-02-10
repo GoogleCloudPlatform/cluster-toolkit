@@ -48,8 +48,9 @@ printf "####################\n#### Installing required packages\n###############
 dnf install -y epel-release
 dnf update -y --security
 dnf config-manager --add-repo https://rpm.releases.hashicorp.com/RHEL/hashicorp.repo
-dnf install -y terraform-1.4.6
-dnf install --best -y google-cloud-sdk nano make gcc python38-devel unzip git \
+# dnf install -y terraform-1.4.6
+dnf install -y terraform
+dnf install --best -y google-cloud-sdk nano make gcc python3.12-devel unzip git \
 	rsync wget nginx bind-utils policycoreutils-python-utils \
 	packer supervisor python3-certbot-nginx jq
 curl --silent --show-error --location https://github.com/mikefarah/yq/releases/download/v4.13.4/yq_linux_amd64 --output /usr/local/bin/yq
@@ -76,12 +77,13 @@ EOL
 
 dnf install -y grafana
 
-pip3.8 install google-api-python-client \
+pip3.12 install google-api-python-client \
+	google-cloud-artifact-registry \
 	google-cloud-secret-manager \
 	google.cloud.pubsub \
 	pyyaml addict httplib2
 
-# Set Python3.8 as default Python3
+# Set Python3.12 as default Python3
 echo '2' | update-alternatives --config python3
 # Download configuration file
 #
@@ -189,7 +191,7 @@ sudo su - gcluster -c /bin/bash <<EOF
   popd
 
   printf "\nEstablishing django environment..."
-  python3.8 -m venv /opt/gcluster/django-env
+  python3.12 -m venv /opt/gcluster/django-env
   source /opt/gcluster/django-env/bin/activate
   printf "\nUpgrading pip...\n"
   pip install --upgrade pip
