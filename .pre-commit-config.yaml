@@ -134,5 +134,5 @@ repos:
   rev: v2.2.6
   hooks:
   - id: codespell
-    exclude: requirements.txt$|/js/|go.sum$
+    exclude: requirements.txt$|/js/|go.sum$|cluster-toolkit-writers.json$
 exclude: tools/validate_configs/golden_copies/.*
