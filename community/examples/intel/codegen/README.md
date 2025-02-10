@@ -1,6 +1,6 @@
 # Cluster Toolkit Examples
 
-This repository provides various example configurations for deploying and managing workloads using GKE. The focus is on leveraging Intel optimizations for workload execution. Below is a detailed description of the `codegen.yaml` example file. 
+This repository provides an example configuration for deploying the Codegen service. It focuses on leveraging Intel optimizations for workload execution.
 
 ## `codegen.yaml`
 
