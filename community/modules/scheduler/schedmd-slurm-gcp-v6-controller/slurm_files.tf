@@ -154,6 +154,7 @@ module "slurm_files" {
   compute_startup_scripts_timeout    = var.compute_startup_scripts_timeout
   login_startup_scripts              = local.login_startup_scripts
   login_startup_scripts_timeout      = var.login_startup_scripts_timeout
+  controller_state_disk              = var.controller_state_disk
 
   enable_debug_logging = var.enable_debug_logging
   extra_logging_flags  = var.extra_logging_flags

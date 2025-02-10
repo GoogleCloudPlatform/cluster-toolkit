@@ -204,4 +204,14 @@ resource "google_compute_instance_template" "tpl" {
       count = guest_accelerator.value.count
     }
   }
+
+  dynamic "disk" {
+    for_each = var.controller_save_disk_self_link != null ? ["unit"] : []
+    content {
+      source      = var.controller_save_disk_self_link
+      device_name = "controller-state-save"
+      auto_delete = false
+    }
+  }
+
 }
