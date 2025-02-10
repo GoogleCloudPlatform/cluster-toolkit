@@ -35,7 +35,7 @@ No resources.
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_guest_accelerator"></a> [guest\_accelerator](#input\_guest\_accelerator) | List of the type and count of accelerator cards attached to the instance. | <pre>list(object({<br/>    type  = string,<br/>    count = number<br/>  }))</pre> | `[]` | no |
+| <a name="input_guest_accelerator"></a> [guest\_accelerator](#input\_guest\_accelerator) | List of the type and count of accelerator cards attached to the instance. | <pre>list(object({<br/>    type  = string<br/>    count = number<br/>    gpu_driver_installation_config = optional(object({<br/>      gpu_driver_version = string<br/>    }), { gpu_driver_version = "DEFAULT" })<br/>    gpu_partition_size = optional(string)<br/>    gpu_sharing_config = optional(object({<br/>      gpu_sharing_strategy       = string<br/>      max_shared_clients_per_gpu = number<br/>    }))<br/>  }))</pre> | `[]` | no |
 | <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | Machine type to use for the instance creation | `string` | n/a | yes |
 
 ## Outputs
