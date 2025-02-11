@@ -128,14 +128,8 @@ deployment_groups:
       machine_type: n2-standard-4
       enable_login_public_ips: true
 
-  - id: slurm_controller_startup
-    source: modules/scripts/startup-script
-    settings:
-      set_ofi_cloud_rdma_tunables: true
-
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     use: [h4d-slurm-net-0, h4d_partition, slurm_login, homefs, appsfs]
     settings:
       enable_controller_public_ips: true
-      controller_startup_script: $(slurm_controller_startup.startup_script)
