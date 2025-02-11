@@ -22,6 +22,7 @@ from pathlib import Path
 import util
 from util import dirs, slurmdirs
 import tpu
+from addict import Dict as NSDict # type: ignore
 
 FILE_PREAMBLE = """
 # Warning:
@@ -520,7 +521,7 @@ class TopologyBuilder:
         return compressed
 
 
-def add_tpu_nodeset_topology(nodeset: object, bldr: TopologyBuilder, lkp: util.Lookup):
+def add_tpu_nodeset_topology(nodeset: NSDict, bldr: TopologyBuilder, lkp: util.Lookup):
     tpuobj = tpu.TPU.make(nodeset.nodeset_name, lkp)
     static, dynamic = lkp.nodenames(nodeset)
 
@@ -551,7 +552,7 @@ def _make_physical_path(physical_host: str) -> List[str]:
     return [_SLURM_TOPO_ROOT, *short_path]
 
 def add_nodeset_topology(
-    nodeset: object, bldr: TopologyBuilder, lkp: util.Lookup
+    nodeset: NSDict, bldr: TopologyBuilder, lkp: util.Lookup
 ) -> None:
     up_nodes = set()
     default_path = [_SLURM_TOPO_ROOT,  f"ns_{nodeset.nodeset_name}"]
