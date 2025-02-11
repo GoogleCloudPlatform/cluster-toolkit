@@ -24,6 +24,7 @@ import inspect
 import json
 import logging
 import logging.config
+import logging.handlers 
 import math
 import os
 import re
@@ -534,7 +535,7 @@ def _fill_cfg_defaults(cfg: NSDict) -> NSDict:
             }
         )
 
-    network_storage_iter = filter(
+    network_storage_iter: Iterable[Any] = filter(
         None,
         (
             cfg.munge_mount,
@@ -1490,7 +1491,7 @@ class Lookup:
             return f"{pref}-{start}"
         return f"{pref}-[{start}-{start + count - 1}]"
 
-    def static_dynamic_sizes(self, nodeset: object) -> Tuple[int, int]:
+    def static_dynamic_sizes(self, nodeset: NSDict) -> Tuple[int, int]:
         return (nodeset.node_count_static or 0, nodeset.node_count_dynamic_max or 0)
 
     def nodelist(self, nodeset) -> str:
@@ -1507,7 +1508,7 @@ class Lookup:
             (f"{pref}-{i}" for i in range(s_count, s_count + d_count)),
         )
 
-    def power_managed_nodesets(self) -> Iterable[object]:
+    def power_managed_nodesets(self) -> Iterable[NSDict]:
         return chain(self.cfg.nodeset.values(), self.cfg.nodeset_tpu.values())
 
     def is_power_managed_node(self, node_name: str) -> bool:
@@ -1643,7 +1644,7 @@ class Lookup:
             deployment_type=reservation.get("deploymentType"),
             bulk_insert_name=bulk_insert_name)
     
-    def nodeset_reservation(self, nodeset: object) -> Optional[ReservationDetails]:
+    def nodeset_reservation(self, nodeset: NSDict) -> Optional[ReservationDetails]:
         if not nodeset.reservation_name:
             return None
 
@@ -1660,7 +1661,7 @@ class Lookup:
         project, name = match.group("project", "reservation")
         return self.get_reservation_details(project, zone, name, nodeset.reservation_name)
     
-    def future_reservation(self, nodeset:object) -> Optional[FutureReservation]:
+    def future_reservation(self, nodeset: NSDict) -> Optional[FutureReservation]:
         if not nodeset.future_reservation:
             return None
 
