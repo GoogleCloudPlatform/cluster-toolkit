@@ -63,6 +63,11 @@ vars:
       mkdir -p "${SLURM_ROOT}/partition-${PARTITION_NAME}-epilog_slurmd.d"
       ln -s "/slurm/scripts/tools/gpu-test" "${SLURM_ROOT}/partition-${PARTITION_NAME}-epilog_slurmd.d/gpu-test.epilog_slurmd"
 
+  # Adds system benchmark scripts to controller node.
+  - type: data
+    destination: /opt/apps/system_benchmarks
+    source: $(ghpc_stage("system_benchmarks"))
+
   # Shared runners between login and controller:
   # Configure an enroot config path
   shared_runners:
