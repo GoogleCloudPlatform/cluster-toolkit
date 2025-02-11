@@ -93,7 +93,7 @@ locals {
     }
   ]
 
-  ofi_runner = var.set_ofi_cloud_rdma_tunables == "" ? [] : [
+  ofi_runner = !var.set_ofi_cloud_rdma_tunables ? [] : [
     {
       type        = "data"
       destination = "/etc/profile.d/set_ofi_cloud_rdma_tunables.sh"
@@ -102,7 +102,8 @@ locals {
         export FI_PROVIDER="verbs;ofi_rxm"
         export FI_OFI_RXM_USE_RNDV_WRITE=1
         export FI_VERBS_INLINE_SIZE=39
-        export I_MPI_FABRICS="shm:rxm"
+        export I_MPI_FABRICS="shm:ofi"
+        export FI_UNIVERSE_SIZE=3072
         EOT
     },
   ]
