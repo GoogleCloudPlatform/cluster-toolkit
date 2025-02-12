@@ -106,7 +106,9 @@ func destroyTerraformGroup(groupDir string) error {
 		return err
 	}
 
-	return shell.Destroy(tf, getApplyBehavior())
+	// Always output text when destroying the cluster
+	// The current implementation outputs JSON only for the "deploy" command
+	return shell.Destroy(tf, getApplyBehavior(), shell.TextOutput)
 }
 
 func destroyChoice(nextGroup config.GroupName) bool {
