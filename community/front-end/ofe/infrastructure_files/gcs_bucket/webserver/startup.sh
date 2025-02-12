@@ -77,6 +77,8 @@ EOL
 
 dnf install -y grafana
 
+python3.12 -m ensurepip --upgrade
+
 pip3.12 install google-api-python-client \
 	google-cloud-artifact-registry \
 	google-cloud-secret-manager \
