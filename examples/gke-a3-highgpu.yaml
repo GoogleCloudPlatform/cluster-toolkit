@@ -25,8 +25,8 @@ vars:
   # The following line must be updated for this example to work.
   authorized_cidr: <your-ip-address>/32
   gcp_public_cidrs_access_enabled: false
-  gvnic_network_prefix: vpc
-  gvnic_starting_index: 1
+  gvnic_network_prefix: # add this
+  gvnic_starting_index: # add this
 
 deployment_groups:
 - group: primary

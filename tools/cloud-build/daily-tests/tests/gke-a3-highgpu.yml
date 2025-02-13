@@ -29,6 +29,8 @@ reservation_affinity:
   specific_reservations:
   - name: a3-reservation-0
     project: "{{ project }}"
+gvnic_network_prefix: vpc
+gvnic_starting_index: 1
 cli_deployment_vars:
   region: "{{ region }}"
   zone: "{{ zone }}"
@@ -38,6 +40,8 @@ cli_deployment_vars:
   network_name: "{{ network }}"
   local_ssd_count_nvme_block: 16
   gcp_public_cidrs_access_enabled: true
+  gvnic_network_prefix: "{{ gvnic_network_prefix }}"
+  gvnic_starting_index: "{{ gvnic_starting_index }}"
 custom_vars:
   project: "{{ project }}"
 post_deploy_tests:
