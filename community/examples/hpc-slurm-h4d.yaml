@@ -18,7 +18,6 @@ vars:
   deployment_name: slurm-h4d
   region: us-central1
   zone: us-central1-a
-  net0_range: 192.168.0.0/19
   rdma_net_range: 192.168.128.0/18
 
 # Documentation for each of the modules used below can be found at
@@ -32,27 +31,28 @@ deployment_groups:
 
   - id: h4d-slurm-net-0
     source: modules/network/vpc
-    settings:
-      network_name: $(vars.deployment_name)-net-0
-      mtu: 8896
-      subnetworks:
-      - subnet_name: $(vars.deployment_name)-sub-0
-        subnet_region: $(vars.region)
-        subnet_ip: $(vars.net0_range)
 
   - id: h4d-rdma-net
     source: modules/network/vpc
     settings:
-      network_name: h4d-rdma-net
+      network_name: $(vars.deployment_name)-rdma-net-0
       mtu: 8896
       network_profile: https://www.googleapis.com/compute/beta/projects/$(vars.project_id)/global/networkProfiles/$(vars.zone)-vpc-falcon
       network_routing_mode: REGIONAL
       enable_cloud_router: false
       enable_cloud_nat: false
       subnetworks:
-      - subnet_name: h4d-rdma-sub-0
+      - subnet_name: $(vars.deployment_name)-rdma-sub-0
         subnet_region: $(vars.region)
         subnet_ip: $(vars.rdma_net_range)
+        region: $(vars.region)
+      firewall_rules:
+      - name: $(vars.deployment_name)-rdma-0
+        ranges: [$(vars.rdma_net_range)]
+        allow:
+        - protocol: tcp
+        - protocol: udp
+        - protocol: icmp
 
   - id: homefs
     source: modules/file-system/filestore
@@ -76,6 +76,11 @@ deployment_groups:
     source: modules/scripts/startup-script
     settings:
       install_cloud_rdma_drivers: true
+      set_ofi_cloud_rdma_tunables: true
+      local_ssd_filesystem:
+        fs_type: ext4
+        mountpoint: /mnt/lssd
+        permissions: "1777"
 
   - id: h4d_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
