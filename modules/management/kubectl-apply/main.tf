@@ -36,8 +36,6 @@ data "google_container_cluster" "gke_cluster" {
   location = local.cluster_location
 }
 
-data "google_client_config" "default" {}
-
 module "kubectl_apply_manifests" {
   for_each = local.apply_manifests_map
   source   = "./kubectl"
@@ -48,9 +46,10 @@ module "kubectl_apply_manifests" {
   server_side_apply = each.value.server_side_apply
   wait_for_rollout  = each.value.wait_for_rollout
 
+  depends_on = [data.google_container_cluster.gke_cluster]
+
   providers = {
-    kubectl = kubectl
-    http    = http.h
+    http = http.h
   }
 }
 
@@ -59,9 +58,10 @@ module "install_kueue" {
   source_path       = local.install_kueue ? local.kueue_install_source : null
   server_side_apply = true
 
+  depends_on = [data.google_container_cluster.gke_cluster]
+
   providers = {
-    kubectl = kubectl
-    http    = http.h
+    http = http.h
   }
 }
 
@@ -70,9 +70,10 @@ module "install_jobset" {
   source_path       = local.install_jobset ? local.jobset_install_source : null
   server_side_apply = true
 
+  depends_on = [data.google_container_cluster.gke_cluster]
+
   providers = {
-    kubectl = kubectl
-    http    = http.h
+    http = http.h
   }
 }
 
@@ -80,13 +81,12 @@ module "configure_kueue" {
   source        = "./kubectl"
   source_path   = local.install_kueue ? try(var.kueue.config_path, "") : null
   template_vars = local.install_kueue ? try(var.kueue.config_template_vars, null) : null
-  depends_on    = [module.install_kueue]
+  depends_on    = [module.install_kueue, data.google_container_cluster.gke_cluster]
 
   server_side_apply = true
   wait_for_rollout  = true
 
   providers = {
-    kubectl = kubectl
-    http    = http.h
+    http = http.h
   }
 }

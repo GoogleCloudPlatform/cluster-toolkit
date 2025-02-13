@@ -60,6 +60,8 @@ locals {
   ])
 }
 
+data "google_client_config" "default" {}
+
 module "kubectl_apply" {
   source = "../../management/kubectl-apply"
 
@@ -67,4 +69,6 @@ module "kubectl_apply" {
   project_id = var.project_id
 
   apply_manifests = concat(local.apply_manifests_non_rdma_networks, local.apply_manifests_rdma_networks)
+
+  depends_on = [data.google_container_cluster.existing_gke_cluster]
 }
