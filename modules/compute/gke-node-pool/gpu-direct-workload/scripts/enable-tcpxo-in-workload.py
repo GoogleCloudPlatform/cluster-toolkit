@@ -81,15 +81,14 @@ def add_annotations(job_manifest):
         "networking.gke.io/interfaces": """|
 [
     {"interfaceName":"eth0","network":"default"},
-    {"interfaceName":"eth1","network":"gvnic-0"},
-    {"interfaceName":"eth2","network":"rdma-0"},
-    {"interfaceName":"eth3","network":"rdma-1"},
-    {"interfaceName":"eth4","network":"rdma-2"},
-    {"interfaceName":"eth5","network":"rdma-3"},
-    {"interfaceName":"eth6","network":"rdma-4"},
-    {"interfaceName":"eth7","network":"rdma-5"},
-    {"interfaceName":"eth8","network":"rdma-6"},
-    {"interfaceName":"eth9","network":"rdma-7"}
+    {"interfaceName":"eth1","network":"vpc1"},
+    {"interfaceName":"eth2","network":"vpc2"},
+    {"interfaceName":"eth3","network":"vpc3"},
+    {"interfaceName":"eth4","network":"vpc4"},
+    {"interfaceName":"eth5","network":"vpc5"},
+    {"interfaceName":"eth6","network":"vpc6"},
+    {"interfaceName":"eth7","network":"vpc7"},
+    {"interfaceName":"eth8","network":"vpc8"}
 ]""",
     }
 

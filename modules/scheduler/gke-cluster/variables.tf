@@ -443,3 +443,19 @@ variable "upgrade_settings" {
     max_unavailable = 1
   }
 }
+
+variable "k8s_network_prefix" {
+  description = "Kubernetes network prefix details for GKE. If starting index is not specified for gvnic or rdma, it would be set to a default value of 0."
+  type = object({
+    gvnic_network_prefix = string
+    gvnic_starting_index = optional(number)
+    rdma_network_prefix  = optional(string)
+    rdma_starting_index  = optional(number)
+  })
+  default = {
+    gvnic_network_prefix = "gvnic-"
+    gvnic_starting_index = 0
+    rdma_network_prefix  = "rdma-"
+    rdma_starting_index  = 0
+  }
+}

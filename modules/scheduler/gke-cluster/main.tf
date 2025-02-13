@@ -386,11 +386,11 @@ locals {
 locals {
   # Separate gvnic and rdma networks and assign indexes
   gvnic_networks = [for idx, net in [for n in var.additional_networks : n if strcontains(upper(n.nic_type), "GVNIC")] :
-    merge(net, { name = "gvnic-${idx}" })
+    merge(net, { name = "${var.k8s_network_prefix.gvnic_network_prefix}${idx + var.k8s_network_prefix.gvnic_starting_index}" })
   ]
 
   rdma_networks = [for idx, net in [for n in var.additional_networks : n if strcontains(upper(n.nic_type), "RDMA")] :
-    merge(net, { name = "rdma-${idx}" })
+    merge(net, { name = "${var.k8s_network_prefix.rdma_network_prefix}${idx + var.k8s_network_prefix.rdma_starting_index}" })
   ]
 
   all_networks = concat(local.gvnic_networks, local.rdma_networks)
