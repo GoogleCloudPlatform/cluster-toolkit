@@ -82,14 +82,14 @@ variable "mount_runner" {
 
 variable "network_interfaces" {
   type = list(object({
-    network = optional(string)
-    subnet  = optional(string)
+    network  = optional(string)
+    subnet   = optional(string)
     nic_type = optional(string)
     access_configs = optional(list(object({
       external_ip = optional(string)
     })))
   }))
-  default = []
+  default     = []
   description = <<EOT
 A list of network interfaces for the VM instance. Each network interface is represented by an object with the following fields:
 

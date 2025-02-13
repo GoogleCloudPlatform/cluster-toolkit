@@ -73,9 +73,9 @@ resource "google_workbench_instance" "instance" {
     dynamic "network_interfaces" {
       for_each = var.network_interfaces
       content {
-        network    = network_interfaces.value.network
-        subnet = network_interfaces.value.subnet
-        nic_type   = network_interfaces.value.nic_type
+        network  = network_interfaces.value.network
+        subnet   = network_interfaces.value.subnet
+        nic_type = network_interfaces.value.nic_type
 
         dynamic "access_configs" {
           for_each = network_interfaces.value.access_configs != null ? network_interfaces.value.access_configs : []
