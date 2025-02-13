@@ -8,7 +8,7 @@ Primarily used for FSI - MonteCarlo Tutorial: **[fsi-montecarlo-on-batch-tutoria
 
 ## Usage
 
-This is a simple usage:
+This is a simple usage, using the default network:
 
 ```yaml
   - id: bucket
@@ -24,6 +24,27 @@ This is a simple usage:
       name_prefix: notebook
       machine_type: n1-standard-4
 
+```
+
+If the user wants do specify a custom subnetwork, or specific external IP restrictions, he can use the `network_interfaces` variable, here is an example on how to use a Shared VPC Subnet with Ephemeral External IP:
+
+```yaml
+  - id: bucket
+    source: community/modules/file-system/cloud-storage-bucket
+    settings: 
+      name_prefix: my-bucket
+      local_mount: /home/jupyter/my-bucket
+
+  - id: notebook
+    source: community/modules/compute/notebook
+    use: [bucket]
+    settings:
+      name_prefix: notebook
+      machine_type: n1-standard-4
+      network_interfaces:
+        - network: "projects/HOST_PROJECT_ID/global/networks/SHARED_VPC_NAME"
+          subnet: "projects/HOST_PROJECT_ID/regions/REGION/subnetworks/SUBNET_NAME"
+          nic_type: "VIRTIO_NET"
 ```
 
 ## License
