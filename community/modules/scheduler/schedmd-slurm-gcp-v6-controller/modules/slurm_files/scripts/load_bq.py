@@ -248,7 +248,7 @@ def load_slurm_jobs(start, end):
 def init_table():
     global dataset
     global table
-    dataset = client.create_dataset(dataset, exists_ok=True)
+    dataset = client.create_dataset(dataset, exists_ok=True) # type: ignore
     table = client.create_table(table, exists_ok=True)
     until_found = retry.Retry(predicate=retry.if_exception_type(exceptions.NotFound))
     table = client.get_table(table, retry=until_found)
