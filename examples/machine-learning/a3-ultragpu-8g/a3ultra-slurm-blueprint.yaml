@@ -402,8 +402,8 @@ deployment_groups:
       is_default: true
       partition_conf:
         OverSubscribe: EXCLUSIVE
-        ResumeTimeout: 900
-        SuspendTimeout: 600
+        ResumeTimeout: 1200
+        SuspendTimeout: 1200
 
   - id: slurm_login
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
