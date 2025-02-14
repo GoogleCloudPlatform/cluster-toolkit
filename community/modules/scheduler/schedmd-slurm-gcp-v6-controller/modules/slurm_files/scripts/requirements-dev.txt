@@ -1,0 +1,3 @@
+types-httplib2
+types-requests
+types-PyYAML
