@@ -330,7 +330,7 @@ def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
         failed_reqs = [str(e) for e in failed.items()]
         log.error("bulkInsert API failures: {}".format("; ".join(failed_reqs)))
         for ident, exc in failed.items():
-            down_nodes_notify_jobs(grouped_nodes[ident].nodes, f"GCP Error: {exc._get_reason()}", resume_data) # type: ignore
+            down_nodes_notify_jobs(grouped_nodes[ident].nodes, f"GCP Error: {exc._get_reason()}", resume_data)
 
     if log.isEnabledFor(logging.DEBUG):
         for group, op in started.items():
@@ -551,7 +551,7 @@ def create_nodeset_placements(nodes: List[str], excl_job_id:Optional[int], lkp: 
         op = item[1]
         if not isinstance(op, Exception):
             return "submitted"
-        if all(e.get("reason") == "alreadyExists" for e in op.error_details): # type: ignore
+        if all(e.get("reason") == "alreadyExists" for e in op.error_details):
             return "redundant"
         return "failed"
 
