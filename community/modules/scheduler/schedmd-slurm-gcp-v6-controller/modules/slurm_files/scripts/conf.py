@@ -501,7 +501,7 @@ class TopologyBuilder:
 
     def render_conf_lines(self) -> Iterable[str]:
         if not self._r.switches:
-            return []
+            return [] # type: ignore
         for s in sorted(self._r.switches.values(), key=lambda s: s.name):
             yield from s.render_conf_lines()
 

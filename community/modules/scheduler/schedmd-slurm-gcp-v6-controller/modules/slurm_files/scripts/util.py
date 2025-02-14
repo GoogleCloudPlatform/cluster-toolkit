@@ -49,9 +49,9 @@ from time import sleep, time
 from google.cloud import secretmanager
 from google.cloud import storage # type: ignore
 
-import google.auth
-from google.oauth2 import service_account
-import googleapiclient.discovery # type: ignore
+import google.auth # type: ignore
+from google.oauth2 import service_account # type: ignore
+import googleapiclient.discovery # type: ignore 
 import google_auth_httplib2 # type: ignore
 from googleapiclient.http import set_user_agent # type: ignore
 from google.api_core.client_options import ClientOptions

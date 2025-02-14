@@ -354,7 +354,7 @@ def sync_placement_groups():
         result = ensure_execute(op)
         # merge placement group info from API and job_id,partition,index parsed from the name
         pgs = (
-            {**pg, **pg_regex.match(pg["name"]).groupdict()}
+            {**pg, **pg_regex.match(pg["name"]).groupdict()} # type: ignore
             for pg in chain.from_iterable(
                 item["resourcePolicies"]
                 for item in result.get("items", {}).values()
