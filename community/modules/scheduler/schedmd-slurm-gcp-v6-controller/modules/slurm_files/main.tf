@@ -41,14 +41,15 @@ resource "random_uuid" "cluster_id" {
 
 locals {
   config = {
-    enable_bigquery_load = var.enable_bigquery_load
-    cloudsql_secret      = var.cloudsql_secret
-    cluster_id           = random_uuid.cluster_id.result
-    project              = var.project_id
-    slurm_cluster_name   = var.slurm_cluster_name
-    bucket_path          = local.bucket_path
-    enable_debug_logging = var.enable_debug_logging
-    extra_logging_flags  = var.extra_logging_flags
+    enable_bigquery_load  = var.enable_bigquery_load
+    cloudsql_secret       = var.cloudsql_secret
+    cluster_id            = random_uuid.cluster_id.result
+    project               = var.project_id
+    slurm_cluster_name    = var.slurm_cluster_name
+    bucket_path           = local.bucket_path
+    enable_debug_logging  = var.enable_debug_logging
+    extra_logging_flags   = var.extra_logging_flags
+    controller_state_disk = var.controller_state_disk
 
     # storage
     disable_default_mounts = var.disable_default_mounts

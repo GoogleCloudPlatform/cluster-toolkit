@@ -158,6 +158,12 @@ variable "auto_delete" {
   default     = "true"
 }
 
+variable "controller_save_disk_self_link" {
+  description = "The id of the encryption key that is stored in Google Cloud KMS to use to encrypt all the disks on this instance"
+  type        = string
+  default     = null
+}
+
 variable "additional_disks" {
   description = "List of maps of additional disks. See https://www.terraform.io/docs/providers/google/r/compute_instance_template#disk_name"
   type = list(object({

@@ -48,6 +48,15 @@ locals {
   )
 }
 
+resource "google_compute_disk" "controller_disk" {
+  count = var.controller_state_disk != null ? 1 : 0
+
+  name = "controller-state-save"
+  type = var.controller_state_disk.type
+  size = var.controller_state_disk.size
+  zone = var.zone
+}
+
 # INSTANCE TEMPLATE
 module "slurm_controller_template" {
   source = "../../internal/slurm-gcp/instance_template"
@@ -64,10 +73,11 @@ module "slurm_controller_template" {
   disk_type        = var.disk_type
   additional_disks = local.additional_disks
 
-  bandwidth_tier            = var.bandwidth_tier
-  slurm_bucket_path         = module.slurm_files.slurm_bucket_path
-  can_ip_forward            = var.can_ip_forward
-  advanced_machine_features = var.advanced_machine_features
+  controller_save_disk_self_link = var.controller_state_disk != null ? google_compute_disk.controller_disk[0].name : null
+  bandwidth_tier                 = var.bandwidth_tier
+  slurm_bucket_path              = module.slurm_files.slurm_bucket_path
+  can_ip_forward                 = var.can_ip_forward
+  advanced_machine_features      = var.advanced_machine_features
 
   enable_confidential_vm   = var.enable_confidential_vm
   enable_oslogin           = var.enable_oslogin
