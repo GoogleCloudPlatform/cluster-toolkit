@@ -32,7 +32,7 @@ locals {
     }
   ]
 
-  synth_def_sa_email = "${data.google_project.this.number}-compute@developer.gserviceaccount.com"
+  synth_def_sa_email = "${data.google_project.controller_project.number}-compute@developer.gserviceaccount.com"
 
   service_account = {
     email  = coalesce(var.service_account_email, local.synth_def_sa_email)
@@ -46,13 +46,19 @@ locals {
     var.metadata,
     local.universe_domain
   )
+
+  controller_project_id = coalesce(var.controller_project_id, var.project_id)
+}
+
+data "google_project" "controller_project" {
+  project_id = var.controller_project_id
 }
 
 # INSTANCE TEMPLATE
 module "slurm_controller_template" {
   source = "../../internal/slurm-gcp/instance_template"
 
-  project_id          = var.project_id
+  project_id          = local.controller_project_id
   region              = var.region
   slurm_instance_role = "controller"
   slurm_cluster_name  = local.slurm_cluster_name
@@ -97,7 +103,7 @@ module "slurm_controller_template" {
 # INSTANCE
 resource "google_compute_instance_from_template" "controller" {
   name                     = "${local.slurm_cluster_name}-controller"
-  project                  = var.project_id
+  project                  = local.controller_project_id
   zone                     = var.zone
   source_instance_template = module.slurm_controller_template.self_link
 

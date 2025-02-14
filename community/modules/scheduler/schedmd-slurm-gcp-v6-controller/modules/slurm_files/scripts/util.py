@@ -1354,7 +1354,7 @@ class Lookup:
 
     @cached_property
     def control_host_addr(self):
-        return host_lookup(self.cfg.slurm_control_host)
+        return self.control_addr or host_lookup(self.cfg.slurm_control_host)
 
     @property
     def control_host_port(self):
