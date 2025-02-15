@@ -88,6 +88,8 @@ module "instance_template" {
 
   project_id = var.project_id
 
+  controller_save_disk_self_link = var.controller_save_disk_self_link
+
   # Network
   can_ip_forward              = var.can_ip_forward
   network_ip                  = var.network_ip
