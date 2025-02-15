@@ -361,7 +361,7 @@ limitations under the License.
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created. | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | Region to place bucket containing startup script. | `string` | n/a | yes |
 | <a name="input_spack_profile_script_path"></a> [spack\_profile\_script\_path](#input\_spack\_profile\_script\_path) | Path to the Spack profile.d script. Created by this module | `string` | `"/etc/profile.d/spack.sh"` | no |
-| <a name="input_spack_ref"></a> [spack\_ref](#input\_spack\_ref) | Git ref to checkout for spack. | `string` | `"v0.20.0"` | no |
+| <a name="input_spack_ref"></a> [spack\_ref](#input\_spack\_ref) | Git ref to checkout for spack. | `string` | `"v0.22.3"` | no |
 | <a name="input_spack_url"></a> [spack\_url](#input\_spack\_url) | URL to clone the spack repo from. | `string` | `"https://github.com/spack/spack"` | no |
 | <a name="input_spack_virtualenv_path"></a> [spack\_virtualenv\_path](#input\_spack\_virtualenv\_path) | Virtual environment path in which to install Spack Python interpreter and other dependencies | `string` | `"/usr/local/spack-python"` | no |
 | <a name="input_system_user_gid"></a> [system\_user\_gid](#input\_system\_user\_gid) | GID used when creating system user group. Ignored if `system_user_name` already exists on system. Default of 1104762903 is arbitrary. | `number` | `1104762903` | no |
