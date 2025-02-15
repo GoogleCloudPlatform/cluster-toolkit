@@ -180,7 +180,7 @@ def test_nodeset_reservation_err(nodeset, err):
     lkp._get_reservation = Mock()
     with pytest.raises(err):
         lkp.nodeset_reservation(nodeset)
-    lkp._get_reservation.assert_not_called()
+    lkp._get_reservation.assert_not_called() # type: ignore
 
 @pytest.mark.parametrize(
         "nodeset,policies,expected",
@@ -228,14 +228,14 @@ def test_nodeset_reservation_ok(nodeset, policies, expected):
 
     if not expected:
         assert lkp.nodeset_reservation(nodeset) is None
-        lkp._get_reservation.assert_not_called()
+        lkp._get_reservation.assert_not_called() # type: ignore
         return
 
-    lkp._get_reservation.return_value = {
+    lkp._get_reservation.return_value = { # type: ignore
         "resourcePolicies": {i: p for i, p in enumerate(policies)},
     }
     assert lkp.nodeset_reservation(nodeset) == expected
-    lkp._get_reservation.assert_called_once_with(expected.project, expected.zone, expected.name)
+    lkp._get_reservation.assert_called_once_with(expected.project, expected.zone, expected.name) # type: ignore
 
 
 @pytest.mark.parametrize(

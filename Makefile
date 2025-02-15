@@ -7,7 +7,7 @@ MIN_GOLANG_VERSION=1.22 # for building gcluster
         warn-go-missing warn-terraform-missing warn-packer-missing \
         warn-go-version warn-terraform-version warn-packer-version \
         test-engine validate_configs validate_golden_copy packer-check \
-        terraform-format packer-format \
+        terraform-format packer-format mypy \
         check-tflint check-pre-commit
 
 SHELL=/bin/bash -o pipefail
@@ -72,7 +72,9 @@ install-dev-deps: warn-terraform-version warn-packer-version check-pre-commit ch
 	go install golang.org/x/tools/cmd/goimports@latest
 	go install honnef.co/go/tools/cmd/staticcheck@latest
 	pip install -r community/modules/scheduler/schedmd-slurm-gcp-v6-controller/modules/slurm_files/scripts/requirements.txt
-	pip install -r community/modules/scheduler/schedmd-slurm-gcp-v6-controller/modules/slurm_files/scripts/tests/requirements.txt
+	pip install -r community/modules/scheduler/schedmd-slurm-gcp-v6-controller/modules/slurm_files/scripts/requirements-dev.txt
+	pip install -r community/modules/scheduler/schedmd-slurm-gcp-v6-controller/modules/slurm_files/scripts/tests/requirements-dev.txt
+	pip install mypy
 
 
 clean:
