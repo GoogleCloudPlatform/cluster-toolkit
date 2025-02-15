@@ -162,8 +162,14 @@ data "google_compute_instance" "ap" {
   self_link = data.google_compute_region_instance_group.ap.instances[0].instance
 }
 
+resource "null_resource" "ap_config" {
+  triggers = {
+    config = local.ap_config
+  }
+}
+
 resource "google_storage_bucket_object" "ap_config" {
-  name    = "${local.name_prefix}-config-${substr(md5(local.ap_config), 0, 4)}"
+  name    = "${local.name_prefix}-config-${substr(md5(null_resource.ap_config.id), 0, 4)}"
   content = local.ap_config
   bucket  = var.htcondor_bucket_name
 
