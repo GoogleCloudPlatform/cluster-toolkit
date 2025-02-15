@@ -338,3 +338,10 @@ variable "subnetwork_self_link" {
   type        = string
   description = "Subnet to deploy to."
 }
+
+
+variable "controller_project_id" {
+  type        = string
+  description = "Optionally. Provision controller and config bucket in the different project"
+  default     = null
+}
