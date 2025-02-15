@@ -69,7 +69,7 @@ locals {
     [local.schedd_runner]
   )
 
-  central_manager_ips  = [data.google_compute_instance.cm.network_interface[0].network_ip]
+  central_manager_ips  = google_compute_address.cm.address
   central_manager_name = data.google_compute_instance.cm.name
 
   list_instances_command = "gcloud compute instance-groups list-instances ${data.google_compute_region_instance_group.cm.name} --region ${var.region} --project ${var.project_id}"
@@ -138,6 +138,14 @@ module "startup_script" {
   runners = local.all_runners
 }
 
+resource "google_compute_address" "cm" {
+  project      = var.project_id
+  name         = local.name_prefix
+  subnetwork   = var.subnetwork_self_link
+  address_type = "INTERNAL"
+  purpose      = "GCE_ENDPOINT"
+}
+
 module "central_manager_instance_template" {
   source  = "terraform-google-modules/vm/google//modules/instance_template"
   version = "~> 12.1"
@@ -162,6 +170,8 @@ module "central_manager_instance_template" {
   # secure boot
   enable_shielded_vm       = var.enable_shielded_vm
   shielded_instance_config = var.shielded_instance_config
+
+  network_ip = google_compute_address.cm.id
 }
 
 module "htcondor_cm" {
@@ -203,12 +213,6 @@ module "htcondor_cm" {
     min_ready_sec                = 300
     minimal_action               = "REPLACE"
     type                         = var.update_policy
-  }]
-
-  stateful_ips = [{
-    interface_name = "nic0"
-    delete_rule    = "ON_PERMANENT_INSTANCE_DELETION"
-    is_external    = false
   }]
 
   # the timeouts below are default for resource
