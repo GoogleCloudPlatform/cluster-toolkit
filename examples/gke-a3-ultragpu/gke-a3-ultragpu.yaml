@@ -33,6 +33,10 @@ vars:
   system_node_pool_disk_size_gb: 200
   a3ultra_node_pool_disk_size_gb: 100
   k8s_service_account_name: # add this
+  gvnic_network_prefix: # add this
+  gvnic_starting_index: # add this
+  rdma_network_prefix: # add this
+  rdma_starting_index: # add this
 
 deployment_groups:
 - group: primary
@@ -156,6 +160,11 @@ deployment_groups:
         start_time: "2024-12-01T00:00:00Z"
         end_time: "2025-12-22T00:00:00Z"
         exclusion_scope: NO_MINOR_OR_NODE_UPGRADES
+      k8s_network_prefix:
+        gvnic_network_prefix: $(vars.gvnic_network_prefix)
+        gvnic_starting_index: $(vars.gvnic_starting_index)
+        rdma_network_prefix: $(vars.rdma_network_prefix)
+        rdma_starting_index: $(vars.rdma_starting_index)
     outputs: [instructions]
 
   - id: a3-ultragpu-pool
