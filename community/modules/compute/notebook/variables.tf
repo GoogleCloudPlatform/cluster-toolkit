@@ -79,3 +79,27 @@ variable "mount_runner" {
     error_message = "There must be 5 elements in the Mount Runner Arguments: ${var.mount_runner.args} \n "
   }
 }
+
+variable "network_interfaces" {
+  type = list(object({
+    network  = optional(string)
+    subnet   = optional(string)
+    nic_type = optional(string)
+    access_configs = optional(list(object({
+      external_ip = optional(string)
+    })))
+  }))
+  default     = []
+  description = <<EOT
+A list of network interfaces for the VM instance. Each network interface is represented by an object with the following fields:
+
+- network: (Optional) The name of the Virtual Private Cloud (VPC) network that this VM instance is connected to.
+
+- subnet: (Optional) The name of the subnetwork within the specified VPC that this VM instance is connected to.
+
+- nic_type: (Optional) The type of vNIC to be used on this interface. Possible values are: `VIRTIO_NET`, `GVNIC`.
+
+- access_configs: (Optional) An array of access configurations for this network interface. The access_config object contains:
+  * external_ip: (Required) An external IP address associated with this instance. Specify an unused static external IP address available to the project or leave this field undefined to use an IP from a shared ephemeral IP address pool. If you specify a static external IP address, it must live in the same region as the zone of the instance.
+EOT
+}
