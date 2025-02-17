@@ -172,10 +172,11 @@ locals {
 
   slurm_gcp_devel_zip        = "slurm-gcp-devel.zip"
   slurm_gcp_devel_zip_bucket = format("%s/%s", local.bucket_dir, local.slurm_gcp_devel_zip)
+  devel_zip_directory        = var.enable_hybrid ? local.output_dir : local.build_dir
 }
 
 data "archive_file" "slurm_gcp_devel_zip" {
-  output_path = "${local.build_dir}/${local.slurm_gcp_devel_zip}"
+  output_path = "${local.devel_zip_directory}/${local.slurm_gcp_devel_zip}"
   type        = "zip"
   source_dir  = local.scripts_dir
 
