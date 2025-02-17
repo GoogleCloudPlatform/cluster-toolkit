@@ -53,3 +53,8 @@ output "controller_devel_zip" {
   value       = data.archive_file.slurm_gcp_devel_controller_zip.output_path
   description = "Path to the generated controller devel zip, it holds the resume/suspend scripts."
 }
+
+output "scripts_dir" {
+  value       = local.scripts_dir
+  description = "The scripts dir location."
+}

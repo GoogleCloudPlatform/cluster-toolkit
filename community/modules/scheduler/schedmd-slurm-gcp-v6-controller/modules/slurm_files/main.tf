@@ -197,6 +197,7 @@ locals {
   slurm_gcp_devel_compute_zip        = "slurm-gcp-devel.zip"
   slurm_gcp_devel_zip_bucket         = format("%s/%s", local.bucket_dir, local.slurm_gcp_devel_controller_zip)
   slurm_gcp_devel_compute_zip_bucket = format("%s/%s", local.bucket_dir, local.slurm_gcp_devel_compute_zip)
+  controller_devel_zip_directory     = var.enable_hybrid ? local.output_dir : local.build_dir
 
   controller_files = [
     "requirements.txt",
@@ -254,7 +255,7 @@ locals {
 }
 
 data "archive_file" "slurm_gcp_devel_controller_zip" {
-  output_path = "${local.build_dir}/${local.slurm_gcp_devel_controller_zip}"
+  output_path = "${local.controller_devel_zip_directory}/${local.slurm_gcp_devel_controller_zip}"
   type        = "zip"
 
   dynamic "source" {
