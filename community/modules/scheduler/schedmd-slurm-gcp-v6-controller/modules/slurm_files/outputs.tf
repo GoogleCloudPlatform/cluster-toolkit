@@ -48,3 +48,8 @@ output "config" {
     error_message = "All nodeset names must be unique among all nodeset types."
   }
 }
+
+output "scripts_dir" {
+  value       = local.scripts_dir
+  description = "The scripts dir location."
+}
