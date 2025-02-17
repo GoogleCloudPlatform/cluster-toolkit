@@ -165,14 +165,11 @@ deployment_groups:
       machine_type: a3-ultragpu-8g
       auto_upgrade: true
       zones: [$(vars.zone)]
-      disk_type: hyperdisk-balanced
       disk_size_gb: $(vars.a3ultra_node_pool_disk_size_gb)
       static_node_count: $(vars.static_node_count)
       guest_accelerator:
       - type: nvidia-h200-141gb
         count: 8
-        gpu_driver_installation_config:
-          gpu_driver_version: "LATEST"
       reservation_affinity:
         consume_reservation_type: SPECIFIC_RESERVATION
         specific_reservations:
@@ -207,7 +204,6 @@ deployment_groups:
           node_pool_name: $(a3-ultragpu-pool.node_pool_name)
       jobset:
         install: true
-        version: v0.7.2
       apply_manifests:
       - source: $(vars.nccl_installer_path)
       - source: $(vars.mglru_disable_path)

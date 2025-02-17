@@ -76,7 +76,7 @@ variable "jobset" {
   description = "Install [Jobset](https://github.com/kubernetes-sigs/jobset) which manages a group of K8s [jobs](https://kubernetes.io/docs/concepts/workloads/controllers/job/) as a unit."
   type = object({
     install = optional(bool, false)
-    version = optional(string, "v0.5.2")
+    version = optional(string, "v0.7.2")
   })
   default = {}
 }
