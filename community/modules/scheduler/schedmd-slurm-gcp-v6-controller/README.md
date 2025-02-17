@@ -264,6 +264,7 @@ limitations under the License.
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.3 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 4.84 |
 | <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 6.0.0 |
+| <a name="requirement_local"></a> [local](#requirement\_local) | ~> 2.0 |
 
 ## Providers
 
@@ -271,6 +272,7 @@ limitations under the License.
 |------|---------|
 | <a name="provider_google"></a> [google](#provider\_google) | >= 4.84 |
 | <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 6.0.0 |
+| <a name="provider_local"></a> [local](#provider\_local) | ~> 2.0 |
 
 ## Modules
 
@@ -299,6 +301,7 @@ limitations under the License.
 | [google_storage_bucket_iam_member.legacy_readers](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_iam_member) | resource |
 | [google_storage_bucket_iam_member.viewers](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_iam_member) | resource |
 | [google_storage_bucket_object.parition_config](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_object) | resource |
+| [local_file.hybrid_install](https://registry.terraform.io/providers/hashicorp/local/latest/docs/resources/file) | resource |
 | [google_compute_image.slurm](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_image) | data source |
 | [google_project.controller_project](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/project) | data source |
 
