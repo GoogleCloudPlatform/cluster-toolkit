@@ -196,10 +196,6 @@ deployment_groups:
         ))
     outputs: [instructions]
 
-  - id: topology-aware-scheduler-install
-    source: community/modules/compute/gke-topology-scheduler
-    use: [a3-ultragpu-cluster]
-
   # Install Kueue, Jobset, and NCCL installer
   - id: workload-manager-install
     source: modules/management/kubectl-apply
