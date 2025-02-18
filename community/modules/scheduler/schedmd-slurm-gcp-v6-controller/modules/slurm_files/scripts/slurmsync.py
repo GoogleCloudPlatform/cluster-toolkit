@@ -154,7 +154,7 @@ def _find_dynamic_node_status() -> NodeAction:
     return NodeActionUnchanged()  # don't touch dynamic nodes
 
 def get_fr_action(fr: FutureReservation, state:Optional[NodeState]) -> Optional[NodeAction]:
-    now = datetime.now(timezone.utc)
+    now = util.now()
     if state is None:
         return None # handle like any other node
     if fr.start_time < now < fr.end_time:
@@ -283,7 +283,7 @@ def get_node_action(nodename: str) -> NodeAction:
     elif (state is None or "POWERED_DOWN" in state.flags) and inst.status == "RUNNING":
         log.info("%s is potential orphan node", nodename)
         threshold = timedelta(seconds=90)
-        age = datetime.now(timezone.utc) - inst.creation_timestamp
+        age = util.now() - inst.creation_timestamp
         log.info(f"{nodename} state: {state}, age: {age}")
         if age < threshold:
             log.info(f"{nodename} not marked as orphan, it started less than {threshold.seconds}s ago ({age.seconds}s)")
