@@ -210,7 +210,7 @@ func getModuleKubectlProviders(mod Module) map[string]TerraformProvider {
 	return map[string]TerraformProvider{
 		"kubectl": {
 			Source:        "gavinbunney/kubectl",
-			Version:       ">= 1.7.0",
+			Version:       ">= 1.19.0",
 			Configuration: kubectlConf}}
 }
 

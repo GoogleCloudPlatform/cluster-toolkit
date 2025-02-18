@@ -102,7 +102,7 @@ func (s *zeroSuite) TestExpandProviders(c *C) {
 
 	testKubectlProvider := PR{
 		Source:        "gavinbunney/kubectl",
-		Version:       ">= 1.7.0",
+		Version:       ">= 1.19.0",
 		Configuration: testKubectlConf}
 
 	testGKEClusterModule := Module{
