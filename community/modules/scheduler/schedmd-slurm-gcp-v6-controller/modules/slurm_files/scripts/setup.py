@@ -16,6 +16,7 @@
 # limitations under the License.
 
 import argparse
+from itertools import chain
 import logging
 import os
 import shutil
@@ -25,6 +26,7 @@ import time
 import yaml
 from pathlib import Path
 import functools
+import grp, pwd
 
 import util
 from util import (
@@ -504,12 +506,64 @@ def setup_login():
 
     log.info("Done setting up login")
 
+def _cond_chown(path: Path, uid: int, gid: int, previous_uid: int = -1, previous_gid: int = -1):
+    """
+    If the current owner of the file at path is previous_uid change it to uid.
+    The same goes for the group.
+    """
+    st = path.stat()
+    my_uid = uid if (previous_uid == -1 or st.st_uid == previous_uid) else -1
+    my_gid = gid if (previous_gid == -1 or st.st_gid == previous_gid) else -1
+    if my_uid != -1 or my_gid != -1:
+        os.chown(path,my_uid,my_gid)
+
+def recursive_chown(path: Path, uid: int, gid: int, previous_uid: int = -1, previous_gid: int = -1):
+    """
+    This is the python equivalent of doing:
+    find path -uid previous_uid -exec chown uid {} +
+    find path -uid previous_gid -exec chgrp gid {} +
+    """
+    # Change ownership for the root directory
+    _cond_chown(path, uid, gid, previous_uid, previous_gid)
+
+    for root, dirs, files in os.walk(path):
+        for item in chain(dirs,files):
+            _cond_chown(Path(os.path.join(root, item)), uid, gid, previous_uid, previous_gid)
+
+
+def change_uid_gid_slurm():
+    lkp = lookup()
+    need_chown = False
+    cur_gid = grp.getgrnam("slurm").gr_gid
+    gid = lkp.cfg.hybrid_conf.slurm_gid
+    if (cur_gid != gid):
+        need_chown = True
+        grc = run(f"groupmod -g {gid} slurm")
+        if grc.returncode:
+            log.error(f"Cannot change the gid of slurm rc={grc.returncode} stdout={grc.stdout} stderr={grc.stderr}")
+            return
+
+    cur_uid = pwd.getpwnam("slurm").pw_uid
+    uid = lkp.cfg.hybrid_conf.slurm_uid
+    if (cur_uid != uid):
+        need_chown = True
+        urc = run(f"usermod -u {uid} slurm")
+        if urc.returncode:
+            log.error(f"Cannot change the uid of slurm rc={urc.returncode} stdout={urc.stdout} stderr={urc.stderr}")
+            return
+    if need_chown:
+        recursive_chown(slurmdirs.home, uid, gid)
+        recursive_chown(slurmdirs.etc, uid, gid, cur_uid, cur_gid)
+        recursive_chown(Path(lkp.cfg.slurm_log_dir), uid, gid, cur_uid, cur_gid)
+        recursive_chown(dirs.slurm, uid, gid, cur_uid, cur_gid) #/slurm
 
 def setup_compute():
     """run compute node setup"""
     log.info("Setting up compute")
 
     lkp = lookup()
+    if lkp.cfg.hybrid:
+        change_uid_gid_slurm()
     util.chown_slurm(dirs.scripts / "config.yaml", mode=0o600)
     slurmctld_host = f"{lkp.control_host}"
     if lkp.control_addr:
