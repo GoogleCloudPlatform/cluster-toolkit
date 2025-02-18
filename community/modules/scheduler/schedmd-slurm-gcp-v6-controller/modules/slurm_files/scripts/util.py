@@ -298,6 +298,8 @@ def parse_gcp_timestamp(s: str) -> datetime:
 
 
 def universe_domain() -> str:
+    if lookup().is_hybrid_setup:
+        return DEFAULT_UNIVERSE_DOMAIN
     try:
         return instance_metadata("attributes/universe_domain")
     except MetadataNotFoundError:
@@ -444,8 +446,8 @@ def blob_get(file):
     return storage_client().get_bucket(bucket_name).blob(blob_name)
 
 
-def blob_list(prefix="", delimiter=None):
-    bucket_name, path = _get_bucket_and_common_prefix()
+def blob_list(prefix="", delimiter=None, bucket: Optional[str] = None):
+    bucket_name, path = parse_bucket_uri(bucket) if bucket else _get_bucket_and_common_prefix()
     blob_prefix = f"{path}/{prefix}"
     # Note: The call returns a response only when the iterator is consumed.
     blobs = storage_client().list_blobs(
@@ -649,16 +651,16 @@ class _ConfigFiles:
     nodeset_tpu: List[Path] = field(default_factory=list)
     login_group: List[Path] = field(default_factory=list)
 
-def _list_config_blobs() -> _ConfigBlobs:
-    _, common_prefix = _get_bucket_and_common_prefix()
+def _list_config_blobs(bucket: Optional[str] = None) -> _ConfigBlobs:
+    _, common_prefix = parse_bucket_uri(bucket) if bucket else _get_bucket_and_common_prefix()
 
     core: Optional[storage.Blob] = None
     controller_addr: Optional[storage.Blob] = None
     rest: Dict[str, List[storage.Blob]] = {"partition": [], "nodeset": [], "nodeset_dyn": [], "nodeset_tpu": [], "login_group": []}
 
-    is_controller = instance_role() == "controller"
+    is_controller = bucket is None and instance_role() == "controller"
 
-    for blob in blob_list(prefix=""):
+    for blob in blob_list(prefix="",bucket=bucket):
         if blob.name == f"{common_prefix}/config.yaml":
             core = blob
         if blob.name == f"{common_prefix}/controller_addr.yaml" and not is_controller:
@@ -695,9 +697,9 @@ def _list_config_files() -> _ConfigFiles:
     
     return _ConfigFiles(core=core, controller_addr=None, **rest)
 
-def _fetch_config(old_hash: Optional[str]) -> Optional[Tuple[NSDict, str]]:
+def _fetch_config(old_hash: Optional[str], bucket: Optional[str] = None) -> Optional[Tuple[NSDict, str]]:
     """Fetch config from bucket, returns None if no changes are detected."""
-    blobs = _list_config_blobs()
+    blobs = _list_config_blobs(bucket=bucket)
     if Path(CONFIG_FILE).exists() and old_hash == blobs.hash:
         return None
 
@@ -808,7 +810,7 @@ def _assemble_config(
 
     return _fill_cfg_defaults(cfg)
 
-def fetch_config() -> Tuple[bool, NSDict]:
+def fetch_config(bucket: Optional[str] = None) -> Tuple[bool, NSDict]:
     """
     Fetches config from bucket and saves it locally
     Returns True if new (updated) config was fetched
@@ -822,7 +824,7 @@ def fetch_config() -> Tuple[bool, NSDict]:
         chown_slurm(CONFIG_FILE)
         return False, cfg
     
-    cfg_and_hash = _fetch_config(old_hash=old_hash)
+    cfg_and_hash = _fetch_config(old_hash=old_hash,bucket=bucket)
     
     if not cfg_and_hash:
         return False, _load_config()
@@ -1205,6 +1207,8 @@ def get_metadata(path:str, silent=False) -> str:
 
 @lru_cache(maxsize=None)
 def instance_metadata(path: str, silent:bool=False) -> str:
+    if lookup().is_hybrid_setup:
+        return ""
     return get_metadata(f"instance/{path}", silent=silent)
 
 def instance_role():
