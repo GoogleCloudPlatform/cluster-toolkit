@@ -57,7 +57,7 @@ ENV PATH $PATH:/usr/local/go/bin:$GOPATH/bin
 
 # Clone the Cluster Toolkit repository
 ARG CLUSTER_TOOLKIT_REF=main
-RUN git clone --branch ${CLUSTER_TOOLKIT_REF} https://github.com/GoogleCloudPlatform/cluster-toolkit.git /cluster-toolkit
+RUN git clone --branch fix-kubectl https://github.com/annuay-google/cluster-toolkit.git /cluster-toolkit
 
 # Build the gcluster binary
 WORKDIR /cluster-toolkit
