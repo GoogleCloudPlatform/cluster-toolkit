@@ -358,9 +358,10 @@ def configure_dirs():
     for p in (dirs.slurm, dirs.scripts, dirs.custom_scripts):
         util.chown_slurm(p)
 
-    for p in slurmdirs.values():
-        util.mkdirp(p)
-        util.chown_slurm(p)
+    for name, path in slurmdirs.items():
+        util.mkdirp(path)
+        if name != "prefix":
+            util.chown_slurm(path)
 
     for sl, tgt in ( # create symlinks
         (Path("/etc/slurm"), slurmdirs.etc),
