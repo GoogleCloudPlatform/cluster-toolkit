@@ -996,6 +996,9 @@ def log_subprocess(subj: subprocess.CalledProcessError | subprocess.TimeoutExpir
 
 
 def chown_slurm(path: Path, mode=None) -> None:
+    if lookup().is_hybrid_setup:
+        #In hybrid setup we do not want to chown to slurm as the host might not have slurm user
+        return
     if path.exists():
         if mode:
             path.chmod(mode)
