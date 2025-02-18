@@ -116,6 +116,9 @@ Log back in to ensure your home directory is correct.
 
 
 def failed_motd():
+    if lookup().is_hybrid_setup:
+        #Do not modify motd for hybrid setup
+        return
     """modify motd to signal that setup is failed"""
     wall_msg = f"*** Slurm setup failed! Please view log: {util.get_log_path()} ***"
     motd_msg = MOTD_HEADER + wall_msg + "\n\n"
