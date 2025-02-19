@@ -16,7 +16,7 @@ import pytest
 import json
 import mock
 from pytest_unordered import unordered
-from common import TstCfg, TstNodeset, TstTPU, tstInstance
+from common import TstCfg, TstNodeset, TstTPU, tstInstance, TstHybridConf
 import sort_nodes
 
 import util
@@ -31,7 +31,7 @@ PRELUDE = """
 
 def test_gen_topology_conf_empty():
     out_dir = tempfile.mkdtemp()
-    cfg = TstCfg(output_dir=out_dir)
+    cfg = TstCfg(hybrid_conf=TstHybridConf(output_dir=out_dir),)
     conf.gen_topology_conf(util.Lookup(cfg))
     assert open(out_dir + "/cloud_topology.conf").read() == PRELUDE + "\n"
 
@@ -49,7 +49,7 @@ def test_gen_topology_conf(tpu_mock):
             "d": TstNodeset("blue", node_count_static=7),
             "e": TstNodeset("pink", node_count_dynamic_max=4),
         },
-        output_dir=output_dir,
+        hybrid_conf=TstHybridConf(output_dir=output_dir),
     )
 
     def tpu_se(ns: str, lkp) -> TstTPU:
@@ -152,7 +152,7 @@ def test_gen_topology_conf_update():
         nodeset={
             "c": TstNodeset("green", node_count_static=2),
         },
-        output_dir=tempfile.mkdtemp(),
+        hybrid_conf=TstHybridConf(output_dir=tempfile.mkdtemp()),
     )
     lkp = util.Lookup(cfg)
     lkp.instances = lambda: { # type: ignore[assignment]

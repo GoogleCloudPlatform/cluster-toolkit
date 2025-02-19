@@ -71,15 +71,9 @@ locals {
     cloud_parameters    = var.cloud_parameters
 
     # hybrid
-    hybrid                        = var.enable_hybrid
-    google_app_cred_path          = var.enable_hybrid ? local.google_app_cred_path : null
-    output_dir                    = var.enable_hybrid ? local.output_dir : null
-    install_dir                   = var.enable_hybrid ? local.install_dir : null
-    slurm_control_host            = var.enable_hybrid ? var.slurm_control_host : null
-    slurm_control_host_port       = var.enable_hybrid ? local.slurm_control_host_port : null
-    slurm_control_addr            = var.enable_hybrid ? var.slurm_control_addr : null
-    slurm_bin_dir                 = var.enable_hybrid ? local.slurm_bin_dir : null
-    slurm_log_dir                 = var.enable_hybrid ? local.slurm_log_dir : null
+    hybrid      = var.enable_hybrid
+    hybrid_conf = var.enable_hybrid ? local.hybrid_conf : null
+
     controller_network_attachment = var.controller_network_attachment
 
 
@@ -100,22 +94,29 @@ locals {
   etc_dir = abspath("${path.module}/etc")
 
   bucket_path = format("%s/%s", data.google_storage_bucket.this.url, local.bucket_dir)
+  output_dir  = try(abspath(coalesce(var.hybrid_conf.output_dir, ".")), abspath("."))
+  hybrid_conf = {
+    #Required params
+    slurm_control_host = var.hybrid_conf != null ? var.hybrid_conf.slurm_control_host : null
+    #Optional params
+    output_dir  = local.output_dir
+    install_dir = try(abspath(var.hybrid_conf.install_dir), local.output_dir)
 
-  slurm_control_host_port = coalesce(var.slurm_control_host_port, "6818")
-
-  google_app_cred_path = var.google_app_cred_path != null ? abspath(var.google_app_cred_path) : null
-  slurm_bin_dir        = var.slurm_bin_dir != null ? abspath(var.slurm_bin_dir) : null
-  slurm_log_dir        = var.slurm_log_dir != null ? abspath(var.slurm_log_dir) : null
-
+    slurm_uid               = try(coalesce(var.hybrid_conf.slurm_uid, 981), 981)
+    slurm_gid               = try(coalesce(var.hybrid_conf.slurm_gid, 981), 981)
+    slurm_control_host_port = try(coalesce(var.hybrid_conf.slurm_control_host_port, "6817"), "6817")
+    slurm_log_dir           = try(abspath(var.hybrid_conf.slurm_log_dir), null)
+    slurm_bin_dir           = try(abspath(var.hybrid_conf.slurm_bin_dir), null)
+    slurm_control_addr      = try(var.hybrid_conf.slurm_control_addr, null)
+    google_app_cred_path    = try(abspath(var.hybrid_conf.google_app_cred_path), null)
+  }
   munge_mount = var.enable_hybrid ? {
-    server_ip     = lookup(var.munge_mount, "server_ip", coalesce(var.slurm_control_addr, var.slurm_control_host))
+    server_ip     = lookup(var.munge_mount, "server_ip", coalesce(var.hybrid_conf.slurm_control_addr, var.hybrid_conf.slurm_control_host))
     remote_mount  = lookup(var.munge_mount, "remote_mount", "/etc/munge/")
     fs_type       = lookup(var.munge_mount, "fs_type", "nfs")
     mount_options = lookup(var.munge_mount, "mount_options", "")
   } : null
 
-  output_dir  = can(coalesce(var.output_dir)) ? abspath(var.output_dir) : abspath(".")
-  install_dir = can(coalesce(var.install_dir)) ? abspath(var.install_dir) : local.output_dir
 }
 
 resource "google_storage_bucket_object" "config" {

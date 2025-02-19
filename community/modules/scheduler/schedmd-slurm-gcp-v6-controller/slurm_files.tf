@@ -47,9 +47,10 @@ locals {
   compute_sa     = toset(flatten([for x in module.slurm_nodeset_template : x.service_account]))
   compute_tpu_sa = toset(flatten([for x in module.slurm_nodeset_tpu : x.service_account]))
   login_sa       = toset(flatten([for x in module.login : x.service_account]))
+  hybrid_sa      = try(var.hybrid_conf.service_account_email, null) != null ? "serviceAccount:${var.hybrid_conf.service_account_email}" : "serviceAccount:${local.synth_def_sa_email}"
 
   viewers = toset(flatten([
-    var.enable_hybrid ? "serviceAccount:${local.synth_def_sa_email}" : "serviceAccount:${module.slurm_controller_template[0].service_account.email}",
+    var.enable_hybrid ? local.hybrid_sa : "serviceAccount:${module.slurm_controller_template[0].service_account.email}",
     formatlist("serviceAccount:%s", [for x in local.compute_sa : x.email]),
     formatlist("serviceAccount:%s", [for x in local.compute_tpu_sa : x.email if x.email != null]),
     formatlist("serviceAccount:%s", [for x in local.login_sa : x.email]),
@@ -167,6 +168,7 @@ module "slurm_files" {
   task_prolog_scripts                = var.task_prolog_scripts
 
   enable_hybrid          = var.enable_hybrid
+  hybrid_conf            = var.enable_hybrid ? var.hybrid_conf : null
   disable_default_mounts = !var.enable_default_mounts
   network_storage = [
     for storage in var.network_storage : {

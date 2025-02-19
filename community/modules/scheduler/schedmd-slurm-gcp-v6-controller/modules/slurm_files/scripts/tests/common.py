@@ -53,6 +53,11 @@ class TstPartition:
     enable_job_exclusive: bool = False
 
 @dataclass
+class TstHybridConf:
+    install_dir: Optional[str] = None
+    output_dir: Optional[str] = None
+
+@dataclass
 class TstCfg:
     slurm_cluster_name: str = "m22"
     cloud_parameters: dict[str, Any] = field(default_factory=dict)
@@ -61,9 +66,8 @@ class TstCfg:
     nodeset: dict[str, TstNodeset] = field(default_factory=dict)
     nodeset_tpu: dict[str, TstNodeset] = field(default_factory=dict)
     nodeset_dyn: dict[str, TstNodeset] = field(default_factory=dict)
-    
-    install_dir: Optional[str] = None
-    output_dir: Optional[str] = None
+
+    hybrid_conf: Optional[TstHybridConf] = None
 
     prolog_scripts: Optional[list[Placeholder]] = field(default_factory=list)
     epilog_scripts: Optional[list[Placeholder]] = field(default_factory=list)
