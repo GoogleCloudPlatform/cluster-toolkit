@@ -99,7 +99,7 @@ def conflines(lkp: util.Lookup) -> str:
         ],
     }
 
-    scripts_dir = lkp.cfg.install_dir or dirs.scripts
+    scripts_dir = lkp.cfg.hybrid_conf.install_dir if lkp.cfg.hybrid_conf else dirs.scripts
     prolog_path = Path(dirs.custom_scripts / "prolog.d")
     epilog_path = Path(dirs.custom_scripts / "epilog.d")
     task_prolog_path = Path(dirs.custom_scripts / "task_prolog.d")
