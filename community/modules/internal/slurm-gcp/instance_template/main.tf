@@ -43,12 +43,12 @@ locals {
   source_image_family = (
     var.source_image_family != "" && var.source_image_family != null
     ? var.source_image_family
-    : "slurm-gcp-6-8-hpc-rocky-linux-8"
+    : "slurm-gcp-next-hpc-rocky-linux-8"
   )
   source_image_project = (
     var.source_image_project != "" && var.source_image_project != null
     ? var.source_image_project
-    : "projects/schedmd-slurm-public/global/images/family"
+    : "projects/hpc-toolkit-dev/global/images/family"
   )
 
   source_image = (

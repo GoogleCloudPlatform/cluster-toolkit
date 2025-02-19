@@ -25,8 +25,8 @@ vars:
   disk_type: pd-ssd
   num_nodes: 1
   rocky_image:
-    family: slurm-gcp-6-8-hpc-rocky-linux-8
-    project: schedmd-slurm-public
+    family: slurm-gcp-next-hpc-rocky-linux-8
+    project: hpc-toolkit-dev
 
 deployment_groups:
 - group: primary
@@ -78,7 +78,7 @@ deployment_groups:
   #     node_count_dynamic_max: $(vars.num_nodes)
   #     instance_image:
   #       family: slurm-gcp-6-8-ubuntu-2004-lts
-  #       project: schedmd-slurm-public
+  #       project: hpc-toolkit-dev
 
   # - id: ubuntu_partition
   #   source: community/modules/compute/schedmd-slurm-gcp-v6-partition
