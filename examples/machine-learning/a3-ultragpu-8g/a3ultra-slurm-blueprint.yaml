@@ -291,8 +291,9 @@ deployment_groups:
                 mode: 0o0644
                 content: |
                   [Unit]
-                  After=network-online.target
+                  After=network-online.target docker.service
                   Before=slurmd.service
+                  Requires=docker.service
 
                   [Service]
                   Type=oneshot
