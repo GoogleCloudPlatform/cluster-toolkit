@@ -801,7 +801,7 @@ def fetch_config() -> Tuple[bool, NSDict]:
     Fetches config from bucket and saves it locally
     Returns True if new (updated) config was fetched
     """
-    hash_file = Path("/slurm/scripts/.config.hash")
+    hash_file = Path(CONFIG_FILE).with_name(".config.hash")
     old_hash = hash_file.read_text() if hash_file.exists() else None
     
     if should_mount_slurm_bucket() and instance_role() != "controller":
