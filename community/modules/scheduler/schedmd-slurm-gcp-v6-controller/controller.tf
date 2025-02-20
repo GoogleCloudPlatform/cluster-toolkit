@@ -32,6 +32,14 @@ locals {
     }
   ]
 
+  state_disk = var.controller_state_disk != null ? [{
+    source      = google_compute_disk.controller_disk[0].name
+    device_name = google_compute_disk.controller_disk[0].name
+    disk_labels = null
+    auto_delete = false
+    boot        = false
+  }] : []
+
   synth_def_sa_email = "${data.google_project.controller_project.number}-compute@developer.gserviceaccount.com"
 
   service_account = {
@@ -54,6 +62,15 @@ data "google_project" "controller_project" {
   project_id = var.controller_project_id
 }
 
+resource "google_compute_disk" "controller_disk" {
+  count = var.controller_state_disk != null ? 1 : 0
+
+  name = "${local.slurm_cluster_name}-controller-save"
+  type = var.controller_state_disk.type
+  size = var.controller_state_disk.size
+  zone = var.zone
+}
+
 # INSTANCE TEMPLATE
 module "slurm_controller_template" {
   source = "../../internal/slurm-gcp/instance_template"
@@ -68,7 +85,7 @@ module "slurm_controller_template" {
   disk_labels      = merge(var.disk_labels, local.labels)
   disk_size_gb     = var.disk_size_gb
   disk_type        = var.disk_type
-  additional_disks = local.additional_disks
+  additional_disks = concat(local.additional_disks, local.state_disk)
 
   bandwidth_tier            = var.bandwidth_tier
   slurm_bucket_path         = module.slurm_files.slurm_bucket_path
