@@ -48,7 +48,7 @@ printf "####################\n#### Installing required packages\n###############
 dnf install -y epel-release
 dnf update -y --security
 dnf config-manager --add-repo https://rpm.releases.hashicorp.com/RHEL/hashicorp.repo
-dnf install -y terraform-1.4.6
+dnf install -y terraform
 dnf install --best -y google-cloud-sdk nano make gcc python3.12-devel unzip git \
 	rsync wget nginx bind-utils policycoreutils-python-utils \
 	packer supervisor python3-certbot-nginx jq
