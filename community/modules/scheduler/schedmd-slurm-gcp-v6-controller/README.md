@@ -264,6 +264,7 @@ limitations under the License.
 
 | Name | Type |
 |------|------|
+| [google_compute_disk.controller_disk](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_disk) | resource |
 | [google_compute_instance_from_template.controller](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_instance_from_template) | resource |
 | [google_secret_manager_secret.cloudsql](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/secret_manager_secret) | resource |
 | [google_secret_manager_secret_iam_member.cloudsql_secret_accessor](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/secret_manager_secret_iam_member) | resource |
@@ -292,6 +293,7 @@ limitations under the License.
 | <a name="input_controller_project_id"></a> [controller\_project\_id](#input\_controller\_project\_id) | Optionally. Provision controller and config bucket in the different project | `string` | `null` | no |
 | <a name="input_controller_startup_script"></a> [controller\_startup\_script](#input\_controller\_startup\_script) | Startup script used by the controller VM. | `string` | `"# no-op"` | no |
 | <a name="input_controller_startup_scripts_timeout"></a> [controller\_startup\_scripts\_timeout](#input\_controller\_startup\_scripts\_timeout) | The timeout (seconds) applied to each script in controller\_startup\_scripts. If<br/>any script exceeds this timeout, then the instance setup process is considered<br/>failed and handled accordingly.<br/><br/>NOTE: When set to 0, the timeout is considered infinite and thus disabled. | `number` | `300` | no |
+| <a name="input_controller_state_disk"></a> [controller\_state\_disk](#input\_controller\_state\_disk) | A disk that will be attached to the controller instance template to save state of slurm. The disk is created and used by default.<br/>  To disable this feature, set this variable to null.<br/><br/>  NOTE: This will not save the contents at /opt/apps and /home. To preserve those, they must be saved externally. | <pre>object({<br/>    type = string<br/>    size = number<br/>  })</pre> | <pre>{<br/>  "size": 50,<br/>  "type": "pd-ssd"<br/>}</pre> | no |
 | <a name="input_create_bucket"></a> [create\_bucket](#input\_create\_bucket) | Create GCS bucket instead of using an existing one. | `bool` | `true` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the deployment. | `string` | n/a | yes |
 | <a name="input_disable_controller_public_ips"></a> [disable\_controller\_public\_ips](#input\_disable\_controller\_public\_ips) | DEPRECATED: Use `enable_controller_public_ips` instead. | `bool` | `null` | no |

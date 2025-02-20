@@ -387,6 +387,24 @@ EOD
 # SLURM #
 #########
 
+variable "controller_state_disk" {
+  description = <<EOD
+  A disk that will be attached to the controller instance template to save state of slurm. The disk is created and used by default.
+  To disable this feature, set this variable to null.
+  
+  NOTE: This will not save the contents at /opt/apps and /home. To preserve those, they must be saved externally.
+  EOD
+  type = object({
+    type = string
+    size = number
+  })
+
+  default = {
+    type = "pd-ssd"
+    size = 50
+  }
+}
+
 variable "enable_debug_logging" {
   type        = bool
   description = "Enables debug logging mode."

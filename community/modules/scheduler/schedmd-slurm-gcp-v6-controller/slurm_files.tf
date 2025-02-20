@@ -104,6 +104,9 @@ locals {
   }
   ghpc_startup_script_controller = length(local.daos_ns) > 0 ? [local.daos_install_mount_script, local.ghpc_startup_controller] : [local.ghpc_startup_controller]
 
+  controller_state_disk = {
+    device_name : try(google_compute_disk.controller_disk[0].name, null)
+  }
   ghpc_startup_login = {
     filename = "ghpc_startup.sh"
     content  = var.login_startup_script
@@ -154,6 +157,7 @@ module "slurm_files" {
   compute_startup_scripts_timeout    = var.compute_startup_scripts_timeout
   login_startup_scripts              = local.login_startup_scripts
   login_startup_scripts_timeout      = var.login_startup_scripts_timeout
+  controller_state_disk              = local.controller_state_disk
 
   enable_debug_logging = var.enable_debug_logging
   extra_logging_flags  = var.extra_logging_flags

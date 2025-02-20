@@ -176,6 +176,47 @@ def run_custom_scripts():
         log.exception(f"script {script} encountered an exception")
         raise e
 
+def mount_save_state_disk():
+    disk_name = f"/dev/disk/by-id/google-{lookup().cfg.controller_state_disk.device_name}"
+    mount_point = util.slurmdirs.state
+    fs_type = "xfs"
+
+    rdevice = util.run(f"realpath {disk_name}").stdout.strip()
+    file_output = util.run(f"file -s {rdevice}").stdout.strip()
+    if "filesystem" not in file_output:
+        util.run(f"mkfs -t {fs_type} -q {rdevice}")
+
+    fstab_entry = f"{disk_name} {mount_point} {fs_type}"
+    with open("/etc/fstab", "r") as f:
+        fstab = f.readlines()
+    if fstab_entry not in fstab:
+        with open("/etc/fstab", "a") as f:
+            f.write(f"{fstab_entry} defaults 0 0\n")
+
+    util.run(f"systemctl daemon-reload")
+
+    os.makedirs(mount_point, exist_ok=True)
+    util.run(f"mount {mount_point}")
+
+    util.chown_slurm(mount_point)
+
+def mount_munge_key_disk():
+    state_disk_dir = "/var/spool/slurm/munge"
+    mount_point = dirs.munge
+
+    os.makedirs(state_disk_dir, exist_ok=True)
+
+    util.run(f"mount --bind {state_disk_dir} {mount_point}")
+
+    fstab_entry = f"{state_disk_dir} {mount_point}"
+    with open("/etc/fstab", "r") as f:
+        fstab = f.readlines()
+    if fstab_entry not in fstab:
+        with open("/etc/fstab", "a") as f:
+            f.write(f"{fstab_entry} none bind 0 0\n")
+
+    util.run(f"systemctl daemon-reload")
+
 def setup_jwt_key():
     jwt_key = Path(slurmdirs.state / "jwt_hs256.key")
 
@@ -329,6 +370,11 @@ def setup_controller():
     util.chown_slurm(dirs.scripts / "config.yaml", mode=0o600)
     install_custom_scripts()
     conf.gen_controller_configs(lookup())
+    
+    if lookup().cfg.controller_state_disk.device_name != None:
+        mount_save_state_disk()
+        mount_munge_key_disk()
+    
     setup_jwt_key()
     setup_munge_key()
     setup_sudoers()
