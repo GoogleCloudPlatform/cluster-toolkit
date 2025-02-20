@@ -122,8 +122,6 @@ deployment_groups:
       random_suffix: true
       force_destroy: true
       enable_hierarchical_namespace: true
-      viewers:
-      - serviceAccount:$(workload_service_account.service_account_email)
 
   - id: checkpoint_bucket
     source: community/modules/file-system/cloud-storage-bucket
@@ -132,8 +130,6 @@ deployment_groups:
       random_suffix: true
       force_destroy: true
       enable_hierarchical_namespace: true
-      viewers:
-      - serviceAccount:$(workload_service_account.service_account_email)
 
   - id: a3-ultragpu-cluster
     source: modules/scheduler/gke-cluster
