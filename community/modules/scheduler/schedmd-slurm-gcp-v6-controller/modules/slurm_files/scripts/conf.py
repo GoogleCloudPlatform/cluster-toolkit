@@ -90,7 +90,7 @@ def conflines(lkp: util.Lookup) -> str:
             "use_interactive_step",
         ],
         "SlurmctldParameters": [
-            "cloud_reg_addrs" if any_dynamic or any_tpu else "cloud_dns",
+            None if (any_dynamic or any_tpu or lkp.cfg.hybrid) else "cloud_dns",
             "enable_configless",
             "idle_on_node_suspend",
         ],
