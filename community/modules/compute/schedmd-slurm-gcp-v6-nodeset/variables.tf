@@ -570,7 +570,7 @@ variable "dws_flex" {
   See: https://cloud.google.com/blog/products/compute/introducing-dynamic-workload-scheduler
   Options:
   - enable: Enable DWS Flex Start
-  - max_run_duration: Maximum duration in seconds for the job to run, should not exceed 1,209,600 (2 weeks).
+  - max_run_duration: Maximum duration in seconds for the job to run, should not exceed 604,800 (one week).
   - use_job_duration: Use the job duration to determine the max_run_duration, if job duration is not set, max_run_duration will be used.
 
  Limitations:
@@ -582,15 +582,15 @@ variable "dws_flex" {
 
   type = object({
     enabled          = optional(bool, true)
-    max_run_duration = optional(number, 1209600) # 2 weeks
+    max_run_duration = optional(number, 604800) # one week
     use_job_duration = optional(bool, false)
   })
   default = {
     enabled = false
   }
   validation {
-    condition     = var.dws_flex.max_run_duration >= 30 && var.dws_flex.max_run_duration <= 1209600
-    error_message = "Max duration must be more than 30 seconds, and cannot be more than two weeks."
+    condition     = var.dws_flex.max_run_duration >= 30 && var.dws_flex.max_run_duration <= 604800
+    error_message = "Max duration must be more than 30 seconds, and cannot be more than one week."
   }
 }
 
