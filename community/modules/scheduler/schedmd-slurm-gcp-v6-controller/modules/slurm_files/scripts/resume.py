@@ -149,10 +149,10 @@ def update_props_dws(props: NSDict, dws_flex: NSDict, job_id: Optional[int]) -> 
 def dws_flex_duration(dws_flex: NSDict, job_id: Optional[int]) -> int:
     max_duration = dws_flex.max_run_duration
     if dws_flex.use_job_duration and job_id is not None and (job := lookup().job(job_id)) and job.duration:
-        if timedelta(seconds=30) <= job.duration <= timedelta(weeks=2):
+        if timedelta(seconds=30) <= job.duration <= timedelta(weeks=1):
             max_duration = int(job.duration.total_seconds())
         else:
-            log.info("Job TimeLimit cannot be less than 30 seconds or exceed 2 weeks")
+            log.info("Job TimeLimit cannot be less than 30 seconds or exceed one week")
     return max_duration
 
 
