@@ -16,16 +16,16 @@
 terraform_backend_defaults:
   type: gcs
   configuration:
-    bucket: BUCKET_NAME
+    bucket: tas-terraform
 
 vars:
-  deployment_name: gke-a3-ultra
-  project_id: PROJECT_ID
-  region: COMPUTE_REGION
-  zone: COMPUTE_ZONE
-  authorized_cidr: <IP_ADDRESS>/<SUFFIX>
+  deployment_name: gke-a3-02-19
+  project_id: hpc-toolkit-gsc
+  region: europe-west1
+  zone: europe-west1-b
+  authorized_cidr: 0.0.0.0/0
   # In order to not target a BLOCK_NAME, extended_reservation can be inputted as
   # extended_reservation: RESERVATION_NAME
-  extended_reservation: RESERVATION_NAME/reservationBlocks/BLOCK_NAME
-  static_node_count: NODE_COUNT
-  k8s_service_account_name: # add this
+  extended_reservation: hpc-exfr-5
+  static_node_count: 2
+  k8s_service_account_name: workload-k8s
