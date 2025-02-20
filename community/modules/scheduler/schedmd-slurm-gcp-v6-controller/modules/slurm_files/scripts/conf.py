@@ -139,7 +139,7 @@ class SlurmConfigGenerator:
                 "use_interactive_step",
             ],
             "SlurmctldParameters": [
-                "cloud_dns" if not(any_dynamic or any_tpu or any_gke) else None,
+                "cloud_dns" if not(any_dynamic or any_tpu or any_gke or self.lkp.cfg.hybrid) else None,
                 "enable_configless",
                 "idle_on_node_suspend",
             ],
