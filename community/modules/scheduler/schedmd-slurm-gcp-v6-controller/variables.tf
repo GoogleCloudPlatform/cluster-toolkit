@@ -477,7 +477,7 @@ variable "enable_default_mounts" {
     - /apps
     EOD
   type        = bool
-  default     = true
+  default     = null
 }
 
 variable "network_storage" {

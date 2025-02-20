@@ -169,7 +169,7 @@ module "slurm_files" {
 
   enable_hybrid          = var.enable_hybrid
   hybrid_conf            = var.enable_hybrid ? var.hybrid_conf : null
-  disable_default_mounts = !var.enable_default_mounts
+  disable_default_mounts = var.enable_default_mounts != null ? !var.enable_default_mounts : var.enable_hybrid
   network_storage = [
     for storage in var.network_storage : {
       server_ip     = storage.server_ip,
