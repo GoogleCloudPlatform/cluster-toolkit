@@ -65,7 +65,7 @@ class TstCfg:
     nodeset: dict[str, TstNodeset] = field(default_factory=dict)
     nodeset_tpu: dict[str, TstNodeset] = field(default_factory=dict)
     nodeset_dyn: dict[str, TstNodeset] = field(default_factory=dict)
-
+    hybrid: Optional[bool] = False
     hybrid_conf: Optional[TstHybridConf] = None
 
     prolog_scripts: Optional[list[Placeholder]] = field(default_factory=list)
