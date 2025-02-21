@@ -20,7 +20,8 @@
 
 - name: Get cluster credentials for kubectl
   delegate_to: localhost
-  ansible.builtin.command: gcloud container clusters get-credentials {{ deployment_name }} --region {{ region }} --project {{ custom_vars.project }}
+  ansible.builtin.shell: |
+    gcloud container clusters get-credentials {{ deployment_name }} --region {{ region }} --project {{ custom_vars.project }}
 
 - name: Modify NCCL test parameters
   delegate_to: localhost
@@ -33,7 +34,8 @@
     executable: /bin/bash
 
 - name: Print the updated NCCL test file to stdout
-  command: cat {{workspace}}/examples/gke-a3-ultragpu/nccl-jobset-example.yaml
+  ansible.builtin.shell: |
+    cat {{workspace}}/examples/gke-a3-ultragpu/nccl-jobset-example.yaml
   register: nccl_test_file_contents
 
 - name: Display updated NCCL test file
