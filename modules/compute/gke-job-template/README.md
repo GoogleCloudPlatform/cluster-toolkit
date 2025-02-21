@@ -40,7 +40,7 @@ This module natively supports:
   * balanced persistent disk backed ephemeral volume
 
 See the [storage-gke.yaml blueprint](../../../examples/storage-gke.yaml) and the
-associated [documentation](../../../../examples/README.md#storage-gkeyaml--) for
+associated [documentation](../../../examples/README.md#storage-gkeyaml--) for
 examples of how to use Filestore and ephemeral storage with this module.
 
 ### Requested Resources
