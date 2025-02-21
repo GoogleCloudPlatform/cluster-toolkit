@@ -39,8 +39,6 @@ steps:
     BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
     EXAMPLE_BP=tools/cloud-build/daily-tests/blueprints/gke-a2-highgpu.yaml
 
-    # Replacing the static subnet name to prevent collisions
-    sed  -i "s/gke-subnet-a2-high/gke-subnet-a2-high-$${BUILD_ID_SHORT}/" $${EXAMPLE_BP}
     echo '  - id: remote-node'                           >> $${EXAMPLE_BP}
     echo '    source: modules/compute/vm-instance'       >> $${EXAMPLE_BP}
     echo '    use: [network1]'                           >> $${EXAMPLE_BP}
