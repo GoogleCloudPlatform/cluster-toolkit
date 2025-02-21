@@ -108,7 +108,9 @@ deployment_groups:
               nvidia_packages:
               - cuda-toolkit-12-4
               - datacenter-gpu-manager
+              - libnvidia-cfg1-550-server
               - libnvidia-nscq-550
+              - nvidia-compute-utils-550-server
             tasks:
             - name: Download NVIDIA repository package
               ansible.builtin.get_url:
@@ -146,12 +148,40 @@ deployment_groups:
                 name: "{{ item }}"
                 selection: hold
               loop: "{{ nvidia_packages }}"
+            - name: Create nvidia-persistenced override directory
+              ansible.builtin.file:
+                path: /etc/systemd/system/nvidia-persistenced.service.d
+                state: directory
+                owner: root
+                group: root
+                mode: 0o755
+            - name: Configure nvidia-persistenced override
+              ansible.builtin.copy:
+                dest: /etc/systemd/system/nvidia-persistenced.service.d/persistence_mode.conf
+                owner: root
+                group: root
+                mode: 0o644
+                content: |
+                  [Service]
+                  ExecStart=
+                  ExecStart=/usr/bin/nvidia-persistenced --user nvidia-persistenced --verbose
+              notify: Reload SystemD
+            handlers:
+            - name: Reload SystemD
+              ansible.builtin.systemd:
+                daemon_reload: true
             post_tasks:
             - name: Disable NVIDIA DCGM by default (enable during boot on GPU nodes)
               ansible.builtin.service:
                 name: nvidia-dcgm.service
                 state: stopped
                 enabled: false
+            - name: Disable nvidia-persistenced SystemD unit (enable during boot on GPU nodes)
+              ansible.builtin.service:
+                name: nvidia-persistenced.service
+                state: stopped
+                enabled: false
+
       - type: ansible-local
         destination: install_ibverbs_utils.yml
         content: |
@@ -327,6 +357,7 @@ deployment_groups:
             vars:
               enable_ops_agent: true
               enable_nvidia_dcgm: true
+              enable_nvidia_persistenced: true
             tasks:
             - name: Update Ops Agent configuration
               ansible.builtin.blockinfile:
@@ -361,6 +392,11 @@ deployment_groups:
                 name: nvidia-dcgm.service
                 state: "{{ 'started' if enable_nvidia_dcgm else 'stopped' }}"
                 enabled: "{{ enable_nvidia_dcgm }}"
+            - name: Enable NVIDIA Persistence Daemon
+              ansible.builtin.service:
+                name: nvidia-persistenced.service
+                state: "{{ 'started' if enable_nvidia_persistenced else 'stopped' }}"
+                enabled: "{{ enable_nvidia_persistenced }}"
 
   - id: a3_ultra_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
