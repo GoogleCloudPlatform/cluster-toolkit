@@ -65,7 +65,7 @@ deployment_groups:
       machine_type: c2-standard-30
       instance_image:
         family: slurm-gcp-6-8-debian-11
-        project: schedmd-slurm-public
+        project: hpc-toolkit-dev
       instance_image_custom: true
 
   - id: nodeset_2
@@ -75,8 +75,8 @@ deployment_groups:
       name: c60
       machine_type: c2-standard-60
       instance_image:
-        family: slurm-gcp-6-8-hpc-rocky-linux-8
-        project: schedmd-slurm-public
+        family: slurm-gcp-next-hpc-rocky-linux-8
+        project: hpc-toolkit-dev
 
   - id: nodeset_3
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
@@ -85,8 +85,8 @@ deployment_groups:
       name: cd112
       machine_type: c2d-standard-112
       instance_image:
-        family: slurm-gcp-6-8-hpc-rocky-linux-8
-        project: schedmd-slurm-public
+        family: slurm-gcp-next-hpc-rocky-linux-8
+        project: hpc-toolkit-dev
       instance_image_custom: true
       advanced_machine_features:
         threads_per_core: null # Use platform default value

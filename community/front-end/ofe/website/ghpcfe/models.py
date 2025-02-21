@@ -597,7 +597,7 @@ class Image(CloudResource):
         max_length=60,
         help_text="Enter a source image project",
         blank=False,
-        default="schedmd-slurm-public",
+        default="hpc-toolkit-dev",
     )
 
     source_image_family = models.CharField(

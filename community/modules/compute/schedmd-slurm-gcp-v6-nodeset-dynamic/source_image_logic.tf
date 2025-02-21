@@ -17,9 +17,9 @@
 locals {
   # Currently supported images and projects
   known_project_families = {
-    schedmd-slurm-public = [
+    hpc-toolkit-dev = [
       "slurm-gcp-6-8-debian-11",
-      "slurm-gcp-6-8-hpc-rocky-linux-8",
+      "slurm-gcp-next-hpc-rocky-linux-8",
       "slurm-gcp-6-8-ubuntu-2004-lts",
       "slurm-gcp-6-8-ubuntu-2204-lts-arm64"
     ]

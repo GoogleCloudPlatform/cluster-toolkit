@@ -39,8 +39,8 @@ vars:
   project_id: invalid-project
   region: us-central1
   slurm_image:
-    family: slurm-gcp-6-8-hpc-rocky-linux-8
-    project: schedmd-slurm-public
+    family: slurm-gcp-next-hpc-rocky-linux-8
+    project: hpc-toolkit-dev
   zone: us-central1-a
 deployment_groups:
   - group: primary
