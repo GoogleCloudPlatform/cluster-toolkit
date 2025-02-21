@@ -98,15 +98,6 @@ data "google_container_cluster" "gke_cluster" {
   location = local.cluster_location
 }
 
-data "google_client_config" "default" {}
-
-provider "kubectl" {
-  host                   = "https://${data.google_container_cluster.gke_cluster.endpoint}"
-  cluster_ca_certificate = base64decode(data.google_container_cluster.gke_cluster.master_auth[0].cluster_ca_certificate)
-  token                  = data.google_client_config.default.access_token
-  load_config_file       = false
-}
-
 resource "kubectl_manifest" "pv" {
   yaml_body = local.is_gcs ? local.gcs_pv_contents : local.filestore_pv_contents
 
@@ -116,6 +107,8 @@ resource "kubectl_manifest" "pv" {
       error_message = "Either gcs_bucket_name or filestore_id must be set."
     }
   }
+
+  depends_on = [data.google_container_cluster.gke_cluster]
 }
 
 resource "kubectl_manifest" "pvc" {

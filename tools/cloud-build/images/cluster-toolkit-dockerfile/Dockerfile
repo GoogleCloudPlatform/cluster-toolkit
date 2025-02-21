@@ -32,7 +32,7 @@ RUN apt-get update && \
         python3-pip
 
 # Install Terraform
-ARG TERRAFORM_VERSION=1.5.2
+ARG TERRAFORM_VERSION=1.5.7
 RUN wget -q "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip" -O terraform.zip && \
     unzip terraform.zip && \
     mv terraform /usr/local/bin/ && \
@@ -57,7 +57,7 @@ ENV PATH $PATH:/usr/local/go/bin:$GOPATH/bin
 
 # Clone the Cluster Toolkit repository
 ARG CLUSTER_TOOLKIT_REF=main
-RUN git clone --branch ${CLUSTER_TOOLKIT_REF} https://github.com/GoogleCloudPlatform/cluster-toolkit.git /cluster-toolkit
+RUN git clone --branch annuay/fix-kubectl https://github.com/annuay-google/cluster-toolkit.git /cluster-toolkit
 
 # Build the gcluster binary
 WORKDIR /cluster-toolkit
