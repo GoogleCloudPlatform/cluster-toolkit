@@ -65,7 +65,8 @@ SA_ROLES=('aiplatform.admin'
 	'bigquery.admin'
 	'secretmanager.admin'
 	'serviceusage.serviceUsageConsumer'
-	'servicenetworking.networksAdmin')
+	'servicenetworking.networksAdmin'
+	'artifactregistry.admin')
 
 #
 #
