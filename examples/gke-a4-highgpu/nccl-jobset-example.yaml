@@ -15,7 +15,7 @@
 apiVersion: jobset.x-k8s.io/v1alpha2
 kind: JobSet
 metadata:
-  generateName: ag-4-
+  generateName: ag-2-
   namespace: default
   labels:
     kueue.x-k8s.io/queue-name: a4-high
@@ -28,8 +28,8 @@ spec:
   - name: w
     template:
       spec:
-        parallelism: 4
-        completions: 4
+        parallelism: 2
+        completions: 2
 
         template:
           metadata:
@@ -144,7 +144,7 @@ spec:
               - -c
               - |
                 set -x
-                export N_NODES=4
+                export N_NODES=2
                 echo "Starting workload container on ${MY_NODE_NAME} for $N_NODES benchmark"
 
                 # Load all the cuda libs

@@ -10,16 +10,18 @@ The following instructions use [Cluster Toolkit](https://cloud.google.com/cluste
 
 Before you start, make sure you have performed the following tasks:
 
-* The user has the following roles: `roles/editor`, `roles/container.clusterAdmin`, and `roles/iam.serviceAccountAdmin`.
-
 * Enable the Google Kubernetes Engine API.
 
 * If you want to use the Google Cloud CLI for this task, [install](https://cloud.google.com/sdk/docs/install) and then [initialize](https://cloud.google.com/sdk/docs/initializing) the gcloud CLI. If you previously installed the gcloud CLI, get the latest version by running gcloud components update.
   > **NOTE:** For existing gcloud CLI installations, make sure to set the compute/region and compute/zone properties. By setting default locations, you can avoid errors in gcloud CLI like the following: One of [--zone, --region] must be supplied: Please specify location.
-Ensure that you have enough quota for A4 High GPUs. To request more quota, follow the instructions in GPU quota. To ensure that your cluster has capacity, you can follow the instructions to reserve capacity.
 
 * Ensure that you have enough quota for A4 High GPUs. To request more quota,
-  follow the instructions in [GPU quota](https://cloud.google.com/compute/resource-usage#gpu_quota). To ensure that your cluster has capacity, you can follow the instructions to [reserve capacity](https://cloud.google.com/ai-hypercomputer/docs/create/gke-ai-hypercompute#reserve-capacity).
+  follow the instructions in [GPU quota](https://cloud.google.com/compute/resource-usage#gpu_quota). To ensure that your cluster has capacity, you can follow the instructions to [reserve capacity](#reserve-capacity).
+
+* Ensure that you have the following roles enabled:
+  * `roles/editor`
+  * `roles/container.clusterAdmin`
+  * `roles/iam.serviceAccountAdmin`
 
 ### Requirements
 
@@ -69,9 +71,9 @@ to create nodes on a specific block within your reservation:
 
 ## Create a cluster using Cluster Toolkit
 
-This section guides you through the cluster creation process, ensuring that your project follows best practices and meets the [requirements](https://cloud.google.com/ai-hypercomputer/docs/create/gke-ai-hypercompute#requirements) for GKE Hypercompute Cluster.
+This section guides you through the cluster creation process, ensuring that your project follows best practices and meets the [requirements](#requirements) for GKE Hypercompute Cluster.
 
-> **NOTE:** Modify the deployment name to update the names of other infra resources automatically.
+> **NOTE:** If you would like to create more than one cluster in a project, make sure you update the deployment name.
 
 1. [Launch Cloud Shell](https://cloud.google.com/shell/docs/launching-cloud-shell). You can use a different environment; however, we recommend Cloud Shell because the dependencies are already pre-installed for Cluster Toolkit. If you don't want to use Cloud Shell, follow the instructions to [install dependencies](https://cloud.google.com/cluster-toolkit/docs/setup/install-dependencies) to prepare a different environment.
 
@@ -113,6 +115,7 @@ This section guides you through the cluster creation process, ensuring that your
    * `RESERVATION_NAME`: the name of your reservation.
    * `BLOCK_NAME`: the name of a specific block within the reservation.
    * `NODE_COUNT`: the number of A4 High nodes in your cluster.
+   * `K8S_SERVICE_ACCOUNT_NAME`: the name of your Kubernetes service account. Make sure you specify the same service account in your workloads.
 
   To modify advanced settings, edit
   `examples/gke-a4-highgpu/gke-a4-highgpu.yaml`.
@@ -144,7 +147,7 @@ complete the following steps.
     enabled by using the [nccl-jobset-example.yaml](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/develop/examples/gke-a4-highgpu/nccl-jobset-example.yaml) file.
 
     By default, this test uses four nodes. To change the number of nodes,
-    modify the YAML file to change the following values from `4` to your required
+    modify the YAML file to change the following values from `2` to your required
     number of nodes:
 
    * `parallelism`
@@ -161,8 +164,8 @@ complete the following steps.
 
     The output should be similar to the following:
 
-    ```none {:.devsite-disable-click-to-copy}
-    jobset.jobset.x-k8s.io/all-gather8t7dt created
+    ```sh
+    jobset.jobset.x-k8s.io/ag-4-9lkmq created
     ```
 
 1. To view the results of the NCCL test, run this command to view all of the
@@ -174,10 +177,10 @@ complete the following steps.
 
     The output should be similar to the following:
 
-    ```none {:.devsite-disable-click-to-copy}
-    NAME                          READY   STATUS      RESTARTS   AGE
-    all-gather8t7dt-w-0-0-n9s6j   0/1     Completed   0          9m34s
-    all-gather8t7dt-w-0-1-rsf7r   0/1     Completed   0          9m34s
+    ```sh
+    NAME                     READY   STATUS      RESTARTS   AGE
+    ag-2-jnftb-w-0-0-8wrqq   0/1     Completed   0          74s
+    ag-2-jnftb-w-0-1-kcxjj   0/1     Completed   0          74s
     ```
 
 1. Find a Pod name matching the pattern `jobset-name-w-0-0-*`. The logs of this
@@ -186,40 +189,40 @@ complete the following steps.
     To fetch the logs for this Pod, run this command:
 
     ```sh
-    kubectl logs all-gather8t7dt-w-0-0-n9s6j
+    kubectl logs ag-2-jnftb-w-0-0-8wrqq
     ```
 
     The output should be similar to the following:
 
-    ```none {:.devsite-disable-click-to-copy}
+    ```sh
     #       size         count      type   redop    root     time   algbw   busbw #wrong     time   algbw   busbw #wrong
-    #        (B)    (elements)                               (us)  (GB/s)  (GB/s)            (us)  (GB/s)  (GB/s)
-            1024            16     float    none      -1    54.07    0.02    0.02      0    55.80    0.02    0.02      0
-            2048            32     float    none      -1    55.46    0.04    0.03      0    55.31    0.04    0.03      0
-            4096            64     float    none      -1    55.59    0.07    0.07      0    55.38    0.07    0.07      0
-            8192           128     float    none      -1    56.05    0.15    0.14      0    55.92    0.15    0.14      0
-           16384           256     float    none      -1    57.08    0.29    0.27      0    57.75    0.28    0.27      0
-           32768           512     float    none      -1    57.49    0.57    0.53      0    57.22    0.57    0.54      0
-           65536          1024     float    none      -1    59.20    1.11    1.04      0    59.20    1.11    1.04      0
-          131072          2048     float    none      -1    59.58    2.20    2.06      0    63.57    2.06    1.93      0
-          262144          4096     float    none      -1    63.87    4.10    3.85      0    63.61    4.12    3.86      0
-          524288          8192     float    none      -1    64.83    8.09    7.58      0    64.40    8.14    7.63      0
-         1048576         16384     float    none      -1    79.74   13.15   12.33      0    76.66   13.68   12.82      0
-         2097152         32768     float    none      -1    78.41   26.74   25.07      0    79.05   26.53   24.87      0
-         4194304         65536     float    none      -1    83.21   50.41   47.26      0    81.25   51.62   48.39      0
-         8388608        131072     float    none      -1    94.35   88.91   83.35      0    99.07   84.68   79.38      0
-        16777216        262144     float    none      -1    122.9  136.55  128.02      0    121.7  137.83  129.21      0
-        33554432        524288     float    none      -1    184.2  182.19  170.80      0    178.1  188.38  176.60      0
-        67108864       1048576     float    none      -1    294.7  227.75  213.51      0    277.7  241.62  226.52      0
-       134217728       2097152     float    none      -1    495.4  270.94  254.00      0    488.8  274.60  257.43      0
-       268435456       4194304     float    none      -1    877.5  305.92  286.80      0    861.3  311.65  292.17      0
-       536870912       8388608     float    none      -1   1589.8  337.71  316.60      0   1576.2  340.61  319.33      0
-      1073741824      16777216     float    none      -1   3105.7  345.74  324.13      0   3069.2  349.85  327.98      0
-      2147483648      33554432     float    none      -1   6161.7  348.52  326.74      0   6070.7  353.75  331.64      0
-      4294967296      67108864     float    none      -1    12305  349.03  327.22      0    12053  356.35  334.08      0
-      8589934592     134217728     float    none      -1    24489  350.77  328.85      0    23991  358.05  335.67      0
+    #        (B)    (elements)                               (us)  (GB/s)  (GB/s)            (us)  (GB/s)  (GB/s)       
+            1024            16     float    none      -1    39.23    0.03    0.02      0    35.16    0.03    0.03      0
+            2048            32     float    none      -1    36.35    0.06    0.05      0    35.80    0.06    0.05      0
+            4096            64     float    none      -1    36.21    0.11    0.11      0    35.88    0.11    0.11      0
+            8192           128     float    none      -1    36.87    0.22    0.21      0    36.60    0.22    0.21      0
+           16384           256     float    none      -1    37.41    0.44    0.41      0    37.16    0.44    0.41      0
+           32768           512     float    none      -1    39.60    0.83    0.78      0    39.18    0.84    0.78      0
+           65536          1024     float    none      -1    40.90    1.60    1.50      0    41.00    1.60    1.50      0
+          131072          2048     float    none      -1    45.50    2.88    2.70      0    41.97    3.12    2.93      0
+          262144          4096     float    none      -1    46.80    5.60    5.25      0    43.63    6.01    5.63      0
+          524288          8192     float    none      -1    46.44   11.29   10.58      0    48.86   10.73   10.06      0
+         1048576         16384     float    none      -1    81.56   12.86   12.05      0    80.30   13.06   12.24      0
+         2097152         32768     float    none      -1    86.29   24.30   22.78      0    84.16   24.92   23.36      0
+         4194304         65536     float    none      -1    95.18   44.07   41.31      0    89.88   46.67   43.75      0
+         8388608        131072     float    none      -1    103.9   80.75   75.70      0    103.7   80.88   75.82      0
+        16777216        262144     float    none      -1    132.9  126.23  118.34      0    132.4  126.72  118.80      0
+        33554432        524288     float    none      -1    185.7  180.69  169.39      0    183.7  182.65  171.23      0
+        67108864       1048576     float    none      -1    285.6  235.01  220.32      0    292.3  229.59  215.24      0
+       134217728       2097152     float    none      -1    477.4  281.17  263.60      0    470.8  285.10  267.28      0
+       268435456       4194304     float    none      -1    792.9  338.55  317.40      0    775.8  346.02  324.40      0
+       536870912       8388608     float    none      -1   1456.3  368.65  345.61      0   1446.0  371.28  348.07      0
+      1073741824      16777216     float    none      -1   2809.4  382.20  358.32      0   2788.3  385.08  361.02      0
+      2147483648      33554432     float    none      -1   5548.2  387.06  362.87      0   5457.9  393.46  368.87      0
+      4294967296      67108864     float    none      -1    11017  389.83  365.47      0    10806  397.48  372.63      0
+      8589934592     134217728     float    none      -1    21986  390.71  366.29      0    21499  399.55  374.57      0
     # Out of bounds values : 0 OK
-    # Avg bus bandwidth    : 120.248
+    # Avg bus bandwidth    : 128.335
     ```
 
 ## Clean up
