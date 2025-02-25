@@ -663,7 +663,7 @@ deployment_groups:
       partition_name: a3ultra
       is_default: true
       partition_conf:
-        ResumeTimeout: 900
+        ResumeTimeout: 1200
         SuspendTimeout: 600
         OverSubscribe: EXCLUSIVE
 
