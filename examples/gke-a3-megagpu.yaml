@@ -13,7 +13,7 @@
 # limitations under the License.
 
 ---
-
+#testing rulesets
 blueprint_name: gke-a3-mega
 
 vars:
