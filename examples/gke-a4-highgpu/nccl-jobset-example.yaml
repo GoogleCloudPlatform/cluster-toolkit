@@ -126,8 +126,7 @@ spec:
             - name: nccl
               stdin: true
               tty: true
-              # TODO: replace with public image
-              image: us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib-diagnostic:v1.0.3
+              image: us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib-diagnostic:v1.0.4
               securityContext:
                 privileged: true
               env:
