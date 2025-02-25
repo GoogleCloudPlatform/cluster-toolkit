@@ -12,22 +12,31 @@ Currently the following benchmarks are supported:
 * HPL-NVIDIA
 * Mixtral 8x7b and LLama3.1 70B via NeMo
 
+The run scripts have all been staged into `/opt/apps/system_benchmarks`
+on the controller node (and available to all nodes). We recommend running
+them using `nohup` and redirecting the stdout/err to a logfile, as the tests can
+take 30-60 minutes or longer if other jobs are in the queue. The results can
+then be viewed by `tail`ing the log file.
+
 For NCCL tests, run:
 
    ```bash
-   bash run-nccl-via-ramble.sh | tee nccl-$(date -Iseconds).log
+   nohup bash /opt/apps/system_benchmarks/run-nccl-tests-via-ramble.sh >& nccl-$(date -Iseconds).log &
+   tail -f nccl-*.log
    ```
 
 For HPL tests, run:
 
    ```bash
-   bash run-hpl-via-ramble.sh | tee hpl-$(date -Iseconds).log
+   nohup bash /opt/apps/system_benchmarks/run-hpl-via-ramble.sh >& hpl-$(date -Iseconds).log &
+   tail -f hpl-*.log
    ```
 
 For NeMo tests, run:
 
    ```bash
-   bash run-nemo-via-ramble.sh | tee nemo-$(date -Iseconds).log
+   nohup bash /opt/apps/system_benchmarks/run-nemo-via-ramble.sh >& nemo-$(date -Iseconds).log &
+   tail -f nemo-*.log
    ```
 
 Where applicable, the NeMo workloads configurations have been chosen to
