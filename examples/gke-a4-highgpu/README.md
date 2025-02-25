@@ -122,8 +122,7 @@ This section guides you through the cluster creation process, ensuring that your
 
 1. Generate [Application Default Credentials (ADC)](https://cloud.google.com/docs/authentication/provide-credentials-adc#google-idp) to provide access to Terraform.
 
-1. Deploy the blueprint to provision the GKE  infrastructure
-    using A4 High machine types:
+1. Deploy the blueprint to provision the GKE infrastructure using A4 High machine types:
 
    ```sh
    cd ~/cluster-toolkit

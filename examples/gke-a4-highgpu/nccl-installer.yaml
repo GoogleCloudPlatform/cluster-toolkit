@@ -54,8 +54,7 @@ spec:
         hostPath:
           path: /home/kubernetes/bin/gib
       initContainers:
-      # TODO: replace with public image
-      - image: us-docker.pkg.dev/kernel-net-team/clouda4-nccl-dev/nccl-plugin-gib-diagnostic:v1.0.3-b200
+      - image: us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib:v1.0.4
         name: nccl-rdma-installer
         resources:
           requests:
