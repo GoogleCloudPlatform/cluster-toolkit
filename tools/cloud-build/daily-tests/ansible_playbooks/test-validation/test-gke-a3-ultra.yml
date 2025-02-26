@@ -26,16 +26,16 @@
 - name: Modify NCCL test parameters
   delegate_to: localhost
   ansible.builtin.shell: |
-    sed -i 's/parallelism: 4/parallelism: 2/' {{workspace}}/examples/gke-a3-ultragpu/nccl-jobset-example.yaml
-    sed -i 's/completions: 4/completions: 2/' {{workspace}}/examples/gke-a3-ultragpu/nccl-jobset-example.yaml
-    sed -i 's/ag-4-/ag-2-/'                   {{workspace}}/examples/gke-a3-ultragpu/nccl-jobset-example.yaml
-    sed -i 's/N_NODES=4/N_NODES=2/'           {{workspace}}/examples/gke-a3-ultragpu/nccl-jobset-example.yaml
+    sed -i 's/parallelism: 4/parallelism: 2/' {{ workspace }}/examples/gke-a3-ultragpu/nccl-jobset-example.yaml
+    sed -i 's/completions: 4/completions: 2/' {{ workspace }}/examples/gke-a3-ultragpu/nccl-jobset-example.yaml
+    sed -i 's/ag-4-/ag-2-/'                   {{ workspace }}/examples/gke-a3-ultragpu/nccl-jobset-example.yaml
+    sed -i 's/N_NODES=4/N_NODES=2/'           {{ workspace }}/examples/gke-a3-ultragpu/nccl-jobset-example.yaml
   args:
     executable: /bin/bash
 
 - name: Print the updated NCCL test file to stdout
   ansible.builtin.shell: |
-    cat {{workspace}}/examples/gke-a3-ultragpu/nccl-jobset-example.yaml
+    cat {{ workspace }}/examples/gke-a3-ultragpu/nccl-jobset-example.yaml
   register: nccl_test_file_contents
 
 - name: Display updated NCCL test file
@@ -45,7 +45,7 @@
 - name: Run the NCCL test
   delegate_to: localhost
   ansible.builtin.shell: |
-    kubectl create -f {{workspace}}/examples/gke-a3-ultragpu/nccl-jobset-example.yaml
+    kubectl create -f {{ workspace }}/examples/gke-a3-ultragpu/nccl-jobset-example.yaml
   args:
     executable: /bin/bash
 
