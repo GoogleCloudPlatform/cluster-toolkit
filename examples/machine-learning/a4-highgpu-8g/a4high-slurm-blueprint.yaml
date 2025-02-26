@@ -54,6 +54,7 @@ deployment_groups:
       install_ansible: true
       docker:
         enabled: true
+        world_writable: true
       runners:
       - type: shell
         destination: prep-for-slurm-build.sh
@@ -150,6 +151,11 @@ deployment_groups:
                 name:
                 - ibverbs-utils
                 state: present
+      - type: data
+        destination: /etc/enroot/enroot.conf
+        content: |
+          ENROOT_CONFIG_PATH     ${HOME}/.enroot
+
 
 - group: image
   modules:
@@ -415,6 +421,12 @@ deployment_groups:
           mkdir -m 0755 -p "${SLURM_ROOT}/scripts"
           mkdir -p "${SLURM_ROOT}/partition-${PARTITION_NAME}-epilog_slurmd.d"
           ln -s "/slurm/scripts/tools/gpu-test" "${SLURM_ROOT}/partition-${PARTITION_NAME}-epilog_slurmd.d/gpu-test.epilog_slurmd"
+      - type: data
+        destination: /opt/apps/system_benchmarks/run-nccl-tests-via-ramble.sh
+        source: $(vars.benchmark_dir)/run-nccl-tests-via-ramble.sh
+      - type: data
+        destination: /opt/apps/system_benchmarks/README.md
+        source: $(vars.benchmark_dir)/README.md
 
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
