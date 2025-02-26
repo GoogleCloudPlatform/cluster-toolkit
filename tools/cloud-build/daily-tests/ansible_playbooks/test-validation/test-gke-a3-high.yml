@@ -24,10 +24,11 @@
     gcloud container clusters get-credentials {{ deployment_name }} --region {{ region }} --project {{ custom_vars.project }}
 
 - name: Download NCCL test file
+  delegate_to: localhost
   ansible.builtin.shell: |
-    wget -O {{workspace}}/examples/nccl-test.yaml \
+    wget -O {{ workspace }}/examples/nccl-test.yaml \
       https://raw.githubusercontent.com/GoogleCloudPlatform/container-engine-accelerators/master/gpudirect-tcpx/nccl-test-latest.yaml
-    cat {{workspace}}/examples/nccl-test.yaml
+    cat {{ workspace }}/examples/nccl-test.yaml
   register: nccl_test_file_contents
 
 - name: Display NCCL test file
@@ -37,8 +38,7 @@
 - name: Create NCCL config map and deploy NCCL test pods
   delegate_to: localhost
   ansible.builtin.shell: |
-    kubectl apply -f {{workspace}}/examples/nccl-config.yaml
-    kubectl apply -f {{workspace}}/examples/nccl-test.yaml
+    kubectl apply -f {{ workspace }}/examples/nccl-test.yaml
 
 - name: Wait until 2 pods are running
   delegate_to: localhost
