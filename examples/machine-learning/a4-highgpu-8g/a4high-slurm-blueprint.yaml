@@ -113,9 +113,9 @@ deployment_groups:
               - nvidia-container-toolkit
               - cuda-toolkit-12-8
               - datacenter-gpu-manager
-              - libnvidia-cfg1-570-server
+              - libnvidia-cfg1-570
               - libnvidia-nscq-570
-              - nvidia-compute-utils-570-server
+              - nvidia-compute-utils-570
             tasks:
             - name: Download NVIDIA repository package
               ansible.builtin.get_url:
