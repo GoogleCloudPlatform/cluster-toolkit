@@ -179,7 +179,7 @@ def run_custom_scripts():
 def mount_save_state_disk():
     disk_name = f"/dev/disk/by-id/google-{lookup().cfg.controller_state_disk.device_name}"
     mount_point = util.slurmdirs.state
-    fs_type = "xfs"
+    fs_type = "ext4"
 
     rdevice = util.run(f"realpath {disk_name}").stdout.strip()
     file_output = util.run(f"file -s {rdevice}").stdout.strip()
@@ -234,7 +234,7 @@ def setup_munge_key():
     if munge_key.exists():
         log.info("Munge key already exists. Skipping key generation.")
     else:
-        run("create-munge-key -f", timeout=30)
+        run(f"dd if=/dev/random of={munge_key} bs=1024 count=1")
 
     shutil.chown(munge_key, user="munge", group="munge")
     os.chmod(munge_key, stat.S_IRUSR)
