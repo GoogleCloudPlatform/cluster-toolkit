@@ -52,7 +52,7 @@ export ENROOT_CONFIG_PATH=${HOME}/.enroot
 ENROOT_CONFIG_CREDENTIALS="${HOME}"/.enroot/.credentials
 
 if ! grep -q "us-docker.pkg.dev" "${ENROOT_CONFIG_CREDENTIALS}"; then
-        cat <<EOF >>"${ENROOT_CONFIG_CREDENTIALS}"
+	cat <<EOF >>"${ENROOT_CONFIG_CREDENTIALS}"
 machine us-docker.pkg.dev login oauth2accesstoken password \$(gcloud auth print-access-token)
 EOF
 fi
@@ -167,10 +167,10 @@ ramble on --where '{n_nodes} <= '"${N_NODES}"
 # Wait for all to be done
 # Use the TAG in the slurm jobs
 until [[ $(squeue -h -o %j | grep -c "${TAG}") -eq 0 ]]; do
-        clear
-        echo "waiting for $(squeue -h -o %j | grep -c "${TAG}") jobs to finish"
-        squeue
-        sleep 5
+	clear
+	echo "waiting for $(squeue -h -o %j | grep -c "${TAG}") jobs to finish"
+	squeue
+	sleep 5
 done
 
 # Analyze
@@ -226,4 +226,3 @@ printf "cd %s\n" "${RAMBLE_WORKSPACE}"
 printf "source %s/ramble/env/bin/activate\n" "${SOFTWARE_INSTALL}"
 printf ". %s/ramble/share/ramble/setup-env.sh\n" "${SOFTWARE_INSTALL}"
 printf "ramble workspace activate .\n"
-
