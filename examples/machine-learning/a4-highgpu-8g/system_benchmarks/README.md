@@ -52,7 +52,7 @@ you should see something like:
 Cleaning Up
 -----------
 
-The ramble workspaces will be located in directories called `nccl-tests-*`,
-`hpl-tests-*`, and `nemo-tests-*`. The ramble codebase was installed to
+The ramble workspaces will be located in directories called `nccl-tests-*`.
+The ramble codebase was installed to
 `/opt/apps/ramble`.  Removing all of these directories will remove all of the
 files generated during these tests.
