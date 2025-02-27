@@ -69,5 +69,12 @@ resource "google_workbench_instance" "instance" {
       project = var.instance_image.project
       family  = var.instance_image.family
     }
+
+    dynamic "service_accounts" {
+      for_each = var.service_account_email == null ? [] : [1]
+      content {
+        email = var.service_account_email
+      }
+    }
   }
 }
