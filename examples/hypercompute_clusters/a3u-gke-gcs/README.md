@@ -44,48 +44,12 @@ Storage (GCS).
    gcloud storage buckets update gs://${BUCKET_NAME} --versioning
    ```
 
-3. **Create and Configure GCS Buckets:**
-
-   * Create separate GCS buckets for training data and checkpoint/restart data:
-
-     ```bash
-     PROJECT_ID=<your-gcp-project>
-     REGION=<your-preferred-region>
-     TRAINING_BUCKET_NAME=<training-bucket-name>
-     CHECKPOINT_BUCKET_NAME=<checkpoint-bucket-name>
-     PROJECT_NUMBER=<your-project-number>
-
-     gcloud storage buckets create gs://${TRAINING_BUCKET_NAME} \
-         --location=${REGION} \
-         --uniform-bucket-level-access \
-         --enable-hierarchical-namespace
-
-     gcloud storage buckets create gs://${CHECKPOINT_BUCKET_NAME} \
-         --location=${REGION} \
-         --uniform-bucket-level-access \
-         --enable-hierarchical-namespace
-     ```
-
-   * Grant workload identity service accounts (WI SAs) access to the buckets:
-
-     ```bash
-
-     gcloud storage buckets add-iam-policy-binding gs://${TRAINING_BUCKET_NAME} \
-         --member "principal://iam.googleapis.com/projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/${PROJECT_ID}.svc.id.goog/subject/ns/default/sa/default" \
-         --role roles/storage.objectUser
-
-     gcloud storage buckets add-iam-policy-binding gs://${CHECKPOINT_BUCKET_NAME} \
-         --member "principal://iam.googleapis.com/projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/${PROJECT_ID}.svc.id.goog/subject/ns/default/sa/default" \
-         --role roles/storage.objectUser
-     ```
-
-4. **Customize Deployment Configuration:**
+3. **Customize Deployment Configuration:**
 
    Modify the `deployment.yaml` file to suit your needs. This will include
-   region/zone, nodepool sizes, reservation name, and checkpoint/training bucket
-   names.
+   region/zone, nodepool sizes, and reservation name.
 
-5. **Deploy the Cluster:**
+4. **Deploy the Cluster:**
 
    Use the `gcluster` tool to deploy your GKE cluster with the desired configuration:
 
