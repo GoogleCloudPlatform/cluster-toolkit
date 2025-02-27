@@ -107,6 +107,7 @@ limitations under the License.
 |------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.1 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 3.83 |
+| <a name="requirement_null"></a> [null](#requirement\_null) | >= 3.0 |
 | <a name="requirement_random"></a> [random](#requirement\_random) | ~> 3.6 |
 
 ## Providers
@@ -114,6 +115,7 @@ limitations under the License.
 | Name | Version |
 |------|---------|
 | <a name="provider_google"></a> [google](#provider\_google) | >= 3.83 |
+| <a name="provider_null"></a> [null](#provider\_null) | >= 3.0 |
 | <a name="provider_random"></a> [random](#provider\_random) | ~> 3.6 |
 
 ## Modules
@@ -128,9 +130,11 @@ limitations under the License.
 
 | Name | Type |
 |------|------|
+| [google_compute_address.ap](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_address) | resource |
 | [google_compute_disk.spool](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_disk) | resource |
 | [google_compute_region_disk.spool](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_region_disk) | resource |
 | [google_storage_bucket_object.ap_config](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_object) | resource |
+| [null_resource.ap_config](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
 | [random_shuffle.zones](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/shuffle) | resource |
 | [google_compute_image.htcondor](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_image) | data source |
 | [google_compute_instance.ap](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_instance) | data source |

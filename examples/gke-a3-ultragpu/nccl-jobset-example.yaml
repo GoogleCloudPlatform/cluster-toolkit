@@ -39,15 +39,15 @@ spec:
               networking.gke.io/interfaces: |
                 [
                   {"interfaceName":"eth0","network":"default"},
-                  {"interfaceName":"eth1","network":"gke-a3-ultra-sub-1"},
-                  {"interfaceName":"eth2","network":"gke-a3-ultra-rdma-sub-0"},
-                  {"interfaceName":"eth3","network":"gke-a3-ultra-rdma-sub-1"},
-                  {"interfaceName":"eth4","network":"gke-a3-ultra-rdma-sub-2"},
-                  {"interfaceName":"eth5","network":"gke-a3-ultra-rdma-sub-3"},
-                  {"interfaceName":"eth6","network":"gke-a3-ultra-rdma-sub-4"},
-                  {"interfaceName":"eth7","network":"gke-a3-ultra-rdma-sub-5"},
-                  {"interfaceName":"eth8","network":"gke-a3-ultra-rdma-sub-6"},
-                  {"interfaceName":"eth9","network":"gke-a3-ultra-rdma-sub-7"}
+                  {"interfaceName":"eth1","network":"gvnic-1"},
+                  {"interfaceName":"eth2","network":"rdma-0"},
+                  {"interfaceName":"eth3","network":"rdma-1"},
+                  {"interfaceName":"eth4","network":"rdma-2"},
+                  {"interfaceName":"eth5","network":"rdma-3"},
+                  {"interfaceName":"eth6","network":"rdma-4"},
+                  {"interfaceName":"eth7","network":"rdma-5"},
+                  {"interfaceName":"eth8","network":"rdma-6"},
+                  {"interfaceName":"eth9","network":"rdma-7"}
                 ]
           spec:
             # Limit benchmark run duration

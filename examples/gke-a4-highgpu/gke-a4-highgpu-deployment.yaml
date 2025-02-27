@@ -1,4 +1,4 @@
-# Copyright 2024 Google LLC
+# Copyright 2025 "Google LLC"
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,12 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-variable "project_id" {
-  description = "The project ID to host the cluster in."
-  type        = string
-}
+---
+terraform_backend_defaults:
+  type: gcs
+  configuration:
+    bucket: BUCKET_NAME
 
-variable "cluster_id" {
-  description = "projects/{{project}}/locations/{{location}}/clusters/{{cluster}}"
-  type        = string
-}
+vars:
+  deployment_name: gke-a4-high
+  project_id: PROJECT_ID
+  region: COMPUTE_REGION
+  zone: COMPUTE_ZONE
+  authorized_cidr: <IP_ADDRESS>/<SUFFIX>
+  # In order to not target a BLOCK_NAME, extended_reservation can be inputted as
+  # extended_reservation: RESERVATION_NAME
+  extended_reservation: RESERVATION_NAME/reservationBlocks/BLOCK_NAME
+  static_node_count: NODE_COUNT
+  k8s_service_account_name: # add this

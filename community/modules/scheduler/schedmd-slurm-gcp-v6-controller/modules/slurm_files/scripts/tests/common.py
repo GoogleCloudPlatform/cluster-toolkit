@@ -42,6 +42,7 @@ class TstNodeset:
     zone_policy_allow: Optional[list[str]] = field(default_factory=list)
     enable_placement: bool = True
     placement_max_distance: Optional[int] = None
+    future_reservation: Optional[str] = ""
 
 @dataclass
 class TstPartition:
@@ -55,7 +56,7 @@ class TstCfg:
     slurm_cluster_name: str = "m22"
     cloud_parameters: dict[str, Any] = field(default_factory=dict)
 
-    partitions: dict[str, Placeholder] = field(default_factory=dict)
+    partitions: dict[str, TstPartition] = field(default_factory=dict)
     nodeset: dict[str, TstNodeset] = field(default_factory=dict)
     nodeset_tpu: dict[str, TstNodeset] = field(default_factory=dict)
     nodeset_dyn: dict[str, TstNodeset] = field(default_factory=dict)
@@ -92,11 +93,11 @@ def tstInstance(name: str, physical_host: Optional[str] = None):
         zone="anorien",
         status="RUNNING",
         creation_timestamp=SOME_TS,
-        resource_status=util.NSDict(
-            physicalHost = physical_host
+        resource_status=util.InstanceResourceStatus(
+            physical_host=physical_host,
+            upcoming_maintenance=None,
         ),
         scheduling=util.NSDict(),
-        upcoming_maintenance=None,
         role="compute",
     )
 

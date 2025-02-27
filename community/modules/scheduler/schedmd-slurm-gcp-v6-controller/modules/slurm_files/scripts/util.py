@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Iterable, List, Tuple, Optional, Any, Dict, Sequence, Type, Callable
+from typing import Iterable, List, Tuple, Optional, Any, Dict, Sequence, Type, Callable, Literal
 import argparse
 import base64
 from dataclasses import dataclass, field
@@ -24,6 +24,7 @@ import inspect
 import json
 import logging
 import logging.config
+import logging.handlers 
 import math
 import os
 import re
@@ -48,9 +49,9 @@ from time import sleep, time
 from google.cloud import secretmanager
 from google.cloud import storage # type: ignore
 
-import google.auth
-from google.oauth2 import service_account
-import googleapiclient.discovery # type: ignore
+import google.auth # type: ignore
+from google.oauth2 import service_account # type: ignore
+import googleapiclient.discovery # type: ignore 
 import google_auth_httplib2 # type: ignore
 from googleapiclient.http import set_user_agent # type: ignore
 from google.api_core.client_options import ClientOptions
@@ -134,7 +135,7 @@ class MachineType:
     guest_cpus: int
     memory_mb: int
     accelerators: List[AcceleratorInfo]
-    
+
     @classmethod
     def from_json(cls, jo: dict) -> "MachineType":
         return cls(
@@ -150,7 +151,7 @@ class MachineType:
         # TODO: doesn't work with N1 custom machine types
         # See https://cloud.google.com/compute/docs/instances/creating-instance-with-custom-machine-type#create
         return self.name.split("-")[0]
-    
+
     @property
     def supports_smt(self) -> bool:
         # https://cloud.google.com/compute/docs/cpu-platforms
@@ -159,7 +160,7 @@ class MachineType:
         if self.guest_cpus == 1:
             return False
         return True
-    
+
     @property
     def sockets(self) -> int:
         return {
@@ -171,9 +172,56 @@ class MachineType:
             "c3": 2 if self.guest_cpus > 88 else 1,
             "c3d": 2 if self.guest_cpus > 180 else 1,
             "c4": 2 if self.guest_cpus > 96 else 1,
+            "c4d": 2 if self.guest_cpus > 192 else 1,
         }.get(
-            self.family, 1,  # assume 1 socket for all other families
+            self.family,
+            1,  # assume 1 socket for all other families
         )
+
+
+@dataclass(frozen=True)
+class UpcomingMaintenance:
+    window_start_time: datetime
+
+    @classmethod
+    def from_json(cls, jo: Optional[dict]) -> Optional["UpcomingMaintenance"]:
+        if jo is None:
+            return None
+        try:
+            if "windowStartTime" in jo:
+                ts = parse_gcp_timestamp(jo["windowStartTime"])
+            elif "startTimeWindow" in jo:
+                ts = parse_gcp_timestamp(jo["startTimeWindow"]["earliest"])
+            else:
+                raise Exception("Neither windowStartTime nor startTimeWindow are found")
+        except BaseException as e:
+            raise ValueError(f"Unexpected format for upcomingMaintenance: {jo}") from e
+        return cls(window_start_time=ts)
+
+@dataclass(frozen=True)
+class InstanceResourceStatus:
+    physical_host: Optional[str]
+    upcoming_maintenance: Optional[UpcomingMaintenance]
+
+    @classmethod
+    def from_json(cls, jo: Optional[dict]) -> "InstanceResourceStatus":
+        if not jo:
+            return cls(
+                physical_host=None,
+                upcoming_maintenance=None,
+            )
+        
+        try:
+            maint = UpcomingMaintenance.from_json(jo.get("upcomingMaintenance"))
+        except ValueError as e:
+            log.exception("Failed to parse upcomingMaintenance, ignoring")
+            maint = None # intentionally swallow exception
+        
+        return cls(
+            physical_host=jo.get("physicalHost"),
+            upcoming_maintenance=maint,
+        )
+
 
 @dataclass(frozen=True)
 class Instance:
@@ -182,13 +230,9 @@ class Instance:
   status: str
   creation_timestamp: datetime
   role: Optional[str]
-
-  # TODO: use proper InstanceResourceStatus class
-  resource_status: NSDict
+  resource_status: InstanceResourceStatus
   # TODO: use proper InstanceScheduling class
   scheduling: NSDict
-  # TODO: use proper UpcomingMaintenance class
-  upcoming_maintenance: Optional[NSDict] = None
 
   @classmethod
   def from_json(cls, jo: dict) -> "Instance":
@@ -199,9 +243,8 @@ class Instance:
       zone=trim_self_link(jo["zone"]),
       status=jo["status"],
       creation_timestamp=parse_gcp_timestamp(jo["creationTimestamp"]),
-      resource_status=NSDict(jo.get("resourceStatus")),
+      resource_status=InstanceResourceStatus.from_json(jo.get("resourceStatus")),
       scheduling=NSDict(jo.get("scheduling")),
-      upcoming_maintenance=NSDict(jo["upcomingMaintenance"]) if "upcomingMaintenance" in jo else None,
       role = labels.get("slurm_instance_role"),
     )
 
@@ -218,15 +261,32 @@ def authentication_project():
 DEFAULT_UNIVERSE_DOMAIN = "googleapis.com"
 
 
+def now() -> datetime:
+    """
+    Return current time as timezone-aware datetime.
+
+    IMPORTANT: DO NOT use `datetime.now()`, unless you explicitly need to have tz-naive datetime.
+    Otherwise there is a risk of getting: "cannot compare naive and aware datetimes" error, 
+    since all timetstamps we receive from GCP API are tz-aware.
+
+    Another motivation  for this function is to allow to mock time in tests.
+    """
+    return datetime.now(timezone.utc)
+
 def parse_gcp_timestamp(s: str) -> datetime:
   """
   Parse timestamp strings returned by GCP API into datetime.
   Works with both Zulu and non-Zulu timestamps.
+  NOTE: It always return tz-aware datetime (fallbacks to UTC and logs error).
   """
   # Requires Python >= 3.7
   # TODO: Remove this "hack" of trimming the Z from timestamps once we move to Python 3.11 
   # (context: https://discuss.python.org/t/parse-z-timezone-suffix-in-datetime/2220/30)
-  return datetime.fromisoformat(s.replace('Z', '+00:00'))
+  ts = datetime.fromisoformat(s.replace('Z', '+00:00'))
+  if ts.tzinfo is None: # fallback to UTC
+    log.error(f"Received timestamp without timezone info: {s}")
+    ts = ts.replace(tzinfo=timezone.utc)
+  return ts
 
 
 def universe_domain() -> str:
@@ -380,24 +440,23 @@ def hash_file(fullpath: Path) -> str:
 
 def install_custom_scripts(check_hash=False):
     """download custom scripts from gcs bucket"""
+    role, tokens = lookup().instance_role, []
 
-    compute_tokens = ["compute", "prolog", "epilog"]
-    if lookup().instance_role == "compute":
-        try:
-            compute_tokens.append(f"nodeset-{lookup().node_nodeset_name()}")
-        except Exception as e:
-            log.error(f"Failed to lookup nodeset: {e}")
+    if role == "controller":
+        tokens = ["controller", "prolog", "epilog"]
+    elif role == "compute":
+        tokens = [
+            "compute", 
+            "prolog", 
+            "epilog",
+            f"nodeset-{lookup().node_nodeset_name()}"
+        ]
+    elif role == "login":
+        tokens = [f"login-{lookup().login_group_name()}"]
 
-    prefix_tokens = dict.get(
-        {
-            "login": ["login"],
-            "compute": compute_tokens,
-            "controller": ["controller", "prolog", "epilog"],
-        },
-        lookup().instance_role,
-        [],
-    )
-    prefixes = [f"slurm-{tok}-script" for tok in prefix_tokens]
+    prefixes = [f"slurm-{tok}-script" for tok in tokens]
+
+    # TODO: use single `blob_list`, to reduce ~4x number of GCS requests
     blobs = list(chain.from_iterable(blob_list(prefix=p) for p in prefixes))
 
     script_pattern = re.compile(r"slurm-(?P<path>\S+)-script-(?P<name>\S+)")
@@ -493,7 +552,7 @@ def _fill_cfg_defaults(cfg: NSDict) -> NSDict:
             }
         )
 
-    network_storage_iter = filter(
+    network_storage_iter: Iterable[Any] = filter(
         None,
         (
             cfg.munge_mount,
@@ -992,6 +1051,7 @@ def to_hostlist(names: Iterable[str]) -> str:
         cur, res = None, []
 
         def cur_repr():
+            assert cur
             nums, strs = cur
             if nums[0] == nums[1]:
                 return strs[0]
@@ -1257,10 +1317,15 @@ class ReservationDetails:
     policies: List[str] # names (not URLs) of resource policies
     bulk_insert_name: str # name in format suitable for bulk insert (currently identical to user supplied name in long format)
     deployment_type: Optional[str]
+    reservation_mode: Optional[str]
 
     @property
     def dense(self) -> bool:
         return self.deployment_type == "DENSE"
+    
+    @property
+    def calendar(self) -> bool:
+        return self.reservation_mode == "CALENDAR"
 
 @dataclass(frozen=True)
 class FutureReservation:
@@ -1270,8 +1335,12 @@ class FutureReservation:
     specific: bool
     start_time: datetime
     end_time: datetime
+    reservation_mode: Optional[str]
     active_reservation: Optional[ReservationDetails]
 
+    @property
+    def calendar(self) -> bool:
+        return self.reservation_mode == "CALENDAR"
 
 @dataclass
 class Job:
@@ -1311,7 +1380,7 @@ class Lookup:
 
     @cached_property
     def control_host_addr(self):
-        return host_lookup(self.cfg.slurm_control_host)
+        return self.control_addr or host_lookup(self.cfg.slurm_control_host)
 
     @property
     def control_host_port(self):
@@ -1341,6 +1410,10 @@ class Lookup:
     @property
     def is_controller(self):
         return self.instance_role_safe == "controller"
+    
+    @property
+    def is_login_node(self):
+        return self.instance_role_safe == "login"
 
     @cached_property
     def compute(self):
@@ -1360,6 +1433,10 @@ class Lookup:
     @cached_property
     def zone(self):
         return instance_metadata("zone")
+
+    def login_group_name(self):
+        assert self.is_login_node, f"{self.hostname} is not a login node"
+        return self._node_desc(self.hostname)["nodeset"]
 
     node_desc_regex = re.compile(
         r"^(?P<prefix>(?P<cluster>[^\s\-]+)-(?P<nodeset>\S+))-(?P<node>(?P<suffix>\w+)|(?P<range>\[[\d,-]+\]))$"
@@ -1440,7 +1517,7 @@ class Lookup:
             return f"{pref}-{start}"
         return f"{pref}-[{start}-{start + count - 1}]"
 
-    def static_dynamic_sizes(self, nodeset: object) -> Tuple[int, int]:
+    def static_dynamic_sizes(self, nodeset: NSDict) -> Tuple[int, int]:
         return (nodeset.node_count_static or 0, nodeset.node_count_dynamic_max or 0)
 
     def nodelist(self, nodeset) -> str:
@@ -1457,7 +1534,7 @@ class Lookup:
             (f"{pref}-{i}" for i in range(s_count, s_count + d_count)),
         )
 
-    def power_managed_nodesets(self) -> Iterable[object]:
+    def power_managed_nodesets(self) -> Iterable[NSDict]:
         return chain(self.cfg.nodeset.values(), self.cfg.nodeset_tpu.values())
 
     def is_power_managed_node(self, node_name: str) -> bool:
@@ -1546,11 +1623,6 @@ class Lookup:
             "zone",
         ]
         
-        # TODO: Merge this with all fields when upcoming maintenance is
-        # supported in beta.
-        if endpoint_version(ApiEndpoint.COMPUTE) == 'alpha':
-          instance_information_fields.append("upcomingMaintenance")
-
         instance_fields = ",".join(sorted(instance_information_fields))
         fields = f"items.zones.instances({instance_fields}),nextPageToken"
         flt = f"labels.slurm_cluster_name={self.cfg.slurm_cluster_name} AND name:{self.cfg.slurm_cluster_name}-*"
@@ -1596,9 +1668,10 @@ class Lookup:
             name=name,
             policies=policies,
             deployment_type=reservation.get("deploymentType"),
+            reservation_mode=reservation.get("reservationMode"),
             bulk_insert_name=bulk_insert_name)
     
-    def nodeset_reservation(self, nodeset: object) -> Optional[ReservationDetails]:
+    def nodeset_reservation(self, nodeset: NSDict) -> Optional[ReservationDetails]:
         if not nodeset.reservation_name:
             return None
 
@@ -1615,7 +1688,7 @@ class Lookup:
         project, name = match.group("project", "reservation")
         return self.get_reservation_details(project, zone, name, nodeset.reservation_name)
     
-    def future_reservation(self, nodeset:object) -> Optional[FutureReservation]:
+    def future_reservation(self, nodeset: NSDict) -> Optional[FutureReservation]:
         if not nodeset.future_reservation:
             return None
 
@@ -1629,7 +1702,7 @@ class Lookup:
         end_time = parse_gcp_timestamp(fr["timeWindow"]["endTime"])
 
         if "autoCreatedReservations" in fr["status"] and (res:=fr["status"]["autoCreatedReservations"][0]):
-            if (start_time<=datetime.now(timezone.utc)<=end_time):
+            if start_time <= now() <=end_time:
                 match = re.search(r'projects/(?P<project>[^/]+)/zones/(?P<zone>[^/]+)/reservations/(?P<name>[^/]+)(/.*)?$',res)
                 assert match, f"Unexpected reservation name '{res}'"
                 res_name = match.group("name")
@@ -1643,6 +1716,7 @@ class Lookup:
             specific=fr["specificReservationRequired"],
             start_time=start_time,
             end_time=end_time,
+            reservation_mode=fr.get("reservationMode"),
             active_reservation=active_reservation
         )
 
@@ -1713,7 +1787,7 @@ class Lookup:
 
     @contextmanager
     def template_cache(self, writeback=False):
-        flag = "c" if writeback else "r"
+        flag: Literal["c", "r"] = "c" if writeback else "r"
         err = None
         for wait in backoff_delay(0.125, timeout=60, count=20):
             try:

@@ -94,7 +94,7 @@ variable "bucket_dir" {
 variable "login_nodes" {
   description = "List of slurm login instance definitions."
   type = list(object({
-    name_prefix = string
+    group_name = string
     access_config = optional(list(object({
       nat_ip       = string
       network_tier = string
@@ -178,8 +178,8 @@ variable "login_nodes" {
   }))
   default = []
   validation {
-    condition     = length(distinct([for x in var.login_nodes : x.name_prefix])) == length(var.login_nodes)
-    error_message = "All login_nodes must have a unique name_prefix."
+    condition     = length(distinct([for x in var.login_nodes : x.group_name])) == length(var.login_nodes)
+    error_message = "All login_nodes must have a unique group name."
   }
 }
 
@@ -386,6 +386,24 @@ EOD
 #########
 # SLURM #
 #########
+
+variable "controller_state_disk" {
+  description = <<EOD
+  A disk that will be attached to the controller instance template to save state of slurm. The disk is created and used by default.
+  To disable this feature, set this variable to null.
+  
+  NOTE: This will not save the contents at /opt/apps and /home. To preserve those, they must be saved externally.
+  EOD
+  type = object({
+    type = string
+    size = number
+  })
+
+  default = {
+    type = "pd-ssd"
+    size = 50
+  }
+}
 
 variable "enable_debug_logging" {
   type        = bool

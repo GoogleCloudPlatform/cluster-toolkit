@@ -368,7 +368,7 @@ module "workload_identity" {
   version = "~> 34.0"
 
   use_existing_gcp_sa = true
-  name                = "workload-identity-k8s-sa"
+  name                = var.k8s_service_account_name
   gcp_sa_name         = local.sa_email
   project_id          = var.project_id
 
@@ -383,6 +383,19 @@ locals {
   k8s_service_account_name = one(module.workload_identity[*].k8s_service_account_name)
 }
 
+locals {
+  # Separate gvnic and rdma networks and assign indexes
+  gvnic_networks = [for idx, net in [for n in var.additional_networks : n if strcontains(upper(n.nic_type), "GVNIC")] :
+    merge(net, { name = "${var.k8s_network_names.gvnic_prefix}${idx + var.k8s_network_names.gvnic_start_index}" })
+  ]
+
+  rdma_networks = [for idx, net in [for n in var.additional_networks : n if strcontains(upper(n.nic_type), "RDMA")] :
+    merge(net, { name = "${var.k8s_network_names.rdma_prefix}${idx + var.k8s_network_names.rdma_start_index}" })
+  ]
+
+  all_networks = concat(local.gvnic_networks, local.rdma_networks)
+}
+
 module "kubectl_apply" {
   source = "../../management/kubectl-apply"
 
@@ -390,11 +403,11 @@ module "kubectl_apply" {
   project_id = var.project_id
 
   apply_manifests = flatten([
-    for idx, network_info in var.additional_networks : [
+    for idx, network_info in local.all_networks : [
       {
         source = "${path.module}/templates/gke-network-paramset.yaml.tftpl",
         template_vars = {
-          name            = network_info.subnetwork,
+          name            = network_info.name,
           network_name    = network_info.network
           subnetwork_name = network_info.subnetwork,
           device_mode     = strcontains(upper(network_info.nic_type), "RDMA") ? "RDMA" : "NetDevice"
@@ -402,7 +415,7 @@ module "kubectl_apply" {
       },
       {
         source        = "${path.module}/templates/network-object.yaml.tftpl",
-        template_vars = { name = network_info.subnetwork }
+        template_vars = { name = network_info.name }
       }
     ]
   ])
