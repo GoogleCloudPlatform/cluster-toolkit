@@ -26,7 +26,7 @@ This is a simple usage, using the default network:
 
 ```
 
-If the user wants do specify a custom subnetwork, or specific external IP restrictions, he can use the `network_interfaces` variable, here is an example on how to use a Shared VPC Subnet with Ephemeral External IP:
+If the user wants do specify a custom subnetwork, or specific external IP restrictions, they can use the `network_interfaces` variable, here is an example on how to use a Shared VPC Subnet with an ephemeral external IP:
 
 ```yaml
   - id: bucket
