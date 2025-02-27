@@ -135,19 +135,6 @@ data input loading.
 
 ## Running Benchmarks with Ramble
 
-To run a series of NCCL test benchmarks on your cluster, you can use
-the use the following script: `run-nccl-tests-via-ramble.sh`,
-which will use [ramble](https://github.com/GoogleCloudPlatform/ramble) to
-automate the building and running of nccl tests from 2 nodes up to 32 node
-scales.
-
-Copy the contents of `run-nccl-tests-via-ramble.sh` to your slurm
-login or controller node, for example:
-
-```bash
-#!/bin/bash
-wget -np -nd https://raw.githubusercontent.com/GoogleCloudPlatform/cluster-toolkit/refs/heads/develop/examples/hypercompute_clusters/a3u-slurm-ubuntu-gcs/run-nccl-tests-via-ramble.sh
-```
-
-and then launch with `bash run-nccl-tests-via-ramble.sh`. The entire process
-will take ~30 minutes.
+See the subdirectory `system_benchamrks`, where you will find instructions
+on how to run NCCL, HPL, and NeMo benchmarks via
+[ramble](https://github.com/GoogleCloudPlatform/ramble).
