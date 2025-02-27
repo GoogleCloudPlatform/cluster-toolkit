@@ -295,6 +295,12 @@ variable "configure_workload_identity_sa" {
   default     = false
 }
 
+variable "k8s_service_account_name" {
+  description = "Kubernetes service account name to use with the gke cluster"
+  type        = string
+  default     = "workload-identity-k8s-sa"
+}
+
 variable "autoscaling_profile" {
   description = "(Beta) Optimize for utilization or availability when deciding to remove nodes. Can be BALANCED or OPTIMIZE_UTILIZATION."
   type        = string
@@ -435,5 +441,21 @@ variable "upgrade_settings" {
     strategy        = "SURGE"
     max_surge       = 0
     max_unavailable = 1
+  }
+}
+
+variable "k8s_network_names" {
+  description = "Kubernetes network names details for GKE. If starting index is not specified for gvnic or rdma, it would be set to the default values."
+  type = object({
+    gvnic_prefix      = optional(string)
+    gvnic_start_index = optional(number)
+    rdma_prefix       = optional(string)
+    rdma_start_index  = optional(number)
+  })
+  default = {
+    gvnic_prefix      = "gvnic-"
+    gvnic_start_index = 1
+    rdma_prefix       = "rdma-"
+    rdma_start_index  = 0
   }
 }

@@ -22,6 +22,7 @@ locals {
       disk_name    = disk.disk_name
       device_name  = disk.device_name
       auto_delete  = disk.auto_delete
+      source       = disk.source
       boot         = disk.boot
       disk_size_gb = disk.disk_size_gb
       disk_type    = disk.disk_type

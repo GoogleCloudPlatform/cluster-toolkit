@@ -44,8 +44,12 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [hpc-gke.yaml](#hpc-gkeyaml--) ![core-badge] ![experimental-badge]
   * [ml-gke](#ml-gkeyaml--) ![core-badge] ![experimental-badge]
   * [storage-gke](#storage-gkeyaml--) ![core-badge] ![experimental-badge]
+  * [gke-managed-hyperdisk.yaml](#gke-managed-hyperdiskyaml--) ![core-badge] ![experimental-badge]
+  * [gke-managed-parallelstore.yaml](#gke-managed-parallelstoreyaml--) ![core-badge] ![experimental-badge]
+  * [gke-a3-ultragpu.yaml](#gke-a3-ultragpuyaml--) ![core-badge] ![experimental-badge]
   * [gke-a3-megagpu](#gke-a3-megagpuyaml--) ![core-badge] ![experimental-badge]
   * [gke-a3-highgpu](#gke-a3-highgpuyaml--) ![core-badge] ![experimental-badge]
+  * [gke-dws-flex-start](#gke-dws-flex-start--) ![core-badge] ![experimental-badge]
   * [htc-slurm.yaml](#htc-slurmyaml-) ![community-badge]
   * [htc-htcondor.yaml](#htc-htcondoryaml--) ![community-badge] ![experimental-badge]
   * [fsi-montecarlo-on-batch.yaml](#fsi-montecarlo-on-batchyaml-) ![community-badge] ![experimental-badge]
@@ -1156,6 +1160,12 @@ The blueprint contains the following:
 
 [gke-managed-parallelstore.yaml]: ../examples/gke-managed-parallelstore.yaml
 
+### [gke-a3-ultragpu.yaml] ![core-badge] ![experimental-badge]
+
+Refer to [AI Hypercomputer Documentation](https://cloud.google.com/ai-hypercomputer/docs/create/gke-ai-hypercompute#create-cluster) for instructions.
+
+[gke-a3-ultragpu.yaml]: ../examples/gke-a3-ultragpu/gke-a3-ultragpu.yaml
+
 ### [gke-a3-megagpu.yaml] ![core-badge] ![experimental-badge]
 
 This blueprint shows how to provision a GKE cluster with A3 Mega machines in the toolkit.
@@ -1201,6 +1211,12 @@ to enable GPUDirect for the A3 High machines.
 > [whatismyip.com](https://whatismyip.com) to determine your IP address.
 
 [gke-a3-highgpu.yaml]: ../examples/gke-a3-highgpu.yaml
+
+### [gke-dws-flex-start] ![core-badge] ![experimental-badge]
+
+This example shows how DWS Flex Start mode can be used to run a job that requires GPU capacity on GKE. Additional information on DWS Flex Start mode and the required steps are captured in this [README](../examples/gke-dws-flex-start/README.md).
+
+[gke-dws-flex-start]: ../examples/gke-dws-flex-start
 
 ### [htc-htcondor.yaml] ![community-badge] ![experimental-badge]
 

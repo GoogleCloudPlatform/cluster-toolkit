@@ -15,7 +15,7 @@
   */
 
 locals {
-  kueue_supported_versions  = ["v0.10.0", "v0.9.1", "v0.9.0", "v0.8.1"]
+  kueue_supported_versions  = ["v0.10.1", "v0.10.0", "v0.9.1", "v0.9.0", "v0.8.1"]
   jobset_supported_versions = ["v0.7.2", "v0.5.2"]
 }
 
@@ -76,7 +76,7 @@ variable "jobset" {
   description = "Install [Jobset](https://github.com/kubernetes-sigs/jobset) which manages a group of K8s [jobs](https://kubernetes.io/docs/concepts/workloads/controllers/job/) as a unit."
   type = object({
     install = optional(bool, false)
-    version = optional(string, "v0.5.2")
+    version = optional(string, "v0.7.2")
   })
   default = {}
 }

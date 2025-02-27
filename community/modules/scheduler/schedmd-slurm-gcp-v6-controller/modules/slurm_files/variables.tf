@@ -58,6 +58,22 @@ variable "slurm_cluster_name" {
   }
 }
 
+variable "controller_state_disk" {
+  description = <<EOD
+  A disk that will be attached to the controller instance template to save state of slurm. The disk is created and used by default.
+  To disable this feature, set this variable to null.
+  
+  NOTE: This will not save the contents at /opt/apps and /home. To preserve those, they must be saved externally.
+  EOD
+  type = object({
+    device_name = string
+  })
+
+  default = {
+    device_name = null
+  }
+}
+
 variable "enable_bigquery_load" {
   description = <<EOD
 Enables loading of cluster job usage into big query.
@@ -90,15 +106,6 @@ variable "cloudsql_secret" {
   description = "Secret URI to cloudsql secret."
   type        = string
   default     = null
-}
-
-variable "login_startup_scripts" {
-  description = "List of scripts to be ran on login VM startup."
-  type = list(object({
-    filename = string
-    content  = string
-  }))
-  default = []
 }
 
 variable "login_startup_scripts_timeout" {
@@ -141,6 +148,15 @@ variable "compute_startup_scripts" {
     content  = string
   }))
   default = []
+}
+
+variable "login_startup_scripts" {
+  description = "List of scripts to be ran on login VM startup in the specific group."
+  type = map(list(object({
+    filename = string
+    content  = string
+  })))
+  default = {}
 }
 
 variable "nodeset_startup_scripts" {

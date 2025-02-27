@@ -28,10 +28,6 @@ locals {
   universe_domain = { "universe_domain" = var.universe_domain }
 }
 
-data "google_project" "this" {
-  project_id = var.project_id
-}
-
 # See 
 # * slurm_files.tf
 # * controller.tf

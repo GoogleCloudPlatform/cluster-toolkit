@@ -28,3 +28,4 @@ vars:
   # extended_reservation: RESERVATION_NAME
   extended_reservation: RESERVATION_NAME/reservationBlocks/BLOCK_NAME
   static_node_count: NODE_COUNT
+  k8s_service_account_name: # add this
