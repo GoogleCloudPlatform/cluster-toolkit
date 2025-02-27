@@ -33,7 +33,6 @@ cli_deployment_vars:
   region: "{{ region }}"
   zone: "{{ zone }}"
   reservation_affinity: "{{ reservation_affinity }}"
-  autoscaling_total_max_nodes: 2
   authorized_cidr: "{{ build_ip.stdout }}/32"
   network_name: "{{ network }}"
   local_ssd_count_nvme_block: 16

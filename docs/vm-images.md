@@ -163,12 +163,14 @@ description of our support for Windows images.
   <th>Lustre</th>
   <th></th>
   <td></td>
+  <td></td>
   <td><a href="../examples/hpc-enterprise-slurm.yaml">✓</a></td>
   <td></td>
 </tr>
 <tr>
   <th>Shared filestore</th>
   <th></th>
+  <td></td>
   <td>✓</td>
   <td><a href="../examples/hpc-slurm.yaml">✓</a></td>
   <td><a href="../community/examples/hpc-slurm-ubuntu2004.yaml">✓</a></td>
@@ -176,6 +178,7 @@ description of our support for Windows images.
 <tr>
   <th>Startup script</th>
   <th></th>
+  <td></td>
   <td>✓</td>
   <td><a href="../community/examples/hpc-slurm-ramble-gromacs.yaml">✓</a></td>
   <td>✓</td>

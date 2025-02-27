@@ -43,9 +43,3 @@ vars:
   # The name of the compute engine reservation of A3-Ultra nodes in the form of
   # <project>/<reservation-name>/reservationBlocks/<reservation-block-name>
   extended_reservation:
-
-  # The name of the GCS bucket used for training data
-  training_bucket_name:
-
-  # The name of the GCS bucket used for checkpoint/restart data.
-  checkpoint_bucket_name:

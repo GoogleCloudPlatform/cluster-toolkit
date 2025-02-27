@@ -197,6 +197,7 @@ def test_nodeset_reservation_err(nodeset, err):
                     name="robin",
                     policies=[],
                     deployment_type=None,
+                    reservation_mode=None,
                     bulk_insert_name="projects/bobin/reservations/robin")),
             (TstNodeset(
                 reservation_name="projects/bobin/reservations/robin",
@@ -208,6 +209,7 @@ def test_nodeset_reservation_err(nodeset, err):
                     name="robin",
                     policies=["wanders", "apples", "yum"],
                     deployment_type=None,
+                    reservation_mode=None,
                     bulk_insert_name="projects/bobin/reservations/robin")),
             (TstNodeset(
                 reservation_name="projects/bobin/reservations/robin/snek/cheese-brie-6",
@@ -219,6 +221,7 @@ def test_nodeset_reservation_err(nodeset, err):
                     name="robin",
                     policies=[],
                     deployment_type=None,
+                    reservation_mode=None,
                     bulk_insert_name="projects/bobin/reservations/robin/snek/cheese-brie-6")),
 
         ])
@@ -237,7 +240,6 @@ def test_nodeset_reservation_ok(nodeset, policies, expected):
     }
     assert lkp.nodeset_reservation(nodeset) == expected
     lkp._get_reservation.assert_called_once_with(expected.project, expected.zone, expected.name) # type: ignore
-
 
 @pytest.mark.parametrize(
     "job_info,expected_job",
@@ -501,6 +503,7 @@ def test_future_reservation_declined():
     lkp._get_future_reservation = Mock(return_value=dict(
         timeWindow = { "startTime": "2025-01-27T23:30:00Z", "endTime": "2025-02-03T23:30:00Z" },
         status = {"procurementStatus": "DECLINED"},
+        reservationMode = "CALENDAR",
         specificReservationRequired = True,
     ))
 
@@ -511,7 +514,8 @@ def test_future_reservation_declined():
             name='zebra', 
             specific=True, 
             start_time=datetime(2025, 1, 27, 23, 30, tzinfo=timezone.utc), 
-            end_time=datetime(2025, 2, 3, 23, 30, tzinfo=timezone.utc), 
+            end_time=datetime(2025, 2, 3, 23, 30, tzinfo=timezone.utc),
+            reservation_mode="CALENDAR",
             active_reservation=None)
     lkp._get_future_reservation.assert_called_once_with("manhattan", "danger", "zebra")
 
@@ -537,12 +541,14 @@ def test_future_reservation_active(_):
             name='zebra', 
             specific=True, 
             start_time=datetime(2025, 1, 27, 23, 30, tzinfo=timezone.utc), 
-            end_time=datetime(2025, 2, 21, 23, 30, tzinfo=timezone.utc), 
+            end_time=datetime(2025, 2, 21, 23, 30, tzinfo=timezone.utc),
+            reservation_mode=None, 
             active_reservation=ReservationDetails(
                 project='manhattan',
                 zone='danger',
                 name='melon',
                 policies=[],
+                reservation_mode=None,
                 bulk_insert_name="projects/manhattan/reservations/melon",
                 deployment_type=None))
     
@@ -560,6 +566,7 @@ def test_future_reservation_inactive(_):
                 "https://www.googleapis.com/compute/alpha/projects/manhattan/zones/danger/reservations/melon"
             ],
         },
+        reservationMode = "DEFAULT",
         specificReservationRequired = True,
     ))
     lkp._get_reservation = Mock()
@@ -572,6 +579,7 @@ def test_future_reservation_inactive(_):
             specific=True, 
             start_time=datetime(2025, 1, 27, 23, 30, tzinfo=timezone.utc), 
             end_time=datetime(2025, 2, 21, 23, 30, tzinfo=timezone.utc), 
+            reservation_mode="DEFAULT",
             active_reservation=None)
     
     lkp._get_future_reservation.assert_called_once_with("manhattan", "danger", "zebra")

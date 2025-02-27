@@ -1,4 +1,4 @@
-# Obtaining GKE nodes with DWS Flex
+# Create a GKE Cluster and obtain A3 Mega nodes with DWS Flex Start mode
 
 > [!NOTE]
 > DWS Flex Start is currently in early development and undergoing extensive testing. While it
@@ -20,7 +20,7 @@ With Dynamic Workload Scheduler in Flex Start mode, you submit a GPU capacity re
 **Step 2**: Connect to the GKE cluster using gcloud command.
 
 ```text
-gcloud container clusters get-credentials <cluster-name> --zone us-central1-staginga --project <project-name>
+gcloud container clusters get-credentials <cluster-name> --location <location> --project <project-name>
 ```
 
 **Step 3**: Run the sample job.
