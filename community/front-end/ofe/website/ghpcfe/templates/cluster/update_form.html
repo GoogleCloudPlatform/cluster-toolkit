@@ -86,6 +86,45 @@
     <small class="form-text text-muted">{{ form.spackdir.help_text }}</small>
   </div>
 
+  <p style="text-decoration: underline; font-size: large;">Artifact / Container Registries</p>
+  <div class="table-responsive">
+    <table class="table align-middle">
+      {{ container_registry_formset.management_form }}
+  
+      <thead>
+        <tr>
+          <th>Repo Mode</th>
+          <th>Format</th>
+          <th>Mirror URL</th>
+          <th>Username</th>
+          <th>Password/API Key</th>
+          <th>Dockerhub Mirror</th>
+          <th>Use Upstream Credentials</th>
+          <th>Delete</th>
+        </tr>
+      </thead>
+  
+      <tbody id="container_registry_form_list">
+        {% for form in container_registry_formset.forms %}
+        <tr class="container_formset_row dynamic-form">
+          <td>{{ form.repo_mode }}</td>
+          <td class="repo-format">{{ form.format }}</td>
+          <td class="repo-remote repo-mirror-url">{{ form.repo_mirror_url }}</td>
+          <td class="repo-remote repo-username">{{ form.repo_username }}</td>
+          <td class="repo-remote repo-password">{{ form.repo_password }}</td>
+          <td class="repo-remote repo-public">{{ form.use_public_repository }}</td>
+          <td class="repo-remote repo-upstream-creds">{{ form.use_upstream_credentials }}</td>
+          <td>
+            {{ form.DELETE }}
+            <a href="javascript:void(0)" class="delete-row">remove</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+  </div>
+
   <hr>
   <p style="text-decoration: underline; font-size: large;">Static Nodes</p>
   <div class="table-responsive">
@@ -296,15 +335,79 @@
 
 {% block tailscript %}
 <script src="{% static 'js/jquery.formset.js' %}"></script>
+
 <script>
-  document.addEventListener('DOMContentLoaded', function() {
+  $(document).ready(function () {
+    // Enable formset functionality for the container registry section
+    let formsetConfig = {
+        prefix: 'container_registry_relations', // Prefix for Django's formset
+        addText: 'add repository',
+        deleteText: '',
+        formCssClass: 'dynamic-repository',
+        canDelete: true, // Enables DELETE checkbox for Django
+    };
+
+    // Actually initialise the formset on the container registry table
+    $('#container_registry_form_list').formset(formsetConfig);
+
+    let firstRow = $('.container_formset_row').first();
+    firstRow.hide();
+
+    let deleteCheckbox = firstRow.find('[name$="-DELETE"]');
+    deleteCheckbox.prop('checked', true).val("on");
+
+    function toggleContainerFields() {
+        $('.container_formset_row').each(function () {
+            let row = $(this);
+            let repoMode = row.find('[name$="-repo_mode"]').val();
+            let usePublicRepo = row.find('[name$="-use_public_repository"]').prop('checked');
+            let repoMirrorUrl = row.find('[name$="-repo_mirror_url"]');
+            let repoUsername = row.find('[name$="-repo_username"]');
+            let repoPassword = row.find('[name$="-repo_password"]');
+
+        if (repoMode === 'STANDARD_REPOSITORY') {
+            // Disable + clear fields for remote mode
+            row.find('.repo-remote input, .repo-remote select').each(function () {
+              $(this).prop('disabled', true).val('');
+            });
+        } else if (repoMode === 'REMOTE_REPOSITORY') {
+            // Enable them for remote mode
+            row.find('.repo-remote input, .repo-remote select').each(function () {
+              $(this).prop('disabled', false);
+            });
+            // If using public DockerHub, remove mirror URL
+            if (usePublicRepo) {
+              repoMirrorUrl.prop('disabled', true).val('');
+            } else {
+              repoMirrorUrl.prop('disabled', false);
+            }
+          }
+      });
+    }
+
+    toggleContainerFields();
+    $(document).on('change', '[name$="-repo_mode"], [name$="-use_public_repository"]', function () {
+      toggleContainerFields();
+    });
+});
+</script>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
     const form = document.getElementById('clusterForm');
+
     form.addEventListener('submit', function(event) {
+        // Find and remove the empty form template row before submission
+        document.querySelectorAll('#container_registry_empty_form .container_formset_row').forEach(row => {
+            row.remove();
+        });
+
+        // Debugging: Check what data is being sent
         const formData = new FormData(this);
         const formDataArray = Array.from(formData.entries()).map(entry => {
             return { [entry[0]]: entry[1] };
         });
-        console.log('Form Data:', formDataArray);
+        // console.log('Final Form Data Before Submission:', formDataArray);
     });
 
     const cloudZoneInput = document.getElementById('id_cloud_zone');
@@ -641,10 +744,11 @@ function deletePartition(partitionId, row) {
     prefix: 'mount_points',
     formCssClass: 'dynamic-mp',
   });
+
   $('.part_formset_row').formset({
     addText: 'add partition',
     deleteText: 'remove',
-    deleteCssClass: 'btn btn-danger delete-partition',
+    /*deleteCssClass: 'btn btn-danger delete-partition',*/
     prefix: 'partitions',
     formCssClass: 'dynamic-part',
     added: function(row) {
@@ -653,7 +757,7 @@ function deletePartition(partitionId, row) {
         }, // Called each time a new form is added
     removed: function(row) {
         var partitionId = $(row).children('td').eq(0).data('partition-id');
-        console.log("partitionId: ", partitionId);
+        // console.log("partitionId: ", partitionId);
         if (partitionId !== 'new-cluster') {
             deletePartition(partitionId, $(row));
         }
@@ -765,6 +869,10 @@ function deletePartition(partitionId, row) {
     gap: 10px;
     /* Adjust the gap as needed */
     width: 100%;
+  }
+
+  .hidden {
+    display: none !important;
   }
 </style>
 {% endblock %}
