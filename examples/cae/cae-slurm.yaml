@@ -40,7 +40,7 @@ vars:
   # for a list of valid family options with Slurm; note: the image types for the compute nodes
   # and the Chrome Remote Desktop (CRD) need to have the same Slurm base.
   instance_image:
-    family: slurm-gcp-6-8-hpc-rocky-linux-8
+    family: slurm-gcp-6-9-hpc-rocky-linux-8
     project: schedmd-slurm-public
 
 # Documentation for each of the modules used below can be found at
