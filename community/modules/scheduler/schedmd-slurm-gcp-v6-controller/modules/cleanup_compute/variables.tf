@@ -64,3 +64,8 @@ variable "nodeset" {
     }))
   })
 }
+
+variable "nodeset_template" {
+  type        = string
+  description = "Self link of the nodeset template"
+}
