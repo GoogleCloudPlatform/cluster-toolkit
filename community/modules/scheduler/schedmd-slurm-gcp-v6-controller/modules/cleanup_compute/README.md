@@ -31,6 +31,7 @@ No modules.
 | <a name="input_endpoint_versions"></a> [endpoint\_versions](#input\_endpoint\_versions) | Version of the API to use (The compute service is the only API currently supported) | <pre>object({<br/>    compute = string<br/>  })</pre> | n/a | yes |
 | <a name="input_gcloud_path_override"></a> [gcloud\_path\_override](#input\_gcloud\_path\_override) | Directory of the gcloud executable to be used during cleanup | `string` | n/a | yes |
 | <a name="input_nodeset"></a> [nodeset](#input\_nodeset) | Nodeset to cleanup | <pre>object({<br/>    nodeset_name         = string<br/>    subnetwork_self_link = string<br/>    additional_networks = list(object({<br/>      subnetwork = string<br/>    }))<br/>  })</pre> | n/a | yes |
+| <a name="input_nodeset_template"></a> [nodeset\_template](#input\_nodeset\_template) | Self link of the nodeset template | `string` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project ID | `string` | n/a | yes |
 | <a name="input_slurm_cluster_name"></a> [slurm\_cluster\_name](#input\_slurm\_cluster\_name) | Name of the Slurm cluster | `string` | n/a | yes |
 | <a name="input_universe_domain"></a> [universe\_domain](#input\_universe\_domain) | Domain address for alternate API universe | `string` | n/a | yes |
