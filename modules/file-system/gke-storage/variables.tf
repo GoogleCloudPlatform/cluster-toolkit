@@ -41,7 +41,7 @@ variable "storage_type" {
   type        = string
   nullable    = false
   validation {
-    condition     = var.storage_type == null ? false : contains(["parallelstore", "hyperdisk-balanced", "hyperdisk-throughput", "hyperdisk-extreme"], lower(var.storage_type))
+    condition     = var.storage_type == null ? false : contains(["parallelstore", "hyperdisk-balanced", "hyperdisk-throughput", "hyperdisk-extreme", "hyperdisk-ml"], lower(var.storage_type))
     error_message = "Allowed string values for var.storage_type are \"Parallelstore\", \"Hyperdisk-balanced\", \"Hyperdisk-throughput\", \"Hyperdisk-extreme\"."
   }
 }
