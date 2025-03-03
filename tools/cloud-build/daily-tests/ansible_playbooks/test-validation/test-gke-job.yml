@@ -43,3 +43,8 @@
 - name: Print job_completion debug output
   ansible.builtin.debug:
     var: job_completion.stdout_lines
+
+- name: Clean up
+  delegate_to: localhost
+  ansible.builtin.shell: |
+    kubectl delete job --all
