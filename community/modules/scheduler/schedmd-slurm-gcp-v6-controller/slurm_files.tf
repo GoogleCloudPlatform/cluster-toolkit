@@ -137,10 +137,11 @@ module "daos_network_storage_scripts" {
 module "slurm_files" {
   source = "./modules/slurm_files"
 
-  project_id         = var.project_id
-  slurm_cluster_name = local.slurm_cluster_name
-  bucket_dir         = var.bucket_dir
-  bucket_name        = local.bucket_name
+  project_id                    = var.project_id
+  slurm_cluster_name            = local.slurm_cluster_name
+  bucket_dir                    = var.bucket_dir
+  bucket_name                   = local.bucket_name
+  controller_network_attachment = var.controller_network_attachment
 
   slurmdbd_conf_tpl = var.slurmdbd_conf_tpl
   slurm_conf_tpl    = var.slurm_conf_tpl

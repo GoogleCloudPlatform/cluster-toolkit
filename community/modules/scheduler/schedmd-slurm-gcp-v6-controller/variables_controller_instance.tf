@@ -345,3 +345,9 @@ variable "controller_project_id" {
   description = "Optionally. Provision controller and config bucket in the different project"
   default     = null
 }
+
+variable "controller_network_attachment" {
+  description = "SelfLink for NetworkAttachment to be attached to the controller, if any."
+  type        = string
+  default     = null
+}

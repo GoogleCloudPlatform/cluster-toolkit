@@ -1353,9 +1353,30 @@ class Lookup:
     def project(self):
         return self.cfg.project or authentication_project()
 
-    @property
-    def control_addr(self):
-        return self.cfg.slurm_control_addr
+    @lru_cache(maxsize=None)
+    def _lookup_network_attachment(self, self_link: str) -> str:
+        resp = self.compute.networkAttachments().get(
+            project=self.project,
+            region=parse_self_link(self_link).region,
+            networkAttachment=trim_self_link(self_link)
+        ).execute()
+        eps = resp.get("connectionEndpoints", [])
+        if not eps or len(eps) > 2:
+            raise Exception(f"Expect exactly one connected endpoint, got {resp}")
+        ep: Dict[str, str] = eps[0]
+        if "ipAddress" not in ep:
+            raise Exception(f"Expect endpoints to have ipAddress, got {resp}")
+        return ep["ipAddress"]
+
+    @cached_property
+    def control_addr(self) -> Optional[str]:
+        if self.cfg.slurm_control_addr:
+            return self.cfg.slurm_control_addr
+
+        if self.cfg.controller_network_attachment:
+            return self._lookup_network_attachment(self.cfg.controller_network_attachment)
+
+        return None
 
     @property
     def control_host(self):

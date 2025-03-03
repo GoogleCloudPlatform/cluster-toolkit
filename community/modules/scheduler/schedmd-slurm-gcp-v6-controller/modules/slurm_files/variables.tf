@@ -465,3 +465,9 @@ variable "endpoint_versions" {
     compute = null
   }
 }
+
+variable "controller_network_attachment" {
+  description = "SelfLink for NetworkAttachment to be attached to the controller, if any."
+  type        = string
+  default     = null
+}
