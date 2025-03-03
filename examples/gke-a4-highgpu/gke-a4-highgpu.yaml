@@ -37,7 +37,7 @@ vars:
   # To allow only your IP address, use <YOUR-IP-ADDRESS>/32
   authorized_cidr:
 
-  # The name of the compute engine reservation of A3-Ultra nodes in the form of
+  # The name of the compute engine reservation of A4-High nodes in the form of
   # <project>/<reservation-name>/reservationBlocks/<reservation-block-name>
   extended_reservation:
 
