@@ -121,6 +121,30 @@ variable "maintenance_exclusions" {
   }
 }
 
+variable "additive_vpc_scope_dns_domain" {
+  description = "This will enable Cloud DNS additive VPC scope. Must provide a domain name that is unique within the VPC. For this to work cluster_dns = \"CLOUD_DNS\" and cluster_dns_scope = \"CLUSTER_SCOPE\" must both be set as well."
+  type        = string
+  default     = ""
+}
+
+variable "cluster_dns" {
+  description = "Which in-cluster DNS provider should be used. PROVIDER_UNSPECIFIED (default) or PLATFORM_DEFAULT or CLOUD_DNS."
+  type        = string
+  default     = "PROVIDER_UNSPECIFIED"
+}
+
+variable "cluster_dns_scope" {
+  description = "The scope of access to cluster DNS records. DNS_SCOPE_UNSPECIFIED (default) or CLUSTER_SCOPE or VPC_SCOPE."
+  type        = string
+  default     = "DNS_SCOPE_UNSPECIFIED"
+}
+
+variable "cluster_dns_domain" {
+  description = "The suffix used for all cluster service records."
+  type        = string
+  default     = ""
+}
+
 variable "enable_filestore_csi" {
   description = "The status of the Filestore Container Storage Interface (CSI) driver addon, which allows the usage of filestore instance as volumes."
   type        = bool

@@ -189,6 +189,13 @@ resource "google_container_cluster" "gke_cluster" {
     }
   }
 
+  dns_config {
+    additive_vpc_scope_dns_domain = var.additive_vpc_scope_dns_domain
+    cluster_dns                   = var.cluster_dns
+    cluster_dns_scope             = var.cluster_dns_scope
+    cluster_dns_domain            = var.cluster_dns_domain
+  }
+
   addons_config {
     gcp_filestore_csi_driver_config {
       enabled = var.enable_filestore_csi
@@ -239,6 +246,10 @@ resource "google_container_cluster" "gke_cluster" {
     precondition {
       condition     = coalesce(var.enable_multi_networking, true) || length(var.additional_networks) == 0
       error_message = "'enable_multi_networking' cannot be false when using multivpc module, which passes additional_networks."
+    }
+    precondition {
+      condition     = !(var.additive_vpc_scope_dns_domain != "" && var.cluster_dns == "CLOUD_DNS" && var.cluster_dns_scope == "CLUSTER_SCOPE")
+      error_message = "For 'additive_vpc_scope_dns_domain' to work cluster_dns = \"CLOUD_DNS\" and cluster_dns_scope = \"CLUSTER_SCOPE\" must be set."
     }
   }
 
