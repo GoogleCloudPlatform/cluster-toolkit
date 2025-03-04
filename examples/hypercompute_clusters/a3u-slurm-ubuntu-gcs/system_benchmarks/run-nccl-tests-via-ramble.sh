@@ -1,5 +1,5 @@
 #!/bin/bash
-# Copyright 2024 Google LLC
+# Copyright 2025 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -27,7 +27,7 @@ This script will install the following packages using on this VM:
   jq
   python3-venv
 
-It will then set up enroot credentials to be able to use artifact registry 
+It will then set up enroot credentials to be able to use artifact registry
 by adding the following to ${HOME}/.enroot/.credentials:
 
   machine us-docker.pkg.dev login oauth2accesstoken password \$(gcloud auth print-access-token)
@@ -86,13 +86,16 @@ ramble:
       --container-workdir /third_party/nccl-tests/build/
       --container-image {container_path}
       --container-mounts "/usr/local/gib,/var/tmp"
+      --container-writable
+      --wait=60
+      --kill-on-bad-exit=1
 
     mpi_command: srun {srun_args}
 
     hostlist: \${SLURM_JOB_NODELIST}
 
+    container_dir: "/opt/apps/ramble/sqsh"
     container_name: nccl-plugin-gib-diagnostic
-    container_dir: "\${HOME}/.enroot"
     container_uri: docker://us-docker.pkg.dev#gce-ai-infra/gpudirect-gib/nccl-plugin-gib-diagnostic:latest
     processes_per_node: 8
     processes_per_node: '{gpus_per_node}'
@@ -141,9 +144,8 @@ cd "${RAMBLE_WORKSPACE}"
 N_NODES=$(sinfo -h -o %D)
 
 # Print available benchmarks
-printf "\n--------- Setting up Benchmarks ----------\n"
-ramble workspace info --where '{n_nodes} <= '"$N_NODES"
-
+printf "\n--- Available Benchmarks on %s nodes --\n" "${N_NODES}"
+ramble workspace info --where '{n_nodes} <= '"${N_NODES}"
 printf "\n------- About to run the following: ------\n\n"
 printf "source %s/ramble/env/bin/activate\n" "${SOFTWARE_INSTALL}"
 printf ". %s/ramble/share/ramble/setup-env.sh\n" "${SOFTWARE_INSTALL}"
@@ -170,9 +172,13 @@ until [[ $(squeue -h -o %j | grep -c "${TAG}") -eq 0 ]]; do
 done
 
 # Analyze
+printf "\n------- Analyzing benchmark logs ------\n"
 ramble workspace analyze -f json --where '{n_nodes} <= '"${N_NODES}"
 
-# Summarize all results in summary.tsv
+printf "\n------- Archiving ramble workspace ------\n"
+ramble workspace archive -t --where '{n_nodes} <= '"${N_NODES}"
+
+printf "\n--------------- SUMMARY ---------------\n"
 cd "${TEST_DIR}"
 jq -r '["workload","n_nodes","msg_size","busbw"], (.experiments[] as $exp | $exp.CONTEXTS[] as $context |
 {
@@ -185,8 +191,8 @@ jq -r '["workload","n_nodes","msg_size","busbw"], (.experiments[] as $exp | $exp
 | [.workload, .n_nodes, .Size, ."Out of Place Bus Bandwidth"])
 | @tsv' results.latest.json >summary.tsv
 
-# Print just the 8GB message sizes
-printf "\n--- SUMMARY for 8GB Message Sizes --\n"
+# Print just the large message sizes
+printf "\n--- SUMMARY for >1GB Message Sizes --\n"
 jq -r '["workload","n_nodes","msg_size","busbw"], (.experiments[] as $exp | $exp.CONTEXTS[] as $context |
 {
   experiment_name: $exp.name,
@@ -195,12 +201,26 @@ jq -r '["workload","n_nodes","msg_size","busbw"], (.experiments[] as $exp | $exp
   Context: $context.name
 } +
 ($context.foms | from_entries )
-| select(.Size | tonumber  > 8000000000)
+| select(.Size | tonumber  > 1000000000)
 | [.workload, .n_nodes, .Size, ."Out of Place Bus Bandwidth"])
 | @tsv' results.latest.json
 printf "\nFor full results, see %s\n" "${TEST_DIR}"/summary.tsv
 
-printf "\n- To reactivate this ramble workspace, run -\n\n"
+printf "\n-------- Benchmarking Complete -------\n"
+
+ARCHIVE_TAR=$(readlink archive/archive.latest.tar.gz)
+ARCHIVE_PATH="${RAMBLE_WORKSPACE}"/archive/"${ARCHIVE_TAR}"
+RESULTS_FILE=$(basename "$(readlink results.latest.json)")
+RESULTS_PATH="${RAMBLE_WORKSPACE}"/"${RESULTS_FILE}"
+
+printf "\n# To view the full results:\n"
+printf "cat %s\n" "${RESULTS_PATH}"
+
+printf "\n# To find the ramble workspace archive:\n"
+printf "ls %s\n" "${ARCHIVE_PATH}"
+
+printf "\n# To re-activate ramble workspace:\n"
+printf "cd %s\n" "${RAMBLE_WORKSPACE}"
 printf "source %s/ramble/env/bin/activate\n" "${SOFTWARE_INSTALL}"
 printf ". %s/ramble/share/ramble/setup-env.sh\n" "${SOFTWARE_INSTALL}"
-printf "ramble workspace activate %s\n" "${TEST_DIR}"
+printf "ramble workspace activate .\n"
