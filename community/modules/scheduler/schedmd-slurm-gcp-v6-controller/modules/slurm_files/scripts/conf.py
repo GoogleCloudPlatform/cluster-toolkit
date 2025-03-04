@@ -283,7 +283,7 @@ def install_slurm_conf(lkp: util.Lookup) -> None:
 
     conf_options = {
         "name": lkp.cfg.slurm_cluster_name,
-        "control_addr": lkp.control_addr if lkp.control_addr else lkp.hostname_fqdn,
+        "control_addr": lkp.control_addr or lkp.control_host_addr if lkp.cfg.hybrid else lkp.hostname_fqdn,
         "control_host": lkp.control_host,
         "accounting_storage_host": lkp.control_addr if lkp.cfg.controller_network_attachment else lkp.control_host,
         "control_host_port": lkp.control_host_port,
@@ -396,7 +396,7 @@ def gen_cloud_gres_conf(lkp: util.Lookup) -> None:
 def install_gres_conf(lkp: util.Lookup) -> None:
     conf_file = lkp.etc_dir / "cloud_gres.conf"
     gres_conf = lkp.etc_dir / "gres.conf"
-    if not gres_conf.exists():
+    if not (gres_conf.exists() or lkp.is_hybrid_setup):
         gres_conf.symlink_to(conf_file)
     util.chown_slurm(gres_conf, mode=0o600)
 
@@ -619,7 +619,7 @@ def install_topology_conf(lkp: util.Lookup) -> None:
     summary_file = lkp.etc_dir / "cloud_topology.summary.json"
     topo_conf = lkp.etc_dir / "topology.conf"
 
-    if not topo_conf.exists():
+    if not (topo_conf.exists() or lkp.is_hybrid_setup):
         topo_conf.symlink_to(conf_file)
 
     util.chown_slurm(conf_file, mode=0o600)
@@ -628,7 +628,8 @@ def install_topology_conf(lkp: util.Lookup) -> None:
 
 def gen_controller_configs(lkp: util.Lookup) -> None:
     install_slurm_conf(lkp)
-    install_slurmdbd_conf(lkp)
+    if not lkp.is_hybrid_setup:
+        install_slurmdbd_conf(lkp)
     gen_cloud_conf(lkp)
     gen_cloud_gres_conf(lkp)
     install_gres_conf(lkp)
