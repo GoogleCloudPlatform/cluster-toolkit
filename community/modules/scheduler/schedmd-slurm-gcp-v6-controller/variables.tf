@@ -462,9 +462,6 @@ variable "enable_default_mounts" {
     Enable default global network storage from the controller
     - /home
     - /apps
-    Warning: If these are disabled, the slurm etc and munge dirs must be added
-    manually, or some other mechanism must be used to synchronize the slurm conf
-    files and the munge key across the cluster.
     EOD
   type        = bool
   default     = true
