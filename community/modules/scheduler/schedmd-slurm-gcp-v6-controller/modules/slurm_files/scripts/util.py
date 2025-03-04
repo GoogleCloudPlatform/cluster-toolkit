@@ -871,7 +871,7 @@ def init_log_and_parse(parser: argparse.ArgumentParser) -> argparse.Namespace:
     if args.trace_api:
         lookup().cfg.extra_logging_flags["trace_api"] = True
     # Configure root logger
-    logging.config.dictConfig({
+    log_config:dict = {
         "version": 1,
         "disable_existing_loggers": True,
         "formatters": {
@@ -888,19 +888,25 @@ def init_log_and_parse(parser: argparse.ArgumentParser) -> argparse.Namespace:
                 "formatter": "standard",
                 "class": "logging.StreamHandler",
                 "stream": sys.stdout,
-            },
-            "file_handler": {
-                "()": owned_file_handler,
-                "level": logging.DEBUG,
-                "formatter": "stamp",
-                "filename": get_log_path(),
-            },
+            }
         },
         "root": {
-            "handlers": ["stdout_handler", "file_handler"],
+            "handlers": ["stdout_handler"],
             "level": loglevel,
         },
-    })
+    }
+
+    if not lookup().is_hybrid_setup: #Regular install
+        log_config["handlers"]["file_handler"] = {
+            "()":  owned_file_handler,
+            "level": logging.DEBUG,
+            "formatter": "stamp",
+            "filename": get_log_path(),
+        }
+        log_config["root"]["handlers"].append("file_handler")
+
+    # Apply logging configuration
+    logging.config.dictConfig(log_config)
 
     sys.excepthook = _handle_exception
 
