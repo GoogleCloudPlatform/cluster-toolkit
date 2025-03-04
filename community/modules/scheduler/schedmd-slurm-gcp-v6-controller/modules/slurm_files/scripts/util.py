@@ -1014,6 +1014,7 @@ def init_log_and_parse(parser: argparse.ArgumentParser) -> argparse.Namespace:
         help="Enable detailed api request output",
     )
     args = parser.parse_args()
+    lookup().hybrid_setup = getattr(args, 'hybrid', False)
     loglevel = args.loglevel
     if lookup().cfg.enable_debug_logging:
         loglevel = logging.DEBUG
@@ -1324,6 +1325,10 @@ def backoff_delay(start, timeout=None, ratio=None, count: int = 0):
 
 
 ROOT_URL = "http://metadata.google.internal/computeMetadata/v1"
+METADATA_TIMEOUT = 2
+# Set once the metadata server turns out to be unreachable, so a host without
+# one, an on-prem controller, does not wait for the same failure on every key.
+_metadata_unreachable = False
 
 class MetadataNotFoundError(Exception):
     pass
@@ -1332,11 +1337,22 @@ def get_metadata(path:str, silent=False) -> str:
     """Get metadata relative to metadata/computeMetadata/v1"""
     HEADERS = {"Metadata-Flavor": "Google"}
     url = f"{ROOT_URL}/{path}"
+    global _metadata_unreachable
+    if _metadata_unreachable:
+        raise MetadataNotFoundError(f"no metadata server, not fetching {url}")
     try:
-        resp = requests_lib.get(url, headers=HEADERS)
+        resp = requests_lib.get(url, headers=HEADERS, timeout=METADATA_TIMEOUT)
         resp.raise_for_status()
         return resp.text
-    except requests_lib.exceptions.HTTPError:
+    except requests_lib.exceptions.ConnectionError:
+        # Nothing listening at all, an on-prem controller, so stop asking it for
+        # anything else. A timeout does not qualify, there the server is up and
+        # just slow, and poisoning the process would break a cloud node.
+        _metadata_unreachable = True
+        if not silent:
+            log.warning(f"metadata server unreachable ({url})")
+        raise MetadataNotFoundError(f"failed to get_metadata from {url}")
+    except (requests_lib.exceptions.Timeout, requests_lib.exceptions.HTTPError):
         if not silent:
             log.warning(f"metadata not found ({url})")
         raise MetadataNotFoundError(f"failed to get_metadata from {url}")
@@ -1676,6 +1692,7 @@ class Lookup:
 
     def __init__(self, cfg):
         self._cfg = cfg
+        self.hybrid_setup = False
 
     @property
     def cfg(self):
@@ -1731,6 +1748,10 @@ class Lookup:
     @property
     def is_login_node(self):
         return self.instance_role_safe == "login"
+
+    @property
+    def is_hybrid_setup(self):
+        return self.hybrid_setup
 
     @cached_property
     def compute(self):
