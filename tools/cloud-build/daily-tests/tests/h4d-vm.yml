@@ -18,7 +18,7 @@
 test_name: h4d-jbvms
 deployment_name: h4d-jbvms-{{ build }}
 workspace: /workspace
-blueprint_yaml: "{{ workspace }}/examples/h4d-vm.yaml"
+blueprint_yaml: "{{ workspace }}/examples/h4d/h4d-vm.yaml"
 region: europe-west4
 zone: europe-west4-b
 network: "{{ deployment_name }}-net"

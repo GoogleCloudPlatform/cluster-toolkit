@@ -11,17 +11,23 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 ---
-blueprint_name: slurm-h4d
+
+blueprint_name: h4d-cluster
+
 vars:
   project_id: ## Set GCP Project ID Here ##
-  deployment_name: slurm-h4d
+  deployment_name: h4d-cluster
   region: us-central1
   zone: us-central1-a
-  rdma_net_range: 192.168.128.0/18
+  rdma_net_range: 192.168.32.0/24
+  hostname_prefix: $(vars.deployment_name)-odyssey
+  h4d_blueprint_dir: $(ghpc_stage(""))
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
+
 deployment_groups:
 - group: primary
   modules:
@@ -29,10 +35,10 @@ deployment_groups:
   # Source is an embedded module, denoted by "modules/*" without ./, ../, /
   # as a prefix. To refer to a local module, prefix with ./, ../ or /
 
-  - id: h4d-slurm-net-0
+  - id: cluster-net-0
     source: modules/network/vpc
 
-  - id: h4d-rdma-net
+  - id: cluster-rdma-net-0
     source: modules/network/vpc
     settings:
       network_name: $(vars.deployment_name)-rdma-net-0
@@ -56,25 +62,40 @@ deployment_groups:
 
   - id: homefs
     source: modules/file-system/filestore
-    use: [h4d-slurm-net-0]
+    use: [cluster-net-0]
     settings:
-      filestore_tier: BASIC_SSD
-      size_gb: 2560
-      filestore_share_name: homeshare
       local_mount: /home
-
-  - id: appsfs
-    source: modules/file-system/filestore
-    use: [h4d-slurm-net-0]
-    settings:
-      filestore_tier: BASIC_SSD
-      size_gb: 2560
-      filestore_share_name: appsshare
-      local_mount: /apps
+    outputs:
+    - network_storage
 
   - id: h4d_startup
     source: modules/scripts/startup-script
     settings:
+      runners:
+      - type: data
+        destination: /etc/h4d/ib_cm.ko
+        source: $(vars.h4d_blueprint_dir)/ib_cm.ko
+      - type: shell
+        destination: /etc/h4d/reload_modules.sh
+        content: |
+          #!/bin/bash
+          set -eEx
+
+          sudo rmmod idpf
+          sudo rmmod irdma
+          sudo modprobe idpf
+
+          sudo mv /etc/h4d/ib_cm.ko "\$(modinfo -n ib_cm)"
+          sudo rmmod ib_srpt
+          sudo rmmod rdma_ucm
+          sudo rmmod ib_iser
+          sudo rmmod ib_isert
+          sudo rmmod rpcrdma
+          sudo rmmod rdma_cm
+          sudo rmmod ib_cm
+          sudo modprobe rdma_ucm
+      configure_ssh_host_patterns:
+      - $(vars.hostname_prefix)-*
       install_cloud_rdma_drivers: true
       set_ofi_cloud_rdma_tunables: true
       local_ssd_filesystem:
@@ -82,54 +103,45 @@ deployment_groups:
         mountpoint: /mnt/lssd
         permissions: "1777"
 
-  - id: h4d_nodeset
-    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [h4d_startup, h4d-slurm-net-0]
+
+  - id: h4d-vms
+    source: modules/compute/vm-instance
+    use: [h4d_startup, homefs]
     settings:
-      bandwidth_tier: gvnic_enabled
       machine_type: h4d-highmem-192-lssd
-      node_count_static: 2
-      node_count_dynamic_max: 0
-      enable_placement: false
+      instance_count: 2
       disk_type: hyperdisk-balanced
       on_host_maintenance: TERMINATE
-      additional_networks:
+      network_interfaces:
         $(concat(
           [{
             network=null,
-            subnetwork=h4d-rdma-net.subnetwork_self_link,
+            subnetwork=cluster-net-0.subnetwork_self_link,
+            subnetwork_project=vars.project_id,
+            nic_type="GVNIC",
+            queue_count=null,
+            network_ip=null,
+            stack_type=null,
+            access_config=[{nat_ip=null, public_ptr_domain_name=null, network_tier=null}],
+            ipv6_access_config=[],
+            alias_ip_range=[]
+          },
+          {
+            network=null,
+            subnetwork=cluster-rdma-net-0.subnetwork_self_link,
             subnetwork_project=vars.project_id,
             nic_type="IRDMA",
             queue_count=null,
             network_ip=null,
             stack_type=null,
-            access_config=null,
+            access_config=[],
             ipv6_access_config=[],
             alias_ip_range=[]
           }]
         ))
 
-  - id: h4d_partition
-    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
-    use:
-    - h4d_nodeset
+  - id: wait-for-vms
+    source: community/modules/scripts/wait-for-startup
     settings:
-      exclusive: false
-      partition_name: h4d
-      is_default: true
-      partition_conf:
-        ResumeTimeout: 900
-        SuspendTimeout: 600
-
-  - id: slurm_login
-    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
-    use: [h4d-slurm-net-0]
-    settings:
-      machine_type: n2-standard-4
-      enable_login_public_ips: true
-
-  - id: slurm_controller
-    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
-    use: [h4d-slurm-net-0, h4d_partition, slurm_login, homefs, appsfs]
-    settings:
-      enable_controller_public_ips: true
+      instance_names: $(h4d-vms.name)
+      timeout: 7200
