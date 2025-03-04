@@ -41,3 +41,4 @@ custom_vars:
   project: "{{ project }}"
 post_deploy_tests:
 - test-validation/test-gke-job.yml
+- test-validation/test-gke-a3-mega.yml

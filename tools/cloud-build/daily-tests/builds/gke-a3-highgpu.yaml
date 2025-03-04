@@ -39,9 +39,6 @@ steps:
     BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
     EXAMPLE_BP=examples/gke-a3-highgpu.yaml
 
-    # Replacing the static subnet name to prevent collisions
-    sed  -i "s/gke-subnet-a3-highgpu/gke-subnet-a3-highgpu-$${BUILD_ID_SHORT}/" $${EXAMPLE_BP}
-
     # adding vm to act as remote node
     echo '  - id: remote-node'                           >> $${EXAMPLE_BP}
     echo '    source: modules/compute/vm-instance'       >> $${EXAMPLE_BP}
