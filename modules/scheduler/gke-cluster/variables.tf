@@ -158,7 +158,7 @@ variable "enable_dcgm_monitoring" {
 }
 
 variable "enable_cloud_dns_provider" {
-  description = "Offload the cluster DNS provider to Google Cloud DNS"
+  description = "Offload the cluster DNS provider to Cloud DNS"
   type        = bool
   default     = false
 }
