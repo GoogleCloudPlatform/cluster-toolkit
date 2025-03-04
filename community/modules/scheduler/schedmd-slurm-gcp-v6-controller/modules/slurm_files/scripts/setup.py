@@ -664,6 +664,7 @@ def main():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--slurmd-feature", dest="slurmd_feature", help="Unused, to be removed.")
+    parser.add_argument("--hybrid", dest="hybrid", action="store_true", help="Do the hybrid setup.")
     _ = util.init_log_and_parse(parser)
 
     try:

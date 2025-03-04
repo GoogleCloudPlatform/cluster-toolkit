@@ -864,6 +864,7 @@ def init_log_and_parse(parser: argparse.ArgumentParser) -> argparse.Namespace:
         help="Enable detailed api request output",
     )
     args = parser.parse_args()
+    lookup().hybrid_setup = getattr(args, 'hybrid', False)
     loglevel = args.loglevel
     if lookup().cfg.enable_debug_logging:
         loglevel = logging.DEBUG
@@ -1507,6 +1508,7 @@ class Lookup:
 
     def __init__(self, cfg):
         self._cfg = cfg
+        self.hybrid_setup = False
 
     @property
     def cfg(self):
@@ -1560,6 +1562,10 @@ class Lookup:
     @property
     def is_login_node(self):
         return self.instance_role_safe == "login"
+
+    @property
+    def is_hybrid_setup(self):
+        return self.hybrid_setup
 
     @cached_property
     def compute(self):
