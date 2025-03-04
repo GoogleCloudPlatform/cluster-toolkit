@@ -157,6 +157,12 @@ variable "enable_dcgm_monitoring" {
   default     = false
 }
 
+variable "enable_cloud_dns_provider" {
+  description = "Offload the DNS Provider to Google Cloud DNS"
+  type        = bool
+  default     = false
+}
+
 variable "enable_node_local_dns_cache" {
   description = "Enable GKE NodeLocal DNSCache addon to improve DNS lookup latency"
   type        = bool
