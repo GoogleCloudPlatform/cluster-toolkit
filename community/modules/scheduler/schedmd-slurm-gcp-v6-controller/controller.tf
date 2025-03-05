@@ -33,7 +33,7 @@ locals {
     }
   ]
 
-  state_disk = var.controller_state_disk != null ? [{
+  state_disk = (var.controller_state_disk != null && !var.enable_hybrid) ? [{
     source      = google_compute_disk.controller_disk[0].name
     device_name = google_compute_disk.controller_disk[0].name
     disk_labels = null
@@ -64,7 +64,7 @@ data "google_project" "controller_project" {
 }
 
 resource "google_compute_disk" "controller_disk" {
-  count = var.controller_state_disk != null ? 1 : 0
+  count = (var.controller_state_disk != null && !var.enable_hybrid) ? 1 : 0
 
   project = local.controller_project_id
   name    = "${local.slurm_cluster_name}-controller-save"
@@ -76,6 +76,7 @@ resource "google_compute_disk" "controller_disk" {
 # INSTANCE TEMPLATE
 module "slurm_controller_template" {
   source = "../../internal/slurm-gcp/instance_template"
+  count  = var.enable_hybrid ? 0 : 1
 
   project_id          = local.controller_project_id
   region              = var.region
@@ -126,12 +127,13 @@ resource "google_compute_instance_from_template" "controller" {
   provider = google-beta
 
   name                     = "${local.slurm_cluster_name}-controller"
+  count                    = var.enable_hybrid ? 0 : 1
   project                  = local.controller_project_id
   zone                     = var.zone
-  source_instance_template = module.slurm_controller_template.self_link
+  source_instance_template = module.slurm_controller_template[0].self_link
   # Due to https://github.com/hashicorp/terraform-provider-google/issues/21693
   # we have to explicitly override instance labels instead of inheriting them from template.
-  labels = module.slurm_controller_template.labels
+  labels = module.slurm_controller_template[0].labels
 
   allow_stopping_for_update = true
 
@@ -158,7 +160,7 @@ resource "google_compute_instance_from_template" "controller" {
 
 moved {
   from = module.slurm_controller_instance.google_compute_instance_from_template.slurm_instance[0]
-  to   = google_compute_instance_from_template.controller
+  to   = google_compute_instance_from_template.controller[0]
 }
 
 # SECRETS: CLOUDSQL

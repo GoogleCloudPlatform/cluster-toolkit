@@ -19,7 +19,7 @@ output "slurm_cluster_name" {
 
 output "slurm_controller_instance" {
   description = "Compute instance of controller node"
-  value       = google_compute_instance_from_template.controller
+  value       = var.enable_hybrid ? null : google_compute_instance_from_template.controller[0]
 }
 
 output "slurm_login_instances" {
@@ -45,9 +45,9 @@ output "slurm_bucket_dir" {
 
 output "instructions" {
   description = "Post deployment instructions."
-  value       = <<-EOT
+  value       = var.enable_hybrid ? "Please use install_hybrid.sh to prepare the files" : <<-EOT
     To SSH to the controller (may need to add '--tunnel-through-iap'):
-      gcloud compute ssh ${google_compute_instance_from_template.controller.self_link}
+      gcloud compute ssh ${google_compute_instance_from_template.controller[0].self_link}
     
     If you are using cloud ops agent with this deployment,
     you can use the following command to see the logs for the entire cluster or any particular VM host:
