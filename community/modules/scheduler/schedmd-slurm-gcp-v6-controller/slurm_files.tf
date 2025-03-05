@@ -53,7 +53,7 @@ locals {
   login_sa       = toset(flatten([for x in module.login : x.service_account]))
 
   viewers = toset(flatten([
-    "serviceAccount:${module.slurm_controller_template.service_account.email}",
+    var.enable_hybrid ? "serviceAccount:${local.synth_def_sa_email}" : "serviceAccount:${module.slurm_controller_template[0].service_account.email}",
     formatlist("serviceAccount:%s", [for x in local.compute_sa : x.email]),
     formatlist("serviceAccount:%s", [for x in local.compute_tpu_sa : x.email if x.email != null]),
     formatlist("serviceAccount:%s", [for x in local.login_sa : x.email]),
@@ -199,6 +199,7 @@ module "slurm_files" {
   task_epilog_scripts                = var.task_epilog_scripts
   task_prolog_scripts                = var.task_prolog_scripts
 
+  enable_hybrid          = var.enable_hybrid
   munge_mount            = local.auto_munge_mount
   slurm_key_mount        = local.auto_slurm_key_mount
   disable_default_mounts = !var.enable_default_mounts || var.enable_backup_controller
