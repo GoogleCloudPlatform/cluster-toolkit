@@ -749,6 +749,15 @@ variable "gcloud_path_override" {
   nullable    = false
 }
 
+variable "enable_hybrid" {
+  description = <<EOD
+Enables use of hybrid controller mode. When true, controller_hybrid_config will
+be used instead of controller_instance_config and will disable login instances.
+EOD
+  type        = bool
+  default     = false
+}
+
 # DEPRECATED VARIABLES
 
 variable "enable_devel" { # tflint-ignore: terraform_unused_declarations
