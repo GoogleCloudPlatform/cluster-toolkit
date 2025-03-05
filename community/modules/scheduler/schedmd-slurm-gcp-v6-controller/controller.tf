@@ -36,7 +36,7 @@ locals {
     }
   ]
 
-  state_disk = var.controller_state_disk != null ? [{
+  state_disk = (var.controller_state_disk != null && !var.enable_hybrid) ? [{
     source                              = google_compute_disk.controller_disk[0].name
     device_name                         = google_compute_disk.controller_disk[0].name
     disk_labels                         = null
@@ -82,7 +82,7 @@ data "google_project" "controller_project" {
 }
 
 resource "google_compute_disk" "controller_disk" {
-  count = var.controller_state_disk != null ? 1 : 0
+  count = (var.controller_state_disk != null && !var.enable_hybrid) ? 1 : 0
 
   project = local.controller_project_id
   name    = "${local.slurm_cluster_name}-controller-save"
@@ -102,6 +102,7 @@ resource "google_compute_disk" "controller_disk" {
 # INSTANCE TEMPLATE
 module "slurm_controller_template" {
   source = "../../internal/slurm-gcp/instance_template"
+  count  = var.enable_hybrid ? 0 : 1
 
   project_id          = local.controller_project_id
   region              = var.region
@@ -154,15 +155,15 @@ module "slurm_controller_template" {
 # INSTANCE
 resource "google_compute_instance_from_template" "controller" {
   provider = google-beta
-  count    = var.enable_backup_controller ? 0 : 1
+  count    = (var.enable_backup_controller || var.enable_hybrid) ? 0 : 1
 
   name                     = "${local.slurm_cluster_name}-controller"
   project                  = local.controller_project_id
   zone                     = var.zone
-  source_instance_template = module.slurm_controller_template.self_link
+  source_instance_template = module.slurm_controller_template[0].self_link
   # Due to https://github.com/hashicorp/terraform-provider-google/issues/21693
   # we have to explicitly override instance labels instead of inheriting them from template.
-  labels = module.slurm_controller_template.labels
+  labels = module.slurm_controller_template[0].labels
 
   allow_stopping_for_update = true
 
@@ -284,7 +285,7 @@ resource "google_compute_health_check" "controller_health_check" {
 
 # ZONAL INSTANCE GROUP MANAGER (deployed if ha_type is zonal)
 resource "google_compute_instance_group_manager" "controller_zonal_mig" {
-  count              = (var.enable_backup_controller && var.controller_ha_type == "zonal") ? 1 : 0
+  count              = (var.enable_backup_controller && !var.enable_hybrid && var.controller_ha_type == "zonal") ? 1 : 0
   name               = "${local.slurm_cluster_name}-controller-mig"
   base_instance_name = "${local.slurm_cluster_name}-controller"
   zone               = var.zone
@@ -305,7 +306,7 @@ resource "google_compute_instance_group_manager" "controller_zonal_mig" {
   }
 
   version {
-    instance_template = module.slurm_controller_template.self_link
+    instance_template = module.slurm_controller_template[0].self_link
   }
 
   auto_healing_policies {
@@ -330,7 +331,7 @@ resource "google_compute_instance_group_manager" "controller_zonal_mig" {
 
 # REGIONAL INSTANCE GROUP MANAGER (deployed if ha_type is regional)
 resource "google_compute_region_instance_group_manager" "controller_regional_mig" {
-  count                     = (var.enable_backup_controller && var.controller_ha_type == "regional") ? 1 : 0
+  count                     = (var.enable_backup_controller && !var.enable_hybrid && var.controller_ha_type == "regional") ? 1 : 0
   name                      = "${local.slurm_cluster_name}-controller-mig"
   base_instance_name        = "${local.slurm_cluster_name}-controller"
   region                    = var.region
@@ -352,7 +353,7 @@ resource "google_compute_region_instance_group_manager" "controller_regional_mig
   }
 
   version {
-    instance_template = module.slurm_controller_template.self_link
+    instance_template = module.slurm_controller_template[0].self_link
   }
 
   auto_healing_policies {
@@ -502,7 +503,7 @@ resource "google_compute_forwarding_rule" "slurm_controller_vip" {
 
 moved {
   from = module.slurm_controller_instance.google_compute_instance_from_template.slurm_instance[0]
-  to   = google_compute_instance_from_template.controller
+  to   = google_compute_instance_from_template.controller[0]
 }
 
 # SECRETS: CLOUDSQL
