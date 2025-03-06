@@ -27,7 +27,6 @@ deployment_groups:
   modules:
   # Source is an embedded module, denoted by "modules/*" without ./, ../, /
   # as a prefix. To refer to a local or community module, prefix with ./, ../ or /
-  # Example - ./modules/network/vpc
   - id: default-network
     source: modules/network/pre-existing-vpc
 
@@ -52,7 +51,7 @@ deployment_groups:
 
   # Test adding a pre-existing network via "use"
   - id: one-used-existing-ni
-    source: ./modules/compute/vm-instance
+    source: modules/compute/vm-instance
     use:
     - default-network
     settings:
@@ -61,7 +60,7 @@ deployment_groups:
 
   # Test adding a newly created network via "use"
   - id: one-used-new-ni
-    source: ./modules/compute/vm-instance
+    source: modules/compute/vm-instance
     use:
     - new-network-1
     settings:
@@ -70,7 +69,7 @@ deployment_groups:
 
   # Test adding one pre-existing network via "network_interfaces"
   - id: one-explicit-existing-ni
-    source: ./modules/compute/vm-instance
+    source: modules/compute/vm-instance
     settings:
       name_prefix: one-explicit-existing-ni
       machine_type: n2-standard-2
@@ -88,7 +87,7 @@ deployment_groups:
 
   # Test adding one newly created network via "network_interfaces"
   - id: one-explicit-new-ni
-    source: ./modules/compute/vm-instance
+    source: modules/compute/vm-instance
     settings:
       name_prefix: one-explicit-new-ni
       machine_type: n2-standard-2
@@ -106,7 +105,7 @@ deployment_groups:
 
   # Test adding both a pre-existing network and a newly created network via "network_interfaces"
   - id: two-explicit-mixed-ni
-    source: ./modules/compute/vm-instance
+    source: modules/compute/vm-instance
     settings:
       name_prefix: two-explicit-mixed-ni
       network_interfaces:
@@ -136,7 +135,7 @@ deployment_groups:
 
   # Test adding two newly created networks via "network_interfaces"
   - id: two-explicit-new-ni
-    source: ./modules/compute/vm-instance
+    source: modules/compute/vm-instance
     settings:
       name_prefix: two-explicit-new-ni
       network_interfaces:

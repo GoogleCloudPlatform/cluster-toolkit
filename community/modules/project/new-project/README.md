@@ -6,16 +6,13 @@ access, Service Accounts, and API enablement to follow best practices.
 
 This module is meant for use with Terraform 0.13.
 
+**Note:** This module has been removed from the Cluster Toolkit. The upstream module (`terraform-google-project-factory`) is now the recommended way to create and manage GCP projects.
+
 ### Example
 
 ```yaml
 - id: project
-  source: community/modules/project/new-project
-  settings:
-    project_id: test_project
-    folder_id: 334688113020 # random number
-    billing_account: "111110-M2N704-854685" # random billing number
-    org_id: 123456789 # random org id
+  source: github.com/terraform-google-modules/terraform-google-project-factory?rev=v17.0.0&depth=1
 ```
 
 This creates a new project with pre-defined project ID, a designated folder and

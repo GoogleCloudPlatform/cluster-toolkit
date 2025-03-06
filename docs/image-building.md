@@ -27,7 +27,6 @@ below demonstrate each approach:
 - [Customizing a Slurm cluster (Hello, World)](../examples/README.md#image-builderyaml-)
 - [Customizing a Slurm cluster (AI/ML applications)](../examples/README.md#ml-slurmyaml-)
 - [Provisioning an HTCondor pool (installing scheduler)](../examples/README.md#htc-htcondoryaml--)
-- [Provisioning a DAOS storage cluster](../community/examples/intel/README.md#daos-cluster)
 
 ## Why build an image?
 
@@ -168,7 +167,7 @@ deployment_groups:
 - group: packer
   modules:
   - id: custom-image
-    source: github.com/GoogleCloudPlatform/slurm-gcp//packer?ref=5.12.0&depth=1
+    source: github.com/GoogleCloudPlatform/slurm-gcp//packer?ref=5.12.2&depth=1
     kind: packer
     settings:
       use_iap: true

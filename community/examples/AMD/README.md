@@ -1,9 +1,5 @@
 # AMD solutions for the Cluster Toolkit (formerly HPC Toolkit)
 
-> [!NOTE]
-> This document uses Slurm-GCP v6. If you want to use Slurm-GCP v5 version you
-> scan refer [blueprint](./hpc-amd-slurm-v5-legacy.yaml)
-
 ## AMD-Optimized Slurm Cluster
 
 This example provisions a Slurm cluster using the AMD-based Computed Optimized

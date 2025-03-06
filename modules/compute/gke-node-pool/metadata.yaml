@@ -17,3 +17,5 @@ spec:
   requirements:
     services:
     - container.googleapis.com
+ghpc:
+  inject_module_id: internal_ghpc_module_id

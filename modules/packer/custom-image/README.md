@@ -36,7 +36,7 @@ This can be achieved by one of the following 2 approaches:
 
 1. Using a public IP address on the VM
 
-- Set [var.omit_external_ip](#input_omit_external_ip) to `true`
+- Set [var.omit_external_ip](#input_omit_external_ip) to `false`
 
 1. Configuring a VPC with a Cloud NAT in the region of the VM
 
@@ -210,24 +210,14 @@ to the console. For example:
 ==> example.googlecompute.toolkit_image: Startup script, if any, has finished running.
 ```
 
-Using the default value for \[var.scopes\]\[#input_scopes\], the output of
-startup script execution will be stored in Cloud Logging. It can be examined
-using the [Cloud Logging Console][logging-console] or with a
-[gcloud logging read][logging-read-docs] command (substituting `<<PROJECT_ID>>`
-with your project ID):
+### Debugging startup-script failures
 
-```shell
-$ gcloud logging --project <<PROJECT_ID>> read \
-    'logName="projects/<<PROJECT_ID>>/logs/GCEMetadataScripts" AND jsonPayload.message=~"^startup-script: "' \
-    --format="table[box](timestamp, resource.labels.instance_id, jsonPayload.message)" --freshness 2h
-```
+> [!NOTE]
+> There can be a delay in the propagation of the logs from the instance to
+> Cloud Logging, so it may require waiting a few minutes to see the full logs.
 
-Note that this command will print **all** startup script entries within the
-project within the "freshness" window **in reverse order**. You may need to
-identify the instance ID of the Packer VM and filter further by that value using
-`gcloud` or `grep`. To print the entries in the order they would have appeared
-on your console, we recommend piping the output of this command to the standard
-Linux utility `tac`.
+If the Packer image build fails, the module will output a `gcloud` command
+that can be used directly to review startup-script execution.
 
 ## License
 

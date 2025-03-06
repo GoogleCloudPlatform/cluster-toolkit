@@ -46,8 +46,9 @@ deployment_groups:
     source: modules/scripts/startup-script
     settings:
       install_ansible: true
-      install_docker: true
-      enable_docker_world_writable: true
+      docker:
+        enabled: true
+        world_writable: true
       configure_ssh_host_patterns:
       - 10.0.0.*
       - 10.1.0.*
@@ -81,11 +82,12 @@ deployment_groups:
             "reboot": false,
             "install_cuda": false,
             "install_gcsfuse": true,
-            "install_lustre": true,
+            "install_lustre": false,
             "install_ompi": true,
             "monitoring_agent": "cloud-ops",
             "nvidia_version": "latest",
-            "slurm_version": "23.11.8"
+            "slurm_version": "23.11.8",
+            "install_nvidia_repo": false
           }
       - type: shell
         destination: install_slurm.sh
@@ -94,7 +96,7 @@ deployment_groups:
           set -e -o pipefail
           ansible-galaxy role install googlecloudplatform.google_cloud_ops_agents
           ansible-pull \
-              -U https://github.com/GoogleCloudPlatform/slurm-gcp -C 6.8.0 \
+              -U https://github.com/GoogleCloudPlatform/slurm-gcp -C 6.8.9 \
               -i localhost, --limit localhost --connection=local \
               -e @/var/tmp/slurm_vars.json \
               ansible/playbook.yml
@@ -108,11 +110,6 @@ deployment_groups:
           * - nofile 1048576
           * - cpu unlimited
           * - rtprio unlimited
-      - type: data
-        destination: /etc/systemd/system/slurmd.service.d/file_ulimit.conf
-        content: |
-          [Service]
-          LimitNOFILE=infinity
       - type: data
         destination: /etc/systemd/system/delay-a3.service
         content: |
@@ -230,3 +227,4 @@ deployment_groups:
       source_image_project_id: [$(vars.source_image_project_id)]
       source_image: $(vars.source_image)
       image_family: $(vars.final_image_family)
+      omit_external_ip: false

@@ -94,7 +94,7 @@ variable "bucket_dir" {
 variable "login_nodes" {
   description = "List of slurm login instance definitions."
   type = list(object({
-    name_prefix = string
+    group_name = string
     access_config = optional(list(object({
       nat_ip       = string
       network_tier = string
@@ -130,7 +130,6 @@ variable "login_nodes" {
     })), [])
     bandwidth_tier         = optional(string, "platform_default")
     can_ip_forward         = optional(bool, false)
-    disable_smt            = optional(bool, false)
     disk_auto_delete       = optional(bool, true)
     disk_labels            = optional(map(string), {})
     disk_size_gb           = optional(number)
@@ -142,8 +141,16 @@ variable "login_nodes" {
       count = number
       type  = string
     }))
-    labels              = optional(map(string), {})
-    machine_type        = optional(string)
+    labels       = optional(map(string), {})
+    machine_type = optional(string)
+    advanced_machine_features = object({
+      enable_nested_virtualization = optional(bool)
+      threads_per_core             = optional(number)
+      turbo_mode                   = optional(string)
+      visible_core_count           = optional(number)
+      performance_monitoring_unit  = optional(string)
+      enable_uefi_networking       = optional(bool)
+    })
     metadata            = optional(map(string), {})
     min_cpu_platform    = optional(string)
     num_instances       = optional(number, 1)
@@ -171,8 +178,8 @@ variable "login_nodes" {
   }))
   default = []
   validation {
-    condition     = length(distinct([for x in var.login_nodes : x.name_prefix])) == length(var.login_nodes)
-    error_message = "All login_nodes must have a unique name_prefix."
+    condition     = length(distinct([for x in var.login_nodes : x.group_name])) == length(var.login_nodes)
+    error_message = "All login_nodes must have a unique group name."
   }
 }
 
@@ -196,24 +203,38 @@ variable "nodeset" {
       auto_delete  = optional(bool, true)
       boot         = optional(bool, false)
     })), [])
-    bandwidth_tier                 = optional(string, "platform_default")
-    can_ip_forward                 = optional(bool, false)
-    disable_smt                    = optional(bool, false)
-    disk_auto_delete               = optional(bool, true)
-    disk_labels                    = optional(map(string), {})
-    disk_size_gb                   = optional(number)
-    disk_type                      = optional(string)
-    enable_confidential_vm         = optional(bool, false)
-    enable_placement               = optional(bool, false)
-    enable_oslogin                 = optional(bool, true)
-    enable_shielded_vm             = optional(bool, false)
-    enable_maintenance_reservation = optional(bool, true)
+    bandwidth_tier                   = optional(string, "platform_default")
+    can_ip_forward                   = optional(bool, false)
+    disk_auto_delete                 = optional(bool, true)
+    disk_labels                      = optional(map(string), {})
+    disk_size_gb                     = optional(number)
+    disk_type                        = optional(string)
+    enable_confidential_vm           = optional(bool, false)
+    enable_placement                 = optional(bool, false)
+    placement_max_distance           = optional(number, null)
+    enable_oslogin                   = optional(bool, true)
+    enable_shielded_vm               = optional(bool, false)
+    enable_maintenance_reservation   = optional(bool, false)
+    enable_opportunistic_maintenance = optional(bool, false)
     gpu = optional(object({
       count = number
       type  = string
     }))
-    labels                   = optional(map(string), {})
-    machine_type             = optional(string)
+    dws_flex = object({
+      enabled          = bool
+      max_run_duration = number
+      use_job_duration = bool
+    })
+    labels       = optional(map(string), {})
+    machine_type = optional(string)
+    advanced_machine_features = object({
+      enable_nested_virtualization = optional(bool)
+      threads_per_core             = optional(number)
+      turbo_mode                   = optional(string)
+      visible_core_count           = optional(number)
+      performance_monitoring_unit  = optional(string)
+      enable_uefi_networking       = optional(bool)
+    })
     maintenance_interval     = optional(string)
     instance_properties_json = string
     metadata                 = optional(map(string), {})
@@ -272,6 +293,7 @@ variable "nodeset" {
     tags               = optional(list(string), [])
     termination_action = optional(string)
     reservation_name   = optional(string)
+    future_reservation = string
     startup_script = optional(list(object({
       filename = string
     content = string })), [])
@@ -365,6 +387,24 @@ EOD
 # SLURM #
 #########
 
+variable "controller_state_disk" {
+  description = <<EOD
+  A disk that will be attached to the controller instance template to save state of slurm. The disk is created and used by default.
+  To disable this feature, set this variable to null.
+  
+  NOTE: This will not save the contents at /opt/apps and /home. To preserve those, they must be saved externally.
+  EOD
+  type = object({
+    type = string
+    size = number
+  })
+
+  default = {
+    type = "pd-ssd"
+    size = 50
+  }
+}
+
 variable "enable_debug_logging" {
   type        = bool
   description = "Enables debug logging mode."
@@ -402,28 +442,26 @@ EOD
 variable "cloud_parameters" {
   description = "cloud.conf options. Defaults inherited from [Slurm GCP repo](https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/terraform/slurm_cluster/modules/slurm_files/README_TF.md#input_cloud_parameters)"
   type = object({
-    no_comma_params = optional(bool)
-    resume_rate     = optional(number)
-    resume_timeout  = optional(number)
-    suspend_rate    = optional(number)
-    suspend_timeout = optional(number)
-    topology_plugin = optional(string)
-    topology_param  = optional(string)
-    tree_width      = optional(number)
+    no_comma_params      = optional(bool, false)
+    private_data         = optional(list(string))
+    scheduler_parameters = optional(list(string))
+    resume_rate          = optional(number)
+    resume_timeout       = optional(number)
+    suspend_rate         = optional(number)
+    suspend_timeout      = optional(number)
+    topology_plugin      = optional(string)
+    topology_param       = optional(string)
+    tree_width           = optional(number)
   })
-  default = {}
+  default  = {}
+  nullable = false
 }
 
 variable "enable_default_mounts" {
   description = <<-EOD
     Enable default global network storage from the controller
-    - /usr/local/etc/slurm
-    - /etc/munge
     - /home
     - /apps
-    Warning: If these are disabled, the slurm etc and munge dirs must be added
-    manually, or some other mechanism must be used to synchronize the slurm conf
-    files and the munge key across the cluster.
     EOD
   type        = bool
   default     = true
@@ -606,14 +644,6 @@ EOD
   sensitive = true
 }
 
-variable "enable_slurm_gcp_plugins" {
-  description = <<EOD
-Enables calling hooks in scripts/slurm_gcp_plugins during cluster resume and suspend.
-EOD
-  type        = any
-  default     = false
-}
-
 variable "universe_domain" {
   description = "Domain address for alternate API universe"
   type        = string
@@ -658,5 +688,24 @@ variable "disable_default_mounts" { # tflint-ignore: terraform_unused_declaratio
   validation {
     condition     = var.disable_default_mounts == null
     error_message = "DEPRECATED: Use `enable_default_mounts` instead."
+  }
+}
+
+variable "enable_slurm_gcp_plugins" { # tflint-ignore: terraform_unused_declarations
+  description = <<EOD
+DEPRECATED: Slurm GCP plugins have been deprecated.
+Instead of 'max_hops' plugin please use the 'placement_max_distance' nodeset property.
+Instead of 'enable_vpmu' plugin please use 'advanced_machine_features.performance_monitoring_unit' nodeset property.
+EOD
+  type        = any
+  default     = null
+
+  validation {
+    condition     = var.enable_slurm_gcp_plugins == null
+    error_message = <<EOD
+DEPRECATED: Slurm GCP plugins have been deprecated.
+Instead of 'max_hops' plugin please use the 'placement_max_distance' nodeset property.
+Instead of 'enable_vpmu' plugin please use 'advanced_machine_features.performance_monitoring_unit' nodeset property.
+EOD
   }
 }

@@ -33,7 +33,7 @@ locals {
 }
 
 module "health_check_firewall_rule" {
-  source = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/network/firewall-rules?ref=9e695aab"
+  source = "../../../../modules/network/firewall-rules"
 
   subnetwork_self_link = var.subnetwork_self_link
 
@@ -54,7 +54,7 @@ module "health_check_firewall_rule" {
 }
 
 module "htcondor_bucket" {
-  source = "github.com/GoogleCloudPlatform/hpc-toolkit//community/modules/file-system/cloud-storage-bucket/?ref=9e695aab"
+  source = "../../../../community/modules/file-system/cloud-storage-bucket"
 
   project_id      = var.project_id
   deployment_name = var.deployment_name

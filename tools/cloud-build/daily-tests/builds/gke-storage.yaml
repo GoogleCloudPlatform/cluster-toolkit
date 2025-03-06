@@ -17,6 +17,7 @@ tags:
 - m.cloud-storage-bucket
 - m.filestore
 - m.gke-cluster
+- m.service-account
 - m.gke-job-template
 - m.gke-node-pool
 - m.gke-persistent-volume
@@ -49,9 +50,6 @@ steps:
     echo '    settings:'                           >> $${SG_EXAMPLE}
     echo '      machine_type: e2-standard-2'       >> $${SG_EXAMPLE}
     echo '      zone: us-central1-a'               >> $${SG_EXAMPLE}
-
-    # avoids conflict with other tests
-    sed -i "s/gke-subnet/gke-subnet-$${BUILD_ID_SHORT}/" $${SG_EXAMPLE}
 
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
       --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \

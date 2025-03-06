@@ -15,6 +15,10 @@
 ---
 blueprint_name: fsi-montecarlo-on-batch
 
+validators:
+- validator: test_apis_enabled
+  skip: true # skipping this validator, since "service-enablement" will take care of it.
+
 vars:
   project_id:  ## Set GCP Project ID Here ##
   deployment_name: fsimontecarlo

@@ -16,6 +16,7 @@
 tags:
 - slurm6
 - m.filestore
+- m.private-service-access
 - m.schedmd-slurm-gcp-v6-controller
 - m.schedmd-slurm-gcp-v6-login
 - m.schedmd-slurm-gcp-v6-nodeset

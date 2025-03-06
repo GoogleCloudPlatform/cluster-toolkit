@@ -7,7 +7,7 @@ The Toolkit contains modules that will **provision**:
 
 - [Filestore (GCP managed NFS)][filestore]
 - [DDN EXAScaler lustre][ddn-exascaler]
-- [Intel DAOS][intel-daos]
+- [Parallelstore][parallelstore]
 - [NFS server (non-GCP managed)][nfs-server]
 
 The Toolkit also provides a **[pre-existing-network-storage]** module to work
@@ -41,7 +41,7 @@ as shown below:
     settings: {local_mount: /home}
 
   - id: workstation
-    source: ./modules/compute/vm-instance
+    source: modules/compute/vm-instance
     use: [network1, homefs]  # Note this line
 ```
 
@@ -98,19 +98,19 @@ The following is an example setting up a filestore using startup script:
 The following matrix shows the best method by which each type of network storage
 device should be mounted to each mount capable module.
 
-&nbsp; | Slurm V6 | Slurm V5 | Batch | vm-instance | Packer (client install) | HTCondor\* | PBS Pro\*
--- | -- | -- | -- | -- | -- | -- | --
-filestore | via USE | via USE | via USE | via USE | via STARTUP | via USE | via USE
-nfs-server | via USE | via USE | via USE | via USE | via STARTUP | via USE | via USE
-cloud-storage-bucket (GCS)| via USE | via USE | via USE | via USE | via STARTUP | via USE | via USE
-DDN EXAScaler lustre | via USE | via USE | via USE | via USE | Needs Testing | via USE | via USE
-Intel DAOS** | Needs Testing | Needs Testing | Needs Testing | Needs Testing | Needs Testing | Needs Testing | Needs Testing
-  |  |   |   |   |   |   |  
-filestore (pre-existing) | via USE | via USE | via USE | via USE | via STARTUP | via USE | via USE
-nfs-server (pre-existing) | via USE | via USE | via USE | via USE | via STARTUP | via USE | via USE
-DDN EXAScaler lustre (pre-existing) | via USE | via USE | via USE | via USE | Needs Testing | via USE | via USE
-Intel DAOS (pre-existing) | Not Supported | Not Supported | Not Supported | Not Supported | Not Supported | Not Supported | Not Supported
-GCS FUSE (pre-existing) | via USE | via USE | via USE | via USE | via STARTUP | via USE | Needs Testing
+&nbsp; | Slurm V6 | Batch | vm-instance | Packer (client install) | HTCondor\* | PBS Pro\*
+-- | -- | -- | -- | -- | -- | --
+filestore | via USE | via USE | via USE | via STARTUP | via USE | via USE
+nfs-server | via USE | via USE | via USE | via STARTUP | via USE | via USE
+cloud-storage-bucket (GCS)| via USE | via USE | via USE | via STARTUP | via USE | via USE
+DDN EXAScaler lustre | via USE | via USE | via USE | Needs Testing | via USE | via USE
+Parallelstore | via USE | Needs Testing | via USE | Needs Testing | Needs Testing | Needs Testing
+  |  |   |   |   |   |  
+filestore (pre-existing) | via USE | via USE | via USE | via STARTUP | via USE | via USE
+nfs-server (pre-existing) | via USE | via USE | via USE | via STARTUP | via USE | via USE
+DDN EXAScaler lustre (pre-existing) | via USE | via USE | via USE | Needs Testing | via USE | via USE
+Parallelstore (pre-existing) | via USE | Needs Testing | via USE | Needs Testing | Needs Testing | Needs Testing
+GCS FUSE (pre-existing) | via USE | via USE | via USE | via STARTUP | via USE | Needs Testing
 
 - **via USE:** Client installation and mounting occur automatically when
   connected with the use field. See
@@ -122,10 +122,9 @@ GCS FUSE (pre-existing) | via USE | via USE | via USE | via USE | via STARTUP | 
 - **Not Supported:** This feature is not supported right now.
 
 \* only supported on CentOS 7\
-** DAOS has additional pre-req steps and does not yet support automatic mounting
 
 [filestore]: ../modules/file-system/filestore/README.md
 [pre-existing-network-storage]: ../modules/file-system/pre-existing-network-storage/README.md
 [ddn-exascaler]: ../community/modules/file-system/DDN-EXAScaler/README.md
-[intel-daos]: ../community/modules/file-system/Intel-DAOS/README.md
+[parallelstore]: ../modules/file-system/parallelstore/README.md
 [nfs-server]: ../community/modules/file-system/nfs-server/README.md

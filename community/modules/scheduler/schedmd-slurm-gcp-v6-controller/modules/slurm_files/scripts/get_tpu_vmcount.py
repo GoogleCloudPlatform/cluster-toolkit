@@ -16,12 +16,14 @@
 
 import argparse
 import util
+import tpu
 
 
 def get_vmcount_of_tpu_part(part):
     res = 0
-    for ns in util.lookup().cfg.partitions[part].partition_nodeset_tpu:
-        tpu_obj = util.TPU(util.lookup().cfg.nodeset_tpu[ns])
+    lkp = util.lookup()
+    for ns in lkp.cfg.partitions[part].partition_nodeset_tpu:
+        tpu_obj = tpu.TPU.make(ns, lkp)
         if res == 0:
             res = tpu_obj.vmcount
         else:
@@ -57,7 +59,7 @@ if __name__ == "__main__":
             valid = PART_INVALID
             break
         else:
-            if util.part_is_tpu(part):
+            if util.lookup().partition_is_tpu(part):
                 vmcount = get_vmcount_of_tpu_part(part)
                 if vmcount == -1:
                     valid = DIFF_VMCOUNTS_SAME_PART

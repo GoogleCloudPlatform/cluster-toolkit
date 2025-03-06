@@ -69,10 +69,10 @@ No providers.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_pbs_install"></a> [pbs\_install](#module\_pbs\_install) | github.com/GoogleCloudPlatform/hpc-toolkit//community/modules/scripts/pbspro-install | v1.39.0&depth=1 |
-| <a name="module_pbs_qmgr"></a> [pbs\_qmgr](#module\_pbs\_qmgr) | github.com/GoogleCloudPlatform/hpc-toolkit//community/modules/scripts/pbspro-qmgr | v1.39.0&depth=1 |
-| <a name="module_pbs_server"></a> [pbs\_server](#module\_pbs\_server) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/compute/vm-instance | 09ae2725 |
-| <a name="module_server_startup_script"></a> [server\_startup\_script](#module\_server\_startup\_script) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | v1.39.0&depth=1 |
+| <a name="module_pbs_install"></a> [pbs\_install](#module\_pbs\_install) | ../../../../community/modules/scripts/pbspro-install | n/a |
+| <a name="module_pbs_qmgr"></a> [pbs\_qmgr](#module\_pbs\_qmgr) | ../../../../community/modules/scripts/pbspro-qmgr | n/a |
+| <a name="module_pbs_server"></a> [pbs\_server](#module\_pbs\_server) | ../../../../modules/compute/vm-instance | n/a |
+| <a name="module_server_startup_script"></a> [server\_startup\_script](#module\_server\_startup\_script) | ../../../../modules/scripts/startup-script | n/a |
 
 ## Resources
 

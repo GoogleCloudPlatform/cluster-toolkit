@@ -18,6 +18,12 @@ spec:
         gke-gcsfuse/volumes: "true"
     %{~ endif ~}
     spec:
+      %{~ if length(security_context) > 0 ~}
+      securityContext:
+      %{~ for context in security_context ~}
+        ${context.key}: ${context.value}
+      %{~ endfor ~}
+      %{~ endif ~}
       %{~ if k8s_service_account_name != null ~}
       serviceAccountName: ${k8s_service_account_name}
       %{~ endif ~}

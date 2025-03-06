@@ -59,7 +59,7 @@ OR
     source: community/modules/scripts/spack-setup
 
   - id: slurm_controller
-    source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     use: [network1, partition1, spack-setup]
 ```
 
@@ -340,7 +340,7 @@ limitations under the License.
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_startup_script"></a> [startup\_script](#module\_startup\_script) | github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script | v1.39.0&depth=1 |
+| <a name="module_startup_script"></a> [startup\_script](#module\_startup\_script) | ../../../../modules/scripts/startup-script | n/a |
 
 ## Resources
 

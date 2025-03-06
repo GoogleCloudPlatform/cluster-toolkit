@@ -16,7 +16,7 @@
 # BUCKET
 
 locals {
-  synt_suffix       = substr(md5("${var.project_id}${var.deployment_name}"), 0, 5)
+  synt_suffix       = substr(md5("${local.controller_project_id}${var.deployment_name}"), 0, 5)
   synth_bucket_name = "${local.slurm_cluster_name}${local.synt_suffix}"
 
   bucket_name = var.create_bucket ? module.bucket[0].name : var.bucket_name
@@ -24,14 +24,14 @@ locals {
 
 module "bucket" {
   source  = "terraform-google-modules/cloud-storage/google"
-  version = "~> 5.0"
+  version = "~> 6.1"
 
   count = var.create_bucket ? 1 : 0
 
   location   = var.region
   names      = [local.synth_bucket_name]
   prefix     = "slurm"
-  project_id = var.project_id
+  project_id = local.controller_project_id
 
   force_destroy = {
     (local.synth_bucket_name) = true
@@ -104,6 +104,9 @@ locals {
   }
   ghpc_startup_script_controller = length(local.daos_ns) > 0 ? [local.daos_install_mount_script, local.ghpc_startup_controller] : [local.ghpc_startup_controller]
 
+  controller_state_disk = {
+    device_name : try(google_compute_disk.controller_disk[0].name, null)
+  }
   ghpc_startup_login = {
     filename = "ghpc_startup.sh"
     content  = var.login_startup_script
@@ -116,13 +119,14 @@ locals {
   }
   ghpc_startup_script_compute = length(local.daos_ns) > 0 ? [local.daos_install_mount_script, local.ghpc_startup_compute] : [local.ghpc_startup_compute]
 
+  login_startup_scripts   = { for g in var.login_nodes : g.group_name => local.ghpc_startup_script_login }
   nodeset_startup_scripts = { for k, v in local.nodeset_map : k => v.startup_script }
 }
 
 module "daos_network_storage_scripts" {
   count = length(local.daos_ns) > 0 ? 1 : 0
 
-  source          = "github.com/GoogleCloudPlatform/hpc-toolkit//modules/scripts/startup-script?ref=v1.39.0&depth=1"
+  source          = "../../../../modules/scripts/startup-script"
   labels          = local.labels
   project_id      = var.project_id
   deployment_name = var.deployment_name
@@ -133,10 +137,11 @@ module "daos_network_storage_scripts" {
 module "slurm_files" {
   source = "./modules/slurm_files"
 
-  project_id         = var.project_id
-  slurm_cluster_name = local.slurm_cluster_name
-  bucket_dir         = var.bucket_dir
-  bucket_name        = local.bucket_name
+  project_id                    = var.project_id
+  slurm_cluster_name            = local.slurm_cluster_name
+  bucket_dir                    = var.bucket_dir
+  bucket_name                   = local.bucket_name
+  controller_network_attachment = var.controller_network_attachment
 
   slurmdbd_conf_tpl = var.slurmdbd_conf_tpl
   slurm_conf_tpl    = var.slurm_conf_tpl
@@ -151,8 +156,9 @@ module "slurm_files" {
   nodeset_startup_scripts            = local.nodeset_startup_scripts
   compute_startup_scripts            = local.ghpc_startup_script_compute
   compute_startup_scripts_timeout    = var.compute_startup_scripts_timeout
-  login_startup_scripts              = local.ghpc_startup_script_login
+  login_startup_scripts              = local.login_startup_scripts
   login_startup_scripts_timeout      = var.login_startup_scripts_timeout
+  controller_state_disk              = local.controller_state_disk
 
   enable_debug_logging = var.enable_debug_logging
   extra_logging_flags  = var.extra_logging_flags
@@ -161,7 +167,6 @@ module "slurm_files" {
   enable_external_prolog_epilog = var.enable_external_prolog_epilog
   epilog_scripts                = var.epilog_scripts
   prolog_scripts                = var.prolog_scripts
-  enable_slurm_gcp_plugins      = var.enable_slurm_gcp_plugins
 
   disable_default_mounts = !var.enable_default_mounts
   network_storage = [

@@ -74,6 +74,18 @@ variable "requested_cpu_per_pod" {
   default     = -1
 }
 
+variable "allocatable_gpu_per_node" {
+  description = "The allocatable gpu per node. Used to claim whole nodes. Generally populated from gke-node-pool via `use` field."
+  type        = list(number)
+  default     = [-1]
+}
+
+variable "requested_gpu_per_pod" {
+  description = "The requested gpu per pod. If null, allocatable_gpu_per_node will be used to claim whole nodes. If provided will override allocatable_gpu_per_node."
+  type        = number
+  default     = -1
+}
+
 variable "tolerations" {
   description = "Tolerations allow the scheduler to schedule pods with matching taints. Generally populated from gke-node-pool via `use` field."
   type = list(object({
@@ -90,6 +102,15 @@ variable "tolerations" {
       effect   = "NoSchedule"
     }
   ]
+}
+
+variable "security_context" {
+  description = "The security options the container should be run with. More info: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/"
+  type = list(object({
+    key   = string
+    value = string
+  }))
+  default = []
 }
 
 variable "machine_family" {

@@ -36,27 +36,10 @@ duplicates = [
         "modules/compute/vm-instance/startup_from_network_storage.tf",
     ],
     [
-        "modules/compute/vm-instance/gpu_definition.tf",
-        "community/modules/compute/htcondor-execute-point/gpu_definition.tf",
-        "community/modules/compute/schedmd-slurm-gcp-v5-node-group/gpu_definition.tf",
-        "community/modules/scheduler/schedmd-slurm-gcp-v5-login/gpu_definition.tf",
-        "community/modules/scheduler/schedmd-slurm-gcp-v5-controller/gpu_definition.tf",
-        "community/modules/compute/schedmd-slurm-gcp-v6-nodeset/gpu_definition.tf",
-        "community/modules/compute/schedmd-slurm-gcp-v6-nodeset-dynamic/gpu_definition.tf",
-        "community/modules/scheduler/schedmd-slurm-gcp-v6-controller/gpu_definition.tf",
-        "community/modules/scheduler/schedmd-slurm-gcp-v6-login/gpu_definition.tf",
-        "modules/compute/gke-node-pool/gpu_definition.tf",
-    ],
-    [
         "modules/compute/gke-node-pool/threads_per_core_calc.tf",
         "modules/compute/vm-instance/threads_per_core_calc.tf",
     ],
-    [ # Slurm V5
-        "community/modules/compute/schedmd-slurm-gcp-v5-node-group/source_image_logic.tf",
-        "community/modules/scheduler/schedmd-slurm-gcp-v5-controller/source_image_logic.tf",
-        "community/modules/scheduler/schedmd-slurm-gcp-v5-login/source_image_logic.tf",
-    ],
-    [ # Slurm V6
+    [
         "community/modules/scheduler/schedmd-slurm-gcp-v6-controller/source_image_logic.tf",
         "community/modules/scheduler/schedmd-slurm-gcp-v6-login/source_image_logic.tf",
         "community/modules/compute/schedmd-slurm-gcp-v6-nodeset/source_image_logic.tf",
@@ -75,7 +58,6 @@ duplicates = [
         "community/modules/scripts/ramble-setup/scripts/install_ramble_deps.yml",
     ],
     [
-        "community/modules/scheduler/schedmd-slurm-gcp-v5-controller/etc/long-prolog-slurm.conf.tpl",
         "community/modules/scheduler/schedmd-slurm-gcp-v6-controller/etc/long-prolog-slurm.conf.tpl",
     ],
     [
@@ -83,8 +65,8 @@ duplicates = [
         "modules/file-system/pre-existing-network-storage/scripts/install-daos-client.sh",
     ],
     [
-        "modules/file-system/parallelstore/scripts/mount-daos.sh",
-        "modules/file-system/pre-existing-network-storage/scripts/mount-daos.sh",
+        "modules/file-system/parallelstore/templates/mount-daos.sh.tftpl",
+        "modules/file-system/pre-existing-network-storage/templates/mount-daos.sh.tftpl",
     ],
     [
         "modules/compute/vm-instance/compute_image.tf"

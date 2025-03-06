@@ -32,21 +32,21 @@ deployment_groups:
     source: modules/network/vpc
 
   - id: gcs
-    source: ./modules/file-system/pre-existing-network-storage
+    source: modules/file-system/pre-existing-network-storage
     settings:
       remote_mount: hpc-toolkit-service-catalog-solutions
       local_mount: /catalog
       fs_type: gcsfuse
 
   - id: compute-hpc-image
-    source: ./modules/compute/vm-instance
+    source: modules/compute/vm-instance
     use: [network1, gcs]
     settings:
       machine_type: n2-standard-2
       name_prefix: hpc-image
 
   - id: wait
-    source: ./community/modules/scripts/wait-for-startup
+    source: community/modules/scripts/wait-for-startup
     settings:
       instance_name: $(compute-hpc-image.name[0])
       timeout: 25

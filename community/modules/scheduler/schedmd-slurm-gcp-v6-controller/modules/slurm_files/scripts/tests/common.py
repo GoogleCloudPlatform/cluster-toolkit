@@ -15,12 +15,16 @@
 from typing import Optional, Any
 import sys
 from dataclasses import dataclass, field
+from datetime import datetime
 
 SCRIPTS_DIR = "community/modules/scheduler/schedmd-slurm-gcp-v6-controller/modules/slurm_files/scripts"
 if SCRIPTS_DIR not in sys.path:
     sys.path.append(SCRIPTS_DIR)  # TODO: make this more robust
 
+import util
 
+
+SOME_TS = datetime.fromisoformat("2018-09-03T20:56:35.450686+00:00")
 # TODO: use "real" classes once they are defined (instead of NSDict)
 
 @dataclass
@@ -29,20 +33,33 @@ class Placeholder:
 
 @dataclass
 class TstNodeset:
-    nodeset_name: str
+    nodeset_name: str = "cantor"
     node_count_static: int = 0
     node_count_dynamic_max: int = 0
     node_conf: dict[str, Any] = field(default_factory=dict)
     instance_template: Optional[str] = None
+    reservation_name: Optional[str] = ""
+    zone_policy_allow: Optional[list[str]] = field(default_factory=list)
+    enable_placement: bool = True
+    placement_max_distance: Optional[int] = None
+    future_reservation: Optional[str] = ""
+
+@dataclass
+class TstPartition:
+    partition_name: str = "euler"
+    partition_nodeset: list[str] = field(default_factory=list)
+    partition_nodeset_tpu: list[str] = field(default_factory=list)
+    enable_job_exclusive: bool = False
 
 @dataclass
 class TstCfg:
     slurm_cluster_name: str = "m22"
     cloud_parameters: dict[str, Any] = field(default_factory=dict)
 
-    partitions: dict[str, Placeholder] = field(default_factory=dict)
+    partitions: dict[str, TstPartition] = field(default_factory=dict)
     nodeset: dict[str, TstNodeset] = field(default_factory=dict)
     nodeset_tpu: dict[str, TstNodeset] = field(default_factory=dict)
+    nodeset_dyn: dict[str, TstNodeset] = field(default_factory=dict)
     
     install_dir: Optional[str] = None
     output_dir: Optional[str] = None
@@ -68,19 +85,21 @@ class TstMachineConf:
 
 @dataclass
 class TstTemplateInfo:
-    gpu_count: int = 0
+    gpu: Optional[util.AcceleratorInfo]
 
-@dataclass
-class TstInstance:
-    name: str
-    region: str = "gondor"
-    zone: str = "anorien"
-    placementPolicyId: Optional[str] = None
-    physicalHost: Optional[str] = None
-
-    @property
-    def resourceStatus(self):
-        return {"physicalHost": self.physicalHost}
+def tstInstance(name: str, physical_host: Optional[str] = None):
+    return util.Instance(
+        name=name,
+        zone="anorien",
+        status="RUNNING",
+        creation_timestamp=SOME_TS,
+        resource_status=util.InstanceResourceStatus(
+            physical_host=physical_host,
+            upcoming_maintenance=None,
+        ),
+        scheduling=util.NSDict(),
+        role="compute",
+    )
 
 def make_to_hostnames_mock(tbl: Optional[dict[str, list[str]]]):
     tbl = tbl or {}

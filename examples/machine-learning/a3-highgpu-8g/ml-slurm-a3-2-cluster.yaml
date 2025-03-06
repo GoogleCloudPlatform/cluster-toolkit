@@ -52,6 +52,7 @@ vars:
   enable_ops_agent: true
   # enable the NVIDIA DCGM daemon and integration into Cloud Ops Agent
   enable_nvidia_dcgm: true
+  localssd_mountpoint: /mnt/localssd
 
 deployment_groups:
 - group: cluster
@@ -95,7 +96,6 @@ deployment_groups:
       node_count_static: 0
       node_count_dynamic_max: 4
       machine_type: n2-standard-2
-      enable_placement: false
 
   - id: debug_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
@@ -114,8 +114,17 @@ deployment_groups:
       # Failure to do will result in VMs that lose data and do not automatically
       # mount local SSD filesystems
       local_ssd_filesystem:
-        mountpoint: /mnt/localssd
+        mountpoint: $(vars.localssd_mountpoint)
         permissions: "1777" # must quote numeric filesystem permissions!
+      # Docker was successfully installed in the image, this configures it
+      # to use the A3-specific local SSD volumes to store container images
+      docker:
+        enabled: true
+        world_writable: true
+        daemon_config: |
+          {
+            "data-root": "$(vars.localssd_mountpoint)/docker"
+          }
       runners:
       - type: ansible-local
         destination: enable_nvidia_dcgm.yml
@@ -172,13 +181,13 @@ deployment_groups:
     settings:
       reservation_name: $(vars.a3_reservation_name)
       maintenance_interval: $(vars.a3_maintenance_interval)
-      enable_placement: false
       node_count_static: $(vars.a3_static_cluster_size)
       node_count_dynamic_max: 0
       disk_type: pd-ssd
       machine_type: a3-highgpu-8g
       enable_public_ips: false
-      enable_smt: true
+      advanced_machine_features:
+        threads_per_core: null # Use platform default value
       node_conf:
         CoresPerSocket: 52
         ThreadsPerCore: 2

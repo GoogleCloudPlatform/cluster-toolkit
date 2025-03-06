@@ -93,7 +93,7 @@
       ansible.builtin.debug:
         var: remote_ip
 
-    ## Setup firewall for cloud build
+    # Setup firewall for cloud build
     - name: Create firewall rule
       register: fw_result
       changed_when: fw_result.rc == 0
@@ -132,8 +132,11 @@
         groups: [remote_host]
       when: remote_ip | ansible.utils.ipaddr
 
-    - name: Wait for cluster
-      ansible.builtin.wait_for_connection:
+    - name: Wait for host tasks
+      ansible.builtin.include_tasks: tasks/wait-for-host.yml
+      vars:
+        host_ip: "{{ remote_ip }}"
+        ansible_ssh_private_key_file: "/builder/home/.ssh/id_rsa"
 
     ## Cleanup and fail gracefully
     rescue:
@@ -166,6 +169,7 @@
   vars:
     startup_timeout_seconds: 600  # 10 minutes
   gather_facts: false
+  ignore_unreachable: true  # ensure always block will run even if SSH fails
   tasks:
   - name: Remote Test Block
     vars:

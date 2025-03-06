@@ -49,9 +49,6 @@ func defaultAPIList(source string) []string {
 			"compute.googleapis.com",
 			"storage.googleapis.com",
 		},
-		"community/modules/compute/schedmd-slurm-gcp-v5-partition": {
-			"compute.googleapis.com",
-		},
 		"community/modules/database/slurm-cloudsql-federation": {
 			"bigqueryconnection.googleapis.com",
 			"sqladmin.googleapis.com",
@@ -62,19 +59,8 @@ func defaultAPIList(source string) []string {
 			"iam.googleapis.com",
 			"runtimeconfig.googleapis.com",
 		},
-		"community/modules/file-system/Intel-DAOS": {
-			"compute.googleapis.com",
-			"iam.googleapis.com",
-			"secretmanager.googleapis.com",
-		},
 		"community/modules/file-system/nfs-server": {
 			"compute.googleapis.com",
-		},
-		"community/modules/project/new-project": {
-			"admin.googleapis.com",
-			"cloudresourcemanager.googleapis.com",
-			"cloudbilling.googleapis.com",
-			"iam.googleapis.com",
 		},
 		"community/modules/project/service-account": {
 			"iam.googleapis.com",
@@ -125,19 +111,6 @@ func defaultAPIList(source string) []string {
 		"community/modules/scheduler/pbspro-server": {
 			"compute.googleapis.com",
 			"storage.googleapis.com",
-		},
-		"community/modules/scheduler/schedmd-slurm-gcp-v5-controller": {
-			"compute.googleapis.com",
-			"iam.googleapis.com",
-			"pubsub.googleapis.com",
-			"secretmanager.googleapis.com",
-		},
-		"community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid": {
-			"compute.googleapis.com",
-			"pubsub.googleapis.com",
-		},
-		"community/modules/scheduler/schedmd-slurm-gcp-v5-login": {
-			"compute.googleapis.com",
 		},
 		"community/modules/scripts/htcondor-install": {},
 		"community/modules/scripts/omnia-install":    {},

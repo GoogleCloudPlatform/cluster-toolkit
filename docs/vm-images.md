@@ -28,7 +28,7 @@ Please see the [blueprint catalog](https://cloud.google.com/hpc-toolkit/docs/set
 > documentation for any module utilized.
 
 When an Cluster Toolkit blueprint points to a predefined source module (e.g.
-`community/modules/compute/schedmd-slurm-gcp-v5-node-group`), generally the
+`community/modules/compute/schedmd-slurm-gcp-v6-nodeset`), generally the
 module has a default image defined. In order to override this default image, a
 user may specify the `instance_image` setting in the yaml blueprint, within
 either the specific module definition or the global variables. The
@@ -84,7 +84,7 @@ blueprint:
 Users may want to be able to guarantee that an image has not been changed across
 multiple HPC deployments. One way to guarantee that the same image is used,
 would be to either create a custom image
-([Image Building](docs/image-building.md)), or to copy an image to a personal or
+([Image Building](image-building.md)), or to copy an image to a personal or
 team project and reference that.
 
 The following command will copy a specified image from a source project to your
@@ -105,20 +105,9 @@ project and the new image name in the `instance_image` field discussed in
 
 ## Cluster Toolkit Supported Images
 
-### HPC CentOS 7
-
-The Cluster Toolkit has officially supported the [HPC CentOS 7 VM Image][hpcimage]
-as the primary VM image for HPC workloads on Google Cloud since it's release.
-Since the [HPC CentOS 7 VM Image][hpcimage] comes pre-tuned for optimal
-performance on typical HPC workloads, it is the default VM image in our modules,
-unless there is specific requirement for a different OS distribution.
-
-[hpcimage]: https://cloud.google.com/blog/topics/hpc/introducing-hpc-vm-images
-
 ### HPC Rocky Linux 8
 
-HPC Rocky Linux 8 is planned to become the primary supported VM image for HPC
-workloads on Google Cloud from 2024.
+HPC Rocky Linux 8 is the primary supported VM image for HPC workloads on Google Cloud.
 
 ### Debian 11
 
@@ -142,25 +131,23 @@ description of our support for Windows images.
   <th>Deployment Type/Scheduler</th>
   <th>Feature</th>
   <th></th>
-  <th>CentOS 7</th><th>Debian 11</th><th>Rocky Linux 8</th><th>Ubuntu 20.04</th>
+  <th>Debian 11</th><th>Rocky Linux 8</th><th>Ubuntu 20.04</th>
 </tr>
 <tr>
-  <td></td><td></td><td></td><td></td><td></td><td></td><td></td>
+  <td></td><td></td><td></td><td></td><td></td><td></td>
 </tr>
 
 <tr>
   <th rowspan="3">Cloud Batch</th>
   <th>Lustre</th>
   <th></th>
+  <td></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/batch-lustre.yaml">✓</a></td>
-  <td></td>
-  <td></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/batch-lustre.yaml">✓</a></td>
 </tr>
 <tr>
   <th>Shared filestore</th>
   <th></th>
-  <td><a href="../tools/validate_configs/os_compatibility_tests/batch-lustre.yaml">✓</a></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/batch-lustre.yaml">✓</a></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/batch-lustre.yaml">✓</a></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/batch-lustre.yaml">✓</a></td>
@@ -171,30 +158,19 @@ description of our support for Windows images.
   <td><a href="../tools/validate_configs/os_compatibility_tests/batch-startup.yaml">✓</a></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/batch-startup.yaml">✓</a></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/batch-startup.yaml">✓</a></td>
-  <td><a href="../tools/validate_configs/os_compatibility_tests/batch-startup.yaml">✓</a></td>
-</tr>
-
-<tr>
-  <th rowspan="4">Slurm</th>
-  <th>Chrome Remote Desktop</th>
-  <th></th>
-  <td></td>
-  <td><a href="../community/examples/hpc-slurm-chromedesktop-v5-legacy.yaml">✓</a></td>
-  <td></td>
-  <td></td>
 </tr>
 <tr>
   <th>Lustre</th>
   <th></th>
-  <td><a href="../examples/hpc-enterprise-slurm.yaml">✓</a></td>
   <td></td>
-  <td>✓</td>
+  <td></td>
+  <td><a href="../examples/hpc-enterprise-slurm.yaml">✓</a></td>
   <td></td>
 </tr>
 <tr>
   <th>Shared filestore</th>
   <th></th>
-  <td>✓</td>
+  <td></td>
   <td>✓</td>
   <td><a href="../examples/hpc-slurm.yaml">✓</a></td>
   <td><a href="../community/examples/hpc-slurm-ubuntu2004.yaml">✓</a></td>
@@ -202,9 +178,9 @@ description of our support for Windows images.
 <tr>
   <th>Startup script</th>
   <th></th>
+  <td></td>
+  <td>✓</td>
   <td><a href="../community/examples/hpc-slurm-ramble-gromacs.yaml">✓</a></td>
-  <td>✓</td>
-  <td>✓</td>
   <td>✓</td>
 </tr>
 
@@ -212,7 +188,6 @@ description of our support for Windows images.
   <th rowspan="4">VM Instance</th>
   <th>Chrome Remote Desktop</th>
   <th></th>
-  <td></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/vm-crd.yaml">✓</a></td>
   <td></td>
   <td><sup><b>*</b></sup></td>
@@ -220,7 +195,6 @@ description of our support for Windows images.
 <tr>
   <th>Lustre</th>
   <th></th>
-  <td><a href="../tools/validate_configs/os_compatibility_tests/vm-lustre.yaml">✓</a></td>
   <td></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/vm-lustre.yaml">✓</a></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/vm-lustre.yaml">✓</a></td>
@@ -231,12 +205,10 @@ description of our support for Windows images.
   <td><a href="../tools/validate_configs/os_compatibility_tests/vm-filestore.yaml">✓</a></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/vm-filestore.yaml">✓</a></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/vm-filestore.yaml">✓</a></td>
-  <td><a href="../tools/validate_configs/os_compatibility_tests/vm-filestore.yaml">✓</a></td>
 </tr>
 <tr>
   <th>Startup script</th>
   <th></th>
-  <td><a href="../tools/validate_configs/os_compatibility_tests/vm-startup.yaml">✓</a></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/vm-startup.yaml">✓</a></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/vm-startup.yaml">✓</a></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/vm-startup.yaml">✓</a></td>
@@ -245,7 +217,6 @@ description of our support for Windows images.
   <th rowspan="1">HTCondor</th>
   <th></th>
   <th></th>
-  <td>✓</td>
   <td></td>
   <td>✓</td>
   <td></td>
@@ -254,7 +225,6 @@ description of our support for Windows images.
   <th rowspan="1">Omnia</th>
   <th></th>
   <th></th>
-  <td></td>
   <td></td>
   <td>✓</td>
   <td></td>
@@ -284,7 +254,7 @@ Packer modules. For example, images built for version 5.8 are compatible with
 all Terraform modules from 5.8.0 but below 5.9.0. The version of the Slurm
 modules used by your copy of the Toolkit in the local filesystem can be
 inspected by looking for the source line in
-`community/modules/compute/schedmd-slurm-gcp-v5-partition/main.tf`.
+`community/modules/compute/schedmd-slurm-gcp-v6-partition/main.tf`.
 
 The latest GitHub release supports
 [these images][slurm-gcp-published-images].
@@ -304,21 +274,21 @@ and [Image Builder](../examples/README.md#image-builderyaml-core-badge)
 
 These instructions apply to the following modules:
 
-* [schedmd-slurm-gcp-v5-controller]
-* [schedmd-slurm-gcp-v5-login]
-* [schedmd-slurm-gcp-v5-node-group]
+* [schedmd-slurm-gcp-v6-controller]
+* [schedmd-slurm-gcp-v6-login]
+* [schedmd-slurm-gcp-v6-nodeset]
 
-[slurm-gcp]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/v5
-[slurm-gcp-packer]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/v5/packer
+[slurm-gcp]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/master
+[slurm-gcp-packer]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/master/packer
 [slurm-gcp-images]: https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md
 [slurm-gcp-published-images]: https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#published-image-family
 [gcloud-compute-images]: https://cloud.google.com/sdk/gcloud/reference/compute/images/create
 
 [vm-instance]: ../modules/compute/vm-instance
 [hpc-toolkit-packer]: ../modules/packer/custom-image
-[schedmd-slurm-gcp-v5-controller]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-controller
-[schedmd-slurm-gcp-v5-login]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-login
-[schedmd-slurm-gcp-v5-node-group]: ../community/modules/compute/schedmd-slurm-gcp-v5-node-group
+[schedmd-slurm-gcp-v6-controller]: ../community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+[schedmd-slurm-gcp-v6-login]: ../community/modules/scheduler/schedmd-slurm-gcp-v6-login
+[schedmd-slurm-gcp-v6-nodeset]: ../community/modules/compute/schedmd-slurm-gcp-v6-nodeset
 [batch-job]: ../modules/scheduler/batch-job-template
 [batch-login]: ../modules/scheduler/batch-login-node
 [htcondor-setup]: ../community/modules/scheduler/htcondor-setup
@@ -331,7 +301,6 @@ These instructions apply to the following modules:
 [vm-crd.yaml]: ../tools/validate_configs/os_compatibility_tests/vm-crd.yaml
 [vm-filestore.yaml]: ../tools/validate_configs/os_compatibility_tests/vm-filestore.yaml
 [vm-lustre.yaml]: ../tools/validate_configs/os_compatibility_tests/vm-lustre.yaml
-[hpc-slurm-chromedesktop-v5-legacy.yaml]: ../community/examples/hpc-slurm-chromedesktop.yaml
 [slurm-filestore.yaml]: ../tools/validate_configs/os_compatibility_tests/slurm-filestore.yaml
 [batch-startup.yaml]: ../tools/validate_configs/os_compatibility_tests/batch-startup.yaml
 [batch-filestore.yaml]: ../tools/validate_configs/os_compatibility_tests/batch-filestore.yaml

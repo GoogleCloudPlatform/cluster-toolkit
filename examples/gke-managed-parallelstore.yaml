@@ -1,0 +1,171 @@
+# Copyright 2024 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+---
+blueprint_name: gke-managed-parallelstore
+vars:
+  project_id:  ## Set GCP Project ID Here ##
+  deployment_name: gke-storage-managed-ps
+  region: us-central1
+  zone: us-central1-c
+  # Cidr block containing the IP of the machine calling terraform.
+  # The following line must be updated for this example to work.
+  authorized_cidr: <your-ip-address>/32
+  gcp_public_cidrs_access_enabled: false
+
+deployment_groups:
+- group: setup
+  modules:
+  - id: network
+    source: modules/network/vpc
+    settings:
+      subnetwork_name: $(vars.deployment_name)-subnet
+      secondary_ranges_list:
+      - subnetwork_name: $(vars.deployment_name)-subnet
+        ranges:
+        - range_name: pods
+          ip_cidr_range: 10.4.0.0/14
+        - range_name: services
+          ip_cidr_range: 10.0.32.0/20
+
+  # Private Service Access (PSA) requires the compute.networkAdmin role which is
+  # included in the Owner role, but not Editor.
+  # PSA is required for all Parallelstore functionality.
+  # https://cloud.google.com/vpc/docs/configure-private-services-access#permissions
+  - id: private_service_access
+    source: community/modules/network/private-service-access
+    use: [network]
+    settings:
+      prefix_length: 24
+
+- group: primary
+  modules:
+  # allow parallelstore connection
+  - id: parallelstore_firewall_rule
+    source: modules/network/firewall-rules
+    use: [network]
+    settings:
+      ingress_rules:
+      - name: $(vars.deployment_name)-allow-parallelstore-traffic
+        description: Allow parallelstore traffic
+        source_ranges:
+        - $(private_service_access.cidr_range)
+        allow:
+        - protocol: tcp
+
+  - id: node_pool_service_account
+    source: community/modules/project/service-account
+    settings:
+      name: gke-np-sa
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
+      - monitoring.viewer
+      - stackdriver.resourceMetadata.writer
+      - storage.objectViewer
+      - artifactregistry.reader
+
+  - id: workload_service_account
+    source: community/modules/project/service-account
+    settings:
+      name: gke-wl-sa
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
+      - monitoring.viewer
+      - stackdriver.resourceMetadata.writer
+      - storage.objectAdmin
+      - artifactregistry.reader
+
+  - id: gke_cluster
+    source: modules/scheduler/gke-cluster
+    use: [network, workload_service_account]
+    settings:
+      release_channel: RAPID
+      enable_parallelstore_csi: true # enable Parallelstore for the cluster
+      configure_workload_identity_sa: true
+      enable_private_endpoint: false  # Allows for access from authorized public IPs
+      gcp_public_cidrs_access_enabled: $(vars.gcp_public_cidrs_access_enabled)
+      master_authorized_networks:
+      - display_name: deployment-machine
+        cidr_block: $(vars.authorized_cidr)
+      maintenance_exclusions:
+      - name: no-minor-or-node-upgrades-indefinite
+        start_time: "2024-12-01T00:00:00Z"
+        end_time: "2025-12-22T00:00:00Z"
+        exclusion_scope: NO_MINOR_OR_NODE_UPGRADES
+    outputs: [instructions]
+
+  ### Set up storage class and persistent volume claim for Parallelstore ###
+  - id: parallelstore-setup
+    source: modules/file-system/gke-storage
+    use: [gke_cluster, private_service_access]
+    settings:
+      storage_type: Parallelstore
+      access_mode: ReadWriteMany
+      sc_volume_binding_mode: Immediate
+      sc_reclaim_policy: Delete # Use Retain if you want to volume and parallelstore resource will remain after
+      sc_topology_zones: [$(vars.zone)]
+      pvc_count: 1
+      capacity_gb: 12000 # from 12,000 GiB to 100,000 GiB, in multiples of 4,000 GiB
+
+  - id: sample-pool
+    source: modules/compute/gke-node-pool
+    use: [gke_cluster, node_pool_service_account]
+    settings:
+      name: sample-pool
+      zones: [$(vars.zone)]
+      machine_type: n2-standard-16
+      auto_upgrade: true
+
+  # Train a TensorFlow model with Keras and Parallelstore on GKE
+  # Tutorial: https://cloud.google.com/parallelstore/docs/tensorflow-sample
+
+  - id: parallelstore-job
+    source: modules/compute/gke-job-template
+    use:
+    - gke_cluster
+    - parallelstore-setup
+    settings:
+      name: tensorflow
+      image: jupyter/tensorflow-notebook@sha256:173f124f638efe870bb2b535e01a76a80a95217e66ed00751058c51c09d6d85d
+      security_context:  # to make sure the job have enough access to execute the jobs and r/w from parallelstore
+      - key: runAsUser
+        value: 1000
+      - key: runAsGroup
+        value: 100
+      - key: fsGroup
+        value: 100
+      command:
+      - bash
+      - -c
+      - |
+        pip install transformers datasets
+        python - <<EOF
+        from datasets import load_dataset
+        dataset = load_dataset("glue", "cola", cache_dir='/data/parallelstore-pvc-0')
+        dataset = dataset["train"]
+        from transformers import AutoTokenizer
+        import numpy as np
+        tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
+        tokenized_data = tokenizer(dataset["sentence"], return_tensors="np", padding=True)
+        tokenized_data = dict(tokenized_data)
+        labels = np.array(dataset["label"])
+        from transformers import TFAutoModelForSequenceClassification
+        from tensorflow.keras.optimizers import Adam
+        model = TFAutoModelForSequenceClassification.from_pretrained("bert-base-cased")
+        model.compile(optimizer=Adam(3e-5))
+        model.fit(tokenized_data, labels)
+        EOF
+      node_count: 1
+    outputs: [instructions]

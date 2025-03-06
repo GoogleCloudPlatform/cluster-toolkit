@@ -30,7 +30,16 @@ updates:
   target-branch: develop
   ignore:
   - dependency-name: "google.golang.org/api"
-
+  groups:
+  # group all Go minor/patch updates together and individual PRs for major updates
+  # https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/optimizing-pr-creation-version-updates#example-3-individual-pull-requests-for-major-updates-and-grouped-for-minorpatch-updates
+    go-minor-and-patch-updates:
+      applies-to: version-updates
+      patterns:
+      - "*"
+      update-types:
+      - minor
+      - patch
 - package-ecosystem: pip
   directory: /community/front-end/ofe/
   labels:
@@ -45,21 +54,13 @@ updates:
   reviewers:
   - ek-nag
   - mattstreet-nag
-  # Disable version updates, do security updates only
-  # See https://docs.github.com/en/code-security/dependabot/dependabot-security-updates/configuring-dependabot-security-updates#overriding-the-default-behavior-with-a-configuration-file
-  open-pull-requests-limit: 0
-- package-ecosystem: pip
-  directory: /community/modules/scheduler/schedmd-slurm-gcp-v6-controller/modules/slurm_files/scripts/
-  labels:
-  - dependencies
-  - python
-  - release-chore
-  schedule:
-    interval: weekly
-    day: monday
-    time: "03:00"
-    timezone: America/Los_Angeles
-  target-branch: develop
-  # Disable version updates, do security updates only
-  # See https://docs.github.com/en/code-security/dependabot/dependabot-security-updates/configuring-dependabot-security-updates#overriding-the-default-behavior-with-a-configuration-file
-  open-pull-requests-limit: 0
+  groups:
+    # group all OFE minor/patch updates together and individual PRs for major updates
+    # https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/optimizing-pr-creation-version-updates#example-3-individual-pull-requests-for-major-updates-and-grouped-for-minorpatch-updates
+    ofe-minor-and-patch-updates:
+      applies-to: version-updates
+      patterns:
+      - "*"
+      update-types:
+      - minor
+      - patch

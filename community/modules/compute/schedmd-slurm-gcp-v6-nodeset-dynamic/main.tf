@@ -17,7 +17,16 @@ locals {
   labels = merge(var.labels, { ghpc_module = "schedmd-slurm-gcp-v6-nodeset-dynamic", ghpc_role = "compute" })
 }
 
+module "gpu" {
+  source = "../../../../modules/internal/gpu-definition"
+
+  machine_type      = var.machine_type
+  guest_accelerator = var.guest_accelerator
+}
+
 locals {
+  guest_accelerator = module.gpu.guest_accelerator
+
   nodeset_name = substr(replace(var.name, "/[^a-z0-9]/", ""), 0, 14)
   feature      = coalesce(var.feature, local.nodeset_name)
 
@@ -56,7 +65,7 @@ locals {
 }
 
 module "slurm_nodeset_template" {
-  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=6.8.0"
+  source = "../../internal/slurm-gcp/instance_template"
 
   project_id          = var.project_id
   region              = var.region
@@ -75,11 +84,11 @@ module "slurm_nodeset_template" {
   bandwidth_tier = var.bandwidth_tier
   can_ip_forward = var.can_ip_forward
 
-  disable_smt              = !var.enable_smt
-  enable_confidential_vm   = var.enable_confidential_vm
-  enable_oslogin           = var.enable_oslogin
-  enable_shielded_vm       = var.enable_shielded_vm
-  shielded_instance_config = var.shielded_instance_config
+  advanced_machine_features = var.advanced_machine_features
+  enable_confidential_vm    = var.enable_confidential_vm
+  enable_oslogin            = var.enable_oslogin
+  enable_shielded_vm        = var.enable_shielded_vm
+  shielded_instance_config  = var.shielded_instance_config
 
   labels       = local.labels
   machine_type = var.machine_type

@@ -30,13 +30,22 @@ deployment_groups:
   modules:
   # Source is an embedded module, denoted by "modules/*" without ./, ../, /
   # as a prefix. To refer to a local module, prefix with ./, ../ or /
-  # Example - ./modules/network/vpc
   - id: network
     source: modules/network/vpc
 
+  # Private Service Access (PSA) requires the compute.networkAdmin role which is
+  # included in the Owner role, but not Editor.
+  # PSA is a best practice for Filestore instances, but can be optionally
+  # removed by deleting the private_service_access module and any references to
+  # the module by Filestore modules.
+  # https://cloud.google.com/vpc/docs/configure-private-services-access#permissions
+  - id: private_service_access
+    source: community/modules/network/private-service-access
+    use: [network]
+
   - id: homefs
     source: modules/file-system/filestore
-    use: [network]
+    use: [network, private_service_access]
     settings:
       local_mount: /home
 
@@ -46,7 +55,6 @@ deployment_groups:
     settings:
       node_count_dynamic_max: 4
       machine_type: n2-standard-2
-      enable_placement: false # the default is: true
       allow_automatic_updates: false
 
   - id: debug_partition

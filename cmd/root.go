@@ -53,7 +53,7 @@ HPC deployments on the Google Cloud Platform.`,
 				logging.Fatal("cmd.Help function failed: %s", err)
 			}
 		},
-		Version:     "v1.40.0",
+		Version:     "v1.47.0",
 		Annotations: annotation,
 	}
 )
@@ -262,6 +262,6 @@ func checkErr(err error, ctx *config.YamlCtx) {
 		ctx = &config.YamlCtx{}
 	}
 	if err != nil {
-		logging.Fatal(renderError(err, *ctx))
+		logging.Fatal("%s", renderError(err, *ctx))
 	}
 }

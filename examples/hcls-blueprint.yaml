@@ -16,6 +16,10 @@
 
 blueprint_name: hcls-cluster-v6
 
+validators:
+- validator: test_apis_enabled
+  skip: true # skipping this validator, since "service-enablement" will take care of it.
+
 vars:
   project_id:  ## Set GCP Project ID Here ##
   deployment_name: hcls-cluster-v6
@@ -49,6 +53,16 @@ deployment_groups:
   - id: network
     source: modules/network/vpc
 
+  # Private Service Access (PSA) requires the compute.networkAdmin role which is
+  # included in the Owner role, but not Editor.
+  # PSA is a best practice for Filestore instances, but can be optionally
+  # removed by deleting the private_service_access module and any references to
+  # the module by Filestore modules.
+  # https://cloud.google.com/vpc/docs/configure-private-services-access#permissions
+  - id: private_service_access
+    source: community/modules/network/private-service-access
+    use: [network]
+
   ### Resource Monitoring ###
 
   - id: hpc-dash
@@ -58,14 +72,14 @@ deployment_groups:
 
   - id: homefs
     source: modules/file-system/filestore
-    use: [network]
+    use: [network, private_service_access]
     settings:
       filestore_share_name: homeshare
       local_mount: /home
 
   - id: appsfs
     source: modules/file-system/filestore
-    use: [network]
+    use: [network, private_service_access]
     settings:
       filestore_share_name: appsshare
       local_mount: /apps
@@ -315,10 +329,10 @@ deployment_groups:
     use: [network]
     settings:
       name: gpu
-      enable_smt: true
+      advanced_machine_features:
+        threads_per_core: null # Use platform default value
       node_count_dynamic_max: 20
       machine_type: g2-standard-4
-      enable_placement: False
       allow_automatic_updates: false
 
   - id: gpu_partition

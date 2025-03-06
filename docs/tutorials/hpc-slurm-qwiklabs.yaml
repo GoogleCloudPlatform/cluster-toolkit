@@ -30,7 +30,6 @@ deployment_groups:
   modules:
   # Source is an embedded module, denoted by "modules/*" without ./, ../, /
   # as a prefix. To refer to a local module, prefix with ./, ../ or /
-  # Example - ./modules/network/vpc
   - id: network
     source: modules/network/vpc
 
@@ -40,7 +39,6 @@ deployment_groups:
     settings:
       node_count_dynamic_max: 4
       machine_type: n2d-standard-2
-      enable_placement: false # the default is: true
 
   - id: debug_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition

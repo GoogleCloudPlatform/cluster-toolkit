@@ -14,6 +14,29 @@
   * limitations under the License.
   */
 
+locals {
+  kueue_supported_versions  = ["v0.10.1", "v0.10.0", "v0.9.1", "v0.9.0", "v0.8.1"]
+  jobset_supported_versions = ["v0.7.2", "v0.5.2"]
+}
+
+resource "terraform_data" "kueue_validations" {
+  lifecycle {
+    precondition {
+      condition     = !var.kueue.install || contains(local.kueue_supported_versions, var.kueue.version)
+      error_message = "Supported version of Kueue are ${join(", ", local.kueue_supported_versions)}"
+    }
+  }
+}
+
+resource "terraform_data" "jobset_validations" {
+  lifecycle {
+    precondition {
+      condition     = !var.jobset.install || contains(local.jobset_supported_versions, var.jobset.version)
+      error_message = "Supported version of Jobset are ${join(", ", local.jobset_supported_versions)}"
+    }
+  }
+}
+
 variable "project_id" {
   description = "The project ID that hosts the gke cluster."
   type        = string
@@ -37,31 +60,23 @@ variable "apply_manifests" {
   default = []
 }
 
+
 variable "kueue" {
-  description = "Install and configure [Kueue](https://kueue.sigs.k8s.io/docs/overview/) workload scheduler."
+  description = "Install and configure [Kueue](https://kueue.sigs.k8s.io/docs/overview/) workload scheduler. A configuration yaml/template file can be provided with config_path to be applied right after kueue installation. If a template file provided, its variables can be set to config_template_vars."
   type = object({
-    install     = optional(bool, false)
-    version     = optional(string, "v0.8.1")
-    config_path = optional(string, null)
+    install              = optional(bool, false)
+    version              = optional(string, "v0.10.0")
+    config_path          = optional(string, null)
+    config_template_vars = optional(map(any), null)
   })
   default = {}
-
-  validation {
-    condition     = !var.kueue.install || contains(["v0.8.1"], var.kueue.version)
-    error_message = "Supported version of Kueue is v0.8.1"
-  }
 }
 
 variable "jobset" {
   description = "Install [Jobset](https://github.com/kubernetes-sigs/jobset) which manages a group of K8s [jobs](https://kubernetes.io/docs/concepts/workloads/controllers/job/) as a unit."
   type = object({
     install = optional(bool, false)
-    version = optional(string, "v0.5.2")
+    version = optional(string, "v0.7.2")
   })
   default = {}
-
-  validation {
-    condition     = !var.jobset.install || contains(["v0.5.2"], var.jobset.version)
-    error_message = "Supported version of Jobset is v0.5.2"
-  }
 }

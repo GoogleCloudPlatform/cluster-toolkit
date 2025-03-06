@@ -1,0 +1,123 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: h4d-cluster
+
+vars:
+  project_id: ## Set GCP Project ID Here ##
+  deployment_name: h4d-cluster
+  region: us-central1
+  zone: us-central1-a
+  rdma_net_range: 192.168.32.0/24
+  hostname_prefix: $(vars.deployment_name)-odyssey
+
+# Documentation for each of the modules used below can be found at
+# https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
+
+deployment_groups:
+- group: primary
+  modules:
+
+  # Source is an embedded module, denoted by "modules/*" without ./, ../, /
+  # as a prefix. To refer to a local module, prefix with ./, ../ or /
+
+  - id: cluster-net-0
+    source: modules/network/vpc
+
+  - id: cluster-rdma-net-0
+    source: modules/network/vpc
+    settings:
+      network_name: $(vars.deployment_name)-rdma-net-0
+      mtu: 8896
+      network_profile: https://www.googleapis.com/compute/beta/projects/$(vars.project_id)/global/networkProfiles/$(vars.zone)-vpc-falcon
+      network_routing_mode: REGIONAL
+      enable_cloud_router: false
+      enable_cloud_nat: false
+      subnetworks:
+      - subnet_name: $(vars.deployment_name)-rdma-sub-0
+        subnet_region: $(vars.region)
+        subnet_ip: $(vars.rdma_net_range)
+        region: $(vars.region)
+      firewall_rules:
+      - name: $(vars.deployment_name)-rdma-0
+        ranges: [$(vars.rdma_net_range)]
+        allow:
+        - protocol: tcp
+        - protocol: udp
+        - protocol: icmp
+
+  - id: homefs
+    source: modules/file-system/filestore
+    use: [cluster-net-0]
+    settings:
+      local_mount: /home
+    outputs:
+    - network_storage
+
+  - id: h4d_startup
+    source: modules/scripts/startup-script
+    settings:
+      configure_ssh_host_patterns:
+      - $(vars.hostname_prefix)-*
+      install_cloud_rdma_drivers: true
+      set_ofi_cloud_rdma_tunables: true
+      local_ssd_filesystem:
+        fs_type: ext4
+        mountpoint: /mnt/lssd
+        permissions: "1777"
+
+
+  - id: h4d-vms
+    source: modules/compute/vm-instance
+    use: [h4d_startup, homefs]
+    settings:
+      machine_type: h4d-highmem-192-lssd
+      instance_count: 2
+      disk_type: hyperdisk-balanced
+      on_host_maintenance: TERMINATE
+      network_interfaces:
+        $(concat(
+          [{
+            network=null,
+            subnetwork=cluster-net-0.subnetwork_self_link,
+            subnetwork_project=vars.project_id,
+            nic_type="GVNIC",
+            queue_count=null,
+            network_ip=null,
+            stack_type=null,
+            access_config=[{nat_ip=null, public_ptr_domain_name=null, network_tier=null}],
+            ipv6_access_config=[],
+            alias_ip_range=[]
+          },
+          {
+            network=null,
+            subnetwork=cluster-rdma-net-0.subnetwork_self_link,
+            subnetwork_project=vars.project_id,
+            nic_type="IRDMA",
+            queue_count=null,
+            network_ip=null,
+            stack_type=null,
+            access_config=[],
+            ipv6_access_config=[],
+            alias_ip_range=[]
+          }]
+        ))
+
+  - id: wait-for-vms
+    source: community/modules/scripts/wait-for-startup
+    settings:
+      instance_names: $(h4d-vms.name)
+      timeout: 7200

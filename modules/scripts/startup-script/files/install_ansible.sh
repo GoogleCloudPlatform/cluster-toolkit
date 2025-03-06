@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+set -e
 REQ_ANSIBLE_VERSION=2.11
 REQ_ANSIBLE_PIP_VERSION=4.10.0
 REQ_PIP_WHEEL_VERSION=0.37.1
@@ -75,16 +76,28 @@ get_python_minor_version() {
 # newly installed packaged.
 install_python3_yum() {
 	major_version=$(rpm -E "%{rhel}")
-	enable_repo=""
-	if [ "${major_version}" -eq "7" ]; then
-		enable_repo="base,epel"
+	set -- "--disablerepo=*" "--enablerepo=baseos,appstream"
+
+	if grep -qi 'ID="rhel"' /etc/os-release && {
+		[ "${major_version}" -eq "7" ] || [ "${major_version}" -eq "8" ] ||
+			[ "${major_version}" -eq "9" ]
+	}; then
+		# Do not set --disablerepo / --enablerepo on RedHat, due to complex repo names
+		# clear array
+		set --
+	elif [ "${major_version}" -eq "7" ]; then
+		set -- "--disablerepo=*" "--enablerepo=base,epel"
 	elif [ "${major_version}" -eq "8" ]; then
-		enable_repo="baseos"
+		# use defaults
+		true
+	elif [ "${major_version}" -eq "9" ]; then
+		# use defaults
+		true
 	else
 		echo "Unsupported version of centos/RHEL/Rocky"
 		return 1
 	fi
-	yum install --disablerepo="*" --enablerepo="${enable_repo}" -y python3 python3-pip python3-venv
+	yum install "$@" -y python3 python3-pip
 	python_path=$(rpm -ql python3 | grep 'bin/python3$')
 }
 
@@ -114,16 +127,28 @@ install_python3() {
 # newly installed packaged.
 install_pip3_yum() {
 	major_version=$(rpm -E "%{rhel}")
-	enable_repo=""
-	if [ "${major_version}" -eq "7" ]; then
-		enable_repo="base,epel"
+	set -- "--disablerepo=*" "--enablerepo=baseos,appstream"
+
+	if grep -qi 'ID="rhel"' /etc/os-release && {
+		[ "${major_version}" -eq "7" ] || [ "${major_version}" -eq "8" ] ||
+			[ "${major_version}" -eq "9" ]
+	}; then
+		# Do not set --disablerepo / --enablerepo on RedHat, due to complex repo names
+		# clear array
+		set --
+	elif [ "${major_version}" -eq "7" ]; then
+		set -- "--disablerepo=*" "--enablerepo=base,epel"
 	elif [ "${major_version}" -eq "8" ]; then
-		enable_repo="baseos"
+		# use defaults
+		true
+	elif [ "${major_version}" -eq "9" ]; then
+		# use defaults
+		true
 	else
 		echo "Unsupported version of centos/RHEL/Rocky"
 		return 1
 	fi
-	yum install --disablerepo="*" --enablerepo="${enable_repo}" -y python3-pip
+	yum install "$@" -y python3-pip
 }
 
 # Install python3 with the apt package manager. Updates python_path to the
@@ -197,13 +222,13 @@ main() {
 	fi
 
 	# upgrade wheel if necessary
-	wheel_pkg=$(${venv_python_path} -m pip list --format=freeze | grep "^wheel")
+	wheel_pkg=$(${venv_python_path} -m pip list --format=freeze | grep "^wheel" || true)
 	if [ "$wheel_pkg" != "wheel==${REQ_PIP_WHEEL_VERSION}" ]; then
 		${venv_python_path} -m pip install -U wheel==${REQ_PIP_WHEEL_VERSION}
 	fi
 
 	# upgrade setuptools if necessary
-	setuptools_pkg=$(${venv_python_path} -m pip list --format=freeze | grep "^setuptools")
+	setuptools_pkg=$(${venv_python_path} -m pip list --format=freeze | grep "^setuptools" || true)
 	if [ "$setuptools_pkg" != "setuptools==${REQ_PIP_SETUPTOOLS_VERSION}" ]; then
 		${venv_python_path} -m pip install -U setuptools==${REQ_PIP_SETUPTOOLS_VERSION}
 	fi

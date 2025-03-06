@@ -30,7 +30,7 @@ project_id = "invalid-project"
 region = "us-central1"
 
 slurm_image = {
-  family  = "slurm-gcp-6-7-hpc-rocky-linux-8"
+  family  = "slurm-gcp-6-8-hpc-rocky-linux-8"
   project = "schedmd-slurm-public"
 }
 

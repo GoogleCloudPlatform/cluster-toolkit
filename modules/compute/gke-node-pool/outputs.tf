@@ -45,6 +45,16 @@ output "has_gpu" {
   value       = local.has_gpu
 }
 
+output "allocatable_gpu_per_node" {
+  description = "Number of GPUs available for scheduling pods on each node."
+  value       = local.allocatable_gpu_per_node
+}
+
+output "static_gpu_count" {
+  description = "Total number of GPUs in the node pool. Available only for static node pools."
+  value       = local.static_gpu_count
+}
+
 locals {
   translate_toleration = {
     PREFER_NO_SCHEDULE = "PreferNoSchedule"
@@ -71,21 +81,27 @@ locals {
     a3-highgpu-8g = "enable-tcpx-in-workload.py",
     a3-megagpu-8g = "enable-tcpxo-in-workload.py"
   }
+  nccl_path              = var.machine_type == "a3-highgpu-8g" ? "configs" : "scripts"
   gpu_direct_instruction = <<-EOT
     Since you are using ${var.machine_type} machine type that has GPUDirect support, your nodepool had been configured with the required plugins.
-    To fully utilize GPUDirect you will need to add the some components into your workload manifest. Details below:
+    To fully utilize GPUDirect you will need to add some components into your workload manifest. Details below:
 
-    A sample GKE job that had GPUDirect enabled and NCCL test included has been generated locally at:
+    A sample GKE job that has GPUDirect enabled and NCCL test included has been generated locally at:
       ${abspath(local.gpu_direct_setting.updated_workload_path)}
 
     You can use the following commands to submit the sample job:
       kubectl create -f ${abspath(local.gpu_direct_setting.updated_workload_path)}
+    After submitting the sample job, you can validate the GPU performance by initiating NCCL test included in the sample workload:
+      NCCL test can be initiated from any one of the sample job Pods and coordinate with the peer Pods:
+      export POD_NAME=$(kubectl get pods -l job-name=my-sample-job -o go-template='{{range .items}}{{.metadata.name}}{{"\n"}}{{end}}' | head -n 1)
+      export PEER_POD_IPS=$(kubectl get pods -l job-name=my-sample-job -o go-template='{{range .items}}{{.status.podIP}}{{" "}}{{end}}')
+      kubectl exec --stdin --tty --container=nccl-test $POD_NAME -- /${local.nccl_path}/allgather.sh $PEER_POD_IPS
 
     If you would like to enable GPUDirect for your own workload, please follow the below steps:
       export WORKLOAD_PATH=<>
       python3 ${abspath("${path.module}/gpu-direct-workload/scripts/${lookup(local.script_path, var.machine_type, "")}")} --file $WORKLOAD_PATH --rxdm ${local.gpu_direct_setting.rxdm_version}
     **WARNING**
-    The "--rxdm" version is tide to the nccl-tcpx/o-installer that had been deployed to your cluster, changing it to other value might have impact on performance
+    The "--rxdm" version is tied to the nccl-tcpx/o-installer that had been deployed to your cluster, changing it to other value might have impact on performance
     **WARNING**
 
     Or you can also follow our GPUDirect user guide to update your workload

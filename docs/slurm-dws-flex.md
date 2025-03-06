@@ -13,25 +13,19 @@ With Dynamic Workload Scheduler in Flex Start mode, you submit a GPU capacity re
 > The project needs to be allowlisted for private preview access.
 > Fill out the [form](https://docs.google.com/forms/d/1etaaXMW9jJUTTxfUC7TIIMttLWT5H-3Q8_3-sG6vwKk/edit).
 
-In order to make use of DWS Flex Start mode with SlurmGCP, you must specify a proper set of `instance_properties` in the `schedmd-slurm-gcp-v6-nodeset` module. See the example below:
+In order to make use of DWS Flex Start mode with SlurmGCP, you must use the `dws_flex` variable in the `schedmd-slurm-gcp-v6-nodeset` module. From there you can specify the desired maximum duration (in seconds) with `max_run_duration`. You can also use `use_job_duration` which will utilize the job's `TimeLimit` within Slurm as the duration. If `use_job_duration` is enabled but `TimeLimit` is not set, it will default to `max_run_duration`. See the example below:
 
 ```yaml
   - id: flex_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [network]
     settings:
-      instance_properties:
-        reservationAffinity:
-          consumeReservationType: NO_RESERVATION
-        scheduling:
-          maxRunDuration: { seconds: $(2 * 60 * 60) } # 2 hours
-          onHostMaintenance: TERMINATE
-          instanceTerminationAction: DELETE
+      dws_flex:
+        max_run_duration: 3600 # 1 hour
+      enable_placement: false
       # the rest of the settings, e.g. node_count_static, machine_type, additional_disks, etc.
 ```
 
-**All** fields in `instance_properties` should match provided values, except for `maxRunDuration`, which should be set to the desired duration in seconds (up to 604800 = 7 days).
-
 > [!WARNING]
-> The use of the `instance_properties` setting directly overrides bulkInsert API parameters. While the documented sample
-> was tested at the time of publication, it is not regression tested and may cease to work based on changes in the bulkInsert API.
+> DWS Flex Start cannot be used in tandem with a reservation or placement policy.
+> While this feature was tested at the time of publication, it is not regression tested and may cease to work based on changes in the bulkInsert API.

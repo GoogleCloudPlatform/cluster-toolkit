@@ -18,11 +18,6 @@ output "partitions" {
   value = [local.partition]
 
   precondition {
-    condition     = (length(local.non_static_ns_with_placement) == 0) || var.exclusive
-    error_message = "If any non-static nodesets has `enable_placement`, `var.exclusive` must be set true"
-  }
-
-  precondition {
     condition     = (length(local.use_static) == 0) || !var.exclusive
     error_message = <<-EOD
     Can't use static nodes within partition with `var.exclusive` set to `true`.
@@ -36,6 +31,11 @@ output "partitions" {
     # turn off "power management" at nodeset level (can only do it at partition or node level).
     condition     = sum([for b in [local.has_node, local.has_dyn, local.has_tpu] : b ? 1 : 0]) == 1
     error_message = "Partition must contain exactly one type of nodeset."
+  }
+
+  precondition {
+    condition     = !local.uses_job_duration || var.exclusive
+    error_message = "`use_job_duration` can only be used in exclusive partitions"
   }
 }
 

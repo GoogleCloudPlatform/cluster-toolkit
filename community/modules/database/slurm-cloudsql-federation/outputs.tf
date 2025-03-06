@@ -18,7 +18,7 @@ output "cloudsql" {
   description = "Describes the cloudsql instance."
   sensitive   = true
   value = {
-    server_ip                = google_sql_database_instance.instance.ip_address[0].ip_address
+    server_ip                = var.use_psc_connection ? google_compute_address.psc[0].address : google_sql_database_instance.instance.ip_address[0].ip_address
     user                     = google_sql_user.users.name
     password                 = google_sql_user.users.password
     db_name                  = google_sql_database.database.name

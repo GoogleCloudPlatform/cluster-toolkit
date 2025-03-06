@@ -16,7 +16,7 @@
 
 test_name: ml-slurm-v6
 deployment_name: ml-slurm-v6-{{ build }}
-network: "{{ test_name }}-net"
+network: "{{ deployment_name }}-net"
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/examples/ml-slurm.yaml"
 packer_group_name: packer

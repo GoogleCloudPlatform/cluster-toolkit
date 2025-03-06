@@ -1,0 +1,9 @@
+pytest
+pytest-mock
+pytest_unordered
+mock
+
+types-mock
+types-httplib2
+types-requests
+types-PyYAML

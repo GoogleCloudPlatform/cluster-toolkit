@@ -15,7 +15,7 @@
 ---
 
 test_name: htc-slurm-v6
-deployment_name: htcv6{{ build }}
+deployment_name: htc-v6-{{ build }}
 slurm_cluster_name: "htcv6{{ build[0:5] }}"
 zone: us-west4-c
 
@@ -26,7 +26,7 @@ cli_deployment_vars:
 
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/community/examples/htc-slurm.yaml"
-network: "{{ test_name }}-net"
+network: "{{ deployment_name }}-net"
 # Note: Pattern matching in gcloud only supports 1 wildcard, a*-login-* won't work.
 login_node: "{{ slurm_cluster_name }}-slurm-login-*"
 controller_node: "{{ slurm_cluster_name }}-controller"

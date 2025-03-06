@@ -58,12 +58,20 @@ variable "slurm_cluster_name" {
   }
 }
 
-variable "enable_slurm_gcp_plugins" {
+variable "controller_state_disk" {
   description = <<EOD
-Enables calling hooks in scripts/slurm_gcp_plugins during cluster resume and suspend.
-EOD
-  type        = any
-  default     = false
+  A disk that will be attached to the controller instance template to save state of slurm. The disk is created and used by default.
+  To disable this feature, set this variable to null.
+  
+  NOTE: This will not save the contents at /opt/apps and /home. To preserve those, they must be saved externally.
+  EOD
+  type = object({
+    device_name = string
+  })
+
+  default = {
+    device_name = null
+  }
 }
 
 variable "enable_bigquery_load" {
@@ -98,15 +106,6 @@ variable "cloudsql_secret" {
   description = "Secret URI to cloudsql secret."
   type        = string
   default     = null
-}
-
-variable "login_startup_scripts" {
-  description = "List of scripts to be ran on login VM startup."
-  type = list(object({
-    filename = string
-    content  = string
-  }))
-  default = []
 }
 
 variable "login_startup_scripts_timeout" {
@@ -149,6 +148,15 @@ variable "compute_startup_scripts" {
     content  = string
   }))
   default = []
+}
+
+variable "login_startup_scripts" {
+  description = "List of scripts to be ran on login VM startup in the specific group."
+  type = map(list(object({
+    filename = string
+    content  = string
+  })))
+  default = {}
 }
 
 variable "nodeset_startup_scripts" {
@@ -232,13 +240,8 @@ EOD
 variable "disable_default_mounts" {
   description = <<-EOD
     Disable default global network storage from the controller
-    - /usr/local/etc/slurm
-    - /etc/munge
     - /home
     - /apps
-    If these are disabled, the slurm etc and munge dirs must be added manually,
-    or some other mechanism must be used to synchronize the slurm conf files
-    and the munge key across the cluster.
     EOD
   type        = bool
   default     = false
@@ -316,16 +319,19 @@ variable "partitions" {
 variable "cloud_parameters" {
   description = "cloud.conf options. Default behavior defined in scripts/conf.py"
   type = object({
-    no_comma_params = optional(bool)
-    resume_rate     = optional(number)
-    resume_timeout  = optional(number)
-    suspend_rate    = optional(number)
-    suspend_timeout = optional(number)
-    topology_plugin = optional(string)
-    topology_param  = optional(string)
-    tree_width      = optional(number)
+    no_comma_params      = optional(bool, false)
+    private_data         = optional(list(string))
+    scheduler_parameters = optional(list(string))
+    resume_rate          = optional(number)
+    resume_timeout       = optional(number)
+    suspend_rate         = optional(number)
+    suspend_timeout      = optional(number)
+    topology_plugin      = optional(string)
+    topology_param       = optional(string)
+    tree_width           = optional(number)
   })
-  default = {}
+  default  = {}
+  nullable = false
 }
 
 ##########
@@ -423,13 +429,9 @@ EOD
   default     = null
 }
 
-variable "munge_mount" {
+variable "slurm_key_mount" {
   description = <<-EOD
-  Remote munge mount for compute and login nodes to acquire the munge.key.
-
-  By default, the munge mount server will be assumed to be the
-  `var.slurm_control_host` (or `var.slurm_control_addr` if non-null) when
-  `server_ip=null`.
+  Remote mount for compute and login nodes to acquire the slurm.key.
   EOD
   type = object({
     server_ip     = string
@@ -437,12 +439,7 @@ variable "munge_mount" {
     fs_type       = string
     mount_options = string
   })
-  default = {
-    server_ip     = null
-    remote_mount  = "/etc/munge/"
-    fs_type       = "nfs"
-    mount_options = ""
-  }
+  default = null
 }
 
 variable "endpoint_versions" {
@@ -453,4 +450,10 @@ variable "endpoint_versions" {
   default = {
     compute = null
   }
+}
+
+variable "controller_network_attachment" {
+  description = "SelfLink for NetworkAttachment to be attached to the controller, if any."
+  type        = string
+  default     = null
 }

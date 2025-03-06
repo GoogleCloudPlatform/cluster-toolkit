@@ -91,7 +91,7 @@ func printAdvancedInstructionsMessage(deplDir string) {
 	logging.Info("Find instructions for cleanly destroying infrastructure and advanced manual")
 	logging.Info("deployment instructions at:")
 	logging.Info("")
-	logging.Info(modulewriter.InstructionsPath(deplDir))
+	logging.Info("%s", modulewriter.InstructionsPath(deplDir))
 }
 
 // TODO: move to expand.go
@@ -125,6 +125,7 @@ func expandOrDie(path string) (config.Blueprint, *config.YamlCtx) {
 	// Expand the blueprint
 	checkErr(bp.Expand(), ctx)
 	validateMaybeDie(bp, *ctx)
+
 	return bp, ctx
 }
 
@@ -134,7 +135,7 @@ func validateMaybeDie(bp config.Blueprint, ctx config.YamlCtx) {
 	if err == nil {
 		return
 	}
-	logging.Error(renderError(err, ctx))
+	logging.Error("%s", renderError(err, ctx))
 
 	logging.Error("One or more blueprint validators has failed. See messages above for suggested")
 	logging.Error("actions. General troubleshooting guidance and instructions for configuring")
@@ -151,12 +152,12 @@ func validateMaybeDie(bp config.Blueprint, ctx config.YamlCtx) {
 	switch bp.ValidationLevel {
 	case config.ValidationWarning:
 		{
-			logging.Error(boldYellow("Validation failures were treated as a warning, continuing to create blueprint."))
+			logging.Error("%s", boldYellow("Validation failures were treated as a warning, continuing to create blueprint."))
 			logging.Error("")
 		}
 	case config.ValidationError:
 		{
-			logging.Fatal(boldRed("validation failed due to the issues listed above"))
+			logging.Fatal("%s", boldRed("validation failed due to the issues listed above"))
 		}
 	}
 

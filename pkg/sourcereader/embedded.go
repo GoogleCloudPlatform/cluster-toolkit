@@ -20,6 +20,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 )
 
 // ModuleFS contains embedded modules (./modules) for use in building
@@ -51,6 +52,31 @@ func copyFileOut(bfs BaseFS, src string, dst string) error {
 		return fmt.Errorf("failed to write %#v: %v", dst, err)
 	}
 	return nil
+}
+
+func LocalModuleIsEmbedded(source string) bool {
+	if ModuleFS == nil {
+		return false
+	}
+
+	if !IsLocalPath(source) {
+		return false
+	}
+
+	pathBits := strings.SplitN(filepath.Clean(source), string(os.PathSeparator), 5)
+	lengthPath := len(pathBits)
+	if lengthPath < 3 {
+		return false
+	}
+
+	for i := 3; i <= lengthPath; i++ {
+		lastBits := filepath.Join(pathBits[lengthPath-i:]...)
+		_, err := ModuleFS.ReadDir(lastBits)
+		if err == nil {
+			return true
+		}
+	}
+	return false
 }
 
 // copyDir copies an FS directory to a local path

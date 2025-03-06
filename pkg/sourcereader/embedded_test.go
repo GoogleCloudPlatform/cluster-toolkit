@@ -98,6 +98,28 @@ func (s *embeddedSuite) TestGetModule_Embedded(c *C) {
 	c.Assert(err, ErrorMatches, "source is not valid: .*")
 }
 
+func (s *embeddedSuite) TestLocalModuleIsEmbedded(c *C) {
+	{ // Invalid: Cannot use embedded modules locally
+		found := LocalModuleIsEmbedded("./modules/network/vpc")
+		c.Check(found, Equals, true)
+	}
+
+	{ // Invalid: Cannot use embedded modules locally
+		found := LocalModuleIsEmbedded("../hpc-toolkit/modules/compute/../network/vpc")
+		c.Check(found, Equals, true)
+	}
+
+	{ // Valid: use non-embedded modules locally
+		found := LocalModuleIsEmbedded("../hpc-toolkit/modules/compute/../foo/bar")
+		c.Check(found, Equals, false)
+	}
+
+	{ // Invalid: must be a local path
+		found := LocalModuleIsEmbedded("modules/network/vpc")
+		c.Check(found, Equals, false)
+	}
+}
+
 func (s *embeddedSuite) TestGetModule_NilFs(c *C) {
 	ModuleFS = nil
 	c.Assert(s.r.GetModule("here", "there"), NotNil)

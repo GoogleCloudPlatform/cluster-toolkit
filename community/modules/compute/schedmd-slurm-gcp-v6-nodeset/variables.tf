@@ -88,7 +88,7 @@ variable "instance_image" {
     EOD
   type        = map(string)
   default = {
-    family  = "slurm-gcp-6-7-hpc-rocky-linux-8"
+    family  = "slurm-gcp-6-8-hpc-rocky-linux-8"
     project = "schedmd-slurm-public"
   }
 
@@ -161,7 +161,7 @@ variable "disk_labels" {
 }
 
 variable "additional_disks" {
-  description = "Configurations of additional disks to be included on the partition nodes. (do not use \"disk_type: local-ssd\"; known issue being addressed)"
+  description = "Configurations of additional disks to be included on the partition nodes."
   type = list(object({
     disk_name    = string
     device_name  = string
@@ -227,10 +227,29 @@ variable "can_ip_forward" {
   default     = false
 }
 
-variable "enable_smt" {
+variable "advanced_machine_features" {
+  description = "See https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_instance_template#nested_advanced_machine_features"
+  type = object({
+    enable_nested_virtualization = optional(bool)
+    threads_per_core             = optional(number)
+    turbo_mode                   = optional(string)
+    visible_core_count           = optional(number)
+    performance_monitoring_unit  = optional(string)
+    enable_uefi_networking       = optional(bool)
+  })
+  default = {
+    threads_per_core = 1 # disable SMT by default
+  }
+}
+
+variable "enable_smt" { # tflint-ignore: terraform_unused_declarations
   type        = bool
-  description = "Enables Simultaneous Multi-Threading (SMT) on instance."
-  default     = false
+  description = "DEPRECATED: Use `advanced_machine_features.threads_per_core` instead."
+  default     = null
+  validation {
+    condition     = var.enable_smt == null
+    error_message = "DEPRECATED: Use `advanced_machine_features.threads_per_core` instead."
+  }
 }
 
 variable "labels" {
@@ -356,7 +375,16 @@ variable "disable_public_ips" { # tflint-ignore: terraform_unused_declarations
 
 
 variable "enable_placement" {
-  description = "Enable placement groups."
+  description = <<-EOD
+  Use placement policy for VMs in this nodeset.
+  See: https://cloud.google.com/compute/docs/instances/placement-policies-overview
+  To set max_distance of used policy, use `placement_max_distance` variable.
+
+  Enabled by default, reasons for users to disable it:
+  - If non-dense reservation is used, user can avoid extra-cost of creating placement policies;
+  - If user wants to avoid "all or nothing" VM provisioning behaviour;
+  - If user wants to intentionally have "spread" VMs (e.g. for reliability reasons)
+  EOD
   type        = bool
   default     = true
 }
@@ -414,24 +442,24 @@ variable "additional_networks" {
   description = "Additional network interface details for GCE, if any."
   default     = []
   type = list(object({
-    network            = string
+    network            = optional(string)
     subnetwork         = string
-    subnetwork_project = string
-    network_ip         = string
-    nic_type           = string
-    stack_type         = string
-    queue_count        = number
-    access_config = list(object({
+    subnetwork_project = optional(string)
+    network_ip         = optional(string, "")
+    nic_type           = optional(string)
+    stack_type         = optional(string)
+    queue_count        = optional(number)
+    access_config = optional(list(object({
       nat_ip       = string
       network_tier = string
-    }))
-    ipv6_access_config = list(object({
+    })), [])
+    ipv6_access_config = optional(list(object({
       network_tier = string
-    }))
-    alias_ip_range = list(object({
+    })), [])
+    alias_ip_range = optional(list(object({
       ip_cidr_range         = string
       subnetwork_range_name = string
-    }))
+    })), [])
   }))
 }
 
@@ -447,8 +475,8 @@ variable "access_config" {
 variable "reservation_name" {
   description = <<-EOD
     Name of the reservation to use for VM resources, should be in one of the following formats:
-    - projects/PROJECT_ID/reservations/RESERVATION_NAME
-    - RESERVATION_NAME
+    - projects/PROJECT_ID/reservations/RESERVATION_NAME[/SUFF/IX]
+    - RESERVATION_NAME[/SUFF/IX]
 
     Must be a "SPECIFIC" reservation
     Set to empty string if using no reservation or automatically-consumed reservations
@@ -458,8 +486,23 @@ variable "reservation_name" {
   nullable    = false
 
   validation {
-    condition     = var.reservation_name == "" || length(regexall("^projects/[a-z0-9-]+/reservations/[a-z0-9-]+$", var.reservation_name)) > 0 || length(regexall("^[a-z0-9-]+$", var.reservation_name)) > 0
-    error_message = "Reservation name must be in the format 'projects/PROJECT_ID/reservations/RESERVATION_NAME' or 'RESERVATION_NAME'."
+    condition     = length(regexall("^((projects/([a-z0-9-]+)/reservations/)?([a-z0-9-]+)(/[a-z0-9-]+/[a-z0-9-]+)?)?$", var.reservation_name)) > 0
+    error_message = "Reservation name must be either empty or in the format '[projects/PROJECT_ID/reservations/]RESERVATION_NAME[/SUFF/IX]', [...] are optional parts."
+  }
+}
+
+variable "future_reservation" {
+  description = <<-EOD
+  If set, will make use of the future reservation for the nodeset. Input can be either the future reservation name or its selfLink in the format 'projects/PROJECT_ID/zones/ZONE/futureReservations/FUTURE_RESERVATION_NAME'.
+  See https://cloud.google.com/compute/docs/instances/future-reservations-overview
+  EOD
+  type        = string
+  default     = ""
+  nullable    = false
+
+  validation {
+    condition     = length(regexall("^(projects/([a-z0-9-]+)/zones/([a-z0-9-]+)/futureReservations/([a-z0-9-]+))?$", var.future_reservation)) > 0 || length(regexall("^([a-z0-9-]+)$", var.future_reservation)) > 0
+    error_message = "Future reservation must be either the future reservation name or its selfLink in the format 'projects/PROJECT_ID/zone/ZONE/futureReservations/FUTURE_RESERVATION_NAME'."
   }
 }
 
@@ -511,4 +554,54 @@ variable "enable_maintenance_reservation" {
   type        = bool
   description = "Enables slurm reservation for scheduled maintenance."
   default     = false
+}
+
+
+variable "enable_opportunistic_maintenance" {
+  type        = bool
+  description = "On receiving maintenance notification, maintenance will be performed as soon as nodes becomes idle."
+  default     = false
+}
+
+
+variable "dws_flex" {
+  description = <<-EOD
+  If set and `enabled = true`, will utilize the DWS Flex Start to provision nodes.
+  See: https://cloud.google.com/blog/products/compute/introducing-dynamic-workload-scheduler
+  Options:
+  - enable: Enable DWS Flex Start
+  - max_run_duration: Maximum duration in seconds for the job to run, should not exceed 604,800 (one week).
+  - use_job_duration: Use the job duration to determine the max_run_duration, if job duration is not set, max_run_duration will be used.
+
+ Limitations:
+  - CAN NOT be used with reservations;
+  - CAN NOT be used with placement groups;
+  - If `use_job_duration` is enabled nodeset can be used in "exclusive" partitions only
+
+ EOD
+
+  type = object({
+    enabled          = optional(bool, true)
+    max_run_duration = optional(number, 604800) # one week
+    use_job_duration = optional(bool, false)
+  })
+  default = {
+    enabled = false
+  }
+  validation {
+    condition     = var.dws_flex.max_run_duration >= 30 && var.dws_flex.max_run_duration <= 604800
+    error_message = "Max duration must be more than 30 seconds, and cannot be more than one week."
+  }
+}
+
+variable "placement_max_distance" {
+  type        = number
+  description = "Maximum distance between nodes in the placement group. Requires enable_placement to be true. Values must be supported by the chosen machine type."
+  nullable    = true
+  default     = null
+
+  validation {
+    condition     = coalesce(var.placement_max_distance, 1) >= 1 && coalesce(var.placement_max_distance, 3) <= 3
+    error_message = "Invalid value for placement_max_distance. Valid values are null, 1, 2, or 3."
+  }
 }

@@ -80,6 +80,12 @@ repos:
     language: system
     types: [python]
     pass_filenames: false
+  - id: mypy-check
+    name: mypy-check
+    entry: mypy community/modules/scheduler/schedmd-slurm-gcp-v6-controller/modules/slurm_files/scripts --check-untyped-defs
+    language: system
+    types: [python]
+    pass_filenames: false
 
 - repo: https://github.com/dnephin/pre-commit-golang
   rev: v0.5.1
@@ -123,8 +129,9 @@ repos:
   hooks:
   - id: script-must-have-extension
   - id: shellcheck
+    exclude: ".*unlinted"
   - id: shfmt
-    exclude: ".*tpl"
+    exclude: ".*tpl|.*unlinted"
 - repo: https://github.com/pre-commit/pre-commit-hooks
   rev: v4.5.0
   hooks:
@@ -133,5 +140,5 @@ repos:
   rev: v2.2.6
   hooks:
   - id: codespell
-    exclude: requirements.txt$|/js/|go.sum$
+    exclude: requirements.txt$|/js/|go.sum$|cluster-toolkit-writers.json$
 exclude: tools/validate_configs/golden_copies/.*
