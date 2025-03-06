@@ -107,13 +107,3 @@ variable "zone" {
   type        = string
   default     = null
 }
-
-#########
-# SLURM #
-#########
-
-variable "replace_trigger" {
-  description = "Trigger value to replace the instances."
-  type        = string
-  default     = ""
-}
