@@ -62,7 +62,7 @@ locals {
     controller_startup_scripts_timeout = var.enable_hybrid ? null : var.controller_startup_scripts_timeout
     compute_startup_scripts_timeout    = var.compute_startup_scripts_timeout
     login_startup_scripts_timeout      = var.enable_hybrid ? null : var.login_startup_scripts_timeout
-    munge_mount                        = local.munge_mount
+    slurm_key_mount                    = var.slurm_key_mount
 
     # slurm conf
     prolog_scripts   = [for k, v in google_storage_bucket_object.prolog_scripts : k]
@@ -70,15 +70,17 @@ locals {
     cloud_parameters = var.cloud_parameters
 
     # hybrid
-    hybrid                  = var.enable_hybrid
-    google_app_cred_path    = var.enable_hybrid ? local.google_app_cred_path : null
-    output_dir              = var.enable_hybrid ? local.output_dir : null
-    install_dir             = var.enable_hybrid ? local.install_dir : null
-    slurm_control_host      = var.enable_hybrid ? var.slurm_control_host : null
-    slurm_control_host_port = var.enable_hybrid ? local.slurm_control_host_port : null
-    slurm_control_addr      = var.enable_hybrid ? var.slurm_control_addr : null
-    slurm_bin_dir           = var.enable_hybrid ? local.slurm_bin_dir : null
-    slurm_log_dir           = var.enable_hybrid ? local.slurm_log_dir : null
+    hybrid                        = var.enable_hybrid
+    google_app_cred_path          = var.enable_hybrid ? local.google_app_cred_path : null
+    output_dir                    = var.enable_hybrid ? local.output_dir : null
+    install_dir                   = var.enable_hybrid ? local.install_dir : null
+    slurm_control_host            = var.enable_hybrid ? var.slurm_control_host : null
+    slurm_control_host_port       = var.enable_hybrid ? local.slurm_control_host_port : null
+    slurm_control_addr            = var.enable_hybrid ? var.slurm_control_addr : null
+    slurm_bin_dir                 = var.enable_hybrid ? local.slurm_bin_dir : null
+    slurm_log_dir                 = var.enable_hybrid ? local.slurm_log_dir : null
+    controller_network_attachment = var.controller_network_attachment
+
 
     # config files templates
     slurmdbd_conf_tpl = file(coalesce(var.slurmdbd_conf_tpl, "${local.etc_dir}/slurmdbd.conf.tpl"))
@@ -126,13 +128,6 @@ locals {
   google_app_cred_path = var.google_app_cred_path != null ? abspath(var.google_app_cred_path) : null
   slurm_bin_dir        = var.slurm_bin_dir != null ? abspath(var.slurm_bin_dir) : null
   slurm_log_dir        = var.slurm_log_dir != null ? abspath(var.slurm_log_dir) : null
-
-  munge_mount = var.enable_hybrid ? {
-    server_ip     = lookup(var.munge_mount, "server_ip", coalesce(var.slurm_control_addr, var.slurm_control_host))
-    remote_mount  = lookup(var.munge_mount, "remote_mount", "/etc/munge/")
-    fs_type       = lookup(var.munge_mount, "fs_type", "nfs")
-    mount_options = lookup(var.munge_mount, "mount_options", "")
-  } : null
 
   output_dir  = can(coalesce(var.output_dir)) ? abspath(var.output_dir) : abspath(".")
   install_dir = can(coalesce(var.install_dir)) ? abspath(var.install_dir) : local.output_dir
