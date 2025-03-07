@@ -71,8 +71,8 @@ gcluster deploy -d a4high-slurm-deployment.yaml a4high-slurm-blueprint.yaml
 ### Create/modify the deployment file with your preferred configuration
 
 For example, set the such as size, reservation to be used, etc, as well as the
-name of the bucket that you just created. Below are example contents for
-`a4high-slurm-deployment.yaml`.
+name of the terraform state bucket from the "Shared Instructions" above. Below
+are example contents for `a4high-vm-deployment.yaml`.
 
 ```yaml
 ---
