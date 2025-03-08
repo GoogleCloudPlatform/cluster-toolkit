@@ -227,7 +227,7 @@ def _find_tpu_node_action(nodename, state) -> NodeAction:
         return NodeActionUnknown(slurm_state=state, instance_state=inst.status)
 
     return NodeActionUnchanged()
-
+# loloololo
 def get_node_action(nodename: str) -> NodeAction:
     """Determine node/instance status that requires action"""
     state = lookup().node_state(nodename)
