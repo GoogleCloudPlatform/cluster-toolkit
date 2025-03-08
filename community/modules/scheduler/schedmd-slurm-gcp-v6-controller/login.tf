@@ -72,7 +72,4 @@ module "slurm_login_instance" {
   static_ips          = each.value.static_ips
   subnetwork          = each.value.subnetwork
   zone                = each.value.zone
-
-  # trigger replacement of login nodes when the controller instance is replaced
-  replace_trigger = google_compute_instance_from_template.controller.self_link
 }
