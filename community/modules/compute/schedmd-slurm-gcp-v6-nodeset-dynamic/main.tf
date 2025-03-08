@@ -24,6 +24,13 @@ module "gpu" {
   guest_accelerator = var.guest_accelerator
 }
 
+module "image" {
+  source = "../../internal/slurm-gcp/image_logic"
+
+  instance_image        = var.instance_image
+  instance_image_custom = var.instance_image_custom
+}
+
 locals {
   guest_accelerator = module.gpu.guest_accelerator
 
@@ -99,10 +106,10 @@ module "slurm_nodeset_template" {
   preemptible          = var.preemptible
   spot                 = var.enable_spot_vm
   service_account      = local.service_account
-  gpu                  = one(local.guest_accelerator)          # requires gpu_definition.tf
-  source_image_family  = local.source_image_family             # requires source_image_logic.tf
-  source_image_project = local.source_image_project_normalized # requires source_image_logic.tf
-  source_image         = local.source_image                    # requires source_image_logic.tf
+  gpu                  = one(local.guest_accelerator)
+  source_image_family  = module.image.source_image_family
+  source_image_project = module.image.source_image_project_normalized
+  source_image         = module.image.source_image
 
   subnetwork          = var.subnetwork_self_link
   additional_networks = var.additional_networks
