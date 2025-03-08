@@ -141,15 +141,6 @@ EOD
   default     = 300
 }
 
-variable "compute_startup_scripts" {
-  description = "List of scripts to be ran on compute VM startup."
-  type = list(object({
-    filename = string
-    content  = string
-  }))
-  default = []
-}
-
 variable "login_startup_scripts" {
   description = "List of scripts to be ran on login VM startup in the specific group."
   type = map(list(object({

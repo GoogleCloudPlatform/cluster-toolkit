@@ -129,15 +129,20 @@ def run_custom_scripts():
     if lookup().is_controller:
         # controller has all scripts, but only runs controller.d
         custom_dirs = [custom_dir / "controller.d"]
+        timeout = lookup().cfg.get("controller_startup_scripts_timeout", 300)
     elif lookup().instance_role == "compute":
-        # compute setup with compute.d and nodeset.d
-        custom_dirs = [custom_dir / "compute.d", custom_dir / "nodeset.d"]
+        # compute setup with nodeset.d
+        custom_dirs = [custom_dir / "nodeset.d"]
+        timeout = lookup().cfg.get("compute_startup_scripts_timeout", 300)
     elif lookup().is_login_node:
         # login setup with only login.d
         custom_dirs = [custom_dir / "login.d"]
+        timeout = lookup().cfg.get("login_startup_scripts_timeout", 300)
     else:
         # Unknown role: run nothing
         custom_dirs = []
+        timeout = 300
+
     custom_scripts = [
         p
         for d in custom_dirs
@@ -149,15 +154,6 @@ def run_custom_scripts():
 
     try:
         for script in custom_scripts:
-            if "/controller.d/" in str(script):
-                timeout = lookup().cfg.get("controller_startup_scripts_timeout", 300)
-            elif "/compute.d/" in str(script) or "/nodeset.d/" in str(script):
-                timeout = lookup().cfg.get("compute_startup_scripts_timeout", 300)
-            elif "/login.d/" in str(script):
-                timeout = lookup().cfg.get("login_startup_scripts_timeout", 300)
-            else:
-                timeout = 300
-            timeout = None if not timeout or timeout < 0 else timeout
             log.info(f"running script {script.name} with timeout={timeout}")
             result = run(str(script), timeout=timeout, check=False, shell=True)
             runlog = (

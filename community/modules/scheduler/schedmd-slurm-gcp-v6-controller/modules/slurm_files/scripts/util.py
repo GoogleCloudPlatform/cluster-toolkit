@@ -455,7 +455,6 @@ def install_custom_scripts(check_hash=False):
         tokens = ["controller", "prolog", "epilog"]
     elif role == "compute":
         tokens = [
-            "compute", 
             "prolog", 
             "epilog",
             f"nodeset-{lookup().node_nodeset_name()}"

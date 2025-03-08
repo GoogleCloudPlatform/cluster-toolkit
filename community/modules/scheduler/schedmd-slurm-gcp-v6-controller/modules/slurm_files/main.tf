@@ -97,9 +97,6 @@ locals {
     controller_startup_scripts_md5 = {
       for o in values(google_storage_bucket_object.controller_startup_scripts) : trimprefix(o.name, local.tp) => o.md5hash
     }
-    compute_startup_scripts_md5 = {
-      for o in values(google_storage_bucket_object.compute_startup_scripts) : trimprefix(o.name, local.tp) => o.md5hash
-    }
     nodeset_startup_scripts_md5 = {
       for o in values(google_storage_bucket_object.nodeset_startup_scripts) : trimprefix(o.name, local.tp) => o.md5hash
     }
@@ -216,17 +213,6 @@ resource "google_storage_bucket_object" "controller_startup_scripts" {
 
   bucket  = var.bucket_name
   name    = format("%s/slurm-controller-script-%s", local.bucket_dir, each.key)
-  content = each.value.content
-}
-
-resource "google_storage_bucket_object" "compute_startup_scripts" {
-  for_each = {
-    for x in var.compute_startup_scripts
-    : replace(basename(x.filename), "/[^a-zA-Z0-9-_]/", "_") => x
-  }
-
-  bucket  = var.bucket_name
-  name    = format("%s/slurm-compute-script-%s", local.bucket_dir, each.key)
   content = each.value.content
 }
 
