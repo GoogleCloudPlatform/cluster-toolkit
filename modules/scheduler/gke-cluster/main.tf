@@ -130,6 +130,11 @@ resource "google_container_cluster" "gke_cluster" {
 
   enable_multi_networking = local.derived_enable_multi_networking
 
+  dns_config {
+    cluster_dns       = var.enable_cloud_dns_provider ? "CLOUD_DNS" : "PROVIDER_UNSPECIFIED"
+    cluster_dns_scope = var.enable_cloud_dns_provider ? "CLUSTER_SCOPE" : "DNS_SCOPE_UNSPECIFIED"
+  }
+
   network_policy {
     # Enabling NetworkPolicy for clusters with DatapathProvider=ADVANCED_DATAPATH
     # is not allowed. Dataplane V2 will take care of network policy enforcement
