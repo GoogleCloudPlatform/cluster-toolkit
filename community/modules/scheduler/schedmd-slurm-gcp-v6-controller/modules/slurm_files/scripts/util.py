@@ -91,7 +91,6 @@ dirs = NSDict(
     slurm = Path("/slurm"),
     scripts = scripts_dir,
     custom_scripts = Path("/slurm/custom_scripts"),
-    munge = Path("/etc/munge"),
     secdisk = Path("/mnt/disks/sec"),
     log = Path("/var/log/slurm"),
 )
@@ -100,6 +99,7 @@ slurmdirs = NSDict(
     prefix = Path("/usr/local"),
     etc = Path("/usr/local/etc/slurm"),
     state = Path("/var/spool/slurm"),
+    key_distribution = Path("/slurm/key_distribution"),
 )
 
 
@@ -247,6 +247,15 @@ class Instance:
       scheduling=NSDict(jo.get("scheduling")),
       role = labels.get("slurm_instance_role"),
     )
+
+
+@dataclass(frozen=True)
+class NSMount:
+    server_ip: str
+    local_mount: Path
+    remote_mount: Path
+    fs_type: str
+    mount_options: str
 
 @lru_cache(maxsize=1)
 def default_credentials():
@@ -446,7 +455,6 @@ def install_custom_scripts(check_hash=False):
         tokens = ["controller", "prolog", "epilog"]
     elif role == "compute":
         tokens = [
-            "compute", 
             "prolog", 
             "epilog",
             f"nodeset-{lookup().node_nodeset_name()}"
@@ -542,32 +550,6 @@ def _fill_cfg_defaults(cfg: NSDict) -> NSDict:
         cfg.slurm_control_host = f"{cfg.slurm_cluster_name}-controller"
     if not cfg.slurm_control_host_port:
         cfg.slurm_control_host_port = "6820-6830"
-    if not cfg.munge_mount: # NOTE: should only happen with cloud controller
-        cfg.munge_mount = NSDict(
-            {
-                "server_ip": cfg.slurm_control_addr or cfg.slurm_control_host,
-                "remote_mount": "/etc/munge",
-                "fs_type": "nfs",
-                "mount_options": "defaults,hard,intr,_netdev",
-            }
-        )
-
-    network_storage_iter: Iterable[Any] = filter(
-        None,
-        (
-            cfg.munge_mount,
-            *cfg.network_storage,
-            *cfg.login_network_storage,
-            *chain.from_iterable(ns.network_storage for ns in cfg.nodeset.values()),
-            *chain.from_iterable(ns.network_storage for ns in cfg.nodeset_dyn.values()),
-            *chain.from_iterable(ns.network_storage for ns in cfg.nodeset_tpu.values()),
-        ),
-    )
-    for netstore in network_storage_iter:
-        if netstore != "gcsfuse" and (
-            netstore.server_ip is None or netstore.server_ip == "$controller"
-        ):
-            netstore.server_ip = cfg.slurm_control_host
     return cfg
 
 @dataclass
@@ -1370,9 +1352,30 @@ class Lookup:
     def project(self):
         return self.cfg.project or authentication_project()
 
-    @property
-    def control_addr(self):
-        return self.cfg.slurm_control_addr
+    @lru_cache(maxsize=None)
+    def _lookup_network_attachment(self, self_link: str) -> str:
+        resp = self.compute.networkAttachments().get(
+            project=self.project,
+            region=parse_self_link(self_link).region,
+            networkAttachment=trim_self_link(self_link)
+        ).execute()
+        eps = resp.get("connectionEndpoints", [])
+        if not eps or len(eps) > 2:
+            raise Exception(f"Expect exactly one connected endpoint, got {resp}")
+        ep: Dict[str, str] = eps[0]
+        if "ipAddress" not in ep:
+            raise Exception(f"Expect endpoints to have ipAddress, got {resp}")
+        return ep["ipAddress"]
+
+    @cached_property
+    def control_addr(self) -> Optional[str]:
+        if self.cfg.slurm_control_addr:
+            return self.cfg.slurm_control_addr
+
+        if self.cfg.controller_network_attachment:
+            return self._lookup_network_attachment(self.cfg.controller_network_attachment)
+
+        return None
 
     @property
     def control_host(self):
@@ -1903,6 +1906,34 @@ class Lookup:
     @property
     def etc_dir(self) -> Path:
         return Path(self.cfg.output_dir or slurmdirs.etc)
+
+    def normalize_ns_mount(self, ns: Dict[str, str]) -> NSMount:
+        server_ip = ns.get("server_ip") or "$controller"
+        if server_ip == "$controller":
+            server_ip = self.control_addr or self.control_host
+    
+        return NSMount(
+            server_ip=server_ip,
+            local_mount=Path(ns["local_mount"]),
+            remote_mount=Path(ns["remote_mount"]),
+            fs_type=ns["fs_type"],
+            mount_options=ns["mount_options"],
+        )
+ 
+    @property
+    def slurm_key_mount(self) -> NSMount:
+        if self.cfg.slurm_key_mount:
+            mnt = self.cfg.slurm_key_mount
+            mnt.local_mount = mnt.local_mount or slurmdirs.key_distribution
+        else:
+            mnt = NSDict(
+                server_ip="$controller",
+                local_mount=slurmdirs.key_distribution,
+                remote_mount=slurmdirs.key_distribution,
+                fs_type="nfs",
+                mount_options="defaults,hard,intr,_netdev",
+            )
+        return self.normalize_ns_mount(mnt)
 
 _lkp: Optional[Lookup] = None
 
