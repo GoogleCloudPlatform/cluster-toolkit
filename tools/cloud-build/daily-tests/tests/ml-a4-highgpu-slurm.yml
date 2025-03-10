@@ -15,20 +15,31 @@
 ---
 
 # region, zone must be defined in build file with --extra-vars flag!
-test_name: h4d-jbvms
-deployment_name: h4d-jbvms-{{ build }}
+test_name: a4h-slurm
+deployment_name: a4h-slurm-{{ build }}
+slurm_cluster_name: "a4h{{ build[0:4] }}"
 workspace: /workspace
-blueprint_yaml: "{{ workspace }}/examples/h4d-vm.yaml"
+blueprint_yaml: "{{ workspace }}/examples/machine-learning/a4-highgpu-8g/a4high-slurm-blueprint.yaml"
+login_node: "{{ slurm_cluster_name }}-slurm-login-*"
+controller_node: "{{ slurm_cluster_name }}-controller"
 region: us-central1
-zone: us-central1-a
-network: "{{ deployment_name }}-net"
-remote_node: "{{ deployment_name }}-0"
+zone: us-central1-b
+network: "{{ deployment_name }}-net-0"
 post_deploy_tests:
-- test-validation/test-irdma.yml
 - test-validation/test-mounts.yml
+- test-validation/test-partitions.yml
+- test-validation/test-enroot.yml
+post_destroy_tasks:
+- post-destroy-tasks/delete-image.yml
 custom_vars:
+  partitions:
+  - a4high
   mounts:
   - /home
 cli_deployment_vars:
   region: "{{ region }}"
   zone: "{{ zone }}"
+  slurm_cluster_name: "{{ slurm_cluster_name }}"
+  disk_size_gb: 200
+  a4h_cluster_size: 2
+  a4h_reservation_name: a4-exr-hpc-toolkit-dev

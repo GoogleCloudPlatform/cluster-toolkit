@@ -157,7 +157,7 @@ def setup_network_storage():
             f.write("\n")
 
     mount_fstab(mounts_by_local(mounts), log)
-    munge_mount_handler()
+    slurm_key_mount_handler()
 
 
 def mount_fstab(mounts, log):
@@ -192,13 +192,12 @@ def mount_fstab(mounts, log):
                 raise e
 
 
-def munge_mount_handler():
+def slurm_key_mount_handler():
     if lookup().is_controller:
         return
-    mnt = lookup().munge_mount
+    mnt = lookup().slurm_key_mount
     
-    log.info(f"Mounting munge share to: {mnt.local_mount}")
-    mnt.local_mount.mkdir()
+    log.info(f"Mounting slurm_key share to: {mnt.local_mount}")
     if mnt.fs_type == "gcsfuse":
         cmd = [
             "gcsfuse",
@@ -214,15 +213,14 @@ def munge_mount_handler():
             f"{mnt.server_ip}:{mnt.remote_mount}",
             str(mnt.local_mount),
         ]
-    # wait max 120s for munge mount
-    timeout = 120
+    timeout = 120 # wait max 120s to mount
     for retry, wait in enumerate(util.backoff_delay(0.5, timeout), 1):
         try:
             run(cmd, timeout=timeout)
             break
         except Exception as e:
             log.error(
-                f"munge mount failed: '{cmd}' {e}, try {retry}, waiting {wait:0.2f}s"
+                f"slurm key mount failed: '{cmd}' {e}, try {retry}, waiting {wait:0.2f}s"
             )
             time.sleep(wait)
             err = e
@@ -230,13 +228,13 @@ def munge_mount_handler():
     else:
         raise err
 
-    munge_key = Path(dirs.munge / "munge.key")
-    log.info(f"Copy munge.key from: {mnt.local_mount}")
-    shutil.copy2(Path(mnt.local_mount / "munge.key"), munge_key)
+    file_name = "slurm.key"
+    dst = Path(util.slurmdirs.etc / file_name)
+    log.info(f"Copy slurm.key from: {mnt.local_mount}")
+    shutil.copy2(mnt.local_mount / file_name, dst)
 
-    log.info("Restrict permissions of munge.key")
-    shutil.chown(munge_key, user="munge", group="munge")
-    os.chmod(munge_key, stat.S_IRUSR)
+    log.info("Restrict permissions of slurm.key")
+    util.chown_slurm(dst, mode=0o400)
 
     log.info(f"Unmount {mnt.local_mount}")
     if mnt.fs_type == "gcsfuse":
@@ -255,7 +253,7 @@ def setup_nfs_exports():
     # The controller only needs to set up exports for cluster-internal mounts
     # switch the key to remote mount path since that is what needs exporting
     mounts = resolve_network_storage()
-    mounts.append(lkp.munge_mount)
+    mounts.append(lkp.slurm_key_mount)
    
     # controller mounts
     _, con_mounts = separate_external_internal_mounts(mounts)

@@ -516,12 +516,9 @@ variable "maintenance_interval" {
 }
 
 variable "startup_script" {
-  description = <<-EOD
-    Startup script used by VMs in this nodeset.
-    NOTE: will be executed after `compute_startup_script` defined on controller module.
-  EOD
+  description = "Startup script used by VMs in this nodeset"
   type        = string
-  default     = "# no-op"
+  default     = null
 }
 
 variable "network_storage" {

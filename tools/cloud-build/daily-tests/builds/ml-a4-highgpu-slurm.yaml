@@ -14,16 +14,20 @@
 
 ---
 tags:
-- vm
+- m.custom-image
 - m.filestore
+- m.gpu-rdma-vpc
+- m.schedmd-slurm-gcp-v6-controller
+- m.schedmd-slurm-gcp-v6-login
+- m.schedmd-slurm-gcp-v6-nodeset
+- m.schedmd-slurm-gcp-v6-partition
 - m.startup-script
 - m.vpc
-- m.vm-instance
-- m.wait-for-startup
+- slurm6
 
 timeout: 14400s  # 4hr
 steps:
-- id: h4d-vm
+- id: ml-a4-highgpu-slurm
   name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
   entrypoint: /bin/bash
   env:
@@ -36,13 +40,13 @@ steps:
     cd /workspace && make
     BUILD_ID_FULL=$BUILD_ID
     BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
-    REGION=us-central1
-    ZONE=us-central1-a
-    BLUEPRINT="/workspace/examples/h4d-vm.yaml"
+    REGION=europe-west1
+    ZONE=europe-west1-b
+    BLUEPRINT="/workspace/examples/machine-learning/a4-highgpu-8g/a4high-slurm-blueprint.yaml"
     sed -i -e '/deletion_protection:/{n;s/enabled: true/enabled: false/}' $${BLUEPRINT}
     sed -i -e '/reason:/d' $${BLUEPRINT}
-    ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
+    ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
         --user=sa_106486320838376751393 \
         --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
         --extra-vars="region=$${REGION} zone=$${ZONE}" \
-        --extra-vars="@tools/cloud-build/daily-tests/tests/h4d-vm.yml"
+        --extra-vars="@tools/cloud-build/daily-tests/tests/ml-a4-highgpu-slurm.yml"

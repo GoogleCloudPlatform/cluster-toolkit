@@ -325,7 +325,7 @@ module "htcondor_ap" {
     interface_name = "nic0"
     delete_rule    = "ON_PERMANENT_INSTANCE_DELETION"
     is_external    = true
-  }] : null
+  }] : []
 
   # the timeouts below are default for resource
   wait_for_instances = true
