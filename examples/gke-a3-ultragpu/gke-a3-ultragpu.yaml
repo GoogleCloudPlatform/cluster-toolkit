@@ -22,6 +22,8 @@ vars:
   # Cidr block containing the IP of the machine calling terraform.
   # The following line must be updated for this example to work.
   authorized_cidr: # add this
+  # In order to not target a BLOCK_NAME, extended_reservation can be inputted as
+  # extended_reservation: RESERVATION_NAME
   extended_reservation: # add this
   # Installs NCCL library and Google NCCL plugin
   # Runs an init container on all H200 GPU nodes with the NCCL plugin image
