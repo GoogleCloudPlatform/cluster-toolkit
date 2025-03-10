@@ -79,3 +79,9 @@ variable "mount_runner" {
     error_message = "There must be 5 elements in the Mount Runner Arguments: ${var.mount_runner.args} \n "
   }
 }
+
+variable "service_account_email" {
+  description = "If defined, the instance will use the service account specified instead of the Default Compute Engine Service Account"
+  type        = string
+  default     = null
+}
