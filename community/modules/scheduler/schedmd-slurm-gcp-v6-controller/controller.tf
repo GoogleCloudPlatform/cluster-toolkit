@@ -19,13 +19,6 @@ module "gpu" {
   guest_accelerator = var.guest_accelerator
 }
 
-module "image" {
-  source = "../../internal/slurm-gcp/image_logic"
-
-  instance_image        = var.instance_image
-  instance_image_custom = var.instance_image_custom
-}
-
 locals {
   additional_disks = [
     for ad in var.additional_disks : {
@@ -115,9 +108,9 @@ module "slurm_controller_template" {
   preemptible         = var.preemptible
   service_account     = local.service_account
 
-  source_image_family  = module.image.source_image_family
-  source_image_project = module.image.source_image_project_normalized
-  source_image         = module.image.source_image
+  source_image_family  = local.source_image_family             # requires source_image_logic.tf
+  source_image_project = local.source_image_project_normalized # requires source_image_logic.tf
+  source_image         = local.source_image                    # requires source_image_logic.tf
 
   subnetwork = var.subnetwork_self_link
 

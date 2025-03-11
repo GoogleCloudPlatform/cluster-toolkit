@@ -17,6 +17,12 @@
 terraform {
   required_version = ">= 1.3"
 
+  required_providers {
+    google = {
+      source  = "hashicorp/google"
+      version = ">= 5.11"
+    }
+  }
   provider_meta "google" {
     module_name = "blueprints/terraform/hpc-toolkit:schedmd-slurm-gcp-v6-nodeset-dynamic/v1.47.0"
   }
