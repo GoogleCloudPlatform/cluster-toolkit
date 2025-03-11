@@ -308,6 +308,8 @@ variable "nodeset" {
     zone_target_shape = string
     zone_policy_allow = set(string)
     zone_policy_deny  = set(string)
+
+    accelerator_topology = optional(string)
   }))
   default = []
 }
