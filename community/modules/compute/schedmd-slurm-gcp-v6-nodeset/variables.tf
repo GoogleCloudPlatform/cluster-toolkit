@@ -87,20 +87,7 @@ variable "instance_image" {
     see the "Slurm on GCP Custom Images" section in docs/vm-images.md.
     EOD
   type        = map(string)
-  default = {
-    family  = "slurm-gcp-6-8-hpc-rocky-linux-8"
-    project = "schedmd-slurm-public"
-  }
-
-  validation {
-    condition     = can(coalesce(var.instance_image.project))
-    error_message = "In var.instance_image, the \"project\" field must be a string set to the Cloud project ID."
-  }
-
-  validation {
-    condition     = can(coalesce(var.instance_image.name)) != can(coalesce(var.instance_image.family))
-    error_message = "In var.instance_image, exactly one of \"family\" or \"name\" fields must be set to desired image family or name."
-  }
+  default     = null
 }
 
 variable "instance_image_custom" {
@@ -516,12 +503,9 @@ variable "maintenance_interval" {
 }
 
 variable "startup_script" {
-  description = <<-EOD
-    Startup script used by VMs in this nodeset.
-    NOTE: will be executed after `compute_startup_script` defined on controller module.
-  EOD
+  description = "Startup script used by VMs in this nodeset"
   type        = string
-  default     = "# no-op"
+  default     = null
 }
 
 variable "network_storage" {
@@ -570,7 +554,7 @@ variable "dws_flex" {
   See: https://cloud.google.com/blog/products/compute/introducing-dynamic-workload-scheduler
   Options:
   - enable: Enable DWS Flex Start
-  - max_run_duration: Maximum duration in seconds for the job to run, should not exceed 1,209,600 (2 weeks).
+  - max_run_duration: Maximum duration in seconds for the job to run, should not exceed 604,800 (one week).
   - use_job_duration: Use the job duration to determine the max_run_duration, if job duration is not set, max_run_duration will be used.
 
  Limitations:
@@ -582,15 +566,15 @@ variable "dws_flex" {
 
   type = object({
     enabled          = optional(bool, true)
-    max_run_duration = optional(number, 1209600) # 2 weeks
+    max_run_duration = optional(number, 604800) # one week
     use_job_duration = optional(bool, false)
   })
   default = {
     enabled = false
   }
   validation {
-    condition     = var.dws_flex.max_run_duration >= 30 && var.dws_flex.max_run_duration <= 1209600
-    error_message = "Max duration must be more than 30 seconds, and cannot be more than two weeks."
+    condition     = var.dws_flex.max_run_duration >= 30 && var.dws_flex.max_run_duration <= 604800
+    error_message = "Max duration must be more than 30 seconds, and cannot be more than one week."
   }
 }
 

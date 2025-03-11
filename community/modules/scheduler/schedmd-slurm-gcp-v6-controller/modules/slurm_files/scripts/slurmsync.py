@@ -21,11 +21,11 @@ import logging
 import re
 import sys
 import shlex
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from itertools import chain
 from pathlib import Path
 from dataclasses import dataclass
-from typing import Dict, Tuple, List, Optional, Protocol
+from typing import Dict, Tuple, List, Optional, Protocol, Any
 from functools import lru_cache
 
 import util
@@ -119,10 +119,13 @@ class NodeActionUnknown():
         hostlist = util.to_hostlist(nodes)    
         log.error(f"{len(nodes)} nodes have unexpected {self.slurm_state} and instance state:{self.instance_state}, ({hostlist})")
 
-def start_instance_op(inst):
+def start_instance_op(node: str) -> Any:
+    inst = lookup().instance(node)
+    assert inst
+
     return lookup().compute.instances().start(
         project=lookup().project,
-        zone=lookup().instance(inst).zone,
+        zone=inst.zone,
         instance=inst,
     )
 
@@ -132,7 +135,7 @@ def start_instances(node_list):
     lkp = lookup()
     # TODO: use code from resume.py to assign proper placement
     normal, tpu_nodes = separate(lkp.node_is_tpu, node_list)
-    ops = {inst: start_instance_op(inst) for inst in normal}
+    ops = {node: start_instance_op(node) for node in normal}
 
     done, failed = batch_execute(ops)
 
@@ -151,7 +154,7 @@ def _find_dynamic_node_status() -> NodeAction:
     return NodeActionUnchanged()  # don't touch dynamic nodes
 
 def get_fr_action(fr: FutureReservation, state:Optional[NodeState]) -> Optional[NodeAction]:
-    now = datetime.now()
+    now = util.now()
     if state is None:
         return None # handle like any other node
     if fr.start_time < now < fr.end_time:
@@ -280,7 +283,7 @@ def get_node_action(nodename: str) -> NodeAction:
     elif (state is None or "POWERED_DOWN" in state.flags) and inst.status == "RUNNING":
         log.info("%s is potential orphan node", nodename)
         threshold = timedelta(seconds=90)
-        age = datetime.now() - parse_gcp_timestamp(inst.creationTimestamp)
+        age = util.now() - inst.creation_timestamp
         log.info(f"{nodename} state: {state}, age: {age}")
         if age < threshold:
             log.info(f"{nodename} not marked as orphan, it started less than {threshold.seconds}s ago ({age.seconds}s)")
@@ -351,7 +354,7 @@ def sync_placement_groups():
         result = ensure_execute(op)
         # merge placement group info from API and job_id,partition,index parsed from the name
         pgs = (
-            {**pg, **pg_regex.match(pg["name"]).groupdict()}
+            {**pg, **pg_regex.match(pg["name"]).groupdict()} # type: ignore
             for pg in chain.from_iterable(
                 item["resourcePolicies"]
                 for item in result.get("items", {}).values()
@@ -408,7 +411,7 @@ def reconfigure_slurm():
         run("systemctl restart slurmd")
         util.run(f"wall '{update_msg}'", timeout=30)
         log.debug("Done.")
-    elif lookup().instance_role_safe == "login":
+    elif lookup().is_login_node:
         log.info("Restarting sackd to make changes take effect.")
         run("systemctl restart sackd")
         util.run(f"wall '{update_msg}'", timeout=30)
@@ -464,10 +467,9 @@ def get_slurm_reservation_maintenance(lkp: util.Lookup) -> Dict[str, datetime]:
 def get_upcoming_maintenance(lkp: util.Lookup) -> Dict[str, Tuple[str, datetime]]:
     upc_maint_map = {}
 
-    for node, properties in lkp.instances().items():
-        if 'upcomingMaintenance' in properties:
-          start_time = parse_gcp_timestamp(properties['upcomingMaintenance']['startTimeWindow']['earliest'])
-          upc_maint_map[node + "_maintenance"] = (node, start_time)
+    for node, inst in lkp.instances().items():
+        if inst.resource_status.upcoming_maintenance:
+          upc_maint_map[node + "_maintenance"] = (node, inst.resource_status.upcoming_maintenance.window_start_time)
 
     return upc_maint_map
 

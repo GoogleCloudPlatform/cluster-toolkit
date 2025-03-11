@@ -33,7 +33,7 @@ vars:
     project: ubuntu-os-accelerator-images
     family: ubuntu-accelerator-2204-amd64-with-nvidia-550
   image_build_machine_type: n2-standard-16
-  build_slurm_from_git_ref: 6.8.7
+  build_slurm_from_git_ref: 6.8.9
   # Cluster env settings
   # net0 and filestore ranges must not overlap
   net0_range: 192.168.0.0/19
@@ -46,7 +46,7 @@ vars:
     project: $(vars.project_id)
     family: $(vars.deployment_name)-u22
   disk_size_gb: 200
-  nccl_plugin_version: v1.0.2
+  nccl_plugin_version: v1.0.3
 
 deployment_groups:
 - group: image-env
@@ -69,6 +69,7 @@ deployment_groups:
             "install_cuda": false,
             "install_gcsfuse": true,
             "install_lustre": false,
+            "install_nvidia_repo": true,
             "install_ompi": true,
             "update_kernel": false,
             "monitoring_agent": "cloud-ops",
@@ -108,7 +109,9 @@ deployment_groups:
               nvidia_packages:
               - cuda-toolkit-12-4
               - datacenter-gpu-manager
+              - libnvidia-cfg1-550-server
               - libnvidia-nscq-550
+              - nvidia-compute-utils-550-server
             tasks:
             - name: Download NVIDIA repository package
               ansible.builtin.get_url:
@@ -146,12 +149,40 @@ deployment_groups:
                 name: "{{ item }}"
                 selection: hold
               loop: "{{ nvidia_packages }}"
+            - name: Create nvidia-persistenced override directory
+              ansible.builtin.file:
+                path: /etc/systemd/system/nvidia-persistenced.service.d
+                state: directory
+                owner: root
+                group: root
+                mode: 0o755
+            - name: Configure nvidia-persistenced override
+              ansible.builtin.copy:
+                dest: /etc/systemd/system/nvidia-persistenced.service.d/persistence_mode.conf
+                owner: root
+                group: root
+                mode: 0o644
+                content: |
+                  [Service]
+                  ExecStart=
+                  ExecStart=/usr/bin/nvidia-persistenced --user nvidia-persistenced --verbose
+              notify: Reload SystemD
+            handlers:
+            - name: Reload SystemD
+              ansible.builtin.systemd:
+                daemon_reload: true
             post_tasks:
             - name: Disable NVIDIA DCGM by default (enable during boot on GPU nodes)
               ansible.builtin.service:
                 name: nvidia-dcgm.service
                 state: stopped
                 enabled: false
+            - name: Disable nvidia-persistenced SystemD unit (enable during boot on GPU nodes)
+              ansible.builtin.service:
+                name: nvidia-persistenced.service
+                state: stopped
+                enabled: false
+
       - type: ansible-local
         destination: install_ibverbs_utils.yml
         content: |
@@ -291,8 +322,9 @@ deployment_groups:
                 mode: 0o0644
                 content: |
                   [Unit]
-                  After=network-online.target
+                  After=network-online.target docker.service
                   Before=slurmd.service
+                  Requires=docker.service
 
                   [Service]
                   Type=oneshot
@@ -316,6 +348,56 @@ deployment_groups:
                 name: nccl-plugin@$(vars.nccl_plugin_version).service
                 state: started
                 enabled: true
+      - type: ansible-local
+        destination: enable_dcgm.yml
+        content: |
+          ---
+          - name: Enable NVIDIA DCGM on GPU nodes
+            hosts: all
+            become: true
+            vars:
+              enable_ops_agent: true
+              enable_nvidia_dcgm: true
+              enable_nvidia_persistenced: true
+            tasks:
+            - name: Update Ops Agent configuration
+              ansible.builtin.blockinfile:
+                path: /etc/google-cloud-ops-agent/config.yaml
+                insertafter: EOF
+                block: |
+                  metrics:
+                    receivers:
+                      dcgm:
+                        type: dcgm
+                    service:
+                      pipelines:
+                        dcgm:
+                          receivers:
+                            - dcgm
+              notify:
+              - Restart Google Cloud Ops Agent
+            handlers:
+            - name: Restart Google Cloud Ops Agent
+              ansible.builtin.service:
+                name: google-cloud-ops-agent.service
+                state: "{{ 'restarted' if enable_ops_agent else 'stopped' }}"
+                enabled: "{{ enable_ops_agent }}"
+            post_tasks:
+            - name: Enable Google Cloud Ops Agent
+              ansible.builtin.service:
+                name: google-cloud-ops-agent.service
+                state: "{{ 'started' if enable_ops_agent else 'stopped' }}"
+                enabled: "{{ enable_ops_agent }}"
+            - name: Enable NVIDIA DCGM
+              ansible.builtin.service:
+                name: nvidia-dcgm.service
+                state: "{{ 'started' if enable_nvidia_dcgm else 'stopped' }}"
+                enabled: "{{ enable_nvidia_dcgm }}"
+            - name: Enable NVIDIA Persistence Daemon
+              ansible.builtin.service:
+                name: nvidia-persistenced.service
+                state: "{{ 'started' if enable_nvidia_persistenced else 'stopped' }}"
+                enabled: "{{ enable_nvidia_persistenced }}"
 
   - id: a3_ultra_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
@@ -358,8 +440,8 @@ deployment_groups:
       is_default: true
       partition_conf:
         OverSubscribe: EXCLUSIVE
-        ResumeTimeout: 900
-        SuspendTimeout: 600
+        ResumeTimeout: 1200
+        SuspendTimeout: 1200
 
   - id: slurm_login
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login

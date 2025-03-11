@@ -94,7 +94,7 @@ variable "bucket_dir" {
 variable "login_nodes" {
   description = "List of slurm login instance definitions."
   type = list(object({
-    name_prefix = string
+    group_name = string
     access_config = optional(list(object({
       nat_ip       = string
       network_tier = string
@@ -178,8 +178,8 @@ variable "login_nodes" {
   }))
   default = []
   validation {
-    condition     = length(distinct([for x in var.login_nodes : x.name_prefix])) == length(var.login_nodes)
-    error_message = "All login_nodes must have a unique name_prefix."
+    condition     = length(distinct([for x in var.login_nodes : x.group_name])) == length(var.login_nodes)
+    error_message = "All login_nodes must have a unique group name."
   }
 }
 
@@ -387,6 +387,24 @@ EOD
 # SLURM #
 #########
 
+variable "controller_state_disk" {
+  description = <<EOD
+  A disk that will be attached to the controller instance template to save state of slurm. The disk is created and used by default.
+  To disable this feature, set this variable to null.
+  
+  NOTE: This will not save the contents at /opt/apps and /home. To preserve those, they must be saved externally.
+  EOD
+  type = object({
+    type = string
+    size = number
+  })
+
+  default = {
+    type = "pd-ssd"
+    size = 50
+  }
+}
+
 variable "enable_debug_logging" {
   type        = bool
   description = "Enables debug logging mode."
@@ -444,9 +462,6 @@ variable "enable_default_mounts" {
     Enable default global network storage from the controller
     - /home
     - /apps
-    Warning: If these are disabled, the slurm etc and munge dirs must be added
-    manually, or some other mechanism must be used to synchronize the slurm conf
-    files and the munge key across the cluster.
     EOD
   type        = bool
   default     = true
@@ -499,7 +514,7 @@ variable "cgroup_conf_tpl" {
 variable "controller_startup_script" {
   description = "Startup script used by the controller VM."
   type        = string
-  default     = "# no-op"
+  default     = null
 }
 
 variable "controller_startup_scripts_timeout" {
@@ -517,7 +532,7 @@ EOD
 variable "login_startup_script" {
   description = "Startup script used by the login VMs."
   type        = string
-  default     = "# no-op"
+  default     = null
 }
 
 variable "login_startup_scripts_timeout" {
@@ -532,15 +547,9 @@ EOD
   default     = 300
 }
 
-variable "compute_startup_script" {
-  description = "Startup script used by the compute VMs."
-  type        = string
-  default     = "# no-op"
-}
-
 variable "compute_startup_scripts_timeout" {
   description = <<EOD
-The timeout (seconds) applied to each script in compute_startup_scripts. If
+The timeout (seconds) applied to each startup script in compute nodes. If
 any script exceeds this timeout, then the instance setup process is considered
 failed and handled accordingly.
 
@@ -691,6 +700,24 @@ EOD
 DEPRECATED: Slurm GCP plugins have been deprecated.
 Instead of 'max_hops' plugin please use the 'placement_max_distance' nodeset property.
 Instead of 'enable_vpmu' plugin please use 'advanced_machine_features.performance_monitoring_unit' nodeset property.
+EOD
+  }
+}
+
+
+variable "compute_startup_script" { # tflint-ignore: terraform_unused_declarations
+  description = <<EOD
+DEPRECATED: `compute_startup_script` has been deprecated.
+Use `startup_script` of nodeset module instead.
+EOD
+  type        = any
+  default     = null
+
+  validation {
+    condition     = var.compute_startup_script == null
+    error_message = <<EOD
+DEPRECATED: `compute_startup_script` has been deprecated.
+Use `startup_script` of nodeset module instead.
 EOD
   }
 }

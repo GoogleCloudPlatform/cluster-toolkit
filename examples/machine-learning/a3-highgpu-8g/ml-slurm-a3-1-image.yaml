@@ -86,7 +86,8 @@ deployment_groups:
             "install_ompi": true,
             "monitoring_agent": "cloud-ops",
             "nvidia_version": "latest",
-            "slurm_version": "23.11.8"
+            "slurm_version": "23.11.8",
+            "install_nvidia_repo": false
           }
       - type: shell
         destination: install_slurm.sh
@@ -95,7 +96,7 @@ deployment_groups:
           set -e -o pipefail
           ansible-galaxy role install googlecloudplatform.google_cloud_ops_agents
           ansible-pull \
-              -U https://github.com/GoogleCloudPlatform/slurm-gcp -C 6.8.6 \
+              -U https://github.com/GoogleCloudPlatform/slurm-gcp -C 6.8.9 \
               -i localhost, --limit localhost --connection=local \
               -e @/var/tmp/slurm_vars.json \
               ansible/playbook.yml
@@ -226,3 +227,4 @@ deployment_groups:
       source_image_project_id: [$(vars.source_image_project_id)]
       source_image: $(vars.source_image)
       image_family: $(vars.final_image_family)
+      omit_external_ip: false

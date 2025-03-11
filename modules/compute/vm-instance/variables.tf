@@ -327,10 +327,22 @@ variable "placement_policy" {
   }
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "spot" {
-  description = "Provision VMs using discounted Spot pricing, allowing for preemption"
+  description = "DEPRECATED - Use `provisioning_model` instead."
   type        = bool
-  default     = false
+  default     = null
+
+  validation {
+    condition     = var.spot == null
+    error_message = "The 'spot' setting is deprecated. If you intend to use Spot pricing, please set 'var.provisioning_model' to \"SPOT\" and do not set 'var.spot' at all."
+  }
+}
+
+variable "provisioning_model" {
+  description = "Provisioning model for cloud instance."
+  type        = string
+  default     = null
 }
 
 variable "min_cpu_platform" {

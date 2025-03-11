@@ -59,8 +59,8 @@ module "client_startup_script" {
 module "pbs_client" {
   source = "../../../../modules/compute/vm-instance"
 
-  instance_count = var.instance_count
-  spot           = var.spot
+  instance_count     = var.instance_count
+  provisioning_model = var.spot ? "SPOT" : null
 
   deployment_name = var.deployment_name
   name_prefix     = local.resource_prefix

@@ -22,6 +22,7 @@ from pathlib import Path
 import util
 from util import dirs, slurmdirs
 import tpu
+from addict import Dict as NSDict # type: ignore
 
 FILE_PREAMBLE = """
 # Warning:
@@ -500,7 +501,7 @@ class TopologyBuilder:
 
     def render_conf_lines(self) -> Iterable[str]:
         if not self._r.switches:
-            return []
+            return [] # type: ignore
         for s in sorted(self._r.switches.values(), key=lambda s: s.name):
             yield from s.render_conf_lines()
 
@@ -520,7 +521,7 @@ class TopologyBuilder:
         return compressed
 
 
-def add_tpu_nodeset_topology(nodeset: object, bldr: TopologyBuilder, lkp: util.Lookup):
+def add_tpu_nodeset_topology(nodeset: NSDict, bldr: TopologyBuilder, lkp: util.Lookup):
     tpuobj = tpu.TPU.make(nodeset.nodeset_name, lkp)
     static, dynamic = lkp.nodenames(nodeset)
 
@@ -551,7 +552,7 @@ def _make_physical_path(physical_host: str) -> List[str]:
     return [_SLURM_TOPO_ROOT, *short_path]
 
 def add_nodeset_topology(
-    nodeset: object, bldr: TopologyBuilder, lkp: util.Lookup
+    nodeset: NSDict, bldr: TopologyBuilder, lkp: util.Lookup
 ) -> None:
     up_nodes = set()
     default_path = [_SLURM_TOPO_ROOT,  f"ns_{nodeset.nodeset_name}"]
@@ -563,7 +564,7 @@ def add_nodeset_topology(
         except Exception:
             continue
     
-        phys_host = inst.resourceStatus.get("physicalHost", "")
+        phys_host = inst.resource_status.physical_host or ""
         bldr.summary.physical_host[inst.name] = phys_host
         up_nodes.add(inst.name)
 

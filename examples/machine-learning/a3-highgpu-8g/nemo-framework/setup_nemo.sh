@@ -18,7 +18,7 @@
 #SBATCH --partition=a3
 #SBATCH --exclusive
 
-: "${NEMOFW_VERSION:=24.07}"
+: "${NEMOFW_VERSION:=24.12}"
 
 srun docker build --build-arg="NEMOFW_VERSION=${NEMOFW_VERSION}" -t nemofw:tcpx-"${NEMOFW_VERSION}" .
 srun rm -f nemofw+tcpx-"${NEMOFW_VERSION}".sqsh

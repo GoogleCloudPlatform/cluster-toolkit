@@ -42,8 +42,9 @@ locals {
   enable_gvnic  = var.bandwidth_tier != "not_enabled"
   enable_tier_1 = var.bandwidth_tier == "tier_1_enabled"
 
-  # use Spot provisioning model (now GA) over older preemptible model
-  provisioning_model = var.spot ? "SPOT" : null
+  provisioning_model = var.provisioning_model
+
+  spot = var.provisioning_model == "SPOT"
 
   # compact_placement : true when placement policy is provided and collocation set; false if unset
   compact_placement = try(var.placement_policy.collocation, null) != null
@@ -52,8 +53,8 @@ locals {
 
   # both of these must be false if either compact placement or preemptible/spot instances are used
   # automatic restart is tolerant of GPUs while on host maintenance is not
-  automatic_restart_default   = local.compact_placement || var.spot ? false : null
-  on_host_maintenance_default = local.compact_placement || var.spot || local.gpu_attached ? "TERMINATE" : "MIGRATE"
+  automatic_restart_default   = local.compact_placement || local.spot ? false : null
+  on_host_maintenance_default = local.compact_placement || local.spot || local.gpu_attached ? "TERMINATE" : "MIGRATE"
 
   automatic_restart = (
     var.automatic_restart != null
@@ -259,7 +260,7 @@ resource "google_compute_instance" "compute_vm" {
   scheduling {
     on_host_maintenance = local.on_host_maintenance
     automatic_restart   = local.automatic_restart
-    preemptible         = var.spot
+    preemptible         = local.spot
     provisioning_model  = local.provisioning_model
   }
 

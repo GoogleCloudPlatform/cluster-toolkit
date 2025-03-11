@@ -19,6 +19,13 @@ module "gpu" {
   guest_accelerator = var.guest_accelerator
 }
 
+module "image" {
+  source = "../../internal/slurm-gcp/image_logic"
+
+  instance_image        = var.instance_image
+  instance_image_custom = var.instance_image_custom
+}
+
 locals {
   additional_disks = [
     for ad in var.additional_disks : {
@@ -32,7 +39,15 @@ locals {
     }
   ]
 
-  synth_def_sa_email = "${data.google_project.this.number}-compute@developer.gserviceaccount.com"
+  state_disk = var.controller_state_disk != null ? [{
+    source      = google_compute_disk.controller_disk[0].name
+    device_name = google_compute_disk.controller_disk[0].name
+    disk_labels = null
+    auto_delete = false
+    boot        = false
+  }] : []
+
+  synth_def_sa_email = "${data.google_project.controller_project.number}-compute@developer.gserviceaccount.com"
 
   service_account = {
     email  = coalesce(var.service_account_email, local.synth_def_sa_email)
@@ -46,13 +61,29 @@ locals {
     var.metadata,
     local.universe_domain
   )
+
+  controller_project_id = coalesce(var.controller_project_id, var.project_id)
+}
+
+data "google_project" "controller_project" {
+  project_id = local.controller_project_id
+}
+
+resource "google_compute_disk" "controller_disk" {
+  count = var.controller_state_disk != null ? 1 : 0
+
+  project = local.controller_project_id
+  name    = "${local.slurm_cluster_name}-controller-save"
+  type    = var.controller_state_disk.type
+  size    = var.controller_state_disk.size
+  zone    = var.zone
 }
 
 # INSTANCE TEMPLATE
 module "slurm_controller_template" {
   source = "../../internal/slurm-gcp/instance_template"
 
-  project_id          = var.project_id
+  project_id          = local.controller_project_id
   region              = var.region
   slurm_instance_role = "controller"
   slurm_cluster_name  = local.slurm_cluster_name
@@ -62,7 +93,7 @@ module "slurm_controller_template" {
   disk_labels      = merge(var.disk_labels, local.labels)
   disk_size_gb     = var.disk_size_gb
   disk_type        = var.disk_type
-  additional_disks = local.additional_disks
+  additional_disks = concat(local.additional_disks, local.state_disk)
 
   bandwidth_tier            = var.bandwidth_tier
   slurm_bucket_path         = module.slurm_files.slurm_bucket_path
@@ -84,9 +115,9 @@ module "slurm_controller_template" {
   preemptible         = var.preemptible
   service_account     = local.service_account
 
-  source_image_family  = local.source_image_family             # requires source_image_logic.tf
-  source_image_project = local.source_image_project_normalized # requires source_image_logic.tf
-  source_image         = local.source_image                    # requires source_image_logic.tf
+  source_image_family  = module.image.source_image_family
+  source_image_project = module.image.source_image_project_normalized
+  source_image         = module.image.source_image
 
   subnetwork = var.subnetwork_self_link
 
@@ -96,8 +127,10 @@ module "slurm_controller_template" {
 
 # INSTANCE
 resource "google_compute_instance_from_template" "controller" {
+  provider = google-beta
+
   name                     = "${local.slurm_cluster_name}-controller"
-  project                  = var.project_id
+  project                  = local.controller_project_id
   zone                     = var.zone
   source_instance_template = module.slurm_controller_template.self_link
 
@@ -114,6 +147,13 @@ resource "google_compute_instance_from_template" "controller" {
     }
     network_ip = length(var.static_ips) == 0 ? "" : var.static_ips[0]
     subnetwork = var.subnetwork_self_link
+  }
+
+  dynamic "network_interface" {
+    for_each = var.controller_network_attachment != null ? [1] : []
+    content {
+      network_attachment = var.controller_network_attachment
+    }
   }
 }
 

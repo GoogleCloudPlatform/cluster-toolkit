@@ -52,7 +52,7 @@
       content: |
         [Unit]
         After=local-fs.target
-        Before=slurmd.service
+        Before=slurmd.service docker.service
         ConditionPathExists=!{{ array_dev }}
 
         [Service]
@@ -62,7 +62,7 @@
         ExecStartPost=/usr/sbin/mkfs -t {{ fstype }}{{ " -m 0" if fstype == "ext4" else "" }} {{ array_dev }}
 
         [Install]
-        WantedBy=slurmd.service
+        WantedBy=slurmd.service docker.service
 
   - name: Create RAID array and format
     ansible.builtin.systemd:
@@ -78,7 +78,7 @@
       content: |
         [Unit]
         After=local-fs.target create-localssd-raid.service
-        Before=slurmd.service
+        Before=slurmd.service docker.service
         Wants=create-localssd-raid.service
         ConditionPathIsMountPoint=!{{ mountpoint }}
 
@@ -90,7 +90,7 @@
         ExecStop=/usr/bin/systemd-umount {{ mountpoint }}
 
         [Install]
-        WantedBy=slurmd.service
+        WantedBy=slurmd.service docker.service
 
   - name: Mount RAID array and set permissions
     ansible.builtin.systemd:

@@ -18,7 +18,7 @@
 #SBATCH --partition=a3ultra
 #SBATCH --exclusive
 
-: "${NEMOFW_VERSION:=24.07}"
+: "${NEMOFW_VERSION:=24.12}"
 
 srun docker build --build-arg="NEMOFW_VERSION=${NEMOFW_VERSION}" -t nemo-"${NEMOFW_VERSION}" .
 srun rm -f nemo-"${NEMOFW_VERSION}".sqsh

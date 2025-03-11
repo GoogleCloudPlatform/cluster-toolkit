@@ -18,6 +18,7 @@ tags:
 - gke
 - m.gke-cluster
 - m.gke-node-pool
+- m.service-account
 - m.gpu-rdma-vpc
 - m.kubectl-apply
 - m.vpc
@@ -39,11 +40,10 @@ steps:
     BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
     EXAMPLE_BP=examples/gke-a3-ultragpu/gke-a3-ultragpu.yaml
 
-
     # adding vm to act as remote node
     echo '  - id: remote-node'                           >> $${EXAMPLE_BP}
     echo '    source: modules/compute/vm-instance'       >> $${EXAMPLE_BP}
-    echo '    use: [gke-a3-ultra-net-0]'                           >> $${EXAMPLE_BP}
+    echo '    use: [gke-a3-ultra-net-0]'                 >> $${EXAMPLE_BP}
     echo '    settings:'                                 >> $${EXAMPLE_BP}
     echo '      machine_type: e2-standard-2'             >> $${EXAMPLE_BP}
     echo '      name_prefix: remote-node'                >> $${EXAMPLE_BP}
@@ -51,7 +51,7 @@ steps:
     echo ''
     echo '  - id: job_template_hostname'                       >> $${EXAMPLE_BP}
     echo '    source: modules/compute/gke-job-template'        >> $${EXAMPLE_BP}
-    echo '    use: [a3-ultragpu-pool]'                          >> $${EXAMPLE_BP}
+    echo '    use: [a3-ultragpu-pool]'                         >> $${EXAMPLE_BP}
     echo '    settings:'                                       >> $${EXAMPLE_BP}
     echo '      image: nvidia/cuda:11.0.3-runtime-ubuntu20.04' >> $${EXAMPLE_BP}
     echo '      command:'                                      >> $${EXAMPLE_BP}

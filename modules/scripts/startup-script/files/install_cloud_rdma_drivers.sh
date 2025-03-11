@@ -19,15 +19,19 @@ OS_VERSION="$(awk -F '=' '/VERSION_ID/ {print $2}' /etc/os-release | sed -e 's/"
 OS_VERSION_MAJOR="$(awk -F '=' '/VERSION_ID/ {print $2}' /etc/os-release | sed -e 's/"//g' -e 's/\..*$//')"
 
 if { [ "${OS_ID}" = "rocky" ] || [ "${OS_ID}" = "rhel" ]; } && { [ "${OS_VERSION_MAJOR}" = "8" ]; }; then
+	KMOD_VERSION="$(dnf list installed | grep "kmod-idpf-irdma" | awk '{print $2}')"
+
 	# Downloading the RDMA packages and installing them
 	sudo dnf install https://depot.ciq.com/public/files/gce-accelerator/irdma-kernel-modules-el8-x86_64/irdma-repos.rpm -y
-	sudo dnf update -y
-	sudo dnf install kmod-idpf-irdma rdma-core libibverbs-utils librdmacm-utils infiniband-diags perftest -y
+	sudo dnf upgrade kmod-idpf-irdma rdma-core libibverbs-utils librdmacm-utils infiniband-diags perftest -y
+	NEW_KMOD_VERSION="$(dnf list installed | grep "kmod-idpf-irdma" | awk '{print $2}')"
 
-	# Restarting drivers so they can use RDMA without needing a reboot
-	sudo rmmod idpf
-	sudo rmmod irdma
-	sudo modprobe idpf
+	# Restarting drivers so they can use RDMA without needing a reboot (for new installs or for kmod package updates)
+	if { [ -z "${KMOD_VERSION}" ] || [ "${KMOD_VERSION}" != "${NEW_KMOD_VERSION}" ]; }; then
+		sudo rmmod idpf
+		sudo rmmod irdma
+		sudo modprobe idpf
+	fi
 
 	exit 0
 else

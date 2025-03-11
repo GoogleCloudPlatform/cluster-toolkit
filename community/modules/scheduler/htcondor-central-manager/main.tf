@@ -69,7 +69,7 @@ locals {
     [local.schedd_runner]
   )
 
-  central_manager_ips  = [data.google_compute_instance.cm.network_interface[0].network_ip]
+  central_manager_ips  = google_compute_address.cm.address
   central_manager_name = data.google_compute_instance.cm.name
 
   list_instances_command = "gcloud compute instance-groups list-instances ${data.google_compute_region_instance_group.cm.name} --region ${var.region} --project ${var.project_id}"
@@ -115,8 +115,14 @@ data "google_compute_instance" "cm" {
   self_link = data.google_compute_region_instance_group.cm.instances[0].instance
 }
 
+resource "null_resource" "cm_config" {
+  triggers = {
+    config = local.cm_config
+  }
+}
+
 resource "google_storage_bucket_object" "cm_config" {
-  name    = "${local.name_prefix}-config-${substr(md5(local.cm_config), 0, 4)}"
+  name    = "${local.name_prefix}-config-${substr(md5(null_resource.cm_config.id), 0, 4)}"
   content = local.cm_config
   bucket  = var.htcondor_bucket_name
 }
@@ -130,6 +136,14 @@ module "startup_script" {
   deployment_name = var.deployment_name
 
   runners = local.all_runners
+}
+
+resource "google_compute_address" "cm" {
+  project      = var.project_id
+  name         = local.name_prefix
+  subnetwork   = var.subnetwork_self_link
+  address_type = "INTERNAL"
+  purpose      = "GCE_ENDPOINT"
 }
 
 module "central_manager_instance_template" {
@@ -156,6 +170,8 @@ module "central_manager_instance_template" {
   # secure boot
   enable_shielded_vm       = var.enable_shielded_vm
   shielded_instance_config = var.shielded_instance_config
+
+  network_ip = google_compute_address.cm.id
 }
 
 module "htcondor_cm" {
@@ -197,12 +213,6 @@ module "htcondor_cm" {
     min_ready_sec                = 300
     minimal_action               = "REPLACE"
     type                         = var.update_policy
-  }]
-
-  stateful_ips = [{
-    interface_name = "nic0"
-    delete_rule    = "ON_PERMANENT_INSTANCE_DELETION"
-    is_external    = false
   }]
 
   # the timeouts below are default for resource

@@ -63,9 +63,33 @@ deployment_groups:
         allow:
         - protocol: tcp
 
+  - id: node_pool_service_account
+    source: community/modules/project/service-account
+    settings:
+      name: gke-np-sa
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
+      - monitoring.viewer
+      - stackdriver.resourceMetadata.writer
+      - storage.objectViewer
+      - artifactregistry.reader
+
+  - id: workload_service_account
+    source: community/modules/project/service-account
+    settings:
+      name: gke-wl-sa
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
+      - monitoring.viewer
+      - stackdriver.resourceMetadata.writer
+      - storage.objectAdmin
+      - artifactregistry.reader
+
   - id: gke_cluster
     source: modules/scheduler/gke-cluster
-    use: [network]
+    use: [network, workload_service_account]
     settings:
       release_channel: RAPID
       enable_parallelstore_csi: true # enable Parallelstore for the cluster
@@ -97,7 +121,7 @@ deployment_groups:
 
   - id: sample-pool
     source: modules/compute/gke-node-pool
-    use: [gke_cluster]
+    use: [gke_cluster, node_pool_service_account]
     settings:
       name: sample-pool
       zones: [$(vars.zone)]

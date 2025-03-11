@@ -41,7 +41,7 @@ from util import (
     trim_self_link,
     wait_for_operation,
 )
-from util import lookup, NSDict
+from util import lookup, NSDict, ReservationDetails
 import tpu
 
 log = logging.getLogger()
@@ -82,7 +82,7 @@ def get_resume_file_data() -> Optional[ResumeData]:
         jobs.append(job)
     return ResumeData(jobs=jobs)
 
-def instance_properties(nodeset:object, model:str, placement_group:Optional[str], labels:Optional[dict], job_id:Optional[int]):
+def instance_properties(nodeset: NSDict, model:str, placement_group:Optional[str], labels:Optional[dict], job_id:Optional[int]):
     props = NSDict()
 
     if labels: # merge in extra labels on instance and disks
@@ -101,10 +101,11 @@ def instance_properties(nodeset:object, model:str, placement_group:Optional[str]
         props.resourcePolicies = [placement_group]
 
     if reservation := lookup().nodeset_reservation(nodeset):
-        update_reservation_props(reservation, props, placement_group)
+        update_reservation_props(reservation, props, placement_group, reservation.calendar)
 
     if (fr := lookup().future_reservation(nodeset)) and fr.specific:
-        update_reservation_props(fr.active_reservation, props, placement_group)
+        assert fr.active_reservation
+        update_reservation_props(fr.active_reservation, props, placement_group, fr.calendar)
 
     if props.resourcePolicies:
        props.scheduling.onHostMaintenance = "TERMINATE"
@@ -119,14 +120,14 @@ def instance_properties(nodeset:object, model:str, placement_group:Optional[str]
     props.update(nodeset.get("instance_properties") or {})
     return props
 
-def update_reservation_props(reservation:object, props:object, placement_group:Optional[str]) -> None:
+def update_reservation_props(reservation:ReservationDetails, props:NSDict, placement_group:Optional[str], calendar_mode:bool) -> None:
     props.reservationAffinity = {
         "consumeReservationType": "SPECIFIC_RESERVATION",
         "key": f"compute.{util.universe_domain()}/reservation-name",
         "values": [reservation.bulk_insert_name],
     }
 
-    if reservation.dense:
+    if reservation.dense or calendar_mode:
         props.scheduling.provisioningModel = "RESERVATION_BOUND"
 
     # Figure out `resourcePolicies`
@@ -139,19 +140,19 @@ def update_reservation_props(reservation:object, props:object, placement_group:O
     log.info(
         f"reservation {reservation.bulk_insert_name} is being used with resourcePolicies: {props.resourcePolicies}")
 
-def update_props_dws(props:object, dws_flex:object, job_id: Optional[int]) -> None:
+def update_props_dws(props: NSDict, dws_flex: NSDict, job_id: Optional[int]) -> None:
     props.scheduling.onHostMaintenance = "TERMINATE"
     props.scheduling.instanceTerminationAction = "DELETE"
     props.reservationAffinity['consumeReservationType'] = "NO_RESERVATION"
     props.scheduling.maxRunDuration['seconds'] = dws_flex_duration(dws_flex, job_id)
 
-def dws_flex_duration(dws_flex:object, job_id: Optional[int]) -> int:
+def dws_flex_duration(dws_flex: NSDict, job_id: Optional[int]) -> int:
     max_duration = dws_flex.max_run_duration
     if dws_flex.use_job_duration and job_id is not None and (job := lookup().job(job_id)) and job.duration:
-        if timedelta(seconds=30) <= job.duration <= timedelta(weeks=2):
+        if timedelta(seconds=30) <= job.duration <= timedelta(weeks=1):
             max_duration = int(job.duration.total_seconds())
         else:
-            log.info("Job TimeLimit cannot be less than 30 seconds or exceed 2 weeks")
+            log.info("Job TimeLimit cannot be less than 30 seconds or exceed one week")
     return max_duration
 
 
@@ -329,7 +330,7 @@ def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
         failed_reqs = [str(e) for e in failed.items()]
         log.error("bulkInsert API failures: {}".format("; ".join(failed_reqs)))
         for ident, exc in failed.items():
-            down_nodes_notify_jobs(grouped_nodes[ident].nodes, f"GCP Error: {exc._get_reason()}", resume_data)
+            down_nodes_notify_jobs(grouped_nodes[ident].nodes, f"GCP Error: {exc._get_reason()}", resume_data) # type: ignore
 
     if log.isEnabledFor(logging.DEBUG):
         for group, op in started.items():
@@ -349,7 +350,7 @@ def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
         _handle_bulk_insert_op(op, grouped_nodes[group].nodes, resume_data)
         
 
-def _handle_bulk_insert_op(op: object, nodes: List[str], resume_data: Optional[ResumeData]) -> None:
+def _handle_bulk_insert_op(op: Dict, nodes: List[str], resume_data: Optional[ResumeData]) -> None:
     """
     Handles **DONE** BulkInsert operations
     """
@@ -550,7 +551,7 @@ def create_nodeset_placements(nodes: List[str], excl_job_id:Optional[int], lkp: 
         op = item[1]
         if not isinstance(op, Exception):
             return "submitted"
-        if all(e.get("reason") == "alreadyExists" for e in op.error_details):
+        if all(e.get("reason") == "alreadyExists" for e in op.error_details): # type: ignore
             return "redundant"
         return "failed"
 

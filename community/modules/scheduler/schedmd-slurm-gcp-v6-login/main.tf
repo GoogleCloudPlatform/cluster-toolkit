@@ -24,6 +24,13 @@ module "gpu" {
   guest_accelerator = var.guest_accelerator
 }
 
+module "image" {
+  source = "../../internal/slurm-gcp/image_logic"
+
+  instance_image        = var.instance_image
+  instance_image_custom = var.instance_image_custom
+}
+
 locals {
   guest_accelerator = module.gpu.guest_accelerator
 
@@ -54,7 +61,7 @@ locals {
   }
 
   # lower, replace `_` with `-`, and remove any non-alphanumeric characters
-  name_prefix = replace(
+  group_name = replace(
     replace(
       lower(var.name_prefix),
     "_", "-"),
@@ -62,7 +69,7 @@ locals {
 
 
   login_node = {
-    name_prefix         = local.name_prefix
+    group_name          = local.group_name
     disk_auto_delete    = var.disk_auto_delete
     disk_labels         = merge(var.disk_labels, local.labels)
     disk_size_gb        = var.disk_size_gb
@@ -92,9 +99,9 @@ locals {
 
     service_account = local.service_account
 
-    source_image_family  = local.source_image_family             # requires source_image_logic.tf
-    source_image_project = local.source_image_project_normalized # requires source_image_logic.tf
-    source_image         = local.source_image                    # requires source_image_logic.tf
+    source_image_family  = module.image.source_image_family
+    source_image_project = module.image.source_image_project_normalized
+    source_image         = module.image.source_image
 
     static_ips     = var.static_ips
     bandwidth_tier = var.bandwidth_tier

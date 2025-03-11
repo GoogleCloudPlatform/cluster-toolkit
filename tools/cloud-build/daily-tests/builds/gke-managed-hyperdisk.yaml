@@ -18,6 +18,7 @@ tags:
 - m.gke-job-template
 - m.gke-node-pool
 - m.gke-storage
+- m.service-account
 - m.vpc
 - gke
 
@@ -45,9 +46,8 @@ steps:
     echo '    use: [network]'                      >> $${SG_EXAMPLE}
     echo '    settings:'                           >> $${SG_EXAMPLE}
     echo '      machine_type: e2-standard-2'       >> $${SG_EXAMPLE}
-    echo '      zone: europe-west1-b'               >> $${SG_EXAMPLE}
-    # avoids conflict with other tests
-    sed -i "s/gke-subnet/gke-subnet-$${BUILD_ID_SHORT}/" $${SG_EXAMPLE}
+    echo '      zone: europe-west1-b'              >> $${SG_EXAMPLE}
+
     IP=$(curl ifconfig.me)
     sed -i "s/<your-ip-address>/$${IP}/" $${SG_EXAMPLE}
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \

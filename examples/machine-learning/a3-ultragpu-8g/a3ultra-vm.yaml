@@ -21,6 +21,8 @@ vars:
   deployment_name: a3ultra-vm-instance
   region: europe-west1
   zone: europe-west1-b
+  a3u_reservation_name: # supply reservation name
+  a3u_provisioning_model: RESERVATION_BOUND
   instance_image:
     project: ubuntu-os-accelerator-images
     family: ubuntu-accelerator-2204-amd64-with-nvidia-550
@@ -103,6 +105,14 @@ deployment_groups:
     settings:
       configure_ssh_host_patterns:
       - $(vars.hostname_prefix)-*
+      runners:
+      - type: shell
+        destination: install-cuda-toolkit.sh
+        content: |
+          #!/bin/bash
+          set -e -o pipefail
+          add-nvidia-repositories -y
+          apt install -y cuda-toolkit-12-8
 
   - id: a3ultra-vms
     source: modules/compute/vm-instance
@@ -114,7 +124,8 @@ deployment_groups:
       disk_type: hyperdisk-balanced
       automatic_restart: true
       on_host_maintenance: TERMINATE
-      reservation_name: # supply reservation name
+      reservation_name: $(vars.a3u_reservation_name)
+      provisioning_model: $(vars.a3u_provisioning_model)
       network_interfaces:
         $(concat(
           [{

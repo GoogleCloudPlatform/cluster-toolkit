@@ -58,6 +58,22 @@ variable "slurm_cluster_name" {
   }
 }
 
+variable "controller_state_disk" {
+  description = <<EOD
+  A disk that will be attached to the controller instance template to save state of slurm. The disk is created and used by default.
+  To disable this feature, set this variable to null.
+  
+  NOTE: This will not save the contents at /opt/apps and /home. To preserve those, they must be saved externally.
+  EOD
+  type = object({
+    device_name = string
+  })
+
+  default = {
+    device_name = null
+  }
+}
+
 variable "enable_bigquery_load" {
   description = <<EOD
 Enables loading of cluster job usage into big query.
@@ -90,15 +106,6 @@ variable "cloudsql_secret" {
   description = "Secret URI to cloudsql secret."
   type        = string
   default     = null
-}
-
-variable "login_startup_scripts" {
-  description = "List of scripts to be ran on login VM startup."
-  type = list(object({
-    filename = string
-    content  = string
-  }))
-  default = []
 }
 
 variable "login_startup_scripts_timeout" {
@@ -134,13 +141,13 @@ EOD
   default     = 300
 }
 
-variable "compute_startup_scripts" {
-  description = "List of scripts to be ran on compute VM startup."
-  type = list(object({
+variable "login_startup_scripts" {
+  description = "List of scripts to be ran on login VM startup in the specific group."
+  type = map(list(object({
     filename = string
     content  = string
-  }))
-  default = []
+  })))
+  default = {}
 }
 
 variable "nodeset_startup_scripts" {
@@ -224,13 +231,8 @@ EOD
 variable "disable_default_mounts" {
   description = <<-EOD
     Disable default global network storage from the controller
-    - /usr/local/etc/slurm
-    - /etc/munge
     - /home
     - /apps
-    If these are disabled, the slurm etc and munge dirs must be added manually,
-    or some other mechanism must be used to synchronize the slurm conf files
-    and the munge key across the cluster.
     EOD
   type        = bool
   default     = false
@@ -418,13 +420,9 @@ EOD
   default     = null
 }
 
-variable "munge_mount" {
+variable "slurm_key_mount" {
   description = <<-EOD
-  Remote munge mount for compute and login nodes to acquire the munge.key.
-
-  By default, the munge mount server will be assumed to be the
-  `var.slurm_control_host` (or `var.slurm_control_addr` if non-null) when
-  `server_ip=null`.
+  Remote mount for compute and login nodes to acquire the slurm.key.
   EOD
   type = object({
     server_ip     = string
@@ -432,12 +430,7 @@ variable "munge_mount" {
     fs_type       = string
     mount_options = string
   })
-  default = {
-    server_ip     = null
-    remote_mount  = "/etc/munge/"
-    fs_type       = "nfs"
-    mount_options = ""
-  }
+  default = null
 }
 
 variable "endpoint_versions" {
@@ -448,4 +441,10 @@ variable "endpoint_versions" {
   default = {
     compute = null
   }
+}
+
+variable "controller_network_attachment" {
+  description = "SelfLink for NetworkAttachment to be attached to the controller, if any."
+  type        = string
+  default     = null
 }
