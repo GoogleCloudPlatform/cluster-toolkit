@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Iterable, List, Tuple, Optional, Any, Dict, Sequence, Type, Callable, Literal
+from typing import Iterable, List, Tuple, Optional, Any, Dict, Sequence, Type, Callable, Literal, Callable
 import argparse
 import base64
 from dataclasses import dataclass, field
