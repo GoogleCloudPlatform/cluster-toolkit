@@ -73,7 +73,7 @@ The `config_path` field in `kueue` installation accepts a template file, too. Yo
         install: true
 ```
 
-You can specify a particular kueue version that you would like to use using the `version` flag. By default, we recommend customers to [use v0.10.0](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/develop/modules/management/kubectl-apply/variables.tf#L68). You can find the list of supported kueue versions [here](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/develop/modules/management/kubectl-apply/variables.tf#L18).
+You can specify a particular kueue version that you would like to use using the `version` flag. By default, we recommend customers to [use v0.10.0](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/modules/management/kubectl-apply/variables.tf#L68). You can find the list of supported kueue versions [here](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/modules/management/kubectl-apply/variables.tf#L18).
 
 ```yaml
   - id: workload_component_install
