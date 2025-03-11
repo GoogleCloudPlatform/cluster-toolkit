@@ -144,7 +144,7 @@ complete the following steps.
 1. Deploy an all-gather NCCL performance test with Topology Aware Scheduling
     enabled by using the [nccl-jobset-example.yaml](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/develop/examples/gke-a4-highgpu/nccl-jobset-example.yaml) file.
 
-    By default, this test uses four nodes. To change the number of nodes,
+    By default, this test uses two nodes. To change the number of nodes,
     modify the YAML file to change the following values from `2` to your required
     number of nodes:
 
