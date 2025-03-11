@@ -1086,6 +1086,8 @@ def to_hostnames(nodelist: str) -> List[str]:
     hostnames = run(f"{lookup().scontrol} show hostnames {hostlist}").stdout.splitlines()
     return hostnames
 
+def swallow_err(_: str) -> None:
+        pass
 
 def retry_exception(exc):
     """return true for exceptions that should always be retried"""
@@ -1456,6 +1458,23 @@ class Lookup:
         if not m:
             raise Exception(f"node name {node_name} is not valid")
         return m.groupdict()
+
+    def zones_in_region(self, project, region):
+        command = [
+            "gcloud",
+            "compute",
+            "zones",
+            "list",
+            f"--project={project}",
+            "--filter",
+            f"region:{region}",
+            "--format=json",
+        ]
+
+        result = subprocess.run(command, capture_output=True, text=True, check=True)
+        zones_data = json.loads(result.stdout)
+        zones = [zone["name"] for zone in zones_data]
+        return zones
 
     def node_prefix(self, node_name=None):
         return self._node_desc(node_name)["prefix"]
