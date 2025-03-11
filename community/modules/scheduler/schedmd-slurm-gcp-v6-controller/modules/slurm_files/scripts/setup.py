@@ -244,7 +244,7 @@ def setup_nss_slurm():
         ),
         check=False,
     )
-    run(r"sed -i 's/\(^\(passwd\|group\):\s\+\)/\1slurm /g' /etc/nsswitch.conf")
+    run(r"sed -i 's/\(^\(passwd\|group\):\s\+\)/\1slurm /g; s/^\(hosts:.*\)/\1 slurm/g' /etc/nsswitch.conf")
 
 
 def setup_sudoers():
