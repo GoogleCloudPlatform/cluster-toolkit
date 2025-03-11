@@ -55,6 +55,15 @@ while batch="$(head -n 2)" && [[ ${#batch} -gt 0 ]]; do
 done <"$tmpfile"
 true >"$tmpfile" # Wipe contents of tmp file
 
+echo "Deleting workload policies"
+workload_filter="name:${cluster_name}-${nodeset_name}"
+gcloud compute resource-policies list --format="value(selfLink)" --filter="${workload_filter}" | while read -r line; do
+	echo "Deleting workload policy: $line"
+	gcloud compute resource-policies delete --quiet "${line}" || {
+		echo "Failed to delete resource policy: $line"
+	}
+done
+
 echo "Deleting compute nodes"
 node_filter="name:${cluster_name}-${nodeset_name}-* labels.slurm_cluster_name=${cluster_name} AND labels.slurm_instance_role=compute"
 

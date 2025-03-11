@@ -321,6 +321,12 @@ variable "guest_accelerator" {
   }
 }
 
+variable "accelerator_topology" {
+  description = "Accelerator topology"
+  type        = string
+  default     = null
+}
+
 variable "preemptible" {
   description = "Should use preemptibles to burst."
   type        = bool
