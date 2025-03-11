@@ -343,7 +343,20 @@ variable "instance_image" {
     see the "Slurm on GCP Custom Images" section in docs/vm-images.md.
     EOD
   type        = map(string)
-  default     = null
+  default = {
+    family  = "slurm-gcp-6-8-hpc-rocky-linux-8"
+    project = "schedmd-slurm-public"
+  }
+
+  validation {
+    condition     = can(coalesce(var.instance_image.project))
+    error_message = "In var.instance_image, the \"project\" field must be a string set to the Cloud project ID."
+  }
+
+  validation {
+    condition     = can(coalesce(var.instance_image.name)) != can(coalesce(var.instance_image.family))
+    error_message = "In var.instance_image, exactly one of \"family\" or \"name\" fields must be set to desired image family or name."
+  }
 }
 
 variable "instance_image_custom" {
