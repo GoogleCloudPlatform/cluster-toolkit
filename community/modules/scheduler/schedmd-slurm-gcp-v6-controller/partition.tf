@@ -46,7 +46,7 @@ module "slurm_nodeset_template" {
   enable_oslogin            = each.value.enable_oslogin
   enable_shielded_vm        = each.value.enable_shielded_vm
   gpu                       = each.value.gpu
-  labels                    = each.value.labels
+  labels                    = merge(each.value.labels, { slurm_nodeset = each.value.nodeset_name })
   machine_type              = each.value.machine_type
   metadata                  = merge(each.value.metadata, local.universe_domain)
   min_cpu_platform          = each.value.min_cpu_platform
