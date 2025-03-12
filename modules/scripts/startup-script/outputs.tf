@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+output "runners" {
+  description = "script runners, which can be passed to various modules that can accept them"
+  value       = local.runners
+}
+
 output "startup_script" {
   description = "script to load and run all runners, as a string value."
   value       = local.stdlib
