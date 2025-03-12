@@ -7,7 +7,7 @@ SlurmdPidFile=/var/run/slurm/slurmd.pid
 TaskPlugin=task/affinity,task/cgroup
 MaxArraySize=10001
 MaxJobCount=500000
-MaxNodeCount=100000
+MaxNodeCount=65536
 MinJobAge=60
 
 #
