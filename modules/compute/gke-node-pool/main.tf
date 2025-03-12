@@ -242,6 +242,8 @@ resource "google_container_node_pool" "node_pool" {
         subnetwork = additional_node_network_configs.value.subnetwork
       }
     }
+
+    enable_private_nodes = var.enable_private_nodes
   }
 
   timeouts {
