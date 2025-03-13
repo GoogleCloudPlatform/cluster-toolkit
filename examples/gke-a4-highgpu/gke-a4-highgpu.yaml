@@ -136,7 +136,7 @@ deployment_groups:
   - id: training_bucket
     source: community/modules/file-system/cloud-storage-bucket
     settings:
-      local_mount: /data
+      local_mount: /training-data
       name_prefix: training
       random_suffix: true
       force_destroy: false
@@ -145,7 +145,7 @@ deployment_groups:
   - id: checkpoint_bucket
     source: community/modules/file-system/cloud-storage-bucket
     settings:
-      local_mount: /data
+      local_mount: /checkpointing-data
       name_prefix: checkpoint
       random_suffix: true
       force_destroy: false

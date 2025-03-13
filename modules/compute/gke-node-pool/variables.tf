@@ -427,3 +427,9 @@ variable "enable_queued_provisioning" {
   type        = bool
   default     = false
 }
+
+variable "enable_private_nodes" {
+  description = "Whether nodes have internal IP addresses only."
+  type        = bool
+  default     = false
+}
