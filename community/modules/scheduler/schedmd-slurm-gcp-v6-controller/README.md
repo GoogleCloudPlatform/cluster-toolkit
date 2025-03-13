@@ -1,7 +1,7 @@
 ## Description
 
-This module creates a slurm controller node via the [slurm-gcp]
-[slurm\_controller\_instance] and [slurm\_instance\_template] modules.
+This module creates a slurm controller node via the internal
+[slurm\_instance\_template] module.
 
 More information about Slurm On GCP can be found at the
 [project's GitHub page][slurm-gcp] and in the
@@ -11,9 +11,7 @@ The [user guide][slurm-ug] provides detailed instructions on customizing and
 enhancing the Slurm on GCP cluster as well as recommendations on configuring the
 controller for optimal performance at different scales.
 
-[slurm-gcp]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.8.6
-[slurm\_controller\_instance]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.8.6/terraform/slurm_cluster/modules/slurm_controller_instance
-[slurm\_instance\_template]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.8.6/terraform/slurm_cluster/modules/slurm_instance_template
+[slurm\_instance\_template]: /community/modules/internal/slurm-gcp/instance_template/README.md
 [slurm-ug]: https://goo.gle/slurm-gcp-user-guide.
 [enable\_cleanup\_compute]: #input\_enable\_cleanup\_compute
 [enable\_cleanup\_subscriptions]: #input\_enable\_cleanup\_subscriptions
