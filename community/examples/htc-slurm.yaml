@@ -45,15 +45,25 @@ deployment_groups:
   - id: network
     source: modules/network/vpc
 
+  # Private Service Access (PSA) requires the compute.networkAdmin role which is
+  # included in the Owner role, but not Editor.
+  # PSA is a best practice for Filestore instances, but can be optionally
+  # removed by deleting the private_service_access module and any references to
+  # the module by Filestore modules.
+  # https://cloud.google.com/vpc/docs/configure-private-services-access#permissions
+  - id: private_service_access
+    source: community/modules/network/private-service-access
+    use: [network]
+
   - id: homefs
     source: modules/file-system/filestore
-    use: [network]
+    use: [network, private_service_access]
     settings:
       local_mount: /home
 
   - id: projectsfs
     source: modules/file-system/filestore
-    use: [network]
+    use: [network, private_service_access]
     settings:
       filestore_tier: HIGH_SCALE_SSD
       size_gb: 10240
@@ -78,7 +88,6 @@ deployment_groups:
       name: c2s60
       node_count_dynamic_max: 200
       bandwidth_tier: gvnic_enabled
-      enable_placement: false
       allow_automatic_updates: false
 
   - id: compute_nodeset_c2s30
@@ -88,7 +97,6 @@ deployment_groups:
       node_count_dynamic_max: 200
       machine_type: c2-standard-30
       bandwidth_tier: gvnic_enabled
-      enable_placement: false
       allow_automatic_updates: false
 
   - id: compute_partition
@@ -112,7 +120,6 @@ deployment_groups:
       machine_type: n2-standard-2
       node_count_dynamic_max: 10
       bandwidth_tier: gvnic_enabled
-      enable_placement: false
       allow_automatic_updates: false
 
   - id: low_cost_nodeset_n2s4
@@ -123,7 +130,6 @@ deployment_groups:
       machine_type: n2-standard-4
       node_count_dynamic_max: 10
       bandwidth_tier: gvnic_enabled
-      enable_placement: false
       allow_automatic_updates: false
 
   - id: low_cost_partition
@@ -158,6 +164,8 @@ deployment_groups:
       enable_controller_public_ips: $(vars.enable_public_ips)
       slurm_conf_tpl: $(vars.staged_configs)/htc-slurm.conf.tpl
       slurmdbd_conf_tpl: $(vars.staged_configs)/htc-slurmdbd.conf.tpl
+      cloud_parameters:
+        scheduler_parameters: ["defer", "salloc_wait_nodes", "batch_sched_delay=20", "bf_continue", "bf_interval=300", "bf_min_age_reserve=10800", "bf_resolution=600", "bf_yield_interval=1000000", "partition_job_depth=500", "sched_max_job_start=200", "sched_min_interval=2000000"]
 
   - id: hpc_dashboard
     source: modules/monitoring/dashboard

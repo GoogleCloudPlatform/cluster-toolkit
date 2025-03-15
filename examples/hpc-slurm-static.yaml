@@ -29,7 +29,7 @@ vars:
   static_node_count: 2 ## Must be <= number of reserved machines ##
 
   slurm_instance_image:
-    family: slurm-gcp-6-8-hpc-rocky-linux-8
+    family: slurm-gcp-6-9-hpc-rocky-linux-8
     project: schedmd-slurm-public
   instance_image_custom: false  # true if using custom image in lines above
   bandwidth_tier: gvnic_enabled
@@ -47,7 +47,6 @@ deployment_groups:
     settings:
       node_count_static: $(vars.static_node_count)
       node_count_dynamic_max: 0
-      enable_placement: false  # placement is done on reservation
       reservation_name: $(vars.static_reservation_name)
       machine_type: $(vars.static_reservation_machine_type)
       instance_image: $(vars.slurm_instance_image)

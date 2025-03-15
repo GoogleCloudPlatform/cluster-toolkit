@@ -68,7 +68,7 @@ variable "instance_image" {
     EOD
   type        = map(string)
   default = {
-    family  = "slurm-gcp-6-8-hpc-rocky-linux-8"
+    family  = "slurm-gcp-6-9-hpc-rocky-linux-8"
     project = "schedmd-slurm-public"
   }
 
@@ -208,10 +208,29 @@ variable "can_ip_forward" {
   default     = false
 }
 
-variable "enable_smt" {
+variable "advanced_machine_features" {
+  description = "See https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_instance_template#nested_advanced_machine_features"
+  type = object({
+    enable_nested_virtualization = optional(bool)
+    threads_per_core             = optional(number)
+    turbo_mode                   = optional(string)
+    visible_core_count           = optional(number)
+    performance_monitoring_unit  = optional(string)
+    enable_uefi_networking       = optional(bool)
+  })
+  default = {
+    threads_per_core = 1 # disable SMT by default
+  }
+}
+
+variable "enable_smt" { # tflint-ignore: terraform_unused_declarations
   type        = bool
-  description = "Enables Simultaneous Multi-Threading (SMT) on instance."
-  default     = false
+  description = "DEPRECATED: Use `advanced_machine_features.threads_per_core` instead."
+  default     = null
+  validation {
+    condition     = var.enable_smt == null
+    error_message = "DEPRECATED: Use `advanced_machine_features.threads_per_core` instead."
+  }
 }
 
 variable "labels" {

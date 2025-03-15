@@ -46,10 +46,19 @@ deployment_groups:
   - id: network
     source: modules/network/vpc
 
+  # Private Service Access (PSA) requires the compute.networkAdmin role which is
+  # included in the Owner role, but not Editor.
+  # PSA is a best practice for Filestore instances, but can be optionally
+  # removed by deleting the private_service_access module and any references to
+  # the module by Filestore modules.
+  # https://cloud.google.com/vpc/docs/configure-private-services-access#permissions
+  - id: private_service_access
+    source: community/modules/network/private-service-access
+    use: [network]
+
   - id: homefs
     source: modules/file-system/filestore
-    use:
-    - network
+    use: [network, private_service_access]
     settings:
       local_mount: /home
       size_gb: 2560
@@ -119,7 +128,7 @@ deployment_groups:
       omit_external_ip: false
       source_image_project_id: [schedmd-slurm-public]
       # see latest in https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#published-image-family
-      source_image_family: slurm-gcp-6-8-debian-11
+      source_image_family: slurm-gcp-6-9-debian-11
       # You can find size of source image by using following command
       # gcloud compute images describe-from-family <source_image_family> --project schedmd-slurm-public
       disk_size: $(vars.disk_size_gb)
@@ -199,7 +208,6 @@ deployment_groups:
     use: [network]
     settings:
       node_count_dynamic_max: 20
-      enable_placement: false
       bandwidth_tier: gvnic_enabled
       machine_type: g2-standard-4
       instance_image: $(vars.new_image)

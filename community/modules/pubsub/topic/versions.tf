@@ -27,6 +27,6 @@ terraform {
     }
   }
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:topic/v1.44.0"
+    module_name = "blueprints/terraform/hpc-toolkit:topic/v1.47.0"
   }
 }

@@ -16,7 +16,7 @@
 # BUCKET
 
 locals {
-  synt_suffix       = substr(md5("${var.project_id}${var.deployment_name}"), 0, 5)
+  synt_suffix       = substr(md5("${local.controller_project_id}${var.deployment_name}"), 0, 5)
   synth_bucket_name = "${local.slurm_cluster_name}${local.synt_suffix}"
 
   bucket_name = var.create_bucket ? module.bucket[0].name : var.bucket_name
@@ -31,7 +31,7 @@ module "bucket" {
   location   = var.region
   names      = [local.synth_bucket_name]
   prefix     = "slurm"
-  project_id = var.project_id
+  project_id = local.controller_project_id
 
   force_destroy = {
     (local.synth_bucket_name) = true
@@ -94,29 +94,30 @@ locals {
     filename = "ghpc_daos_mount.sh"
     content  = length(local.daos_ns) > 0 ? module.daos_network_storage_scripts[0].startup_script : ""
   }
+
+  common_scripts = length(local.daos_ns) > 0 ? [local.daos_install_mount_script] : []
 }
 
 # SLURM FILES
 locals {
-  ghpc_startup_controller = {
-    filename = "ghpc_startup.sh"
-    content  = var.controller_startup_script
-  }
-  ghpc_startup_script_controller = length(local.daos_ns) > 0 ? [local.daos_install_mount_script, local.ghpc_startup_controller] : [local.ghpc_startup_controller]
+  ghpc_startup_script_controller = concat(
+    local.common_scripts,
+    var.controller_startup_script == null ? [] : [{
+      filename = "ghpc_startup.sh"
+      content  = var.controller_startup_script
+  }])
 
-  ghpc_startup_login = {
+  controller_state_disk = {
+    device_name : try(google_compute_disk.controller_disk[0].name, null)
+  }
+
+  ghpc_startup_login = var.login_startup_script == null ? [] : [{
     filename = "ghpc_startup.sh"
     content  = var.login_startup_script
-  }
-  ghpc_startup_script_login = length(local.daos_ns) > 0 ? [local.daos_install_mount_script, local.ghpc_startup_login] : [local.ghpc_startup_login]
+  }]
 
-  ghpc_startup_compute = {
-    filename = "ghpc_startup.sh"
-    content  = var.compute_startup_script
-  }
-  ghpc_startup_script_compute = length(local.daos_ns) > 0 ? [local.daos_install_mount_script, local.ghpc_startup_compute] : [local.ghpc_startup_compute]
-
-  nodeset_startup_scripts = { for k, v in local.nodeset_map : k => v.startup_script }
+  login_startup_scripts   = { for g in var.login_nodes : g.group_name => concat(local.common_scripts, local.ghpc_startup_login) }
+  nodeset_startup_scripts = { for k, v in local.nodeset_map : k => concat(local.common_scripts, v.startup_script) }
 }
 
 module "daos_network_storage_scripts" {
@@ -133,10 +134,11 @@ module "daos_network_storage_scripts" {
 module "slurm_files" {
   source = "./modules/slurm_files"
 
-  project_id         = var.project_id
-  slurm_cluster_name = local.slurm_cluster_name
-  bucket_dir         = var.bucket_dir
-  bucket_name        = local.bucket_name
+  project_id                    = var.project_id
+  slurm_cluster_name            = local.slurm_cluster_name
+  bucket_dir                    = var.bucket_dir
+  bucket_name                   = local.bucket_name
+  controller_network_attachment = var.controller_network_attachment
 
   slurmdbd_conf_tpl = var.slurmdbd_conf_tpl
   slurm_conf_tpl    = var.slurm_conf_tpl
@@ -149,10 +151,10 @@ module "slurm_files" {
   controller_startup_scripts         = local.ghpc_startup_script_controller
   controller_startup_scripts_timeout = var.controller_startup_scripts_timeout
   nodeset_startup_scripts            = local.nodeset_startup_scripts
-  compute_startup_scripts            = local.ghpc_startup_script_compute
   compute_startup_scripts_timeout    = var.compute_startup_scripts_timeout
-  login_startup_scripts              = local.ghpc_startup_script_login
+  login_startup_scripts              = local.login_startup_scripts
   login_startup_scripts_timeout      = var.login_startup_scripts_timeout
+  controller_state_disk              = local.controller_state_disk
 
   enable_debug_logging = var.enable_debug_logging
   extra_logging_flags  = var.extra_logging_flags
@@ -161,7 +163,6 @@ module "slurm_files" {
   enable_external_prolog_epilog = var.enable_external_prolog_epilog
   epilog_scripts                = var.epilog_scripts
   prolog_scripts                = var.prolog_scripts
-  enable_slurm_gcp_plugins      = var.enable_slurm_gcp_plugins
 
   disable_default_mounts = !var.enable_default_mounts
   network_storage = [

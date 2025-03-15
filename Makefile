@@ -1,19 +1,21 @@
 # PREAMBLE
 MIN_PACKER_VERSION=1.7.9 # for building images
-MIN_TERRAFORM_VERSION=1.2 # for deploying modules
-MIN_GOLANG_VERSION=1.18 # for building gcluster
+MIN_TERRAFORM_VERSION=1.5.7 # for deploying modules
+MIN_GOLANG_VERSION=1.22 # for building gcluster
 
 .PHONY: install install-user tests format install-dev-deps \
         warn-go-missing warn-terraform-missing warn-packer-missing \
         warn-go-version warn-terraform-version warn-packer-version \
         test-engine validate_configs validate_golden_copy packer-check \
-        terraform-format packer-format \
+        terraform-format packer-format mypy \
         check-tflint check-pre-commit
 
 SHELL=/bin/bash -o pipefail
 ENG = ./cmd/... ./pkg/...
 TERRAFORM_FOLDERS=$(shell find ./modules ./community/modules ./tools -type f -name "*.tf" -not -path '*/\.*' -exec dirname "{}" \; | sort -u)
 PACKER_FOLDERS=$(shell find ./modules ./community/modules ./tools -type f -name "*.pkr.hcl" -not -path '*/\.*' -exec dirname "{}" \; | sort -u)
+BINARY_TARGETS := ghpc gcluster
+INSTALL_DIRS := . ~/bin /usr/local/bin
 
 ifneq (, $(shell which git))
 ## GIT IS PRESENT
@@ -70,7 +72,25 @@ install-dev-deps: warn-terraform-version warn-packer-version check-pre-commit ch
 	go install golang.org/x/tools/cmd/goimports@latest
 	go install honnef.co/go/tools/cmd/staticcheck@latest
 	pip install -r community/modules/scheduler/schedmd-slurm-gcp-v6-controller/modules/slurm_files/scripts/requirements.txt
-	pip install -r community/modules/scheduler/schedmd-slurm-gcp-v6-controller/modules/slurm_files/scripts/tests/requirements.txt
+	pip install -r community/modules/scheduler/schedmd-slurm-gcp-v6-controller/modules/slurm_files/scripts/requirements-dev.txt
+	pip install mypy
+
+
+clean:
+	@for dir in $(INSTALL_DIRS); do \
+		for file in $(BINARY_TARGETS); do \
+			if [ -f "$$dir/$$file" ] || [ -L "$$dir/$$file" ]; then \
+				if [ -w "$$dir/$$file" ]; then \
+					echo "Removing $$dir/$$file"; \
+					rm "$$dir/$$file"; \
+				else \
+					echo "Do not have permissions to delete $$dir/$$file"; \
+				fi; \
+			else \
+				echo "$$dir/$$file does not exist"; \
+			fi; \
+		done; \
+	done
 
 # RULES SUPPORTING THE ABOVE
 

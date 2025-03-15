@@ -1,3 +1,6 @@
+# mypy: ignore-errors
+# This implementation of TPU integration is to be deprecated
+
 # Copyright 2024 "Google LLC"
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +19,6 @@ from typing import List
 
 import socket
 import logging
-from dataclasses import dataclass
 from pathlib import Path
 import yaml
 

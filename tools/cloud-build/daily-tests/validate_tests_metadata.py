@@ -73,7 +73,7 @@ def get_blueprint(build_path: str) -> Optional[str]:
         f"{BUILDS_DIR}/chrome-remote-desktop.yaml": "tools/cloud-build/daily-tests/blueprints/crd-default.yaml",
         f"{BUILDS_DIR}/chrome-remote-desktop-ubuntu.yaml": "tools/cloud-build/daily-tests/blueprints/crd-ubuntu.yaml",
         f"{BUILDS_DIR}/gcluster-dockerfile.yaml": "tools/cloud-build/daily-tests/blueprints/e2e.yaml",
-        f"{BUILDS_DIR}/slurm-gcp-v6-reconfig-size.yaml": "tools/python-integration-tests/blueprints/slurm-simple-reconfig.yaml",
+        f"{BUILDS_DIR}/slurm-gcp-v6-reconfig-size.yaml": "tools/python-integration-tests/blueprints/slurm-reconfig-before.yaml",
         f"{BUILDS_DIR}/slurm-gcp-v6-simple-job-completion.yaml": "tools/python-integration-tests/blueprints/slurm-simple.yaml",
         f"{BUILDS_DIR}/slurm-gcp-v6-topology.yaml": "tools/python-integration-tests/blueprints/topology-test.yaml",
     }
@@ -127,7 +127,7 @@ class TestIntegrationTestsMeta(unittest.TestCase):
         if missing_mod_tags:
             hint = "\n- ".join([""] + sorted(missing_mod_tags))
             self.fail(msg=f"Some used modules aren't declared\nHINT: add following tags to {build_path}: {hint}")
-        self.assertEquals(declared_mod_tags, required_mod_tags)
+        self.assertEqual(declared_mod_tags, required_mod_tags)
 
         self.assertNotEqual(tags & CATEGORICAL_TAGS, set(), msg=f"No categorical tags, pick/add one: {CATEGORICAL_TAGS}")
 

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/slurm/python/venv/bin/python3.13
 
 # Copyright (C) SchedMD LLC.
 # Copyright 2015 Google Inc. All rights reserved.
@@ -15,7 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List
+from typing import List, Any
 import argparse
 import logging
 
@@ -30,8 +30,6 @@ from util import (
 )
 from util import lookup
 import tpu
-
-import slurm_gcp_plugins
 
 log = logging.getLogger()
 
@@ -48,11 +46,14 @@ def truncate_iter(iterable, max_count):
         yield el
 
 
-def delete_instance_request(instance):
+def delete_instance_request(name: str) -> Any:
+    inst = lookup().instance(name)
+    assert inst
+
     request = lookup().compute.instances().delete(
         project=lookup().project,
-        zone=lookup().instance(instance).zone,
-        instance=instance,
+        zone=inst.zone,
+        instance=name,
     )
     log_api_request(request)
     return request
@@ -105,8 +106,6 @@ def main(nodelist):
         return
 
     log.info(f"suspend {nodelist}")
-    if lookup().cfg.enable_slurm_gcp_plugins:
-        slurm_gcp_plugins.pre_main_suspend_nodes(lkp=lookup(), nodelist=nodelist)
     suspend_nodes(pm_nodes)
 
 

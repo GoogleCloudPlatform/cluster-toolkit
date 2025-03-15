@@ -92,9 +92,10 @@ variable "filestore_tier" {
       "BASIC_SSD",
       "HIGH_SCALE_SSD",
       "ZONAL",
+      "REGIONAL",
       "ENTERPRISE"
     ], var.filestore_tier)
-    error_message = "Allowed values for filestore_tier are 'BASIC_HDD','BASIC_SSD','HIGH_SCALE_SSD','ZONAL','ENTERPRISE'.\nhttps://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/filestore_instance#tier\nhttps://cloud.google.com/filestore/docs/reference/rest/v1beta1/Tier."
+    error_message = "Allowed values for filestore_tier are 'BASIC_HDD','BASIC_SSD','ZONAL','REGIONAL'.\nhttps://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/filestore_instance#tier\nhttps://cloud.google.com/filestore/docs/reference/rest/v1/Tier."
   }
 }
 
@@ -162,5 +163,15 @@ variable "deletion_protection" {
   validation {
     condition     = !can(coalesce(var.deletion_protection.reason)) || var.deletion_protection.enabled
     error_message = "Cannot set Filestore var.deletion_protection.reason unless var.deletion_protection.enabled is true"
+  }
+}
+
+variable "protocol" {
+  description = "NFS protocol version. Default is NFS_V3. NFS_V4_1 is only supported with HIGH_SCALE_SSD, ZONAL, REGIONAL, and ENTERPRISE tiers."
+  type        = string
+  default     = "NFS_V3"
+  validation {
+    condition     = contains(["NFS_V3", "NFS_V4_1"], var.protocol)
+    error_message = "Allowed values for protocol are 'NFS_V3' or 'NFS_V4_1'."
   }
 }

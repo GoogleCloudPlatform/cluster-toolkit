@@ -13,6 +13,8 @@
 # limitations under the License.
 
 blueprint_name: two-clusters
+toolkit_modules_url: github.com/GoogleCloudPlatform/cluster-toolkit
+toolkit_modules_version: v1.41.0
 
 vars:
   project_id: ## Set GCP Project ID Here ##
@@ -24,6 +26,23 @@ vars:
   enable_cleanup_subscriptions: True
   enable_bigquery_load: True
   instance_image_custom: True
+
+terraform_providers:
+  google:
+    source: hashicorp/google
+    version: 5.45.0
+    configuration:
+      project: $(vars.project_id)
+      region: $(vars.region)
+      zone: $(vars.zone)
+
+  google-beta:
+    source: hashicorp/google-beta
+    version: 5.45.0
+    configuration:
+      project: $(vars.project_id)
+      region: $(vars.region)
+      zone: $(vars.zone)
 
 deployment_groups:
 - group: net
@@ -52,7 +71,6 @@ deployment_groups:
     id: c1partition_0_group
     use:
     settings:
-      enable_smt: False
       machine_type: c2-standard-60
       node_count_dynamic_max: 4
       node_count_static: 0
@@ -111,7 +129,6 @@ deployment_groups:
   - source: community/modules/compute/schedmd-slurm-gcp-v5-node-group
     id: c2partition_0_group
     settings:
-      enable_smt: False
       machine_type: c2-standard-60
       node_count_dynamic_max: 4
       node_count_static: 0

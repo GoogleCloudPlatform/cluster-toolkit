@@ -58,12 +58,20 @@ variable "slurm_cluster_name" {
   }
 }
 
-variable "enable_slurm_gcp_plugins" {
+variable "controller_state_disk" {
   description = <<EOD
-Enables calling hooks in scripts/slurm_gcp_plugins during cluster resume and suspend.
-EOD
-  type        = any
-  default     = false
+  A disk that will be attached to the controller instance template to save state of slurm. The disk is created and used by default.
+  To disable this feature, set this variable to null.
+  
+  NOTE: This will not save the contents at /opt/apps and /home. To preserve those, they must be saved externally.
+  EOD
+  type = object({
+    device_name = string
+  })
+
+  default = {
+    device_name = null
+  }
 }
 
 variable "enable_bigquery_load" {
@@ -100,15 +108,6 @@ variable "cloudsql_secret" {
   default     = null
 }
 
-variable "login_startup_scripts" {
-  description = "List of scripts to be ran on login VM startup."
-  type = list(object({
-    filename = string
-    content  = string
-  }))
-  default = []
-}
-
 variable "login_startup_scripts_timeout" {
   description = <<EOD
 The timeout (seconds) applied to each script in login_startup_scripts. If
@@ -142,13 +141,13 @@ EOD
   default     = 300
 }
 
-variable "compute_startup_scripts" {
-  description = "List of scripts to be ran on compute VM startup."
-  type = list(object({
+variable "login_startup_scripts" {
+  description = "List of scripts to be ran on login VM startup in the specific group."
+  type = map(list(object({
     filename = string
     content  = string
-  }))
-  default = []
+  })))
+  default = {}
 }
 
 variable "nodeset_startup_scripts" {
@@ -456,4 +455,10 @@ variable "endpoint_versions" {
   default = {
     compute = null
   }
+}
+
+variable "controller_network_attachment" {
+  description = "SelfLink for NetworkAttachment to be attached to the controller, if any."
+  type        = string
+  default     = null
 }

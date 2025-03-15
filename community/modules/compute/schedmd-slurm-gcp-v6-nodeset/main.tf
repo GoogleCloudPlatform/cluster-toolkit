@@ -17,7 +17,16 @@ locals {
   labels = merge(var.labels, { ghpc_module = "schedmd-slurm-gcp-v6-nodeset", ghpc_role = "compute" })
 }
 
+module "gpu" {
+  source = "../../../../modules/internal/gpu-definition"
+
+  machine_type      = var.machine_type
+  guest_accelerator = var.guest_accelerator
+}
+
 locals {
+  guest_accelerator = module.gpu.guest_accelerator
+
   disable_automatic_updates_metadata = var.allow_automatic_updates ? {} : { google_disable_automatic_updates = "TRUE" }
 
   metadata = merge(
@@ -47,7 +56,7 @@ locals {
     scopes = var.service_account_scopes
   }
 
-  ghpc_startup_script = [{
+  ghpc_startup_script = var.startup_script == null ? [] : [{
     filename = "ghpc_nodeset_startup.sh"
     content  = var.startup_script
   }]
@@ -67,18 +76,19 @@ locals {
 
     bandwidth_tier = var.bandwidth_tier
     can_ip_forward = var.can_ip_forward
-    disable_smt    = !var.enable_smt
 
     enable_confidential_vm = var.enable_confidential_vm
     enable_placement       = var.enable_placement
+    placement_max_distance = var.placement_max_distance
     enable_oslogin         = var.enable_oslogin
     enable_shielded_vm     = var.enable_shielded_vm
     gpu                    = one(local.guest_accelerator)
 
-    labels           = local.labels
-    machine_type     = terraform_data.machine_type_zone_validation.output
-    metadata         = local.metadata
-    min_cpu_platform = var.min_cpu_platform
+    labels                    = local.labels
+    machine_type              = terraform_data.machine_type_zone_validation.output
+    advanced_machine_features = var.advanced_machine_features
+    metadata                  = local.metadata
+    min_cpu_platform          = var.min_cpu_platform
 
     on_host_maintenance      = var.on_host_maintenance
     preemptible              = var.preemptible

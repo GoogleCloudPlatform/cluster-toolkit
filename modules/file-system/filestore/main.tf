@@ -55,6 +55,7 @@ resource "google_filestore_instance" "filestore_instance" {
   name     = var.name != null ? var.name : "${var.deployment_name}-${random_id.resource_name_suffix.hex}"
   location = var.filestore_tier == "ENTERPRISE" ? var.region : var.zone
   tier     = var.filestore_tier
+  protocol = var.protocol
 
   deletion_protection_enabled = var.deletion_protection.enabled
   deletion_protection_reason  = var.deletion_protection.reason
@@ -102,6 +103,11 @@ resource "google_filestore_instance" "filestore_instance" {
         specified then it must be a CIDR IP range with suffix range size 29 for
         BASIC_HDD or BASIC_SSD tiers. Otherwise the range size must be 24.
         EOT
+    }
+
+    precondition {
+      condition     = !startswith(var.filestore_tier, "BASIC") || var.protocol != "NFS_V4_1"
+      error_message = "NFS_V4_1 is not supported on BASIC Filestore tiers."
     }
   }
 }

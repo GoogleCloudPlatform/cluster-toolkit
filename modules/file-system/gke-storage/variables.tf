@@ -34,12 +34,15 @@ variable "storage_type" {
   The type of [GKE supported storage options](https://cloud.google.com/kubernetes-engine/docs/concepts/storage-overview)
   to used. This module currently support dynamic provisioning for the below storage options
   - Parallelstore
+  - Hyperdisk-balanced
+  - Hyperdisk-throughput
+  - Hyperdisk-extreme
   EOT 
   type        = string
   nullable    = false
   validation {
-    condition     = var.storage_type == null ? false : contains(["parallelstore"], lower(var.storage_type))
-    error_message = "Allowed string values for var.storage_type are \"Parallelstore\"."
+    condition     = var.storage_type == null ? false : contains(["parallelstore", "hyperdisk-balanced", "hyperdisk-throughput", "hyperdisk-extreme"], lower(var.storage_type))
+    error_message = "Allowed string values for var.storage_type are \"Parallelstore\", \"Hyperdisk-balanced\", \"Hyperdisk-throughput\", \"Hyperdisk-extreme\"."
   }
 }
 

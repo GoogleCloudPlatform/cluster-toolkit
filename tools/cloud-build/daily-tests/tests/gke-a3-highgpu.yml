@@ -33,7 +33,6 @@ cli_deployment_vars:
   region: "{{ region }}"
   zone: "{{ zone }}"
   reservation_affinity: "{{ reservation_affinity }}"
-  autoscaling_total_max_nodes: 2
   authorized_cidr: "{{ build_ip.stdout }}/32"
   network_name: "{{ network }}"
   local_ssd_count_nvme_block: 16
@@ -42,3 +41,4 @@ custom_vars:
   project: "{{ project }}"
 post_deploy_tests:
 - test-validation/test-gke-job.yml
+- test-validation/test-gke-a3-high.yml

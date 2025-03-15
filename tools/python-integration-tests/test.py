@@ -43,9 +43,9 @@ class SlurmTest(Test):
     # Base class for Slurm-specific tests.
     def ssh(self, hostname):
         self.ssh_manager = SSHManager()
-        self.ssh_manager.setup_connection(hostname, 10022, self.deployment.project_id, self.deployment.zone)
+        self.ssh_manager.setup_connection(hostname, self.deployment.project_id, self.deployment.zone)
         self.ssh_client = self.ssh_manager.ssh_client
-        self.ssh_client.connect("localhost", 10022, username=self.deployment.username, pkey=self.ssh_manager.key)
+        self.ssh_client.connect("localhost", self.ssh_manager.local_port, username=self.deployment.username, pkey=self.ssh_manager.key)
 
     def close_ssh(self):
         self.ssh_manager.close()

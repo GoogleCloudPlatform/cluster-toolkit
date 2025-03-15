@@ -97,7 +97,7 @@ locals {
     ])
   }
 
-  access_point_ips  = [data.google_compute_instance.ap.network_interface[0].network_ip]
+  access_point_ips  = google_compute_address.ap.address
   access_point_name = data.google_compute_instance.ap.name
 
   spool_disk_resource_name = "${var.deployment_name}-spool-disk"
@@ -162,8 +162,14 @@ data "google_compute_instance" "ap" {
   self_link = data.google_compute_region_instance_group.ap.instances[0].instance
 }
 
+resource "null_resource" "ap_config" {
+  triggers = {
+    config = local.ap_config
+  }
+}
+
 resource "google_storage_bucket_object" "ap_config" {
-  name    = "${local.name_prefix}-config-${substr(md5(local.ap_config), 0, 4)}"
+  name    = "${local.name_prefix}-config-${substr(md5(null_resource.ap_config.id), 0, 4)}"
   content = local.ap_config
   bucket  = var.htcondor_bucket_name
 
@@ -225,6 +231,14 @@ resource "google_compute_disk" "spool" {
   size   = var.spool_disk_size_gb
 }
 
+resource "google_compute_address" "ap" {
+  project      = var.project_id
+  name         = local.name_prefix
+  subnetwork   = var.subnetwork_self_link
+  address_type = "INTERNAL"
+  purpose      = "GCE_ENDPOINT"
+}
+
 module "access_point_instance_template" {
   source  = "terraform-google-modules/vm/google//modules/instance_template"
   version = "~> 12.1"
@@ -250,6 +264,8 @@ module "access_point_instance_template" {
   # secure boot
   enable_shielded_vm       = var.enable_shielded_vm
   shielded_instance_config = var.shielded_instance_config
+
+  network_ip = google_compute_address.ap.id
 
   # spool disk
   additional_disks = [
@@ -305,12 +321,11 @@ module "htcondor_ap" {
     device_name = local.spool_disk_device_name
     delete_rule = "ON_PERMANENT_INSTANCE_DELETION"
   }]
-
-  stateful_ips = [{
+  stateful_ips = var.enable_public_ips ? [{
     interface_name = "nic0"
     delete_rule    = "ON_PERMANENT_INSTANCE_DELETION"
-    is_external    = var.enable_public_ips
-  }]
+    is_external    = true
+  }] : []
 
   # the timeouts below are default for resource
   wait_for_instances = true

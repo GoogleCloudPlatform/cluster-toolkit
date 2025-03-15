@@ -28,19 +28,29 @@ vars:
 deployment_groups:
 - group: primary
   modules:
-  - id: network1
+  - id: network
     source: modules/network/vpc
+
+  # Private Service Access (PSA) requires the compute.networkAdmin role which is
+  # included in the Owner role, but not Editor.
+  # PSA is a best practice for Filestore instances, but can be optionally
+  # removed by deleting the private_service_access module and any references to
+  # the module by Filestore modules.
+  # https://cloud.google.com/vpc/docs/configure-private-services-access#permissions
+  - id: private_service_access
+    source: community/modules/network/private-service-access
+    use: [network]
 
   ## Filesystems
   - id: appsfs
     source: modules/file-system/filestore
-    use: [network1]
+    use: [network, private_service_access]
     settings:
       local_mount: /sw
 
   - id: homefs
     source: modules/file-system/filestore
-    use: [network1]
+    use: [network, private_service_access]
     settings:
       local_mount: /home
 
@@ -93,7 +103,7 @@ deployment_groups:
 
   - id: compute_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [network1]
+    use: [network]
     settings:
       node_count_dynamic_max: 20
       bandwidth_tier: gvnic_enabled
@@ -108,14 +118,14 @@ deployment_groups:
 
   - id: slurm_login
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
-    use: [network1]
+    use: [network]
     settings:
       enable_login_public_ips: true
 
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     use:
-    - network1
+    - network
     - compute_partition
     - slurm_login
     - homefs

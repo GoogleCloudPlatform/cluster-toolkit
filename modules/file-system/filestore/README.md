@@ -53,7 +53,7 @@ creation will fail when you run `terraform apply`.
 
 [tiers]: https://cloud.google.com/filestore/docs/service-tiers
 
-### Filestore mount options
+### Filestore protocols and mount options
 After Filestore instance is created, you can mount this to the compute node
 using different mount options. Toolkit uses [default mount options](https://linux.die.net/man/8/mount)
 for all tier services. Filestore has recommended mount options for different
@@ -69,6 +69,22 @@ mentioned below.
   settings:
     local_mount: /homefs
     mount_options: defaults,hard,timeo=600,retrans=3,_netdev
+```
+
+Filestore supports NFS protocols `NFS_V3` (default) and `NFS_V4_1`. Protocol support depends on the selected tier:
+- `NFS_V3`: Supported on all tiers (`BASIC_HDD`, `BASIC_SSD`, `HIGH_SCALE_SSD`, `ZONAL`, `ENTERPRISE`).
+- `NFS_V4_1`: Supported only on `HIGH_SCALE_SSD`, `ZONAL`, `REGIONAL`, and `ENTERPRISE`.
+This can be specified at creation time via the `protocol` variable. By default, `NFS_V3` is used for compatibility.
+See the example below and [this page](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/filestore_instance#protocol-1) for more information.
+
+```yaml
+- id: homefs
+  source: modules/file-system/filestore
+  use: [network1]
+  settings:
+    local_mount: /homefs
+    protocol: NFS_V4_1
+    filestore_tier: ZONAL
 ```
 
 ### Filestore quota
@@ -174,7 +190,7 @@ limitations under the License.
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 0.14.0 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.3.0 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.4 |
 | <a name="requirement_random"></a> [random](#requirement\_random) | ~> 3.0 |
 
@@ -212,6 +228,7 @@ No modules.
 | <a name="input_network_id"></a> [network\_id](#input\_network\_id) | The ID of the GCE VPC network to which the instance is connected given in the format:<br/>`projects/<project_id>/global/networks/<network_name>`" | `string` | n/a | yes |
 | <a name="input_nfs_export_options"></a> [nfs\_export\_options](#input\_nfs\_export\_options) | Define NFS export options. | <pre>list(object({<br/>    access_mode = optional(string)<br/>    ip_ranges   = optional(list(string))<br/>    squash_mode = optional(string)<br/>  }))</pre> | `[]` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | ID of project in which Filestore instance will be created. | `string` | n/a | yes |
+| <a name="input_protocol"></a> [protocol](#input\_protocol) | NFS protocol version. Default is NFS\_V3. NFS\_V4\_1 is only supported with HIGH\_SCALE\_SSD, ZONAL, REGIONAL, and ENTERPRISE tiers. | `string` | `"NFS_V3"` | no |
 | <a name="input_region"></a> [region](#input\_region) | Location for Filestore instances at Enterprise tier. | `string` | n/a | yes |
 | <a name="input_reserved_ip_range"></a> [reserved\_ip\_range](#input\_reserved\_ip\_range) | Reserved IP range for Filestore instance. Users are encouraged to set to null<br/>for automatic selection. If supplied, it must be:<br/><br/>CIDR format when var.connect\_mode == "DIRECT\_PEERING"<br/>Named IP Range when var.connect\_mode == "PRIVATE\_SERVICE\_ACCESS"<br/><br/>See Cloud documentation for more details:<br/><br/>https://cloud.google.com/filestore/docs/creating-instances#configure_a_reserved_ip_address_range | `string` | `null` | no |
 | <a name="input_size_gb"></a> [size\_gb](#input\_size\_gb) | Storage size of the filestore instance in GB. | `number` | `1024` | no |

@@ -59,7 +59,7 @@ OR
     source: community/modules/scripts/spack-setup
 
   - id: slurm_controller
-    source: community/modules/scheduler/schedmd-slurm-gcp-v5-controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     use: [network1, partition1, spack-setup]
 ```
 

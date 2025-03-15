@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/slurm/python/venv/bin/python3.13
 
 # Copyright (C) SchedMD LLC.
 # Copyright 2024 Google LLC
@@ -15,6 +15,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import List
+
 import os
 import sys
 import stat
@@ -24,10 +26,10 @@ import logging
 import shutil
 from pathlib import Path
 from concurrent.futures import as_completed
-from addict import Dict as NSDict
+from addict import Dict as NSDict # type: ignore
 
 import util
-from util import lookup, run, dirs, separate
+from util import NSMount, lookup, run, dirs, separate
 from more_executors import Executors, ExceptionRetryPolicy
 
 
@@ -38,48 +40,46 @@ def mounts_by_local(mounts):
     return {str(Path(m.local_mount).resolve()): m for m in mounts}
 
 
-def resolve_network_storage(nodeset=None):
+def _get_default_mounts(lkp: util.Lookup) -> List[NSDict]:
+    if lkp.cfg.disable_default_mounts:
+        return []
+    return [
+        NSDict(
+                server_ip= "$controller",
+                remote_mount= path,
+                local_mount= path,
+                fs_type= "nfs",
+                mount_options= "defaults,hard,intr",
+        )
+        for path in (
+            dirs.home,
+            dirs.apps,
+        )
+    ]
+
+def resolve_network_storage(nodeset=None) -> List[NSMount]:
     """Combine appropriate network_storage fields to a single list"""
-
-    if lookup().instance_role == "compute":
-        try:
-            nodeset = lookup().node_nodeset()
-        except Exception:
-            # External nodename, skip lookup
-            nodeset = None
-
-    # seed mounts with the default controller mounts
-    if lookup().cfg.disable_default_mounts:
-        default_mounts = []
-    else:
-        default_mounts = [
-            NSDict(
-                {
-                    "server_ip": lookup().control_addr or lookup().control_host,
-                    "remote_mount": str(path),
-                    "local_mount": str(path),
-                    "fs_type": "nfs",
-                    "mount_options": "defaults,hard,intr",
-                }
-            )
-            for path in (
-                dirs.home,
-                dirs.apps,
-            )
-        ]
-
+    lkp = lookup()
+    
     # create dict of mounts, local_mount: mount_info
-    mounts = mounts_by_local(default_mounts)
+    mounts = mounts_by_local(_get_default_mounts(lkp))
 
     # On non-controller instances, entries in network_storage could overwrite
     # default exports from the controller. Be careful, of course
-    mounts.update(mounts_by_local(lookup().cfg.network_storage))
-    if lookup().instance_role in ("login", "controller"):
-        mounts.update(mounts_by_local(lookup().cfg.login_network_storage))
+    mounts.update(mounts_by_local(lkp.cfg.network_storage))
 
-    if nodeset is not None:
-        mounts.update(mounts_by_local(nodeset.network_storage))
-    return list(mounts.values())
+    if lkp.is_login_node:
+        mounts.update(mounts_by_local(lkp.cfg.login_network_storage))
+
+    if lkp.instance_role == "compute":
+        try:
+            nodeset = lkp.node_nodeset()
+        except Exception:
+            pass # external nodename, skip lookup
+        else:
+            mounts.update(mounts_by_local(nodeset.network_storage))
+
+    return [lkp.normalize_ns_mount(mnt) for mnt in mounts.values()]
 
 
 def separate_external_internal_mounts(mounts):
@@ -193,46 +193,26 @@ def mount_fstab(mounts, log):
 
 
 def munge_mount_handler():
-    if not lookup().cfg.munge_mount:
-        log.error("Missing munge_mount in cfg")
-    elif lookup().is_controller:
+    if lookup().is_controller:
         return
-
-    mount = lookup().cfg.munge_mount
-    server_ip = (
-        mount.server_ip
-        if mount.server_ip
-        else (lookup().cfg.slurm_control_addr or lookup().cfg.slurm_control_host)
-    )
-    remote_mount = mount.remote_mount
-    local_mount = Path("/mnt/munge")
-    fs_type = mount.fs_type if mount.fs_type is not None else "nfs"
-    mount_options = (
-        mount.mount_options
-        if mount.mount_options is not None
-        else "defaults,hard,intr,_netdev"
-    )
-
-    log.info(f"Mounting munge share to: {local_mount}")
-    local_mount.mkdir()
-    if fs_type.lower() == "gcsfuse".lower():
-        if remote_mount is None:
-            remote_mount = ""
+    mnt = lookup().munge_mount
+    
+    log.info(f"Mounting munge share to: {mnt.local_mount}")
+    mnt.local_mount.mkdir()
+    if mnt.fs_type == "gcsfuse":
         cmd = [
             "gcsfuse",
-            f"--only-dir={remote_mount}" if remote_mount != "" else None,
-            server_ip,
-            str(local_mount),
+            f"--only-dir={mnt.remote_mount}" if mnt.remote_mount != "" else None,
+            mnt.server_ip,
+            str(mnt.local_mount),
         ]
     else:
-        if remote_mount is None:
-            remote_mount = dirs.munge
         cmd = [
             "mount",
-            f"--types={fs_type}",
-            f"--options={mount_options}" if mount_options != "" else None,
-            f"{server_ip}:{remote_mount}",
-            str(local_mount),
+            f"--types={mnt.fs_type}",
+            f"--options={mnt.mount_options}" if mnt.mount_options != "" else None,
+            f"{mnt.server_ip}:{mnt.remote_mount}",
+            str(mnt.local_mount),
         ]
     # wait max 120s for munge mount
     timeout = 120
@@ -251,42 +231,36 @@ def munge_mount_handler():
         raise err
 
     munge_key = Path(dirs.munge / "munge.key")
-    log.info(f"Copy munge.key from: {local_mount}")
-    shutil.copy2(Path(local_mount / "munge.key"), munge_key)
+    log.info(f"Copy munge.key from: {mnt.local_mount}")
+    shutil.copy2(Path(mnt.local_mount / "munge.key"), munge_key)
 
     log.info("Restrict permissions of munge.key")
     shutil.chown(munge_key, user="munge", group="munge")
     os.chmod(munge_key, stat.S_IRUSR)
 
-    log.info(f"Unmount {local_mount}")
-    if fs_type.lower() == "gcsfuse".lower():
-        run(f"fusermount -u {local_mount}", timeout=120)
+    log.info(f"Unmount {mnt.local_mount}")
+    if mnt.fs_type == "gcsfuse":
+        run(f"fusermount -u {mnt.local_mount}", timeout=120)
     else:
-        run(f"umount {local_mount}", timeout=120)
-    shutil.rmtree(local_mount)
+        run(f"umount {mnt.local_mount}", timeout=120)
+    shutil.rmtree(mnt.local_mount)
 
 
 def setup_nfs_exports():
     """nfs export all needed directories"""
+    lkp = util.lookup()
+    assert lkp.is_controller
+
+
     # The controller only needs to set up exports for cluster-internal mounts
     # switch the key to remote mount path since that is what needs exporting
     mounts = resolve_network_storage()
-    # manually add munge_mount
-    mounts.append(
-        NSDict(
-            {
-                "server_ip": lookup().cfg.munge_mount.server_ip,
-                "remote_mount": lookup().cfg.munge_mount.remote_mount,
-                "local_mount": Path(f"{dirs.munge}_tmp"),
-                "fs_type": lookup().cfg.munge_mount.fs_type,
-                "mount_options": lookup().cfg.munge_mount.mount_options,
-            }
-        )
-    )
+    mounts.append(lkp.munge_mount)
+   
     # controller mounts
     _, con_mounts = separate_external_internal_mounts(mounts)
     con_mounts = {m.remote_mount: m for m in con_mounts}
-    for nodeset in lookup().cfg.nodeset.values():
+    for nodeset in lkp.cfg.nodeset.values():
         # get internal mounts for each nodeset by calling
         # resolve_network_storage as from a node in each nodeset
         ns_mounts = resolve_network_storage(nodeset=nodeset)

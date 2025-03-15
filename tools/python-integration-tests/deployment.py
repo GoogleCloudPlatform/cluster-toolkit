@@ -17,16 +17,18 @@ import shutil
 import os
 import subprocess
 import yaml
+import uuid
 
 class Deployment:
     def __init__(self, blueprint: str):
-        self.blueprint_yaml = blueprint
+        self.blueprint_file = blueprint
         self.state_bucket = "daily-tests-tf-state"
         self.project_id = None
         self.workspace = None
         self.instance_name = None
         self.username = None
         self.deployment_name = None
+        self.blueprint_name = None
         self.zone = None
 
     def run_command(self, cmd: str, err_msg: str = None) -> subprocess.CompletedProcess:
@@ -37,8 +39,8 @@ class Deployment:
     def parse_blueprint(self, file_path: str):
         with open(file_path, 'r') as file:
             content = yaml.safe_load(file)
-        self.deployment_name = content["vars"]["deployment_name"]
         self.zone = content["vars"]["zone"]
+        self.blueprint_name = content["blueprint_name"]
 
     def get_posixAccount_info(self):
         # Extract the username from posixAccounts
@@ -50,9 +52,17 @@ class Deployment:
                 self.project_id = account['accountId']
                 self.username = account['username']
 
+    def generate_uniq_deployment_name(self):
+        BUILD_ID = os.environ.get('BUILD_ID')
+        if BUILD_ID:
+            return "-".join([self.blueprint_name, str(BUILD_ID[:6])])
+        else:
+            return "-".join([self.blueprint_name, str(uuid.uuid4())[:6]])
+
     def set_deployment_variables(self):
         self.workspace = os.path.abspath(os.getcwd().strip())
-        self.parse_blueprint(self.blueprint_yaml)
+        self.parse_blueprint(self.blueprint_file)
+        self.deployment_name = self.generate_uniq_deployment_name()
         self.get_posixAccount_info()
         self.instance_name = self.deployment_name.replace("-", "")[:10] + "-slurm-login-001"
 
@@ -62,7 +72,7 @@ class Deployment:
               "create",
               "-l",
               "ERROR",
-              self.blueprint_yaml,
+              self.blueprint_file,
               "--backend-config",
               f"bucket={self.state_bucket}",
               "--vars",

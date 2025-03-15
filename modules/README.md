@@ -35,10 +35,6 @@ Modules that are still in development and less stable are labeled with the
 ### Compute
 
 * **[vm-instance]** ![core-badge] : Creates one or more VM instances.
-* **[schedmd-slurm-gcp-v5-partition]** ![community-badge] ![deprecated-badge] :
-  Creates a partition to be used by a [slurm-controller][schedmd-slurm-gcp-v5-controller].
-* **[schedmd-slurm-gcp-v5-node-group]** ![community-badge] ![deprecated-badge]:
-  Creates a node group to be used by the [schedmd-slurm-gcp-v5-partition] module.
 * **[schedmd-slurm-gcp-v6-partition]** ![core-badge] :
   Creates a partition to be used by a [slurm-controller][schedmd-slurm-gcp-v6-controller].
 * **[schedmd-slurm-gcp-v6-nodeset]** ![core-badge] :
@@ -65,8 +61,6 @@ Modules that are still in development and less stable are labeled with the
 [gke-node-pool]: ../modules/compute/gke-node-pool/README.md
 [resource-policy]: ../modules/compute/resource-policy/README.md
 [gke-job-template]: ../modules/compute/gke-job-template/README.md
-[schedmd-slurm-gcp-v5-partition]: ../community/modules/compute/schedmd-slurm-gcp-v5-partition/README.md
-[schedmd-slurm-gcp-v5-node-group]: ../community/modules/compute/schedmd-slurm-gcp-v5-node-group/README.md
 [schedmd-slurm-gcp-v6-partition]: ../community/modules/compute/schedmd-slurm-gcp-v6-partition/README.md
 [schedmd-slurm-gcp-v6-nodeset]: ../community/modules/compute/schedmd-slurm-gcp-v6-nodeset/README.md
 [schedmd-slurm-gcp-v6-nodeset-tpu]: ../community/modules/compute/schedmd-slurm-gcp-v6-nodeset-tpu/README.md
@@ -188,16 +182,10 @@ Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial][fsi-monteca
 * **[gke-cluster]** ![core-badge] ![experimental-badge] : Creates a
   Kubernetes cluster using GKE.
 * **[pre-existing-gke-cluster]** ![core-badge] ![experimental-badge] : Retrieves an existing GKE cluster. Substitute for ([gke-cluster]) module.
-* **[schedmd-slurm-gcp-v5-controller]** ![community-badge] ![deprecated-badge] :
-  Creates a Slurm controller node using [slurm-gcp-version-5].
-* **[schedmd-slurm-gcp-v5-login]** ![community-badge] ![deprecated-badge] :
-  Creates a Slurm login node using [slurm-gcp-version-5].
-* **[schedmd-slurm-gcp-v5-hybrid]** ![community-badge] ![experimental-badge] ![deprecated-badge] :
-  Creates hybrid Slurm partition configuration files using [slurm-gcp-version-5].
 * **[schedmd-slurm-gcp-v6-controller]** ![core-badge] :
-  Creates a Slurm controller node using [slurm-gcp-version-6].
+  Creates a Slurm controller node.
 * **[schedmd-slurm-gcp-v6-login]** ![core-badge] :
-  Creates a Slurm login node using [slurm-gcp-version-6].
+  Creates a Slurm login node.
 * **[htcondor-setup]** ![community-badge] ![experimental-badge] : Creates the
   base infrastructure for an HTCondor pool (service accounts and Cloud Storage bucket).
 * **[htcondor-pool-secrets]** ![community-badge] ![experimental-badge] : Creates
@@ -220,11 +208,6 @@ Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial][fsi-monteca
 [htcondor-access-point]: ../community/modules/scheduler/htcondor-access-point/README.md
 [schedmd-slurm-gcp-v6-controller]: ../community/modules/scheduler/schedmd-slurm-gcp-v6-controller/README.md
 [schedmd-slurm-gcp-v6-login]: ../community/modules/scheduler/schedmd-slurm-gcp-v6-login/README.md
-[schedmd-slurm-gcp-v5-controller]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-controller/README.md
-[schedmd-slurm-gcp-v5-login]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-login/README.md
-[schedmd-slurm-gcp-v5-hybrid]: ../community/modules/scheduler/schedmd-slurm-gcp-v5-hybrid/README.md
-[slurm-gcp-version-5]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/5.12.2
-[slurm-gcp-version-6]: https://github.com/GoogleCloudPlatform/slurm-gcp/tree/6.8.6
 [pbspro-client]: ../community/modules/scheduler/pbspro-client/README.md
 [pbspro-server]: ../community/modules/scheduler/pbspro-server/README.md
 
@@ -278,10 +261,14 @@ Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial][fsi-monteca
 [spack-execute]: ../community/modules/scripts/spack-execute/README.md
 [wait-for-startup]: ../community/modules/scripts/wait-for-startup/README.md
 
-> **_NOTE:_** Slurm V4 is deprecated. In case, you want to use V4 modules, please use
+> **_NOTE:_** Slurm-GCP V4 is deprecated. In case, you want to use V4 modules, please use
 [ghpc-v1.27.0](https://github.com/GoogleCloudPlatform/hpc-toolkit/releases/tag/v1.27.0)
 source code and build ghpc binary from this. This source code also contains
 deprecated examples using V4 modules for your reference.
+> **_NOTE:_** Slurm-GCP V5 is deprecated. In case, you want to use V5 modules, please use
+[ghpc-v1.44.1](https://github.com/GoogleCloudPlatform/hpc-toolkit/releases/tag/v1.44.1)
+source code and build ghpc binary from this. This source code also contains
+deprecated examples using V5 modules for your reference.
 
 ## Module Fields
 

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/slurm/python/venv/bin/python3.13
 
 # Copyright (C) SchedMD LLC.
 #
@@ -22,6 +22,7 @@ from pathlib import Path
 import util
 from util import dirs, slurmdirs
 import tpu
+from addict import Dict as NSDict # type: ignore
 
 FILE_PREAMBLE = """
 # Warning:
@@ -184,10 +185,12 @@ def partitionlines(partition, lkp: util.Lookup) -> str:
     """Make a partition line for the slurm.conf"""
     MIN_MEM_PER_CPU = 100
 
-    def defmempercpu(nodeset: str) -> int:
-        template = lkp.cfg.nodeset.get(nodeset).instance_template
+    def defmempercpu(nodeset_name: str) -> int:
+        nodeset = lkp.cfg.nodeset.get(nodeset_name)
+        template = nodeset.instance_template
         machine = lkp.template_machine_conf(template)
-        return max(MIN_MEM_PER_CPU, machine.memory // machine.cpus)
+        mem_spec_limit = int(nodeset.node_conf.get("MemSpecLimit", 0))
+        return max(MIN_MEM_PER_CPU, (machine.memory - mem_spec_limit) // machine.cpus)
 
     defmem = min(
         map(defmempercpu, partition.partition_nodeset), default=MIN_MEM_PER_CPU
@@ -498,7 +501,7 @@ class TopologyBuilder:
 
     def render_conf_lines(self) -> Iterable[str]:
         if not self._r.switches:
-            return []
+            return [] # type: ignore
         for s in sorted(self._r.switches.values(), key=lambda s: s.name):
             yield from s.render_conf_lines()
 
@@ -518,7 +521,7 @@ class TopologyBuilder:
         return compressed
 
 
-def add_tpu_nodeset_topology(nodeset: object, bldr: TopologyBuilder, lkp: util.Lookup):
+def add_tpu_nodeset_topology(nodeset: NSDict, bldr: TopologyBuilder, lkp: util.Lookup):
     tpuobj = tpu.TPU.make(nodeset.nodeset_name, lkp)
     static, dynamic = lkp.nodenames(nodeset)
 
@@ -549,7 +552,7 @@ def _make_physical_path(physical_host: str) -> List[str]:
     return [_SLURM_TOPO_ROOT, *short_path]
 
 def add_nodeset_topology(
-    nodeset: object, bldr: TopologyBuilder, lkp: util.Lookup
+    nodeset: NSDict, bldr: TopologyBuilder, lkp: util.Lookup
 ) -> None:
     up_nodes = set()
     default_path = [_SLURM_TOPO_ROOT,  f"ns_{nodeset.nodeset_name}"]
@@ -561,7 +564,7 @@ def add_nodeset_topology(
         except Exception:
             continue
     
-        phys_host = inst.resourceStatus.get("physicalHost", "")
+        phys_host = inst.resource_status.physical_host or ""
         bldr.summary.physical_host[inst.name] = phys_host
         up_nodes.add(inst.name)
 

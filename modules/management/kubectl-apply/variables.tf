@@ -15,8 +15,8 @@
   */
 
 locals {
-  kueue_supported_versions  = ["v0.10.0", "v0.9.1", "v0.9.0", "v0.8.1"]
-  jobset_supported_versions = ["v0.7.1", "v0.5.2"]
+  kueue_supported_versions  = ["v0.10.1", "v0.10.0", "v0.9.1", "v0.9.0", "v0.8.1"]
+  jobset_supported_versions = ["v0.7.2", "v0.5.2"]
 }
 
 resource "terraform_data" "kueue_validations" {
@@ -65,7 +65,7 @@ variable "kueue" {
   description = "Install and configure [Kueue](https://kueue.sigs.k8s.io/docs/overview/) workload scheduler. A configuration yaml/template file can be provided with config_path to be applied right after kueue installation. If a template file provided, its variables can be set to config_template_vars."
   type = object({
     install              = optional(bool, false)
-    version              = optional(string, "v0.8.1")
+    version              = optional(string, "v0.10.0")
     config_path          = optional(string, null)
     config_template_vars = optional(map(any), null)
   })
@@ -76,7 +76,7 @@ variable "jobset" {
   description = "Install [Jobset](https://github.com/kubernetes-sigs/jobset) which manages a group of K8s [jobs](https://kubernetes.io/docs/concepts/workloads/controllers/job/) as a unit."
   type = object({
     install = optional(bool, false)
-    version = optional(string, "v0.5.2")
+    version = optional(string, "v0.7.2")
   })
   default = {}
 }

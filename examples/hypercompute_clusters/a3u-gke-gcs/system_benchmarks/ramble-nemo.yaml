@@ -1,0 +1,634 @@
+# Copyright 2025 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ramble
+  namespace: ramble
+---
+apiVersion: kueue.x-k8s.io/v1beta1
+kind: LocalQueue
+metadata:
+  namespace: "ramble"
+  name: "a3-ultra-tas"
+spec:
+  clusterQueue: "a3-ultra"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ramble
+  namespace: ramble
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: ramble
+  name: ramble-editor
+rules:
+- apiGroups: ["", "batch", "jobset.x-k8s.io", "kueue.x-k8s.io"] # "" indicates the core API group
+  resources: ["*"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kueue-reader
+rules:
+- apiGroups: ["kueue.x-k8s.io"]
+  resources: ["clusterqueues"]
+  verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ramble-editor
+  namespace: ramble
+subjects:
+- kind: ServiceAccount
+  name: ramble
+  apiGroup: ""
+roleRef:
+  kind: Role
+  name: ramble-editor
+  apiGroup: ""
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ramble-kueue-reader
+subjects:
+- kind: ServiceAccount
+  name: ramble
+  namespace: ramble
+  apiGroup: ""
+roleRef:
+  kind: ClusterRole
+  name: kueue-reader
+  apiGroup: ""
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ramble-nemo-configs
+  namespace: ramble
+data:
+  execute_nemo.tpl: |
+    #!/bin/bash
+    set -e
+    cd "{experiment_run_dir}"
+    kubectl delete -n {gke_namespace} configmap {experiment_name} || true
+    kubectl create -n {gke_namespace} configmap {experiment_name} --from-file={nemo_generated_config_path}/{nemo_generated_config_name}
+    printf "Submitting {experiment_name}\n"
+    kubectl create -f jobset 2>&1 | tee klog
+
+  collect_logs.tpl: |
+    #!/bin/bash
+    set -e
+    jobname=$(head -n 1 {experiment_run_dir}/klog | awk -F " |/" '{print $2}')
+    printf "Waiting for up to a day for ${jobname} to complete.\n"
+    kubectl wait --timeout=86400s jobs/${jobname}-w-0 --for=condition=complete
+    kubectl logs --tail=-1 -f -l batch.kubernetes.io/job-completion-index=0,job-name=${jobname}-w-0 | tee {log_file}
+
+  ramble.yaml: |
+    ramble:
+      variables:
+        ssh_port: 22
+        batch_submit: '{execute_nemo}'
+        mpi_command: >-
+          mpirun
+          -n {n_ranks}
+          -N {processes_per_node}
+          --bind-to none
+          --hostfile /tmp/hostfile
+          --mca btl self,tcp
+          --mca btl_tcp_if_include eth0
+          --mca orte_keep_fqdn_hostnames 1
+          --mca plm_rsh_no_tree_spawn 1
+          -x {mpi_env_vars}
+          --mca plm_rsh_agent "ssh -q -o LogLevel=ERROR -o StrictHostKeyChecking=no -p {ssh_port}"
+        mpi_env_vars: >-
+          $(echo
+          ${!NCCL*}
+          ${!OMPI*}
+          LD_LIBRARY_PATH
+          ${!CUDA*}
+          ${!GLOO*}
+          ${!NVIDIA*}
+          ${!NVTE*}
+          ${!OMP*}
+          ${!TORCH*}
+          ${!TQDM*}
+          TRANSFORMERS_OFFLINE
+          PYTHONPATH
+          | sed 's/ / -x /g')
+
+        container_name: nemo
+        container_uri: nvcr.io/nvidia/nemo:{nemo_version}
+        gke_container_name: nemo
+        gke_namespace: ramble
+        gpus_per_node: 8
+        n_threads: 12
+        nemo_launcher_tag: 24.07
+        nemo_version: 24.07
+        processes_per_node: 8
+
+        # Shared NeMo Configurations
+        trainer.max_steps: 10
+        trainer.val_check_interval: null
+        trainer.limit_val_batches: 0.0
+        trainer.log_every_n_steps: 1
+        trainer.enable_model_summary: false
+
+        model.tokenizer.library: megatron
+        model.tokenizer.type: GPT2BPETokenizer
+        model.tokenizer.model: null
+        model.tokenizer.delimiter : null
+        model.tokenizer.vocab_file: gpt2-vocab.json
+        model.tokenizer.merge_file: gpt2-merges.txt
+        model.data.data_impl: mock
+        model.data.data_prefix: []
+        model.data.splits_string: 98,1,1
+
+        exp_manager.resume_if_exists: false
+        exp_manager.create_checkpoint_callback: false
+        exp_manager.create_dllogger_logger: false
+        exp_manager.checkpoint_callback_params.save_top_k: 1
+        exp_manager.checkpoint_callback_params.model_parallel_size: ${multiply:$\{model.tensor_model_parallel_size}, $\{model.pipeline_model_parallel_size}}
+        exp_manager.exp_dir: '{experiment_run_dir}'
+
+        # Potentially need to be modified
+        gke_nodepool: a3-ultragpu-8g-a3-ultragpu-pool
+        sysnet_subnet_prefix: a3u-gke-gcs-sub
+        gpu_subnet_prefix: a3u-gke-gcs-rdma-sub
+        cluster_queue: a3-ultra-tas
+
+      env_vars:
+        set:
+          CUDA_VISIBLE_DEVICES: 0,1,2,3,4,5,6,7
+          OMP_NUM_THREADS: '{n_threads}'
+          TRANSFORMERS_OFFLINE: 0
+          TORCH_NCCL_AVOID_RECORD_STREAMS: 1
+          NCCL_NVLS_ENABLE: 0
+          GLOO_SOCKET_IFNAME: eth0,eth1
+          # SM_MARGIN environment vars prevent send-receive stalling execution
+          # (results in reduced step time)
+          NVTE_FWD_LAYERNORM_SM_MARGIN: 8
+          NVTE_BWD_LAYERNORM_SM_MARGIN: 8
+          NCCL_NET: gIB
+        prepend:
+        - paths:
+            LD_LIBRARY_PATH: /usr/local/gib/lib64
+
+      applications:
+        py-nemo:
+          workloads:
+            pretraining:
+              experiments:
+                mixtral-{n_nodes}-nodes:
+                  variables:
+                    n_nodes: [8, 16, 32]
+                    jobset_name: 'm8x7b-{n_nodes}'
+
+                    nemo_stage: training
+                    nemo_model: mixtral
+                    nemo_config_name: mixtral_8x7b
+
+                    model.data.num_workers: 4
+                    model.fp8_params: true
+                    model.gc_interval: 0
+                    model.global_batch_size: 1024
+                    model.micro_batch_size: 2
+                    model.moe_grouped_gemm: false
+                    model.optim.contiguous_grad_buffer: true
+                    model.optim.contiguous_param_buffer: true
+                    model.pipeline_model_parallel_size: 1
+                    model.virtual_pipeline_model_parallel_size: null
+
+                llama3-{n_nodes}-nodes:
+                  variables:
+                    n_nodes: [8, 16, 32]
+
+                    jobset_name: 'llama-{n_nodes}'
+                    nemo_stage: training
+                    nemo_model: llama
+                    nemo_config_name: llama3_1_70b
+
+                    model.data.num_workers: 2
+                    model.context_parallel_size: 1
+                    model.fp8: true
+                    model.fp8_e4m3: true
+                    model.fp8_hybrid: true
+                    model.fp8_params: true
+                    model.global_batch_size: 1024
+                    model.optim.grad_sync_dtype: bf16
+                    model.tensor_model_parallel_size: 2
+                    model.ub_tp_comm_overlap: false
+                    model.virtual_pipeline_model_parallel_size: 20
+
+          internals:
+            custom_executables:
+              mpi_head_node:
+                template:
+                - echo "Downloading GPT vocabulary files"
+                - wget -P /opt/NeMo/ https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-vocab.json
+                - wget -P /opt/NeMo/ https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-merges.txt
+                - source /usr/local/gib/scripts/set_nccl_env.sh
+                - if [[ "${NODE_RANK}" -eq "0" ]]; then
+                redirect: ''
+                log_file: ''
+              wait_worker_nodes:
+                template:
+                - else
+                - while ping -c 1 ${WORKERS_BASENAME}-0.${POSTFIX}; do
+                - sleep 5
+                - done
+                - fi
+                redirect: ''
+                log_file: ''
+              tail_log:
+                template:
+                - tail -f {log_file} &
+                - export TAIL_PID=$!
+                redirect: ''
+                log_file: ''
+              kill_tail:
+                template:
+                - kill -9 $TAIL_PID
+                redirect: ''
+                log_file: ''
+            executable_injection:
+            - name: mpi_head_node
+              order: before
+            - name: wait_worker_nodes
+              order: after
+            - name: tail_log
+              order: before
+            - name: kill_tail
+              order: after
+          formatted_executables:
+            yaml_command:
+              indentation: 18
+              join_separator: \n
+              commands:
+              - mkdir -p {experiment_run_dir}
+              - ulimit -l unlimited
+              - cp /configs/nemo.yaml {experiment_run_dir}/
+              - '{unformatted_command}'
+
+  jobset.tpl: |
+    apiVersion: jobset.x-k8s.io/v1alpha2
+    kind: JobSet
+    metadata:
+      generateName: {jobset_name}-
+      namespace: {gke_namespace}
+      labels:
+        kueue.x-k8s.io/queue-name: {cluster_queue}
+    spec:
+      ttlSecondsAfterFinished: 86400
+      network:
+        enableDNSHostnames: true
+        publishNotReadyAddresses: true
+      replicatedJobs:
+        - name: w
+          template:
+            spec:
+              parallelism: {n_nodes}
+              completions: {n_nodes}
+              template:
+                metadata:
+                  annotations:
+                    kueue.x-k8s.io/podset-preferred-topology: "kubernetes.io/hostname"
+                    networking.gke.io/default-interface: 'eth0'
+                    networking.gke.io/interfaces: |
+                      [
+                        \{"interfaceName":"eth0","network":"default"\},
+                        \{"interfaceName":"eth1","network":"{sysnet_subnet_prefix}-1"\},
+                        \{"interfaceName":"eth2","network":"{gpu_subnet_prefix}-0"\},
+                        \{"interfaceName":"eth3","network":"{gpu_subnet_prefix}-1"\},
+                        \{"interfaceName":"eth4","network":"{gpu_subnet_prefix}-2"\},
+                        \{"interfaceName":"eth5","network":"{gpu_subnet_prefix}-3"\},
+                        \{"interfaceName":"eth6","network":"{gpu_subnet_prefix}-4"\},
+                        \{"interfaceName":"eth7","network":"{gpu_subnet_prefix}-5"\},
+                        \{"interfaceName":"eth8","network":"{gpu_subnet_prefix}-6"\},
+                        \{"interfaceName":"eth9","network":"{gpu_subnet_prefix}-7"\}
+                      ]
+                spec:
+                  restartPolicy: Never
+                  nodeSelector:
+                    cloud.google.com/gke-nodepool: {gke_nodepool}
+                    cloud.google.com/gke-ephemeral-storage-local-ssd: "true"
+                  tolerations:
+                  - key: cloud.google.com/gke-queued
+                    effect: NoSchedule
+                    value: "true"
+                  - key: "nvidia.com/gpu"
+                    operator: "Exists"
+                    effect: "NoSchedule"
+                  setHostnameAsFQDN: true
+                  volumes:
+                  - name: mpi-id
+                    secret:
+                      secretName: mpi-ssh-nemo
+                      items:
+                      - key: ssh-privatekey
+                        path: "id_rsa"
+                      - key: ssh-publickey
+                        path: "id_rsa.pub"
+                  - name: gib
+                    hostPath:
+                      path: /home/kubernetes/bin/gib
+                  - name: nvidia
+                    hostPath:
+                      path: /home/kubernetes/bin/nvidia
+                  - name: lib64
+                    hostPath:
+                      path: /lib64
+                  - name: shared-memory
+                    emptyDir:
+                      medium: "Memory"
+                      sizeLimit: 250Gi
+                  - name: sys
+                    hostPath:
+                      path: /sys
+                  - name: proc-sys
+                    hostPath:
+                      path: /proc/sys
+                  - name: local-ssd
+                    hostPath:
+                      path: /mnt/stateful_partition/kube-ephemeral-ssd
+                  - name: nemo-config
+                    configMap:
+                      name: {experiment_name}
+                  initContainers:
+                  - name: gpu-healthcheck
+                    image: alpine:latest
+                    command: ["/bin/sh", "-c"]
+                    args:
+                    - |
+                      apk add --no-cache bash  # Install bash
+                      /bin/bash -c "set -ex
+                      NUM_GPUS=$(/usr/local/nvidia/bin/nvidia-smi --query-gpu=driver_version --format=csv,noheader,nounits | wc -l)
+                      if [ \${NUM_GPUS} -lt 8 ]; then
+                        echo \"Error: Only \${NUM_GPUS} GPUs and expected 8\"
+                        exit 1
+                      fi
+                      gpu_errors=(\$(/usr/local/nvidia/bin/nvidia-smi --query-gpu=ecc.errors.uncorrected.volatile.total --format=csv,noheader,nounits))
+                      for gpu_index in \${!gpu_errors[@]}; do
+                          if [ \${gpu_errors[\$gpu_index]} == '[N/A]' ]; then
+                              echo 'Error: ERR detected in GPU index '\$gpu_index
+                              exit 1
+                          elif [ \${gpu_errors[\$gpu_index]} -gt 0 ]; then
+                              echo 'Error: Unrecoverable ECC errors detected in GPU index '\$gpu_index
+                              exit 1
+                          fi
+                      done
+                      echo \${NUM_GPUS} GPUs found with no ERR or Unrecoverable ECC errors"
+                    volumeMounts:
+                    - name: nvidia
+                      mountPath: /usr/local/nvidia
+                    - name: lib64
+                      mountPath: /lib64
+                    securityContext:
+                      privileged: true
+                    env:
+                    - name: LD_LIBRARY_PATH
+                      value: /usr/local/nvidia/lib64
+                  containers:
+                  - name: {gke_container_name}
+                    stdin: true
+                    tty: true
+                    image: {container_uri}
+                    env:
+                    - name: OMPI_ALLOW_RUN_AS_ROOT
+                      value: "1"
+                    - name: OMPI_ALLOW_RUN_AS_ROOT_CONFIRM
+                      value: "1"
+                    - name: MY_NODE_NAME
+                      valueFrom:
+                        fieldRef:
+                          fieldPath: spec.nodeName
+                    command:
+                    - bash
+                    - -c
+                    - |
+                      set -x
+
+                      # Setup SSH
+                      export DEBIAN_FRONTEND=noninteractive
+
+                      apt update -qq -y
+                      apt install -qq -y iputils-ping openssh-server
+
+                      mkdir -p /run/sshd ~/.ssh
+                      chmod 700 ~/.ssh
+                      cp /secrets/ssh/* ~/.ssh/
+                      cat ~/.ssh/id_rsa.pub >> ~/.ssh/authorized_keys
+                      chmod 600 ~/.ssh/*
+                      mkdir -p /run/sshd
+                      /sbin/sshd
+
+                      # Load all the cuda libs
+                      /sbin/ldconfig
+
+                      export POSTFIX=$(hostname | cut -d . -f 2-)
+                      export WORKERS_BASENAME=$(hostname | cut -d . -f 1 | rev | cut -d - -f 2- | rev )
+                      export NODE_RANK=$JOB_COMPLETION_INDEX
+
+                      # For every host, get the entity and add to hostfile
+                      for i in `seq 0 $(({n_nodes}-1))`; do
+                        OTHER=${WORKERS_BASENAME}-${i}.${POSTFIX}
+                        until ssh -p {ssh_port} -o StrictHostKeyChecking=no $OTHER hostname;
+                        do
+                          echo ...
+                          sleep 10
+                        done
+                        echo ${OTHER} port={ssh_port} slots={processes_per_node} | tee -a /tmp/hostfile;
+                      done
+                      cat /tmp/hostfile
+
+                      export MASTER_ADDR=${WORKERS_BASENAME}-0.${POSTFIX}
+                      export MASTER_PORT=5678
+
+    {yaml_command}
+
+                      exit 0
+
+                    volumeMounts:
+                    - name: mpi-id
+                      mountPath: "/secrets/ssh"
+                      readOnly: true
+                    - name: nvidia
+                      mountPath: /usr/local/nvidia
+                    - name: gib
+                      mountPath: /usr/local/gib
+                    - name: shared-memory
+                      mountPath: /dev/shm
+                    - name: local-ssd
+                      mountPath: /ssd
+                    - name: nemo-config
+                      mountPath: /configs
+                    resources:
+                      limits:
+                        nvidia.com/gpu: 8
+                      requests:
+                        nvidia.com/gpu: 8
+
+                  restartPolicy: Never
+
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ramble-nemo-runner
+  namespace: ramble
+spec:
+  template:
+    spec:
+      volumes:
+      - name: config
+        configMap:
+          name: ramble-nemo-configs
+          items:
+          - key: jobset.tpl
+            path: jobset.tpl
+          - key: ramble.yaml
+            path: ramble.yaml
+          - key: execute_nemo.tpl
+            path: execute_nemo.tpl
+          - key: collect_logs.tpl
+            path: collect_logs.tpl
+
+      serviceAccountName: ramble
+      containers:
+      - name: ramble-controller
+        image: ubuntu:latest
+
+        volumeMounts:
+        - name: config
+          mountPath: /opt/configs/
+          readOnly: true
+
+        command:
+        - bash
+        - -c
+        - |
+          export DEBIAN_FRONTEND=noninteractive
+
+          set -e
+          printf "Installing system dependencies\n"
+          apt update -qq -y > /dev/null
+          apt install -qq -y build-essential python3-venv jq git curl > /dev/null
+
+          printf "Installing kubectl\n"
+          curl -s -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+
+          # Use current unix timestamp as a unique tag
+          # for jobs submitted
+          TAG=$(date +%s)
+          TEST_DIR=/workspace/nemo-tests-"${TAG}"
+          SOFTWARE_INSTALL=/opt
+
+          mkdir -p ${SOFTWARE_INSTALL} ${TEST_DIR}
+
+          printf "Cloning ramble and cluster-toolkit\n"
+          git clone --depth 1 -c feature.manyFiles=true https://github.com/GoogleCloudPlatform/ramble.git "${SOFTWARE_INSTALL}"/ramble
+
+          printf "Setting up ramble python environment, and installing requirements\n"
+          python3 -m venv "${SOFTWARE_INSTALL}"/ramble/env || true
+          source "${SOFTWARE_INSTALL}"/ramble/env/bin/activate
+          pip install -q -r "${SOFTWARE_INSTALL}"/ramble/requirements.txt
+
+          # Activate ramble
+          . ${SOFTWARE_INSTALL}/ramble/share/ramble/setup-env.sh
+
+          ramble workspace create -a -d "${TEST_DIR}"
+
+          cp /opt/configs/* ${RAMBLE_WORKSPACE}/configs/
+
+          cd ${RAMBLE_WORKSPACE}
+
+          # Set up SSH
+          printf "Creating ssh keypair for MPI workloads\n"
+          ssh-keygen -b 2048 -f mpi_id -N ""
+          kubectl create secret generic mpi-ssh-nemo --from-file=ssh-privatekey=./mpi_id --from-file=ssh-publickey=./mpi_id.pub || true
+
+          # Get number of GPUs / nodes available in this cluster from Kueue:
+          AVAILABLE_GPUS=$(
+            kubectl get clusterqueues.kueue.x-k8s.io -o json |
+            jq -r '.items[].spec.resourceGroups[].flavors[] | select (.name=="a3-ultra-tas") |
+            .resources[] | select (.name="nvidia.com/gpu") | .nominalQuota'
+          )
+
+          N_NODES=$((AVAILABLE_GPUS / 8))
+
+          printf "\n--- Available Benchmarks on %s nodes --\n" ${N_NODES}
+          ramble workspace info --where '{n_nodes} <= '"${N_NODES}"
+
+          printf "\n--------- Setting up Benchmarks -------\n"
+          ramble workspace setup --where '{n_nodes} <= '"${N_NODES}"
+
+          printf "\n----------- Running Benchmarks --------\n"
+          ramble on --where '{n_nodes} <= '"${N_NODES}"
+
+          printf "\n------- Collecting benchmark logs -----\n"
+          ramble on --executor "{experiment_run_dir}/collect_logs" --where '{n_nodes} <= '"${N_NODES}"
+
+          printf "\n------- Analyzing benchmark logs ------\n"
+          ramble workspace analyze -f json --where '{n_nodes} <= '"${N_NODES}"
+
+          printf "\n------- Archiving ramble workspace ------\n"
+          ramble workspace archive -t --where '{n_nodes} <= '"${N_NODES}"
+
+          printf "\n--------------- SUMMARY ---------------\n"
+          jq -r '["nemo_config","n_nodes","step","train_step_timing"], (.experiments[] as $exp | $exp.CONTEXTS[] as $context |
+          {
+            name: $exp.RAMBLE_VARIABLES.nemo_config_name,
+            workload: $exp.workload_name,
+            n_nodes: $exp.n_nodes,
+            Context: $context.name
+          } +
+          ($context.foms | from_entries )
+          | select (.Context == "0-10/10")
+          | [.name, .n_nodes, .Context, .train_step_timing])
+          | @tsv' results.latest.json
+          printf "\n-------- Benchmarking Complete -------\n"
+
+          ARCHIVE_TAR=$(readlink archive/archive.latest.tar.gz)
+          ARCHIVE_PATH=${RAMBLE_WORKSPACE}/archive/${ARCHIVE_TAR}
+          RESULTS_FILE=$(basename $(readlink results.latest.json))
+          RESULTS_PATH=${RAMBLE_WORKSPACE}/${RESULTS_FILE}
+
+          printf "\n# To copy the full results from container:\n"
+          printf "kubectl cp %s:%s %s\n" $(hostname) ${RESULTS_PATH} ${RESULTS_FILE}
+          printf "\n# To copy the ramble workspace archive from container:\n"
+          printf "kubectl cp %s:%s ./%s\n" $(hostname) ${ARCHIVE_PATH} ${ARCHIVE_TAR}
+
+          printf "\n# To re-activate ramble workspace, first access runner:\n"
+          printf "kubectl exec -it %s -- /bin/bash\n" $(hostname)
+          printf "# Then run:\n"
+          printf "cd ${RAMBLE_WORKSPACE}\n"
+          printf "source "${SOFTWARE_INSTALL}"/ramble/env/bin/activate\n"
+          printf ". ${SOFTWARE_INSTALL}/ramble/share/ramble/setup-env.sh\n"
+          printf "ramble workspace activate .\n"
+
+          printf "\n- Sleeping for 1 day to allow introspection -\n"
+          sleep 86400
+
+
+      restartPolicy: Never
+  backoffLimit: 4

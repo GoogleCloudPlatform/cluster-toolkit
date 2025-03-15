@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/slurm/python/venv/bin/python3.13
 
 # Copyright (C) SchedMD LLC.
 #
@@ -14,16 +14,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Iterable, List, Tuple, Optional, Any, Dict, Sequence
+from typing import Iterable, List, Tuple, Optional, Any, Dict, Sequence, Type, Callable, Literal
 import argparse
 import base64
-from dataclasses import dataclass
-from datetime import timedelta, datetime
+from dataclasses import dataclass, field
+from datetime import timedelta, datetime, timezone
 import hashlib
 import inspect
 import json
 import logging
 import logging.config
+import logging.handlers 
 import math
 import os
 import re
@@ -43,26 +44,26 @@ from itertools import chain, islice
 from pathlib import Path
 from time import sleep, time
 
-import slurm_gcp_plugins
 
+# TODO: remove "type: ignore" once moved to newer version of libraries
 from google.cloud import secretmanager
-from google.cloud import storage
+from google.cloud import storage # type: ignore
 
-import google.auth  # noqa: E402
-from google.oauth2 import service_account  # noqa: E402
-import googleapiclient.discovery  # noqa: E402
-import google_auth_httplib2  # noqa: E402
-from googleapiclient.http import set_user_agent  # noqa: E402
-from google.api_core.client_options import ClientOptions  # noqa: E402
-import httplib2  # noqa: E402
+import google.auth # type: ignore
+from google.oauth2 import service_account # type: ignore
+import googleapiclient.discovery # type: ignore 
+import google_auth_httplib2 # type: ignore
+from googleapiclient.http import set_user_agent # type: ignore
+from google.api_core.client_options import ClientOptions
+import httplib2
 
-import google.api_core.exceptions as gExceptions  # noqa: E402
+import google.api_core.exceptions as gExceptions
 
-from requests import get as get_url  # noqa: E402
-from requests.exceptions import RequestException  # noqa: E402
+from requests import get as get_url
+from requests.exceptions import RequestException
 
-import yaml  # noqa: E402
-from addict import Dict as NSDict  # noqa: E402
+import yaml
+from addict import Dict as NSDict # type: ignore
 
 
 USER_AGENT = "Slurm_GCP_Scripts/1.5 (GPN:SchedMD)"
@@ -85,40 +86,28 @@ scripts_dir = next(
 
 # load all directories as Paths into a dict-like namespace
 dirs = NSDict(
-    {
-        n: Path(p)
-        for n, p in dict.items(
-            {
-                "home": "/home",
-                "apps": "/opt/apps",
-                "slurm": "/slurm",
-                "scripts": scripts_dir,
-                "custom_scripts": "/slurm/custom_scripts",
-                "munge": "/etc/munge",
-                "secdisk": "/mnt/disks/sec",
-                "log": "/var/log/slurm",
-            }
-        )
-    }
+    home = Path("/home"),
+    apps = Path("/opt/apps"),
+    slurm = Path("/slurm"),
+    scripts = scripts_dir,
+    custom_scripts = Path("/slurm/custom_scripts"),
+    munge = Path("/etc/munge"),
+    secdisk = Path("/mnt/disks/sec"),
+    log = Path("/var/log/slurm"),
 )
 
 slurmdirs = NSDict(
-    {
-        n: Path(p)
-        for n, p in dict.items(
-            {
-                "prefix": "/usr/local",
-                "etc": "/usr/local/etc/slurm",
-                "state": "/var/spool/slurm",
-            }
-        )
-    }
+    prefix = Path("/usr/local"),
+    etc = Path("/usr/local/etc/slurm"),
+    state = Path("/var/spool/slurm"),
 )
 
 
+# TODO: Remove this hack (relies on undocumented behavior of PyYAML)
+# No need to represent NSDict and Path once we move to properly typed & serializable config.
 yaml.SafeDumper.yaml_representers[
-    None
-] = lambda self, data: yaml.representer.SafeRepresenter.represent_str(self, str(data))
+    None # type: ignore
+] = lambda self, data: yaml.representer.SafeRepresenter.represent_str(self, str(data)) # type: ignore
 
 
 class ApiEndpoint(Enum):
@@ -146,7 +135,7 @@ class MachineType:
     guest_cpus: int
     memory_mb: int
     accelerators: List[AcceleratorInfo]
-    
+
     @classmethod
     def from_json(cls, jo: dict) -> "MachineType":
         return cls(
@@ -162,31 +151,111 @@ class MachineType:
         # TODO: doesn't work with N1 custom machine types
         # See https://cloud.google.com/compute/docs/instances/creating-instance-with-custom-machine-type#create
         return self.name.split("-")[0]
-    
+
     @property
     def supports_smt(self) -> bool:
         # https://cloud.google.com/compute/docs/cpu-platforms
-        if self.family in  ("t2a", "t2d", "h3", "c4a",):
+        if self.family in  ("t2a", "t2d", "h3", "c4a", "h4d",):
             return False
         if self.guest_cpus == 1:
             return False
         return True
-    
+
     @property
     def sockets(self) -> int:
         return {
             "h3": 2,
+            "h4d": 2,
             "c2d": 2 if self.guest_cpus > 56 else 1,
             "a3": 2,
             "c2": 2 if self.guest_cpus > 30 else 1,
             "c3": 2 if self.guest_cpus > 88 else 1,
             "c3d": 2 if self.guest_cpus > 180 else 1,
             "c4": 2 if self.guest_cpus > 96 else 1,
+            "c4d": 2 if self.guest_cpus > 192 else 1,
         }.get(
-            self.family, 1,  # assume 1 socket for all other families
+            self.family,
+            1,  # assume 1 socket for all other families
         )
 
 
+@dataclass(frozen=True)
+class UpcomingMaintenance:
+    window_start_time: datetime
+
+    @classmethod
+    def from_json(cls, jo: Optional[dict]) -> Optional["UpcomingMaintenance"]:
+        if jo is None:
+            return None
+        try:
+            if "windowStartTime" in jo:
+                ts = parse_gcp_timestamp(jo["windowStartTime"])
+            elif "startTimeWindow" in jo:
+                ts = parse_gcp_timestamp(jo["startTimeWindow"]["earliest"])
+            else:
+                raise Exception("Neither windowStartTime nor startTimeWindow are found")
+        except BaseException as e:
+            raise ValueError(f"Unexpected format for upcomingMaintenance: {jo}") from e
+        return cls(window_start_time=ts)
+
+@dataclass(frozen=True)
+class InstanceResourceStatus:
+    physical_host: Optional[str]
+    upcoming_maintenance: Optional[UpcomingMaintenance]
+
+    @classmethod
+    def from_json(cls, jo: Optional[dict]) -> "InstanceResourceStatus":
+        if not jo:
+            return cls(
+                physical_host=None,
+                upcoming_maintenance=None,
+            )
+        
+        try:
+            maint = UpcomingMaintenance.from_json(jo.get("upcomingMaintenance"))
+        except ValueError as e:
+            log.exception("Failed to parse upcomingMaintenance, ignoring")
+            maint = None # intentionally swallow exception
+        
+        return cls(
+            physical_host=jo.get("physicalHost"),
+            upcoming_maintenance=maint,
+        )
+
+
+@dataclass(frozen=True)
+class Instance:
+  name: str
+  zone: str
+  status: str
+  creation_timestamp: datetime
+  role: Optional[str]
+  resource_status: InstanceResourceStatus
+  # TODO: use proper InstanceScheduling class
+  scheduling: NSDict
+
+  @classmethod
+  def from_json(cls, jo: dict) -> "Instance":
+    labels = jo.get("labels", {})
+
+    return cls(
+      name=jo["name"],
+      zone=trim_self_link(jo["zone"]),
+      status=jo["status"],
+      creation_timestamp=parse_gcp_timestamp(jo["creationTimestamp"]),
+      resource_status=InstanceResourceStatus.from_json(jo.get("resourceStatus")),
+      scheduling=NSDict(jo.get("scheduling")),
+      role = labels.get("slurm_instance_role"),
+    )
+
+
+@dataclass(frozen=True)
+class NSMount:
+    server_ip: str
+    local_mount: Path
+    remote_mount: Path
+    fs_type: str
+    mount_options: str
 
 @lru_cache(maxsize=1)
 def default_credentials():
@@ -199,6 +268,34 @@ def authentication_project():
 
 
 DEFAULT_UNIVERSE_DOMAIN = "googleapis.com"
+
+
+def now() -> datetime:
+    """
+    Return current time as timezone-aware datetime.
+
+    IMPORTANT: DO NOT use `datetime.now()`, unless you explicitly need to have tz-naive datetime.
+    Otherwise there is a risk of getting: "cannot compare naive and aware datetimes" error, 
+    since all timetstamps we receive from GCP API are tz-aware.
+
+    Another motivation  for this function is to allow to mock time in tests.
+    """
+    return datetime.now(timezone.utc)
+
+def parse_gcp_timestamp(s: str) -> datetime:
+  """
+  Parse timestamp strings returned by GCP API into datetime.
+  Works with both Zulu and non-Zulu timestamps.
+  NOTE: It always return tz-aware datetime (fallbacks to UTC and logs error).
+  """
+  # Requires Python >= 3.7
+  # TODO: Remove this "hack" of trimming the Z from timestamps once we move to Python 3.11 
+  # (context: https://discuss.python.org/t/parse-z-timezone-suffix-in-datetime/2220/30)
+  ts = datetime.fromisoformat(s.replace('Z', '+00:00'))
+  if ts.tzinfo is None: # fallback to UTC
+    log.error(f"Received timestamp without timezone info: {s}")
+    ts = ts.replace(tzinfo=timezone.utc)
+  return ts
 
 
 def universe_domain() -> str:
@@ -278,6 +375,7 @@ def parse_bucket_uri(uri: str):
     """
     pattern = re.compile(r"gs://(?P<bucket>[^/\s]+)/(?P<path>([^/\s]+)(/[^/\s]+)*)")
     matches = pattern.match(uri)
+    assert matches, f"Unexpected bucker URI: '{uri}'"
     return matches.group("bucket"), matches.group("path")
 
 
@@ -351,24 +449,22 @@ def hash_file(fullpath: Path) -> str:
 
 def install_custom_scripts(check_hash=False):
     """download custom scripts from gcs bucket"""
+    role, tokens = lookup().instance_role, []
 
-    compute_tokens = ["compute", "prolog", "epilog"]
-    if lookup().instance_role == "compute":
-        try:
-            compute_tokens.append(f"nodeset-{lookup().node_nodeset_name()}")
-        except Exception as e:
-            log.error(f"Failed to lookup nodeset: {e}")
+    if role == "controller":
+        tokens = ["controller", "prolog", "epilog"]
+    elif role == "compute":
+        tokens = [
+            "prolog", 
+            "epilog",
+            f"nodeset-{lookup().node_nodeset_name()}"
+        ]
+    elif role == "login":
+        tokens = [f"login-{lookup().login_group_name()}"]
 
-    prefix_tokens = dict.get(
-        {
-            "login": ["login"],
-            "compute": compute_tokens,
-            "controller": ["controller", "prolog", "epilog"],
-        },
-        lookup().instance_role,
-        [],
-    )
-    prefixes = [f"slurm-{tok}-script" for tok in prefix_tokens]
+    prefixes = [f"slurm-{tok}-script" for tok in tokens]
+
+    # TODO: use single `blob_list`, to reduce ~4x number of GCS requests
     blobs = list(chain.from_iterable(blob_list(prefix=p) for p in prefixes))
 
     script_pattern = re.compile(r"slurm-(?P<path>\S+)-script-(?P<name>\S+)")
@@ -454,76 +550,61 @@ def _fill_cfg_defaults(cfg: NSDict) -> NSDict:
         cfg.slurm_control_host = f"{cfg.slurm_cluster_name}-controller"
     if not cfg.slurm_control_host_port:
         cfg.slurm_control_host_port = "6820-6830"
-    if not cfg.munge_mount: # NOTE: should only happen with cloud controller
-        cfg.munge_mount = NSDict(
-            {
-                "server_ip": cfg.slurm_control_addr or cfg.slurm_control_host,
-                "remote_mount": "/etc/munge",
-                "fs_type": "nfs",
-                "mount_options": "defaults,hard,intr,_netdev",
-            }
-        )
-
-    network_storage_iter = filter(
-        None,
-        (
-            cfg.munge_mount,
-            *cfg.network_storage,
-            *cfg.login_network_storage,
-            *chain.from_iterable(ns.network_storage for ns in cfg.nodeset.values()),
-            *chain.from_iterable(ns.network_storage for ns in cfg.nodeset_dyn.values()),
-            *chain.from_iterable(ns.network_storage for ns in cfg.nodeset_tpu.values()),
-        ),
-    )
-    for netstore in network_storage_iter:
-        if netstore != "gcsfuse" and (
-            netstore.server_ip is None or netstore.server_ip == "$controller"
-        ):
-            netstore.server_ip = cfg.slurm_control_host
     return cfg
 
-def _list_config_blobs() -> Tuple[Any, str]:
+@dataclass
+class _ConfigBlobs:
+    """
+    "Private" class that represent a collection of GCS blobs for configuration
+    """
+    core: storage.Blob
+    partition: List[storage.Blob] = field(default_factory=list)
+    nodeset: List[storage.Blob] = field(default_factory=list)
+    nodeset_dyn: List[storage.Blob] = field(default_factory=list)
+    nodeset_tpu: List[storage.Blob] = field(default_factory=list)
+
+    @property
+    def hash(self) -> str:
+        h = hashlib.md5()
+        all = [self.core] + self.partition + self.nodeset + self.nodeset_dyn + self.nodeset_tpu    
+        # sort blobs so hash is consistent
+        for blob in sorted(all, key=lambda b: b.name): 
+            h.update(blob.md5_hash.encode("utf-8"))
+        return h.hexdigest() 
+
+def _list_config_blobs() -> _ConfigBlobs:
     _, common_prefix = _get_bucket_and_common_prefix()
-    res = { # TODO: use a dataclass once we move to python 3.7
-        "core": None,
-        "partition": [],
-        "nodeset": [],
-        "nodeset_dyn": [],
-        "nodeset_tpu": [],
-    }
-    hash = hashlib.md5()
-    blobs = list(blob_list(prefix=""))
-    # sort blobs so hash is consistent
-    for blob in sorted(blobs, key=lambda b: b.name):
+    
+    core: Optional[storage.Blob] = None
+    rest: Dict[str, List[storage.Blob]] = {"partition": [], "nodeset": [], "nodeset_dyn": [], "nodeset_tpu": []}
+
+    for blob in blob_list(prefix=""):
         if blob.name == f"{common_prefix}/config.yaml":
-            res["core"] = blob
-            hash.update(blob.md5_hash.encode("utf-8"))
-        for key in ("partition", "nodeset", "nodeset_dyn", "nodeset_tpu"):
+            core = blob
+        for key in rest.keys():
             if blob.name.startswith(f"{common_prefix}/{key}_configs/"):
-                res[key].append(blob)
-                hash.update(blob.md5_hash.encode("utf-8"))
+                rest[key].append(blob)
 
-    if res["core"] is None:
-        raise DeffetiveStoredConfigError("config.yaml not found in bucket")
-    return res, hash.hexdigest()
-
+    if core is None:
+        raise DeffetiveStoredConfigError(f"{common_prefix}/config.yaml not found in bucket")
+    return _ConfigBlobs(core=core, **rest)
 
 def _fetch_config(old_hash: Optional[str]) -> Optional[Tuple[NSDict, str]]:
     """Fetch config from bucket, returns None if no changes are detected."""
-    blobs, hash = _list_config_blobs()
-    if old_hash == hash:
+    blobs = _list_config_blobs()
+    if old_hash == blobs.hash:
         return None
 
     def _download(bs) -> List[Any]:
         return [yaml.safe_load(b.download_as_text()) for b in bs]
 
     return _assemble_config(
-        core=_download([blobs["core"]])[0],
-        partitions=_download(blobs["partition"]),
-        nodesets=_download(blobs["nodeset"]),
-        nodesets_dyn=_download(blobs["nodeset_dyn"]),
-        nodesets_tpu=_download(blobs["nodeset_tpu"]),
-    ), hash
+        core=_download([blobs.core])[0],
+        partitions=_download(blobs.partition),
+        nodesets=_download(blobs.nodeset),
+        nodesets_dyn=_download(blobs.nodeset_dyn),
+        nodesets_tpu=_download(blobs.nodeset_tpu),
+    ), blobs.hash
 
 def _assemble_config(
         core: Any,
@@ -743,7 +824,7 @@ def cached_property(f):
     return property(lru_cache()(f))
 
 
-def retry(max_retries: int, init_wait_time: float, warn_msg: str, exc_type: Exception):
+def retry(max_retries: int, init_wait_time: float, warn_msg: str, exc_type: Type[Exception]):
     """Retries functions that raises the exception exc_type.
     Retry time is increased by a factor of two for every iteration.
 
@@ -764,7 +845,7 @@ def retry(max_retries: int, init_wait_time: float, warn_msg: str, exc_type: Exce
         def wrapper(*args, **kwargs):
             retry = 0
             secs = init_wait_time
-            captured_exc = None
+            captured_exc: Optional[BaseException] = None
             while retry < max_retries:
                 try:
                     return f(*args, **kwargs)
@@ -774,6 +855,7 @@ def retry(max_retries: int, init_wait_time: float, warn_msg: str, exc_type: Exce
                     sleep(secs)
                     retry += 1
                     secs *= 2
+            assert captured_exc
             raise captured_exc
 
         return wrapper
@@ -781,11 +863,14 @@ def retry(max_retries: int, init_wait_time: float, warn_msg: str, exc_type: Exce
     return decorator
 
 
-def separate(pred, coll):
+def separate(pred: Callable[[Any], bool], coll: Iterable[Any]) -> Tuple[List[Any], List[Any]]:
     """filter into 2 lists based on pred returning True or False
     returns ([False], [True])
     """
-    return reduce(lambda acc, el: acc[pred(el)].append(el) or acc, coll, ([], []))
+    res: Tuple[List[Any], List[Any]] = ([],[])
+    for el in coll:
+        res[pred(el)].append(el)
+    return res
 
 
 def chunked(iterable, n=API_REQ_LIMIT):
@@ -939,13 +1024,16 @@ def to_hostlist(names: Iterable[str]) -> str:
     pref = defaultdict(list)
     tokenizer = re.compile(r"^(.*?)(\d*)$")
     for name in filter(None, names):
-        p, s = tokenizer.match(name).groups()
+        matches = tokenizer.match(name)
+        assert matches, name
+        p, s = matches.groups()
         pref[p].append(s)
 
     def _compress_suffixes(ss: List[str]) -> List[str]:
         cur, res = None, []
 
         def cur_repr():
+            assert cur
             nums, strs = cur
             if nums[0] == nums[1]:
                 return strs[0]
@@ -1041,7 +1129,7 @@ def batch_execute(requests, retry_cb=None, log_err=log.error):
         requests = {str(k): v for k, v in enumerate(requests)}  # rid generated here
     done = {}
     failed = {}
-    timestamps = []
+    timestamps: List[float] = []
     rate_limited = False
 
     def batch_callback(rid, resp, exc):
@@ -1137,7 +1225,7 @@ def wait_for_operations(operations):
 def get_filtered_operations(op_filter):
     """get list of operations associated with group id"""
     project = lookup().project
-    operations = []
+    operations: List[Any] = []
 
     def get_aggregated_operations(items):
         # items is a dict of location key to value: dict(operations=<list of operations>) or an empty dict
@@ -1211,10 +1299,15 @@ class ReservationDetails:
     policies: List[str] # names (not URLs) of resource policies
     bulk_insert_name: str # name in format suitable for bulk insert (currently identical to user supplied name in long format)
     deployment_type: Optional[str]
+    reservation_mode: Optional[str]
 
     @property
     def dense(self) -> bool:
         return self.deployment_type == "DENSE"
+    
+    @property
+    def calendar(self) -> bool:
+        return self.reservation_mode == "CALENDAR"
 
 @dataclass(frozen=True)
 class FutureReservation:
@@ -1224,8 +1317,12 @@ class FutureReservation:
     specific: bool
     start_time: datetime
     end_time: datetime
+    reservation_mode: Optional[str]
     active_reservation: Optional[ReservationDetails]
 
+    @property
+    def calendar(self) -> bool:
+        return self.reservation_mode == "CALENDAR"
 
 @dataclass
 class Job:
@@ -1255,9 +1352,30 @@ class Lookup:
     def project(self):
         return self.cfg.project or authentication_project()
 
-    @property
-    def control_addr(self):
-        return self.cfg.slurm_control_addr
+    @lru_cache(maxsize=None)
+    def _lookup_network_attachment(self, self_link: str) -> str:
+        resp = self.compute.networkAttachments().get(
+            project=self.project,
+            region=parse_self_link(self_link).region,
+            networkAttachment=trim_self_link(self_link)
+        ).execute()
+        eps = resp.get("connectionEndpoints", [])
+        if not eps or len(eps) > 2:
+            raise Exception(f"Expect exactly one connected endpoint, got {resp}")
+        ep: Dict[str, str] = eps[0]
+        if "ipAddress" not in ep:
+            raise Exception(f"Expect endpoints to have ipAddress, got {resp}")
+        return ep["ipAddress"]
+
+    @cached_property
+    def control_addr(self) -> Optional[str]:
+        if self.cfg.slurm_control_addr:
+            return self.cfg.slurm_control_addr
+
+        if self.cfg.controller_network_attachment:
+            return self._lookup_network_attachment(self.cfg.controller_network_attachment)
+
+        return None
 
     @property
     def control_host(self):
@@ -1265,7 +1383,7 @@ class Lookup:
 
     @cached_property
     def control_host_addr(self):
-        return host_lookup(self.cfg.slurm_control_host)
+        return self.control_addr or host_lookup(self.cfg.slurm_control_host)
 
     @property
     def control_host_port(self):
@@ -1295,6 +1413,10 @@ class Lookup:
     @property
     def is_controller(self):
         return self.instance_role_safe == "controller"
+    
+    @property
+    def is_login_node(self):
+        return self.instance_role_safe == "login"
 
     @cached_property
     def compute(self):
@@ -1314,6 +1436,10 @@ class Lookup:
     @cached_property
     def zone(self):
         return instance_metadata("zone")
+
+    def login_group_name(self):
+        assert self.is_login_node, f"{self.hostname} is not a login node"
+        return self._node_desc(self.hostname)["nodeset"]
 
     node_desc_regex = re.compile(
         r"^(?P<prefix>(?P<cluster>[^\s\-]+)-(?P<nodeset>\S+))-(?P<node>(?P<suffix>\w+)|(?P<range>\[[\d,-]+\]))$"
@@ -1394,7 +1520,7 @@ class Lookup:
             return f"{pref}-{start}"
         return f"{pref}-[{start}-{start + count - 1}]"
 
-    def static_dynamic_sizes(self, nodeset: object) -> int:
+    def static_dynamic_sizes(self, nodeset: NSDict) -> Tuple[int, int]:
         return (nodeset.node_count_static or 0, nodeset.node_count_dynamic_max or 0)
 
     def nodelist(self, nodeset) -> str:
@@ -1411,7 +1537,7 @@ class Lookup:
             (f"{pref}-{i}" for i in range(s_count, s_count + d_count)),
         )
 
-    def power_managed_nodesets(self) -> Iterable[object]:
+    def power_managed_nodesets(self) -> Iterable[NSDict]:
         return chain(self.cfg.nodeset.values(), self.cfg.nodeset_tpu.values())
 
     def is_power_managed_node(self, node_name: str) -> bool:
@@ -1431,10 +1557,9 @@ class Lookup:
         return idx < self.node_nodeset(node_name).node_count_static
 
     @lru_cache(maxsize=None)
-    def slurm_nodes(self):
-
-        def make_node_tuple(node_line):
-            """turn node,state line to (node, NodeState(state))"""
+    def slurm_nodes(self) -> Dict[str, NodeState]:
+        def parse_line(node_line) -> Tuple[str, NodeState]:
+            """turn node,state line to (node, NodeState)"""
             # state flags include: CLOUD, COMPLETING, DRAIN, FAIL, POWERED_DOWN,
             #   POWERING_DOWN
             node, fullstate = node_line.split(",")
@@ -1450,7 +1575,7 @@ class Lookup:
         node_lines = run(cmd, shell=True).stdout.rstrip().splitlines()
         nodes = {
             node: state
-            for node, state in map(make_node_tuple, node_lines)
+            for node, state in map(parse_line, node_lines)
             if "CLOUD" in state.flags or "DYNAMIC_NORM" in state.flags
         }
         return nodes
@@ -1490,101 +1615,46 @@ class Lookup:
 
 
     @lru_cache(maxsize=1)
-    def instances(self) -> Dict[str, object]:
+    def instances(self) -> Dict[str, Instance]:
         instance_information_fields = [
-            "advancedMachineFeatures",
-            "cpuPlatform",
             "creationTimestamp",
-            "disks",
-            "disks",
-            "fingerprint",
-            "guestAccelerators",
-            "hostname",
-            "id",
-            "kind",
-            "labelFingerprint",
-            "labels",
-            "lastStartTimestamp",
-            "lastStopTimestamp",
-            "lastSuspendedTimestamp",
-            "machineType",
-            "metadata",
             "name",
-            "networkInterfaces",
             "resourceStatus",
             "scheduling",
-            "selfLink",
-            "serviceAccounts",
-            "shieldedInstanceConfig",
-            "shieldedInstanceIntegrityPolicy",
-            "sourceMachineImage",
             "status",
-            "statusMessage",
-            "tags",
+            "labels.slurm_instance_role",
             "zone",
-            # "deletionProtection",
-            # "startRestricted",
         ]
-        if lookup().cfg.enable_slurm_gcp_plugins:
-            slurm_gcp_plugins.register_instance_information_fields(
-                lkp=lookup(),
-                project=self.project,
-                slurm_cluster_name=self.cfg.slurm_cluster_name,
-                instance_information_fields=instance_information_fields,
-            )
-
-        # TODO: Merge this with all fields when upcoming maintenance is
-        # supported in beta.
-        if endpoint_version(ApiEndpoint.COMPUTE) == 'alpha':
-          instance_information_fields.append("upcomingMaintenance")
-
-        instance_information_fields = sorted(set(instance_information_fields))
-        instance_fields = ",".join(instance_information_fields)
+        
+        instance_fields = ",".join(sorted(instance_information_fields))
         fields = f"items.zones.instances({instance_fields}),nextPageToken"
         flt = f"labels.slurm_cluster_name={self.cfg.slurm_cluster_name} AND name:{self.cfg.slurm_cluster_name}-*"
         act = self.compute.instances()
         op = act.aggregatedList(project=self.project, fields=fields, filter=flt)
 
-        def properties(inst):
-            """change instance properties to a preferred format"""
-            inst["zone"] = trim_self_link(inst["zone"])
-            inst["machineType"] = trim_self_link(inst["machineType"])
-            # metadata is fetched as a dict of dicts like:
-            # {'key': key, 'value': value}, kinda silly
-            metadata = {i["key"]: i["value"] for i in inst["metadata"].get("items", [])}
-            if "slurm_instance_role" not in metadata:
-                return None
-            inst["role"] = metadata["slurm_instance_role"]
-            inst["metadata"] = metadata
-            # del inst["metadata"]  # no need to store all the metadata
-            return NSDict(inst)
-
         instances = {}
         while op is not None:
             result = ensure_execute(op)
-            instance_iter = (
-                (inst["name"], properties(inst))
-                for inst in chain.from_iterable(
-                    zone.get("instances", []) for zone in result.get("items", {}).values()
-                )
-            )
-            instances.update(
-                {name: props for name, props in instance_iter if props is not None}
-            )
+            for zone in result.get("items", {}).values():
+                for jo in zone.get("instances", []):
+                    inst = Instance.from_json(jo)
+                    if inst.name in instances:
+                        log.error(f"Duplicate VM name {inst.name} across multiple zones")
+                    instances[inst.name] = inst
             op = act.aggregatedList_next(op, result)
         return instances
 
-    def instance(self, instance_name: str) -> Optional[object]:
+    def instance(self, instance_name: str) -> Optional[Instance]:
         return self.instances().get(instance_name)
 
     @lru_cache()
-    def _get_reservation(self, project: str, zone: str, name: str) -> object:
+    def _get_reservation(self, project: str, zone: str, name: str) -> Any:
         """See https://cloud.google.com/compute/docs/reference/rest/v1/reservations"""
         return self.compute.reservations().get(
             project=project, zone=zone, reservation=name).execute()
     
     @lru_cache()
-    def _get_future_reservation(self, project:str, zone:str, name: str) -> object:
+    def _get_future_reservation(self, project:str, zone:str, name: str) -> Any:
         """See https://cloud.google.com/compute/docs/reference/rest/v1/futureReservations"""
         return self.compute.futureReservations().get(project=project, zone=zone, futureReservation=name).execute()
 
@@ -1601,9 +1671,10 @@ class Lookup:
             name=name,
             policies=policies,
             deployment_type=reservation.get("deploymentType"),
+            reservation_mode=reservation.get("reservationMode"),
             bulk_insert_name=bulk_insert_name)
     
-    def nodeset_reservation(self, nodeset: object) -> Optional[ReservationDetails]:
+    def nodeset_reservation(self, nodeset: NSDict) -> Optional[ReservationDetails]:
         if not nodeset.reservation_name:
             return None
 
@@ -1620,22 +1691,23 @@ class Lookup:
         project, name = match.group("project", "reservation")
         return self.get_reservation_details(project, zone, name, nodeset.reservation_name)
     
-    def future_reservation(self, nodeset:object) -> Optional[FutureReservation]:
+    def future_reservation(self, nodeset: NSDict) -> Optional[FutureReservation]:
         if not nodeset.future_reservation:
             return None
 
         active_reservation = None
         match = re.search(r'^projects/(?P<project>[^/]+)/zones/(?P<zone>[^/]+)/futureReservations/(?P<name>[^/]+)(/.*)?$', nodeset.future_reservation)
+        assert match, f"Invalid future reservation name '{nodeset.future_reservation}'"
         project, zone, name = match.group("project","zone","name")
         fr = self._get_future_reservation(project,zone,name)
 
-        # TODO: Remove this "hack" of trimming the Z from timestamps once we move to Python 3.11 (context: https://discuss.python.org/t/parse-z-timezone-suffix-in-datetime/2220/30)
-        start_time = datetime.fromisoformat(fr["timeWindow"]["startTime"][:-1])
-        end_time = datetime.fromisoformat(fr["timeWindow"]["endTime"][:-1])
+        start_time = parse_gcp_timestamp(fr["timeWindow"]["startTime"])
+        end_time = parse_gcp_timestamp(fr["timeWindow"]["endTime"])
 
-        if "autoCreatedReservations" in fr["status"] and (fr_res:=fr["status"]["autoCreatedReservations"][0]):
-            if (start_time<=datetime.utcnow()<=end_time):
-                match = re.search(r'projects/(?P<project>[^/]+)/zones/(?P<zone>[^/]+)/reservations/(?P<name>[^/]+)(/.*)?$',fr_res)
+        if "autoCreatedReservations" in fr["status"] and (res:=fr["status"]["autoCreatedReservations"][0]):
+            if start_time <= now() <=end_time:
+                match = re.search(r'projects/(?P<project>[^/]+)/zones/(?P<zone>[^/]+)/reservations/(?P<name>[^/]+)(/.*)?$',res)
+                assert match, f"Unexpected reservation name '{res}'"
                 res_name = match.group("name")
                 bulk_insert_name = f"projects/{project}/reservations/{res_name}"
                 active_reservation = self.get_reservation_details(project, zone, res_name, bulk_insert_name)
@@ -1647,6 +1719,7 @@ class Lookup:
             specific=fr["specificReservationRequired"],
             start_time=start_time,
             end_time=end_time,
+            reservation_mode=fr.get("reservationMode"),
             active_reservation=active_reservation
         )
 
@@ -1655,7 +1728,7 @@ class Lookup:
         field_names = "name,zone,guestCpus,memoryMb,accelerators"
         fields = f"items.zones.machineTypes({field_names}),nextPageToken"
 
-        machines = defaultdict(dict)
+        machines: Dict[str, Dict[str, Any]] = defaultdict(dict)
         act = self.compute.machineTypes()
         op = act.aggregatedList(project=self.project, fields=fields)
         while op is not None:
@@ -1717,7 +1790,7 @@ class Lookup:
 
     @contextmanager
     def template_cache(self, writeback=False):
-        flag = "c" if writeback else "r"
+        flag: Literal["c", "r"] = "c" if writeback else "r"
         err = None
         for wait in backoff_delay(0.125, timeout=60, count=20):
             try:
@@ -1833,6 +1906,34 @@ class Lookup:
     @property
     def etc_dir(self) -> Path:
         return Path(self.cfg.output_dir or slurmdirs.etc)
+
+    def normalize_ns_mount(self, ns: Dict[str, str]) -> NSMount:
+        server_ip = ns.get("server_ip") or "$controller"
+        if server_ip == "$controller":
+            server_ip = self.control_addr or self.control_host
+    
+        return NSMount(
+            server_ip=server_ip,
+            local_mount=Path(ns["local_mount"]),
+            remote_mount=Path(ns["remote_mount"]),
+            fs_type=ns["fs_type"],
+            mount_options=ns["mount_options"],
+        )
+ 
+    @property
+    def munge_mount(self) -> NSMount:
+        if self.cfg.munge_mount:
+            mnt = self.cfg.munge_mount
+            mnt.local_mount = mnt.local_mount or "/mnt/munge"
+        else:
+            mnt = NSDict(
+                server_ip="$controller",
+                local_mount="/mnt/munge",
+                remote_mount=dirs.munge,
+                fs_type="nfs",
+                mount_options="defaults,hard,intr,_netdev",
+            )
+        return self.normalize_ns_mount(mnt)
 
 _lkp: Optional[Lookup] = None
 

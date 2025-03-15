@@ -154,6 +154,12 @@ variable "static_node_count" {
   default     = null
 }
 
+variable "auto_repair" {
+  description = "Whether the nodes will be automatically repaired."
+  type        = bool
+  default     = true
+}
+
 variable "auto_upgrade" {
   description = "Whether the nodes will be automatically upgraded."
   type        = bool
@@ -414,4 +420,16 @@ variable "run_workload_script" {
   description = "Whether execute the script to create a sample workload and inject rxdm sidecar into workload. Currently, implemented for A3-Highgpu and A3-Megagpu only."
   type        = bool
   default     = true
+}
+
+variable "enable_queued_provisioning" {
+  description = "If true, enables Dynamic Workload Scheduler and adds the cloud.google.com/gke-queued taint to the node pool."
+  type        = bool
+  default     = false
+}
+
+variable "enable_private_nodes" {
+  description = "Whether nodes have internal IP addresses only."
+  type        = bool
+  default     = false
 }

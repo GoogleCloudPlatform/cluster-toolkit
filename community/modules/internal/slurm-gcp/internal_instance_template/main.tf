@@ -95,7 +95,7 @@ resource "google_compute_instance_template" "tpl" {
       source       = lookup(disk.value, "source", null)
       source_image = lookup(disk.value, "source_image", null)
       type         = lookup(disk.value, "disk_type", null) == "local-ssd" ? "SCRATCH" : "PERSISTENT"
-      labels       = lookup(disk.value, "disk_type", null) == "local-ssd" ? null : lookup(disk.value, "disk_labels", null)
+      labels       = (lookup(disk.value, "source", null) != null || lookup(disk.value, "disk_type", null) == "local-ssd") ? null : lookup(disk.value, "disk_labels", null)
 
       dynamic "disk_encryption_key" {
         for_each = compact([var.disk_encryption_key == null ? null : 1])
@@ -176,8 +176,12 @@ resource "google_compute_instance_template" "tpl" {
   }
 
   advanced_machine_features {
-    enable_nested_virtualization = false
-    threads_per_core             = var.threads_per_core
+    enable_nested_virtualization = var.advanced_machine_features.enable_nested_virtualization
+    threads_per_core             = var.advanced_machine_features.threads_per_core
+    turbo_mode                   = var.advanced_machine_features.turbo_mode
+    visible_core_count           = var.advanced_machine_features.visible_core_count
+    performance_monitoring_unit  = var.advanced_machine_features.performance_monitoring_unit
+    enable_uefi_networking       = var.advanced_machine_features.enable_uefi_networking
   }
 
   dynamic "shielded_instance_config" {

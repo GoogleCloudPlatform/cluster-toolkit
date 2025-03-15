@@ -17,7 +17,16 @@ locals {
   labels = merge(var.labels, { ghpc_module = "schedmd-slurm-gcp-v6-login", ghpc_role = "scheduler" })
 }
 
+module "gpu" {
+  source = "../../../../modules/internal/gpu-definition"
+
+  machine_type      = var.machine_type
+  guest_accelerator = var.guest_accelerator
+}
+
 locals {
+  guest_accelerator = module.gpu.guest_accelerator
+
   disable_automatic_updates_metadata = var.allow_automatic_updates ? {} : { google_disable_automatic_updates = "TRUE" }
 
   metadata = merge(
@@ -45,7 +54,7 @@ locals {
   }
 
   # lower, replace `_` with `-`, and remove any non-alphanumeric characters
-  name_prefix = replace(
+  group_name = replace(
     replace(
       lower(var.name_prefix),
     "_", "-"),
@@ -53,7 +62,7 @@ locals {
 
 
   login_node = {
-    name_prefix         = local.name_prefix
+    group_name          = local.group_name
     disk_auto_delete    = var.disk_auto_delete
     disk_labels         = merge(var.disk_labels, local.labels)
     disk_size_gb        = var.disk_size_gb
@@ -61,8 +70,8 @@ locals {
     additional_disks    = local.additional_disks
     additional_networks = var.additional_networks
 
-    can_ip_forward = var.can_ip_forward
-    disable_smt    = !var.enable_smt
+    can_ip_forward            = var.can_ip_forward
+    advanced_machine_features = var.advanced_machine_features
 
     enable_confidential_vm   = var.enable_confidential_vm
     access_config            = var.enable_login_public_ips ? local.public_access_config : []

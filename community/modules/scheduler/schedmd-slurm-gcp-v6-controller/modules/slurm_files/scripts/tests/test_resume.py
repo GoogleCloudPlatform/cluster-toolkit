@@ -170,4 +170,6 @@ def test_allocate_nodes_to_placements(nodes: list[str], excl_job_id: Optional[in
 
   with unittest.mock.patch("resume.valid_placement_node") as mock_valid_placement_node:
     mock_valid_placement_node.return_value = True
+    lkp.template_info = unittest.mock.Mock(return_value=unittest.mock.Mock(machine_type=unittest.mock.Mock(family="n1")))
+
     assert resume._allocate_nodes_to_placements(nodes, excl_job_id, lkp) == expected

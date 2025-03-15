@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/slurm/python/venv/bin/python3.13
 
 # Copyright 2024 Google LLC
 #
@@ -53,12 +53,12 @@ def order(paths: List[List[str]]) -> List[str]:
     if not paths: return []
     class Vert:
         "Represents a vertex in a *network* tree."
-        def __init__(self, name: str, parent: "Vert"):
+        def __init__(self, name: str, parent: Optional["Vert"]):
             self.name = name
             self.parent = parent
             # Use `OrderedDict` to preserve insertion order
             # TODO: once we move to Python 3.7+ use regular `dict` since it has the same guarantee
-            self.children = OrderedDict()
+            self.children: OrderedDict = OrderedDict()
 
     # build a tree, children are ordered by insertion order
     root = Vert("", None)
@@ -107,7 +107,7 @@ def to_hostnames(nodelist: str) -> List[str]:
     return [n.decode("utf-8") for n in out.splitlines()]
 
 
-def get_instances(node_names: List[str]) -> Dict[str, object]:
+def get_instances(node_names: List[str]) -> Dict[str, Optional[Instance]]:
     fmt = (
         "--format=csv[no-heading,separator=','](zone,resourceStatus.physicalHost,name)"
     )

@@ -19,6 +19,7 @@ tags:
 - m.gke-job-template
 - m.gke-node-pool
 - m.gke-storage
+- m.service-account
 - m.private-service-access
 - m.vpc
 - gke
@@ -49,9 +50,6 @@ steps:
     echo '    settings:'                           >> $${SG_EXAMPLE}
     echo '      machine_type: e2-standard-2'       >> $${SG_EXAMPLE}
     echo '      zone: us-central1-a'               >> $${SG_EXAMPLE}
-
-    # avoids conflict with other tests
-    sed -i "s/gke-subnet/gke-subnet-$${BUILD_ID_SHORT}/" $${SG_EXAMPLE}
 
     IP=$(curl ifconfig.me)
     sed -i "s/<your-ip-address>/$${IP}/" $${SG_EXAMPLE}

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/slurm/python/venv/bin/python3.13
 
 # Copyright (C) SchedMD LLC.
 # Copyright 2024 Google LLC
@@ -129,15 +129,20 @@ def run_custom_scripts():
     if lookup().is_controller:
         # controller has all scripts, but only runs controller.d
         custom_dirs = [custom_dir / "controller.d"]
+        timeout = lookup().cfg.get("controller_startup_scripts_timeout", 300)
     elif lookup().instance_role == "compute":
-        # compute setup with compute.d and nodeset.d
-        custom_dirs = [custom_dir / "compute.d", custom_dir / "nodeset.d"]
-    elif lookup().instance_role == "login":
+        # compute setup with nodeset.d
+        custom_dirs = [custom_dir / "nodeset.d"]
+        timeout = lookup().cfg.get("compute_startup_scripts_timeout", 300)
+    elif lookup().is_login_node:
         # login setup with only login.d
         custom_dirs = [custom_dir / "login.d"]
+        timeout = lookup().cfg.get("login_startup_scripts_timeout", 300)
     else:
         # Unknown role: run nothing
         custom_dirs = []
+        timeout = 300
+
     custom_scripts = [
         p
         for d in custom_dirs
@@ -149,15 +154,6 @@ def run_custom_scripts():
 
     try:
         for script in custom_scripts:
-            if "/controller.d/" in str(script):
-                timeout = lookup().cfg.get("controller_startup_scripts_timeout", 300)
-            elif "/compute.d/" in str(script) or "/nodeset.d/" in str(script):
-                timeout = lookup().cfg.get("compute_startup_scripts_timeout", 300)
-            elif "/login.d/" in str(script):
-                timeout = lookup().cfg.get("login_startup_scripts_timeout", 300)
-            else:
-                timeout = 300
-            timeout = None if not timeout or timeout < 0 else timeout
             log.info(f"running script {script.name} with timeout={timeout}")
             result = run(str(script), timeout=timeout, check=False, shell=True)
             runlog = (
@@ -176,6 +172,47 @@ def run_custom_scripts():
         log.exception(f"script {script} encountered an exception")
         raise e
 
+def mount_save_state_disk():
+    disk_name = f"/dev/disk/by-id/google-{lookup().cfg.controller_state_disk.device_name}"
+    mount_point = util.slurmdirs.state
+    fs_type = "ext4"
+
+    rdevice = util.run(f"realpath {disk_name}").stdout.strip()
+    file_output = util.run(f"file -s {rdevice}").stdout.strip()
+    if "filesystem" not in file_output:
+        util.run(f"mkfs -t {fs_type} -q {rdevice}")
+
+    fstab_entry = f"{disk_name} {mount_point} {fs_type}"
+    with open("/etc/fstab", "r") as f:
+        fstab = f.readlines()
+    if fstab_entry not in fstab:
+        with open("/etc/fstab", "a") as f:
+            f.write(f"{fstab_entry} defaults 0 0\n")
+
+    util.run(f"systemctl daemon-reload")
+
+    os.makedirs(mount_point, exist_ok=True)
+    util.run(f"mount {mount_point}")
+
+    util.chown_slurm(mount_point)
+
+def mount_munge_key_disk():
+    state_disk_dir = "/var/spool/slurm/munge"
+    mount_point = dirs.munge
+
+    os.makedirs(state_disk_dir, exist_ok=True)
+
+    util.run(f"mount --bind {state_disk_dir} {mount_point}")
+
+    fstab_entry = f"{state_disk_dir} {mount_point}"
+    with open("/etc/fstab", "r") as f:
+        fstab = f.readlines()
+    if fstab_entry not in fstab:
+        with open("/etc/fstab", "a") as f:
+            f.write(f"{fstab_entry} none bind 0 0\n")
+
+    util.run(f"systemctl daemon-reload")
+
 def setup_jwt_key():
     jwt_key = Path(slurmdirs.state / "jwt_hs256.key")
 
@@ -193,7 +230,7 @@ def setup_munge_key():
     if munge_key.exists():
         log.info("Munge key already exists. Skipping key generation.")
     else:
-        run("create-munge-key -f", timeout=30)
+        run(f"dd if=/dev/random of={munge_key} bs=1024 count=1")
 
     shutil.chown(munge_key, user="munge", group="munge")
     os.chmod(munge_key, stat.S_IRUSR)
@@ -329,6 +366,11 @@ def setup_controller():
     util.chown_slurm(dirs.scripts / "config.yaml", mode=0o600)
     install_custom_scripts()
     conf.gen_controller_configs(lookup())
+    
+    if lookup().cfg.controller_state_disk.device_name != None:
+        mount_save_state_disk()
+        mount_munge_key_disk()
+    
     setup_jwt_key()
     setup_munge_key()
     setup_sudoers()
@@ -531,14 +573,17 @@ if __name__ == "__main__":
     try:
         main()
     except subprocess.TimeoutExpired as e:
+        stdout = (e.stdout or b"").decode().strip()
+        stderr = (e.stderr or b"").decode().strip()
+
         log.error(
             f"""TimeoutExpired:
     command={e.cmd}
     timeout={e.timeout}
     stdout:
-{e.stdout.strip()}
+{stdout}
     stderr:
-{e.stderr.strip()}
+{stderr}
 """
         )
         log.error("Aborting setup...")

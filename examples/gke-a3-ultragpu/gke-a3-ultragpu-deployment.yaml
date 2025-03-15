@@ -16,15 +16,16 @@
 terraform_backend_defaults:
   type: gcs
   configuration:
-    bucket: gke-a3u-manual-test
+    bucket: BUCKET_NAME
 
 vars:
   deployment_name: gke-a3-ultra
-  project_id: hpc-toolkit-dev
-  region: europe-west1
-  zone: europe-west1-b
-  authorized_cidr: 0.0.0.0/0
+  project_id: PROJECT_ID
+  region: COMPUTE_REGION
+  zone: COMPUTE_ZONE
+  authorized_cidr: <IP_ADDRESS>/<SUFFIX>
   # In order to not target a BLOCK_NAME, extended_reservation can be inputted as
   # extended_reservation: RESERVATION_NAME
-  extended_reservation: slurm-dev-gcp-a3u-gsc
-  static_node_count: 0
+  extended_reservation: RESERVATION_NAME/reservationBlocks/BLOCK_NAME
+  static_node_count: NODE_COUNT
+  k8s_service_account_name: # add this

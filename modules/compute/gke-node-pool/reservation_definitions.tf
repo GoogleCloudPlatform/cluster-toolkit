@@ -48,6 +48,7 @@ data "google_compute_reservation" "specific_reservations" {
 }
 
 locals {
+  generated_guest_accelerator       = module.gpu.machine_type_guest_accelerator
   reservation_resource_api_label    = "compute.googleapis.com/reservation-name"
   input_specific_reservations_count = try(length(var.reservation_affinity.specific_reservations), 0)
 

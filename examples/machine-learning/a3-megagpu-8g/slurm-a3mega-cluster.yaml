@@ -21,7 +21,6 @@ vars:
   deployment_name: a3mega-cluster
   a3mega_partition_name: a3mega
   a3mega_maintenance_interval: ""
-  enable_placement: false
   remote_mount_homefs: /nfsshare
   local_mount_homefs: /home
   instance_image_custom: true
@@ -181,7 +180,8 @@ deployment_groups:
       disk_type: pd-ssd
       machine_type: a3-megagpu-8g
       enable_public_ips: false
-      enable_smt: true
+      advanced_machine_features:
+        threads_per_core: null # Use platform default value
       node_conf:
         CoresPerSocket: 52
         ThreadsPerCore: 2

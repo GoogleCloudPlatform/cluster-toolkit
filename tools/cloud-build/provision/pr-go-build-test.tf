@@ -14,6 +14,7 @@
 
 
 resource "google_cloudbuild_trigger" "pr_go_build_test" {
+  # NOTE: make sure that go.mod:go and Makefile:MIN_GOLANG_VERSION match lowest version.
   for_each = toset(["1.22", "1.23"])
 
   name        = "PR-Go-${replace(each.key, ".", "-")}-build-test"

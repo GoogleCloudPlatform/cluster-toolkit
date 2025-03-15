@@ -27,9 +27,20 @@ locals {
   }
 }
 
+module "gpu" {
+  source = "../../internal/gpu-definition"
+
+  machine_type      = var.machine_type
+  guest_accelerator = var.guest_accelerator
+}
+
 locals {
-  has_gpu                  = length(local.guest_accelerator) > 0
-  allocatable_gpu_per_node = local.has_gpu ? max(local.guest_accelerator[*].count...) : -1
+  guest_accelerator = module.gpu.guest_accelerator
+
+  has_gpu                       = length(local.guest_accelerator) > 0
+  allocatable_gpu_per_node      = local.has_gpu ? max(local.guest_accelerator[*].count...) : -1
+  is_static_node_pool_with_gpus = var.static_node_count != null && local.allocatable_gpu_per_node != -1
+  static_gpu_count              = local.is_static_node_pool_with_gpus ? var.static_node_count * local.allocatable_gpu_per_node : 0
   gpu_taint = local.has_gpu ? [{
     key    = "nvidia.com/gpu"
     value  = "present"
@@ -78,7 +89,7 @@ resource "google_container_node_pool" "node_pool" {
   max_pods_per_node = var.max_pods_per_node
 
   management {
-    auto_repair  = true
+    auto_repair  = var.auto_repair
     auto_upgrade = var.auto_upgrade
   }
 
@@ -93,6 +104,13 @@ resource "google_container_node_pool" "node_pool" {
     content {
       type        = var.placement_policy.type
       policy_name = var.placement_policy.name
+    }
+  }
+
+  dynamic "queued_provisioning" {
+    for_each = var.enable_queued_provisioning ? [1] : []
+    content {
+      enabled = true
     }
   }
 
@@ -224,6 +242,8 @@ resource "google_container_node_pool" "node_pool" {
         subnetwork = additional_node_network_configs.value.subnetwork
       }
     }
+
+    enable_private_nodes = var.enable_private_nodes
   }
 
   timeouts {
@@ -317,6 +337,18 @@ resource "google_container_node_pool" "node_pool" {
     precondition {
       condition     = var.placement_policy.type != "COMPACT" || local.upgrade_settings.strategy != "BLUE_GREEN"
       error_message = "Compact placement is not supported with blue-green upgrades."
+    }
+    precondition {
+      condition     = !(var.enable_queued_provisioning == true && var.placement_policy.type == "COMPACT")
+      error_message = "placement_policy cannot be COMPACT when enable_queued_provisioning is true."
+    }
+    precondition {
+      condition     = !(var.enable_queued_provisioning == true && var.reservation_affinity.consume_reservation_type != "NO_RESERVATION")
+      error_message = "reservation_affinity should be NO_RESERVATION when enable_queued_provisioning is true."
+    }
+    precondition {
+      condition     = !(var.enable_queued_provisioning == true && var.autoscaling_total_min_nodes != 0)
+      error_message = "autoscaling_total_min_nodes should be 0 when enable_queued_provisioning is true."
     }
   }
 }

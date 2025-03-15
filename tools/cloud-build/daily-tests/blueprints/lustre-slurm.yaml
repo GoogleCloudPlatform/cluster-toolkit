@@ -23,11 +23,9 @@ vars:
   zone: us-central1-a
   machine_type: n2-standard-2
   disk_type: pd-ssd
-  # enable_placement: false
-  # on_host_maintenance: MIGRATE
   num_nodes: 1
   rocky_image:
-    family: slurm-gcp-6-8-hpc-rocky-linux-8
+    family: slurm-gcp-6-9-hpc-rocky-linux-8
     project: schedmd-slurm-public
 
 deployment_groups:
@@ -79,7 +77,7 @@ deployment_groups:
   #   settings:
   #     node_count_dynamic_max: $(vars.num_nodes)
   #     instance_image:
-  #       family: slurm-gcp-6-8-ubuntu-2004-lts
+  #       family: slurm-gcp-6-9-ubuntu-2004-lts
   #       project: schedmd-slurm-public
 
   # - id: ubuntu_partition

@@ -23,6 +23,9 @@ It will automatically perform the following steps, as described in the
   - source: modules/network/vpc
     id: network
 
+  # Private Service Access (PSA) requires the compute.networkAdmin role which is
+  # included in the Owner role, but not Editor.
+  # https://cloud.google.com/vpc/docs/configure-private-services-access#permissions
   - source: community/modules/network/private-service-access
     id: ps_connect
     use: [network]

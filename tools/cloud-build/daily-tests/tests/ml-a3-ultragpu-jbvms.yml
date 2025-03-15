@@ -1,0 +1,38 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+# region, zone must be defined in build file with --extra-vars flag!
+test_name: a3u-jbvms
+deployment_name: a3u-jbvms-{{ build }}
+hostname_prefix: "{{ deployment_name }}-beowulf"
+workspace: /workspace
+blueprint_yaml: "{{ workspace }}/examples/machine-learning/a3-ultragpu-8g/a3ultra-vm.yaml"
+region: europe-west1
+zone: europe-west1-b
+network: "{{ deployment_name }}-net-0"
+remote_node: "{{ hostname_prefix }}-0"
+post_deploy_tests:
+- test-validation/test-mounts.yml
+- test-validation/test-nvidia-smi.yml
+custom_vars:
+  mounts:
+  - /home
+cli_deployment_vars:
+  region: "{{ region }}"
+  zone: "{{ zone }}"
+  disk_size_gb: 200
+  a3u_reservation_name: hpc-exr-2
+  a3u_provisioning_model: RESERVATION_BOUND

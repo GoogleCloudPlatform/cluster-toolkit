@@ -68,6 +68,16 @@ data "google_project" "project" {
   project_id = var.project_id
 }
 
+data "google_container_engine_versions" "version_prefix_filter" {
+  provider       = google-beta
+  location       = var.cluster_availability_type == "ZONAL" ? var.zone : var.region
+  version_prefix = var.version_prefix
+}
+
+locals {
+  master_version = var.min_master_version != null ? var.min_master_version : data.google_container_engine_versions.version_prefix_filter.latest_master_version
+}
+
 resource "google_container_cluster" "gke_cluster" {
   provider = google-beta
 
@@ -159,7 +169,7 @@ resource "google_container_cluster" "gke_cluster" {
   release_channel {
     channel = var.release_channel
   }
-  min_master_version = var.min_master_version
+  min_master_version = local.master_version
 
   maintenance_policy {
     daily_maintenance_window {
@@ -179,6 +189,13 @@ resource "google_container_cluster" "gke_cluster" {
     }
   }
 
+  dns_config {
+    additive_vpc_scope_dns_domain = var.cloud_dns_config.additive_vpc_scope_dns_domain
+    cluster_dns                   = var.cloud_dns_config.cluster_dns
+    cluster_dns_scope             = var.cloud_dns_config.cluster_dns_scope
+    cluster_dns_domain            = var.cloud_dns_config.cluster_dns_domain
+  }
+
   addons_config {
     gcp_filestore_csi_driver_config {
       enabled = var.enable_filestore_csi
@@ -195,6 +212,9 @@ resource "google_container_cluster" "gke_cluster" {
     parallelstore_csi_driver_config {
       enabled = var.enable_parallelstore_csi
     }
+    ray_operator_config {
+      enabled = var.enable_ray_operator
+    }
   }
 
   timeouts {
@@ -202,10 +222,18 @@ resource "google_container_cluster" "gke_cluster" {
     update = var.timeout_update
   }
 
+  node_config {
+    shielded_instance_config {
+      enable_secure_boot          = var.system_node_pool_enable_secure_boot
+      enable_integrity_monitoring = true
+    }
+  }
+
   lifecycle {
     # Ignore all changes to the default node pool. It's being removed after creation.
     ignore_changes = [
-      node_config
+      node_config,
+      min_master_version,
     ]
     precondition {
       condition     = var.default_max_pods_per_node == null || var.networking_mode == "VPC_NATIVE"
@@ -243,7 +271,7 @@ resource "google_container_node_pool" "system_node_pools" {
   name     = var.system_node_pool_name
   cluster  = var.cluster_reference_type == "NAME" ? google_container_cluster.gke_cluster.name : google_container_cluster.gke_cluster.self_link
   location = var.cluster_availability_type == "ZONAL" ? var.zone : var.region
-  version  = var.min_master_version
+  version  = local.master_version
 
   autoscaling {
     total_min_node_count = var.system_node_pool_node_count.total_min_nodes
@@ -312,6 +340,7 @@ resource "google_container_node_pool" "system_node_pools" {
     ignore_changes = [
       node_config[0].labels,
       node_config[0].taint,
+      version,
     ]
     precondition {
       condition     = contains(["SURGE"], local.upgrade_settings.strategy)
@@ -346,16 +375,32 @@ module "workload_identity" {
   version = "~> 34.0"
 
   use_existing_gcp_sa = true
-  name                = "workload-identity-k8-sa"
+  name                = var.k8s_service_account_name
   gcp_sa_name         = local.sa_email
   project_id          = var.project_id
-  roles               = var.enable_gcsfuse_csi ? ["roles/storage.admin"] : []
 
   # https://github.com/terraform-google-modules/terraform-google-kubernetes-engine/issues/1059
   depends_on = [
     data.google_project.project,
     google_container_cluster.gke_cluster
   ]
+}
+
+locals {
+  k8s_service_account_name = one(module.workload_identity[*].k8s_service_account_name)
+}
+
+locals {
+  # Separate gvnic and rdma networks and assign indexes
+  gvnic_networks = [for idx, net in [for n in var.additional_networks : n if strcontains(upper(n.nic_type), "GVNIC")] :
+    merge(net, { name = "${var.k8s_network_names.gvnic_prefix}${idx + var.k8s_network_names.gvnic_start_index}" })
+  ]
+
+  rdma_networks = [for idx, net in [for n in var.additional_networks : n if strcontains(upper(n.nic_type), "RDMA")] :
+    merge(net, { name = "${var.k8s_network_names.rdma_prefix}${idx + var.k8s_network_names.rdma_start_index}" })
+  ]
+
+  all_networks = concat(local.gvnic_networks, local.rdma_networks)
 }
 
 module "kubectl_apply" {
@@ -365,11 +410,11 @@ module "kubectl_apply" {
   project_id = var.project_id
 
   apply_manifests = flatten([
-    for idx, network_info in var.additional_networks : [
+    for idx, network_info in local.all_networks : [
       {
         source = "${path.module}/templates/gke-network-paramset.yaml.tftpl",
         template_vars = {
-          name            = network_info.subnetwork,
+          name            = network_info.name,
           network_name    = network_info.network
           subnetwork_name = network_info.subnetwork,
           device_mode     = strcontains(upper(network_info.nic_type), "RDMA") ? "RDMA" : "NetDevice"
@@ -377,7 +422,7 @@ module "kubectl_apply" {
       },
       {
         source        = "${path.module}/templates/network-object.yaml.tftpl",
-        template_vars = { name = network_info.subnetwork }
+        template_vars = { name = network_info.name }
       }
     ]
   ])

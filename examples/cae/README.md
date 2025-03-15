@@ -1,7 +1,3 @@
-> **_NOTE:_** This document uses Slurm-GCP v5 version of CAE blueprint. You can
-> also use Slurm-GCP v6 version of the CAE blueprint in this folder. it would
-> require to append "-v6" suffix at the end of blueprint name/ deployment folder.
-
 # Computer Aided Engineering (CAE) Reference Architecture
 
 The Computer Aided Engineering (CAE) [blueprint](./cae-slurm.yaml) in

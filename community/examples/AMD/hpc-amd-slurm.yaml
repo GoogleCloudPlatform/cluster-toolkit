@@ -168,7 +168,7 @@ deployment_groups:
         # these images must match the images used by Slurm modules below because
         # we are building OpenMPI with PMI support in libraries contained in
         # Slurm installation
-        family: slurm-gcp-6-8-hpc-rocky-linux-8
+        family: slurm-gcp-6-9-hpc-rocky-linux-8
         project: schedmd-slurm-public
 
   - id: low_cost_nodeset
@@ -178,7 +178,6 @@ deployment_groups:
       machine_type: c2d-standard-4
       node_count_dynamic_max: 10
       bandwidth_tier: gvnic_enabled
-      enable_placement: false
       allow_automatic_updates: false
 
   - id: low_cost_partition
@@ -194,7 +193,6 @@ deployment_groups:
       machine_type: c2d-standard-112
       node_count_dynamic_max: 50
       bandwidth_tier: gvnic_enabled
-      enable_placement: true
       allow_automatic_updates: false
 
   # Because is_default is set to true, jobs will run on this partition unless an
