@@ -29,10 +29,10 @@ if ! type -P nv-hostengine 1>/dev/null; then
     exit 0
 fi
 
-# Exit if GPU isn't H100
+# Exit if GPU isn't H/B 100/200
 GPU_MODEL=$(nvidia-smi --query-gpu=name --format=csv,noheader)
-if ! [[ "$GPU_MODEL" =~ H[1-2]00 ]]; then
-    echo "No H100 or H200 GPU detected" >&2
+if ! [[ "$GPU_MODEL" =~ [BH][1-2]00 ]]; then
+    echo "No supported GPU detected" >&2
     exit 0
 fi
 
