@@ -31,7 +31,7 @@ variable "name" {
 }
 
 variable "zone" {
-  description = "The zone name where the nfs instance located in."
+  description = "The zone name where the NFS instance located in."
   type        = string
 }
 
@@ -74,7 +74,7 @@ variable "provisioned_throughput" {
 # Deprecated, replaced by instance_image
 # tflint-ignore: terraform_unused_declarations
 variable "image" {
-  description = "DEPRECATED: The VM image used by the nfs server"
+  description = "DEPRECATED: The VM image used by the NFS server"
   type        = string
   default     = null
 
@@ -86,7 +86,7 @@ variable "image" {
 
 variable "instance_image" {
   description = <<-EOD
-    The VM image used by the nfs server.
+    The VM image used by the NFS server.
 
     Expected Fields:
     name: The name of the image. Mutually exclusive with family.
@@ -111,19 +111,19 @@ variable "instance_image" {
 }
 
 variable "auto_delete_disk" {
-  description = "Whether or not the nfs disk should be auto-deleted"
+  description = "Whether or not the NFS disk should be auto-deleted"
   type        = bool
   default     = false
 }
 
 variable "network_self_link" {
-  description = "The self link of the network to attach the nfs VM."
+  description = "The self link of the network to attach the NFS VM."
   type        = string
   default     = "default"
 }
 
 variable "subnetwork_self_link" {
-  description = "The self link of the subnetwork to attach the nfs VM."
+  description = "The self link of the subnetwork to attach the NFS VM."
   type        = string
   default     = null
 }
