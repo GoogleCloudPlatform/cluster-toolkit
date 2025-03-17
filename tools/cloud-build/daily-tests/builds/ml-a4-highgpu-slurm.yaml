@@ -44,6 +44,7 @@ steps:
     ZONE=europe-west1-b
     BLUEPRINT="/workspace/examples/machine-learning/a4-highgpu-8g/a4high-slurm-blueprint.yaml"
     sed -i -e '/deletion_protection:/{n;s/enabled: true/enabled: false/}' $${BLUEPRINT}
+    sed -i -e 's/\breservation_name\b/future_reservation/g' $${BLUEPRINT}
     sed -i -e '/reason:/d' $${BLUEPRINT}
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
         --user=sa_106486320838376751393 \
