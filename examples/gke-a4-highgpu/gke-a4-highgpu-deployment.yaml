@@ -41,5 +41,7 @@ vars:
   authorized_cidr:
 
   # The name of the compute engine reservation of A4-High nodes in the form of
+  # <project>/<reservation-name>
+  # In order to target a BLOCK_NAME, extended_reservation can be inputted as
   # <project>/<reservation-name>/reservationBlocks/<reservation-block-name>
   extended_reservation:
