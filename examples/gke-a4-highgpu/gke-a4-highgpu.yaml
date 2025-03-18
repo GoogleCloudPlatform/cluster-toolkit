@@ -1,4 +1,4 @@
-# Copyright 2024 "Google LLC"
+# Copyright 2025 "Google LLC"
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -38,6 +38,8 @@ vars:
   authorized_cidr:
 
   # The name of the compute engine reservation of A4-High nodes in the form of
+  # <project>/<reservation-name>
+  # In order to target a BLOCK_NAME, extended_reservation can be inputted as
   # <project>/<reservation-name>/reservationBlocks/<reservation-block-name>
   extended_reservation:
 
@@ -250,7 +252,7 @@ deployment_groups:
       image: nvidia/cuda:11.0.3-runtime-ubuntu20.04
       command:
       - nvidia-smi
-      node_count: 2
+      node_count: $(vars.static_node_count)
       name: run-nvidia-smi
       k8s_service_account_name: workload-identity-k8s-sa
     outputs: [instructions]
