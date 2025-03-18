@@ -1,5 +1,5 @@
 /**
- * Copyright 2024 Google LLC
+ * Copyright 2025 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -56,10 +56,11 @@ locals {
   verified_specific_reservations = [for k, v in data.google_compute_reservation.specific_reservations : v if(v.specific_reservation != null && v.specific_reservation_required == true)]
 
   # Build two maps to be used to compare the VM properties between reservations and the node pool
-  reservation_vm_properties = [for r in local.verified_specific_reservations : {
-    "machine_type" : try(r.specific_reservation[0].instance_properties[0].machine_type, "")
-    "guest_accelerators" : { for acc in try(r.specific_reservation[0].instance_properties[0].guest_accelerators, []) : acc.accelerator_type => acc.accelerator_count }
-  }]
+  # Skip this for TPUs
+  reservation_vm_properties = local.has_gpu ? ([for reservation in local.verified_specific_reservations : {
+    "machine_type" : try(reservation.specific_reservation[0].instance_properties[0].machine_type, "")
+    "guest_accelerators" : { for acc in try(reservation.specific_reservation[0].instance_properties[0].guest_accelerators, []) : acc.accelerator_type => acc.accelerator_count }
+  }]) : []
   nodepool_vm_properties = {
     "machine_type" : var.machine_type
     "guest_accelerators" : { for acc in try(local.guest_accelerator, []) : coalesce(acc.type, try(local.generated_guest_accelerator[0].type, "")) => coalesce(acc.count, try(local.generated_guest_accelerator[0].count, 0)) }
