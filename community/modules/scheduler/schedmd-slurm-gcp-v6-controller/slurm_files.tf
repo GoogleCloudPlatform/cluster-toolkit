@@ -159,10 +159,12 @@ module "slurm_files" {
   enable_debug_logging = var.enable_debug_logging
   extra_logging_flags  = var.extra_logging_flags
 
-  enable_bigquery_load          = var.enable_bigquery_load
-  enable_external_prolog_epilog = var.enable_external_prolog_epilog
-  epilog_scripts                = var.epilog_scripts
-  prolog_scripts                = var.prolog_scripts
+  enable_bigquery_load               = var.enable_bigquery_load
+  enable_external_prolog_epilog      = var.enable_external_prolog_epilog
+  enable_chs_gpu_health_check_prolog = var.enable_chs_gpu_health_check_prolog
+  enable_chs_gpu_health_check_epilog = var.enable_chs_gpu_health_check_epilog
+  epilog_scripts                     = var.epilog_scripts
+  prolog_scripts                     = var.prolog_scripts
 
   disable_default_mounts = !var.enable_default_mounts
   network_storage = [
