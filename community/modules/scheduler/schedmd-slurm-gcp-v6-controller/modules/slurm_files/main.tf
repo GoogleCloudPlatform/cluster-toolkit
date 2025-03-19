@@ -268,6 +268,14 @@ resource "google_storage_bucket_object" "epilog_scripts" {
   source  = each.value.source
 }
 
+############################
+# DATA: CHS GPU HEALTH CHECK
+############################
+
+data "local_file" "chs_gpu_health_check" {
+  filename = "${path.module}/scripts/tools/gpu-test"
+}
+
 ################################
 # DATA: EXTERNAL PROLOG/EPILOG #
 ################################
@@ -299,8 +307,19 @@ locals {
     filename = "z_setup_external.sh"
     content  = data.local_file.setup_external.content
   }]
+  chs_gpu_health_check = [{
+    filename = "a_chs_gpu_health_check.sh"
+    content  = data.local_file.chs_gpu_health_check.content
+    source   = null
+  }]
 
-  prolog_scripts             = var.enable_external_prolog_epilog ? concat(local.external_prolog, var.prolog_scripts) : var.prolog_scripts
-  epilog_scripts             = var.enable_external_prolog_epilog ? concat(local.external_epilog, var.epilog_scripts) : var.epilog_scripts
+  chs_prolog     = var.enable_chs_gpu_health_check_prolog ? local.chs_gpu_health_check : []
+  ext_prolog     = var.enable_external_prolog_epilog ? local.external_prolog : []
+  prolog_scripts = concat(local.chs_prolog, local.ext_prolog, var.prolog_scripts)
+
+  chs_epilog     = var.enable_chs_gpu_health_check_epilog ? local.chs_gpu_health_check : []
+  ext_epilog     = var.enable_external_prolog_epilog ? local.external_epilog : []
+  epilog_scripts = concat(local.chs_epilog, local.ext_epilog, var.epilog_scripts)
+
   controller_startup_scripts = var.enable_external_prolog_epilog ? concat(local.setup_external, var.controller_startup_scripts) : var.controller_startup_scripts
 }
