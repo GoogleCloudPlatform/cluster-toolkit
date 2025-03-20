@@ -482,12 +482,12 @@ variable "upgrade_settings" {
 variable "k8s_network_names" {
   description = "Kubernetes network names details for GKE. If starting index is not specified for gvnic or rdma, it would be set to the default values."
   type = object({
-    gvnic_prefix      = optional(string)
-    gvnic_start_index = optional(number)
-    gvnic_postfix     = optional(string)
-    rdma_prefix       = optional(string)
-    rdma_start_index  = optional(number)
-    rdma_postfix      = optional(string)
+    gvnic_prefix      = optional(string, "")
+    gvnic_start_index = optional(number, 1)
+    gvnic_postfix     = optional(string, "")
+    rdma_prefix       = optional(string, "")
+    rdma_start_index  = optional(number, 0)
+    rdma_postfix      = optional(string, "")
   })
   default = {
     gvnic_prefix      = "gvnic-"
