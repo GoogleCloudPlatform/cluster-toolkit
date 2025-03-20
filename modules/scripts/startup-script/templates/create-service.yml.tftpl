@@ -1,0 +1,85 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+---
+- name: Set up service
+  hosts: localhost
+  become: true
+  vars:
+    service_name: ${service_name}
+    service_user: ${service_user}
+    service_type: ${service_type}
+    exec_start: ${exec_start}
+    start_after: ${start_after}
+    working_directory: ${working_directory}
+
+  tasks:
+    - name: Check if service user exists
+      command: id "{{ service_user }}"
+      register: user_exists
+      ignore_errors: true
+    - name: Create service user if it doesn't exist
+      user:
+        name: "{{ service_user }}"
+        home: "{{ working_directory }}"
+        create_home: yes
+      when: user_exists.rc != 0
+    - name: Create /var/log/{{ service_name }} directory
+      file:
+        path: "/var/log/{{ service_name }}"
+        state: directory
+        owner: "{{ service_user }}"
+        group: "{{ service_user }}"
+        mode: '0755'
+    - name: Create the service file
+      copy:
+        dest: "/etc/systemd/system/{{ service_name }}.service"
+        content: |
+          [Unit]
+          Description={{ service_name }} Service
+          After={{ start_after }}
+
+          [Service]
+          Type={{ service_type }}
+          ExecStart={{ exec_start }}
+          StandardOutput=append:/var/log/{{ service_name }}/{{ service_name }}.std
+          StandardError=append:/var/log/{{ service_name }}/{{ service_name }}.err
+          Restart=always
+          User={{ service_user }}
+          WorkingDirectory={{ working_directory }}
+      notify: Reload systemd
+    - name: Create logrotate configuration
+      copy:
+        dest: "/etc/logrotate.d/{{ service_name }}"
+        content: |
+          /var/log/{{ service_name }}/*.log {
+            daily
+            rotate 7
+            compress
+            delaycompress
+            missingok
+            notifempty
+            create 0640 {{ service_user }} {{ service_user }}
+          }
+
+  handlers:
+    - name: Reload systemd
+      systemd:
+        daemon_reload: yes
+
+  post_tasks:
+    - name: Enable and start the service
+      systemd:
+        name: "{{ service_name }}.service"
+        enabled: yes
+        state: started

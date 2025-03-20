@@ -196,6 +196,39 @@ variable "local_ssd_filesystem" {
   nullable = false
 }
 
+variable "create_systemd_service" {
+  description = "Creates a new systemd service. Enable by setting name field."
+  type = object({
+    name              = optional(string, "")
+    user              = optional(string, "root")
+    type              = optional(string, "simple")
+    exec_start        = optional(string, "")
+    start_after       = optional(string, "network.target")
+    working_directory = optional(string, "/tmp")
+  })
+
+  validation {
+    condition     = var.create_systemd_service.name == "" || var.create_systemd_service.exec_start != ""
+    error_message = "var.service.exec_start: The content of ExecStart must be defined."
+  }
+
+  validation {
+    condition     = var.create_systemd_service.name == "" || startswith(var.create_systemd_service.working_directory, "/")
+    error_message = "var.service.working_directory must be set to an absolute path."
+  }
+
+  default = {
+    name              = ""
+    user              = "root"
+    type              = "simple"
+    exec_start        = ""
+    start_after       = "network.target"
+    working_directory = "/tmp"
+  }
+
+  nullable = true
+}
+
 variable "install_cloud_ops_agent" {
   description = "Warning: Consider using `install_stackdriver_agent` for better performance. Run Google Ops Agent installation script if set to true."
   type        = bool

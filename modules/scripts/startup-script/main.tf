@@ -148,8 +148,28 @@ locals {
     },
   ]
 
+  create_systemd_service_enabled = can(coalesce(var.create_systemd_service.name))
+  service_setup_content = !local.create_systemd_service_enabled ? "" : templatefile(
+    "${path.module}/templates/create-service.yml.tftpl",
+    {
+      service_name      = var.create_systemd_service.name,
+      service_user      = var.create_systemd_service.user,
+      service_type      = var.create_systemd_service.type,
+      start_after       = var.create_systemd_service.start_after,
+      working_directory = var.create_systemd_service.working_directory,
+      exec_start        = var.create_systemd_service.exec_start,
+    }
+  )
+  service_setup = !local.create_systemd_service_enabled ? [] : [
+    {
+      type        = "ansible-local"
+      destination = "create-systemd-service.yml"
+      content     = local.service_setup_content
+    },
+  ]
+
   supplied_ansible_runners = anytrue([for r in var.runners : r.type == "ansible-local"])
-  has_ansible_runners      = anytrue([local.supplied_ansible_runners, local.configure_ssh, var.docker.enabled, local.local_ssd_filesystem_enabled])
+  has_ansible_runners      = anytrue([local.supplied_ansible_runners, local.configure_ssh, var.docker.enabled, local.local_ssd_filesystem_enabled, local.create_systemd_service_enabled])
   install_ansible          = coalesce(var.install_ansible, local.has_ansible_runners)
   ansible_installer = local.install_ansible ? [{
     type        = "shell"
@@ -175,7 +195,8 @@ locals {
     local.raid_setup, # order RAID early to ensure filesystem is ready for subsequent runners
     local.configure_ssh_runners,
     local.docker_runner,
-    var.runners
+    var.runners,
+    local.service_setup # Run this last in case it has dependencies from runners
   )
 
   bucket_regex               = "^gs://([^/]*)/*(.*)"
