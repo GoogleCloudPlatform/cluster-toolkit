@@ -203,7 +203,7 @@ deployment_groups:
         config_path: $(vars.kueue_configuration_path)
         config_template_vars:
           num_gpus: $(a3-ultragpu-pool.static_gpu_count)
-          node_pool_name: $(a3-ultragpu-pool.node_pool_name)
+          node_pool_name: $(a3-ultragpu-pool.node_pool_names[0])
       jobset:
         install: true
       apply_manifests:
