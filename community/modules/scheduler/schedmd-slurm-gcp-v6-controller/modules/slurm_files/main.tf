@@ -52,9 +52,12 @@ locals {
     controller_state_disk = var.controller_state_disk
 
     # storage
-    disable_default_mounts = var.disable_default_mounts
-    network_storage        = var.network_storage
-    login_network_storage  = var.enable_hybrid ? null : var.login_network_storage
+    disable_default_mounts           = var.disable_default_mounts
+    enable_controller_default_mounts = var.enable_controller_default_mounts
+    controller_home                  = var.controller_home
+
+    network_storage       = var.network_storage
+    login_network_storage = var.enable_hybrid ? null : var.login_network_storage
 
     # timeouts
     controller_startup_scripts_timeout = var.controller_startup_scripts_timeout

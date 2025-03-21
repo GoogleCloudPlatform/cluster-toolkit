@@ -249,6 +249,7 @@ limitations under the License.
 | Name | Source | Version |
 |------|--------|---------|
 | <a name="module_bucket"></a> [bucket](#module\_bucket) | terraform-google-modules/cloud-storage/google | ~> 6.1 |
+| <a name="module_controller_home"></a> [controller\_home](#module\_controller\_home) | terraform-google-modules/cloud-storage/google | ~> 6.1 |
 | <a name="module_daos_network_storage_scripts"></a> [daos\_network\_storage\_scripts](#module\_daos\_network\_storage\_scripts) | ../../../../modules/scripts/startup-script | n/a |
 | <a name="module_gpu"></a> [gpu](#module\_gpu) | ../../../../modules/internal/gpu-definition | n/a |
 | <a name="module_nodeset_cleanup"></a> [nodeset\_cleanup](#module\_nodeset\_cleanup) | ./modules/cleanup_compute | n/a |
@@ -309,6 +310,7 @@ limitations under the License.
 | <a name="input_enable_chs_gpu_health_check_prolog"></a> [enable\_chs\_gpu\_health\_check\_prolog](#input\_enable\_chs\_gpu\_health\_check\_prolog) | Enable a Cluster Health Sacnner(CHS) GPU health check that slurmd executes as a prolog script whenever it is asked to run a job step from a new job allocation. Compute nodes that fail GPU health check during prolog will be marked as drained. Find more details at:<br/>https://github.com/GoogleCloudPlatform/cluster-toolkit/tree/main/docs/CHS-Slurm.md | `bool` | `true` | no |
 | <a name="input_enable_cleanup_compute"></a> [enable\_cleanup\_compute](#input\_enable\_cleanup\_compute) | Enables automatic cleanup of compute nodes and resource policies (e.g.<br/>placement groups) managed by this module, when cluster is destroyed.<br/><br/>*WARNING*: Toggling this off will impact the running workload.<br/>Deployed compute nodes will be destroyed. | `bool` | `true` | no |
 | <a name="input_enable_confidential_vm"></a> [enable\_confidential\_vm](#input\_enable\_confidential\_vm) | Enable the Confidential VM configuration. Note: the instance image must support option. | `bool` | `false` | no |
+| <a name="input_enable_controller_default_mounts"></a> [enable\_controller\_default\_mounts](#input\_enable\_controller\_default\_mounts) | Enable default global network storage to controller.<br/>- /home<br/>- /apps | `bool` | `true` | no |
 | <a name="input_enable_controller_public_ips"></a> [enable\_controller\_public\_ips](#input\_enable\_controller\_public\_ips) | If set to true. The controller will have a random public IP assigned to it. Ignored if access\_config is set. | `bool` | `false` | no |
 | <a name="input_enable_debug_logging"></a> [enable\_debug\_logging](#input\_enable\_debug\_logging) | Enables debug logging mode. | `bool` | `false` | no |
 | <a name="input_enable_default_mounts"></a> [enable\_default\_mounts](#input\_enable\_default\_mounts) | Enable default global network storage from the controller<br/>- /home<br/>- /apps<br/>Warning: If these are disabled, the slurm etc and munge dirs must be added<br/>manually, or some other mechanism must be used to synchronize the slurm conf<br/>files and the munge key across the cluster. | `bool` | `true` | no |

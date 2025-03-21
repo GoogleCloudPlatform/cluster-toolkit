@@ -43,24 +43,28 @@ def mounts_by_local(mounts):
 def _get_default_mounts(lkp: util.Lookup) -> List[NSDict]:
     if lkp.cfg.disable_default_mounts:
         return []
-    return [
-        NSDict(
-                server_ip= "$controller",
-                remote_mount= path,
-                local_mount= path,
-                fs_type= "nfs",
-                mount_options= "defaults,hard,intr",
-        )
-        for path in (
-            dirs.home,
-            dirs.apps,
-        )
-    ]
+
+    mount_home = NSDict(
+        remote_mount = lkp.cfg.controller_home,
+        local_mount = dirs.home,
+        fs_type= "gcsfuse",
+        mount_options = "defaults,_netdev,implicit_dirs,allow_other,dir_mode=0777,file_mode=766",
+    )
+
+    mount_apps = NSDict(
+        server_ip= "$controller",
+        remote_mount= dirs.apps,
+        local_mount= dirs.apps,
+        fs_type= "nfs",
+        mount_options= "defaults,hard,intr",
+    )
+
+    return [mount_home, mount_apps]
 
 def resolve_network_storage(nodeset=None) -> List[NSMount]:
     """Combine appropriate network_storage fields to a single list"""
     lkp = lookup()
-    
+
     # create dict of mounts, local_mount: mount_info
     mounts = mounts_by_local(_get_default_mounts(lkp))
 
@@ -102,8 +106,11 @@ def setup_network_storage():
     all_mounts = resolve_network_storage()
     ext_mounts, int_mounts = separate_external_internal_mounts(all_mounts)
 
+    mounts = []
     if lookup().is_controller:
-        mounts = ext_mounts
+        mount = ext_mounts
+        if lookup().cfg.enable_controller_default_mounts:
+          mounts.extend([m for m in int_mounts if m.fs_type == "gcsfuse"])
     else:
         mounts = ext_mounts + int_mounts
 
@@ -196,7 +203,7 @@ def munge_mount_handler():
     if lookup().is_controller:
         return
     mnt = lookup().munge_mount
-    
+
     log.info(f"Mounting munge share to: {mnt.local_mount}")
     mnt.local_mount.mkdir()
     if mnt.fs_type == "gcsfuse":
@@ -256,7 +263,7 @@ def setup_nfs_exports():
     # switch the key to remote mount path since that is what needs exporting
     mounts = resolve_network_storage()
     mounts.append(lkp.munge_mount)
-   
+
     # controller mounts
     _, con_mounts = separate_external_internal_mounts(mounts)
     con_mounts = {m.remote_mount: m for m in con_mounts}

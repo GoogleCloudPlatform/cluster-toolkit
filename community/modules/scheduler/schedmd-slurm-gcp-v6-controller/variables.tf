@@ -391,7 +391,7 @@ variable "controller_state_disk" {
   description = <<EOD
   A disk that will be attached to the controller instance template to save state of slurm. The disk is created and used by default.
   To disable this feature, set this variable to null.
-  
+
   NOTE: This will not save the contents at /opt/apps and /home. To preserve those, they must be saved externally.
   EOD
   type = object({
@@ -466,6 +466,16 @@ variable "enable_default_mounts" {
     manually, or some other mechanism must be used to synchronize the slurm conf
     files and the munge key across the cluster.
     EOD
+  type        = bool
+  default     = true
+}
+
+variable "enable_controller_default_mounts" {
+  description = <<-EOD
+    Enable default global network storage to controller.
+    - /home
+    - /apps
+  EOD
   type        = bool
   default     = true
 }

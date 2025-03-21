@@ -366,11 +366,11 @@ def setup_controller():
     util.chown_slurm(dirs.scripts / "config.yaml", mode=0o600)
     install_custom_scripts()
     conf.gen_controller_configs(lookup())
-    
+
     if lookup().cfg.controller_state_disk.device_name != None:
         mount_save_state_disk()
         mount_munge_key_disk()
-    
+
     setup_jwt_key()
     setup_munge_key()
     setup_sudoers()
@@ -507,7 +507,7 @@ def setup_cloud_ops() -> None:
     cloudOpsStatus = run(
         "systemctl is-active --quiet google-cloud-ops-agent.service", check=False
     ).returncode
-    
+
     if cloudOpsStatus != 0:
         return
 

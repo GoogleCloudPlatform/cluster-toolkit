@@ -42,6 +42,16 @@ module "bucket" {
   })
 }
 
+module "controller_home" {
+  source  = "terraform-google-modules/cloud-storage/google"
+  version = "~> 6.1"
+
+  location   = var.region
+  names      = ["cont-${local.synth_bucket_name}"]
+  prefix     = "home"
+  project_id = var.project_id
+}
+
 # BUCKET IAMs
 locals {
   compute_sa     = toset(flatten([for x in module.slurm_nodeset_template : x.service_account]))
@@ -167,6 +177,9 @@ module "slurm_files" {
   prolog_scripts                     = var.prolog_scripts
 
   disable_default_mounts = !var.enable_default_mounts
+
+  enable_controller_default_mounts = var.enable_controller_default_mounts
+  controller_home                  = module.controller_home.name
   network_storage = [
     for storage in var.network_storage : {
       server_ip     = storage.server_ip,
