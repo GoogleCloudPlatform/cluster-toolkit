@@ -54,7 +54,7 @@ spec:
         hostPath:
           path: /home/kubernetes/bin/gib
       initContainers:
-      - image: us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib:v1.0.4
+      - image: us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib:v1.0.5
         name: nccl-rdma-installer
         resources:
           requests:
