@@ -189,6 +189,13 @@ resource "google_container_cluster" "gke_cluster" {
     }
   }
 
+  dns_config {
+    additive_vpc_scope_dns_domain = var.cloud_dns_config.additive_vpc_scope_dns_domain
+    cluster_dns                   = var.cloud_dns_config.cluster_dns
+    cluster_dns_scope             = var.cloud_dns_config.cluster_dns_scope
+    cluster_dns_domain            = var.cloud_dns_config.cluster_dns_domain
+  }
+
   addons_config {
     gcp_filestore_csi_driver_config {
       enabled = var.enable_filestore_csi
@@ -386,11 +393,11 @@ locals {
 locals {
   # Separate gvnic and rdma networks and assign indexes
   gvnic_networks = [for idx, net in [for n in var.additional_networks : n if strcontains(upper(n.nic_type), "GVNIC")] :
-    merge(net, { name = "${var.k8s_network_names.gvnic_prefix}${idx + var.k8s_network_names.gvnic_start_index}" })
+    merge(net, { name = "${var.k8s_network_names.gvnic_prefix}${idx + var.k8s_network_names.gvnic_start_index}${var.k8s_network_names.gvnic_postfix}" })
   ]
 
   rdma_networks = [for idx, net in [for n in var.additional_networks : n if strcontains(upper(n.nic_type), "RDMA")] :
-    merge(net, { name = "${var.k8s_network_names.rdma_prefix}${idx + var.k8s_network_names.rdma_start_index}" })
+    merge(net, { name = "${var.k8s_network_names.rdma_prefix}${idx + var.k8s_network_names.rdma_start_index}${var.k8s_network_names.rdma_postfix}" })
   ]
 
   all_networks = concat(local.gvnic_networks, local.rdma_networks)

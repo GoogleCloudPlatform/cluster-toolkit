@@ -123,7 +123,7 @@ locals {
       node_count               = var.node_count
       completion_mode          = var.completion_mode
       k8s_service_account_name = var.k8s_service_account_name
-      node_pool_names          = var.node_pool_name
+      node_pool_names          = var.node_pool_names
       node_selectors           = local.node_selectors
       full_node_request        = local.full_node_request
       cpu_request              = local.cpu_request_string

@@ -27,7 +27,7 @@ vars:
     project: ubuntu-os-cloud
     family: ubuntu-2204-lts
   image_build_machine_type: n2-standard-16
-  build_slurm_from_git_ref: 6.8.9
+  build_slurm_from_git_ref: 6.9.1
   # Cluster env settings
   # net0 and filestore ranges must not overlap
   net0_range: 192.168.0.0/19

@@ -517,7 +517,7 @@ variable "cgroup_conf_tpl" {
 variable "controller_startup_script" {
   description = "Startup script used by the controller VM."
   type        = string
-  default     = "# no-op"
+  default     = null
 }
 
 variable "controller_startup_scripts_timeout" {
@@ -535,7 +535,7 @@ EOD
 variable "login_startup_script" {
   description = "Startup script used by the login VMs."
   type        = string
-  default     = "# no-op"
+  default     = null
 }
 
 variable "login_startup_scripts_timeout" {
@@ -550,15 +550,9 @@ EOD
   default     = 300
 }
 
-variable "compute_startup_script" {
-  description = "Startup script used by the compute VMs."
-  type        = string
-  default     = "# no-op"
-}
-
 variable "compute_startup_scripts_timeout" {
   description = <<EOD
-The timeout (seconds) applied to each script in compute_startup_scripts. If
+The timeout (seconds) applied to each startup script in compute nodes. If
 any script exceeds this timeout, then the instance setup process is considered
 failed and handled accordingly.
 
@@ -566,6 +560,27 @@ NOTE: When set to 0, the timeout is considered infinite and thus disabled.
 EOD
   type        = number
   default     = 300
+}
+
+variable "enable_chs_gpu_health_check_prolog" {
+  description = <<EOD
+Enable a Cluster Health Sacnner(CHS) GPU health check that slurmd executes as a prolog script whenever it is asked to run a job step from a new job allocation. Compute nodes that fail GPU health check during prolog will be marked as drained. Find more details at:
+https://github.com/GoogleCloudPlatform/cluster-toolkit/tree/main/docs/CHS-Slurm.md
+EOD
+  type        = bool
+  default     = true
+  nullable    = false
+}
+
+variable "enable_chs_gpu_health_check_epilog" {
+  description = <<EOD
+Enable a Cluster Health Sacnner(CHS) GPU health check that slurmd executes as an epilog script after completing a job step from a new job allocation.
+Compute nodes that fail GPU health check during epilog will be marked as drained. Find more details at:
+https://github.com/GoogleCloudPlatform/cluster-toolkit/tree/main/docs/CHS-Slurm.md
+EOD
+  type        = bool
+  default     = false
+  nullable    = false
 }
 
 variable "prolog_scripts" {
@@ -709,6 +724,24 @@ EOD
 DEPRECATED: Slurm GCP plugins have been deprecated.
 Instead of 'max_hops' plugin please use the 'placement_max_distance' nodeset property.
 Instead of 'enable_vpmu' plugin please use 'advanced_machine_features.performance_monitoring_unit' nodeset property.
+EOD
+  }
+}
+
+
+variable "compute_startup_script" { # tflint-ignore: terraform_unused_declarations
+  description = <<EOD
+DEPRECATED: `compute_startup_script` has been deprecated.
+Use `startup_script` of nodeset module instead.
+EOD
+  type        = any
+  default     = null
+
+  validation {
+    condition     = var.compute_startup_script == null
+    error_message = <<EOD
+DEPRECATED: `compute_startup_script` has been deprecated.
+Use `startup_script` of nodeset module instead.
 EOD
   }
 }
