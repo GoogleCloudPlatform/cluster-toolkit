@@ -112,7 +112,7 @@ No modules.
 | <a name="input_machine_family"></a> [machine\_family](#input\_machine\_family) | The machine family to use in the node selector (example: `n2`). If null then machine family will not be used as selector criteria. | `string` | `null` | no |
 | <a name="input_name"></a> [name](#input\_name) | The name of the job. | `string` | `"my-job"` | no |
 | <a name="input_node_count"></a> [node\_count](#input\_node\_count) | How many nodes the job should run in parallel. | `number` | `1` | no |
-| <a name="input_node_pool_name"></a> [node\_pool\_name](#input\_node\_pool\_name) | A list of node pool names on which to run the job. Can be populated via `use` field. | `list(string)` | `[]` | no |
+| <a name="input_node_pool_names"></a> [node\_pool\_names](#input\_node\_pool\_names) | A list of node pool names on which to run the job. Can be populated via `use` field. | `list(string)` | `[]` | no |
 | <a name="input_node_selectors"></a> [node\_selectors](#input\_node\_selectors) | A list of node selectors to use to place the job. | <pre>list(object({<br/>    key   = string<br/>    value = string<br/>  }))</pre> | `[]` | no |
 | <a name="input_persistent_volume_claims"></a> [persistent\_volume\_claims](#input\_persistent\_volume\_claims) | A list of objects that describes a k8s PVC that is to be used and mounted on the job. Generally supplied by the gke-persistent-volume module. | <pre>list(object({<br/>    name          = string<br/>    mount_path    = string<br/>    mount_options = string<br/>    is_gcs        = bool<br/>  }))</pre> | `[]` | no |
 | <a name="input_random_name_sufix"></a> [random\_name\_sufix](#input\_random\_name\_sufix) | Appends a random suffix to the job name to avoid clashes. | `bool` | `true` | no |

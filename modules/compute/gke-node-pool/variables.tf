@@ -433,3 +433,9 @@ variable "enable_private_nodes" {
   type        = bool
   default     = false
 }
+
+variable "num_node_pools" {
+  description = "Number of node pools to create. For TPUs, this is the number of slices."
+  type        = number
+  default     = 1
+}
