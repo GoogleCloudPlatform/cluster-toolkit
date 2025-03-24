@@ -65,7 +65,7 @@ variable "kueue" {
   description = "Install and configure [Kueue](https://kueue.sigs.k8s.io/docs/overview/) workload scheduler. A configuration yaml/template file can be provided with config_path to be applied right after kueue installation. If a template file provided, its variables can be set to config_template_vars."
   type = object({
     install              = optional(bool, false)
-    version              = optional(string, "v0.10.0")
+    version              = optional(string, "v0.11.1")
     config_path          = optional(string, null)
     config_template_vars = optional(map(any), null)
   })

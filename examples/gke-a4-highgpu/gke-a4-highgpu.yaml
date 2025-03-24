@@ -198,7 +198,6 @@ deployment_groups:
     settings:
       kueue:
         install: true
-        version: v0.11.1
         config_path: $(vars.kueue_configuration_path)
         config_template_vars:
           num_gpus: $(a4-highgpu-pool.static_gpu_count)
