@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/slurm/python/venv/bin/python3.13
 
 # Copyright (C) SchedMD LLC.
 # Copyright 2024 Google LLC
@@ -129,15 +129,20 @@ def run_custom_scripts():
     if lookup().is_controller:
         # controller has all scripts, but only runs controller.d
         custom_dirs = [custom_dir / "controller.d"]
+        timeout = lookup().cfg.get("controller_startup_scripts_timeout", 300)
     elif lookup().instance_role == "compute":
-        # compute setup with compute.d and nodeset.d
-        custom_dirs = [custom_dir / "compute.d", custom_dir / "nodeset.d"]
+        # compute setup with nodeset.d
+        custom_dirs = [custom_dir / "nodeset.d"]
+        timeout = lookup().cfg.get("compute_startup_scripts_timeout", 300)
     elif lookup().is_login_node:
         # login setup with only login.d
         custom_dirs = [custom_dir / "login.d"]
+        timeout = lookup().cfg.get("login_startup_scripts_timeout", 300)
     else:
         # Unknown role: run nothing
         custom_dirs = []
+        timeout = 300
+
     custom_scripts = [
         p
         for d in custom_dirs
@@ -149,15 +154,6 @@ def run_custom_scripts():
 
     try:
         for script in custom_scripts:
-            if "/controller.d/" in str(script):
-                timeout = lookup().cfg.get("controller_startup_scripts_timeout", 300)
-            elif "/compute.d/" in str(script) or "/nodeset.d/" in str(script):
-                timeout = lookup().cfg.get("compute_startup_scripts_timeout", 300)
-            elif "/login.d/" in str(script):
-                timeout = lookup().cfg.get("login_startup_scripts_timeout", 300)
-            else:
-                timeout = 300
-            timeout = None if not timeout or timeout < 0 else timeout
             log.info(f"running script {script.name} with timeout={timeout}")
             result = run(str(script), timeout=timeout, check=False, shell=True)
             runlog = (
@@ -507,7 +503,7 @@ def setup_compute():
     log.info("Done setting up compute")
 
 def setup_cloud_ops() -> None:
-    """add deployment info to cloud ops config"""
+    """Add health checks, deployment info, and updated setup path to cloud ops config."""
     cloudOpsStatus = run(
         "systemctl is-active --quiet google-cloud-ops-agent.service", check=False
     ).returncode
@@ -517,6 +513,16 @@ def setup_cloud_ops() -> None:
 
     with open("/etc/google-cloud-ops-agent/config.yaml", "r") as f:
         file = yaml.safe_load(f)
+
+    # Update setup receiver path
+    file["logging"]["receivers"]["setup"]["include_paths"] = ["/var/log/slurm/setup.log"]
+
+    # Add chs_health_check receiver
+    file["logging"]["receivers"]["chs_health_check"] = {
+        "type": "files",
+        "include_paths": ["/var/log/slurm/chs_health_check.log"],
+        "record_log_file_path": True,
+    }
 
     cluster_info = {
         'type':'modify_fields',
@@ -533,6 +539,11 @@ def setup_cloud_ops() -> None:
     file["logging"]["processors"]["add_cluster_info"] = cluster_info
     file["logging"]["service"]["pipelines"]["slurmlog_pipeline"]["processors"].append("add_cluster_info")
     file["logging"]["service"]["pipelines"]["slurmlog2_pipeline"]["processors"].append("add_cluster_info")
+
+    # Add chs_health_check to slurmlog2_pipeline
+    file["logging"]["service"]["pipelines"]["slurmlog2_pipeline"]["receivers"].append(
+        "chs_health_check"
+    )
 
     with open("/etc/google-cloud-ops-agent/config.yaml", "w") as f:
         yaml.safe_dump(file, f, sort_keys=False)

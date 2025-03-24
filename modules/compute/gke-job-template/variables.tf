@@ -50,7 +50,7 @@ variable "k8s_service_account_name" {
   default     = null
 }
 
-variable "node_pool_name" {
+variable "node_pool_names" {
   description = "A list of node pool names on which to run the job. Can be populated via `use` field."
   type        = list(string)
   default     = []
