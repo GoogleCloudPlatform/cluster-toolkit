@@ -107,6 +107,20 @@ variable "advanced_machine_features" {
   })
 }
 
+variable "resource_manager_tags" {
+  description = "(Optional) A set of key/value resource manager tag pairs to bind to the instances. Keys must be in the format tagKeys/{tag_key_id}, and values are in the format tagValues/456."
+  type        = map(string)
+  default     = {}
+  validation {
+    condition     = alltrue([for value in var.resource_manager_tags : can(regex("tagValues/[0-9]+", value))])
+    error_message = "All Resource Manager tag values should be in the format 'tagValues/[0-9]+'"
+  }
+  validation {
+    condition     = alltrue([for value in keys(var.resource_manager_tags) : can(regex("tagKeys/[0-9]+", value))])
+    error_message = "All Resource Manager tag keys should be in the format 'tagKeys/[0-9]+'"
+  }
+}
+
 #######
 # disk
 #######
@@ -158,17 +172,32 @@ variable "auto_delete" {
   default     = "true"
 }
 
+variable "disk_resource_manager_tags" {
+  description = "(Optional) A set of key/value resource manager tag pairs to bind to the instance disks. Keys must be in the format tagKeys/{tag_key_id}, and values are in the format tagValues/456."
+  type        = map(string)
+  default     = {}
+  validation {
+    condition     = alltrue([for value in var.disk_resource_manager_tags : can(regex("tagValues/[0-9]+", value))])
+    error_message = "All Resource Manager tag values should be in the format 'tagValues/[0-9]+'"
+  }
+  validation {
+    condition     = alltrue([for value in keys(var.disk_resource_manager_tags) : can(regex("tagKeys/[0-9]+", value))])
+    error_message = "All Resource Manager tag keys should be in the format 'tagKeys/[0-9]+'"
+  }
+}
+
 variable "additional_disks" {
   description = "List of maps of additional disks. See https://www.terraform.io/docs/providers/google/r/compute_instance_template#disk_name"
   type = list(object({
-    source       = optional(string)
-    disk_name    = optional(string)
-    device_name  = string
-    auto_delete  = bool
-    boot         = bool
-    disk_size_gb = optional(number)
-    disk_type    = optional(string)
-    disk_labels  = map(string)
+    source                     = optional(string)
+    disk_name                  = optional(string)
+    device_name                = string
+    auto_delete                = bool
+    boot                       = bool
+    disk_size_gb               = optional(number)
+    disk_type                  = optional(string)
+    disk_labels                = map(string)
+    disk_resource_manager_tags = map(string)
   }))
   default = []
 }

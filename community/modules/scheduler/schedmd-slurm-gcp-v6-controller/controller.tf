@@ -22,13 +22,14 @@ module "gpu" {
 locals {
   additional_disks = [
     for ad in var.additional_disks : {
-      disk_name    = ad.disk_name
-      device_name  = ad.device_name
-      disk_type    = ad.disk_type
-      disk_size_gb = ad.disk_size_gb
-      disk_labels  = merge(ad.disk_labels, local.labels)
-      auto_delete  = ad.auto_delete
-      boot         = ad.boot
+      disk_name                  = ad.disk_name
+      device_name                = ad.device_name
+      disk_type                  = ad.disk_type
+      disk_size_gb               = ad.disk_size_gb
+      disk_labels                = merge(ad.disk_labels, local.labels)
+      auto_delete                = ad.auto_delete
+      boot                       = ad.boot
+      disk_resource_manager_tags = ad.disk_resource_manager_tags
     }
   ]
 
@@ -82,16 +83,18 @@ module "slurm_controller_template" {
   slurm_cluster_name  = local.slurm_cluster_name
   labels              = local.labels
 
-  disk_auto_delete = var.disk_auto_delete
-  disk_labels      = merge(var.disk_labels, local.labels)
-  disk_size_gb     = var.disk_size_gb
-  disk_type        = var.disk_type
-  additional_disks = concat(local.additional_disks, local.state_disk)
+  disk_auto_delete           = var.disk_auto_delete
+  disk_labels                = merge(var.disk_labels, local.labels)
+  disk_size_gb               = var.disk_size_gb
+  disk_type                  = var.disk_type
+  disk_resource_manager_tags = var.disk_resource_manager_tags
+  additional_disks           = concat(local.additional_disks, local.state_disk)
 
   bandwidth_tier            = var.bandwidth_tier
   slurm_bucket_path         = module.slurm_files.slurm_bucket_path
   can_ip_forward            = var.can_ip_forward
   advanced_machine_features = var.advanced_machine_features
+  resource_manager_tags     = var.resource_manager_tags
 
   enable_confidential_vm   = var.enable_confidential_vm
   enable_oslogin           = var.enable_oslogin
