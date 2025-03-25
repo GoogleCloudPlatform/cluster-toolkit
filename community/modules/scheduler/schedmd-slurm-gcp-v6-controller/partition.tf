@@ -34,36 +34,38 @@ module "slurm_nodeset_template" {
   slurm_instance_role = "compute"
   slurm_bucket_path   = module.slurm_files.slurm_bucket_path
 
-  additional_disks          = each.value.additional_disks
-  bandwidth_tier            = each.value.bandwidth_tier
-  can_ip_forward            = each.value.can_ip_forward
-  advanced_machine_features = each.value.advanced_machine_features
-  disk_auto_delete          = each.value.disk_auto_delete
-  disk_labels               = each.value.disk_labels
-  disk_size_gb              = each.value.disk_size_gb
-  disk_type                 = each.value.disk_type
-  enable_confidential_vm    = each.value.enable_confidential_vm
-  enable_oslogin            = each.value.enable_oslogin
-  enable_shielded_vm        = each.value.enable_shielded_vm
-  gpu                       = each.value.gpu
-  labels                    = merge(each.value.labels, { slurm_nodeset = each.value.nodeset_name })
-  machine_type              = each.value.machine_type
-  metadata                  = merge(each.value.metadata, local.universe_domain)
-  min_cpu_platform          = each.value.min_cpu_platform
-  name_prefix               = each.value.nodeset_name
-  on_host_maintenance       = each.value.on_host_maintenance
-  preemptible               = each.value.preemptible
-  spot                      = each.value.spot
-  termination_action        = each.value.termination_action
-  service_account           = each.value.service_account
-  shielded_instance_config  = each.value.shielded_instance_config
-  source_image_family       = each.value.source_image_family
-  source_image_project      = each.value.source_image_project
-  source_image              = each.value.source_image
-  subnetwork                = each.value.subnetwork_self_link
-  additional_networks       = each.value.additional_networks
-  access_config             = each.value.access_config
-  tags                      = concat([local.slurm_cluster_name], each.value.tags)
+  additional_disks           = each.value.additional_disks
+  bandwidth_tier             = each.value.bandwidth_tier
+  can_ip_forward             = each.value.can_ip_forward
+  advanced_machine_features  = each.value.advanced_machine_features
+  disk_auto_delete           = each.value.disk_auto_delete
+  disk_labels                = each.value.disk_labels
+  disk_resource_manager_tags = each.value.disk_resource_manager_tags
+  disk_size_gb               = each.value.disk_size_gb
+  disk_type                  = each.value.disk_type
+  enable_confidential_vm     = each.value.enable_confidential_vm
+  enable_oslogin             = each.value.enable_oslogin
+  enable_shielded_vm         = each.value.enable_shielded_vm
+  gpu                        = each.value.gpu
+  labels                     = merge(each.value.labels, { slurm_nodeset = each.value.nodeset_name })
+  machine_type               = each.value.machine_type
+  metadata                   = merge(each.value.metadata, local.universe_domain)
+  min_cpu_platform           = each.value.min_cpu_platform
+  name_prefix                = each.value.nodeset_name
+  on_host_maintenance        = each.value.on_host_maintenance
+  preemptible                = each.value.preemptible
+  resource_manager_tags      = each.value.resource_manager_tags
+  spot                       = each.value.spot
+  termination_action         = each.value.termination_action
+  service_account            = each.value.service_account
+  shielded_instance_config   = each.value.shielded_instance_config
+  source_image_family        = each.value.source_image_family
+  source_image_project       = each.value.source_image_project
+  source_image               = each.value.source_image
+  subnetwork                 = each.value.subnetwork_self_link
+  additional_networks        = each.value.additional_networks
+  access_config              = each.value.access_config
+  tags                       = concat([local.slurm_cluster_name], each.value.tags)
 }
 
 module "nodeset_cleanup" {

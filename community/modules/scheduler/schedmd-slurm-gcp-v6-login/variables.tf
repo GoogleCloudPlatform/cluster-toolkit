@@ -47,6 +47,12 @@ variable "num_instances" {
   default     = 1
 }
 
+variable "resource_manager_tags" {
+  description = "(Optional) A set of key/value resource manager tag pairs to bind to the instances. Keys must be in the format tagKeys/{tag_key_id}, and values are in the format tagValues/456."
+  type        = map(string)
+  default     = {}
+}
+
 variable "disk_type" {
   type        = string
   description = "Boot disk type, can be either hyperdisk-balanced, pd-ssd, pd-standard, pd-balanced, or pd-extreme."
@@ -71,15 +77,30 @@ variable "disk_labels" {
   default     = {}
 }
 
+variable "disk_resource_manager_tags" {
+  description = "(Optional) A set of key/value resource manager tag pairs to bind to the instance disks. Keys must be in the format tagKeys/{tag_key_id}, and values are in the format tagValues/456."
+  type        = map(string)
+  default     = {}
+  validation {
+    condition     = alltrue([for value in var.disk_resource_manager_tags : can(regex("tagValues/[0-9]+", value))])
+    error_message = "All Resource Manager tag values should be in the format 'tagValues/[0-9]+'"
+  }
+  validation {
+    condition     = alltrue([for value in keys(var.disk_resource_manager_tags) : can(regex("tagKeys/[0-9]+", value))])
+    error_message = "All Resource Manager tag keys should be in the format 'tagKeys/[0-9]+'"
+  }
+}
+
 variable "additional_disks" {
   type = list(object({
-    disk_name    = string
-    device_name  = string
-    disk_type    = string
-    disk_size_gb = number
-    disk_labels  = map(string)
-    auto_delete  = bool
-    boot         = bool
+    disk_name                  = string
+    device_name                = string
+    disk_type                  = string
+    disk_size_gb               = number
+    disk_labels                = map(string)
+    auto_delete                = bool
+    boot                       = bool
+    disk_resource_manager_tags = map(string)
   }))
   description = "List of maps of disks."
   default     = []
