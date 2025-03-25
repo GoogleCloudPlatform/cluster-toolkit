@@ -85,8 +85,8 @@ variable "jobset" {
 variable "gpu_operator" {
   description = "Install [GPU Operator](https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/getting-started.html) which manages a group of K8s [jobs](https://kubernetes.io/docs/concepts/workloads/controllers/job/) as a unit."
   type = object({
-    install = optional(bool, false)
-    version = optional(string, "v0.7.2")
+    install     = optional(bool, false)
+    config_path = optional(string, null)
   })
   default = {}
 }

@@ -103,3 +103,16 @@ module "configure_kueue" {
     http    = http.h
   }
 }
+module "configure_gpu_operator" {
+  source      = "./kubectl"
+  source_path = local.install_gpu_operator ? try(var.gpu_operator.config_path, "") : null
+  depends_on  = [module.install_gpu_operator]
+
+  server_side_apply = true
+  wait_for_rollout  = true
+
+  providers = {
+    kubectl = kubectl
+    http    = http.h
+  }
+}
