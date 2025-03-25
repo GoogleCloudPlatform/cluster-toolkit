@@ -88,7 +88,7 @@ variable "instance_image" {
     EOD
   type        = map(string)
   default = {
-    family  = "slurm-gcp-6-8-hpc-rocky-linux-8"
+    family  = "slurm-gcp-6-9-hpc-rocky-linux-8"
     project = "schedmd-slurm-public"
   }
 
@@ -516,12 +516,9 @@ variable "maintenance_interval" {
 }
 
 variable "startup_script" {
-  description = <<-EOD
-    Startup script used by VMs in this nodeset.
-    NOTE: will be executed after `compute_startup_script` defined on controller module.
-  EOD
+  description = "Startup script used by VMs in this nodeset"
   type        = string
-  default     = "# no-op"
+  default     = null
 }
 
 variable "network_storage" {

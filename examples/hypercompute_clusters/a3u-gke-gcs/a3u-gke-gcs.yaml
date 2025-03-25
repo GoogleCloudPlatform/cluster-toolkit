@@ -119,7 +119,7 @@ deployment_groups:
     source: community/modules/file-system/cloud-storage-bucket
     settings:
       local_mount: /data
-      name_prefix: $(vars.deployment_name)-training-
+      name_prefix: training
       random_suffix: true
       force_destroy: false
       enable_hierarchical_namespace: true
@@ -128,7 +128,7 @@ deployment_groups:
     source: community/modules/file-system/cloud-storage-bucket
     settings:
       local_mount: /data
-      name_prefix: $(vars.deployment_name)-checkpoint-
+      name_prefix: checkpoint
       random_suffix: true
       force_destroy: false
       enable_hierarchical_namespace: true
@@ -218,7 +218,7 @@ deployment_groups:
         config_path: $(ghpc_stage("kueue-configuration.yaml.tftpl"))
         config_template_vars:
           num_gpus: $(a3-ultragpu-pool.static_gpu_count)
-          node_pool_name: $(a3-ultragpu-pool.node_pool_name)
+          node_pool_name: $(a3-ultragpu-pool.node_pool_names[0])
       jobset:
         install: true
       apply_manifests:
