@@ -107,15 +107,13 @@ This section guides you through the cluster creation process, ensuring that your
 
 1. In the [`examples/gke-a4-highgpu/gke-a4-highgpu-deployment.yaml`](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/develop/examples/gke-a4-highgpu/gke-a4-highgpu-deployment.yaml) file, replace the following variables in the `terraform_backend_defaults` and `vars` sections to match the specific values for your deployment:
 
-   * `BUCKET_NAME`: the name of the Cloud Storage bucket you created in the previous step.
-   * `PROJECT_ID`: your Google Cloud project ID.
-   * `COMPUTE_REGION`: the compute region for the cluster.
-   * `COMPUTE_ZONE`: the compute zone for the node pool of A4 High machines.
-   * `IP_ADDRESS/SUFFIX`: The IP address range that you want to allow to connect with the cluster. This CIDR block must include the IP address of the machine to call Terraform.
-   * `RESERVATION_NAME`: the name of your reservation.
-   * `BLOCK_NAME`: the name of a specific block within the reservation.
-   * `NODE_COUNT`: the number of A4 High nodes in your cluster.
-   * `K8S_SERVICE_ACCOUNT_NAME`: the name of your Kubernetes service account. Make sure you specify the same service account in your workloads.
+   * `bucket`: the name of the Cloud Storage bucket you created in the previous step.
+   * `project_id`: your Google Cloud project ID.
+   * `region`: the compute region for the cluster.
+   * `zone`: the compute zone for the node pool of A4 High machines.
+   * `authorized_cidr`: The IP address range that you want to allow to connect with the cluster. This CIDR block must include the IP address of the machine to call Terraform.
+   * `extended_reservation`: the name of your reservation in the form of <project>/<reservation-name>/reservationBlocks/<reservation-block-name>
+   * `static_node_count`: the number of A4 High nodes in your cluster.
 
   To modify advanced settings, edit
   `examples/gke-a4-highgpu/gke-a4-highgpu.yaml`.
@@ -146,7 +144,7 @@ complete the following steps.
 1. Deploy an all-gather NCCL performance test with Topology Aware Scheduling
     enabled by using the [nccl-jobset-example.yaml](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/develop/examples/gke-a4-highgpu/nccl-jobset-example.yaml) file.
 
-    By default, this test uses four nodes. To change the number of nodes,
+    By default, this test uses two nodes. To change the number of nodes,
     modify the YAML file to change the following values from `2` to your required
     number of nodes:
 

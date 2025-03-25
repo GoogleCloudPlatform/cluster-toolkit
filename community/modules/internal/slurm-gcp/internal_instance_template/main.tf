@@ -23,12 +23,13 @@ locals {
 
   boot_disk = [
     {
-      source_image = var.source_image != "" ? format("${local.source_image_project}/${local.source_image}") : format("${local.source_image_project}/${local.source_image_family}")
-      disk_size_gb = var.disk_size_gb
-      disk_type    = var.disk_type
-      disk_labels  = var.disk_labels
-      auto_delete  = var.auto_delete
-      boot         = "true"
+      source_image               = var.source_image != "" ? format("${local.source_image_project}/${local.source_image}") : format("${local.source_image_project}/${local.source_image_family}")
+      disk_size_gb               = var.disk_size_gb
+      disk_type                  = var.disk_type
+      disk_labels                = var.disk_labels
+      auto_delete                = var.auto_delete
+      disk_resource_manager_tags = var.disk_resource_manager_tags
+      boot                       = "true"
     },
   ]
 
@@ -75,6 +76,7 @@ resource "google_compute_instance_template" "tpl" {
   metadata_startup_script = var.startup_script
   region                  = var.region
   min_cpu_platform        = var.min_cpu_platform
+  resource_manager_tags   = var.resource_manager_tags
 
   service_account {
     email  = coalesce(var.service_account.email, "${data.google_project.this.number}-compute@developer.gserviceaccount.com")
@@ -84,18 +86,19 @@ resource "google_compute_instance_template" "tpl" {
   dynamic "disk" {
     for_each = local.all_disks
     content {
-      auto_delete  = lookup(disk.value, "auto_delete", null)
-      boot         = lookup(disk.value, "boot", null)
-      device_name  = lookup(disk.value, "device_name", null)
-      disk_name    = lookup(disk.value, "disk_name", null)
-      disk_size_gb = lookup(disk.value, "disk_size_gb", lookup(disk.value, "disk_type", null) == "local-ssd" ? "375" : null)
-      disk_type    = lookup(disk.value, "disk_type", null)
-      interface    = lookup(disk.value, "interface", lookup(disk.value, "disk_type", null) == "local-ssd" ? "NVME" : null)
-      mode         = lookup(disk.value, "mode", null)
-      source       = lookup(disk.value, "source", null)
-      source_image = lookup(disk.value, "source_image", null)
-      type         = lookup(disk.value, "disk_type", null) == "local-ssd" ? "SCRATCH" : "PERSISTENT"
-      labels       = (lookup(disk.value, "source", null) != null || lookup(disk.value, "disk_type", null) == "local-ssd") ? null : lookup(disk.value, "disk_labels", null)
+      auto_delete           = lookup(disk.value, "auto_delete", null)
+      boot                  = lookup(disk.value, "boot", null)
+      device_name           = lookup(disk.value, "device_name", null)
+      disk_name             = lookup(disk.value, "disk_name", null)
+      disk_size_gb          = lookup(disk.value, "disk_size_gb", lookup(disk.value, "disk_type", null) == "local-ssd" ? "375" : null)
+      disk_type             = lookup(disk.value, "disk_type", null)
+      interface             = lookup(disk.value, "interface", lookup(disk.value, "disk_type", null) == "local-ssd" ? "NVME" : null)
+      mode                  = lookup(disk.value, "mode", null)
+      source                = lookup(disk.value, "source", null)
+      source_image          = lookup(disk.value, "source_image", null)
+      type                  = lookup(disk.value, "disk_type", null) == "local-ssd" ? "SCRATCH" : "PERSISTENT"
+      labels                = (lookup(disk.value, "source", null) != null || lookup(disk.value, "disk_type", null) == "local-ssd") ? null : lookup(disk.value, "disk_labels", null)
+      resource_manager_tags = lookup(disk.value, "disk_resource_manager_tags", {})
 
       dynamic "disk_encryption_key" {
         for_each = compact([var.disk_encryption_key == null ? null : 1])

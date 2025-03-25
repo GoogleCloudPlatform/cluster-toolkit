@@ -24,8 +24,8 @@ network: "{{ deployment_name }}-net-0"
 region: europe-west1
 zone: europe-west1-b
 remote_node: "{{ deployment_name }}-remote-node-0"
-extended_reservation: hpc-exfr-2
-static_node_count: 1
+extended_reservation: hpc-exr-2
+static_node_count: 2
 k8s_service_account_name: workload-identity-k8s-sa
 cli_deployment_vars:
   region: "{{ region }}"
@@ -39,3 +39,4 @@ custom_vars:
   project: "{{ project }}"
 post_deploy_tests:
 - test-validation/test-gke-job.yml
+- test-validation/test-gke-a3-ultra.yml

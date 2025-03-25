@@ -14,9 +14,9 @@
   * limitations under the License.
   */
 
-output "node_pool_name" {
-  description = "Name of the node pool."
-  value       = google_container_node_pool.node_pool.name
+output "node_pool_names" {
+  description = "Names of the node pools."
+  value       = google_container_node_pool.node_pool[*].name
 }
 
 locals {
@@ -61,7 +61,7 @@ locals {
     NO_SCHEDULE        = "NoSchedule"
     NO_EXECUTE         = "NoExecute"
   }
-  taints = google_container_node_pool.node_pool.node_config[0].taint
+  taints = google_container_node_pool.node_pool[0].node_config[0].taint
   tolerations = [for taint in local.taints : {
     key      = taint.key
     operator = "Equal"
