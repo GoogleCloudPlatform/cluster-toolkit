@@ -40,6 +40,8 @@ resource "random_uuid" "cluster_id" {
 ##################
 
 locals {
+  tp = "${local.bucket_dir}/" # prefix to trim from the bucket path to get a "file name"
+
   config = {
     enable_bigquery_load  = var.enable_bigquery_load
     cloudsql_secret       = var.cloudsql_secret
@@ -88,10 +90,25 @@ locals {
     # Providers
     endpoint_versions = var.endpoint_versions
 
-    # Extra-files MD5 hashes. Makes config file creation to wait on those files
-    controller_startup_scripts_md5 = { for k, v in local.controller_script_files : k => md5(v) }
-    nodeset_startup_scripts_md5    = { for k, v in local.nodeset_script_files : k => md5(v) }
-    login_startup_scripts_md5      = { for k, v in local.login_script_files : k => md5(v) }
+    # Extra-files MD5 hashes
+    # Makes config file creation depend on the files
+    # Allows for informed updates & checks on slurmsync side
+    slurm_gcp_scripts_md5 = google_storage_bucket_object.devel.md5hash,
+    controller_startup_scripts_md5 = {
+      for o in values(google_storage_bucket_object.controller_startup_scripts) : trimprefix(o.name, local.tp) => o.md5hash
+    }
+    nodeset_startup_scripts_md5 = {
+      for o in values(google_storage_bucket_object.nodeset_startup_scripts) : trimprefix(o.name, local.tp) => o.md5hash
+    }
+    login_startup_scripts_md5 = {
+      for o in values(google_storage_bucket_object.login_startup_scripts) : trimprefix(o.name, local.tp) => o.md5hash
+    }
+    prolog_scripts_md5 = {
+      for o in values(google_storage_bucket_object.prolog_scripts) : trimprefix(o.name, local.tp) => o.md5hash
+    }
+    epilog_scripts_md5 = {
+      for o in values(google_storage_bucket_object.epilog_scripts) : trimprefix(o.name, local.tp) => o.md5hash
+    }
   }
 
   x_nodeset         = toset(var.nodeset[*].nodeset_name)
@@ -195,52 +212,42 @@ resource "google_storage_bucket_object" "devel" {
 # SCRIPTS #
 ###########
 
-locals {
-  bad_chars = "/[^a-zA-Z0-9-_]/"
-
-  controller_script_files = {
+resource "google_storage_bucket_object" "controller_startup_scripts" {
+  for_each = {
     for x in local.controller_startup_scripts
-    : format("slurm-controller-script-%s", replace(basename(x.filename), local.bad_chars, "_")) => x.content
+    : replace(basename(x.filename), "/[^a-zA-Z0-9-_]/", "_") => x
   }
 
-  nodeset_script_files = { for x in flatten([
+  bucket  = var.bucket_name
+  name    = format("%s/slurm-controller-script-%s", local.bucket_dir, each.key)
+  content = each.value.content
+}
+
+resource "google_storage_bucket_object" "nodeset_startup_scripts" {
+  for_each = { for x in flatten([
     for nodeset, scripts in var.nodeset_startup_scripts
     : [for s in scripts
       : {
         content = s.content,
-      name = format("slurm-nodeset-%s-script-%s", nodeset, replace(basename(s.filename), local.bad_chars, "_")) }
+      name = format("slurm-nodeset-%s-script-%s", nodeset, replace(basename(s.filename), "/[^a-zA-Z0-9-_]/", "_")) }
   ]]) : x.name => x.content }
 
-  login_script_files = { for x in flatten([
-    for group, scripts in var.login_startup_scripts
-    : [for s in scripts
-      : {
-        content = s.content,
-      name = format("slurm-login-%s-script-%s", group, replace(basename(s.filename), local.bad_chars, "_")) }
-  ]]) : x.name => x.content }
-}
-
-resource "google_storage_bucket_object" "controller_startup_scripts" {
-  for_each = local.controller_script_files
-
   bucket  = var.bucket_name
-  name    = "${local.bucket_dir}/${each.key}"
-  content = each.value
-}
-
-resource "google_storage_bucket_object" "nodeset_startup_scripts" {
-  for_each = local.nodeset_script_files
-
-  bucket  = var.bucket_name
-  name    = "${local.bucket_dir}/${each.key}"
+  name    = format("%s/%s", local.bucket_dir, each.key)
   content = each.value
 }
 
 resource "google_storage_bucket_object" "login_startup_scripts" {
-  for_each = local.login_script_files
+  for_each = { for x in flatten([
+    for group, scripts in var.login_startup_scripts
+    : [for s in scripts
+      : {
+        content = s.content,
+      name = format("slurm-login-%s-script-%s", group, replace(basename(s.filename), "/[^a-zA-Z0-9-_]/", "_")) }
+  ]]) : x.name => x.content }
 
   bucket  = var.bucket_name
-  name    = "${local.bucket_dir}/${each.key}"
+  name    = format("%s/%s", local.bucket_dir, each.key)
   content = each.value
 }
 
@@ -322,4 +329,6 @@ locals {
   epilog_scripts = concat(local.chs_epilog, local.ext_epilog, var.epilog_scripts)
 
   controller_startup_scripts = var.enable_external_prolog_epilog ? concat(local.setup_external, var.controller_startup_scripts) : var.controller_startup_scripts
+
+
 }
