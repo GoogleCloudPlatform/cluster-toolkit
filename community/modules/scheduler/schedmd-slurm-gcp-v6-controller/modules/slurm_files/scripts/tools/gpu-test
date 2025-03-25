@@ -13,26 +13,34 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+LOG_FILE="/var/log/slurm/chs_health_check.log"
+TMP_DCGM_OUT="/tmp/dcgm.out"
+TMP_ECC_ERRORS_OUT="/tmp/ecc_errors.out"
+
+log_step() {
+  echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> "$LOG_FILE"
+}
+
 # Fail gracefully if nvidia-smi or dcgmi doesn't exist
 if ! type -P nvidia-smi 1>/dev/null; then
-    echo "nvidia-smi not found - this script requires nvidia-smi to function" >&2
+    log_step "nvidia-smi not found - this script requires nvidia-smi to function"
     exit 0
 fi
 
 if ! type -P dcgmi 1>/dev/null; then
-    echo "dcgmi not found - this script requires dcgmi to function" >&2
+    log_step "dcgmi not found - this script requires dcgmi to function"
     exit 0
 fi
 
 if ! type -P nv-hostengine 1>/dev/null; then
-    echo "nv-hostengine not found - this script requires nv-hostengine to function" >&2
+    log_step "nv-hostengine not found - this script requires nv-hostengine to function"
     exit 0
 fi
 
 # Exit if GPU isn't H/B 100/200
 GPU_MODEL=$(nvidia-smi --query-gpu=name --format=csv,noheader)
 if ! [[ "$GPU_MODEL" =~ [BH][1-2]00 ]]; then
-    echo "No supported GPU detected" >&2
+    log_step "No Supported GPU detected"
     exit 0
 fi
 
@@ -40,52 +48,64 @@ NUMGPUS=$(nvidia-smi -L | wc -l)
 
 # Check that all GPUs are healthy via DCGM and check for ECC errors
 if [ $NUMGPUS -gt 0 ]; then
-    echo "Execute DCGM health check and ECC error check for GPUs"
+    log_step "Execute DCGM health check, ECC error check, and NVLink error check for GPUs"
     GPULIST=$(nvidia-smi --query-gpu=index --format=csv,noheader | tr '\n' ',' | sed 's/,$//')
-    rm -f /tmp/dcgm.out
-    rm -f /tmp/ecc_errors.out
+    rm -f $TMP_DCGM_OUT
+    rm -f $TMP_ECC_ERRORS_OUT
 
     # Run DCGM checks
     START_HOSTENGINE=false
     if ! pidof nv-hostengine > /dev/null; then
-        echo "Starting nv-hostengine..."
-        nv-hostengine
+        log_step "Starting nv-hostengine..."
+        nv-hostengine >> "$LOG_FILE" 2>&1
         sleep 1  # Give it a moment to start up
         START_HOSTENGINE=true
     fi
     GROUPID=$(dcgmi group -c gpuinfo | awk '{print $NF}' | tr -d ' ')
-    dcgmi group -g $GROUPID -a $GPULIST
-    dcgmi diag -g $GROUPID -r 1 1> /tmp/dcgm.out
-    dcgmi group -d $GROUPID
+    dcgmi group -g $GROUPID -a $GPULIST >> "$LOG_FILE" 2>&1
+    dcgmi diag -g $GROUPID -r 1 > "$TMP_DCGM_OUT" 2>&1
+    cat "$TMP_DCGM_OUT" >> "$LOG_FILE"
+    dcgmi group -d $GROUPID >> "$LOG_FILE" 2>&1
 
     # Terminate the host engine if it was manually started
     if [ "$START_HOSTENGINE" = true ]; then
-        echo "Terminating nv-hostengine..."
-        nv-hostengine -t
+        log_step "Terminating nv-hostengine..."
+        nv-hostengine -t >> "$LOG_FILE" 2>&1
     fi
 
     # Check for DCGM failures
     DCGM_FAILED=0
-    grep -i fail /tmp/dcgm.out > /dev/null || DCGM_FAILED=$?
+    if grep -i fail "$TMP_DCGM_OUT" > /dev/null; then
+      DCGM_FAILED=1
+    fi
 
     # Check for ECC errors
-    nvidia-smi --query-gpu=ecc.errors.uncorrected.volatile.total --format=csv,noheader > /tmp/ecc_errors.out
-    ECC_ERRORS=$(awk -F', ' '{sum += $2} END {print sum}' /tmp/ecc_errors.out)
+    nvidia-smi --query-gpu=ecc.errors.uncorrected.volatile.total --format=csv,noheader > "$TMP_ECC_ERRORS_OUT"
+    cat "$TMP_ECC_ERRORS_OUT" >> "$LOG_FILE"
+    ECC_ERRORS=$(awk -F', ' '{sum += $2} END {print sum}' "$TMP_ECC_ERRORS_OUT")
+    log_step "ECC Errors: $ECC_ERRORS"
 
     # Check for NVLink errors
     NVLINK_ERRORS=$(nvidia-smi nvlink -sc 0bz -i 0 2>/dev/null | grep -i "Error Count" | awk '{sum += $3} END {print sum}')
     # Set to 0 if empty/null
     NVLINK_ERRORS=${NVLINK_ERRORS:-0}
+    log_step "NVLink Errors: $NVLINK_ERRORS"
 
-    if [ $DCGM_FAILED -eq 0 ] || \
+    if [ $DCGM_FAILED -eq 1 ] || \
        [ $ECC_ERRORS -gt 0 ] || \
        [ $NVLINK_ERRORS -gt 0 ]; then
         REASON="GPU issues detected: "
-        [ $DCGM_FAILED -eq 0 ] && REASON+="DCGM test failed, "
-        [ $ECC_ERRORS -gt 0 ] && REASON+="ECC errors found ($ECC_ERRORS double-bit errors), "
-        [ $NVLINK_ERRORS -gt 0 ] && REASON+="NVLink errors detected ($NVLINK_ERRORS errors), "
-        REASON+="see /tmp/dcgm.out and /tmp/ecc_errors.out"
-        echo "$REASON"
+        if [ $DCGM_FAILED -eq 1 ]; then
+          REASON+="DCGM test failed, "
+        fi
+        if [ $ECC_ERRORS -gt 0 ]; then
+          REASON+="ECC errors found ($ECC_ERRORS double-bit errors), "
+        fi
+        if [ $NVLINK_ERRORS -gt 0 ]; then
+          REASON+="NVLink errors detected ($NVLINK_ERRORS errors), "
+        fi
+        REASON+="see $LOG_FILE"
+        log_step "$REASON"
         exit 1
     fi
 fi
