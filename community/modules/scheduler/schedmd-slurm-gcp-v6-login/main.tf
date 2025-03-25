@@ -36,13 +36,14 @@ locals {
 
   additional_disks = [
     for ad in var.additional_disks : {
-      disk_name    = ad.disk_name
-      device_name  = ad.device_name
-      disk_type    = ad.disk_type
-      disk_size_gb = ad.disk_size_gb
-      disk_labels  = merge(ad.disk_labels, local.labels)
-      auto_delete  = ad.auto_delete
-      boot         = ad.boot
+      disk_name                  = ad.disk_name
+      device_name                = ad.device_name
+      disk_type                  = ad.disk_type
+      disk_size_gb               = ad.disk_size_gb
+      disk_labels                = merge(ad.disk_labels, local.labels)
+      auto_delete                = ad.auto_delete
+      boot                       = ad.boot
+      disk_resource_manager_tags = ad.var.disk_resource_manager_tags
     }
   ]
 
@@ -62,13 +63,14 @@ locals {
 
 
   login_node = {
-    group_name          = local.group_name
-    disk_auto_delete    = var.disk_auto_delete
-    disk_labels         = merge(var.disk_labels, local.labels)
-    disk_size_gb        = var.disk_size_gb
-    disk_type           = var.disk_type
-    additional_disks    = local.additional_disks
-    additional_networks = var.additional_networks
+    group_name                 = local.group_name
+    disk_auto_delete           = var.disk_auto_delete
+    disk_labels                = merge(var.disk_labels, local.labels)
+    disk_size_gb               = var.disk_size_gb
+    disk_type                  = var.disk_type
+    disk_resource_manager_tags = var.disk_resource_manager_tags
+    additional_disks           = local.additional_disks
+    additional_networks        = var.additional_networks
 
     can_ip_forward            = var.can_ip_forward
     advanced_machine_features = var.advanced_machine_features
@@ -79,16 +81,17 @@ locals {
     enable_shielded_vm       = var.enable_shielded_vm
     shielded_instance_config = var.shielded_instance_config
 
-    gpu                 = one(local.guest_accelerator)
-    labels              = local.labels
-    machine_type        = var.machine_type
-    metadata            = local.metadata
-    min_cpu_platform    = var.min_cpu_platform
-    num_instances       = var.num_instances
-    on_host_maintenance = var.on_host_maintenance
-    preemptible         = var.preemptible
-    region              = var.region
-    zone                = var.zone
+    gpu                   = one(local.guest_accelerator)
+    labels                = local.labels
+    machine_type          = var.machine_type
+    metadata              = local.metadata
+    min_cpu_platform      = var.min_cpu_platform
+    num_instances         = var.num_instances
+    on_host_maintenance   = var.on_host_maintenance
+    preemptible           = var.preemptible
+    region                = var.region
+    resource_manager_tags = var.resource_manager_tags
+    zone                  = var.zone
 
     service_account = local.service_account
 
