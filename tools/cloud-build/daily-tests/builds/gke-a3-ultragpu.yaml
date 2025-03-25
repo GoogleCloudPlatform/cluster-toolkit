@@ -22,6 +22,9 @@ tags:
 - m.gpu-rdma-vpc
 - m.kubectl-apply
 - m.vpc
+- m.cloud-storage-bucket
+- m.gke-persistent-volume
+- m.pre-existing-network-storage
 
 timeout: 14400s  # 4hr
 steps:
