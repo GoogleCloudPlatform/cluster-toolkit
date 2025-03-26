@@ -240,6 +240,23 @@ deployment_groups:
       k8s_service_account_name: $(vars.k8s_service_account_name)
     outputs: [instructions]
 
+  # Create a remote mount of training_bucket using
+  # mount options optimized for reading training data.
+  - id: gcs-training
+    source: modules/file-system/pre-existing-network-storage
+    settings:
+      remote_mount: $(training_bucket.gcs_bucket_name)
+      local_mount: /training-data
+      fs_type: gcsfuse
+      mount_options: >-
+        implicit-dirs,
+        metadata-cache:ttl-secs:-1,
+        metadata-cache:stat-cache-max-size-mb:-1,
+        metadata-cache:type-cache-max-size-mb:-1,
+        file-cache:max-size-mb:-1,
+        file-cache:cache-file-for-range-read:true,
+        file-system:kernel-list-cache-ttl-secs:-1
+
 # Create a remote mount of checkpoint_bucket using mount
   # options optimized for writing and reading checkpoint data.
   - id: gcs-checkpointing
