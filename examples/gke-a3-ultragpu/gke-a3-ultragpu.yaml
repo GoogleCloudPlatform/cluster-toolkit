@@ -268,17 +268,9 @@ deployment_groups:
   # Persistent Volume for checkpoint data
   - id: checkpointing-pv
     source: modules/file-system/gke-persistent-volume
-    use: [gcs-checkpointing, a4-highgpu-cluster]
-    settings:
-      gcs_bucket_name: $(checkpoint_bucket.gcs_bucket_name)
-      capacity_gb: 1000000
-
-  # Persistent Volume for checkpoint data
-  - id: checkpointing-pv
-    source: modules/file-system/gke-persistent-volume
     use: [gcs-checkpointing, a3-ultragpu-cluster]
     settings:
-      gcs_bucket_name: $(vars.checkpoint_bucket_name)
+      gcs_bucket_name: $(checkpoint_bucket.gcs_bucket_name)
       capacity_gb: 1000000
 
   # This is an example job that will install and run an `fio`
