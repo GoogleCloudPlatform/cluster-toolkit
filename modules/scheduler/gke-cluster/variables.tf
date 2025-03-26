@@ -498,3 +498,9 @@ variable "k8s_network_names" {
     rdma_postfix      = ""
   }
 }
+
+variable "enable_k8s_beta_apis" {
+  description = "List of Enabled Kubernetes Beta APIs."
+  type        = list(string)
+  default     = null
+}

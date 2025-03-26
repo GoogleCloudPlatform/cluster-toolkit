@@ -92,6 +92,13 @@ resource "google_container_cluster" "gke_cluster" {
 
   deletion_protection = var.deletion_protection
 
+  dynamic "enable_k8s_beta_apis" {
+    for_each = var.enable_k8s_beta_apis != null ? [1] : []
+    content {
+      enabled_apis = var.enable_k8s_beta_apis
+    }
+  }
+
   network    = var.network_id
   subnetwork = var.subnetwork_self_link
 
