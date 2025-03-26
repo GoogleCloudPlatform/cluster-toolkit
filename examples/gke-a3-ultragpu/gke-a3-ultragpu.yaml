@@ -130,7 +130,7 @@ deployment_groups:
   - id: checkpoint_bucket
     source: community/modules/file-system/cloud-storage-bucket
     settings:
-      local_mount: /checkpointing-data
+      local_mount: /checkpoint-data
       name_prefix: checkpoint
       random_suffix: true
       force_destroy: false
