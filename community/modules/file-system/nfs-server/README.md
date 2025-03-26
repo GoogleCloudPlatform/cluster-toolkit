@@ -9,6 +9,8 @@ community modules that create compute VMs.
 For more information on this and other network storage options in the Cluster
 Toolkit, see the extended [Network Storage documentation](../../../../docs/network_storage.md).
 
+If you are using Hyperdisk storage, check the possible disk size, IOPS, and throughput values for each disk type in the [Hyperdisk limits documentation](https://cloud.google.com/compute/docs/disks/hyperdisks#limits-disk).
+
 > **_WARNING:_** This module has only been tested against the HPC centos7 OS
 > disk image (the default). Using other images may work, but have not been
 > verified.
@@ -122,23 +124,27 @@ No modules.
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_auto_delete_disk"></a> [auto\_delete\_disk](#input\_auto\_delete\_disk) | Whether or not the nfs disk should be auto-deleted | `bool` | `false` | no |
+| <a name="input_auto_delete_disk"></a> [auto\_delete\_disk](#input\_auto\_delete\_disk) | Whether or not the NFS disk should be auto-deleted | `bool` | `false` | no |
+| <a name="input_boot_disk_size"></a> [boot\_disk\_size](#input\_boot\_disk\_size) | Storage size in GB for the boot disk | `number` | `null` | no |
+| <a name="input_boot_disk_type"></a> [boot\_disk\_type](#input\_boot\_disk\_type) | Storage type for the boot disk | `string` | `null` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the HPC deployment, used as name of the NFS instance if no name is specified. | `string` | n/a | yes |
-| <a name="input_disk_size"></a> [disk\_size](#input\_disk\_size) | Storage size gb | `number` | `"100"` | no |
-| <a name="input_image"></a> [image](#input\_image) | DEPRECATED: The VM image used by the nfs server | `string` | `null` | no |
-| <a name="input_instance_image"></a> [instance\_image](#input\_instance\_image) | The VM image used by the nfs server.<br/><br/>Expected Fields:<br/>name: The name of the image. Mutually exclusive with family.<br/>family: The image family to use. Mutually exclusive with name.<br/>project: The project where the image is hosted. | `map(string)` | <pre>{<br/>  "family": "hpc-rocky-linux-8",<br/>  "project": "cloud-hpc-image-public"<br/>}</pre> | no |
+| <a name="input_disk_size"></a> [disk\_size](#input\_disk\_size) | Storage size in GB for the NFS data disk | `number` | `"100"` | no |
+| <a name="input_image"></a> [image](#input\_image) | DEPRECATED: The VM image used by the NFS server | `string` | `null` | no |
+| <a name="input_instance_image"></a> [instance\_image](#input\_instance\_image) | The VM image used by the NFS server.<br/><br/>Expected Fields:<br/>name: The name of the image. Mutually exclusive with family.<br/>family: The image family to use. Mutually exclusive with name.<br/>project: The project where the image is hosted. | `map(string)` | <pre>{<br/>  "family": "hpc-rocky-linux-8",<br/>  "project": "cloud-hpc-image-public"<br/>}</pre> | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the NFS instance. Key-value pairs. | `map(string)` | n/a | yes |
 | <a name="input_local_mounts"></a> [local\_mounts](#input\_local\_mounts) | Mountpoint for this NFS compute instance | `list(string)` | <pre>[<br/>  "/data"<br/>]</pre> | no |
 | <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | Type of the VM instance to use | `string` | `"n2d-standard-2"` | no |
 | <a name="input_metadata"></a> [metadata](#input\_metadata) | Metadata, provided as a map | `map(string)` | `{}` | no |
 | <a name="input_name"></a> [name](#input\_name) | The resource name of the instance. | `string` | `null` | no |
-| <a name="input_network_self_link"></a> [network\_self\_link](#input\_network\_self\_link) | The self link of the network to attach the nfs VM. | `string` | `"default"` | no |
+| <a name="input_network_self_link"></a> [network\_self\_link](#input\_network\_self\_link) | The self link of the network to attach the NFS VM. | `string` | `"default"` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created | `string` | n/a | yes |
+| <a name="input_provisioned_iops"></a> [provisioned\_iops](#input\_provisioned\_iops) | Provisioned IOPS for the NFS data disk if using Extreme PD or Hyperdisk Balanced/ML/Throughput | `number` | `null` | no |
+| <a name="input_provisioned_throughput"></a> [provisioned\_throughput](#input\_provisioned\_throughput) | Provisioned throughput for the NFS data disk if using Hyperdisk Balanced/Extreme | `number` | `null` | no |
 | <a name="input_scopes"></a> [scopes](#input\_scopes) | Scopes to apply to the controller | `list(string)` | <pre>[<br/>  "https://www.googleapis.com/auth/cloud-platform"<br/>]</pre> | no |
-| <a name="input_service_account"></a> [service\_account](#input\_service\_account) | Service Account for the NFS Server | `string` | `null` | no |
-| <a name="input_subnetwork_self_link"></a> [subnetwork\_self\_link](#input\_subnetwork\_self\_link) | The self link of the subnetwork to attach the nfs VM. | `string` | `null` | no |
-| <a name="input_type"></a> [type](#input\_type) | The service tier of the instance. | `string` | `"pd-ssd"` | no |
-| <a name="input_zone"></a> [zone](#input\_zone) | The zone name where the nfs instance located in. | `string` | n/a | yes |
+| <a name="input_service_account"></a> [service\_account](#input\_service\_account) | Service Account for the NFS server | `string` | `null` | no |
+| <a name="input_subnetwork_self_link"></a> [subnetwork\_self\_link](#input\_subnetwork\_self\_link) | The self link of the subnetwork to attach the NFS VM. | `string` | `null` | no |
+| <a name="input_type"></a> [type](#input\_type) | Storage type for the NFS data disk | `string` | `"pd-ssd"` | no |
+| <a name="input_zone"></a> [zone](#input\_zone) | The zone name where the NFS instance located in. | `string` | n/a | yes |
 
 ## Outputs
 
