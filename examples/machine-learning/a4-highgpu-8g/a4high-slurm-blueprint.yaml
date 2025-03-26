@@ -371,6 +371,11 @@ deployment_groups:
       disk_type: hyperdisk-balanced
       on_host_maintenance: TERMINATE
       reservation_name: $(vars.a4h_reservation_name)
+      advanced_machine_features:
+        threads_per_core: null # Use platform default value
+      node_conf:
+        CoresPerSocket: 56
+        ThreadsPerCore: 2
       additional_networks:
         $(concat(
           [{
