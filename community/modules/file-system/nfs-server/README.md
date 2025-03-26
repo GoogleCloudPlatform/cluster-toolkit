@@ -9,6 +9,8 @@ community modules that create compute VMs.
 For more information on this and other network storage options in the Cluster
 Toolkit, see the extended [Network Storage documentation](../../../../docs/network_storage.md).
 
+If you are using Hyperdisk storage, check the possible disk size, IOPS, and throughput values for each disk type in the [Hyperdisk limits documentation](https://cloud.google.com/compute/docs/disks/hyperdisks#limits-disk).
+
 > **_WARNING:_** This module has only been tested against the HPC centos7 OS
 > disk image (the default). Using other images may work, but have not been
 > verified.
