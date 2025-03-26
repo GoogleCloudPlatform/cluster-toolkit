@@ -23,6 +23,17 @@ if [[ -z "$HOME" ]]; then
 	HOME="$(getent passwd "$(whoami)" | cut -d: -f6)"
 fi
 
+# Temporary workaround for transition period when some of older images
+# don't have "baked in" python yet.
+# TODO: Remove
+SLURM_PY="/slurm/python/venv/bin/python3.13"
+SYSTEM_PY="/usr/bin/python3"
+if [[ ! -e "$SLURM_PY" ]]; then
+  echo "Symlink $SLURM_PY does not exist. Creating symlink to $SYSTEM_PY"
+  mkdir -p /slurm/python/venv/bin
+  ln -s "$SYSTEM_PY" "$SLURM_PY"
+fi
+
 METADATA_SERVER="metadata.google.internal"
 URL="http://$METADATA_SERVER/computeMetadata/v1"
 CURL="curl -sS --fail --header Metadata-Flavor:Google"
