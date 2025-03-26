@@ -260,7 +260,7 @@ deployment_groups:
   # Persistent Volume for training data
   - id: training-pv
     source: modules/file-system/gke-persistent-volume
-    use: [gcs-training, a4-highgpu-cluster]
+    use: [gcs-training, a3-ultragpu-cluster]
     settings:
       gcs_bucket_name: $(training_bucket.gcs_bucket_name)
       capacity_gb: 1000000
