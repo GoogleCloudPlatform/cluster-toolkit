@@ -416,7 +416,7 @@ deployment_groups:
       advanced_machine_features:
         threads_per_core: null # Use platform default value
       node_conf:
-        CoresPerSocket: 52
+        CoresPerSocket: 56
         ThreadsPerCore: 2
       additional_networks:
         $(concat(
