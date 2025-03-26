@@ -31,7 +31,3 @@ vars:
   extended_reservation: RESERVATION_NAME
   static_node_count: NODE_COUNT
   k8s_service_account_name: # add this
-  # The name of the GCS bucket used for training data
-  training_bucket_name:
-  # The name of the GCS bucket used for checkpoint/restart data.
-  checkpoint_bucket_name:
