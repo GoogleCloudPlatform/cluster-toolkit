@@ -27,7 +27,7 @@ where `<instance_id>` is the instance ID of the compute node, acquired from the 
 
 The Prolog/Epilog GPU health check can be enabled or disabled through the `enable_chs_gpu_health_check_prolog` and `enable_chs_gpu_health_check_epilog` settings within the Slurm controller module.
 
-- `enable_chs_gpu_health_check_prolog`: Enables the health check to run as a prolog script before each job step. This field is set to `true` by default.
+- `enable_chs_gpu_health_check_prolog`: Enables the health check to run as a prolog script before each job step. This field is set to `false` by default.
 - `enable_chs_gpu_health_check_epilog`: Enables the health check to run as an epilog script after each job step. This field is set to `false` by default.
 
 #### Example Configuration
@@ -41,8 +41,8 @@ To enable both prolog and epilog GPU health checks, include the following settin
     - slurm_login
     # ...
     settings:
-      enable_chs_gpu_health_check_prolog: true
-      enable_chs_gpu_health_check_epilog: true
+      enable_chs_gpu_health_check_prolog: true # false by default
+      enable_chs_gpu_health_check_epilog: true # false by default
       # the rest of the settings, e.g. mahcine_type, controller_startup_script, login_startup_script, etc.
 ```
 
