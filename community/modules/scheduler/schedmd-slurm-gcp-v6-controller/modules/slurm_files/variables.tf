@@ -171,6 +171,27 @@ EOD
   default     = 300
 }
 
+variable "enable_chs_gpu_health_check_prolog" {
+  description = <<EOD
+Enable a Cluster Health Sacnner(CHS) GPU health check that slurmd executes as a prolog script whenever it is asked to run a job step from a new job allocation. Compute nodes that fail GPU health check during prolog will be marked as drained. Find more details at:
+https://github.com/GoogleCloudPlatform/cluster-toolkit/tree/main/docs/CHS-Slurm.md
+EOD
+  type        = bool
+  default     = true
+  nullable    = false
+}
+
+variable "enable_chs_gpu_health_check_epilog" {
+  description = <<EOD
+Enable a Cluster Health Sacnner(CHS) GPU health check that slurmd executes as an epilog script after completing a job step from a new job allocation.
+Compute nodes that fail GPU health check during epilog will be marked as drained. Find more details at:
+https://github.com/GoogleCloudPlatform/cluster-toolkit/tree/main/docs/CHS-Slurm.md
+EOD
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
 variable "prolog_scripts" {
   description = <<EOD
 List of scripts to be used for Prolog. Programs for the slurmd to execute
