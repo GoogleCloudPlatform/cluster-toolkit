@@ -20,7 +20,7 @@ if [ ! "$(which mount.nfs)" ]; then
 		enable_repo=""
 		if [ "${major_version}" -eq "7" ]; then
 			enable_repo="base,epel"
-		elif [ "${major_version}" -eq "8" ]; then
+		elif [ "${major_version}" -eq "8" ] || [ "${major_version}" -eq "9" ]; then
 			enable_repo="baseos"
 		else
 			echo "Unsupported version of centos/RHEL/Rocky"

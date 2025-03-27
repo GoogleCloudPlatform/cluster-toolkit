@@ -130,7 +130,7 @@ deployment_groups:
   - id: checkpoint_bucket
     source: community/modules/file-system/cloud-storage-bucket
     settings:
-      local_mount: /checkpointing-data
+      local_mount: /checkpoint-data
       name_prefix: checkpoint
       random_suffix: true
       force_destroy: false
@@ -240,6 +240,23 @@ deployment_groups:
       k8s_service_account_name: $(vars.k8s_service_account_name)
     outputs: [instructions]
 
+  # Create a remote mount of training_bucket using
+  # mount options optimized for reading training data.
+  - id: gcs-training
+    source: modules/file-system/pre-existing-network-storage
+    settings:
+      remote_mount: $(training_bucket.gcs_bucket_name)
+      local_mount: /training-data
+      fs_type: gcsfuse
+      mount_options: >-
+        implicit-dirs,
+        metadata-cache:ttl-secs:-1,
+        metadata-cache:stat-cache-max-size-mb:-1,
+        metadata-cache:type-cache-max-size-mb:-1,
+        file-cache:max-size-mb:-1,
+        file-cache:cache-file-for-range-read:true,
+        file-system:kernel-list-cache-ttl-secs:-1
+
 # Create a remote mount of checkpoint_bucket using mount
   # options optimized for writing and reading checkpoint data.
   - id: gcs-checkpointing
@@ -260,7 +277,7 @@ deployment_groups:
   # Persistent Volume for training data
   - id: training-pv
     source: modules/file-system/gke-persistent-volume
-    use: [gcs-training, a4-highgpu-cluster]
+    use: [gcs-training, a3-ultragpu-cluster]
     settings:
       gcs_bucket_name: $(training_bucket.gcs_bucket_name)
       capacity_gb: 1000000
@@ -268,17 +285,9 @@ deployment_groups:
   # Persistent Volume for checkpoint data
   - id: checkpointing-pv
     source: modules/file-system/gke-persistent-volume
-    use: [gcs-checkpointing, a4-highgpu-cluster]
-    settings:
-      gcs_bucket_name: $(checkpoint_bucket.gcs_bucket_name)
-      capacity_gb: 1000000
-
-  # Persistent Volume for checkpoint data
-  - id: checkpointing-pv
-    source: modules/file-system/gke-persistent-volume
     use: [gcs-checkpointing, a3-ultragpu-cluster]
     settings:
-      gcs_bucket_name: $(vars.checkpoint_bucket_name)
+      gcs_bucket_name: $(checkpoint_bucket.gcs_bucket_name)
       capacity_gb: 1000000
 
   # This is an example job that will install and run an `fio`

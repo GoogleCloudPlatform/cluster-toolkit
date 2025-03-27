@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-blueprint_name: gke-a4-high
+blueprint_name: gke-a4
 
 vars:
   # The following variables should be over-written in the deployment.yaml file.
@@ -21,7 +21,7 @@ vars:
 
   # This should be unique across all of your Cluster
   # Toolkit Deployments.
-  deployment_name: gke-a4-high
+  deployment_name: gke-a4
 
   # The GCP Region used for this deployment.
   region:
@@ -37,7 +37,7 @@ vars:
   # To allow only your IP address, use <YOUR-IP-ADDRESS>/32
   authorized_cidr:
 
-  # The name of the compute engine reservation of A4-High nodes in the form of
+  # The name of the compute engine reservation of A4 nodes in the form of
   # <project>/<reservation-name>
   # In order to target a BLOCK_NAME, extended_reservation can be inputted as
   # <project>/<reservation-name>/reservationBlocks/<reservation-block-name>
@@ -50,13 +50,13 @@ vars:
   mglru_disable_path: $(ghpc_stage("./mglru-disable.yaml"))
   kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
   system_node_pool_disk_size_gb: 200
-  a4high_node_pool_disk_size_gb: 100
+  a4_node_pool_disk_size_gb: 100
 
 
 deployment_groups:
 - group: primary
   modules:
-  - id: gke-a4-high-net-0
+  - id: gke-a4-net-0
     source: modules/network/vpc
     settings:
       network_name: $(vars.deployment_name)-net-0
@@ -81,7 +81,7 @@ deployment_groups:
           ports: ["0-65535"]
         - protocol: icmp
 
-  - id: gke-a4-high-net-1
+  - id: gke-a4-net-1
     source: modules/network/vpc
     settings:
       network_name: $(vars.deployment_name)-net-1
@@ -99,7 +99,7 @@ deployment_groups:
           ports: ["0-65535"]
         - protocol: icmp
 
-  - id: gke-a4-high-rdma-net
+  - id: gke-a4-rdma-net
     source: modules/network/gpu-rdma-vpc
     settings:
       network_name: $(vars.deployment_name)-rdma-net
@@ -147,15 +147,15 @@ deployment_groups:
   - id: checkpoint_bucket
     source: community/modules/file-system/cloud-storage-bucket
     settings:
-      local_mount: /checkpointing-data
+      local_mount: /checkpoint-data
       name_prefix: checkpoint
       random_suffix: true
       force_destroy: false
       enable_hierarchical_namespace: true
 
-  - id: a4-highgpu-cluster
+  - id: a4-cluster
     source: modules/scheduler/gke-cluster
-    use: [gke-a4-high-net-0, workload_service_account]
+    use: [gke-a4-net-0, workload_service_account]
     settings:
       system_node_pool_machine_type: "e2-standard-16"
       system_node_pool_disk_size_gb: $(vars.system_node_pool_disk_size_gb)
@@ -170,8 +170,8 @@ deployment_groups:
       additional_networks:
         $(concat(
           [{
-            network=gke-a4-high-net-1.network_name,
-            subnetwork=gke-a4-high-net-1.subnetwork_name,
+            network=gke-a4-net-1.network_name,
+            subnetwork=gke-a4-net-1.subnetwork_name,
             subnetwork_project=vars.project_id,
             nic_type="GVNIC",
             queue_count=null,
@@ -181,7 +181,7 @@ deployment_groups:
             ipv6_access_config=[],
             alias_ip_range=[]
           }],
-         gke-a4-high-rdma-net.subnetwork_interfaces_gke
+         gke-a4-rdma-net.subnetwork_interfaces_gke
         ))
       # Cluster versions cannot be updated through the toolkit after creation
       # Please manage cluster version from the Google Cloud Console directly
@@ -194,14 +194,14 @@ deployment_groups:
         exclusion_scope: NO_MINOR_OR_NODE_UPGRADES
     outputs: [instructions]
 
-  - id: a4-highgpu-pool
+  - id: a4-pool
     source: modules/compute/gke-node-pool
-    use: [a4-highgpu-cluster, node_pool_service_account]
+    use: [a4-cluster, node_pool_service_account]
     settings:
       machine_type: a4-highgpu-8g
       auto_upgrade: true
       zones: [$(vars.zone)]
-      disk_size_gb: $(vars.a4high_node_pool_disk_size_gb)
+      disk_size_gb: $(vars.a4_node_pool_disk_size_gb)
       static_node_count: $(vars.static_node_count)
       guest_accelerator:
       - type: nvidia-b200
@@ -213,8 +213,8 @@ deployment_groups:
       additional_networks:
         $(concat(
           [{
-            network=gke-a4-high-net-1.network_name,
-            subnetwork=gke-a4-high-net-1.subnetwork_name,
+            network=gke-a4-net-1.network_name,
+            subnetwork=gke-a4-net-1.subnetwork_name,
             subnetwork_project=vars.project_id,
             nic_type="GVNIC",
             queue_count=null,
@@ -224,21 +224,21 @@ deployment_groups:
             ipv6_access_config=[],
             alias_ip_range=[]
           }],
-         gke-a4-high-rdma-net.subnetwork_interfaces_gke
+         gke-a4-rdma-net.subnetwork_interfaces_gke
         ))
     outputs: [instructions]
 
   # Install Kueue, Jobset, and NCCL installer
   - id: workload-manager-install
     source: modules/management/kubectl-apply
-    use: [a4-highgpu-cluster]
+    use: [a4-cluster]
     settings:
       kueue:
         install: true
         config_path: $(vars.kueue_configuration_path)
         config_template_vars:
-          num_gpus: $(a4-highgpu-pool.static_gpu_count)
-          node_pool_name: $(a4-highgpu-pool.node_pool_names[0])
+          num_gpus: $(a4-pool.static_gpu_count)
+          node_pool_name: $(a4-pool.node_pool_names[0])
       jobset:
         install: true
       apply_manifests:
@@ -247,7 +247,7 @@ deployment_groups:
 
   - id: job-template
     source: modules/compute/gke-job-template
-    use: [a4-highgpu-pool]
+    use: [a4-pool]
     settings:
       image: nvidia/cuda:11.0.3-runtime-ubuntu20.04
       command:
@@ -294,7 +294,7 @@ deployment_groups:
   # Persistent Volume for training data
   - id: training-pv
     source: modules/file-system/gke-persistent-volume
-    use: [gcs-training, a4-highgpu-cluster]
+    use: [gcs-training, a4-cluster]
     settings:
       gcs_bucket_name: $(training_bucket.gcs_bucket_name)
       capacity_gb: 1000000
@@ -302,7 +302,7 @@ deployment_groups:
   # Persistent Volume for checkpoint data
   - id: checkpointing-pv
     source: modules/file-system/gke-persistent-volume
-    use: [gcs-checkpointing, a4-highgpu-cluster]
+    use: [gcs-checkpointing, a4-cluster]
     settings:
       gcs_bucket_name: $(checkpoint_bucket.gcs_bucket_name)
       capacity_gb: 1000000
@@ -311,7 +311,7 @@ deployment_groups:
   # benchmark against the training and checkpointing buckets.
   - id: fio-bench-job-template
     source: modules/compute/gke-job-template
-    use: [checkpointing-pv, training-pv, a4-highgpu-pool]
+    use: [checkpointing-pv, training-pv, a4-pool]
     settings:
 
       # By adding an ephemeral volume, this will ensure that the job adds:
