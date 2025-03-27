@@ -31,26 +31,50 @@ variable "name" {
 }
 
 variable "zone" {
-  description = "The zone name where the nfs instance located in."
+  description = "The zone name where the NFS instance located in."
   type        = string
 }
 
+variable "boot_disk_size" {
+  description = "Storage size in GB for the boot disk"
+  type        = number
+  default     = null
+}
+
+variable "boot_disk_type" {
+  description = "Storage type for the boot disk"
+  type        = string
+  default     = null
+}
+
 variable "disk_size" {
-  description = "Storage size gb"
+  description = "Storage size in GB for the NFS data disk"
   type        = number
   default     = "100"
 }
 
 variable "type" {
-  description = "The service tier of the instance."
+  description = "Storage type for the NFS data disk"
   type        = string
   default     = "pd-ssd"
+}
+
+variable "provisioned_iops" {
+  description = "Provisioned IOPS for the NFS data disk if using Extreme PD or Hyperdisk Balanced/ML/Throughput"
+  type        = number
+  default     = null
+}
+
+variable "provisioned_throughput" {
+  description = "Provisioned throughput for the NFS data disk if using Hyperdisk Balanced/Extreme"
+  type        = number
+  default     = null
 }
 
 # Deprecated, replaced by instance_image
 # tflint-ignore: terraform_unused_declarations
 variable "image" {
-  description = "DEPRECATED: The VM image used by the nfs server"
+  description = "DEPRECATED: The VM image used by the NFS server"
   type        = string
   default     = null
 
@@ -62,7 +86,7 @@ variable "image" {
 
 variable "instance_image" {
   description = <<-EOD
-    The VM image used by the nfs server.
+    The VM image used by the NFS server.
 
     Expected Fields:
     name: The name of the image. Mutually exclusive with family.
@@ -87,19 +111,19 @@ variable "instance_image" {
 }
 
 variable "auto_delete_disk" {
-  description = "Whether or not the nfs disk should be auto-deleted"
+  description = "Whether or not the NFS disk should be auto-deleted"
   type        = bool
   default     = false
 }
 
 variable "network_self_link" {
-  description = "The self link of the network to attach the nfs VM."
+  description = "The self link of the network to attach the NFS VM."
   type        = string
   default     = "default"
 }
 
 variable "subnetwork_self_link" {
-  description = "The self link of the subnetwork to attach the nfs VM."
+  description = "The self link of the subnetwork to attach the NFS VM."
   type        = string
   default     = null
 }
@@ -122,7 +146,7 @@ variable "metadata" {
 }
 
 variable "service_account" {
-  description = "Service Account for the NFS Server"
+  description = "Service Account for the NFS server"
   type        = string
   default     = null
 }

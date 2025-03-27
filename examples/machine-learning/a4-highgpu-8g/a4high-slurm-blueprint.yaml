@@ -1,0 +1,452 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+---
+
+blueprint_name: a4high-slurm
+
+vars:
+  deployment_name: # supply deployment name
+  project_id: # supply project ID
+  region: # supply region
+  zone: # supply zone
+  a4h_cluster_size: # supply cluster size
+  a4h_reservation_name: # supply reservation name
+  # Image settings
+  base_image:
+    project: ubuntu-os-cloud
+    family: ubuntu-2204-lts
+  image_build_machine_type: n2-standard-16
+  build_slurm_from_git_ref: 6.9.1
+  # Cluster env settings
+  # net0 and filestore ranges must not overlap
+  net0_range: 192.168.0.0/19
+  filestore_ip_range: 192.168.32.0/24
+  net1_range: 192.168.64.0/18
+  rdma_net_range: 192.168.128.0/18
+  # Cluster Settings
+  local_ssd_mountpoint: /mnt/localssd
+  instance_image:
+    project: $(vars.project_id)
+    family: $(vars.deployment_name)-u22
+  disk_size_gb: 200
+  nccl_plugin_version: v1.0.5
+  benchmark_dir: $(ghpc_stage("system_benchmarks"))
+
+deployment_groups:
+- group: image-env
+  modules:
+  - id: slurm-image-network
+    source: modules/network/vpc
+
+  - id: slurm-build-script
+    source: modules/scripts/startup-script
+    settings:
+      install_ansible: true
+      docker:
+        enabled: true
+        world_writable: true
+      runners:
+      - type: shell
+        destination: prep-for-slurm-build.sh
+        content: |
+          #!/bin/bash
+          set -e -o pipefail
+          ansible-galaxy role install googlecloudplatform.google_cloud_ops_agents
+      - type: data
+        destination: /var/tmp/slurm_vars.json
+        content: |
+          {
+            "reboot": false,
+            "install_cuda": false,
+            "install_gcsfuse": true,
+            "install_lustre": false,
+            "install_ompi": true,
+            "install_nvidia_repo": true,
+            "update_kernel": false,
+            "monitoring_agent": "cloud-ops",
+          }
+      - type: shell
+        destination: install_slurm.sh
+        content: |
+          #!/bin/bash
+          set -e -o pipefail
+          ansible-pull \
+              -U https://github.com/GoogleCloudPlatform/slurm-gcp -C $(vars.build_slurm_from_git_ref) \
+              -i localhost, --limit localhost --connection=local \
+              -e @/var/tmp/slurm_vars.json \
+              ansible/playbook.yml
+      - type: data
+        destination: /etc/security/limits.d/99-unlimited.conf
+        content: |
+          * - memlock unlimited
+          * - nproc unlimited
+          * - stack unlimited
+          * - nofile 1048576
+          * - cpu unlimited
+          * - rtprio unlimited
+      - type: ansible-local
+        destination: install_a4h_drivers.yml
+        content: |
+          ---
+          - name: Install A4 Drivers and Utils
+            hosts: all
+            become: true
+            vars:
+              distribution: "{{ ansible_distribution | lower }}{{ ansible_distribution_version | replace('.','') }}"
+              cuda_repo_url: https://developer.download.nvidia.com/compute/cuda/repos/{{ distribution }}/x86_64/cuda-keyring_1.1-1_all.deb
+              cuda_repo_filename: /tmp/{{ cuda_repo_url | basename }}
+              enable_nvidia_dcgm: false
+              nvidia_packages:
+              - nvidia-open-570
+              - nvidia-utils-570
+              - nvidia-container-toolkit
+              - cuda-toolkit-12-8
+              - datacenter-gpu-manager
+              - libnvidia-nscq-570
+            tasks:
+            - name: Download NVIDIA repository package
+              ansible.builtin.get_url:
+                url: "{{ cuda_repo_url }}"
+                dest: "{{ cuda_repo_filename }}"
+            - name: Install NVIDIA repository package
+              ansible.builtin.apt:
+                deb: "{{ cuda_repo_filename }}"
+                state: present
+            - name: Install NVIDIA fabric and CUDA
+              ansible.builtin.apt:
+                name: "{{ item }}"
+                update_cache: true
+              loop: "{{ nvidia_packages }}"
+            - name: Freeze NVIDIA fabric and CUDA
+              ansible.builtin.dpkg_selections:
+                name: "{{ item }}"
+                selection: hold
+              loop: "{{ nvidia_packages }}"
+            post_tasks:
+            - name: Disable NVIDIA DCGM by default (enable during boot on GPU nodes)
+              ansible.builtin.service:
+                name: nvidia-dcgm.service
+                state: stopped
+                enabled: false
+
+      - type: ansible-local
+        destination: install_ibverbs_utils.yml
+        content: |
+          ---
+          - name: Install ibverbs-utils
+            hosts: all
+            become: true
+            tasks:
+            - name: Install Linux Modules Extra
+              ansible.builtin.package:
+                name:
+                - ibverbs-utils
+                state: present
+      - type: data
+        destination: /etc/enroot/enroot.conf
+        content: |
+          ENROOT_CONFIG_PATH     ${HOME}/.enroot
+
+
+- group: image
+  modules:
+  - id: slurm-a4high-image
+    source: modules/packer/custom-image
+    kind: packer
+    settings:
+      disk_size: $(vars.disk_size_gb)
+      machine_type: $(vars.image_build_machine_type)
+      source_image_family: $(vars.base_image.family)
+      source_image_project_id: [$(vars.base_image.project)]
+      image_family: $(vars.instance_image.family)
+      omit_external_ip: false
+    use:
+    - slurm-image-network
+    - slurm-build-script
+
+- group: cluster-env
+  modules:
+  - id: a4high-slurm-net-0
+    source: modules/network/vpc
+    settings:
+      network_name: $(vars.deployment_name)-net-0
+      mtu: 8896
+      enable_internal_traffic: false # Setting firewall below instead
+      subnetworks:
+      - subnet_name: $(vars.deployment_name)-sub-0
+        subnet_region: $(vars.region)
+        subnet_ip: $(vars.net0_range)
+      firewall_rules:
+      - name: $(vars.deployment_name)-internal-0
+        ranges: [$(vars.net0_range)]
+        allow:
+        - protocol: tcp
+        - protocol: udp
+        - protocol: icmp
+
+  - id: a4high-slurm-net-1
+    source: modules/network/vpc
+    settings:
+      network_name: $(vars.deployment_name)-net-1
+      mtu: 8896
+      enable_internal_traffic: false # Setting firewall below instead
+      subnetworks:
+      - subnet_name: $(vars.deployment_name)-sub-1
+        subnet_region: $(vars.region)
+        subnet_ip: $(vars.net1_range)
+      firewall_rules:
+      - name: $(vars.deployment_name)-internal-1
+        ranges: [$(vars.net1_range)]
+        allow:
+        - protocol: tcp
+        - protocol: udp
+        - protocol: icmp
+
+  - id: a4high-slurm-rdma-net
+    source: modules/network/gpu-rdma-vpc
+    settings:
+      network_name: $(vars.deployment_name)-rdma-net
+      network_profile: https://www.googleapis.com/compute/v1/projects/$(vars.project_id)/global/networkProfiles/$(vars.zone)-vpc-roce
+      network_routing_mode: REGIONAL
+      subnetworks_template:
+        name_prefix: $(vars.deployment_name)-mrdma-sub
+        count: 8
+        ip_range: $(vars.rdma_net_range)
+        region: $(vars.region)
+      firewall_rules:
+      - name: $(vars.deployment_name)-internal-rdma
+        ranges: [$(vars.rdma_net_range)]
+        allow:
+        - protocol: tcp
+        - protocol: udp
+        - protocol: icmp
+
+  - id: homefs
+    source: modules/file-system/filestore
+    use:
+    - a4high-slurm-net-0
+    settings:
+      filestore_tier: HIGH_SCALE_SSD
+      size_gb: 10240
+      local_mount: /home
+      reserved_ip_range: $(vars.filestore_ip_range)
+      deletion_protection:
+        enabled: true
+        reason: Avoid data loss
+    outputs:
+    - network_storage
+
+- group: cluster
+  modules:
+  - id: a4high_startup
+    source: modules/scripts/startup-script
+    settings:
+      local_ssd_filesystem:
+        mountpoint: $(vars.local_ssd_mountpoint)
+        permissions: "1777" # must quote numeric filesystem permissions!
+      docker:
+        enabled: true
+        world_writable: true
+        daemon_config: |
+          {
+            "data-root": "$(vars.local_ssd_mountpoint)/docker"
+          }
+      runners:
+      - type: data
+        destination: /etc/enroot/enroot.conf
+        content: |
+          ENROOT_CONFIG_PATH     ${HOME}/.enroot
+          ENROOT_RUNTIME_PATH    $(vars.local_ssd_mountpoint)/${UID}/enroot/runtime
+          ENROOT_CACHE_PATH      $(vars.local_ssd_mountpoint)/${UID}/enroot/cache
+          ENROOT_DATA_PATH       $(vars.local_ssd_mountpoint)/${UID}/enroot/data
+          ENROOT_TEMP_PATH       $(vars.local_ssd_mountpoint)/${UID}/enroot
+      - type: ansible-local
+        destination: nccl_plugin.yml
+        content: |
+          ---
+          - name: Install NCCL plugin for A4 High series
+            hosts: all
+            become: true
+            tasks:
+            - name: Add SystemD unit for NCCL plugin installation
+              ansible.builtin.copy:
+                dest: /etc/systemd/system/nccl-plugin@.service
+                mode: 0o0644
+                content: |
+                  [Unit]
+                  After=network-online.target docker.service
+                  Before=slurmd.service
+                  Requires=docker.service
+
+                  [Service]
+                  Type=oneshot
+                  ExecStartPre=/usr/bin/rm -rf /usr/local/gib
+                  ExecStartPre=/usr/bin/mkdir -p /usr/local/gib
+                  ExecStartPre=/snap/bin/gcloud auth configure-docker --quiet us-docker.pkg.dev
+                  ExecStart=/usr/bin/docker run --rm --name nccl-gib-installer --volume /usr/local/gib:/var/lib/gib \
+                      us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib:%i install --install-nccl
+                  ExecStartPost=/usr/bin/chmod -R a+r /usr/local/gib
+
+                  [Install]
+                  WantedBy=slurmd.service
+              notify:
+              - Reload SystemD
+            handlers:
+            - name: Reload SystemD
+              ansible.builtin.systemd:
+                daemon_reload: true
+            post_tasks:
+            - name: Enable NCCL plugin SystemD unit
+              ansible.builtin.service:
+                name: nccl-plugin@$(vars.nccl_plugin_version).service
+                state: started
+                enabled: true
+      - type: ansible-local
+        destination: enable_dcgm.yml
+        content: |
+          ---
+          - name: Enable NVIDIA DCGM on GPU nodes
+            hosts: all
+            become: true
+            vars:
+              enable_ops_agent: true
+              enable_nvidia_dcgm: true
+            tasks:
+            - name: Update Ops Agent configuration
+              ansible.builtin.blockinfile:
+                path: /etc/google-cloud-ops-agent/config.yaml
+                insertafter: EOF
+                block: |
+                  metrics:
+                    receivers:
+                      dcgm:
+                        type: dcgm
+                    service:
+                      pipelines:
+                        dcgm:
+                          receivers:
+                            - dcgm
+              notify:
+              - Restart Google Cloud Ops Agent
+            handlers:
+            - name: Restart Google Cloud Ops Agent
+              ansible.builtin.service:
+                name: google-cloud-ops-agent.service
+                state: "{{ 'restarted' if enable_ops_agent else 'stopped' }}"
+                enabled: "{{ enable_ops_agent }}"
+            post_tasks:
+            - name: Enable Google Cloud Ops Agent
+              ansible.builtin.service:
+                name: google-cloud-ops-agent.service
+                state: "{{ 'started' if enable_ops_agent else 'stopped' }}"
+                enabled: "{{ enable_ops_agent }}"
+            - name: Enable NVIDIA DCGM
+              ansible.builtin.service:
+                name: nvidia-dcgm.service
+                state: "{{ 'started' if enable_nvidia_dcgm else 'stopped' }}"
+                enabled: "{{ enable_nvidia_dcgm }}"
+
+  - id: a4high_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [a4high-slurm-net-0, a4high_startup]
+    settings:
+      bandwidth_tier: gvnic_enabled
+      machine_type: a4-highgpu-8g
+      instance_image_custom: true
+      enable_public_ips: true
+      node_count_static: $(vars.a4h_cluster_size)
+      node_count_dynamic_max: 0
+      enable_placement: false
+      disk_type: hyperdisk-balanced
+      on_host_maintenance: TERMINATE
+      reservation_name: $(vars.a4h_reservation_name)
+      advanced_machine_features:
+        threads_per_core: null # Use platform default value
+      node_conf:
+        CoresPerSocket: 56
+        ThreadsPerCore: 2
+      additional_networks:
+        $(concat(
+          [{
+            network=null,
+            subnetwork=a4high-slurm-net-1.subnetwork_self_link,
+            subnetwork_project=vars.project_id,
+            nic_type="GVNIC",
+            queue_count=null,
+            network_ip="",
+            stack_type=null,
+            access_config=[],
+            ipv6_access_config=[],
+            alias_ip_range=[]
+          }],
+          a4high-slurm-rdma-net.subnetwork_interfaces
+        ))
+
+  - id: a4high_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use:
+    - a4high_nodeset
+    settings:
+      exclusive: false
+      partition_name: a4high
+      is_default: true
+      partition_conf:
+        OverSubscribe: EXCLUSIVE
+        ResumeTimeout: 1200
+        SuspendTimeout: 600
+
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    use: [a4high-slurm-net-0]
+    settings:
+      instance_image_custom: true
+      disk_size_gb: 300
+      enable_login_public_ips: true
+      machine_type: n2-standard-8
+
+  - id: controller_startup
+    source: modules/scripts/startup-script
+    settings:
+      runners:
+      - type: shell
+        destination: stage_scripts.sh
+        content: |
+          #!/bin/bash
+          SLURM_ROOT=/opt/apps/adm/slurm
+          PARTITION_NAME=$(a4high_partition.partitions[0].partition_name)
+          mkdir -m 0755 -p "${SLURM_ROOT}/scripts"
+          mkdir -p "${SLURM_ROOT}/partition-${PARTITION_NAME}-epilog_slurmd.d"
+          ln -s "/slurm/scripts/tools/gpu-test" "${SLURM_ROOT}/partition-${PARTITION_NAME}-epilog_slurmd.d/gpu-test.epilog_slurmd"
+      - type: data
+        destination: /opt/apps/system_benchmarks/run-nccl-tests-via-ramble.sh
+        source: $(vars.benchmark_dir)/run-nccl-tests-via-ramble.sh
+      - type: data
+        destination: /opt/apps/system_benchmarks/README.md
+        source: $(vars.benchmark_dir)/README.md
+
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    use:
+    - a4high-slurm-net-0
+    - a4high_partition
+    - slurm_login
+    - homefs
+    settings:
+      enable_controller_public_ips: true
+      instance_image_custom: true
+      disk_type: pd-extreme
+      disk_size_gb: 300
+      machine_type: n2-standard-80
+      controller_startup_script: $(controller_startup.startup_script)
+      enable_external_prolog_epilog: true

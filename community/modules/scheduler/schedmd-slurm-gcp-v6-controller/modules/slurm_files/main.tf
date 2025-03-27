@@ -43,14 +43,15 @@ locals {
   tp = "${local.bucket_dir}/" # prefix to trim from the bucket path to get a "file name"
 
   config = {
-    enable_bigquery_load = var.enable_bigquery_load
-    cloudsql_secret      = var.cloudsql_secret
-    cluster_id           = random_uuid.cluster_id.result
-    project              = var.project_id
-    slurm_cluster_name   = var.slurm_cluster_name
-    bucket_path          = local.bucket_path
-    enable_debug_logging = var.enable_debug_logging
-    extra_logging_flags  = var.extra_logging_flags
+    enable_bigquery_load  = var.enable_bigquery_load
+    cloudsql_secret       = var.cloudsql_secret
+    cluster_id            = random_uuid.cluster_id.result
+    project               = var.project_id
+    slurm_cluster_name    = var.slurm_cluster_name
+    bucket_path           = local.bucket_path
+    enable_debug_logging  = var.enable_debug_logging
+    extra_logging_flags   = var.extra_logging_flags
+    controller_state_disk = var.controller_state_disk
 
     # storage
     disable_default_mounts = var.disable_default_mounts
@@ -58,9 +59,9 @@ locals {
     login_network_storage  = var.enable_hybrid ? null : var.login_network_storage
 
     # timeouts
-    controller_startup_scripts_timeout = var.enable_hybrid ? null : var.controller_startup_scripts_timeout
+    controller_startup_scripts_timeout = var.controller_startup_scripts_timeout
     compute_startup_scripts_timeout    = var.compute_startup_scripts_timeout
-    login_startup_scripts_timeout      = var.enable_hybrid ? null : var.login_startup_scripts_timeout
+    login_startup_scripts_timeout      = var.login_startup_scripts_timeout
     munge_mount                        = local.munge_mount
 
     # slurm conf
@@ -69,15 +70,17 @@ locals {
     cloud_parameters = var.cloud_parameters
 
     # hybrid
-    hybrid                  = var.enable_hybrid
-    google_app_cred_path    = var.enable_hybrid ? local.google_app_cred_path : null
-    output_dir              = var.enable_hybrid ? local.output_dir : null
-    install_dir             = var.enable_hybrid ? local.install_dir : null
-    slurm_control_host      = var.enable_hybrid ? var.slurm_control_host : null
-    slurm_control_host_port = var.enable_hybrid ? local.slurm_control_host_port : null
-    slurm_control_addr      = var.enable_hybrid ? var.slurm_control_addr : null
-    slurm_bin_dir           = var.enable_hybrid ? local.slurm_bin_dir : null
-    slurm_log_dir           = var.enable_hybrid ? local.slurm_log_dir : null
+    hybrid                        = var.enable_hybrid
+    google_app_cred_path          = var.enable_hybrid ? local.google_app_cred_path : null
+    output_dir                    = var.enable_hybrid ? local.output_dir : null
+    install_dir                   = var.enable_hybrid ? local.install_dir : null
+    slurm_control_host            = var.enable_hybrid ? var.slurm_control_host : null
+    slurm_control_host_port       = var.enable_hybrid ? local.slurm_control_host_port : null
+    slurm_control_addr            = var.enable_hybrid ? var.slurm_control_addr : null
+    slurm_bin_dir                 = var.enable_hybrid ? local.slurm_bin_dir : null
+    slurm_log_dir                 = var.enable_hybrid ? local.slurm_log_dir : null
+    controller_network_attachment = var.controller_network_attachment
+
 
     # config files templates
     slurmdbd_conf_tpl = file(coalesce(var.slurmdbd_conf_tpl, "${local.etc_dir}/slurmdbd.conf.tpl"))
@@ -93,9 +96,6 @@ locals {
     slurm_gcp_scripts_md5 = google_storage_bucket_object.devel.md5hash,
     controller_startup_scripts_md5 = {
       for o in values(google_storage_bucket_object.controller_startup_scripts) : trimprefix(o.name, local.tp) => o.md5hash
-    }
-    compute_startup_scripts_md5 = {
-      for o in values(google_storage_bucket_object.compute_startup_scripts) : trimprefix(o.name, local.tp) => o.md5hash
     }
     nodeset_startup_scripts_md5 = {
       for o in values(google_storage_bucket_object.nodeset_startup_scripts) : trimprefix(o.name, local.tp) => o.md5hash
@@ -223,17 +223,6 @@ resource "google_storage_bucket_object" "controller_startup_scripts" {
   content = each.value.content
 }
 
-resource "google_storage_bucket_object" "compute_startup_scripts" {
-  for_each = {
-    for x in var.compute_startup_scripts
-    : replace(basename(x.filename), "/[^a-zA-Z0-9-_]/", "_") => x
-  }
-
-  bucket  = var.bucket_name
-  name    = format("%s/slurm-compute-script-%s", local.bucket_dir, each.key)
-  content = each.value.content
-}
-
 resource "google_storage_bucket_object" "nodeset_startup_scripts" {
   for_each = { for x in flatten([
     for nodeset, scripts in var.nodeset_startup_scripts
@@ -249,14 +238,17 @@ resource "google_storage_bucket_object" "nodeset_startup_scripts" {
 }
 
 resource "google_storage_bucket_object" "login_startup_scripts" {
-  for_each = {
-    for x in var.login_startup_scripts
-    : replace(basename(x.filename), "/[^a-zA-Z0-9-_]/", "_") => x
-  }
+  for_each = { for x in flatten([
+    for group, scripts in var.login_startup_scripts
+    : [for s in scripts
+      : {
+        content = s.content,
+      name = format("slurm-login-%s-script-%s", group, replace(basename(s.filename), "/[^a-zA-Z0-9-_]/", "_")) }
+  ]]) : x.name => x.content }
 
   bucket  = var.bucket_name
-  name    = format("%s/slurm-login-script-%s", local.bucket_dir, each.key)
-  content = each.value.content
+  name    = format("%s/%s", local.bucket_dir, each.key)
+  content = each.value
 }
 
 resource "google_storage_bucket_object" "prolog_scripts" {
@@ -281,6 +273,14 @@ resource "google_storage_bucket_object" "epilog_scripts" {
   name    = format("%s/slurm-epilog-script-%s", local.bucket_dir, each.key)
   content = each.value.content
   source  = each.value.source
+}
+
+############################
+# DATA: CHS GPU HEALTH CHECK
+############################
+
+data "local_file" "chs_gpu_health_check" {
+  filename = "${path.module}/scripts/tools/gpu-test"
 }
 
 ################################
@@ -314,9 +314,20 @@ locals {
     filename = "z_setup_external.sh"
     content  = data.local_file.setup_external.content
   }]
+  chs_gpu_health_check = [{
+    filename = "a_chs_gpu_health_check.sh"
+    content  = data.local_file.chs_gpu_health_check.content
+    source   = null
+  }]
 
-  prolog_scripts             = var.enable_external_prolog_epilog ? concat(local.external_prolog, var.prolog_scripts) : var.prolog_scripts
-  epilog_scripts             = var.enable_external_prolog_epilog ? concat(local.external_epilog, var.epilog_scripts) : var.epilog_scripts
+  chs_prolog     = var.enable_chs_gpu_health_check_prolog ? local.chs_gpu_health_check : []
+  ext_prolog     = var.enable_external_prolog_epilog ? local.external_prolog : []
+  prolog_scripts = concat(local.chs_prolog, local.ext_prolog, var.prolog_scripts)
+
+  chs_epilog     = var.enable_chs_gpu_health_check_epilog ? local.chs_gpu_health_check : []
+  ext_epilog     = var.enable_external_prolog_epilog ? local.external_epilog : []
+  epilog_scripts = concat(local.chs_epilog, local.ext_epilog, var.epilog_scripts)
+
   controller_startup_scripts = var.enable_external_prolog_epilog ? concat(local.setup_external, var.controller_startup_scripts) : var.controller_startup_scripts
 
 

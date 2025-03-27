@@ -22,8 +22,16 @@ variable "machine_type" {
 variable "guest_accelerator" {
   description = "List of the type and count of accelerator cards attached to the instance."
   type = list(object({
-    type  = string,
+    type  = string
     count = number
+    gpu_driver_installation_config = optional(object({
+      gpu_driver_version = string
+    }), { gpu_driver_version = "DEFAULT" })
+    gpu_partition_size = optional(string)
+    gpu_sharing_config = optional(object({
+      gpu_sharing_strategy       = string
+      max_shared_clients_per_gpu = number
+    }))
   }))
   default  = []
   nullable = false
@@ -38,26 +46,28 @@ locals {
   #   },
   # ]
   accelerator_machines = {
-    "a2-highgpu-1g"  = { type = "nvidia-tesla-a100", count = 1 },
-    "a2-highgpu-2g"  = { type = "nvidia-tesla-a100", count = 2 },
-    "a2-highgpu-4g"  = { type = "nvidia-tesla-a100", count = 4 },
-    "a2-highgpu-8g"  = { type = "nvidia-tesla-a100", count = 8 },
-    "a2-megagpu-16g" = { type = "nvidia-tesla-a100", count = 16 },
-    "a2-ultragpu-1g" = { type = "nvidia-a100-80gb", count = 1 },
-    "a2-ultragpu-2g" = { type = "nvidia-a100-80gb", count = 2 },
-    "a2-ultragpu-4g" = { type = "nvidia-a100-80gb", count = 4 },
-    "a2-ultragpu-8g" = { type = "nvidia-a100-80gb", count = 8 },
-    "a3-highgpu-8g"  = { type = "nvidia-h100-80gb", count = 8 },
-    "a3-megagpu-8g"  = { type = "nvidia-h100-mega-80gb", count = 8 },
-    "a3-ultragpu-8g" = { type = "nvidia-h200-141gb", count = 8 },
-    "g2-standard-4"  = { type = "nvidia-l4", count = 1 },
-    "g2-standard-8"  = { type = "nvidia-l4", count = 1 },
-    "g2-standard-12" = { type = "nvidia-l4", count = 1 },
-    "g2-standard-16" = { type = "nvidia-l4", count = 1 },
-    "g2-standard-24" = { type = "nvidia-l4", count = 2 },
-    "g2-standard-32" = { type = "nvidia-l4", count = 1 },
-    "g2-standard-48" = { type = "nvidia-l4", count = 4 },
-    "g2-standard-96" = { type = "nvidia-l4", count = 8 },
+    "a2-highgpu-1g"        = { type = "nvidia-tesla-a100", count = 1 },
+    "a2-highgpu-2g"        = { type = "nvidia-tesla-a100", count = 2 },
+    "a2-highgpu-4g"        = { type = "nvidia-tesla-a100", count = 4 },
+    "a2-highgpu-8g"        = { type = "nvidia-tesla-a100", count = 8 },
+    "a2-megagpu-16g"       = { type = "nvidia-tesla-a100", count = 16 },
+    "a2-ultragpu-1g"       = { type = "nvidia-a100-80gb", count = 1 },
+    "a2-ultragpu-2g"       = { type = "nvidia-a100-80gb", count = 2 },
+    "a2-ultragpu-4g"       = { type = "nvidia-a100-80gb", count = 4 },
+    "a2-ultragpu-8g"       = { type = "nvidia-a100-80gb", count = 8 },
+    "a3-highgpu-8g"        = { type = "nvidia-h100-80gb", count = 8 },
+    "a3-megagpu-8g"        = { type = "nvidia-h100-mega-80gb", count = 8 },
+    "a3-ultragpu-8g"       = { type = "nvidia-h200-141gb", count = 8 },
+    "a4-highgpu-8g-lowmem" = { type = "nvidia-b200", count = 8 },
+    "a4-highgpu-8g"        = { type = "nvidia-b200", count = 8 },
+    "g2-standard-4"        = { type = "nvidia-l4", count = 1 },
+    "g2-standard-8"        = { type = "nvidia-l4", count = 1 },
+    "g2-standard-12"       = { type = "nvidia-l4", count = 1 },
+    "g2-standard-16"       = { type = "nvidia-l4", count = 1 },
+    "g2-standard-24"       = { type = "nvidia-l4", count = 2 },
+    "g2-standard-32"       = { type = "nvidia-l4", count = 1 },
+    "g2-standard-48"       = { type = "nvidia-l4", count = 4 },
+    "g2-standard-96"       = { type = "nvidia-l4", count = 8 },
   }
   generated_guest_accelerator = try([local.accelerator_machines[var.machine_type]], [])
 

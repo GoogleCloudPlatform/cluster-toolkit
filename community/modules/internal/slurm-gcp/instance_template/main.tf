@@ -22,6 +22,7 @@ locals {
       disk_name    = disk.disk_name
       device_name  = disk.device_name
       auto_delete  = disk.auto_delete
+      source       = disk.source
       boot         = disk.boot
       disk_size_gb = disk.disk_size_gb
       disk_type    = disk.disk_type
@@ -32,6 +33,7 @@ locals {
           slurm_instance_role = var.slurm_instance_role
         },
       )
+      disk_resource_manager_tags = disk.disk_resource_manager_tags
     }
   ]
 
@@ -43,7 +45,7 @@ locals {
   source_image_family = (
     var.source_image_family != "" && var.source_image_family != null
     ? var.source_image_family
-    : "slurm-gcp-6-8-hpc-rocky-linux-8"
+    : "slurm-gcp-6-9-hpc-rocky-linux-8"
   )
   source_image_project = (
     var.source_image_project != "" && var.source_image_project != null
@@ -122,6 +124,7 @@ module "instance_template" {
     },
   )
   instance_termination_action = var.termination_action
+  resource_manager_tags       = var.resource_manager_tags
 
   # Metadata
   startup_script = data.local_file.startup.content
@@ -151,5 +154,6 @@ module "instance_template" {
     },
     var.disk_labels,
   )
-  additional_disks = local.additional_disks
+  disk_resource_manager_tags = var.disk_resource_manager_tags
+  additional_disks           = local.additional_disks
 }

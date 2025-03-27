@@ -7,7 +7,7 @@ SlurmdPidFile=/var/run/slurm/slurmd.pid
 TaskPlugin=task/affinity,task/cgroup
 MaxArraySize=10001
 MaxJobCount=500000
-MaxNodeCount=100000
+MaxNodeCount=65536
 MinJobAge=60
 
 #
@@ -63,5 +63,3 @@ include cloud.conf
 ################################################################################
 #              ^^^^^  WARNING: DO NOT MODIFY SECTION ABOVE  ^^^^^              #
 ################################################################################
-
-SchedulerParameters=defer,salloc_wait_nodes,batch_sched_delay=20,bf_continue,bf_interval=300,bf_min_age_reserve=10800,bf_resolution=600,bf_yield_interval=1000000,partition_job_depth=500,sched_max_job_start=200,sched_min_interval=2000000

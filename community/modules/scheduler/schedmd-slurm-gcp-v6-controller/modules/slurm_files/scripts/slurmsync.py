@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/slurm/python/venv/bin/python3.13
 
 # Copyright (C) SchedMD LLC.
 #
@@ -21,7 +21,7 @@ import logging
 import re
 import sys
 import shlex
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from itertools import chain
 from pathlib import Path
 from dataclasses import dataclass
@@ -154,7 +154,7 @@ def _find_dynamic_node_status() -> NodeAction:
     return NodeActionUnchanged()  # don't touch dynamic nodes
 
 def get_fr_action(fr: FutureReservation, state:Optional[NodeState]) -> Optional[NodeAction]:
-    now = datetime.now()
+    now = util.now()
     if state is None:
         return None # handle like any other node
     if fr.start_time < now < fr.end_time:
@@ -283,7 +283,7 @@ def get_node_action(nodename: str) -> NodeAction:
     elif (state is None or "POWERED_DOWN" in state.flags) and inst.status == "RUNNING":
         log.info("%s is potential orphan node", nodename)
         threshold = timedelta(seconds=90)
-        age = datetime.now() - inst.creation_timestamp
+        age = util.now() - inst.creation_timestamp
         log.info(f"{nodename} state: {state}, age: {age}")
         if age < threshold:
             log.info(f"{nodename} not marked as orphan, it started less than {threshold.seconds}s ago ({age.seconds}s)")
@@ -354,7 +354,7 @@ def sync_placement_groups():
         result = ensure_execute(op)
         # merge placement group info from API and job_id,partition,index parsed from the name
         pgs = (
-            {**pg, **pg_regex.match(pg["name"]).groupdict()}
+            {**pg, **pg_regex.match(pg["name"]).groupdict()} # type: ignore
             for pg in chain.from_iterable(
                 item["resourcePolicies"]
                 for item in result.get("items", {}).values()
@@ -411,7 +411,7 @@ def reconfigure_slurm():
         run("systemctl restart slurmd")
         util.run(f"wall '{update_msg}'", timeout=30)
         log.debug("Done.")
-    elif lookup().instance_role_safe == "login":
+    elif lookup().is_login_node:
         log.info("Restarting sackd to make changes take effect.")
         run("systemctl restart sackd")
         util.run(f"wall '{update_msg}'", timeout=30)

@@ -268,3 +268,9 @@ variable "install_cloud_rdma_drivers" {
   type        = bool
   default     = false
 }
+
+variable "set_ofi_cloud_rdma_tunables" {
+  description = "Controls whether to enable specific OFI environment variables for workloads using Cloud RDMA networking. Should be false for non-RDMA workloads."
+  type        = bool
+  default     = false
+}

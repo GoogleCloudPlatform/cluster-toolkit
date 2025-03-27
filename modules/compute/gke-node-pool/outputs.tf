@@ -14,9 +14,9 @@
   * limitations under the License.
   */
 
-output "node_pool_name" {
-  description = "Name of the node pool."
-  value       = google_container_node_pool.node_pool.name
+output "node_pool_names" {
+  description = "Names of the node pools."
+  value       = google_container_node_pool.node_pool[*].name
 }
 
 locals {
@@ -61,7 +61,7 @@ locals {
     NO_SCHEDULE        = "NoSchedule"
     NO_EXECUTE         = "NoExecute"
   }
-  taints = google_container_node_pool.node_pool.node_config[0].taint
+  taints = google_container_node_pool.node_pool[0].node_config[0].taint
   tolerations = [for taint in local.taints : {
     key      = taint.key
     operator = "Equal"
@@ -81,6 +81,7 @@ locals {
     a3-highgpu-8g = "enable-tcpx-in-workload.py",
     a3-megagpu-8g = "enable-tcpxo-in-workload.py"
   }
+  nccl_path              = var.machine_type == "a3-highgpu-8g" ? "configs" : "scripts"
   gpu_direct_instruction = <<-EOT
     Since you are using ${var.machine_type} machine type that has GPUDirect support, your nodepool had been configured with the required plugins.
     To fully utilize GPUDirect you will need to add some components into your workload manifest. Details below:
@@ -94,7 +95,7 @@ locals {
       NCCL test can be initiated from any one of the sample job Pods and coordinate with the peer Pods:
       export POD_NAME=$(kubectl get pods -l job-name=my-sample-job -o go-template='{{range .items}}{{.metadata.name}}{{"\n"}}{{end}}' | head -n 1)
       export PEER_POD_IPS=$(kubectl get pods -l job-name=my-sample-job -o go-template='{{range .items}}{{.status.podIP}}{{" "}}{{end}}')
-      kubectl exec --stdin --tty --container=nccl-test $POD_NAME -- /scripts/allgather.sh $PEER_POD_IPS
+      kubectl exec --stdin --tty --container=nccl-test $POD_NAME -- /${local.nccl_path}/allgather.sh $PEER_POD_IPS
 
     If you would like to enable GPUDirect for your own workload, please follow the below steps:
       export WORKLOAD_PATH=<>

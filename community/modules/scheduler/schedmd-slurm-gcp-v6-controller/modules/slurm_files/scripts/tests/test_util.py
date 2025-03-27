@@ -17,10 +17,11 @@ from typing import Optional, Type
 import pytest
 from mock import Mock
 from datetime import datetime, timezone, timedelta
+import unittest
 
 from common import TstNodeset, TstCfg # needed to import util
 import util
-from util import NodeState, MachineType, AcceleratorInfo, UpcomingMaintenance, InstanceResourceStatus
+from util import NodeState, MachineType, AcceleratorInfo, UpcomingMaintenance, InstanceResourceStatus, FutureReservation, ReservationDetails
 from google.api_core.client_options import ClientOptions  # noqa: E402
 
 # Note: need to install pytest-mock
@@ -180,7 +181,7 @@ def test_nodeset_reservation_err(nodeset, err):
     lkp._get_reservation = Mock()
     with pytest.raises(err):
         lkp.nodeset_reservation(nodeset)
-    lkp._get_reservation.assert_not_called()
+    lkp._get_reservation.assert_not_called() # type: ignore
 
 @pytest.mark.parametrize(
         "nodeset,policies,expected",
@@ -196,6 +197,7 @@ def test_nodeset_reservation_err(nodeset, err):
                     name="robin",
                     policies=[],
                     deployment_type=None,
+                    reservation_mode=None,
                     bulk_insert_name="projects/bobin/reservations/robin")),
             (TstNodeset(
                 reservation_name="projects/bobin/reservations/robin",
@@ -207,6 +209,7 @@ def test_nodeset_reservation_err(nodeset, err):
                     name="robin",
                     policies=["wanders", "apples", "yum"],
                     deployment_type=None,
+                    reservation_mode=None,
                     bulk_insert_name="projects/bobin/reservations/robin")),
             (TstNodeset(
                 reservation_name="projects/bobin/reservations/robin/snek/cheese-brie-6",
@@ -218,6 +221,7 @@ def test_nodeset_reservation_err(nodeset, err):
                     name="robin",
                     policies=[],
                     deployment_type=None,
+                    reservation_mode=None,
                     bulk_insert_name="projects/bobin/reservations/robin/snek/cheese-brie-6")),
 
         ])
@@ -228,15 +232,14 @@ def test_nodeset_reservation_ok(nodeset, policies, expected):
 
     if not expected:
         assert lkp.nodeset_reservation(nodeset) is None
-        lkp._get_reservation.assert_not_called()
+        lkp._get_reservation.assert_not_called() # type: ignore
         return
 
-    lkp._get_reservation.return_value = {
+    lkp._get_reservation.return_value = { # type: ignore
         "resourcePolicies": {i: p for i, p in enumerate(policies)},
     }
     assert lkp.nodeset_reservation(nodeset) == expected
-    lkp._get_reservation.assert_called_once_with(expected.project, expected.zone, expected.name)
-
+    lkp._get_reservation.assert_called_once_with(expected.project, expected.zone, expected.name) # type: ignore
 
 @pytest.mark.parametrize(
     "job_info,expected_job",
@@ -414,6 +417,8 @@ UTC, PST = timezone.utc, timezone(timedelta(hours=-8))
         ("2024-11-05T15:23:33.702-08:00", datetime(2024, 11, 5, 15, 23, 33, 702000, tzinfo=PST)), 
         # from futureReservation.timeWindow.endTime
         ("2025-01-15T00:00:00Z", datetime(2025, 1, 15, 0, 0, tzinfo=UTC)),
+        # fallback to UTC if no tz is specified
+        ("2025-01-15T00:00:00", datetime(2025, 1, 15, 0, 0, tzinfo=UTC)),
     ])
 def test_parse_gcp_timestamp(got: str, want: datetime):
     assert util.parse_gcp_timestamp(got) == want
@@ -486,3 +491,96 @@ def tests_parse_UpcomingMaintenance_FAIL(got: dict):
     ])
 def test_parse_InstanceResourceStatus(got: dict, want: Optional[InstanceResourceStatus]):
     assert InstanceResourceStatus.from_json(got) == want
+
+
+def test_future_reservation_none():
+    lkp = util.Lookup(TstCfg())
+    assert lkp.future_reservation(TstNodeset()) == None
+
+
+def test_future_reservation_declined():
+    lkp = util.Lookup(TstCfg())
+    lkp._get_future_reservation = Mock(return_value=dict(
+        timeWindow = { "startTime": "2025-01-27T23:30:00Z", "endTime": "2025-02-03T23:30:00Z" },
+        status = {"procurementStatus": "DECLINED"},
+        reservationMode = "CALENDAR",
+        specificReservationRequired = True,
+    ))
+
+    assert lkp.future_reservation(
+        TstNodeset(future_reservation="projects/manhattan/zones/danger/futureReservations/zebra")) == FutureReservation(
+            project='manhattan', 
+            zone='danger', 
+            name='zebra', 
+            specific=True, 
+            start_time=datetime(2025, 1, 27, 23, 30, tzinfo=timezone.utc), 
+            end_time=datetime(2025, 2, 3, 23, 30, tzinfo=timezone.utc),
+            reservation_mode="CALENDAR",
+            active_reservation=None)
+    lkp._get_future_reservation.assert_called_once_with("manhattan", "danger", "zebra")
+
+@unittest.mock.patch('util.now', return_value=datetime(2025, 2, 13, 0, 0, tzinfo=timezone.utc))
+def test_future_reservation_active(_):
+    lkp = util.Lookup(TstCfg())
+    lkp._get_future_reservation = Mock(return_value=dict(
+        timeWindow = { "startTime": "2025-01-27T23:30:00Z", "endTime": "2025-02-21T23:30:00Z" },
+        status = {
+            "procurementStatus": "FULFILLED",
+            "autoCreatedReservations": [
+                "https://www.googleapis.com/compute/alpha/projects/manhattan/zones/danger/reservations/melon"
+            ],
+        },
+        specificReservationRequired = True,
+    ))
+    lkp._get_reservation = Mock(return_value=dict())
+
+    assert lkp.future_reservation(
+        TstNodeset(future_reservation="projects/manhattan/zones/danger/futureReservations/zebra")) == FutureReservation(
+            project='manhattan', 
+            zone='danger', 
+            name='zebra', 
+            specific=True, 
+            start_time=datetime(2025, 1, 27, 23, 30, tzinfo=timezone.utc), 
+            end_time=datetime(2025, 2, 21, 23, 30, tzinfo=timezone.utc),
+            reservation_mode=None, 
+            active_reservation=ReservationDetails(
+                project='manhattan',
+                zone='danger',
+                name='melon',
+                policies=[],
+                reservation_mode=None,
+                bulk_insert_name="projects/manhattan/reservations/melon",
+                deployment_type=None))
+    
+    lkp._get_future_reservation.assert_called_once_with("manhattan", "danger", "zebra")
+    lkp._get_reservation.assert_called_once_with("manhattan", "danger", "melon")
+
+@unittest.mock.patch('util.now', return_value=datetime(2025, 2, 28, 0, 0, tzinfo=timezone.utc))
+def test_future_reservation_inactive(_):
+    lkp = util.Lookup(TstCfg())
+    lkp._get_future_reservation = Mock(return_value=dict(
+        timeWindow = { "startTime": "2025-01-27T23:30:00Z", "endTime": "2025-02-21T23:30:00Z" },
+        status = {
+            "procurementStatus": "FULFILLED",
+            "autoCreatedReservations": [
+                "https://www.googleapis.com/compute/alpha/projects/manhattan/zones/danger/reservations/melon"
+            ],
+        },
+        reservationMode = "DEFAULT",
+        specificReservationRequired = True,
+    ))
+    lkp._get_reservation = Mock()
+
+    assert lkp.future_reservation(
+        TstNodeset(future_reservation="projects/manhattan/zones/danger/futureReservations/zebra")) == FutureReservation(
+            project='manhattan', 
+            zone='danger', 
+            name='zebra', 
+            specific=True, 
+            start_time=datetime(2025, 1, 27, 23, 30, tzinfo=timezone.utc), 
+            end_time=datetime(2025, 2, 21, 23, 30, tzinfo=timezone.utc), 
+            reservation_mode="DEFAULT",
+            active_reservation=None)
+    
+    lkp._get_future_reservation.assert_called_once_with("manhattan", "danger", "zebra")
+    lkp._get_reservation.assert_not_called()

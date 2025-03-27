@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-ARG NEMOFW_VERSION=24.07
+ARG NEMOFW_VERSION=24.12
 FROM nvcr.io/nvidia/nemo:$NEMOFW_VERSION
 
 ENV NCCL_FASTRAK_CTRL_DEV=enp0s12

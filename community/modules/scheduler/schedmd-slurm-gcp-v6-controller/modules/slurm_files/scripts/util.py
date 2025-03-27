@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/slurm/python/venv/bin/python3.13
 
 # Copyright (C) SchedMD LLC.
 #
@@ -18,12 +18,13 @@ from typing import Iterable, List, Tuple, Optional, Any, Dict, Sequence, Type, C
 import argparse
 import base64
 from dataclasses import dataclass, field
-from datetime import timedelta, datetime
+from datetime import timedelta, datetime, timezone
 import hashlib
 import inspect
 import json
 import logging
 import logging.config
+import logging.handlers 
 import math
 import os
 import re
@@ -48,9 +49,9 @@ from time import sleep, time
 from google.cloud import secretmanager
 from google.cloud import storage # type: ignore
 
-import google.auth
-from google.oauth2 import service_account
-import googleapiclient.discovery # type: ignore
+import google.auth # type: ignore
+from google.oauth2 import service_account # type: ignore
+import googleapiclient.discovery # type: ignore 
 import google_auth_httplib2 # type: ignore
 from googleapiclient.http import set_user_agent # type: ignore
 from google.api_core.client_options import ClientOptions
@@ -247,6 +248,15 @@ class Instance:
       role = labels.get("slurm_instance_role"),
     )
 
+
+@dataclass(frozen=True)
+class NSMount:
+    server_ip: str
+    local_mount: Path
+    remote_mount: Path
+    fs_type: str
+    mount_options: str
+
 @lru_cache(maxsize=1)
 def default_credentials():
     return google.auth.default()[0]
@@ -260,15 +270,32 @@ def authentication_project():
 DEFAULT_UNIVERSE_DOMAIN = "googleapis.com"
 
 
+def now() -> datetime:
+    """
+    Return current time as timezone-aware datetime.
+
+    IMPORTANT: DO NOT use `datetime.now()`, unless you explicitly need to have tz-naive datetime.
+    Otherwise there is a risk of getting: "cannot compare naive and aware datetimes" error, 
+    since all timetstamps we receive from GCP API are tz-aware.
+
+    Another motivation  for this function is to allow to mock time in tests.
+    """
+    return datetime.now(timezone.utc)
+
 def parse_gcp_timestamp(s: str) -> datetime:
   """
   Parse timestamp strings returned by GCP API into datetime.
   Works with both Zulu and non-Zulu timestamps.
+  NOTE: It always return tz-aware datetime (fallbacks to UTC and logs error).
   """
   # Requires Python >= 3.7
   # TODO: Remove this "hack" of trimming the Z from timestamps once we move to Python 3.11 
   # (context: https://discuss.python.org/t/parse-z-timezone-suffix-in-datetime/2220/30)
-  return datetime.fromisoformat(s.replace('Z', '+00:00'))
+  ts = datetime.fromisoformat(s.replace('Z', '+00:00'))
+  if ts.tzinfo is None: # fallback to UTC
+    log.error(f"Received timestamp without timezone info: {s}")
+    ts = ts.replace(tzinfo=timezone.utc)
+  return ts
 
 
 def universe_domain() -> str:
@@ -422,24 +449,22 @@ def hash_file(fullpath: Path) -> str:
 
 def install_custom_scripts(check_hash=False):
     """download custom scripts from gcs bucket"""
+    role, tokens = lookup().instance_role, []
 
-    compute_tokens = ["compute", "prolog", "epilog"]
-    if lookup().instance_role == "compute":
-        try:
-            compute_tokens.append(f"nodeset-{lookup().node_nodeset_name()}")
-        except Exception as e:
-            log.error(f"Failed to lookup nodeset: {e}")
+    if role == "controller":
+        tokens = ["controller", "prolog", "epilog"]
+    elif role == "compute":
+        tokens = [
+            "prolog", 
+            "epilog",
+            f"nodeset-{lookup().node_nodeset_name()}"
+        ]
+    elif role == "login":
+        tokens = [f"login-{lookup().login_group_name()}"]
 
-    prefix_tokens = dict.get(
-        {
-            "login": ["login"],
-            "compute": compute_tokens,
-            "controller": ["controller", "prolog", "epilog"],
-        },
-        lookup().instance_role,
-        [],
-    )
-    prefixes = [f"slurm-{tok}-script" for tok in prefix_tokens]
+    prefixes = [f"slurm-{tok}-script" for tok in tokens]
+
+    # TODO: use single `blob_list`, to reduce ~4x number of GCS requests
     blobs = list(chain.from_iterable(blob_list(prefix=p) for p in prefixes))
 
     script_pattern = re.compile(r"slurm-(?P<path>\S+)-script-(?P<name>\S+)")
@@ -525,32 +550,6 @@ def _fill_cfg_defaults(cfg: NSDict) -> NSDict:
         cfg.slurm_control_host = f"{cfg.slurm_cluster_name}-controller"
     if not cfg.slurm_control_host_port:
         cfg.slurm_control_host_port = "6820-6830"
-    if not cfg.munge_mount: # NOTE: should only happen with cloud controller
-        cfg.munge_mount = NSDict(
-            {
-                "server_ip": cfg.slurm_control_addr or cfg.slurm_control_host,
-                "remote_mount": "/etc/munge",
-                "fs_type": "nfs",
-                "mount_options": "defaults,hard,intr,_netdev",
-            }
-        )
-
-    network_storage_iter = filter(
-        None,
-        (
-            cfg.munge_mount,
-            *cfg.network_storage,
-            *cfg.login_network_storage,
-            *chain.from_iterable(ns.network_storage for ns in cfg.nodeset.values()),
-            *chain.from_iterable(ns.network_storage for ns in cfg.nodeset_dyn.values()),
-            *chain.from_iterable(ns.network_storage for ns in cfg.nodeset_tpu.values()),
-        ),
-    )
-    for netstore in network_storage_iter:
-        if netstore != "gcsfuse" and (
-            netstore.server_ip is None or netstore.server_ip == "$controller"
-        ):
-            netstore.server_ip = cfg.slurm_control_host
     return cfg
 
 @dataclass
@@ -1300,10 +1299,15 @@ class ReservationDetails:
     policies: List[str] # names (not URLs) of resource policies
     bulk_insert_name: str # name in format suitable for bulk insert (currently identical to user supplied name in long format)
     deployment_type: Optional[str]
+    reservation_mode: Optional[str]
 
     @property
     def dense(self) -> bool:
         return self.deployment_type == "DENSE"
+    
+    @property
+    def calendar(self) -> bool:
+        return self.reservation_mode == "CALENDAR"
 
 @dataclass(frozen=True)
 class FutureReservation:
@@ -1313,8 +1317,12 @@ class FutureReservation:
     specific: bool
     start_time: datetime
     end_time: datetime
+    reservation_mode: Optional[str]
     active_reservation: Optional[ReservationDetails]
 
+    @property
+    def calendar(self) -> bool:
+        return self.reservation_mode == "CALENDAR"
 
 @dataclass
 class Job:
@@ -1344,9 +1352,30 @@ class Lookup:
     def project(self):
         return self.cfg.project or authentication_project()
 
-    @property
-    def control_addr(self):
-        return self.cfg.slurm_control_addr
+    @lru_cache(maxsize=None)
+    def _lookup_network_attachment(self, self_link: str) -> str:
+        resp = self.compute.networkAttachments().get(
+            project=self.project,
+            region=parse_self_link(self_link).region,
+            networkAttachment=trim_self_link(self_link)
+        ).execute()
+        eps = resp.get("connectionEndpoints", [])
+        if not eps or len(eps) > 2:
+            raise Exception(f"Expect exactly one connected endpoint, got {resp}")
+        ep: Dict[str, str] = eps[0]
+        if "ipAddress" not in ep:
+            raise Exception(f"Expect endpoints to have ipAddress, got {resp}")
+        return ep["ipAddress"]
+
+    @cached_property
+    def control_addr(self) -> Optional[str]:
+        if self.cfg.slurm_control_addr:
+            return self.cfg.slurm_control_addr
+
+        if self.cfg.controller_network_attachment:
+            return self._lookup_network_attachment(self.cfg.controller_network_attachment)
+
+        return None
 
     @property
     def control_host(self):
@@ -1354,7 +1383,7 @@ class Lookup:
 
     @cached_property
     def control_host_addr(self):
-        return host_lookup(self.cfg.slurm_control_host)
+        return self.control_addr or host_lookup(self.cfg.slurm_control_host)
 
     @property
     def control_host_port(self):
@@ -1384,6 +1413,10 @@ class Lookup:
     @property
     def is_controller(self):
         return self.instance_role_safe == "controller"
+    
+    @property
+    def is_login_node(self):
+        return self.instance_role_safe == "login"
 
     @cached_property
     def compute(self):
@@ -1403,6 +1436,10 @@ class Lookup:
     @cached_property
     def zone(self):
         return instance_metadata("zone")
+
+    def login_group_name(self):
+        assert self.is_login_node, f"{self.hostname} is not a login node"
+        return self._node_desc(self.hostname)["nodeset"]
 
     node_desc_regex = re.compile(
         r"^(?P<prefix>(?P<cluster>[^\s\-]+)-(?P<nodeset>\S+))-(?P<node>(?P<suffix>\w+)|(?P<range>\[[\d,-]+\]))$"
@@ -1483,7 +1520,7 @@ class Lookup:
             return f"{pref}-{start}"
         return f"{pref}-[{start}-{start + count - 1}]"
 
-    def static_dynamic_sizes(self, nodeset: object) -> Tuple[int, int]:
+    def static_dynamic_sizes(self, nodeset: NSDict) -> Tuple[int, int]:
         return (nodeset.node_count_static or 0, nodeset.node_count_dynamic_max or 0)
 
     def nodelist(self, nodeset) -> str:
@@ -1500,7 +1537,7 @@ class Lookup:
             (f"{pref}-{i}" for i in range(s_count, s_count + d_count)),
         )
 
-    def power_managed_nodesets(self) -> Iterable[object]:
+    def power_managed_nodesets(self) -> Iterable[NSDict]:
         return chain(self.cfg.nodeset.values(), self.cfg.nodeset_tpu.values())
 
     def is_power_managed_node(self, node_name: str) -> bool:
@@ -1634,9 +1671,10 @@ class Lookup:
             name=name,
             policies=policies,
             deployment_type=reservation.get("deploymentType"),
+            reservation_mode=reservation.get("reservationMode"),
             bulk_insert_name=bulk_insert_name)
     
-    def nodeset_reservation(self, nodeset: object) -> Optional[ReservationDetails]:
+    def nodeset_reservation(self, nodeset: NSDict) -> Optional[ReservationDetails]:
         if not nodeset.reservation_name:
             return None
 
@@ -1653,7 +1691,7 @@ class Lookup:
         project, name = match.group("project", "reservation")
         return self.get_reservation_details(project, zone, name, nodeset.reservation_name)
     
-    def future_reservation(self, nodeset:object) -> Optional[FutureReservation]:
+    def future_reservation(self, nodeset: NSDict) -> Optional[FutureReservation]:
         if not nodeset.future_reservation:
             return None
 
@@ -1667,7 +1705,7 @@ class Lookup:
         end_time = parse_gcp_timestamp(fr["timeWindow"]["endTime"])
 
         if "autoCreatedReservations" in fr["status"] and (res:=fr["status"]["autoCreatedReservations"][0]):
-            if (start_time<=datetime.now()<=end_time):
+            if start_time <= now() <=end_time:
                 match = re.search(r'projects/(?P<project>[^/]+)/zones/(?P<zone>[^/]+)/reservations/(?P<name>[^/]+)(/.*)?$',res)
                 assert match, f"Unexpected reservation name '{res}'"
                 res_name = match.group("name")
@@ -1681,6 +1719,7 @@ class Lookup:
             specific=fr["specificReservationRequired"],
             start_time=start_time,
             end_time=end_time,
+            reservation_mode=fr.get("reservationMode"),
             active_reservation=active_reservation
         )
 
@@ -1867,6 +1906,34 @@ class Lookup:
     @property
     def etc_dir(self) -> Path:
         return Path(self.cfg.output_dir or slurmdirs.etc)
+
+    def normalize_ns_mount(self, ns: Dict[str, str]) -> NSMount:
+        server_ip = ns.get("server_ip") or "$controller"
+        if server_ip == "$controller":
+            server_ip = self.control_addr or self.control_host
+    
+        return NSMount(
+            server_ip=server_ip,
+            local_mount=Path(ns["local_mount"]),
+            remote_mount=Path(ns["remote_mount"]),
+            fs_type=ns["fs_type"],
+            mount_options=ns["mount_options"],
+        )
+ 
+    @property
+    def munge_mount(self) -> NSMount:
+        if self.cfg.munge_mount:
+            mnt = self.cfg.munge_mount
+            mnt.local_mount = mnt.local_mount or "/mnt/munge"
+        else:
+            mnt = NSDict(
+                server_ip="$controller",
+                local_mount="/mnt/munge",
+                remote_mount=dirs.munge,
+                fs_type="nfs",
+                mount_options="defaults,hard,intr,_netdev",
+            )
+        return self.normalize_ns_mount(mnt)
 
 _lkp: Optional[Lookup] = None
 

@@ -84,7 +84,7 @@ deployment_groups:
       disk_type: pd-balanced
       machine_type: g2-standard-4
 
-  - id: job_template
+  - id: nvidia_smi_job_template
     source: modules/compute/gke-job-template
     use: [g2_pool]
     settings:

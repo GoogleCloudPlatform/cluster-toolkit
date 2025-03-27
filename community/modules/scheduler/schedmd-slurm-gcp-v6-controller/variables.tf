@@ -94,19 +94,20 @@ variable "bucket_dir" {
 variable "login_nodes" {
   description = "List of slurm login instance definitions."
   type = list(object({
-    name_prefix = string
+    group_name = string
     access_config = optional(list(object({
       nat_ip       = string
       network_tier = string
     })))
     additional_disks = optional(list(object({
-      disk_name    = optional(string)
-      device_name  = optional(string)
-      disk_size_gb = optional(number)
-      disk_type    = optional(string)
-      disk_labels  = optional(map(string), {})
-      auto_delete  = optional(bool, true)
-      boot         = optional(bool, false)
+      disk_name                  = optional(string)
+      device_name                = optional(string)
+      disk_size_gb               = optional(number)
+      disk_type                  = optional(string)
+      disk_labels                = optional(map(string), {})
+      auto_delete                = optional(bool, true)
+      boot                       = optional(bool, false)
+      disk_resource_manager_tags = optional(map(string), {})
     })), [])
     additional_networks = optional(list(object({
       access_config = optional(list(object({
@@ -128,15 +129,16 @@ variable "login_nodes" {
       subnetwork         = optional(string)
       subnetwork_project = optional(string)
     })), [])
-    bandwidth_tier         = optional(string, "platform_default")
-    can_ip_forward         = optional(bool, false)
-    disk_auto_delete       = optional(bool, true)
-    disk_labels            = optional(map(string), {})
-    disk_size_gb           = optional(number)
-    disk_type              = optional(string, "n1-standard-1")
-    enable_confidential_vm = optional(bool, false)
-    enable_oslogin         = optional(bool, true)
-    enable_shielded_vm     = optional(bool, false)
+    bandwidth_tier             = optional(string, "platform_default")
+    can_ip_forward             = optional(bool, false)
+    disk_auto_delete           = optional(bool, true)
+    disk_labels                = optional(map(string), {})
+    disk_resource_manager_tags = optional(map(string), {})
+    disk_size_gb               = optional(number)
+    disk_type                  = optional(string, "n1-standard-1")
+    enable_confidential_vm     = optional(bool, false)
+    enable_oslogin             = optional(bool, true)
+    enable_shielded_vm         = optional(bool, false)
     gpu = optional(object({
       count = number
       type  = string
@@ -151,12 +153,13 @@ variable "login_nodes" {
       performance_monitoring_unit  = optional(string)
       enable_uefi_networking       = optional(bool)
     })
-    metadata            = optional(map(string), {})
-    min_cpu_platform    = optional(string)
-    num_instances       = optional(number, 1)
-    on_host_maintenance = optional(string)
-    preemptible         = optional(bool, false)
-    region              = optional(string)
+    metadata              = optional(map(string), {})
+    min_cpu_platform      = optional(string)
+    num_instances         = optional(number, 1)
+    on_host_maintenance   = optional(string)
+    preemptible           = optional(bool, false)
+    region                = optional(string)
+    resource_manager_tags = optional(map(string), {})
     service_account = optional(object({
       email  = optional(string)
       scopes = optional(list(string), ["https://www.googleapis.com/auth/cloud-platform"])
@@ -178,8 +181,8 @@ variable "login_nodes" {
   }))
   default = []
   validation {
-    condition     = length(distinct([for x in var.login_nodes : x.name_prefix])) == length(var.login_nodes)
-    error_message = "All login_nodes must have a unique name_prefix."
+    condition     = length(distinct([for x in var.login_nodes : x.group_name])) == length(var.login_nodes)
+    error_message = "All login_nodes must have a unique group name."
   }
 }
 
@@ -195,18 +198,20 @@ variable "nodeset" {
     node_conf              = optional(map(string), {})
     nodeset_name           = string
     additional_disks = optional(list(object({
-      disk_name    = optional(string)
-      device_name  = optional(string)
-      disk_size_gb = optional(number)
-      disk_type    = optional(string)
-      disk_labels  = optional(map(string), {})
-      auto_delete  = optional(bool, true)
-      boot         = optional(bool, false)
+      disk_name                  = optional(string)
+      device_name                = optional(string)
+      disk_size_gb               = optional(number)
+      disk_type                  = optional(string)
+      disk_labels                = optional(map(string), {})
+      auto_delete                = optional(bool, true)
+      boot                       = optional(bool, false)
+      disk_resource_manager_tags = optional(map(string), {})
     })), [])
     bandwidth_tier                   = optional(string, "platform_default")
     can_ip_forward                   = optional(bool, false)
     disk_auto_delete                 = optional(bool, true)
     disk_labels                      = optional(map(string), {})
+    disk_resource_manager_tags       = optional(map(string), {})
     disk_size_gb                     = optional(number)
     disk_type                        = optional(string)
     enable_confidential_vm           = optional(bool, false)
@@ -249,9 +254,10 @@ variable "nodeset" {
       client_install_runner = optional(map(string))
       mount_runner          = optional(map(string))
     })), [])
-    on_host_maintenance = optional(string)
-    preemptible         = optional(bool, false)
-    region              = optional(string)
+    on_host_maintenance   = optional(string)
+    preemptible           = optional(bool, false)
+    region                = optional(string)
+    resource_manager_tags = optional(map(string), {})
     service_account = optional(object({
       email  = optional(string)
       scopes = optional(list(string), ["https://www.googleapis.com/auth/cloud-platform"])
@@ -387,6 +393,24 @@ EOD
 # SLURM #
 #########
 
+variable "controller_state_disk" {
+  description = <<EOD
+  A disk that will be attached to the controller instance template to save state of slurm. The disk is created and used by default.
+  To disable this feature, set this variable to null.
+  
+  NOTE: This will not save the contents at /opt/apps and /home. To preserve those, they must be saved externally.
+  EOD
+  type = object({
+    type = string
+    size = number
+  })
+
+  default = {
+    type = "pd-ssd"
+    size = 50
+  }
+}
+
 variable "enable_debug_logging" {
   type        = bool
   description = "Enables debug logging mode."
@@ -499,7 +523,7 @@ variable "cgroup_conf_tpl" {
 variable "controller_startup_script" {
   description = "Startup script used by the controller VM."
   type        = string
-  default     = "# no-op"
+  default     = null
 }
 
 variable "controller_startup_scripts_timeout" {
@@ -517,7 +541,7 @@ EOD
 variable "login_startup_script" {
   description = "Startup script used by the login VMs."
   type        = string
-  default     = "# no-op"
+  default     = null
 }
 
 variable "login_startup_scripts_timeout" {
@@ -532,15 +556,9 @@ EOD
   default     = 300
 }
 
-variable "compute_startup_script" {
-  description = "Startup script used by the compute VMs."
-  type        = string
-  default     = "# no-op"
-}
-
 variable "compute_startup_scripts_timeout" {
   description = <<EOD
-The timeout (seconds) applied to each script in compute_startup_scripts. If
+The timeout (seconds) applied to each startup script in compute nodes. If
 any script exceeds this timeout, then the instance setup process is considered
 failed and handled accordingly.
 
@@ -548,6 +566,27 @@ NOTE: When set to 0, the timeout is considered infinite and thus disabled.
 EOD
   type        = number
   default     = 300
+}
+
+variable "enable_chs_gpu_health_check_prolog" {
+  description = <<EOD
+Enable a Cluster Health Sacnner(CHS) GPU health check that slurmd executes as a prolog script whenever it is asked to run a job step from a new job allocation. Compute nodes that fail GPU health check during prolog will be marked as drained. Find more details at:
+https://github.com/GoogleCloudPlatform/cluster-toolkit/tree/main/docs/CHS-Slurm.md
+EOD
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
+variable "enable_chs_gpu_health_check_epilog" {
+  description = <<EOD
+Enable a Cluster Health Sacnner(CHS) GPU health check that slurmd executes as an epilog script after completing a job step from a new job allocation.
+Compute nodes that fail GPU health check during epilog will be marked as drained. Find more details at:
+https://github.com/GoogleCloudPlatform/cluster-toolkit/tree/main/docs/CHS-Slurm.md
+EOD
+  type        = bool
+  default     = false
+  nullable    = false
 }
 
 variable "prolog_scripts" {
@@ -691,6 +730,24 @@ EOD
 DEPRECATED: Slurm GCP plugins have been deprecated.
 Instead of 'max_hops' plugin please use the 'placement_max_distance' nodeset property.
 Instead of 'enable_vpmu' plugin please use 'advanced_machine_features.performance_monitoring_unit' nodeset property.
+EOD
+  }
+}
+
+
+variable "compute_startup_script" { # tflint-ignore: terraform_unused_declarations
+  description = <<EOD
+DEPRECATED: `compute_startup_script` has been deprecated.
+Use `startup_script` of nodeset module instead.
+EOD
+  type        = any
+  default     = null
+
+  validation {
+    condition     = var.compute_startup_script == null
+    error_message = <<EOD
+DEPRECATED: `compute_startup_script` has been deprecated.
+Use `startup_script` of nodeset module instead.
 EOD
   }
 }

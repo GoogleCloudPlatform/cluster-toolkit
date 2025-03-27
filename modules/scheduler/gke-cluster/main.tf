@@ -92,6 +92,13 @@ resource "google_container_cluster" "gke_cluster" {
 
   deletion_protection = var.deletion_protection
 
+  dynamic "enable_k8s_beta_apis" {
+    for_each = var.enable_k8s_beta_apis != null ? [1] : []
+    content {
+      enabled_apis = var.enable_k8s_beta_apis
+    }
+  }
+
   network    = var.network_id
   subnetwork = var.subnetwork_self_link
 
@@ -187,6 +194,13 @@ resource "google_container_cluster" "gke_cluster" {
         }
       }
     }
+  }
+
+  dns_config {
+    additive_vpc_scope_dns_domain = var.cloud_dns_config.additive_vpc_scope_dns_domain
+    cluster_dns                   = var.cloud_dns_config.cluster_dns
+    cluster_dns_scope             = var.cloud_dns_config.cluster_dns_scope
+    cluster_dns_domain            = var.cloud_dns_config.cluster_dns_domain
   }
 
   addons_config {
@@ -368,7 +382,7 @@ module "workload_identity" {
   version = "~> 34.0"
 
   use_existing_gcp_sa = true
-  name                = "workload-identity-k8s-sa"
+  name                = var.k8s_service_account_name
   gcp_sa_name         = local.sa_email
   project_id          = var.project_id
 
@@ -383,6 +397,19 @@ locals {
   k8s_service_account_name = one(module.workload_identity[*].k8s_service_account_name)
 }
 
+locals {
+  # Separate gvnic and rdma networks and assign indexes
+  gvnic_networks = [for idx, net in [for n in var.additional_networks : n if strcontains(upper(n.nic_type), "GVNIC")] :
+    merge(net, { name = "${var.k8s_network_names.gvnic_prefix}${idx + var.k8s_network_names.gvnic_start_index}${var.k8s_network_names.gvnic_postfix}" })
+  ]
+
+  rdma_networks = [for idx, net in [for n in var.additional_networks : n if strcontains(upper(n.nic_type), "RDMA")] :
+    merge(net, { name = "${var.k8s_network_names.rdma_prefix}${idx + var.k8s_network_names.rdma_start_index}${var.k8s_network_names.rdma_postfix}" })
+  ]
+
+  all_networks = concat(local.gvnic_networks, local.rdma_networks)
+}
+
 module "kubectl_apply" {
   source = "../../management/kubectl-apply"
 
@@ -390,11 +417,11 @@ module "kubectl_apply" {
   project_id = var.project_id
 
   apply_manifests = flatten([
-    for idx, network_info in var.additional_networks : [
+    for idx, network_info in local.all_networks : [
       {
         source = "${path.module}/templates/gke-network-paramset.yaml.tftpl",
         template_vars = {
-          name            = network_info.subnetwork,
+          name            = network_info.name,
           network_name    = network_info.network
           subnetwork_name = network_info.subnetwork,
           device_mode     = strcontains(upper(network_info.nic_type), "RDMA") ? "RDMA" : "NetDevice"
@@ -402,7 +429,7 @@ module "kubectl_apply" {
       },
       {
         source        = "${path.module}/templates/network-object.yaml.tftpl",
-        template_vars = { name = network_info.subnetwork }
+        template_vars = { name = network_info.name }
       }
     ]
   ])

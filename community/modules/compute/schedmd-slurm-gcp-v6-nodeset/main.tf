@@ -38,13 +38,14 @@ locals {
 
   additional_disks = [
     for ad in var.additional_disks : {
-      disk_name    = ad.disk_name
-      device_name  = ad.device_name
-      disk_type    = ad.disk_type
-      disk_size_gb = ad.disk_size_gb
-      disk_labels  = merge(ad.disk_labels, local.labels)
-      auto_delete  = ad.auto_delete
-      boot         = ad.boot
+      disk_name                  = ad.disk_name
+      device_name                = ad.device_name
+      disk_type                  = ad.disk_type
+      disk_size_gb               = ad.disk_size_gb
+      disk_labels                = merge(ad.disk_labels, local.labels)
+      auto_delete                = ad.auto_delete
+      boot                       = ad.boot
+      disk_resource_manager_tags = ad.disk_resource_manager_tags
     }
   ]
 
@@ -56,7 +57,7 @@ locals {
     scopes = var.service_account_scopes
   }
 
-  ghpc_startup_script = [{
+  ghpc_startup_script = var.startup_script == null ? [] : [{
     filename = "ghpc_nodeset_startup.sh"
     content  = var.startup_script
   }]
@@ -68,11 +69,12 @@ locals {
     nodeset_name           = local.name
     dws_flex               = var.dws_flex
 
-    disk_auto_delete = var.disk_auto_delete
-    disk_labels      = merge(local.labels, var.disk_labels)
-    disk_size_gb     = var.disk_size_gb
-    disk_type        = var.disk_type
-    additional_disks = local.additional_disks
+    disk_auto_delete           = var.disk_auto_delete
+    disk_labels                = merge(local.labels, var.disk_labels)
+    disk_size_gb               = var.disk_size_gb
+    disk_type                  = var.disk_type
+    disk_resource_manager_tags = var.disk_resource_manager_tags
+    additional_disks           = local.additional_disks
 
     bandwidth_tier = var.bandwidth_tier
     can_ip_forward = var.can_ip_forward
@@ -93,6 +95,7 @@ locals {
     on_host_maintenance      = var.on_host_maintenance
     preemptible              = var.preemptible
     region                   = var.region
+    resource_manager_tags    = var.resource_manager_tags
     service_account          = local.service_account
     shielded_instance_config = var.shielded_instance_config
     source_image_family      = local.source_image_family             # requires source_image_logic.tf

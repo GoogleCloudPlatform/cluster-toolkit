@@ -70,7 +70,9 @@ data "google_container_cluster" "gke_cluster" {
 resource "google_container_node_pool" "node_pool" {
   provider = google-beta
 
-  name           = coalesce(var.name, "${var.machine_type}-${local.module_unique_id}")
+  count = var.num_node_pools
+
+  name           = var.num_node_pools == 1 ? coalesce(var.name, join("-", [var.machine_type, local.module_unique_id])) : join("-", [coalesce(var.name, join("-", [var.machine_type, local.module_unique_id])), count.index])
   cluster        = var.cluster_id
   node_locations = var.zones
 
@@ -242,6 +244,8 @@ resource "google_container_node_pool" "node_pool" {
         subnetwork = additional_node_network_configs.value.subnetwork
       }
     }
+
+    enable_private_nodes = var.enable_private_nodes
   }
 
   timeouts {

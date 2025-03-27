@@ -48,7 +48,7 @@ printf "####################\n#### Installing required packages\n###############
 dnf install -y epel-release
 dnf update -y --security
 dnf config-manager --add-repo https://rpm.releases.hashicorp.com/RHEL/hashicorp.repo
-# dnf install -y terraform-1.4.6
+
 dnf install -y terraform
 dnf install --best -y google-cloud-sdk nano make gcc python3.12-devel unzip git \
 	rsync wget nginx bind-utils policycoreutils-python-utils \
@@ -80,7 +80,6 @@ dnf install -y grafana
 python3.12 -m ensurepip --upgrade
 
 pip3.12 install google-api-python-client \
-	google-cloud-artifact-registry \
 	google-cloud-secret-manager \
 	google.cloud.pubsub \
 	pyyaml addict httplib2

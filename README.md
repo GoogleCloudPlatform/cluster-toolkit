@@ -107,7 +107,6 @@ minutes. Please consider it only for blueprints that are quickly deployed.
 
 The Cluster Toolkit officially supports the following VM images:
 
-* HPC CentOS 7
 * HPC Rocky Linux 8
 * Debian 11
 * Ubuntu 20.04 LTS
