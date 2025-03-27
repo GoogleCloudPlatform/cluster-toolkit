@@ -177,7 +177,7 @@ Enable a Cluster Health Sacnner(CHS) GPU health check that slurmd executes as a 
 https://github.com/GoogleCloudPlatform/cluster-toolkit/tree/main/docs/CHS-Slurm.md
 EOD
   type        = bool
-  default     = true
+  default     = false
   nullable    = false
 }
 

@@ -1,5 +1,7 @@
 ## Description
 
+**Warning**: This module is now deprecated. Do not use this module.
+
 This module will create a set of startup-script runners that will install and
 run [DellHPC Omnia](https://github.com/dellhpc/omnia) version 1.3 onto a set of
 VMs representing a slurm controller and compute nodes. For a full example using

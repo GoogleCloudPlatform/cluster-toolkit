@@ -33,7 +33,3 @@ vars:
   system_node_pool_disk_size_gb: # add this
   a3ultra_node_pool_disk_size_gb: # add this
   k8s_service_account_name: # add this
-  # The name of the GCS bucket used for training data
-  training_bucket_name:
-  # The name of the GCS bucket used for checkpoint/restart data.
-  checkpoint_bucket_name:
