@@ -80,3 +80,13 @@ variable "jobset" {
   })
   default = {}
 }
+
+
+variable "gpu_operator" {
+  description = "Install [GPU Operator](https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/getting-started.html) which uses the [Kubernetes operator](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/) to automate the management of all NVIDIA software components needed to provision GPU."
+  type = object({
+    install     = optional(bool, false)
+    config_path = optional(string, null)
+  })
+  default = {}
+}
