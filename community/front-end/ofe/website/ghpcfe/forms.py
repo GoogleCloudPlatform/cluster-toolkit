@@ -834,6 +834,7 @@ class VirtualSubnetForm(forms.ModelForm):
             "name": forms.TextInput(attrs={"class": "form-control"}),
             "cidr": forms.TextInput(attrs={"class": "form-control"}),
             "cloud_region": forms.Select(attrs={"class": "form-control"}),
+            "private_google_access_enabled": forms.CheckboxInput(attrs={"class": "form-control"}),
         }
 
 
@@ -1119,3 +1120,61 @@ class ImageImportForm(forms.ModelForm):
         startup_scripts = owned_scripts | authorized_scripts
 
         return startup_scripts
+
+
+class ContainerRegistryForm(forms.ModelForm):
+    class Meta:
+        model = ContainerRegistry
+        fields = [
+            'repo_password',
+            'format',
+            'repo_mode',
+            'use_public_repository',
+            'repo_mirror_url',
+            'use_upstream_credentials',
+            'repo_username',
+        ]
+        widgets = {
+            'repo_password': forms.PasswordInput(attrs={'class': 'form-control'}),
+            'format': forms.Select(attrs={'class': 'form-control'}),
+            'repo_mode': forms.Select(attrs={'class': 'form-control'}),
+            'use_public_repository': forms.CheckboxInput(),
+            'repo_mirror_url': forms.URLInput(attrs={'class': 'form-control'}),
+            'use_upstream_credentials': forms.CheckboxInput(),
+            'repo_username': forms.TextInput(attrs={'class': 'form-control'}),
+        }
+
+    def clean_use_public_repository(self):
+        """Ensure checkbox is always returned as True/False"""
+        return self.cleaned_data.get("use_public_repository", False)
+
+    def clean_use_upstream_credentials(self):
+        """Ensure checkbox is always returned as True/False"""
+        return self.cleaned_data.get("use_upstream_credentials", False)
+
+    def clean(self):
+        cleaned_data = super().clean()
+        repo_mode = cleaned_data.get("repo_mode")
+        use_public_repository = cleaned_data.get("use_public_repository")
+
+        # logger.info(f"DEBUG: Cleaned data for this form: {cleaned_data}")
+
+        if repo_mode == "REMOTE_REPOSITORY":
+            # Allow either repo_mirror_url OR use_public_repository to be set
+            if not use_public_repository and not cleaned_data.get("repo_mirror_url"):
+                self.add_error("repo_mirror_url", "Mirror URL is required for remote repositories unless using a public repository.")
+
+            if cleaned_data.get("use_upstream_credentials") and not cleaned_data.get("repo_username"):
+                self.add_error("repo_username", "Username is required when using upstream credentials.")
+
+            # If use_public_repository is set, enforce defaults
+            if use_public_repository:
+                cleaned_data["repo_mirror_url"] = None  # Ensure no mirror URL is stored
+
+        # Ensure STANDARD_REPOSITORY does not require unnecessary fields
+        elif repo_mode == "STANDARD_REPOSITORY":
+            cleaned_data["repo_mirror_url"] = None
+            cleaned_data["repo_username"] = None
+            cleaned_data["repo_password"] = None
+
+        return cleaned_data

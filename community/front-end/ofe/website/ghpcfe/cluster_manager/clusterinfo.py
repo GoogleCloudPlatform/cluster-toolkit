@@ -35,7 +35,7 @@ from . import cloud_info
 from . import utils
 
 from .. import grafana
-from ..models import Cluster, ApplicationInstallationLocation, ComputeInstance
+from ..models import Cluster, ApplicationInstallationLocation, ComputeInstance, ContainerRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -215,6 +215,37 @@ class ClusterInfo:
 
         return ("\n\n".join(filesystems_yaml), refs)
 
+    def _prepare_ghpc_artifact_registry(self):
+        artifact_registry_yaml = []
+        template = self.env.get_template('blueprint/artifact_registry_config.yaml.j2')
+
+        registries = self.cluster.container_registry_relations.all()
+        logger.info(f"Total container registries: {len(registries)}")
+
+        for registry in self.cluster.container_registry_relations.all():
+            # logger.info(f"Processing registry ID: {registry.id}, repo_mode: {registry.repo_mode}")
+
+            context = {
+                "registry_id": f"registry_{registry.id}",
+                "repo_mode": registry.repo_mode,
+                "format": registry.format,
+                "use_public_repository": registry.use_public_repository,
+                "repo_mirror_url": registry.repo_mirror_url,
+                "repo_username": registry.repo_username,
+                "repo_password": registry.repo_password,
+                "use_upstream_credentials": registry.use_upstream_credentials,
+            }
+
+            # logger.info(f"Registry Context: {json.dumps(context, indent=2)}")
+            rendered_yaml = template.render(context)
+            if not rendered_yaml.strip():
+                logger.warning(f"Rendered YAML for registry {registry.id} (mode: {registry.repo_mode}) is EMPTY!")
+
+            indented_yaml = self.indent_text(rendered_yaml, 1)
+            artifact_registry_yaml.append(indented_yaml)
+
+        return "\n\n".join(artifact_registry_yaml)
+
     def _prepare_ghpc_partitions(self, part_uses):
         partitions_yaml = []
         refs = []
@@ -262,6 +293,7 @@ class ClusterInfo:
             project_id = json.loads(self.cluster.cloud_credential.detail)["project_id"]
             filesystems_yaml, filesystems_refs = self._prepare_ghpc_filesystems()
             partitions_yaml, partitions_refs = self._prepare_ghpc_partitions(filesystems_refs)
+            artifact_registry_yaml = self._prepare_ghpc_artifact_registry()
             cloudsql_yaml, cloudsql_refs = self._prepare_cloudsql_yaml()  # Incorporate CloudSQL YAML
 
             # Use a template to generate the final YAML configuration
@@ -272,6 +304,7 @@ class ClusterInfo:
                 "site_name": SITE_NAME,
                 "filesystems_yaml": filesystems_yaml,
                 "partitions_yaml": partitions_yaml,
+                "artifact_registry_yaml": artifact_registry_yaml,
                 "cloudsql_yaml": cloudsql_yaml,
                 "cluster": self.cluster,
                 "controller_uses": self._yaml_refs_to_uses(controller_uses_refs, indent_level=2),
@@ -280,6 +313,8 @@ class ClusterInfo:
                 "startup_bucket": self.config["server"]["gcs_bucket"]
             }
             rendered_yaml = template.render(context)
+
+            logger.debug("Generated YAML Output:\n" + rendered_yaml)
 
             if self.cluster.controller_node_image is not None:
                 context["controller_image_yaml"] = f"""instance_image:
@@ -395,8 +430,17 @@ class ClusterInfo:
         return list(filter(matches, state["resources"]))
 
     def _create_model_instances_from_tf_state(self, state, filters):
-        print(self._get_tf_state_resource(state, filters))
-        tf_nodes = self._get_tf_state_resource(state, filters)[0]["instances"]
+        tf_resources = self._get_tf_state_resource(state, filters)
+        print(tf_resources)
+
+        if not tf_resources:
+            logger.error(f"No resources found for filters: {filters}")
+            return []
+
+        tf_nodes = tf_resources[0].get("instances", [])
+        if not tf_nodes:
+            logger.error(f"No instances found for resource with filters: {filters}")
+            return []
 
         def model_from_tf(tf):
             ci_kwargs = {
@@ -447,22 +491,35 @@ class ClusterInfo:
         # resources At the moment, pull from controller & login instances. This
         # misses "compute" nodes, but they're going to just be the same as
         # controller & login until we start setting them.
+        service_accounts = {}
 
-        filters = {
-            "module": "module.slurm_controller.module.slurm_controller_instance",  #pylint:disable=line-too-long
+        controller_filters = {
+            "module": "module.slurm_controller",
+            "type": "google_compute_instance_from_template",
+            "name": "controller",
+        }
+        controller_resources = self._get_tf_state_resource(tf_state, controller_filters)
+        if controller_resources:
+            controller_instance = controller_resources[0]["instances"][0]
+            service_accounts["controller"] = controller_instance["attributes"]["service_account"][0]["email"]
+        else:
+            logger.error(f"No resources found for controller filters: {controller_filters}")
+
+
+        login_filters = {
+            "module": 'module.slurm_controller.module.slurm_login_instance["slurm-login"]',
+            "type": "google_compute_instance_from_template",
             "name": "slurm_instance",
         }
-        tf_node = self._get_tf_state_resource(tf_state, filters)[0]["instances"][0]  #pylint:disable=line-too-long
-        ctrl_sa = tf_node["attributes"]["service_account"][0]["email"]
+        login_resources = self._get_tf_state_resource(tf_state, login_filters)
+        if login_resources:
+            login_instance = login_resources[0]["instances"][0]
+            service_accounts["login"] = login_instance["attributes"]["service_account"][0]["email"]
+            service_accounts["compute"] = login_instance["attributes"]["service_account"][0]["email"]
+        else:
+            logger.error(f"No resources found for login filters: {login_filters}")
 
-        filters = {
-            "module": 'module.slurm_controller.module.slurm_login_instance["slurm-login"]',  #pylint:disable=line-too-long
-            "name": "slurm_instance",
-        }
-        tf_node = self._get_tf_state_resource(tf_state, filters)[0]["instances"][0]  #pylint:disable=line-too-long
-        login_sa = tf_node["attributes"]["service_account"][0]["email"]
-
-        return {"controller": ctrl_sa, "login": login_sa, "compute": login_sa}
+        return service_accounts
 
     def _apply_service_account_permissions(self, service_accounts):
         # Need to give permission for all instances to download startup scripts
@@ -530,12 +587,15 @@ class ClusterInfo:
                 self.cluster.status = "i"
                 self.cluster.save()
 
+                # Updated Filters for Management Nodes (Controller)
+                mgmt_filters = {
+                    "module": "module.slurm_controller",
+                    "type": "google_compute_instance_from_template",
+                    "name": "controller",
+                }
                 mgmt_nodes = self._create_model_instances_from_tf_state(
                     state,
-                    {
-                        "module": "module.slurm_controller.module.slurm_controller_instance",  # pylint: disable=line-too-long
-                        "name": "slurm_instance",
-                    },
+                    mgmt_filters,
                 )
                 if len(mgmt_nodes) != 1:
                     logger.warning(
@@ -551,12 +611,15 @@ class ClusterInfo:
                         node.public_ip if node.public_ip else node.internal_ip,
                     )
 
+                # Updated Filters for Login Nodes
+                login_filters = {
+                    "module": 'module.slurm_controller.module.slurm_login_instance["slurm-login"]',
+                    "type": "google_compute_instance_from_template",
+                    "name": "slurm_instance",
+                }
                 login_nodes = self._create_model_instances_from_tf_state(
                     state,
-                    {
-                        "module": 'module.slurm_controller.module.slurm_login_instance["slurm-login"]',   # pylint: disable=line-too-long
-                        "name": "slurm_instance",
-                    },
+                    login_filters,
                 )
                 if len(login_nodes) != self.cluster.num_login_nodes:
                     logger.warning(
@@ -601,6 +664,10 @@ class ClusterInfo:
             self.cluster.save()
 
             utils.run_terraform(terraform_dir, "destroy", extra_env=extra_env)
+
+            # Delete Container Registry objects linked to this cluster
+            registry_count, _ = ContainerRegistry.objects.filter(cluster=self.cluster).delete()
+            logger.info(f"Deleted {registry_count} container registry entries associated with cluster {self.cluster.name}")
 
             controller_sa = self.cluster.controller_node.service_account
 

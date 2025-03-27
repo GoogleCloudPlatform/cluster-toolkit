@@ -71,6 +71,11 @@ class UserAdmin(BaseUserAdmin):
     )
 
 
+class ContainerRegistryInline(admin.TabularInline):
+    model = ContainerRegistry
+    extra = 1
+
+
 class MountPointInline(admin.TabularInline):
     """ To enable inline editing of instance types on cluster admin page """
     model = MountPoint
@@ -115,7 +120,7 @@ class FilesystemAdmin(admin.ModelAdmin):
 
 class ClusterAdmin(admin.ModelAdmin):
     """ Custom ModelAdmin for Cluster model """
-    inlines = (MountPointInline, ClusterPartitionInline)
+    inlines = (MountPointInline, ClusterPartitionInline, ContainerRegistryInline)
     list_display = ("id", "name", "cloud_zone", "_controller_node", "status")
 
     def _controller_node(self, obj):
@@ -176,3 +181,4 @@ admin.site.register(AuthorisedUser)
 admin.site.register(WorkbenchMountPoint)
 admin.site.register(StartupScript)
 admin.site.register(Image)
+admin.site.register(ContainerRegistry)

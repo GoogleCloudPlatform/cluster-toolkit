@@ -17,7 +17,7 @@
 
 <html lang="en">
 <head>
-  {% block title %}<title>Cluster Toolkit FrontEnd</title>{% endblock %}
+  {% block title %}<title>Cluster Toolkit OpenFrontEnd</title>{% endblock %}
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   {% block meta %}{% endblock %}
@@ -126,6 +126,9 @@
             </li>
             <li id="navtab-application" class="nav-item">
               <a class="nav-link" style="color: white;" href="{% url 'applications' %}"><img src="/static/img/white-application.png">Applications</a>
+            </li>
+            <li id="navtab-registries" class="nav-item">
+              <a class="nav-link" style="color: white;" href="{% url 'registries' %}"><img src="/static/img/white-registries.png">Registries</a>
             </li>
             <li id="navtab-job" class="nav-item">
               <a class="nav-link" style="color: white;" href="{% url 'jobs' %}"><img src="/static/img/white-job.png">Jobs</a>

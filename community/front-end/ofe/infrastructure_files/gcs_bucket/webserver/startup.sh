@@ -48,6 +48,7 @@ printf "####################\n#### Installing required packages\n###############
 dnf install -y epel-release
 dnf update -y --security
 dnf config-manager --add-repo https://rpm.releases.hashicorp.com/RHEL/hashicorp.repo
+
 dnf install -y terraform
 dnf install --best -y google-cloud-sdk nano make gcc python3.12-devel unzip git \
 	rsync wget nginx bind-utils policycoreutils-python-utils \
@@ -76,12 +77,14 @@ EOL
 
 dnf install -y grafana
 
+python3.12 -m ensurepip --upgrade
+
 pip3.12 install google-api-python-client \
 	google-cloud-secret-manager \
 	google.cloud.pubsub \
 	pyyaml addict httplib2
 
-# Set Python3.8 as default Python3
+# Set Python3.12 as default Python3
 echo '2' | update-alternatives --config python3
 # Download configuration file
 #

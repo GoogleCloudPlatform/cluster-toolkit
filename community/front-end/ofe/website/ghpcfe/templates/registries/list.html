@@ -1,0 +1,53 @@
+<!--
+ Copyright 2025 "Google LLC"
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+{% extends "base_generic.html" %}
+
+{% block content %}
+<h2>Artifact / Container Registries</h2>
+
+<hr>
+
+{% if registry_list %}
+<table class="table">
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Cluster</th>
+            <th>Format</th>
+            <th>Repo Mode</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+    {% for registry in registry_list %}
+        <tr>
+            <td>{{ registry.id }}</td>
+            <td><a href="../cluster/{{ registry.cluster.id }}">{{ registry.cluster.name }} (ID: {{ registry.cluster.id }})</a></td>
+            <td>{{ registry.get_format_display }}</td>
+            <td>{{ registry.get_repo_mode_display }}</td>
+            <td>
+                <a href="{% url 'registry-detail' registry.id %}" class="btn btn-sm btn-primary">View</a>
+            </td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p>No registries found. You can deploy an <a href="https://cloud.google.com/artifact-registry/docs"></a>Artifact Registry</a> when you create a cluster.</p>
+<p></p>
+{% endif %}
+{% endblock %}
