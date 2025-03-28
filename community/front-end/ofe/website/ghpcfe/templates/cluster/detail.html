@@ -150,14 +150,16 @@
       </tr>
     </thead>
     {% for registry in object.container_registry_relations.all %}
-    <tr class="container_formset_row">
-      <td>{{ registry.repo_mode }}</td>
-      <td>{{ registry.format }}</td>
-      <td>{{ registry.repo_mirror_url }}</td>
-      <td>{{ registry.repo_username }}</td>
-      <td>{{ registry.use_public_repository }}</td>
-      <td>{{ registry.use_upstream_credentials}}</td>
-    </tr>
+      {% if registry.status != "d" %}
+        <tr class="container_formset_row">
+          <td>{{ registry.get_repo_mode_display }}</td>
+          <td>{{ registry.get_format_display }}</td>
+          <td>{{ registry.get_repo_mirror_url }}</td>
+          <td>{{ registry.repo_username }}</td>
+          <td>{{ registry.use_public_repository }}</td>
+          <td>{{ registry.use_upstream_credentials}}</td>
+        </tr>
+      {% endif %}
     {% endfor %}
   </table>
 </div>

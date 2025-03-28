@@ -16,6 +16,7 @@
 # shellcheck disable=SC1083
 BUCKET={{ server_bucket }}
 CLUSTER_ID={{ cluster.id }}
+USE_CONTAINERS={{ use_containers }}
 
 echo "This is the startup script for the controller on cluster ${CLUSTER_ID}"
 
@@ -45,6 +46,7 @@ cluster_bucket=${BUCKET}
 spack_dir={{ spack_dir }}
 fec2_subscription={{ fec2_subscription }}
 fec2_topic={{ fec2_topic }}
+use_containers=${USE_CONTAINERS}
 EOF
 
 exec ansible-playbook ./controller.yaml

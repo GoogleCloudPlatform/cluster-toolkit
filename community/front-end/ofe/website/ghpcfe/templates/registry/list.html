@@ -1,0 +1,118 @@
+<!--
+ Copyright 2025 "Google LLC"
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+{% extends "base_generic.html" %}
+
+{% block meta %}
+  {% if loading == 1 %}
+  <meta http-equiv="refresh" content="15" />
+  {% endif %}
+{% endblock %}
+
+{% block extrameta %}
+{% load static %}
+<script type="text/javascript">
+    window.csrfToken = "{{ csrf_token }}";
+</script>
+<script type="module">
+    import { setupDropdownFilter } from "/static/js/views/shared/filter_and_refresh.js";
+    document.addEventListener("DOMContentLoaded", () => {
+      setupDropdownFilter("cluster-select", "image-list", "cluster");
+    });
+  </script>
+{% endblock %}
+
+{% block content %}
+
+<h2>Artifact / Container Registries</h2>
+<hr>
+<p>
+    From this section you can use Cloud Build to add containers to your 'standard' repositories. Once built,
+    these containers will be accessible via <a href="https://console.cloud.google.com/artifacts">Artifact Registry</a>.
+    Please note that ARM64 or multi arch container builds are not yet supported.
+</p>
+<p>
+    If you have configured a 'remote' repository and would like to use pull-through functionality you will need to
+    provide credentials when deploying your <a href="/clusters/">Cluster</a>, or use a remote source that does not 
+    require authentication. Remote repositories act as a mirror of the source, meaning you will have immediate access to
+    all containers directly from your Artifact Registry without needing to use the build process available on this page.
+</p>
+<p>
+    Please see the Artifact Registry module <a href="/">documentation</a> for further information about mirroring. 
+    Detailed instructions and information about repository mirroring can be found in the Artifact Registry guide
+    linked <a href="https://cloud.google.com/artifact-registry/docs/repositories/remote-repo">here</a> too.
+</p>
+
+<!-- Cluster Selector -->
+<div class="form-group">
+    <label for="cluster-select"><strong>Select Cluster:</strong></label>
+    <select id="cluster-select" class="form-control">
+        <option value="all">All Clusters</option>
+        {% for cluster in cluster_list %}
+            <option value="{{ cluster.id }}">{{ cluster.name }} (ID: {{ cluster.id }})</option>
+        {% endfor %}
+    </select>
+</div>
+
+<hr>
+
+{% if registry_list %}
+<table class="table">
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Cluster</th>
+            <th>Format</th>
+            <th>Repo URL</th>
+            <th>Repo Mode</th>
+            <th>Status</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody id="image-list">
+        {% for registry in registry_list %}
+            <tr data-cluster="{{ registry.cluster.id }}">
+                <td>{{ registry.id }}</td>
+                <td><a href="../cluster/{{ registry.cluster.id }}">{{ registry.cluster.name }} (ID: {{ registry.cluster.id }})</a></td>
+                <td>{{ registry.get_format_display }}</td>
+                <td>{{ registry.get_repo_mirror_url }}</td>
+                <td>{{ registry.get_repo_mode_display }}</td>
+                <td>
+                    {% if registry.status == "i" %}
+                    <img src="/static/img/loading.gif" style="width:32px;height:32px;">
+                    {% elif registry.status == "r" %}
+                    <img src="/static/img/status-ready.png" style="width:32px;height:32px;">
+                    {% elif registry.status == "n" %}
+                    <img src="/static/img/status-configured.png" style="width:30px;height:32px;">
+                    {% elif registry.status == "d" %}
+                    <img src="/static/img/status-deleted.png" style="width:30px;height:32px;">
+                    {% endif %}
+                    {{ registry.get_status_display }}
+                </td>
+                <td>
+                    {% if registry.status == "r" %}
+                    <a href="{% url 'registry-detail' registry.id %}" class="btn btn-sm btn-outline-secondary">View</a>
+                    {% endif %}
+                </td>
+            </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p>No registries found. You can deploy an <a href="https://cloud.google.com/artifact-registry/docs"></a>Artifact Registry</a> when you create a cluster.</p>
+{% endif %}
+
+{% endblock %}

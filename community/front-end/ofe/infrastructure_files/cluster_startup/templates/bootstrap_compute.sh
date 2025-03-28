@@ -17,6 +17,7 @@
 BUCKET={{ server_bucket }}
 CLUSTER_ID={{ cluster.id }}
 SPACK_DIR={{ spack_dir }}
+USE_CONTAINERS={{ use_containers }}
 
 echo "This is the startup script for the compute nodes on cluster ${CLUSTER_ID}"
 
@@ -44,6 +45,7 @@ cat >/etc/ansible/facts.d/ghpcfe.fact <<EOF
 cluster_id=${CLUSTER_ID}
 cluster_bucket=${BUCKET}
 spack_dir=${SPACK_DIR}
+use_containers=${USE_CONTAINERS}
 EOF
 
 exec ansible-playbook ./compute.yaml

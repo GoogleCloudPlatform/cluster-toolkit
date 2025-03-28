@@ -102,7 +102,7 @@ locals {
 locals {
   ghpc_startup_script_controller = concat(
     local.common_scripts,
-    var.controller_startup_script == null ? [] : [{
+    [{
       filename = "ghpc_startup.sh"
       content  = var.controller_startup_script
   }])
@@ -111,7 +111,7 @@ locals {
     device_name : try(google_compute_disk.controller_disk[0].name, null)
   }
 
-  ghpc_startup_login = var.login_startup_script == null ? [] : [{
+  ghpc_startup_login = [{
     filename = "ghpc_startup.sh"
     content  = var.login_startup_script
   }]
