@@ -268,6 +268,30 @@ resource "google_container_cluster" "gke_cluster" {
   }
 }
 
+resource "kubernetes_resource_quota" "gpu_operator_quota" {
+  count = var.enable_gpu_operator ? 1 : 0
+
+  metadata {
+    name      = "gpu-operator-quota"
+    namespace = "gpu-operator"
+  }
+  spec {
+    hard = {
+      pods = "100"
+    }
+    scope_selector {
+      match_expression {
+        scope_name = "PriorityClass"
+        operator   = "In"
+        values = [
+          "system-node-critical",
+          "system-cluster-critical",
+        ]
+      }
+    }
+  }
+}
+
 # We define explicit node pools, so that it can be modified without
 # having to destroy the entire cluster.
 resource "google_container_node_pool" "system_node_pools" {
