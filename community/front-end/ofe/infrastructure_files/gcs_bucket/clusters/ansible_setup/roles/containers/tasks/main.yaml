@@ -1,0 +1,52 @@
+# Copyright 2025 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+# - name: Gather Artifact Registry repositories in the current project
+#   command: gcloud artifacts repositories list --format=json
+#   register: artifact_repos_raw
+
+- name: create container cache directory
+  file:
+    path: /opt/apps/containers
+    state: directory
+    mode: '0755'
+
+- name: Deploy Enroot cache path drop-in config
+  copy:
+    dest: /etc/enroot/enroot.conf.d/10-cache.conf
+    content: |
+      # Drop-in config for setting ENROOT_CACHE_PATH
+      ENROOT_CACHE_PATH=/opt/apps/containers
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Set /tmp as path to store enroot squashfs imageß
+  lineinfile:
+    path: /etc/slurm/plugstack.conf
+    regexp: '^(required\s+/usr/local/lib/slurm/spank_pyxis\.so)(.*)$'
+    line: '\1 runtime_path=/tmp'
+    backrefs: yes
+  become: true
+
+# - name: Generate Enroot credentials from template
+#   template:
+#     src: enroot_credentials.j2
+#     dest: /etc/enroot/config/.credentials
+#     owner: root
+#     group: root
+#     mode: '0600'
+#   vars:
+#     artifact_repos: "{{ artifact_repos_raw.stdout | from_json }}"

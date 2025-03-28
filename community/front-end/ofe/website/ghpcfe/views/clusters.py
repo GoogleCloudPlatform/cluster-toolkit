@@ -302,16 +302,27 @@ class ClusterUpdateView(LoginRequiredMixin, UpdateView):
         return self.region_info
 
     def get_container_registry_formset(self, **kwargs):
+        existing_registries = ContainerRegistry.objects.filter(cluster=self.object)
+
+        if not existing_registries.exists():
+            # Create a default registry if needed
+            default_registry = ContainerRegistry(
+                cluster=self.object,
+                # Defaults?
+            )
+            default_registry.save()
+
         ContainerRegistryFormSet = inlineformset_factory(
             Cluster,
             ContainerRegistry,
             form=ContainerRegistryForm,
-            extra=1,
+            extra=0,
             can_delete=True
         )
 
         if self.request.POST:
             kwargs["data"] = self.request.POST
+
         return ContainerRegistryFormSet(instance=self.object, **kwargs)
 
     def get_context_data(self, **kwargs):
@@ -355,11 +366,15 @@ class ClusterUpdateView(LoginRequiredMixin, UpdateView):
         # for i, registry_form in enumerate(container_registry_formset.forms):
         #     logger.info(f"Form {i} data: {registry_form.data}")
 
-        if not container_registry_formset.is_valid():
-            logger.warning(f"Container registry formset errors: {container_registry_formset.errors}")
-            form.add_error(None, "Error in container registries section")
-            return self.form_invalid(form)
-        
+        if form.instance.use_containers:
+            if not container_registry_formset.is_valid():
+                logger.warning(f"Container registry formset errors: {container_registry_formset.errors}")
+                form.add_error(None, "Error in container registries section")
+                return self.form_invalid(form)
+        else:
+            # If not enabling containers, discard any user-supplied forms,
+            container_registry_formset = None
+
         #logger.info(f"Total valid registry forms before filtering: {len(container_registry_formset.cleaned_data)}")
 
         # for i, registry_form in enumerate(container_registry_formset.forms):
@@ -446,8 +461,10 @@ class ClusterUpdateView(LoginRequiredMixin, UpdateView):
         for formset, formset_name in [
             (mountpoints, "mountpoints"),
             (partitions, "partitions"),
-            (container_registry_formset, "container registries")
+            (container_registry_formset, "containers")
         ]:
+            if formset is None:
+                continue
             if not formset.is_valid():
                 form.add_error(None, f"Error in {formset_name} section")
                 return self.form_invalid(form)
@@ -487,13 +504,6 @@ class ClusterUpdateView(LoginRequiredMixin, UpdateView):
             if not found:
                 # Log if no corresponding form was found for the partition
                 logger.info(f"No form found for Partition: {partition.name}.")
-
-        # Process container registry deletions
-        existing_registries = ContainerRegistry.objects.filter(cluster=self.object)
-        for registry in existing_registries:
-            if not any(registry_form.instance == registry for registry_form in container_registry_formset.forms):
-                logger.info(f"Deleting container registry ID: {registry.pk}")
-                registry.delete()
 
         try:
             with transaction.atomic():
