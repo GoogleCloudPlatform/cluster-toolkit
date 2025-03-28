@@ -19,6 +19,7 @@
 {% load static %}
 
 {% block extrameta %}
+{% load static %}
 <script src="{% static 'js/jquery.cookie.js' %}"></script>
 <script>
 function setLimits() {
@@ -125,6 +126,7 @@ function initPage() {
     document.getElementById("id_partition").onchange = change_partition;
     updateRunScriptSelection('{{ run_script_type }}');
     updatePricing();
+
     var user_quota_type = "{{ user_quota_type|safe }}";
     if(user_quota_type === "d"){
         document.getElementById("id_submit_button").disabled = true;
