@@ -19,7 +19,7 @@
 test_name: gke-a3mega
 deployment_name: gke-a3mega-{{ build }}
 workspace: /workspace
-blueprint_yaml: "{{ workspace }}/examples/gke-a3-megagpu.yaml"
+blueprint_yaml: "{{ workspace }}/examples/gke-a3-megagpu/gke-a3-megagpu.yaml"
 network: "{{ deployment_name }}-net"
 region: us-west4
 zone: us-west4-a
