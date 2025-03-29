@@ -196,11 +196,14 @@ resource "google_container_cluster" "gke_cluster" {
     }
   }
 
-  dns_config {
-    additive_vpc_scope_dns_domain = var.cloud_dns_config.additive_vpc_scope_dns_domain
-    cluster_dns                   = var.cloud_dns_config.cluster_dns
-    cluster_dns_scope             = var.cloud_dns_config.cluster_dns_scope
-    cluster_dns_domain            = var.cloud_dns_config.cluster_dns_domain
+  dynamic "dns_config" {
+    for_each = var.cloud_dns_config != null ? [1] : []
+    content {
+      additive_vpc_scope_dns_domain = var.cloud_dns_config.additive_vpc_scope_dns_domain
+      cluster_dns                   = var.cloud_dns_config.cluster_dns
+      cluster_dns_scope             = var.cloud_dns_config.cluster_dns_scope
+      cluster_dns_domain            = var.cloud_dns_config.cluster_dns_domain
+    }
   }
 
   addons_config {
