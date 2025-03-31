@@ -196,11 +196,14 @@ resource "google_container_cluster" "gke_cluster" {
     }
   }
 
-  dns_config {
-    additive_vpc_scope_dns_domain = var.cloud_dns_config.additive_vpc_scope_dns_domain
-    cluster_dns                   = var.cloud_dns_config.cluster_dns
-    cluster_dns_scope             = var.cloud_dns_config.cluster_dns_scope
-    cluster_dns_domain            = var.cloud_dns_config.cluster_dns_domain
+  dynamic "dns_config" {
+    for_each = var.cloud_dns_config != null ? [1] : []
+    content {
+      additive_vpc_scope_dns_domain = var.cloud_dns_config.additive_vpc_scope_dns_domain
+      cluster_dns                   = var.cloud_dns_config.cluster_dns
+      cluster_dns_scope             = var.cloud_dns_config.cluster_dns_scope
+      cluster_dns_domain            = var.cloud_dns_config.cluster_dns_domain
+    }
   }
 
   addons_config {
@@ -265,6 +268,30 @@ resource "google_container_cluster" "gke_cluster" {
 
   logging_config {
     enable_components = local.default_logging_component
+  }
+}
+
+resource "kubernetes_resource_quota" "gpu_operator_quota" {
+  count = var.enable_gpu_operator ? 1 : 0
+
+  metadata {
+    name      = "gpu-operator-quota"
+    namespace = "gpu-operator"
+  }
+  spec {
+    hard = {
+      pods = "100"
+    }
+    scope_selector {
+      match_expression {
+        scope_name = "PriorityClass"
+        operator   = "In"
+        values = [
+          "system-node-critical",
+          "system-cluster-critical",
+        ]
+      }
+    }
   }
 }
 
