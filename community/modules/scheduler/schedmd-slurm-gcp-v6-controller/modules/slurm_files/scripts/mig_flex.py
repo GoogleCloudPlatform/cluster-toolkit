@@ -115,7 +115,7 @@ def _suspend_flex_mig(mig_self_link: str, nodes: List[str], lkp: util.Lookup) ->
   # The request will fail and MIG will continue provisioning.
   # Instead whole MIG should be deleted.
   # + All other instances in MIG are not provisioned also, safe to delete
-  # - Need to come up wil clear test to differentiate non-provisioned MIG and single VM being down;
+  # - Need to come up will clear test to differentiate non-provisioned MIG and single VM being down;
   #   Particularly CRITICAL due to ActionOnFailure=DO_NOTHING 
   # - Need to `down_nodes_notify_jobs` for all nodes in MIG, make sure that it doesn't interfere with Slurm suspend-flow. 
   req = lkp.compute.instanceGroupManagers().deleteInstances(
