@@ -1,0 +1,176 @@
+# SPDX-FileCopyrightText: Copyright (C) SchedMD LLC.
+# SPDX-License-Identifier: Apache-2.0
+
+#
+# -- (string)
+# Overrides the name of the release.
+nameOverride: ""
+
+#
+# -- (string)
+# Overrides the full name of the release.
+fullnameOverride: ""
+
+#
+# -- (string)
+# Overrides the namespace of the release.
+namespaceOverride: ""
+
+#
+# -- (list)
+# Sets the image pull secrets.
+# Ref: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
+imagePullSecrets: []
+  # - name: regcred
+
+#
+# -- (string)
+# Set the priority class to use.
+# Ref: https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/#priorityclass
+priorityClassName: ""
+
+#
+# Operator configurations.
+operator:
+  #
+  # -- (bool)
+  # Enables the operator.
+  enabled: true
+  #
+  # -- (integer)
+  # Set the number of replicas to deploy.
+  replicas: 1
+  #
+  # -- (string)
+  # Set the image pull policy.
+  imagePullPolicy: IfNotPresent
+  #
+  # Image configurations.
+  image:
+    #
+    # -- (string)
+    # Sets the image repository to use.
+    repository: ghcr.io/slinkyproject/slurm-operator
+    #
+    # -- (string)
+    # Sets the image tag to use.
+    # @default -- The Release version.
+    tag: 0.2.0
+  #
+  # Service account configurations.
+  serviceAccount:
+    #
+    # -- (bool)
+    # Allows chart to create the service account.
+    create: true
+    #
+    # -- (string)
+    # Set the service account to use (and create).
+    name: ""
+  #
+  # -- (object)
+  # Set affinity for Kubernetes Pod scheduling.
+  # Ref: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#affinity-and-anti-affinity
+  affinity: {}
+  #
+  # -- (object)
+  # Set container resource requests and limits for Kubernetes Pod scheduling.
+  # Ref: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/#resource-requests-and-limits-of-pod-and-container
+  resources: {}
+    # requests:
+    #   cpu: 1
+    #   memory: 1Gi
+    # limits:
+    #   cpu: 2
+    #   memory: 4Gi
+  #
+  # -- (integer)
+  # Set the max concurrent workers for the Cluster controller.
+  clusterWorkers: 1
+  #
+  # -- (integer)
+  # Set the max concurrent workers for the NodeSet controller.
+  nodesetWorkers: 1
+  #
+  # -- (string)
+  # Set the log level by string (e.g. error, info, debug) or number (e.g. 1..5).
+  logLevel: info
+
+#
+# Webhook configurations.
+webhook:
+  #
+  # -- (bool)
+  # Enables the webhook.
+  enabled: true
+  #
+  # -- (integer)
+  # Set the number of replicas to deploy.
+  replicas: 1
+  #
+  # -- (string)
+  # Set the image pull policy.
+  imagePullPolicy: IfNotPresent
+  #
+  # Image configurations.
+  image:
+    #
+    # -- (string)
+    # Sets the image repository to use.
+    repository: ghcr.io/slinkyproject/slurm-operator-webhook
+    #
+    # -- (string)
+    # Sets the image tag to use.
+    # @default -- The Release version.
+    tag: 0.2.0
+  #
+  # Service account configurations.
+  serviceAccount:
+    #
+    # -- (bool)
+    # Allows chart to create the service account.
+    create: true
+    #
+    # -- (string)
+    # Set the service account to use (and create).
+    name: ""
+  #
+  # -- (object)
+  # Set affinity for Kubernetes Pod scheduling.
+  # Ref: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#affinity-and-anti-affinity
+  affinity: {}
+  #
+  # -- (object)
+  # Set container resource requests and limits for Kubernetes Pod scheduling.
+  # Ref: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/#resource-requests-and-limits-of-pod-and-container
+  resources: {}
+    # requests:
+    #   cpu: 1
+    #   memory: 1Gi
+    # limits:
+    #   cpu: 2
+    #   memory: 4Gi
+  #
+  # -- (string)
+  # Set the log level by string (e.g. error, info, debug) or number (e.g. 1..5).
+  logLevel: info
+
+#
+# Cert-Manager certificate configurations.
+certManager:
+  #
+  # -- (bool)
+  # Enables cert-manager for certificate management.
+  enabled: true
+  #
+  # -- (string)
+  # The secret to be (created and) mounted.
+  secretName: slurm-operator-webhook-ca
+  #
+  # -- (string)
+  # Duration of certificate life.
+  duration: 43800h0m0s # 5 year
+  #
+  # -- (string)
+  # Certificate renewal time. Should be before the expiration.
+  renewBefore: 8760h0m0s # 1 year
