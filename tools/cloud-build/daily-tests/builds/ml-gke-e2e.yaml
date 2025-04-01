@@ -52,9 +52,6 @@ steps:
     echo '    use: [gke_cluster]'                                      >> $${SG_EXAMPLE}
     echo '    settings: {name: ubuntu, image_type: UBUNTU_CONTAINERD}' >> $${SG_EXAMPLE}
 
-    # avoids conflict with other tests
-    sed -i "s/gke-subnet/gke-subnet-$${BUILD_ID_SHORT}/" $${SG_EXAMPLE}
-
     IP=$(curl ifconfig.me)
     sed -i "s/<your-ip-address>/$${IP}/" $${SG_EXAMPLE}
 

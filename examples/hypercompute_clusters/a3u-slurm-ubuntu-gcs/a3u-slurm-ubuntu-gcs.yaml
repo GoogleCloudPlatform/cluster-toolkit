@@ -1,4 +1,4 @@
-# Copyright 2024 Google LLC
+# Copyright 2025 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -33,7 +33,7 @@ vars:
     project: ubuntu-os-accelerator-images
     family: ubuntu-accelerator-2204-amd64-with-nvidia-550
   image_build_machine_type: n2-standard-16
-  build_slurm_from_git_ref: 6.8.6
+  build_slurm_from_git_ref: 6.9.1
 
   # Cluster env settings
   # net0 and filestore ranges must not overlap
@@ -48,7 +48,8 @@ vars:
     project: $(vars.project_id)
     family: $(vars.deployment_name)-u22
   disk_size_gb: 200
-  nccl_plugin_version: v1.0.3
+  nccl_plugin_version: v1.0.5
+  benchmark_dir: $(ghpc_stage("system_benchmarks"))
 
   # Here we define a set of startup script runners that are used to configure
   # the controller node
@@ -62,6 +63,18 @@ vars:
       mkdir -m 0755 -p "${SLURM_ROOT}/scripts"
       mkdir -p "${SLURM_ROOT}/partition-${PARTITION_NAME}-epilog_slurmd.d"
       ln -s "/slurm/scripts/tools/gpu-test" "${SLURM_ROOT}/partition-${PARTITION_NAME}-epilog_slurmd.d/gpu-test.epilog_slurmd"
+  - type: data
+    destination: /opt/apps/system_benchmarks/run-nccl-tests-via-ramble.sh
+    source: $(vars.benchmark_dir)/run-nccl-tests-via-ramble.sh
+  - type: data
+    destination: /opt/apps/system_benchmarks/run-nemo-via-ramble.sh
+    source: $(vars.benchmark_dir)/run-nemo-via-ramble.sh
+  - type: data
+    destination: /opt/apps/system_benchmarks/run-hpl-via-ramble.sh
+    source: $(vars.benchmark_dir)/run-hpl-via-ramble.sh
+  - type: data
+    destination: /opt/apps/system_benchmarks/README.md
+    source: $(vars.benchmark_dir)/README.md
 
   # Shared runners between login and controller:
   # Configure an enroot config path
@@ -135,6 +148,7 @@ vars:
         vars:
           enable_ops_agent: true
           enable_nvidia_dcgm: true
+          enable_nvidia_persistenced: true
         tasks:
         - name: Update Ops Agent configuration
           ansible.builtin.blockinfile:
@@ -169,6 +183,11 @@ vars:
             name: nvidia-dcgm.service
             state: "{{ 'started' if enable_nvidia_dcgm else 'stopped' }}"
             enabled: "{{ enable_nvidia_dcgm }}"
+        - name: Enable NVIDIA Persistence Daemon
+          ansible.builtin.service:
+            name: nvidia-persistenced.service
+            state: "{{ 'started' if enable_nvidia_persistenced else 'stopped' }}"
+            enabled: "{{ enable_nvidia_persistenced }}"
 
   # Configure Cloud Storage FUSE
   - type: ansible-local
@@ -351,6 +370,7 @@ deployment_groups:
             "install_cuda": false,
             "install_gcsfuse": true,
             "install_lustre": false,
+            "install_nvidia_repo": true,
             "install_ompi": true,
             "update_kernel": false,
             "monitoring_agent": "cloud-ops",
@@ -431,7 +451,9 @@ deployment_groups:
               nvidia_packages:
               - cuda-toolkit-12-4
               - datacenter-gpu-manager
+              - libnvidia-cfg1-550-server
               - libnvidia-nscq-550
+              - nvidia-compute-utils-550-server
             tasks:
             - name: Download NVIDIA repository package
               ansible.builtin.get_url:
@@ -469,10 +491,37 @@ deployment_groups:
                 name: "{{ item }}"
                 selection: hold
               loop: "{{ nvidia_packages }}"
+            - name: Create nvidia-persistenced override directory
+              ansible.builtin.file:
+                path: /etc/systemd/system/nvidia-persistenced.service.d
+                state: directory
+                owner: root
+                group: root
+                mode: 0o755
+            - name: Configure nvidia-persistenced override
+              ansible.builtin.copy:
+                dest: /etc/systemd/system/nvidia-persistenced.service.d/persistence_mode.conf
+                owner: root
+                group: root
+                mode: 0o644
+                content: |
+                  [Service]
+                  ExecStart=
+                  ExecStart=/usr/bin/nvidia-persistenced --user nvidia-persistenced --verbose
+              notify: Reload SystemD
+            handlers:
+            - name: Reload SystemD
+              ansible.builtin.systemd:
+                daemon_reload: true
             post_tasks:
             - name: Disable NVIDIA DCGM by default (enable during boot on GPU nodes)
               ansible.builtin.service:
                 name: nvidia-dcgm.service
+                state: stopped
+                enabled: false
+            - name: Disable nvidia-persistenced SystemD unit (enable during boot on GPU nodes)
+              ansible.builtin.service:
+                name: nvidia-persistenced.service
                 state: stopped
                 enabled: false
       - type: ansible-local
@@ -588,6 +637,11 @@ deployment_groups:
       disk_type: hyperdisk-balanced
       on_host_maintenance: TERMINATE
       reservation_name: $(vars.a3u_reservation_name)
+      advanced_machine_features:
+        threads_per_core: null # Use platform default value
+      node_conf:
+        CoresPerSocket: 56
+        ThreadsPerCore: 2
       additional_networks:
         $(concat(
           [{
@@ -614,7 +668,7 @@ deployment_groups:
       partition_name: a3ultra
       is_default: true
       partition_conf:
-        ResumeTimeout: 900
+        ResumeTimeout: 1200
         SuspendTimeout: 600
         OverSubscribe: EXCLUSIVE
 

@@ -92,6 +92,13 @@ resource "google_container_cluster" "gke_cluster" {
 
   deletion_protection = var.deletion_protection
 
+  dynamic "enable_k8s_beta_apis" {
+    for_each = var.enable_k8s_beta_apis != null ? [1] : []
+    content {
+      enabled_apis = var.enable_k8s_beta_apis
+    }
+  }
+
   network    = var.network_id
   subnetwork = var.subnetwork_self_link
 
@@ -189,6 +196,16 @@ resource "google_container_cluster" "gke_cluster" {
     }
   }
 
+  dynamic "dns_config" {
+    for_each = var.cloud_dns_config != null ? [1] : []
+    content {
+      additive_vpc_scope_dns_domain = var.cloud_dns_config.additive_vpc_scope_dns_domain
+      cluster_dns                   = var.cloud_dns_config.cluster_dns
+      cluster_dns_scope             = var.cloud_dns_config.cluster_dns_scope
+      cluster_dns_domain            = var.cloud_dns_config.cluster_dns_domain
+    }
+  }
+
   addons_config {
     gcp_filestore_csi_driver_config {
       enabled = var.enable_filestore_csi
@@ -251,6 +268,30 @@ resource "google_container_cluster" "gke_cluster" {
 
   logging_config {
     enable_components = local.default_logging_component
+  }
+}
+
+resource "kubernetes_resource_quota" "gpu_operator_quota" {
+  count = var.enable_gpu_operator ? 1 : 0
+
+  metadata {
+    name      = "gpu-operator-quota"
+    namespace = "gpu-operator"
+  }
+  spec {
+    hard = {
+      pods = "100"
+    }
+    scope_selector {
+      match_expression {
+        scope_name = "PriorityClass"
+        operator   = "In"
+        values = [
+          "system-node-critical",
+          "system-cluster-critical",
+        ]
+      }
+    }
   }
 }
 
@@ -386,11 +427,11 @@ locals {
 locals {
   # Separate gvnic and rdma networks and assign indexes
   gvnic_networks = [for idx, net in [for n in var.additional_networks : n if strcontains(upper(n.nic_type), "GVNIC")] :
-    merge(net, { name = "${var.k8s_network_names.gvnic_prefix}${idx + var.k8s_network_names.gvnic_start_index}" })
+    merge(net, { name = "${var.k8s_network_names.gvnic_prefix}${idx + var.k8s_network_names.gvnic_start_index}${var.k8s_network_names.gvnic_postfix}" })
   ]
 
   rdma_networks = [for idx, net in [for n in var.additional_networks : n if strcontains(upper(n.nic_type), "RDMA")] :
-    merge(net, { name = "${var.k8s_network_names.rdma_prefix}${idx + var.k8s_network_names.rdma_start_index}" })
+    merge(net, { name = "${var.k8s_network_names.rdma_prefix}${idx + var.k8s_network_names.rdma_start_index}${var.k8s_network_names.rdma_postfix}" })
   ]
 
   all_networks = concat(local.gvnic_networks, local.rdma_networks)

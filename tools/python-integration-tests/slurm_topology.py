@@ -19,6 +19,9 @@ from collections import defaultdict
 import unittest
 import logging
 
+logging.basicConfig(level=logging.INFO) 
+log = logging.getLogger()
+
 class SlurmTopologyTest(SlurmTest):
     # Class to test Slurm topology
     def __init__(self, deployment):
@@ -52,7 +55,13 @@ class SlurmTopologyTest(SlurmTest):
     def get_slurm_rack(self, node: str):
         stdin, stdout, stderr = self.ssh_client.exec_command(f"scontrol show topology {node} | tail -1 | cut -d' ' -f1")
         switch_name = stdout.read().decode()
-        self.assert_equal(self.get_node_depth(switch_name), 2, f"{node} does not have the expected topology depth of 2."),
+        err = stderr.read().decode()
+        log.info(f"Slurm rack for {node}: {switch_name}")
+        if err:
+            raise Exception(f"Slurm topology error for {node}: {err}") 
+
+        depth = self.get_node_depth(switch_name)
+        self.assert_equal(depth, 2, f"{node} has a topology depth of {depth} which does not match expected topology depth of 2.")
         return switch_name
 
 if __name__ == "__main__":

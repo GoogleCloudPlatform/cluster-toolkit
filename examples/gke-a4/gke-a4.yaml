@@ -1,4 +1,4 @@
-# Copyright 2024 "Google LLC"
+# Copyright 2025 "Google LLC"
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-blueprint_name: a3u-gke-gcs
+blueprint_name: gke-a4
 
 vars:
   # The following variables should be over-written in the deployment.yaml file.
@@ -21,7 +21,7 @@ vars:
 
   # This should be unique across all of your Cluster
   # Toolkit Deployments.
-  deployment_name: a3u-gke-gcs
+  deployment_name: gke-a4
 
   # The GCP Region used for this deployment.
   region:
@@ -37,28 +37,29 @@ vars:
   # To allow only your IP address, use <YOUR-IP-ADDRESS>/32
   authorized_cidr:
 
-  # The name of the compute engine reservation of A3-Ultra nodes in the form of
+  # The name of the compute engine reservation of A4 nodes in the form of
+  # <project>/<reservation-name>
+  # In order to target a BLOCK_NAME, extended_reservation can be inputted as
   # <project>/<reservation-name>/reservationBlocks/<reservation-block-name>
   extended_reservation:
 
-  # The name of the GCS bucket used for training data
-  training_bucket_name:
-
-  # The following variables do not need to be modified
-  nccl_installer_path: $(ghpc_stage("./nccl-rdma-installer.yaml"))
-  mtu_size: 8896
+  # Installs NCCL library and Google NCCL plugin
+  # Runs an init container on all H200 GPU nodes with the NCCL plugin image
+  nccl_installer_path: $(ghpc_stage("./nccl-installer.yaml"))
+  # Temporary fix for COS issue, will be fixed in next release
+  mglru_disable_path: $(ghpc_stage("./mglru-disable.yaml"))
+  kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
   system_node_pool_disk_size_gb: 200
-  a3ultra_node_pool_disk_size_gb: 100
+  a4_node_pool_disk_size_gb: 100
 
 
 deployment_groups:
 - group: primary
   modules:
-  - id: gke-a3-ultra-net-0
+  - id: gke-a4-net-0
     source: modules/network/vpc
     settings:
       network_name: $(vars.deployment_name)-net-0
-      mtu: 8896
       subnetworks:
       - subnet_name: $(vars.deployment_name)-sub-0
         subnet_region: $(vars.region)
@@ -70,22 +71,38 @@ deployment_groups:
           ip_cidr_range: 10.4.0.0/14
         - range_name: services
           ip_cidr_range: 10.0.32.0/20
+      firewall_rules:
+      - name: $(vars.deployment_name)-internal-0
+        ranges: [192.168.0.0/16]
+        allow:
+        - protocol: tcp
+          ports: ["0-65535"]
+        - protocol: udp
+          ports: ["0-65535"]
+        - protocol: icmp
 
-  - id: gke-a3-ultra-net-1
+  - id: gke-a4-net-1
     source: modules/network/vpc
     settings:
       network_name: $(vars.deployment_name)-net-1
-      mtu: $(vars.mtu_size)
       subnetworks:
       - subnet_name: $(vars.deployment_name)-sub-1
         subnet_region: $(vars.region)
         subnet_ip: 192.168.64.0/18
+      firewall_rules:
+      - name: $(vars.deployment_name)-internal-1
+        ranges: [192.168.0.0/16]
+        allow:
+        - protocol: tcp
+          ports: ["0-65535"]
+        - protocol: udp
+          ports: ["0-65535"]
+        - protocol: icmp
 
-  - id: gke-a3-ultra-rdma-net
+  - id: gke-a4-rdma-net
     source: modules/network/gpu-rdma-vpc
     settings:
       network_name: $(vars.deployment_name)-rdma-net
-      mtu: $(vars.mtu_size)
       network_profile: https://www.googleapis.com/compute/beta/projects/$(vars.project_id)/global/networkProfiles/$(vars.zone)-vpc-roce
       network_routing_mode: REGIONAL
       subnetworks_template:
@@ -118,9 +135,27 @@ deployment_groups:
       - storage.objectAdmin
       - artifactregistry.reader
 
-  - id: a3-ultragpu-cluster
+  - id: training_bucket
+    source: community/modules/file-system/cloud-storage-bucket
+    settings:
+      local_mount: /training-data
+      name_prefix: training
+      random_suffix: true
+      force_destroy: false
+      enable_hierarchical_namespace: true
+
+  - id: checkpoint_bucket
+    source: community/modules/file-system/cloud-storage-bucket
+    settings:
+      local_mount: /checkpoint-data
+      name_prefix: checkpoint
+      random_suffix: true
+      force_destroy: false
+      enable_hierarchical_namespace: true
+
+  - id: a4-cluster
     source: modules/scheduler/gke-cluster
-    use: [gke-a3-ultra-net-0, workload_service_account]
+    use: [gke-a4-net-0, workload_service_account]
     settings:
       system_node_pool_machine_type: "e2-standard-16"
       system_node_pool_disk_size_gb: $(vars.system_node_pool_disk_size_gb)
@@ -135,8 +170,8 @@ deployment_groups:
       additional_networks:
         $(concat(
           [{
-            network=gke-a3-ultra-net-1.network_name,
-            subnetwork=gke-a3-ultra-net-1.subnetwork_name,
+            network=gke-a4-net-1.network_name,
+            subnetwork=gke-a4-net-1.subnetwork_name,
             subnetwork_project=vars.project_id,
             nic_type="GVNIC",
             queue_count=null,
@@ -146,11 +181,11 @@ deployment_groups:
             ipv6_access_config=[],
             alias_ip_range=[]
           }],
-         gke-a3-ultra-rdma-net.subnetwork_interfaces_gke
+         gke-a4-rdma-net.subnetwork_interfaces_gke
         ))
       # Cluster versions cannot be updated through the toolkit after creation
       # Please manage cluster version from the Google Cloud Console directly
-      version_prefix: "1.31."
+      version_prefix: "1.32."
       release_channel: RAPID
       maintenance_exclusions:
       - name: no-minor-or-node-upgrades-indefinite
@@ -159,17 +194,17 @@ deployment_groups:
         exclusion_scope: NO_MINOR_OR_NODE_UPGRADES
     outputs: [instructions]
 
-  - id: a3-ultragpu-pool
+  - id: a4-pool
     source: modules/compute/gke-node-pool
-    use: [a3-ultragpu-cluster, node_pool_service_account]
+    use: [a4-cluster, node_pool_service_account]
     settings:
-      machine_type: a3-ultragpu-8g
+      machine_type: a4-highgpu-8g
       auto_upgrade: true
       zones: [$(vars.zone)]
-      disk_size_gb: $(vars.a3ultra_node_pool_disk_size_gb)
+      disk_size_gb: $(vars.a4_node_pool_disk_size_gb)
       static_node_count: $(vars.static_node_count)
       guest_accelerator:
-      - type: nvidia-h200-141gb
+      - type: nvidia-b200
         count: 8
       reservation_affinity:
         consume_reservation_type: SPECIFIC_RESERVATION
@@ -178,8 +213,8 @@ deployment_groups:
       additional_networks:
         $(concat(
           [{
-            network=gke-a3-ultra-net-1.network_name,
-            subnetwork=gke-a3-ultra-net-1.subnetwork_name,
+            network=gke-a4-net-1.network_name,
+            subnetwork=gke-a4-net-1.subnetwork_name,
             subnetwork_project=vars.project_id,
             nic_type="GVNIC",
             queue_count=null,
@@ -189,33 +224,45 @@ deployment_groups:
             ipv6_access_config=[],
             alias_ip_range=[]
           }],
-         gke-a3-ultra-rdma-net.subnetwork_interfaces_gke
+         gke-a4-rdma-net.subnetwork_interfaces_gke
         ))
     outputs: [instructions]
 
   # Install Kueue, Jobset, and NCCL installer
   - id: workload-manager-install
     source: modules/management/kubectl-apply
-    use: [a3-ultragpu-cluster]
+    use: [a4-cluster]
     settings:
       kueue:
         install: true
-        config_path: $(ghpc_stage("kueue-configuration.yaml.tftpl"))
+        config_path: $(vars.kueue_configuration_path)
         config_template_vars:
-          num_gpus: $(a3-ultragpu-pool.static_gpu_count)
-          node_pool_name: $(a3-ultragpu-pool.node_pool_name)
+          num_gpus: $(a4-pool.static_gpu_count)
+          node_pool_name: $(a4-pool.node_pool_names[0])
       jobset:
         install: true
       apply_manifests:
       - source: $(vars.nccl_installer_path)
+      - source: $(vars.mglru_disable_path)
 
-  # Create a remote mount of $(vars.training_bucket_name)
-  # using mount options optimized for reading training
-  # data.
+  - id: job-template
+    source: modules/compute/gke-job-template
+    use: [a4-pool]
+    settings:
+      image: nvidia/cuda:11.0.3-runtime-ubuntu20.04
+      command:
+      - nvidia-smi
+      node_count: $(vars.static_node_count)
+      name: run-nvidia-smi
+      k8s_service_account_name: workload-identity-k8s-sa
+    outputs: [instructions]
+
+  # Create a remote mount of training_bucket using
+  # mount options optimized for reading training data.
   - id: gcs-training
     source: modules/file-system/pre-existing-network-storage
     settings:
-      remote_mount: $(vars.training_bucket_name)
+      remote_mount: $(training_bucket.gcs_bucket_name)
       local_mount: /training-data
       fs_type: gcsfuse
       mount_options: >-
@@ -227,13 +274,12 @@ deployment_groups:
         file-cache:cache-file-for-range-read:true,
         file-system:kernel-list-cache-ttl-secs:-1
 
-  # Create a remote mount of $(vars.checkpoint_bucket_name)
-  # using mount options optimized for writing and reading
-  # checkpoint data.
+  # Create a remote mount of checkpoint_bucket using mount
+  # options optimized for writing and reading checkpoint data.
   - id: gcs-checkpointing
     source: modules/file-system/pre-existing-network-storage
     settings:
-      remote_mount: $(vars.checkpoint_bucket_name)
+      remote_mount: $(checkpoint_bucket.gcs_bucket_name)
       local_mount: /checkpoint-data
       fs_type: gcsfuse
       mount_options: >-
@@ -248,24 +294,24 @@ deployment_groups:
   # Persistent Volume for training data
   - id: training-pv
     source: modules/file-system/gke-persistent-volume
-    use: [gcs-training, a3-ultragpu-cluster]
+    use: [gcs-training, a4-cluster]
     settings:
-      gcs_bucket_name: $(vars.training_bucket_name)
+      gcs_bucket_name: $(training_bucket.gcs_bucket_name)
       capacity_gb: 1000000
 
   # Persistent Volume for checkpoint data
   - id: checkpointing-pv
     source: modules/file-system/gke-persistent-volume
-    use: [gcs-checkpointing, a3-ultragpu-cluster]
+    use: [gcs-checkpointing, a4-cluster]
     settings:
-      gcs_bucket_name: $(vars.checkpoint_bucket_name)
+      gcs_bucket_name: $(checkpoint_bucket.gcs_bucket_name)
       capacity_gb: 1000000
 
   # This is an example job that will install and run an `fio`
   # benchmark against the training and checkpointing buckets.
   - id: fio-bench-job-template
     source: modules/compute/gke-job-template
-    use: [checkpointing-pv, training-pv, a3-ultragpu-pool]
+    use: [checkpointing-pv, training-pv, a4-pool]
     settings:
 
       # By adding an ephemeral volume, this will ensure that the job adds:
@@ -277,7 +323,7 @@ deployment_groups:
         mount_path: /scratch-data
         size_gb: 1000  # Use 1 out of 12 TB for local scratch
 
-      k8s_service_account_name: default
+      k8s_service_account_name: workload-identity-k8s-sa
       image: ubuntu:latest
 
       command:

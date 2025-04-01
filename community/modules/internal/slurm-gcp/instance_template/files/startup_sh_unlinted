@@ -23,6 +23,17 @@ if [[ -z "$HOME" ]]; then
 	HOME="$(getent passwd "$(whoami)" | cut -d: -f6)"
 fi
 
+# Temporary workaround for transition period when some of older images
+# don't have "baked in" python yet.
+# TODO: Remove
+SLURM_PY="/slurm/python/venv/bin/python3.13"
+SYSTEM_PY="/usr/bin/python3"
+if [[ ! -e "$SLURM_PY" ]]; then
+  echo "Symlink $SLURM_PY does not exist. Creating symlink to $SYSTEM_PY"
+  mkdir -p /slurm/python/venv/bin
+  ln -s "$SYSTEM_PY" "$SLURM_PY"
+fi
+
 METADATA_SERVER="metadata.google.internal"
 URL="http://$METADATA_SERVER/computeMetadata/v1"
 CURL="curl -sS --fail --header Metadata-Flavor:Google"
@@ -67,6 +78,9 @@ SCRIPTS_ZIP="$HOME/slurm-gcp-scripts.zip"
 export CLOUDSDK_CORE_UNIVERSE_DOMAIN="$UNIVERSE_DOMAIN"
 until gcloud storage cp "$BUCKET/slurm-gcp-devel.zip" "$SCRIPTS_ZIP"; do
 	echo "WARN: Could not download SlurmGCP scripts, retrying in 5 seconds."
+        # Remove marker used to determine if gcloud is being used in a GCE VM.
+        # This can get mistakenly set to False in some cases.
+	rm -f /root/.config/gcloud/gce
 	sleep 5
 done
 unzip -o "$SCRIPTS_ZIP" -d "$SCRIPTS_DIR"
