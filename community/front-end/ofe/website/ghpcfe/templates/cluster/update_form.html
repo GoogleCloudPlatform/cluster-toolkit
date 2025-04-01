@@ -87,6 +87,64 @@
   </div>
 
   <hr>
+
+  <p style="text-decoration: underline; font-size: large;">Artifact/Container Registries</p>
+
+  <div class="form-group">
+    {{ form.use_containers.errors }}
+    <div class="grid-container">
+      <label class="slider-switch-container">
+        <div class="slider-switch">
+          {{ form.use_containers }}
+          <span class="slider"></span>
+        </div>
+      </label>
+      <div class="help-text">
+        Enable containers for this cluster? Artifact Registry can be configured to store your containers.
+      </div>
+    </div>
+  </div>
+
+  {% load form_extras %}
+  <div class="table-responsive">
+    <table class="table align-middle" id="container_registry_table">
+      {{ container_registry_formset.management_form }}
+  
+      <thead>
+        <tr>
+          {% for field in container_registry_formset.forms.0.visible_fields %}
+            <th>{{ field.label|capfirst }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+  
+      <tbody>
+        {% for form in container_registry_formset.forms %}
+          <tr class="cr_formset_row dynamic-cr">
+            {% for field in form.visible_fields %}
+              <td style="min-width: 100px;">
+                {% if forloop.first %}
+                  {% for hidden in form.hidden_fields %}
+                    {{ hidden }}
+                  {% endfor %}
+                {% endif %}
+  
+                {{ field.errors.as_ul }}
+  
+                {% if field.name in "repo_mirror_url repo_username repo_password" %}
+                  {{ field|add_class:"repo-remote form-control" }}
+                {% else %}
+                  {{ field|add_class:"form-control" }}
+                {% endif %}
+              </td>
+            {% endfor %}
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <hr>
   <p style="text-decoration: underline; font-size: large;">Static Nodes</p>
   <div class="table-responsive">
     <table class="table align-middle">
@@ -296,6 +354,7 @@
 
 {% block tailscript %}
 <script src="{% static 'js/jquery.formset.js' %}"></script>
+
 <script>
   document.addEventListener('DOMContentLoaded', function() {
     const form = document.getElementById('clusterForm');
@@ -304,7 +363,7 @@
         const formDataArray = Array.from(formData.entries()).map(entry => {
             return { [entry[0]]: entry[1] };
         });
-        console.log('Form Data:', formDataArray);
+        // console.log('Final Form Data Before Submission:', formDataArray);
     });
 
     const cloudZoneInput = document.getElementById('id_cloud_zone');
@@ -632,6 +691,19 @@ function deletePartition(partitionId, row) {
     });
 }
 
+  $('#container_registry_table .cr_formset_row').formset({
+    addText: 'add another registry',
+    deleteText: 'Remove',
+    deleteCssClass: 'btn btn-danger delete-row',
+    prefix: '{{ container_registry_formset.prefix }}',
+    formCssClass: 'dynamic-cr',
+    added: function (row) {
+        toggleContainerFields();
+    },
+    removed: function(row) {
+        toggleContainerFields();
+    }
+  });
 
   $('.mp_formset_row').formset({
     addText: 'add mount point',
@@ -641,10 +713,11 @@ function deletePartition(partitionId, row) {
     prefix: 'mount_points',
     formCssClass: 'dynamic-mp',
   });
+
   $('.part_formset_row').formset({
     addText: 'add partition',
     deleteText: 'remove',
-    deleteCssClass: 'btn btn-danger delete-partition',
+    /*deleteCssClass: 'btn btn-danger delete-partition',*/
     prefix: 'partitions',
     formCssClass: 'dynamic-part',
     added: function(row) {
@@ -653,11 +726,77 @@ function deletePartition(partitionId, row) {
         }, // Called each time a new form is added
     removed: function(row) {
         var partitionId = $(row).children('td').eq(0).data('partition-id');
-        console.log("partitionId: ", partitionId);
+        // console.log("partitionId: ", partitionId);
         if (partitionId !== 'new-cluster') {
             deletePartition(partitionId, $(row));
         }
     }
+  });
+</script>
+
+<script>
+  // Toggle the Artifact Registry table based on the `use_containers` checkbox
+  const enableContainersCheckbox = document.getElementById("id_use_containers");
+  const artifactRegistrySection = document.getElementById("container_registry_table");
+
+  function toggleRegistrySection() {
+    if (enableContainersCheckbox.checked) {
+      artifactRegistrySection.style.display = "block";
+    } else {
+      artifactRegistrySection.style.display = "none";
+    }
+  }
+
+  enableContainersCheckbox.addEventListener("change", toggleRegistrySection);
+  // Initialize the correct state on page load:
+  toggleRegistrySection();
+</script>
+
+<script>
+  // Once the document (and formset) is ready:
+  $(document).ready(function () {
+
+    // This function looks at each row in the container registry
+    // and toggles certain fields based on "repo_mode" or "use_public_repository".
+    function toggleContainerFields() {
+      // For each row in the container registry formset:
+      $('.cr_formset_row').each(function () {
+        let row = $(this);
+
+        // Grab certain inputs from that row:
+        let repoMode       = row.find('[name$="-repo_mode"]').val();
+        let usePublicRepo  = row.find('[name$="-use_public_repository"]').prop('checked');
+        let repoMirrorUrl  = row.find('[name$="-repo_mirror_url"]');
+        let repoUsername   = row.find('[name$="-repo_username"]');
+        let repoPassword   = row.find('[name$="-repo_password"]');
+
+        if (repoMode === 'STANDARD_REPOSITORY') {
+          // For standard repos, no mirror URL or credentials needed. Disable them.
+          repoMirrorUrl.prop('disabled', true).val('');
+          repoUsername.prop('disabled', true).val('');
+          repoPassword.prop('disabled', true).val('');
+        }
+        else if (repoMode === 'REMOTE_REPOSITORY') {
+          // Remote repos can have an optional mirror URL, etc. Re-enable them:
+          repoMirrorUrl.prop('disabled', false);
+          repoUsername.prop('disabled', false);
+          repoPassword.prop('disabled', false);
+
+          // If "use_public_repository" is checked, remove the mirror URL
+          if (usePublicRepo) {
+            repoMirrorUrl.prop('disabled', true).val('');
+          }
+        }
+      });
+    }
+
+    // Initially toggle once on page load
+    toggleContainerFields();
+
+    // Re-run toggles whenever 'repo_mode' or 'use_public_repository' changes
+    $(document).on('change', '[name$="-repo_mode"], [name$="-use_public_repository"]', function () {
+      toggleContainerFields();
+    });
   });
 </script>
 
@@ -765,6 +904,10 @@ function deletePartition(partitionId, row) {
     gap: 10px;
     /* Adjust the gap as needed */
     width: 100%;
+  }
+
+  .hidden {
+    display: none !important;
   }
 </style>
 {% endblock %}

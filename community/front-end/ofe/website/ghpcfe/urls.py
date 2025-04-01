@@ -26,6 +26,8 @@ from .views.clusters import *
 from .views.applications import *
 from .views.jobs import *
 from .views.benchmarks import *
+from .views.registries import *
+from .views.containers import *
 from .views.workbench import *
 from .views.users import *
 from .views.vpc import *
@@ -126,9 +128,19 @@ urlpatterns += [
         name="application-create-install",
     ),
     path(
+        "application/create_install/<int:cluster>",
+        ContainerApplicationCreateView.as_view(),
+        name="application-create-install",
+    ),
+    path(
         "application/create_spack/<int:cluster>",
         SpackApplicationCreateView.as_view(),
         name="application-create-spack-cluster",
+    ),
+    path(
+        "application/create_container/<int:cluster>",
+        ContainerApplicationCreateView.as_view(),
+        name="application-create-container",
     ),
     path("job/create/<int:app>", JobCreateView.as_view(), name="job-create"),
     path(
@@ -345,6 +357,30 @@ urlpatterns += [
     path("user/detail/<int:pk>", UserDetailView.as_view(), name="user-detail"),
     path(
         "user/admin/<int:pk>", UserAdminUpdateView.as_view(), name="user-admin"
+    ),
+]
+
+# Registries endpoints
+urlpatterns += [
+    path("registry/", RegistryListView.as_view(), name="registry"),
+    path("registry/<int:pk>/", RegistryDetailView.as_view(), name="registry-detail"),
+    path("registry/<int:pk>/delete/", RegistryDeleteView.as_view(), name="registry-delete"),
+]
+
+# Containers endpoints nested under a registry
+urlpatterns += [
+    path('registry/<int:registry_id>/containers/pull/', PullToArtifactRegistryView.as_view(), name='pull-container'),
+    path('registry/<int:registry_id>/containers/status/', ContainerBuildStatusView.as_view(), name='container-status'),
+    path('registry/<int:registry_id>/containers/', RegistryContainersView.as_view(), name='registry-containers'),
+    path(
+        "registry/<int:registry_id>/containers/images/",
+        GetContainerImagesView.as_view(),
+        name="registry-container-images",
+    ),
+    path(
+        "registry/<int:registry_id>/containers/<path:image_name>/delete/",
+        DeleteContainerView.as_view(),
+        name="delete-container"
     ),
 ]
 

@@ -370,3 +370,84 @@ def send_update(cluster_id, comm_id, data):
 
 def register_command(command_id, callback):
     _c2_callbackMap[command_id] = callback
+
+def _cloud_build_logs_callback(message):
+    import json
+    try:
+        raw_data = message.data.decode("utf-8")
+        logger.debug("Received Pub/Sub message: %s", raw_data)
+        log_entry = json.loads(raw_data)
+        logger.debug("Parsed log entry: %s", log_entry)
+
+        # Try to get the full build object from jsonPayload or protoPayload.
+        build = log_entry.get("jsonPayload", {}).get("build")
+        if not build:
+            build = log_entry.get("protoPayload", {}).get("build")
+
+        # If still no build object, use fallback: look for final step messages.
+        if not build:
+            build_id = log_entry.get("resource", {}).get("labels", {}).get("build_id")
+            text = log_entry.get("textPayload", "").strip().upper()
+            if text in ["DONE", "PUSH"]:
+                status_str = "SUCCESS"
+                logger.info("Interpreting textPayload '%s' as final success for build_id=%s", text, build_id)
+            elif "FAIL" in text or "ERROR" in text or "CANCELLED" in text or "FAILED" in text:
+                status_str = "FAILURE"
+                logger.info("Interpreting textPayload '%s' as failure for build_id=%s", text, build_id)
+            else:
+                logger.debug("Ignoring non-final log for build_id=%s with textPayload: %s", build_id, text)
+                message.ack()
+                return
+        else:
+            build_id = build.get("id")
+            status_str = build.get("status")
+            logger.info("Extracted build object: build_id=%s, status=%s", build_id, status_str)
+
+        logger.info("Processing Cloud Build log for build_id=%s with status=%s", build_id, status_str)
+
+        # Only update if final status is reached.
+        if status_str in ["SUCCESS", "FAILURE", "CANCELLED", "ERROR"]:
+            from ..models import ContainerRegistry
+            updated_count = 0
+            for reg in ContainerRegistry.objects.all():
+                modified = False
+                for binfo in reg.build_info:
+                    if binfo.get("build_id") == build_id:
+                        logger.info("Before update for build_id=%s: current status=%s", build_id, binfo.get("status"))
+                        if status_str == "SUCCESS":
+                            binfo["status"] = "s"
+                        elif status_str in ["FAILURE", "CANCELLED", "ERROR"]:
+                            binfo["status"] = "f"
+                        logger.info("After update for build_id=%s: new status=%s", build_id, binfo["status"])
+                        modified = True
+                if modified:
+                    logger.info("Saving updated status for build_id=%s in registry ID %s", build_id, reg.id)
+                    reg.save(update_fields=["build_info"])
+                    updated_count += 1
+            if updated_count:
+                logger.info("Updated %d ContainerRegistry record(s) for build_id=%s", updated_count, build_id)
+            else:
+                logger.warning("No ContainerRegistry record updated for build_id=%s", build_id)
+        else:
+            logger.debug("Log for build_id=%s has non-final status (%s); no DB update.", build_id, status_str)
+
+        message.ack()
+        logger.debug("Message acknowledged for build_id=%s", build_id)
+
+    except Exception as e:
+        logger.exception("Error processing Cloud Build log entry: %s", e)
+        message.nack()
+
+
+def start_cloud_build_log_subscriber():
+    conf = utils.load_config()
+    project_id = conf["server"]["gcp_project"]
+    deployment_name = conf["server"]["deployment_name"]
+    subscription_id = f"{deployment_name}-build-logs-sub"
+
+    subscriber = pubsub.SubscriberClient()
+    subscription_path = subscriber.subscription_path(project_id, subscription_id)
+
+    logger.info("Starting Cloud Build subscription: %s", subscription_path)
+    subscriber.subscribe(subscription_path, callback=_cloud_build_logs_callback)
+    logger.info("Cloud Build subscriber started.")

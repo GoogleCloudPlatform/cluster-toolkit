@@ -22,3 +22,4 @@
   - common
   - dev_env
   - spack_setup
+  - {role: containers, when: use_containers | bool}

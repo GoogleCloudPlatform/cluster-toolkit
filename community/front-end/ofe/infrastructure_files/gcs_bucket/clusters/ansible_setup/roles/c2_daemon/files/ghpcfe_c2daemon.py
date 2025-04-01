@@ -757,15 +757,63 @@ def _submit_job(
     # TODO: Add things like ranksPerNode, threadsPerRank, wall time
     nranks = num_nodes
     extra_sbatch = ""
-    if "ranksPerNode" in kwargs:
-        extra_sbatch += f"#SBATCH --ntasks-per-node={kwargs['ranksPerNode']}\n"
-        nranks = num_nodes * kwargs["ranksPerNode"]
-    if "threadsPerRank" in kwargs:
-        extra_sbatch += f"#SBATCH --cpus-per-task={kwargs['threadsPerRank']}\n"
+
+    is_container_job = kwargs.get("is_container_job", False)
+
+    if is_container_job:
+        logger.debug("Applying container-specific SBATCH configuration.")
+        extra_sbatch += f"#SBATCH --cpus-per-task={kwargs['ranksPerNode']}\n"
+    else:
+        if "ranksPerNode" in kwargs:
+            extra_sbatch += f"#SBATCH --ntasks-per-node={kwargs['ranksPerNode']}\n"
+            nranks = num_nodes * kwargs["ranksPerNode"]
+        if "threadsPerRank" in kwargs:
+            extra_sbatch += f"#SBATCH --cpus-per-task={kwargs['threadsPerRank']}\n"
+
     if "wall_limit" in kwargs:
         extra_sbatch += f"#SBATCH --time={kwargs['wall_limit']}\n"
     if "gpus_per_node" in kwargs:
         extra_sbatch += f"#SBATCH --gpus={kwargs['gpus_per_node']}\n"
+
+    # Container-specific settings
+    if is_container_job:
+        logger.debug("Applying container SBATCH lines because is_container_job=True")
+
+        if "container_image_uri" in kwargs:
+            token = subprocess.check_output(["gcloud", "auth", "print-access-token"]).strip().decode("utf-8")
+            extra_sbatch += f"#SBATCH --container-image=docker://oauth2accesstoken:{token}@{kwargs['container_image_uri']}\n"
+
+        if "container_mounts" in kwargs:
+            extra_sbatch += f"#SBATCH --container-mounts={kwargs['container_mounts']}\n"
+
+        if "container_envvars" in kwargs:
+            extra_sbatch += f"#SBATCH --container-env={kwargs['container_envvars']}\n"
+
+        if "container_workdir" in kwargs:
+            extra_sbatch += f"#SBATCH --container-workdir={kwargs['container_workdir']}\n"
+
+        # Booleans: set them explicitly if present, else skip
+        if kwargs.get("container_writable", True):
+            extra_sbatch += "#SBATCH --container-writable\n"
+        else:
+            extra_sbatch += "#SBATCH --container-readonly\n"
+
+        if kwargs.get("container_use_entrypoint", False):
+            extra_sbatch += "#SBATCH --container-entrypoint\n"
+        else:
+            extra_sbatch += "#SBATCH --no-container-entrypoint\n"
+
+        if kwargs.get("container_remap_root", True):
+            extra_sbatch += "#SBATCH --container-remap-root\n"
+        else:
+            extra_sbatch += "#SBATCH --no-container-remap-root\n"
+
+        if kwargs.get("container_mount_home", True):
+            extra_sbatch += "#SBATCH --container-mount-home\n"
+        else:
+            extra_sbatch += "#SBATCH --no-container-mount-home\n"
+    else:
+        logger.debug("Skipping container SBATCH lines because is_container_job=False or not present.")
 
     # Download input data, if specified
     download_command = ""
@@ -784,6 +832,10 @@ def _submit_job(
         # Convert numbers into strings for sbatch
         u_name = pwd.getpwuid(uid).pw_name
         u_grname = grp.getgrgid(gid).gr_name
+        spack_setup_line = ""
+        if not is_container_job:
+            spack_setup_line = f". {spack_path}/share/spack/setup-env.sh"
+
         fileh.write(
             f"""#!/bin/bash
 #SBATCH --partition={partition}
@@ -791,7 +843,7 @@ def _submit_job(
 #SBATCH --uid={u_name}
 #SBATCH --gid={u_grname}
 #SBATCH --nodes={num_nodes}
-#SBATCH --ntasks={nranks}
+#SBATCH --ntasks={1 if is_container_job else nranks}
 #SBATCH --job-name=job_{job_id}
 #SBATCH --output={outfile.as_posix()}
 #SBATCH --error={errfile.as_posix()}
@@ -802,7 +854,7 @@ set -e
 
 cd {job_dir.as_posix()}
 
-. {spack_path}/share/spack/setup-env.sh
+{spack_setup_line}
 {kwargs.get('load_command', '')}
 
 {download_command}

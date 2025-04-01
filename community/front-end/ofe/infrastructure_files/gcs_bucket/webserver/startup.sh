@@ -32,6 +32,7 @@ SERVER_HOSTNAME=$(curl --silent --fail http://metadata/computeMetadata/v1/instan
 config_bucket=$(curl --silent --show-error http://metadata/computeMetadata/v1/instance/attributes/webserver-config-bucket -H "Metadata-Flavor: Google")
 c2_topic=$(curl --silent --show-error http://metadata/computeMetadata/v1/instance/attributes/ghpcfe-c2-topic -H "Metadata-Flavor: Google")
 deploy_mode=$(curl --silent --show-error http://metadata/computeMetadata/v1/instance/attributes/deploy_mode -H "Metadata-Flavor: Google")
+deployment_name=$(curl --silent --show-error http://metadata/computeMetadata/v1/instance/attributes/deployment_name -H "Metadata-Flavor: Google")
 
 # Exit if deployment already exists to stop startup script running on reboots
 #
@@ -48,6 +49,7 @@ printf "####################\n#### Installing required packages\n###############
 dnf install -y epel-release
 dnf update -y --security
 dnf config-manager --add-repo https://rpm.releases.hashicorp.com/RHEL/hashicorp.repo
+
 dnf install -y terraform
 dnf install --best -y google-cloud-sdk nano make gcc python3.12-devel unzip git \
 	rsync wget nginx bind-utils policycoreutils-python-utils \
@@ -76,12 +78,14 @@ EOL
 
 dnf install -y grafana
 
+python3.12 -m ensurepip --upgrade
+
 pip3.12 install google-api-python-client \
 	google-cloud-secret-manager \
 	google.cloud.pubsub \
 	pyyaml addict httplib2
 
-# Set Python3.8 as default Python3
+# Set Python3.12 as default Python3
 echo '2' | update-alternatives --config python3
 # Download configuration file
 #
@@ -203,7 +207,8 @@ sudo su - gcluster -c /bin/bash <<EOF
   echo "    gcp_project: \"$GCP_PROJECT\"" >> configuration.yaml
   echo "    gcs_bucket: \"${config_bucket}\"" >> configuration.yaml
   echo "    c2_topic: \"${c2_topic}\"" >> configuration.yaml
-
+  echo "    deployment_name: \"${deployment_name}\"" >> configuration.yaml
+  
   printf "\nInitalising Django environments...\n"
   mkdir /opt/gcluster/run
   pushd website

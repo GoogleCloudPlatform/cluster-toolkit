@@ -46,7 +46,7 @@ urlpatterns += [
 urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
 
 # customise admin site
-admin.site.site_header = "Cluster Toolkit FrontEnd Admin Site"
+admin.site.site_header = "Cluster Toolkit OpenFrontEnd Admin Site"
 admin.site.index_title = "Administration"
 admin.site.site_title = "Administration site"
 

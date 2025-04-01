@@ -28,7 +28,9 @@ locals {
     "logging.logWriter",
     "monitoring.metricWriter",
     "cloudtrace.agent",
-    "pubsub.admin"
+    "pubsub.admin",
+    "artifactregistry.admin",
+    "secretmanager.admin"
   ]
 
   deploy_key1 = var.deployment_key != "" ? filebase64(var.deployment_key) : ""
@@ -150,6 +152,7 @@ resource "google_compute_instance" "server_vm" {
     ghpcfe-c2-topic         = module.pubsub.topic,
     hostname                = var.webserver_hostname
     deploy_mode             = var.deployment_mode
+    deployment_name         = var.deployment_name
   }
 
   service_account {
@@ -186,4 +189,54 @@ resource "google_compute_instance" "server_vm" {
     }
   }
 
+}
+
+
+resource "google_pubsub_topic" "cloud_build_logs" {
+  name    = "${var.deployment_name}-build-logs"
+  project = var.project_id
+
+  labels = {
+    environment = "dev"
+  }
+}
+
+
+resource "google_logging_project_sink" "build_sink" {
+  name    = "${var.deployment_name}-build-sink"
+  project = var.project_id
+  # Filter for "resource.type=build" ensures only Cloud Build logs match.
+  filter = "resource.type=\"build\""
+  # Pub/Sub topic you just created
+  destination = "pubsub.googleapis.com/projects/${var.project_id}/topics/${google_pubsub_topic.cloud_build_logs.name}"
+}
+
+
+# 3) Grant sink “writer identity” permission to publish to your new topic
+resource "google_pubsub_topic_iam_member" "build_sink_pub" {
+  project = var.project_id
+  topic   = google_pubsub_topic.cloud_build_logs.name
+  role    = "roles/pubsub.publisher"
+
+  # The sink's writer_identity is a service account that Google auto-creates
+  member = google_logging_project_sink.build_sink.writer_identity
+}
+
+
+# 4) Create a new pull subscription for your Django app
+resource "google_pubsub_subscription" "cloud_build_logs_sub" {
+  name    = "${var.deployment_name}-build-logs-sub"
+  topic   = google_pubsub_topic.cloud_build_logs.name
+  project = var.project_id
+
+  ack_deadline_seconds = 30
+  expiration_policy {
+    ttl = "" # Messages never expire
+  }
+  # Retain messages for up to 7 days (example)
+  message_retention_duration = "604800s"
+
+  labels = {
+    environment = "dev"
+  }
 }

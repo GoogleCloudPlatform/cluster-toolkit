@@ -14,3 +14,4 @@
 
 ---
 spack_dir: "{{ ansible_local.ghpcfe.config.spack_dir }}"
+use_containers: "{{ ansible_local.ghpcfe.config.use_containers }}"
