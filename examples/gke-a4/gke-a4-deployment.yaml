@@ -45,3 +45,7 @@ vars:
   # In order to target a BLOCK_NAME, extended_reservation can be inputted as
   # <project>/<reservation-name>/reservationBlocks/<reservation-block-name>
   extended_reservation:
+
+  system_node_pool_disk_size_gb: 200
+
+  a4_node_pool_disk_size_gb: 100
