@@ -88,6 +88,8 @@ deployment_groups:
       k8s_network_names:
         gvnic_prefix: vpc
         gvnic_start_index: 1
+      version_prefix: "1.32."
+      release_channel: RAPID
     outputs: [instructions]
 
   - id: a3_megagpu_pool
