@@ -72,6 +72,7 @@ deployment_groups:
       master_authorized_networks:
       - display_name: deployment-machine
         cidr_block: $(vars.authorized_cidr)
+      system_node_pool_enabled: false
       configure_workload_identity_sa: true
     outputs: [instructions]
 
