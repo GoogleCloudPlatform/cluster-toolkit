@@ -58,9 +58,6 @@ duplicates = [
         "community/modules/scripts/ramble-setup/scripts/install_ramble_deps.yml",
     ],
     [
-        "community/modules/scheduler/schedmd-slurm-gcp-v6-controller/etc/long-prolog-slurm.conf.tpl",
-    ],
-    [
         "modules/file-system/parallelstore/scripts/install-daos-client.sh",
         "modules/file-system/pre-existing-network-storage/scripts/install-daos-client.sh",
     ],
