@@ -46,6 +46,6 @@ vars:
   # <project>/<reservation-name>/reservationBlocks/<reservation-block-name>
   extended_reservation:
 
-  system_node_pool_disk_size_gb: 200
+  system_node_pool_disk_size_gb:
 
-  a4_node_pool_disk_size_gb: 100
+  a4_node_pool_disk_size_gb:
