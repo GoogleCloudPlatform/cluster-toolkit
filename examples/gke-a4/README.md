@@ -1,6 +1,6 @@
-# Create a GKE Cluster with A4 High nodes
+# Create a GKE Cluster with A4 nodes
 
-This example shows how to create your own [Hypercompute Cluster](https://cloud.google.com/ai-hypercomputer/docs/hypercompute-cluster) with Google Kubernetes Engine (GKE) to support your AI and ML workloads, using A4 High GPUs.
+This example shows how to create your own [Hypercompute Cluster](https://cloud.google.com/ai-hypercomputer/docs/hypercompute-cluster) with Google Kubernetes Engine (GKE) to support your AI and ML workloads, using A4 GPUs.
 
 GKE is the open, portable, extensible, and highly scalable platform for Hypercompute Cluster. GKE provides a single platform surface to run a diverse set of workloads for your organization's needs. This includes high performance distributed pre-training, model fine-tuning, model inference, application serving, and supporting services. GKE reduces the operational burden of managing multiple platforms.
 
@@ -15,7 +15,7 @@ Before you start, make sure you have performed the following tasks:
 * If you want to use the Google Cloud CLI for this task, [install](https://cloud.google.com/sdk/docs/install) and then [initialize](https://cloud.google.com/sdk/docs/initializing) the gcloud CLI. If you previously installed the gcloud CLI, get the latest version by running gcloud components update.
   > **NOTE:** For existing gcloud CLI installations, make sure to set the compute/region and compute/zone properties. By setting default locations, you can avoid errors in gcloud CLI like the following: One of [--zone, --region] must be supplied: Please specify location.
 
-* Ensure that you have enough quota for A4 High GPUs. To request more quota,
+* Ensure that you have enough quota for A4 GPUs. To request more quota,
   follow the instructions in [GPU quota](https://cloud.google.com/compute/resource-usage#gpu_quota). To ensure that your cluster has capacity, you can follow the instructions to [reserve capacity](#reserve-capacity).
 
 * Ensure that you have the following roles enabled:
@@ -27,13 +27,13 @@ Before you start, make sure you have performed the following tasks:
 
 The following requirements apply to GKE Hypercompute Cluster:
 
-* The B200 GPUs in A4 High VMs require a minimum of 570 GPU driver version, which is available in GKE 1.32 as `LATEST` driver version. For A4 High, you must set `gpu_driver_version: "LATEST"` with GKE 1.32.
+* The B200 GPUs in A4 VMs require a minimum of 570 GPU driver version, which is available in GKE 1.32 as `LATEST` driver version. For A4, you must set `gpu_driver_version: "LATEST"` with GKE 1.32.
 * To use GPUDirect RDMA, use GKE patch version 1.32.1-gke.1420000 or higher.
 * To use GPUDirect RDMA, the GKE nodes must use a Container-Optimized OS node image. Ubuntu and Windows node images are not supported.
 
 ## Reserve capacity
 
-To ensure that your workloads have the A4 High GPU resources required for these instructions, you can create a [future reservation request](https://cloud.google.com/compute/docs/instances/future-reservations-overview). With this request, you can reserve blocks of capacity for a defined duration in the future. At that date and time in the future, Compute Engine automatically provisions the blocks of capacity by creating on-demand reservations that you can immediately consume by provisioning node pools for this cluster.
+To ensure that your workloads have the A4 GPU resources required for these instructions, you can create a [future reservation request](https://cloud.google.com/compute/docs/instances/future-reservations-overview). With this request, you can reserve blocks of capacity for a defined duration in the future. At that date and time in the future, Compute Engine automatically provisions the blocks of capacity by creating on-demand reservations that you can immediately consume by provisioning node pools for this cluster.
 
 Additionally, as your reserved capacity might span multiple
 [blocks](https://cloud.google.com/ai-hypercomputer/docs/terminology#block), we recommend that you create GKE nodes on a specific block within your reservation.
@@ -105,29 +105,29 @@ This section guides you through the cluster creation process, ensuring that your
    * `BUCKET_NAME`: the name of the new Cloud Storage bucket.
    * `COMPUTE_REGION`: the compute region where you want to store the state of the Terraform deployment.
 
-1. In the [`examples/gke-a4-highgpu/gke-a4-highgpu-deployment.yaml`](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/develop/examples/gke-a4-highgpu/gke-a4-highgpu-deployment.yaml) file, replace the following variables in the `terraform_backend_defaults` and `vars` sections to match the specific values for your deployment:
+1. In the [`examples/gke-a4/gke-a4-deployment.yaml`](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/develop/examples/gke-a4/gke-a4-deployment.yaml) file, replace the following variables in the `terraform_backend_defaults` and `vars` sections to match the specific values for your deployment:
 
    * `bucket`: the name of the Cloud Storage bucket you created in the previous step.
    * `project_id`: your Google Cloud project ID.
    * `region`: the compute region for the cluster.
-   * `zone`: the compute zone for the node pool of A4 High machines.
+   * `zone`: the compute zone for the node pool of A4 machines.
    * `authorized_cidr`: The IP address range that you want to allow to connect with the cluster. This CIDR block must include the IP address of the machine to call Terraform.
    * `extended_reservation`: the name of your reservation in the form of <project>/<reservation-name>/reservationBlocks/<reservation-block-name>
-   * `static_node_count`: the number of A4 High nodes in your cluster.
+   * `static_node_count`: the number of A4 nodes in your cluster.
 
   To modify advanced settings, edit
-  `examples/gke-a4-highgpu/gke-a4-highgpu.yaml`.
+  `examples/gke-a4/gke-a4.yaml`.
 
 1. Generate [Application Default Credentials (ADC)](https://cloud.google.com/docs/authentication/provide-credentials-adc#google-idp) to provide access to Terraform.
 
 1. Deploy the blueprint to provision the GKE  infrastructure
-    using A4 High machine types:
+    using A4 machine types:
 
    ```sh
    cd ~/cluster-toolkit
    ./gcluster deploy -d \
-    examples/gke-a4-highgpu/gke-a4-highgpu-deployment.yaml \
-    examples/gke-a4-highgpu/gke-a4-highgpu.yaml
+    examples/gke-a4/gke-a4-deployment.yaml \
+    examples/gke-a4/gke-a4.yaml
    ```
 
 ## Deploy and run NCCL test with Topology Aware Scheduling (TAS)
@@ -138,13 +138,13 @@ complete the following steps.
 1. Connect to your cluster:
 
     ```sh
-    gcloud container clusters get-credentials gke-a4-high
+    gcloud container clusters get-credentials gke-a4
     ```
 
 1. Deploy an all-gather NCCL performance test with Topology Aware Scheduling
-    enabled by using the [nccl-jobset-example.yaml](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/develop/examples/gke-a4-highgpu/nccl-jobset-example.yaml) file.
+    enabled by using the [nccl-jobset-example.yaml](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/develop/examples/gke-a4/nccl-jobset-example.yaml) file.
 
-    By default, this test uses four nodes. To change the number of nodes,
+    By default, this test uses two nodes. To change the number of nodes,
     modify the YAML file to change the following values from `2` to your required
     number of nodes:
 
@@ -155,7 +155,7 @@ complete the following steps.
     Create the resources to run the test:
 
     ```sh
-    kubectl create -f ~/cluster-toolkit/examples/gke-a4-highgpu/nccl-jobset-example.yaml
+    kubectl create -f ~/cluster-toolkit/examples/gke-a4/nccl-jobset-example.yaml
     ```
 
     This command returns a JobSet name.
@@ -228,5 +228,5 @@ complete the following steps.
 To avoid recurring charges for the resources used on this page, clean up the resources provisioned by Cluster Toolkit, including the VPC networks and GKE cluster:
 
    ```sh
-   ./gcluster destroy gke-a4-high/
+   ./gcluster destroy gke-a4/
    ```

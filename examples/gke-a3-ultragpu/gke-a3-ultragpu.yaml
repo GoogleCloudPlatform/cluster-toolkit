@@ -22,6 +22,8 @@ vars:
   # Cidr block containing the IP of the machine calling terraform.
   # The following line must be updated for this example to work.
   authorized_cidr: # add this
+  # In order to target a BLOCK_NAME, extended_reservation can be inputted as
+  # extended_reservation: RESERVATION_NAME/reservationBlocks/BLOCK_NAME
   extended_reservation: # add this
   # Installs NCCL library and Google NCCL plugin
   # Runs an init container on all H200 GPU nodes with the NCCL plugin image
@@ -116,6 +118,24 @@ deployment_groups:
       - storage.objectAdmin
       - artifactregistry.reader
 
+  - id: training_bucket
+    source: community/modules/file-system/cloud-storage-bucket
+    settings:
+      local_mount: /training-data
+      name_prefix: training
+      random_suffix: true
+      force_destroy: false
+      enable_hierarchical_namespace: true
+
+  - id: checkpoint_bucket
+    source: community/modules/file-system/cloud-storage-bucket
+    settings:
+      local_mount: /checkpoint-data
+      name_prefix: checkpoint
+      random_suffix: true
+      force_destroy: false
+      enable_hierarchical_namespace: true
+
   - id: a3-ultragpu-cluster
     source: modules/scheduler/gke-cluster
     use: [gke-a3-ultra-net-0, workload_service_account]
@@ -201,7 +221,7 @@ deployment_groups:
         config_path: $(vars.kueue_configuration_path)
         config_template_vars:
           num_gpus: $(a3-ultragpu-pool.static_gpu_count)
-          node_pool_name: $(a3-ultragpu-pool.node_pool_name)
+          node_pool_name: $(a3-ultragpu-pool.node_pool_names[0])
       jobset:
         install: true
       apply_manifests:
@@ -218,4 +238,127 @@ deployment_groups:
       node_count: 2
       name: run-nvidia-smi
       k8s_service_account_name: $(vars.k8s_service_account_name)
+    outputs: [instructions]
+
+  # Create a remote mount of training_bucket using
+  # mount options optimized for reading training data.
+  - id: gcs-training
+    source: modules/file-system/pre-existing-network-storage
+    settings:
+      remote_mount: $(training_bucket.gcs_bucket_name)
+      local_mount: /training-data
+      fs_type: gcsfuse
+      mount_options: >-
+        implicit-dirs,
+        metadata-cache:ttl-secs:-1,
+        metadata-cache:stat-cache-max-size-mb:-1,
+        metadata-cache:type-cache-max-size-mb:-1,
+        file-cache:max-size-mb:-1,
+        file-cache:cache-file-for-range-read:true,
+        file-system:kernel-list-cache-ttl-secs:-1
+
+# Create a remote mount of checkpoint_bucket using mount
+  # options optimized for writing and reading checkpoint data.
+  - id: gcs-checkpointing
+    source: modules/file-system/pre-existing-network-storage
+    settings:
+      remote_mount: $(checkpoint_bucket.gcs_bucket_name)
+      local_mount: /checkpoint-data
+      fs_type: gcsfuse
+      mount_options: >-
+        implicit-dirs,
+        metadata-cache:ttl-secs:0,
+        file-cache:max-size-mb:-1,
+        file-cache:cache-file-for-range-read:true,
+        file-system:kernel-list-cache-ttl-secs:0,
+        file-cache:enable-parallel-downloads:true,
+        rename-dir-limit=200000
+
+  # Persistent Volume for training data
+  - id: training-pv
+    source: modules/file-system/gke-persistent-volume
+    use: [gcs-training, a3-ultragpu-cluster]
+    settings:
+      gcs_bucket_name: $(training_bucket.gcs_bucket_name)
+      capacity_gb: 1000000
+
+  # Persistent Volume for checkpoint data
+  - id: checkpointing-pv
+    source: modules/file-system/gke-persistent-volume
+    use: [gcs-checkpointing, a3-ultragpu-cluster]
+    settings:
+      gcs_bucket_name: $(checkpoint_bucket.gcs_bucket_name)
+      capacity_gb: 1000000
+
+  # This is an example job that will install and run an `fio`
+  # benchmark against the training and checkpointing buckets.
+  - id: fio-bench-job-template
+    source: modules/compute/gke-job-template
+    use: [checkpointing-pv, training-pv, a3-ultragpu-pool]
+    settings:
+
+      # By adding an ephemeral volume, this will ensure that the job adds:
+      # nodeSelector:
+      #   cloud.google.com/gke-ephemeral-storage-local-ssd: "true"
+      # which is the best practice for using local-ssd for ephemeral storage.
+      ephemeral_volumes:
+      - type: local-ssd
+        mount_path: /scratch-data
+        size_gb: 1000  # Use 1 out of 12 TB for local scratch
+
+      k8s_service_account_name: default
+      image: ubuntu:latest
+
+      command:
+      - bash
+      - -c
+      - |
+
+        set -eux
+        export DEBIAN_FRONTEND=noninteractive
+
+        # Install fio
+        apt update -y && apt install -y fio
+
+        # Use a tag to create a unique path for tests
+        TAG=`date +%s`
+
+        # Verify mountpoints
+        df -h
+        mountpoint /scratch-data
+        mountpoint /checkpoint-data
+        mountpoint /training-data
+
+        # Create temporary directory for fio benchmarks
+        mkdir -p /{scratch,training,checkpoint}-data/fio-benchmarks-${TAG}
+
+        # The following will take roughly 10 minutes to complete
+
+        # Perform scratch data write performance test
+        fio --ioengine=libaio --filesize=10G --ramp_time=2s --runtime=1m \
+          --numjobs=32 --create_serialize=0 --direct=1 --verify=0 \
+          --randrepeat=0 --group_reporting --directory=/scratch-data/fio-benchmarks-${TAG} \
+          --name=scratch --blocksize=100m --iodepth=64 --readwrite=write
+
+        # Perform training data reading performance test
+        fio --ioengine=libaio --filesize=1G --ramp_time=2s --runtime=1m \
+          --numjobs=32 --create_serialize=0 --direct=1 --verify=0 \
+          --randrepeat=0 --group_reporting --directory=/training-data/fio-benchmarks-${TAG} \
+          --name=training --blocksize=1m --iodepth=64 --readwrite=randread
+
+        # Perform checkpoint data writing performance test
+        fio --ioengine=libaio --filesize=10G --ramp_time=2s --runtime=1m \
+          --numjobs=32 --create_serialize=0 --direct=1 --verify=0 \
+          --randrepeat=0 --group_reporting --directory=/checkpoint-data/fio-benchmarks-${TAG} \
+          --name=checkpoint --blocksize=100m --iodepth=64 --readwrite=write
+
+        # Perform checkpoint data reading performance test
+        fio --ioengine=libaio --filesize=10G --ramp_time=2s --runtime=1m \
+          --numjobs=32 --create_serialize=0 --direct=1 --verify=0 \
+          --randrepeat=0 --group_reporting --directory=/checkpoint-data/fio-benchmarks-${TAG} \
+          --name=checkpoint --blocksize=100m --iodepth=64 --readwrite=read
+
+        # Clean up temporary directories for fio benchmarks
+        rm -rf /{scratch,training,checkpoint}-data/fio-benchmarks-${TAG}
+
     outputs: [instructions]

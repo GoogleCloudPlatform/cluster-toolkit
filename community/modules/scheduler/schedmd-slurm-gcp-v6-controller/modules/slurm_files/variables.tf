@@ -171,6 +171,27 @@ EOD
   default     = 300
 }
 
+variable "enable_chs_gpu_health_check_prolog" {
+  description = <<EOD
+Enable a Cluster Health Sacnner(CHS) GPU health check that slurmd executes as a prolog script whenever it is asked to run a job step from a new job allocation. Compute nodes that fail GPU health check during prolog will be marked as drained. Find more details at:
+https://github.com/GoogleCloudPlatform/cluster-toolkit/tree/main/docs/CHS-Slurm.md
+EOD
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
+variable "enable_chs_gpu_health_check_epilog" {
+  description = <<EOD
+Enable a Cluster Health Sacnner(CHS) GPU health check that slurmd executes as an epilog script after completing a job step from a new job allocation.
+Compute nodes that fail GPU health check during epilog will be marked as drained. Find more details at:
+https://github.com/GoogleCloudPlatform/cluster-toolkit/tree/main/docs/CHS-Slurm.md
+EOD
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
 variable "prolog_scripts" {
   description = <<EOD
 List of scripts to be used for Prolog. Programs for the slurmd to execute
@@ -231,8 +252,13 @@ EOD
 variable "disable_default_mounts" {
   description = <<-EOD
     Disable default global network storage from the controller
+    - /usr/local/etc/slurm
+    - /etc/munge
     - /home
     - /apps
+    If these are disabled, the slurm etc and munge dirs must be added manually,
+    or some other mechanism must be used to synchronize the slurm conf files
+    and the munge key across the cluster.
     EOD
   type        = bool
   default     = false
@@ -420,9 +446,13 @@ EOD
   default     = null
 }
 
-variable "slurm_key_mount" {
+variable "munge_mount" {
   description = <<-EOD
-  Remote mount for compute and login nodes to acquire the slurm.key.
+  Remote munge mount for compute and login nodes to acquire the munge.key.
+
+  By default, the munge mount server will be assumed to be the
+  `var.slurm_control_host` (or `var.slurm_control_addr` if non-null) when
+  `server_ip=null`.
   EOD
   type = object({
     server_ip     = string
@@ -430,7 +460,12 @@ variable "slurm_key_mount" {
     fs_type       = string
     mount_options = string
   })
-  default = null
+  default = {
+    server_ip     = null
+    remote_mount  = "/etc/munge/"
+    fs_type       = "nfs"
+    mount_options = ""
+  }
 }
 
 variable "endpoint_versions" {

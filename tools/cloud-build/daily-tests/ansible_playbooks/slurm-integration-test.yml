@@ -198,9 +198,9 @@
     - name: Gather facts
       ansible.builtin.setup:
 
-    - name: Wait until Slurm is configure
+    - name: Wait until Munge is active
       ansible.builtin.wait_for:
-        path: /slurm/slurm_configured_do_not_remove
+        path: /var/run/munge/munge.socket.2
         timeout: 600
 
     - name: Count Slurm nodes

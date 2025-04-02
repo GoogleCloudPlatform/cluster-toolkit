@@ -16,10 +16,10 @@
 
 # region, zone must be defined
 # in build file with --extra-vars flag!
-test_name: gke-a4high
-deployment_name: gke-a4high-{{ build }}
+test_name: gke-a4
+deployment_name: gke-a4-{{ build }}
 workspace: /workspace
-blueprint_yaml: "{{ workspace }}/examples/gke-a4-highgpu/gke-a4-highgpu.yaml"
+blueprint_yaml: "{{ workspace }}/examples/gke-a4/gke-a4.yaml"
 network: "{{ deployment_name }}-net-0"
 region: us-central1
 zone: us-central1-b
