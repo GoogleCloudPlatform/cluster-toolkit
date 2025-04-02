@@ -36,8 +36,8 @@ steps:
     cd /workspace && make
     BUILD_ID_FULL=$BUILD_ID
     BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
-    REGION=us-central1
-    ZONE=us-central1-a
+    REGION=europe-west4
+    ZONE=europe-west4-b
     BLUEPRINT="/workspace/examples/h4d-vm.yaml"
     sed -i -e '/deletion_protection:/{n;s/enabled: true/enabled: false/}' $${BLUEPRINT}
     sed -i -e '/reason:/d' $${BLUEPRINT}
