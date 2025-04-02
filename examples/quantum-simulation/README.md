@@ -71,101 +71,83 @@ For installed software, you need a few tools.
 
 > These tools are already installed within the [Google Cloud Shell](https://shell.cloud.google.com/) and Cloud Shell Editor.
 
-## Install the Google Cloud Cluster toolkit
+# Use Cluster Toolkit to create a Slurm cluster
 
-To run the remainder of this tutorial, you must:
+The A3 Ultra and A4 machine profiles have a complex build. The details are provided here:
 
-* Set up [Cloud Cluster Toolkit](https://cloud.google.com/cluster-toolkit/docs/setup/configure-environment#clone-repo). During the setup ensure you enable all the required APIs, and permissions, and grant credentials to Terraform. Also ensure you clone and build the Cloud Cluster Toolkit repository in your local environment.
-* Review the [best practices](https://cloud.google.com/cluster-toolkit/docs/tutorials/best-practices).
+[Create a Slurm cluster](https://cloud.google.com/ai-hypercomputer/docs/create/create-slurm-cluster)
 
-# Run cuQuantum on Google Cloud
+Follow the instructions described in the document list above above to
+create the A3 Ultra or A4 Slurm cluster.
+
+## Run cuQuantum on Google Cloud
 
 Running the cuQuantum platform on Google Cloud using the Cluster Toolkit requires a few steps.
 
-## Run the Cluster Toolkit blueprint
-
-To build the cuQuantum example Slurm cluster, go to the appropriate directory.
-If the Toolkit is installed in the \$HOME directory, the command is:
-```
-cd ~/cluster-toolkit/examples/quantum-simulation
-```
-Execute the `gcluster` command. If the Toolkit is installed in the \$HOME directory, the command is:
-
-```
-~/cluster-toolkit/gcluster deploy -d a4high-slurm-deployment.yaml \
-    ../machine-learning/a4-highgpu-8g/a4high-slurm-blueprint.yaml \
-    --skip-validators="test_apis_enabled"  --auto-approve \
-    --vars project_id=$(gcloud config get project)
-```
 ## Connect to Slurm
 The remaining steps in this tutorial will all be run on the Slurm cluster login node. SSH is used to connect to the login node, and `gcloud` offers an option for SSH connections.
+Cloud Console method:
+
+## Go to the Compute Engine > VM instances page.
+1. Go to VM instances
+1. Connect to the login VM using SSH-in-browser.
+1. From the Connect column of the VM, click SSH. Authorize SSH permissions when prompted.
+
+## Command Line method:
+Use the following command to ssh into the controller node from cloud shell:
 ```
-gcloud compute ssh --zone "asia-northeast3-a" "namdslurm-slurm-login-001" --project $(gcloud config get project)
+gcloud compute ssh $(gcloud compute instances list --filter "name ~ login" --format "value(name)") --tunnel-through-iap --zone $(gcloud compute instances list --filter "name ~ login" --format "value(zone)")
 ```
-An alternative to SSH connection to the login node is to connect from the 
-[Cloud Console](https://console.cloud.google.com/compute/instances). Click on the `SSH` link.
-## Download sample configuration
-To run NAMD, configuration files are required. NVIDIA shares information for the APOA1 benchmark. Download the benchmark configuration. 
+You may be prompted to set up SSH. If so follow the prompts and if asked for a password, just hit [enter] leaving the input blank.
+After logging in, you may see the following output on the terminal, followed by a terminal prompt:
+
+**Output (do not copy)** 
 ```
-wget -O - https://gitlab.com/NVHPC/ngc-examples/raw/master/namd/3.0/get_apoa1.sh | bash
-```
->> For convenience, the deployment has created  download shell script to get this data and the data for STMV. Available on the login node.
-```
-cp /tmp/get_data.sh .
-bash get_data.sh
+*** Slurm is currently being configured in the background. ***
+
+** WARNING **: The Cluster Toolkit startup scripts are currently running.
 ```
 
-## Convert Docker to Apptainer
-[Apptainer](https://apptainer.org/) is recommended for HPC applications. The published 
-[NVIDIA Docker Container](https://catalog.ngc.nvidia.com/orgs/hpc/containers/namd)
-is easily convereted to Apptainer compatible formats.
+If you do not see this text, skip to the next step. 
+If you do see this text, wait for the following message, then disconnect and reconnect to the login node (reload the page if using the Cloud Console method).
 
-`apptainer` has been previously installed on the cluster.
-
-The `apptainer build` command will convert a docker container into apptainer format. The Slurm `sbatch` will
-run this step if `namd.sif` is not present, so this step is optional since the `sbatch` file contains 
-commands to download and convert the container.
+**Output (do not copy)**
 ```
-export NAMD_TAG=3.0-beta5
-apptainer build namd.sif docker://nvcr.io/hpc/namd:$NAMD_TAG 
+* NOTICE **: The Cluster Toolkit startup scripts have finished running successfully.
+*** Slurm login setup complete ***                                                                               
+/home on the controller was mounted over the existing /home.
+Log back in to ensure your home directory is correct.
 ```
-This may take 5 minutes.
+From the command line of the VM, run the sinfo command to view the available partition and node information to run our jobs, and confirm that Slurm is operational.
+```
+sinfo
+```
 
-## Slurm batch file
+You should see output similar to the following, which shows the Slurm partitions and partition information:
+```
+PARTITION AVAIL  TIMELIMIT  NODES  STATE NODELIST
+a4high*      up   infinite      2   idle a4h0-a4highnodeset-[0-1]
+```
+
+## Download batch job files and Dockerfile from Github
+
 To submit a job on Slurm, a Slurm Batch script must be created.
-
->> For convenience, the deployment created two Slurm batch job files to run these samples.
-```
-cp /tmp/*.job .
-```
-## Create the Slurm batch file
-Alternatively, you can create the batch file manually.  Use the `heredoc` below. Cut and paste
-the follwing into your Slurm login terminal. 
+The Slurm batch jobs files and Docker file to run the cuQuantum simulations can be downloaded using `wget`
 
 ```
-tee namd_apoa1.job << JOB
-#!/bin/bash
-#SBATCH --job-name=namd_ipoa1_benchmark
-#SBATCH --partition=a2
-#SBATCH --output=%3A/out.txt
-#SBATCH --error=%3A/err.txt
-
-# Build SIF, if it doesn't exist
-if [[ ! -f namd.sif ]]; then
-  export NAMD_TAG=3.0-beta5
-  apptainer build namd.sif docker://nvcr.io/hpc/namd:\$NAMD_TAG 
-fi
-apptainer run --nv namd.sif namd3 +p4 +devices 0,1 +setcpuaffinity apoa1/apoa1_nve_cuda_soa.namd
-JOB
+wget https://raw.githubusercontent.com/jrossthomson/cluster-toolkit/refs/heads/develop/examples/quantum-simulation/build_image.sh
+wget https://raw.githubusercontent.com/jrossthomson/cluster-toolkit/refs/heads/develop/examples/quantum-simulation/submit.sh
+wget https://raw.githubusercontent.com/jrossthomson/cluster-toolkit/refs/heads/develop/examples/quantum-simulation/Dockerfile
 ```
-This creates a Slurm batch file named namd.job
 
-## Submit the job
+## Submit the Slurm job to create the updated cuQuantum `enroot` image
+[Enroot](https://github.com/NVIDIA/enroot) is an NVIDIA platform to run traditional containers
+in unprivileged sandboxes. Here, a Slurm job runs to create the enroot "sqsh" file.
 The command to submit a job with Slurm is [sbatch](https://slurm.schedmd.com/sbatch.html). 
 
 Submit the job.
 ```
-sbatch namd_apoa1.job
+sbatch build_image.sh
 ```
 The command to see the jobs in the Slurm batch queue is [squeue](https://slurm.schedmd.com/squeue.html)
 ```
@@ -174,13 +156,24 @@ squeue
 The output lists running and pending jobs.
 ```
              JOBID PARTITION     NAME     USER ST       TIME  NODES NODELIST(REASON)
-                 6        a2 namd_ipo drj_gcp_ CF       0:02      1 namdslurm-a2nodeset-0
+                 1    a4high    build drj_gcp_  R       0:02      1 a3h0-a4highnodeset
 ```
-## Review the output
-As configured in the `namd_apoa1.job` file, the standard output of the Slurm job is directed to
-`###/out.txt`, where `###` is the JOBID. When the job is complete, it will not be visible
-in the  `squeue` output and the output files will be present.
+This may take several minutes to complete.
 
+## Run the cuQuantum container to simulate the circuit
+Once the "build_image.sh" step is completed, you can run the `cuquantum-gcp+24.08.sqsh` image 
+to simulate a quantum circuit.
+ 
+ Submit the job.
+```
+sbatch submit.sh
+```
+Once again, you can see the running job.
+```
+squeue
+```
+
+# View the output
 
 You can use `head` to see the start of the output.
 ```
@@ -205,22 +198,10 @@ You can use `tail` to see the end of the output.
 tail 001/out.txt 
 ```
 Shows:
-```
-WRITING EXTENDED SYSTEM TO OUTPUT FILE AT STEP 10000
-WRITING COORDINATES TO OUTPUT FILE AT STEP 10000
-The last position output (seq=-2) takes 0.030 seconds, 0.000 MB of memory in use
-WRITING VELOCITIES TO OUTPUT FILE AT STEP 10000
-The last velocity output (seq=-2) takes 0.026 seconds, 0.000 MB of memory in use
-====================================================
 
-WallClock: 13.387387  CPUTime: 13.058638  Memory: 0.000000 MB
-[Partition 0][Node 0] End of program
-```
 ## Discussion
 
-The tutorial demonstrated how to run the NAMD molecular dynamics IPOA1 benchmark 
-using NVIDIA GPUs on Google Cloud. The infrastructure was deploye3d by the Cluster Toolkit,
-and the NVIDIA container was deployed by Apptainer. 
+The tutorial demonstrated how to run the NVIDIA cuQuantum container to simulate a quantum circuit.
 
 Slurm was used as a workload manager. Simulation output was viewed in a text file.
 
