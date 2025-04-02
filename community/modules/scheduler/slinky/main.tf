@@ -71,6 +71,11 @@ resource "helm_release" "slurm_operator" {
   version    = "0.2.0"
   namespace  = kubernetes_namespace.slinky.metadata[0].name
 
+  # The Cert Manager webhook deployment must be running to provision the Operator
+  depends_on = [
+    helm_release.cert_manager
+  ]
+
   values = [
     file("${path.module}/values/operator.yaml"),
     yamlencode(var.slurm_operator_values)
@@ -83,6 +88,11 @@ resource "helm_release" "slurm" {
   repository = "oci://ghcr.io/slinkyproject/charts"
   version    = "0.2.0"
   namespace  = kubernetes_namespace.slurm.metadata[0].name
+
+  # The Slurm Operator must be running to provision Slurm clusters/nodesets
+  depends_on = [
+    helm_release.slurm_operator
+  ]
 
   values = [
     file("${path.module}/values/slurm.yaml"),
