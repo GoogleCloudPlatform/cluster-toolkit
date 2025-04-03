@@ -10,7 +10,6 @@ This module creates a Slinky cluster and nodeset(s), for a Slurm-on-Kubernetes H
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.3 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.16 |
 | <a name="requirement_helm"></a> [helm](#requirement\_helm) | ~> 2.17 |
-| <a name="requirement_kubernetes"></a> [kubernetes](#requirement\_kubernetes) | ~> 2.36 |
 
 ## Providers
 
@@ -18,7 +17,6 @@ This module creates a Slinky cluster and nodeset(s), for a Slurm-on-Kubernetes H
 |------|---------|
 | <a name="provider_google"></a> [google](#provider\_google) | >= 6.16 |
 | <a name="provider_helm"></a> [helm](#provider\_helm) | ~> 2.17 |
-| <a name="provider_kubernetes"></a> [kubernetes](#provider\_kubernetes) | ~> 2.36 |
 
 ## Modules
 
@@ -31,9 +29,6 @@ No modules.
 | [helm_release.cert_manager](https://registry.terraform.io/providers/hashicorp/helm/latest/docs/resources/release) | resource |
 | [helm_release.slurm](https://registry.terraform.io/providers/hashicorp/helm/latest/docs/resources/release) | resource |
 | [helm_release.slurm_operator](https://registry.terraform.io/providers/hashicorp/helm/latest/docs/resources/release) | resource |
-| [kubernetes_namespace.cert_manager](https://registry.terraform.io/providers/hashicorp/kubernetes/latest/docs/resources/namespace) | resource |
-| [kubernetes_namespace.slinky](https://registry.terraform.io/providers/hashicorp/kubernetes/latest/docs/resources/namespace) | resource |
-| [kubernetes_namespace.slurm](https://registry.terraform.io/providers/hashicorp/kubernetes/latest/docs/resources/namespace) | resource |
 | [google_client_config.default](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/client_config) | data source |
 | [google_container_cluster.gke_cluster](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/container_cluster) | data source |
 

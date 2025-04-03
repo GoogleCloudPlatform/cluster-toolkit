@@ -33,14 +33,6 @@ locals {
       }
     }
   } : {}
-
-  kubernetes_config = {
-    host  = "https://${data.google_container_cluster.gke_cluster.endpoint}"
-    token = data.google_client_config.default.access_token
-    cluster_ca_certificate = base64decode(
-      data.google_container_cluster.gke_cluster.master_auth[0].cluster_ca_certificate,
-    )
-  }
 }
 
 data "google_client_config" "default" {}
@@ -51,29 +43,12 @@ data "google_container_cluster" "gke_cluster" {
   location = local.cluster_location
 }
 
-resource "kubernetes_namespace" "cert_manager" {
-  metadata {
-    name = "cert-manager"
-  }
-}
-
-resource "kubernetes_namespace" "slinky" {
-  metadata {
-    name = "slinky"
-  }
-}
-
-resource "kubernetes_namespace" "slurm" {
-  metadata {
-    name = "slurm"
-  }
-}
-
 resource "helm_release" "cert_manager" {
-  name       = "cert-manager"
-  repository = "https://charts.jetstack.io"
-  chart      = "cert-manager"
-  namespace  = kubernetes_namespace.cert_manager.metadata[0].name
+  name             = "cert-manager"
+  repository       = "https://charts.jetstack.io"
+  chart            = "cert-manager"
+  namespace        = "cert-manager"
+  create_namespace = true
 
   values = [
     yamlencode(merge(var.cert_manager_values, local.node_affinity ? {
@@ -83,11 +58,12 @@ resource "helm_release" "cert_manager" {
 }
 
 resource "helm_release" "slurm_operator" {
-  name       = "slurm-operator"
-  chart      = "slurm-operator"
-  repository = "oci://ghcr.io/slinkyproject/charts"
-  version    = "0.2.0"
-  namespace  = kubernetes_namespace.slinky.metadata[0].name
+  name             = "slurm-operator"
+  chart            = "slurm-operator"
+  repository       = "oci://ghcr.io/slinkyproject/charts"
+  version          = "0.2.0"
+  namespace        = "slinky"
+  create_namespace = true
 
   # The Cert Manager webhook deployment must be running to provision the Operator
   depends_on = [
@@ -108,11 +84,12 @@ resource "helm_release" "slurm_operator" {
 }
 
 resource "helm_release" "slurm" {
-  name       = "slurm"
-  chart      = "slurm"
-  repository = "oci://ghcr.io/slinkyproject/charts"
-  version    = "0.2.0"
-  namespace  = kubernetes_namespace.slurm.metadata[0].name
+  name             = "slurm"
+  chart            = "slurm"
+  repository       = "oci://ghcr.io/slinkyproject/charts"
+  version          = "0.2.0"
+  namespace        = "slurm"
+  create_namespace = true
 
   # The Slurm Operator must be running to provision Slurm clusters/nodesets
   depends_on = [
