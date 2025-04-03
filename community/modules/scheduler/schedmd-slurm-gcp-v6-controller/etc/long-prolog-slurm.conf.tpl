@@ -39,8 +39,9 @@ PrologFlags=Contain
 
 SlurmctldHost={control_host}({control_addr})
 
+
 AuthType=auth/munge
-AuthInfo=cred_expire=120
+AuthInfo=cred_expire=600
 AuthAltTypes=auth/jwt
 CredType=cred/munge
 MpiDefault={mpi_default}
