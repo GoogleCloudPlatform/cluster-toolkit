@@ -33,7 +33,7 @@ vars:
   gcp_public_cidrs_access_enabled: false
   kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
   # The number of nodes to be created
-  static_node_count:
+  static_node_count: 2
 
 deployment_groups:
 - group: primary
