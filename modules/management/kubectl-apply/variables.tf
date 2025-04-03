@@ -15,7 +15,7 @@
   */
 
 locals {
-  kueue_supported_versions  = ["v0.10.1", "v0.10.0", "v0.9.1", "v0.9.0", "v0.8.1"]
+  kueue_supported_versions  = ["v0.11.1", "v0.10.1", "v0.10.0", "v0.9.1", "v0.9.0", "v0.8.1"]
   jobset_supported_versions = ["v0.7.2", "v0.5.2"]
 }
 
@@ -65,7 +65,7 @@ variable "kueue" {
   description = "Install and configure [Kueue](https://kueue.sigs.k8s.io/docs/overview/) workload scheduler. A configuration yaml/template file can be provided with config_path to be applied right after kueue installation. If a template file provided, its variables can be set to config_template_vars."
   type = object({
     install              = optional(bool, false)
-    version              = optional(string, "v0.10.0")
+    version              = optional(string, "v0.11.1")
     config_path          = optional(string, null)
     config_template_vars = optional(map(any), null)
   })
@@ -77,6 +77,16 @@ variable "jobset" {
   type = object({
     install = optional(bool, false)
     version = optional(string, "v0.7.2")
+  })
+  default = {}
+}
+
+
+variable "gpu_operator" {
+  description = "Install [GPU Operator](https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/getting-started.html) which uses the [Kubernetes operator](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/) to automate the management of all NVIDIA software components needed to provision GPU."
+  type = object({
+    install     = optional(bool, false)
+    config_path = optional(string, null)
   })
   default = {}
 }

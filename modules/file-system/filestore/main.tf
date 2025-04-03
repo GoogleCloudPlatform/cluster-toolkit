@@ -53,7 +53,7 @@ resource "google_filestore_instance" "filestore_instance" {
   project = var.project_id
 
   name     = var.name != null ? var.name : "${var.deployment_name}-${random_id.resource_name_suffix.hex}"
-  location = var.filestore_tier == "ENTERPRISE" ? var.region : var.zone
+  location = contains(["ENTERPRISE", "REGIONAL"], var.filestore_tier) ? var.region : var.zone
   tier     = var.filestore_tier
   protocol = var.protocol
 

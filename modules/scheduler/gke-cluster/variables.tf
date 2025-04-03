@@ -504,3 +504,9 @@ variable "enable_k8s_beta_apis" {
   type        = list(string)
   default     = null
 }
+
+variable "enable_gpu_operator" {
+  description = "Describes if a gpu operator resource quota should be created or not."
+  type        = bool
+  default     = false
+}

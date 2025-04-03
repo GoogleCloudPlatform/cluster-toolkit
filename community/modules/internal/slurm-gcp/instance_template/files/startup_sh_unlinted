@@ -78,6 +78,9 @@ SCRIPTS_ZIP="$HOME/slurm-gcp-scripts.zip"
 export CLOUDSDK_CORE_UNIVERSE_DOMAIN="$UNIVERSE_DOMAIN"
 until gcloud storage cp "$BUCKET/slurm-gcp-devel.zip" "$SCRIPTS_ZIP"; do
 	echo "WARN: Could not download SlurmGCP scripts, retrying in 5 seconds."
+        # Remove marker used to determine if gcloud is being used in a GCE VM.
+        # This can get mistakenly set to False in some cases.
+	rm -f /root/.config/gcloud/gce
 	sleep 5
 done
 unzip -o "$SCRIPTS_ZIP" -d "$SCRIPTS_DIR"
