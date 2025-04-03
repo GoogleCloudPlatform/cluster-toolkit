@@ -156,3 +156,23 @@ deployment_groups:
             partition:
               enabled: true
     outputs: [instructions]
+
+  - id: slurm_exporter_monitoring
+    source: modules/management/kubectl-apply
+    use: [gke_cluster]
+    settings:
+      apply_manifests:
+      - content: |
+          apiVersion: monitoring.googleapis.com/v1
+          kind: PodMonitoring
+          metadata:
+            name: slurm-exporter
+            namespace: slurm
+          spec:
+            selector:
+              matchLabels:
+                app.kubernetes.io/instance: slurm-exporter
+                app.kubernetes.io/name: slurm-exporter
+            endpoints:
+            - port: metrics
+              interval: 30s
