@@ -18,6 +18,22 @@ locals {
   cluster_location = local.cluster_id_parts[3]
   project_id       = var.project_id != null ? var.project_id : local.cluster_id_parts[1]
 
+  # Define affinity settings when node pools are specified
+  node_affinity = var.node_pool_names != null
+  node_pool_affinity = local.node_affinity ? {
+    nodeAffinity = {
+      requiredDuringSchedulingIgnoredDuringExecution = {
+        nodeSelectorTerms = [{
+          matchExpressions = [{
+            key      = "cloud.google.com/gke-nodepool"
+            operator = "In"
+            values   = var.node_pool_names
+          }]
+        }]
+      }
+    }
+  } : {}
+
   kubernetes_config = {
     host  = "https://${data.google_container_cluster.gke_cluster.endpoint}"
     token = data.google_client_config.default.access_token
@@ -60,7 +76,9 @@ resource "helm_release" "cert_manager" {
   namespace  = kubernetes_namespace.cert_manager.metadata[0].name
 
   values = [
-    yamlencode(var.cert_manager_values)
+    yamlencode(merge(var.cert_manager_values, local.node_affinity ? {
+      affinity = local.node_pool_affinity
+    } : {}))
   ]
 }
 
@@ -78,7 +96,14 @@ resource "helm_release" "slurm_operator" {
 
   values = [
     file("${path.module}/values/operator.yaml"),
-    yamlencode(var.slurm_operator_values)
+    yamlencode(merge(var.slurm_operator_values, local.node_affinity ? {
+      operator = {
+        affinity = local.node_pool_affinity
+      }
+      webhook = {
+        affinity = local.node_pool_affinity
+      }
+    } : {}))
   ]
 }
 
@@ -96,6 +121,19 @@ resource "helm_release" "slurm" {
 
   values = [
     file("${path.module}/values/slurm.yaml"),
-    yamlencode(var.slurm_values)
+    yamlencode(merge(var.slurm_values, local.node_affinity ? {
+      controller = {
+        affinity = local.node_pool_affinity
+      }
+      accounting = {
+        affinity = local.node_pool_affinity
+      }
+      mariadb = {
+        affinity = local.node_pool_affinity
+      }
+      restapi = {
+        affinity = local.node_pool_affinity
+      }
+    } : {}))
   ]
 }

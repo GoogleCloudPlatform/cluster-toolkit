@@ -23,6 +23,12 @@ variable "cluster_id" {
   nullable    = false
 }
 
+variable "node_pool_names" {
+  description = "Names of node pools, for use in node affinities (Slinky system components)."
+  type        = list(string)
+  default     = null
+}
+
 variable "cert_manager_values" {
   description = "Value overrides for the Cert Manager release"
   type        = any

@@ -96,7 +96,11 @@ deployment_groups:
 
   - id: slinky
     source: community/modules/scheduler/slinky
-    use: [gke_cluster]
+    use: [
+      gke_cluster,
+      # Optionally specify nodepool(s) to avoid operator components running on HPC hardware
+      base_pool
+    ]
     settings:
       slurm_values:
         compute:
@@ -115,6 +119,14 @@ deployment_groups:
               limits:
                 cpu: 1
                 memory: 4Gi
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                - matchExpressions:
+                  - key: "node.kubernetes.io/instance-type"
+                    operator: In
+                    values:
+                    - e2-standard-4
             partition:
               enabled: true
           - name: h3
@@ -131,6 +143,14 @@ deployment_groups:
               limits:
                 cpu: 86
                 memory: 324Gi
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                - matchExpressions:
+                  - key: "node.kubernetes.io/instance-type"
+                    operator: In
+                    values:
+                    - h3-standard-88
             partition:
               enabled: true
     outputs: [instructions]
