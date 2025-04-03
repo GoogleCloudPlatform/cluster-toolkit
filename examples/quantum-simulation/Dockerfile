@@ -13,6 +13,8 @@ RUN sudo chmod 1777 /opt
 RUN git clone https://github.com/NVIDIA/cuQuantum.git
 RUN cd /opt/cuQuantum/benchmarks/ && /opt/conda/envs/cuquantum-24.08/bin/pip install .[all]
 
+WORKDIR /home
+
 # Set environment variables
 ENV LD_LIBRARY_PATH=/usr/lib/x86_64-gnu:/opt/conda/envs/cuquantum-24.08/lib:/usr/local/mpi/lib:/usr/local/ucx/lib:/usr/local/gdrcopy/lib:/usr/local/munge/lib:/usr/local/pmix/lib:/usr/local/slurm/lib:/usr/local/nvidia/lib:/usr/local/cuda/lib64:/usr/local/cuda/targets/x86_64-linux/lib:${LD_LIBRARY_PATH}
 ENV CUDA_VISIBLE_DEVICE=0,1,2,3,4,5,6,7

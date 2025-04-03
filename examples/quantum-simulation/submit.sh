@@ -11,7 +11,7 @@
 set -x
 
 # Mount /var/tmp to allow the rest of the enroot container to be read-only
-CONTAINER_MOUNTS="${PWD}:/var/tmp:/var/tmp"
+CONTAINER_MOUNTS="${PWD}:/home"
 CONTAINER_BASENAME=cuquantum-gcp
 CONTAINER_VERSION=24.08
 CONTAINER_NAME=${CONTAINER_BASENAME}+${CONTAINER_VERSION}.sqsh

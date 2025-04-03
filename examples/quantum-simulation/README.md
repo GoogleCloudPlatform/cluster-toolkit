@@ -3,7 +3,7 @@
 <img src="https://services.google.com/fh/files/misc/hero-heading.jpg" width="400">
 
 
-This guide provides instructions on how to run quantum circuit simulation on GPUs using the  [Google Cloud Cluster Toolkit](https://cloud.google.com/cluster-toolkit/docs/setup/configure-environment), running the [NVIDIA cuQuantum](https://catalog.ngc.nvidia.com/orgs/nvidia/containers/cuquantum-appliance) on [Slurm](https://slurm.schedmd.com/overview.html)
+This guide provides instructions on how to run quantum circuit simulation on GPUs using the  [Google Cloud Cluster Toolkit](https://cloud.google.com/cluster-toolkit/docs/setup/configure-environment), running the [NVIDIA cuQuantum container](https://catalog.ngc.nvidia.com/orgs/nvidia/containers/cuquantum-appliance) on [Slurm](https://slurm.schedmd.com/overview.html)
 
 # Getting Started
 ## Explore costs
@@ -69,7 +69,7 @@ For installed software, you need a few tools.
 * [Terraform](https://learn.hashicorp.com/tutorials/terraform/install-cli) installed.
 * [Git](https://git-scm.com/book/en/v2/Getting-Started-Installing-Git) installed.
 
-> These tools are already installed within the [Google Cloud Shell](https://shell.cloud.google.com/) and Cloud Shell Editor.
+> Fortunately, these tools are already installed within the [Google Cloud Shell](https://shell.cloud.google.com/) and Cloud Shell Editor.
 
 # Use Cluster Toolkit to create a Slurm cluster
 
@@ -77,7 +77,7 @@ The A3 Ultra and A4 machine profiles have a complex build. The details are provi
 
 [Create a Slurm cluster](https://cloud.google.com/ai-hypercomputer/docs/create/create-slurm-cluster)
 
-Follow the instructions described in the document list above above to
+Follow the instructions described in the documents above above to
 create the A3 Ultra or A4 Slurm cluster.
 
 ## Run cuQuantum on Google Cloud
@@ -88,17 +88,19 @@ Running the cuQuantum platform on Google Cloud using the Cluster Toolkit require
 The remaining steps in this tutorial will all be run on the Slurm cluster login node. SSH is used to connect to the login node, and `gcloud` offers an option for SSH connections.
 Cloud Console method:
 
-## Go to the Compute Engine > VM instances page.
-1. Go to VM instances
+### Go to the Compute Engine > VM instances page.
+1. Go to [VM instances](https://console.cloud.google.com/compute/instances)
 1. Connect to the login VM using SSH-in-browser.
 1. From the Connect column of the VM, click SSH. Authorize SSH permissions when prompted.
 
-## Command Line method:
+### Command Line method:
 Use the following command to ssh into the controller node from cloud shell:
 ```
 gcloud compute ssh $(gcloud compute instances list --filter "name ~ login" --format "value(name)") --tunnel-through-iap --zone $(gcloud compute instances list --filter "name ~ login" --format "value(zone)")
 ```
 You may be prompted to set up SSH. If so follow the prompts and if asked for a password, just hit [enter] leaving the input blank.
+
+## Is Slurm ready?
 After logging in, you may see the following output on the terminal, followed by a terminal prompt:
 
 **Output (do not copy)** 
@@ -131,21 +133,24 @@ a4high*      up   infinite      2   idle a4h0-a4highnodeset-[0-1]
 
 ## Download batch job files and Dockerfile from Github
 
-To submit a job on Slurm, a Slurm Batch script must be created.
-The Slurm batch jobs files and Docker file to run the cuQuantum simulations can be downloaded using `wget`
+To submit a job on Slurm, a Slurm batch script are required.
+The Slurm batch jobs provided in this repo do two things:
+1. Build an [Enroot](https://github.com/NVIDIA/enroot) image using the Dockerfile based on the cuQuantum container
+1. Run quantum circuit simulations on the Slurm cluster
+
+These batch scripts can be downloaded using `wget`.
 
 ```
 wget https://raw.githubusercontent.com/jrossthomson/cluster-toolkit/refs/heads/develop/examples/quantum-simulation/build_image.sh
 wget https://raw.githubusercontent.com/jrossthomson/cluster-toolkit/refs/heads/develop/examples/quantum-simulation/submit.sh
 wget https://raw.githubusercontent.com/jrossthomson/cluster-toolkit/refs/heads/develop/examples/quantum-simulation/Dockerfile
 ```
-
 ## Submit the Slurm job to create the updated cuQuantum `enroot` image
 [Enroot](https://github.com/NVIDIA/enroot) is an NVIDIA platform to run traditional containers
-in unprivileged sandboxes. Here, a Slurm job runs to create the enroot "sqsh" file.
+in unprivileged sandboxes. Here, we use a Slurm job to create the enroot "sqsh" file image.
 The command to submit a job with Slurm is [sbatch](https://slurm.schedmd.com/sbatch.html). 
 
-Submit the job.
+Submit the image build job with `sbatch`
 ```
 sbatch build_image.sh
 ```
@@ -177,27 +182,43 @@ squeue
 
 You can use `head` to see the start of the output.
 ```
-head 001/out.txt 
+head slurm-2.txt 
 ```
 Shows:
 ```
-==========
-== CUDA ==
-==========
++ CONTAINER_MOUNTS=/home/jrossthomson_google_com:/home
++ CONTAINER_BASENAME=cuquantum-gcp
++ CONTAINER_VERSION=24.08
++ CONTAINER_NAME=cuquantum-gcp+24.08.sqsh
++ srun -l --mpi=pmix --cpu-bind=verbose --container-image=./cuquantum-gcp+24.08.sqsh --container-writable --container-mounts=/home/jrossthomson_google_com:/home --wait=10 --kill-on-bad-exit=1 bash -c '
+ set -x
+ export UCX_NET_DEVICES=mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1,mlx5_4:1,mlx5_5:1,mlx5_6:1,mlx5_7:1;
+ /opt/conda/envs/cuquantum-24.08/bin/cuquantum-benchmarks circuit     -v     --frontend qiskit     --backend cusvaer     --benchmark qpe     --precision double     --nfused 5     --nqubits 36     --cachedir data_36     --cusvaer-global-index-bits 3,1     --cusvaer-p2p-device-bits 3
+'
+ 0: cpu-bind=MASK - a4h0-a4highnodeset-0, task  0  0 [167426]: mask 0xffffffffffffff00000000000000ffffffffffffff set
 
-CUDA Version 12.3.0
-
-Container image Copyright (c) 2016-2023, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
-
-This container image and its contents are governed by the NVIDIA Deep Learning Container License.
 
 ```
 
 You can use `tail` to see the end of the output.
 ```
-tail 001/out.txt 
+tail slurm-2.txt 
 ```
 Shows:
+```
+ 0: 2025-04-03 19:54:02,350 INFO      -
+ 0: 2025-04-03 19:54:02,350 INFO      - [GPU] Averaged elapsed time: 8.199314014 s 
+ 0: 2025-04-03 19:54:02,350 INFO      - [GPU] GPU device name: NVIDIA B200
+ 0: 2025-04-03 19:54:02,350 DEBUG     - [GPU] Total global memory: 191.51 GB
+ 0: 2025-04-03 19:54:02,350 DEBUG     - [GPU] Clock frequency (Mhz): 1965.0
+ 0: 2025-04-03 19:54:02,350 DEBUG     - [GPU] Multi processor count: 148
+ 0: 2025-04-03 19:54:02,350 DEBUG     - [GPU] CUDA driver version: 12080 (570.124.06)
+ 0: 2025-04-03 19:54:02,350 DEBUG     - [GPU] CUDA runtime version: 12060
+ 0: 2025-04-03 19:54:02,350 INFO     
+ 0: 2025-04-03 19:54:02,370 DEBUG    Saved data_36/data/qpe.json as JSON
+```
+The file referred to `data_36/data/qpe.json` was also created.
+
 
 ## Discussion
 
@@ -213,13 +234,11 @@ To avoid incurring charges to your Google Cloud account for the resources used i
 
 To delete the HPC cluster, run the following command:
 ```
-~/cluster-toolkit/gcluster destroy namd-slurm --auto-approve
+~/cluster-toolkit/gcluster destroy <DEPLOYMENT NAME> --auto-approve
 ```
 When complete you will see output similar to:
 
 Destroy complete! Resources: xx destroyed.
-
-**CAUTION**: This approach will destroy all content including the fine tuned model.
 
 ## Delete the project
 
