@@ -646,7 +646,10 @@ restapi:
 # `slurm-exporter` subchart configurations.
 # Ref: https://github.com/SlinkyProject/slurm-exporter/-/blob/main/helm/slurm-exporter/values.yaml
 slurm-exporter:
-  enabled: false
+  enabled: true
   exporter:
     enabled: true
+    image:
+      repository: ghcr.io/slinkyproject/slurm-exporter
+      tag: "0.2.0"
     secretName: "slurm-token-exporter"

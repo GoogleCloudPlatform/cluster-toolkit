@@ -29,6 +29,21 @@ variable "node_pool_names" {
   default     = null
 }
 
+variable "install_kube_prometheus_stack" {
+  # Components detailed at https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack
+  description = "Install the Kube Prometheus Stack."
+  type        = bool
+  default     = false
+}
+
+variable "prometheus_values" {
+  description = "Value overrides for the Prometheus release"
+  type        = any
+  default = {
+    installCRDs = true
+  }
+}
+
 variable "cert_manager_values" {
   description = "Value overrides for the Cert Manager release"
   type        = any

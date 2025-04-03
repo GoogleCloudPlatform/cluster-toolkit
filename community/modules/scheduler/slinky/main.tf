@@ -111,6 +111,48 @@ resource "helm_release" "slurm" {
       restapi = {
         affinity = local.node_pool_affinity
       }
+      slurm-exporter = {
+        affinity = local.node_pool_affinity
+      }
     } : {}))
+  ]
+}
+
+resource "helm_release" "prometheus" {
+  count            = var.install_kube_prometheus_stack ? 1 : 0
+  name             = "prometheus"
+  repository       = "https://prometheus-community.github.io/helm-charts"
+  chart            = "kube-prometheus-stack"
+  namespace        = "prometheus"
+  create_namespace = true
+
+  values = [
+    yamlencode(local.node_affinity ?
+      merge(var.prometheus_values, {
+        crds = {
+          upgradeJob = {
+            affinity = local.node_pool_affinity
+          }
+        }
+        alertmanager = {
+          alertmanagerSpec = {
+            affinity = local.node_pool_affinity
+          }
+        }
+        prometheusOperator = {
+          affinity = local.node_pool_affinity
+        }
+        prometheus = {
+          prometheusSpec = {
+            affinity = local.node_pool_affinity
+          }
+        }
+        thanosRuler = {
+          thanosRulerSpec = {
+            affinity = local.node_pool_affinity
+          }
+        }
+      }) : var.prometheus_values
+    )
   ]
 }
