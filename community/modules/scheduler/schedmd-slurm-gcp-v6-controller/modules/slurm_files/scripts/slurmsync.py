@@ -46,6 +46,7 @@ from util import (
 from util import lookup
 from suspend import delete_instances
 import tpu
+import mig
 import conf
 
 log = logging.getLogger()
@@ -133,7 +134,7 @@ def start_instance_op(node: str) -> Any:
 def start_instances(node_list):
     log.info("{} instances to start ({})".format(len(node_list), ",".join(node_list)))
     lkp = lookup()
-    # TODO: use code from resume.py to assign proper placement
+
     normal, tpu_nodes = separate(lkp.node_is_tpu, node_list)
     ops = {node: start_instance_op(node) for node in normal}
 
@@ -146,6 +147,28 @@ def start_instances(node_list):
             tpu_start_data.append({"tpu": tpuobj, "node": snodes})
     execute_with_futures(tpu.start_tpu, tpu_start_data)
 
+
+def get_mig_from_node(nodename: str):
+    node_prefix = lookup().node_prefix(nodename)
+    zone = lookup().zone.split("/")[-1]
+
+    expected_mig_name = f"{node_prefix}-0"
+    migs_in_zone = mig.migs(lookup(), zone)
+    mig_obj = migs_in_zone.get(expected_mig_name)
+
+    for mig_name, mig_obj in migs_in_zone.items():
+        if mig_name == expected_mig_name:
+            return mig_obj
+    return None
+
+def _find_mig_node_action(nodename) -> NodeAction:
+    mig_obj = get_mig_from_node(nodename)
+
+    if mig_obj == None:
+        log.info(f"{nodename} should be associated with a MIG, but it is not")
+        return NodeActionDelete()
+
+    return NodeActionUnchanged() 
 
 def _find_dynamic_node_status() -> NodeAction:
     # TODO: cover more cases:
@@ -231,7 +254,11 @@ def _find_tpu_node_action(nodename, state) -> NodeAction:
 def get_node_action(nodename: str) -> NodeAction:
     """Determine node/instance status that requires action"""
     state = lookup().node_state(nodename)
+    inst = lookup().instance(nodename.split(".")[0])
 
+    if mig.is_mig_node(nodename):
+        if inst != None: # !!!
+            return _find_mig_node_action(nodename)
     if lookup().node_is_fr(nodename):
         fr = lookup().future_reservation(lookup().node_nodeset(nodename))
         assert fr
@@ -245,7 +272,6 @@ def get_node_action(nodename: str) -> NodeAction:
         return _find_tpu_node_action(nodename, state)
 
     # split below is workaround for VMs whose hostname is FQDN
-    inst = lookup().instance(nodename.split(".")[0])
     power_flags = frozenset(
         ("POWER_DOWN", "POWERING_UP", "POWERING_DOWN", "POWERED_DOWN")
     ) & (state.flags if state is not None else set())
@@ -320,6 +346,52 @@ def delete_placement_groups(placement_groups):
     log.info(
         f"deleted {len(done)} of {len(placement_groups)} placement groups ({to_hostlist(done.keys())})"
     )
+
+
+def sync_mig_groups():
+    lkp = lookup()
+    zone = lkp.zone.split("/")[-1]
+    migs = mig.migs(lkp, zone)
+
+    compute_instances = {
+        name for name, inst in lkp.instances().items() if inst.role == "compute"
+    }
+    slurm_nodes = set(lkp.slurm_nodes().keys())
+
+    migs_to_delete = []
+    for mig_name, mig_obj in migs.items():
+        cluster, nodeset, _ = mig_obj.name.split('-')
+        if cluster != lkp.cfg.slurm_cluster_name:
+            continue
+
+        if not mig.is_stable(lkp, mig_obj):
+            log.info(f"Mig {mig_name} isn't stable yet")
+            continue
+
+        mig_nodes = []
+        for node in slurm_nodes:
+            if (lkp.node_prefix(node) == f"{cluster}-{nodeset}") & mig.is_mig_node(node):
+                mig_nodes.append(node)
+
+        if len(mig_nodes) == 0:
+            # Delete MIG that is attributed to the cluster (by name) but not existing nodeset (result of nodeset deletion)
+            migs_to_delete.append(mig_obj)
+            continue
+
+        model = mig_nodes[0]    
+        node_nodeset = lkp.node_nodeset(model) 
+        if mig_obj.versions[0] != node_nodeset.instance_template:
+            migs_to_delete.append(mig_obj)
+            continue
+
+        max_index = node_nodeset["node_count_dynamic_max"] + node_nodeset["node_count_static"] - 1
+        if all(lkp.node_index(node) > max_index for node in mig_nodes):
+            migs_to_delete.append(mig_obj)
+            continue
+    
+    if len(migs_to_delete) > 0:
+        mig.delete_migs(lkp, migs_to_delete)
+        mig.delete_workload_policies(lkp, migs_to_delete)
 
 
 def sync_placement_groups():
@@ -584,6 +656,11 @@ def main():
             sync_slurm()
         except Exception:
             log.exception("failed to sync instances")
+
+        try:
+            sync_mig_groups()
+        except Exception:
+            log.exception("failed to sync mig groups")
 
         try:
             sync_placement_groups()

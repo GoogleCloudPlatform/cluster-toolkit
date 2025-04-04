@@ -21,7 +21,6 @@ import logging
 
 import util
 from util import (
-    groupby_unsorted,
     log_api_request,
     batch_execute,
     to_hostlist,
@@ -30,6 +29,7 @@ from util import (
 )
 from util import lookup
 import tpu
+import mig
 
 log = logging.getLogger()
 
@@ -81,9 +81,11 @@ def delete_instances(instances):
 
 def suspend_nodes(nodes: List[str]) -> None:
     lkp = lookup()
-    other_nodes, tpu_nodes = util.separate(lkp.node_is_tpu, nodes)
+    vms, tpu_nodes = util.separate(lkp.node_is_tpu, nodes)
+    bulk_nodes, mig_nodest = util.separate(mig.is_mig_node, vms)
 
-    delete_instances(other_nodes)
+    mig.suspend_mig_nodes(lkp, mig_nodest)
+    delete_instances(bulk_nodes)
     tpu.delete_tpu_instances(tpu_nodes)
 
 

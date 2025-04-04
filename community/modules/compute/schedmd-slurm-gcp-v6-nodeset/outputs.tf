@@ -32,6 +32,12 @@ output "nodeset" {
     EOD
   }
 
+  # ???
+  # precondition {
+  #   condition     = (var.accelerator_topology != null)
+  #   error_message = "accelerator_topology must be divisible by number of gpu in machine."
+  # }
+
   precondition {
     condition     = var.placement_max_distance == null || var.enable_placement
     error_message = "placement_max_distance requires enable_placement to be set to true."
