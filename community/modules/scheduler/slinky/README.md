@@ -1,6 +1,73 @@
 ## Description
 
-This module creates a Slinky cluster and nodeset(s), for a Slurm-on-Kubernetes HPC setup.
+This module creates a [Slinky](https://slinky.ai) cluster and nodesets, for a [Slurm](https://slurm.schedmd.com/documentation.html)-on-Kubernetes HPC setup.
+
+The setup closely follows the [documented quickstart installation](https://github.com/SlinkyProject/slurm-operator/blob/main/docs/quickstart.md), with the exception of a more lightweight monitoring/metrics setup. Consider scraping the Slurm Exporter with [Google Managed Prometheus](https://cloud.google.com/stackdriver/docs/managed-prometheus) and a [PodMonitoring resource](https://cloud.google.com/stackdriver/docs/managed-prometheus/setup-managed#gmp-pod-monitoring), rather than a cluster-local Kube Prometheus Stack (although both are possible with module parameterizations).
+
+Through `cert_manager_values`, `prometheus_values`, `slurm_operator_values`, and `slurm_values`, you can customize the Helm releases that constitute Slinky. The Cert Manager, Slurm Operator, and Slurm Helm installations are required, whereas the Prometheus Helm chart is optional (and not included by default). Set `install_kube_prometheus_stack=true` to install Prometheus.
+
+### Example
+
+```yaml
+- id: slinky
+  source: community/modules/scheduler/slinky
+  use: [gke_cluster, base_pool]
+  settings:
+    slurm_values:
+      compute:
+        nodesets:
+        - name: h3
+          enabled: true
+          replicas: 3
+          image:
+            # Use the default nodeset image
+            repository: ""
+            tag: ""
+          resources:
+            requests:
+              cpu: 86
+              memory: 324Gi
+            limits:
+              cpu: 86
+              memory: 324Gi
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                - matchExpressions:
+                  - key: "node.kubernetes.io/instance-type"
+                    operator: In
+                    values:
+                    - h3-standard-88
+          partition:
+            enabled: true
+```
+
+This creates a Slinky cluster with the following attributes:
+
+* Slinky Helm releases are installed atop the `gke_cluster` (from the `gke-cluster` module).
+* Slinky system components are scheduled on the `base_pool` (from the `gke-node-pool` module).
+  * This node affinity specification is recommended, to save HPC hardware for HPC nodesets, and to ensure Helm releases are fully uninstalled before all nodepools are deleted during a `gcluster destroy`.
+* One Slurm nodeset is provisioned, with resource requests/limits and node affinities aligned to h3-standard-88 VMs.
+
+### Usage
+
+To test Slurm functionality, connect to the controller and use Slurm client commands:
+
+```bash
+kubectl exec -it statefulsets/slurm-controller \
+  --namespace=slurm \
+  -- bash --login
+```
+
+On the controller pod (e.g. host slurm@slurm-controller-0), run the following commands to quickly test if Slurm is functioning:
+
+```bash
+sinfo
+srun hostname
+sbatch --wrap="sleep 60"
+squeue
+```
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
 ## Requirements
