@@ -50,7 +50,9 @@ class SlurmTopologyTest(SlurmTest):
 
     def get_real_rack(self, node: str):
         result = self.run_command(f"gcloud compute instances describe {node} --zone={self.deployment.zone} --project={self.deployment.project_id} --format='value(resourceStatus.physicalHost)'")
-        return result.stdout.split("/")[1]
+        physicalHost = result.stdout.split("/")[1]
+        log.info(f"physicalHost for {node}: {physicalHost}")
+        return physicalHost
 
     def get_slurm_rack(self, node: str):
         stdin, stdout, stderr = self.ssh_client.exec_command(f"scontrol show topology {node} | tail -1 | cut -d' ' -f1")
