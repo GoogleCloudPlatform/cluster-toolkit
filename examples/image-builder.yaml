@@ -46,7 +46,7 @@ deployment_groups:
         destination: generate_hello.sh
         content: |
           #!/bin/sh
-          echo "Hello World" > /home/hello.txt
+          echo "Hello World" > /usr/local/hello.txt
 
 - group: packer
   modules:
