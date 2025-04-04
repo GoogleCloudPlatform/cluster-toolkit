@@ -75,6 +75,9 @@ exclude=*beta*
 EOL
 
 dnf install -y grafana
+dnf install -y sqlite
+
+python3.12 -m ensurepip --upgrade
 
 pip3.12 install google-api-python-client \
 	google-cloud-secret-manager \
