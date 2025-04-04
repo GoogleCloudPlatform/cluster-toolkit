@@ -51,11 +51,12 @@ resource "helm_release" "cert_manager" {
   namespace        = "cert-manager"
   create_namespace = true
 
-  values = [
-    yamlencode(merge(var.cert_manager_values, local.node_affinity ? {
+  values = concat(
+    [yamlencode(var.cert_manager_values)],
+    local.node_affinity ? [yamlencode({
       affinity = local.node_pool_affinity
-    } : {}))
-  ]
+    })] : []
+  )
 }
 
 resource "helm_release" "slurm_operator" {
@@ -71,17 +72,17 @@ resource "helm_release" "slurm_operator" {
     helm_release.cert_manager
   ]
 
-  values = [
-    file("${path.module}/values/operator.yaml"),
-    yamlencode(merge(var.slurm_operator_values, local.node_affinity ? {
+  values = concat(
+    [yamlencode(var.slurm_operator_values)],
+    local.node_affinity ? [yamlencode({
       operator = {
         affinity = local.node_pool_affinity
       }
       webhook = {
         affinity = local.node_pool_affinity
       }
-    } : {}))
-  ]
+    })] : []
+  )
 }
 
 resource "helm_release" "slurm" {
@@ -97,9 +98,9 @@ resource "helm_release" "slurm" {
     helm_release.slurm_operator
   ]
 
-  values = [
-    file("${path.module}/values/slurm.yaml"),
-    yamlencode(merge(var.slurm_values, local.node_affinity ? {
+  values = concat(
+    [yamlencode(var.slurm_values)],
+    local.node_affinity ? [yamlencode({
       controller = {
         affinity = local.node_pool_affinity
       }
@@ -115,8 +116,8 @@ resource "helm_release" "slurm" {
       slurm-exporter = {
         affinity = local.node_pool_affinity
       }
-    } : {}))
-  ]
+    })] : []
+  )
 }
 
 resource "helm_release" "prometheus" {
@@ -128,33 +129,32 @@ resource "helm_release" "prometheus" {
   namespace        = "prometheus"
   create_namespace = true
 
-  values = [
-    yamlencode(local.node_affinity ?
-      merge(var.prometheus_values, {
-        crds = {
-          upgradeJob = {
-            affinity = local.node_pool_affinity
-          }
-        }
-        alertmanager = {
-          alertmanagerSpec = {
-            affinity = local.node_pool_affinity
-          }
-        }
-        prometheusOperator = {
+  values = concat(
+    [yamlencode(var.prometheus_values)],
+    local.node_affinity ? [yamlencode({
+      crds = {
+        upgradeJob = {
           affinity = local.node_pool_affinity
         }
-        prometheus = {
-          prometheusSpec = {
-            affinity = local.node_pool_affinity
-          }
+      }
+      alertmanager = {
+        alertmanagerSpec = {
+          affinity = local.node_pool_affinity
         }
-        thanosRuler = {
-          thanosRulerSpec = {
-            affinity = local.node_pool_affinity
-          }
+      }
+      prometheusOperator = {
+        affinity = local.node_pool_affinity
+      }
+      prometheus = {
+        prometheusSpec = {
+          affinity = local.node_pool_affinity
         }
-      }) : var.prometheus_values
-    )
-  ]
+      }
+      thanosRuler = {
+        thanosRulerSpec = {
+          affinity = local.node_pool_affinity
+        }
+      }
+    })] : []
+  )
 }

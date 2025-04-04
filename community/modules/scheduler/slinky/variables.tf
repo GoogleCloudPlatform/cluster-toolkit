@@ -66,7 +66,16 @@ variable "slurm_chart_version" {
 variable "slurm_values" {
   description = "Value overrides for the Slurm release"
   type        = any
-  default     = {}
+  default = {
+    slurm-exporter = {
+      exporter = {
+        image = {
+          repository = "ghcr.io/slinkyproject/slurm-exporter"
+          tag        = "0.2.0"
+        }
+      }
+    }
+  }
 }
 
 variable "install_kube_prometheus_stack" {

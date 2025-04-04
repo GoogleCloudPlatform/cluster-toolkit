@@ -155,6 +155,11 @@ deployment_groups:
                       - h3-standard-88
             partition:
               enabled: true
+        slurm-exporter:
+          exporter:
+            image:
+              repository: ghcr.io/slinkyproject/slurm-exporter
+              tag: "0.2.0"
     outputs: [instructions]
 
   - id: slurm_exporter_monitoring
