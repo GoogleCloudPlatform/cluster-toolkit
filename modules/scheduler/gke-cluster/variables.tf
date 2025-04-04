@@ -510,3 +510,12 @@ variable "enable_gpu_operator" {
   type        = bool
   default     = false
 }
+
+variable "enable_external_dns_endpoint" {
+  description = <<-EOT
+  Allow [DNS-based approach](https://cloud.google.com/kubernetes-engine/docs/concepts/network-isolation#dns-based_endpoint) for accessing the GKE control plane.
+  Refer this [dedicated blog](https://cloud.google.com/blog/products/containers-kubernetes/new-dns-based-endpoint-for-the-gke-control-plane) for more details.
+  EOT
+  type        = bool
+  default     = false
+}
