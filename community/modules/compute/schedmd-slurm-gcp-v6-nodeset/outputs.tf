@@ -53,6 +53,18 @@ output "nodeset" {
   }
 
   precondition {
+    condition     = length(var.zones) == 0 || !var.dws_flex.enabled
+    error_message = <<-EOD
+      If a DWS Flex is enabled, `var.zones` should be empty.
+    EOD
+  }
+
+  precondition {
+    condition     = var.on_host_maintenance == "TERMINATE" || !var.dws_flex.enabled
+    error_message = "If DWS Flex is used, `on_host_maintenance` should be set to 'TERMINATE'"
+  }
+
+  precondition {
     condition     = var.reservation_name == "" || var.future_reservation == ""
     error_message = "Cannot use reservations and future reservations in the same nodeset"
   }

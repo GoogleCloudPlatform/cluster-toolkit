@@ -251,7 +251,7 @@ variable "termination_action" {
     See https://cloud.google.com/compute/docs/instances/spot for more details.
   EOD
   type        = string
-  default     = "STOP"
+  default     = null
 
   validation {
     condition     = var.termination_action == null ? true : contains(["STOP", "DELETE"], var.termination_action)
@@ -402,4 +402,23 @@ variable "advanced_machine_features" {
 variable "slurm_bucket_path" {
   description = "GCS Bucket URI of Slurm cluster file storage."
   type        = string
+}
+
+
+variable "max_run_duration" {
+  description = "The duration (in whole seconds) of the instance. Instance will run and be terminated after then."
+  type        = number
+  default     = null
+}
+
+variable "provisioning_model" {
+  description = "The provisioning model of the instance"
+  type        = string
+  default     = null
+}
+
+variable "reservation_affinity" {
+  description = "Specifies the reservations that this instance can consume from."
+  type        = object({ type = string })
+  default     = null
 }

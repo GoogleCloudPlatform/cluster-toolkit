@@ -55,6 +55,9 @@ locals {
   )
 
   nic_type = var.total_egress_bandwidth_tier == "TIER_1" ? "GVNIC" : var.nic_type
+
+
+  provisioning_model = coalesce(var.provisioning_model, local.preemptible ? "SPOT" : "STANDARD")
 }
 
 data "google_project" "this" {
@@ -172,10 +175,24 @@ resource "google_compute_instance_template" "tpl" {
 
   scheduling {
     preemptible                 = local.preemptible
-    provisioning_model          = local.preemptible ? "SPOT" : "STANDARD"
+    provisioning_model          = local.provisioning_model
     automatic_restart           = local.automatic_restart
     on_host_maintenance         = local.on_host_maintenance
-    instance_termination_action = local.preemptible ? var.instance_termination_action : null
+    instance_termination_action = var.instance_termination_action
+
+    dynamic "max_run_duration" {
+      for_each = var.max_run_duration != null ? [var.max_run_duration] : []
+      content {
+        seconds = max_run_duration.value
+      }
+    }
+  }
+
+  dynamic "reservation_affinity" {
+    for_each = var.reservation_affinity != null ? [var.reservation_affinity] : []
+    content {
+      type = reservation_affinity.value.type
+    }
   }
 
   advanced_machine_features {

@@ -74,7 +74,7 @@ variable "instance_termination_action" {
     See https://cloud.google.com/compute/docs/instances/spot for more details.
   EOD
   type        = string
-  default     = "STOP"
+  default     = null
 }
 
 variable "automatic_restart" {
@@ -376,4 +376,23 @@ EOF
     subnetwork_range_name = string
   })
   default = null
+}
+
+
+variable "max_run_duration" {
+  description = "The duration (in whole  seconds) of the instance. Instance will run and be terminated after then."
+  type        = number
+  default     = null
+}
+
+variable "provisioning_model" {
+  description = "The provisioning model of the instance"
+  type        = string
+  default     = null
+}
+
+variable "reservation_affinity" {
+  description = "Specifies the reservations that this instance can consume from."
+  type        = object({ type = string })
+  default     = null
 }
