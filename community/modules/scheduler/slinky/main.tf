@@ -45,8 +45,9 @@ data "google_container_cluster" "gke_cluster" {
 
 resource "helm_release" "cert_manager" {
   name             = "cert-manager"
-  repository       = "https://charts.jetstack.io"
   chart            = "cert-manager"
+  repository       = "https://charts.jetstack.io"
+  version          = var.cert_manager_chart_version
   namespace        = "cert-manager"
   create_namespace = true
 
@@ -61,7 +62,7 @@ resource "helm_release" "slurm_operator" {
   name             = "slurm-operator"
   chart            = "slurm-operator"
   repository       = "oci://ghcr.io/slinkyproject/charts"
-  version          = "0.2.0"
+  version          = var.slurm_operator_chart_version
   namespace        = "slinky"
   create_namespace = true
 
@@ -87,7 +88,7 @@ resource "helm_release" "slurm" {
   name             = "slurm"
   chart            = "slurm"
   repository       = "oci://ghcr.io/slinkyproject/charts"
-  version          = "0.2.0"
+  version          = var.slurm_chart_version
   namespace        = "slurm"
   create_namespace = true
 
@@ -121,8 +122,9 @@ resource "helm_release" "slurm" {
 resource "helm_release" "prometheus" {
   count            = var.install_kube_prometheus_stack ? 1 : 0
   name             = "prometheus"
-  repository       = "https://prometheus-community.github.io/helm-charts"
   chart            = "kube-prometheus-stack"
+  repository       = "https://prometheus-community.github.io/helm-charts"
+  version          = var.prometheus_chart_version
   namespace        = "prometheus"
   create_namespace = true
 

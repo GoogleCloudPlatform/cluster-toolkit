@@ -29,19 +29,10 @@ variable "node_pool_names" {
   default     = null
 }
 
-variable "install_kube_prometheus_stack" {
-  # Components detailed at https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack
-  description = "Install the Kube Prometheus Stack."
-  type        = bool
-  default     = false
-}
-
-variable "prometheus_values" {
-  description = "Value overrides for the Prometheus release"
-  type        = any
-  default = {
-    installCRDs = true
-  }
+variable "cert_manager_chart_version" {
+  description = "Version of the Cert Manager chart to install."
+  type        = string
+  default     = "v1.17.1"
 }
 
 variable "cert_manager_values" {
@@ -54,14 +45,47 @@ variable "cert_manager_values" {
   }
 }
 
+variable "slurm_operator_chart_version" {
+  description = "Version of the Slurm Operator chart to install."
+  type        = string
+  default     = "0.2.0"
+}
+
 variable "slurm_operator_values" {
   description = "Value overrides for the Slinky release"
   type        = any
   default     = {}
 }
 
+variable "slurm_chart_version" {
+  description = "Version of the Slurm chart to install."
+  type        = string
+  default     = "0.2.0"
+}
+
 variable "slurm_values" {
   description = "Value overrides for the Slurm release"
   type        = any
   default     = {}
+}
+
+variable "install_kube_prometheus_stack" {
+  # Components detailed at https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack
+  description = "Install the Kube Prometheus Stack."
+  type        = bool
+  default     = false
+}
+
+variable "prometheus_chart_version" {
+  description = "Version of the Kube Prometheus Stack chart to install."
+  type        = string
+  default     = "70.4.1"
+}
+
+variable "prometheus_values" {
+  description = "Value overrides for the Prometheus release"
+  type        = any
+  default = {
+    installCRDs = true
+  }
 }
