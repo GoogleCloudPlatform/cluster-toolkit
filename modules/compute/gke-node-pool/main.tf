@@ -70,9 +70,9 @@ data "google_container_cluster" "gke_cluster" {
 resource "google_container_node_pool" "node_pool" {
   provider = google-beta
 
-  count = var.num_node_pools
+  count = max(var.num_node_pools, var.num_slices)
 
-  name           = var.num_node_pools == 1 ? coalesce(var.name, join("-", [var.machine_type, local.module_unique_id])) : join("-", [coalesce(var.name, join("-", [var.machine_type, local.module_unique_id])), count.index])
+  name           = (max(var.num_node_pools, var.num_slices) == 1) ? coalesce(var.name, join("-", [var.machine_type, local.module_unique_id])) : join("-", [coalesce(var.name, join("-", [var.machine_type, local.module_unique_id])), count.index])
   cluster        = var.cluster_id
   node_locations = var.zones
 
@@ -104,8 +104,9 @@ resource "google_container_node_pool" "node_pool" {
   dynamic "placement_policy" {
     for_each = var.placement_policy.type != null ? [1] : []
     content {
-      type        = var.placement_policy.type
-      policy_name = var.placement_policy.name
+      type         = var.placement_policy.type
+      policy_name  = var.placement_policy.name
+      tpu_topology = var.placement_policy.tpu_topology
     }
   }
 
@@ -351,6 +352,18 @@ resource "google_container_node_pool" "node_pool" {
     precondition {
       condition     = !(var.enable_queued_provisioning == true && var.autoscaling_total_min_nodes != 0)
       error_message = "autoscaling_total_min_nodes should be 0 when enable_queued_provisioning is true."
+    }
+    precondition {
+      condition     = !(var.num_node_pools > 1 && var.num_slices > 1)
+      error_message = "num_node_pools is for CPUs and GPUS, and num_slices is for TPUs. Both cannot be set at the same time to create a group of identical nodepools / slices."
+    }
+    precondition {
+      condition     = !(var.num_node_pools == 0 && var.num_slices == 0)
+      error_message = "Either num_node_pools (for CPUs and GPUS) or num_slices (for TPUs) should be set to a positive integer value."
+    }
+    precondition {
+      condition     = !(var.num_node_pools < 0 || var.num_slices < 0)
+      error_message = "Negative integer value of num_node_pools or num_slices is not valid. Please use a positive integer value to set num_node_pools for CPUs and GPUS, and num_slices for TPUs."
     }
   }
 }
