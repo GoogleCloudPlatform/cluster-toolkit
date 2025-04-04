@@ -80,6 +80,12 @@ variable "mount_runner" {
   }
 }
 
+variable "service_account_email" {
+  description = "If defined, the instance will use the service account specified instead of the Default Compute Engine Service Account"
+  type        = string
+  default     = null
+}
+
 variable "network_interfaces" {
   type = list(object({
     network  = optional(string)
