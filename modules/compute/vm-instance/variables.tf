@@ -74,6 +74,16 @@ variable "local_ssd_interface" {
   default     = "NVME"
 }
 
+variable "additional_persistent_disks" {
+  description = "Configurations of additional disks to be included on the partition nodes."
+  type = object({
+    count = optional(number, 0)
+    type  = optional(string, "pd-balanced")
+    size  = optional(number, 200)
+  })
+  default = {}
+}
+
 variable "name_prefix" {
   description = <<-EOT
     An optional name for all VM and disk resources.
