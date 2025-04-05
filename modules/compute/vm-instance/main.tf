@@ -214,7 +214,7 @@ resource "google_compute_instance" "compute_vm" {
     for_each = toset(slice(
       google_compute_disk.additional_disks,
       var.additional_persistent_disks.count * count.index,
-      var.additional_persistent_disks.count,
+      var.additional_persistent_disks.count * count.index + var.additional_persistent_disks.count,
     ))
 
     content {
