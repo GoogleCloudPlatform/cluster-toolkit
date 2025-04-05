@@ -60,6 +60,22 @@ locals {
         ${local.sa_email}
     EOT
   )
+  kubernetes_cluster_fetch_credential_message = var.enable_external_dns_endpoint ? trimspace(
+    <<-EOT
+      Use the following command to fetch credentials for the created cluster:
+        gcloud container clusters get-credentials ${google_container_cluster.gke_cluster.name} \
+          --region ${google_container_cluster.gke_cluster.location} \
+          --project ${var.project_id} \
+          --dns-endpoint
+    EOT
+    ) : trimspace(
+    <<-EOT
+      Use the following command to fetch credentials for the created cluster:
+        gcloud container clusters get-credentials ${google_container_cluster.gke_cluster.name} \
+          --region ${google_container_cluster.gke_cluster.location} \
+          --project ${var.project_id}
+    EOT
+  )
 }
 
 output "instructions" {
@@ -70,10 +86,7 @@ output "instructions" {
 
       ${local.allowlist_your_ip_message}
 
-      Use the following command to fetch credentials for the created cluster:
-        gcloud container clusters get-credentials ${google_container_cluster.gke_cluster.name} \
-          --region ${google_container_cluster.gke_cluster.location} \
-          --project ${var.project_id}
+      ${local.kubernetes_cluster_fetch_credential_message}
 
       ${local.kubernetes_service_account_message}
     EOT

@@ -239,6 +239,12 @@ resource "google_container_cluster" "gke_cluster" {
     }
   }
 
+  control_plane_endpoints_config {
+    dns_endpoint_config {
+      allow_external_traffic = var.enable_external_dns_endpoint
+    }
+  }
+
   lifecycle {
     # Ignore all changes to the default node pool. It's being removed after creation.
     ignore_changes = [
