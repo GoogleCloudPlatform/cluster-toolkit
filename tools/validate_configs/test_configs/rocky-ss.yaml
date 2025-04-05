@@ -42,7 +42,6 @@ deployment_groups:
       instance_image:
         project: rocky-linux-cloud
         family: rocky-linux-8
-      auto_delete_disk: true
 
   - id: spack-setup
     source: community/modules/scripts/spack-setup
