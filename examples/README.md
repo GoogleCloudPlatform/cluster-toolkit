@@ -40,6 +40,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [hpc-slurm-gromacs.yaml](#hpc-slurm-gromacsyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-local-ssd.yaml](#hpc-slurm-local-ssdyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-h4d.yaml](#hpc-slurm-h4dyaml--) ![community-badge] ![experimental-badge]
+  * [hpc-slinky.yaml](#hpc-slinkyyaml--) ![community-badge] ![experimental-badge]
   * [hcls-blueprint.yaml](#hcls-blueprintyaml-) ![core-badge]
   * [hpc-gke.yaml](#hpc-gkeyaml-) ![core-badge]
   * [ml-gke](#ml-gkeyaml-) ![core-badge]
@@ -987,6 +988,21 @@ Creates a basic auto-scaling Slurm cluster with mostly default settings. The
 blueprint also creates two new VPC networks, one configured for RDMA networking and the other for non-RDMA networking, along with two filestore instances mounted to `/home` and `/apps`. There is an `h4d` partition that uses compute-optimized `h4d-highmem-192-lssd` machine type.
 
 [hpc-slurm-h4d.yaml]: ../community/examples/hpc-slurm-h4d.yaml
+
+### [hpc-slinky.yaml] ![community-badge] ![experimental-badge]
+
+The SchedMD Slinky Project brings Slurm to Kubernetes, for a best of both worlds experience. Slinky is particularly useful for:
+1. Those with a prefer a Slurm workload management paradigm, but a cloud-native operational experience
+2. Those who want the flexibility of running HPC jobs with either Kubernetes-based scheduling or Slurm-based scheduling, all on the same platform
+
+This blueprint creates a simple Slinky installation on top of Google Kubernetes Engine, with the following notable deviations from the Slinky quickstart setup:
+1. Two nodesets are implemented, following the pattern of an HPC nodeset and a debug nodeset.
+2. A lightweight, GCP-native metrics/monitoring system is adopted, rather than the Slinky-documented cluster-local Kube Prometheus Stack.
+3. Node affinities for both system components and compute nodesets are more explicitly defined, to improve stability, control, and HPC hardware utilization.
+
+While H3 compute-optimized VMs are used for the HPC nodeset, the machine type can easily be switched (including to GPU-accelerated instances).
+
+[hpc-slinky.yaml]: ../community/examples/hpc-slinky.yaml
 
 ### [hcls-blueprint.yaml]: ![core-badge]
 
