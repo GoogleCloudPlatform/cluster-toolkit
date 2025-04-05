@@ -23,6 +23,7 @@ vars:
   - us-central1-a
   authorized_cidr: <your-ip-address>/32
   gcp_public_cidrs_access_enabled: false
+  exporter_pod_monitoring_path: $(ghpc_stage("./exporter-pod-monitoring.yaml"))
 
 deployment_groups:
 - group: primary
@@ -167,17 +168,4 @@ deployment_groups:
     use: [gke_cluster]
     settings:
       apply_manifests:
-      - content: |
-          apiVersion: monitoring.googleapis.com/v1
-          kind: PodMonitoring
-          metadata:
-            name: slurm-exporter
-            namespace: slurm
-          spec:
-            selector:
-              matchLabels:
-                app.kubernetes.io/instance: slurm-exporter
-                app.kubernetes.io/name: slurm-exporter
-            endpoints:
-            - port: metrics
-              interval: 30s
+      - source: $(vars.exporter_pod_monitoring_path)

@@ -1004,7 +1004,7 @@ While H3 compute-optimized VMs are used for the HPC nodeset, the machine type ca
 
 GKE node pools are deliberately autoscaling via `initial_node_count`, rather than `static_node_count`, so that scaling out Slurm nodesets or system components is an easy Kubernetes-/Helm-level update. For example, scaling a debug nodeset from 3 to 5 replicas is a single Nodeset (via Slurm Helm release) config change - no extra work adjusting infrastructure-level specifications. The autoscaling also avoids manual bin packing calculations (especially valuable for nodeset-shared or system component node pools).
 
-[hpc-slinky.yaml]: ../community/examples/hpc-slinky.yaml
+[hpc-slinky.yaml]: ../community/examples/hpc-slinky/hpc-slinky.yaml
 
 ### [hcls-blueprint.yaml]: ![core-badge]
 
