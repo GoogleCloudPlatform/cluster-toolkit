@@ -16,8 +16,8 @@
 blueprint_name: hpc-slinky
 
 vars:
-  project_id:
-  deployment_name:
+  project_id:  ## Set GCP Project ID Here ##
+  deployment_name: slinky-01
   region: us-central1
   zones:
   - us-central1-a
