@@ -20,11 +20,8 @@ output "node_pool_names" {
 }
 
 locals {
-  is_a_series = local.machine_family == "a2"
-  last_digit  = trimsuffix(try(local.machine_vals[2], 0), "g")
-
   # Shared core machines only have 1 cpu allocatable, even if they have 2 cpu capacity
-  vcpu        = local.machine_shared_core ? 1 : local.is_a_series ? local.last_digit * 12 : local.last_digit
+  vcpu        = local.machine_shared_core ? 1 : local.guest_cpus
   useable_cpu = local.set_threads_per_core ? local.threads_per_core * local.vcpu / 2 : local.vcpu
 
   # allocatable resource definition: https://cloud.google.com/kubernetes-engine/docs/concepts/plan-node-sizes#cpu_reservations
