@@ -247,7 +247,7 @@ def setup_nss_slurm():
         ),
         check=False,
     )
-    run(r"sed -i 's/\(^\(passwd\|group\):\s\+\)/\1slurm /g' /etc/nsswitch.conf")
+    run(r"sed -i 's/\(^\(passwd\|group\):\s\+\)/\1slurm /g; s/^\(hosts:.*\)/\1 slurm/g' /etc/nsswitch.conf")
 
 
 def setup_sudoers():
@@ -476,6 +476,29 @@ def setup_compute():
     if slurmd_feature is not None:
         slurmd_options.append(f'--conf="Feature={slurmd_feature}"')
         slurmd_options.append("-Z")
+
+    if os.getenv("OS_ENV") == "slurm_container":
+        try:
+            def _extract_slurmd_nodename(slurm_names, tpu_env):
+                wid = None
+                for line in tpu_env.splitlines():
+                    if line.startswith('WORKER_ID:'):
+                        wid = line.split(":", 1)[1].strip().strip("'")
+                if wid is not None:
+                    for pair in slurm_names.split(";"):
+                        if pair.startswith(f"WORKER_{wid}"):
+                            return pair.split(":", 1)[1]
+                return None
+
+            slurm_names = util.instance_metadata("attributes/slurm_names")
+            tpu_env = util.instance_metadata("attributes/slurm_names/tpu-env")
+            slurmd_nodename = _extract_slurmd_nodename(slurm_names,tpu_env)
+
+        except Exception:
+            # TODO: differentiate between unset and error
+            slurmd_nodename = None
+        if slurmd_nodename is not None:
+            slurmd_options.append(f'-N {slurmd_nodename}')
 
     sysconf = f"""SLURMD_OPTIONS='{" ".join(slurmd_options)}'"""
     update_system_config("slurmd", sysconf)
