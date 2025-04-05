@@ -1002,6 +1002,8 @@ This blueprint creates a simple Slinky installation on top of Google Kubernetes 
 
 While H3 compute-optimized VMs are used for the HPC nodeset, the machine type can easily be switched (including to GPU-accelerated instances).
 
+GKE node pools are deliberately autoscaling via `initial_node_count`, rather than `static_node_count`, so that scaling out Slurm nodesets or system components is an easy Kubernetes-/Helm-level update. For example, scaling a debug nodeset from 3 to 5 replicas is a single Nodeset (via Slurm Helm release) config change - no extra work adjusting infrastructure-level specifications. The autoscaling also avoids manual bin packing calculations (especially valuable for nodeset-shared or system component node pools).
+
 [hpc-slinky.yaml]: ../community/examples/hpc-slinky.yaml
 
 ### [hcls-blueprint.yaml]: ![core-badge]
