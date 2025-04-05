@@ -47,6 +47,12 @@ variable "boot_disk_type" {
   default     = null
 }
 
+variable "create_boot_snapshot_before_destroy" {
+  description = "Whether to create a snapshot before destroying the boot disk"
+  type        = bool
+  default     = false
+}
+
 variable "disk_size" {
   description = "Storage size in GB for the NFS data disk"
   type        = number
@@ -57,6 +63,12 @@ variable "type" {
   description = "Storage type for the NFS data disk"
   type        = string
   default     = "pd-ssd"
+}
+
+variable "create_snapshot_before_destroy" {
+  description = "Whether to create a snapshot before destroying the NFS data disk"
+  type        = bool
+  default     = false
 }
 
 variable "provisioned_iops" {
@@ -110,10 +122,17 @@ variable "instance_image" {
   }
 }
 
+# Deprecated, replaced by create_snapshot_before_destroy and create_boot_snapshot_before_destroy
+# tflint-ignore: terraform_unused_declarations
 variable "auto_delete_disk" {
-  description = "Whether or not the NFS disk should be auto-deleted"
-  type        = bool
-  default     = false
+  description = "DEPRECATED: Whether or not the NFS disk should be auto-deleted"
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.auto_delete_disk == null
+    error_message = "The 'var.auto_delete_disk' setting is broken in Cluster Toolkit versions >1.25.0 and deprecated in versions >1.48.0, please use 'var.create_snapshot_before_destroy' and 'var.create_boot_snapshot_before_destroy' instead."
+  }
 }
 
 variable "network_self_link" {
