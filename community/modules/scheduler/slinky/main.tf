@@ -19,8 +19,7 @@ locals {
   project_id       = var.project_id != null ? var.project_id : local.cluster_id_parts[1]
 
   # Define affinity settings when node pools are specified
-  node_affinity = var.node_pool_names != null
-  node_pool_affinity = local.node_affinity ? {
+  node_pool_affinity = var.node_pool_names != null ? {
     nodeAffinity = {
       requiredDuringSchedulingIgnoredDuringExecution = {
         nodeSelectorTerms = [{
@@ -52,10 +51,19 @@ resource "helm_release" "cert_manager" {
   create_namespace = true
 
   values = concat(
-    [yamlencode(var.cert_manager_values)],
-    local.node_affinity ? [yamlencode({
+    [yamlencode({
       affinity = local.node_pool_affinity
-    })] : []
+      webhook = {
+        affinity = local.node_pool_affinity
+      }
+      cainjector = {
+        affinity = local.node_pool_affinity
+      }
+      startupapicheck = {
+        affinity = local.node_pool_affinity
+      }
+    })],
+    [yamlencode(var.cert_manager_values)]
   )
 }
 
@@ -73,15 +81,15 @@ resource "helm_release" "slurm_operator" {
   ]
 
   values = concat(
-    [yamlencode(var.slurm_operator_values)],
-    local.node_affinity ? [yamlencode({
+    [yamlencode({
       operator = {
         affinity = local.node_pool_affinity
       }
       webhook = {
         affinity = local.node_pool_affinity
       }
-    })] : []
+    })],
+    [yamlencode(var.slurm_operator_values)]
   )
 }
 
@@ -99,8 +107,7 @@ resource "helm_release" "slurm" {
   ]
 
   values = concat(
-    [yamlencode(var.slurm_values)],
-    local.node_affinity ? [yamlencode({
+    [yamlencode({
       controller = {
         affinity = local.node_pool_affinity
       }
@@ -108,15 +115,23 @@ resource "helm_release" "slurm" {
         affinity = local.node_pool_affinity
       }
       mariadb = {
-        affinity = local.node_pool_affinity
+        primary = {
+          affinity = local.node_pool_affinity
+        }
+        secondary = {
+          affinity = local.node_pool_affinity
+        }
       }
       restapi = {
         affinity = local.node_pool_affinity
       }
       slurm-exporter = {
-        affinity = local.node_pool_affinity
+        exporter = {
+          affinity = local.node_pool_affinity
+        }
       }
-    })] : []
+    })],
+    [yamlencode(var.slurm_values)]
   )
 }
 
@@ -130,8 +145,7 @@ resource "helm_release" "prometheus" {
   create_namespace = true
 
   values = concat(
-    [yamlencode(var.prometheus_values)],
-    local.node_affinity ? [yamlencode({
+    [yamlencode({
       crds = {
         upgradeJob = {
           affinity = local.node_pool_affinity
@@ -143,6 +157,14 @@ resource "helm_release" "prometheus" {
         }
       }
       prometheusOperator = {
+        admissionWebhooks = {
+          deployment = {
+            affinity = local.node_pool_affinity
+          }
+          patch = {
+            affinity = local.node_pool_affinity
+          }
+        }
         affinity = local.node_pool_affinity
       }
       prometheus = {
@@ -155,6 +177,19 @@ resource "helm_release" "prometheus" {
           affinity = local.node_pool_affinity
         }
       }
-    })] : []
+      kube-state-metrics = {
+        affinity = local.node_pool_affinity
+      }
+      grafana = {
+        affinity = local.node_pool_affinity
+        imageRenderer = {
+          affinity = local.node_pool_affinity
+        }
+      }
+      prometheus-windows-exporter = {
+        affinity = local.node_pool_affinity
+      }
+    })],
+    [yamlencode(var.prometheus_values)]
   )
 }
