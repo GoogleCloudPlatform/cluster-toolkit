@@ -211,15 +211,15 @@ resource "google_compute_instance" "compute_vm" {
   }
 
   dynamic "attached_disk" {
-    for_each = toset(slice(
+    for_each = slice(
       google_compute_disk.additional_disks,
       var.additional_persistent_disks.count * count.index,
       var.additional_persistent_disks.count * count.index + var.additional_persistent_disks.count,
-    ))
+    )
 
     content {
       source      = attached_disk.value.self_link
-      device_name = attached_disk.value.name
+      device_name = "additional-disk-${attached_disk.key}"
       mode        = "READ_WRITE"
     }
   }
