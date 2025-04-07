@@ -15,7 +15,7 @@
 */
 
 data "google_compute_machine_types" "machine_info" {
-  for_each = toset(var.zones)
+  for_each = var.zones == null ? toset([]) : toset(var.zones)
 
   project = var.project_id
   zone    = each.key
