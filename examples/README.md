@@ -59,6 +59,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [flux-cluster](#flux-clusteryaml--) ![community-badge] ![experimental-badge]
   * [tutorial-fluent.yaml](#tutorial-fluentyaml--) ![community-badge] ![experimental-badge]
   * [omnia-cluster.yaml](#omnia-clusteryaml---) ![community-badge] ![experimental-badge] ![deprecated-badge]
+  * [gke-tpu-v4](#gke-tpu-v4--) ![community-badge] ![experimental-badge]
 * [Blueprint Schema](#blueprint-schema)
 * [Writing an HPC Blueprint](#writing-an-hpc-blueprint)
   * [Blueprint Boilerplate](#blueprint-boilerplate)
@@ -1328,6 +1329,12 @@ deployment_groups:
 
 [hpc-slurm-sharedvpc.yaml]: ../community/examples/hpc-slurm-sharedvpc.yaml
 [fs-shared-vpc]: https://cloud.google.com/filestore/docs/shared-vpc
+
+### [gke-tpu-v4] ![community-badge] ![experimental-badge]
+
+This example shows how TPU v4 cluster can be created and be used to run a job that requires TPU capacity on GKE. Additional information on TPU blueprint and associated changes are in this [README](/community/examples/gke-tpu-v4/README.md).
+
+[gke-tpu-v4]: ../community/examples/gke-tpu-v4
 
 ## Blueprint Schema
 
