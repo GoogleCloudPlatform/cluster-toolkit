@@ -15,7 +15,7 @@
 terraform_backend_defaults:
   type: gcs
   configuration:
-    bucket: quantum-sim-jrt 
+    bucket: quantum-sim-jrt
 
 vars:
   deployment_name: # supply unique deployment name
