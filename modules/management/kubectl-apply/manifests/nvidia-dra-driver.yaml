@@ -11,7 +11,38 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gpu-operator
+  labels:
+    helm.sh/chart: nvidia-dra-driver-gpu-25.3.0-rc.2
+    app.kubernetes.io/name: nvidia-dra-driver-gpu
+    app.kubernetes.io/instance: nvidia-dra-driver-gpu
+    app.kubernetes.io/version: "25.3.0-rc.2"
+    app.kubernetes.io/managed-by: Helm
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: nvidia-dra-driver-gpu-quota
+  namespace: nvidia-dra-driver-gpu
+  labels:
+    helm.sh/chart: nvidia-dra-driver-gpu-25.3.0-rc.2
+    app.kubernetes.io/name: nvidia-dra-driver-gpu
+    app.kubernetes.io/instance: nvidia-dra-driver-gpu
+    app.kubernetes.io/version: "25.3.0-rc.2"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  hard:
+    pods: 100
+  scopeSelector:
+    matchExpressions:
+    - operator: In
+      scopeName: PriorityClass
+      values:
+      - system-node-critical
+      - system-cluster-critical
 ---
 # Source: nvidia-dra-driver-gpu/templates/serviceaccount.yaml
 apiVersion: v1
