@@ -24,6 +24,22 @@ metadata:
     app.kubernetes.io/component: "gpu-operator"
 ---
 apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: gpu-operator-quota
+  namespace: gpu-operator
+spec:
+  hard:
+    pods: 100
+  scopeSelector:
+    matchExpressions:
+    - operator: In
+      scopeName: PriorityClass
+      values:
+      - system-node-critical
+      - system-cluster-critical
+---
+apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: node-feature-discovery
