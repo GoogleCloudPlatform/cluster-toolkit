@@ -11,7 +11,34 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gpu-operator
+  labels:
+    app.kubernetes.io/name: gpu-operator
+    helm.sh/chart: gpu-operator-v24.9.2
+    app.kubernetes.io/instance: release-name
+    app.kubernetes.io/version: "v24.9.2"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: "gpu-operator"
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: gpu-operator-quota
+  namespace: gpu-operator
+spec:
+  hard:
+    pods: 100
+  scopeSelector:
+    matchExpressions:
+    - operator: In
+      scopeName: PriorityClass
+      values:
+      - system-node-critical
+      - system-cluster-critical
+---
 apiVersion: v1
 kind: ServiceAccount
 metadata:

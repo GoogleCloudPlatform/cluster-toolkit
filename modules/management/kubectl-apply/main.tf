@@ -27,7 +27,7 @@ locals {
   install_kueue               = try(var.kueue.install, false)
   install_jobset              = try(var.jobset.install, false)
   install_gpu_operator        = try(var.gpu_operator.install, false)
-  gpu_operator_install_source = "${path.module}/manifests/gpu-operator.yaml"
+  gpu_operator_install_source = format("${path.module}/manifests/gpu-operator-%s.yaml", try(var.gpu_operator.version, ""))
   kueue_install_source        = format("${path.module}/manifests/kueue-%s.yaml", try(var.kueue.version, ""))
   jobset_install_source       = format("${path.module}/manifests/jobset-%s.yaml", try(var.jobset.version, ""))
 }
@@ -94,19 +94,6 @@ module "configure_kueue" {
   source_path   = local.install_kueue ? try(var.kueue.config_path, "") : null
   template_vars = local.install_kueue ? try(var.kueue.config_template_vars, null) : null
   depends_on    = [module.install_kueue]
-
-  server_side_apply = true
-  wait_for_rollout  = true
-
-  providers = {
-    kubectl = kubectl
-    http    = http.h
-  }
-}
-module "configure_gpu_operator" {
-  source      = "./kubectl"
-  source_path = local.install_gpu_operator ? try(var.gpu_operator.config_path, "") : null
-  depends_on  = [module.install_gpu_operator]
 
   server_side_apply = true
   wait_for_rollout  = true
