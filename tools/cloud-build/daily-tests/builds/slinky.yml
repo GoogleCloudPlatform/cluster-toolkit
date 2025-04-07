@@ -24,7 +24,7 @@ tags:
 
 timeout: 14400s  # 4hr
 steps:
-- id: gke-a4
+- id: slinky
   name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
   entrypoint: /bin/bash
   env:
