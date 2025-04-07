@@ -505,12 +505,6 @@ variable "enable_k8s_beta_apis" {
   default     = null
 }
 
-variable "enable_gpu_operator" {
-  description = "Describes if a gpu operator resource quota should be created or not."
-  type        = bool
-  default     = false
-}
-
 variable "enable_external_dns_endpoint" {
   description = <<-EOT
   Allow [DNS-based approach](https://cloud.google.com/kubernetes-engine/docs/concepts/network-isolation#dns-based_endpoint) for accessing the GKE control plane.
