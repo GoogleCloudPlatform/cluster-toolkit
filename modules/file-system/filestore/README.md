@@ -40,9 +40,10 @@ specified in the Toolkit using the following names:
 
 - Basic HDD: "BASIC\_HDD" ([preferred][tierapi]) or "STANDARD" (deprecated)
 - Basic SSD: "BASIC\_SSD" ([preferred][tierapi]) or "PREMIUM" (deprecated)
+- Zonal With Lower Capacity Band: "ZONAL"
 - Zonal With Higher Capacity Band or High Scale SSD: "HIGH\_SCALE\_SSD"
 - Enterprise: "ENTERPRISE"
-- Zonal With Lower Capacity Band: "ZONAL"
+- Regional: "REGIONAL"
 
 [tierapi]: https://cloud.google.com/filestore/docs/reference/rest/v1beta1/Tier
 
