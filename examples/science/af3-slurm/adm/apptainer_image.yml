@@ -1,0 +1,38 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+---
+- name: Install apptainer and latest Nvidia driver for custom image
+  hosts: localhost
+  become: true
+
+  tasks:
+  - name: Install EPEL repository configuration
+    ansible.builtin.dnf:
+      name: epel-release
+      state: present
+
+  - name: Install Apptainer packages from EPEL
+    ansible.builtin.dnf:
+      name:
+      - apptainer
+      - apptainer-suid
+      state: present
+
+  - name: Install latest Nvidia driver
+    ansible.builtin.shell: |
+      #!/bin/bash
+      set -e -o pipefail
+      dnf config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel8/x86_64/cuda-rhel8.repo
+      dnf clean all
+      dnf -y module install nvidia-driver:570-open
