@@ -178,7 +178,7 @@ You need to obtain your copy of the AlphaFold 3 model weights. To do so, please 
 
 #### Quota
 Before attempting to execute the following instructions, it is important to
-consider your project's quota. The `af3-slurm-blueprint.yaml` blueprint creates an
+consider your project's quota. The `af3-slurm.yaml` blueprint creates an
 autoscaling cluster that, when fully scaled up, can deploy up to 3
 `c3d-highmem-180` and up to 10 `g2-standard-1g`, 5 `a2-highcpu-1g` and 5 `a2-ultragpu-1g` VMs.
 
@@ -339,7 +339,7 @@ This solution uses various GCS buckets to store required persistent information:
    number of files).
 
    For convenience, we provide a slurm job to populate the Databases Bucket in the correct format. When
-   executed on one of the nodes of the Datapipeline partition of the [af3-slurm-blueprint.yaml](af3-slurm-blueprint.yaml)
+   executed on one of the nodes of the Datapipeline partition of the [af3-slurm.yaml](af3-slurm.yaml)
    blueprint, this operation takes approximately **~30min**.
 
    The AlphaFold 3 solution preconfigures this script, see section [Bootstrapping of the Databases Bucket](#bootstrapping-of-the-databases-bucket) for how this can be executed **after** you built the cluster.
@@ -433,10 +433,10 @@ If you want to configure and deploy your cluster in one go, simply type:
 
 ```bash
 #!/bin/bash
-./gcluster deploy -d example/af3/af3-slurm-deployment.yaml example/af3/af3-slurm-blueprint.yaml --auto-approve 
+./gcluster deploy -d example/af3/af3-slurm-deployment.yaml example/af3/af3-slurm.yaml --auto-approve 
 ```
 
-In some cases, it may be useful to exert more fine-grained control.The `af3-slurm-blueprint.yaml` has
+In some cases, it may be useful to exert more fine-grained control.The `af3-slurm.yaml` has
 three deployment groups **environment**, **image**, **cluster**, which set up the network, build and
 Apptainer-enabled slurm image, and deploy the cluster, respectively.
 
@@ -444,7 +444,7 @@ For example, you can first build the deployment folder by:
 
 ```bash
 #!/bin/bash
-./gcluster create -d example/af3/af3-slurm-deployment.yaml example/af3/af3-slurm-blueprint.yaml -w 
+./gcluster create -d example/af3/af3-slurm-deployment.yaml example/af3/af3-slurm.yaml -w 
 ```
 
 And then deploy (or destroy) the different deployment groups in sequence:
