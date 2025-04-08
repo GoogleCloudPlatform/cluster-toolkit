@@ -44,4 +44,4 @@ vars:
   # <project>/<reservation-name>
   # In order to target a BLOCK_NAME, extended_reservation can be inputted as
   # <project>/<reservation-name>/reservationBlocks/<reservation-block-name>
-  extended_reservation: <project>/<reservation-name>
+  extended_reservation: RESERVATION_NAME
