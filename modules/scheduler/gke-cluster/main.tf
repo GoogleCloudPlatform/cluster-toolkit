@@ -239,6 +239,12 @@ resource "google_container_cluster" "gke_cluster" {
     }
   }
 
+  control_plane_endpoints_config {
+    dns_endpoint_config {
+      allow_external_traffic = var.enable_external_dns_endpoint
+    }
+  }
+
   lifecycle {
     # Ignore all changes to the default node pool. It's being removed after creation.
     ignore_changes = [
@@ -268,30 +274,6 @@ resource "google_container_cluster" "gke_cluster" {
 
   logging_config {
     enable_components = local.default_logging_component
-  }
-}
-
-resource "kubernetes_resource_quota" "gpu_operator_quota" {
-  count = var.enable_gpu_operator ? 1 : 0
-
-  metadata {
-    name      = "gpu-operator-quota"
-    namespace = "gpu-operator"
-  }
-  spec {
-    hard = {
-      pods = "100"
-    }
-    scope_selector {
-      match_expression {
-        scope_name = "PriorityClass"
-        operator   = "In"
-        values = [
-          "system-node-critical",
-          "system-cluster-critical",
-        ]
-      }
-    }
   }
 }
 

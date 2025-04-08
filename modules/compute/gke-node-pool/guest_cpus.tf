@@ -1,5 +1,5 @@
 /**
- * Copyright 2022 Google LLC
+ * Copyright 2025 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,19 +14,19 @@
  * limitations under the License.
 */
 
-terraform {
-  required_version = ">= 1.0"
-  required_providers {
-    google = {
-      source  = "hashicorp/google"
-      version = ">= 4.42"
-    }
-    random = {
-      source  = "hashicorp/random"
-      version = "~> 3.0"
-    }
+data "google_compute_machine_types" "machine_info" {
+  for_each = var.zones == null ? toset([]) : toset(var.zones)
+
+  project = var.project_id
+  zone    = each.key
+  filter  = "name = \"${var.machine_type}\""
+}
+
+locals {
+  valid_machine_info = {
+    for zone, data in data.google_compute_machine_types.machine_info :
+    zone => data.machine_types if length(data.machine_types) > 0
   }
-  provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:topic/v1.48.0"
-  }
+
+  guest_cpus = try(local.valid_machine_info[0].guest_cpus, 0)
 }
