@@ -62,7 +62,7 @@ in the original AlphaFold 3 documentation.
 
 For the two example launchers (see [Examples](#examples)), the solution sets the g2-based partition (infg2) as
 the default since this is the most cost-effective inference platform as long as your sequences fit into the
-available GPU memory. You can change the default in the `af3-deployment.yaml` file via the variable
+available GPU memory. You can change the default in the `af3-slurm-deployment.yaml` file via the variable
 `default_inference_partition`. There currently is no auto-selection of GPUs; see [Known Limitations](#known-limitations).
 
 Compared to Nvidia A100 GPUs, Nvidia's H100 GPU gives a \< 2x speed-up; see [Performance](https://github.com/google-deepmind/alphafold3/blob/main/docs/performance.md)
@@ -95,7 +95,7 @@ The solution allows you to configure static and dynamic nodes for both stages.
 ## Customization
 In addition to AlphaFold 3 ability to process diverse [inputs](https://github.com/google-deepmind/alphafold3/blob/main/docs/input.md), the inference step of AlphaFold 3 accepts a set of command
 line parameters, such as `num_diffusion_samples`, `num_seeds` etc. We are surfacing the most
-relevant of these customization parameters in the [af3-deployment.yaml](./af3-slurm-deployment.yaml).
+relevant of these customization parameters in the [af3-slurm-deployment.yaml](./af3-slurm-deployment.yaml).
 If set to "", it will use the defaults that are defined in the [run_alphafold.py](https://github.com/google-deepmind/alphafold3/blob/main/run_alphafold.py) of the Google Deepmind AlphaFold release.
 
 If you define values for these parameters in the deployment file, these parameters are set as
