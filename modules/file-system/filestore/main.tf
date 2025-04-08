@@ -24,10 +24,9 @@ resource "random_id" "resource_name_suffix" {
 }
 
 locals {
-  is_high_capacity_zonal_tier    = contains(["HIGH_SCALE_SSD", "ZONAL"], var.filestore_tier) && var.size_gb >= 10240 && var.size_gb <= 102400
-  is_high_capacity_regional_tier = var.filestore_tier == "REGIONAL" && var.size_gb >= 10240 && var.size_gb <= 102400
+  is_high_capacity_tier = contains(["HIGH_SCALE_SSD", "ZONAL", "REGIONAL"], var.filestore_tier) && var.size_gb >= 10240 && var.size_gb <= 102400
 
-  timeouts      = local.is_high_capacity_zonal_tier || local.is_high_capacity_regional_tier ? [1] : []
+  timeouts      = local.is_high_capacity_tier ? [1] : []
   server_ip     = google_filestore_instance.filestore_instance.networks[0].ip_addresses[0]
   remote_mount  = format("/%s", google_filestore_instance.filestore_instance.file_shares[0].name)
   fs_type       = "nfs"
