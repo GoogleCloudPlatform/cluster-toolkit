@@ -23,6 +23,7 @@ locals {
   apply_manifests_map = tomap({
     for index, manifest in var.apply_manifests : index => manifest
   })
+  node_pool_names = var.node_pool_names
 
   install_kueue               = try(var.kueue.install, false)
   install_jobset              = try(var.jobset.install, false)
@@ -79,6 +80,7 @@ module "install_jobset" {
 }
 
 module "install_gpu_operator" {
+  depends_on        = [local.node_pool_names]
   source            = "./kubectl"
   source_path       = local.install_gpu_operator ? local.gpu_operator_install_source : null
   server_side_apply = true
