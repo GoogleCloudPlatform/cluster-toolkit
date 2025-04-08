@@ -50,7 +50,7 @@
         <td>{{ application.version }}</td>
         <td>{{ application.compiler }}</td>
         <td>{{ application.mpi }}</td>
-        <td><img src="/static/img/GCP_logo.png" style="width:32px;height:32px;"> {{ application.install_loc.filesystem.name }}</td>
+        <td>{{ application.install_loc.filesystem.name }}</td>
         <td>{{ application.installed_architecture }}</td>        
         <td>
           {% if application.status == "p" or application.status == "q" or application.status == "i" %}

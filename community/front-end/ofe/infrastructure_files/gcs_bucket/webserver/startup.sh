@@ -32,6 +32,7 @@ SERVER_HOSTNAME=$(curl --silent --fail http://metadata/computeMetadata/v1/instan
 config_bucket=$(curl --silent --show-error http://metadata/computeMetadata/v1/instance/attributes/webserver-config-bucket -H "Metadata-Flavor: Google")
 c2_topic=$(curl --silent --show-error http://metadata/computeMetadata/v1/instance/attributes/ghpcfe-c2-topic -H "Metadata-Flavor: Google")
 deploy_mode=$(curl --silent --show-error http://metadata/computeMetadata/v1/instance/attributes/deploy_mode -H "Metadata-Flavor: Google")
+deployment_name=$(curl --silent --show-error http://metadata/computeMetadata/v1/instance/attributes/deployment_name -H "Metadata-Flavor: Google")
 
 # Exit if deployment already exists to stop startup script running on reboots
 #
@@ -48,6 +49,7 @@ printf "####################\n#### Installing required packages\n###############
 dnf install -y epel-release
 dnf update -y --security
 dnf config-manager --add-repo https://rpm.releases.hashicorp.com/RHEL/hashicorp.repo
+
 dnf install -y terraform
 dnf install --best -y google-cloud-sdk nano make gcc python3.12-devel unzip git \
 	rsync wget nginx bind-utils policycoreutils-python-utils \
@@ -76,12 +78,43 @@ EOL
 
 dnf install -y grafana
 
+# Build and install latest SQLite for Django 5 compatibility
+# dnf/yum only has 3.26.0 which causes error:
+# "django.db.utils.NotSupportedError: SQLite 3.31 or later is required (found 3.26.0)."
+install_sqlite() {
+	local src_dir="/usr/local/src"
+	local tarball="sqlite-autoconf-3490100.tar.gz"
+	local url="https://www.sqlite.org/2025/${tarball}"
+
+	cd "$src_dir" || {
+		echo "ERROR: Could not change directory to $src_dir"
+		exit 1
+	}
+
+	if ! wget "$url"; then
+		echo "ERROR: Failed to download SQLite from $url"
+		exit 1
+	fi
+
+	tar xzf sqlite-autoconf-3490100.tar.gz
+	cd sqlite-autoconf-3490100 || exit 1
+	./configure --prefix=/usr/local
+	make
+	sudo make install
+	echo "/usr/local/lib" | sudo tee /etc/ld.so.conf.d/sqlite3.conf
+	sudo ldconfig
+}
+
+install_sqlite
+
+python3.12 -m ensurepip --upgrade
+
 pip3.12 install google-api-python-client \
 	google-cloud-secret-manager \
 	google.cloud.pubsub \
 	pyyaml addict httplib2
 
-# Set Python3.8 as default Python3
+# Set Python3.12 as default Python3
 echo '2' | update-alternatives --config python3
 # Download configuration file
 #
@@ -203,6 +236,7 @@ sudo su - gcluster -c /bin/bash <<EOF
   echo "    gcp_project: \"$GCP_PROJECT\"" >> configuration.yaml
   echo "    gcs_bucket: \"${config_bucket}\"" >> configuration.yaml
   echo "    c2_topic: \"${c2_topic}\"" >> configuration.yaml
+  echo "    deployment_name: \"${deployment_name}\"" >> configuration.yaml
 
   printf "\nInitalising Django environments...\n"
   mkdir /opt/gcluster/run
