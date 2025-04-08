@@ -33,7 +33,7 @@ vars:
 
   # Cidr block containing the IP of the machine calling terraform.
   # The following line must be updated for this example to work.
-  authorized_cidr: <your-ip-address>/32
+  authorized_cidr:
 
   gcp_public_cidrs_access_enabled: false
   kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
@@ -45,7 +45,7 @@ vars:
   # <project>/<reservation-name>
   # In order to target a BLOCK_NAME, extended_reservation can be inputted as
   # <project>/<reservation-name>/reservationBlocks/<reservation-block-name>
-  extended_reservation: <project>/<reservation-name>
+  extended_reservation:
 
 deployment_groups:
 - group: primary
