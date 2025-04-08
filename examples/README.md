@@ -1018,6 +1018,9 @@ Before using this solution, please review the [AlphaFold 3 Model Parameter Terms
 Please check that you/your organization are eligible for obtaining the weights and that your use falls within the allowed terms and complies
 with the [Prohibited Use Policy](https://github.com/google-deepmind/alphafold3/blob/main/WEIGHTS_PROHIBITED_USE_POLICY.md).
 
+See the [AF3 Solution README] for more details.
+
+[AF3 Solution README]: ../examples/science/af3-slurm/README.md
 [af3-slurm.yaml]: ../examples/science/af3-slurm/af3-slurm.yaml
 
 ### [hpc-gke.yaml] ![core-badge]
