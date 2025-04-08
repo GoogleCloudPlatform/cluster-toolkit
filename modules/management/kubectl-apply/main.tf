@@ -79,18 +79,6 @@ module "install_jobset" {
   }
 }
 
-module "install_gpu_operator" {
-  depends_on        = [local.node_pool_names]
-  source            = "./kubectl"
-  source_path       = local.install_gpu_operator ? local.gpu_operator_install_source : null
-  server_side_apply = true
-
-  providers = {
-    kubectl = kubectl
-    http    = http.h
-  }
-}
-
 module "configure_kueue" {
   source        = "./kubectl"
   source_path   = local.install_kueue ? try(var.kueue.config_path, "") : null
@@ -99,6 +87,18 @@ module "configure_kueue" {
 
   server_side_apply = true
   wait_for_rollout  = true
+
+  providers = {
+    kubectl = kubectl
+    http    = http.h
+  }
+}
+
+module "install_gpu_operator" {
+  depends_on        = [local.node_pool_names, module.install_kueue]
+  source            = "./kubectl"
+  source_path       = local.install_gpu_operator ? local.gpu_operator_install_source : null
+  server_side_apply = true
 
   providers = {
     kubectl = kubectl

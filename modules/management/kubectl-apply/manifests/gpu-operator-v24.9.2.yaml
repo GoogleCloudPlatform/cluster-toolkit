@@ -603,7 +603,7 @@ metadata:
     app.kubernetes.io/managed-by: Helm
     role: worker
 spec:
-  revisionHistoryLimit:
+  revisionHistoryLimit: 1
   selector:
     matchLabels:
       app.kubernetes.io/name: node-feature-discovery
@@ -756,7 +756,7 @@ metadata:
     role: master
 spec:
   replicas: 1
-  revisionHistoryLimit:
+  revisionHistoryLimit: 1
   selector:
     matchLabels:
       app.kubernetes.io/name: node-feature-discovery
@@ -876,7 +876,7 @@ metadata:
     role: gc
 spec:
   replicas: 1
-  revisionHistoryLimit:
+  revisionHistoryLimit: 1
   selector:
     matchLabels:
       app.kubernetes.io/name: node-feature-discovery
@@ -1078,6 +1078,7 @@ spec:
       env:
       - name: WITH_WORKLOAD
         value: "false"
+
   mig:
     strategy: single
   psa:
@@ -1092,7 +1093,7 @@ spec:
     usePrecompiled: false
     repository: nvcr.io/nvidia
     image: driver
-    version: "570.124.06"
+    version: "550.127.05"
     imagePullPolicy: IfNotPresent
     startupProbe:
       failureThreshold: 120
@@ -1286,10 +1287,7 @@ spec:
     - name: WITH_REBOOT
       value: "false"
     config:
-    name:
-    default: all-disabled
-    gpuClientsConfig:
-      name: ""
+      default: all-disabled
   nodeStatusExporter:
     enabled: false
     repository: nvcr.io/nvidia/cloud-native
