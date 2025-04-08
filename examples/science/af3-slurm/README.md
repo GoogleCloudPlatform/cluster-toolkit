@@ -54,9 +54,11 @@ tokens presented to the model in the inference step. The number of tokens in tur
 to the sum of the sequence lengths of all proteins, DNA and RNA plus the number of all ligand atoms. Note that
 non-standard polymer amino acids are also tokenized like ligands, i.e. per-atom.
 
-As long as the total sum stays below ~3000, the g2 inference partition suffices. Up to about ~3800 tokens, the a2-highgpu
-partition suffices. Above this you should select the a2-ultragpu partition. For additional tuning, also consider
-[Other Hardware Configurations](https://github.com/google-deepmind/alphafold3/blob/main/docs/performance.md#other-hardware-configurations).
+For example, the g2-based inference partition suffices to process inputs of up to 2000 tokens. The a2-ultragpu partition can process
+inputs of up to 5120 tokens. It is furthermore possible to use unified memory, increasing the number of tokens that can be handled by a
+GPU at the expense of throughput. See
+[Other Hardware Configurations](https://github.com/google-deepmind/alphafold3/blob/main/docs/performance.md#other-hardware-configurations)
+in the original AlphaFold 3 documentation.
 
 For the two example launchers (see [Examples](#examples)), the solution sets the g2-based partition (infg2) as
 the default since this is the most cost-effective inference platform as long as your sequences fit into the
