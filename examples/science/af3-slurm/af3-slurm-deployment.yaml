@@ -26,8 +26,8 @@ vars:
   zone: us-central1-a                # supply zone with C3D-highmem and GPU capacity
 
   # Required buckets for weights and databases
-  modelweights_bucket:               # name of your bucket with af3 model weights
-  database_bucket:                   # name of your bucket with the database files
+  modelweights_bucket: ""            # name of your bucket with af3 model weights
+  database_bucket: ""                # name of your bucket with the database files
 
   # AF3 model - architecture mappings - typically do not need to be modified
   sif_dir: /opt/apps/af3/containers  # default path for the local copy of the container image

@@ -120,7 +120,7 @@ check_background() {
 	fi
 }
 
-CONFIGS=$(find examples/ community/examples/ tools/validate_configs/test_configs/ docs/tutorials/ docs/videos/build-your-own-blueprint/ -name "*.yaml" -type f -not -path 'examples/machine-learning/a3-megagpu-8g/*' -not -path 'examples/machine-learning/a3-ultragpu-8g/*' -not -path 'examples/gke-a3-ultragpu/*' -not -path 'examples/hypercompute_clusters/*' -not -path 'examples/gke-dws-flex-start/*' -not -path 'examples/gke-a4/*' -not -path 'examples/machine-learning/a4-highgpu-8g/*')
+CONFIGS=$(find examples/ community/examples/ tools/validate_configs/test_configs/ docs/tutorials/ docs/videos/build-your-own-blueprint/ -name "*.yaml" -type f -not -path 'examples/machine-learning/a3-megagpu-8g/*' -not -path 'examples/machine-learning/a3-ultragpu-8g/*' -not -path 'examples/gke-a3-ultragpu/*' -not -path 'examples/hypercompute_clusters/*' -not -path 'examples/gke-dws-flex-start/*' -not -path 'examples/gke-a4/*' -not -path 'examples/machine-learning/a4-highgpu-8g/*' -not -path 'examples/science/af3-slurm/*')
 # Exclude blueprints that use v5 modules.
 declare -A EXCLUDE_EXAMPLE
 EXCLUDE_EXAMPLE["tools/validate_configs/test_configs/two-clusters-sql.yaml"]=
@@ -152,5 +152,6 @@ done
 run_test "examples/machine-learning/a3-megagpu-8g/slurm-a3mega-base.yaml" "examples/machine-learning/a3-megagpu-8g/deployment-base.yaml"
 run_test "examples/machine-learning/a3-megagpu-8g/slurm-a3mega-image.yaml" "examples/machine-learning/a3-megagpu-8g/deployment-image-cluster.yaml"
 run_test "examples/machine-learning/a3-megagpu-8g/slurm-a3mega-cluster.yaml" "examples/machine-learning/a3-megagpu-8g/deployment-image-cluster.yaml"
+run_test "examples/science/af3-slurm/af3-slurm.yaml" "examples/science/af3-slurm/af3-slurm-deployment.yaml"
 
 echo "All configs have been validated successfully (passed)."
