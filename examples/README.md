@@ -989,7 +989,7 @@ blueprint also creates two new VPC networks, one configured for RDMA networking 
 
 [hpc-slurm-h4d.yaml]: ../community/examples/hpc-slurm-h4d.yaml
 
-### [hcls-blueprint.yaml]: ![core-badge] ![experimental-badge]
+### [hcls-blueprint.yaml]: ![core-badge]
 
 This blueprint demonstrates an advanced architecture that can be used to run
 GROMACS with GPUs and CPUs on Google Cloud. For full documentation, refer
@@ -998,7 +998,7 @@ GROMACS with GPUs and CPUs on Google Cloud. For full documentation, refer
 [document]: ../docs/videos/healthcare-and-life-sciences/README.md
 [hcls-blueprint.yaml]:  ../example/hcls-blueprint.yaml
 
-### [af3-slurm.yaml]: ![core-badge]
+### [af3-slurm.yaml]: ![core-badge] ![experimental-badge]
 
 This blueprint lets you create a high-throughput execution environment for Google Deepmind's
 [AlphaFold 3](https://blog.google/technology/ai/google-deepmind-isomorphic-alphafold-3-ai-model)
