@@ -41,7 +41,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [hpc-slurm-local-ssd.yaml](#hpc-slurm-local-ssdyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-h4d.yaml](#hpc-slurm-h4dyaml--) ![community-badge] ![experimental-badge]
   * [hcls-blueprint.yaml](#hcls-blueprintyaml-) ![core-badge]
-  * [af3-slurm.yaml](#af3-slurmyaml-) ![core-badge]
+  * [af3-slurm.yaml](#af3-slurmyaml-) ![core-badge] ![experimental-badge]
   * [hpc-gke.yaml](#hpc-gkeyaml-) ![core-badge]
   * [ml-gke](#ml-gkeyaml-) ![core-badge]
   * [storage-gke](#storage-gkeyaml-) ![core-badge]
@@ -989,7 +989,7 @@ blueprint also creates two new VPC networks, one configured for RDMA networking 
 
 [hpc-slurm-h4d.yaml]: ../community/examples/hpc-slurm-h4d.yaml
 
-### [hcls-blueprint.yaml]: ![core-badge]
+### [hcls-blueprint.yaml]: ![core-badge] ![experimental-badge]
 
 This blueprint demonstrates an advanced architecture that can be used to run
 GROMACS with GPUs and CPUs on Google Cloud. For full documentation, refer
@@ -1017,6 +1017,8 @@ controller-node, not requiring any user interaction with the AlphaFold 3 environ
 Before using this solution, please review the [AlphaFold 3 Model Parameter Terms of Use](https://github.com/google-deepmind/alphafold3/blob/main/WEIGHTS_TERMS_OF_USE.md).
 Please check that you/your organization are eligible for obtaining the weights and that your use falls within the allowed terms and complies
 with the [Prohibited Use Policy](https://github.com/google-deepmind/alphafold3/blob/main/WEIGHTS_PROHIBITED_USE_POLICY.md).
+
+[af3-slurm.yaml]: ../example/science/af3-slurm.yaml
 
 ### [hpc-gke.yaml] ![core-badge]
 
