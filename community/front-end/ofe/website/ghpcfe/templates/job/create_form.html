@@ -15,10 +15,11 @@
 -->
 
 {% extends "base_generic.html" %}
+{% load static %}
 
 {% block extrameta %}
-{% load static %}
 <script src="{% static 'js/jquery.cookie.js' %}"></script>
+
 <script>
 function setLimits() {
     var limits = {
@@ -28,31 +29,30 @@ function setLimits() {
             "instance_type": "{{ partition.machine_type }}",
             "vcpu": {{ partition.vCPU_per_node }},
             "nodes": {{ partition.dynamic_node_count }} + {{ partition.static_node_count }},
-            },
+        },
         {% endfor %}
     };
+    var limit = limits[document.getElementById("id_partition").value];
+    var nNodes = document.getElementById("id_number_of_nodes");
+    var ranksPer = document.getElementById("id_ranks_per_node");
 
-    limit = limits[document.getElementById("id_partition").value];
-    nNodes = document.getElementById("id_number_of_nodes");
     nNodes.max = limit["nodes"];
-    ranksPer = document.getElementById("id_ranks_per_node");
     ranksPer.max = limit["vcpu"];
     ranksPer.value = limit["vcpu"];
-};
-
+}
 
 function updateRunScriptSelection(val) {
-        if ( val == 'url') {
-            document.getElementById("id_run_script").disabled = false;
-            document.getElementById("id_run_script_raw").disabled = true;
-            document.getElementById("run_script_url").style.display = 'block';
-            document.getElementById("run_script_raw").style.display = 'none';
-        } else {
-            document.getElementById("id_run_script").disabled = true;
-            document.getElementById("id_run_script_raw").disabled = false;
-            document.getElementById("run_script_url").style.display = 'none';
-            document.getElementById("run_script_raw").style.display = 'block';
-        }
+    if ( val === 'url') {
+        document.getElementById("id_run_script").disabled = false;
+        document.getElementById("id_run_script_raw").disabled = true;
+        document.getElementById("run_script_url").style.display = 'block';
+        document.getElementById("run_script_raw").style.display = 'none';
+    } else {
+        document.getElementById("id_run_script").disabled = true;
+        document.getElementById("id_run_script_raw").disabled = false;
+        document.getElementById("run_script_url").style.display = 'none';
+        document.getElementById("run_script_raw").style.display = 'block';
+    }
 }
 
 $(function() {
@@ -65,36 +65,48 @@ var priceCache = {};
 function updatePricing() {
     var user_quota_type = "{{ user_quota_type|safe }}";
     var user_quota_remaining = {{ user_quota_remaining|safe }};
-    partition_id = document.getElementById("id_partition").value;
-    nNodes = document.getElementById("id_number_of_nodes").value;
-    max_walltime = document.getElementById("id_wall_clock_time_limit").value;
+    var partition_id = document.getElementById("id_partition").value;
+    var nNodes = document.getElementById("id_number_of_nodes").value;
+    var max_walltime = document.getElementById("id_wall_clock_time_limit").value;
+
     if (!priceCache[partition_id]) {
         priceCache[partition_id] = $.ajax({
             url: "{% url 'api-pricing-list' %}" + partition_id,
             type: "GET",
             dataType: "json",
             headers: {'X-CSRFToken': $.cookie("csrftoken")}
-            });
+        });
     }
+
     priceCache[partition_id].done(function(data) {
-        hourly_price = data["price"];
-        total_cost = hourly_price * nNodes * max_walltime/60;
-        usd_fmt = new Intl.NumberFormat('en-US', {style: "currency", currency: data["currency"]})
-	fmt_price = usd_fmt.format(total_cost);
-        priceDiv = document.getElementById("id_pricing");
-        priceDiv.innerHTML = "<p>Estimated cost:  "+fmt_price+".</p>";
+        var hourly_price = data["price"];
+        var total_cost = hourly_price * nNodes * (max_walltime/60);
+        var usd_fmt = new Intl.NumberFormat('en-US', {style: "currency", currency: data["currency"]});
+        var fmt_price = usd_fmt.format(total_cost);
+
+        var priceDiv = document.getElementById("id_pricing");
+        priceDiv.innerHTML = "<p>Estimated cost: " + fmt_price + ".</p>";
         document.getElementById("id_job_cost").value = total_cost;
         document.getElementById("id_node_price").value = hourly_price;
-	if (user_quota_type == "l" ){
-	    if (total_cost > user_quota_remaining) {
-		priceDiv.innerHTML += "\n<div class=\"alert alert-danger\" role=\"alert\">Job cost exceeds remaining quota (${{ user_quota_remaining }}) - submission will likely fail.</div>";
-	    } else {
-		priceDiv.innerHTML += "\n<div class=\"alert alert-info\" role=\"alert\">Estimated "+usd_fmt.format(user_quota_remaining - total_cost)+" quota will remain after this job.</div>";
-	    }
-	}
+
+        if (user_quota_type === "l") {
+            if (total_cost > user_quota_remaining) {
+                priceDiv.innerHTML += 
+                  "<div class='alert alert-danger mt-2' role='alert'>" +
+                  "Job cost exceeds remaining quota (${{ user_quota_remaining }}) - submission will likely fail." +
+                  "</div>";
+            } else {
+                var remain = usd_fmt.format(user_quota_remaining - total_cost);
+                priceDiv.innerHTML +=
+                  "<div class='alert alert-info mt-2' role='alert'>" +
+                  "Estimated " + remain + " quota will remain after this job." +
+                  "</div>";
+            }
+        }
     });
+
     priceCache[partition_id].fail(function(data) {
-        priceDiv = document.getElementById("id_pricing");
+        var priceDiv = document.getElementById("id_pricing");
         priceDiv.innerHTML = "<p>Unable to retrieve pricing information for estimated price.</p>";
         document.getElementById("id_job_cost").value = -1.0;
         document.getElementById("id_node_price").value = -1.0;
@@ -124,156 +136,404 @@ function initPage() {
     updateRunScriptSelection('url');
     updatePricing();
 
-    user_quota_type = "{{ user_quota_type|safe }}";
-
-    if (user_quota_type == "d") {
+    var user_quota_type = "{{ user_quota_type|safe }}";
+    if (user_quota_type === "d") {
         document.getElementById("id_submit_button").disabled = true;
     }
 }
 
-window.onload=initPage;
+window.onload = initPage;
 </script>
-{% endblock %}
-
+{% endblock extrameta %}
 
 {% block content %}
-  <h2>{{ application.name }} - {{ application.version }} on {{ cluster.name }}</h2>
+
+<div class="my-4">
+  {% if is_container %}
+    <h2 class="mb-4">{{ application.name }} - {{ cluster.name }}</h2>
+  {% else %}
+    <h2 class="mb-4">{{ application.name }} - {{ application.version }} on {{ cluster.name }}</h2>
+  {% endif %}
 
   {% if user_quota_type == "d" %}
-  <div class="alert alert-danger" role="alert">Job submission disabled for this account. Contact your administrator.</div>
+  <div class="alert alert-danger" role="alert">
+    Job submission disabled for this account. Contact your administrator.
+  </div>
   {% endif %}
 
   {% if form.non_field_errors %}
-  <div class="alert alert-danger" role="alert">{{ form.non_field_errors.as_text }}</div>
+  <div class="alert alert-danger" role="alert">
+    {{ form.non_field_errors.as_text }}
+  </div>
   {% endif %}
 
   <form action="" method="post">
+    {% load form_extras %}
+
     {% csrf_token %}
-    <input type="hidden" name="application" class="form-control" id="id_application" value="{{ application.id }}">
-    <input type="hidden" name="job_cost" class="form-control" id="id_job_cost">
-    <input type="hidden" name="node_price" class="form-control" id="id_node_price">
+    <!-- Hidden fields -->
+    <input type="hidden" name="application" id="id_application" value="{{ application.id }}">
+    <input type="hidden" name="job_cost" id="id_job_cost">
+    <input type="hidden" name="node_price" id="id_node_price">
 
-    <div class="form-group">
-      {{ form.name.errors }}
-      {{ form.name.label_tag }}
-      {{ form.name }}
-      {% if form.name.help_text %}
-        <small class="form-text text-muted">{{ form.name.help_text }}</small>
-      {% endif %}
-    </div>
-    <div class="form-group">
-      {{ form.cluster.errors }}
-      {{ form.cluster.label_tag }}
-      {{ form.cluster }}
-      {% if form.cluster.help_text %}
-        <small class="form-text text-muted">{{ form.cluster.help_text }}</small>
-      {% endif %}
-      <input type="hidden" name="cluster" class="form-control" id="id_cluster" value="{{ cluster.id }}">
-    </div>
-    <div class="form-group">
-      {{ form.partition.errors }}
-      {{ form.partition.label_tag }}
-      <select name="partition" class="form-control" required id="id_partition" onchange="change_partition();">
-      {% for partition in cluster.partitions.all %}
-        <option value="{{partition.id}}">{{partition.name}} - dynamic {{partition.dynamic_node_count}} and {{partition.static_node_count}} of {{ partition.machine_type }}</option>
-      {% endfor %}
-      </select>
-      {% if form.partition.help_text %}
-        <small class="form-text text-muted">{{ form.partiion.help_text }}</small>
-      {% endif %}
-    </div>
-    <div class="form-group">
-      {{ form.number_of_nodes.errors }}
-      {{ form.number_of_nodes.label_tag }}
-      {{ form.number_of_nodes }}
-      {% if form.number_of_nodes.help_text %}
-        <small class="form-text text-muted">{{ form.number_of_nodes.help_text }}</small>
-      {% endif %}
-    </div>
-    <div class="form-group">
-      {{ form.ranks_per_node.errors }}
-      {{ form.ranks_per_node.label_tag }}
-      {{ form.ranks_per_node }}
-      {% if form.ranks_per_node.help_text %}
-        <small class="form-text text-muted">{{ form.ranks_per_node.help_text }}</small>
-      {% endif %}
-    </div>
-    <div class="form-group">
-      {{ form.threads_per_rank.errors }}
-      {{ form.threads_per_rank.label_tag }}
-      {{ form.threads_per_rank }}
-      {% if form.threads_per_rank.help_text %}
-        <small class="form-text text-muted">{{ form.threads_per_rank.help_text }}</small>
-      {% endif %}
-    </div>
-    <div class="form-group">
-      {{ form.wall_clock_time_limit.errors }}
-      {{ form.wall_clock_time_limit.label_tag }}
-      {{ form.wall_clock_time_limit }}
-      {% if form.wall_clock_time_limit.help_text %}
-        <small class="form-text text-muted">{{ form.wall_clock_time_limit.help_text }}</small>
-      {% endif %}
-    </div>
-
-    <hr>
-    <h3>Application Details</h3>
-    <div class="form-group">
-      {{ form.run_script.errors }}
-      {{ form.run_script.label_tag }}
-      <div>
-      <input type="radio" name="script_type" id="url" value="url" checked="checked" /><label for="url">URL to script</label>
-      <input type="radio" name="script_type" id="raw" value="raw"><label for="raw" />Inline Script</label>
+    <div class="row g-3">
+      <!-- Job Name -->
+      <div class="col-md-6 mb-4">
+        <label for="{{ form.name.id_for_label }}" class="form-label font-weight-bold">
+          {{ form.name.label }}:
+        </label>
+        {{ form.name|add_class:"form-control" }}
+        {% if form.name.help_text %}
+        <div class="form-text text-muted">{{ form.name.help_text }}</div>
+        {% endif %}
+        {% if form.name.errors %}
+        <div class="text-danger small">{{ form.name.errors }}</div>
+        {% endif %}
       </div>
 
-      <div id="run_script_url">
-      <input type="url" name="run_script" class="form-control" maxlength="200" required id="id_run_script" {% if form.run_script.value %}value="{{form.run_script.value}}"{%endif%}>
-      <small class="form-text text-muted">The URL to the job script (a shell script or a tarball containing run.sh)</small>
+      <!-- Cluster (read-only if you prefer; we store the actual ID in a hidden field) -->
+      <div class="col-md-6 mb-4">
+        <label class="form-label">
+          {{ form.cluster.label }}:
+        </label>
+        <div>
+          <select disabled class="form-control">
+            <option>{{ cluster.name }}</option>
+          </select>
+        </div>
+        {% if form.cluster.help_text %}
+        <div class="form-text text-muted">{{ form.cluster.help_text }}</div>
+        {% endif %}
+        <input type="hidden" name="cluster" id="id_cluster" value="{{ cluster.id }}">
+        {% if form.cluster.errors %}
+        <div class="text-danger small">{{ form.cluster.errors }}</div>
+        {% endif %}
       </div>
-      <div id="run_script_raw">
-      <textarea name="run_script" cols="40" rows="10" class="form-control" maxlength="8190" id="id_run_script_raw">{%if form.run_script.value %}{{form.run_script.value}}{%else%}#!/bin/bash
+    </div>
 
-{%endif%}</textarea>
-      <small class="form-text text-muted">Inline shell script, beginning with #!</small>
+    <div class="row g-3 mt-3">
+      <!-- Partition -->
+      <div class="col-md-6 mb-4">
+        <label for="id_partition" class="form-label font-weight-bold">
+          {{ form.partition.label }}:
+        </label>
+        <select name="partition" class="form-control" required id="id_partition" onchange="change_partition();">
+        {% for partition in cluster.partitions.all %}
+          <option value="{{ partition.id }}">
+            {{ partition.name }} - dynamic {{ partition.dynamic_node_count }} and {{ partition.static_node_count }} of {{ partition.machine_type }}
+          </option>
+        {% endfor %}
+        </select>
+        {% if form.partition.help_text %}
+        <div class="form-text text-muted">{{ form.partition.help_text }}</div>
+        {% endif %}
+        {% if form.partition.errors %}
+        <div class="text-danger small">{{ form.partition.errors }}</div>
+        {% endif %}
+      </div>
+
+      <!-- Number of nodes -->
+      <div class="col-md-3 mb-4">
+        <label for="{{ form.number_of_nodes.id_for_label }}" class="form-label font-weight-bold">
+          {{ form.number_of_nodes.label }}:
+        </label>
+        {{ form.number_of_nodes|add_class:"form-control" }}
+        {% if form.number_of_nodes.help_text %}
+        <div class="form-text text-muted">{{ form.number_of_nodes.help_text }}</div>
+        {% endif %}
+        {% if form.number_of_nodes.errors %}
+        <div class="text-danger small">{{ form.number_of_nodes.errors }}</div>
+        {% endif %}
+      </div>
+
+      <!-- CPUs per Node -->
+      <div class="col-md-3 mb-4">
+        <label for="{{ form.ranks_per_node.id_for_label }}" class="form-label font-weight-bold">
+          {{ form.ranks_per_node.label }}:
+        </label>
+        {{ form.ranks_per_node|add_class:"form-control" }}
+        {% if form.ranks_per_node.help_text %}
+        <div class="form-text text-muted">{{ form.ranks_per_node.help_text }}</div>
+        {% endif %}
+        {% if form.ranks_per_node.errors %}
+        <div class="text-danger small">{{ form.ranks_per_node.errors }}</div>
+        {% endif %}
+      </div>
+
+      {% if not is_container %}
+      <!-- Threads per Rank -->
+      <div class="col-md-3 mb-4">
+        <label for="{{ form.threads_per_rank.id_for_label }}" class="form-label font-weight-bold">
+          {{ form.threads_per_rank.label }}:
+        </label>
+        {{ form.threads_per_rank|add_class:"form-control" }}
+        {% if form.threads_per_rank.help_text %}
+        <div class="form-text text-muted">{{ form.threads_per_rank.help_text }}</div>
+        {% endif %}
+        {% if form.threads_per_rank.errors %}
+        <div class="text-danger small">{{ form.threads_per_rank.errors }}</div>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      <!-- Wall time -->
+      <div class="col-md-3 mb-4">
+        <label for="{{ form.wall_clock_time_limit.id_for_label }}" class="form-label font-weight-bold">
+          {{ form.wall_clock_time_limit.label }}:
+        </label>
+        {{ form.wall_clock_time_limit|add_class:"form-control" }}
+        {% if form.wall_clock_time_limit.help_text %}
+        <div class="form-text text-muted">{{ form.wall_clock_time_limit.help_text }}</div>
+        {% endif %}
+        {% if form.wall_clock_time_limit.errors %}
+        <div class="text-danger small">{{ form.wall_clock_time_limit.errors }}</div>
+        {% endif %}
       </div>
     </div>
-    <div class="form-group">
-      {{ form.input_data.errors }}
-      {{ form.input_data.label_tag }}
-      {{ form.input_data }}
-      {% if form.input_data.help_text %}
-        <small class="form-text text-muted">{{ form.input_data.help_text }}</small>
-      {% endif %}
+
+    {% if is_container %}
+    <hr class="my-4">
+
+    <!-- Container Options -->
+    <h4>Container Options</h4>
+    <p class="small">
+      Please read the
+      <a href="https://github.com/NVIDIA/pyxis/wiki/Setup#slurm-plugstack-configuration">Pyxis</a> and
+      <a href="https://github.com/NVIDIA/enroot/blob/master/doc/configuration.md">Enroot</a>
+      documentation for best practices in configuring your environment.
+    </p>
+
+    <div class="row g-3 mt-3">
+      <!-- Container Image URI -->
+      <div class="col-md-6 mb-4">
+        <label for="{{ form.container_image_uri.id_for_label }}" class="form-label font-weight-bold">
+          {{ form.container_image_uri.label }}:
+        </label>
+        {{ form.container_image_uri|add_class:"form-control" }}
+        {% if form.container_image_uri.help_text %}
+        <div class="form-text text-muted">{{ form.container_image_uri.help_text }}</div>
+        {% endif %}
+        {% if form.container_image_uri.errors %}
+        <div class="text-danger small">{{ form.container_image_uri.errors }}</div>
+        {% endif %}
+      </div>
+
+      <!-- Container mounts -->
+      <div class="col-md-6 mb-4">
+        <label for="{{ form.container_mounts.id_for_label }}" class="form-label font-weight-bold">
+          {{ form.container_mounts.label }}:
+        </label>
+        {{ form.container_mounts|add_class:"form-control" }}
+        {% if form.container_mounts.help_text %}
+        <div class="form-text text-muted">{{ form.container_mounts.help_text }}</div>
+        {% endif %}
+        {% if form.container_mounts.errors %}
+        <div class="text-danger small">{{ form.container_mounts.errors }}</div>
+        {% endif %}
+      </div>
+
+      <!-- Container envvars -->
+      <div class="col-md-6 mb-4">
+        <label for="{{ form.container_envvars.id_for_label }}" class="form-label font-weight-bold">
+          {{ form.container_envvars.label }}:
+        </label>
+        {{ form.container_envvars|add_class:"form-control" }}
+        {% if form.container_envvars.help_text %}
+        <div class="form-text text-muted">{{ form.container_envvars.help_text }}</div>
+        {% endif %}
+        {% if form.container_envvars.errors %}
+        <div class="text-danger small">{{ form.container_envvars.errors }}</div>
+        {% endif %}
+      </div>
+
+      <!-- Container workdir -->
+      <div class="col-md-6 mb-4">
+        <label for="{{ form.container_workdir.id_for_label }}" class="form-label font-weight-bold">
+          {{ form.container_workdir.label }}:
+        </label>
+        {{ form.container_workdir|add_class:"form-control" }}
+        {% if form.container_workdir.help_text %}
+        <div class="form-text text-muted">{{ form.container_workdir.help_text }}</div>
+        {% endif %}
+        {% if form.container_workdir.errors %}
+        <div class="text-danger small">{{ form.container_workdir.errors }}</div>
+        {% endif %}
+      </div>
     </div>
-    <div class="form-group">
-      {{ form.result_data.errors }}
-      {{ form.result_data.label_tag }}
-      {{ form.result_data }}
-      {% if form.result_data.help_text %}
-        <small class="form-text text-muted">{{ form.result_data.help_text }}</small>
-      {% endif %}
+
+    <div class="row g-3 mt-3">
+      <!-- Checkboxes -->
+      <div class="col-md-6 mb-4">
+        <div class="form-check mb-2">
+          <input type="checkbox" class="form-check-input"
+                id="id_container_use_entrypoint"
+                name="container_use_entrypoint"
+                {% if form.container_use_entrypoint.value %}checked{% endif %}>
+          <label class="form-check-label" for="id_container_use_entrypoint">
+            {{ form.container_use_entrypoint.label }}
+          </label>
+          {% if form.container_use_entrypoint.help_text %}
+          <div class="form-text text-muted">{{ form.container_use_entrypoint.help_text }}</div>
+          {% endif %}
+        </div>
+
+        <div class="form-check mb-2">
+          <input type="checkbox" class="form-check-input"
+                id="id_container_mount_home"
+                name="container_mount_home"
+                {% if form.container_mount_home.value %}checked{% endif %}>
+          <label class="form-check-label" for="id_container_mount_home">
+            {{ form.container_mount_home.label }}
+          </label>
+          {% if form.container_mount_home.help_text %}
+          <div class="form-text text-muted">{{ form.container_mount_home.help_text }}</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="col-md-6 mb-4">
+        <div class="form-check mb-2">
+          <input type="checkbox" class="form-check-input"
+                id="id_container_remap_root"
+                name="container_remap_root"
+                {% if form.container_remap_root.value %}checked{% endif %}>
+          <label class="form-check-label" for="id_container_remap_root">
+            {{ form.container_remap_root.label }}
+          </label>
+          {% if form.container_remap_root.help_text %}
+          <div class="form-text text-muted">{{ form.container_remap_root.help_text }}</div>
+          {% endif %}
+        </div>
+
+        <div class="form-check mb-3">
+          <input type="checkbox" class="form-check-input"
+                id="id_container_writable"
+                name="container_writable"
+                {% if form.container_writable.value %}checked{% endif %}>
+          <label class="form-check-label" for="id_container_writable">
+            {{ form.container_writable.label }}
+          </label>
+          {% if form.container_writable.help_text %}
+          <div class="form-text text-muted">{{ form.container_writable.help_text }}</div>
+          {% endif %}
+        </div>
+      </div>
     </div>
-    <div class="form-group">
-      {{ form.cleanup_choice.errors }}
-      {{ form.cleanup_choice.label_tag }}
-      {{ form.cleanup_choice }}
-      {% if form.cleanup_choice.help_text %}
-        <small class="form-text text-muted">{{ form.cleanup_choice.help_text }}</small>
-      {% endif %}
+    {% endif %}
+
+    <hr class="my-4">
+    <h4>Application Details</h4>
+
+    <div class="row g-3 mt-3">
+      <!-- Script type (radio) + script input -->
+      <div class="col-12 mb-4">
+        <label class="form-label">{{ form.run_script.label }}:</label>
+        <div class="mb-2">
+          <input type="radio" name="script_type" id="url" value="url" checked>
+          <label for="url" class="mr-3 font-weight-bold">URL to script</label>
+
+          <input type="radio" name="script_type" id="raw" value="raw">
+          <label for="raw" class="font-weight-bold">Inline Script</label>
+        </div>
+
+        <!-- URL input -->
+        <div id="run_script_url">
+          <input type="url" name="run_script" class="form-control" maxlength="200"
+                required id="id_run_script"
+                {% if form.run_script.value %}value="{{ form.run_script.value }}"{% endif %}>
+          <div class="form-text text-muted">
+            The URL to the job script (a shell script or a tarball containing run.sh)
+          </div>
+        </div>
+
+        <!-- Raw script textarea -->
+        <div id="run_script_raw">
+          <textarea name="run_script" cols="40" rows="10" class="form-control" maxlength="8190"
+                    id="id_run_script_raw" disabled>{% if form.run_script.value %}{{ form.run_script.value }}{% else %}#!/bin/bash
+
+  {% endif %}</textarea>
+          <div class="form-text text-muted">
+            Inline shell script, beginning with #!
+          </div>
+        </div>
+
+        {% if form.run_script.errors %}
+        <div class="text-danger small">{{ form.run_script.errors }}</div>
+        {% endif %}
+      </div>
     </div>
-    <div class="form-group">
-      {{ form.benchmark.errors }}
-      {{ form.benchmark.label_tag }}
-      {{ form.benchmark }}
-      {% if form.benchmark.help_text %}
-        <small class="form-text text-muted">{{ form.benchmark.help_text }}</small>
-      {% endif %}
+    
+    <div class="row g-3 mt-3">
+      <!-- Input Data -->
+      <div class="col-md-6 mb-4">
+        <label for="{{ form.input_data.id_for_label }}" class="form-label font-weight-bold">
+          {{ form.input_data.label }}:
+        </label>
+        {{ form.input_data|add_class:"form-control" }}
+        {% if form.input_data.help_text %}
+        <div class="form-text text-muted">{{ form.input_data.help_text }}</div>
+        {% endif %}
+        {% if form.input_data.errors %}
+        <div class="text-danger small">{{ form.input_data.errors }}</div>
+        {% endif %}
+      </div>
+
+      <!-- Result Data -->
+      <div class="col-md-6 mb-4">
+        <label for="{{ form.result_data.id_for_label }}" class="form-label font-weight-bold">
+          {{ form.result_data.label }}:
+        </label>
+        {{ form.result_data|add_class:"form-control" }}
+        {% if form.result_data.help_text %}
+        <div class="form-text text-muted">{{ form.result_data.help_text }}</div>
+        {% endif %}
+        {% if form.result_data.errors %}
+        <div class="text-danger small">{{ form.result_data.errors }}</div>
+        {% endif %}
+      </div>
+
+      <!-- Cleanup choice -->
+      <div class="col-md-6 mb-4">
+        <label for="{{ form.cleanup_choice.id_for_label }}" class="form-label font-weight-bold">
+          {{ form.cleanup_choice.label }}:
+        </label>
+        {{ form.cleanup_choice|add_class:"form-control" }}
+        {% if form.cleanup_choice.help_text %}
+        <div class="form-text text-muted">{{ form.cleanup_choice.help_text }}</div>
+        {% endif %}
+        {% if form.cleanup_choice.errors %}
+        <div class="text-danger small">{{ form.cleanup_choice.errors }}</div>
+        {% endif %}
+      </div>
+
+      <!-- Benchmark -->
+      <div class="col-md-6 mb-4">
+        <label for="{{ form.benchmark.id_for_label }}" class="form-label font-weight-bold">
+          {{ form.benchmark.label }}:
+        </label>
+        {{ form.benchmark|add_class:"form-control" }}
+        {% if form.benchmark.help_text %}
+        <div class="form-text text-muted">{{ form.benchmark.help_text }}</div>
+        {% endif %}
+        {% if form.benchmark.errors %}
+        <div class="text-danger small">{{ form.benchmark.errors }}</div>
+        {% endif %}
+      </div>
     </div>
 
 
-    <hr>
-    <div id="id_pricing">
+    <hr class="my-4">
+    <!-- Pricing Info -->
+    <div class="row g-3 mt-3">
+      <div class="col-12" id="id_pricing">
+        <p>Unable to retrieve pricing information for estimated price.</p>
+      </div>
+
+      <!-- Submit button -->
+      <div class="col-12">
+        <input type="submit" value="Launch" class="btn btn-primary" id="id_submit_button">
+      </div>
     </div>
-    <input type="submit" value="Launch" class="btn btn-primary" id="id_submit_button"/>
   </form>
-
-{% endblock %}
+</div>
+{% endblock content %}
