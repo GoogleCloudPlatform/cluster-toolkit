@@ -1,4 +1,4 @@
-# Copyright 2025 "Google LLC"
+# Copyright 2024 Google Inc. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -54,6 +54,22 @@ spec:
         hostPath:
           path: /home/kubernetes/bin/gib
       initContainers:
+      - name: disable-log-martian
+        image: alpine:latest
+        command: ["/bin/sh"]
+        securityContext:
+          privileged: true
+        args:
+        - -c
+        - |
+          sysctl -w net.ipv4.conf.gpu0rdma0.log_martians=0
+          sysctl -w net.ipv4.conf.gpu1rdma0.log_martians=0
+          sysctl -w net.ipv4.conf.gpu2rdma0.log_martians=0
+          sysctl -w net.ipv4.conf.gpu3rdma0.log_martians=0
+          sysctl -w net.ipv4.conf.gpu4rdma0.log_martians=0
+          sysctl -w net.ipv4.conf.gpu5rdma0.log_martians=0
+          sysctl -w net.ipv4.conf.gpu6rdma0.log_martians=0
+          sysctl -w net.ipv4.conf.gpu7rdma0.log_martians=0
       - image: us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib:v1.0.5
         name: nccl-rdma-installer
         resources:
@@ -73,8 +89,7 @@ spec:
           /scripts/container_entry.sh install --install-nccl
           cp -r /var/lib/gib/lib64/. /usr/local/home/kubernetes/bin/nvidia/lib64
           cp -r /var/lib/gib/. /usr/local/home/kubernetes/bin/gib
-          # ibv_devinfo || exit 1
           echo "installation finishes"
-      containers:
-      - image: "gke.gcr.io/pause:3.8@sha256:880e63f94b145e46f1b1082bb71b85e21f16b99b180b9996407d61240ceb9830"
-        name: pause
+    containers:
+    - image: "gke.gcr.io/pause:3.8@sha256:880e63f94b145e46f1b1082bb71b85e21f16b99b180b9996407d61240ceb9830"
+      name: pause
