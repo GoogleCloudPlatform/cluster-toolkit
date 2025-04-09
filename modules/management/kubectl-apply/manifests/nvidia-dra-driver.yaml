@@ -11,7 +11,38 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nvidia-dra-driver-gpu
+  labels:
+      helm.sh/chart: nvidia-dra-driver-gpu-25.3.0-rc.2
+      app.kubernetes.io/name: nvidia-dra-driver-gpu
+      app.kubernetes.io/instance: nvidia-dra-driver-gpu
+      app.kubernetes.io/version: "25.3.0-rc.2"
+      app.kubernetes.io/managed-by: Helm
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: nvidia-dra-driver-gpu-quota
+  namespace: nvidia-dra-driver-gpu
+labels:
+    helm.sh/chart: nvidia-dra-driver-gpu-25.3.0-rc.2
+    app.kubernetes.io/name: nvidia-dra-driver-gpu
+    app.kubernetes.io/instance: nvidia-dra-driver-gpu
+    app.kubernetes.io/version: "25.3.0-rc.2"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  hard:
+    pods: 100
+  scopeSelector:
+    matchExpressions:
+    - operator: In
+      scopeName: PriorityClass
+      values:
+        - system-node-critical
+        - system-cluster-critical
 ---
 # Source: nvidia-dra-driver-gpu/templates/serviceaccount.yaml
 apiVersion: v1
@@ -203,6 +234,11 @@ spec:
                 operator: In
                 values:
                 - "true"
+      tolerations:
+        - effect: NoSchedule
+          key: nvidia.com/gpu
+          operator: Equal
+          value: present
 ---
 # Source: nvidia-dra-driver-gpu/templates/controller.yaml
 apiVersion: apps/v1
@@ -255,59 +291,13 @@ spec:
           requiredDuringSchedulingIgnoredDuringExecution:
             nodeSelectorTerms:
             - matchExpressions:
-              - key: node-role.kubernetes.io/control-plane
-                operator: Exists
+              - key: nvidia.com/gpu
+                operator: DoesNotExist
       tolerations:
-      - effect: NoSchedule
-        key: node-role.kubernetes.io/control-plane
-        operator: Exists
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/control-plane
+          operator: Exists
 ---
-# Source: nvidia-dra-driver-gpu/templates/controller.yaml
-# Copyright 2024 NVIDIA CORPORATION
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
----
-# Source: nvidia-dra-driver-gpu/templates/kubeletplugin.yaml
-# Copyright 2023 NVIDIA CORPORATION
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
----
-# Source: nvidia-dra-driver-gpu/templates/openshiftprivilegedrolebinging.yaml
-# Apply only when running on OpenShift to let the kublet plugin run privileged
-# Source: nvidia-dra-driver-gpu/templates/validation.yaml
-# Copyright 2024 NVIDIA CORPORATION
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 # Source: nvidia-dra-driver-gpu/templates/deviceclass-compute-domain-daemon.yaml
 apiVersion: resource.k8s.io/v1beta1
 kind: DeviceClass
@@ -337,10 +327,10 @@ spec:
   failurePolicy: Fail
   matchConstraints:
     resourceRules:
-    - apiGroups: ["resource.k8s.io"]
+    - apiGroups:   ["resource.k8s.io"]
       apiVersions: ["v1beta1"]
-      operations: ["CREATE", "UPDATE", "DELETE"]
-      resources: ["resourceslices"]
+      operations:  ["CREATE", "UPDATE", "DELETE"]
+      resources:   ["resourceslices"]
   matchConditions:
   - name: isRestrictedUser
     expression: >-
