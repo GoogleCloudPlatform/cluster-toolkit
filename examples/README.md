@@ -1553,38 +1553,3 @@ This means that you can redeploy a blueprint (`gcluster deploy <blueprint> -w`) 
 Slurm-GCP v5 users should read [Slurm-GCP v5 EOL](../docs/slurm-gcp-support.md)
 for information on v5 retirement and feature highlights for v6. Slurm-GCP v6 is
 only supported option within the Toolkit.
-
-<!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
-## Requirements
-
-No requirements.
-
-## Providers
-
-| Name | Version |
-|------|---------|
-| <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | n/a |
-
-## Modules
-
-No modules.
-
-## Resources
-
-| Name | Type |
-|------|------|
-| [google-beta_google_compute_global_address.private_ip_alloc](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_compute_global_address) | resource |
-| [google-beta_google_compute_network.network](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_compute_network) | resource |
-| [google-beta_google_parallelstore_instance.instance](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_parallelstore_instance) | resource |
-| [google-beta_google_service_networking_connection.default](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_service_networking_connection) | resource |
-
-## Inputs
-
-No inputs.
-
-## Outputs
-
-| Name | Description |
-|------|-------------|
-| <a name="output_access_points"></a> [access\_points](#output\_access\_points) | Output access points |
-<!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
