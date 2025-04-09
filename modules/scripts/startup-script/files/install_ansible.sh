@@ -20,6 +20,7 @@ REQ_PIP_WHEEL_VERSION=0.37.1
 REQ_PIP_SETUPTOOLS_VERSION=59.6.0
 REQ_PIP_MAJOR_VERSION=21
 REQ_PYTHON3_VERSION=6
+NEW_PYTHON_THRESHOLD=12
 
 apt_wait() {
 	while fuser /var/lib/dpkg/lock >/dev/null 2>&1; do
@@ -40,7 +41,9 @@ apt_wait() {
 
 # Installs any dependencies needed for python based on the OS
 install_python_deps() {
-	if [ -f /etc/debian_version ] || grep -qi ubuntu /etc/lsb-release 2>/dev/null ||
+	if grep -qi "ubuntu 24.04" /etc/os-release 2>/dev/null; then
+		install_python_apt_new
+	elif [ -f /etc/debian_version ] || grep -qi ubuntu /etc/lsb-release 2>/dev/null ||
 		grep -qi ubuntu /etc/os-release 2>/dev/null; then
 		apt-get update --allow-releaseinfo-change-origin --allow-releaseinfo-change-label
 		apt-get install -y python3-distutils python3-venv
@@ -168,6 +171,18 @@ install_pip3() {
 	else
 		echo "Error: Unsupported Distribution"
 		return 1
+	fi
+}
+
+#Intended for installations contain Python 3.12 or newer
+install_python_apt_new() {
+	if [ "${python_major_version}" = "3" ] && [ "${python_minor_version}" -gt "${NEW_PYTHON_THRESHOLD}" ]; then
+		REQ_ANSIBLE_VERSION=2.16
+		REQ_ANSIBLE_PIP_VERSION=11.3.0
+		REQ_PIP_SETUPTOOLS_VERSION=73.0.0
+		apt-get update --allow-releaseinfo-change-origin --allow-releaseinfo-change-label
+		apt-get install -y python3 python3-setuptools python3-pip python3-venv
+		python_path=$(command -v python3)
 	fi
 }
 
