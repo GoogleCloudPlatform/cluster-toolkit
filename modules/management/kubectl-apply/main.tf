@@ -29,6 +29,7 @@ locals {
   install_gpu_operator                  = try(var.gpu_operator.install, false)
   gpu_operator_install_source           = format("${path.module}/manifests/gpu-operator-%s.yaml", try(var.gpu_operator.version, ""))
   gpu_operator_namespace_install_source = format("${path.module}/manifests/gpu-operator-namespace-%s.yaml", try(var.gpu_operator.version, ""))
+  gpu_operator_crd_install_source       = format("${path.module}/manifests/gpu-operator-crd-%s.yaml", try(var.gpu_operator.version, ""))
   kueue_install_source                  = format("${path.module}/manifests/kueue-%s.yaml", try(var.kueue.version, ""))
   jobset_install_source                 = format("${path.module}/manifests/jobset-%s.yaml", try(var.jobset.version, ""))
 }
@@ -105,8 +106,20 @@ module "install_gpu_operator_namespace" {
   }
 }
 
-module "install_gpu_operator" {
+module "install_gpu_operator_crd" {
   depends_on        = [module.install_gpu_operator_namespace]
+  source            = "./kubectl"
+  source_path       = local.install_gpu_operator ? local.gpu_operator_crd_install_source : null
+  server_side_apply = true
+
+  providers = {
+    kubectl = kubectl
+    http    = http.h
+  }
+}
+
+module "install_gpu_operator" {
+  depends_on        = [module.install_gpu_operator_crd]
   source            = "./kubectl"
   source_path       = local.install_gpu_operator ? local.gpu_operator_install_source : null
   server_side_apply = true

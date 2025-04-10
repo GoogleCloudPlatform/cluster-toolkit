@@ -134,6 +134,7 @@ limitations under the License.
 |------|--------|---------|
 | <a name="module_configure_kueue"></a> [configure\_kueue](#module\_configure\_kueue) | ./kubectl | n/a |
 | <a name="module_install_gpu_operator"></a> [install\_gpu\_operator](#module\_install\_gpu\_operator) | ./kubectl | n/a |
+| <a name="module_install_gpu_operator_crd"></a> [install\_gpu\_operator\_crd](#module\_install\_gpu\_operator\_crd) | ./kubectl | n/a |
 | <a name="module_install_gpu_operator_namespace"></a> [install\_gpu\_operator\_namespace](#module\_install\_gpu\_operator\_namespace) | ./kubectl | n/a |
 | <a name="module_install_jobset"></a> [install\_jobset](#module\_install\_jobset) | ./kubectl | n/a |
 | <a name="module_install_kueue"></a> [install\_kueue](#module\_install\_kueue) | ./kubectl | n/a |
