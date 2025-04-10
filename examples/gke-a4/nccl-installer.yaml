@@ -90,6 +90,6 @@ spec:
           cp -r /var/lib/gib/lib64/. /usr/local/home/kubernetes/bin/nvidia/lib64
           cp -r /var/lib/gib/. /usr/local/home/kubernetes/bin/gib
           echo "installation finishes"
-    containers:
-    - image: "gke.gcr.io/pause:3.8@sha256:880e63f94b145e46f1b1082bb71b85e21f16b99b180b9996407d61240ceb9830"
-      name: pause
+      containers:
+      - image: "gke.gcr.io/pause:3.8@sha256:880e63f94b145e46f1b1082bb71b85e21f16b99b180b9996407d61240ceb9830"
+        name: pause
