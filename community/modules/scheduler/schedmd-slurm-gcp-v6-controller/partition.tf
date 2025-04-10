@@ -21,6 +21,9 @@ locals {
 
   nodeset_dyn_map_ell = { for x in var.nodeset_dyn : x.nodeset_name => x... }
   nodeset_dyn_map     = { for k, vs in local.nodeset_dyn_map_ell : k => vs[0] }
+
+
+  no_reservation_affinity = { type : "NO_RESERVATION" }
 }
 
 # NODESET
@@ -66,6 +69,10 @@ module "slurm_nodeset_template" {
   additional_networks        = each.value.additional_networks
   access_config              = each.value.access_config
   tags                       = concat([local.slurm_cluster_name], each.value.tags)
+
+  max_run_duration     = (each.value.dws_flex.enabled && !each.value.dws_flex.use_bulk_insert) ? each.value.dws_flex.max_run_duration : null
+  provisioning_model   = (each.value.dws_flex.enabled && !each.value.dws_flex.use_bulk_insert) ? "FLEX_START" : null
+  reservation_affinity = (each.value.dws_flex.enabled && !each.value.dws_flex.use_bulk_insert) ? local.no_reservation_affinity : null
 }
 
 module "nodeset_cleanup" {
@@ -79,6 +86,7 @@ module "nodeset_cleanup" {
   universe_domain        = var.universe_domain
   endpoint_versions      = var.endpoint_versions
   gcloud_path_override   = var.gcloud_path_override
+  nodeset_template       = module.slurm_nodeset_template[each.value.nodeset_name].self_link
 }
 
 locals {
