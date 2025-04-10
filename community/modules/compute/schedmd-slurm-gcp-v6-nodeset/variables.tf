@@ -481,6 +481,7 @@ variable "additional_networks" {
     network            = optional(string)
     subnetwork         = string
     subnetwork_project = optional(string)
+    network_attachment = optional(string)
     network_ip         = optional(string, "")
     nic_type           = optional(string)
     stack_type         = optional(string)
