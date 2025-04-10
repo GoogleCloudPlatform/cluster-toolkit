@@ -17,6 +17,7 @@
 from typing import List
 
 import socket
+import functools
 import logging
 from pathlib import Path
 import yaml
@@ -168,12 +169,7 @@ class TPU:
         return False
 
     def list_nodes(self):
-        try:
-            request = tpu.ListNodesRequest(parent=self._parent)
-            res = self._client.list_nodes(request=request)
-        except gExceptions.NotFound:
-            res = None
-        return res
+        return list_nodes(self._parent)
 
     def list_node_names(self):
         return [node.name.split("/")[-1] for node in self.list_nodes()]
@@ -189,12 +185,10 @@ class TPU:
         return self.__check_resp(resp, "stop")
 
     def get_node(self, nodename):
-        try:
-            request = tpu.GetNodeRequest(name=f"{self._parent}/nodes/{nodename}")
-            res = self._client.get_node(request=request)
-        except gExceptions.NotFound:
-            res = None
-        return res
+        for node in self.list_nodes():
+            if node.name == nodename:
+                return node
+        return None
 
     def _register_node(self, nodename, ip_addr):
         dns_name = socket.getnameinfo((ip_addr, 0), 0)[0]
@@ -340,4 +334,15 @@ def start_tpu(node: List[str]):
         )
         if not tpuobj.create_node(nodename=node):
             log.error("Error creating tpu node {node}")
+
+@functools.lru_cache(maxsize=2)
+def list_nodes(parent):
+    try:
+        request = tpu.ListNodesRequest(parent=parent)
+        co = create_client_options(ApiEndpoint.TPU)
+        client = tpu.TpuClient(client_options=co)
+        res = client.list_nodes(request=request)
+    except gExceptions.NotFound:
+        res = None
+    return res
 
