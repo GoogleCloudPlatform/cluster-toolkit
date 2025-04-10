@@ -24,12 +24,13 @@ locals {
     for index, manifest in var.apply_manifests : index => manifest
   })
 
-  install_kueue               = try(var.kueue.install, false)
-  install_jobset              = try(var.jobset.install, false)
-  install_gpu_operator        = try(var.gpu_operator.install, false)
-  gpu_operator_install_source = format("${path.module}/manifests/gpu-operator-%s.yaml", try(var.gpu_operator.version, ""))
-  kueue_install_source        = format("${path.module}/manifests/kueue-%s.yaml", try(var.kueue.version, ""))
-  jobset_install_source       = format("${path.module}/manifests/jobset-%s.yaml", try(var.jobset.version, ""))
+  install_kueue                         = try(var.kueue.install, false)
+  install_jobset                        = try(var.jobset.install, false)
+  install_gpu_operator                  = try(var.gpu_operator.install, false)
+  gpu_operator_install_source           = format("${path.module}/manifests/gpu-operator-%s.yaml", try(var.gpu_operator.version, ""))
+  gpu_operator_namespace_install_source = format("${path.module}/manifests/gpu-operator-namespace-%s.yaml", try(var.gpu_operator.version, ""))
+  kueue_install_source                  = format("${path.module}/manifests/kueue-%s.yaml", try(var.kueue.version, ""))
+  jobset_install_source                 = format("${path.module}/manifests/jobset-%s.yaml", try(var.jobset.version, ""))
 }
 
 data "google_container_cluster" "gke_cluster" {
@@ -78,17 +79,6 @@ module "install_jobset" {
   }
 }
 
-module "install_gpu_operator" {
-  source            = "./kubectl"
-  source_path       = local.install_gpu_operator ? local.gpu_operator_install_source : null
-  server_side_apply = true
-
-  providers = {
-    kubectl = kubectl
-    http    = http.h
-  }
-}
-
 module "configure_kueue" {
   source        = "./kubectl"
   source_path   = local.install_kueue ? try(var.kueue.config_path, "") : null
@@ -97,6 +87,29 @@ module "configure_kueue" {
 
   server_side_apply = true
   wait_for_rollout  = true
+
+  providers = {
+    kubectl = kubectl
+    http    = http.h
+  }
+}
+
+module "install_gpu_operator_namespace" {
+  source            = "./kubectl"
+  source_path       = local.install_gpu_operator ? local.gpu_operator_namespace_install_source : null
+  server_side_apply = true
+
+  providers = {
+    kubectl = kubectl
+    http    = http.h
+  }
+}
+
+module "install_gpu_operator" {
+  depends_on        = [module.install_gpu_operator_namespace]
+  source            = "./kubectl"
+  source_path       = local.install_gpu_operator ? local.gpu_operator_install_source : null
+  server_side_apply = true
 
   providers = {
     kubectl = kubectl

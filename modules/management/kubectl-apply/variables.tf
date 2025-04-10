@@ -86,7 +86,7 @@ variable "gpu_operator" {
   description = "Install [GPU Operator](https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/getting-started.html) which uses the [Kubernetes operator](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/) to automate the management of all NVIDIA software components needed to provision GPU."
   type = object({
     install = optional(bool, false)
-    version = optional(string, "v24.9.2")
+    version = optional(string, "v25.3.0")
   })
   default = {}
 }
