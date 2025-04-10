@@ -70,9 +70,9 @@ module "slurm_nodeset_template" {
   access_config              = each.value.access_config
   tags                       = concat([local.slurm_cluster_name], each.value.tags)
 
-  max_run_duration     = each.value.dws_flex.enabled ? each.value.dws_flex.max_run_duration : null
-  provisioning_model   = each.value.dws_flex.enabled ? "FLEX_START" : null
-  reservation_affinity = each.value.dws_flex.enabled ? local.no_reservation_affinity : null
+  max_run_duration     = (each.value.dws_flex.enabled && !each.value.dws_flex.use_bulk_insert) ? each.value.dws_flex.max_run_duration : null
+  provisioning_model   = (each.value.dws_flex.enabled && !each.value.dws_flex.use_bulk_insert) ? "FLEX_START" : null
+  reservation_affinity = (each.value.dws_flex.enabled && !each.value.dws_flex.use_bulk_insert) ? local.no_reservation_affinity : null
 }
 
 module "nodeset_cleanup" {

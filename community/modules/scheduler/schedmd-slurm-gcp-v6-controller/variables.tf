@@ -229,6 +229,7 @@ variable "nodeset" {
       enabled          = bool
       max_run_duration = number
       use_job_duration = bool
+      use_bulk_insert  = bool
     })
     labels       = optional(map(string), {})
     machine_type = optional(string)
