@@ -133,6 +133,19 @@ resource "google_compute_disk" "boot_disk" {
   }
 }
 
+resource "google_compute_disk" "additional_disks" {
+  project = var.project_id
+
+  count = var.instance_count * var.additional_persistent_disks.count
+
+  # NB: this resource array must be sliced accounting for var.instance_count
+  name   = "${local.resource_prefix}-disk-${count.index}"
+  type   = var.additional_persistent_disks.type
+  size   = var.additional_persistent_disks.size
+  labels = local.labels
+  zone   = var.zone
+}
+
 resource "google_compute_resource_policy" "placement_policy" {
   project  = var.project_id
   provider = google-beta
@@ -195,6 +208,20 @@ resource "google_compute_instance" "compute_vm" {
     source      = google_compute_disk.boot_disk[count.index].self_link
     device_name = google_compute_disk.boot_disk[count.index].name
     auto_delete = var.auto_delete_boot_disk
+  }
+
+  dynamic "attached_disk" {
+    for_each = slice(
+      google_compute_disk.additional_disks,
+      var.additional_persistent_disks.count * count.index,
+      var.additional_persistent_disks.count * count.index + var.additional_persistent_disks.count,
+    )
+
+    content {
+      source      = attached_disk.value.self_link
+      device_name = "additional-disk-${attached_disk.key}"
+      mode        = "READ_WRITE"
+    }
   }
 
   dynamic "scratch_disk" {
