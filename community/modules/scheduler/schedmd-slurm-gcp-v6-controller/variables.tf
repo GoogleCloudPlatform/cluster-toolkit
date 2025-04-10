@@ -150,6 +150,7 @@ variable "login_nodes" {
         network_tier = string
       })), [])
       network            = optional(string)
+      network_attachment = optional(string)
       network_ip         = optional(string, "")
       nic_type           = optional(string)
       queue_count        = optional(number)
@@ -310,6 +311,7 @@ variable "nodeset" {
       network            = string
       subnetwork         = string
       subnetwork_project = string
+      network_attachment = optional(string)
       network_ip         = string
       nic_type           = string
       stack_type         = string
