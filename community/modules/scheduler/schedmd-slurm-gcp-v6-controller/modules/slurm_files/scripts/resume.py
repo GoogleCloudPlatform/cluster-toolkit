@@ -43,6 +43,7 @@ from util import (
 )
 from util import lookup, NSDict, ReservationDetails
 import tpu
+import mig
 
 log = logging.getLogger()
 
@@ -278,18 +279,26 @@ def group_nodes_bulk(nodes: List[str], resume_data: Optional[ResumeData], lkp: u
     ]
     return {chunk.name: chunk for chunk in chunks}
 
+def _filter_out_dormant_fr_nodes(nodes: List[str], resume_data: Optional[ResumeData]) -> List[str]:
+    rest, skip = util.separate(lookup().is_dormant_fr_node, nodes)
+    if skip:
+        log.warning(f"Resume was unable to resume future reservation nodes={skip}")
+        down_nodes_notify_jobs(skip, "Reservation is not active, nodes cannot be resumed", resume_data)
+    return rest
 
-def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
+
+def _filter_out_and_handle_slice_nodes(nodes: List[str], resume_data: Optional[ResumeData]) -> List[str]:
+    rest, slice_nodes = util.separate(mig.is_mig_node, nodes)
+    mig.resume_mig_nodes(lookup(), slice_nodes, resume_data)
+    return rest
+
+def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]) -> None:
     """resume nodes in nodelist"""
     # Prevent dormant nodes associated with a future reservation from being resumed
-    nodes, dormant_fr_nodes = util.separate(lookup().is_dormant_fr_node, nodes)
-    
-    if dormant_fr_nodes:
-        log.warning(f"Resume was unable to resume future reservation nodes={dormant_fr_nodes}")
-        down_nodes_notify_jobs(dormant_fr_nodes, "Reservation is not active, nodes cannot be resumed", resume_data)
+    nodes = _filter_out_dormant_fr_nodes(nodes, resume_data)
+    nodes = _filter_out_and_handle_slice_nodes(nodes, resume_data)
 
     if not nodes:
-        log.info("No nodes to resume")
         return
 
     nodes = sorted(nodes, key=lookup().node_prefix)
