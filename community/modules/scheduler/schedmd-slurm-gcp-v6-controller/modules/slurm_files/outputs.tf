@@ -19,6 +19,16 @@ output "slurm_bucket_path" {
   value       = local.bucket_path
 }
 
+output "bucket_name" {
+  description = "GCS Bucket name of Slurm cluster file storage."
+  value       = data.google_storage_bucket.this.name
+}
+
+output "bucket_dir" {
+  description = "Path directory within `bucket_name` for Slurm cluster file storage."
+  value       = local.bucket_dir
+}
+
 output "config" {
   description = "Cluster configuration."
   value       = local.config
@@ -32,24 +42,4 @@ output "config" {
     condition     = length(local.x_nodeset_overlap) == 0
     error_message = "All nodeset names must be unique among all nodeset types."
   }
-}
-
-output "partitions" {
-  description = "Cluster partitions."
-  value       = lookup(local.config, "partitions", null)
-}
-
-output "nodeset" {
-  description = "Cluster nodesets."
-  value       = lookup(local.config, "nodeset", null)
-}
-
-output "nodeset_dyn" {
-  description = "Cluster nodesets (dynamic)."
-  value       = lookup(local.config, "nodeset_dyn", null)
-}
-
-output "nodeset_tpu" {
-  description = "Cluster nodesets (TPU)."
-  value       = lookup(local.config, "nodeset_tpu", null)
 }

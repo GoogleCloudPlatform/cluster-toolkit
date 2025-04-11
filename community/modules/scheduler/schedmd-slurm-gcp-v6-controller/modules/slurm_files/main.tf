@@ -143,14 +143,6 @@ resource "google_storage_bucket_object" "config" {
   content = yamlencode(local.config)
 }
 
-resource "google_storage_bucket_object" "parition_config" {
-  for_each = { for p in var.partitions : p.partition_name => p }
-
-  bucket  = data.google_storage_bucket.this.name
-  name    = "${local.bucket_dir}/partition_configs/${each.key}.yaml"
-  content = yamlencode(each.value)
-}
-
 resource "google_storage_bucket_object" "nodeset_config" {
   for_each = { for ns in var.nodeset : ns.nodeset_name => merge(ns, {
     instance_properties = jsondecode(ns.instance_properties_json)

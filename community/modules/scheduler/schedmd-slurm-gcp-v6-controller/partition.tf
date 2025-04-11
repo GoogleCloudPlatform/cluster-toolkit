@@ -27,7 +27,6 @@ locals {
 }
 
 # NODESET
-# TODO: remove dependency on slurm-gcp repo, move to local template module
 module "slurm_nodeset_template" {
   source   = "../../internal/slurm-gcp/instance_template"
   for_each = local.nodeset_map
@@ -156,4 +155,17 @@ module "nodeset_cleanup_tpu" {
     # subnetwork resourceInUseByAnotherResource error
     var.subnetwork_self_link
   ]
+}
+
+resource "google_storage_bucket_object" "parition_config" {
+  for_each = { for p in var.partitions : p.partition_name => p }
+
+  bucket  = module.slurm_files.bucket_name
+  name    = "${module.slurm_files.bucket_dir}/partition_configs/${each.key}.yaml"
+  content = yamlencode(each.value)
+}
+
+moved {
+  from = module.slurm_files.google_storage_bucket_object.parition_config
+  to   = google_storage_bucket_object.parition_config
 }
