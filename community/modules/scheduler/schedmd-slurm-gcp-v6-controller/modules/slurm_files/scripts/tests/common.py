@@ -99,6 +99,7 @@ def tstInstance(name: str, physical_host: Optional[str] = None):
         ),
         scheduling=util.NSDict(),
         role="compute",
+        metadata={},
     )
 
 def make_to_hostnames_mock(tbl: Optional[dict[str, list[str]]]):

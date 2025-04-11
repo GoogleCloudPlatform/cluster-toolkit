@@ -26,6 +26,7 @@ import yaml
 import collections
 from pathlib import Path
 from dataclasses import dataclass
+from addict import Dict as NSDict # type: ignore
 
 import util
 from util import (
@@ -41,8 +42,9 @@ from util import (
     trim_self_link,
     wait_for_operation,
 )
-from util import lookup, NSDict, ReservationDetails
+from util import lookup, ReservationDetails
 import tpu
+import mig_flex
 
 log = logging.getLogger()
 
@@ -51,6 +53,9 @@ PLACEMENT_MAX_CNT = 1500
 # if placement is used the actual BULK_INSERT_LIMIT will be
 # max([1000, PLACEMENT_MAX_CNT])
 BULK_INSERT_LIMIT = 5000
+
+# https://cloud.google.com/compute/docs/instance-groups#types_of_managed_instance_groups
+ZONAL_MIG_SIZE_LIMIT = 1000
 
 
 @dataclass(frozen=True)
@@ -109,11 +114,11 @@ def instance_properties(nodeset: NSDict, model:str, placement_group:Optional[str
 
     if props.resourcePolicies:
        props.scheduling.onHostMaintenance = "TERMINATE"
-    
+
     if nodeset.maintenance_interval:
         props.scheduling.maintenanceInterval = nodeset.maintenance_interval
 
-    if nodeset.dws_flex.enabled:
+    if nodeset.dws_flex.enabled and nodeset.dws_flex.use_bulk_insert:
         update_props_dws(props, nodeset.dws_flex, job_id)
 
     # Override with properties explicit specified in the nodeset
@@ -154,7 +159,6 @@ def dws_flex_duration(dws_flex: NSDict, job_id: Optional[int]) -> int:
         else:
             log.info("Job TimeLimit cannot be less than 30 seconds or exceed one week")
     return max_duration
-
 
 def create_instances_request(nodes: List[str], placement_group: Optional[str], excl_job_id: Optional[int]):
     """Call regionInstances.bulkInsert to create instances"""
@@ -258,10 +262,19 @@ def group_nodes_bulk(nodes: List[str], resume_data: Optional[ResumeData], lkp: u
     groups[None] = create_placements(sorted(non_excl), excl_job_id=None, lkp=lkp)
 
     def chunk_nodes(nodes: List[str]):
-        chunk_size = BULK_INSERT_LIMIT
-        if nodes and lkp.node_is_tpu(nodes[0]):
-            ns = lkp.node_nodeset_name(nodes[0])
-            chunk_size = tpu.TPU.make(ns, lkp).vmcount
+        if not nodes:
+            return []
+        
+        model = nodes[0]
+        
+        if lkp.is_flex_node(model):
+            chunk_size = ZONAL_MIG_SIZE_LIMIT
+        elif lkp.node_is_tpu(model):
+            ns_name = lkp.node_nodeset_name(model)
+            chunk_size = tpu.TPU.make(ns_name, lkp).vmcount
+        else:
+            chunk_size = BULK_INSERT_LIMIT
+
         return chunked(nodes, n=chunk_size)
     
     chunks = [
@@ -281,19 +294,28 @@ def group_nodes_bulk(nodes: List[str], resume_data: Optional[ResumeData], lkp: u
 
 def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
     """resume nodes in nodelist"""
+    lkp = lookup()
     # Prevent dormant nodes associated with a future reservation from being resumed
-    nodes, dormant_fr_nodes = util.separate(lookup().is_dormant_fr_node, nodes)
+    nodes, dormant_fr_nodes = util.separate(lkp.is_dormant_fr_node, nodes)
     
     if dormant_fr_nodes:
         log.warning(f"Resume was unable to resume future reservation nodes={dormant_fr_nodes}")
         down_nodes_notify_jobs(dormant_fr_nodes, "Reservation is not active, nodes cannot be resumed", resume_data)
 
+    nodes, flex_managed = util.separate(lambda n: lkp.is_flex_node(n) and (lkp.instance(n) is not None), nodes)
+    if flex_managed:
+        # TODO(FLEX): This is weak assumption, VM may not exist, but still be managed by MIG (e.g. still provisioning)
+        # Inspect all present MIGs instead.
+        # Particularly CRITICAL due to ActionOnFailure=DO_NOTHING, hence deleted VMs will not be repaired.
+        log.warning(f"Resume was unable to resume nodes={flex_managed} already managed by MIGs")
+        down_nodes_notify_jobs(flex_managed, "VM is managed MIG, can not be resumed", resume_data)
+
     if not nodes:
         log.info("No nodes to resume")
         return
 
-    nodes = sorted(nodes, key=lookup().node_prefix)
-    grouped_nodes = group_nodes_bulk(nodes, resume_data, lookup())
+    nodes = sorted(nodes, key=lkp.node_prefix)
+    grouped_nodes = group_nodes_bulk(nodes, resume_data, lkp)
 
     if log.isEnabledFor(logging.DEBUG):
         grouped_nodelists = {
@@ -303,17 +325,23 @@ def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
             "node bulk groups: \n{}".format(yaml.safe_dump(grouped_nodelists).rstrip())
         )
 
-    tpu_chunks = []
+    tpu_chunks, flex_chunks = [], []
     bi_inserts = {}
 
     for group, chunk in grouped_nodes.items():
         model = chunk.nodes[0]
-        if lookup().node_is_tpu(model):
+
+        if lkp.node_is_tpu(model):
             tpu_chunks.append(chunk.nodes)
+        elif lkp.is_flex_node(model):
+            flex_chunks.append(chunk)
         else:
             bi_inserts[group] = create_instances_request(
                 chunk.nodes, chunk.placement_group, chunk.excl_job_id
             )
+
+    for chunk in flex_chunks:
+        mig_flex.resume_flex_chunk(chunk.nodes, chunk.excl_job_id, lkp)
 
     # execute all bulkInsert requests  with batch
     bulk_ops = dict(
@@ -472,6 +500,8 @@ def _allocate_nodes_to_placements(nodes: List[str], excl_job_id:Optional[int], l
     model = nodes[0]
     nodeset = lkp.node_nodeset(model)
 
+    if lkp.is_flex_node(model):
+        return no_pp # TODO(FLEX): Add support for workload policies 
     if lkp.node_is_tpu(model):
         return no_pp
     if not (nodeset.enable_placement and valid_placement_node(model)):

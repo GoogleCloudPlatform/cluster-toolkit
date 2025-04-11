@@ -598,6 +598,7 @@ variable "dws_flex" {
   - enable: Enable DWS Flex Start
   - max_run_duration: Maximum duration in seconds for the job to run, should not exceed 604,800 (one week).
   - use_job_duration: Use the job duration to determine the max_run_duration, if job duration is not set, max_run_duration will be used.
+  - use_bulk_insert: Uses the legacy implementation of DWS Flex Start with Bulk Insert for non-accelerator instances
 
  Limitations:
   - CAN NOT be used with reservations;
@@ -610,6 +611,7 @@ variable "dws_flex" {
     enabled          = optional(bool, true)
     max_run_duration = optional(number, 604800) # one week
     use_job_duration = optional(bool, false)
+    use_bulk_insert  = optional(bool, false)
   })
   default = {
     enabled = false
