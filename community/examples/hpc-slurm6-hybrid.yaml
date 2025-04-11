@@ -1,0 +1,129 @@
+# Copyright 2024 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+# See instructions at
+# https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/examples#image-builderyaml-
+
+blueprint_name: hpc-slurm6-hybrid
+
+vars:
+  project_id: ## Set GCP Project ID Here ##
+  local_munge_key: /opt/deployments/munge.key
+  deployment_name: slurm6-hybrid
+  onprem_ctld_host: "your_slurmctld_name"
+  onprem_ctld_addr: "your_slurmctld_IPaddres"
+  cluster_name: "your_cluster_name"
+  on_prem_install_dir: "your_slurm_installation_directory"
+  slurm_uid: 620
+  slurm_gid: 620
+  output_dir: /opt/deployments/output
+  region: us-central1
+  zone: us-central1-c
+  custom_image:
+    family: hybrid
+    project: $(vars.project_id)
+  disk_size: 64
+
+deployment_groups:
+- group: network
+  modules:
+  - id: network
+    source: modules/network/vpc
+    settings:
+      network_name: "slurm-hybrid-net"
+
+- group: scripts_for_image
+  modules:
+  - id: scripts_for_image
+    source: modules/scripts/startup-script
+    settings:
+      runners:
+      - type: data
+        destination: /etc/munge/munge.key
+        source: $(vars.local_munge_key)
+      #Ensure munge key has the proper settings
+      - type: shell
+        destination: prepare_munge_key.sh
+        content: |
+          #!/bin/sh
+          chmod 600 /etc/munge/munge.key
+          chown munge: /etc/munge/munge.key
+      #This scripts creates on the compute node image all the necessary slurmd
+      #directories as we have on-prem. For things like the log or the etc dir
+      #mkdir is good enough, but with the ln we keep it all in the same place.
+      - type: shell
+        destination: prepare_slurm_dirs.sh
+        content: |
+          #!/bin/sh
+          mkdir -p $(vars.on_prem_install_dir)/var/spool/slurmd
+          ln -s /usr/local/etc/slurm $(vars.on_prem_install_dir)/etc
+          ln -s /usr/local/bin $(vars.on_prem_install_dir)/bin
+          ln -s /usr/local/sbin $(vars.on_prem_install_dir)/sbin
+          ln -s /var/log/slurm $(vars.on_prem_install_dir)/var/log
+          chown -R $(vars.slurm_uid):$(vars.slurm_gid) $(vars.on_prem_install_dir)
+
+- group: packer
+  modules:
+  - id: munge-enabled-image
+    source: modules/packer/custom-image
+    kind: packer
+    use:
+    - network
+    - scripts_for_image
+    settings:
+      source_image_project_id: [schedmd-slurm-public]
+      # see latest in https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#published-image-family
+      source_image_family: slurm-gcp-6-9-hpc-rocky-linux-8
+      disk_size: $(vars.disk_size)
+      image_family: $(vars.custom_image.family)
+      state_timeout: 15m
+
+- group: cluster
+  modules:
+  - id: compute_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network]
+    settings:
+      node_count_dynamic_max: 20
+      disk_size_gb: $(vars.disk_size)
+      instance_image: $(vars.custom_image)
+      instance_image_custom: true
+
+  - id: compute_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use: [compute_nodeset]
+    settings:
+      partition_name: compute
+      is_default: true
+
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    use:
+    - network
+    - compute_partition
+    settings:
+      enable_hybrid: true
+      slurm_cluster_name: $(vars.cluster_name)
+      hybrid_conf:
+        slurm_control_host: $(vars.onprem_ctld_host)
+        slurm_control_addr: $(vars.onprem_ctld_addr)
+        use_same_path_on_cloud: false
+        output_dir: $(vars.output_dir)
+        install_dir: $(vars.on_prem_install_dir)/etc
+        slurm_uid: $(vars.slurm_uid)
+        slurm_gid: $(vars.slurm_gid)
+        slurm_log_dir: $(vars.on_prem_install_dir)/var/log
+        slurm_bin_dir: $(vars.on_prem_install_dir)/bin
