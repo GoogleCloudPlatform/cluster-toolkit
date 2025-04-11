@@ -23,8 +23,13 @@ from django.db.models import Q
 from django.forms import ValidationError
 from django.utils.safestring import mark_safe
 
+from crispy_forms.helper import FormHelper
+from crispy_forms.layout import Layout, Field, Submit, Div, Hidden
+from crispy_forms.bootstrap import InlineCheckboxes
+
 from .cluster_manager import cloud_info
 from .cluster_manager import validate_credential
+from .views.view_utils import RegistryDataHelper
 
 # If we have a model, it has a form - pretty much
 from .models import *  # pylint: disable=wildcard-import,unused-wildcard-import
@@ -174,6 +179,7 @@ class ClusterForm(forms.ModelForm):
             "controller_node_image",
             "use_cloudsql",
             "use_bigquery",
+            "use_containers",
         )
 
         widgets = {
@@ -217,6 +223,7 @@ class ClusterForm(forms.ModelForm):
                                                        "value": "",}),
             "use_cloudsql": forms.CheckboxInput(attrs={"class": "required checkbox"}),
             "use_bigquery": forms.CheckboxInput(attrs={"class": "required checkbox"}),
+            "use_containers": forms.CheckboxInput(attrs={"class": "required checkbox"}),
         }
 
 
@@ -658,6 +665,120 @@ class CustomInstallationApplicationForm(forms.ModelForm):
         self.fields["install_partition"].queryset = cluster.partitions
 
 
+class RegistrySelectWidget(forms.Select):
+    def create_option(self, name, value, label, selected, index, subindex=None, attrs=None):
+        option = super().create_option(name, value, label, selected, index, subindex=subindex, attrs=attrs)
+        # Look up the repo_mode from the mapping provided on the widget.
+        if hasattr(self, 'repo_mode_mapping') and value:
+            mode = self.repo_mode_mapping.get(str(value))
+            if mode:
+                option['attrs']['data-repo-mode'] = mode
+        return option
+class ContainerApplicationForm(forms.ModelForm):
+    """Form to collect container installation details"""
+
+    container_image_remote = forms.CharField(
+        required=False,
+        widget=forms.TextInput(attrs={"class": "form-control"}),
+        label="Container Image",
+    )
+
+    registry = forms.ModelChoiceField(
+        queryset=ContainerRegistry.objects.all(),
+        required=True,
+        widget=RegistrySelectWidget(attrs={"class": "form-control"}),
+    )
+
+    def __init__(self, *args, **kwargs):
+        cluster = kwargs.pop("cluster", None)
+        image_choices = kwargs.pop("image_choices", [])
+        super().__init__(*args, **kwargs)
+
+        if cluster:
+            self.fields["cluster"].initial = cluster.pk
+            self.fields["cluster"].widget = forms.HiddenInput()
+            qs = cluster.container_registry_relations.all()
+            self.fields["registry"].queryset = qs
+
+            # Build mapping of registry ID to repo_mode.
+            mapping = {str(reg.id): reg.repo_mode for reg in qs}
+            self.fields["registry"].widget.repo_mode_mapping = mapping
+
+        if image_choices:
+            self.fields["container_image"].choices = image_choices
+        else:
+            self.fields["container_image"].choices = [("", "--- Select a registry first ---")]
+        self.fields["container_image"].widget = forms.Select(attrs={"class": "form-control"})
+
+        self.helper = FormHelper()
+        self.helper.form_method = "post"
+        self.helper.label_class = "font-weight-bold"
+        self.helper.field_class = ""
+        self.helper.layout = Layout(
+            # Handling bootstrap layout in forms instead of the template
+            Div(
+                Div(Field("name", css_class="form-control mb-3"), css_class="col-md-6"),
+                Div(Field("registry", css_class="form-control mb-3"), css_class="col-md-6"),
+                css_class="row"
+            ),
+            Div(
+                Div(Field("container_image", css_class="form-control"), css_class="image-dropdown mb-3"),
+                Div(Field("container_image_remote", css_class="form-control"), css_class="image-remote mb-3", attrs={"style": "display:none;"}),
+                css_class="mb-3",
+                css_id="container-image-wrapper"
+            ),
+            Div(
+                Div(Field("container_mounts", css_class="form-control mb-3"), css_class="col-md-4"),
+                Div(Field("container_envvars", css_class="form-control mb-3"), css_class="col-md-4"),
+                Div(Field("container_workdir", css_class="form-control mb-3"), css_class="col-md-4"),
+                css_class="row"
+            ),
+            Div(
+                Div(Field("container_writable"), css_class="col-md-3 mb-3"),
+                Div(Field("container_use_entrypoint"), css_class="col-md-3 mb-3"),
+                Div(Field("container_mount_home"), css_class="col-md-3 mb-3"),
+                Div(Field("container_remap_root"), css_class="col-md-3 mb-3"),
+                css_class="row"
+            ),
+            Div(
+                Submit("submit", "Save", css_class="btn btn-primary"),
+                css_class="mb-3"
+            )
+        )
+
+    class Meta:
+        model = ContainerApplication
+        fields = (
+            "cluster",
+            "name",
+            "registry",
+            "container_image",
+            "container_mounts",
+            "container_envvars",
+            "container_workdir",
+            "container_writable",
+            "container_use_entrypoint",
+            "container_mount_home",
+            "container_remap_root",
+        )
+
+    def clean(self):
+        cleaned_data = super().clean()
+        registry = cleaned_data.get("registry")
+        image = cleaned_data.get("container_image")
+        remote_image = self.data.get("container_image_remote", "").strip()
+
+        # If the registry is a remote repository, use the remote image input.
+        if registry and registry.repo_mode == "REMOTE_REPOSITORY":
+            if not remote_image:
+                self.add_error("container_image", "Please specify an image name for the remote repository.")
+            else:
+                cleaned_data["container_image"] = remote_image
+        elif not image:
+            self.add_error("container_image", "Please select a container image from the list.")
+        return cleaned_data
+
+
 class SpackApplicationForm(forms.ModelForm):
     """Custom form for application model"""
 
@@ -744,6 +865,62 @@ class JobForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         cluster = kwargs["initial"]["cluster"]
         self.fields["partition"].queryset = cluster.partitions
+
+
+class ContainerJobForm(JobForm):
+    """Custom form for containerized jobs"""
+
+    class Meta(JobForm.Meta):
+        model = ContainerJob
+        fields = JobForm.Meta.fields + (
+            "container_image_uri",
+            "container_mounts",
+            "container_envvars",
+            "container_workdir",
+            "container_writable",
+            "container_use_entrypoint",
+            "container_mount_home",
+            "container_remap_root",
+        )
+
+        widgets = {
+            "container_image_uri": forms.TextInput(attrs={"class": "form-control", "readonly": True}),
+            "container_mounts": forms.TextInput(attrs={"class": "form-control", "readonly": False}),
+            "container_envvars": forms.TextInput(attrs={"class": "form-control", "readonly": False}),
+            "container_workdir": forms.TextInput(attrs={"class": "form-control", "readonly": False}),
+            "container_writable": forms.CheckboxInput(attrs={"class": "form-check-input", "disabled": False}),
+            "container_use_entrypoint": forms.CheckboxInput(attrs={"class": "form-check-input", "disabled": False}),
+            "container_mount_home": forms.CheckboxInput(attrs={"class": "form-check-input", "disabled": False}),
+            "container_remap_root": forms.CheckboxInput(attrs={"class": "form-check-input", "disabled": False}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        """Initialize form for containerized jobs"""
+        application = kwargs.get("initial", {}).get("application")
+        super().__init__(*args, **kwargs)
+
+        # Modify labels for ranks_per_node field
+        self.fields["ranks_per_node"].label = "CPUs per Node"
+        self.fields["ranks_per_node"].help_text = "The number of CPUs per node"
+
+        # Set and hide threads_per_rank field
+        self.fields["threads_per_rank"].required = False
+        self.fields["threads_per_rank"].initial = "N/A"
+        self.fields["threads_per_rank"].widget = forms.HiddenInput()
+
+        # Disable field in UI
+        self.fields["ranks_per_node"].widget.attrs.pop("readonly", True)
+
+        # Pre-fill fields from application form
+        if application and hasattr(application, "containerapplication"):
+            self.fields["container_image_uri"].initial = application.containerapplication.container_image
+            self.fields["container_mounts"].initial = application.containerapplication.container_mounts
+            self.fields["container_envvars"].initial = application.containerapplication.container_envvars
+            self.fields["container_workdir"].initial = application.containerapplication.container_workdir
+            self.fields["container_writable"].initial = application.containerapplication.container_writable
+            self.fields["container_use_entrypoint"].initial = application.containerapplication.container_use_entrypoint
+            self.fields["container_mount_home"].initial = application.containerapplication.container_mount_home
+            self.fields["container_remap_root"].initial = application.containerapplication.container_remap_root
 
 
 class BenchmarkForm(forms.ModelForm):
@@ -834,6 +1011,7 @@ class VirtualSubnetForm(forms.ModelForm):
             "name": forms.TextInput(attrs={"class": "form-control"}),
             "cidr": forms.TextInput(attrs={"class": "form-control"}),
             "cloud_region": forms.Select(attrs={"class": "form-control"}),
+            "private_google_access_enabled": forms.CheckboxInput(attrs={"class": "form-control"}),
         }
 
 
@@ -1119,3 +1297,105 @@ class ImageImportForm(forms.ModelForm):
         startup_scripts = owned_scripts | authorized_scripts
 
         return startup_scripts
+
+
+class ContainerRegistryForm(forms.ModelForm):
+    class Meta:
+        model = ContainerRegistry
+        fields = [
+            'format',
+            'repo_mode',
+            'repo_mirror_url',
+            'repo_username',
+            'repo_password',
+            'use_public_repository',
+            'use_upstream_credentials',
+        ]
+        widgets = {
+            'repo_password': forms.PasswordInput(attrs={'class': 'form-control'}),
+            'format': forms.Select(attrs={'class': 'form-control'}),
+            'repo_mode': forms.Select(attrs={'class': 'form-control'}),
+            'use_public_repository': forms.CheckboxInput(),
+            'repo_mirror_url': forms.URLInput(attrs={'class': 'form-control'}),
+            'use_upstream_credentials': forms.CheckboxInput(),
+            'repo_username': forms.TextInput(attrs={'class': 'form-control'}),
+        }
+
+    def clean_use_public_repository(self):
+        """Ensure checkbox is always returned as True/False"""
+        return self.cleaned_data.get("use_public_repository", False)
+
+    def clean_use_upstream_credentials(self):
+        """Ensure checkbox is always returned as True/False"""
+        return self.cleaned_data.get("use_upstream_credentials", False)
+
+    def clean(self):
+        cleaned_data = super().clean()
+        repo_mode = cleaned_data.get("repo_mode")
+        use_public_repository = cleaned_data.get("use_public_repository")
+
+        if repo_mode == "REMOTE_REPOSITORY":
+            if not use_public_repository and not cleaned_data.get("repo_mirror_url"):
+                self.add_error("repo_mirror_url", "Mirror URL is required for remote repositories unless using a public repository.")
+                raise ValidationError(
+                        f"repo_mirror_url is required for remote repositories unless using a public repository."
+                    )
+
+            if cleaned_data.get("use_upstream_credentials") and not cleaned_data.get("repo_username"):
+                self.add_error("repo_username", "Username is required when using upstream credentials.")
+                raise ValidationError(
+                        f"repo_username is required when using upstream credentials."
+                    )
+
+            # Allow repo_password to exist in cleaned_data even if not saved to the model
+            if cleaned_data.get("use_upstream_credentials") and not cleaned_data.get("repo_password"):
+                self.add_error("repo_password", "Password is required when using upstream credentials.")
+                raise ValidationError(
+                        f"repo_password is required when using upstream credentials."
+                    )
+
+            # If use_public_repository is set, enforce defaults
+            if use_public_repository:
+                cleaned_data["repo_mirror_url"] = None  # Ensure no mirror URL is stored
+
+        elif repo_mode == "STANDARD_REPOSITORY":
+            cleaned_data["repo_mirror_url"] = None
+            cleaned_data["repo_username"] = None
+            cleaned_data["repo_password"] = None
+
+        return cleaned_data
+
+
+class PullContainerForm(forms.Form):
+    source_uri = forms.CharField(
+        required=True,
+        label="Remote Container URL",
+        widget=forms.TextInput(attrs={
+            "class": "form-control",
+            "placeholder": "Enter remote container URL (e.g., docker.io/pytorch/pytorch:latest)"
+        })
+    )
+    container_tag = forms.CharField(
+        required=False,
+        label="Container Tag",
+        widget=forms.TextInput(attrs={
+            "class": "form-control",
+            "placeholder": "Enter tag for built container (e.g., latest)"
+        })
+    )
+    repo_username = forms.CharField(
+        required=False,
+        label="Repo Username",
+        widget=forms.TextInput(attrs={
+            "class": "form-control",
+            "placeholder": "Repo username (if required)"
+        })
+    )
+    repo_password = forms.CharField(
+        required=False,
+        label="Repo Password",
+        widget=forms.PasswordInput(attrs={
+            "class": "form-control",
+            "placeholder": "Repo password (if required)"
+        })
+    )

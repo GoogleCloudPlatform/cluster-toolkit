@@ -65,7 +65,10 @@ SA_ROLES=('aiplatform.admin'
 	'bigquery.admin'
 	'secretmanager.admin'
 	'serviceusage.serviceUsageConsumer'
-	'servicenetworking.networksAdmin')
+	'servicenetworking.networksAdmin'
+	'artifactregistry.admin'
+	'cloudbuild.builds.builder'
+)
 
 #
 #
@@ -150,8 +153,7 @@ create_service_account() {
 	fi
 
 	# Create the service account
-	# - may fail if user doesn't have permissions
-	#
+	echo "Creating service account [${account}] in project [${project}] ..."
 	set +e
 	if ! gcloud iam service-accounts create "${account}" \
 		--description="TKFE service account" --project="${project}"; then
@@ -166,12 +168,38 @@ create_service_account() {
 
 	# Add all required roles to new service account
 	# - can assume we can do this if account creation above works
+	# - retries in case of delay in SA creation propagating to gcloud
 	#
 	sa_fullname=$(sa_expand "${project}" "${account}")
+
+	# ---- Configure number of retries ----
+	local max_retries=3
+	local attempt
+	local success
+
 	for role in "${SA_ROLES[@]}"; do
-		gcloud projects add-iam-policy-binding "${project}" \
-			--member="serviceAccount:${sa_fullname}" \
-			--role="roles/${role}" &>${devnull}
+		success=false
+		attempt=1
+		while [[ ${attempt} -le ${max_retries} ]]; do
+			if gcloud projects add-iam-policy-binding "${project}" \
+				--member="serviceAccount:${sa_fullname}" \
+				--role="roles/${role}" >/dev/null 2>&1; then
+				success=true
+				break
+			else
+				error "Failed to assign role [roles/${role}] on attempt ${attempt}."
+				if [[ ${attempt} -lt ${max_retries} ]]; then
+					error "Retrying in a few seconds..."
+					sleep 3
+				fi
+			fi
+			((attempt++))
+		done
+
+		if [[ ${success} != true ]]; then
+			error "All $max_retries attempts to assign [roles/${role}] failed. Exiting."
+			return 1
+		fi
 	done
 
 	return 0

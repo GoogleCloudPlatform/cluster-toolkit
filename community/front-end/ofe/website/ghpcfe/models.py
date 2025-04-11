@@ -31,6 +31,9 @@ from django.db import models
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from rest_framework.authtoken.models import Token
+from django import template
+
+register = template.Library()
 
 logger = logging.getLogger(__name__)
 
@@ -376,6 +379,11 @@ class VirtualSubnet(CloudResource):
         max_length=18,
         help_text="CIDR for this subnet",
         validators=[CIDRValidator],
+    )
+    private_google_access_enabled = models.BooleanField(
+        default=True,
+        null=False,
+        help_text="Would you like to use Private Google Access with this subnet?"
     )
 
     def __str__(self):
@@ -802,6 +810,12 @@ class Cluster(CloudResource):
             "Would you like to send Slurm accounting data to BigQuery?"
         ),
     )
+    use_containers = models.BooleanField(
+        default=False,
+        help_text=(
+            "Enable containers for this cluster? Artifact Registry can be configured to store your containers."
+        ),        
+    )
 
     def get_access_key(self):
         return Token.objects.get(user=self.owner)
@@ -995,6 +1009,172 @@ class ClusterPartition(models.Model):
             raise ValidationError("You cannot enable both Placement Groups and Node Reuse simultaneously.") 
 
 
+class ContainerRegistry(models.Model):
+    """Model to represent container registry settings for Terraform blueprints."""
+
+    REPO_MODES = [
+        ('REMOTE_REPOSITORY', 'Remote Repository'),
+        ('STANDARD_REPOSITORY', 'Standard Repository'),
+    ]
+
+    FORMATS = [
+        ('DOCKER', 'Docker'),
+    ]
+
+    cluster = models.ForeignKey(
+        Cluster,
+        on_delete=models.CASCADE,
+        related_name="container_registry_relations",
+        help_text="Cluster associated with this container registry"
+    )
+
+    # Todo: clear this field after deployment and retrieve from Secret Manager?
+    repo_password = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        default='',
+        help_text="Optional repo password"
+    )
+
+    format = models.CharField(
+        max_length=20,
+        choices=FORMATS,
+        default="DOCKER"
+    )
+
+    repo_mode = models.CharField(
+        max_length=30,
+        choices=REPO_MODES,
+        default="REMOTE_REPOSITORY"
+    )
+
+    use_public_repository = models.BooleanField(
+        default=False
+    )
+
+    repo_mirror_url = models.URLField(
+        blank=True,
+        null=True,
+        default='',
+        help_text="URL for remote repository"
+    )
+
+    use_upstream_credentials = models.BooleanField(
+        default=False,
+        help_text="Use Service Account for usptream authentication to the remote repository"
+    )
+
+    repo_username = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        default='',
+        help_text="Username for remote repository"
+    )
+
+    REGISTRY_STATUS = (
+        ("n", "Newly created"),
+        ("c", "Being created"),
+        ("i", "Initialized and awaiting setup"),
+        ("r", "Ready"),
+        ("e", "Deployment failed"),
+        ("d", "Deleted"),
+    )
+
+    status = models.CharField(
+        max_length=2,
+        choices=REGISTRY_STATUS,
+        default="n",
+        help_text="Status of this Artifact Registry",
+    )
+
+    repository_id = models.CharField(
+        max_length=200,
+        blank=True,
+        null=True,
+        help_text="GCP Artifact Registry name extracted from Terraform state"
+    )
+
+    secret_id = models.CharField(
+        max_length=200,
+        blank=True,
+        null=True,
+        help_text="GCP Artifact Registry Secret name extracted from Terraform state"
+    )
+
+    # This is handled by /templatetags/registry_extras.py
+    BUILD_STATUS = (
+        ("n", "Not Started"),
+        ("i", "In Progress"),
+        ("s", "Success"),
+        ("f", "Failed"),
+    )
+
+    build_info = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="List of build info objects, each with build_id and status..."
+    )
+
+    def get_project_id(self):
+        """Retrieve project ID dynamically from the related cluster's credential."""
+        return self.cluster.project_id if self.cluster else None
+
+    def get_repo_mirror_url(self):
+        """Return the URL of the mirrored repository or a default message."""
+        if self.repo_mirror_url:
+            return self.repo_mirror_url
+        if self.use_public_repository:
+            return "docker.io"
+        return "N/A"
+
+    def get_registry_url(self):
+        """
+        Return the full Artifact Registry URL for this repository, e.g.
+        'https://us-central1-docker.pkg.dev/my-project/my-repo'
+        """
+        if self.repository_id:
+            project_id = self.get_project_id()
+            cloud_region = self.cluster.cloud_region
+            return f"https://{cloud_region}-docker.pkg.dev/{project_id}/{self.repository_id}"
+        return "N/A"
+
+    def get_registry_console_url(self):
+        """Build the repository URL for access via GCP console."""
+        if self.repository_id:
+            project_id = self.get_project_id()
+            cloud_region = self.cluster.cloud_region
+            format = self.format
+            return f"https://console.cloud.google.com/artifacts/{format}/{project_id}/{cloud_region}/{self.repository_id}"
+        return "N/A"
+
+    def get_secret_url(self):
+        """Build the secret URL based on the secret ID. Eventually remove repo_password field in favour of this."""
+        if self.secret_id:
+            project_id = self.get_project_id()
+            return f"https://secretmanager.googleapis.com/v1/projects/{project_id}/secrets/{self.secret_id}/versions/latest"
+        return "N/A"
+
+    def get_build_url(self, build_id, region="global"):
+        """
+        Construct and return a Cloud Build URL for a given build_id.
+        """
+        project_id = self.get_project_id()
+        return f"https://console.cloud.google.com/cloud-build/builds;region={region}/{build_id}?project={project_id}"
+
+    def delete(self, *args, **kwargs):
+        self.status = "d"
+        self.save(update_fields=["status"])
+    
+    def __str__(self):
+        return self.repository_id
+
+    class Meta:
+        verbose_name = "Container Registry"
+        verbose_name_plural = "Container Registries"
+
+
 class ApplicationInstallationLocation(models.Model):
     """User managed application support"""
 
@@ -1171,6 +1351,85 @@ class SpackApplication(Application):
         blank=True,
         null=True,
     )
+
+
+class ContainerApplication(Application):
+    """Managed Container-based application"""
+
+    container_image = models.CharField(
+        max_length=512,
+        blank=True,
+        null=True,
+        help_text="URI of the container image, eg. gcr.io/my-project/my-container:latest",
+    )
+
+    container_mounts = models.CharField(
+        max_length=512,
+        default="/home:/home,/opt/cluster:/opt/cluster",
+        blank=True,
+        null=True,
+        help_text="Mounts to use in container",
+    )
+
+    container_envvars = models.CharField(
+        max_length=512,
+        default="ALL",
+        blank=True,
+        null=True,
+        help_text="Environment variables to preserve from the host environment",
+    )
+
+    container_workdir = models.CharField(
+        max_length=512,
+        blank=True,
+        null=True,
+        help_text="Working directory to use in container",
+    )
+
+    registry = models.ForeignKey(
+        ContainerRegistry,
+        help_text="Container registry where this image is stored",
+        on_delete=models.CASCADE,
+        blank=True,
+        null=True,
+    )
+
+    container_use_entrypoint = models.BooleanField(
+        default=False,
+        help_text="Execute the entrypoint from the container image",
+    )
+
+    container_mount_home = models.BooleanField(
+        default=True,
+        help_text="Bind mount the user's home directory",
+    )
+
+    container_remap_root = models.BooleanField(
+        default=True,
+        help_text="Ask to be remapped to root inside the container",
+    )
+
+    container_writable = models.BooleanField(
+        default=True,
+        help_text="Make the container filesystem writable",
+    )
+
+    def get_full_container_image_uri(self):
+        """
+        Returns the full container image URI from the latest successful build.
+        """
+        if not self.registry or not self.registry.build_info:
+            return None  # Return None if no registry or no builds exist
+
+        # Find the latest successful build entry
+        for build in reversed(self.registry.build_info):
+            if build.get("status") == "s":  # 's' indicates success
+                return build.get("dest_image")  # Full container image path
+        return None  # No successful builds found
+
+    @property
+    def container_image_uri(self):
+        return self.get_full_container_image_uri()
 
 
 class Benchmark(models.Model):
@@ -1379,6 +1638,79 @@ class Job(models.Model):
     def __str__(self):
         """String for representing the Model object."""
         return f"#{self.id} - '{self.name}' on {self.application.cluster}"
+
+
+class ContainerJob(Job):
+    """A subclass of Job specifically for container-based jobs"""
+
+    container_image_uri = models.CharField(
+        max_length=512,
+        blank=True,
+        null=True,
+        help_text="Full URI of the container image used for this job",
+    )
+
+    container_mounts = models.TextField(
+        blank=True,
+        null=True,
+        help_text="Filesystem mounts inside the container (e.g., '/mnt/data:/mnt/data')",
+    )
+
+    container_envvars = models.TextField(
+        blank=True,
+        null=True,
+        help_text="Environment variables passed to the container",
+    )
+
+    container_workdir = models.CharField(
+        max_length=512,
+        blank=True,
+        null=True,
+        help_text="Working directory inside the container",
+    )
+
+    container_use_entrypoint = models.BooleanField(
+        default=False,
+        help_text="Execute the entrypoint from the container image",
+    )
+
+    container_mount_home = models.BooleanField(
+        default=True,
+        help_text="Bind mount the user's home directory",
+    )
+
+    container_remap_root = models.BooleanField(
+        default=True,
+        help_text="Ask to be remapped to root inside the container",
+    )
+
+    container_writable = models.BooleanField(
+        default=True,
+        help_text="Make the container filesystem writable",
+    )
+
+    def get_container_payload(self):
+        """Return container-specific job parameters for C2"""
+        # uri for slurm/pyxis to access artifact registry is formatted like:
+        # `oauth2accesstoken@us-central1-docker.pkg.dev#my-project/my-repo/image:tag``
+        # eventually `oauth2accesstoken:token_here@us-central1...` is used for auth
+        image_uri = self.container_image_uri or ""
+        # If no hash is present, split at the first slash
+        if '#' not in image_uri and '/' in image_uri:
+            parts = image_uri.split('/', 1)
+            # escape the hash as per Pyxis sbatch docs
+            image_uri = f"{parts[0]}\\#{parts[1]}"
+        return {
+            "is_container_job": True,
+            "container_image_uri": image_uri,
+            "container_mounts": self.container_mounts,
+            "container_envvars": self.container_envvars,
+            "container_workdir": self.container_workdir,
+            "container_use_entrypoint": self.container_use_entrypoint,
+            "container_mount_home": self.container_mount_home,
+            "container_remap_root": self.container_remap_root,
+            "container_writable": self.container_writable,
+        }
 
 
 class Task(models.Model):

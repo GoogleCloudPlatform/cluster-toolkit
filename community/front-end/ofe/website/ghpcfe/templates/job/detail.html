@@ -27,9 +27,7 @@
   <p><b>Job ID:</b> {{ object.id }}</p>
   <p><b>Name:</b> {{ object.name }}</p>
   <p><b>Application:</b> <a href="{% url 'application-detail' object.application.id %}">{{ object.application.name }}</a></p>
-  <p><b>Cluster:</b> {{ object.application.cluster.name }} 
-    <img src="/static/img/GCP_logo.png" style="width:32px;height:32px;">
-     </p>
+  <p><b>Cluster:</b> {{ object.application.cluster.name }}</p>
   <p><b>Instance Type:</b> {{ object.partition.machine_type }}</p>
   <p><b>Job Cost:</b> {% if job.status != "c" and job.status != "e" %}<={%endif%}${{ object.job_cost }}</p>
   <hr>

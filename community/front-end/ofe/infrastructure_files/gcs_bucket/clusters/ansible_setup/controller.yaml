@@ -22,5 +22,6 @@
   - common
   - spack_install
   - spack_setup
+  - {role: containers, when: use_containers | bool}
   # This one should be last - has a role to check in with FE to signal ready
   - c2_daemon
