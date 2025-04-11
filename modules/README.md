@@ -261,15 +261,6 @@ Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial][fsi-monteca
 [spack-execute]: ../community/modules/scripts/spack-execute/README.md
 [wait-for-startup]: ../community/modules/scripts/wait-for-startup/README.md
 
-> **_NOTE:_** Slurm-GCP V4 is deprecated. In case, you want to use V4 modules, please use
-[ghpc-v1.27.0](https://github.com/GoogleCloudPlatform/hpc-toolkit/releases/tag/v1.27.0)
-source code and build ghpc binary from this. This source code also contains
-deprecated examples using V4 modules for your reference.
-> **_NOTE:_** Slurm-GCP V5 is deprecated. In case, you want to use V5 modules, please use
-[ghpc-v1.44.1](https://github.com/GoogleCloudPlatform/hpc-toolkit/releases/tag/v1.44.1)
-source code and build ghpc binary from this. This source code also contains
-deprecated examples using V5 modules for your reference.
-
 ## Module Fields
 
 ### ID (Required)

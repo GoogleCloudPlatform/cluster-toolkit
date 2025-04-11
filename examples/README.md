@@ -1,10 +1,5 @@
 # Example Blueprints
 
-> [!NOTE]
-> Migration to Slurm-GCP v6 is completed. See
-> [this update](#completed-migration-to-slurm-gcp-v6) for specific recommendations
-> and timelines.
-
 This directory contains a set of example blueprint files that can be fed into
 gHPC to create a deployment.
 
@@ -15,7 +10,6 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
 
 * [Instructions](#instructions)
   * [(Optional) Setting up a remote terraform state](#optional-setting-up-a-remote-terraform-state)
-* [Completed Migration to Slurm-GCP v6](#completed-migration-to-slurm-gcp-v6)
 * [Blueprint Descriptions](#blueprint-descriptions)
   * [hpc-slurm.yaml](#hpc-slurmyaml-) ![core-badge]
   * [hpc-enterprise-slurm.yaml](#hpc-enterprise-slurmyaml-) ![core-badge]
@@ -135,55 +129,6 @@ subcommands as well:
 [terraform backends]: https://developer.hashicorp.com/terraform/language/settings/backends/configuration
 [configuration block]: https://developer.hashicorp.com/terraform/language/settings/backends/configuration#using-a-backend-block
 [gcs]: https://developer.hashicorp.com/terraform/language/settings/backends/gcs
-
-## Completed Migration to Slurm-GCP v6
-
-[Slurm-GCP](https://github.com/GoogleCloudPlatform/slurm-gcp) is the set of
-scripts and tools that automate the installation, deployment, and certain
-operational aspects of [Slurm](https://slurm.schedmd.com/overview.html) on
-Google Cloud Platform. It is recommended to use Slurm-GCP through the Cluster
-Toolkit where it is exposed as various modules.
-
-The Cluster Toolkit team has finished transitioning from Slurm-GCP v5 to Slurm-GCP v6 and
-as of 10/11/2024, Slurm-GCP v6 is the recommended option. Blueprint naming is as
-follows:
-
-* Slurm v5: hpc-slurm-v5-legacy.yaml
-* Slurm v6: hpc-slurm.yaml
-
-> [!IMPORTANT]
-> Slurm-GCP v5 modules are now marked as deprecated and will be maintained in our
-> repo till January 6, 2025. After that, the modules will be removed from the Cluster
-> Toolkit repo and regression tests will no longer run for V5. Those who choose
-> to not upgrade to V6 will still be able to use V5 modules by referencing
-> specific git tags in the module source lines.
-
-### Major Changes in from Slurm GCP v5 to v6
-
-* Robust reconfiguration
-
-  Reconfiguration is now managed by a service that runs on each instance. This has removed the dependency on the Pub/Sub Google cloud service, and provides a more consistent reconfiguration experience (when calling `gcluster deploy blueprint.yaml -w`). Reconfiguration has also been enabled by default.
-
-* Faster deployments
-
-  Simple cluster deploys up to 3x faster.
-
-* Lift the restriction on the number of deployments in a single project.
-
-  Slurm GCP v6 has eliminated the use of project metadata to store cluster configuration. Project metadata was both slow to update and had an absolute storage limit. This restricted the number of clusters that could be deployed in a single project. Configs are now stored in a Google Storage Bucket.
-
-* Fewer dependencies in the deployment environment
-
-  Reconfiguration and compute node cleanup no longer require users to install local python dependencies in the deployment environment (where gcluster is called). This has allowed for these features to be enabled by default.
-
-* Flexible node to partition relation
-
-  The v5 concept of "node-group" was replaced by "nodeset" to align with Slurm naming convention. Nodeset can be attributed to multiple partitions, as well as partitions can include multiple nodesets.
-
-* Upgrade Slurm to 23.11
-* TPU v3, v4 support
-
-_For a full accounting of changes, see the changelog._
 
 ## Blueprint Descriptions
 
@@ -1610,37 +1555,8 @@ To avoid these issues, the `ghpc_stage` function can be used to copy a file (or 
 The `ghpc_stage` function will always look first in the path specified in the blueprint. If the file is not found at this path then `ghpc_stage` will look for the staged file in the deployment folder, if a deployment folder exists.
 This means that you can redeploy a blueprint (`gcluster deploy <blueprint> -w`) so long as you have the deployment folder from the original deployment, even if locally referenced files are not available.
 
-<!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
-## Requirements
+## Completed Migration to Slurm-GCP v6
 
-No requirements.
-
-## Providers
-
-| Name | Version |
-|------|---------|
-| <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | n/a |
-
-## Modules
-
-No modules.
-
-## Resources
-
-| Name | Type |
-|------|------|
-| [google-beta_google_compute_global_address.private_ip_alloc](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_compute_global_address) | resource |
-| [google-beta_google_compute_network.network](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_compute_network) | resource |
-| [google-beta_google_parallelstore_instance.instance](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_parallelstore_instance) | resource |
-| [google-beta_google_service_networking_connection.default](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_service_networking_connection) | resource |
-
-## Inputs
-
-No inputs.
-
-## Outputs
-
-| Name | Description |
-|------|-------------|
-| <a name="output_access_points"></a> [access\_points](#output\_access\_points) | Output access points |
-<!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
+Slurm-GCP v5 users should read [Slurm-GCP v5 EOL](../docs/slurm-gcp-support.md)
+for information on v5 retirement and feature highlights for v6. Slurm-GCP v6 is
+only supported option within the Toolkit.
