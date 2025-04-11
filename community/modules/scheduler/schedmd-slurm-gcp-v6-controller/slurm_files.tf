@@ -57,16 +57,18 @@ locals {
 }
 
 
-resource "google_storage_bucket_iam_binding" "viewers" {
-  bucket  = local.bucket_name
-  role    = "roles/storage.objectViewer"
-  members = compact(local.viewers)
+resource "google_storage_bucket_iam_member" "viewers" {
+  for_each = local.viewers
+  bucket   = local.bucket_name
+  role     = "roles/storage.objectViewer"
+  member   = each.value
 }
 
-resource "google_storage_bucket_iam_binding" "legacy_readers" {
-  bucket  = local.bucket_name
-  role    = "roles/storage.legacyBucketReader"
-  members = compact(local.viewers)
+resource "google_storage_bucket_iam_member" "legacy_readers" {
+  for_each = local.viewers
+  bucket   = local.bucket_name
+  role     = "roles/storage.legacyBucketReader"
+  member   = each.value
 }
 
 locals {
