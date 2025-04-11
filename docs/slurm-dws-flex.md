@@ -36,4 +36,4 @@ In order to make use of DWS Flex Start mode with SlurmGCP, you must use the `dws
 * Empty MIGs are not cleaned up automatically.
 
 > [!NOTE]
-> We also have a legacy implementation (which uses bulkInsert) which can be enabled by using the `use_bulk_insert` variable. The project needs to be allowlisted to make use of this legacy implementation via this [form](https://docs.google.com/forms/d/1etaaXMW9jJUTTxfUC7TIIMttLWT5H-3Q8_3-sG6vwKk/edit) can be used to sign up.
+> We also have a legacy implementation (which uses bulkInsert) which can be enabled by using the `use_bulk_insert` variable. The project needs to be allowlisted to make use of this legacy implementation. You can sign up by filling out the form [here](https://docs.google.com/forms/d/1etaaXMW9jJUTTxfUC7TIIMttLWT5H-3Q8_3-sG6vwKk/edit).
