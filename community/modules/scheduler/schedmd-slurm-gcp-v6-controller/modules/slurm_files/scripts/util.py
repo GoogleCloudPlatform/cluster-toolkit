@@ -1942,7 +1942,7 @@ class Lookup:
             nodeset = self.node_nodeset(node)
             if nodeset.dws_flex.use_bulk_insert:
                 return False #For legacy flex support
-            return nodeset.dws_flex.enabled
+            return bool(nodeset.dws_flex.enabled)
         except:
             return False
 
