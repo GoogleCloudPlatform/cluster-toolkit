@@ -39,7 +39,6 @@ deployment_groups:
     use: [network]
     settings:
       local_mounts: [/home]
-      auto_delete_disk: true
 
   ## Single node group, use defaults where appropriate
   - id: default_nodeset

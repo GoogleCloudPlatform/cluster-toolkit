@@ -38,8 +38,6 @@ deployment_groups:
   - id: nfs
     source: community/modules/file-system/nfs-server
     use: [network1]
-    settings:
-      auto_delete_disk: true
 
   - id: spack-setup
     source: community/modules/scripts/spack-setup
