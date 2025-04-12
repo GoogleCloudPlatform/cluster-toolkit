@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 # Source: gpu-operator/charts/node-feature-discovery/templates/serviceaccount.yaml
 apiVersion: v1
 kind: ServiceAccount
@@ -344,7 +345,6 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   name: release-name-node-feature-discovery
-  namespace: gpu-operator
   labels:
     helm.sh/chart: node-feature-discovery-0.17.2
     app.kubernetes.io/name: node-feature-discovery
@@ -365,7 +365,6 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   name: release-name-node-feature-discovery-gc
-  namespace: gpu-operator
   labels:
     helm.sh/chart: node-feature-discovery-0.17.2
     app.kubernetes.io/name: node-feature-discovery
@@ -1067,7 +1066,7 @@ spec:
     usePrecompiled: false
     repository: nvcr.io/nvidia
     image: driver
-    version: "550.127.05"
+    version: "570.124.06"
     imagePullPolicy: IfNotPresent
     startupProbe: 
       failureThreshold: 120
@@ -1219,13 +1218,13 @@ spec:
     enabled: false
     repository: nvcr.io/nvidia/cloud-native
     image: dcgm
-    version: "4.1.1-2-ubuntu22.04"
+    version: "4.2.0-1-ubuntu22.04"
     imagePullPolicy: IfNotPresent
   dcgmExporter:
     enabled: true
     repository: nvcr.io/nvidia/k8s
     image: dcgm-exporter
-    version: "4.1.1-4.0.4-ubuntu22.04"
+    version: "4.2.0-4.1.0-ubuntu22.04"
     imagePullPolicy: IfNotPresent
     env: 
       - name: DCGM_EXPORTER_LISTEN

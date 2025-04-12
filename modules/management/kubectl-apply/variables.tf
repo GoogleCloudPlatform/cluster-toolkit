@@ -90,3 +90,12 @@ variable "gpu_operator" {
   })
   default = {}
 }
+
+variable "nvidia_dra_driver" {
+  description = "Installs [Nvidia DRA driver](https://github.com/NVIDIA/k8s-dra-driver-gpu) which supports Dynamic Resource Allocation for NVIDIA GPUs in Kubernetes"
+  type = object({
+    install = optional(bool, false)
+    version = optional(string, "v25.3.0")
+  })
+  default = {}
+}
