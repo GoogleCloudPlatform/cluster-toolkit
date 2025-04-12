@@ -92,9 +92,10 @@ module "configure_kueue" {
     http    = http.h
   }
 }
+
 module "install_nvidia_dra_driver" {
   count      = local.install_nvidia_dra_driver ? 1 : 0
-  depends_on = [module.kubectl_apply_manifests]
+  depends_on = [module.kubectl_apply_manifests, var.gke_cluster_exists]
   source     = "./helm_install"
 
   release_name     = "nvidia-dra-driver-gpu"              # The release name
@@ -158,7 +159,7 @@ module "install_gpu_operator" {
   count            = local.install_gpu_operator ? 1 : 0
   source           = "./helm_install"
   chart_repository = "https://helm.ngc.nvidia.com/nvidia"
-  depends_on       = [module.kubectl_apply_manifests]
+  depends_on       = [module.kubectl_apply_manifests, var.gke_cluster_exists]
 
   namespace        = "gpu-operator"
   create_namespace = true
