@@ -92,7 +92,7 @@ module "configure_kueue" {
     http    = http.h
   }
 }
-module "nvidia_dra_driver" {
+module "install_nvidia_dra_driver" {
   count      = local.install_nvidia_dra_driver ? 1 : 0
   depends_on = [module.kubectl_apply_manifests]
   source     = "./helm_install"
@@ -100,7 +100,7 @@ module "nvidia_dra_driver" {
   release_name     = "nvidia-dra-driver-gpu"              # The release name
   chart_repository = "https://helm.ngc.nvidia.com/nvidia" # The Helm repository URL for nvidia charts
   chart_name       = "nvidia-dra-driver-gpu"              # The chart name
-  chart_version    = "25.3.0-rc.2"                        # The chart version
+  chart_version    = var.nvidia_dra_driver.version        # The chart version
   namespace        = "nvidia-dra-driver-gpu"              # The target namespace
   create_namespace = true                                 # Equivalent to --create-namespace
 
@@ -150,12 +150,11 @@ module "nvidia_dra_driver" {
       EOF
   ]
 
-  # Optional: Add settings for atomic deploys, cleanup, etc. if needed
   atomic          = true
   cleanup_on_fail = true
 }
 
-module "install_gpu_operator_namespace" {
+module "install_gpu_operator" {
   count            = local.install_gpu_operator ? 1 : 0
   source           = "./helm_install"
   chart_repository = "https://helm.ngc.nvidia.com/nvidia"
@@ -164,9 +163,9 @@ module "install_gpu_operator_namespace" {
   namespace        = "gpu-operator"
   create_namespace = true
 
-  release_name  = "v25.3.0"
+  release_name  = "gpu-operator"
   chart_name    = "gpu-operator"
-  chart_version = "v25.3.0"
+  chart_version = var.gpu_operator.version
   wait          = true
 
   set_values = [{
@@ -190,29 +189,3 @@ module "install_gpu_operator_namespace" {
       value = false
   }]
 }
-
-# module "install_gpu_operator_crd" {
-#   source      = "./kubectl"
-#   source_path = local.install_gpu_operator ? local.gpu_operator_crd_install_source : null
-#   depends_on  = [module.install_gpu_operator_namespace]
-
-#   server_side_apply = true
-
-#   providers = {
-#     kubectl = kubectl
-#     http    = http.h
-#   }
-# }
-
-# module "install_gpu_operator" {
-#   source      = "./kubectl"
-#   source_path = local.install_gpu_operator ? local.gpu_operator_install_source : null
-#   depends_on  = [module.install_gpu_operator_crd]
-
-#   server_side_apply = true
-
-#   providers = {
-#     kubectl = kubectl
-#     http    = http.h
-#   }
-# }
