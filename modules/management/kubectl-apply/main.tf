@@ -169,9 +169,10 @@ module "install_gpu_operator" {
   chart_version = var.gpu_operator.version
   wait          = true
 
-  set_values = [{
-    name  = "hostPaths.driverInstallDir",
-    value = "/home/kubernetes/bin/nvidia"
+  set_values = [
+    {
+      name  = "hostPaths.driverInstallDir",
+      value = "/home/kubernetes/bin/nvidia"
     },
     {
       name  = "toolkit.installDir"
