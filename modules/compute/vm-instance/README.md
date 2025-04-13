@@ -195,6 +195,7 @@ limitations under the License.
 | [google-beta_google_compute_instance.compute_vm](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_compute_instance) | resource |
 | [google-beta_google_compute_resource_policy.placement_policy](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_compute_resource_policy) | resource |
 | [google_compute_address.compute_ip](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_address) | resource |
+| [google_compute_disk.additional_disks](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_disk) | resource |
 | [google_compute_disk.boot_disk](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_disk) | resource |
 | [null_resource.image](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
 | [null_resource.replace_vm_trigger_from_placement](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
@@ -205,6 +206,7 @@ limitations under the License.
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | <a name="input_add_deployment_name_before_prefix"></a> [add\_deployment\_name\_before\_prefix](#input\_add\_deployment\_name\_before\_prefix) | If true, the names of VMs and disks will always be prefixed with `deployment_name` to enable uniqueness across deployments.<br/>See `name_prefix` for further details on resource naming behavior. | `bool` | `false` | no |
+| <a name="input_additional_persistent_disks"></a> [additional\_persistent\_disks](#input\_additional\_persistent\_disks) | Configurations of additional disks to be included on the partition nodes. | <pre>object({<br/>    count = optional(number, 0)<br/>    type  = optional(string, "pd-balanced")<br/>    size  = optional(number, 200)<br/>  })</pre> | `{}` | no |
 | <a name="input_allocate_ip"></a> [allocate\_ip](#input\_allocate\_ip) | If not null, allocate IPs with the given configuration. See details at<br/>https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_address | <pre>object({<br/>    address_type = optional(string, "INTERNAL")<br/>    purpose      = optional(string),<br/>    network_tier = optional(string),<br/>    ip_version   = optional(string, "IPV4"),<br/>  })</pre> | `null` | no |
 | <a name="input_allow_automatic_updates"></a> [allow\_automatic\_updates](#input\_allow\_automatic\_updates) | If false, disables automatic system package updates on the created instances.  This feature is<br/>only available on supported images (or images derived from them).  For more details, see<br/>https://cloud.google.com/compute/docs/instances/create-hpc-vm#disable_automatic_updates | `bool` | `true` | no |
 | <a name="input_auto_delete_boot_disk"></a> [auto\_delete\_boot\_disk](#input\_auto\_delete\_boot\_disk) | Controls if boot disk should be auto-deleted when instance is deleted. | `bool` | `true` | no |
