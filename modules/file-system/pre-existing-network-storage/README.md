@@ -60,6 +60,25 @@ filesystem:
 
 Note the use of the MGS NID (Network ID) in the `server_ip` field - in particular, note the `@tcp` suffix.
 
+The following is an example of using `pre-existing-network-storage` with the
+`managed_lustre` filesystem:
+
+```yaml
+- id: lustrefs
+  source: modules/file-system/pre-existing-network-storage
+  settings:
+    fs_type: managed_lustre
+    server_ip: 192.168.227.11@tcp
+    local_mount: /scratch
+    remote_mount: /mg_lustre
+```
+
+This is similar to the `lustre` filesystem, with the exception that it connects
+with a managed Lustre instance hosted by GCP.  Currently only Rocky 8 and a
+subset of Ubuntu 22.04 and 20.04 kernels are compatible.  Please see this
+[Artifact Registry](https://pantheon.corp.google.com/artifacts/browse/lustre-client-binaries/us?e=-13802955&hl=en&invt=Abuvpg&mods=logs_tg_prod&project=lustre-client-binaries)
+to see the list of available packages and their corresponding kernel versions.
+
 The following is an example of using `pre-existing-network-storage` with the `daos`
 filesystem. In order to use existing `parallelstore` instance, `fs_type` needs to be
 explicitly mentioned in blueprint. The `remote_mount` option refers to `access_points`
@@ -116,6 +135,7 @@ Supported `fs_type`:
 
 - nfs
 - lustre
+- managed_lustre
 - gcsfuse
 - daos
 
