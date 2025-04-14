@@ -244,11 +244,11 @@ variable "resume_timeout" {
     See https://slurm.schedmd.com/slurm.conf.html#OPT_ResumeTimeout_1 for details.
   EOD
   type        = number
-  default     = 300
+  default     = null
 
   validation {
-    condition     = var.resume_timeout == null ? true : var.resume_timeout > 0
-    error_message = "Value must be > 0."
+    condition     = var.resume_timeout == null ? true : var.resume_timeout > 0 && var.resume_timeout < 65536
+    error_message = "Value must be > 0 and < 65536"
   }
 }
 
