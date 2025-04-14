@@ -30,6 +30,8 @@ vars:
   # extended_reservation: RESERVATION_NAME/reservationBlocks/BLOCK_NAME
   extended_reservation: RESERVATION_NAME
   static_node_count: NODE_COUNT
-  system_node_pool_disk_size_gb: # add this
-  a3ultra_node_pool_disk_size_gb: # add this
-  k8s_service_account_name: # add this
+  system_node_pool_disk_size_gb: <SYSTEM_NODE_POOL_DISK_SIZE_GB> # the size of
+  # disk for each node of the system node pool.
+  a3ultra_node_pool_disk_size_gb: <A3ULTRA_NODE_POOL_DISK_SIZE_GB> # the size of
+  # disk for each node.
+  k8s_service_account_name: <K8S_SERVICE_ACCOUNT_NAME>
