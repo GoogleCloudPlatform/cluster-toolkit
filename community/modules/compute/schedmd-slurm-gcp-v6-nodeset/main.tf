@@ -62,6 +62,8 @@ locals {
     content  = var.startup_script
   }]
 
+  termination_action = (var.dws_flex.enabled && !var.dws_flex.use_bulk_insert) ? "DELETE" : try(var.spot_instance_config.termination_action, null)
+
   nodeset = {
     node_count_static      = var.node_count_static
     node_count_dynamic_max = var.node_count_dynamic_max
@@ -106,7 +108,7 @@ locals {
     access_config            = local.access_config
     tags                     = var.tags
     spot                     = var.enable_spot_vm
-    termination_action       = try(var.spot_instance_config.termination_action, null)
+    termination_action       = local.termination_action
     reservation_name         = local.reservation_name
     future_reservation       = local.future_reservation
     maintenance_interval     = var.maintenance_interval
