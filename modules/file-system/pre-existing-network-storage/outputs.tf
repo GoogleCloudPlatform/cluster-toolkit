@@ -45,15 +45,17 @@ locals {
       local_mount  = var.local_mount
     }
   )
-  nfs_client_install_script  = file("${path.module}/scripts/install-nfs-client.sh")
-  gcs_fuse_install_script    = file("${path.module}/scripts/install-gcs-fuse.sh")
-  daos_client_install_script = file("${path.module}/scripts/install-daos-client.sh")
+  managed_lustre_client_install_script = file("${path.module}/scripts/install-managed-lustre-client.sh")
+  nfs_client_install_script            = file("${path.module}/scripts/install-nfs-client.sh")
+  gcs_fuse_install_script              = file("${path.module}/scripts/install-gcs-fuse.sh")
+  daos_client_install_script           = file("${path.module}/scripts/install-daos-client.sh")
 
   install_scripts = {
-    "lustre"  = local.ddn_lustre_client_install_script
-    "nfs"     = local.nfs_client_install_script
-    "gcsfuse" = local.gcs_fuse_install_script
-    "daos"    = local.daos_client_install_script
+    "lustre"         = local.ddn_lustre_client_install_script
+    "managed_lustre" = local.managed_lustre_client_install_script
+    "nfs"            = local.nfs_client_install_script
+    "gcsfuse"        = local.gcs_fuse_install_script
+    "daos"           = local.daos_client_install_script
   }
 
   client_install_runner = {
@@ -63,7 +65,7 @@ locals {
     "args"        = ""
   }
 
-  mount_vanilla_supported_fstype = ["lustre", "nfs"]
+  mount_vanilla_supported_fstype = ["lustre", "managed_lustre", "nfs"]
   mount_runner_vanilla = {
     "type"        = "shell"
     "destination" = "mount_filesystem${replace(var.local_mount, "/", "_")}.sh"
@@ -96,10 +98,11 @@ locals {
   }
 
   mount_scripts = {
-    "lustre"  = local.mount_runner_vanilla
-    "nfs"     = local.mount_runner_vanilla
-    "gcsfuse" = local.mount_runner_gcsfuse
-    "daos"    = local.mount_runner_daos
+    "lustre"         = local.mount_runner_vanilla
+    "managed_lustre" = local.mount_runner_vanilla
+    "nfs"            = local.mount_runner_vanilla
+    "gcsfuse"        = local.mount_runner_gcsfuse
+    "daos"           = local.mount_runner_daos
   }
 
   mount_runner = lookup(local.mount_scripts, var.fs_type, local.mount_runner_vanilla)

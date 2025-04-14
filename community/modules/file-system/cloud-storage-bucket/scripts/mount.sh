@@ -21,6 +21,10 @@ MOUNT_OPTIONS=$5
 
 [[ -z "${MOUNT_OPTIONS}" ]] && POPULATED_MOUNT_OPTIONS="defaults" || POPULATED_MOUNT_OPTIONS="${MOUNT_OPTIONS}"
 
+if [[ "${FS_TYPE}" == *"lustre"* ]]; then
+	FS_TYPE=lustre
+fi
+
 if [ "${FS_TYPE}" = "gcsfuse" ]; then
 	FS_SPEC="${REMOTE_MOUNT}"
 else
