@@ -24,7 +24,7 @@ login_node: "{{ slurm_cluster_name }}-slurm-login-*"
 controller_node: "{{ slurm_cluster_name }}-controller"
 region: us-central1
 zone: us-central1-b
-network: "{{ deployment_name }}-net-0"
+network: "{{ test_name }}-net-0"
 post_deploy_tests:
 - test-validation/test-mounts.yml
 - test-validation/test-partitions.yml

@@ -30,6 +30,22 @@ tags:
 timeout: 14400s  # 4hr
 
 steps:
+# While using static network names we are gaurding against more than 1 instance running at a time (for multi-group tests)
+- id: check_for_running_build
+  name: gcr.io/cloud-builders/gcloud
+  entrypoint: /bin/bash
+  args:
+  - -c
+  - |
+    set -x -e
+    echo $TRIGGER_BUILD_CONFIG_PATH
+    MATCHING_BUILDS=$(gcloud builds list --ongoing --format 'value(id)' --filter='substitutions.TRIGGER_BUILD_CONFIG_PATH="$TRIGGER_BUILD_CONFIG_PATH"')
+    MATCHING_COUNT=$(echo $$MATCHING_BUILDS | wc -w)
+    if [ "$$MATCHING_COUNT" -gt 1 ]; then
+        echo "Found more than 1 matching running builds"
+        echo "$$MATCHING_BUILDS"
+        exit 1
+    fi
 - id: spack-gromacs
   name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
   entrypoint: /bin/bash
