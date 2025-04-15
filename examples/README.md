@@ -1134,6 +1134,20 @@ to enable GPUDirect for the A3 Mega machines.
 > `--vars authorized_cidr=<your-ip-address>/32`.** You can use a service like
 > [whatismyip.com](https://whatismyip.com) to determine your IP address.
 
+#### Troubleshooting
+
+##### Externally Managed Environment Error
+
+If you see an error saying: `local-exec provisioner error` or `This environment is externally managed`, please use a virtual environment. This error is caused due to a conflict between pip3 and the operating system's package manager (like apt on Debian/Ubuntu-based systems).
+
+```shell
+  ## One time step of creating the venv
+  VENV_DIR=~/venvp3
+  python3 -m venv $VENV_DIR
+  ## Enter your venv.
+  source $VENV_DIR/bin/activate
+```
+
 [gke-a3-megagpu.yaml]: ../examples/gke-a3-megagpu.yaml
 
 ### [gke-a3-highgpu.yaml] ![core-badge]
@@ -1155,6 +1169,20 @@ to enable GPUDirect for the A3 High machines.
 > the IP address of the machine deploying the blueprint, for example
 > `--vars authorized_cidr=<your-ip-address>/32`.** You can use a service like
 > [whatismyip.com](https://whatismyip.com) to determine your IP address.
+
+#### Troubleshooting
+
+##### Externally Managed Environment Error
+
+If you see an error saying: `local-exec provisioner error` or `This environment is externally managed`, please use a virtual environment. This error is caused due to a conflict between pip3 and the operating system's package manager (like apt on Debian/Ubuntu-based systems).
+
+```shell
+  ## One time step of creating the venv
+  VENV_DIR=~/venvp3
+  python3 -m venv $VENV_DIR
+  ## Enter your venv.
+  source $VENV_DIR/bin/activate
+```
 
 [gke-a3-highgpu.yaml]: ../examples/gke-a3-highgpu.yaml
 
