@@ -19,6 +19,7 @@ duplicates = [
     [
         "modules/file-system/pre-existing-network-storage/scripts/mount.sh",
         "modules/file-system/filestore/scripts/mount.sh",
+        "modules/file-system/managed-lustre/scripts/mount.sh",
         "community/modules/file-system/cloud-storage-bucket/scripts/mount.sh",
         "community/modules/file-system/nfs-server/scripts/mount.sh",
     ],
