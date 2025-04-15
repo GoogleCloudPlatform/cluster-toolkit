@@ -58,7 +58,8 @@ filesystem:
     remote_mount: /exacloud
 ```
 
-Note the use of the MGS NID (Network ID) in the `server_ip` field - in particular, note the `@tcp` suffix.
+Note the use of the MGS NID (Network ID) in the `server_ip` field - in
+particular, note the `@tcp` suffix.
 
 The following is an example of using `pre-existing-network-storage` with the
 `managed_lustre` filesystem:
@@ -75,9 +76,23 @@ The following is an example of using `pre-existing-network-storage` with the
 
 This is similar to the `lustre` filesystem, with the exception that it connects
 with a managed Lustre instance hosted by GCP.  Currently only Rocky 8 and a
-subset of Ubuntu 22.04 and 20.04 kernels are compatible.  Please see this
-[Artifact Registry](https://pantheon.corp.google.com/artifacts/browse/lustre-client-binaries/us?e=-13802955&hl=en&invt=Abuvpg&mods=logs_tg_prod&project=lustre-client-binaries)
-to see the list of available packages and their corresponding kernel versions.
+subset of Ubuntu 22.04 and 20.04 kernels are compatible.  The following Ubuntu
+images are supported:
+
+Ubuntu 22.04
+
+1. ubuntu-2204-jammy-v20250128
+1. ubuntu-2204-jammy-v20250409
+
+Ubuntu 20.04
+
+1. ubuntu-2004-focal-v20250130
+
+This list will be updated as more kernels are supported.
+
+> [!WARNING] When used on Ubuntu for lustre, this module stops apt from
+> auto-upgrading packages. This is meant to prevent any instability caused by
+> upgrading the kernel.
 
 The following is an example of using `pre-existing-network-storage` with the `daos`
 filesystem. In order to use existing `parallelstore` instance, `fs_type` needs to be

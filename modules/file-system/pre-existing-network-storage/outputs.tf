@@ -20,7 +20,7 @@ output "network_storage" {
     server_ip             = var.server_ip
     remote_mount          = local.remote_mount
     local_mount           = var.local_mount
-    fs_type               = var.fs_type
+    fs_type               = local.fs_type
     mount_options         = var.mount_options
     client_install_runner = local.client_install_runner
     mount_runner          = local.mount_runner
@@ -32,9 +32,13 @@ locals {
   remote_mount_with_slash = length(regexall("^/.*", var.remote_mount)) > 0 ? (
     var.remote_mount
   ) : format("/%s", var.remote_mount)
-  remote_mount = contains(local.mount_vanilla_supported_fstype, var.fs_type) ? (
+  remote_mount = contains(local.mount_vanilla_supported_fstype, local.fs_type) ? (
     local.remote_mount_with_slash
   ) : var.remote_mount
+
+  # Collapse fs_type lustre and managed lustre for most uses, only needs to be
+  # different for client installation
+  fs_type = strcontains(var.fs_type, "lustre") ? "lustre" : var.fs_type
 
   # Client Install
   ddn_lustre_client_install_script = templatefile(
@@ -65,13 +69,13 @@ locals {
     "args"        = ""
   }
 
-  mount_vanilla_supported_fstype = ["lustre", "managed_lustre", "nfs"]
+  mount_vanilla_supported_fstype = ["lustre", "nfs"]
   mount_runner_vanilla = {
     "type"        = "shell"
     "destination" = "mount_filesystem${replace(var.local_mount, "/", "_")}.sh"
-    "args"        = "\"${var.server_ip}\" \"${local.remote_mount}\" \"${var.local_mount}\" \"${var.fs_type}\" \"${var.mount_options}\""
+    "args"        = "\"${var.server_ip}\" \"${local.remote_mount}\" \"${var.local_mount}\" \"${local.fs_type}\" \"${var.mount_options}\""
     "content" = (
-      contains(local.mount_vanilla_supported_fstype, var.fs_type) ?
+      contains(local.mount_vanilla_supported_fstype, local.fs_type) ?
       file("${path.module}/scripts/mount.sh") :
       "echo 'skipping: mount_runner not yet supported for ${var.fs_type}'"
     )
@@ -80,7 +84,7 @@ locals {
   mount_runner_gcsfuse = {
     "type"        = "shell"
     "destination" = "mount_filesystem${replace(var.local_mount, "/", "_")}.sh"
-    "args"        = "\"not-used\" \"${local.gcsbucket}\" \"${var.local_mount}\" \"${var.fs_type}\" \"${var.mount_options}\""
+    "args"        = "\"not-used\" \"${local.gcsbucket}\" \"${var.local_mount}\" \"${local.fs_type}\" \"${var.mount_options}\""
     "content"     = file("${path.module}/scripts/mount.sh")
   }
 
@@ -98,14 +102,13 @@ locals {
   }
 
   mount_scripts = {
-    "lustre"         = local.mount_runner_vanilla
-    "managed_lustre" = local.mount_runner_vanilla
-    "nfs"            = local.mount_runner_vanilla
-    "gcsfuse"        = local.mount_runner_gcsfuse
-    "daos"           = local.mount_runner_daos
+    "lustre"  = local.mount_runner_vanilla
+    "nfs"     = local.mount_runner_vanilla
+    "gcsfuse" = local.mount_runner_gcsfuse
+    "daos"    = local.mount_runner_daos
   }
 
-  mount_runner = lookup(local.mount_scripts, var.fs_type, local.mount_runner_vanilla)
+  mount_runner = lookup(local.mount_scripts, local.fs_type, local.mount_runner_vanilla)
 }
 
 output "client_install_runner" {
