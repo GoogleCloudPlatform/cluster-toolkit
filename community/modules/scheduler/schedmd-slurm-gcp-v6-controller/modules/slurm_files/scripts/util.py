@@ -1849,7 +1849,11 @@ class Lookup:
         with self.template_cache(writeback=True) as cache:
             cache[template_name] = template.to_dict()
         # cache should be owned by slurm
-        chown_slurm(self.template_cache_path)
+        # handle all files that shelve creates (.dat, .dir, and .bak)
+        for ext in ['', '.dat', '.dir', '.bak']:
+            path = Path(str(self.template_cache_path) + ext)
+            if path.exists():
+                chown_slurm(path)
 
         return template
 
