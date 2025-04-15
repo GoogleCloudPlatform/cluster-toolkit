@@ -43,3 +43,4 @@ cli_deployment_vars:
   disk_size_gb: 200
   a4h_cluster_size: 2
   a4h_reservation_name: a4-exfr-hpc-toolkit-dev
+  network_name: "{{ network }}"

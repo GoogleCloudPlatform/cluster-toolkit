@@ -32,3 +32,4 @@ custom_vars:
 cli_deployment_vars:
   region: "{{ region }}"
   zone: "{{ zone }}"
+  network_name: "{{ network }}"
