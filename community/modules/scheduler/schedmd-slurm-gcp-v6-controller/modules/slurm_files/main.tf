@@ -137,10 +137,26 @@ locals {
   install_dir = can(coalesce(var.install_dir)) ? abspath(var.install_dir) : local.output_dir
 }
 
+resource "null_resource" "config" {
+  triggers = {
+    content = yamlencode(local.config)
+  }
+}
+
 resource "google_storage_bucket_object" "config" {
   bucket  = data.google_storage_bucket.this.name
   name    = "${local.bucket_dir}/config.yaml"
   content = yamlencode(local.config)
+  lifecycle {
+    replace_triggered_by = [null_resource.config]
+  }
+}
+
+resource "null_resource" "partition_config" {
+  for_each = { for p in var.partitions : p.partition_name => p }
+  triggers = {
+    content = yamlencode(each.value)
+  }
 }
 
 resource "google_storage_bucket_object" "parition_config" {
@@ -149,6 +165,18 @@ resource "google_storage_bucket_object" "parition_config" {
   bucket  = data.google_storage_bucket.this.name
   name    = "${local.bucket_dir}/partition_configs/${each.key}.yaml"
   content = yamlencode(each.value)
+  lifecycle {
+    replace_triggered_by = [null_resource.partition_config[each.key]]
+  }
+}
+
+resource "null_resource" "nodeset_config" {
+  for_each = { for ns in var.nodeset : ns.nodeset_name => merge(ns, {
+    instance_properties = jsondecode(ns.instance_properties_json)
+  }) }
+  triggers = {
+    content = yamlencode(each.value)
+  }
 }
 
 resource "google_storage_bucket_object" "nodeset_config" {
@@ -159,6 +187,17 @@ resource "google_storage_bucket_object" "nodeset_config" {
   bucket  = data.google_storage_bucket.this.name
   name    = "${local.bucket_dir}/nodeset_configs/${each.key}.yaml"
   content = yamlencode(each.value)
+  lifecycle {
+    replace_triggered_by = [null_resource.nodeset_config[each.key]]
+  }
+}
+
+resource "null_resource" "nodeset_dyn_config" {
+  for_each = { for ns in var.nodeset_dyn : ns.nodeset_name => ns }
+
+  triggers = {
+    content = yamlencode(each.value)
+  }
 }
 
 resource "google_storage_bucket_object" "nodeset_dyn_config" {
@@ -167,6 +206,17 @@ resource "google_storage_bucket_object" "nodeset_dyn_config" {
   bucket  = data.google_storage_bucket.this.name
   name    = "${local.bucket_dir}/nodeset_dyn_configs/${each.key}.yaml"
   content = yamlencode(each.value)
+  lifecycle {
+    replace_triggered_by = [null_resource.nodeset_dyn_config[each.key]]
+  }
+}
+
+resource "null_resource" "nodeset_tpu_config" {
+  for_each = { for n in var.nodeset_tpu[*].nodeset : n.nodeset_name => n }
+
+  triggers = {
+    content = yamlencode(each.value)
+  }
 }
 
 resource "google_storage_bucket_object" "nodeset_tpu_config" {
@@ -175,6 +225,9 @@ resource "google_storage_bucket_object" "nodeset_tpu_config" {
   bucket  = data.google_storage_bucket.this.name
   name    = "${local.bucket_dir}/nodeset_tpu_configs/${each.key}.yaml"
   content = yamlencode(each.value)
+  lifecycle {
+    replace_triggered_by = [null_resource.nodeset_tpu_config[each.key]]
+  }
 }
 
 #########
@@ -198,19 +251,38 @@ data "archive_file" "slurm_gcp_devel_zip" {
     # TODO: consider removing (including nested) __pycache__ and all .* files
     # Though it only affects developers
   ])
+}
 
+resource "null_resource" "devel" {
+  triggers = {
+    content_md5 = data.archive_file.slurm_gcp_devel_zip.output_md5
+  }
 }
 
 resource "google_storage_bucket_object" "devel" {
   bucket = var.bucket_name
   name   = local.slurm_gcp_devel_zip_bucket
   source = data.archive_file.slurm_gcp_devel_zip.output_path
+  lifecycle {
+    replace_triggered_by = [null_resource.devel]
+  }
 }
 
 
 ###########
 # SCRIPTS #
 ###########
+
+resource "null_resource" "controller_startup_scripts" {
+  for_each = {
+    for x in local.controller_startup_scripts
+    : replace(basename(x.filename), "/[^a-zA-Z0-9-_]/", "_") => x
+  }
+
+  triggers = {
+    content = each.value.content
+  }
+}
 
 resource "google_storage_bucket_object" "controller_startup_scripts" {
   for_each = {
@@ -221,6 +293,24 @@ resource "google_storage_bucket_object" "controller_startup_scripts" {
   bucket  = var.bucket_name
   name    = format("%s/slurm-controller-script-%s", local.bucket_dir, each.key)
   content = each.value.content
+
+  lifecycle {
+    replace_triggered_by = [null_resource.controller_startup_scripts[each.key]]
+  }
+}
+
+resource "null_resource" "nodeset_startup_scripts" {
+  for_each = { for x in flatten([
+    for nodeset, scripts in var.nodeset_startup_scripts
+    : [for s in scripts
+      : {
+        content = s.content,
+      name = format("slurm-nodeset-%s-script-%s", nodeset, replace(basename(s.filename), "/[^a-zA-Z0-9-_]/", "_")) }
+  ]]) : x.name => x.content }
+
+  triggers = {
+    content = each.value
+  }
 }
 
 resource "google_storage_bucket_object" "nodeset_startup_scripts" {
@@ -235,6 +325,22 @@ resource "google_storage_bucket_object" "nodeset_startup_scripts" {
   bucket  = var.bucket_name
   name    = format("%s/%s", local.bucket_dir, each.key)
   content = each.value
+  lifecycle {
+    replace_triggered_by = [null_resource.nodeset_startup_scripts[each.key]]
+  }
+}
+
+resource "null_resource" "login_startup_scripts" {
+  for_each = { for x in flatten([
+    for group, scripts in var.login_startup_scripts
+    : [for s in scripts
+      : {
+        content = s.content,
+      name = format("slurm-login-%s-script-%s", group, replace(basename(s.filename), "/[^a-zA-Z0-9-_]/", "_")) }
+  ]]) : x.name => x.content }
+  triggers = {
+    content = each.value
+  }
 }
 
 resource "google_storage_bucket_object" "login_startup_scripts" {
@@ -249,6 +355,21 @@ resource "google_storage_bucket_object" "login_startup_scripts" {
   bucket  = var.bucket_name
   name    = format("%s/%s", local.bucket_dir, each.key)
   content = each.value
+  lifecycle {
+    replace_triggered_by = [null_resource.login_startup_scripts[each.key]]
+  }
+}
+
+resource "null_resource" "prolog_scripts" {
+  for_each = {
+    for x in local.prolog_scripts
+    : replace(basename(x.filename), "/[^a-zA-Z0-9-_]/", "_") => x
+  }
+
+  triggers = {
+    content = each.value.content
+    source  = each.value.source
+  }
 }
 
 resource "google_storage_bucket_object" "prolog_scripts" {
@@ -261,8 +382,21 @@ resource "google_storage_bucket_object" "prolog_scripts" {
   name    = format("%s/slurm-prolog-script-%s", local.bucket_dir, each.key)
   content = each.value.content
   source  = each.value.source
+  lifecycle {
+    replace_triggered_by = [null_resource.prolog_scripts[each.key]]
+  }
 }
 
+resource "null_resource" "epilog_scripts" {
+  for_each = {
+    for x in local.epilog_scripts
+    : replace(basename(x.filename), "/[^a-zA-Z0-9-_]/", "_") => x
+  }
+  triggers = {
+    content = each.value.content
+    source  = each.value.source
+  }
+}
 resource "google_storage_bucket_object" "epilog_scripts" {
   for_each = {
     for x in local.epilog_scripts
@@ -273,6 +407,9 @@ resource "google_storage_bucket_object" "epilog_scripts" {
   name    = format("%s/slurm-epilog-script-%s", local.bucket_dir, each.key)
   content = each.value.content
   source  = each.value.source
+  lifecycle {
+    replace_triggered_by = [null_resource.epilog_scripts[each.key]]
+  }
 }
 
 ############################
