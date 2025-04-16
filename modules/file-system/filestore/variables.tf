@@ -184,6 +184,6 @@ variable "description" {
   default     = ""
   validation {
     condition     = length(var.description) <= 2048
-    error_message = "Must be 2048 characters or fewer"
+    error_message = "Filestore description must be 2048 characters or fewer"
   }
 }
