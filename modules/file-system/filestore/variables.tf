@@ -177,3 +177,13 @@ variable "protocol" {
     error_message = "Allowed values for protocol are 'NFS_V3' or 'NFS_V4_1'."
   }
 }
+
+variable "description" {
+  description = "A description of the filestore instance."
+  type        = string
+  default     = ""
+  validation {
+    condition     = length(var.description) <= 2048
+    error_message = "Filestore description must be 2048 characters or fewer"
+  }
+}
