@@ -1865,6 +1865,7 @@ class Lookup:
         
         # Create a marker file to indicate that the cache file exists
         self.template_cache_path_exists.touch()
+        chown_slurm(self.template_cache_path_exists)
         return template
 
 
