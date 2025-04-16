@@ -23,8 +23,9 @@ resource "random_id" "resource_name_suffix" {
   byte_length = 4
 }
 
-data "google_compute_subnetwork" "private_subnetwork" {
-  self_link = var.subnetwork_self_link
+data "google_compute_network_peering" "private_peering" {
+  name    = var.private_vpc_connection_peering
+  network = var.network_self_link
 }
 
 locals {
@@ -70,7 +71,7 @@ resource "google_lustre_instance" "lustre_instance" {
 
   lifecycle {
     precondition {
-      condition     = data.google_compute_subnetwork.private_subnetwork.private_ip_google_access
+      condition     = data.google_compute_network_peering.private_peering.state == "ACTIVE"
       error_message = "The subnetwork that the lustre instance is hosted on must have private service access."
     }
   }

@@ -15,7 +15,7 @@
  */
 
 output "network_storage" {
-  description = "Describes a filestore instance."
+  description = "Describes a Managed Lustre instance."
   value = {
     server_ip             = local.server_ip
     remote_mount          = local.remote_mount

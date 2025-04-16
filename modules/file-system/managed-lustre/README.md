@@ -12,11 +12,6 @@ Toolkit, see the extended [Network Storage documentation](../../../docs/network_
 A Managed Lustre instance can be used with Slurm cluster or compute
 VM running Ubuntu 20.04, 22.04 or Rocky Linux 8 (including the HPC flavor).
 
-> [!WARNING] The Ubuntu OS client kernel modules are only available for a
-> limited number of kernels. To check compatibility please see
-> [Artifact Registry](https://pantheon.corp.google.com/artifacts/browse/lustre-client-binaries/us?e=-13802955&hl=en&invt=Abuvpg&mods=logs_tg_prod&project=lustre-client-binaries)
-> to check which kernels the packages currently support.
-
 ### Managed Lustre Access
 
 Currently Managed Lustre is only available on allowlisted projects.  To set
@@ -24,7 +19,7 @@ this up, please work with your account representative.
 
 ### Example - New VPC
 
-For Managed Lustre instance, Below snippet creates new VPC and configures
+For Managed Lustre instance, the snippet below creates new VPC and configures
 private-service-access for this newly created network.  Both items are required
 to be passed to the Lustre module to ensure that they're built in order and
 that the correct subnetwork has private service access.
@@ -44,12 +39,79 @@ that the correct subnetwork has private service access.
     use: [network, private_service_access]
 ```
 
+### Example - Slurm
+
+When using Slurm you must take into consideration whether or not you are using
+an official image from the `schedmd-slurm-public` project or building your own.
+The Lustre client modules are pre-installed in the official images.  With the
+official images, Lustre can be used as follows:
+
+```yaml
+- id: lustre-gcp
+  source: modules/file-system/managed-lustre
+  use: [network, private_service_access]
+  settings:
+    name: lustre-instance
+    local_mount: /lustre
+    remote_mount: lustrefs
+    size_gib: 18000
+
+# Other modules: nodesets, partitions, login, etc.
+
+- id: slurm_controller
+  source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+  use:
+  - network
+  - lustre_partition
+  - lustre-gcp
+  - slurm_login
+  settings:
+    machine_type: n2-standard-4
+    enable_controller_public_ips: true
+```
+
+For custom images you must install the modules during the image build as the
+Slurm cluster will not run the installation script like it does for the
+standard VMs.
+
+Assuming you have a startup script for the Slurm image building, you can add
+this Ansible playbook to correctly install the Lustre drivers into the image:
+
+```yaml
+- type: ansible-local
+  destination: install_managed_lustre.yml
+  content: |
+    ---
+    - name: Install Managed Luster Client Modules
+      hosts: all
+      become: true
+      vars:
+        lustre_packages:
+        - lustre-client-modules-{{ ansible_kernel }}
+        - lustre-client-utils
+      tasks:
+      - name: Add gpg key for Lustre Client repo
+        ansible.builtin.get_url:
+          url: https://us-apt.pkg.dev/doc/repo-signing-key.gpg
+          dest: /etc/apt/keyrings/lustre-client.asc
+          mode: '0644'
+          force: true
+      - name: Add Lustre Client module repo
+        ansible.builtin.apt_repository:
+          repo: deb [ signed-by=/etc/apt/keyrings/lustre-client.asc ] https://us-apt.pkg.dev/projects/lustre-client-binaries lustre-client-ubuntu-{{ ansible_distribution_release }} main
+      - name: Install Lustre packages
+        ansible.builtin.apt:
+          name: "{{ item }}"
+          update_cache: true
+        loop: "{{ lustre_packages }}"
+```
+
 ### Example - Existing VPC
 
 If you want to use existing network with private-service-access configured, you need
-to manually provide `private_vpc_connection_peering` to the parallelstore module.
+to manually provide `private_vpc_connection_peering` to the Managed Lustre module.
 You can get this details from the Google Cloud Console UI in `VPC network peering`
-section. Below is the example of using existing network and creating parallelstore.
+section. Below is the example of using existing network and creating Managed Lustre.
 If existing network is not configured with private-service-access, you can follow
 [Configure private service access](https://cloud.google.com/vpc/docs/configure-private-services-access)
 to set it up.
@@ -87,6 +149,11 @@ from  bucket.
 Here you can replace `import_gcs_bucket_uri` with the uri of sub folder within
 GCS bucket and `import_destination_path` with local directory within the
 Managed Lustre instance.
+
+> [!NOTE]
+> Prior to deployment of the Managed Lustre instance, please follow
+> [these instructions](https://cloud.google.com/managed-lustre/docs/transfer-data#required_permissions)
+> to give bucket access to the project service account.
 
 ## License
 
@@ -133,7 +200,7 @@ No modules.
 | [google_lustre_instance.lustre_instance](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/lustre_instance) | resource |
 | [null_resource.hydration](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
 | [random_id.resource_name_suffix](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/id) | resource |
-| [google_compute_subnetwork.private_subnetwork](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_subnetwork) | data source |
+| [google_compute_network_peering.private_peering](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_network_peering) | data source |
 
 ## Inputs
 
@@ -148,11 +215,11 @@ No modules.
 | <a name="input_mount_options"></a> [mount\_options](#input\_mount\_options) | Mounting options for the file system. | `string` | `"defaults,_netdev"` | no |
 | <a name="input_name"></a> [name](#input\_name) | Name of the Lustre instance | `string` | n/a | yes |
 | <a name="input_network_id"></a> [network\_id](#input\_network\_id) | The ID of the GCE VPC network to which the instance is connected given in the format:<br/>`projects/<project_id>/global/networks/<network_name>`" | `string` | n/a | yes |
+| <a name="input_network_self_link"></a> [network\_self\_link](#input\_network\_self\_link) | Network self-link this instance will be on, required for checking private service access | `string` | n/a | yes |
 | <a name="input_private_vpc_connection_peering"></a> [private\_vpc\_connection\_peering](#input\_private\_vpc\_connection\_peering) | The name of the VPC Network peering connection.<br/>If using new VPC, please use community/modules/network/private-service-access to create private-service-access and<br/>If using existing VPC with private-service-access enabled, set this manually." | `string` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | ID of project in which Lustre instance will be created. | `string` | n/a | yes |
 | <a name="input_remote_mount"></a> [remote\_mount](#input\_remote\_mount) | Remote mount point of the Managed Lustre instance | `string` | n/a | yes |
 | <a name="input_size_gib"></a> [size\_gib](#input\_size\_gib) | Storage size of the Managed Lustre instance in GB. See https://cloud.google.com/managed-lustre/docs/create-instance for limitations | `number` | `18000` | no |
-| <a name="input_subnetwork_self_link"></a> [subnetwork\_self\_link](#input\_subnetwork\_self\_link) | Subnetwork self-link this instance will be on, required for checking private service access | `string` | n/a | yes |
 | <a name="input_zone"></a> [zone](#input\_zone) | Location for the Lustre instance. | `string` | n/a | yes |
 
 ## Outputs
@@ -162,5 +229,5 @@ No modules.
 | <a name="output_capacity_gb"></a> [capacity\_gb](#output\_capacity\_gb) | File share capacity in GiB. |
 | <a name="output_install_managed_lustre_client"></a> [install\_managed\_lustre\_client](#output\_install\_managed\_lustre\_client) | Script for installing NFS client |
 | <a name="output_lustre_id"></a> [lustre\_id](#output\_lustre\_id) | An identifier for the resource with format `projects/{{project}}/locations/{{location}}/instances/{{name}}` |
-| <a name="output_network_storage"></a> [network\_storage](#output\_network\_storage) | Describes a filestore instance. |
+| <a name="output_network_storage"></a> [network\_storage](#output\_network\_storage) | Describes a Managed Lustre instance. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

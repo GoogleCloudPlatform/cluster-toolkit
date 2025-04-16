@@ -53,8 +53,8 @@ variable "network_id" {
   }
 }
 
-variable "subnetwork_self_link" {
-  description = "Subnetwork self-link this instance will be on, required for checking private service access"
+variable "network_self_link" {
+  description = "Network self-link this instance will be on, required for checking private service access"
   type        = string
   nullable    = false
 }
@@ -94,7 +94,7 @@ variable "import_gcs_bucket_uri" {
   default     = null
 
   validation {
-    condition     = startswith(var.import_gcs_bucket_uri, "gs://")
+    condition     = try(startswith(var.import_gcs_bucket_uri, "gs://"), var.import_gcs_bucket_uri == null)
     error_message = "The import_gcs_bucket_uri must start with \"gs://\"."
   }
 }
