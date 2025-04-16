@@ -54,10 +54,11 @@ locals {
 resource "google_filestore_instance" "filestore_instance" {
   project = var.project_id
 
-  name     = var.name != null ? var.name : "${var.deployment_name}-${random_id.resource_name_suffix.hex}"
-  location = contains(["ENTERPRISE", "REGIONAL"], var.filestore_tier) ? var.region : var.zone
-  tier     = var.filestore_tier
-  protocol = var.protocol
+  name        = var.name != null ? var.name : "${var.deployment_name}-${random_id.resource_name_suffix.hex}"
+  description = var.description
+  location    = contains(["ENTERPRISE", "REGIONAL"], var.filestore_tier) ? var.region : var.zone
+  tier        = var.filestore_tier
+  protocol    = var.protocol
 
   deletion_protection_enabled = var.deletion_protection.enabled
   deletion_protection_reason  = var.deletion_protection.reason
