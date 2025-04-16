@@ -231,13 +231,8 @@ EOD
 variable "disable_default_mounts" {
   description = <<-EOD
     Disable default global network storage from the controller
-    - /usr/local/etc/slurm
-    - /etc/munge
     - /home
     - /apps
-    If these are disabled, the slurm etc and munge dirs must be added manually,
-    or some other mechanism must be used to synchronize the slurm conf files
-    and the munge key across the cluster.
     EOD
   type        = bool
   default     = false
@@ -393,13 +388,9 @@ EOD
   default     = null
 }
 
-variable "munge_mount" {
+variable "slurm_key_mount" {
   description = <<-EOD
-  Remote munge mount for compute and login nodes to acquire the munge.key.
-
-  By default, the munge mount server will be assumed to be the
-  `var.slurm_control_host` (or `var.slurm_control_addr` if non-null) when
-  `server_ip=null`.
+  Remote mount for compute and login nodes to acquire the slurm.key.
   EOD
   type = object({
     server_ip     = string
@@ -407,12 +398,7 @@ variable "munge_mount" {
     fs_type       = string
     mount_options = string
   })
-  default = {
-    server_ip     = null
-    remote_mount  = "/etc/munge/"
-    fs_type       = "nfs"
-    mount_options = ""
-  }
+  default = null
 }
 
 variable "endpoint_versions" {

@@ -103,13 +103,6 @@ locals {
   slurm_bin_dir        = var.slurm_bin_dir != null ? abspath(var.slurm_bin_dir) : null
   slurm_log_dir        = var.slurm_log_dir != null ? abspath(var.slurm_log_dir) : null
 
-  munge_mount = var.enable_hybrid ? {
-    server_ip     = lookup(var.munge_mount, "server_ip", coalesce(var.slurm_control_addr, var.slurm_control_host))
-    remote_mount  = lookup(var.munge_mount, "remote_mount", "/etc/munge/")
-    fs_type       = lookup(var.munge_mount, "fs_type", "nfs")
-    mount_options = lookup(var.munge_mount, "mount_options", "")
-  } : null
-
   output_dir  = can(coalesce(var.output_dir)) ? abspath(var.output_dir) : abspath(".")
   install_dir = can(coalesce(var.install_dir)) ? abspath(var.install_dir) : local.output_dir
 }

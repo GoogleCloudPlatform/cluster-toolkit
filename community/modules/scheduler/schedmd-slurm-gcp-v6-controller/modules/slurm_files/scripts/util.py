@@ -92,7 +92,6 @@ dirs = NSDict(
     slurm = Path("/slurm"),
     scripts = scripts_dir,
     custom_scripts = Path("/slurm/custom_scripts"),
-    munge = Path("/etc/munge"),
     secdisk = Path("/mnt/disks/sec"),
     log = Path("/var/log/slurm"),
 )
@@ -101,6 +100,7 @@ slurmdirs = NSDict(
     prefix = Path("/usr/local"),
     etc = Path("/usr/local/etc/slurm"),
     state = Path("/var/spool/slurm"),
+    key_distribution = Path("/slurm/key_distribution"),
 )
 
 
@@ -1940,15 +1940,15 @@ class Lookup:
         )
  
     @property
-    def munge_mount(self) -> NSMount:
-        if self.cfg.munge_mount:
-            mnt = self.cfg.munge_mount
-            mnt.local_mount = mnt.local_mount or "/mnt/munge"
+    def slurm_key_mount(self) -> NSMount:
+        if self.cfg.slurm_key_mount:
+            mnt = self.cfg.slurm_key_mount
+            mnt.local_mount = mnt.local_mount or slurmdirs.key_distribution
         else:
             mnt = NSDict(
                 server_ip="$controller",
-                local_mount="/mnt/munge",
-                remote_mount=dirs.munge,
+                local_mount=slurmdirs.key_distribution,
+                remote_mount=slurmdirs.key_distribution,
                 fs_type="nfs",
                 mount_options="defaults,hard,intr,_netdev",
             )
