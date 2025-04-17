@@ -47,17 +47,9 @@ if [[ ${DIST} == "Ubuntu" ]]; then
 	# Set up apt repo
 	echo "deb [ signed-by=${KEY_LOC}/${KEY_NAME} ] https://us-apt.pkg.dev/projects/lustre-client-binaries lustre-client-ubuntu-${UBUNTU_CODENAME} main" | tee -a /etc/apt/sources.list.d/artifact-registry.list
 
-	# Install modules and insert them into the kernel
+	# Install modules
 	apt update
 	apt install -y "lustre-client-modules-$(uname -r)" lustre-client-utils || (echo "Error finding Lustre module packages, Lustre package may not exist for this kernel version" && exit 1)
-	# Stop auto-upgrades to prevent kernel changes
-	mkdir /etc/apt/conf.d
-	touch /etc/apt/conf.d/20auto-upgrades
-	cat >/etc/apt/conf.d/20auto-upgrades <<-EOF
-		APT::Periodic::Update-Package-Lists "0";
-		APT::Periodic::Unattended-Upgrade "0";
-	EOF
-	apt-mark hold linux-image*
 elif [[ ${DIST} == "Rocky" ]]; then
 	# Set up yum repo
 	touch /etc/yum.repos.d/artifact-registry.repo
