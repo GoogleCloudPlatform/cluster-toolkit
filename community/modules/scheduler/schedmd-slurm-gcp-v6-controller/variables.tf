@@ -379,10 +379,7 @@ EOD
     enable_job_exclusive  = optional(bool, false)
   }))
 
-  validation {
-    condition     = length(var.partitions) > 0
-    error_message = "Partitions cannot be empty."
-  }
+  default = []
 
   validation {
     condition     = length(distinct([for x in var.partitions : x.partition_name])) == length(var.partitions)
