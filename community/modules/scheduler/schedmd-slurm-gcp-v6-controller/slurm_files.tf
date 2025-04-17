@@ -181,8 +181,6 @@ module "slurm_files" {
   ]
   login_network_storage = var.login_network_storage
 
-  partitions = var.partitions
-
   nodeset     = local.nodesets
   nodeset_dyn = values(local.nodeset_dyn_map)
   # Use legacy format for now

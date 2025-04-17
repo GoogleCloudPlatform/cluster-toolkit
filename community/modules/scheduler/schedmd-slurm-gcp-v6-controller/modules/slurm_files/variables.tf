@@ -320,19 +320,6 @@ variable "nodeset_tpu" {
   default     = []
 }
 
-variable "partitions" {
-  description = "Cluster partitions as a list."
-  type        = list(any)
-  default     = []
-
-  validation {
-    condition = alltrue([
-      for n in var.partitions[*].partition_name : can(regex("^[a-z](?:[a-z0-9]*)$", n))
-    ])
-    error_message = "Items 'partition_name' must be a match of regex '^[a-z](?:[a-z0-9]*)$'."
-  }
-}
-
 variable "cloud_parameters" {
   description = "cloud.conf options. Default behavior defined in scripts/conf.py"
   type = object({
