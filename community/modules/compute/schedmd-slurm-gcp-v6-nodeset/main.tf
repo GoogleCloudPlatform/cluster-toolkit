@@ -147,7 +147,7 @@ data "google_compute_zones" "available" {
 }
 
 locals {
-  res_match = regex("^(?P<whole>(?P<prefix>projects/(?P<project>[a-z0-9-]+)/reservations/)?(?P<name>[a-z0-9-]+)(?P<suffix>/[a-z0-9-]+/[a-z0-9-]+)?)?$", var.reservation_name)
+  res_match = regex("^(?P<whole>(?P<prefix>projects/(?P<project>[a-z0-9-]+)/reservations/)?(?P<name>[a-z0-9-]+)(?P<suffix>/reservationBlocks/[a-z0-9-]+)?)?$", var.reservation_name)
 
   res_short_name = local.res_match.name
   res_project    = coalesce(local.res_match.project, var.project_id)
