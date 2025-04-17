@@ -55,7 +55,7 @@ A simple way to enable inbound SSH access is to use the VPC module with
 ### User or service account executing Packer at command line
 
 The user or service account running Packer must have the permission to create
-VMs in the selected VPC network and, if [use_iap](#input_use_iap) is set, must
+VMs in the selected VPC network and, if [use\_iap](#input_use_iap) is set, must
 have the "IAP-Secured Tunnel User" role. Recommended roles are:
 
 - `roles/compute.instanceAdmin.v1`
