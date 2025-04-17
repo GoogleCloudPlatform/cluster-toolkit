@@ -109,6 +109,7 @@ Parallelstore | via USE | Needs Testing | via USE | Needs Testing | Needs Testin
 filestore (pre-existing) | via USE | via USE | via USE | via STARTUP | via USE | via USE
 nfs-server (pre-existing) | via USE | via USE | via USE | via STARTUP | via USE | via USE
 DDN EXAScaler lustre (pre-existing) | via USE | via USE | via USE | Needs Testing | via USE | via USE
+Managed Lustre (pre-existing) | Needs Testing | Needs Testing | via USE | Needs Testing | Needs Testing |  Needs Testing
 Parallelstore (pre-existing) | via USE | Needs Testing | via USE | Needs Testing | Needs Testing | Needs Testing
 GCS FUSE (pre-existing) | via USE | via USE | via USE | via STARTUP | via USE | Needs Testing
 
