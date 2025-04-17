@@ -40,8 +40,6 @@ resource "random_uuid" "cluster_id" {
 ##################
 
 locals {
-  tp = "${local.bucket_dir}/" # prefix to trim from the bucket path to get a "file name"
-
   config = {
     enable_bigquery_load  = var.enable_bigquery_load
     cloudsql_secret       = var.cloudsql_secret
@@ -89,26 +87,6 @@ locals {
 
     # Providers
     endpoint_versions = var.endpoint_versions
-
-    # Extra-files MD5 hashes
-    # Makes config file creation depend on the files
-    # Allows for informed updates & checks on slurmsync side
-    slurm_gcp_scripts_md5 = google_storage_bucket_object.devel.md5hash,
-    controller_startup_scripts_md5 = {
-      for o in values(google_storage_bucket_object.controller_startup_scripts) : trimprefix(o.name, local.tp) => o.md5hash
-    }
-    nodeset_startup_scripts_md5 = {
-      for o in values(google_storage_bucket_object.nodeset_startup_scripts) : trimprefix(o.name, local.tp) => o.md5hash
-    }
-    login_startup_scripts_md5 = {
-      for o in values(google_storage_bucket_object.login_startup_scripts) : trimprefix(o.name, local.tp) => o.md5hash
-    }
-    prolog_scripts_md5 = {
-      for o in values(google_storage_bucket_object.prolog_scripts) : trimprefix(o.name, local.tp) => o.md5hash
-    }
-    epilog_scripts_md5 = {
-      for o in values(google_storage_bucket_object.epilog_scripts) : trimprefix(o.name, local.tp) => o.md5hash
-    }
   }
 
   x_nodeset         = toset(var.nodeset[*].nodeset_name)
@@ -141,6 +119,17 @@ resource "google_storage_bucket_object" "config" {
   bucket  = data.google_storage_bucket.this.name
   name    = "${local.bucket_dir}/config.yaml"
   content = yamlencode(local.config)
+
+  # Take dependency on all other "config artifacts" so creation of `config.yaml`
+  # can be used as a signal for setup.py that "everything is ready".
+  # Some of following files, particularly mount scripts for new NFSes, can take a while to be created.
+  depends_on = [
+    google_storage_bucket_object.controller_startup_scripts,
+    google_storage_bucket_object.nodeset_startup_scripts,
+    google_storage_bucket_object.login_startup_scripts,
+    google_storage_bucket_object.prolog_scripts,
+    google_storage_bucket_object.epilog_scripts
+  ]
 }
 
 resource "google_storage_bucket_object" "nodeset_config" {
