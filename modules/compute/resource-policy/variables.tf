@@ -46,5 +46,10 @@ variable "workload_policy" {
     max_topology_distance = optional(string, null)
     accelerator_topology  = optional(string, null)
   })
-  default = null
+  default = {
+    type                  = null
+    max_topology_distance = null
+    accelerator_topology  = null
+  }
+  nullable = false
 }

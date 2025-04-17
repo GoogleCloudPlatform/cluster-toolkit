@@ -21,12 +21,12 @@ resource "google_compute_resource_policy" "policy" {
   provider = google-beta
 
   dynamic "workload_policy" {
-    for_each = var.workload_policy != null ? [1] : []
+    for_each = var.workload_policy.type != null ? [1] : []
 
     content {
-      type                  = workload_policy.value.type
-      max_topology_distance = workload_policy.value.max_topology_distance
-      accelerator_topology  = workload_policy.value.accelerator_topology
+      type                  = var.workload_policy.type
+      max_topology_distance = var.workload_policy.max_topology_distance
+      accelerator_topology  = var.workload_policy.accelerator_topology
     }
   }
 
