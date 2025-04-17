@@ -21,7 +21,7 @@ resource "google_compute_resource_policy" "policy" {
   provider = google-beta
 
   dynamic "workload_policy" {
-    for_each = var.workload_policy != null ? [1] : []
+    for_each = var.workload_policy.type != null ? [1] : []
 
     content {
       type                  = var.workload_policy.type

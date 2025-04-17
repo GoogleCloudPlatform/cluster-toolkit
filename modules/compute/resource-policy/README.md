@@ -69,7 +69,7 @@ No modules.
 | <a name="input_name"></a> [name](#input\_name) | The resource policy's name. | `string` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The project ID for the resource policy. | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | The region for the the resource policy. | `string` | n/a | yes |
-| <a name="input_workload_policy"></a> [workload\_policy](#input\_workload\_policy) | Describes the workload policy | <pre>object({<br/>    type                  = optional(string, null)<br/>    max_topology_distance = optional(string, null)<br/>    accelerator_topology  = optional(string, null)<br/>  })</pre> | `null` | no |
+| <a name="input_workload_policy"></a> [workload\_policy](#input\_workload\_policy) | Describes the workload policy | <pre>object({<br/>    type                  = optional(string, null)<br/>    max_topology_distance = optional(string, null)<br/>    accelerator_topology  = optional(string, null)<br/>  })</pre> | <pre>{<br/>  "accelerator_topology": null,<br/>  "max_topology_distance": null,<br/>  "type": null<br/>}</pre> | no |
 
 ## Outputs
 
