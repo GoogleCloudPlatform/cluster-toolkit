@@ -52,7 +52,7 @@ the metadata-based startup-script solution.
 A simple way to enable inbound SSH access is to use the VPC module with
 `allowed_ssh_ip_ranges` set to `0.0.0.0/0`.
 
-### User or service account running Packer
+### User or service account executing Packer at command line
 
 The user or service account running Packer must have the permission to create
 VMs in the selected VPC network and, if [use_iap](#input_use_iap) is set, must
@@ -71,6 +71,7 @@ have the permission to modify its own metadata and to read from Cloud Storage
 buckets. Recommended roles are:
 
 - `roles/compute.instanceAdmin.v1`
+- `roles/iam.serviceAccountUser`
 - `roles/logging.logWriter`
 - `roles/monitoring.metricWriter`
 - `roles/storage.objectViewer`
