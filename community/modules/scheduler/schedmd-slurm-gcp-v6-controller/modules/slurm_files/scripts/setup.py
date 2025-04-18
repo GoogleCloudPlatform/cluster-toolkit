@@ -122,25 +122,33 @@ def failed_motd():
     util.run(f"wall -n '{wall_msg}'", timeout=30)
 
 
+def _startup_script_timeout(lkp: util.Lookup) -> int:
+    if lkp.is_controller:
+        return lkp.cfg.get("controller_startup_scripts_timeout", 300)
+    elif lkp.instance_role == "compute":
+        return lkp.cfg.get("compute_startup_scripts_timeout", 300)
+    elif lkp.is_login_node:
+        return lkp.cfg.login_groups[util.instance_login_group()].get("startup_scripts_timeout", 300)
+    return 300
+
+
 def run_custom_scripts():
     """run custom scripts based on instance_role"""
     custom_dir = dirs.custom_scripts
     if lookup().is_controller:
         # controller has all scripts, but only runs controller.d
         custom_dirs = [custom_dir / "controller.d"]
-        timeout = lookup().cfg.get("controller_startup_scripts_timeout", 300)
     elif lookup().instance_role == "compute":
         # compute setup with nodeset.d
         custom_dirs = [custom_dir / "nodeset.d"]
-        timeout = lookup().cfg.get("compute_startup_scripts_timeout", 300)
     elif lookup().is_login_node:
         # login setup with only login.d
         custom_dirs = [custom_dir / "login.d"]
-        timeout = lookup().cfg.get("login_startup_scripts_timeout", 300)
     else:
         # Unknown role: run nothing
         custom_dirs = []
-        timeout = 300
+
+    timeout = _startup_script_timeout(lookup())
 
     custom_scripts = [
         p

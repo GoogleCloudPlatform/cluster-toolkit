@@ -461,7 +461,7 @@ def install_custom_scripts(check_hash=False):
             f"nodeset-{lookup().node_nodeset_name()}"
         ]
     elif role == "login":
-        tokens = [f"login-{lookup().login_group_name()}"]
+        tokens = [f"login-{instance_login_group()}"]
 
     prefixes = [f"slurm-{tok}-script" for tok in tokens]
 
@@ -563,6 +563,7 @@ class _ConfigBlobs:
     nodeset: List[storage.Blob] = field(default_factory=list)
     nodeset_dyn: List[storage.Blob] = field(default_factory=list)
     nodeset_tpu: List[storage.Blob] = field(default_factory=list)
+    login_group: List[storage.Blob] = field(default_factory=list)
 
     @property
     def hash(self) -> str:
@@ -577,7 +578,7 @@ def _list_config_blobs() -> _ConfigBlobs:
     _, common_prefix = _get_bucket_and_common_prefix()
     
     core: Optional[storage.Blob] = None
-    rest: Dict[str, List[storage.Blob]] = {"partition": [], "nodeset": [], "nodeset_dyn": [], "nodeset_tpu": []}
+    rest: Dict[str, List[storage.Blob]] = {"partition": [], "nodeset": [], "nodeset_dyn": [], "nodeset_tpu": [], "login_group": []}
 
     for blob in blob_list(prefix=""):
         if blob.name == f"{common_prefix}/config.yaml":
@@ -605,6 +606,7 @@ def _fetch_config(old_hash: Optional[str]) -> Optional[Tuple[NSDict, str]]:
         nodesets=_download(blobs.nodeset),
         nodesets_dyn=_download(blobs.nodeset_dyn),
         nodesets_tpu=_download(blobs.nodeset_tpu),
+        login_groups=_download(blobs.login_group),
     ), blobs.hash
 
 def _assemble_config(
@@ -613,6 +615,7 @@ def _assemble_config(
         nodesets: List[Any],
         nodesets_dyn: List[Any],
         nodesets_tpu: List[Any],
+        login_groups: List[Any],
     ) -> NSDict:
     cfg = NSDict(core)
 
@@ -644,6 +647,18 @@ def _assemble_config(
         for ns_name in chain(p.partition_nodeset, p.partition_nodeset_dyn, p.partition_nodeset_tpu):
             if ns_name not in ns_names:
                 raise DeffetiveStoredConfigError(f"nodeset {ns_name} not defined in config")
+            
+    for lg_yaml in login_groups:
+        lg_cfg = NSDict(lg_yaml)
+        assert lg_cfg.get("group_name"), "group_name is required"
+        lg_name = lg_cfg.group_name
+        assert lg_name not in cfg.login_groups
+        cfg.login_groups[lg_name] = lg_cfg
+
+    if instance_role() == "login":
+        group = instance_login_group()
+        if group not in cfg.login_groups:
+            raise DeffetiveStoredConfigError(f"login group '{group}' does not exist in config")
 
     return _fill_cfg_defaults(cfg)
 
@@ -990,6 +1005,12 @@ def instance_metadata(path):
     """Get instance metadata"""
     return get_metadata(path, root=f"{ROOT_URL}/instance")
 
+def instance_role():
+    return instance_metadata("attributes/slurm_instance_role")
+
+
+def instance_login_group():
+    return instance_metadata("attributes/slurm_login_group")
 
 @lru_cache(maxsize=None)
 def project_metadata(key):
@@ -1400,7 +1421,7 @@ class Lookup:
 
     @cached_property
     def instance_role(self):
-        return instance_metadata("attributes/slurm_instance_role")
+        return instance_role()
 
     @cached_property
     def instance_role_safe(self):
@@ -1437,10 +1458,6 @@ class Lookup:
     @cached_property
     def zone(self):
         return instance_metadata("zone")
-
-    def login_group_name(self):
-        assert self.is_login_node, f"{self.hostname} is not a login node"
-        return self._node_desc(self.hostname)["nodeset"]
 
     node_desc_regex = re.compile(
         r"^(?P<prefix>(?P<cluster>[^\s\-]+)-(?P<nodeset>\S+))-(?P<node>(?P<suffix>\w+)|(?P<range>\[[\d,-]+\]))$"

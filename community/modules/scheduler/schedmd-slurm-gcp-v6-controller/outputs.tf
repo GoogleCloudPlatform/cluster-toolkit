@@ -24,7 +24,7 @@ output "slurm_controller_instance" {
 
 output "slurm_login_instances" {
   description = "Compute instances of login nodes"
-  value       = flatten([for k, v in module.slurm_login_instance : v.slurm_instances])
+  value       = flatten([for k, v in module.login : v.instances])
 }
 
 output "slurm_bucket_path" {
