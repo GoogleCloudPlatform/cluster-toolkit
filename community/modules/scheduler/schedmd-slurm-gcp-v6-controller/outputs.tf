@@ -32,6 +32,17 @@ output "slurm_bucket_path" {
   value       = module.slurm_files.slurm_bucket_path
 }
 
+output "slurm_bucket_name" {
+  description = "GCS Bucket name of Slurm cluster file storage."
+  value       = module.slurm_files.bucket_name
+}
+
+output "slurm_bucket_dir" {
+  description = "Path directory within `bucket_name` for Slurm cluster file storage."
+  value       = module.slurm_files.bucket_dir
+}
+
+
 output "instructions" {
   description = "Post deployment instructions."
   value       = <<-EOT
