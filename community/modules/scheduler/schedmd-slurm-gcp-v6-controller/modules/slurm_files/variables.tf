@@ -129,27 +129,6 @@ EOD
   default     = 300
 }
 
-variable "nodeset_startup_scripts" {
-  description = "List of scripts to be ran on compute VM startup in the specific nodeset."
-  type = map(list(object({
-    filename = string
-    content  = string
-  })))
-  default = {}
-}
-
-variable "compute_startup_scripts_timeout" {
-  description = <<EOD
-The timeout (seconds) applied to each script in compute_startup_scripts. If
-any script exceeds this timeout, then the instance setup process is considered
-failed and handled accordingly.
-
-NOTE: When set to 0, the timeout is considered infinite and thus disabled.
-EOD
-  type        = number
-  default     = 300
-}
-
 variable "enable_chs_gpu_health_check_prolog" {
   description = <<EOD
 Enable a Cluster Health Sacnner(CHS) GPU health check that slurmd executes as a prolog script whenever it is asked to run a job step from a new job allocation. Compute nodes that fail GPU health check during prolog will be marked as drained. Find more details at:
@@ -260,12 +239,6 @@ EOD
     mount_options = string
   }))
   default = []
-}
-
-variable "nodeset" {
-  description = "Cluster nodenets, as a list."
-  type        = list(any)
-  default     = []
 }
 
 variable "nodeset_dyn" {

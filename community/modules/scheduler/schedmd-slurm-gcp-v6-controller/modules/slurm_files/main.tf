@@ -57,7 +57,6 @@ locals {
 
     # timeouts
     controller_startup_scripts_timeout = var.controller_startup_scripts_timeout
-    compute_startup_scripts_timeout    = var.compute_startup_scripts_timeout
 
     munge_mount = local.munge_mount
 
@@ -87,11 +86,6 @@ locals {
     # Providers
     endpoint_versions = var.endpoint_versions
   }
-
-  x_nodeset         = toset(var.nodeset[*].nodeset_name)
-  x_nodeset_dyn     = toset(var.nodeset_dyn[*].nodeset_name)
-  x_nodeset_tpu     = toset(var.nodeset_tpu[*].nodeset.nodeset_name)
-  x_nodeset_overlap = setintersection([], local.x_nodeset, local.x_nodeset_dyn, local.x_nodeset_tpu)
 
   etc_dir = abspath("${path.module}/etc")
 
@@ -124,20 +118,9 @@ resource "google_storage_bucket_object" "config" {
   # Some of following files, particularly mount scripts for new NFSes, can take a while to be created.
   depends_on = [
     google_storage_bucket_object.controller_startup_scripts,
-    google_storage_bucket_object.nodeset_startup_scripts,
     google_storage_bucket_object.prolog_scripts,
     google_storage_bucket_object.epilog_scripts
   ]
-}
-
-resource "google_storage_bucket_object" "nodeset_config" {
-  for_each = { for ns in var.nodeset : ns.nodeset_name => merge(ns, {
-    instance_properties = jsondecode(ns.instance_properties_json)
-  }) }
-
-  bucket  = data.google_storage_bucket.this.name
-  name    = "${local.bucket_dir}/nodeset_configs/${each.key}.yaml"
-  content = yamlencode(each.value)
 }
 
 resource "google_storage_bucket_object" "nodeset_dyn_config" {
@@ -200,20 +183,6 @@ resource "google_storage_bucket_object" "controller_startup_scripts" {
   bucket  = var.bucket_name
   name    = format("%s/slurm-controller-script-%s", local.bucket_dir, each.key)
   content = each.value.content
-}
-
-resource "google_storage_bucket_object" "nodeset_startup_scripts" {
-  for_each = { for x in flatten([
-    for nodeset, scripts in var.nodeset_startup_scripts
-    : [for s in scripts
-      : {
-        content = s.content,
-      name = format("slurm-nodeset-%s-script-%s", nodeset, replace(basename(s.filename), "/[^a-zA-Z0-9-_]/", "_")) }
-  ]]) : x.name => x.content }
-
-  bucket  = var.bucket_name
-  name    = format("%s/%s", local.bucket_dir, each.key)
-  content = each.value
 }
 
 resource "google_storage_bucket_object" "prolog_scripts" {

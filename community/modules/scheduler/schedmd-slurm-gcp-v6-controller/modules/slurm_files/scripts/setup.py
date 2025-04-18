@@ -126,7 +126,7 @@ def _startup_script_timeout(lkp: util.Lookup) -> int:
     if lkp.is_controller:
         return lkp.cfg.get("controller_startup_scripts_timeout", 300)
     elif lkp.instance_role == "compute":
-        return lkp.cfg.get("compute_startup_scripts_timeout", 300)
+        return lkp.node_nodeset().get("startup_scripts_timeout", 300)
     elif lkp.is_login_node:
         return lkp.cfg.login_groups[util.instance_login_group()].get("startup_scripts_timeout", 300)
     return 300

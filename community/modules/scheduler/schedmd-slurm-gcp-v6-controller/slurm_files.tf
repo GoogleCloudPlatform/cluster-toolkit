@@ -44,7 +44,7 @@ module "bucket" {
 
 # BUCKET IAMs
 locals {
-  compute_sa     = toset(flatten([for x in module.slurm_nodeset_template : x.service_account]))
+  compute_sa     = toset(flatten([for x in module.nodeset : x.service_account]))
   compute_tpu_sa = toset(flatten([for x in module.slurm_nodeset_tpu : x.service_account]))
   login_sa       = toset(flatten([for x in module.login : x.service_account]))
 
@@ -112,9 +112,6 @@ locals {
   controller_state_disk = {
     device_name : try(google_compute_disk.controller_disk[0].name, null)
   }
-
-
-  nodeset_startup_scripts = { for k, v in local.nodeset_map : k => concat(local.common_scripts, v.startup_script) }
 }
 
 module "daos_network_storage_scripts" {
@@ -147,8 +144,6 @@ module "slurm_files" {
 
   controller_startup_scripts         = local.ghpc_startup_script_controller
   controller_startup_scripts_timeout = var.controller_startup_scripts_timeout
-  nodeset_startup_scripts            = local.nodeset_startup_scripts
-  compute_startup_scripts_timeout    = var.compute_startup_scripts_timeout
   controller_state_disk              = local.controller_state_disk
 
   enable_debug_logging = var.enable_debug_logging
@@ -173,11 +168,9 @@ module "slurm_files" {
     if storage.fs_type != "daos"
   ]
 
-  nodeset     = local.nodesets
   nodeset_dyn = values(local.nodeset_dyn_map)
   # Use legacy format for now
   nodeset_tpu = values(module.slurm_nodeset_tpu)[*]
-
 
   depends_on = [module.bucket]
 
