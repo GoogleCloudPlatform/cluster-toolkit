@@ -203,6 +203,25 @@ def mount_save_state_disk():
 
     util.chown_slurm(mount_point)
 
+
+def mount_munge_key_disk():
+    state_disk_dir = "/var/spool/slurm/munge"
+    mount_point = dirs.munge
+
+    os.makedirs(state_disk_dir, exist_ok=True)
+
+    util.run(f"mount --bind {state_disk_dir} {mount_point}")
+
+    fstab_entry = f"{state_disk_dir} {mount_point}"
+    with open("/etc/fstab", "r") as f:
+        fstab = f.readlines()
+    if fstab_entry not in fstab:
+        with open("/etc/fstab", "a") as f:
+            f.write(f"{fstab_entry} none bind 0 0\n")
+
+    util.run(f"systemctl daemon-reload")
+
+
 def setup_jwt_key():
     jwt_key = Path(slurmdirs.state / "jwt_hs256.key")
 
@@ -221,7 +240,7 @@ def _generate_slurm_key(p: Path) -> None:
 def setup_slurm_key(lkp: util.Lookup) -> None:
     file_name = "slurm.key"
     dst = Path(slurmdirs.etc / file_name)
-    
+
     if lkp.cfg.controller_state_disk.device_name:
         # Copy key from persistent state disk
         persist = slurmdirs.state / file_name
@@ -234,12 +253,24 @@ def setup_slurm_key(lkp: util.Lookup) -> None:
             log.info("slurm.key already exists. Skipping key generation.")
         else:
             _generate_slurm_key(dst)
-    
+
     # Put key into shared volume for distribution
     distributed = util.slurmdirs.key_distribution / file_name
     shutil.copyfile(dst, distributed)
     util.chown_slurm(distributed, mode=0o400)
-    
+
+def setup_munge_key():
+    munge_key = Path(dirs.munge / "munge.key")
+
+    if munge_key.exists():
+        log.info("Munge key already exists. Skipping key generation.")
+    else:
+        run(f"dd if=/dev/random of={munge_key} bs=1024 count=1")
+
+    shutil.chown(munge_key, user="munge", group="munge")
+    os.chmod(munge_key, stat.S_IRUSR)
+    run("systemctl restart munge", timeout=30)
+
 
 def setup_nss_slurm():
     """install and configure nss_slurm"""
@@ -397,12 +428,19 @@ def setup_controller():
     util.chown_slurm(dirs.scripts / "config.yaml", mode=0o600)
     install_custom_scripts()
     conf.gen_controller_configs(lkp)
-    
+
     if lkp.cfg.controller_state_disk.device_name != None:
         mount_save_state_disk()
-    
+        if not lkp.cfg.enable_slurm_auth:
+          mount_munge_key_disk()
+
     setup_jwt_key()
-    setup_slurm_key(lkp)
+
+    if lkp.cfg.enable_slurm_auth:
+      setup_slurm_key(lkp)
+    else:
+      setup_munge_key()
+
     setup_sudoers()
     setup_network_storage()
 
@@ -429,7 +467,9 @@ def setup_controller():
     run("systemctl enable slurmctld", timeout=30)
     run("systemctl restart slurmctld", timeout=30)
 
-    _prepare_slurmrestd()
+    if lkp.cfg.enable_slurm_auth:
+      _prepare_slurmrestd()
+
     run("systemctl enable slurmrestd", timeout=30)
     run("systemctl restart slurmrestd", timeout=30)
 
@@ -441,6 +481,8 @@ def setup_controller():
     run("systemctl enable --now slurmcmd.timer", timeout=30)
 
     log.info("Check status of cluster services")
+    if not lkp.cfg.enable_slurm_auth:
+      run("systemctl status munge", timeout=30)
     run("systemctl status slurmdbd", timeout=30)
     run("systemctl status slurmctld", timeout=30)
     run("systemctl status slurmrestd", timeout=30)
@@ -460,11 +502,13 @@ def setup_controller():
 def setup_login():
     """run login node setup"""
     log.info("Setting up login")
-    slurmctld_host = f"{lookup().control_host}"
-    if lookup().control_addr:
-        slurmctld_host = f"{lookup().control_host}({lookup().control_addr})"
+
+    lkp = lookup()
+    slurmctld_host = f"{lkp.control_host}"
+    if lkp.control_addr:
+        slurmctld_host = f"{lkp.control_host}({lkp.control_addr})"
     sackd_options = [
-        f'--conf-server="{slurmctld_host}:{lookup().control_host_port}"',
+        f'--conf-server="{slurmctld_host}:{lkp.control_host_port}"',
     ]
     sysconf = f"""SACKD_OPTIONS='{" ".join(sackd_options)}'"""
     update_system_config("sackd", sysconf)
@@ -472,6 +516,8 @@ def setup_login():
 
     setup_network_storage()
     setup_sudoers()
+    if not lkp.cfg.enable_slurm_auth:
+      run("systemctl restart munge", timeout=30)
     run("systemctl enable sackd", timeout=30)
     run("systemctl restart sackd", timeout=30)
     run("systemctl enable --now slurmcmd.timer", timeout=30)
@@ -479,6 +525,8 @@ def setup_login():
     run_custom_scripts()
 
     log.info("Check status of cluster services")
+    if not lkp.cfg.enable_slurm_auth:
+      run("systemctl status munge", timeout=30)
     run("systemctl status sackd", timeout=30)
 
     log.info("Done setting up login")
@@ -487,12 +535,14 @@ def setup_login():
 def setup_compute():
     """run compute node setup"""
     log.info("Setting up compute")
+
+    lkp = lookup()
     util.chown_slurm(dirs.scripts / "config.yaml", mode=0o600)
-    slurmctld_host = f"{lookup().control_host}"
-    if lookup().control_addr:
-        slurmctld_host = f"{lookup().control_host}({lookup().control_addr})"
+    slurmctld_host = f"{lkp.control_host}"
+    if lkp.control_addr:
+        slurmctld_host = f"{lkp.control_host}({lkp.control_addr})"
     slurmd_options = [
-        f'--conf-server="{slurmctld_host}:{lookup().control_host_port}"',
+        f'--conf-server="{slurmctld_host}:{lkp.control_host_port}"',
     ]
 
     try:
@@ -519,11 +569,15 @@ def setup_compute():
     run_custom_scripts()
 
     setup_sudoers()
+    if not lkp.cfg.enable_slurm_auth:
+      run("systemctl restart munge", timeout=30)
     run("systemctl enable slurmd", timeout=30)
     run("systemctl restart slurmd", timeout=30)
     run("systemctl enable --now slurmcmd.timer", timeout=30)
 
     log.info("Check status of cluster services")
+    if not lkp.cfg.enable_slurm_auth:
+      run("systemctl status munge", timeout=30)
     run("systemctl status slurmd", timeout=30)
 
     log.info("Done setting up compute")
@@ -533,7 +587,7 @@ def setup_cloud_ops() -> None:
     cloudOpsStatus = run(
         "systemctl is-active --quiet google-cloud-ops-agent.service", check=False
     ).returncode
-    
+
     if cloudOpsStatus != 0:
         return
 

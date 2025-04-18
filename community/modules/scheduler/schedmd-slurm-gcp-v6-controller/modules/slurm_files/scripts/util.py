@@ -25,7 +25,7 @@ import inspect
 import json
 import logging
 import logging.config
-import logging.handlers 
+import logging.handlers
 import math
 import os
 import re
@@ -52,7 +52,7 @@ from google.cloud import storage # type: ignore
 
 import google.auth # type: ignore
 from google.oauth2 import service_account # type: ignore
-import googleapiclient.discovery # type: ignore 
+import googleapiclient.discovery # type: ignore
 import google_auth_httplib2 # type: ignore
 from googleapiclient.http import set_user_agent # type: ignore
 from google.api_core.client_options import ClientOptions
@@ -92,6 +92,7 @@ dirs = NSDict(
     slurm = Path("/slurm"),
     scripts = scripts_dir,
     custom_scripts = Path("/slurm/custom_scripts"),
+    munge = Path("/etc/munge"),
     secdisk = Path("/mnt/disks/sec"),
     log = Path("/var/log/slurm"),
 )
@@ -152,7 +153,7 @@ class MachineType:
         # TODO: doesn't work with N1 custom machine types
         # See https://cloud.google.com/compute/docs/instances/creating-instance-with-custom-machine-type#create
         return self.name.split("-")[0]
-    
+
     @property
     def supports_smt(self) -> bool:
         # https://cloud.google.com/compute/docs/cpu-platforms
@@ -211,13 +212,13 @@ class InstanceResourceStatus:
                 physical_host=None,
                 upcoming_maintenance=None,
             )
-        
+
         try:
             maint = UpcomingMaintenance.from_json(jo.get("upcomingMaintenance"))
         except ValueError as e:
             log.exception("Failed to parse upcomingMaintenance, ignoring")
             maint = None # intentionally swallow exception
-        
+
         return cls(
             physical_host=jo.get("physicalHost"),
             upcoming_maintenance=maint,
@@ -276,7 +277,7 @@ def now() -> datetime:
     Return current time as timezone-aware datetime.
 
     IMPORTANT: DO NOT use `datetime.now()`, unless you explicitly need to have tz-naive datetime.
-    Otherwise there is a risk of getting: "cannot compare naive and aware datetimes" error, 
+    Otherwise there is a risk of getting: "cannot compare naive and aware datetimes" error,
     since all timetstamps we receive from GCP API are tz-aware.
 
     Another motivation  for this function is to allow to mock time in tests.
@@ -290,7 +291,7 @@ def parse_gcp_timestamp(s: str) -> datetime:
   NOTE: It always return tz-aware datetime (fallbacks to UTC and logs error).
   """
   # Requires Python >= 3.7
-  # TODO: Remove this "hack" of trimming the Z from timestamps once we move to Python 3.11 
+  # TODO: Remove this "hack" of trimming the Z from timestamps once we move to Python 3.11
   # (context: https://discuss.python.org/t/parse-z-timezone-suffix-in-datetime/2220/30)
   ts = datetime.fromisoformat(s.replace('Z', '+00:00'))
   if ts.tzinfo is None: # fallback to UTC
@@ -456,7 +457,7 @@ def install_custom_scripts(check_hash=False):
         tokens = ["controller", "prolog", "epilog"]
     elif role == "compute":
         tokens = [
-            "prolog", 
+            "prolog",
             "epilog",
             f"nodeset-{lookup().node_nodeset_name()}"
         ]
@@ -568,15 +569,15 @@ class _ConfigBlobs:
     @property
     def hash(self) -> str:
         h = hashlib.md5()
-        all = [self.core] + self.partition + self.nodeset + self.nodeset_dyn + self.nodeset_tpu    
+        all = [self.core] + self.partition + self.nodeset + self.nodeset_dyn + self.nodeset_tpu
         # sort blobs so hash is consistent
-        for blob in sorted(all, key=lambda b: b.name): 
+        for blob in sorted(all, key=lambda b: b.name):
             h.update(blob.md5_hash.encode("utf-8"))
-        return h.hexdigest() 
+        return h.hexdigest()
 
 def _list_config_blobs() -> _ConfigBlobs:
     _, common_prefix = _get_bucket_and_common_prefix()
-    
+
     core: Optional[storage.Blob] = None
     rest: Dict[str, List[storage.Blob]] = {"partition": [], "nodeset": [], "nodeset_dyn": [], "nodeset_tpu": [], "login_group": []}
 
@@ -1326,7 +1327,7 @@ class ReservationDetails:
     @property
     def dense(self) -> bool:
         return self.deployment_type == "DENSE"
-    
+
     @property
     def calendar(self) -> bool:
         return self.reservation_mode == "CALENDAR"
@@ -1435,7 +1436,7 @@ class Lookup:
     @property
     def is_controller(self):
         return self.instance_role_safe == "controller"
-    
+
     @property
     def is_login_node(self):
         return self.instance_role_safe == "login"
@@ -1477,11 +1478,11 @@ class Lookup:
 
     def node_prefix(self, node_name=None):
         return self._node_desc(node_name)["prefix"]
-    
+
     def node_index(self, node: str) -> int:
         """ node_index("cluster-nodeset-45") == 45 """
         suff = self._node_desc(node)["suffix"]
-        
+
         if suff is None:
             raise ValueError(f"Node {node} name does not end with numeric index")
         return int(suff)
@@ -1504,7 +1505,7 @@ class Lookup:
     def node_is_tpu(self, node_name=None):
         nodeset_name = self.node_nodeset_name(node_name)
         return self.cfg.nodeset_tpu.get(nodeset_name) is not None
-    
+
     def node_is_fr(self, node_name:str) -> bool:
         return bool(self.node_nodeset(node_name).future_reservation)
 
@@ -1602,10 +1603,10 @@ class Lookup:
         state = self.slurm_nodes().get(nodename)
         if state is not None:
             return state
-        
+
         # state is None => Slurm doesn't know this node,
         # there are two reasons:
-        # * happy: 
+        # * happy:
         #   * node belongs to removed nodeset
         #   * node belongs to downsized portion of nodeset
         #   * dynamic node that didn't register itself
@@ -1619,16 +1620,16 @@ class Lookup:
         except:
             log.info(f"Unknown node {nodename}, belongs to unknown nodeset")
             return None # Can't find nodeset, may be belongs to removed nodeset
-        
+
         if self.node_is_dyn(nodename):
             log.info(f"Unknown node {nodename}, belongs to dynamic nodeset")
             return None # we can't make any judjment for dynamic nodes
-        
+
         cnt = sum(self.static_dynamic_sizes(ns))
         if self.node_index(nodename) >= cnt:
             log.info(f"Unknown node {nodename}, out of nodeset size boundaries ({cnt})")
             return None # node belongs to downsized nodeset
-        
+
         raise RuntimeError(f"Slurm does not recognize node {nodename}, potential misconfiguration.")
 
 
@@ -1644,7 +1645,7 @@ class Lookup:
             "zone",
             "metadata",
         ]
-        
+
         instance_fields = ",".join(sorted(instance_information_fields))
         fields = f"items.zones.instances({instance_fields}),nextPageToken"
         flt = f"labels.slurm_cluster_name={self.cfg.slurm_cluster_name} AND name:{self.cfg.slurm_cluster_name}-*"
@@ -1671,7 +1672,7 @@ class Lookup:
         """See https://cloud.google.com/compute/docs/reference/rest/v1/reservations"""
         return self.compute.reservations().get(
             project=project, zone=zone, reservation=name).execute()
-    
+
     @lru_cache()
     def _get_future_reservation(self, project:str, zone:str, name: str) -> Any:
         """See https://cloud.google.com/compute/docs/reference/rest/v1/futureReservations"""
@@ -1679,7 +1680,7 @@ class Lookup:
 
     def get_reservation_details(self, project:str, zone:str, name:str, bulk_insert_name:str) -> ReservationDetails:
         reservation = self._get_reservation(project, zone, name)
-    
+
         # Converts policy URLs to names, e.g.:
         # projects/111111/regions/us-central1/resourcePolicies/zebra -> zebra
         policies = [u.split("/")[-1] for u in reservation.get("resourcePolicies", {}).values()]
@@ -1692,7 +1693,7 @@ class Lookup:
             deployment_type=reservation.get("deploymentType"),
             reservation_mode=reservation.get("reservationMode"),
             bulk_insert_name=bulk_insert_name)
-    
+
     def nodeset_reservation(self, nodeset: NSDict) -> Optional[ReservationDetails]:
         if not nodeset.reservation_name:
             return None
@@ -1709,7 +1710,7 @@ class Lookup:
 
         project, name = match.group("project", "reservation")
         return self.get_reservation_details(project, zone, name, nodeset.reservation_name)
-    
+
     def future_reservation(self, nodeset: NSDict) -> Optional[FutureReservation]:
         if not nodeset.future_reservation:
             return None
@@ -1774,7 +1775,7 @@ class Lookup:
                 memory_mb=int(match.group("mem")),
                 accelerators=[],
             )
-        
+
         machines = self.machine_types()
         if name not in machines:
             raise Exception(f"machine type {name} not found")
@@ -1930,7 +1931,7 @@ class Lookup:
         server_ip = ns.get("server_ip") or "$controller"
         if server_ip == "$controller":
             server_ip = self.control_addr or self.control_host
-    
+
         return NSMount(
             server_ip=server_ip,
             local_mount=Path(ns["local_mount"]),
@@ -1938,7 +1939,22 @@ class Lookup:
             fs_type=ns["fs_type"],
             mount_options=ns["mount_options"],
         )
- 
+
+    @property
+    def munge_mount(self) -> NSMount:
+        if self.cfg.munge_mount:
+            mnt = self.cfg.munge_mount
+            mnt.local_mount = mnt.local_mount or "/mnt/munge"
+        else:
+            mnt = NSDict(
+                server_ip="$controller",
+                local_mount="/mnt/munge",
+                remote_mount=dirs.munge,
+                fs_type="nfs",
+                mount_options="defaults,hard,intr,_netdev",
+            )
+        return self.normalize_ns_mount(mnt)
+
     @property
     def slurm_key_mount(self) -> NSMount:
         if self.cfg.slurm_key_mount:

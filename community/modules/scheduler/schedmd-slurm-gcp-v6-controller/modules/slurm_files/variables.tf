@@ -44,6 +44,15 @@ variable "project_id" {
   type        = string
 }
 
+variable "enable_slurm_auth" {
+  description = <<EOD
+Enables slurm authentication instead of munge.
+
+EOD
+  type        = bool
+  default     = false
+}
+
 #########
 # SLURM #
 #########
@@ -62,7 +71,7 @@ variable "controller_state_disk" {
   description = <<EOD
   A disk that will be attached to the controller instance template to save state of slurm. The disk is created and used by default.
   To disable this feature, set this variable to null.
-  
+
   NOTE: This will not save the contents at /opt/apps and /home. To preserve those, they must be saved externally.
   EOD
   type = object({
@@ -386,6 +395,27 @@ are different.
 This will default to var.output_dir if null.
 EOD
   default     = null
+}
+
+variable "munge_mount" {
+  description = <<-EOD
+  Remote munge mount for compute and login nodes to acquire the munge.key.
+  By default, the munge mount server will be assumed to be the
+  `var.slurm_control_host` (or `var.slurm_control_addr` if non-null) when
+  `server_ip=null`.
+  EOD
+  type = object({
+    server_ip     = string
+    remote_mount  = string
+    fs_type       = string
+    mount_options = string
+  })
+  default = {
+    server_ip     = null
+    remote_mount  = "/etc/munge/"
+    fs_type       = "nfs"
+    mount_options = ""
+  }
 }
 
 variable "slurm_key_mount" {

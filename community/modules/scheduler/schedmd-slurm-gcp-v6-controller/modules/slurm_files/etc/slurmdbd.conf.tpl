@@ -8,7 +8,7 @@ PidFile=/var/run/slurm/slurmdbd.pid
 #              vvvvv  WARNING: DO NOT MODIFY SECTION BELOW  vvvvv              #
 ################################################################################
 
-AuthType=auth/slurm
+AuthType=auth/{auth_key}
 AuthAltTypes=auth/jwt
 AuthAltParameters=jwt_key={state_save}/jwt_hs256.key
 
