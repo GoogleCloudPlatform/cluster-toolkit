@@ -28,7 +28,7 @@ output "network_storage" {
 }
 
 output "install_managed_lustre_client" {
-  description = "Script for installing NFS client"
+  description = "Script for installing Managed Lustre client"
   value       = file("${path.module}/scripts/install-managed-lustre-client.sh")
 }
 

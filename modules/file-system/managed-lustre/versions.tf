@@ -24,10 +24,6 @@ terraform {
       source  = "hashicorp/random"
       version = "~> 3.0"
     }
-    null = {
-      source  = "hashicorp/null"
-      version = "~> 3.0"
-    }
   }
   provider_meta "google" {
     module_name = "blueprints/terraform/hpc-toolkit:managed-lustre/v1.48.0"

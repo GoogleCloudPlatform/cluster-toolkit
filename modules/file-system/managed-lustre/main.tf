@@ -76,12 +76,3 @@ resource "google_lustre_instance" "lustre_instance" {
     }
   }
 }
-
-resource "null_resource" "hydration" {
-  count = var.import_gcs_bucket_uri != null ? 1 : 0
-
-  depends_on = [resource.google_lustre_instance.lustre_instance]
-  provisioner "local-exec" {
-    command = "curl -X POST   -H \"Content-Type: application/json\"   -H \"Authorization: Bearer $(gcloud auth print-access-token)\"   -d '{\"gcsPath\": {\"uri\":\"${var.import_gcs_bucket_uri}\"}, \"lustrePath\": {\"path\":\"${var.import_destination_path}\"}}'   https://lustre.googleapis.com/v1/projects/${var.project_id}/locations/${var.zone}/instances/${local.instance_id}:importData"
-  }
-}

@@ -47,7 +47,7 @@ The Lustre client modules are pre-installed in the official images.  With the
 official images, Lustre can be used as follows:
 
 ```yaml
-- id: lustre-gcp
+- id: managed_lustre
   source: modules/file-system/managed-lustre
   use: [network, private_service_access]
   settings:
@@ -63,7 +63,7 @@ official images, Lustre can be used as follows:
   use:
   - network
   - lustre_partition
-  - lustre-gcp
+  - managed_lustre
   - slurm_login
   settings:
     machine_type: n2-standard-4
@@ -130,31 +130,6 @@ to set it up.
       private_vpc_connection_peering: <private_vpc_connection_peering> # will look like "servicenetworking.googleapis.com"
 ```
 
-### Import data from GCS bucket
-
-You can import data from your GCS bucket to Managed Lustre instance. Important
-to note that data may not be available to the instance immediately. This
-depends on latency and size of data. Below is the example of importing data
-from  bucket.
-
-```yaml
-  - id: lustre
-    source: modules/file-system/managed-lustre
-    use: [network, private-service-access]
-    settings:
-      import_gcs_bucket_uri: gs://gcs-bucket/folder-path
-      import_destination_path: /gcs/import/
-```
-
-Here you can replace `import_gcs_bucket_uri` with the uri of sub folder within
-GCS bucket and `import_destination_path` with local directory within the
-Managed Lustre instance.
-
-> [!NOTE]
-> Prior to deployment of the Managed Lustre instance, please follow
-> [these instructions](https://cloud.google.com/managed-lustre/docs/transfer-data#required_permissions)
-> to give bucket access to the project service account.
-
 ## License
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
@@ -178,7 +153,6 @@ limitations under the License.
 |------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.3.0 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.27.0 |
-| <a name="requirement_null"></a> [null](#requirement\_null) | ~> 3.0 |
 | <a name="requirement_random"></a> [random](#requirement\_random) | ~> 3.0 |
 
 ## Providers
@@ -186,7 +160,6 @@ limitations under the License.
 | Name | Version |
 |------|---------|
 | <a name="provider_google"></a> [google](#provider\_google) | >= 6.27.0 |
-| <a name="provider_null"></a> [null](#provider\_null) | ~> 3.0 |
 | <a name="provider_random"></a> [random](#provider\_random) | ~> 3.0 |
 
 ## Modules
@@ -198,7 +171,6 @@ No modules.
 | Name | Type |
 |------|------|
 | [google_lustre_instance.lustre_instance](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/lustre_instance) | resource |
-| [null_resource.hydration](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
 | [random_id.resource_name_suffix](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/id) | resource |
 | [google_compute_network_peering.private_peering](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_network_peering) | data source |
 
@@ -208,8 +180,6 @@ No modules.
 |------|-------------|------|---------|:--------:|
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the HPC deployment, used as name of the Lustre instance if no name is specified. | `string` | n/a | yes |
 | <a name="input_description"></a> [description](#input\_description) | Description of the created Lustre instance. | `string` | `"Lustre Instance"` | no |
-| <a name="input_import_destination_path"></a> [import\_destination\_path](#input\_import\_destination\_path) | The name of local path to import data on Lustre instance from GCS bucket. | `string` | `null` | no |
-| <a name="input_import_gcs_bucket_uri"></a> [import\_gcs\_bucket\_uri](#input\_import\_gcs\_bucket\_uri) | The name of the GCS bucket to import data from to the Lustre instance. | `string` | `null` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the Managed Lustre instance. Key-value pairs. | `map(string)` | n/a | yes |
 | <a name="input_local_mount"></a> [local\_mount](#input\_local\_mount) | Local mount point for the Managed Lustre instance. | `string` | `"/shared"` | no |
 | <a name="input_mount_options"></a> [mount\_options](#input\_mount\_options) | Mounting options for the file system. | `string` | `"defaults,_netdev"` | no |
@@ -227,7 +197,7 @@ No modules.
 | Name | Description |
 |------|-------------|
 | <a name="output_capacity_gb"></a> [capacity\_gb](#output\_capacity\_gb) | File share capacity in GiB. |
-| <a name="output_install_managed_lustre_client"></a> [install\_managed\_lustre\_client](#output\_install\_managed\_lustre\_client) | Script for installing NFS client |
+| <a name="output_install_managed_lustre_client"></a> [install\_managed\_lustre\_client](#output\_install\_managed\_lustre\_client) | Script for installing Managed Lustre client |
 | <a name="output_lustre_id"></a> [lustre\_id](#output\_lustre\_id) | An identifier for the resource with format `projects/{{project}}/locations/{{location}}/instances/{{name}}` |
 | <a name="output_network_storage"></a> [network\_storage](#output\_network\_storage) | Describes a Managed Lustre instance. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

@@ -88,23 +88,6 @@ variable "mount_options" {
   default     = "defaults,_netdev"
 }
 
-variable "import_gcs_bucket_uri" {
-  description = "The name of the GCS bucket to import data from to the Lustre instance."
-  type        = string
-  default     = null
-
-  validation {
-    condition     = try(startswith(var.import_gcs_bucket_uri, "gs://"), var.import_gcs_bucket_uri == null)
-    error_message = "The import_gcs_bucket_uri must start with \"gs://\"."
-  }
-}
-
-variable "import_destination_path" {
-  description = "The name of local path to import data on Lustre instance from GCS bucket."
-  type        = string
-  default     = null
-}
-
 variable "private_vpc_connection_peering" {
   description = <<-EOT
     The name of the VPC Network peering connection.
