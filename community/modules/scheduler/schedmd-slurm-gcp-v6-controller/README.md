@@ -364,6 +364,8 @@ limitations under the License.
 | Name | Description |
 |------|-------------|
 | <a name="output_instructions"></a> [instructions](#output\_instructions) | Post deployment instructions. |
+| <a name="output_slurm_bucket_dir"></a> [slurm\_bucket\_dir](#output\_slurm\_bucket\_dir) | Path directory within `bucket_name` for Slurm cluster file storage. |
+| <a name="output_slurm_bucket_name"></a> [slurm\_bucket\_name](#output\_slurm\_bucket\_name) | GCS Bucket name of Slurm cluster file storage. |
 | <a name="output_slurm_bucket_path"></a> [slurm\_bucket\_path](#output\_slurm\_bucket\_path) | Bucket path used by cluster. |
 | <a name="output_slurm_cluster_name"></a> [slurm\_cluster\_name](#output\_slurm\_cluster\_name) | Slurm cluster name. |
 | <a name="output_slurm_controller_instance"></a> [slurm\_controller\_instance](#output\_slurm\_controller\_instance) | Compute instance of controller node |
