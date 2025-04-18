@@ -120,7 +120,7 @@ check_background() {
 	fi
 }
 
-CONFIGS=$(find examples/ community/examples/ tools/validate_configs/test_configs/ docs/tutorials/ docs/videos/build-your-own-blueprint/ -name "*.yaml" -type f -not -path 'examples/machine-learning/a3-megagpu-8g/*' -not -path 'examples/machine-learning/a3-ultragpu-8g/*' -not -path 'examples/gke-a3-ultragpu/*' -not -path 'examples/hypercompute_clusters/*' -not -path 'examples/gke-dws-flex-start/*' -not -path 'examples/gke-a4/*' -not -path 'examples/gke-a3-megagpu/*' -not -path 'examples/machine-learning/a4-highgpu-8g/*' -not -path 'community/examples/gke-tpu-v6/*' -not -path 'community/examples/xpk-n2-filestore/*')
+CONFIGS=$(find examples/ community/examples/ tools/validate_configs/test_configs/ docs/tutorials/ docs/videos/build-your-own-blueprint/ -name "*.yaml" -type f -not -path 'examples/machine-learning/a3-megagpu-8g/*' -not -path 'examples/machine-learning/a3-ultragpu-8g/*' -not -path 'examples/gke-a3-ultragpu/*' -not -path 'examples/hypercompute_clusters/*' -not -path 'examples/gke-consumption-options/*' -not -path 'examples/gke-a4/*' -not -path 'examples/gke-a3-megagpu/*' -not -path 'examples/machine-learning/a4-highgpu-8g/*' -not -path 'community/examples/gke-tpu-v6/*' -not -path 'community/examples/xpk-n2-filestore/*')
 # Exclude blueprints that use v5 modules.
 declare -A EXCLUDE_EXAMPLE
 EXCLUDE_EXAMPLE["tools/validate_configs/test_configs/two-clusters-sql.yaml"]=
