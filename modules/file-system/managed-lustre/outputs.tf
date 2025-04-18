@@ -37,7 +37,7 @@ output "lustre_id" {
   value       = google_lustre_instance.lustre_instance.instance_id
 }
 
-output "capacity_gb" {
+output "capacity_gib" {
   description = "File share capacity in GiB."
   value       = google_lustre_instance.lustre_instance.capacity_gib
 }

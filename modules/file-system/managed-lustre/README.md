@@ -2,7 +2,7 @@
 
 This module creates a [Managed Lustre](https://cloud.google.com/managed-lustre)
 instance. Managed Lustre is a high performance network file system that can be
-mounted to one or more compute VMs.
+mounted to one or more VMs.
 
 For more information on this and other network storage options in the Cluster
 Toolkit, see the extended [Network Storage documentation](../../../docs/network_storage.md).
@@ -14,8 +14,7 @@ VM running Ubuntu 20.04, 22.04 or Rocky Linux 8 (including the HPC flavor).
 
 ### Managed Lustre Access
 
-Currently Managed Lustre is only available on allowlisted projects.  To set
-this up, please work with your account representative.
+Managed Lustre is available by invitation only. If you'd like to request access to Managed Lustre in your Google Cloud project, contact your sales representative.
 
 ### Example - New VPC
 
@@ -196,7 +195,7 @@ No modules.
 
 | Name | Description |
 |------|-------------|
-| <a name="output_capacity_gb"></a> [capacity\_gb](#output\_capacity\_gb) | File share capacity in GiB. |
+| <a name="output_capacity_gib"></a> [capacity\_gib](#output\_capacity\_gib) | File share capacity in GiB. |
 | <a name="output_install_managed_lustre_client"></a> [install\_managed\_lustre\_client](#output\_install\_managed\_lustre\_client) | Script for installing Managed Lustre client |
 | <a name="output_lustre_id"></a> [lustre\_id](#output\_lustre\_id) | An identifier for the resource with format `projects/{{project}}/locations/{{location}}/instances/{{name}}` |
 | <a name="output_network_storage"></a> [network\_storage](#output\_network\_storage) | Describes a Managed Lustre instance. |
