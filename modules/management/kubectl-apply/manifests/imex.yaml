@@ -1,0 +1,92 @@
+# Copyright 2025 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  labels:
+    app: imex-installer
+  name: imex-binary-installer
+spec:
+  selector:
+    matchLabels:
+      app: imex-installer
+  template:
+    metadata:
+      labels:
+        app: imex-installer
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: cloud.google.com/gke-gpu
+                    operator: In
+                    values:
+                      - "true"
+      tolerations:
+        - key: "nvidia.com/gpu"
+          operator: "Equal"
+          value: "present"
+          effect: "NoSchedule"
+      hostPID: true
+      containers:
+        - name: imex-installer
+          image: ubuntu:22.04
+          securityContext:
+            privileged: true
+          command:
+            - sh
+            - -c
+            - |
+              IMEX_DRIVER_VERSION=570
+              DRIVER_VERSION=570.86.15
+              TARGETARCH=arm64
+
+              apt update
+              apt install -y curl build-essential
+
+              curl -fsSL -w "%{exitcode}\n" -o /imex-var/nvidia-imex-${IMEX_DRIVER_VERSION}_${DRIVER_VERSION}-1_${TARGETARCH}.deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/sbsa/nvidia-imex-${IMEX_DRIVER_VERSION}_${DRIVER_VERSION}-1_${TARGETARCH}.deb
+
+              dpkg -x /imex-var/nvidia-imex-${IMEX_DRIVER_VERSION}_${DRIVER_VERSION}-1_${TARGETARCH}.deb /imex-var/extract
+
+              rm /imex-var/nvidia-imex-${IMEX_DRIVER_VERSION}_${DRIVER_VERSION}-1_${TARGETARCH}.deb
+
+              DEST_DIR="$IMEX_DEST_DIR"
+              echo "Destination Dir: $DEST_DIR"
+              echo "/imex-var/extract found"
+              echo "copying nvidia-imex to $DEST_DIR"
+              cp /imex-var/extract/usr/bin/nvidia-imex "$DEST_DIR"
+              echo "copying nvidia-imex-ctl to $DEST_DIR"
+              cp /imex-var/extract/usr/bin/nvidia-imex-ctl "$DEST_DIR"
+              echo "removing /imex-var/extract"
+              rm -r /imex-var/extract
+              echo "finished"
+              tail -f /dev/null
+          env:
+            - name: IMEX_DEST_DIR
+              value: /imex-bin
+          volumeMounts:
+            - name: imex-loc
+              mountPath: /imex-var
+            - name: imex-binaries
+              mountPath: /imex-bin
+      volumes:
+        - name: imex-binaries
+          hostPath:
+            path: /home/kubernetes/bin/nvidia/bin
+        - name: imex-loc
+          hostPath:
+            path: /var/
+            type: DirectoryOrCreate

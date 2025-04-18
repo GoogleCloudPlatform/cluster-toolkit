@@ -217,7 +217,7 @@ deployment_groups:
     source: modules/network/gpu-rdma-vpc
     settings:
       network_name: $(vars.deployment_name)-rdma-net
-      network_profile: https://www.googleapis.com/compute/v1/projects/$(vars.project_id)/global/networkProfiles/$(vars.zone)-vpc-roce
+      network_profile: https://www.googleapis.com/compute/beta/projects/$(vars.project_id)/global/networkProfiles/$(vars.zone)-vpc-roce
       network_routing_mode: REGIONAL
       subnetworks_template:
         name_prefix: $(vars.deployment_name)-mrdma-sub
@@ -426,8 +426,19 @@ deployment_groups:
           SLURM_ROOT=/opt/apps/adm/slurm
           PARTITION_NAME=$(a4high_partition.partitions[0].partition_name)
           mkdir -m 0755 -p "${SLURM_ROOT}/scripts"
+          # enable a GPU health check that runs at the completion of all jobs on A4 nodes
           mkdir -p "${SLURM_ROOT}/partition-${PARTITION_NAME}-epilog_slurmd.d"
           ln -s "/slurm/scripts/tools/gpu-test" "${SLURM_ROOT}/partition-${PARTITION_NAME}-epilog_slurmd.d/gpu-test.epilog_slurmd"
+          # enable the use of password-free sudo within Slurm jobs on all compute nodes
+          # feature is restricted to users with OS Admin Login IAM role
+          # https://cloud.google.com/iam/docs/understanding-roles#compute.osAdminLogin
+          mkdir -p "${SLURM_ROOT}/prolog_slurmd.d"
+          mkdir -p "${SLURM_ROOT}/epilog_slurmd.d"
+          curl -s -o "${SLURM_ROOT}/scripts/sudo-oslogin" \
+              https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/master/tools/prologs-epilogs/sudo-oslogin
+          chmod 0755 "${SLURM_ROOT}/scripts/sudo-oslogin"
+          ln -s "${SLURM_ROOT}/scripts/sudo-oslogin" "${SLURM_ROOT}/prolog_slurmd.d/sudo-oslogin.prolog_slurmd"
+          ln -s "${SLURM_ROOT}/scripts/sudo-oslogin" "${SLURM_ROOT}/epilog_slurmd.d/sudo-oslogin.epilog_slurmd"
       - type: data
         destination: /opt/apps/system_benchmarks/run-nccl-tests-via-ramble.sh
         source: $(vars.benchmark_dir)/run-nccl-tests-via-ramble.sh

@@ -22,10 +22,10 @@ Documentation concerning AI Hypercomputer solutions is available for
 
 ## Detailed documentation and examples
 
-The Toolkit comes with a suite of [tutorials], [examples], and full
-documentation for a suite of [modules] that have been designed for AI/ML and HPC use cases.
-More information can be found on the
-[Google Cloud Docs](https://cloud.google.com/cluster-toolkit/docs/overview).
+The Toolkit provides [tutorials], [examples], and comprehensive
+developer documentation for a suite of [modules] that have been designed for AI/ML and HPC use cases.
+
+For end-user guides and how-to information, please refer to the [Google Cloud Docs](https://cloud.google.com/cluster-toolkit/docs/overview).
 
 [tutorials]: docs/tutorials/README.md
 [examples]: examples/README.md

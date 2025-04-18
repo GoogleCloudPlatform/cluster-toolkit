@@ -95,6 +95,8 @@ variable "filestore_tier" {
       "REGIONAL",
       "ENTERPRISE"
     ], var.filestore_tier)
+    # Avoid adding the legacy tier name in error_message, for e.g. 'HIGH_SCALE_SSD', 'ENTERPRISE'.
+    # As we want to steer the customer to new one's, but also support the legacy ones for older customers.
     error_message = "Allowed values for filestore_tier are 'BASIC_HDD','BASIC_SSD','ZONAL','REGIONAL'.\nhttps://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/filestore_instance#tier\nhttps://cloud.google.com/filestore/docs/reference/rest/v1/Tier."
   }
 }
@@ -173,5 +175,15 @@ variable "protocol" {
   validation {
     condition     = contains(["NFS_V3", "NFS_V4_1"], var.protocol)
     error_message = "Allowed values for protocol are 'NFS_V3' or 'NFS_V4_1'."
+  }
+}
+
+variable "description" {
+  description = "A description of the filestore instance."
+  type        = string
+  default     = ""
+  validation {
+    condition     = length(var.description) <= 2048
+    error_message = "Filestore description must be 2048 characters or fewer"
   }
 }

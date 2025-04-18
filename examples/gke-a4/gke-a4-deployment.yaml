@@ -45,3 +45,9 @@ vars:
   # In order to target a BLOCK_NAME, extended_reservation can be inputted as
   # <project>/<reservation-name>/reservationBlocks/<reservation-block-name>
   extended_reservation:
+
+  # The disk size of system node pool for this deployment.
+  system_node_pool_disk_size_gb:
+
+  # The disk size of a4 node pool for this deployment.
+  a4_node_pool_disk_size_gb:

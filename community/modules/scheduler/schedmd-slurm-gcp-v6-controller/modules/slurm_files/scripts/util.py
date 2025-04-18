@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from importlib import metadata
 from typing import Iterable, List, Tuple, Optional, Any, Dict, Sequence, Type, Callable, Literal
 import argparse
 import base64
@@ -151,7 +152,7 @@ class MachineType:
         # TODO: doesn't work with N1 custom machine types
         # See https://cloud.google.com/compute/docs/instances/creating-instance-with-custom-machine-type#create
         return self.name.split("-")[0]
-
+    
     @property
     def supports_smt(self) -> bool:
         # https://cloud.google.com/compute/docs/cpu-platforms
@@ -231,13 +232,12 @@ class Instance:
   creation_timestamp: datetime
   role: Optional[str]
   resource_status: InstanceResourceStatus
+  metadata: Dict[str, str]
   # TODO: use proper InstanceScheduling class
   scheduling: NSDict
 
   @classmethod
   def from_json(cls, jo: dict) -> "Instance":
-    labels = jo.get("labels", {})
-
     return cls(
       name=jo["name"],
       zone=trim_self_link(jo["zone"]),
@@ -245,7 +245,8 @@ class Instance:
       creation_timestamp=parse_gcp_timestamp(jo["creationTimestamp"]),
       resource_status=InstanceResourceStatus.from_json(jo.get("resourceStatus")),
       scheduling=NSDict(jo.get("scheduling")),
-      role = labels.get("slurm_instance_role"),
+      role = jo.get("labels", {}).get("slurm_instance_role"),
+      metadata = {k["key"]: k["value"] for k in jo.get("metadata", {}).get("items", [])}
     )
 
 
@@ -1201,7 +1202,7 @@ def wait_request(operation, project: str):
     return req
 
 
-def wait_for_operation(operation):
+def wait_for_operation(operation) -> Dict[str, Any]:
     """wait for given operation"""
     project = parse_self_link(operation["selfLink"]).project
     wait_req = wait_request(operation, project=project)
@@ -1624,6 +1625,7 @@ class Lookup:
             "status",
             "labels.slurm_instance_role",
             "zone",
+            "metadata",
         ]
         
         instance_fields = ",".join(sorted(instance_information_fields))
@@ -1934,6 +1936,17 @@ class Lookup:
                 mount_options="defaults,hard,intr,_netdev",
             )
         return self.normalize_ns_mount(mnt)
+
+    def is_flex_node(self, node: str) -> bool:
+        try:
+            nodeset = self.node_nodeset(node)
+            if nodeset.dws_flex.use_bulk_insert:
+                return False #For legacy flex support
+            return bool(nodeset.dws_flex.enabled)
+        except:
+            return False
+
+
 
 _lkp: Optional[Lookup] = None
 

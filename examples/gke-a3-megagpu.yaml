@@ -88,12 +88,15 @@ deployment_groups:
       k8s_network_names:
         gvnic_prefix: vpc
         gvnic_start_index: 1
+      version_prefix: "1.32."
+      release_channel: RAPID
     outputs: [instructions]
 
   - id: a3_megagpu_pool
     source: modules/compute/gke-node-pool
     use: [gke_cluster, gpunets, node_pool_service_account]
     settings:
+      auto_upgrade: true
       machine_type: a3-megagpu-8g
       static_node_count: 2
       zones: [$(vars.zone)]

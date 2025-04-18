@@ -70,6 +70,13 @@ resource "google_workbench_instance" "instance" {
       family  = var.instance_image.family
     }
 
+    dynamic "service_accounts" {
+      for_each = var.service_account_email == null ? [] : [1]
+      content {
+        email = var.service_account_email
+      }
+    }
+
     dynamic "network_interfaces" {
       for_each = var.network_interfaces
       content {

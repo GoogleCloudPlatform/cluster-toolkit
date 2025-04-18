@@ -53,6 +53,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [flux-cluster](#flux-clusteryaml--) ![community-badge] ![experimental-badge]
   * [tutorial-fluent.yaml](#tutorial-fluentyaml--) ![community-badge] ![experimental-badge]
   * [omnia-cluster.yaml](#omnia-clusteryaml---) ![community-badge] ![experimental-badge] ![deprecated-badge]
+  * [gke-tpu-v4](#gke-tpu-v4--) ![community-badge] ![experimental-badge]
 * [Blueprint Schema](#blueprint-schema)
 * [Writing an HPC Blueprint](#writing-an-hpc-blueprint)
   * [Blueprint Boilerplate](#blueprint-boilerplate)
@@ -1133,6 +1134,20 @@ to enable GPUDirect for the A3 Mega machines.
 > `--vars authorized_cidr=<your-ip-address>/32`.** You can use a service like
 > [whatismyip.com](https://whatismyip.com) to determine your IP address.
 
+#### Troubleshooting
+
+##### Externally Managed Environment Error
+
+If you see an error saying: `local-exec provisioner error` or `This environment is externally managed`, please use a virtual environment. This error is caused due to a conflict between pip3 and the operating system's package manager (like apt on Debian/Ubuntu-based systems).
+
+```shell
+  ## One time step of creating the venv
+  VENV_DIR=~/venvp3
+  python3 -m venv $VENV_DIR
+  ## Enter your venv.
+  source $VENV_DIR/bin/activate
+```
+
 [gke-a3-megagpu.yaml]: ../examples/gke-a3-megagpu.yaml
 
 ### [gke-a3-highgpu.yaml] ![core-badge]
@@ -1154,6 +1169,20 @@ to enable GPUDirect for the A3 High machines.
 > the IP address of the machine deploying the blueprint, for example
 > `--vars authorized_cidr=<your-ip-address>/32`.** You can use a service like
 > [whatismyip.com](https://whatismyip.com) to determine your IP address.
+
+#### Troubleshooting
+
+##### Externally Managed Environment Error
+
+If you see an error saying: `local-exec provisioner error` or `This environment is externally managed`, please use a virtual environment. This error is caused due to a conflict between pip3 and the operating system's package manager (like apt on Debian/Ubuntu-based systems).
+
+```shell
+  ## One time step of creating the venv
+  VENV_DIR=~/venvp3
+  python3 -m venv $VENV_DIR
+  ## Enter your venv.
+  source $VENV_DIR/bin/activate
+```
 
 [gke-a3-highgpu.yaml]: ../examples/gke-a3-highgpu.yaml
 
@@ -1273,6 +1302,12 @@ deployment_groups:
 
 [hpc-slurm-sharedvpc.yaml]: ../community/examples/hpc-slurm-sharedvpc.yaml
 [fs-shared-vpc]: https://cloud.google.com/filestore/docs/shared-vpc
+
+### [gke-tpu-v4] ![community-badge] ![experimental-badge]
+
+This example shows how TPU v4 cluster can be created and be used to run a job that requires TPU capacity on GKE. Additional information on TPU blueprint and associated changes are in this [README](/community/examples/gke-tpu-v4/README.md).
+
+[gke-tpu-v4]: ../community/examples/gke-tpu-v4
 
 ## Blueprint Schema
 
