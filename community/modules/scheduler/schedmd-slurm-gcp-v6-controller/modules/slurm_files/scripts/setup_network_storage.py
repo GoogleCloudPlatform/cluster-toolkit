@@ -70,7 +70,7 @@ def resolve_network_storage(nodeset=None) -> List[NSMount]:
 
     if lkp.is_login_node:
         login_ns = lkp.cfg.login_groups[util.instance_login_group()].network_storage
-        mounts.update(login_ns)
+        mounts.update(mounts_by_local(login_ns))
 
     if lkp.instance_role == "compute":
         try:
