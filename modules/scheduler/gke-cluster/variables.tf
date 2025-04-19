@@ -273,6 +273,12 @@ variable "system_node_pool_enable_secure_boot" {
   default     = true
 }
 
+variable "system_node_pool_zones" {
+  description = "The zones to use for the system node pool. If not specified, the cluster default node zone(s) will be used."
+  type        = list(string)
+  default     = null
+}
+
 variable "enable_private_nodes" {
   description = "(Beta) Whether nodes have internal IP addresses only."
   type        = bool
