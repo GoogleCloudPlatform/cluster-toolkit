@@ -55,6 +55,10 @@ This creates a Slinky cluster with the following attributes:
 To test Slurm functionality, connect to the controller and use Slurm client commands:
 
 ```bash
+gcloud container clusters get-credentials YOUR_CLUSTER --region YOUR_REGION
+```
+
+```bash
 kubectl exec -it statefulsets/slurm-controller \
   --namespace=slurm \
   -- bash --login
