@@ -65,9 +65,11 @@ This section guides you through the cluster creation process, ensuring that your
    * `project_id`: your Google Cloud project ID.
    * `region`: the compute region for the cluster.
    * `zone`: the compute zone for the TPUs.
+   * `num_slices`: the number of TPU slices to create.
+   * `tpu_topology`: the TPU placement topology for pod slice node pool.
+   * `static_node_count`: the number of TPU nodes in your cluster.
    * `authorized_cidr`: The IP address range that you want to allow to connect with the cluster. This CIDR block must include the IP address of the machine to call Terraform.
    * `extended_reservation`: the name of your reservation in the form of <project>/<reservation-name>
-   * `static_node_count`: the number of TPU nodes in your cluster.
 
     To modify advanced settings, edit `community/examples/gke-tpu-v4-2x2x2/gke-tpu-v4-2x2x2.yaml`.
 
