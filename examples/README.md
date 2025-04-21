@@ -1008,6 +1008,12 @@ In order to create a static Slurm nodeset, which only requires one configuration
 * Non-autoscaling Slurm nodesets (via `replicas`), which sit 1:1 on top of the GKE nodes
 If both of these settings were static, two changes would be required for nodeset scale outs - one at the Slurm level (nodeset replicas) and one at the infrastructure level (node pool node count) - so instead the node pool autoscales to "follow" the nodeset specification.
 
+Scale in/out nodesets with a single `kubectl` command:
+
+```bash
+kubectl scale nodeset/slurm-compute-debug --replicas=5 -n slurm
+```
+
 Nodeset autoscaling is only possible with [KEDA installation and configuration work](https://github.com/SlinkyProject/slurm-operator/blob/main/docs/autoscaling.md), and this is not included in the example.
 
 [hpc-slinky.yaml]: ../community/examples/hpc-slinky/hpc-slinky.yaml
