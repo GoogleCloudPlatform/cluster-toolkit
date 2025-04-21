@@ -106,6 +106,7 @@ deployment_groups:
       name: gke-tpu-v4-pool
       disk_type: pd-balanced
       machine_type: ct4p-hightpu-4t
+      auto_upgrade: true
       zones: [$(vars.zone)]
       static_node_count: $(vars.static_node_count)
       reservation_affinity:
