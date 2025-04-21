@@ -24,6 +24,8 @@ vars:
   authorized_cidr:  # <your-ip-address>/32
   gcp_public_cidrs_access_enabled: false
   exporter_pod_monitoring_path: $(ghpc_stage("./exporter-pod-monitoring.yaml"))
+  debug_nodeset_replicas: 2
+  h3_nodeset_replicas: 2
 
 deployment_groups:
 - group: primary
@@ -106,7 +108,7 @@ deployment_groups:
           nodesets:
           - name: debug
             enabled: true
-            replicas: 3
+            replicas: $(vars.debug_nodeset_replicas)
             image:
               # Use the default nodeset image
               repository: ""
@@ -131,7 +133,7 @@ deployment_groups:
               enabled: true
           - name: h3
             enabled: true
-            replicas: 0
+            replicas: $(vars.h3_nodeset_replicas)
             image:
               # Use the default nodeset image
               repository: ""
