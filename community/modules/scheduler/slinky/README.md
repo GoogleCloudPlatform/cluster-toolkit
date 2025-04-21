@@ -18,7 +18,7 @@ Through `cert_manager_values`, `prometheus_values`, `slurm_operator_values`, and
         nodesets:
         - name: h3
           enabled: true
-          replicas: 3
+          replicas: 2
           image:
             # Use the default nodeset image
             repository: ""
