@@ -992,7 +992,7 @@ blueprint also creates two new VPC networks, one configured for RDMA networking 
 
 ### [hpc-slinky.yaml] ![community-badge] ![experimental-badge]
 
-The SchedMD Slinky Project brings Slurm to Kubernetes, for a best of both worlds experience. Slinky is particularly useful for:
+The SchedMD Slinky Project deploys Slurm on Kubernetes. Slinky is particularly useful for:
 1. Those with a prefer a Slurm workload management paradigm, but a cloud-native operational experience
 2. Those who want the flexibility of running HPC jobs with either Kubernetes-based scheduling or Slurm-based scheduling, all on the same platform
 
