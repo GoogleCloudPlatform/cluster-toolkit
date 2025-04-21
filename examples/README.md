@@ -1,7 +1,12 @@
 # Example Blueprints
 
-This directory contains a set of example blueprint files that can be fed into
-gHPC to create a deployment.
+## AI Hypercomputer
+
+Additional blueprints optimized for AI workloads on modern GPUs is available at [Google Cloud AI Hypercomputer][aihc]. Documentation is available for [GKE][aihc-gke] and for [Slurm][aihc-slurm].
+
+[aihc]: https://cloud.google.com/ai-hypercomputer/docs
+[aihc-gke]: https://cloud.google.com/ai-hypercomputer/docs/create/gke-ai-hypercompute
+[aihc-slurm]: https://cloud.google.com/ai-hypercomputer/docs/create/create-slurm-cluster
 
 <!-- TOC generated with some manual tweaking of the following command output:
 md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
