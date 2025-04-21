@@ -1,0 +1,166 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+---
+
+blueprint_name: hpc-slinky
+
+vars:
+  project_id:  ## Set GCP Project ID Here ##
+  deployment_name: slinky-01
+  region: us-central1
+  zones:
+  - us-central1-a
+  authorized_cidr:  # <your-ip-address>/32
+  gcp_public_cidrs_access_enabled: false
+  exporter_pod_monitoring_path: $(ghpc_stage("./exporter-pod-monitoring.yaml"))
+  debug_nodeset_replicas: 2
+  h3_nodeset_replicas: 2
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: network
+    source: modules/network/vpc
+    settings:
+      subnetwork_name: $(vars.deployment_name)-subnet
+      secondary_ranges_list:
+      - subnetwork_name: $(vars.deployment_name)-subnet
+        ranges:
+        - range_name: pods
+          ip_cidr_range: 10.4.0.0/14
+        - range_name: services
+          ip_cidr_range: 10.0.32.0/20
+
+  - id: node_pool_service_account
+    source: community/modules/project/service-account
+    settings:
+      name: gke-np-sa
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
+      - monitoring.viewer
+      - stackdriver.resourceMetadata.writer
+      - storage.objectAdmin
+      - artifactregistry.reader
+
+  - id: workload_service_account
+    source: community/modules/project/service-account
+    settings:
+      name: gke-wl-sa
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
+      - monitoring.viewer
+      - stackdriver.resourceMetadata.writer
+      - storage.objectAdmin
+      - artifactregistry.reader
+
+  - id: gke_cluster
+    source: modules/scheduler/gke-cluster
+    use: [network, workload_service_account]
+    settings:
+      enable_private_endpoint: false
+      gcp_public_cidrs_access_enabled: $(vars.gcp_public_cidrs_access_enabled)
+      master_authorized_networks:
+      - display_name: deployment-machine
+        cidr_block: $(vars.authorized_cidr)
+      system_node_pool_enabled: false
+      configure_workload_identity_sa: true
+    outputs: [instructions]
+
+  - id: base_pool
+    source: modules/compute/gke-node-pool
+    use: [gke_cluster, node_pool_service_account]
+    settings:
+      initial_node_count: 1
+      disk_type: pd-balanced
+      machine_type: e2-standard-4
+      zones: $(vars.zones)
+
+  - id: h3_pool
+    source: modules/compute/gke-node-pool
+    use: [gke_cluster, node_pool_service_account]
+    settings:
+      initial_node_count: 2
+      disk_type: pd-balanced
+      machine_type: h3-standard-88
+      zones: $(vars.zones)
+
+  - id: slinky
+    source: community/modules/scheduler/slinky
+    use:
+    - gke_cluster
+    - base_pool  # Optionally specify nodepool(s) to avoid operator components running on HPC hardware
+    settings:
+      slurm_values:
+        compute:
+          nodesets:
+          - name: debug
+            enabled: true
+            replicas: $(vars.debug_nodeset_replicas)
+            image:
+              # Use the default nodeset image
+              repository: ""
+              tag: ""
+            resources:
+              requests:
+                cpu: 500m
+                memory: 4Gi
+              limits:
+                cpu: 500m
+                memory: 4Gi
+            affinity:
+              nodeAffinity:
+                requiredDuringSchedulingIgnoredDuringExecution:
+                  nodeSelectorTerms:
+                  - matchExpressions:
+                    - key: "node.kubernetes.io/instance-type"
+                      operator: In
+                      values:
+                      - e2-standard-4
+            partition:
+              enabled: true
+          - name: h3
+            enabled: true
+            replicas: $(vars.h3_nodeset_replicas)
+            image:
+              # Use the default nodeset image
+              repository: ""
+              tag: ""
+            resources:
+              requests:
+                cpu: 86
+                memory: 324Gi
+              limits:
+                cpu: 86
+                memory: 324Gi
+            affinity:
+              nodeAffinity:
+                requiredDuringSchedulingIgnoredDuringExecution:
+                  nodeSelectorTerms:
+                  - matchExpressions:
+                    - key: "node.kubernetes.io/instance-type"
+                      operator: In
+                      values:
+                      - h3-standard-88
+            partition:
+              enabled: true
+    outputs: [instructions]
+
+  - id: slurm_exporter_monitoring
+    source: modules/management/kubectl-apply
+    use: [gke_cluster]
+    settings:
+      apply_manifests:
+      - source: $(vars.exporter_pod_monitoring_path)
