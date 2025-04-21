@@ -21,7 +21,7 @@ vars:
   region: us-central1
   zones:
   - us-central1-a
-  authorized_cidr: <your-ip-address>/32
+  authorized_cidr:  # <your-ip-address>/32
   gcp_public_cidrs_access_enabled: false
   exporter_pod_monitoring_path: $(ghpc_stage("./exporter-pod-monitoring.yaml"))
 
