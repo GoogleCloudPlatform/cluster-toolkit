@@ -92,7 +92,7 @@ deployment_groups:
     source: modules/compute/gke-node-pool
     use: [gke_cluster, node_pool_service_account]
     settings:
-      initial_node_count: 0
+      initial_node_count: 2
       disk_type: pd-balanced
       machine_type: h3-standard-88
       zones: $(vars.zones)
