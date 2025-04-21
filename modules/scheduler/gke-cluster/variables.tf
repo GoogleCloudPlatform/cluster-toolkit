@@ -163,7 +163,7 @@ variable "enable_filestore_csi" {
 }
 
 variable "enable_gcsfuse_csi" {
-  description = "The status of the GCSFuse Filestore Container Storage Interface (CSI) driver addon, which allows the usage of a gcs bucket as volumes."
+  description = "The status of the GCSFuse Container Storage Interface (CSI) driver addon, which allows the usage of a GCS bucket as volumes."
   type        = bool
   default     = false
 }
