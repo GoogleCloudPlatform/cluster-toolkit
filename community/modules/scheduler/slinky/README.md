@@ -41,11 +41,6 @@ Through `cert_manager_values`, `prometheus_values`, `slurm_operator_values`, and
                     - h3-standard-88
           partition:
             enabled: true
-      slurm-exporter:
-        exporter:
-          image:
-            repository: ghcr.io/slinkyproject/slurm-exporter
-            tag: "0.2.0"
 ```
 
 This creates a Slinky cluster with the following attributes:
@@ -54,7 +49,6 @@ This creates a Slinky cluster with the following attributes:
 * Slinky system components are scheduled on the `base_pool` (from the `gke-node-pool` module).
   * This node affinity specification is recommended, to save HPC hardware for HPC nodesets, and to ensure Helm releases are fully uninstalled before all nodepools are deleted during a `gcluster destroy`.
 * One Slurm nodeset is provisioned, with resource requests/limits and node affinities aligned to h3-standard-88 VMs.
-* A custom Slurm Exporter (metrics exporter) image is specified, to circumvent a non-existent default image bug in the v0.2.0 Slurm Helm chart.
 
 ### Usage
 
@@ -118,10 +112,10 @@ No modules.
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The project ID that hosts the GKE cluster. | `string` | n/a | yes |
 | <a name="input_prometheus_chart_version"></a> [prometheus\_chart\_version](#input\_prometheus\_chart\_version) | Version of the Kube Prometheus Stack chart to install. | `string` | `"70.4.1"` | no |
 | <a name="input_prometheus_values"></a> [prometheus\_values](#input\_prometheus\_values) | Value overrides for the Prometheus release | `any` | <pre>{<br/>  "installCRDs": true<br/>}</pre> | no |
-| <a name="input_slurm_chart_version"></a> [slurm\_chart\_version](#input\_slurm\_chart\_version) | Version of the Slurm chart to install. | `string` | `"0.2.0"` | no |
-| <a name="input_slurm_operator_chart_version"></a> [slurm\_operator\_chart\_version](#input\_slurm\_operator\_chart\_version) | Version of the Slurm Operator chart to install. | `string` | `"0.2.0"` | no |
+| <a name="input_slurm_chart_version"></a> [slurm\_chart\_version](#input\_slurm\_chart\_version) | Version of the Slurm chart to install. | `string` | `"0.2.1"` | no |
+| <a name="input_slurm_operator_chart_version"></a> [slurm\_operator\_chart\_version](#input\_slurm\_operator\_chart\_version) | Version of the Slurm Operator chart to install. | `string` | `"0.2.1"` | no |
 | <a name="input_slurm_operator_values"></a> [slurm\_operator\_values](#input\_slurm\_operator\_values) | Value overrides for the Slinky release | `any` | `{}` | no |
-| <a name="input_slurm_values"></a> [slurm\_values](#input\_slurm\_values) | Value overrides for the Slurm release | `any` | <pre>{<br/>  "slurm-exporter": {<br/>    "exporter": {<br/>      "image": {<br/>        "repository": "ghcr.io/slinkyproject/slurm-exporter",<br/>        "tag": "0.2.0"<br/>      }<br/>    }<br/>  }<br/>}</pre> | no |
+| <a name="input_slurm_values"></a> [slurm\_values](#input\_slurm\_values) | Value overrides for the Slurm release | `any` | `{}` | no |
 
 ## Outputs
 

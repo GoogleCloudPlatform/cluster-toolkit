@@ -48,7 +48,7 @@ variable "cert_manager_values" {
 variable "slurm_operator_chart_version" {
   description = "Version of the Slurm Operator chart to install."
   type        = string
-  default     = "0.2.0"
+  default     = "0.2.1"
 }
 
 variable "slurm_operator_values" {
@@ -60,22 +60,13 @@ variable "slurm_operator_values" {
 variable "slurm_chart_version" {
   description = "Version of the Slurm chart to install."
   type        = string
-  default     = "0.2.0"
+  default     = "0.2.1"
 }
 
 variable "slurm_values" {
   description = "Value overrides for the Slurm release"
   type        = any
-  default = {
-    slurm-exporter = {
-      exporter = {
-        image = {
-          repository = "ghcr.io/slinkyproject/slurm-exporter"
-          tag        = "0.2.0"
-        }
-      }
-    }
-  }
+  default     = {}
 }
 
 variable "install_kube_prometheus_stack" {
