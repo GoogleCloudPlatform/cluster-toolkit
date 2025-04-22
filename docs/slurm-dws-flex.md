@@ -31,8 +31,7 @@ In order to make use of DWS Flex Start mode with SlurmGCP, you must use the `dws
 
 **Known issues:**
 
-* Static nodes will not be provisioned automatically. To trigger provisioning, schedule a job with `srun` or `sbatch`.
-* Slurm can not suspend nodes that were not provisioned yet. To terminate provisioning, manually delete corresponding MIG.
+* When `max_run_duration` completes instances will be deleted by the MIG.
 * Empty MIGs are not cleaned up automatically.
 
 > [!NOTE]
