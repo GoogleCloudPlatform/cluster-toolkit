@@ -134,9 +134,9 @@ variable "autoclass" {
 }
 
 variable "uniform_bucket_level_access" {
-  description = "If true, allow uniform control access to GCS bucket."
+  description = "If true, allow uniform control access to the bucket."
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "soft_delete_retention_duration" {
