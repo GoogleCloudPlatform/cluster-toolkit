@@ -1,0 +1,66 @@
+# Copyright 2025 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: storages.xpk.x-k8s.io
+spec:
+  group: xpk.x-k8s.io
+  versions:
+  - name: v1
+    served: true
+    storage: true
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          spec:
+            type: object
+            properties:
+              type:
+                type: string
+              cluster:
+                type: string
+              auto_mount:
+                type: boolean
+              mount_point:
+                type: string
+              readonly:
+                type: boolean
+              manifest:
+                type: string
+              pv:
+                type: string
+              pvc:
+                type: string
+            required:
+            - type
+            - cluster
+            - auto_mount
+            - mount_point
+            - readonly
+            - manifest
+            - pvc
+            - pv
+        x-kubernetes-validations:
+        - message: Value is immutable
+          rule: self == oldSelf
+  scope: Cluster
+  names:
+    plural: storages
+    singular: storage
+    kind: Storage
+    shortNames:
+    - stg
