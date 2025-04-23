@@ -217,6 +217,9 @@ class ClusterInfo:
         return ("\n\n".join(filesystems_yaml), refs)
 
     def _prepare_ghpc_artifact_registry(self):
+        if not getattr(self.cluster, "use_containers", False):
+            return "", False
+
         artifact_registry_yaml = []
         template = self.env.get_template('blueprint/artifact_registry_config.yaml.j2')
 
@@ -508,6 +511,7 @@ class ClusterInfo:
             "type": "google_compute_instance_from_template",
             "name": "controller",
         }
+
         controller_resources = self._get_tf_state_resource(tf_state, controller_filters)
         if controller_resources:
             controller_instance = controller_resources[0]["instances"][0]
@@ -517,10 +521,11 @@ class ClusterInfo:
 
 
         login_filters = {
-            "module": 'module.slurm_controller.module.slurm_login_instance["slurm-login"]',
+            "module": 'module.slurm_controller.module.login["slurm-login"].module.instance',
             "type": "google_compute_instance_from_template",
             "name": "slurm_instance",
         }
+
         login_resources = self._get_tf_state_resource(tf_state, login_filters)
         if login_resources:
             login_instance = login_resources[0]["instances"][0]

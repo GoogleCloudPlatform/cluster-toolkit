@@ -507,43 +507,22 @@ class ClusterUpdateView(LoginRequiredMixin, UpdateView):
 
         try:
             with transaction.atomic():
-                self.object.save()
                 self.object = form.save()
-                mountpoints.instance = self.object
-                mountpoints.save()
 
-                partitions.instance = self.object
-                partitions.save()
-
-                container_registry_formset.instance = self.object
-
-                # Log instances before saving
-                # for registry_form in container_registry_formset.forms:
-                #     logger.info(f"Before save: form instance repo_mode={registry_form.instance.repo_mode}, id={registry_form.instance.pk}")
-
-                registries = container_registry_formset.save()
-
-                # Log saved instances
-                for registry in registries:
-                    # logger.info(f"Saved registry ID: {registry.id}, repo_mode: {registry.repo_mode}")
-                    registry.project_id = self.object.project_id  # Set project dynamically
-                    registry.save()
-
-        except ValidationError as ve:
-            form.add_error(None, ve)
-            return self.form_invalid(form)
-
-        try:
-            with transaction.atomic():
-                # Save the modified Cluster object
-                self.object.save()
-                self.object = form.save()
                 mountpoints.instance = self.object
                 mountpoints.save()
 
                 partitions.instance = self.object
                 parts = partitions.save()
                 
+                # If containers are enabled, persist them and set project IDs
+                if container_registry_formset is not None:
+                    container_registry_formset.instance = self.object
+                    regs = container_registry_formset.save()
+                    for registry in regs:
+                        registry.project_id = self.object.project_id
+                        registry.save()
+
                 try:
                     total_nodes_requested = {}
                     for part in parts:
