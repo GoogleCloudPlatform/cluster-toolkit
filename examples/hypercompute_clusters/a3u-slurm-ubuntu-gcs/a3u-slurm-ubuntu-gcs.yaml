@@ -584,7 +584,6 @@ deployment_groups:
       network_name: $(vars.deployment_name)-rdma-net
       network_profile: https://www.googleapis.com/compute/beta/projects/$(vars.project_id)/global/networkProfiles/$(vars.zone)-vpc-roce
       network_routing_mode: REGIONAL
-      nic_type: MRDMA
       subnetworks_template:
         name_prefix: $(vars.deployment_name)-mrdma-sub
         count: 8

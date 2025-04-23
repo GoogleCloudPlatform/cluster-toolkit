@@ -169,9 +169,20 @@ locals {
   }
 }
 
+resource "terraform_data" "network_profile_firewall_validation" {
+  lifecycle {
+    precondition {
+      condition     = !(try(strcontains(var.network_profile, "roce"), false) && length(local.firewall_rules) > 0)
+      error_message = "If var.network_profile contains 'roce', var.firewall_rules must be empty and var.enable_internal_traffic must be false"
+    }
+  }
+}
+
 module "vpc" {
   source  = "terraform-google-modules/network/google"
   version = "~> 10.0"
+
+  depends_on = [terraform_data.network_profile_firewall_validation]
 
   network_name                           = local.network_name
   project_id                             = var.project_id
