@@ -704,6 +704,10 @@ spec:
                 path: nfd-worker.conf
       tolerations:
         - effect: NoSchedule
+          key: kubernetes.io/arch
+          operator: Equal
+          value: arm64
+        - effect: NoSchedule
           key: node-role.kubernetes.io/master
           operator: Equal
           value: ""
@@ -1038,7 +1042,12 @@ spec:
     tolerations: 
       - effect: NoSchedule
         key: nvidia.com/gpu
-        operator: Exists
+        operator: Equal
+        value: present
+      - effect: NoSchedule
+        key: kubernetes.io/arch
+        operator: Equal
+        value: arm64
     priorityClassName: system-node-critical
     updateStrategy: RollingUpdate
     rollingUpdate:
@@ -1067,7 +1076,7 @@ spec:
     usePrecompiled: false
     repository: nvcr.io/nvidia
     image: driver
-    version: "550.127.05"
+    version: "570.124.06"
     imagePullPolicy: IfNotPresent
     startupProbe: 
       failureThreshold: 120
