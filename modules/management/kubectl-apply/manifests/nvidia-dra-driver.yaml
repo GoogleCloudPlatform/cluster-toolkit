@@ -239,6 +239,10 @@ spec:
           key: nvidia.com/gpu
           operator: Equal
           value: present
+        - effect: NoSchedule
+          key: kubernetes.io/arch
+          operator: Equal
+          value: arm64
 ---
 # Source: nvidia-dra-driver-gpu/templates/controller.yaml
 apiVersion: apps/v1
