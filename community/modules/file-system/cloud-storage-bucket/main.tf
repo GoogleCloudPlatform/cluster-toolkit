@@ -110,6 +110,11 @@ resource "google_storage_bucket" "bucket" {
       condition     = !var.enable_hierarchical_namespace || var.uniform_bucket_level_access
       error_message = "Hierarchical namespace is not compatible with Uniform bucket level access disabled"
     }
+
+    precondition {
+      condition     = !var.enable_versioning || !var.enable_hierarchical_namespace
+      error_message = "Hierarchical namespace is not compatible with Object versioning enabled."
+    }
   }
 }
 
