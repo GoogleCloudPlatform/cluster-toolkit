@@ -59,18 +59,19 @@ This section guides you through the cluster creation process, ensuring that your
    * `BUCKET_NAME`: the name of the new Cloud Storage bucket.
    * `COMPUTE_REGION`: the compute region where you want to store the state of the Terraform deployment.
 
-1. In the [`community/examples/gke-t4-2x2x2/gke-t4-2x2x2-deployment.yaml`](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/develop/community/examples/gke-t4-2x2x2/gke-t4-2x2x2-deployment.yaml) file, replace the following variables in the `terraform_backend_defaults` and `vars` sections to match the specific values for your deployment:
+1. In the [`community/examples/gke-tpu-v4-2x2x2/gke-tpu-v4-2x2x2-deployment.yaml`](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/community/examples/gke-tpu-v4-2x2x2/gke-tpu-v4-2x2x2-deployment.yaml) file, replace the following variables in the `terraform_backend_defaults` and `vars` sections to match the specific values for your deployment:
 
    * `bucket`: the name of the Cloud Storage bucket you created in the previous step.
    * `project_id`: your Google Cloud project ID.
    * `region`: the compute region for the cluster.
    * `zone`: the compute zone for the TPUs.
+   * `num_slices`: the number of TPU slices to create.
+   * `tpu_topology`: the TPU placement topology for pod slice node pool.
+   * `static_node_count`: the number of TPU nodes in your cluster.
    * `authorized_cidr`: The IP address range that you want to allow to connect with the cluster. This CIDR block must include the IP address of the machine to call Terraform.
    * `extended_reservation`: the name of your reservation in the form of <project>/<reservation-name>
-   * `static_node_count`: the number of TPU nodes in your cluster.
 
-  To modify advanced settings, edit
-  `community/examples/gke-t4-2x2x2/gke-t4-2x2x2.yaml`.
+    To modify advanced settings, edit `community/examples/gke-tpu-v4-2x2x2/gke-tpu-v4-2x2x2.yaml`.
 
 1. Generate [Application Default Credentials (ADC)](https://cloud.google.com/docs/authentication/provide-credentials-adc#google-idp) to provide access to Terraform.
 
@@ -80,24 +81,34 @@ This section guides you through the cluster creation process, ensuring that your
    ```sh
     cd ~/cluster-toolkit
     ./gcluster deploy -d \
-    community/examples/gke-t4-2x2x2/gke-t4-2x2x2-deployment.yaml \
-    community/examples/gke-t4-2x2x2/gke-t4-2x2x2.yaml
+    community/examples/gke-tpu-v4-2x2x2/gke-tpu-v4-2x2x2-deployment.yaml \
+    community/examples/gke-tpu-v4-2x2x2/gke-tpu-v4-2x2x2.yaml
    ```
 
 ## Run the sample job
 
-The `tpu-available-chips.yaml`(https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/develop/community/examples/gke-t4-2x2x2/tpu-available-chips.yaml) file creates a service and a job resource in kubernetes. It is based on https://cloud.google.com/kubernetes-engine/docs/how-to/tpus#tpu-chips-node-pool. The  workload returns the number of TPU chips across all of the nodes in a multi-host TPU slice.
+The [tpu-available-chips.yaml](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/community/examples/gke-tpu-v4-2x2x2/tpu-available-chips.yaml) file creates a service and a job resource in kubernetes. It is based on https://cloud.google.com/kubernetes-engine/docs/how-to/tpus#tpu-chips-node-pool. The  workload returns the number of TPU chips across all of the nodes in a multi-host TPU slice.
 
 1. Connect to your cluster:
 
     ```sh
-    gcloud container clusters get-credentials gke-t4-2x2x2
+    gcloud container clusters get-credentials gke-tpu-v4-2x2x2 --region=REGION --project_id=PROJECT_ID
+    ```
+
+    Replace the `REGION` and `PROJECT_ID` with the ones used in the blueprint.
+
+1. Update the nodeSelector under the template spec of tpu-available-chips.yaml file. The values depend on the tpu accelerator and tpu topology used in the blueprint.
+
+    ```yaml
+    nodeSelector:
+        cloud.google.com/gke-tpu-accelerator: tpu-v4-podslice
+        cloud.google.com/gke-tpu-topology: 2x2x2
     ```
 
 1. Create the resources:
 
     ```sh
-    kubectl create -f ~/cluster-toolkit/community/examples/gke-t4-2x2x2/tpu-available-chips.yaml
+    kubectl create -f ~/cluster-toolkit/community/examples/gke-tpu-v4-2x2x2/tpu-available-chips.yaml
     ```
 
     This command returns a service and a job name.

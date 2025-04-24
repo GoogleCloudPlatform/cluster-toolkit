@@ -37,13 +37,85 @@ resource "google_storage_bucket" "bucket" {
   provider                    = google-beta
   project                     = var.project_id
   name                        = local.name
-  uniform_bucket_level_access = true
+  uniform_bucket_level_access = var.uniform_bucket_level_access
   location                    = var.region
-  storage_class               = "REGIONAL"
+  storage_class               = var.storage_class
   labels                      = local.labels
   force_destroy               = var.force_destroy
+  public_access_prevention    = var.public_access_prevention
+  enable_object_retention     = var.enable_object_retention
   hierarchical_namespace {
     enabled = var.enable_hierarchical_namespace
+  }
+
+  dynamic "autoclass" {
+    for_each = var.autoclass.enabled ? [1] : []
+    content {
+      enabled                = var.autoclass.enabled
+      terminal_storage_class = var.autoclass.terminal_storage_class
+    }
+  }
+
+  dynamic "soft_delete_policy" {
+    for_each = var.soft_delete_retention_duration == null ? [] : [1]
+    content {
+      retention_duration_seconds = var.soft_delete_retention_duration
+    }
+  }
+
+  dynamic "retention_policy" {
+    for_each = var.retention_policy_period == null ? [] : [1]
+    content {
+      retention_period = var.retention_policy_period
+    }
+  }
+
+  dynamic "versioning" {
+    for_each = var.enable_versioning ? [1] : []
+    content {
+      enabled = var.enable_versioning
+    }
+  }
+
+  dynamic "lifecycle_rule" {
+    for_each = var.lifecycle_rules
+    content {
+      action {
+        type          = lifecycle_rule.value.action.type
+        storage_class = lookup(lifecycle_rule.value.action, "storage_class", null)
+      }
+      condition {
+        age                        = lookup(lifecycle_rule.value.condition, "age", null)
+        send_age_if_zero           = lookup(lifecycle_rule.value.condition, "send_age_if_zero", null)
+        created_before             = lookup(lifecycle_rule.value.condition, "created_before", null)
+        with_state                 = lookup(lifecycle_rule.value.condition, "with_state", contains(keys(lifecycle_rule.value.condition), "is_live") ? (lifecycle_rule.value.condition["is_live"] ? "LIVE" : null) : null)
+        matches_storage_class      = lifecycle_rule.value.condition["matches_storage_class"] != null ? split(",", lifecycle_rule.value.condition["matches_storage_class"]) : null
+        matches_prefix             = lifecycle_rule.value.condition["matches_prefix"] != null ? split(",", lifecycle_rule.value.condition["matches_prefix"]) : null
+        matches_suffix             = lifecycle_rule.value.condition["matches_suffix"] != null ? split(",", lifecycle_rule.value.condition["matches_suffix"]) : null
+        num_newer_versions         = lookup(lifecycle_rule.value.condition, "num_newer_versions", null)
+        custom_time_before         = lookup(lifecycle_rule.value.condition, "custom_time_before", null)
+        days_since_custom_time     = lookup(lifecycle_rule.value.condition, "days_since_custom_time", null)
+        days_since_noncurrent_time = lookup(lifecycle_rule.value.condition, "days_since_noncurrent_time", null)
+        noncurrent_time_before     = lookup(lifecycle_rule.value.condition, "noncurrent_time_before", null)
+      }
+    }
+  }
+
+  lifecycle {
+    precondition {
+      condition     = !var.autoclass.enabled || !var.enable_hierarchical_namespace
+      error_message = "Hierarchical namespace is not compatible with Autoclass enabled."
+    }
+
+    precondition {
+      condition     = !var.enable_hierarchical_namespace || var.uniform_bucket_level_access
+      error_message = "Hierarchical namespace is not compatible with Uniform bucket level access disabled."
+    }
+
+    precondition {
+      condition     = !var.enable_versioning || !var.enable_hierarchical_namespace
+      error_message = "Hierarchical namespace is not compatible with Object versioning enabled."
+    }
   }
 }
 

@@ -31,7 +31,7 @@ vars:
   # Image settings
   base_image:
     project: ubuntu-os-accelerator-images
-    family: ubuntu-accelerator-2204-amd64-with-nvidia-550
+    family: ubuntu-accelerator-2204-amd64-with-nvidia-570
   image_build_machine_type: n2-standard-16
   build_slurm_from_git_ref: 6.9.1
   # Cluster env settings
@@ -47,12 +47,15 @@ vars:
     family: $(vars.deployment_name)-u22
   disk_size_gb: 200
   nccl_plugin_version: v1.0.5
+  base_network_name: $(vars.deployment_name)
 
 deployment_groups:
 - group: image-env
   modules:
   - id: slurm-image-network
     source: modules/network/vpc
+    settings:
+      network_name: $(vars.base_network_name)-image-net
 
   - id: slurm-build-script
     source: modules/scripts/startup-script
@@ -107,11 +110,11 @@ deployment_groups:
               cuda_repo_filename: /tmp/{{ cuda_repo_url | basename }}
               enable_nvidia_dcgm: false
               nvidia_packages:
-              - cuda-toolkit-12-4
+              - cuda-toolkit-12-8
               - datacenter-gpu-manager
-              - libnvidia-cfg1-550-server
-              - libnvidia-nscq-550
-              - nvidia-compute-utils-550-server
+              - libnvidia-cfg1-570-server
+              - libnvidia-nscq-570
+              - nvidia-compute-utils-570-server
             tasks:
             - name: Download NVIDIA repository package
               ansible.builtin.get_url:
@@ -218,7 +221,7 @@ deployment_groups:
   - id: a3ultra-slurm-net-0
     source: modules/network/vpc
     settings:
-      network_name: $(vars.deployment_name)-net-0
+      network_name: $(vars.base_network_name)-net-0
       mtu: 8896
       enable_internal_traffic: false # Setting firewall below instead
       subnetworks:
@@ -236,7 +239,7 @@ deployment_groups:
   - id: a3ultra-slurm-net-1
     source: modules/network/vpc
     settings:
-      network_name: $(vars.deployment_name)-net-1
+      network_name: $(vars.base_network_name)-net-1
       mtu: 8896
       enable_internal_traffic: false # Setting firewall below instead
       subnetworks:
@@ -468,8 +471,19 @@ deployment_groups:
           SLURM_ROOT=/opt/apps/adm/slurm
           PARTITION_NAME=$(a3_ultra_partition.partitions[0].partition_name)
           mkdir -m 0755 -p "${SLURM_ROOT}/scripts"
+          # enable a GPU health check that runs at the completion of all jobs on A3U nodes
           mkdir -p "${SLURM_ROOT}/partition-${PARTITION_NAME}-epilog_slurmd.d"
           ln -s "/slurm/scripts/tools/gpu-test" "${SLURM_ROOT}/partition-${PARTITION_NAME}-epilog_slurmd.d/gpu-test.epilog_slurmd"
+          # enable the use of password-free sudo within Slurm jobs on all compute nodes
+          # feature is restricted to users with OS Admin Login IAM role
+          # https://cloud.google.com/iam/docs/understanding-roles#compute.osAdminLogin
+          mkdir -p "${SLURM_ROOT}/prolog_slurmd.d"
+          mkdir -p "${SLURM_ROOT}/epilog_slurmd.d"
+          curl -s -o "${SLURM_ROOT}/scripts/sudo-oslogin" \
+              https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/master/tools/prologs-epilogs/sudo-oslogin
+          chmod 0755 "${SLURM_ROOT}/scripts/sudo-oslogin"
+          ln -s "${SLURM_ROOT}/scripts/sudo-oslogin" "${SLURM_ROOT}/prolog_slurmd.d/sudo-oslogin.prolog_slurmd"
+          ln -s "${SLURM_ROOT}/scripts/sudo-oslogin" "${SLURM_ROOT}/epilog_slurmd.d/sudo-oslogin.epilog_slurmd"
 
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller

@@ -53,14 +53,15 @@ locals {
 data "google_compute_default_service_account" "default" {}
 
 resource "google_compute_disk" "attached_disk" {
-  project                = var.project_id
-  name                   = "${local.name}-nfs-instance-disk"
-  size                   = var.disk_size
-  type                   = var.type
-  zone                   = var.zone
-  labels                 = local.labels
-  provisioned_iops       = var.provisioned_iops
-  provisioned_throughput = var.provisioned_throughput
+  project                        = var.project_id
+  name                           = "${local.name}-nfs-instance-disk"
+  size                           = var.disk_size
+  type                           = var.type
+  zone                           = var.zone
+  labels                         = local.labels
+  provisioned_iops               = var.provisioned_iops
+  provisioned_throughput         = var.provisioned_throughput
+  create_snapshot_before_destroy = var.create_snapshot_before_destroy
 }
 
 data "google_compute_image" "compute_image" {
@@ -80,12 +81,13 @@ resource "null_resource" "image" {
 resource "google_compute_disk" "boot_disk" {
   project = var.project_id
 
-  name   = "${local.name}-boot-disk"
-  size   = var.boot_disk_size
-  type   = var.boot_disk_type
-  image  = data.google_compute_image.compute_image.self_link
-  labels = local.labels
-  zone   = var.zone
+  name                           = "${local.name}-boot-disk"
+  size                           = var.boot_disk_size
+  type                           = var.boot_disk_type
+  image                          = data.google_compute_image.compute_image.self_link
+  labels                         = local.labels
+  zone                           = var.zone
+  create_snapshot_before_destroy = var.create_boot_snapshot_before_destroy
 
   lifecycle {
     replace_triggered_by = [null_resource.image]
@@ -102,7 +104,7 @@ resource "google_compute_instance" "compute_instance" {
   machine_type = var.machine_type
 
   boot_disk {
-    auto_delete = var.auto_delete_disk
+    auto_delete = false
     source      = google_compute_disk.boot_disk.self_link
     device_name = google_compute_disk.boot_disk.name
   }

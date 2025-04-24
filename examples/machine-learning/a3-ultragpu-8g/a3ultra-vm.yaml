@@ -31,6 +31,7 @@ vars:
   filestore_ip_range: 192.168.32.0/24
   rdma_net_range: 192.168.128.0/18
   hostname_prefix: $(vars.deployment_name)-beowulf
+  base_network_name: $(vars.deployment_name)
 
 deployment_groups:
 - group: primary
@@ -39,7 +40,7 @@ deployment_groups:
   - id: a3ultra-net-0
     source: modules/network/vpc
     settings:
-      network_name: $(vars.deployment_name)-net-0
+      network_name: $(vars.base_network_name)-net-0
       mtu: 8896
       subnetworks:
       - subnet_name: $(vars.deployment_name)-sub-0
@@ -56,7 +57,7 @@ deployment_groups:
   - id: a3ultra-net-1
     source: modules/network/vpc
     settings:
-      network_name: $(vars.deployment_name)-net-1
+      network_name: $(vars.base_network_name)-net-1
       mtu: 8896
       subnetworks:
       - subnet_name: $(vars.deployment_name)-sub-1

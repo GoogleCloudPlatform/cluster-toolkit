@@ -251,12 +251,11 @@ limitations under the License.
 | <a name="module_bucket"></a> [bucket](#module\_bucket) | terraform-google-modules/cloud-storage/google | ~> 6.1 |
 | <a name="module_daos_network_storage_scripts"></a> [daos\_network\_storage\_scripts](#module\_daos\_network\_storage\_scripts) | ../../../../modules/scripts/startup-script | n/a |
 | <a name="module_gpu"></a> [gpu](#module\_gpu) | ../../../../modules/internal/gpu-definition | n/a |
+| <a name="module_login"></a> [login](#module\_login) | ../../internal/slurm-gcp/login | n/a |
 | <a name="module_nodeset_cleanup"></a> [nodeset\_cleanup](#module\_nodeset\_cleanup) | ./modules/cleanup_compute | n/a |
 | <a name="module_nodeset_cleanup_tpu"></a> [nodeset\_cleanup\_tpu](#module\_nodeset\_cleanup\_tpu) | ./modules/cleanup_tpu | n/a |
 | <a name="module_slurm_controller_template"></a> [slurm\_controller\_template](#module\_slurm\_controller\_template) | ../../internal/slurm-gcp/instance_template | n/a |
 | <a name="module_slurm_files"></a> [slurm\_files](#module\_slurm\_files) | ./modules/slurm_files | n/a |
-| <a name="module_slurm_login_instance"></a> [slurm\_login\_instance](#module\_slurm\_login\_instance) | ../../internal/slurm-gcp/instance | n/a |
-| <a name="module_slurm_login_template"></a> [slurm\_login\_template](#module\_slurm\_login\_template) | ../../internal/slurm-gcp/instance_template | n/a |
 | <a name="module_slurm_nodeset_template"></a> [slurm\_nodeset\_template](#module\_slurm\_nodeset\_template) | ../../internal/slurm-gcp/instance_template | n/a |
 | <a name="module_slurm_nodeset_tpu"></a> [slurm\_nodeset\_tpu](#module\_slurm\_nodeset\_tpu) | ../../internal/slurm-gcp/nodeset_tpu | n/a |
 
@@ -313,11 +312,12 @@ limitations under the License.
 | <a name="input_enable_confidential_vm"></a> [enable\_confidential\_vm](#input\_enable\_confidential\_vm) | Enable the Confidential VM configuration. Note: the instance image must support option. | `bool` | `false` | no |
 | <a name="input_enable_controller_public_ips"></a> [enable\_controller\_public\_ips](#input\_enable\_controller\_public\_ips) | If set to true. The controller will have a random public IP assigned to it. Ignored if access\_config is set. | `bool` | `false` | no |
 | <a name="input_enable_debug_logging"></a> [enable\_debug\_logging](#input\_enable\_debug\_logging) | Enables debug logging mode. | `bool` | `false` | no |
-| <a name="input_enable_default_mounts"></a> [enable\_default\_mounts](#input\_enable\_default\_mounts) | Enable default global network storage from the controller<br/>- /home<br/>- /apps<br/>Warning: If these are disabled, the slurm etc and munge dirs must be added<br/>manually, or some other mechanism must be used to synchronize the slurm conf<br/>files and the munge key across the cluster. | `bool` | `true` | no |
+| <a name="input_enable_default_mounts"></a> [enable\_default\_mounts](#input\_enable\_default\_mounts) | Enable default global network storage from the controller<br/>- /home<br/>- /apps | `bool` | `true` | no |
 | <a name="input_enable_devel"></a> [enable\_devel](#input\_enable\_devel) | DEPRECATED: `enable_devel` is always on. | `bool` | `null` | no |
 | <a name="input_enable_external_prolog_epilog"></a> [enable\_external\_prolog\_epilog](#input\_enable\_external\_prolog\_epilog) | Automatically enable a script that will execute prolog and epilog scripts<br/>shared by NFS from the controller to compute nodes. Find more details at:<br/>https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/tools/prologs-epilogs/README.md | `bool` | `null` | no |
 | <a name="input_enable_oslogin"></a> [enable\_oslogin](#input\_enable\_oslogin) | Enables Google Cloud os-login for user login and authentication for VMs.<br/>See https://cloud.google.com/compute/docs/oslogin | `bool` | `true` | no |
 | <a name="input_enable_shielded_vm"></a> [enable\_shielded\_vm](#input\_enable\_shielded\_vm) | Enable the Shielded VM configuration. Note: the instance image must support option. | `bool` | `false` | no |
+| <a name="input_enable_slurm_auth"></a> [enable\_slurm\_auth](#input\_enable\_slurm\_auth) | Enables slurm authentication instead of munge. | `bool` | `false` | no |
 | <a name="input_enable_slurm_gcp_plugins"></a> [enable\_slurm\_gcp\_plugins](#input\_enable\_slurm\_gcp\_plugins) | DEPRECATED: Slurm GCP plugins have been deprecated.<br/>Instead of 'max\_hops' plugin please use the 'placement\_max\_distance' nodeset property.<br/>Instead of 'enable\_vpmu' plugin please use 'advanced\_machine\_features.performance\_monitoring\_unit' nodeset property. | `any` | `null` | no |
 | <a name="input_enable_smt"></a> [enable\_smt](#input\_enable\_smt) | DEPRECATED: Use `advanced_machine_features.threads_per_core` instead. | `bool` | `null` | no |
 | <a name="input_endpoint_versions"></a> [endpoint\_versions](#input\_endpoint\_versions) | Version of the API to use (The compute service is the only API currently supported) | <pre>object({<br/>    compute = string<br/>  })</pre> | <pre>{<br/>  "compute": "beta"<br/>}</pre> | no |
@@ -365,6 +365,8 @@ limitations under the License.
 | Name | Description |
 |------|-------------|
 | <a name="output_instructions"></a> [instructions](#output\_instructions) | Post deployment instructions. |
+| <a name="output_slurm_bucket_dir"></a> [slurm\_bucket\_dir](#output\_slurm\_bucket\_dir) | Path directory within `bucket_name` for Slurm cluster file storage. |
+| <a name="output_slurm_bucket_name"></a> [slurm\_bucket\_name](#output\_slurm\_bucket\_name) | GCS Bucket name of Slurm cluster file storage. |
 | <a name="output_slurm_bucket_path"></a> [slurm\_bucket\_path](#output\_slurm\_bucket\_path) | Bucket path used by cluster. |
 | <a name="output_slurm_cluster_name"></a> [slurm\_cluster\_name](#output\_slurm\_cluster\_name) | Slurm cluster name. |
 | <a name="output_slurm_controller_instance"></a> [slurm\_controller\_instance](#output\_slurm\_controller\_instance) | Compute instance of controller node |

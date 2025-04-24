@@ -122,25 +122,33 @@ def failed_motd():
     util.run(f"wall -n '{wall_msg}'", timeout=30)
 
 
+def _startup_script_timeout(lkp: util.Lookup) -> int:
+    if lkp.is_controller:
+        return lkp.cfg.get("controller_startup_scripts_timeout", 300)
+    elif lkp.instance_role == "compute":
+        return lkp.cfg.get("compute_startup_scripts_timeout", 300)
+    elif lkp.is_login_node:
+        return lkp.cfg.login_groups[util.instance_login_group()].get("startup_scripts_timeout", 300)
+    return 300
+
+
 def run_custom_scripts():
     """run custom scripts based on instance_role"""
     custom_dir = dirs.custom_scripts
     if lookup().is_controller:
         # controller has all scripts, but only runs controller.d
         custom_dirs = [custom_dir / "controller.d"]
-        timeout = lookup().cfg.get("controller_startup_scripts_timeout", 300)
     elif lookup().instance_role == "compute":
         # compute setup with nodeset.d
         custom_dirs = [custom_dir / "nodeset.d"]
-        timeout = lookup().cfg.get("compute_startup_scripts_timeout", 300)
     elif lookup().is_login_node:
         # login setup with only login.d
         custom_dirs = [custom_dir / "login.d"]
-        timeout = lookup().cfg.get("login_startup_scripts_timeout", 300)
     else:
         # Unknown role: run nothing
         custom_dirs = []
-        timeout = 300
+
+    timeout = _startup_script_timeout(lookup())
 
     custom_scripts = [
         p
@@ -195,22 +203,6 @@ def mount_save_state_disk():
 
     util.chown_slurm(mount_point)
 
-def mount_munge_key_disk():
-    state_disk_dir = "/var/spool/slurm/munge"
-    mount_point = dirs.munge
-
-    os.makedirs(state_disk_dir, exist_ok=True)
-
-    util.run(f"mount --bind {state_disk_dir} {mount_point}")
-
-    fstab_entry = f"{state_disk_dir} {mount_point}"
-    with open("/etc/fstab", "r") as f:
-        fstab = f.readlines()
-    if fstab_entry not in fstab:
-        with open("/etc/fstab", "a") as f:
-            f.write(f"{fstab_entry} none bind 0 0\n")
-
-    util.run(f"systemctl daemon-reload")
 
 def setup_jwt_key():
     jwt_key = Path(slurmdirs.state / "jwt_hs256.key")
@@ -223,17 +215,52 @@ def setup_jwt_key():
     util.chown_slurm(jwt_key, mode=0o400)
 
 
-def setup_munge_key():
-    munge_key = Path(dirs.munge / "munge.key")
+def _generate_key(p: Path) -> None:
+    run(f"dd if=/dev/random of={p} bs=1024 count=1")
 
-    if munge_key.exists():
-        log.info("Munge key already exists. Skipping key generation.")
+
+def setup_key(lkp: util.Lookup) -> None:
+    file_name = "munge.key"
+    dir = dirs.munge
+
+    if lkp.cfg.enable_slurm_auth:
+      file_name = "slurm.key"
+      dir = slurmdirs.etc
+
+    dst = Path(dir / file_name)
+
+    if lkp.cfg.controller_state_disk.device_name:
+        # Copy key from persistent state disk
+        persist = slurmdirs.state / file_name
+        if not persist.exists():
+            _generate_key(persist)
+
+        shutil.copyfile(persist, dst)
+        if lkp.cfg.enable_slurm_auth:
+            util.chown_slurm(dst, mode=0o400)
+            util.chown_slurm(persist, mode=0o400)
+        else:
+            shutil.chown(dst, user="munge", group="munge")
+            os.chmod(dst, stat.S_IRUSR)
     else:
-        run(f"dd if=/dev/random of={munge_key} bs=1024 count=1")
+        if dst.exists():
+            log.info("key already exists. Skipping key generation.")
+        else:
+            _generate_key(dst)
+            if lkp.cfg.enable_slurm_auth:
+              util.chown_slurm(dst, mode=0o400)
+            else:
+              shutil.chown(dst, user="munge", group="munge")
+              os.chmod(dst, stat.S_IRUSR)
 
-    shutil.chown(munge_key, user="munge", group="munge")
-    os.chmod(munge_key, stat.S_IRUSR)
-    run("systemctl restart munge", timeout=30)
+    if lkp.cfg.enable_slurm_auth:
+        # Put key into shared volume for distribution
+        distributed = util.slurmdirs.key_distribution / file_name
+        shutil.copyfile(dst, distributed)
+        util.chown_slurm(distributed, mode=0o400)
+        # Munge is distributed from /etc/munge.
+    else:
+        run("systemctl restart munge", timeout=30)
 
 
 def setup_nss_slurm():
@@ -362,16 +389,17 @@ def configure_dirs():
 def setup_controller():
     """Run controller setup"""
     log.info("Setting up controller")
+    lkp = util.lookup()
     util.chown_slurm(dirs.scripts / "config.yaml", mode=0o600)
     install_custom_scripts()
-    conf.gen_controller_configs(lookup())
-    
-    if lookup().cfg.controller_state_disk.device_name != None:
+    conf.gen_controller_configs(lkp)
+
+    if lkp.cfg.controller_state_disk.device_name != None:
         mount_save_state_disk()
-        mount_munge_key_disk()
-    
+
     setup_jwt_key()
-    setup_munge_key()
+    setup_key(lkp)
+
     setup_sudoers()
     setup_network_storage()
 
@@ -409,7 +437,8 @@ def setup_controller():
     run("systemctl enable --now slurmcmd.timer", timeout=30)
 
     log.info("Check status of cluster services")
-    run("systemctl status munge", timeout=30)
+    if not lkp.cfg.enable_slurm_auth:
+      run("systemctl status munge", timeout=30)
     run("systemctl status slurmdbd", timeout=30)
     run("systemctl status slurmctld", timeout=30)
     run("systemctl status slurmrestd", timeout=30)
@@ -429,11 +458,13 @@ def setup_controller():
 def setup_login():
     """run login node setup"""
     log.info("Setting up login")
-    slurmctld_host = f"{lookup().control_host}"
-    if lookup().control_addr:
-        slurmctld_host = f"{lookup().control_host}({lookup().control_addr})"
+
+    lkp = lookup()
+    slurmctld_host = f"{lkp.control_host}"
+    if lkp.control_addr:
+        slurmctld_host = f"{lkp.control_host}({lkp.control_addr})"
     sackd_options = [
-        f'--conf-server="{slurmctld_host}:{lookup().control_host_port}"',
+        f'--conf-server="{slurmctld_host}:{lkp.control_host_port}"',
     ]
     sysconf = f"""SACKD_OPTIONS='{" ".join(sackd_options)}'"""
     update_system_config("sackd", sysconf)
@@ -441,7 +472,8 @@ def setup_login():
 
     setup_network_storage()
     setup_sudoers()
-    run("systemctl restart munge")
+    if not lkp.cfg.enable_slurm_auth:
+      run("systemctl restart munge", timeout=30)
     run("systemctl enable sackd", timeout=30)
     run("systemctl restart sackd", timeout=30)
     run("systemctl enable --now slurmcmd.timer", timeout=30)
@@ -449,7 +481,8 @@ def setup_login():
     run_custom_scripts()
 
     log.info("Check status of cluster services")
-    run("systemctl status munge", timeout=30)
+    if not lkp.cfg.enable_slurm_auth:
+      run("systemctl status munge", timeout=30)
     run("systemctl status sackd", timeout=30)
 
     log.info("Done setting up login")
@@ -458,12 +491,14 @@ def setup_login():
 def setup_compute():
     """run compute node setup"""
     log.info("Setting up compute")
+
+    lkp = lookup()
     util.chown_slurm(dirs.scripts / "config.yaml", mode=0o600)
-    slurmctld_host = f"{lookup().control_host}"
-    if lookup().control_addr:
-        slurmctld_host = f"{lookup().control_host}({lookup().control_addr})"
+    slurmctld_host = f"{lkp.control_host}"
+    if lkp.control_addr:
+        slurmctld_host = f"{lkp.control_host}({lkp.control_addr})"
     slurmd_options = [
-        f'--conf-server="{slurmctld_host}:{lookup().control_host_port}"',
+        f'--conf-server="{slurmctld_host}:{lkp.control_host_port}"',
     ]
 
     try:
@@ -490,13 +525,15 @@ def setup_compute():
     run_custom_scripts()
 
     setup_sudoers()
-    run("systemctl restart munge", timeout=30)
+    if not lkp.cfg.enable_slurm_auth:
+      run("systemctl restart munge", timeout=30)
     run("systemctl enable slurmd", timeout=30)
     run("systemctl restart slurmd", timeout=30)
     run("systemctl enable --now slurmcmd.timer", timeout=30)
 
     log.info("Check status of cluster services")
-    run("systemctl status munge", timeout=30)
+    if not lkp.cfg.enable_slurm_auth:
+      run("systemctl status munge", timeout=30)
     run("systemctl status slurmd", timeout=30)
 
     log.info("Done setting up compute")
@@ -506,7 +543,7 @@ def setup_cloud_ops() -> None:
     cloudOpsStatus = run(
         "systemctl is-active --quiet google-cloud-ops-agent.service", check=False
     ).returncode
-    
+
     if cloudOpsStatus != 0:
         return
 

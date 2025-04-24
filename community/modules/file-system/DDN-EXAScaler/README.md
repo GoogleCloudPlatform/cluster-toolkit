@@ -1,7 +1,7 @@
 ## Description
 
-This module creates a DDN EXAScaler Cloud Lustre file system using
-[exascaler-cloud-terraform](https://github.com/DDNStorage/exascaler-cloud-terraform/tree/master/gcp).
+This module creates a DDN EXAScaler Cloud Lustre file system using code based on DDN's
+[exascaler-cloud-terraform](https://github.com/DDNStorage/exascaler-cloud-terraform/tree/scripts/2.2.2/gcp) (`scripts/2.2.2` is last release with GCP-specific module).
 
 More information about the architecture can be found at
 [Overview of Lustre and EXAScaler Cloud][architecture].

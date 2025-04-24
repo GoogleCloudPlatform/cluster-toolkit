@@ -21,7 +21,7 @@ tags:
 
 timeout: 14400s  # 4hr
 steps:
-- id: ml-a3-highgpu-slurm-image
+- id: ml-a3-megagpu-slurm-image
   name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
   entrypoint: /bin/bash
   env:

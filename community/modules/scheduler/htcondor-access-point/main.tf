@@ -234,6 +234,7 @@ resource "google_compute_disk" "spool" {
 resource "google_compute_address" "ap" {
   project      = var.project_id
   name         = local.name_prefix
+  region       = var.region
   subnetwork   = var.subnetwork_self_link
   address_type = "INTERNAL"
   purpose      = "GCE_ENDPOINT"

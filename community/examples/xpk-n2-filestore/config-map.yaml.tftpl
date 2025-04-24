@@ -1,0 +1,14 @@
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: ${deployment_name}-resources-configmap
+data:
+  ${machine_type}-${vms_per_slice}: "${vms_per_slice}"
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: ${deployment_name}-metadata-configmap
+data:
+  capacity_type: ON_DEMAND
+  xpk_version: ${xpk_version}

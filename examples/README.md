@@ -1,7 +1,12 @@
 # Example Blueprints
 
-This directory contains a set of example blueprint files that can be fed into
-gHPC to create a deployment.
+## AI Hypercomputer
+
+Additional blueprints optimized for AI workloads on modern GPUs is available at [Google Cloud AI Hypercomputer][aihc]. Documentation is available for [GKE][aihc-gke] and for [Slurm][aihc-slurm].
+
+[aihc]: https://cloud.google.com/ai-hypercomputer/docs
+[aihc-gke]: https://cloud.google.com/ai-hypercomputer/docs/create/gke-ai-hypercompute
+[aihc-slurm]: https://cloud.google.com/ai-hypercomputer/docs/create/create-slurm-cluster
 
 <!-- TOC generated with some manual tweaking of the following command output:
 md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
@@ -54,6 +59,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [tutorial-fluent.yaml](#tutorial-fluentyaml--) ![community-badge] ![experimental-badge]
   * [omnia-cluster.yaml](#omnia-clusteryaml---) ![community-badge] ![experimental-badge] ![deprecated-badge]
   * [gke-tpu-v4](#gke-tpu-v4--) ![community-badge] ![experimental-badge]
+  * [xpk-n2-filestore](#xpk-n2-filestore--) ![community-badge] ![experimental-badge]
 * [Blueprint Schema](#blueprint-schema)
 * [Writing an HPC Blueprint](#writing-an-hpc-blueprint)
   * [Blueprint Boilerplate](#blueprint-boilerplate)
@@ -1308,6 +1314,52 @@ deployment_groups:
 This example shows how TPU v4 cluster can be created and be used to run a job that requires TPU capacity on GKE. Additional information on TPU blueprint and associated changes are in this [README](/community/examples/gke-tpu-v4/README.md).
 
 [gke-tpu-v4]: ../community/examples/gke-tpu-v4
+
+### [xpk-n2-filestore] ![community-badge] ![experimental-badge]
+
+This example shows how to set up an [XPK](https://github.com/AI-Hypercomputer/xpk)-compatible GKE cluster - giving researchers a Slurm-like CLI experience but with lightweight Kueue and Kjob resources on the cluster side. The blueprint creates a low-cost, CPU-based XPK cluster, using a single n2-standard-32-2 slice.
+
+Client-side installation of the XPK CLI is also required (see the [prerequisites](https://github.com/AI-Hypercomputer/xpk?tab=readme-ov-file#prerequisites) and [installation](https://github.com/AI-Hypercomputer/xpk?tab=readme-ov-file#installation) in the XPK repository). Set `gcloud config set compute/zone <zone>` and `gcloud config set project <project-id>` to avoid their repeated inclusion in XPK commands.
+
+Attach the Filestore instance for use in workloads and jobs with the `xpk storage` command:
+
+```bash
+python3 xpk.py storage attach xpk-01-homefs \
+  --cluster=xpk-01 \
+  --type=gcpfilestore \
+  --auto-mount=true \
+  --mount-point=/home \
+  --mount-options="" \
+  --readonly=false \
+  --size=1024 \
+  --vol=nfsshare
+```
+
+After blueprint provisioning, XPK CLI installation, and storage setup, users can run interactive shells, workloads, and jobs:
+
+```bash
+# Start an interactive shell (somewhat analogous to a Slurm login node)
+python3 xpk.py shell --cluster xpk-01
+```
+
+```bash
+# Submit a workload (Kueue-based)
+python3 xpk.py workload create \
+  --cluster xpk-01 \
+  --num-slices=1 \
+  --device-type=n2-standard-32-2 \
+  --workload xpk-test-workload \
+  --command="ls /home"
+```
+
+```bash
+# Run and manage jobs (kjob-focused)
+python3 xpk.py run --cluster xpk-01 your-script.sh
+python3 xpk.py batch --cluster xpk-01 your-script.sh
+python3 xpk.py info --cluster xpk-01
+```
+
+[xpk-n2-filestore]: ../community/examples/xpk-n2-filestore/xpk-n2-filestore.yaml
 
 ## Blueprint Schema
 
