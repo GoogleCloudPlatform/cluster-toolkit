@@ -368,6 +368,23 @@ resource "google_container_node_pool" "node_pool" {
   }
 }
 
+### TODO: remove this after Terraform support for GKE flex-start is added. ###
+###       Instead use node_config above to enable it                       ###
+locals {
+  max_run_duration = var.max_run_duration != null ? var.max_run_duration : 3600
+}
+resource "null_resource" "enable_flex_start" {
+  count = var.enable_flex_start == true ? max(var.num_node_pools, var.num_slices) : 0
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      gcloud container node-pools update ${google_container_node_pool.node_pool[count.index].name} --cluster=${local.cluster_name} --location=${local.cluster_location} --project=${var.project_id} --max-run-duration=${local.max_run_duration}s
+      gcloud container node-pools update ${google_container_node_pool.node_pool[count.index].name} --cluster=${local.cluster_name} --location=${local.cluster_location} --project=${var.project_id} --flex-start
+    EOT
+  }
+  depends_on = [google_container_node_pool.node_pool] # wait until nodepool creation completed
+}
+
 locals {
   supported_machine_types_for_install_dependencies = ["a3-highgpu-8g", "a3-megagpu-8g"]
 }
