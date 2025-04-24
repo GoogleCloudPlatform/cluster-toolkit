@@ -395,7 +395,7 @@ variable "controller_state_disk" {
   description = <<EOD
   A disk that will be attached to the controller instance template to save state of slurm. The disk is created and used by default.
   To disable this feature, set this variable to null.
-  
+
   NOTE: This will not save the contents at /opt/apps and /home. To preserve those, they must be saved externally.
   EOD
   type = object({
@@ -443,6 +443,15 @@ EOD
   default     = false
 }
 
+variable "enable_slurm_auth" {
+  description = <<EOD
+Enables slurm authentication instead of munge.
+
+EOD
+  type        = bool
+  default     = false
+}
+
 variable "cloud_parameters" {
   description = "cloud.conf options. Defaults inherited from [Slurm GCP repo](https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/terraform/slurm_cluster/modules/slurm_files/README_TF.md#input_cloud_parameters)"
   type = object({
@@ -466,9 +475,6 @@ variable "enable_default_mounts" {
     Enable default global network storage from the controller
     - /home
     - /apps
-    Warning: If these are disabled, the slurm etc and munge dirs must be added
-    manually, or some other mechanism must be used to synchronize the slurm conf
-    files and the munge key across the cluster.
     EOD
   type        = bool
   default     = true
