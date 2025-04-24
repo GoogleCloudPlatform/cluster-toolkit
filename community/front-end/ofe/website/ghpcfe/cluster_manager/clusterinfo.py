@@ -697,7 +697,7 @@ class ClusterInfo:
 
                 # Filters for Login Nodes
                 login_filters = {
-                    "module": 'module.slurm_controller.module.slurm_login_instance["slurm-login"]',
+                    "module": 'module.slurm_controller.module.login["slurm-login"].module.instance',
                     "type": "google_compute_instance_from_template",
                     "name": "slurm_instance",
                 }
