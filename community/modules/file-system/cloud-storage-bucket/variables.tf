@@ -178,9 +178,9 @@ variable "soft_delete_retention_duration" {
 }
 
 variable "enable_versioning" {
-  description = "Enables versioning for the bucket."
+  description = "If true, enables versioning for the bucket."
   type        = bool
-  default     = null
+  default     = false
 }
 
 variable "lifecycle_rules" {

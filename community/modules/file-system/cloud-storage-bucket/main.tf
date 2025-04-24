@@ -71,7 +71,7 @@ resource "google_storage_bucket" "bucket" {
   }
 
   dynamic "versioning" {
-    for_each = var.enable_versioning == null ? [] : [1]
+    for_each = var.enable_versioning ? [1] : []
     content {
       enabled = var.enable_versioning
     }
