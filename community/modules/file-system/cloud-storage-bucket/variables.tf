@@ -250,5 +250,5 @@ variable "enable_object_retention" {
   https://cloud.google.com/storage/docs/object-lock
   EOT
   type        = bool
-  default     = null
+  default     = false
 }
