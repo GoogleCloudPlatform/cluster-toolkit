@@ -89,6 +89,12 @@ variable "enable_hierarchical_namespace" {
   default     = false
 }
 
+variable "uniform_bucket_level_access" {
+  description = "Allow uniform control access to the bucket."
+  type        = bool
+  default     = true
+}
+
 variable "storage_class" {
   description = "The storage class of the GCS bucket."
   type        = string
@@ -102,7 +108,7 @@ variable "storage_class" {
       "COLDLINE",
       "ARCHIVE"
     ], var.storage_class)
-    error_message = "Allowed values for GCS storage_class are 'STANDARD', 'MULTI_REGIONAL', 'REGIONAL', 'NEARLINE', 'COLDLINE', 'ARCHIVE'.\nhttps://cloud.google.com/storage/docs/storage-classes."
+    error_message = "Allowed values for GCS storage_class are 'STANDARD', 'MULTI_REGIONAL', 'REGIONAL', 'NEARLINE', 'COLDLINE', 'ARCHIVE'.\nhttps://cloud.google.com/storage/docs/storage-classes"
   }
 }
 
@@ -133,10 +139,25 @@ variable "autoclass" {
   }
 }
 
-variable "uniform_bucket_level_access" {
-  description = "If true, allow uniform control access to the bucket."
-  type        = bool
-  default     = false
+variable "public_access_prevention" {
+  description = <<-EOT
+  Bucket public access can be controlled by setting a value of either `inherited` or `enforced`. 
+  When set to `enforced`, public access to the bucket is blocked.
+  If set to `inherited`, the bucket's public access prevention depends on whether it is subject to the organization policy constraint for public access prevention.
+
+  See Cloud documentation for more details:
+
+  https://cloud.google.com/storage/docs/public-access-prevention
+  EOT
+  type        = string
+  default     = null
+  validation {
+    condition = var.public_access_prevention == null ? true : contains([
+      "inherited",
+      "enforced"
+    ], var.public_access_prevention)
+    error_message = "Allowed values for public_access_prevention are 'inherited', 'enforced'.\n"
+  }
 }
 
 variable "soft_delete_retention_duration" {
@@ -157,9 +178,9 @@ variable "soft_delete_retention_duration" {
 }
 
 variable "enable_versioning" {
-  description = "If true, enables versioning for the bucket."
+  description = "Enables versioning for the bucket."
   type        = bool
-  default     = false
+  default     = null
 }
 
 variable "lifecycle_rules" {
@@ -229,5 +250,5 @@ variable "enable_object_retention" {
   https://cloud.google.com/storage/docs/object-lock
   EOT
   type        = bool
-  default     = false
+  default     = null
 }

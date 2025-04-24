@@ -42,6 +42,7 @@ resource "google_storage_bucket" "bucket" {
   storage_class               = var.storage_class
   labels                      = local.labels
   force_destroy               = var.force_destroy
+  public_access_prevention    = var.public_access_prevention
   enable_object_retention     = var.enable_object_retention
   hierarchical_namespace {
     enabled = var.enable_hierarchical_namespace
@@ -70,7 +71,7 @@ resource "google_storage_bucket" "bucket" {
   }
 
   dynamic "versioning" {
-    for_each = var.enable_versioning ? [1] : []
+    for_each = var.enable_versioning == null ? [] : [1]
     content {
       enabled = var.enable_versioning
     }
