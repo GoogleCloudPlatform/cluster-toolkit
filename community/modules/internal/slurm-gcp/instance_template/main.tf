@@ -156,4 +156,8 @@ module "instance_template" {
   )
   disk_resource_manager_tags = var.disk_resource_manager_tags
   additional_disks           = local.additional_disks
+
+  max_run_duration     = var.max_run_duration
+  provisioning_model   = var.provisioning_model
+  reservation_affinity = var.reservation_affinity
 }

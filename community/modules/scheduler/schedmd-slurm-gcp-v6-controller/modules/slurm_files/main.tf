@@ -40,8 +40,6 @@ resource "random_uuid" "cluster_id" {
 ##################
 
 locals {
-  tp = "${local.bucket_dir}/" # prefix to trim from the bucket path to get a "file name"
-
   config = {
     enable_bigquery_load  = var.enable_bigquery_load
     cloudsql_secret       = var.cloudsql_secret
@@ -56,13 +54,12 @@ locals {
     # storage
     disable_default_mounts = var.disable_default_mounts
     network_storage        = var.network_storage
-    login_network_storage  = var.enable_hybrid ? null : var.login_network_storage
 
     # timeouts
     controller_startup_scripts_timeout = var.controller_startup_scripts_timeout
     compute_startup_scripts_timeout    = var.compute_startup_scripts_timeout
-    login_startup_scripts_timeout      = var.login_startup_scripts_timeout
-    munge_mount                        = local.munge_mount
+
+    munge_mount = local.munge_mount
 
     # slurm conf
     prolog_scripts   = [for k, v in google_storage_bucket_object.prolog_scripts : k]
@@ -89,26 +86,6 @@ locals {
 
     # Providers
     endpoint_versions = var.endpoint_versions
-
-    # Extra-files MD5 hashes
-    # Makes config file creation depend on the files
-    # Allows for informed updates & checks on slurmsync side
-    slurm_gcp_scripts_md5 = google_storage_bucket_object.devel.md5hash,
-    controller_startup_scripts_md5 = {
-      for o in values(google_storage_bucket_object.controller_startup_scripts) : trimprefix(o.name, local.tp) => o.md5hash
-    }
-    nodeset_startup_scripts_md5 = {
-      for o in values(google_storage_bucket_object.nodeset_startup_scripts) : trimprefix(o.name, local.tp) => o.md5hash
-    }
-    login_startup_scripts_md5 = {
-      for o in values(google_storage_bucket_object.login_startup_scripts) : trimprefix(o.name, local.tp) => o.md5hash
-    }
-    prolog_scripts_md5 = {
-      for o in values(google_storage_bucket_object.prolog_scripts) : trimprefix(o.name, local.tp) => o.md5hash
-    }
-    epilog_scripts_md5 = {
-      for o in values(google_storage_bucket_object.epilog_scripts) : trimprefix(o.name, local.tp) => o.md5hash
-    }
   }
 
   x_nodeset         = toset(var.nodeset[*].nodeset_name)
@@ -141,14 +118,16 @@ resource "google_storage_bucket_object" "config" {
   bucket  = data.google_storage_bucket.this.name
   name    = "${local.bucket_dir}/config.yaml"
   content = yamlencode(local.config)
-}
 
-resource "google_storage_bucket_object" "parition_config" {
-  for_each = { for p in var.partitions : p.partition_name => p }
-
-  bucket  = data.google_storage_bucket.this.name
-  name    = "${local.bucket_dir}/partition_configs/${each.key}.yaml"
-  content = yamlencode(each.value)
+  # Take dependency on all other "config artifacts" so creation of `config.yaml`
+  # can be used as a signal for setup.py that "everything is ready".
+  # Some of following files, particularly mount scripts for new NFSes, can take a while to be created.
+  depends_on = [
+    google_storage_bucket_object.controller_startup_scripts,
+    google_storage_bucket_object.nodeset_startup_scripts,
+    google_storage_bucket_object.prolog_scripts,
+    google_storage_bucket_object.epilog_scripts
+  ]
 }
 
 resource "google_storage_bucket_object" "nodeset_config" {
@@ -230,20 +209,6 @@ resource "google_storage_bucket_object" "nodeset_startup_scripts" {
       : {
         content = s.content,
       name = format("slurm-nodeset-%s-script-%s", nodeset, replace(basename(s.filename), "/[^a-zA-Z0-9-_]/", "_")) }
-  ]]) : x.name => x.content }
-
-  bucket  = var.bucket_name
-  name    = format("%s/%s", local.bucket_dir, each.key)
-  content = each.value
-}
-
-resource "google_storage_bucket_object" "login_startup_scripts" {
-  for_each = { for x in flatten([
-    for group, scripts in var.login_startup_scripts
-    : [for s in scripts
-      : {
-        content = s.content,
-      name = format("slurm-login-%s-script-%s", group, replace(basename(s.filename), "/[^a-zA-Z0-9-_]/", "_")) }
   ]]) : x.name => x.content }
 
   bucket  = var.bucket_name

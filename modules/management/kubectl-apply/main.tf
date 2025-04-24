@@ -24,12 +24,12 @@ locals {
     for index, manifest in var.apply_manifests : index => manifest
   })
 
-  install_kueue               = try(var.kueue.install, false)
-  install_jobset              = try(var.jobset.install, false)
-  install_gpu_operator        = try(var.gpu_operator.install, false)
-  gpu_operator_install_source = "${path.module}/manifests/gpu-operator.yaml"
-  kueue_install_source        = format("${path.module}/manifests/kueue-%s.yaml", try(var.kueue.version, ""))
-  jobset_install_source       = format("${path.module}/manifests/jobset-%s.yaml", try(var.jobset.version, ""))
+  install_kueue             = try(var.kueue.install, false)
+  install_jobset            = try(var.jobset.install, false)
+  install_gpu_operator      = try(var.gpu_operator.install, false)
+  install_nvidia_dra_driver = try(var.nvidia_dra_driver.install, false)
+  kueue_install_source      = format("${path.module}/manifests/kueue-%s.yaml", try(var.kueue.version, ""))
+  jobset_install_source     = format("${path.module}/manifests/jobset-%s.yaml", try(var.jobset.version, ""))
 }
 
 data "google_container_cluster" "gke_cluster" {
@@ -78,17 +78,6 @@ module "install_jobset" {
   }
 }
 
-module "install_gpu_operator" {
-  source            = "./kubectl"
-  source_path       = local.install_gpu_operator ? local.gpu_operator_install_source : null
-  server_side_apply = true
-
-  providers = {
-    kubectl = kubectl
-    http    = http.h
-  }
-}
-
 module "configure_kueue" {
   source        = "./kubectl"
   source_path   = local.install_kueue ? try(var.kueue.config_path, "") : null
@@ -103,16 +92,102 @@ module "configure_kueue" {
     http    = http.h
   }
 }
-module "configure_gpu_operator" {
-  source      = "./kubectl"
-  source_path = local.install_gpu_operator ? try(var.gpu_operator.config_path, "") : null
-  depends_on  = [module.install_gpu_operator]
 
-  server_side_apply = true
-  wait_for_rollout  = true
+module "install_nvidia_dra_driver" {
+  count      = local.install_nvidia_dra_driver ? 1 : 0
+  depends_on = [module.kubectl_apply_manifests, var.gke_cluster_exists]
+  source     = "./helm_install"
 
-  providers = {
-    kubectl = kubectl
-    http    = http.h
-  }
+  release_name     = "nvidia-dra-driver-gpu"              # The release name
+  chart_repository = "https://helm.ngc.nvidia.com/nvidia" # The Helm repository URL for nvidia charts
+  chart_name       = "nvidia-dra-driver-gpu"              # The chart name
+  chart_version    = var.nvidia_dra_driver.version        # The chart version
+  namespace        = "nvidia-dra-driver-gpu"              # The target namespace
+  create_namespace = true                                 # Equivalent to --create-namespace
+
+  # Use the 'values' argument to pass the YAML content
+  # This corresponds to the -f <(cat <<EOF ... EOF) part
+  values_yaml = [<<EOF
+      nvidiaDriverRoot: /home/kubernetes/bin/nvidia
+      nvidiaCtkPath: /home/kubernetes/bin/nvidia/toolkit/nvidia-ctk
+      resources:
+        gpus:
+          enabled: false
+
+      controller:
+        affinity:
+          nodeAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+              nodeSelectorTerms:
+              - matchExpressions:
+                - key: "nvidia.com/gpu"
+                  operator: "DoesNotExist"
+
+      kubeletPlugin:
+        affinity:
+          nodeAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+              nodeSelectorTerms:
+                - matchExpressions:
+                    - key: feature.node.kubernetes.io/pci-10de.present
+                      operator: In
+                      values:
+                        - "true"
+                - matchExpressions:
+                    - key: feature.node.kubernetes.io/cpu-model.vendor_id
+                      operator: In
+                      values:
+                        - "ARM"
+                - matchExpressions:
+                    - key: "nvidia.com/gpu.present"
+                      operator: In
+                      values:
+                        - "true"
+        tolerations:
+          - key: nvidia.com/gpu
+            operator: Equal
+            value: present
+            effect: NoSchedule
+      EOF
+  ]
+
+  atomic          = true
+  cleanup_on_fail = true
+}
+
+module "install_gpu_operator" {
+  count            = local.install_gpu_operator ? 1 : 0
+  source           = "./helm_install"
+  chart_repository = "https://helm.ngc.nvidia.com/nvidia"
+  depends_on       = [module.kubectl_apply_manifests, var.gke_cluster_exists]
+
+  namespace        = "gpu-operator"
+  create_namespace = true
+
+  release_name  = "gpu-operator"
+  chart_name    = "gpu-operator"
+  chart_version = var.gpu_operator.version
+  wait          = true
+
+  set_values = [
+    {
+      name  = "hostPaths.driverInstallDir",
+      value = "/home/kubernetes/bin/nvidia"
+    },
+    {
+      name  = "toolkit.installDir"
+      value = "/home/kubernetes/bin/nvidia"
+    },
+    {
+      name  = "cdi.enabled"
+      value = true
+    },
+    {
+      name  = "cdi.default"
+      value = true
+    },
+    {
+      name  = "driver.enabled"
+      value = false
+  }]
 }

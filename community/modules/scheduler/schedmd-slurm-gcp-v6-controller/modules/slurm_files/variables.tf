@@ -108,18 +108,6 @@ variable "cloudsql_secret" {
   default     = null
 }
 
-variable "login_startup_scripts_timeout" {
-  description = <<EOD
-The timeout (seconds) applied to each script in login_startup_scripts. If
-any script exceeds this timeout, then the instance setup process is considered
-failed and handled accordingly.
-
-NOTE: When set to 0, the timeout is considered infinite and thus disabled.
-EOD
-  type        = number
-  default     = 300
-}
-
 variable "controller_startup_scripts" {
   description = "List of scripts to be ran on controller VM startup."
   type = list(object({
@@ -139,15 +127,6 @@ NOTE: When set to 0, the timeout is considered infinite and thus disabled.
 EOD
   type        = number
   default     = 300
-}
-
-variable "login_startup_scripts" {
-  description = "List of scripts to be ran on login VM startup in the specific group."
-  type = map(list(object({
-    filename = string
-    content  = string
-  })))
-  default = {}
 }
 
 variable "nodeset_startup_scripts" {
@@ -283,25 +262,6 @@ EOD
   default = []
 }
 
-variable "login_network_storage" {
-  description = <<EOD
-Storage to mounted on login and controller instances
-- server_ip     : Address of the storage server.
-- remote_mount  : The location in the remote instance filesystem to mount from.
-- local_mount   : The location on the instance filesystem to mount to.
-- fs_type       : Filesystem type (e.g. "nfs").
-- mount_options : Options to mount with.
-EOD
-  type = list(object({
-    server_ip     = string
-    remote_mount  = string
-    local_mount   = string
-    fs_type       = string
-    mount_options = string
-  }))
-  default = []
-}
-
 variable "nodeset" {
   description = "Cluster nodenets, as a list."
   type        = list(any)
@@ -318,19 +278,6 @@ variable "nodeset_tpu" {
   description = "Cluster nodenets (TPU), as a list."
   type        = list(any)
   default     = []
-}
-
-variable "partitions" {
-  description = "Cluster partitions as a list."
-  type        = list(any)
-  default     = []
-
-  validation {
-    condition = alltrue([
-      for n in var.partitions[*].partition_name : can(regex("^[a-z](?:[a-z0-9]*)$", n))
-    ])
-    error_message = "Items 'partition_name' must be a match of regex '^[a-z](?:[a-z0-9]*)$'."
-  }
 }
 
 variable "cloud_parameters" {

@@ -18,7 +18,7 @@ metadata:
   generateName: ag-2-
   namespace: default
   labels:
-    kueue.x-k8s.io/queue-name: a4-high
+    kueue.x-k8s.io/queue-name: a4
 spec:
   ttlSecondsAfterFinished: 1200
   suspend: False
@@ -54,7 +54,7 @@ spec:
             activeDeadlineSeconds: 3600
             restartPolicy: Never
             nodeSelector:
-              cloud.google.com/gke-nodepool: a4-highgpu-8g-a4-highgpu-pool
+              cloud.google.com/gke-nodepool: a4-highgpu-8g-a4-pool
             tolerations:
             - key: cloud.google.com/gke-queued
               effect: NoSchedule

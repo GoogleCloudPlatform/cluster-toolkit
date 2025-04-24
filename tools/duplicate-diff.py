@@ -19,6 +19,7 @@ duplicates = [
     [
         "modules/file-system/pre-existing-network-storage/scripts/mount.sh",
         "modules/file-system/filestore/scripts/mount.sh",
+        "modules/file-system/managed-lustre/scripts/mount.sh",
         "community/modules/file-system/cloud-storage-bucket/scripts/mount.sh",
         "community/modules/file-system/nfs-server/scripts/mount.sh",
     ],
@@ -58,9 +59,6 @@ duplicates = [
         "community/modules/scripts/ramble-setup/scripts/install_ramble_deps.yml",
     ],
     [
-        "community/modules/scheduler/schedmd-slurm-gcp-v6-controller/etc/long-prolog-slurm.conf.tpl",
-    ],
-    [
         "modules/file-system/parallelstore/scripts/install-daos-client.sh",
         "modules/file-system/pre-existing-network-storage/scripts/install-daos-client.sh",
     ],
@@ -81,6 +79,10 @@ duplicates = [
         "modules/scheduler/gke-cluster/templates/network-object.yaml.tftpl",
         "modules/scheduler/pre-existing-gke-cluster/templates/network-object.yaml.tftpl",
     ],
+    [
+        "modules/file-system/pre-existing-network-storage/scripts/install-managed-lustre-client.sh",
+        "modules/file-system/managed-lustre/scripts/install-managed-lustre-client.sh"
+    ]
 ]
 
 for group in duplicates:

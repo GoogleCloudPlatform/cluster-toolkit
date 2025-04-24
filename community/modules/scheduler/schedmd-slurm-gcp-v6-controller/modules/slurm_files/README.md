@@ -44,12 +44,10 @@ No modules.
 | [google_storage_bucket_object.controller_startup_scripts](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_object) | resource |
 | [google_storage_bucket_object.devel](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_object) | resource |
 | [google_storage_bucket_object.epilog_scripts](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_object) | resource |
-| [google_storage_bucket_object.login_startup_scripts](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_object) | resource |
 | [google_storage_bucket_object.nodeset_config](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_object) | resource |
 | [google_storage_bucket_object.nodeset_dyn_config](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_object) | resource |
 | [google_storage_bucket_object.nodeset_startup_scripts](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_object) | resource |
 | [google_storage_bucket_object.nodeset_tpu_config](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_object) | resource |
-| [google_storage_bucket_object.parition_config](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_object) | resource |
 | [google_storage_bucket_object.prolog_scripts](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_object) | resource |
 | [random_uuid.cluster_id](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/uuid) | resource |
 | [archive_file.slurm_gcp_devel_zip](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
@@ -85,9 +83,6 @@ No modules.
 | <a name="input_extra_logging_flags"></a> [extra\_logging\_flags](#input\_extra\_logging\_flags) | The only available flag is `trace_api` | `map(bool)` | `{}` | no |
 | <a name="input_google_app_cred_path"></a> [google\_app\_cred\_path](#input\_google\_app\_cred\_path) | Path to Google Application Credentials. | `string` | `null` | no |
 | <a name="input_install_dir"></a> [install\_dir](#input\_install\_dir) | Directory where the hybrid configuration directory will be installed on the<br/>on-premise controller (e.g. /etc/slurm/hybrid). This updates the prefix path<br/>for the resume and suspend scripts in the generated `cloud.conf` file.<br/><br/>This variable should be used when the TerraformHost and the SlurmctldHost<br/>are different.<br/><br/>This will default to var.output\_dir if null. | `string` | `null` | no |
-| <a name="input_login_network_storage"></a> [login\_network\_storage](#input\_login\_network\_storage) | Storage to mounted on login and controller instances<br/>- server\_ip     : Address of the storage server.<br/>- remote\_mount  : The location in the remote instance filesystem to mount from.<br/>- local\_mount   : The location on the instance filesystem to mount to.<br/>- fs\_type       : Filesystem type (e.g. "nfs").<br/>- mount\_options : Options to mount with. | <pre>list(object({<br/>    server_ip     = string<br/>    remote_mount  = string<br/>    local_mount   = string<br/>    fs_type       = string<br/>    mount_options = string<br/>  }))</pre> | `[]` | no |
-| <a name="input_login_startup_scripts"></a> [login\_startup\_scripts](#input\_login\_startup\_scripts) | List of scripts to be ran on login VM startup in the specific group. | <pre>map(list(object({<br/>    filename = string<br/>    content  = string<br/>  })))</pre> | `{}` | no |
-| <a name="input_login_startup_scripts_timeout"></a> [login\_startup\_scripts\_timeout](#input\_login\_startup\_scripts\_timeout) | The timeout (seconds) applied to each script in login\_startup\_scripts. If<br/>any script exceeds this timeout, then the instance setup process is considered<br/>failed and handled accordingly.<br/><br/>NOTE: When set to 0, the timeout is considered infinite and thus disabled. | `number` | `300` | no |
 | <a name="input_munge_mount"></a> [munge\_mount](#input\_munge\_mount) | Remote munge mount for compute and login nodes to acquire the munge.key.<br/><br/>By default, the munge mount server will be assumed to be the<br/>`var.slurm_control_host` (or `var.slurm_control_addr` if non-null) when<br/>`server_ip=null`. | <pre>object({<br/>    server_ip     = string<br/>    remote_mount  = string<br/>    fs_type       = string<br/>    mount_options = string<br/>  })</pre> | <pre>{<br/>  "fs_type": "nfs",<br/>  "mount_options": "",<br/>  "remote_mount": "/etc/munge/",<br/>  "server_ip": null<br/>}</pre> | no |
 | <a name="input_network_storage"></a> [network\_storage](#input\_network\_storage) | Storage to mounted on all instances.<br/>- server\_ip     : Address of the storage server.<br/>- remote\_mount  : The location in the remote instance filesystem to mount from.<br/>- local\_mount   : The location on the instance filesystem to mount to.<br/>- fs\_type       : Filesystem type (e.g. "nfs").<br/>- mount\_options : Options to mount with. | <pre>list(object({<br/>    server_ip     = string<br/>    remote_mount  = string<br/>    local_mount   = string<br/>    fs_type       = string<br/>    mount_options = string<br/>  }))</pre> | `[]` | no |
 | <a name="input_nodeset"></a> [nodeset](#input\_nodeset) | Cluster nodenets, as a list. | `list(any)` | `[]` | no |
@@ -95,7 +90,6 @@ No modules.
 | <a name="input_nodeset_startup_scripts"></a> [nodeset\_startup\_scripts](#input\_nodeset\_startup\_scripts) | List of scripts to be ran on compute VM startup in the specific nodeset. | <pre>map(list(object({<br/>    filename = string<br/>    content  = string<br/>  })))</pre> | `{}` | no |
 | <a name="input_nodeset_tpu"></a> [nodeset\_tpu](#input\_nodeset\_tpu) | Cluster nodenets (TPU), as a list. | `list(any)` | `[]` | no |
 | <a name="input_output_dir"></a> [output\_dir](#input\_output\_dir) | Directory where this module will write its files to. These files include:<br/>cloud.conf; cloud\_gres.conf; config.yaml; resume.py; suspend.py; and util.py. | `string` | `null` | no |
-| <a name="input_partitions"></a> [partitions](#input\_partitions) | Cluster partitions as a list. | `list(any)` | `[]` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The GCP project ID. | `string` | n/a | yes |
 | <a name="input_prolog_scripts"></a> [prolog\_scripts](#input\_prolog\_scripts) | List of scripts to be used for Prolog. Programs for the slurmd to execute<br/>whenever it is asked to run a job step from a new job allocation.<br/>See https://slurm.schedmd.com/slurm.conf.html#OPT_Prolog. | <pre>list(object({<br/>    filename = string<br/>    content  = optional(string)<br/>    source   = optional(string)<br/>  }))</pre> | `[]` | no |
 | <a name="input_slurm_bin_dir"></a> [slurm\_bin\_dir](#input\_slurm\_bin\_dir) | Path to directory of Slurm binary commands (e.g. scontrol, sinfo). If 'null',<br/>then it will be assumed that binaries are in $PATH. | `string` | `null` | no |
@@ -111,10 +105,8 @@ No modules.
 
 | Name | Description |
 |------|-------------|
+| <a name="output_bucket_dir"></a> [bucket\_dir](#output\_bucket\_dir) | Path directory within `bucket_name` for Slurm cluster file storage. |
+| <a name="output_bucket_name"></a> [bucket\_name](#output\_bucket\_name) | GCS Bucket name of Slurm cluster file storage. |
 | <a name="output_config"></a> [config](#output\_config) | Cluster configuration. |
-| <a name="output_nodeset"></a> [nodeset](#output\_nodeset) | Cluster nodesets. |
-| <a name="output_nodeset_dyn"></a> [nodeset\_dyn](#output\_nodeset\_dyn) | Cluster nodesets (dynamic). |
-| <a name="output_nodeset_tpu"></a> [nodeset\_tpu](#output\_nodeset\_tpu) | Cluster nodesets (TPU). |
-| <a name="output_partitions"></a> [partitions](#output\_partitions) | Cluster partitions. |
 | <a name="output_slurm_bucket_path"></a> [slurm\_bucket\_path](#output\_slurm\_bucket\_path) | GCS Bucket URI of Slurm cluster file storage. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

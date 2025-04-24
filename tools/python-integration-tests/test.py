@@ -34,7 +34,7 @@ class Test(unittest.TestCase):  # Inherit from unittest.TestCase
     def setUp(self):
         self.addCleanup(self.clean_up)
         self.deployment.deploy()
-        time.sleep(90)
+        time.sleep(120)
 
     def clean_up(self):
         self.deployment.destroy()

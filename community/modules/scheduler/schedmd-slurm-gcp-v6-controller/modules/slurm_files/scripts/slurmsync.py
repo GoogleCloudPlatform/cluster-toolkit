@@ -228,24 +228,34 @@ def _find_tpu_node_action(nodename, state) -> NodeAction:
 
     return NodeActionUnchanged()
 
+def _find_flex_node_actions(*args, **kwargs) -> NodeAction:
+    # Don't perform actions on instances directly,
+    # Flex MIGs a handled by sync_flex_migs
+    return NodeActionUnchanged()
+
 def get_node_action(nodename: str) -> NodeAction:
     """Determine node/instance status that requires action"""
-    state = lookup().node_state(nodename)
+    lkp = lookup()
+    state = lkp.node_state(nodename)
 
-    if lookup().node_is_fr(nodename):
-        fr = lookup().future_reservation(lookup().node_nodeset(nodename))
+    if lkp.node_is_fr(nodename):
+        fr = lkp.future_reservation(lkp.node_nodeset(nodename))
         assert fr
         if action := get_fr_action(fr, state):
             return action
+        
+    
+    if lkp.is_flex_node(nodename):
+        return _find_flex_node_actions(nodename, state, lkp)
 
-    if lookup().node_is_dyn(nodename):
+    if lkp.node_is_dyn(nodename):
         return _find_dynamic_node_status()
 
-    if lookup().node_is_tpu(nodename):
+    if lkp.node_is_tpu(nodename):
         return _find_tpu_node_action(nodename, state)
 
     # split below is workaround for VMs whose hostname is FQDN
-    inst = lookup().instance(nodename.split(".")[0])
+    inst = lkp.instance(nodename.split(".")[0])
     power_flags = frozenset(
         ("POWER_DOWN", "POWERING_UP", "POWERING_DOWN", "POWERED_DOWN")
     ) & (state.flags if state is not None else set())
@@ -268,7 +278,7 @@ def get_node_action(nodename: str) -> NodeAction:
             return NodeActionDown(reason="Unbacked instance")
         if state.base == "DOWN" and not power_flags:
             return NodeActionPowerDown()
-        if "POWERED_DOWN" in state.flags and lookup().is_static_node(nodename):
+        if "POWERED_DOWN" in state.flags and lkp.is_static_node(nodename):
             return NodeActionPowerUp()
     elif (
         state is not None
@@ -371,7 +381,7 @@ def sync_placement_groups():
         delete_placement_groups(list(placement_groups.values()))
 
 
-def sync_slurm():
+def sync_instances():
     compute_instances = {
         name for name, inst in lookup().instances().items() if inst.role == "compute"
     }
@@ -573,17 +583,27 @@ def sync_opportunistic_maintenance(lkp: util.Lookup) -> None:
         create_maintenance_job(job_name, node)
 
 
+
+def sync_flex_migs(lkp: util.Lookup) -> None:
+    pass
+
 def main():
     try:
         reconfigure_slurm()
     except Exception:
         log.exception("failed to reconfigure slurm")
 
-    if lookup().is_controller:
+    lkp = lookup()
+    if lkp.is_controller:
         try:
-            sync_slurm()
+            sync_instances()
         except Exception:
             log.exception("failed to sync instances")
+
+        try:
+            sync_flex_migs(lkp)
+        except Exception:
+            log.exception("failed to sync DWS Flex MIGs")
 
         try:
             sync_placement_groups()
@@ -591,17 +611,17 @@ def main():
             log.exception("failed to sync placement groups")
 
         try:
-            update_topology(lookup())
+            update_topology(lkp)
         except Exception:
             log.exception("failed to update topology")
 
         try:
-            sync_maintenance_reservation(lookup())
+            sync_maintenance_reservation(lkp)
         except Exception:
             log.exception("failed to sync slurm reservation for scheduled maintenance")
 
         try:
-            sync_opportunistic_maintenance(lookup())
+            sync_opportunistic_maintenance(lkp)
         except Exception:
             log.exception("failed to sync opportunistic reservation for scheduled maintenance")
 

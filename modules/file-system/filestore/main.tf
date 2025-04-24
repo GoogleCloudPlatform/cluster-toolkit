@@ -24,7 +24,9 @@ resource "random_id" "resource_name_suffix" {
 }
 
 locals {
-  timeouts      = var.filestore_tier == "HIGH_SCALE_SSD" ? [1] : []
+  is_high_capacity_tier = contains(["HIGH_SCALE_SSD", "ZONAL", "REGIONAL"], var.filestore_tier) && var.size_gb >= 10240 && var.size_gb <= 102400
+
+  timeouts      = local.is_high_capacity_tier ? [1] : []
   server_ip     = google_filestore_instance.filestore_instance.networks[0].ip_addresses[0]
   remote_mount  = format("/%s", google_filestore_instance.filestore_instance.file_shares[0].name)
   fs_type       = "nfs"
@@ -52,10 +54,11 @@ locals {
 resource "google_filestore_instance" "filestore_instance" {
   project = var.project_id
 
-  name     = var.name != null ? var.name : "${var.deployment_name}-${random_id.resource_name_suffix.hex}"
-  location = var.filestore_tier == "ENTERPRISE" ? var.region : var.zone
-  tier     = var.filestore_tier
-  protocol = var.protocol
+  name        = var.name != null ? var.name : "${var.deployment_name}-${random_id.resource_name_suffix.hex}"
+  description = var.description
+  location    = contains(["ENTERPRISE", "REGIONAL"], var.filestore_tier) ? var.region : var.zone
+  tier        = var.filestore_tier
+  protocol    = var.protocol
 
   deletion_protection_enabled = var.deletion_protection.enabled
   deletion_protection_reason  = var.deletion_protection.reason

@@ -1,0 +1,367 @@
+# Copyright 2025 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nvidia-dra-driver-gpu
+  labels:
+      helm.sh/chart: nvidia-dra-driver-gpu-25.3.0-rc.2
+      app.kubernetes.io/name: nvidia-dra-driver-gpu
+      app.kubernetes.io/instance: nvidia-dra-driver-gpu
+      app.kubernetes.io/version: "25.3.0-rc.2"
+      app.kubernetes.io/managed-by: Helm
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: nvidia-dra-driver-gpu-quota
+  namespace: nvidia-dra-driver-gpu
+labels:
+    helm.sh/chart: nvidia-dra-driver-gpu-25.3.0-rc.2
+    app.kubernetes.io/name: nvidia-dra-driver-gpu
+    app.kubernetes.io/instance: nvidia-dra-driver-gpu
+    app.kubernetes.io/version: "25.3.0-rc.2"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  hard:
+    pods: 100
+  scopeSelector:
+    matchExpressions:
+    - operator: In
+      scopeName: PriorityClass
+      values:
+        - system-node-critical
+        - system-cluster-critical
+---
+# Source: nvidia-dra-driver-gpu/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: nvidia-dra-driver-gpu-service-account
+  namespace: nvidia-dra-driver-gpu
+  labels:
+    helm.sh/chart: nvidia-dra-driver-gpu-25.3.0-rc.2
+    app.kubernetes.io/name: nvidia-dra-driver-gpu
+    app.kubernetes.io/instance: nvidia-dra-driver-gpu
+    app.kubernetes.io/version: "25.3.0-rc.2"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: nvidia-dra-driver-gpu/templates/clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: nvidia-dra-driver-gpu-role
+  namespace: nvidia-dra-driver-gpu
+rules:
+- apiGroups: ["resource.nvidia.com"]
+  resources: ["computedomains"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: ["resource.nvidia.com"]
+  resources: ["computedomains/status"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: ["resource.k8s.io"]
+  resources: ["resourceclaims"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: ["resource.k8s.io"]
+  resources: ["resourceclaimtemplates"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: ["resource.k8s.io"]
+  resources: ["deviceclasses"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: ["resource.k8s.io"]
+  resources: ["resourceslices"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: ["resource.k8s.io"]
+  resources: ["resourceclaims/status"]
+  verbs: ["update"]
+- apiGroups: ["apps"]
+  resources: ["daemonsets"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: [""]
+  resources: ["nodes"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "watch"]
+---
+# Source: nvidia-dra-driver-gpu/templates/clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: nvidia-dra-driver-gpu-role-binding
+  namespace: nvidia-dra-driver-gpu
+subjects:
+- kind: ServiceAccount
+  name: nvidia-dra-driver-gpu-service-account
+  namespace: nvidia-dra-driver-gpu
+roleRef:
+  kind: ClusterRole
+  name: nvidia-dra-driver-gpu-role
+  apiGroup: rbac.authorization.k8s.io
+---
+# Source: nvidia-dra-driver-gpu/templates/kubeletplugin.yaml
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: nvidia-dra-driver-gpu-kubelet-plugin
+  namespace: nvidia-dra-driver-gpu
+  labels:
+    helm.sh/chart: nvidia-dra-driver-gpu-25.3.0-rc.2
+    app.kubernetes.io/name: nvidia-dra-driver-gpu
+    app.kubernetes.io/instance: nvidia-dra-driver-gpu
+    app.kubernetes.io/version: "25.3.0-rc.2"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: nvidia-dra-driver-gpu
+      app.kubernetes.io/instance: nvidia-dra-driver-gpu
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: nvidia-dra-driver-gpu
+        app.kubernetes.io/instance: nvidia-dra-driver-gpu
+    spec:
+      priorityClassName: system-node-critical
+      serviceAccountName: nvidia-dra-driver-gpu-service-account
+      securityContext:
+        {}
+      containers:
+      - name: compute-domains
+        securityContext:
+          privileged: true
+        image: nvcr.io/nvidia/k8s-dra-driver-gpu:v25.3.0-rc.2
+        imagePullPolicy: IfNotPresent
+        command: ["bash", "-c"]
+        args:
+        - |-
+          # Conditionally mask the params file to prevent this container from
+          # recreating any missing GPU device nodes. This is necessary, for
+          # example, when running under nvkind to limit the set GPUs governed
+          # by the plugin even though it has cgroup access to all of them.
+          if [ "${MASK_NVIDIA_DRIVER_PARAMS}" = "true" ]; then
+            cp /proc/driver/nvidia/params root/gpu-params
+            sed -i 's/^ModifyDeviceFiles: 1$/ModifyDeviceFiles: 0/' root/gpu-params
+            mount --bind root/gpu-params /proc/driver/nvidia/params
+          fi
+          compute-domain-kubelet-plugin
+        resources:
+          {}
+        env:
+        - name: MASK_NVIDIA_DRIVER_PARAMS
+          value: ""
+        - name: NVIDIA_CTK_PATH
+          value: "/home/kubernetes/bin/nvidia/toolkit/nvidia-ctk"
+        - name: NVIDIA_DRIVER_ROOT
+          value: "/home/kubernetes/bin/nvidia"
+        - name: NVIDIA_VISIBLE_DEVICES
+          value: void
+        - name: CDI_ROOT
+          value: /var/run/cdi
+        - name: NVIDIA_MIG_CONFIG_DEVICES
+          value: all
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        volumeMounts:
+        - name: plugins-registry
+          mountPath: /var/lib/kubelet/plugins_registry
+        - name: plugins
+          mountPath: /var/lib/kubelet/plugins
+          mountPropagation: Bidirectional
+        - name: cdi
+          mountPath: /var/run/cdi
+        # We always mount the driver root at /driver-root in the container.
+        - name: driver-root
+          mountPath: /driver-root
+          readOnly: true
+        # Pragmatic solution for host-managed drivers located not at /.
+        - name: host-dev
+          mountPath: /dev
+      volumes:
+      - name: plugins-registry
+        hostPath:
+          path: /var/lib/kubelet/plugins_registry
+      - name: plugins
+        hostPath:
+          path: /var/lib/kubelet/plugins
+      - name: cdi
+        hostPath:
+          path: /var/run/cdi
+      - name: driver-root
+        hostPath:
+          path: /home/kubernetes/bin/nvidia
+      - name: host-dev
+        hostPath:
+          path: /dev
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: feature.node.kubernetes.io/pci-10de.present
+                operator: In
+                values:
+                - "true"
+            - matchExpressions:
+              - key: feature.node.kubernetes.io/cpu-model.vendor_id
+                operator: In
+                values:
+                - ARM
+            - matchExpressions:
+              - key: nvidia.com/gpu.present
+                operator: In
+                values:
+                - "true"
+      tolerations:
+        - effect: NoSchedule
+          key: nvidia.com/gpu
+          operator: Equal
+          value: present
+---
+# Source: nvidia-dra-driver-gpu/templates/controller.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nvidia-dra-driver-gpu-controller
+  namespace: nvidia-dra-driver-gpu
+  labels:
+    helm.sh/chart: nvidia-dra-driver-gpu-25.3.0-rc.2
+    app.kubernetes.io/name: nvidia-dra-driver-gpu
+    app.kubernetes.io/instance: nvidia-dra-driver-gpu
+    app.kubernetes.io/version: "25.3.0-rc.2"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: nvidia-dra-driver-gpu
+      app.kubernetes.io/instance: nvidia-dra-driver-gpu
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: nvidia-dra-driver-gpu
+        app.kubernetes.io/instance: nvidia-dra-driver-gpu
+    spec:
+      priorityClassName: system-node-critical
+      serviceAccountName: nvidia-dra-driver-gpu-service-account
+      securityContext:
+        {}
+      containers:
+      - name: compute-domain
+        securityContext:
+          {}
+        image: nvcr.io/nvidia/k8s-dra-driver-gpu:v25.3.0-rc.2
+        imagePullPolicy: IfNotPresent
+        command: ["compute-domain-controller", "-v", "6"]
+        resources:
+          {}
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: nvidia.com/gpu
+                operator: DoesNotExist
+      tolerations:
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/control-plane
+          operator: Exists
+---
+# Source: nvidia-dra-driver-gpu/templates/deviceclass-compute-domain-daemon.yaml
+apiVersion: resource.k8s.io/v1beta1
+kind: DeviceClass
+metadata:
+  name: compute-domain-daemon.nvidia.com
+spec:
+  selectors:
+  - cel:
+      expression: "device.driver == 'compute-domain.nvidia.com' && device.attributes['compute-domain.nvidia.com'].type == 'daemon'"
+---
+# Source: nvidia-dra-driver-gpu/templates/deviceclass-compute-domain-default-channel.yaml
+apiVersion: resource.k8s.io/v1beta1
+kind: DeviceClass
+metadata:
+  name: compute-domain-default-channel.nvidia.com
+spec:
+  selectors:
+  - cel:
+      expression: "device.driver == 'compute-domain.nvidia.com' && device.attributes['compute-domain.nvidia.com'].type == 'channel' && device.attributes['compute-domain.nvidia.com'].id == 0"
+---
+# Source: nvidia-dra-driver-gpu/templates/validatingadmissionpolicy.yaml
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: resourceslices-policy-nvidia-dra-driver-gpu
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+    - apiGroups:   ["resource.k8s.io"]
+      apiVersions: ["v1beta1"]
+      operations:  ["CREATE", "UPDATE", "DELETE"]
+      resources:   ["resourceslices"]
+  matchConditions:
+  - name: isRestrictedUser
+    expression: >-
+      request.userInfo.username == "system:serviceaccount:nvidia-dra-driver-gpu:nvidia-dra-driver-gpu-service-account"
+  variables:
+  - name: userNodeName
+    expression: >-
+      request.userInfo.extra[?'authentication.kubernetes.io/node-name'][0].orValue('')
+  - name: objectNodeName
+    expression: >-
+      (request.operation == "DELETE" ? oldObject : object).spec.?nodeName.orValue("")
+  - name: nodeSelectorValue
+    expression: >-
+      (request.operation == "DELETE" ? oldObject : object).spec.?nodeSelector.orValue(null)
+  - name: allNodesValue
+    expression: >-
+      (request.operation == "DELETE" ? oldObject : object).spec.?allNodes.orValue(false)
+  validations:
+  - expression: variables.userNodeName != ""
+    message: >-
+      no node association found for user, this user must run in a pod on a node and ServiceAccountTokenPodNodeInfo must be enabled
+  - expression: variables.userNodeName == variables.objectNodeName || variables.allNodesValue == true || variables.nodeSelectorValue != null
+    messageExpression: >-
+      "this user running on node '"+variables.userNodeName+"' may not modify cluster or node resourceslices"
+---
+# Source: nvidia-dra-driver-gpu/templates/validatingadmissionpolicybinding.yaml
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: resourceslices-policy-nvidia-dra-driver-gpu
+spec:
+  policyName: resourceslices-policy-nvidia-dra-driver-gpu
+  validationActions: [Deny]
+  # All ResourceSlices are matched.

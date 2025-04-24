@@ -40,9 +40,9 @@ specified in the Toolkit using the following names:
 
 - Basic HDD: "BASIC\_HDD" ([preferred][tierapi]) or "STANDARD" (deprecated)
 - Basic SSD: "BASIC\_SSD" ([preferred][tierapi]) or "PREMIUM" (deprecated)
-- Zonal With Higher Capacity Band or High Scale SSD: "HIGH\_SCALE\_SSD"
+- Zonal: "ZONAL"
 - Enterprise: "ENTERPRISE"
-- Zonal With Lower Capacity Band: "ZONAL"
+- Regional: "REGIONAL"
 
 [tierapi]: https://cloud.google.com/filestore/docs/reference/rest/v1beta1/Tier
 
@@ -219,6 +219,7 @@ No modules.
 | <a name="input_connect_mode"></a> [connect\_mode](#input\_connect\_mode) | Used to select mode - supported values DIRECT\_PEERING and PRIVATE\_SERVICE\_ACCESS. | `string` | `"DIRECT_PEERING"` | no |
 | <a name="input_deletion_protection"></a> [deletion\_protection](#input\_deletion\_protection) | Configure Filestore instance deletion protection | <pre>object({<br/>    enabled = optional(bool, false)<br/>    reason  = optional(string)<br/>  })</pre> | <pre>{<br/>  "enabled": false<br/>}</pre> | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the HPC deployment, used as name of the filestore instance if no name is specified. | `string` | n/a | yes |
+| <a name="input_description"></a> [description](#input\_description) | A description of the filestore instance. | `string` | `""` | no |
 | <a name="input_filestore_share_name"></a> [filestore\_share\_name](#input\_filestore\_share\_name) | Name of the file system share on the instance. | `string` | `"nfsshare"` | no |
 | <a name="input_filestore_tier"></a> [filestore\_tier](#input\_filestore\_tier) | The service tier of the instance. | `string` | `"BASIC_HDD"` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the filestore instance. Key-value pairs. | `map(string)` | n/a | yes |
