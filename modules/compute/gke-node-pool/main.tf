@@ -118,15 +118,17 @@ resource "google_container_node_pool" "node_pool" {
   }
 
   node_config {
-    disk_size_gb    = var.disk_size_gb
-    disk_type       = var.disk_type
-    resource_labels = local.labels
-    labels          = var.kubernetes_labels
-    service_account = var.service_account_email
-    oauth_scopes    = var.service_account_scopes
-    machine_type    = var.machine_type
-    spot            = var.spot
-    image_type      = var.image_type
+    disk_size_gb     = var.disk_size_gb
+    disk_type        = var.disk_type
+    resource_labels  = local.labels
+    labels           = var.kubernetes_labels
+    service_account  = var.service_account_email
+    oauth_scopes     = var.service_account_scopes
+    machine_type     = var.machine_type
+    spot             = var.spot
+    image_type       = var.image_type
+    flex_start       = var.enable_flex_start
+    max_run_duration = var.max_run_duration != null ? "${var.max_run_duration}s" : null
 
     dynamic "guest_accelerator" {
       for_each = local.guest_accelerator
@@ -366,23 +368,6 @@ resource "google_container_node_pool" "node_pool" {
       error_message = "Negative integer value of num_node_pools or num_slices is not valid. Please use a positive integer value to set num_node_pools for CPUs and GPUS, and num_slices for TPUs."
     }
   }
-}
-
-### TODO: remove this after Terraform support for GKE flex-start is added. ###
-###       Instead use node_config above to enable it                       ###
-locals {
-  max_run_duration = var.max_run_duration != null ? var.max_run_duration : 3600
-}
-resource "null_resource" "enable_flex_start" {
-  count = var.enable_flex_start == true ? max(var.num_node_pools, var.num_slices) : 0
-
-  provisioner "local-exec" {
-    command = <<-EOT
-      gcloud container node-pools update ${google_container_node_pool.node_pool[count.index].name} --cluster=${local.cluster_name} --location=${local.cluster_location} --project=${var.project_id} --max-run-duration=${local.max_run_duration}s
-      gcloud container node-pools update ${google_container_node_pool.node_pool[count.index].name} --cluster=${local.cluster_name} --location=${local.cluster_location} --project=${var.project_id} --flex-start
-    EOT
-  }
-  depends_on = [google_container_node_pool.node_pool] # wait until nodepool creation completed
 }
 
 locals {
