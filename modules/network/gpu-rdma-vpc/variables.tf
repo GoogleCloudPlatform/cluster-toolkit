@@ -104,6 +104,36 @@ variable "delete_default_internet_gateway_routes" {
   default     = false
 }
 
+variable "enable_internal_traffic" { # tflint-ignore: terraform_unused_declarations
+  description = "DEPRECATED: enable_internal_traffic can not be specified for gpu-rdma-vpc."
+  type        = bool
+  default     = null
+  validation {
+    condition     = var.enable_internal_traffic == null
+    error_message = "DEPRECATED: enable_internal_traffic can not be specified for gpu-rdma-vpc."
+  }
+}
+
+variable "firewall_rules" { # tflint-ignore: terraform_unused_declarations
+  description = "DEPRECATED: firewall_rules can not be specified for gpu-rdma-vpc."
+  type        = any
+  default     = null
+  validation {
+    condition     = var.firewall_rules == null
+    error_message = "DEPRECATED: firewall_rules can not be specified for gpu-rdma-vpc."
+  }
+}
+
+variable "firewall_log_config" { # tflint-ignore: terraform_unused_declarations
+  description = "DEPRECATED: firewall_log_config can not be specified for gpu-rdma-vpc."
+  type        = string
+  default     = null
+  validation {
+    condition     = var.firewall_log_config == null
+    error_message = "DEPRECATED: firewall_log_config can not be specified for gpu-rdma-vpc."
+  }
+}
+
 variable "network_profile" {
   description = <<-EOT
   A full or partial URL of the network profile to apply to this network.

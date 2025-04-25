@@ -173,7 +173,7 @@ resource "terraform_data" "network_profile_firewall_validation" {
   lifecycle {
     precondition {
       condition     = !(try(strcontains(var.network_profile, "roce"), false) && length(local.firewall_rules) > 0)
-      error_message = "If var.network_profile contains 'roce', var.firewall_rules must be empty and var.enable_internal_traffic must be false"
+      error_message = "If var.network_profile contains 'roce', var.firewall_rules must be empty and var.enable_internal_traffic must be false, please see: https://cloud.google.com/vpc/docs/rdma-network-profiles#additional_features_that_dont_apply_to_traffic_from_rdma_nics"
     }
   }
 }
