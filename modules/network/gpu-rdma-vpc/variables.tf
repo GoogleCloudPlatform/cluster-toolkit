@@ -107,7 +107,7 @@ variable "delete_default_internet_gateway_routes" {
 variable "enable_internal_traffic" {
   type        = bool
   description = "Enable a firewall rule to allow all internal TCP, UDP, and ICMP traffic within the network"
-  default     = true
+  default     = false
 }
 
 variable "firewall_rules" {
