@@ -1366,6 +1366,7 @@ class Lookup:
     def __init__(self, cfg):
         self._cfg = cfg
         self.template_cache_path = Path(__file__).parent / "template_info.cache"
+        self.template_cache_path_exists = Path(__file__).parent / "template_info.cache.exists"
 
     @property
     def cfg(self):
@@ -1836,7 +1837,7 @@ class Lookup:
         template_name = trim_self_link(template_link)
         # split read and write access to minimize write-lock. This might be a
         # bit slower? TODO measure
-        if self.template_cache_path.exists():
+        if self.template_cache_path_exists.exists():
             with self.template_cache() as cache:
                 if template_name in cache:
                     return NSDict(cache[template_name])
@@ -1868,9 +1869,23 @@ class Lookup:
         # keep write access open for minimum time
         with self.template_cache(writeback=True) as cache:
             cache[template_name] = template.to_dict()
-        # cache should be owned by slurm
-        chown_slurm(self.template_cache_path)
-
+        
+        # Note that shelve database may add custom suffix on top of the path
+        # > The filename specified is the base filename for the underlying database. 
+        # We find all files which could be the database and open the first one.
+        cache_files = [filename for filename in os.listdir(self.template_cache_path.parent) if filename.startswith(self.template_cache_path.name)]
+        if not cache_files:
+            # No cache files found, skip
+            return template
+        # Change ownership of the cache files to the slurm user
+        # This is needed to avoid permission issues when running slurmsync
+        # as a different user (e.g. when using sudo)
+        for filename in cache_files:
+            chown_slurm(Path(self.template_cache_path.parent) / filename)
+        
+        # Create a marker file to indicate that the cache file exists
+        self.template_cache_path_exists.touch()
+        chown_slurm(self.template_cache_path_exists)
         return template
 
 
