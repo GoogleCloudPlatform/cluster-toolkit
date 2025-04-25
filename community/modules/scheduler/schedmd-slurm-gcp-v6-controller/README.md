@@ -204,6 +204,34 @@ The default has been set to 128. Values above this have not been fully tested
 and may cause congestion on the controller. A more scalable solution is under
 way.
 
+## ResumeRate and Node Resumption
+
+The `ResumeRate` parameter in `slurm.conf` controls the maximum number of nodes
+that Slurm attempts to resume (power up) per minute. This is particularly
+important in cloud environments where auto-scaling can lead to a large number of
+nodes starting concurrently.
+
+When many nodes start simultaneously, they can place a heavy load on shared
+resources, especially shared filesystems, as they all try to mount filesystems
+and access configuration files at the same time. By limiting the `ResumeRate`,
+you can stagger the node startup process, reducing the peak load on these shared
+resources and improving overall cluster stability during scaling events.
+
+For example, to limit the node resumption rate to 100 nodes per minute,
+configure the blueprint as follows:
+
+```yaml
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    ...
+    settings:
+      cloud_parameters:
+        resume_rate: 100
+```
+
+Adjust this value based on the capabilities of your shared filesystem and the
+expected scaling behavior of your cluster.
+
 ## Support
 The Cluster Toolkit team maintains the wrapper around the [slurm-on-gcp] terraform
 modules. For support with the underlying modules, see the instructions in the
