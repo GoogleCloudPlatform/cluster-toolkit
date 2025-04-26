@@ -23,7 +23,6 @@ vars:
   zone: us-central1-a
   rdma_net_range: 192.168.32.0/24
   hostname_prefix: $(vars.deployment_name)-odyssey
-  base_network_name: $(vars.deployment_name)
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
@@ -37,13 +36,11 @@ deployment_groups:
 
   - id: cluster-net-0
     source: modules/network/vpc
-    settings:
-      network_name: $(vars.base_network_name)
 
   - id: cluster-rdma-net-0
     source: modules/network/vpc
     settings:
-      network_name: $(vars.base_network_name)-rdma-net-0
+      network_name: $(vars.deployment_name)-rdma-net-0
       mtu: 8896
       network_profile: https://www.googleapis.com/compute/beta/projects/$(vars.project_id)/global/networkProfiles/$(vars.zone)-vpc-falcon
       network_routing_mode: REGIONAL

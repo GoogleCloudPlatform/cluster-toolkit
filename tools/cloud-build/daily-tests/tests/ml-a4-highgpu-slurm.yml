@@ -24,7 +24,7 @@ login_node: "{{ slurm_cluster_name }}-slurm-login-*"
 controller_node: "{{ slurm_cluster_name }}-controller"
 region: us-central1
 zone: us-central1-b
-network: "{{ test_name }}-net-0"
+network: "{{ deployment_name }}-net-0"
 post_deploy_tests:
 - test-validation/test-mounts.yml
 - test-validation/test-partitions.yml
@@ -43,4 +43,3 @@ cli_deployment_vars:
   disk_size_gb: 200
   a4h_cluster_size: 2
   a4h_reservation_name: nvidia-b200-db38b25a-c93d-4a7e-a3c5-ba4135be357e
-  base_network_name: "{{ test_name }}"
