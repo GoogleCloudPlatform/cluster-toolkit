@@ -104,31 +104,33 @@ variable "delete_default_internet_gateway_routes" {
   default     = false
 }
 
-variable "enable_internal_traffic" {
+variable "enable_internal_traffic" { # tflint-ignore: terraform_unused_declarations
+  description = "DEPRECATED: enable_internal_traffic can not be specified for gpu-rdma-vpc."
   type        = bool
-  description = "Enable a firewall rule to allow all internal TCP, UDP, and ICMP traffic within the network"
-  default     = true
-}
-
-variable "firewall_rules" {
-  type        = any
-  description = "List of firewall rules"
-  default     = []
-}
-
-variable "firewall_log_config" {
-  type        = string
-  description = "Firewall log configuration for Toolkit firewall rules (var.enable_iap_ssh_ingress and others)"
-  default     = "DISABLE_LOGGING"
-  nullable    = false
-
+  default     = null
   validation {
-    condition = contains([
-      "INCLUDE_ALL_METADATA",
-      "EXCLUDE_ALL_METADATA",
-      "DISABLE_LOGGING",
-    ], var.firewall_log_config)
-    error_message = "var.firewall_log_config must be set to \"DISABLE_LOGGING\", or enable logging with \"INCLUDE_ALL_METADATA\" or \"EXCLUDE_ALL_METADATA\""
+    condition     = var.enable_internal_traffic == null
+    error_message = "DEPRECATED: enable_internal_traffic can not be specified for gpu-rdma-vpc."
+  }
+}
+
+variable "firewall_rules" { # tflint-ignore: terraform_unused_declarations
+  description = "DEPRECATED: firewall_rules can not be specified for gpu-rdma-vpc."
+  type        = any
+  default     = null
+  validation {
+    condition     = var.firewall_rules == null
+    error_message = "DEPRECATED: firewall_rules can not be specified for gpu-rdma-vpc."
+  }
+}
+
+variable "firewall_log_config" { # tflint-ignore: terraform_unused_declarations
+  description = "DEPRECATED: firewall_log_config can not be specified for gpu-rdma-vpc."
+  type        = string
+  default     = null
+  validation {
+    condition     = var.firewall_log_config == null
+    error_message = "DEPRECATED: firewall_log_config can not be specified for gpu-rdma-vpc."
   }
 }
 
