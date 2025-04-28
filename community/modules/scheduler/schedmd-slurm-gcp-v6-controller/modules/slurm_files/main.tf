@@ -81,7 +81,7 @@ locals {
 
     # config files templates
     slurmdbd_conf_tpl = file(coalesce(var.slurmdbd_conf_tpl, "${local.etc_dir}/slurmdbd.conf.tpl"))
-    slurm_conf_tpl    = file(coalesce(var.slurm_conf_tpl, "${local.etc_dir}/slurm.conf.tpl"))
+    slurm_conf_tpl    = var.slurm_conf_tpl.content != null ? var.slurm_conf_tpl.content : file(coalesce(var.slurm_conf_tpl.source, "${local.etc_dir}/slurm.conf.tpl"))
     cgroup_conf_tpl   = file(coalesce(var.cgroup_conf_tpl, "${local.etc_dir}/cgroup.conf.tpl"))
 
     # Providers

@@ -91,9 +91,17 @@ variable "slurmdbd_conf_tpl" {
 }
 
 variable "slurm_conf_tpl" {
-  type        = string
-  description = "Slurm slurm.conf template file path."
-  default     = null
+  description = "Slurm slurm.conf template."
+  type = object({
+    content = optional(string)
+    source  = optional(string)
+  })
+  default = {}
+
+  validation {
+    condition     = var.slurm_conf_tpl.content == null || var.slurm_conf_tpl.source == null
+    error_message = "Both 'content' or 'source' must not be defined at the same time."
+  }
 }
 
 variable "cgroup_conf_tpl" {
