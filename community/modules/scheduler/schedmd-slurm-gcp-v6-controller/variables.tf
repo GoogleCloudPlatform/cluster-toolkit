@@ -513,6 +513,12 @@ variable "slurmdbd_conf_tpl" {
 }
 
 variable "slurm_conf_tpl" {
+  type        = string
+  description = "DEPRECATED: This variable is deprecated and will be removed in a future version. Please use 'slurm_conf_template' object instead. This path is used only if 'slurm_conf_template' is not provided."
+  default     = null
+}
+
+variable "slurm_conf_template" {
   description = "Slurm slurm.conf template."
   type = object({
     content = optional(string)
@@ -521,7 +527,7 @@ variable "slurm_conf_tpl" {
   default = {}
 
   validation {
-    condition     = var.slurm_conf_tpl.content == null || var.slurm_conf_tpl.source == null
+    condition     = var.slurm_conf_template.content == null || var.slurm_conf_template.source == null
     error_message = "Both 'content' or 'source' must not be defined at the same time."
   }
 }
