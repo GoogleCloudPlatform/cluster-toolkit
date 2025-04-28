@@ -87,6 +87,7 @@ variable "nodeset" {
       count = number
       type  = string
     }))
+    accelerator_topology = optional(string, null)
     dws_flex = object({
       enabled          = bool
       max_run_duration = number
