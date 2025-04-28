@@ -368,6 +368,7 @@ deployment_groups:
         threads_per_core: null # Use platform default value
       node_conf:
         CoresPerSocket: 56
+        SocketsPerBoard: 2
         ThreadsPerCore: 2
       additional_networks:
         $(concat(

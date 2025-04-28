@@ -1,0 +1,120 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+---
+
+blueprint_name: xpk-n2
+
+vars:
+  project_id:  ## Set GCP Project ID Here ##
+  deployment_name: xpk-01
+  region: us-central1
+  zones:
+  - us-central1-a
+  filestore_zone: us-central1-a
+  authorized_cidr: <your-ip-address>/32
+  gcp_public_cidrs_access_enabled: false
+  kueue_config_path: $(ghpc_stage("./kueue-xpk-configuration.yaml.tftpl"))
+  config_map_path: $(ghpc_stage("./config-map.yaml.tftpl"))
+  storage_crd_path: $(ghpc_stage("./storage-crd.yaml"))
+  machine_type: n2-standard-32
+  slice_vm_count: 2
+  slice_cpu_count: 64
+  xpk_version: v0.8.0
+  kueue_version: v0.11.1
+  jobset_version: v0.7.2
+  kjob_version: f775609365df47bdc3e7c10290d8efae7f512464
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: network
+    source: modules/network/vpc
+    settings:
+      subnetwork_name: $(vars.deployment_name)-subnet
+      secondary_ranges_list:
+      - subnetwork_name: $(vars.deployment_name)-subnet
+        ranges:
+        - range_name: pods
+          ip_cidr_range: 10.4.0.0/14
+        - range_name: services
+          ip_cidr_range: 10.0.32.0/20
+
+  - id: gke_cluster
+    source: modules/scheduler/gke-cluster
+    use: [network]
+    settings:
+      system_node_pool_machine_type: "e2-standard-4"
+      system_node_pool_node_count:
+        total_min_nodes: 1
+        total_max_nodes: 1000
+      enable_private_endpoint: false
+      gcp_public_cidrs_access_enabled: $(vars.gcp_public_cidrs_access_enabled)
+      master_authorized_networks:
+      - display_name: deployment-machine
+        cidr_block: $(vars.authorized_cidr)
+      version_prefix: "1.31."
+      release_channel: RAPID
+      maintenance_exclusions:
+      - name: no-minor-or-node-upgrades-indefinite
+        start_time: "2024-12-01T00:00:00Z"
+        end_time: "2025-12-22T00:00:00Z"
+        exclusion_scope: NO_MINOR_OR_NODE_UPGRADES
+      enable_filestore_csi: true
+    outputs: [instructions]
+
+  - id: cpu_pool
+    source: modules/compute/gke-node-pool
+    use: [gke_cluster]
+    settings:
+      static_node_count: $(vars.slice_vm_count)
+      machine_type: $(vars.machine_type)
+      threads_per_core: 2  # enable simultaneous multi-threading to meet XPK system characteristics
+      auto_upgrade: true
+      zones: $(vars.zones)
+
+  - id: workload-manager-install
+    source: modules/management/kubectl-apply
+    use: [gke_cluster]
+    settings:
+      kueue:
+        install: true
+        version: $(vars.kueue_version)
+        config_path: $(vars.kueue_config_path)
+        config_template_vars: {machine_type: $(vars.machine_type), vms_per_slice: $(vars.slice_vm_count), cpu_count: $(vars.slice_cpu_count)}
+      jobset:
+        install: true
+        version: $(vars.jobset_version)
+      apply_manifests:
+      - source: $(vars.config_map_path)
+        template_vars: {deployment_name: $(vars.deployment_name), machine_type: $(vars.machine_type), vms_per_slice: $(vars.slice_vm_count), xpk_version: $(vars.xpk_version)}
+      - source: $(vars.storage_crd_path)
+        # Server-side applies avoid last-applied-configuration and associated annotation length issues
+      - source: https://raw.githubusercontent.com/kubernetes-sigs/kjob/$(vars.kjob_version)/config/crd/bases/kjobctl.x-k8s.io_applicationprofiles.yaml
+        server_side_apply: true
+      - source: https://raw.githubusercontent.com/kubernetes-sigs/kjob/$(vars.kjob_version)/config/crd/bases/kjobctl.x-k8s.io_jobtemplates.yaml
+        server_side_apply: true
+      - source: https://raw.githubusercontent.com/kubernetes-sigs/kjob/$(vars.kjob_version)/config/crd/bases/kjobctl.x-k8s.io_rayclustertemplates.yaml
+        server_side_apply: true
+      - source: https://raw.githubusercontent.com/kubernetes-sigs/kjob/$(vars.kjob_version)/config/crd/bases/kjobctl.x-k8s.io_rayjobtemplates.yaml
+        server_side_apply: true
+      - source: https://raw.githubusercontent.com/kubernetes-sigs/kjob/$(vars.kjob_version)/config/crd/bases/kjobctl.x-k8s.io_volumebundles.yaml
+        server_side_apply: true
+
+  - id: homefs
+    source: modules/file-system/filestore
+    use: [network]
+    settings:
+      name: $(vars.deployment_name)-homefs
+      zone: $(vars.filestore_zone)
+      local_mount: /home

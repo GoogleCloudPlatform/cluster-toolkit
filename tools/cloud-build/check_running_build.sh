@@ -1,4 +1,5 @@
-# Copyright 2023 Google LLC
+#!/bin/bash
+# Copyright 2025 "Google LLC"
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,23 +13,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-terraform {
-  required_version = ">= 1.0"
-  required_providers {
-    google = {
-      source  = "hashicorp/google"
-      version = ">= 4.42"
-    }
-    kubectl = {
-      source  = "gavinbunney/kubectl"
-      version = ">= 1.7.0"
-    }
-    local = {
-      source  = "hashicorp/local"
-      version = ">= 2.0.0"
-    }
-  }
-  provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:gke-persistent-volume/v1.49.0"
-  }
-}
+set -e
+
+TRIGGER_BUILD_CONFIG_PATH="$1"
+
+echo "$TRIGGER_BUILD_CONFIG_PATH"
+
+MATCHING_BUILDS=$(gcloud builds list --ongoing --format 'value(id)' --filter="substitutions.TRIGGER_BUILD_CONFIG_PATH=\"$TRIGGER_BUILD_CONFIG_PATH\"")
+MATCHING_COUNT=$(echo "$MATCHING_BUILDS" | wc -w)
+
+if [ "$MATCHING_COUNT" -gt 1 ]; then
+	echo "Found more than 1 matching running build(s):"
+	echo "$MATCHING_BUILDS"
+	exit 1
+fi
+
+echo "No other matching running builds found (or only one)."
+exit 0
