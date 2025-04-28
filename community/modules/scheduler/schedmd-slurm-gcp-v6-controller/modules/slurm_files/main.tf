@@ -83,7 +83,7 @@ locals {
 
     # config files templates
     slurmdbd_conf_tpl = file(coalesce(var.slurmdbd_conf_tpl, "${local.etc_dir}/slurmdbd.conf.tpl"))
-    slurm_conf_tpl    = var.slurm_conf_template.content != null ? var.slurm_conf_template.content : file(coalesce(local.derived_slurm_config_source, "${local.etc_dir}/slurm.conf.tpl"))
+    slurm_conf_tpl    = var.slurm_conf_template != null ? var.slurm_conf_template : file(coalesce(var.slurm_conf_tpl, "${local.etc_dir}/slurm.conf.tpl"))
     cgroup_conf_tpl   = file(coalesce(var.cgroup_conf_tpl, "${local.etc_dir}/cgroup.conf.tpl"))
 
     # Providers
@@ -95,8 +95,7 @@ locals {
   x_nodeset_tpu     = toset(var.nodeset_tpu[*].nodeset.nodeset_name)
   x_nodeset_overlap = setintersection([], local.x_nodeset, local.x_nodeset_dyn, local.x_nodeset_tpu)
 
-  derived_slurm_config_source = var.slurm_conf_template.source != null ? var.slurm_conf_template.source : var.slurm_conf_tpl
-  etc_dir                     = abspath("${path.module}/etc")
+  etc_dir = abspath("${path.module}/etc")
 
   bucket_path = format("%s/%s", data.google_storage_bucket.this.url, local.bucket_dir)
 

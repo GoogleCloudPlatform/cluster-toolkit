@@ -267,8 +267,7 @@ deployment_groups:
         tree_width: $(vars.a3_static_cluster_size)
       machine_type: c2-standard-8
       disk_type: pd-balanced
-      slurm_conf_template:
-        source: modules/embedded/community/modules/scheduler/schedmd-slurm-gcp-v6-controller/etc/long-prolog-slurm.conf.tpl
+      slurm_conf_tpl: modules/embedded/community/modules/scheduler/schedmd-slurm-gcp-v6-controller/etc/long-prolog-slurm.conf.tpl
       enable_controller_public_ips: true
       enable_external_prolog_epilog: true
       controller_startup_script: $(controller_startup.startup_script)
