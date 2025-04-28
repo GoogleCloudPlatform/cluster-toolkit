@@ -74,7 +74,7 @@ deployment_groups:
             "install_lustre": false,
             "install_nvidia_repo": true,
             "install_ompi": true,
-            "update_kernel": false,
+            "allow_kernel_upgrades": false,
             "monitoring_agent": "cloud-ops",
           }
       - type: shell
