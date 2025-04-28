@@ -633,3 +633,10 @@ variable "placement_max_distance" {
     error_message = "Invalid value for placement_max_distance. Valid values are null, 1, 2, or 3."
   }
 }
+
+variable "placement_gpu_topology" {
+  type        = string
+  description = "Maximum distance between nodes in the placement group. Requires enable_placement to be true. Values must be supported by the chosen machine type."
+  nullable    = true
+  default     = null
+}

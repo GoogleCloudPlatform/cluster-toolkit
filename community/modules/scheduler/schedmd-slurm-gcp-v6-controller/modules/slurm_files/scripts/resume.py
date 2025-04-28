@@ -452,13 +452,14 @@ def down_nodes_notify_jobs(nodes: List[str], reason: str, resume_data: Optional[
     
 
 
-def create_placement_request(pg_name: str, region: str, max_distance: Optional[int]):
+def create_placement_request(pg_name: str, region: str, max_distance: Optional[int], gpu_topology: Optional[str]):
     config = {
         "name": pg_name,
         "region": region,
         "groupPlacementPolicy": {
             "collocation": "COLLOCATED",
-            "maxDistance": max_distance
+            "maxDistance": max_distance,
+            "gpuTopology": gpu_topology
         },
     }
     
@@ -550,6 +551,7 @@ def create_nodeset_placements(nodes: List[str], excl_job_id:Optional[int], lkp: 
     placements = _allocate_nodes_to_placements(nodes, excl_job_id, lkp)
     region = lkp.node_region(nodes[0])
     max_distance = lkp.node_nodeset(nodes[0]).get('placement_max_distance')
+    gpu_topology = lkp.node_nodeset(nodes[0]).get('placement_gpu_topology')
 
     if log.isEnabledFor(logging.DEBUG):
         debug_p = {p.placement: to_hostlist(p.nodes) for p in placements}
@@ -558,7 +560,7 @@ def create_nodeset_placements(nodes: List[str], excl_job_id:Optional[int], lkp: 
         )
 
     requests = {
-        p.placement: create_placement_request(p.placement, region, max_distance) for p in placements if p.placement
+        p.placement: create_placement_request(p.placement, region, max_distance, gpu_topology) for p in placements if p.placement
     }
     if not requests:
         return placements

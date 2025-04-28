@@ -103,6 +103,7 @@ locals {
     instance_properties_json         = ns.instance_properties_json
     enable_placement                 = ns.enable_placement
     placement_max_distance           = ns.placement_max_distance
+    placement_gpu_topology           = ns.placement_gpu_topology
     network_storage                  = ns.network_storage
     zone_target_shape                = ns.zone_target_shape
     zone_policy_allow                = ns.zone_policy_allow

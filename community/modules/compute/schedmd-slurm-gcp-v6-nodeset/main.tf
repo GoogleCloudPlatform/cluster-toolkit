@@ -84,6 +84,7 @@ locals {
     enable_confidential_vm = var.enable_confidential_vm
     enable_placement       = var.enable_placement
     placement_max_distance = var.placement_max_distance
+    placement_gpu_topology = var.placement_gpu_topology
     enable_oslogin         = var.enable_oslogin
     enable_shielded_vm     = var.enable_shielded_vm
     gpu                    = one(local.guest_accelerator)

@@ -38,6 +38,11 @@ output "nodeset" {
   }
 
   precondition {
+    condition     = var.placement_gpu_topology == null || var.enable_placement
+    error_message = "placement_gpu_topology requires enable_placement to be set to true."
+  }
+
+  precondition {
     condition     = !(startswith(var.machine_type, "a3-") && var.placement_max_distance == 1)
     error_message = "A3 machines do not support a placement_max_distance of 1."
   }
