@@ -430,6 +430,23 @@ variable "enable_queued_provisioning" {
   default     = false
 }
 
+variable "enable_flex_start" {
+  description = <<-EOT
+  If true, start the node pool with Flex Start provisioning model.
+  To learn more about flex-start mode, please refer to
+  https://cloud.google.com/kubernetes-engine/docs/how-to/dws-flex-start-training and
+  https://cloud.google.com/kubernetes-engine/docs/how-to/provisioningrequest
+  EOT
+  type        = bool
+  default     = false
+}
+
+variable "max_run_duration" {
+  description = "The duration (in whole seconds) of the instance. Instance will run and be terminated after then."
+  type        = number
+  default     = null
+}
+
 variable "enable_private_nodes" {
   description = "Whether nodes have internal IP addresses only."
   type        = bool

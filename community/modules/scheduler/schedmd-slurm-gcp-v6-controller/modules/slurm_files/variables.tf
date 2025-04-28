@@ -44,6 +44,15 @@ variable "project_id" {
   type        = string
 }
 
+variable "enable_slurm_auth" {
+  description = <<EOD
+Enables slurm authentication instead of munge.
+
+EOD
+  type        = bool
+  default     = false
+}
+
 #########
 # SLURM #
 #########
@@ -62,7 +71,7 @@ variable "controller_state_disk" {
   description = <<EOD
   A disk that will be attached to the controller instance template to save state of slurm. The disk is created and used by default.
   To disable this feature, set this variable to null.
-  
+
   NOTE: This will not save the contents at /opt/apps and /home. To preserve those, they must be saved externally.
   EOD
   type = object({
@@ -239,13 +248,8 @@ EOD
 variable "disable_default_mounts" {
   description = <<-EOD
     Disable default global network storage from the controller
-    - /usr/local/etc/slurm
-    - /etc/munge
     - /home
     - /apps
-    If these are disabled, the slurm etc and munge dirs must be added manually,
-    or some other mechanism must be used to synchronize the slurm conf files
-    and the munge key across the cluster.
     EOD
   type        = bool
   default     = false
@@ -404,7 +408,6 @@ EOD
 variable "munge_mount" {
   description = <<-EOD
   Remote munge mount for compute and login nodes to acquire the munge.key.
-
   By default, the munge mount server will be assumed to be the
   `var.slurm_control_host` (or `var.slurm_control_addr` if non-null) when
   `server_ip=null`.
@@ -421,6 +424,19 @@ variable "munge_mount" {
     fs_type       = "nfs"
     mount_options = ""
   }
+}
+
+variable "slurm_key_mount" {
+  description = <<-EOD
+  Remote mount for compute and login nodes to acquire the slurm.key.
+  EOD
+  type = object({
+    server_ip     = string
+    remote_mount  = string
+    fs_type       = string
+    mount_options = string
+  })
+  default = null
 }
 
 variable "endpoint_versions" {

@@ -119,9 +119,9 @@ module "install_nvidia_dra_driver" {
           nodeAffinity:
             requiredDuringSchedulingIgnoredDuringExecution:
               nodeSelectorTerms:
-              - matchExpressions:
-                - key: "nvidia.com/gpu"
-                  operator: "DoesNotExist"
+                - matchExpressions:
+                  - key: "nvidia.com/gpu"
+                    operator: "DoesNotExist"
 
       kubeletPlugin:
         affinity:
@@ -148,6 +148,10 @@ module "install_nvidia_dra_driver" {
             operator: Equal
             value: present
             effect: NoSchedule
+          - key: kubernetes.io/arch 
+            operator: Equal 
+            value: arm64 
+            effect: NoSchedule
       EOF
   ]
 
@@ -169,25 +173,52 @@ module "install_gpu_operator" {
   chart_version = var.gpu_operator.version
   wait          = true
 
-  set_values = [
-    {
-      name  = "hostPaths.driverInstallDir",
-      value = "/home/kubernetes/bin/nvidia"
-    },
-    {
-      name  = "toolkit.installDir"
-      value = "/home/kubernetes/bin/nvidia"
-    },
-    {
-      name  = "cdi.enabled"
-      value = true
-    },
-    {
-      name  = "cdi.default"
-      value = true
-    },
-    {
-      name  = "driver.enabled"
-      value = false
-  }]
+  # Use the 'values' argument to pass the YAML content
+  # This corresponds to the -f <(cat <<EOF ... EOF) part
+  values_yaml = [<<EOF
+      hostPaths:
+        driverInstallDir: /home/kubernetes/bin/nvidia
+      toolkit:
+        installDir: /home/kubernetes/bin/nvidia
+      cdi:
+        enabled: true
+        default: true
+      driver:
+        enabled: false
+
+      daemonsets:
+        tolerations:
+          - key: nvidia.com/gpu
+            operator: Equal
+            value: present
+            effect: NoSchedule
+          - key: kubernetes.io/arch 
+            operator: Equal 
+            value: arm64 
+            effect: NoSchedule
+
+      node-feature-discovery:
+        worker:
+          tolerations:
+            - key: kubernetes.io/arch 
+              operator: Equal 
+              value: arm64 
+              effect: NoSchedule
+            - key: "node-role.kubernetes.io/master"
+              operator: "Equal"
+              value: ""
+              effect: "NoSchedule"
+            - key: "node-role.kubernetes.io/control-plane"
+              operator: "Equal"
+              value: ""
+              effect: "NoSchedule"
+            - key: nvidia.com/gpu
+              operator: Exists
+              effect: NoSchedule
+      EOF
+  ]
+
+  atomic          = true
+  cleanup_on_fail = true
+
 }

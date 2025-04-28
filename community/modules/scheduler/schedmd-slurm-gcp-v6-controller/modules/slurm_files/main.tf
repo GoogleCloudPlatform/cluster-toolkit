@@ -46,6 +46,7 @@ locals {
     cluster_id            = random_uuid.cluster_id.result
     project               = var.project_id
     slurm_cluster_name    = var.slurm_cluster_name
+    enable_slurm_auth     = var.enable_slurm_auth
     bucket_path           = local.bucket_path
     enable_debug_logging  = var.enable_debug_logging
     extra_logging_flags   = var.extra_logging_flags
@@ -59,7 +60,8 @@ locals {
     controller_startup_scripts_timeout = var.controller_startup_scripts_timeout
     compute_startup_scripts_timeout    = var.compute_startup_scripts_timeout
 
-    munge_mount = local.munge_mount
+    munge_mount     = local.munge_mount
+    slurm_key_mount = var.slurm_key_mount
 
     # slurm conf
     prolog_scripts   = [for k, v in google_storage_bucket_object.prolog_scripts : k]

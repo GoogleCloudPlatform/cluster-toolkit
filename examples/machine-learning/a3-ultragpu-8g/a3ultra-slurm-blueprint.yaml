@@ -31,7 +31,7 @@ vars:
   # Image settings
   base_image:
     project: ubuntu-os-accelerator-images
-    family: ubuntu-accelerator-2204-amd64-with-nvidia-550
+    family: ubuntu-accelerator-2204-amd64-with-nvidia-570
   image_build_machine_type: n2-standard-16
   build_slurm_from_git_ref: 6.9.1
   # Cluster env settings
@@ -47,12 +47,15 @@ vars:
     family: $(vars.deployment_name)-u22
   disk_size_gb: 200
   nccl_plugin_version: v1.0.5
+  base_network_name: $(vars.deployment_name)
 
 deployment_groups:
 - group: image-env
   modules:
   - id: slurm-image-network
     source: modules/network/vpc
+    settings:
+      network_name: $(vars.base_network_name)-net
 
   - id: slurm-build-script
     source: modules/scripts/startup-script
@@ -107,11 +110,11 @@ deployment_groups:
               cuda_repo_filename: /tmp/{{ cuda_repo_url | basename }}
               enable_nvidia_dcgm: false
               nvidia_packages:
-              - cuda-toolkit-12-4
+              - cuda-toolkit-12-8
               - datacenter-gpu-manager
-              - libnvidia-cfg1-550-server
-              - libnvidia-nscq-550
-              - nvidia-compute-utils-550-server
+              - libnvidia-cfg1-570-server
+              - libnvidia-nscq-570
+              - nvidia-compute-utils-570-server
             tasks:
             - name: Download NVIDIA repository package
               ansible.builtin.get_url:
@@ -218,15 +221,15 @@ deployment_groups:
   - id: a3ultra-slurm-net-0
     source: modules/network/vpc
     settings:
-      network_name: $(vars.deployment_name)-net-0
+      network_name: $(vars.base_network_name)-net-0
       mtu: 8896
       enable_internal_traffic: false # Setting firewall below instead
       subnetworks:
-      - subnet_name: $(vars.deployment_name)-sub-0
+      - subnet_name: $(vars.base_network_name)-sub-0
         subnet_region: $(vars.region)
         subnet_ip: $(vars.net0_range)
       firewall_rules:
-      - name: $(vars.deployment_name)-internal-0
+      - name: $(vars.base_network_name)-internal-0
         ranges: [$(vars.net0_range)]
         allow:
         - protocol: tcp
@@ -236,15 +239,15 @@ deployment_groups:
   - id: a3ultra-slurm-net-1
     source: modules/network/vpc
     settings:
-      network_name: $(vars.deployment_name)-net-1
+      network_name: $(vars.base_network_name)-net-1
       mtu: 8896
       enable_internal_traffic: false # Setting firewall below instead
       subnetworks:
-      - subnet_name: $(vars.deployment_name)-sub-1
+      - subnet_name: $(vars.base_network_name)-sub-1
         subnet_region: $(vars.region)
         subnet_ip: $(vars.net1_range)
       firewall_rules:
-      - name: $(vars.deployment_name)-internal-1
+      - name: $(vars.base_network_name)-internal-1
         ranges: [$(vars.net1_range)]
         allow:
         - protocol: tcp
@@ -254,21 +257,14 @@ deployment_groups:
   - id: a3ultra-slurm-rdma-net
     source: modules/network/gpu-rdma-vpc
     settings:
-      network_name: $(vars.deployment_name)-rdma-net
+      network_name: $(vars.base_network_name)-rdma-net
       network_profile: https://www.googleapis.com/compute/beta/projects/$(vars.project_id)/global/networkProfiles/$(vars.zone)-vpc-roce
       network_routing_mode: REGIONAL
       subnetworks_template:
-        name_prefix: $(vars.deployment_name)-mrdma-sub
+        name_prefix: $(vars.base_network_name)-mrdma-sub
         count: 8
         ip_range: $(vars.rdma_net_range)
         region: $(vars.region)
-      firewall_rules:
-      - name: $(vars.deployment_name)-internal-rdma
-        ranges: [$(vars.rdma_net_range)]
-        allow:
-        - protocol: tcp
-        - protocol: udp
-        - protocol: icmp
 
   - id: homefs
     source: modules/file-system/filestore

@@ -13,9 +13,12 @@
   * See the License for the specific language governing permissions and
   * limitations under the License.
   */
+resource "random_id" "resource_name_suffix" {
+  byte_length = 4
+}
 
 resource "google_compute_resource_policy" "policy" {
-  name     = var.name
+  name     = "${var.name}-${random_id.resource_name_suffix.hex}"
   region   = var.region
   project  = var.project_id
   provider = google-beta

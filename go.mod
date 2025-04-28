@@ -4,14 +4,14 @@ go 1.23.0
 
 require (
 	cloud.google.com/go/storage v1.49.0 // indirect
-	github.com/go-git/go-git/v5 v5.14.0
+	github.com/go-git/go-git/v5 v5.16.0
 	github.com/hashicorp/go-getter v1.7.8
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/hashicorp/hcl/v2 v2.23.0
 	github.com/hashicorp/terraform-config-inspect v0.0.0-20230925220900-5a6f8d18746d
 	github.com/otiai10/copy v1.14.1
 	github.com/pkg/errors v0.9.1
-	github.com/spf13/afero v1.12.0
+	github.com/spf13/afero v1.14.0
 	github.com/spf13/cobra v1.9.1
 	github.com/zclconf/go-cty v1.16.2
 	golang.org/x/exp v0.0.0-20240719175910-8a7402abbf56
@@ -24,7 +24,7 @@ require (
 	github.com/fatih/color v1.18.0
 	github.com/go-git/go-billy/v5 v5.6.2
 	github.com/google/go-cmp v0.7.0
-	github.com/hashicorp/terraform-exec v0.22.0
+	github.com/hashicorp/terraform-exec v0.23.0
 	github.com/mattn/go-isatty v0.0.20
 	github.com/zclconf/go-cty-debug v0.0.0-20240509010212-0d6042c53940
 	google.golang.org/api v0.215.0
@@ -65,8 +65,8 @@ require (
 	go.opentelemetry.io/otel/sdk v1.29.0 // indirect
 	go.opentelemetry.io/otel/sdk/metric v1.29.0 // indirect
 	go.opentelemetry.io/otel/trace v1.29.0 // indirect
-	golang.org/x/mod v0.22.0 // indirect
-	golang.org/x/sync v0.11.0 // indirect
+	golang.org/x/mod v0.24.0 // indirect
+	golang.org/x/sync v0.13.0 // indirect
 	golang.org/x/time v0.8.0 // indirect
 	golang.org/x/tools v0.26.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20241209162323-e6fa225c2576 // indirect
@@ -78,11 +78,11 @@ require (
 	cloud.google.com/go/compute/metadata v0.6.0 // indirect
 	cloud.google.com/go/iam v1.2.2 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
-	github.com/ProtonMail/go-crypto v1.1.5 // indirect
+	github.com/ProtonMail/go-crypto v1.1.6 // indirect
 	github.com/agext/levenshtein v1.2.3
 	github.com/aws/aws-sdk-go v1.44.122 // indirect
 	github.com/bgentry/go-netrc v0.0.0-20140422174119-9fd32a8b3d3d // indirect
-	github.com/cloudflare/circl v1.6.0 // indirect
+	github.com/cloudflare/circl v1.6.1 // indirect
 	github.com/emirpasic/gods v1.18.1 // indirect
 	github.com/go-git/gcfg v1.5.1-0.20230307220236-3a3c6141e376 // indirect
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
@@ -109,11 +109,11 @@ require (
 	github.com/ulikunitz/xz v0.5.10 // indirect
 	github.com/xanzy/ssh-agent v0.3.3 // indirect
 	go.opencensus.io v0.24.0 // indirect
-	golang.org/x/crypto v0.35.0 // indirect
-	golang.org/x/net v0.36.0 // indirect
+	golang.org/x/crypto v0.37.0 // indirect
+	golang.org/x/net v0.39.0 // indirect
 	golang.org/x/oauth2 v0.25.0 // indirect
-	golang.org/x/sys v0.31.0
-	golang.org/x/text v0.22.0 // indirect
+	golang.org/x/sys v0.32.0
+	golang.org/x/text v0.24.0 // indirect
 	google.golang.org/grpc v1.67.3 // indirect
 	google.golang.org/protobuf v1.36.1 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect
