@@ -97,3 +97,14 @@ variable "private_vpc_connection_peering" {
   type        = string
   nullable    = false
 }
+
+variable "gke_support_enabled" {
+  description = <<-EOT
+    Set to true to create Managed Lustre instance with GKE compatibility.
+    Note: This does not work with Slurm, the Slurm image must be built with
+    the correct compatibility.
+    EOT
+  type        = bool
+  nullable    = false
+  default     = false
+}

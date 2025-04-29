@@ -36,6 +36,8 @@ locals {
     local.remote_mount_with_slash
   ) : var.remote_mount
 
+  ml_gke_support_enabled = coalesce(try(var.managed_lustre_options.gke_support_enabled, false), false)
+
   # Collapse fs_type lustre and managed lustre for most uses, only needs to be
   # different for client installation
   fs_type = strcontains(var.fs_type, "lustre") ? "lustre" : var.fs_type
@@ -66,7 +68,7 @@ locals {
     "type"        = "shell"
     "content"     = lookup(local.install_scripts, var.fs_type, "echo 'skipping: client_install_runner not yet supported for ${var.fs_type}'")
     "destination" = "install_filesystem_client${replace(var.local_mount, "/", "_")}.sh"
-    "args"        = ""
+    "args"        = local.ml_gke_support_enabled ? "1" : ""
   }
 
   mount_vanilla_supported_fstype = ["lustre", "nfs"]

@@ -19,6 +19,18 @@
 # The client modules currently only support Rocky 8, and Ubuntu 20.04/22.04
 
 set -e
+
+GKE_ENABLED=$1
+
+# Update lnet to enable GKE supported Lustre instance
+if [[ $GKE_ENABLED == "1" ]]; then
+	if [[ -f "/etc/modprobe.d/lnet.conf" ]] && grep -Fq "options lnet accept_port" /etc/modprobe.d/lnet.conf; then
+		echo "Lnet accept port already set, continuing without updating /etc/modprobe.d/lnet.conf"
+	else
+		echo "options lnet accept_port=6988" >>/etc/modprobe.d/lnet.conf
+	fi
+fi
+
 if grep -q lustre /proc/filesystems; then
 	echo "Skipping managed lustre client install as it is already supported"
 	exit 0
