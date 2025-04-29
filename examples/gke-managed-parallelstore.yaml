@@ -22,6 +22,7 @@ vars:
   # The following line must be updated for this example to work.
   authorized_cidr: <your-ip-address>/32
   gcp_public_cidrs_access_enabled: false
+  base_network_name: $(vars.deployment_name)
 
 deployment_groups:
 - group: setup
@@ -29,9 +30,10 @@ deployment_groups:
   - id: network
     source: modules/network/vpc
     settings:
-      subnetwork_name: $(vars.deployment_name)-subnet
+      network_name: $(vars.base_network_name)-net
+      subnetwork_name: $(vars.base_network_name)-subnet
       secondary_ranges_list:
-      - subnetwork_name: $(vars.deployment_name)-subnet
+      - subnetwork_name: $(vars.base_network_name)-subnet
         ranges:
         - range_name: pods
           ip_cidr_range: 10.4.0.0/14
@@ -56,7 +58,7 @@ deployment_groups:
     use: [network]
     settings:
       ingress_rules:
-      - name: $(vars.deployment_name)-allow-parallelstore-traffic
+      - name: $(vars.base_network_name)-allow-parallelstore-traffic
         description: Allow parallelstore traffic
         source_ranges:
         - $(private_service_access.cidr_range)
