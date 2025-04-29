@@ -29,7 +29,7 @@ metadata:
   name: "a3-mega"
 spec:
   nodeLabels:
-    cloud.google.com/gke-nodepool: ${node_pool_name}
+    cloud.google.com/gke-accelerator: ${accelerator_type}
   topologyName: "gke-default"
   tolerations:
   - key: "nvidia.com/gpu"

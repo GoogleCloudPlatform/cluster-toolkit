@@ -51,6 +51,7 @@ vars:
   kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
   system_node_pool_disk_size_gb: 200
   a4_node_pool_disk_size_gb: 100
+  accelerator_type: nvidia-b200
 
 
 deployment_groups:
@@ -204,7 +205,7 @@ deployment_groups:
       disk_size_gb: $(vars.a4_node_pool_disk_size_gb)
       static_node_count: $(vars.static_node_count)
       guest_accelerator:
-      - type: nvidia-b200
+      - type: $(vars.accelerator_type)
         count: 8
       reservation_affinity:
         consume_reservation_type: SPECIFIC_RESERVATION
@@ -238,7 +239,7 @@ deployment_groups:
         config_path: $(vars.kueue_configuration_path)
         config_template_vars:
           num_gpus: $(a4-pool.static_gpu_count)
-          node_pool_name: $(a4-pool.node_pool_names[0])
+          accelerator_type: $(vars.accelerator_type)
       jobset:
         install: true
       apply_manifests:
