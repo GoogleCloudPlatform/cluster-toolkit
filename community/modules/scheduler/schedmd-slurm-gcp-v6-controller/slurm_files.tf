@@ -163,6 +163,8 @@ module "slurm_files" {
   enable_chs_gpu_health_check_epilog = var.enable_chs_gpu_health_check_epilog
   epilog_scripts                     = var.epilog_scripts
   prolog_scripts                     = var.prolog_scripts
+  task_epilog_scripts                = var.task_epilog_scripts
+  task_prolog_scripts                = var.task_prolog_scripts
 
   disable_default_mounts = !var.enable_default_mounts
   network_storage = [

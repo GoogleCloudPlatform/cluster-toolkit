@@ -66,6 +66,8 @@ class TstCfg:
 
     prolog_scripts: Optional[list[Placeholder]] = field(default_factory=list)
     epilog_scripts: Optional[list[Placeholder]] = field(default_factory=list)
+    task_prolog_scripts: Optional[list[Placeholder]] = field(default_factory=list)
+    task_epilog_scripts: Optional[list[Placeholder]] = field(default_factory=list)
     
 
 @dataclass

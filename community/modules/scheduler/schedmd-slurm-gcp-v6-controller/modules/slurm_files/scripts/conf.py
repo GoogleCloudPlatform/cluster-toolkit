@@ -102,12 +102,16 @@ def conflines(lkp: util.Lookup) -> str:
     scripts_dir = lkp.cfg.install_dir or dirs.scripts
     prolog_path = Path(dirs.custom_scripts / "prolog.d")
     epilog_path = Path(dirs.custom_scripts / "epilog.d")
+    task_prolog_path = Path(dirs.custom_scripts / "task_prolog.d")
+    task_epilog_path = Path(dirs.custom_scripts / "task_epilog.d")
     default_tree_width = 65533 if any_dynamic else 128
 
     conf_options = {
         **(comma_params if not no_comma_params else {}),
         "Prolog": f"{prolog_path}/*" if lkp.cfg.prolog_scripts else None,
         "Epilog": f"{epilog_path}/*" if lkp.cfg.epilog_scripts else None,
+        "TaskProlog": f"{task_prolog_path}/*" if lkp.cfg.task_prolog_scripts else None,
+        "TaskEpilog": f"{task_epilog_path}/*" if lkp.cfg.task_epilog_scripts else None,
         "PrivateData": get("private_data", []),
         "SchedulerParameters": get("scheduler_parameters", [
             "bf_continue",

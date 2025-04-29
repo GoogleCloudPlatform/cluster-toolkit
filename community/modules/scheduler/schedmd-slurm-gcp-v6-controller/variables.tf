@@ -645,6 +645,52 @@ EOD
   }
 }
 
+variable "task_prolog_scripts" {
+  description = <<EOD
+List of scripts to be used for TaskProlog. Programs for the slurmd to execute
+as the slurm job's owner prior to initiation of each task.
+See https://slurm.schedmd.com/slurm.conf.html#OPT_TaskProlog.
+EOD
+  type = list(object({
+    filename = string
+    content  = optional(string)
+    source   = optional(string)
+  }))
+  default = []
+
+  validation {
+    condition = alltrue([
+      for script in var.task_prolog_scripts :
+      (script.content != null && script.source == null) ||
+      (script.content == null && script.source != null)
+    ])
+    error_message = "Either 'content' or 'source' must be defined, but not both."
+  }
+}
+
+variable "task_epilog_scripts" {
+  description = <<EOD
+List of scripts to be used for TaskEpilog. Programs for the slurmd to execute
+as the slurm job's owner after termination of each task.
+See https://slurm.schedmd.com/slurm.conf.html#OPT_TaskEpilog.
+EOD
+  type = list(object({
+    filename = string
+    content  = optional(string)
+    source   = optional(string)
+  }))
+  default = []
+
+  validation {
+    condition = alltrue([
+      for script in var.task_epilog_scripts :
+      (script.content != null && script.source == null) ||
+      (script.content == null && script.source != null)
+    ])
+    error_message = "Either 'content' or 'source' must be defined, but not both."
+  }
+}
+
 variable "enable_external_prolog_epilog" {
   description = <<EOD
 Automatically enable a script that will execute prolog and epilog scripts

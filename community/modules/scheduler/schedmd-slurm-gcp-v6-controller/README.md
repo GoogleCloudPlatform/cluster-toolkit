@@ -386,6 +386,8 @@ limitations under the License.
 | <a name="input_static_ips"></a> [static\_ips](#input\_static\_ips) | List of static IPs for VM instances. | `list(string)` | `[]` | no |
 | <a name="input_subnetwork_self_link"></a> [subnetwork\_self\_link](#input\_subnetwork\_self\_link) | Subnet to deploy to. | `string` | n/a | yes |
 | <a name="input_tags"></a> [tags](#input\_tags) | Network tag list. | `list(string)` | `[]` | no |
+| <a name="input_task_epilog_scripts"></a> [task\_epilog\_scripts](#input\_task\_epilog\_scripts) | List of scripts to be used for TaskEpilog. Programs for the slurmd to execute<br/>as the slurm job's owner after termination of each task.<br/>See https://slurm.schedmd.com/slurm.conf.html#OPT_TaskEpilog. | <pre>list(object({<br/>    filename = string<br/>    content  = optional(string)<br/>    source   = optional(string)<br/>  }))</pre> | `[]` | no |
+| <a name="input_task_prolog_scripts"></a> [task\_prolog\_scripts](#input\_task\_prolog\_scripts) | List of scripts to be used for TaskProlog. Programs for the slurmd to execute<br/>as the slurm job's owner prior to initiation of each task.<br/>See https://slurm.schedmd.com/slurm.conf.html#OPT_TaskProlog. | <pre>list(object({<br/>    filename = string<br/>    content  = optional(string)<br/>    source   = optional(string)<br/>  }))</pre> | `[]` | no |
 | <a name="input_universe_domain"></a> [universe\_domain](#input\_universe\_domain) | Domain address for alternate API universe | `string` | `"googleapis.com"` | no |
 | <a name="input_zone"></a> [zone](#input\_zone) | Zone where the instances should be created. If not specified, instances will be<br/>spread across available zones in the region. | `string` | `null` | no |
 

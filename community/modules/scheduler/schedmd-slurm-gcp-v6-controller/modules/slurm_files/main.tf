@@ -64,9 +64,11 @@ locals {
     slurm_key_mount = var.slurm_key_mount
 
     # slurm conf
-    prolog_scripts   = [for k, v in google_storage_bucket_object.prolog_scripts : k]
-    epilog_scripts   = [for k, v in google_storage_bucket_object.epilog_scripts : k]
-    cloud_parameters = var.cloud_parameters
+    prolog_scripts      = [for k, v in google_storage_bucket_object.prolog_scripts : k]
+    epilog_scripts      = [for k, v in google_storage_bucket_object.epilog_scripts : k]
+    task_prolog_scripts = [for k, v in google_storage_bucket_object.task_prolog_scripts : k]
+    task_epilog_scripts = [for k, v in google_storage_bucket_object.task_epilog_scripts : k]
+    cloud_parameters    = var.cloud_parameters
 
     # hybrid
     hybrid                        = var.enable_hybrid
@@ -128,7 +130,9 @@ resource "google_storage_bucket_object" "config" {
     google_storage_bucket_object.controller_startup_scripts,
     google_storage_bucket_object.nodeset_startup_scripts,
     google_storage_bucket_object.prolog_scripts,
-    google_storage_bucket_object.epilog_scripts
+    google_storage_bucket_object.epilog_scripts,
+    google_storage_bucket_object.task_prolog_scripts,
+    google_storage_bucket_object.task_epilog_scripts
   ]
 }
 
@@ -242,6 +246,30 @@ resource "google_storage_bucket_object" "epilog_scripts" {
   source  = each.value.source
 }
 
+resource "google_storage_bucket_object" "task_prolog_scripts" {
+  for_each = {
+    for x in local.task_prolog_scripts
+    : replace(basename(x.filename), "/[^a-zA-Z0-9-_]/", "_") => x
+  }
+
+  bucket  = var.bucket_name
+  name    = format("%s/slurm-task-prolog-script-%s", local.bucket_dir, each.key)
+  content = each.value.content
+  source  = each.value.source
+}
+
+resource "google_storage_bucket_object" "task_epilog_scripts" {
+  for_each = {
+    for x in local.task_epilog_scripts
+    : replace(basename(x.filename), "/[^a-zA-Z0-9-_]/", "_") => x
+  }
+
+  bucket  = var.bucket_name
+  name    = format("%s/slurm-task-epilog-script-%s", local.bucket_dir, each.key)
+  content = each.value.content
+  source  = each.value.source
+}
+
 ############################
 # DATA: CHS GPU HEALTH CHECK
 ############################
@@ -287,13 +315,15 @@ locals {
     source   = null
   }]
 
-  chs_prolog     = var.enable_chs_gpu_health_check_prolog ? local.chs_gpu_health_check : []
-  ext_prolog     = var.enable_external_prolog_epilog ? local.external_prolog : []
-  prolog_scripts = concat(local.chs_prolog, local.ext_prolog, var.prolog_scripts)
+  chs_prolog          = var.enable_chs_gpu_health_check_prolog ? local.chs_gpu_health_check : []
+  ext_prolog          = var.enable_external_prolog_epilog ? local.external_prolog : []
+  prolog_scripts      = concat(local.chs_prolog, local.ext_prolog, var.prolog_scripts)
+  task_prolog_scripts = var.task_prolog_scripts
 
-  chs_epilog     = var.enable_chs_gpu_health_check_epilog ? local.chs_gpu_health_check : []
-  ext_epilog     = var.enable_external_prolog_epilog ? local.external_epilog : []
-  epilog_scripts = concat(local.chs_epilog, local.ext_epilog, var.epilog_scripts)
+  chs_epilog          = var.enable_chs_gpu_health_check_epilog ? local.chs_gpu_health_check : []
+  ext_epilog          = var.enable_external_prolog_epilog ? local.external_epilog : []
+  epilog_scripts      = concat(local.chs_epilog, local.ext_epilog, var.epilog_scripts)
+  task_epilog_scripts = var.task_epilog_scripts
 
   controller_startup_scripts = var.enable_external_prolog_epilog ? concat(local.setup_external, var.controller_startup_scripts) : var.controller_startup_scripts
 
