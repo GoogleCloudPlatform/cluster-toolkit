@@ -42,12 +42,15 @@ vars:
   disk_size_gb: 200
   nccl_plugin_version: v1.0.5
   benchmark_dir: $(ghpc_stage("system_benchmarks"))
+  base_network_name: $(vars.deployment_name)
 
 deployment_groups:
 - group: image-env
   modules:
   - id: slurm-image-network
     source: modules/network/vpc
+    settings:
+      network_name: $(vars.base_network_name)-net
 
   - id: slurm-build-script
     source: modules/scripts/startup-script
@@ -180,15 +183,15 @@ deployment_groups:
   - id: a4high-slurm-net-0
     source: modules/network/vpc
     settings:
-      network_name: $(vars.deployment_name)-net-0
+      network_name: $(vars.base_network_name)-net-0
       mtu: 8896
       enable_internal_traffic: false # Setting firewall below instead
       subnetworks:
-      - subnet_name: $(vars.deployment_name)-sub-0
+      - subnet_name: $(vars.base_network_name)-sub-0
         subnet_region: $(vars.region)
         subnet_ip: $(vars.net0_range)
       firewall_rules:
-      - name: $(vars.deployment_name)-internal-0
+      - name: $(vars.base_network_name)-internal-0
         ranges: [$(vars.net0_range)]
         allow:
         - protocol: tcp
@@ -198,15 +201,15 @@ deployment_groups:
   - id: a4high-slurm-net-1
     source: modules/network/vpc
     settings:
-      network_name: $(vars.deployment_name)-net-1
+      network_name: $(vars.base_network_name)-net-1
       mtu: 8896
       enable_internal_traffic: false # Setting firewall below instead
       subnetworks:
-      - subnet_name: $(vars.deployment_name)-sub-1
+      - subnet_name: $(vars.base_network_name)-sub-1
         subnet_region: $(vars.region)
         subnet_ip: $(vars.net1_range)
       firewall_rules:
-      - name: $(vars.deployment_name)-internal-1
+      - name: $(vars.base_network_name)-internal-1
         ranges: [$(vars.net1_range)]
         allow:
         - protocol: tcp
@@ -216,11 +219,11 @@ deployment_groups:
   - id: a4high-slurm-rdma-net
     source: modules/network/gpu-rdma-vpc
     settings:
-      network_name: $(vars.deployment_name)-rdma-net
+      network_name: $(vars.base_network_name)-rdma-net
       network_profile: https://www.googleapis.com/compute/beta/projects/$(vars.project_id)/global/networkProfiles/$(vars.zone)-vpc-roce
       network_routing_mode: REGIONAL
       subnetworks_template:
-        name_prefix: $(vars.deployment_name)-mrdma-sub
+        name_prefix: $(vars.base_network_name)-mrdma-sub
         count: 8
         ip_range: $(vars.rdma_net_range)
         region: $(vars.region)
