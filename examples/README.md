@@ -27,7 +27,8 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [image-builder.yaml](#image-builderyaml-) ![core-badge]
   * [serverless-batch.yaml](#serverless-batchyaml-) ![core-badge]
   * [serverless-batch-mpi.yaml](#serverless-batch-mpiyaml-) ![core-badge]
-  * [pfs-lustre.yaml](#pfs-lustreyaml-) ![core-badge]
+  * [pfs-lustre.yaml](#pfs-lustreyaml-) ![core-badge] ![deprecated-badge]
+  * [pfs-managed-lustre-vms.yaml](#pfs-managed-lustre-vmsyaml-) ![core-badge]
   * [ps-slurm.yaml](#ps-slurmyaml--) ![core-badge] ![experimental-badge]
   * [pfs-parallelstore.yaml](#pfs-parallelstoreyaml--) ![core-badge] ![experimental-badge]
   * [cae-slurm.yaml](#cae-slurmyaml-) ![core-badge]
@@ -598,7 +599,9 @@ The blueprint contains the following:
 
 [serverless-batch-mpi.yaml]: ../examples/serverless-batch-mpi.yaml
 
-### [pfs-lustre.yaml] ![core-badge]
+### [pfs-lustre.yaml] ![core-badge] ![deprecated-badge]
+
+_This blueprint has been deprecated and will be removed on August 1, 2025._
 
 Creates a DDN EXAScaler lustre file-system that is mounted in two client instances.
 
@@ -624,6 +627,31 @@ For this example the following is needed in the selected region:
 * Compute Engine API: N2 CPUs: **~116: 32 MDS, 32 MGS, 3x16 OSS, 2x2 client-vms**
 
 [pfs-lustre.yaml]: ./pfs-lustre.yaml
+
+### [pfs-managed-lustre-vms.yaml] ![core-badge]
+
+Creates a Managed Lustre file-system that is mounted in one client instance.
+
+The [GCP Managed Lustre](../modules/file-system/managed-lustre/README.md)
+file system is designed for high IO performance. It has a minimum capacity of ~18TiB and is mounted at `/lustre`.
+
+After the creation of the file-system and the client instances, the lustre drivers will be automatically installed and the mount-point configured on the VMs. This may take a few minutes after the VMs are created and can be verified by running:
+
+```sh
+watch mount -t lustre
+```
+
+#### Quota Requirements for pfs-managed-lustre.yaml
+
+For this example, the following is needed in the selected region:
+
+* Compute Engine API: Persistent Disk SSD (GB): **~800GB: 800GB MDT**
+* Compute Engine API: Persistent Disk Standard (GB): **~328GB: 128 MGT, 200GB client-vm**
+* Compute Engine API: Hyperdisk Balanced (GB): **~27432GB: 18432 GB OST Pool, 8*1125GB OST**
+* Compute Engine API: N2 CPUs: **~34: 32 MGS, 2 client-vm**
+* Compute Engine API: C3 CPUs: **~396: 44 MDS, 2*176 OSS**
+
+[pfs-managed-lustre-vms.yaml]: ./pfs-managed-lustre-vms.yaml
 
 ### [ps-slurm.yaml] ![core-badge] ![experimental-badge]
 
