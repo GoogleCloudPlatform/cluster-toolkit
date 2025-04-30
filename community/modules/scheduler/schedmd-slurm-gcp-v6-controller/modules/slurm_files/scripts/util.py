@@ -1242,6 +1242,13 @@ def batch_execute(requests, retry_cb=None, log_err=log.error):
     return done, failed
 
 
+def get_operation_req(lkp: "Lookup", name: str, region: Optional[str]=None, zone: Optional[str]=None) -> Any:
+  if zone:
+    return lkp.compute.zoneOperations().get(project=lkp.project, zone=zone, operation=name)
+  elif region:
+    return lkp.compute.regionOperations().get(project=lkp.project, region=region, operation=name)
+  return lkp.compute.globalOperations().get(project=lkp.project, operation=name)
+
 def wait_request(operation, project: str):
     """makes the appropriate wait request for a given operation"""
     if "zone" in operation:
@@ -1277,11 +1284,6 @@ def wait_for_operation(operation) -> Dict[str, Any]:
             )
             return result
 
-
-def wait_for_operations(operations):
-    return [
-        wait_for_operation(op) for op in operations
-    ]
 
 
 def get_filtered_operations(op_filter):
