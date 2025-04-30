@@ -20,10 +20,12 @@ region: us-central1
 zone: us-central1-a
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/examples/pfs-parallelstore.yaml"
-network: "{{ deployment_name }}-net"
+network: "{{ test_name }}-net"
 remote_node: "{{ deployment_name }}-debian-0"
 post_deploy_tests:
 - test-validation/test-mounts.yml
 custom_vars:
   mounts:
   - /parallelstore
+cli_deployment_vars:
+  base_network_name: "{{ test_name }}"

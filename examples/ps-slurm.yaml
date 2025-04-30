@@ -25,7 +25,7 @@ vars:
   region: us-east4
   zone: us-east4-b
   compute_node_machine_type: c2-standard-60
-
+  base_network_name: $(vars.deployment_name)
   # The Parallelstore drivers installation takes a long time.
   # Increase the timeout to 20 minutes (default is 5 minutes).
   compute_startup_scripts_timeout: $(20*60)
@@ -38,6 +38,8 @@ deployment_groups:
   modules:
   - id: network
     source: modules/network/vpc
+    settings:
+      network_name: $(vars.base_network_name)-net
 
   # Private Service Access (PSA) requires the compute.networkAdmin role which is
   # included in the Owner role, but not Editor.
