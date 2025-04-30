@@ -57,7 +57,6 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [hpc-slurm-ramble-gromacs.yaml](#hpc-slurm-ramble-gromacsyaml--) ![community-badge] ![experimental-badge]
   * [flux-cluster](#flux-clusteryaml--) ![community-badge] ![experimental-badge]
   * [tutorial-fluent.yaml](#tutorial-fluentyaml--) ![community-badge] ![experimental-badge]
-  * [omnia-cluster.yaml](#omnia-clusteryaml---) ![community-badge] ![experimental-badge] ![deprecated-badge]
   * [gke-tpu-v4](#gke-tpu-v4--) ![community-badge] ![experimental-badge]
   * [xpk-n2-filestore](#xpk-n2-filestore--) ![community-badge] ![experimental-badge]
 * [Blueprint Schema](#blueprint-schema)
@@ -906,25 +905,6 @@ The experiments defined by the workspace configuration are a 1, 2, 4, 8, and 16
 node scaling study of the Lignocellulose benchmark for Gromacs.
 
 [hpc-slurm-ramble-gromacs.yaml]: ../community/examples/hpc-slurm-ramble-gromacs.yaml
-
-### [omnia-cluster.yaml] ![community-badge] ![experimental-badge] ![deprecated-badge]
-
-_This blueprint has been deprecated and will be removed on August 1, 2024._
-
-Creates a simple [Dell Omnia][omnia-github] provisioned cluster with an
-omnia-manager node that acts as the slurm manager and 2 omnia-compute nodes on
-the pre-existing default network. Omnia will be automatically installed after
-the nodes are provisioned. All nodes mount a filestore instance on `/home`.
-
-> **_NOTE:_** The omnia-cluster.yaml example uses `vm-instance` modules to
-> create the cluster. For these instances, Simultaneous Multithreading (SMT) is
-> turned off by default, meaning that only the physical cores are visible. For
-> the compute nodes, this means that 30 physical cores are visible on the
-> `c2-standard-60` VMs. To activate all 60 virtual cores, include
-> `threads_per_core=2` under settings for the compute vm-instance module.
-
-[omnia-github]: https://github.com/dellhpc/omnia
-[omnia-cluster.yaml]: ../community/examples/omnia-cluster.yaml
 
 ### [hpc-slurm-local-ssd.yaml] ![community-badge] ![experimental-badge]
 
