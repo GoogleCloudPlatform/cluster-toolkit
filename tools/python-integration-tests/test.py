@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 import json
 import subprocess
 import time
@@ -19,6 +20,13 @@ import unittest
 import re
 from ssh import SSHManager
 from deployment import Deployment
+from tenacity import retry, wait_fixed, stop_after_delay
+
+
+#retry after every 5 / 10 secs till 120 s
+def retry_with_timeout(delay=10, timeout=120):
+   return retry(wait=wait_fixed(delay), stop=stop_after_delay(timeout))
+
 
 class Test(unittest.TestCase):  # Inherit from unittest.TestCase
     def __init__(self, deployment):
@@ -26,6 +34,7 @@ class Test(unittest.TestCase):  # Inherit from unittest.TestCase
         self.deployment = deployment
         self.ssh_manager = None
         self.ssh_client = None
+
 
     def run_command(self, cmd: str) -> subprocess.CompletedProcess:
         res = subprocess.run(cmd, shell=True, text=True, check=True,
@@ -35,10 +44,16 @@ class Test(unittest.TestCase):  # Inherit from unittest.TestCase
     def setUp(self):
         self.addCleanup(self.clean_up)
         self.deployment.deploy()
-        time.sleep(120)
+        self.ready() # abrstractor implemnet ready (below)
+
+
+    def ready(self):
+        pass
+
 
     def clean_up(self):
         self.deployment.destroy()
+
 
 class SlurmTest(Test):
     # Base class for Slurm-specific tests.
@@ -56,6 +71,25 @@ class SlurmTest(Test):
         super().setUp()
         hostname = self.get_login_node()
         self.ssh(hostname)
+
+    @retry_with_timeout()        
+    def ready(self):
+        hostname = self.get_login_node()
+        self.ssh(hostname)
+        cmd = "sinfo --noheader -o '%P %a %T'"
+        stdin, stdout, stderr = self.ssh_client.exec_command(cmd)
+        output = stdout.read().decode().splitlines()
+
+        for line in output:
+            parts = line.split()
+            if len(parts) < 3:
+                continue
+            avail = parts[1].lower()  # e.g. , "up" 
+            state = parts[2].lower() # e.g. , "idle~" 
+            
+            # Check if it's "up", anything else means not fully ready
+            if avail != "up" or state != "idle~":
+                raise Exception(f"Partition not ready: {line}")  # triggers retry
 
     def clean_up(self):
         super().clean_up()

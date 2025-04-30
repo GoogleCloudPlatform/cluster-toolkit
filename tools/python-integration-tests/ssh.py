@@ -18,6 +18,7 @@ import socket
 import time
 import paramiko
 
+
 class SSHManager:
     # Manages tunnel and SSH connection.
     _instance = None
@@ -58,13 +59,12 @@ class SSHManager:
 
     def get_keypath(self):
         key_path = os.path.expanduser("~/.ssh/google_compute_engine")
+        public_key_path = key_path + ".pub"
         os.makedirs(os.path.dirname(key_path), exist_ok=True)
 
-        self.run_command(["ssh-keygen", "-t", "rsa", "-f", key_path, "-N", ""])
-
-        # Add the public key to OS Login
-        public_key_path = key_path + ".pub"
-        self.run_command(["gcloud", "compute", "os-login", "ssh-keys", "add", "--key-file", public_key_path, "--ttl", "60m"])
+        if not os.path.exists(public_key_path):
+            self.run_command(["ssh-keygen", "-t", "rsa", "-f", key_path, "-N", ""])
+            self.run_command(["gcloud", "compute", "os-login", "ssh-keys", "add", "--key-file", public_key_path, "--ttl", "60m"])
 
         return key_path
 
