@@ -32,5 +32,5 @@ steps:
     set -x -e
     cd /workspace && make
     export BUILD_ID="${BUILD_ID}"
-
+    
     python3 tools/python-integration-tests/slurm_topology.py

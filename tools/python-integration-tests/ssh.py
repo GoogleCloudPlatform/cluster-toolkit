@@ -37,6 +37,13 @@ class SSHManager:
     def run_command(self, cmd: str) -> subprocess.CompletedProcess:
         res = subprocess.run(cmd, text=True, check=True, capture_output=True)
 
+    # def run_command(self, cmd: list) -> subprocess.CompletedProcess:
+    #     try:
+    #         return subprocess.run(cmd, text=True, check=True, capture_output=True)
+    #     except subprocess.CalledProcessError as e:
+    #         raise RuntimeError(f"Command failed: {' '.join(cmd)}\nstdout: {e.stdout}\nstderr: {e.stderr}") from e
+
+
     def get_available_port(self):
         sock = socket.socket()
         sock.bind(('', 0))
@@ -56,17 +63,28 @@ class SSHManager:
         # Sleep to give the tunnel a few seconds to set up
         time.sleep(3)
 
+    # def get_keypath(self):
+    #     key_path = os.path.expanduser("~/.ssh/google_compute_engine")
+    #     os.makedirs(os.path.dirname(key_path), exist_ok=True)
+
+    #     self.run_command(["ssh-keygen", "-t", "rsa", "-f", key_path, "-N", ""])
+
+    #     # Add the public key to OS Login
+    #     public_key_path = key_path + ".pub"
+    #     self.run_command(["gcloud", "compute", "os-login", "ssh-keys", "add", "--key-file", public_key_path, "--ttl", "60m"])
+
+    #     return key_path
+
     def get_keypath(self):
         key_path = os.path.expanduser("~/.ssh/google_compute_engine")
-        os.makedirs(os.path.dirname(key_path), exist_ok=True)
-
-        self.run_command(["ssh-keygen", "-t", "rsa", "-f", key_path, "-N", ""])
-
-        # Add the public key to OS Login
         public_key_path = key_path + ".pub"
-        self.run_command(["gcloud", "compute", "os-login", "ssh-keys", "add", "--key-file", public_key_path, "--ttl", "60m"])
-
+        os.makedirs(os.path.dirname(key_path), exist_ok=True)
+        
+        if not os.path.exists(public_key_path):
+            self.run_command(["ssh-keygen", "-t", "rsa", "-f", key_path, "-N", ""])
+            self.run_command(["gcloud", "compute", "os-login", "ssh-keys", "add", "--key-file", public_key_path, "--ttl", "60m"])
         return key_path
+
 
     def setup_connection(self, instance_name, project_id, zone):
         self.ssh_client = paramiko.SSHClient()
