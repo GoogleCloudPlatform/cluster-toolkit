@@ -30,6 +30,7 @@ from util import (
 from util import lookup
 import tpu
 import mig_flex
+import mig
 
 log = logging.getLogger()
 
@@ -82,9 +83,12 @@ def delete_instances(instances):
 def suspend_nodes(nodes: List[str]) -> None:
     lkp = lookup()
     other_nodes, tpu_nodes = util.separate(lkp.node_is_tpu, nodes)
-    bulk_nodes, flex_nodes = util.separate(lkp.is_flex_node, other_nodes)
+    other_nodes, flex_nodes = util.separate(lkp.is_flex_node, other_nodes)
+    bulk_nodes, mig_nodes = util.separate(mig.is_mig_node, other_nodes)
 
     mig_flex.suspend_flex_nodes(flex_nodes, lkp)
+    mig.suspend_mig_nodes(lkp, mig_nodes)
+    
     delete_instances(bulk_nodes)
     tpu.delete_tpu_instances(tpu_nodes)
 
