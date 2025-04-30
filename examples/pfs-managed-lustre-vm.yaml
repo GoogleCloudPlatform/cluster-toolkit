@@ -48,6 +48,7 @@ deployment_groups:
     id: lustre_ubuntu22_instances
     use: [network, lustre-gcp]
     settings:
+      add_deployment_name_before_prefix: true
       name_prefix: lustre-ubuntu22
       instance_count: 1
       machine_type: n2-standard-2
