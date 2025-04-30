@@ -78,6 +78,7 @@ variable "nodeset" {
     disk_type                        = optional(string)
     enable_confidential_vm           = optional(bool, false)
     enable_placement                 = optional(bool, false)
+    placement_max_distance           = optional(number, null)
     enable_oslogin                   = optional(bool, true)
     enable_shielded_vm               = optional(bool, false)
     enable_maintenance_reservation   = optional(bool, false)
