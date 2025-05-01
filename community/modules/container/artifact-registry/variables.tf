@@ -12,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Todo: re-add the variable validation in a way that pre-commit/TF is happy with...
-
 variable "project_id" {
   description = "Project ID where the artifact registry and secret are created."
   type        = string
