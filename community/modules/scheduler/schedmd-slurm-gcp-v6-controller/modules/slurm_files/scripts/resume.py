@@ -91,8 +91,8 @@ def instance_properties(nodeset: NSDict, model:str, placement_group:Optional[str
     props = NSDict()
 
     if labels: # merge in extra labels on instance and disks
-        template = lookup().node_template(model)
-        template_info = lookup().template_info(template)
+        template_link = lookup().node_template(model)
+        template_info = lookup().template_info(template_link)
 
         props.labels = {**template_info.labels, **labels}
         
