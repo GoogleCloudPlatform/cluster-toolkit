@@ -454,7 +454,7 @@ def install_custom_scripts(check_hash=False):
     role, tokens = lookup().instance_role, []
 
     if role == "controller":
-        tokens = ["controller", "prolog", "epilog"]
+        tokens = ["controller", "prolog", "epilog", "task_prolog", "task_epilog"]
     elif role == "compute":
         tokens = [
             "prolog",

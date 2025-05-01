@@ -513,7 +513,13 @@ variable "slurmdbd_conf_tpl" {
 }
 
 variable "slurm_conf_tpl" {
-  description = "Slurm slurm.conf template file path."
+  type        = string
+  description = "Slurm slurm.conf template file path. This path is used only if raw content is not provided in 'slurm_conf_template'."
+  default     = null
+}
+
+variable "slurm_conf_template" {
+  description = "Slurm slurm.conf template. Content of the file in 'slurm_conf_tpl' is used if this is not set."
   type        = string
   default     = null
 }
@@ -632,6 +638,52 @@ EOD
   validation {
     condition = alltrue([
       for script in var.epilog_scripts :
+      (script.content != null && script.source == null) ||
+      (script.content == null && script.source != null)
+    ])
+    error_message = "Either 'content' or 'source' must be defined, but not both."
+  }
+}
+
+variable "task_prolog_scripts" {
+  description = <<EOD
+List of scripts to be used for TaskProlog. Programs for the slurmd to execute
+as the slurm job's owner prior to initiation of each task.
+See https://slurm.schedmd.com/slurm.conf.html#OPT_TaskProlog.
+EOD
+  type = list(object({
+    filename = string
+    content  = optional(string)
+    source   = optional(string)
+  }))
+  default = []
+
+  validation {
+    condition = alltrue([
+      for script in var.task_prolog_scripts :
+      (script.content != null && script.source == null) ||
+      (script.content == null && script.source != null)
+    ])
+    error_message = "Either 'content' or 'source' must be defined, but not both."
+  }
+}
+
+variable "task_epilog_scripts" {
+  description = <<EOD
+List of scripts to be used for TaskEpilog. Programs for the slurmd to execute
+as the slurm job's owner after termination of each task.
+See https://slurm.schedmd.com/slurm.conf.html#OPT_TaskEpilog.
+EOD
+  type = list(object({
+    filename = string
+    content  = optional(string)
+    source   = optional(string)
+  }))
+  default = []
+
+  validation {
+    condition = alltrue([
+      for script in var.task_epilog_scripts :
       (script.content != null && script.source == null) ||
       (script.content == null && script.source != null)
     ])

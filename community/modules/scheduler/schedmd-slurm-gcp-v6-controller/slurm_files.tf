@@ -137,10 +137,11 @@ module "slurm_files" {
   bucket_name                   = local.bucket_name
   controller_network_attachment = var.controller_network_attachment
 
-  slurmdbd_conf_tpl = var.slurmdbd_conf_tpl
-  slurm_conf_tpl    = var.slurm_conf_tpl
-  cgroup_conf_tpl   = var.cgroup_conf_tpl
-  cloud_parameters  = var.cloud_parameters
+  slurmdbd_conf_tpl   = var.slurmdbd_conf_tpl
+  slurm_conf_tpl      = var.slurm_conf_tpl
+  slurm_conf_template = var.slurm_conf_template
+  cgroup_conf_tpl     = var.cgroup_conf_tpl
+  cloud_parameters    = var.cloud_parameters
   cloudsql_secret = try(
     one(google_secret_manager_secret_version.cloudsql_version[*].id),
   null)
@@ -162,6 +163,8 @@ module "slurm_files" {
   enable_chs_gpu_health_check_epilog = var.enable_chs_gpu_health_check_epilog
   epilog_scripts                     = var.epilog_scripts
   prolog_scripts                     = var.prolog_scripts
+  task_epilog_scripts                = var.task_epilog_scripts
+  task_prolog_scripts                = var.task_prolog_scripts
 
   disable_default_mounts = !var.enable_default_mounts
   network_storage = [
