@@ -39,6 +39,7 @@ locals {
     "type"        = "shell"
     "source"      = "${path.module}/scripts/install-managed-lustre-client.sh"
     "destination" = "install-managed-lustre-client${replace(var.local_mount, "/", "_")}.sh"
+    "args"        = var.gke_support_enabled ? "1" : "0"
   }
   mount_runner = {
     "type"        = "shell"
@@ -60,6 +61,8 @@ resource "google_lustre_instance" "lustre_instance" {
 
   labels  = local.labels
   network = var.network_id
+
+  gke_support_enabled = var.gke_support_enabled
 
   timeouts {
     create = "1h"

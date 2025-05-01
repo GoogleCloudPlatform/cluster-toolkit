@@ -52,3 +52,16 @@ variable "parallelstore_options" {
   })
   default = {}
 }
+
+variable "managed_lustre_options" {
+  description = <<-EOT
+    Managed Lustre specific options:
+      gke_support_enabled (bool, default = false)
+    Note: gke_support_enabled does not work with Slurm, the Slurm image must be built with
+    the correct compatibility.
+    EOT
+  type = object({
+    gke_support_enabled = optional(bool, false)
+  })
+  default = {}
+}
