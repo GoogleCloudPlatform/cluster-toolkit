@@ -46,7 +46,7 @@ grafana-api==1.0.3
 grpc-google-iam-v1==0.14.2
 grpcio==1.69.0
 grpcio-status==1.69.0
-h11==0.14.0
+h11==0.16.0
 httplib2==0.22.0
 identify==2.6.9
 idna==3.10
