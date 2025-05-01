@@ -29,11 +29,12 @@ data "google_compute_network_peering" "private_peering" {
 }
 
 locals {
-  server_ip     = split(":", google_lustre_instance.lustre_instance.mount_point)[0]
-  remote_mount  = split(":", google_lustre_instance.lustre_instance.mount_point)[1]
-  fs_type       = "lustre"
-  mount_options = var.mount_options
-  instance_id   = var.name != null ? var.name : "${var.deployment_name}-${random_id.resource_name_suffix.hex}"
+  server_ip        = split(":", google_lustre_instance.lustre_instance.mount_point)[0]
+  remote_mount     = split(":", google_lustre_instance.lustre_instance.mount_point)[1]
+  fs_type          = "lustre"
+  mount_options    = var.mount_options
+  instance_id      = var.name != null ? var.name : "${var.deployment_name}-${random_id.resource_name_suffix.hex}"
+  destination_path = "/"
 
   install_managed_lustre_client_runner = {
     "type"        = "shell"
@@ -47,6 +48,14 @@ locals {
     "args"        = "\"${local.server_ip}\" \"${local.remote_mount}\" \"${var.local_mount}\" \"${local.fs_type}\" \"${local.mount_options}\""
     "destination" = "mount${replace(var.local_mount, "/", "_")}.sh"
   }
+
+  bucket_count = try(length(data.google_storage_bucket.lustre_import_bucket), 0)
+}
+
+data "google_storage_bucket" "lustre_import_bucket" {
+  count = try(length(var.import_gcs_bucket_uri) > 0, false) ? 1 : 0
+
+  name = split("//", var.import_gcs_bucket_uri)[1]
 }
 
 resource "google_lustre_instance" "lustre_instance" {
@@ -70,12 +79,25 @@ resource "google_lustre_instance" "lustre_instance" {
     delete = "1h"
   }
 
-  depends_on = [var.private_vpc_connection_peering]
+  depends_on = [var.private_vpc_connection_peering, data.google_storage_bucket.lustre_import_bucket]
 
   lifecycle {
     precondition {
       condition     = data.google_compute_network_peering.private_peering.state == "ACTIVE"
       error_message = "The subnetwork that the lustre instance is hosted on must have private service access."
     }
+  }
+
+  provisioner "local-exec" {
+    command     = <<EOF
+      if [[ ${local.bucket_count} > 0 ]]; then
+        curl -X POST \
+             -H "Content-Type: application/json" \
+             -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+             -d '{"gcsPath": {"uri":"${coalesce(var.import_gcs_bucket_uri, "gs://")}"}, "lustrePath": {"path":"${local.destination_path}"}}' \
+             https://lustre.googleapis.com/v1/projects/${var.project_id}/locations/${var.zone}/instances/${local.instance_id}:importData
+      fi
+      EOF
+    interpreter = ["bash", "-c"]
   }
 }
