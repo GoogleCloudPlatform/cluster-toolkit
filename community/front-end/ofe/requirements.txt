@@ -48,7 +48,7 @@ importlib-resources==6.5.2
 isort==6.0.1
 Jinja2==3.1.6
 jsonschema==4.23.0
-jsonschema-specifications==2023.12.1
+jsonschema-specifications==2025.4.1
 lazy-object-proxy==1.10.0
 libcst==1.7.0
 macholib==1.16.3
