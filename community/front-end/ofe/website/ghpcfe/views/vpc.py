@@ -415,7 +415,12 @@ class VirtualSubnetView(SuperUserRequiredMixin, generic.TemplateView):
             form=VirtualSubnetForm,
             fk_name="vpc",
             formfield_callback=formfield_cb,
-            fields=("name", "cidr", "cloud_region"),
+            fields=(
+                "name",
+                "cidr",
+                "cloud_region",
+                "private_google_access_enabled"
+            ),
             can_delete=True,
             extra=1,
         )

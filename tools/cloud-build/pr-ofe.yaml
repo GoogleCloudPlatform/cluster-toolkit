@@ -16,7 +16,7 @@
 
 steps:
 - id: ofe-virtual-env
-  name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
+  name: python:3.12
   entrypoint: /bin/bash
   args:
   - '-c'

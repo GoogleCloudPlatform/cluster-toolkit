@@ -33,13 +33,16 @@ from ..forms import ApplicationEditForm
 from ..forms import ApplicationForm
 from ..forms import CustomInstallationApplicationForm
 from ..forms import SpackApplicationForm
+from ..forms import ContainerApplicationForm
 from ..models import Application
 from ..models import Cluster
 from ..models import CustomInstallationApplication
 from ..models import SpackApplication
+from ..models import ContainerApplication
 from ..serializers import ApplicationSerializer
 from .view_utils import GCSFile
 from .view_utils import StreamingFileView
+from .view_utils import RegistryDataHelper
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +73,8 @@ class ApplicationListView(LoginRequiredMixin, generic.ListView):
                 item.type = "spack"
             elif hasattr(item, "custominstallationapplication"):
                 item.type = "custom"
+            elif hasattr(item, "containerapplication"):
+                item.type = "container"
             else:
                 item.type = "pre-installed"
         return queryset
@@ -108,13 +113,19 @@ class ApplicationDetailView(generic.DetailView):
         )
         if hasattr(self.get_object(), "spackapplication"):
             return ["application/spack_detail.html"]
+        if hasattr(self.get_object(), "containerapplication"):
+            return ["application/container_detail.html"]
         return super().get_template_names()
 
     def get_context_data(self, **kwargs):
         admin_view = 0
         if self.request.user.has_admin_role():
             admin_view = 1
+
         context = super().get_context_data(**kwargs)
+
+        application = self.get_object()
+
         if hasattr(self.get_object(), "spackapplication"):
             spack_application = SpackApplication.objects.get(
                 pk=context["application"].id
@@ -123,6 +134,35 @@ class ApplicationDetailView(generic.DetailView):
             load = context["application"].load_command
             if load and load.startswith("spack load /"):
                 context["application"].spack_hash = load.split("/", 1)[1]
+
+        if hasattr(application, "containerapplication"):
+            container_application = application.containerapplication
+            logger.info(f"Container Application Retrieved: {container_application}")
+
+            # Ensure correct object reference
+            context["application"] = container_application
+            context["application"].container_image = (
+                container_application.container_image.split("/")[-1] if container_application.container_image else "N/A"
+            )
+            context["application"].full_container_image_uri = container_application.get_full_container_image_uri()
+
+            # Registry Debugging
+            context["application"].registry = container_application.registry
+            if container_application.registry:
+                logger.info(f"Registry Found: {container_application.registry}")
+                context["registry_console_url"] = container_application.registry.get_registry_console_url()
+                context["registry_mode"] = container_application.registry.get_repo_mode_display()
+            else:
+                logger.warning("Registry Not Found")
+                context["registry_console_url"] = None
+                context["registry_mode"] = "N/A"
+
+            logger.info(
+                f"Container Image: {context['application'].container_image}, "
+                f"Full URI: {context['application'].full_container_image_uri}, "
+                f"Registry: {context['application'].registry}"
+            )
+
         context["navtab"] = "application"
         context["admin_view"] = admin_view
         return context
@@ -152,6 +192,8 @@ class ApplicationCreateSelectView(LoginRequiredMixin, generic.ListView):
             itemtype = "application-create-install"
         elif request.POST["application-type"] == "installed":
             itemtype = "application-create"
+        elif request.POST["application-type"] == "container":
+            itemtype = "application-create-container"
         return HttpResponseRedirect(
             reverse(itemtype, kwargs={"cluster": request.POST["cluster"]})
         )
@@ -269,6 +311,53 @@ class SpackApplicationCreateView(LoginRequiredMixin, generic.CreateView):
             '"Spack install" button below to actually install it on cluster.',
         )
         return HttpResponseRedirect(self.get_success_url())
+
+
+class ContainerApplicationCreateView(LoginRequiredMixin, generic.CreateView):
+    """CreateView for Containerised Applications"""
+
+    template_name = "application/container_create_form.html"
+    form_class = ContainerApplicationForm
+
+    def get_initial(self):
+        """Ensure cluster is set as an initial value"""
+        return {"cluster": self.get_cluster()}
+
+    def get_context_data(self, **kwargs):
+        """Pass cluster to the template, matching other views"""
+        context = super().get_context_data(**kwargs)
+        context["cluster"] = self.get_cluster()
+        context["navtab"] = "application"
+        return context
+
+    def get_cluster(self):
+        """Retrieve the cluster from the URL kwargs"""
+        return get_object_or_404(Cluster, pk=self.kwargs["cluster"])
+
+    def get_form_kwargs(self):
+        """Pass cluster explicitly to the form"""
+        kwargs = super().get_form_kwargs()
+        kwargs["cluster"] = self.get_cluster()
+        return kwargs
+
+    def form_valid(self, form):
+        """Set status and save container application"""
+        self.object = form.save(commit=False)
+        self.object.cluster = self.get_cluster()  # Ensure cluster is set
+        self.object.status = "r"
+
+        if not self.object.registry:
+            logger.warning("No registry set for Container Application")
+
+        self.object.save()
+        messages.success(
+            self.request,
+            f'Container Application "{self.object.name}" created successfully.',
+        )
+        return HttpResponseRedirect(self.get_success_url())
+
+    def get_success_url(self):
+        return reverse("application-detail", kwargs={"pk": self.object.pk})
 
 
 class ApplicationUpdateView(LoginRequiredMixin, generic.UpdateView):

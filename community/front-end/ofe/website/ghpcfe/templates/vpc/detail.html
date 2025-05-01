@@ -50,6 +50,7 @@
         <th>Subnet Name</th>
         <th>Region</th>
         <th>CIDR</th>
+        <th>Private Access Enabled</th>
       </tr>
       {% if subnets %}
         {% for subnet in subnets %}
@@ -57,11 +58,12 @@
         <td>{{ subnet.name }}</td>
         <td>{{ subnet.cloud_region }}</td>
         <td>{{ subnet.cidr }}</td>
+        <td>{{ subnet.private_google_access_enabled }}</td>
       </tr>
         {% endfor %}
       {% else %}
       <tr>
-        <td colspan="3">
+        <td colspan="4">
           {% if "c" not in object.cloud_state %}
           Click the <b>Edit Subnets</b> button below to configure subnets.</td> 
           {% endif %}

@@ -25,6 +25,7 @@
     <li><b>Spack applications</b>: use the Spack package management system to install commonly used and mostly open-source applications.</li>
     <li><b>Custom applications</b>: for applications not yet supported by Spack, e.g. in-house applications or those Spack fails to build, use custom scripts to install them.</li>
     <li><b>Pre-installed applications</b>: if applications have to be manually installed on clusters (e.g. commercial applications with complex set-up), register them with the system.</li>
+    <li><b>Container applications</b>: use a pre-existing container in your 'standard' repository, or pull a mirrored container from a configured 'remote' repository</li>
   </ul>
   <hr>
 
@@ -49,6 +50,8 @@
       <label for="type2">Custom application</label>
       <input type="radio" id="type3" name="application-type" value="installed">
       <label for="type3">Pre-installed application</label>
+      <input type="radio" id="type4" name="application-type" value="container">
+      <label for="type4">Container application</label>
       <small class="form-text text-muted">Which type of application to set up?</small>
     </div>
     <br/>  
