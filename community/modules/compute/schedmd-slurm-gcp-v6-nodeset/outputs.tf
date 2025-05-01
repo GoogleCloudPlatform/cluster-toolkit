@@ -48,6 +48,11 @@ output "nodeset" {
   }
 
   precondition {
+    condition     = can(regex("^(a3-|g2-|a2-|a4-).*", var.machine_type)) || !var.dws_flex.enabled || var.dws_flex.use_bulk_insert
+    error_message = "DWS Flex-Start is only support on G2, A2, A3 High/Mega/Ultra, A4 machine types."
+  }
+
+  precondition {
     condition     = !var.enable_placement || !var.dws_flex.enabled
     error_message = "Cannot use DWS Flex with `enable_placement`."
   }

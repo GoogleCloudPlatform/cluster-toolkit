@@ -1675,6 +1675,20 @@ class Lookup:
             project=project, zone=zone, reservation=name).execute()
 
     @lru_cache()
+    def get_mig(self, project: str, zone: str, self_link:str) -> Any:
+        """https://cloud.google.com/compute/docs/reference/rest/v1/instanceGroupManagers"""
+        return self.compute.instanceGroupManagers().get(project=project, zone=zone, instanceGroupManager=self_link).execute()
+
+    @lru_cache
+    def get_mig_instances(self, project: str, zone: str, self_link:str) -> Any:
+        return self.compute.instanceGroupManagers().listManagedInstances(project=project, zone=zone, instanceGroupManager=self_link).execute() 
+
+    @lru_cache()
+    def get_mig_list(self, project: str, zone: str) -> Any:
+        """https://cloud.google.com/compute/docs/reference/rest/v1/instanceGroupManagers"""
+        return self.compute.instanceGroupManagers().list(project=project, zone=zone).execute()
+
+    @lru_cache()
     def _get_future_reservation(self, project:str, zone:str, name: str) -> Any:
         """See https://cloud.google.com/compute/docs/reference/rest/v1/futureReservations"""
         return self.compute.futureReservations().get(project=project, zone=zone, futureReservation=name).execute()
@@ -1993,6 +2007,37 @@ class Lookup:
             return bool(nodeset.dws_flex.enabled)
         except:
             return False
+
+    def is_provisioning_flex_node(self, node:str) -> bool:
+        if not self.is_flex_node(node):
+            return False
+        if self.instance(node) is not None:
+            return True
+
+        nodeset = self.node_nodeset(node)
+        zones = nodeset.zone_policy_allow
+        assert len(zones) == 1
+        zone = zones[0]
+
+        potential_migs=[]
+        mig_list=self.get_mig_list(self.project, zone)
+        
+        if not mig_list or not mig_list.get("items"):
+            return False
+
+        for mig in mig_list["items"]:
+            if not mig.get("instanceTemplate"): #possibly an old MIG
+                return False
+            if mig["instanceTemplate"] == self.node_template(node) and mig["currentActions"]["creating"] > 0:
+                potential_migs.append(self.get_mig_instances(self.project, zone, trim_self_link(mig["selfLink"])))
+
+        if not potential_migs:
+            return False
+
+        for instance_collection in potential_migs[0]["managedInstances"]:
+            if node in instance_collection["name"] and instance_collection["currentAction"]=="CREATING":
+                return True
+        return False
 
 
 

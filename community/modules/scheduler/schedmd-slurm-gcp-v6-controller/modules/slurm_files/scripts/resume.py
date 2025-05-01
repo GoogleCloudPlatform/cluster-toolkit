@@ -302,11 +302,8 @@ def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
         log.warning(f"Resume was unable to resume future reservation nodes={dormant_fr_nodes}")
         down_nodes_notify_jobs(dormant_fr_nodes, "Reservation is not active, nodes cannot be resumed", resume_data)
 
-    nodes, flex_managed = util.separate(lambda n: lkp.is_flex_node(n) and (lkp.instance(n) is not None), nodes)
+    nodes, flex_managed = util.separate(lkp.is_provisioning_flex_node, nodes)
     if flex_managed:
-        # TODO(FLEX): This is weak assumption, VM may not exist, but still be managed by MIG (e.g. still provisioning)
-        # Inspect all present MIGs instead.
-        # Particularly CRITICAL due to ActionOnFailure=DO_NOTHING, hence deleted VMs will not be repaired.
         log.warning(f"Resume was unable to resume nodes={flex_managed} already managed by MIGs")
         down_nodes_notify_jobs(flex_managed, "VM is managed MIG, can not be resumed", resume_data)
 
