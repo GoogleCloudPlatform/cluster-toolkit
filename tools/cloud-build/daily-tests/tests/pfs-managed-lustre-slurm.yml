@@ -26,6 +26,7 @@ cli_deployment_vars:
   zone: "{{ zone }}"
   compute_node_machine_type: c2-standard-4
   slurm_cluster_name: "{{ slurm_cluster_name }}"
+  lustre_instance_id: "lustre-instance-{{build}}"
 # Note: Pattern matching in gcloud only supports 1 wildcard.
 login_node: "{{ slurm_cluster_name }}-slurm-login-*"
 controller_node: "{{ slurm_cluster_name }}-controller"
