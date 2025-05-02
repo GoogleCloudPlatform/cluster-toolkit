@@ -48,8 +48,8 @@ output "nodeset" {
   }
 
   precondition {
-    condition     = can(regex("^(a3-|g2-|a2-|a4-).*", var.machine_type)) || !var.dws_flex.enabled || var.dws_flex.use_bulk_insert
-    error_message = "DWS Flex-Start is only supported on G2, A2, A3 High/Mega/Ultra, A4 machine types."
+    condition     = local.nodeset.gpu.count > 0 || !var.dws_flex.enabled || var.dws_flex.use_bulk_insert
+    error_message = "DWS Flex-Start is only supported for GPU instances"
   }
 
   precondition {
