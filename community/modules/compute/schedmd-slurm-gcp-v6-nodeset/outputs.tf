@@ -48,7 +48,7 @@ output "nodeset" {
   }
 
   precondition {
-    condition     = local.nodeset.gpu.count > 0 || !var.dws_flex.enabled || var.dws_flex.use_bulk_insert
+    condition     = local.nodeset.gpu != null || !var.dws_flex.enabled || var.dws_flex.use_bulk_insert
     error_message = "DWS Flex-Start is only supported for GPU instances"
   }
 
