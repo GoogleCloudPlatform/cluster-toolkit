@@ -20,6 +20,7 @@ vars:
   deployment_name: pfs-managed-lustre-vms
   region: us-central1
   zone: us-central1-a
+  lustre_instance_id: lustre-instance
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
@@ -39,7 +40,7 @@ deployment_groups:
     source: modules/file-system/managed-lustre
     use: [network, private_service_access]
     settings:
-      name: lustre-instance
+      name: $(vars.lustre_instance_id)
       local_mount: /lustre
       remote_mount: lustrefs
       size_gib: 18000

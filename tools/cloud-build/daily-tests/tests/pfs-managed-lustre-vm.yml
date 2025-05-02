@@ -21,6 +21,8 @@ workspace: /workspace
 blueprint_yaml: "{{ workspace }}/examples/pfs-managed-lustre-vm.yaml"
 network: "{{ deployment_name }}-net"
 remote_node: "{{ deployment_name }}-lustre-ubuntu22-0"
+cli_deployment_vars:
+  lustre_instance_id: "lustre-instance-{{build}}"
 post_deploy_tests:
 - test-validation/test-mounts.yml
 custom_vars:
