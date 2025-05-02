@@ -88,10 +88,10 @@ variable "nodeset" {
       type  = string
     }))
     dws_flex = object({
-      enabled          = bool
-      max_run_duration = number
-      use_job_duration = bool
-      use_bulk_insert  = bool
+      enabled          = optional(bool)
+      max_run_duration = optional(number)
+      use_job_duration = optional(bool)
+      use_bulk_insert  = optional(bool)
     })
     labels       = optional(map(string), {})
     machine_type = optional(string)
