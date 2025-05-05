@@ -17,6 +17,7 @@
 locals {
   kueue_supported_versions  = ["v0.11.4", "v0.10.1", "v0.10.0", "v0.9.1", "v0.9.0", "v0.8.1"]
   jobset_supported_versions = ["v0.8.1", "v0.7.2", "v0.5.2"]
+  gib_supported_versions    = ["v1.0.2", "v1.0.3", "v1.0.5"]
 }
 
 resource "terraform_data" "kueue_validations" {
@@ -33,6 +34,15 @@ resource "terraform_data" "jobset_validations" {
     precondition {
       condition     = !var.jobset.install || contains(local.jobset_supported_versions, var.jobset.version)
       error_message = "Supported version of Jobset are ${join(", ", local.jobset_supported_versions)}"
+    }
+  }
+}
+
+resource "terraform_data" "gib_validations" {
+  lifecycle {
+    precondition {
+      condition     = !var.gib.install || contains(local.gib_supported_versions, var.gib.version)
+      error_message = "Supported version of the NCCL gIB plugin are ${join(", ", local.gib_supported_versions)}"
     }
   }
 }
@@ -102,6 +112,22 @@ variable "nvidia_dra_driver" {
   type = object({
     install = optional(bool, false)
     version = optional(string, "v25.3.0-rc.2")
+  })
+  default = {}
+}
+
+variable "gib" {
+  description = "Install the NCCL gIB plugin"
+  type = object({
+    install = optional(bool, false)
+    version = optional(string, "v1.0.5")
+    acceleratorSelector = optional(
+      list(string),
+      [
+        "nvidia-h200-141gb",
+        "nvidia-b200"
+      ]
+    )
   })
   default = {}
 }
