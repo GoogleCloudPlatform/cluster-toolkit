@@ -51,6 +51,3 @@ vars:
 
   # The disk size of a4 node pool for this deployment.
   a4_node_pool_disk_size_gb:
-
-  # GKE version prefix
-  version_prefix:
