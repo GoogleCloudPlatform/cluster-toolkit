@@ -231,8 +231,8 @@ deployment_groups:
           chmod 0755 "${SLURM_ROOT}/scripts/rxdm"
           ln -s "${SLURM_ROOT}/scripts/rxdm" "${SLURM_ROOT}/partition-$(vars.a3mega_partition_name)-prolog_slurmd.d/rxdm.prolog_slurmd"
           ln -s "${SLURM_ROOT}/scripts/rxdm" "${SLURM_ROOT}/partition-$(vars.a3mega_partition_name)-epilog_slurmd.d/rxdm.epilog_slurmd"
-          # Uncomment the line below to enable epilog that will check health of GPUs and drain node if problem is detected.
-          # ln -s "/slurm/scripts/tools/gpu-test" "${SLURM_ROOT}/partition-$(vars.a3mega_partition_name)-epilog_slurmd.d/gpu-test.epilog_slurmd"
+          # enable a GPU health check that runs at the completion of all jobs on A3mega nodes
+          ln -s "/slurm/scripts/tools/gpu-test" "${SLURM_ROOT}/partition-$(vars.a3mega_partition_name)-epilog_slurmd.d/gpu-test.epilog_slurmd"
       - type: shell
         destination: reset_enroot.sh
         content: |
