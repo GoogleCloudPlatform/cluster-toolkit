@@ -22,7 +22,7 @@ terraform {
     }
   }
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:pre-existing-vpc/v1.49.0"
+    module_name = "blueprints/terraform/hpc-toolkit:pre-existing-vpc/v1.50.0"
   }
 
   required_version = ">= 1.5"
