@@ -25,6 +25,8 @@ spec:
       k8s-app: nccl-rdma-installer
   updateStrategy:
     type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 16
   template:
     metadata:
       labels:
