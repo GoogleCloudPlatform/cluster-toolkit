@@ -61,6 +61,18 @@ deployment_groups:
         destination: prevent_unintentional_upgrades.sh
         content: |
           #!/bin/bash
+          # Unattended upgrades are disabled in this blueprint so that software does not
+          # get updated daily and lead to potential instability in the cluster environment.
+          #
+          # Unattended Upgrades installs available security updates from the Ubuntu
+          # security pocket for installed packages daily by default. Administrators who
+          # disable this feature assume all responsibility for manually reviewing and
+          # patching their systems against vulnerabilities.
+          #
+          # To enable unattended upgrades, please remove the following lines:
+          #   systemctl stop unattended-upgrades.service
+          #   systemctl disable unattended-upgrades.service
+          #   systemctl mask unattended-upgrades.service
           set -e -o pipefail
           systemctl stop unattended-upgrades.service
           systemctl disable unattended-upgrades.service

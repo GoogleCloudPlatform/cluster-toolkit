@@ -29,7 +29,7 @@ metadata:
   name: "tas-flavor"
 spec:
   nodeLabels:
-    cloud.google.com/gke-nodepool: "a2-highgpu-2g-a2highgpupool"
+    cloud.google.com/gke-accelerator: nvidia-tesla-a100
   topologyName: "gke-default"
   tolerations:
   - key: "nvidia.com/gpu"

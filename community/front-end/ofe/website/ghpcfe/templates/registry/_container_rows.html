@@ -1,0 +1,115 @@
+<!--
+ Copyright 2025 "Google LLC"
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+{% load registry_extras %}
+{% for image in container_images %}
+<tr>
+    <td>{{ image.name }}</td>
+    <td>{{ image.tags|join:", " }}</td>
+    <td>
+        {% for build in image.builds %}
+            <div id="build-status-{{ build.build_id }}">
+                {% if build.status == "n" %}
+                    <img src="/static/img/status-configured.png" style="width:30px;height:32px;">
+                {% elif build.status == "i" %}
+                    <img src="/static/img/loading.gif" style="width:32px;height:32px;">
+                {% elif build.status == "s" %}
+                    <img src="/static/img/status-ready.png" style="width:32px;height:32px;">
+                {% elif build.status == "f" %}
+                    <img src="/static/img/status-error.png" style="width:30px;height:20px;">
+                {% endif %}
+                {{ build.status|friendly_build_status }} ({{ build.build_id|slice:":8" }})
+            </div>
+        {% endfor %}
+    </td>
+    <td>
+        <div class="btn-group">
+            {% if image.builds|length > 1 %}
+                <button type="button" class="btn btn-outline-secondary btn-sm dropdown-toggle" data-toggle="dropdown">
+                    Actions
+                </button>
+                <ul class="dropdown-menu">
+                    {% for build in image.builds|dictsortreversed:"build_id" %}
+                        <li>
+                            <a class="dropdown-item" href="{{ build.url }}">
+                                View Build ({{ build.build_id|slice:":8" }})
+                            </a>
+                        </li>
+                    {% endfor %}
+                    <li><hr class="dropdown-divider"></li>
+
+                    {% if image.resource_name %}
+                    <!-- If the image actually exists in Artifact Registry, show delete -->
+                    <li>
+                        <form method="post"
+                            action="{% url 'delete-container' object.id image.resource_name %}"
+                            onsubmit="return confirm('This will remove ALL versions of {{ image.name }}. Proceed?');"
+                            style="display:inline;">
+                                {% csrf_token %}
+                                <button type="submit" class="dropdown-item text-danger">Delete</button>
+                        </form>
+                    </li>
+                    {% else %}
+                    <!-- If not in registry, hide or disable the button -->
+                    <li>
+                        <a class="dropdown-item disabled text-secondary">
+                            Not Available in Registry
+                        </a>
+                    </li>
+                    {% endif %}
+                </ul>
+            {% elif image.builds|length == 1 %}
+                <a href="{{ image.builds.0.url }}" class="btn btn-outline-secondary btn-sm">
+                    View Build ({{ image.builds.0.build_id|slice:":8" }})
+                </a>
+
+                {% if image.resource_name %}
+                <form method="post"
+                    action="{% url 'delete-container' object.id image.resource_name %}"
+                    style="display:inline;"
+                    onsubmit="return confirm('This will remove ALL versions of {{ image.name }}. Proceed?');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger btn-sm ms-1">
+                        Delete
+                    </button>
+                </form>
+                {% else %}
+                <button class="btn btn-danger btn-sm ms-1" disabled>Delete</button>
+                {% endif %}
+
+            {% else %}
+                <button class="btn btn-secondary btn-sm" disabled>No Builds</button>
+
+                {% if image.resource_name %}
+                <form method="post"
+                      action="{% url 'delete-container' object.id image.resource_name %}"
+                      style="display:inline;"
+                      onsubmit="return confirm('This will remove ALL versions of {{ image.name }}. Proceed?');"
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger btn-sm ms-1">
+                        Delete
+                    </button>
+                </form>
+                {% else %}
+                <button class="btn btn-danger btn-sm ms-1" disabled>Delete</button>
+                {% endif %}
+            {% endif %}
+        </div>
+    </td>
+</tr>
+{% empty %}
+<tr><td colspan="4">No images found.</td></tr>
+{% endfor %}

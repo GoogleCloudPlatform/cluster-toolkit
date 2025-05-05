@@ -228,11 +228,6 @@ def _find_tpu_node_action(nodename, state) -> NodeAction:
 
     return NodeActionUnchanged()
 
-def _find_flex_node_actions(*args, **kwargs) -> NodeAction:
-    # Don't perform actions on instances directly,
-    # Flex MIGs a handled by sync_flex_migs
-    return NodeActionUnchanged()
-
 def get_node_action(nodename: str) -> NodeAction:
     """Determine node/instance status that requires action"""
     lkp = lookup()
@@ -243,10 +238,6 @@ def get_node_action(nodename: str) -> NodeAction:
         assert fr
         if action := get_fr_action(fr, state):
             return action
-        
-    
-    if lkp.is_flex_node(nodename):
-        return _find_flex_node_actions(nodename, state, lkp)
 
     if lkp.node_is_dyn(nodename):
         return _find_dynamic_node_status()
@@ -263,7 +254,6 @@ def get_node_action(nodename: str) -> NodeAction:
     if (state is None) and (inst is None):
         # Should never happen
         return NodeActionUnknown(None, None)
-
     if inst is None:
         assert state is not None # to keep type-checker happy
         if "POWERING_UP" in state.flags:

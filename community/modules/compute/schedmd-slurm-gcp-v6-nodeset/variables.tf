@@ -617,8 +617,8 @@ variable "dws_flex" {
     enabled = false
   }
   validation {
-    condition     = var.dws_flex.max_run_duration >= 30 && var.dws_flex.max_run_duration <= 604800
-    error_message = "Max duration must be more than 30 seconds, and cannot be more than one week."
+    condition     = var.dws_flex.max_run_duration >= 600 && var.dws_flex.max_run_duration <= 604800
+    error_message = "Max duration must be at least than 10 minutes, and cannot be more than one week."
   }
 }
 

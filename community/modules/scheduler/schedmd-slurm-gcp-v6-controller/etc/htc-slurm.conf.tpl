@@ -34,10 +34,10 @@ MessageTimeout=60
 
 SlurmctldHost={control_host}({control_addr})
 
-AuthType=auth/munge
+AuthType=auth/{auth_key}
 AuthInfo=cred_expire=120
 AuthAltTypes=auth/jwt
-CredType=cred/munge
+CredType=cred/{auth_key}
 MpiDefault={mpi_default}
 ReturnToService=2
 SlurmctldPort={control_host_port}

@@ -14,7 +14,8 @@ VM running Ubuntu 20.04, 22.04 or Rocky Linux 8 (including the HPC flavor).
 
 ### Managed Lustre Access
 
-Managed Lustre is available by invitation only. If you'd like to request access to Managed Lustre in your Google Cloud project, contact your sales representative.
+Managed Lustre must be enabled for your project by Google staff. Please contact
+your sales representative for further steps.
 
 ### Example - New VPC
 
@@ -129,6 +130,34 @@ to set it up.
       private_vpc_connection_peering: <private_vpc_connection_peering> # will look like "servicenetworking.googleapis.com"
 ```
 
+### Example - GKE compatibility
+
+By default the Managed Lustre instance that is deployed is not compatible with
+GKE.  To enable the compatibility use the `gke_support_enabled: true` option.
+This creates a file `/etc/modprobe/lnet.conf` that changes the listening port
+to 6988.
+
+```yaml
+  - id: managed-lustre
+    source: modules/file-system/managed-lustre
+    use: [network, private_service_access]
+    settings:
+      name: lustre-instance
+      local_mount: /lustre
+      remote_mount: lustrefs
+      size_gib: 18000
+      gke_support_enabled: true
+```
+
+> [!WARNING]
+>
+> 1. VMs cannot connect to both GKE compatible and GKE incompatible lustre
+> instances at the same time as they connect to different ports.  Lustre can
+> only listen to one port at a time.
+>
+> 2. Setting `gke_support_enabled: true` will not affect Slurm nodes, GKE
+> compatibility must be built into the Slurm image.
+
 ## License
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
@@ -179,6 +208,7 @@ No modules.
 |------|-------------|------|---------|:--------:|
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the HPC deployment, used as name of the Lustre instance if no name is specified. | `string` | n/a | yes |
 | <a name="input_description"></a> [description](#input\_description) | Description of the created Lustre instance. | `string` | `"Lustre Instance"` | no |
+| <a name="input_gke_support_enabled"></a> [gke\_support\_enabled](#input\_gke\_support\_enabled) | Set to true to create Managed Lustre instance with GKE compatibility.<br/>Note: This does not work with Slurm, the Slurm image must be built with<br/>the correct compatibility. | `bool` | `false` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the Managed Lustre instance. Key-value pairs. | `map(string)` | n/a | yes |
 | <a name="input_local_mount"></a> [local\_mount](#input\_local\_mount) | Local mount point for the Managed Lustre instance. | `string` | `"/shared"` | no |
 | <a name="input_mount_options"></a> [mount\_options](#input\_mount\_options) | Mounting options for the file system. | `string` | `"defaults,_netdev"` | no |

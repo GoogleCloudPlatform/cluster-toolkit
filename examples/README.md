@@ -27,7 +27,8 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [image-builder.yaml](#image-builderyaml-) ![core-badge]
   * [serverless-batch.yaml](#serverless-batchyaml-) ![core-badge]
   * [serverless-batch-mpi.yaml](#serverless-batch-mpiyaml-) ![core-badge]
-  * [pfs-lustre.yaml](#pfs-lustreyaml-) ![core-badge]
+  * [pfs-lustre.yaml](#pfs-lustreyaml-) ![core-badge] ![deprecated-badge]
+  * [pfs-managed-lustre-vms.yaml](#pfs-managed-lustre-vmsyaml-) ![core-badge]
   * [ps-slurm.yaml](#ps-slurmyaml--) ![core-badge] ![experimental-badge]
   * [pfs-parallelstore.yaml](#pfs-parallelstoreyaml--) ![core-badge] ![experimental-badge]
   * [cae-slurm.yaml](#cae-slurmyaml-) ![core-badge]
@@ -57,8 +58,8 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [hpc-slurm-ramble-gromacs.yaml](#hpc-slurm-ramble-gromacsyaml--) ![community-badge] ![experimental-badge]
   * [flux-cluster](#flux-clusteryaml--) ![community-badge] ![experimental-badge]
   * [tutorial-fluent.yaml](#tutorial-fluentyaml--) ![community-badge] ![experimental-badge]
-  * [omnia-cluster.yaml](#omnia-clusteryaml---) ![community-badge] ![experimental-badge] ![deprecated-badge]
   * [gke-tpu-v4](#gke-tpu-v4--) ![community-badge] ![experimental-badge]
+  * [xpk-n2-filestore](#xpk-n2-filestore--) ![community-badge] ![experimental-badge]
 * [Blueprint Schema](#blueprint-schema)
 * [Writing an HPC Blueprint](#writing-an-hpc-blueprint)
   * [Blueprint Boilerplate](#blueprint-boilerplate)
@@ -598,7 +599,9 @@ The blueprint contains the following:
 
 [serverless-batch-mpi.yaml]: ../examples/serverless-batch-mpi.yaml
 
-### [pfs-lustre.yaml] ![core-badge]
+### [pfs-lustre.yaml] ![core-badge] ![deprecated-badge]
+
+_This blueprint has been deprecated and will be removed on August 1, 2025._
 
 Creates a DDN EXAScaler lustre file-system that is mounted in two client instances.
 
@@ -624,6 +627,31 @@ For this example the following is needed in the selected region:
 * Compute Engine API: N2 CPUs: **~116: 32 MDS, 32 MGS, 3x16 OSS, 2x2 client-vms**
 
 [pfs-lustre.yaml]: ./pfs-lustre.yaml
+
+### [pfs-managed-lustre-vms.yaml] ![core-badge]
+
+Creates a Managed Lustre file-system that is mounted in one client instance.
+
+The [GCP Managed Lustre](../modules/file-system/managed-lustre/README.md)
+file system is designed for high IO performance. It has a minimum capacity of ~18TiB and is mounted at `/lustre`.
+
+After the creation of the file-system and the client instances, the lustre drivers will be automatically installed and the mount-point configured on the VMs. This may take a few minutes after the VMs are created and can be verified by running:
+
+```sh
+watch mount -t lustre
+```
+
+#### Quota Requirements for pfs-managed-lustre.yaml
+
+For this example, the following is needed in the selected region:
+
+* Compute Engine API: Persistent Disk SSD (GB): **~800GB: 800GB MDT**
+* Compute Engine API: Persistent Disk Standard (GB): **~328GB: 128 MGT, 200GB client-vm**
+* Compute Engine API: Hyperdisk Balanced (GB): **~27432GB: 18432 GB OST Pool, 8*1125GB OST**
+* Compute Engine API: N2 CPUs: **~34: 32 MGS, 2 client-vm**
+* Compute Engine API: C3 CPUs: **~396: 44 MDS, 2*176 OSS**
+
+[pfs-managed-lustre-vms.yaml]: ./pfs-managed-lustre-vms.yaml
 
 ### [ps-slurm.yaml] ![core-badge] ![experimental-badge]
 
@@ -905,25 +933,6 @@ The experiments defined by the workspace configuration are a 1, 2, 4, 8, and 16
 node scaling study of the Lignocellulose benchmark for Gromacs.
 
 [hpc-slurm-ramble-gromacs.yaml]: ../community/examples/hpc-slurm-ramble-gromacs.yaml
-
-### [omnia-cluster.yaml] ![community-badge] ![experimental-badge] ![deprecated-badge]
-
-_This blueprint has been deprecated and will be removed on August 1, 2024._
-
-Creates a simple [Dell Omnia][omnia-github] provisioned cluster with an
-omnia-manager node that acts as the slurm manager and 2 omnia-compute nodes on
-the pre-existing default network. Omnia will be automatically installed after
-the nodes are provisioned. All nodes mount a filestore instance on `/home`.
-
-> **_NOTE:_** The omnia-cluster.yaml example uses `vm-instance` modules to
-> create the cluster. For these instances, Simultaneous Multithreading (SMT) is
-> turned off by default, meaning that only the physical cores are visible. For
-> the compute nodes, this means that 30 physical cores are visible on the
-> `c2-standard-60` VMs. To activate all 60 virtual cores, include
-> `threads_per_core=2` under settings for the compute vm-instance module.
-
-[omnia-github]: https://github.com/dellhpc/omnia
-[omnia-cluster.yaml]: ../community/examples/omnia-cluster.yaml
 
 ### [hpc-slurm-local-ssd.yaml] ![community-badge] ![experimental-badge]
 
@@ -1313,6 +1322,52 @@ deployment_groups:
 This example shows how TPU v4 cluster can be created and be used to run a job that requires TPU capacity on GKE. Additional information on TPU blueprint and associated changes are in this [README](/community/examples/gke-tpu-v4/README.md).
 
 [gke-tpu-v4]: ../community/examples/gke-tpu-v4
+
+### [xpk-n2-filestore] ![community-badge] ![experimental-badge]
+
+This example shows how to set up an [XPK](https://github.com/AI-Hypercomputer/xpk)-compatible GKE cluster - giving researchers a Slurm-like CLI experience but with lightweight Kueue and Kjob resources on the cluster side. The blueprint creates a low-cost, CPU-based XPK cluster, using a single n2-standard-32-2 slice.
+
+Client-side installation of the XPK CLI is also required (see the [prerequisites](https://github.com/AI-Hypercomputer/xpk?tab=readme-ov-file#prerequisites) and [installation](https://github.com/AI-Hypercomputer/xpk?tab=readme-ov-file#installation) in the XPK repository). Set `gcloud config set compute/zone <zone>` and `gcloud config set project <project-id>` to avoid their repeated inclusion in XPK commands.
+
+Attach the Filestore instance for use in workloads and jobs with the `xpk storage` command:
+
+```bash
+python3 xpk.py storage attach xpk-01-homefs \
+  --cluster=xpk-01 \
+  --type=gcpfilestore \
+  --auto-mount=true \
+  --mount-point=/home \
+  --mount-options="" \
+  --readonly=false \
+  --size=1024 \
+  --vol=nfsshare
+```
+
+After blueprint provisioning, XPK CLI installation, and storage setup, users can run interactive shells, workloads, and jobs:
+
+```bash
+# Start an interactive shell (somewhat analogous to a Slurm login node)
+python3 xpk.py shell --cluster xpk-01
+```
+
+```bash
+# Submit a workload (Kueue-based)
+python3 xpk.py workload create \
+  --cluster xpk-01 \
+  --num-slices=1 \
+  --device-type=n2-standard-32-2 \
+  --workload xpk-test-workload \
+  --command="ls /home"
+```
+
+```bash
+# Run and manage jobs (kjob-focused)
+python3 xpk.py run --cluster xpk-01 your-script.sh
+python3 xpk.py batch --cluster xpk-01 your-script.sh
+python3 xpk.py info --cluster xpk-01
+```
+
+[xpk-n2-filestore]: ../community/examples/xpk-n2-filestore/xpk-n2-filestore.yaml
 
 ## Blueprint Schema
 

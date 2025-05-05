@@ -204,6 +204,34 @@ The default has been set to 128. Values above this have not been fully tested
 and may cause congestion on the controller. A more scalable solution is under
 way.
 
+## ResumeRate and Node Resumption
+
+The `ResumeRate` parameter in `slurm.conf` controls the maximum number of nodes
+that Slurm attempts to resume (power up) per minute. This is particularly
+important in cloud environments where auto-scaling can lead to a large number of
+nodes starting concurrently.
+
+When many nodes start simultaneously, they can place a heavy load on shared
+resources, especially shared filesystems, as they all try to mount filesystems
+and access configuration files at the same time. By limiting the `ResumeRate`,
+you can stagger the node startup process, reducing the peak load on these shared
+resources and improving overall cluster stability during scaling events.
+
+For example, to limit the node resumption rate to 100 nodes per minute,
+configure the blueprint as follows:
+
+```yaml
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    ...
+    settings:
+      cloud_parameters:
+        resume_rate: 100
+```
+
+Adjust this value based on the capabilities of your shared filesystem and the
+expected scaling behavior of your cluster.
+
 ## Support
 The Cluster Toolkit team maintains the wrapper around the [slurm-on-gcp] terraform
 modules. For support with the underlying modules, see the instructions in the
@@ -312,11 +340,12 @@ limitations under the License.
 | <a name="input_enable_confidential_vm"></a> [enable\_confidential\_vm](#input\_enable\_confidential\_vm) | Enable the Confidential VM configuration. Note: the instance image must support option. | `bool` | `false` | no |
 | <a name="input_enable_controller_public_ips"></a> [enable\_controller\_public\_ips](#input\_enable\_controller\_public\_ips) | If set to true. The controller will have a random public IP assigned to it. Ignored if access\_config is set. | `bool` | `false` | no |
 | <a name="input_enable_debug_logging"></a> [enable\_debug\_logging](#input\_enable\_debug\_logging) | Enables debug logging mode. | `bool` | `false` | no |
-| <a name="input_enable_default_mounts"></a> [enable\_default\_mounts](#input\_enable\_default\_mounts) | Enable default global network storage from the controller<br/>- /home<br/>- /apps<br/>Warning: If these are disabled, the slurm etc and munge dirs must be added<br/>manually, or some other mechanism must be used to synchronize the slurm conf<br/>files and the munge key across the cluster. | `bool` | `true` | no |
+| <a name="input_enable_default_mounts"></a> [enable\_default\_mounts](#input\_enable\_default\_mounts) | Enable default global network storage from the controller<br/>- /home<br/>- /apps | `bool` | `true` | no |
 | <a name="input_enable_devel"></a> [enable\_devel](#input\_enable\_devel) | DEPRECATED: `enable_devel` is always on. | `bool` | `null` | no |
 | <a name="input_enable_external_prolog_epilog"></a> [enable\_external\_prolog\_epilog](#input\_enable\_external\_prolog\_epilog) | Automatically enable a script that will execute prolog and epilog scripts<br/>shared by NFS from the controller to compute nodes. Find more details at:<br/>https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/tools/prologs-epilogs/README.md | `bool` | `null` | no |
 | <a name="input_enable_oslogin"></a> [enable\_oslogin](#input\_enable\_oslogin) | Enables Google Cloud os-login for user login and authentication for VMs.<br/>See https://cloud.google.com/compute/docs/oslogin | `bool` | `true` | no |
 | <a name="input_enable_shielded_vm"></a> [enable\_shielded\_vm](#input\_enable\_shielded\_vm) | Enable the Shielded VM configuration. Note: the instance image must support option. | `bool` | `false` | no |
+| <a name="input_enable_slurm_auth"></a> [enable\_slurm\_auth](#input\_enable\_slurm\_auth) | Enables slurm authentication instead of munge. | `bool` | `false` | no |
 | <a name="input_enable_slurm_gcp_plugins"></a> [enable\_slurm\_gcp\_plugins](#input\_enable\_slurm\_gcp\_plugins) | DEPRECATED: Slurm GCP plugins have been deprecated.<br/>Instead of 'max\_hops' plugin please use the 'placement\_max\_distance' nodeset property.<br/>Instead of 'enable\_vpmu' plugin please use 'advanced\_machine\_features.performance\_monitoring\_unit' nodeset property. | `any` | `null` | no |
 | <a name="input_enable_smt"></a> [enable\_smt](#input\_enable\_smt) | DEPRECATED: Use `advanced_machine_features.threads_per_core` instead. | `bool` | `null` | no |
 | <a name="input_endpoint_versions"></a> [endpoint\_versions](#input\_endpoint\_versions) | Version of the API to use (The compute service is the only API currently supported) | <pre>object({<br/>    compute = string<br/>  })</pre> | <pre>{<br/>  "compute": "beta"<br/>}</pre> | no |
@@ -351,11 +380,14 @@ limitations under the License.
 | <a name="input_service_account_scopes"></a> [service\_account\_scopes](#input\_service\_account\_scopes) | Scopes to attach to the controller instance. | `set(string)` | <pre>[<br/>  "https://www.googleapis.com/auth/cloud-platform"<br/>]</pre> | no |
 | <a name="input_shielded_instance_config"></a> [shielded\_instance\_config](#input\_shielded\_instance\_config) | Shielded VM configuration for the instance. Note: not used unless<br/>enable\_shielded\_vm is 'true'.<br/>  enable\_integrity\_monitoring : Compare the most recent boot measurements to the<br/>  integrity policy baseline and return a pair of pass/fail results depending on<br/>  whether they match or not.<br/>  enable\_secure\_boot : Verify the digital signature of all boot components, and<br/>  halt the boot process if signature verification fails.<br/>  enable\_vtpm : Use a virtualized trusted platform module, which is a<br/>  specialized computer chip you can use to encrypt objects like keys and<br/>  certificates. | <pre>object({<br/>    enable_integrity_monitoring = bool<br/>    enable_secure_boot          = bool<br/>    enable_vtpm                 = bool<br/>  })</pre> | <pre>{<br/>  "enable_integrity_monitoring": true,<br/>  "enable_secure_boot": true,<br/>  "enable_vtpm": true<br/>}</pre> | no |
 | <a name="input_slurm_cluster_name"></a> [slurm\_cluster\_name](#input\_slurm\_cluster\_name) | Cluster name, used for resource naming and slurm accounting.<br/>If not provided it will default to the first 8 characters of the deployment name (removing any invalid characters). | `string` | `null` | no |
-| <a name="input_slurm_conf_tpl"></a> [slurm\_conf\_tpl](#input\_slurm\_conf\_tpl) | Slurm slurm.conf template file path. | `string` | `null` | no |
+| <a name="input_slurm_conf_template"></a> [slurm\_conf\_template](#input\_slurm\_conf\_template) | Slurm slurm.conf template. Content of the file in 'slurm\_conf\_tpl' is used if this is not set. | `string` | `null` | no |
+| <a name="input_slurm_conf_tpl"></a> [slurm\_conf\_tpl](#input\_slurm\_conf\_tpl) | Slurm slurm.conf template file path. This path is used only if raw content is not provided in 'slurm\_conf\_template'. | `string` | `null` | no |
 | <a name="input_slurmdbd_conf_tpl"></a> [slurmdbd\_conf\_tpl](#input\_slurmdbd\_conf\_tpl) | Slurm slurmdbd.conf template file path. | `string` | `null` | no |
 | <a name="input_static_ips"></a> [static\_ips](#input\_static\_ips) | List of static IPs for VM instances. | `list(string)` | `[]` | no |
 | <a name="input_subnetwork_self_link"></a> [subnetwork\_self\_link](#input\_subnetwork\_self\_link) | Subnet to deploy to. | `string` | n/a | yes |
 | <a name="input_tags"></a> [tags](#input\_tags) | Network tag list. | `list(string)` | `[]` | no |
+| <a name="input_task_epilog_scripts"></a> [task\_epilog\_scripts](#input\_task\_epilog\_scripts) | List of scripts to be used for TaskEpilog. Programs for the slurmd to execute<br/>as the slurm job's owner after termination of each task.<br/>See https://slurm.schedmd.com/slurm.conf.html#OPT_TaskEpilog. | <pre>list(object({<br/>    filename = string<br/>    content  = optional(string)<br/>    source   = optional(string)<br/>  }))</pre> | `[]` | no |
+| <a name="input_task_prolog_scripts"></a> [task\_prolog\_scripts](#input\_task\_prolog\_scripts) | List of scripts to be used for TaskProlog. Programs for the slurmd to execute<br/>as the slurm job's owner prior to initiation of each task.<br/>See https://slurm.schedmd.com/slurm.conf.html#OPT_TaskProlog. | <pre>list(object({<br/>    filename = string<br/>    content  = optional(string)<br/>    source   = optional(string)<br/>  }))</pre> | `[]` | no |
 | <a name="input_universe_domain"></a> [universe\_domain](#input\_universe\_domain) | Domain address for alternate API universe | `string` | `"googleapis.com"` | no |
 | <a name="input_zone"></a> [zone](#input\_zone) | Zone where the instances should be created. If not specified, instances will be<br/>spread across available zones in the region. | `string` | `null` | no |
 

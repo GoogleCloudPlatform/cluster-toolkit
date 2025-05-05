@@ -46,6 +46,7 @@ locals {
     cluster_id            = random_uuid.cluster_id.result
     project               = var.project_id
     slurm_cluster_name    = var.slurm_cluster_name
+    enable_slurm_auth     = var.enable_slurm_auth
     bucket_path           = local.bucket_path
     enable_debug_logging  = var.enable_debug_logging
     extra_logging_flags   = var.extra_logging_flags
@@ -59,12 +60,15 @@ locals {
     controller_startup_scripts_timeout = var.controller_startup_scripts_timeout
     compute_startup_scripts_timeout    = var.compute_startup_scripts_timeout
 
-    munge_mount = local.munge_mount
+    munge_mount     = local.munge_mount
+    slurm_key_mount = var.slurm_key_mount
 
     # slurm conf
-    prolog_scripts   = [for k, v in google_storage_bucket_object.prolog_scripts : k]
-    epilog_scripts   = [for k, v in google_storage_bucket_object.epilog_scripts : k]
-    cloud_parameters = var.cloud_parameters
+    prolog_scripts      = [for k, v in google_storage_bucket_object.prolog_scripts : k]
+    epilog_scripts      = [for k, v in google_storage_bucket_object.epilog_scripts : k]
+    task_prolog_scripts = [for k, v in google_storage_bucket_object.task_prolog_scripts : k]
+    task_epilog_scripts = [for k, v in google_storage_bucket_object.task_epilog_scripts : k]
+    cloud_parameters    = var.cloud_parameters
 
     # hybrid
     hybrid                        = var.enable_hybrid
@@ -81,7 +85,7 @@ locals {
 
     # config files templates
     slurmdbd_conf_tpl = file(coalesce(var.slurmdbd_conf_tpl, "${local.etc_dir}/slurmdbd.conf.tpl"))
-    slurm_conf_tpl    = file(coalesce(var.slurm_conf_tpl, "${local.etc_dir}/slurm.conf.tpl"))
+    slurm_conf_tpl    = var.slurm_conf_template != null ? var.slurm_conf_template : file(coalesce(var.slurm_conf_tpl, "${local.etc_dir}/slurm.conf.tpl"))
     cgroup_conf_tpl   = file(coalesce(var.cgroup_conf_tpl, "${local.etc_dir}/cgroup.conf.tpl"))
 
     # Providers
@@ -126,7 +130,9 @@ resource "google_storage_bucket_object" "config" {
     google_storage_bucket_object.controller_startup_scripts,
     google_storage_bucket_object.nodeset_startup_scripts,
     google_storage_bucket_object.prolog_scripts,
-    google_storage_bucket_object.epilog_scripts
+    google_storage_bucket_object.epilog_scripts,
+    google_storage_bucket_object.task_prolog_scripts,
+    google_storage_bucket_object.task_epilog_scripts
   ]
 }
 
@@ -240,6 +246,30 @@ resource "google_storage_bucket_object" "epilog_scripts" {
   source  = each.value.source
 }
 
+resource "google_storage_bucket_object" "task_prolog_scripts" {
+  for_each = {
+    for x in local.task_prolog_scripts
+    : replace(basename(x.filename), "/[^a-zA-Z0-9-_]/", "_") => x
+  }
+
+  bucket  = var.bucket_name
+  name    = format("%s/slurm-task-prolog-script-%s", local.bucket_dir, each.key)
+  content = each.value.content
+  source  = each.value.source
+}
+
+resource "google_storage_bucket_object" "task_epilog_scripts" {
+  for_each = {
+    for x in local.task_epilog_scripts
+    : replace(basename(x.filename), "/[^a-zA-Z0-9-_]/", "_") => x
+  }
+
+  bucket  = var.bucket_name
+  name    = format("%s/slurm-task-epilog-script-%s", local.bucket_dir, each.key)
+  content = each.value.content
+  source  = each.value.source
+}
+
 ############################
 # DATA: CHS GPU HEALTH CHECK
 ############################
@@ -285,13 +315,15 @@ locals {
     source   = null
   }]
 
-  chs_prolog     = var.enable_chs_gpu_health_check_prolog ? local.chs_gpu_health_check : []
-  ext_prolog     = var.enable_external_prolog_epilog ? local.external_prolog : []
-  prolog_scripts = concat(local.chs_prolog, local.ext_prolog, var.prolog_scripts)
+  chs_prolog          = var.enable_chs_gpu_health_check_prolog ? local.chs_gpu_health_check : []
+  ext_prolog          = var.enable_external_prolog_epilog ? local.external_prolog : []
+  prolog_scripts      = concat(local.chs_prolog, local.ext_prolog, var.prolog_scripts)
+  task_prolog_scripts = var.task_prolog_scripts
 
-  chs_epilog     = var.enable_chs_gpu_health_check_epilog ? local.chs_gpu_health_check : []
-  ext_epilog     = var.enable_external_prolog_epilog ? local.external_epilog : []
-  epilog_scripts = concat(local.chs_epilog, local.ext_epilog, var.epilog_scripts)
+  chs_epilog          = var.enable_chs_gpu_health_check_epilog ? local.chs_gpu_health_check : []
+  ext_epilog          = var.enable_external_prolog_epilog ? local.external_epilog : []
+  epilog_scripts      = concat(local.chs_epilog, local.ext_epilog, var.epilog_scripts)
+  task_epilog_scripts = var.task_epilog_scripts
 
   controller_startup_scripts = var.enable_external_prolog_epilog ? concat(local.setup_external, var.controller_startup_scripts) : var.controller_startup_scripts
 

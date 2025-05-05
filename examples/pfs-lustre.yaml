@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# WARNING: this example has been deprecated as of v1.51.0 of the Cluster Toolkit
+
 ---
 blueprint_name: pfs-lustre
 

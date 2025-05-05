@@ -395,7 +395,7 @@ variable "controller_state_disk" {
   description = <<EOD
   A disk that will be attached to the controller instance template to save state of slurm. The disk is created and used by default.
   To disable this feature, set this variable to null.
-  
+
   NOTE: This will not save the contents at /opt/apps and /home. To preserve those, they must be saved externally.
   EOD
   type = object({
@@ -443,6 +443,15 @@ EOD
   default     = false
 }
 
+variable "enable_slurm_auth" {
+  description = <<EOD
+Enables slurm authentication instead of munge.
+
+EOD
+  type        = bool
+  default     = false
+}
+
 variable "cloud_parameters" {
   description = "cloud.conf options. Defaults inherited from [Slurm GCP repo](https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/terraform/slurm_cluster/modules/slurm_files/README_TF.md#input_cloud_parameters)"
   type = object({
@@ -466,9 +475,6 @@ variable "enable_default_mounts" {
     Enable default global network storage from the controller
     - /home
     - /apps
-    Warning: If these are disabled, the slurm etc and munge dirs must be added
-    manually, or some other mechanism must be used to synchronize the slurm conf
-    files and the munge key across the cluster.
     EOD
   type        = bool
   default     = true
@@ -507,7 +513,13 @@ variable "slurmdbd_conf_tpl" {
 }
 
 variable "slurm_conf_tpl" {
-  description = "Slurm slurm.conf template file path."
+  type        = string
+  description = "Slurm slurm.conf template file path. This path is used only if raw content is not provided in 'slurm_conf_template'."
+  default     = null
+}
+
+variable "slurm_conf_template" {
+  description = "Slurm slurm.conf template. Content of the file in 'slurm_conf_tpl' is used if this is not set."
   type        = string
   default     = null
 }
@@ -626,6 +638,52 @@ EOD
   validation {
     condition = alltrue([
       for script in var.epilog_scripts :
+      (script.content != null && script.source == null) ||
+      (script.content == null && script.source != null)
+    ])
+    error_message = "Either 'content' or 'source' must be defined, but not both."
+  }
+}
+
+variable "task_prolog_scripts" {
+  description = <<EOD
+List of scripts to be used for TaskProlog. Programs for the slurmd to execute
+as the slurm job's owner prior to initiation of each task.
+See https://slurm.schedmd.com/slurm.conf.html#OPT_TaskProlog.
+EOD
+  type = list(object({
+    filename = string
+    content  = optional(string)
+    source   = optional(string)
+  }))
+  default = []
+
+  validation {
+    condition = alltrue([
+      for script in var.task_prolog_scripts :
+      (script.content != null && script.source == null) ||
+      (script.content == null && script.source != null)
+    ])
+    error_message = "Either 'content' or 'source' must be defined, but not both."
+  }
+}
+
+variable "task_epilog_scripts" {
+  description = <<EOD
+List of scripts to be used for TaskEpilog. Programs for the slurmd to execute
+as the slurm job's owner after termination of each task.
+See https://slurm.schedmd.com/slurm.conf.html#OPT_TaskEpilog.
+EOD
+  type = list(object({
+    filename = string
+    content  = optional(string)
+    source   = optional(string)
+  }))
+  default = []
+
+  validation {
+    condition = alltrue([
+      for script in var.task_epilog_scripts :
       (script.content != null && script.source == null) ||
       (script.content == null && script.source != null)
     ])

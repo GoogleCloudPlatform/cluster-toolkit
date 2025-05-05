@@ -115,9 +115,9 @@ No resources.
 |------|-------------|------|---------|:--------:|
 | <a name="input_delete_default_internet_gateway_routes"></a> [delete\_default\_internet\_gateway\_routes](#input\_delete\_default\_internet\_gateway\_routes) | If set, ensure that all routes within the network specified whose names begin with 'default-route' and with a next hop of 'default-internet-gateway' are deleted | `bool` | `false` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | The name of the current deployment | `string` | n/a | yes |
-| <a name="input_enable_internal_traffic"></a> [enable\_internal\_traffic](#input\_enable\_internal\_traffic) | Enable a firewall rule to allow all internal TCP, UDP, and ICMP traffic within the network | `bool` | `true` | no |
-| <a name="input_firewall_log_config"></a> [firewall\_log\_config](#input\_firewall\_log\_config) | Firewall log configuration for Toolkit firewall rules (var.enable\_iap\_ssh\_ingress and others) | `string` | `"DISABLE_LOGGING"` | no |
-| <a name="input_firewall_rules"></a> [firewall\_rules](#input\_firewall\_rules) | List of firewall rules | `any` | `[]` | no |
+| <a name="input_enable_internal_traffic"></a> [enable\_internal\_traffic](#input\_enable\_internal\_traffic) | DEPRECATED: enable\_internal\_traffic can not be specified for gpu-rdma-vpc. | `bool` | `null` | no |
+| <a name="input_firewall_log_config"></a> [firewall\_log\_config](#input\_firewall\_log\_config) | DEPRECATED: firewall\_log\_config can not be specified for gpu-rdma-vpc. | `string` | `null` | no |
+| <a name="input_firewall_rules"></a> [firewall\_rules](#input\_firewall\_rules) | DEPRECATED: firewall\_rules can not be specified for gpu-rdma-vpc. | `any` | `null` | no |
 | <a name="input_mtu"></a> [mtu](#input\_mtu) | The network MTU (default: 8896). Recommended values: 0 (use Compute Engine default), 1460 (default outside HPC environments), 1500 (Internet default), or 8896 (for Jumbo packets). Allowed are all values in the range 1300 to 8896, inclusively. | `number` | `8896` | no |
 | <a name="input_network_description"></a> [network\_description](#input\_network\_description) | An optional description of this resource (changes will trigger resource destroy/create) | `string` | `""` | no |
 | <a name="input_network_name"></a> [network\_name](#input\_network\_name) | The name of the network to be created (if unsupplied, will default to "{deployment\_name}-net") | `string` | `null` | no |

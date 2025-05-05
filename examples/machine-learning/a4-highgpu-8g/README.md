@@ -60,6 +60,18 @@ vars:
   number_of_vms: <RESERVATION_SIZE>
 ```
 
+### Additional ways to provision
+Cluster toolkit also supports DWS Flex, Spot VMs, as well as reservations as ways to provision instances.
+
+[For more information on DWS Flex in Slurm](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/docs/slurm-dws-flex.md)
+[For more information on Spot VMs](https://cloud.google.com/compute/docs/instances/spot)
+
+We provide ways to enable the alternative consumption methods in the `a4high-vm-deployment.yaml` file.
+
+To make use of these other methods, replace `a4h_reservation_name` in the deployment file with the variable of choice below.
+
+`a4h_enable_spot_vm: true` for spot or `a4h_dws_flex_enabled: true` for DWS Flex.
+
 ### Deploy the VMs
 
 ```bash
