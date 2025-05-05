@@ -232,6 +232,8 @@ deployment_groups:
           chmod 0755 "${SLURM_ROOT}/scripts/receive-data-path-manager"
           ln -s "${SLURM_ROOT}/scripts/receive-data-path-manager" "${SLURM_ROOT}/partition-$(vars.a3_partition_name)-prolog_slurmd.d/start-rxdm.prolog_slurmd"
           ln -s "${SLURM_ROOT}/scripts/receive-data-path-manager" "${SLURM_ROOT}/partition-$(vars.a3_partition_name)-epilog_slurmd.d/stop-rxdm.epilog_slurmd"
+          # enable a GPU health check that runs at the completion of all jobs on A3high nodes
+          ln -s "/slurm/scripts/tools/gpu-test" "${SLURM_ROOT}/partition-$(vars.a3_partition_name)-epilog_slurmd.d/gpu-test.epilog_slurmd"
       - type: shell
         destination: reset_enroot.sh
         content: |
