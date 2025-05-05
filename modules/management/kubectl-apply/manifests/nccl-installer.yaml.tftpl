@@ -40,7 +40,9 @@ spec:
               - key: cloud.google.com/gke-accelerator
                 operator: In
                 values:
-                - nvidia-b200
+                %{~ for accelerator in acceleratorSelector ~}
+                - "${accelerator}"
+                %{~ endfor ~}
       tolerations:
       - operator: "Exists"
       hostNetwork: true

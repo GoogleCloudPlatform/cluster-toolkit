@@ -43,9 +43,6 @@ vars:
   # <project>/<reservation-name>/reservationBlocks/<reservation-block-name>
   extended_reservation:
 
-  # Installs NCCL library and Google NCCL plugin
-  # Runs an init container on all H200 GPU nodes with the NCCL plugin image
-  nccl_installer_path: $(ghpc_stage("./nccl-installer.yaml"))
   # Temporary fix for COS issue, will be fixed in next release
   mglru_disable_path: $(ghpc_stage("./mglru-disable.yaml"))
   kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
@@ -242,8 +239,9 @@ deployment_groups:
           accelerator_type: $(vars.accelerator_type)
       jobset:
         install: true
+      gib:
+        install: true  # NCCL gIB plugin via DaemonSet initContainer
       apply_manifests:
-      - source: $(vars.nccl_installer_path)
       - source: $(vars.mglru_disable_path)
 
   - id: job-template

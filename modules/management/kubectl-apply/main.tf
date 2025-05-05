@@ -28,8 +28,10 @@ locals {
   install_jobset            = try(var.jobset.install, false)
   install_gpu_operator      = try(var.gpu_operator.install, false)
   install_nvidia_dra_driver = try(var.nvidia_dra_driver.install, false)
+  install_gib               = try(var.gib.install, false)
   kueue_install_source      = format("${path.module}/manifests/kueue-%s.yaml", try(var.kueue.version, ""))
   jobset_install_source     = format("${path.module}/manifests/jobset-%s.yaml", try(var.jobset.version, ""))
+  gib_install_source        = "${path.module}/manifests/nccl-installer.yaml.tftpl"
 }
 
 data "google_container_cluster" "gke_cluster" {
@@ -221,4 +223,18 @@ module "install_gpu_operator" {
   atomic          = true
   cleanup_on_fail = true
 
+}
+
+module "install_gib" {
+  source            = "./kubectl"
+  source_path       = local.install_gib ? local.gib_install_source : null
+  server_side_apply = true
+  template_vars = {
+    acceleratorSelector = var.gib.acceleratorSelector
+  }
+
+  providers = {
+    kubectl = kubectl
+    http    = http.h
+  }
 }
