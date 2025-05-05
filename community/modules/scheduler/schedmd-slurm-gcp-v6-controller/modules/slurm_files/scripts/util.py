@@ -1110,13 +1110,15 @@ def to_hostnames(nodelist: str) -> List[str]:
     return hostnames
 
 
-def retry_exception(exc):
+def retry_exception(exc) -> bool:
     """return true for exceptions that should always be retried"""
+    msg = str(exc)
     retry_errors = (
         "Rate Limit Exceeded",
         "Quota Exceeded",
+        "Quota exceeded",
     )
-    return any(e in str(exc) for e in retry_errors)
+    return any(err in msg for err in retry_errors)
 
 
 def ensure_execute(request):
