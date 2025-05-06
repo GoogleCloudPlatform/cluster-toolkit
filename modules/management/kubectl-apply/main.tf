@@ -231,6 +231,7 @@ module "install_gib" {
   server_side_apply = true
   template_vars = {
     acceleratorSelector = var.gib.accelerator_selector
+    acceleratorCount    = var.gib.accelerator_count
     version             = var.gib.version
   }
 

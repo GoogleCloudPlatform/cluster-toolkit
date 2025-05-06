@@ -144,6 +144,7 @@ variable "gib" {
         "nvidia-b200"
       ]
     )
+    accelerator_count = optional(number, 8)
   })
   default = {}
 }
