@@ -69,7 +69,7 @@ spec:
           %{~ for i in range(acceleratorCount) ~}
           sysctl -w net.ipv4.conf.gpu${i}rdma0.log_martians=0
           %{~ endfor ~}
-      - image: us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib:${version}
+      - image: ${image}:${version}
         name: nccl-rdma-installer
         resources:
           requests:

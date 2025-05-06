@@ -232,6 +232,7 @@ module "install_gib" {
   template_vars = {
     acceleratorSelector = var.gib.accelerator_selector
     acceleratorCount    = var.gib.accelerator_count
+    image               = var.gib.image
     version             = var.gib.version
   }
 
