@@ -47,6 +47,22 @@ resource "terraform_data" "gib_validations" {
   }
 }
 
+resource "terraform_data" "initial_gib_version" {
+  input = var.gib.install ? var.gib.version : null
+
+  lifecycle {
+    ignore_changes = [input]
+  }
+}
+
+check "gib_version_changes" {
+  assert {
+    # Skip version checking if gIB was not initially or is not currently installed
+    condition     = terraform_data.initial_gib_version.output == null || !var.gib.install || terraform_data.initial_gib_version.output == var.gib.version
+    error_message = "When changing the gIB NCCL plugin version, confirm full rollout and environment consistency. Replace any NCCL env hard coding/caches with set_nccl_env.sh sourcing."
+  }
+}
+
 variable "project_id" {
   description = "The project ID that hosts the gke cluster."
   type        = string
