@@ -136,6 +136,7 @@ variable "gib" {
   description = "Install the NCCL gIB plugin"
   type = object({
     install = optional(bool, false)
+    image   = optional(string, "us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib")
     version = optional(string, "v1.0.5")
     accelerator_selector = optional(
       list(string),
