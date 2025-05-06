@@ -36,15 +36,7 @@ spec:
       priorityClassName: system-node-critical
       affinity:
         nodeAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            nodeSelectorTerms:
-            - matchExpressions:
-              - key: cloud.google.com/gke-accelerator
-                operator: In
-                values:
-                %{~ for accelerator in acceleratorSelector ~}
-                - "${accelerator}"
-                %{~ endfor ~}
+          ${indent(10, yamlencode(nodeAffinity))}
       tolerations:
       - operator: "Exists"
       hostNetwork: true

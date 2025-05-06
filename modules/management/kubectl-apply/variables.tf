@@ -138,13 +138,17 @@ variable "gib" {
     install = optional(bool, false)
     image   = optional(string, "us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib")
     version = optional(string, "v1.0.5")
-    accelerator_selector = optional(
-      list(string),
-      [
-        "nvidia-h200-141gb",
-        "nvidia-b200"
-      ]
-    )
+    node_affinity = optional(any, {
+      requiredDuringSchedulingIgnoredDuringExecution = {
+        nodeSelectorTerms = [{
+          matchExpressions = [{
+            key      = "cloud.google.com/gke-gpu",
+            operator = "In",
+            values   = ["true"]
+          }]
+        }]
+      }
+    })
     accelerator_count = optional(number, 8)
   })
   default = {}
