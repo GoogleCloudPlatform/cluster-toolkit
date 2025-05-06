@@ -35,6 +35,7 @@ vars:
   system_node_pool_disk_size_gb: 200
   a3ultra_node_pool_disk_size_gb: 100
   accelerator_type: nvidia-h200-141gb
+  version_prefix: "1.31."
 
 deployment_groups:
 - group: primary
@@ -168,7 +169,7 @@ deployment_groups:
         ))
       # Cluster versions cannot be updated through the toolkit after creation
       # Please manage cluster version from the Google Cloud Console directly
-      version_prefix: "1.31."
+      version_prefix: $(vars.version_prefix)
       release_channel: RAPID
       maintenance_exclusions:
       - name: no-minor-or-node-upgrades-indefinite

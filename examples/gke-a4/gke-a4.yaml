@@ -52,6 +52,7 @@ vars:
   system_node_pool_disk_size_gb: 200
   a4_node_pool_disk_size_gb: 100
   accelerator_type: nvidia-b200
+  version_prefix: "1.32."
 
 
 deployment_groups:
@@ -186,7 +187,7 @@ deployment_groups:
         ))
       # Cluster versions cannot be updated through the toolkit after creation
       # Please manage cluster version from the Google Cloud Console directly
-      version_prefix: "1.32."
+      version_prefix: $(vars.version_prefix)
       release_channel: RAPID
       maintenance_exclusions:
       - name: no-minor-or-node-upgrades-indefinite
