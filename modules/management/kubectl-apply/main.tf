@@ -230,7 +230,7 @@ module "install_gib" {
   source_path       = local.install_gib ? local.gib_install_source : null
   server_side_apply = true
   template_vars = {
-    acceleratorSelector = var.gib.acceleratorSelector
+    acceleratorSelector = var.gib.accelerator_selector
     version             = var.gib.version
   }
 

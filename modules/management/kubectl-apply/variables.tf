@@ -137,7 +137,7 @@ variable "gib" {
   type = object({
     install = optional(bool, false)
     version = optional(string, "v1.0.5")
-    acceleratorSelector = optional(
+    accelerator_selector = optional(
       list(string),
       [
         "nvidia-h200-141gb",
