@@ -242,6 +242,7 @@ deployment_groups:
         install: true
       gib:
         install: true  # NCCL gIB plugin via DaemonSet initContainer
+        acceleratorSelector: [$(vars.accelerator_type)]
       apply_manifests:
       - source: $(vars.mglru_disable_path)
 
