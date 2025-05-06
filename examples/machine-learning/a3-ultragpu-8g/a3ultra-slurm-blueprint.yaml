@@ -42,9 +42,9 @@ vars:
   nccl_plugin_version: v1.0.5
   base_network_name: $(vars.deployment_name)
   #Consumption options (set to true or fill in reservation name, pick only one)
-  a4h_dws_flex_enabled: false
-  a4h_enable_spot_vm: false
-  a4h_reservation_name: ""
+  a3u_dws_flex_enabled: false
+  a3u_enable_spot_vm: false
+  a3u_reservation_name: ""
 
 deployment_groups:
 - group: image-env
@@ -470,10 +470,10 @@ deployment_groups:
       on_host_maintenance: TERMINATE
 
       #Consumption options
-      reservation_name: $(vars.a4h_reservation_name)
-      enable_spot_vm: $(vars.a4h_enable_spot_vm)
+      reservation_name: $(vars.a3u_reservation_name)
+      enable_spot_vm: $(vars.a3u_enable_spot_vm)
       dws_flex:
-        enabled: $(vars.a4h_dws_flex_enabled)
+        enabled: $(vars.a3u_dws_flex_enabled)
 
       advanced_machine_features:
         threads_per_core: null # Use platform default value
