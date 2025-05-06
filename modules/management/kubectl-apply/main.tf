@@ -230,10 +230,10 @@ module "install_gib" {
   source_path       = local.install_gib ? local.gib_install_source : null
   server_side_apply = true
   template_vars = {
-    acceleratorSelector = var.gib.accelerator_selector
-    acceleratorCount    = var.gib.accelerator_count
-    image               = var.gib.image
-    version             = var.gib.version
+    image            = var.gib.image
+    version          = var.gib.version
+    acceleratorCount = var.gib.accelerator_count
+    nodeAffinity     = var.gib.node_affinity
   }
 
   providers = {
