@@ -459,6 +459,8 @@ def install_custom_scripts(check_hash=False):
         tokens = [
             "prolog",
             "epilog",
+            "task_prolog",
+            "task_epilog",
             f"nodeset-{lookup().node_nodeset_name()}"
         ]
     elif role == "login":
