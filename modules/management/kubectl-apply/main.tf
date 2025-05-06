@@ -109,16 +109,16 @@ module "install_nvidia_dra_driver" {
   # This corresponds to the -f <(cat <<EOF ... EOF) part
   values_yaml = [<<EOF
       nvidiaDriverRoot: /home/kubernetes/bin/nvidia
-      nvidiaCtkPath: /home/kubernetes/bin/nvidia/toolkit/nvidia-ctk
+      nvidiaCtkPath: /home/kubernetes/bin/nvidia/nvidia-ctk
       resources:
         gpus:
           enabled: false
 
       controller:
         affinity:
-          nodeAffinity:
-            requiredDuringSchedulingIgnoredDuringExecution:
-              nodeSelectorTerms:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
                 - matchExpressions:
                   - key: "nvidia.com/gpu"
                     operator: "DoesNotExist"
@@ -129,20 +129,15 @@ module "install_nvidia_dra_driver" {
             requiredDuringSchedulingIgnoredDuringExecution:
               nodeSelectorTerms:
                 - matchExpressions:
-                    - key: feature.node.kubernetes.io/pci-10de.present
+                    - key: cloud.google.com/gke-accelerator
                       operator: In
                       values:
-                        - "true"
-                - matchExpressions:
-                    - key: feature.node.kubernetes.io/cpu-model.vendor_id
+                        - nvidia-gb200
+                    - key: kubernetes.io/arch
                       operator: In
                       values:
-                        - "ARM"
-                - matchExpressions:
-                    - key: "nvidia.com/gpu.present"
-                      operator: In
-                      values:
-                        - "true"
+                        - arm64
+
         tolerations:
           - key: nvidia.com/gpu
             operator: Equal
@@ -152,6 +147,7 @@ module "install_nvidia_dra_driver" {
             operator: Equal 
             value: arm64 
             effect: NoSchedule
+
       EOF
   ]
 
