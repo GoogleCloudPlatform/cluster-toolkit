@@ -70,6 +70,26 @@ deployment_groups:
     outputs:
     - network_storage
 
+  # - id: private_service_access
+  #   source: community/modules/network/private-service-access
+  #   use: [cluster-net-0]
+
+  # To use Managed Lustre as for the shared /home directory:
+  # 1. Comment out the filestore block above
+  # 2. Uncomment the managed-lustre and private-service-access blocks
+  # - id: homefs
+  #   source: modules/file-system/managed-lustre
+  #   use:
+  #   - cluster-net-0
+  #   - private_service_access
+  #   settings:
+  #     size_gib: 18000
+  #     name: lustre-instance
+  #     local_mount: /home
+  #     remote_mount: lustrefs
+  #   outputs:
+  #   - network_storage
+
   - id: h4d_startup
     source: modules/scripts/startup-script
     settings:
