@@ -31,7 +31,6 @@ locals {
   install_gib               = try(var.gib.install, false)
   kueue_install_source      = format("${path.module}/manifests/kueue-%s.yaml", try(var.kueue.version, ""))
   jobset_install_source     = format("${path.module}/manifests/jobset-%s.yaml", try(var.jobset.version, ""))
-  gib_install_source        = "${path.module}/manifests/nccl-installer.yaml.tftpl"
 }
 
 data "google_container_cluster" "gke_cluster" {
@@ -226,14 +225,9 @@ module "install_gpu_operator" {
 
 module "install_gib" {
   source            = "./kubectl"
-  source_path       = local.install_gib ? local.gib_install_source : null
+  source_path       = local.install_gib ? var.gib.path : null
   server_side_apply = true
-  template_vars = {
-    image            = var.gib.image
-    version          = var.gib.version
-    acceleratorCount = var.gib.accelerator_count
-    nodeAffinity     = var.gib.node_affinity
-  }
+  template_vars     = var.gib.template_vars
 
   providers = {
     kubectl = kubectl

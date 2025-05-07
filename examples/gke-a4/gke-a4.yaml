@@ -46,6 +46,7 @@ vars:
   # Temporary fix for COS issue, will be fixed in next release
   mglru_disable_path: $(ghpc_stage("./mglru-disable.yaml"))
   kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
+  gib_installer_path: $(ghpc_stage("./nccl-installer.yaml.tftpl"))
   system_node_pool_disk_size_gb: 200
   a4_node_pool_disk_size_gb: 100
   accelerator_type: nvidia-b200
@@ -242,7 +243,7 @@ deployment_groups:
         install: true
       gib:
         install: true  # NCCL gIB plugin via DaemonSet initContainer
-        accelerator_selector: [$(vars.accelerator_type)]
+        path: $(vars.gib_installer_path)
       apply_manifests:
       - source: $(vars.mglru_disable_path)
 
