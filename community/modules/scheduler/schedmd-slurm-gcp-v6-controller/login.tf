@@ -1,4 +1,4 @@
-# Copyright 2023 Google LLC
+# Copyright 2025 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,69 +12,39 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# TEMPLATE
-module "slurm_login_template" {
-  source = "../../internal/slurm-gcp/instance_template"
 
-  for_each = { for x in var.login_nodes : x.group_name => x }
+locals {
+  # TODO: deprecate `var.login_[ startup_script, startup_scripts_timeout, network_storage]`
+  # in favour of vars defined in user-facing login module
+  ghpc_startup_login = [{
+    filename = "ghpc_startup.sh"
+    content  = var.login_startup_script
+  }]
 
-  project_id          = var.project_id
-  slurm_cluster_name  = local.slurm_cluster_name
-  slurm_instance_role = "login"
-  slurm_bucket_path   = module.slurm_files.slurm_bucket_path
-  name_prefix         = each.value.group_name
-
-  additional_disks           = each.value.additional_disks
-  bandwidth_tier             = each.value.bandwidth_tier
-  can_ip_forward             = each.value.can_ip_forward
-  advanced_machine_features  = each.value.advanced_machine_features
-  disk_auto_delete           = each.value.disk_auto_delete
-  disk_labels                = each.value.disk_labels
-  disk_resource_manager_tags = each.value.disk_resource_manager_tags
-  disk_size_gb               = each.value.disk_size_gb
-  disk_type                  = each.value.disk_type
-  enable_confidential_vm     = each.value.enable_confidential_vm
-  enable_oslogin             = each.value.enable_oslogin
-  enable_shielded_vm         = each.value.enable_shielded_vm
-  gpu                        = each.value.gpu
-  labels                     = each.value.labels
-  machine_type               = each.value.machine_type
-  metadata                   = merge(each.value.metadata, local.universe_domain)
-  min_cpu_platform           = each.value.min_cpu_platform
-  on_host_maintenance        = each.value.on_host_maintenance
-  preemptible                = each.value.preemptible
-  region                     = each.value.region
-  resource_manager_tags      = each.value.resource_manager_tags
-  service_account            = each.value.service_account
-  shielded_instance_config   = each.value.shielded_instance_config
-  source_image_family        = each.value.source_image_family
-  source_image_project       = each.value.source_image_project
-  source_image               = each.value.source_image
-  spot                       = each.value.spot
-  subnetwork                 = each.value.subnetwork
-  tags                       = concat([local.slurm_cluster_name], each.value.tags)
-  termination_action         = each.value.termination_action
+  login_startup_scripts = concat(local.common_scripts, local.ghpc_startup_login)
 }
 
-# INSTANCE
-module "slurm_login_instance" {
-  source   = "../../internal/slurm-gcp/instance"
+module "login" {
+  source   = "../../internal/slurm-gcp/login"
   for_each = { for x in var.login_nodes : x.group_name => x }
-
-  access_config = each.value.access_config
-  hostname      = "${local.slurm_cluster_name}-${each.key}"
 
   project_id = var.project_id
 
-  instance_template = module.slurm_login_template[each.key].self_link
-  num_instances     = each.value.num_instances
+  slurm_cluster_name = local.slurm_cluster_name
+  slurm_bucket_path  = module.slurm_files.slurm_bucket_path
+  slurm_bucket_name  = module.slurm_files.bucket_name
+  slurm_bucket_dir   = module.slurm_files.bucket_dir
 
-  additional_networks = each.value.additional_networks
-  region              = each.value.region
-  static_ips          = each.value.static_ips
-  subnetwork          = each.value.subnetwork
-  zone                = each.value.zone
+  login_nodes = each.value
+
+  startup_scripts         = local.login_startup_scripts
+  startup_scripts_timeout = var.login_startup_scripts_timeout
+
+  network_storage = var.login_network_storage
+
+  universe_domain = var.universe_domain
 
   # trigger replacement of login nodes when the controller instance is replaced
+  # Needed for re-mounting volumes hosted on controller
   replace_trigger = google_compute_instance_from_template.controller.self_link
 }

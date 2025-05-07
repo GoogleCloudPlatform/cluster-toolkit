@@ -1,0 +1,12 @@
+- source: community/modules/container/artifact-registry
+  kind: terraform
+  id: {{ registry_id }}
+  settings:
+    repo_mode: {{ repo_mode }}
+    format: {{ format }}
+    {% if repo_mode == "REMOTE_REPOSITORY" %}
+    use_upstream_credentials: {{ use_upstream_credentials }}
+    {% if use_public_repository == True %}repo_public_repository: DOCKER_HUB{% else %}repo_mirror_url: {{ repo_mirror_url }}{% endif %}
+    {% if use_upstream_credentials == True %}repo_username: {{ repo_username }}
+    repo_password: {{ repo_password }}
+    {% endif %}{% endif %}

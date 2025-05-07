@@ -118,15 +118,17 @@ resource "google_container_node_pool" "node_pool" {
   }
 
   node_config {
-    disk_size_gb    = var.disk_size_gb
-    disk_type       = var.disk_type
-    resource_labels = local.labels
-    labels          = var.kubernetes_labels
-    service_account = var.service_account_email
-    oauth_scopes    = var.service_account_scopes
-    machine_type    = var.machine_type
-    spot            = var.spot
-    image_type      = var.image_type
+    disk_size_gb     = var.disk_size_gb
+    disk_type        = var.disk_type
+    resource_labels  = local.labels
+    labels           = var.kubernetes_labels
+    service_account  = var.service_account_email
+    oauth_scopes     = var.service_account_scopes
+    machine_type     = var.machine_type
+    spot             = var.spot
+    image_type       = var.image_type
+    flex_start       = var.enable_flex_start
+    max_run_duration = var.max_run_duration != null ? "${var.max_run_duration}s" : null
 
     dynamic "guest_accelerator" {
       for_each = local.guest_accelerator
@@ -364,6 +366,22 @@ resource "google_container_node_pool" "node_pool" {
     precondition {
       condition     = !(var.num_node_pools < 0 || var.num_slices < 0)
       error_message = "Negative integer value of num_node_pools or num_slices is not valid. Please use a positive integer value to set num_node_pools for CPUs and GPUS, and num_slices for TPUs."
+    }
+    precondition {
+      condition     = var.enable_flex_start == true ? (var.auto_repair == false) : true
+      error_message = "enable_flex_start needs node auto_repair set to false."
+    }
+    precondition {
+      condition     = var.enable_flex_start == true ? (var.static_node_count == null) : true
+      error_message = "enable_flex_start does not work with static_node_count. static_node_count should be set to null."
+    }
+    precondition {
+      condition     = var.enable_flex_start == true ? (var.reservation_affinity.consume_reservation_type == "NO_RESERVATION") : true
+      error_message = "enable_flex_start only works with reservation_affinity consume_reservation_type NO_RESERVATION."
+    }
+    precondition {
+      condition     = var.enable_flex_start == true ? (var.spot == false) : true
+      error_message = "Both enable_flex_start and spot consumption option cannot be set to true at the same time."
     }
   }
 }

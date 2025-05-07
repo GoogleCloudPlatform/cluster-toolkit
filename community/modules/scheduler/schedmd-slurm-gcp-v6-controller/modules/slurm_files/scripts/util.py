@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from importlib import metadata
 from typing import Iterable, List, Tuple, Optional, Any, Dict, Sequence, Type, Callable, Literal
 import argparse
 import base64
@@ -24,7 +25,7 @@ import inspect
 import json
 import logging
 import logging.config
-import logging.handlers 
+import logging.handlers
 import math
 import os
 import re
@@ -51,7 +52,7 @@ from google.cloud import storage # type: ignore
 
 import google.auth # type: ignore
 from google.oauth2 import service_account # type: ignore
-import googleapiclient.discovery # type: ignore 
+import googleapiclient.discovery # type: ignore
 import google_auth_httplib2 # type: ignore
 from googleapiclient.http import set_user_agent # type: ignore
 from google.api_core.client_options import ClientOptions
@@ -100,6 +101,7 @@ slurmdirs = NSDict(
     prefix = Path("/usr/local"),
     etc = Path("/usr/local/etc/slurm"),
     state = Path("/var/spool/slurm"),
+    key_distribution = Path("/slurm/key_distribution"),
 )
 
 
@@ -210,13 +212,13 @@ class InstanceResourceStatus:
                 physical_host=None,
                 upcoming_maintenance=None,
             )
-        
+
         try:
             maint = UpcomingMaintenance.from_json(jo.get("upcomingMaintenance"))
         except ValueError as e:
             log.exception("Failed to parse upcomingMaintenance, ignoring")
             maint = None # intentionally swallow exception
-        
+
         return cls(
             physical_host=jo.get("physicalHost"),
             upcoming_maintenance=maint,
@@ -231,13 +233,12 @@ class Instance:
   creation_timestamp: datetime
   role: Optional[str]
   resource_status: InstanceResourceStatus
+  metadata: Dict[str, str]
   # TODO: use proper InstanceScheduling class
   scheduling: NSDict
 
   @classmethod
   def from_json(cls, jo: dict) -> "Instance":
-    labels = jo.get("labels", {})
-
     return cls(
       name=jo["name"],
       zone=trim_self_link(jo["zone"]),
@@ -245,7 +246,8 @@ class Instance:
       creation_timestamp=parse_gcp_timestamp(jo["creationTimestamp"]),
       resource_status=InstanceResourceStatus.from_json(jo.get("resourceStatus")),
       scheduling=NSDict(jo.get("scheduling")),
-      role = labels.get("slurm_instance_role"),
+      role = jo.get("labels", {}).get("slurm_instance_role"),
+      metadata = {k["key"]: k["value"] for k in jo.get("metadata", {}).get("items", [])}
     )
 
 
@@ -275,7 +277,7 @@ def now() -> datetime:
     Return current time as timezone-aware datetime.
 
     IMPORTANT: DO NOT use `datetime.now()`, unless you explicitly need to have tz-naive datetime.
-    Otherwise there is a risk of getting: "cannot compare naive and aware datetimes" error, 
+    Otherwise there is a risk of getting: "cannot compare naive and aware datetimes" error,
     since all timetstamps we receive from GCP API are tz-aware.
 
     Another motivation  for this function is to allow to mock time in tests.
@@ -289,7 +291,7 @@ def parse_gcp_timestamp(s: str) -> datetime:
   NOTE: It always return tz-aware datetime (fallbacks to UTC and logs error).
   """
   # Requires Python >= 3.7
-  # TODO: Remove this "hack" of trimming the Z from timestamps once we move to Python 3.11 
+  # TODO: Remove this "hack" of trimming the Z from timestamps once we move to Python 3.11
   # (context: https://discuss.python.org/t/parse-z-timezone-suffix-in-datetime/2220/30)
   ts = datetime.fromisoformat(s.replace('Z', '+00:00'))
   if ts.tzinfo is None: # fallback to UTC
@@ -452,15 +454,15 @@ def install_custom_scripts(check_hash=False):
     role, tokens = lookup().instance_role, []
 
     if role == "controller":
-        tokens = ["controller", "prolog", "epilog"]
+        tokens = ["controller", "prolog", "epilog", "task_prolog", "task_epilog"]
     elif role == "compute":
         tokens = [
-            "prolog", 
+            "prolog",
             "epilog",
             f"nodeset-{lookup().node_nodeset_name()}"
         ]
     elif role == "login":
-        tokens = [f"login-{lookup().login_group_name()}"]
+        tokens = [f"login-{instance_login_group()}"]
 
     prefixes = [f"slurm-{tok}-script" for tok in tokens]
 
@@ -562,21 +564,22 @@ class _ConfigBlobs:
     nodeset: List[storage.Blob] = field(default_factory=list)
     nodeset_dyn: List[storage.Blob] = field(default_factory=list)
     nodeset_tpu: List[storage.Blob] = field(default_factory=list)
+    login_group: List[storage.Blob] = field(default_factory=list)
 
     @property
     def hash(self) -> str:
         h = hashlib.md5()
-        all = [self.core] + self.partition + self.nodeset + self.nodeset_dyn + self.nodeset_tpu    
+        all = [self.core] + self.partition + self.nodeset + self.nodeset_dyn + self.nodeset_tpu
         # sort blobs so hash is consistent
-        for blob in sorted(all, key=lambda b: b.name): 
+        for blob in sorted(all, key=lambda b: b.name):
             h.update(blob.md5_hash.encode("utf-8"))
-        return h.hexdigest() 
+        return h.hexdigest()
 
 def _list_config_blobs() -> _ConfigBlobs:
     _, common_prefix = _get_bucket_and_common_prefix()
-    
+
     core: Optional[storage.Blob] = None
-    rest: Dict[str, List[storage.Blob]] = {"partition": [], "nodeset": [], "nodeset_dyn": [], "nodeset_tpu": []}
+    rest: Dict[str, List[storage.Blob]] = {"partition": [], "nodeset": [], "nodeset_dyn": [], "nodeset_tpu": [], "login_group": []}
 
     for blob in blob_list(prefix=""):
         if blob.name == f"{common_prefix}/config.yaml":
@@ -604,6 +607,7 @@ def _fetch_config(old_hash: Optional[str]) -> Optional[Tuple[NSDict, str]]:
         nodesets=_download(blobs.nodeset),
         nodesets_dyn=_download(blobs.nodeset_dyn),
         nodesets_tpu=_download(blobs.nodeset_tpu),
+        login_groups=_download(blobs.login_group),
     ), blobs.hash
 
 def _assemble_config(
@@ -612,6 +616,7 @@ def _assemble_config(
         nodesets: List[Any],
         nodesets_dyn: List[Any],
         nodesets_tpu: List[Any],
+        login_groups: List[Any],
     ) -> NSDict:
     cfg = NSDict(core)
 
@@ -643,6 +648,18 @@ def _assemble_config(
         for ns_name in chain(p.partition_nodeset, p.partition_nodeset_dyn, p.partition_nodeset_tpu):
             if ns_name not in ns_names:
                 raise DeffetiveStoredConfigError(f"nodeset {ns_name} not defined in config")
+            
+    for lg_yaml in login_groups:
+        lg_cfg = NSDict(lg_yaml)
+        assert lg_cfg.get("group_name"), "group_name is required"
+        lg_name = lg_cfg.group_name
+        assert lg_name not in cfg.login_groups
+        cfg.login_groups[lg_name] = lg_cfg
+
+    if instance_role() == "login":
+        group = instance_login_group()
+        if group not in cfg.login_groups:
+            raise DeffetiveStoredConfigError(f"login group '{group}' does not exist in config")
 
     return _fill_cfg_defaults(cfg)
 
@@ -989,6 +1006,12 @@ def instance_metadata(path):
     """Get instance metadata"""
     return get_metadata(path, root=f"{ROOT_URL}/instance")
 
+def instance_role():
+    return instance_metadata("attributes/slurm_instance_role")
+
+
+def instance_login_group():
+    return instance_metadata("attributes/slurm_login_group")
 
 @lru_cache(maxsize=None)
 def project_metadata(key):
@@ -1201,7 +1224,7 @@ def wait_request(operation, project: str):
     return req
 
 
-def wait_for_operation(operation):
+def wait_for_operation(operation) -> Dict[str, Any]:
     """wait for given operation"""
     project = parse_self_link(operation["selfLink"]).project
     wait_req = wait_request(operation, project=project)
@@ -1304,7 +1327,7 @@ class ReservationDetails:
     @property
     def dense(self) -> bool:
         return self.deployment_type == "DENSE"
-    
+
     @property
     def calendar(self) -> bool:
         return self.reservation_mode == "CALENDAR"
@@ -1343,6 +1366,7 @@ class Lookup:
     def __init__(self, cfg):
         self._cfg = cfg
         self.template_cache_path = Path(__file__).parent / "template_info.cache"
+        self.template_cache_path_exists = Path(__file__).parent / "template_info.cache.exists"
 
     @property
     def cfg(self):
@@ -1399,7 +1423,7 @@ class Lookup:
 
     @cached_property
     def instance_role(self):
-        return instance_metadata("attributes/slurm_instance_role")
+        return instance_role()
 
     @cached_property
     def instance_role_safe(self):
@@ -1413,7 +1437,7 @@ class Lookup:
     @property
     def is_controller(self):
         return self.instance_role_safe == "controller"
-    
+
     @property
     def is_login_node(self):
         return self.instance_role_safe == "login"
@@ -1437,10 +1461,6 @@ class Lookup:
     def zone(self):
         return instance_metadata("zone")
 
-    def login_group_name(self):
-        assert self.is_login_node, f"{self.hostname} is not a login node"
-        return self._node_desc(self.hostname)["nodeset"]
-
     node_desc_regex = re.compile(
         r"^(?P<prefix>(?P<cluster>[^\s\-]+)-(?P<nodeset>\S+))-(?P<node>(?P<suffix>\w+)|(?P<range>\[[\d,-]+\]))$"
     )
@@ -1459,11 +1479,11 @@ class Lookup:
 
     def node_prefix(self, node_name=None):
         return self._node_desc(node_name)["prefix"]
-    
+
     def node_index(self, node: str) -> int:
         """ node_index("cluster-nodeset-45") == 45 """
         suff = self._node_desc(node)["suffix"]
-        
+
         if suff is None:
             raise ValueError(f"Node {node} name does not end with numeric index")
         return int(suff)
@@ -1486,7 +1506,7 @@ class Lookup:
     def node_is_tpu(self, node_name=None):
         nodeset_name = self.node_nodeset_name(node_name)
         return self.cfg.nodeset_tpu.get(nodeset_name) is not None
-    
+
     def node_is_fr(self, node_name:str) -> bool:
         return bool(self.node_nodeset(node_name).future_reservation)
 
@@ -1584,10 +1604,10 @@ class Lookup:
         state = self.slurm_nodes().get(nodename)
         if state is not None:
             return state
-        
+
         # state is None => Slurm doesn't know this node,
         # there are two reasons:
-        # * happy: 
+        # * happy:
         #   * node belongs to removed nodeset
         #   * node belongs to downsized portion of nodeset
         #   * dynamic node that didn't register itself
@@ -1601,16 +1621,16 @@ class Lookup:
         except:
             log.info(f"Unknown node {nodename}, belongs to unknown nodeset")
             return None # Can't find nodeset, may be belongs to removed nodeset
-        
+
         if self.node_is_dyn(nodename):
             log.info(f"Unknown node {nodename}, belongs to dynamic nodeset")
             return None # we can't make any judjment for dynamic nodes
-        
+
         cnt = sum(self.static_dynamic_sizes(ns))
         if self.node_index(nodename) >= cnt:
             log.info(f"Unknown node {nodename}, out of nodeset size boundaries ({cnt})")
             return None # node belongs to downsized nodeset
-        
+
         raise RuntimeError(f"Slurm does not recognize node {nodename}, potential misconfiguration.")
 
 
@@ -1624,8 +1644,9 @@ class Lookup:
             "status",
             "labels.slurm_instance_role",
             "zone",
+            "metadata",
         ]
-        
+
         instance_fields = ",".join(sorted(instance_information_fields))
         fields = f"items.zones.instances({instance_fields}),nextPageToken"
         flt = f"labels.slurm_cluster_name={self.cfg.slurm_cluster_name} AND name:{self.cfg.slurm_cluster_name}-*"
@@ -1652,7 +1673,21 @@ class Lookup:
         """See https://cloud.google.com/compute/docs/reference/rest/v1/reservations"""
         return self.compute.reservations().get(
             project=project, zone=zone, reservation=name).execute()
-    
+
+    @lru_cache()
+    def get_mig(self, project: str, zone: str, self_link:str) -> Any:
+        """https://cloud.google.com/compute/docs/reference/rest/v1/instanceGroupManagers"""
+        return self.compute.instanceGroupManagers().get(project=project, zone=zone, instanceGroupManager=self_link).execute()
+
+    @lru_cache
+    def get_mig_instances(self, project: str, zone: str, self_link:str) -> Any:
+        return self.compute.instanceGroupManagers().listManagedInstances(project=project, zone=zone, instanceGroupManager=self_link).execute() 
+
+    @lru_cache()
+    def get_mig_list(self, project: str, zone: str) -> Any:
+        """https://cloud.google.com/compute/docs/reference/rest/v1/instanceGroupManagers"""
+        return self.compute.instanceGroupManagers().list(project=project, zone=zone).execute()
+
     @lru_cache()
     def _get_future_reservation(self, project:str, zone:str, name: str) -> Any:
         """See https://cloud.google.com/compute/docs/reference/rest/v1/futureReservations"""
@@ -1660,7 +1695,7 @@ class Lookup:
 
     def get_reservation_details(self, project:str, zone:str, name:str, bulk_insert_name:str) -> ReservationDetails:
         reservation = self._get_reservation(project, zone, name)
-    
+
         # Converts policy URLs to names, e.g.:
         # projects/111111/regions/us-central1/resourcePolicies/zebra -> zebra
         policies = [u.split("/")[-1] for u in reservation.get("resourcePolicies", {}).values()]
@@ -1673,7 +1708,7 @@ class Lookup:
             deployment_type=reservation.get("deploymentType"),
             reservation_mode=reservation.get("reservationMode"),
             bulk_insert_name=bulk_insert_name)
-    
+
     def nodeset_reservation(self, nodeset: NSDict) -> Optional[ReservationDetails]:
         if not nodeset.reservation_name:
             return None
@@ -1690,7 +1725,7 @@ class Lookup:
 
         project, name = match.group("project", "reservation")
         return self.get_reservation_details(project, zone, name, nodeset.reservation_name)
-    
+
     def future_reservation(self, nodeset: NSDict) -> Optional[FutureReservation]:
         if not nodeset.future_reservation:
             return None
@@ -1755,7 +1790,7 @@ class Lookup:
                 memory_mb=int(match.group("mem")),
                 accelerators=[],
             )
-        
+
         machines = self.machine_types()
         if name not in machines:
             raise Exception(f"machine type {name} not found")
@@ -1816,7 +1851,7 @@ class Lookup:
         template_name = trim_self_link(template_link)
         # split read and write access to minimize write-lock. This might be a
         # bit slower? TODO measure
-        if self.template_cache_path.exists():
+        if self.template_cache_path_exists.exists():
             with self.template_cache() as cache:
                 if template_name in cache:
                     return NSDict(cache[template_name])
@@ -1848,9 +1883,23 @@ class Lookup:
         # keep write access open for minimum time
         with self.template_cache(writeback=True) as cache:
             cache[template_name] = template.to_dict()
-        # cache should be owned by slurm
-        chown_slurm(self.template_cache_path)
-
+        
+        # Note that shelve database may add custom suffix on top of the path
+        # > The filename specified is the base filename for the underlying database. 
+        # We find all files which could be the database and open the first one.
+        cache_files = [filename for filename in os.listdir(self.template_cache_path.parent) if filename.startswith(self.template_cache_path.name)]
+        if not cache_files:
+            # No cache files found, skip
+            return template
+        # Change ownership of the cache files to the slurm user
+        # This is needed to avoid permission issues when running slurmsync
+        # as a different user (e.g. when using sudo)
+        for filename in cache_files:
+            chown_slurm(Path(self.template_cache_path.parent) / filename)
+        
+        # Create a marker file to indicate that the cache file exists
+        self.template_cache_path_exists.touch()
+        chown_slurm(self.template_cache_path_exists)
         return template
 
 
@@ -1911,7 +1960,7 @@ class Lookup:
         server_ip = ns.get("server_ip") or "$controller"
         if server_ip == "$controller":
             server_ip = self.control_addr or self.control_host
-    
+
         return NSMount(
             server_ip=server_ip,
             local_mount=Path(ns["local_mount"]),
@@ -1919,7 +1968,7 @@ class Lookup:
             fs_type=ns["fs_type"],
             mount_options=ns["mount_options"],
         )
- 
+
     @property
     def munge_mount(self) -> NSMount:
         if self.cfg.munge_mount:
@@ -1934,6 +1983,63 @@ class Lookup:
                 mount_options="defaults,hard,intr,_netdev",
             )
         return self.normalize_ns_mount(mnt)
+
+    @property
+    def slurm_key_mount(self) -> NSMount:
+        if self.cfg.slurm_key_mount:
+            mnt = self.cfg.slurm_key_mount
+            mnt.local_mount = mnt.local_mount or slurmdirs.key_distribution
+        else:
+            mnt = NSDict(
+                server_ip="$controller",
+                local_mount=slurmdirs.key_distribution,
+                remote_mount=slurmdirs.key_distribution,
+                fs_type="nfs",
+                mount_options="defaults,hard,intr,_netdev",
+            )
+        return self.normalize_ns_mount(mnt)
+
+    def is_flex_node(self, node: str) -> bool:
+        try:
+            nodeset = self.node_nodeset(node)
+            if nodeset.dws_flex.use_bulk_insert:
+                return False #For legacy flex support
+            return bool(nodeset.dws_flex.enabled)
+        except:
+            return False
+
+    def is_provisioning_flex_node(self, node:str) -> bool:
+        if not self.is_flex_node(node):
+            return False
+        if self.instance(node) is not None:
+            return True
+
+        nodeset = self.node_nodeset(node)
+        zones = nodeset.zone_policy_allow
+        assert len(zones) == 1
+        zone = zones[0]
+
+        potential_migs=[]
+        mig_list=self.get_mig_list(self.project, zone)
+        
+        if not mig_list or not mig_list.get("items"):
+            return False
+
+        for mig in mig_list["items"]:
+            if not mig.get("instanceTemplate"): #possibly an old MIG
+                return False
+            if mig["instanceTemplate"] == self.node_template(node) and mig["currentActions"]["creating"] > 0:
+                potential_migs.append(self.get_mig_instances(self.project, zone, trim_self_link(mig["selfLink"])))
+
+        if not potential_migs:
+            return False
+
+        for instance_collection in potential_migs[0]["managedInstances"]:
+            if node in instance_collection["name"] and instance_collection["currentAction"]=="CREATING":
+                return True
+        return False
+
+
 
 _lkp: Optional[Lookup] = None
 

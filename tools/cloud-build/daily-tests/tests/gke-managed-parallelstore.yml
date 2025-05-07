@@ -18,7 +18,7 @@ zone: us-central1-a  # for remote node
 region: us-central1
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/examples/gke-managed-parallelstore.yaml"
-network: "{{ deployment_name }}-net"
+network: "{{ test_name }}-net"
 remote_node: "{{ deployment_name }}-0"
 post_deploy_tests:
 - test-validation/test-gke-managed-parallelstore.yml
@@ -27,3 +27,4 @@ custom_vars:
 cli_deployment_vars:
   region: "{{ region }}"
   gcp_public_cidrs_access_enabled: true
+  base_network_name: "{{ test_name }}"

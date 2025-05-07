@@ -50,7 +50,7 @@
         <th>{{ job.id }}</th>
         <td><a href="{% url 'job-detail' job.id %}">{{ job.name }}</a></td>
         <td>{{ job.date_time_submission }}</td>
-        <td><img src="/static/img/GCP_logo.png" style="width:32px;height:32px;"> {{ job.application.cluster.name }}</td>
+        <td>{{ job.application.cluster.name }}</td>
         <td><a href="{% url 'application-detail' job.application.id %}">{{ job.application.name }}</a></td>
         <td>{{ job.partition.machine_type }}</td>
         <td>{{ job.number_of_nodes }}</td>

@@ -60,16 +60,16 @@ def conflines(lkp: util.Lookup) -> str:
     params = lkp.cfg.cloud_parameters
     def get(key, default):
         """
-        Returns the value of the key in params if it exists and is not None, 
+        Returns the value of the key in params if it exists and is not None,
         otherwise returns supplied default.
-        We can't rely on the `dict.get` method because the value could be `None` as 
+        We can't rely on the `dict.get` method because the value could be `None` as
         well as empty NSDict, depending on type of the `cfg.cloud_parameters`.
         TODO: Simplify once NSDict is removed from the codebase.
         """
         if key not in params or params[key] is None:
             return default
         return params[key]
-    
+
     no_comma_params = get("no_comma_params", False)
 
     any_gpus = any(
@@ -102,12 +102,16 @@ def conflines(lkp: util.Lookup) -> str:
     scripts_dir = lkp.cfg.install_dir or dirs.scripts
     prolog_path = Path(dirs.custom_scripts / "prolog.d")
     epilog_path = Path(dirs.custom_scripts / "epilog.d")
+    task_prolog_path = Path(dirs.custom_scripts / "task_prolog.d")
+    task_epilog_path = Path(dirs.custom_scripts / "task_epilog.d")
     default_tree_width = 65533 if any_dynamic else 128
 
     conf_options = {
         **(comma_params if not no_comma_params else {}),
         "Prolog": f"{prolog_path}/*" if lkp.cfg.prolog_scripts else None,
         "Epilog": f"{epilog_path}/*" if lkp.cfg.epilog_scripts else None,
+        "TaskProlog": f"{task_prolog_path}/*" if lkp.cfg.task_prolog_scripts else None,
+        "TaskEpilog": f"{task_epilog_path}/*" if lkp.cfg.task_epilog_scripts else None,
         "PrivateData": get("private_data", []),
         "SchedulerParameters": get("scheduler_parameters", [
             "bf_continue",
@@ -286,6 +290,7 @@ def install_slurm_conf(lkp: util.Lookup) -> None:
         "slurmlog": dirs.log,
         "state_save": slurmdirs.state,
         "mpi_default": mpi_default,
+        "auth_key": "slurm" if lkp.cfg.enable_slurm_auth else "munge",
     }
 
     conf = lkp.cfg.slurm_conf_tpl.format(**conf_options)
@@ -306,6 +311,7 @@ def install_slurmdbd_conf(lkp: util.Lookup) -> None:
         "db_pass": '""',
         "db_host": "localhost",
         "db_port": "3306",
+        "auth_key": "slurm" if lkp.cfg.enable_slurm_auth else "munge",
     }
 
     if lkp.cfg.cloudsql_secret:
@@ -348,7 +354,7 @@ def install_jobsubmit_lua(lkp: util.Lookup) -> None:
         for tpu_nodeset in part.partition_nodeset_tpu
     ):
         return # No TPU partitions, no need for job_submit.lua
-    
+
     scripts_dir = lkp.cfg.slurm_scripts_dir or dirs.scripts
     tpl = (scripts_dir / "job_submit.lua.tpl").read_text()
     conf = tpl.format(scripts_dir=scripts_dir)
@@ -451,14 +457,14 @@ class TopologySummary:
             down_nodes=d.get("down_nodes"),
             tpu_nodes=d.get("tpu_nodes"),
         )
-    
+
     @classmethod
     def load(cls, lkp: util.Lookup) -> "TopologySummary":
         p = cls.path(lkp)
         if not p.exists():
             return cls() # Return empty instance
         return cls.loads(p.read_text())
-    
+
     def dumps(self) -> str:
         return json.dumps(
             {
@@ -467,13 +473,13 @@ class TopologySummary:
                 "tpu_nodes": list(self.tpu_nodes),
             },
             indent=2)
-    
+
     def dump(self, lkp: util.Lookup) -> None:
         TopologySummary.path(lkp).write_text(self.dumps())
-    
+
     def _nodenames(self) -> Set[str]:
         return set(self.physical_host) | self.down_nodes | self.tpu_nodes
-        
+
     def requires_reconfigure(self, prev: "TopologySummary") -> bool:
         """
         Reconfigure IFF one of the following occurs:
@@ -563,7 +569,7 @@ def add_nodeset_topology(
                 continue
         except Exception:
             continue
-    
+
         phys_host = inst.resource_status.physical_host or ""
         bldr.summary.physical_host[inst.name] = phys_host
         up_nodes.add(inst.name)
@@ -572,7 +578,7 @@ def add_nodeset_topology(
             bldr.add(_make_physical_path(phys_host), [inst.name])
         else:
             bldr.add(default_path, [inst.name])
-        
+
     down_nodes = []
     for node in chain(*lkp.nodenames(nodeset)):
         if node not in up_nodes:
@@ -611,7 +617,7 @@ def install_topology_conf(lkp: util.Lookup) -> None:
     conf_file = lkp.etc_dir / "cloud_topology.conf"
     summary_file = lkp.etc_dir / "cloud_topology.summary.json"
     topo_conf = lkp.etc_dir / "topology.conf"
-    
+
     if not topo_conf.exists():
         topo_conf.symlink_to(conf_file)
 
@@ -625,7 +631,7 @@ def gen_controller_configs(lkp: util.Lookup) -> None:
     gen_cloud_conf(lkp)
     gen_cloud_gres_conf(lkp)
     install_gres_conf(lkp)
-    install_cgroup_conf(lkp) 
+    install_cgroup_conf(lkp)
     install_jobsubmit_lua(lkp)
 
     if topology_plugin(lkp) == TOPOLOGY_PLUGIN_TREE:

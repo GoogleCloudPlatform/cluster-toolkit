@@ -43,13 +43,15 @@ limitations under the License.
 | Name | Version |
 |------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.3 |
-| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | > 4.56.0 |
+| <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 6.29.0 |
+| <a name="requirement_random"></a> [random](#requirement\_random) | ~> 3.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | > 4.56.0 |
+| <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 6.29.0 |
+| <a name="provider_random"></a> [random](#provider\_random) | ~> 3.0 |
 
 ## Modules
 
@@ -60,6 +62,7 @@ No modules.
 | Name | Type |
 |------|------|
 | [google-beta_google_compute_resource_policy.policy](https://registry.terraform.io/providers/hashicorp/google-beta/latest/docs/resources/google_compute_resource_policy) | resource |
+| [random_id.resource_name_suffix](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/id) | resource |
 
 ## Inputs
 
@@ -69,6 +72,7 @@ No modules.
 | <a name="input_name"></a> [name](#input\_name) | The resource policy's name. | `string` | n/a | yes |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The project ID for the resource policy. | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | The region for the the resource policy. | `string` | n/a | yes |
+| <a name="input_workload_policy"></a> [workload\_policy](#input\_workload\_policy) | Describes the workload policy | <pre>object({<br/>    type                  = optional(string, null)<br/>    max_topology_distance = optional(string, null)<br/>    accelerator_topology  = optional(string, null)<br/>  })</pre> | <pre>{<br/>  "accelerator_topology": null,<br/>  "max_topology_distance": null,<br/>  "type": null<br/>}</pre> | no |
 
 ## Outputs
 

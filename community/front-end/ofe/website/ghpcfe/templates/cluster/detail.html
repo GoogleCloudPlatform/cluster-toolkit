@@ -135,6 +135,36 @@
 </div>
 
 <hr>
+{% if object.container_registry_relations.exists %}
+<p style="text-decoration: underline; font-size: large;">Artifact Registries</p>
+<div class="table-responsive">
+  <table class="table align-middle">
+    <thead>
+      <tr>
+        <th>Repo Mode</th>
+        <th>Format</th>
+        <th>Mirror URL</th>
+        <th>Username</th>
+        <th>Dockerhub mirror</th>
+        <th>Use upstream credentials</th>
+      </tr>
+    </thead>
+    {% for registry in object.container_registry_relations.all %}
+      {% if registry.status != "d" %}
+        <tr class="container_formset_row">
+          <td>{{ registry.get_repo_mode_display }}</td>
+          <td>{{ registry.get_format_display }}</td>
+          <td>{{ registry.get_repo_mirror_url }}</td>
+          <td>{{ registry.repo_username }}</td>
+          <td>{{ registry.use_public_repository }}</td>
+          <td>{{ registry.use_upstream_credentials}}</td>
+        </tr>
+      {% endif %}
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
+
 <p style="text-decoration: underline; font-size: large;">Partitions</p>
 <div class="table-responsive">
   <table class="table align-middle">

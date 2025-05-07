@@ -57,9 +57,10 @@ from ..models import (
     VirtualSubnet,
     Task,
     User,
+    ContainerRegistry,
 )
 from ..serializers import ClusterSerializer
-from ..forms import ClusterForm, ClusterMountPointForm, ClusterPartitionForm
+from ..forms import ClusterForm, ClusterMountPointForm, ClusterPartitionForm, ContainerRegistryForm
 from ..cluster_manager import cloud_info, c2, utils
 from ..cluster_manager.clusterinfo import ClusterInfo
 from ..views.asyncview import BackendAsyncView
@@ -300,6 +301,30 @@ class ClusterUpdateView(LoginRequiredMixin, UpdateView):
             )
         return self.region_info
 
+    def get_container_registry_formset(self, **kwargs):
+        existing_registries = ContainerRegistry.objects.filter(cluster=self.object)
+
+        if not existing_registries.exists():
+            # Create a default registry if needed
+            default_registry = ContainerRegistry(
+                cluster=self.object,
+                # Defaults?
+            )
+            default_registry.save()
+
+        ContainerRegistryFormSet = inlineformset_factory(
+            Cluster,
+            ContainerRegistry,
+            form=ContainerRegistryForm,
+            extra=0,
+            can_delete=True
+        )
+
+        if self.request.POST:
+            kwargs["data"] = self.request.POST
+
+        return ContainerRegistryFormSet(instance=self.object, **kwargs)
+
     def get_context_data(self, **kwargs):
         """Perform extra query to populate instance types data"""
         context = super().get_context_data(**kwargs)
@@ -325,6 +350,7 @@ class ClusterUpdateView(LoginRequiredMixin, UpdateView):
         context["mountpoints_formset"] = self.get_mp_formset()
         context["cluster_partitions_formset"] = self.get_partition_formset()
         context["title"] = "Create cluster" if self.object.status == "n" else "Update cluster"
+        context["container_registry_formset"] = self.get_container_registry_formset()
         return context
 
 
@@ -333,6 +359,26 @@ class ClusterUpdateView(LoginRequiredMixin, UpdateView):
         context = self.get_context_data()
         mountpoints = context["mountpoints_formset"]
         partitions = context["cluster_partitions_formset"]
+        container_registry_formset = context["container_registry_formset"]
+
+        logger.info(f"Received {len(container_registry_formset.forms)} registry forms.")
+
+        # for i, registry_form in enumerate(container_registry_formset.forms):
+        #     logger.info(f"Form {i} data: {registry_form.data}")
+
+        if form.instance.use_containers:
+            if not container_registry_formset.is_valid():
+                logger.warning(f"Container registry formset errors: {container_registry_formset.errors}")
+                form.add_error(None, "Error in container registries section")
+                return self.form_invalid(form)
+        else:
+            # If not enabling containers, discard any user-supplied forms,
+            container_registry_formset = None
+
+        #logger.info(f"Total valid registry forms before filtering: {len(container_registry_formset.cleaned_data)}")
+
+        # for i, registry_form in enumerate(container_registry_formset.forms):
+        #     logger.info(f"Form {i} cleaned data BEFORE filtering: {registry_form.cleaned_data}")
 
         if self.object.status == "n":
             # If creating a new cluster generate unique cloud id.
@@ -415,7 +461,10 @@ class ClusterUpdateView(LoginRequiredMixin, UpdateView):
         for formset, formset_name in [
             (mountpoints, "mountpoints"),
             (partitions, "partitions"),
+            (container_registry_formset, "containers")
         ]:
+            if formset is None:
+                continue
             if not formset.is_valid():
                 form.add_error(None, f"Error in {formset_name} section")
                 return self.form_invalid(form)
@@ -455,24 +504,31 @@ class ClusterUpdateView(LoginRequiredMixin, UpdateView):
             if not found:
                 # Log if no corresponding form was found for the partition
                 logger.info(f"No form found for Partition: {partition.name}.")
-                
+
         try:
             with transaction.atomic():
-                # Save the modified Cluster object
-                self.object.save()
                 self.object = form.save()
+
                 mountpoints.instance = self.object
                 mountpoints.save()
 
                 partitions.instance = self.object
                 parts = partitions.save()
                 
+                # If containers are enabled, persist them and set project IDs
+                if container_registry_formset is not None:
+                    container_registry_formset.instance = self.object
+                    regs = container_registry_formset.save()
+                    for registry in regs:
+                        registry.project_id = self.object.project_id
+                        registry.save()
+
                 try:
                     total_nodes_requested = {}
                     for part in parts:
                         part.vCPU_per_node = machine_info[part.machine_type]["vCPU"] // (1 if part.enable_hyperthreads else 2)
                         cpu_count = machine_info[part.machine_type]["vCPU"]
-                        logger.info(f"{part.machine_type} CPU Count: {cpu_count}")
+                        # logger.info(f"{part.machine_type} CPU Count: {cpu_count}")
 
                         # Tier1 networking validation
                         if part.enable_tier1_networking == True:
