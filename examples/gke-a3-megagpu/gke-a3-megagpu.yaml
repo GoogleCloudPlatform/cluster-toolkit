@@ -49,6 +49,8 @@ vars:
 
   accelerator_type: nvidia-h100-mega-80gb
   version_prefix: "1.32."
+  enable_gcsfuse_csi: true
+  enable_parallelstore_csi: false
 
 deployment_groups:
 - group: primary
@@ -106,8 +108,8 @@ deployment_groups:
       enable_private_endpoint: false  # Allows for access from authorized public IPs
       gcp_public_cidrs_access_enabled: $(vars.gcp_public_cidrs_access_enabled)
       configure_workload_identity_sa: true
-      enable_gcsfuse_csi: true
-      enable_parallelstore_csi: false
+      enable_gcsfuse_csi: $(vars.enable_gcsfuse_csi)
+      enable_parallelstore_csi: $(vars.enable_parallelstore_csi)
       master_authorized_networks:
       - cidr_block: $(vars.authorized_cidr)  # Allows your machine run kubectl command. It's required for the multi-network setup.
         display_name: "kubectl-access-network"
