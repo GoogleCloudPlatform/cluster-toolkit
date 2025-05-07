@@ -2038,6 +2038,17 @@ class Lookup:
             if node in instance_collection["name"] and instance_collection["currentAction"]=="CREATING":
                 return True
         return False
+    
+    def cluster_regions(self) -> list[str]:
+        """
+        Returns all regions used in cluster
+        NOTE: only concerned with normal nodesets, 
+        neither TPU, nor dynamic, nor login node, nor controller node are considered
+        """
+        res = set()
+        for nodeset in self.cfg.nodeset.values():
+            res.add(parse_self_link(nodeset.subnetwork).region)
+        return list(res)
 
 
 
