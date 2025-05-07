@@ -25,8 +25,9 @@ terraform {
       version = ">= 1.7.0"
     }
     http = {
-      source  = "hashicorp/http"
-      version = "~> 3.0"
+      source                = "hashicorp/http"
+      version               = "~> 3.0"
+      configuration_aliases = [http.h, ]
     }
     helm = {
       source  = "hashicorp/helm"
