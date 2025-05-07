@@ -135,11 +135,11 @@ variable "nvidia_dra_driver" {
 variable "gib" {
   description = "Install the NCCL gIB plugin"
   type = object({
-    install = optional(bool, false)
-    path    = optional(string, null)
-    template_vars = optional(object({
+    install = bool
+    path    = string
+    template_vars = object({
       image   = optional(string, "us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib")
-      version = optional(string, "v1.0.5")
+      version = string
       node_affinity = optional(any, {
         requiredDuringSchedulingIgnoredDuringExecution = {
           nodeSelectorTerms = [{
@@ -151,28 +151,15 @@ variable "gib" {
           }]
         }
       })
-      accelerator_count = optional(number, 8)
-      }), {
-      image   = "us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib",
-      version = "v1.0.5",
-      node_affinity = {
-        requiredDuringSchedulingIgnoredDuringExecution = {
-          nodeSelectorTerms = [{
-            matchExpressions = [{
-              key      = "cloud.google.com/gke-gpu",
-              operator = "In",
-              values   = ["true"]
-            }]
-          }]
-        }
-      },
-      accelerator_count = 8
+      accelerator_count = number
     })
   })
-  default = {}
-
-  validation {
-    condition     = !var.gib.install || var.gib.path != null
-    error_message = "To install the gIB NCCL plugin, provide the path to the manifest."
+  default = {
+    install = false
+    path    = ""
+    template_vars = {
+      version           = ""
+      accelerator_count = 0
+    }
   }
 }
