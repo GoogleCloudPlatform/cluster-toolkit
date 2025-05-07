@@ -41,14 +41,14 @@ resource "terraform_data" "jobset_validations" {
 resource "terraform_data" "gib_validations" {
   lifecycle {
     precondition {
-      condition     = !var.gib.install || contains(local.gib_supported_versions, var.gib.version)
+      condition     = !var.gib.install || contains(local.gib_supported_versions, var.gib.template_vars.version)
       error_message = "Supported version of the NCCL gIB plugin are ${join(", ", local.gib_supported_versions)}"
     }
   }
 }
 
 resource "terraform_data" "initial_gib_version" {
-  input = var.gib.install ? var.gib.version : null
+  input = var.gib.install ? var.gib.template_vars.version : null
 
   lifecycle {
     ignore_changes = [input]
@@ -58,7 +58,7 @@ resource "terraform_data" "initial_gib_version" {
 check "gib_version_changes" {
   assert {
     # Skip version checking if gIB was not initially or is not currently installed
-    condition     = terraform_data.initial_gib_version.output == null || !var.gib.install || terraform_data.initial_gib_version.output == var.gib.version
+    condition     = terraform_data.initial_gib_version.output == null || !var.gib.install || terraform_data.initial_gib_version.output == var.gib.template_vars.version
     error_message = "When changing the gIB NCCL plugin version, confirm full rollout and environment consistency. Replace any NCCL env hard coding/caches with set_nccl_env.sh sourcing."
   }
 }
@@ -136,20 +136,38 @@ variable "gib" {
   description = "Install the NCCL gIB plugin"
   type = object({
     install = optional(bool, false)
-    image   = optional(string, "us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib")
-    version = optional(string, "v1.0.5")
-    node_affinity = optional(any, {
-      requiredDuringSchedulingIgnoredDuringExecution = {
-        nodeSelectorTerms = [{
-          matchExpressions = [{
-            key      = "cloud.google.com/gke-gpu",
-            operator = "In",
-            values   = ["true"]
+    path    = optional(string, null)
+    template_vars = optional(object({
+      image   = optional(string, "us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib")
+      version = optional(string, "v1.0.5")
+      node_affinity = optional(any, {
+        requiredDuringSchedulingIgnoredDuringExecution = {
+          nodeSelectorTerms = [{
+            matchExpressions = [{
+              key      = "cloud.google.com/gke-gpu",
+              operator = "In",
+              values   = ["true"]
+            }]
           }]
-        }]
-      }
+        }
+      })
+      accelerator_count = optional(number, 8)
+      }), {
+      image   = "us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib",
+      version = "v1.0.5",
+      node_affinity = {
+        requiredDuringSchedulingIgnoredDuringExecution = {
+          nodeSelectorTerms = [{
+            matchExpressions = [{
+              key      = "cloud.google.com/gke-gpu",
+              operator = "In",
+              values   = ["true"]
+            }]
+          }]
+        }
+      },
+      accelerator_count = 8
     })
-    accelerator_count = optional(number, 8)
   })
   default = {}
 }

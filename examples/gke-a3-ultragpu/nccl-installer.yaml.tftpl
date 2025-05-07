@@ -36,7 +36,7 @@ spec:
       priorityClassName: system-node-critical
       affinity:
         nodeAffinity:
-          ${indent(10, yamlencode(nodeAffinity))}
+          ${indent(10, yamlencode(node_affinity))}
       tolerations:
       - operator: "Exists"
       hostNetwork: true
@@ -58,7 +58,7 @@ spec:
         args:
         - -c
         - |
-          %{~ for i in range(acceleratorCount) ~}
+          %{~ for i in range(accelerator_count) ~}
           sysctl -w net.ipv4.conf.gpu${i}rdma0.log_martians=0
           %{~ endfor ~}
       - image: ${image}:${version}
