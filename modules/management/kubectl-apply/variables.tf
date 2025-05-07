@@ -170,4 +170,9 @@ variable "gib" {
     })
   })
   default = {}
+
+  validation {
+    condition     = !var.gib.install || var.gib.path != null
+    error_message = "To install the gIB NCCL plugin, provide the path to the manifest."
+  }
 }
