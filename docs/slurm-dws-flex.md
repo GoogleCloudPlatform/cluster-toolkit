@@ -1,9 +1,7 @@
 # Obtaining SlurmGCP nodes with DWS Flex
 
 > [!NOTE]
-> DWS Flex Start is currently in early development and undergoing extensive testing. While it
-> can be used with other machine families, we strongly recommend utilizing it primarily with
-> A3 machine families during this phase.
+> DWS Flex Start is currently in early development and undergoing extensive testing.
 
 [Dynamic Workload Scheduler](https://cloud.google.com/blog/products/compute/introducing-dynamic-workload-scheduler) Flex Start mode is designed for fine-tuning models, experimentation, shorter training jobs, distillation, offline inference, and batch jobs.
 

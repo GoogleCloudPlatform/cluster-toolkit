@@ -41,10 +41,11 @@ vars:
   disk_size_gb: 100
   nccl_plugin_version: v1.0.5
   base_network_name: $(vars.deployment_name)
-  #Consumption options (set to true or fill in reservation name, pick only one)
+
+  #Provisioning models (set to true or fill in reservation name, pick only one)
+  a3u_reservation_name: "" # supply reservation name
   a3u_dws_flex_enabled: false
   a3u_enable_spot_vm: false
-  a3u_reservation_name: ""
 
 deployment_groups:
 - group: image-env
@@ -469,7 +470,7 @@ deployment_groups:
       disk_type: hyperdisk-balanced
       on_host_maintenance: TERMINATE
 
-      #Consumption options
+      #Provisioning models
       reservation_name: $(vars.a3u_reservation_name)
       enable_spot_vm: $(vars.a3u_enable_spot_vm)
       dws_flex:
