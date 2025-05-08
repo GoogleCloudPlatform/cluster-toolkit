@@ -21,7 +21,7 @@ import logging
 import re
 import sys
 import shlex
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from itertools import chain
 from pathlib import Path
 from dataclasses import dataclass
@@ -41,12 +41,12 @@ from util import (
     NodeState,
     chunked,
     dirs,
-    parse_gcp_timestamp,
 )
 from util import lookup
 from suspend import delete_instances
 import tpu
 import conf
+import file_cache
 
 log = logging.getLogger()
 
@@ -324,6 +324,15 @@ def delete_placement_groups(placement_groups):
 
 def sync_placement_groups():
     """Delete placement policies that are for jobs that have completed/terminated"""
+    
+    # Perform sync_placement_groups infrequently (every 2 hours)
+    # To avoid costly "get all resource polcicies" API calls
+    delay = timedelta(hours=2)
+    cache, key = file_cache.cache("sync_resource_policies"), "last_run"
+    if (ts := cache.get(key)) and (ts + delay > util.now()):
+        return
+    cache.set(key, util.now())
+
     keep_states = frozenset(
         [
             "RUNNING",
