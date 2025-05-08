@@ -20,7 +20,7 @@
     - custom_vars.gpu_count is defined
 
 - name: Run nvidia-smi command
-  ansible.builtin.command: srun -N 1 -p "{{ custom_vars.gpu_partition }}" --gpus-per-node={{ custom_vars.gpu_count }} nvidia-smi -L
+  ansible.builtin.command: srun -N 1 -p {{ custom_vars.gpu_partition }} --gpus-per-node={{ custom_vars.gpu_count }} nvidia-smi -L
   register: nvidia_smi_result
   failed_when: nvidia_smi_result.rc != 0
 
@@ -34,10 +34,16 @@
     msg: "{{ nvidia_smi_result.stdout }}"
 
 - name: Run DCGM diagnostics
-  ansible.builtin.command: srun -N 2 -p "{{ custom_vars.gpu_partition }}" dcgmi diag -r 1
+  ansible.builtin.command: srun -N 2 -p {{ custom_vars.gpu_partition }} dcgmi diag -r 1
   register: nvidia_dcgmi_result
   failed_when: nvidia_dcgmi_result.rc != 0
 
 - name: Print DCGM output
   ansible.builtin.debug:
     msg: "{{ nvidia_dcgmi_result.stdout }}"
+
+- name: Verify nvidia-persistenced is active
+  ansible.builtin.command: srun -N 2 -p {{ custom_vars.gpu_partition }} systemctl is-active nvidia-persistenced
+  register: nvidia_persistenced_result
+  failed_when: nvidia_persistenced_result.rc != 0
+  when: custom_vars.test_persistenced is defined and custom_vars.test_persistenced

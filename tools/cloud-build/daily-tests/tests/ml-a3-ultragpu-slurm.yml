@@ -35,6 +35,7 @@ post_destroy_tasks:
 custom_vars:
   gpu_count: 8
   gpu_partition: a3ultra
+  test_persistenced: true
   partitions:
   - a3ultra
   mounts:
