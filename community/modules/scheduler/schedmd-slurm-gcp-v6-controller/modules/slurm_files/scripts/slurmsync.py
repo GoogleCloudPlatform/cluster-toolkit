@@ -21,7 +21,7 @@ import logging
 import re
 import sys
 import shlex
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from itertools import chain
 from pathlib import Path
 from dataclasses import dataclass
@@ -41,12 +41,12 @@ from util import (
     NodeState,
     chunked,
     dirs,
-    parse_gcp_timestamp,
 )
 from util import lookup
 from suspend import delete_instances
 import tpu
 import conf
+import file_cache
 
 log = logging.getLogger()
 
@@ -324,6 +324,15 @@ def delete_placement_groups(placement_groups):
 
 def sync_placement_groups():
     """Delete placement policies that are for jobs that have completed/terminated"""
+    # Perform sync_placement_groups infrequently (at least every hour)
+    # To avoid costly "get all resource polcicies" API calls
+    cache = file_cache.cache("sync_resource_policies")
+    NEXT_RUN_KEY = "next_run"
+    if (ts := cache.get(NEXT_RUN_KEY)) and (ts < util.now()):
+        log.debug(f"Skipping sync_placement_groups until {ts}")
+        return
+    
+
     keep_states = frozenset(
         [
             "RUNNING",
@@ -369,6 +378,15 @@ def sync_placement_groups():
 
     if len(placement_groups) > 0:
         delete_placement_groups(list(placement_groups.values()))
+        # Do not schedule/delay next run, perform it during next invocation of slurmsync
+    else:
+        # TODO: consider modifying `resume.py::create_nodeset_placements` to wipe out 
+        # `next_run` if error of exceeding `RESOURCE-POLICIES-per-project-region` is 
+        # observed
+        delay = timedelta(hours=1)
+        cache.set(NEXT_RUN_KEY, util.now() + delay)
+        log.debug(f"No resource polcicies to delete, next run {delay=}")
+
 
 
 def sync_instances():
