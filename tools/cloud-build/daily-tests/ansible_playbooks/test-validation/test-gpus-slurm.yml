@@ -41,3 +41,9 @@
 - name: Print DCGM output
   ansible.builtin.debug:
     msg: "{{ nvidia_dcgmi_result.stdout }}"
+
+- name: Verify nvidia-persistenced is active
+  ansible.builtin.command: srun -N 2 -p {{ custom_vars.gpu_partition }} systemctl is-active nvidia-persistenced
+  register: nvidia_persistenced_result
+  failed_when: nvidia_persistenced_result.rc != 0
+  when: custom_vars.test_persistenced is defined and custom_vars.test_persistenced
