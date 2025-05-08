@@ -452,15 +452,11 @@ def hash_file(fullpath: Path) -> str:
 def install_custom_scripts(check_hash=False):
     """download custom scripts from gcs bucket"""
     role, tokens = lookup().instance_role, []
-
+    all_prolog_tokens = ["prolog", "epilog", "task_prolog", "task_epilog"]
     if role == "controller":
-        tokens = ["controller", "prolog", "epilog", "task_prolog", "task_epilog"]
+        tokens = ["controller"] + all_prolog_tokens
     elif role == "compute":
-        tokens = [
-            "prolog",
-            "epilog",
-            f"nodeset-{lookup().node_nodeset_name()}"
-        ]
+        tokens = [f"nodeset-{lookup().node_nodeset_name()}"] + all_prolog_tokens
     elif role == "login":
         tokens = [f"login-{instance_login_group()}"]
 
