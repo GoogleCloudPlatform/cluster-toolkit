@@ -606,17 +606,31 @@ _This blueprint has been deprecated and will be removed on August 1, 2025._
 Creates a DDN EXAScaler lustre file-system that is mounted in two client instances.
 
 The [DDN Exascaler Lustre](../community/modules/file-system/DDN-EXAScaler/README.md)
-file system is designed for high IO performance. It has a default capacity of ~10TiB and is mounted at `/lustre`.
+file system is designed for high IO performance. It has a default capacity of
+~10TiB and is mounted at `/lustre`.
 
 > **Warning**: The DDN Exascaler Lustre file system has a license cost as
 > described in the pricing section of the
 > [DDN EXAScaler Cloud Marketplace Solution](https://console.developers.google.com/marketplace/product/ddnstorage/).
 
-After the creation of the file-system and the client instances, the lustre drivers will be automatically installed and the mount-point configured on the VMs. This may take a few minutes after the VMs are created and can be verified by running:
+After the creation of the file-system and the client instances, the startup
+scripts on the client instances will automatically install the lustre drivers,
+configure the mount-point, and mount the file system to the specified
+directory. This may take a few minutes after the VMs are created and can be
+verified by running:
 
 ```sh
-watch mount -t lustre
+watch df
 ```
+
+Eventually you should see a line similar to:
+
+```sh
+<IP>:<remote_mount>  lustre   100G   15G  85G  15% <local_mount>
+```
+
+with remote_mount, and local_mount reflecting the settings of the module and
+IP being set to the lustre instance's IP.
 
 #### Quota Requirements for pfs-lustre.yaml
 
@@ -635,11 +649,24 @@ Creates a Managed Lustre file-system that is mounted in one client instance.
 The [GCP Managed Lustre](../modules/file-system/managed-lustre/README.md)
 file system is designed for high IO performance. It has a minimum capacity of ~18TiB and is mounted at `/lustre`.
 
-After the creation of the file-system and the client instances, the lustre drivers will be automatically installed and the mount-point configured on the VMs. This may take a few minutes after the VMs are created and can be verified by running:
+After the creation of the file-system and the client instances, the startup
+scripts on the client instances will automatically install the lustre drivers,
+configure the mount-point, and mount the file system to the specified
+directory. This may take a few minutes after the VMs are created and can be
+verified by running:
 
 ```sh
-watch mount -t lustre
+watch df
 ```
+
+Eventually you should see a line similar to:
+
+```sh
+<IP>:<remote_mount>  lustre   100G   15G  85G  15% <local_mount>
+```
+
+with remote_mount, and local_mount reflecting the settings of the module and
+IP being set to the lustre instance's IP.
 
 #### Quota Requirements for pfs-managed-lustre.yaml
 
