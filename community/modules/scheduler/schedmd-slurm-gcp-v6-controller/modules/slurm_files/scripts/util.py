@@ -795,17 +795,54 @@ def run(
     if not shell and isinstance(args, str):
         args = shlex.split(args)
     log.debug(f"run: {args}")
-    result = subprocess.run(
-        args,
-        stdout=stdout,
-        stderr=stderr,
-        shell=shell,
-        timeout=timeout,
-        check=check,
-        universal_newlines=universal_newlines,
-        **kwargs,
-    )
+    try:
+        result = subprocess.run(
+            args,
+            stdout=stdout,
+            stderr=stderr,
+            shell=shell,
+            timeout=timeout,
+            check=check,
+            universal_newlines=universal_newlines,
+            **kwargs,
+        )
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+        log_subprocess(e)
+        raise
+    log_subprocess(result)
     return result
+
+def log_subprocess(subj: subprocess.CalledProcessError | subprocess.TimeoutExpired | subprocess.CompletedProcess) -> None:
+    match subj:
+        case subprocess.CompletedProcess(returncode=0):
+            # Do not log successful runs, to not overwhelm logs (e.g. scontrol show jobs --json)
+            # TODO: consider still doing it in DEBUG or trim output to few KBs. 
+            return
+        case subprocess.CompletedProcess(): # non-zero returncode
+            log.error(f"Command '{subj.args}' returned exit status {subj.returncode}.")
+        case subprocess.CalledProcessError() | subprocess.TimeoutExpired():
+            log.error(str(subj))
+        
+
+    def normalize(out: None | str | bytes) -> None | str:
+        """
+        Turns stderr and stdout into string:
+        > A bytes sequence, or a string if run() was called with an encoding, errors, or text=True. None if was not captured.
+        """
+        match out:
+            case None:
+                return None
+            case str():
+                return out.strip()
+            case bytes():
+                return out.decode().strip()
+            case _:
+                return repr(out)
+
+    if stdout := normalize(subj.stdout):
+        log.error(f"stdout: {stdout}")
+    if stderr := normalize(subj.stderr):
+        log.error(f"stderr: {stderr}")
 
 
 def chown_slurm(path: Path, mode=None) -> None:
