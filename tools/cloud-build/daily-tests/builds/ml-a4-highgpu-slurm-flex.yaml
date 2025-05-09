@@ -27,7 +27,12 @@ tags:
 
 timeout: 14400s  # 4hr
 steps:
-- id: ml-a4-highgpu-slurm-flex
+# While using static network names we are gaurding against more than 1 instance running at a time (for multi-group tests)
+- id: check_for_running_build
+  name: gcr.io/cloud-builders/gcloud
+  script: "tools/cloud-build/check_running_build.sh tools/cloud-build/daily-tests/builds/ml-a4-highgpu-slurm-flex.yaml"
+
+- id: ml-a4-highgpu-slurm
   name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
   entrypoint: /bin/bash
   env:
@@ -42,7 +47,7 @@ steps:
     BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
     REGION=europe-west1
     ZONE=europe-west1-b
-    BLUEPRINT="/workspace/examples/machine-learning/a4-highgpu-8g/a4high-slurm-blueprint-flex.yaml"
+    BLUEPRINT="/workspace/examples/machine-learning/a4-highgpu-8g/a4high-slurm-blueprint.yaml"
     sed -i -e '/deletion_protection:/{n;s/enabled: true/enabled: false/}' $${BLUEPRINT}
     sed -i -e 's/\breservation_name\b/future_reservation/g' $${BLUEPRINT}
     sed -i -e '/reason:/d' $${BLUEPRINT}
