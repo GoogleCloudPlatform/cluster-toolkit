@@ -294,6 +294,14 @@ data "local_file" "setup_external" {
   filename = "${path.module}/files/setup_external.sh"
 }
 
+data "local_file" "main_task_prolog" {
+  filename = "${path.module}/files/main_task_prolog"
+}
+
+data "local_file" "main_task_epilog" {
+  filename = "${path.module}/files/main_task_epilog"
+}
+
 locals {
   external_epilog = [{
     filename = "z_external_epilog.sh"
@@ -315,15 +323,23 @@ locals {
     source   = null
   }]
 
-  chs_prolog          = var.enable_chs_gpu_health_check_prolog ? local.chs_gpu_health_check : []
-  ext_prolog          = var.enable_external_prolog_epilog ? local.external_prolog : []
-  prolog_scripts      = concat(local.chs_prolog, local.ext_prolog, var.prolog_scripts)
-  task_prolog_scripts = var.task_prolog_scripts
+  chs_prolog     = var.enable_chs_gpu_health_check_prolog ? local.chs_gpu_health_check : []
+  ext_prolog     = var.enable_external_prolog_epilog ? local.external_prolog : []
+  prolog_scripts = concat(local.chs_prolog, local.ext_prolog, var.prolog_scripts)
+  task_prolog_scripts = length(var.task_prolog_scripts) > 0 ? concat(var.task_prolog_scripts, [{
+    filename = "main_task_prolog"
+    content  = data.local_file.main_task_prolog.content
+    source   = null
+  }]) : var.task_prolog_scripts
 
-  chs_epilog          = var.enable_chs_gpu_health_check_epilog ? local.chs_gpu_health_check : []
-  ext_epilog          = var.enable_external_prolog_epilog ? local.external_epilog : []
-  epilog_scripts      = concat(local.chs_epilog, local.ext_epilog, var.epilog_scripts)
-  task_epilog_scripts = var.task_epilog_scripts
+  chs_epilog     = var.enable_chs_gpu_health_check_epilog ? local.chs_gpu_health_check : []
+  ext_epilog     = var.enable_external_prolog_epilog ? local.external_epilog : []
+  epilog_scripts = concat(local.chs_epilog, local.ext_epilog, var.epilog_scripts)
+  task_epilog_scripts = length(var.task_epilog_scripts) > 0 ? concat(var.task_epilog_scripts, [{
+    filename = "main_task_epilog"
+    content  = data.local_file.main_task_epilog.content
+    source   = null
+  }]) : var.task_epilog_scripts
 
   controller_startup_scripts = var.enable_external_prolog_epilog ? concat(local.setup_external, var.controller_startup_scripts) : var.controller_startup_scripts
 
