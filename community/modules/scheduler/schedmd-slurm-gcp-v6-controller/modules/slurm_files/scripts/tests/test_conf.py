@@ -171,8 +171,8 @@ TopologyParam=yellow"""),
         ),
          """LaunchParameters=enable_nss_slurm,use_interactive_step
 SlurmctldParameters=cloud_dns,enable_configless,idle_on_node_suspend
-TaskProlog=/slurm/custom_scripts/task_prolog.d/*
-TaskEpilog=/slurm/custom_scripts/task_epilog.d/*
+TaskProlog=/slurm/custom_scripts/task_prolog.d/main_task_prolog
+TaskEpilog=/slurm/custom_scripts/task_epilog.d/main_task_epilog
 SchedulerParameters=bf_continue,salloc_wait_nodes,ignore_prefer_validation
 ResumeProgram=ukulele/resume.py
 ResumeFailProgram=ukulele/suspend.py
