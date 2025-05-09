@@ -623,35 +623,6 @@ if __name__ == "__main__":
 
     try:
         main()
-    except subprocess.TimeoutExpired as e:
-        stdout = (e.stdout or b"").decode().strip()
-        stderr = (e.stderr or b"").decode().strip()
-
-        log.error(
-            f"""TimeoutExpired:
-    command={e.cmd}
-    timeout={e.timeout}
-    stdout:
-{stdout}
-    stderr:
-{stderr}
-"""
-        )
-        log.error("Aborting setup...")
-        failed_motd()
-    except subprocess.CalledProcessError as e:
-        log.error(
-            f"""CalledProcessError:
-    command={e.cmd}
-    returncode={e.returncode}
-    stdout:
-{e.stdout.strip()}
-    stderr:
-{e.stderr.strip()}
-"""
-        )
-        log.error("Aborting setup...")
-        failed_motd()
     except Exception:
         log.exception("Aborting setup...")
         failed_motd()
