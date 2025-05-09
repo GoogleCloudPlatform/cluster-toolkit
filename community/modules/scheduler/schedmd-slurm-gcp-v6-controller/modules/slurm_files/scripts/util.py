@@ -325,6 +325,12 @@ def get_credentials() -> Optional[service_account.Credentials]:
     return credentials
 
 
+@lru_cache(maxsize=1)
+def get_dev_key() -> Optional[str]:
+    """Get dev key for project"""
+    return os.environ.get("GOOGLE_DEVELOPER_KEY")
+
+
 def create_client_options(api: ApiEndpoint) -> ClientOptions:
     """Create client options for cloud endpoints"""
     ver = endpoint_version(api)
@@ -498,6 +504,7 @@ def compute_service(version="beta"):
     creates a new Http for each request
     """
     credentials = get_credentials()
+    dev_key = get_dev_key()
 
     def build_request(http, *args, **kwargs):
         new_http = set_user_agent(httplib2.Http(), USER_AGENT)
@@ -517,6 +524,7 @@ def compute_service(version="beta"):
         version,
         requestBuilder=build_request,
         credentials=credentials,
+        developerKey=dev_key,
         discoveryServiceUrl=disc_url,
         cache_discovery=False, # See https://github.com/googleapis/google-api-python-client/issues/299
     )
