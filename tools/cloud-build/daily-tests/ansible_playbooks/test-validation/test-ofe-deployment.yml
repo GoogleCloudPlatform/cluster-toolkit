@@ -80,30 +80,30 @@
 
 - name: Make HTTP request (dynamic wait + graceful teardown on failure)
   block:
-    - name: Wait until OFE serves HTTP 200
-      ansible.builtin.uri:
-        url: "http://{{ ip_only }}/"
-        return_content: no
-        status_code: 200
-      register: ofe_ready
-      retries: 120          # 120 × 15 s ≈ 30 min max
-      delay: 15
-      until: ofe_ready.status == 200
-    - name: Fetch landing page after OFE is ready
-      ansible.builtin.uri:
-        url: "http://{{ ip_only }}/"
-        return_content: yes
-      register: http_response
-    - name: Print out HTTP Response code
-      ansible.builtin.debug:
-        msg: "HTTP response code is {{ http_response.status }}"
+  - name: Wait until OFE serves HTTP 200
+    ansible.builtin.uri:
+      url: "http://{{ ip_only }}/"
+      return_content: no
+      status_code: 200
+    register: ofe_ready
+    retries: 120          # 120 × 15 s ≈ 30 min max
+    delay: 15
+    until: ofe_ready.status == 200
+  - name: Fetch landing page after OFE is ready
+    ansible.builtin.uri:
+      url: "http://{{ ip_only }}/"
+      return_content: yes
+    register: http_response
+  - name: Print out HTTP Response code
+    ansible.builtin.debug:
+      msg: "HTTP response code is {{ http_response.status }}"
   rescue:
-    - name: Handle request failure
-      ansible.builtin.shell: |
-        ./teardown.sh -y
-      args:
-        chdir: /workspace/community/front-end/ofe
-      failed_when: true
+  - name: Handle request failure
+    ansible.builtin.shell: |
+      ./teardown.sh -y
+    args:
+      chdir: /workspace/community/front-end/ofe
+    failed_when: true
 
 - name: Tear down OFE using script
   ansible.builtin.shell: |
