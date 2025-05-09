@@ -48,6 +48,7 @@ vars:
   extended_reservation:
 
   accelerator_type: nvidia-h100-mega-80gb
+  version_prefix: "1.32."
 
 deployment_groups:
 - group: primary
@@ -113,6 +114,7 @@ deployment_groups:
       k8s_network_names:
         gvnic_prefix: vpc
         gvnic_start_index: 1
+      version_prefix: $(vars.version_prefix)
     outputs: [instructions]
 
   - id: a3_megagpu_pool

@@ -78,11 +78,20 @@
     path: /builder/home/.netrc
     mode: '0600'
 
-- name: Make HTTP request
+- name: Make HTTP request (dynamic wait + graceful teardown on failure)
   block:
-  - name: Make a HTTP request to OFE server
+  - name: Wait until OFE serves HTTP 200
     ansible.builtin.uri:
-      url: "http://{{ ip_only }}"
+      url: "http://{{ ip_only }}/"
+      return_content: no
+      status_code: 200
+    register: ofe_ready
+    retries: 120          # 120 × 15 s ≈ 30 min max
+    delay: 15
+    until: ofe_ready.status == 200
+  - name: Fetch landing page after OFE is ready
+    ansible.builtin.uri:
+      url: "http://{{ ip_only }}/"
       return_content: yes
     register: http_response
   - name: Print out HTTP Response code

@@ -227,7 +227,7 @@
     always:
     - name: Ensure all nodes are powered down
       vars:
-        wait_for_compute_nodes_to_go_down: false
+        wait_for_compute_nodes_to_go_down: true
       ansible.builtin.command: sinfo -t 'POWERED_DOWN' --noheader --format "%n"
       register: final_node_count
       changed_when: False

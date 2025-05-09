@@ -28,7 +28,7 @@ variable "source_path" {
 
 variable "template_vars" {
   description = "The values to populate template file(s) with."
-  type        = map(any)
+  type        = any
   default     = null
 }
 

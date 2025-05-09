@@ -17,3 +17,15 @@ To test workloads directly on A3 Ultra VMs, you can deploy the [a3ultra-vm.yaml]
 The VMs can be consumed from a reservation by modifying the `reservation_name` parameter in the `a3ultra-vms` module.
 
 [a3ultra-vm.yaml]: ./a3ultra-vm.yaml
+
+### Additional ways to provision
+Cluster toolkit also supports DWS Flex-Start, Spot VMs, as well as reservations as ways to provision instances.
+
+[For more information on DWS Flex-Start in Slurm](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/docs/slurm-dws-flex.md)
+[For more information on Spot VMs](https://cloud.google.com/compute/docs/instances/spot)
+
+We provide ways to enable the alternative provisioning models in the `a3ultra-slurm-deployment.yaml` file.
+
+To make use of these other models, replace `a3u_reservation_name` in the deployment file with the variable of choice below.
+
+`a3u_enable_spot_vm: true` for spot or `a3u_dws_flex_enabled: true` for DWS Flex-Start.

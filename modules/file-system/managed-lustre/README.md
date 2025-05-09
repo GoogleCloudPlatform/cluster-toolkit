@@ -75,36 +75,29 @@ Slurm cluster will not run the installation script like it does for the
 standard VMs.
 
 Assuming you have a startup script for the Slurm image building, you can add
-this Ansible playbook to correctly install the Lustre drivers into the image:
+this Ansible playbook to correctly install the Lustre drivers into the image
+(for Slurm-GCP versions greater than 6.10.0):
 
 ```yaml
-- type: ansible-local
-  destination: install_managed_lustre.yml
+- type: data
+  destination: /var/tmp/slurm_vars.json
   content: |
-    ---
-    - name: Install Managed Luster Client Modules
-      hosts: all
-      become: true
-      vars:
-        lustre_packages:
-        - lustre-client-modules-{{ ansible_kernel }}
-        - lustre-client-utils
-      tasks:
-      - name: Add gpg key for Lustre Client repo
-        ansible.builtin.get_url:
-          url: https://us-apt.pkg.dev/doc/repo-signing-key.gpg
-          dest: /etc/apt/keyrings/lustre-client.asc
-          mode: '0644'
-          force: true
-      - name: Add Lustre Client module repo
-        ansible.builtin.apt_repository:
-          repo: deb [ signed-by=/etc/apt/keyrings/lustre-client.asc ] https://us-apt.pkg.dev/projects/lustre-client-binaries lustre-client-ubuntu-{{ ansible_distribution_release }} main
-      - name: Install Lustre packages
-        ansible.builtin.apt:
-          name: "{{ item }}"
-          update_cache: true
-        loop: "{{ lustre_packages }}"
+    {
+      "reboot": false,
+      "install_cuda": false,
+      "install_gcsfuse": true,
+      "install_lustre": false,
+      "install_managed_lustre": true,
+      "install_nvidia_repo": true,
+      "install_ompi": true,
+      "allow_kernel_upgrades": false,
+      "monitoring_agent": "cloud-ops",
+    }
 ```
+
+The `install_managed_lustre: true` line specifies that slurm-gcp should install
+the correct modules within the slurm image.  This runner should be placed
+ahead of the script that calls the ansible build of the slurm-gcp image.
 
 ### Example - Existing VPC
 
@@ -158,6 +151,67 @@ to 6988.
 > 2. Setting `gke_support_enabled: true` will not affect Slurm nodes, GKE
 > compatibility must be built into the Slurm image.
 
+### Example - Importing data from GSC Bucket
+
+One option with the Managed Lustre instance is to import data from a GSC bucket
+upon the lustre instance creation.  To do this, use the `import_gcs_bucket_uri`
+variable to dictate the bucket to pull data from.  The data will be imported
+under the directory specified by `local_mount` (`/shared` if unspecified).
+
+> [!NOTE]
+>
+> 1. This is a one way operation.  Once the data has been copied to the lustre
+> instance it will not be updated with any changes made to the GCS bucket.
+>
+> 2. Once the lustre instance has been created in Terraform, the copy process
+> will proceed in the background.  Data may not be appear in the mounted
+> directory for a period of time after the deployment has completed (see below).
+
+```yaml
+- id: managed_lustre
+  source: modules/file-system/managed-lustre
+  use: [network, private_service_access]
+  settings:
+    name: lustre-instance
+    local_mount: /lustre
+    remote_mount: lustrefs
+    size_gib: 18000
+    import_gcs_bucket_uri: gs://<bucket_name>
+```
+
+> [!WARNING]
+> Please follow [this guide](https://cloud.google.com/managed-lustre/docs/transfer-data#required_permissions)
+> to set up the correct IAM permissions for importing data from GCS to lustre.
+> Without this, the copy process may fail silently leaving an empty lustre
+> instance.
+
+If an import is requested, gcluster will output a json response similar to:
+
+```json
+{
+  "name": "projects/<project_id>/locations/<location>/operations/<operation_id>",
+  "metadata": {
+    "@type": "type.googleapis.com/google.cloud.lustre.v1.ImportDataMetadata",
+    "createTime": "<start time>",
+    "target": "projects/<project_id>/locations/<location>/instances/<instance_name>",
+    "requestedCancellation": false,
+    "apiVersion": "v1"
+  },
+  "done": false
+}
+```
+
+You can retrieve more information about the transfer using the following
+command, substituting with values from the json response above:
+
+```bash
+gcloud lustre operations describe <operation_id> --location <location> --project <project_id>
+```
+
+This will provide information on if the transfer is complete or if any errors
+have occurred. See more at
+[Get operation](https://cloud.google.com/managed-lustre/docs/transfer-data#get_operation).
+
 ## License
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
@@ -201,6 +255,7 @@ No modules.
 | [google_lustre_instance.lustre_instance](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/lustre_instance) | resource |
 | [random_id.resource_name_suffix](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/id) | resource |
 | [google_compute_network_peering.private_peering](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_network_peering) | data source |
+| [google_storage_bucket.lustre_import_bucket](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/storage_bucket) | data source |
 
 ## Inputs
 
@@ -209,6 +264,7 @@ No modules.
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the HPC deployment, used as name of the Lustre instance if no name is specified. | `string` | n/a | yes |
 | <a name="input_description"></a> [description](#input\_description) | Description of the created Lustre instance. | `string` | `"Lustre Instance"` | no |
 | <a name="input_gke_support_enabled"></a> [gke\_support\_enabled](#input\_gke\_support\_enabled) | Set to true to create Managed Lustre instance with GKE compatibility.<br/>Note: This does not work with Slurm, the Slurm image must be built with<br/>the correct compatibility. | `bool` | `false` | no |
+| <a name="input_import_gcs_bucket_uri"></a> [import\_gcs\_bucket\_uri](#input\_import\_gcs\_bucket\_uri) | The name of the GCS bucket to import data from to managed lustre. Data will<br/>be imported to the local\_mount directory. Changing this value will not<br/>trigger a redeployment, to prevent data deletion. | `string` | `null` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the Managed Lustre instance. Key-value pairs. | `map(string)` | n/a | yes |
 | <a name="input_local_mount"></a> [local\_mount](#input\_local\_mount) | Local mount point for the Managed Lustre instance. | `string` | `"/shared"` | no |
 | <a name="input_mount_options"></a> [mount\_options](#input\_mount\_options) | Mounting options for the file system. | `string` | `"defaults,_netdev"` | no |

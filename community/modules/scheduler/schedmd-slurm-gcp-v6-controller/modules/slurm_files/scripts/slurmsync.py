@@ -296,14 +296,12 @@ def get_node_action(nodename: str) -> NodeAction:
     return NodeActionUnchanged()
 
 
-def delete_placement_groups(placement_groups):
-    requests = {
-        pg["name"]: lookup().compute.resourcePolicies().delete(
-            project=lookup().project,
-            region=util.trim_self_link(pg["region"]),
-            resourcePolicy=pg["name"])
-        for pg in placement_groups
-    }
+def delete_resource_policies(links: list[str], lkp: util.Lookup) -> None:
+    requests = {}
+    for link in links:
+        name = util.trim_self_link(link)
+        region = util.parse_self_link(link).region
+        requests[name] = lkp.compute.resourcePolicies().delete(project=lkp.project, region=region, resourcePolicy=name)
 
     def swallow_err(_: str) -> None:
         pass
@@ -318,9 +316,30 @@ def delete_placement_groups(placement_groups):
         if failures:
             log.error(f"some placement groups failed to delete: {failures}")
     log.info(
-        f"deleted {len(done)} of {len(placement_groups)} placement groups ({to_hostlist(done.keys())})"
+        f"deleted {len(done)} of {len(links)} placement groups ({to_hostlist(done.keys())})"
     )
 
+
+
+@lru_cache
+def _get_resource_policies_in_region(lkp: util.Lookup, region: str) -> list[Any]:
+    res = []
+    act = lkp.compute.resourcePolicies()
+    op = act.list(project=lkp.project, region=region)
+    prefix = f"{lkp.cfg.slurm_cluster_name}-slurmgcp-managed-"
+    while op is not None:
+        result = ensure_execute(op)
+        res.extend([p for p in result.get("items", []) if p.get("name", "").startswith(prefix)])
+        op = act.list_next(op, result)
+    return res
+
+
+@lru_cache
+def _get_resource_policies(lkp: util.Lookup) -> list[Any]:
+    res = []
+    for region in lkp.cluster_regions():
+        res.extend(_get_resource_policies_in_region(lkp, region))
+    return res
 
 def sync_placement_groups():
     """Delete placement policies that are for jobs that have completed/terminated"""
@@ -335,40 +354,30 @@ def sync_placement_groups():
         ]
     )
 
+    lkp = lookup()
     keep_jobs = {
         str(job.id)
-        for job in lookup().get_jobs()
+        for job in lkp.get_jobs()
         if job.job_state in keep_states
     }
     keep_jobs.add("0")  # Job 0 is a placeholder for static node placement
 
-    fields = "items.regions.resourcePolicies,nextPageToken"
-    flt = f"name={lookup().cfg.slurm_cluster_name}-*"
-    act = lookup().compute.resourcePolicies()
-    op = act.aggregatedList(project=lookup().project, fields=fields, filter=flt)
-    placement_groups = {}
+    to_delete = []
     pg_regex = re.compile(
-        rf"{lookup().cfg.slurm_cluster_name}-slurmgcp-managed-(?P<partition>[^\s\-]+)-(?P<job_id>\d+)-(?P<index>\d+)"
+        rf"{lkp.cfg.slurm_cluster_name}-slurmgcp-managed-(?P<ns>[^\s\-]+)-(?P<job_id>\d+)-(?P<index>\d+)"
     )
-    while op is not None:
-        result = ensure_execute(op)
-        # merge placement group info from API and job_id,partition,index parsed from the name
-        pgs = (
-            {**pg, **pg_regex.match(pg["name"]).groupdict()} # type: ignore
-            for pg in chain.from_iterable(
-                item["resourcePolicies"]
-                for item in result.get("items", {}).values()
-                if item
-            )
-            if pg_regex.match(pg["name"]) is not None
-        )
-        placement_groups.update(
-            {pg["name"]: pg for pg in pgs if pg.get("job_id") not in keep_jobs}
-        )
-        op = act.aggregatedList_next(op, result)
+    
+    for pg in _get_resource_policies(lkp):
+        name = pg["name"]
+    
+        if (mtch := pg_regex.match(name)) is None:
+            log.warning(f"Unexpected resource policy {name=}")
+            continue
+        if mtch.group("job_id") not in keep_jobs:
+            to_delete.append(pg["selfLink"])
 
-    if len(placement_groups) > 0:
-        delete_placement_groups(list(placement_groups.values()))
+    if to_delete:
+        delete_resource_policies(to_delete, lkp)
 
 
 def sync_instances():

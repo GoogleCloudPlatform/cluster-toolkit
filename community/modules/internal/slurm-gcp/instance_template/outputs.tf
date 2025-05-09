@@ -36,3 +36,8 @@ output "service_account" {
   description = "Service account object, includes email and scopes."
   value       = module.instance_template.service_account
 }
+
+output "labels" {
+  description = "Labels attached to the instance template"
+  value       = local.labels
+}

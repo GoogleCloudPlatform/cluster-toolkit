@@ -49,7 +49,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [gke-a3-ultragpu.yaml](#gke-a3-ultragpuyaml-) ![core-badge]
   * [gke-a3-megagpu](#gke-a3-megagpuyaml-) ![core-badge]
   * [gke-a3-highgpu](#gke-a3-highgpuyaml-) ![core-badge]
-  * [gke-dws-flex-start](#gke-dws-flex-start-) ![core-badge]
+  * [gke-consumption-options](#gke-consumption-options-) ![core-badge]
   * [htc-slurm.yaml](#htc-slurmyaml-) ![community-badge]
   * [htc-htcondor.yaml](#htc-htcondoryaml--) ![community-badge] ![experimental-badge]
   * [fsi-montecarlo-on-batch.yaml](#fsi-montecarlo-on-batchyaml-) ![community-badge] ![experimental-badge]
@@ -58,7 +58,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [hpc-slurm-ramble-gromacs.yaml](#hpc-slurm-ramble-gromacsyaml--) ![community-badge] ![experimental-badge]
   * [flux-cluster](#flux-clusteryaml--) ![community-badge] ![experimental-badge]
   * [tutorial-fluent.yaml](#tutorial-fluentyaml--) ![community-badge] ![experimental-badge]
-  * [gke-tpu-v4](#gke-tpu-v4--) ![community-badge] ![experimental-badge]
+  * [gke-tpu-v6](#gke-tpu-v6--) ![community-badge] ![experimental-badge]
   * [xpk-n2-filestore](#xpk-n2-filestore--) ![community-badge] ![experimental-badge]
 * [Blueprint Schema](#blueprint-schema)
 * [Writing an HPC Blueprint](#writing-an-hpc-blueprint)
@@ -1200,11 +1200,14 @@ If you see an error saying: `local-exec provisioner error` or `This environment 
 
 [gke-a3-highgpu.yaml]: ../examples/gke-a3-highgpu.yaml
 
-### [gke-dws-flex-start] ![core-badge]
+### [gke-consumption-options] ![core-badge]
 
-This example shows how DWS Flex Start mode can be used to run a job that requires GPU capacity on GKE. Additional information on DWS Flex Start mode and the required steps are captured in this [README](../examples/gke-dws-flex-start/README.md).
+This folder holds multiple GKE blueprint examples that display different consumption options on GKE.
+* [DWS Calendar](../examples/gke-consumption-options/dws-calendar)
+* [DWS Flex Start](../examples/gke-consumption-options/dws-flex-start)
+* [DWS Flex Start with Queued Provisioning](../examples/gke-consumption-options/dws-flex-start-queued-provisioning)
 
-[gke-dws-flex-start]: ../examples/gke-dws-flex-start
+[gke-consumption-options]: ../examples/gke-consumption-options
 
 ### [htc-htcondor.yaml] ![community-badge] ![experimental-badge]
 
@@ -1317,11 +1320,11 @@ deployment_groups:
 [hpc-slurm-sharedvpc.yaml]: ../community/examples/hpc-slurm-sharedvpc.yaml
 [fs-shared-vpc]: https://cloud.google.com/filestore/docs/shared-vpc
 
-### [gke-tpu-v4] ![community-badge] ![experimental-badge]
+### [gke-tpu-v6] ![community-badge] ![experimental-badge]
 
-This example shows how TPU v4 cluster can be created and be used to run a job that requires TPU capacity on GKE. Additional information on TPU blueprint and associated changes are in this [README](/community/examples/gke-tpu-v4/README.md).
+This example shows how TPU v6 cluster can be created and be used to run a job that requires TPU capacity on GKE. Additional information on TPU blueprint and associated changes are in this [README](/community/examples/gke-tpu-v6/README.md).
 
-[gke-tpu-v4]: ../community/examples/gke-tpu-v4
+[gke-tpu-v6]: ../community/examples/gke-tpu-v6
 
 ### [xpk-n2-filestore] ![community-badge] ![experimental-badge]
 

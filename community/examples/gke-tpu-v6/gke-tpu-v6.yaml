@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-blueprint_name: gke-tpu-v4
+blueprint_name: gke-tpu-v6
 
 vars:
   # The following variables should be over-written in the deployment.yaml file.
@@ -21,7 +21,7 @@ vars:
 
   # This should be unique across all of your Cluster
   # Toolkit Deployments.
-  deployment_name: gke-tpu-v4-2x2x2
+  deployment_name: gke-tpu-v6
 
   # The GCP Region used for this deployment.
   region:
@@ -31,6 +31,9 @@ vars:
 
   # The number of TPU slices to create
   num_slices:
+
+  # Machine type
+  machine_type:
 
   # The TPU placement topology for pod slice node pool.
   tpu_topology:
@@ -53,7 +56,7 @@ vars:
 deployment_groups:
 - group: primary
   modules:
-  - id: gke-tpu-v4-net
+  - id: gke-tpu-v6-net
     source: modules/network/vpc
     settings:
       subnetworks:
@@ -77,11 +80,11 @@ deployment_groups:
           ports: ["0-65535"]
         - protocol: icmp
 
-  - id: gke-tpu-v4-cluster
+  - id: gke-tpu-v6-cluster
     source: modules/scheduler/gke-cluster
-    use: [gke-tpu-v4-net]
+    use: [gke-tpu-v6-net]
     settings:
-      system_node_pool_machine_type: "n1-standard-8"
+      system_node_pool_machine_type: "n2-standard-8"
       system_node_pool_taints: []
       enable_private_endpoint: false # Allows access from authorized public IPs
       master_authorized_networks:
@@ -98,14 +101,14 @@ deployment_groups:
         exclusion_scope: NO_MINOR_OR_NODE_UPGRADES
     outputs: [instructions]
 
-  - id: gke-tpu-v4-pool
+  - id: gke-tpu-v6-pool
     source: modules/compute/gke-node-pool
-    use: [gke-tpu-v4-cluster]
+    use: [gke-tpu-v6-cluster]
     settings:
       num_slices: $(vars.num_slices)
-      name: gke-tpu-v4-pool
-      disk_type: pd-balanced
-      machine_type: ct4p-hightpu-4t
+      name: gke-tpu-v6-pool
+      disk_type: hyperdisk-balanced
+      machine_type: $(vars.machine_type)
       auto_upgrade: true
       zones: [$(vars.zone)]
       static_node_count: $(vars.static_node_count)
@@ -117,3 +120,10 @@ deployment_groups:
         type: COMPACT
         tpu_topology: $(vars.tpu_topology)
     outputs: [instructions]
+
+  - id: workload-manager-install
+    source: modules/management/kubectl-apply
+    use: [gke-tpu-v6-cluster]
+    settings:
+      jobset:
+        install: true

@@ -24,3 +24,13 @@ vars:
   zone: # supply zone with a3-ultragpu-8g capacity in reservation
   a3u_reservation_name: # supply a3-ultragpu-8g reservation name
   a3u_cluster_size: # supply a3-ultragpu-8g reservation size
+
+# Additional provisioning models (pick only one), can be used to substitute `a3u_reservation_name`:
+#
+# a3u_dws_flex_enabled: true
+#
+# To make use of DWS Flex-Start, for more info visit: https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/docs/slurm-dws-flex.md
+#
+# a3u_enable_spot_vm: true
+#
+# To make use of Spot VMs, for more info visit: https://cloud.google.com/compute/docs/instances/spot

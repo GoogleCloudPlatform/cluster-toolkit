@@ -70,6 +70,8 @@ resource "null_resource" "replace_trigger" {
   }
 }
 
+# TODO: `internal/slurm-gcp/login` is ONLY user of `internal/slurm-gcp/instance`
+# Remove this module, add functionality (+ prune generality) to the login module directly.
 resource "google_compute_instance_from_template" "slurm_instance" {
   count   = local.num_instances
   name    = format("%s-%s", var.hostname, format("%03d", count.index + 1))
@@ -113,6 +115,10 @@ resource "google_compute_instance_from_template" "slurm_instance" {
   }
 
   source_instance_template = data.google_compute_instance_template.base.self_link
+  # Due to https://github.com/hashicorp/terraform-provider-google/issues/21693
+  # we have to explicitly override instance labels instead of inheriting them from template.
+  labels = data.google_compute_instance_template.base.labels
+
 
   lifecycle {
     replace_triggered_by = [null_resource.replace_trigger.id]

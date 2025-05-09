@@ -253,7 +253,7 @@ resource "google_storage_bucket_object" "task_prolog_scripts" {
   }
 
   bucket  = var.bucket_name
-  name    = format("%s/slurm-task-prolog-script-%s", local.bucket_dir, each.key)
+  name    = format("%s/slurm-task_prolog-script-%s", local.bucket_dir, each.key)
   content = each.value.content
   source  = each.value.source
 }
@@ -265,7 +265,7 @@ resource "google_storage_bucket_object" "task_epilog_scripts" {
   }
 
   bucket  = var.bucket_name
-  name    = format("%s/slurm-task-epilog-script-%s", local.bucket_dir, each.key)
+  name    = format("%s/slurm-task_epilog-script-%s", local.bucket_dir, each.key)
   content = each.value.content
   source  = each.value.source
 }

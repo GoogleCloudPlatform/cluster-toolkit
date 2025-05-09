@@ -17,6 +17,7 @@
 locals {
   kueue_supported_versions  = ["v0.11.4", "v0.10.1", "v0.10.0", "v0.9.1", "v0.9.0", "v0.8.1"]
   jobset_supported_versions = ["v0.8.1", "v0.7.2", "v0.5.2"]
+  gib_supported_versions    = ["v1.0.2", "v1.0.3", "v1.0.5"]
 }
 
 resource "terraform_data" "kueue_validations" {
@@ -34,6 +35,31 @@ resource "terraform_data" "jobset_validations" {
       condition     = !var.jobset.install || contains(local.jobset_supported_versions, var.jobset.version)
       error_message = "Supported version of Jobset are ${join(", ", local.jobset_supported_versions)}"
     }
+  }
+}
+
+resource "terraform_data" "gib_validations" {
+  lifecycle {
+    precondition {
+      condition     = !var.gib.install || contains(local.gib_supported_versions, var.gib.template_vars.version)
+      error_message = "Supported version of the NCCL gIB plugin are ${join(", ", local.gib_supported_versions)}"
+    }
+  }
+}
+
+resource "terraform_data" "initial_gib_version" {
+  input = var.gib.install ? var.gib.template_vars.version : null
+
+  lifecycle {
+    ignore_changes = [input]
+  }
+}
+
+check "gib_version_changes" {
+  assert {
+    # Skip version checking if gIB was not initially or is not currently installed
+    condition     = terraform_data.initial_gib_version.output == null || !var.gib.install || terraform_data.initial_gib_version.output == var.gib.template_vars.version
+    error_message = "When changing the gIB NCCL plugin version, confirm full rollout and environment consistency. Replace any NCCL env hard coding/caches with set_nccl_env.sh sourcing."
   }
 }
 
@@ -104,4 +130,36 @@ variable "nvidia_dra_driver" {
     version = optional(string, "v25.3.0-rc.2")
   })
   default = {}
+}
+
+variable "gib" {
+  description = "Install the NCCL gIB plugin"
+  type = object({
+    install = bool
+    path    = string
+    template_vars = object({
+      image   = optional(string, "us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib")
+      version = string
+      node_affinity = optional(any, {
+        requiredDuringSchedulingIgnoredDuringExecution = {
+          nodeSelectorTerms = [{
+            matchExpressions = [{
+              key      = "cloud.google.com/gke-gpu",
+              operator = "In",
+              values   = ["true"]
+            }]
+          }]
+        }
+      })
+      accelerator_count = number
+    })
+  })
+  default = {
+    install = false
+    path    = ""
+    template_vars = {
+      version           = ""
+      accelerator_count = 0
+    }
+  }
 }
