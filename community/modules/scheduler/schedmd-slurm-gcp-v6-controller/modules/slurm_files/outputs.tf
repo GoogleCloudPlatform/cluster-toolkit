@@ -37,9 +37,4 @@ output "config" {
     condition     = var.enable_hybrid ? can(coalesce(var.slurm_control_host)) : true
     error_message = "Input slurm_control_host is required."
   }
-
-  precondition {
-    condition     = length(local.x_nodeset_overlap) == 0
-    error_message = "All nodeset names must be unique among all nodeset types."
-  }
 }
