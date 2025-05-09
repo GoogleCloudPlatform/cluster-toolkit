@@ -33,11 +33,13 @@ PDB_DATABASE_PATH="{{ pdb_database_path }}"
 DEFAULT_JAX_COMPILATION_CACHE_PATH="{{ jax_compilation_cache_path }}"
 
 # --- Initialize variables ---
-JOB_TYPE="" PARTITION="" MEM="" CPUS=""
+JOB_TYPE="{{ job_type }}" 
+PARTITION="" MEM="" CPUS=""
 TIME_SECONDS="" # Initialize as empty - will hold user input OR default
 GRES="${DEFAULT_GRES}" LOG_BASE_DIR="${DEFAULT_LOG_BASE_DIR}"
 JOB_NAME_BASE="${DEFAULT_JOB_NAME_BASE}" JAX_COMPILATION_CACHE_PATH="${DEFAULT_JAX_COMPILATION_CACHE_PATH}"
-INPUT_PATH="" OUTPUT_DIR=""
+INPUT_PATH="{{ input_path }}" 
+OUTPUT_DIR="{{ output_path }}"
 GRES_USER_SET="false" # Flag to track if user provided --gres
 
 # Initialize AF3 science variables with defaults
@@ -268,23 +270,7 @@ mkdir -p "$LOG_BASE_DIR" || echo "Warning: Could not create log base dir '$LOG_B
 [ ! -f "${CONTAINER_IMAGE}" ] && { echo "Error: Container image '${CONTAINER_IMAGE}' not found." >&2; exit 1; }
 
 
-# --- Assemble sbatch Command ---
-SBATCH_DIRECTIVES=$(cat << SBD
-#!/bin/bash
-#SBATCH --job-name=${final_job_name}
-#SBATCH --partition=${PARTITION}
-#SBATCH --time=${TIME_HMS}
-#SBATCH --mem=${MEM}G
-#SBATCH --cpus-per-task=${CPUS}
-#SBATCH --output=${LOG_BASE_DIR}/job_%j/out.txt
-#SBATCH --error=${LOG_BASE_DIR}/job_%j/err.txt
-SBD
-)
-# Only add --gres directive if GRES is non-empty
-[ -n "$GRES" ] && SBATCH_DIRECTIVES+=$'\n'"#SBATCH --gres=${GRES}"
-
-
-# --- Submit sbatch Command ---
+# --- Submit Command ---
 bind_args_str=$(printf "%s " "${apptainer_binds[@]}")
 echo "Submitting job ${final_job_name} to partition ${PARTITION}..."
 echo "Time Limit:       ${TIME_HMS} (${TIME_SECONDS} seconds)"
@@ -295,9 +281,6 @@ echo "Log File Pattern: ${LOG_BASE_DIR}/job_%j/{out.txt,err.txt}"
 
 # Combine all python options
 all_python_opts="${base_python_opts} ${job_specific_python_opts}"
-
-sbatch << EOF
-${SBATCH_DIRECTIVES}
 
 # --- Job Environment & Setup ---
 echo "--- Job Info ---"
@@ -337,16 +320,16 @@ echo "Launching AlphaFold ($JOB_TYPE)..."
 set -e # Exit on error
 set -x # Print command being executed
 
-apptainer run ${apptainer_nv_flag} \\
-    ${bind_args_str} \\
-  "${CONTAINER_IMAGE}" python3 "${ALPHAFOLD_SCRIPT}" \\
-    ${python_input_flag} "${python_input_value}" \\
-    --output_dir "${OUTPUT_DIR}" \\
-    ${run_data_pipeline_flag} \\
-    ${run_inference_flag} \\
-    --model_dir="${MODEL_DIR}" \\
-    --db_dir="${DB_DIR}" \\
-    --pdb_database_path="${PDB_DATABASE_PATH}" \\
+apptainer run ${apptainer_nv_flag} \
+    ${bind_args_str} \
+  "${CONTAINER_IMAGE}" python3 "${ALPHAFOLD_SCRIPT}" \
+    ${python_input_flag} "${python_input_value}" \
+    --output_dir "${OUTPUT_DIR}" \
+    ${run_data_pipeline_flag} \
+    ${run_inference_flag} \
+    --model_dir="${MODEL_DIR}" \
+    --db_dir="${DB_DIR}" \
+    --pdb_database_path="${PDB_DATABASE_PATH}" \
     ${all_python_opts}
 
 set +x

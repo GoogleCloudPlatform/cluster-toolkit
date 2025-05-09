@@ -1,0 +1,501 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# 🛠️ Install Dependencies\n",
+    "First, install the required dependencies from `notebook-requirements.txt`."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "!pip install -r notebook-requirements.txt\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# 🚀 AF3 - System Settings\n",
+    "These settings configure partitions, memory, CPU, and default timeouts. Below are the detailed system settings you can choose to change the `af3_config` on the next section:"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Datapipeline Partition (C3DH)\n",
+    "- **Name**: {{ datapipeline_c3dhm_partition_name }}\n",
+    "- **Machine Type**: {{ datapipeline_c3dhm_partition_machine_type }}\n",
+    "- **Memory**: {{ datapipeline_c3dhm_partition_memory }} GB\n",
+    "- **CPU Count**: {{ datapipeline_c3dhm_partition_cpu_count }}\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Inference Partition (G2)\n",
+    "- **Name**: {{ inference_g2_partition_name }}\n",
+    "- **Machine Type**: {{ inference_g2_partition_machine_type }}\n",
+    "- **Memory**: {{ inference_g2_partition_memory }} GB\n",
+    "- **CPU Count**: {{ inference_g2_partition_cpu_count }}\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Inference Partition (A2)\n",
+    "- **Name**: {{ inference_a2_partition_name }}\n",
+    "- **Machine Type**: {{ inference_a2_partition_machine_type }}\n",
+    "- **Memory**: {{ inference_a2_partition_memory }} GB\n",
+    "- **CPU Count**: {{ inference_a2_partition_cpu_count }}\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Inference Partition (A2U)\n",
+    "- **Name**: {{ inference_a2u_partition_name }}\n",
+    "- **Machine Type**: {{ inference_a2u_partition_machine_type }}\n",
+    "- **Memory**: {{ inference_a2u_partition_memory }} GB\n",
+    "- **CPU Count**: {{ inference_a2u_partition_cpu_count }}\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# 🔬 AF3 - Science Settings\n",
+    "Scientific parameters for model behavior like seeds, iterations, and templates."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "max_template_date = \"{{ max_template_date }}\"\n",
+    "conformer_max_iterations = \"{{ conformer_max_iterations }}\"\n",
+    "num_recycles = \"{{ num_recycles }}\"\n",
+    "num_diffusion_samples = \"{{ num_diffusion_samples }}\"\n",
+    "num_seeds = \"{{ num_seeds }}\"\n",
+    "save_embeddings = \"{{ save_embeddings }}\"\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# 📂 Loading SLURM Info\n",
+    "We will attempt to load the SLURM configuration data from a JSON file (`slurm_info.json`). If the file is missing, an error will be displayed."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "import json\n",
+    "data = {}\n",
+    "try:\n",
+    "    with open(\"slurm_info.json\", \"r\", encoding=\"utf-8\") as f:\n",
+    "        data = json.load(f)\n",
+    "        print(data)\n",
+    "except FileNotFoundError:\n",
+    "    print(\"Can't find slurm info file.\")\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# 🔑 AF3 - SLURM REST API\n",
+    "This section contains the SLURM REST API configuration. The API is used to interact with the SLURM job scheduler."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# GCP Secret Name\n",
+    "gcp_secret_name = \"{{ secret_name }}\"\n",
+    "# Af3 default config\n",
+    "af3_config = {\n",
+    "    \"datapipeline_partition\": \"{{ default_datapipeline_partition_name }}\", # Datapipeline partition name\n",
+    "    \"inference_partition\": \"{{ default_inference_partition_name }}\", # Inference partition name\n",
+    "    \"datapipeline_memory\": \"{{ default_datapipeline_memory }}\", # Datapipeline memory\n",
+    "    \"inference_memory\": \"{{ default_inference_memory }}\", # Inference memory\n",
+    "    \"datapipeline_cpu_count\": \"{{ default_datapipeline_cpu_count }}\", # Datapipeline CPU count\n",
+    "    \"inference_cpu_count\": \"{{ default_inference_cpu_count }}\", # Inference CPU count\n",
+    "    \"datapipeline_timeout\": \"{{ default_datapipeline_timeout }}\", # Datapipeline timeout\n",
+    "    \"inference_timeout\": \"{{ default_inference_timeout }}\", # Inference timeout\n",
+    "    \"jax_compilation_cache_path\": \"{{ jax_compilation_cache_path }}\",\n",
+    "    \"max_template_date\": max_template_date,\n",
+    "    \"conformer_max_iterations\": conformer_max_iterations,\n",
+    "    \"num_recycles\": num_recycles,\n",
+    "    \"num_diffusion_samples\": num_diffusion_samples,\n",
+    "    \"num_seeds\": num_seeds,\n",
+    "    \"save_embeddings\": save_embeddings,\n",
+    "    \n",
+    "    \n",
+    "    # Warning: don't change manually\n",
+    "    \"sif_dir\": \"{{ sif_dir }}\",\n",
+    "    \"model_dir\": \"{{ model_dir }}\",\n",
+    "    \"db_dir\": \"{{ db_dir }}\",\n",
+    "    \"pdb_database_path\": \"{{ pdb_database_path }}\",\n",
+    "    \"default_folder\": \"{{ slurm_node_notebook_bucket_local_mount }}\",\n",
+    "    \"job_template_path\": \"{{ af3_job_template_jupyter_path }}\",\n",
+    "}\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Initialize AF3SlurmClient\n",
+    "from slurm_client import AF3SlurmClient\n",
+    "client = AF3SlurmClient(remote_host=data[\"hostname\"],remote_port={{ api_port }}, gcp_project_id=\"{{ project_id }}\", gcp_secret_name=gcp_secret_name, af3_config=af3_config)\n",
+    "\n",
+    "# Example Usage: Ping\n",
+    "ping_response = client.ping()\n",
+    "print(\"Ping Response:\")\n",
+    "print(json.dumps(ping_response,indent=4))\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Example Usage: Submit Job"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "\n",
+    "# Job configuration\n",
+    "job_config = {\n",
+    "    \"account\": \"{{ service_user }}\",\n",
+    "    \"tasks\": 1,\n",
+    "    \"name\": \"af3_slurm_rest_api_job\",\n",
+    "    \"partition\": \"{{ default_datapipeline_partition_name }}\",\n",
+    "    \"current_working_directory\": \"{{ working_directory }}\",\n",
+    "    \"environment\": [\n",
+    "        \"PATH=/bin:/usr/bin/:/usr/local/bin/\",\n",
+    "        \"LD_LIBRARY_PATH=/lib/:/lib64/:/usr/local/lib\",\n",
+    "    ],\n",
+    "}\n",
+    "script_command = \"#!/bin/bash\\nsleep 15\"\n",
+    "\n",
+    "# Send job config and its command \n",
+    "submit_job_response = client.submit_job(job_config, script_command)\n",
+    "print(\"Submit Job Response:\", submit_job_response)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# 🧮 Datapipeline\n",
+    "Run Datapipeline from uploaded files. This is a simple example of how to run a Datapipeline job using the AF3 SLURM REST API."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Example of how to use SlurmClient to submit datapipeline job\n",
+    "# Job configuration\n",
+    "job_config = {\n",
+    "    \"account\": \"{{ service_user }}\",\n",
+    "    \"tasks\": 1,\n",
+    "    \"name\": \"af3_slurm_rest_api_job\",\n",
+    "    \"partition\": \"{{ default_datapipeline_partition_name }}\",\n",
+    "    \"current_working_directory\": \"{{ working_directory }}\",\n",
+    "    \"time_limit\": \"{{ default_datapipeline_timeout }}\",\n",
+    "    \"memory_per_node\": \"{{ default_datapipeline_memory }}G\",\n",
+    "    \"cpus_per_task\": {{ default_datapipeline_cpu_count }},\n",
+    "    \"environment\": [\n",
+    "        \"PATH=/bin:/usr/bin/:/usr/local/bin/\",\n",
+    "        \"LD_LIBRARY_PATH=/lib/:/lib64/:/usr/local/lib\",\n",
+    "    ],\n",
+    "}\n",
+    "\n",
+    "# Submit job\n",
+    "# Assign `input_file` with datapipeline input file path\n",
+    "input_file= \"\"\n",
+    "submit_job_response = client.submit_data_pipeline_job(job_config, input_file)\n",
+    "print(\"Submit Job Response:\", json.dumps(submit_job_response,indent=4))"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "job_id = 1 # Replace with the actual job ID you want to check\n",
+    "# Check job status\n",
+    "job_status_response = client.get_job_info(job_id)\n",
+    "print(\"Job Status Response:\", json.dumps(job_status_response,indent=4))\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# 🤖 Inference\n",
+    "Run inference jobs using the AF3 SLURM REST API. This section demonstrates how to configure and submit an inference job through Slurm."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Example of how to use SlurmClient to submit inference job\n",
+    "# Job configuration\n",
+    "inference_job_config = {\n",
+    "    \"account\": \"{{ service_user }}\",\n",
+    "    \"tasks\": 1,\n",
+    "    \"name\": \"af3_slurm_rest_api_inference_job\",\n",
+    "    \"partition\": \"{{ default_inference_partition_name }}\",\n",
+    "    \"current_working_directory\": \"{{ working_directory }}\",\n",
+    "    \"time_limit\": \"{{ default_inference_timeout }}\",\n",
+    "    \"memory_per_node\": \"{{ default_inference_memory }}G\",\n",
+    "    \"cpus_per_task\": {{ default_inference_cpu_count }},\n",
+    "    \"tres_per_job\": \"gres/gpu:1\", # Enables GPU\n",
+    "    \"environment\": [\n",
+    "        \"PATH=/bin:/usr/bin/:/usr/local/bin/\",\n",
+    "        \"LD_LIBRARY_PATH=/lib/:/lib64/:/usr/local/lib\",\n",
+    "    ],\n",
+    "}\n",
+    "\n",
+    "# Submit job\n",
+    "# Assign `input_file` with inference input file path\n",
+    "input_file = \"\"\n",
+    "submit_inference_response = client.submit_inference_job(inference_job_config, input_file)\n",
+    "print(\"Submit Inference Job Response:\", json.dumps(submit_inference_response,indent=4))\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "job_id = 1 # Replace with the actual job ID you want to check\n",
+    "# Check job status\n",
+    "job_status_response = client.get_job_info(job_id)\n",
+    "print(\"Job Status Response:\", json.dumps(job_status_response,indent=4))\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# 🧬 Structure & PAE Viewer\n",
+    "Run visualization from inference files. This is a simple example of how to run a visualization from inference result"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "import io\n",
+    "import json\n",
+    "import numpy as np\n",
+    "import Bio\n",
+    "import py3Dmol\n",
+    "from IPython.display import display, Markdown\n",
+    "import plotly.express as px\n",
+    "import pandas as pd\n",
+    "from typing import Dict, Tuple, List\n",
+    "\n",
+    "def plot_pae_matrix(pae: Dict,token_chain_ids: str)->None:\n",
+    "    df = pd.DataFrame(pae)\n",
+    "    fig = px.imshow(df, color_continuous_scale='Viridis',\n",
+    "                    labels={'color': 'PAE'},\n",
+    "                    title='Predicted Aligned Error (PAE) Matrix')\n",
+    "    # Draw chain boundaries if available\n",
+    "    if token_chain_ids:\n",
+    "        chain_boundaries = []\n",
+    "        prev_chain = token_chain_ids[0]\n",
+    "        for idx, chain_id in enumerate(token_chain_ids):\n",
+    "            if chain_id != prev_chain:\n",
+    "                chain_boundaries.append(idx - 0.5)\n",
+    "                prev_chain = chain_id\n",
+    "\n",
+    "        for boundary in chain_boundaries:\n",
+    "            fig.add_shape(\n",
+    "                type=\"line\",\n",
+    "                x0=boundary,\n",
+    "                y0=0,\n",
+    "                x1=boundary,\n",
+    "                y1=len(token_chain_ids),\n",
+    "                line=dict(color=\"red\", width=1)\n",
+    "            )\n",
+    "            fig.add_shape(\n",
+    "                type=\"line\",\n",
+    "                x0=0,\n",
+    "                y0=boundary,\n",
+    "                x1=len(token_chain_ids),\n",
+    "                y1=boundary,\n",
+    "                line=dict(color=\"red\", width=1)\n",
+    "            )\n",
+    "    fig.update_layout(autosize=True)\n",
+    "    fig.show()\n",
+    "\n",
+    "def read_cif_file(file_path : str)->Tuple[Bio.PDB.Structure.Structure,str]:\n",
+    "    parser = Bio.PDB.MMCIFParser(QUIET=True)\n",
+    "    with open(file_path, 'r') as file:\n",
+    "        content = file.read()\n",
+    "    file_like = io.StringIO(content)\n",
+    "    structure = parser.get_structure('protein', file_like)\n",
+    "    return structure, content\n",
+    "\n",
+    "def extract_pae_from_json(file_path : str)->Tuple[np.array,List]:\n",
+    "    with open(file_path, 'r') as file:\n",
+    "        data = json.load(file)\n",
+    "    pae = np.array(data.get('pae', []), dtype=np.float16)\n",
+    "    token_chain_ids = data.get('token_chain_ids', [])\n",
+    "    return pae, token_chain_ids\n",
+    "\n",
+    "\n",
+    "def show_structure_3d(cif_string: str, width=500, height=400)->None:\n",
+    "    viewer = py3Dmol.view(width=width, height=height)\n",
+    "    viewer.addModel(cif_string, 'cif')\n",
+    "    viewer.setStyle({'cartoon': {'color': 'spectrum'}})\n",
+    "    viewer.zoomTo()\n",
+    "    viewer.show()\n",
+    "    display(viewer)\n",
+    "    \n",
+    "\n",
+    "def extract_summary_confidences_obj(file_path: str)->Dict:\n",
+    "    \"\"\"Extract summary confidence data from JSON file object.\"\"\"\n",
+    "    try:\n",
+    "        with open(file_path,\"r\",encoding=\"utf-8\") as f:\n",
+    "            data = json.load(f)\n",
+    "        # Check if data is a list\n",
+    "        if isinstance(data, list):\n",
+    "            summary_data = data[0]  # Take first element if it's a list\n",
+    "        else:\n",
+    "            summary_data = data\n",
+    "            \n",
+    "        # Convert any numpy arrays to lists for JSON serialization\n",
+    "        processed_data = {}\n",
+    "        for key, value in summary_data.items():\n",
+    "            if isinstance(value, np.ndarray):\n",
+    "                processed_data[key] = value.tolist()\n",
+    "            else:\n",
+    "                processed_data[key] = value\n",
+    "                \n",
+    "        return processed_data\n",
+    "    except Exception as e:\n",
+    "        print(f\"Error extracting summary confidence data: {str(e)}\")\n",
+    "        return {}  # Return empty dict as fallback\n",
+    "\n",
+    "    \n",
+    "def display_summary_data(summary_data: Dict, chain_ids: List)->None:\n",
+    "    display(Markdown(\"### Summary of Confidence Metrics\"))\n",
+    "\n",
+    "    # Map chain-level metrics to chain IDs\n",
+    "    chain_metrics = {}\n",
+    "    for key in ['chain_iptm', 'chain_ptm']:\n",
+    "        if key in summary_data:\n",
+    "            values = summary_data[key]\n",
+    "            if len(values) == len(chain_ids):\n",
+    "                chain_metrics[key] = dict(zip(chain_ids, values))\n",
+    "            else:\n",
+    "                print(f\"Warning: The number of values in '{key}' does not match the number of chains.\")\n",
+    "    \n",
+    "    # Optionally print the mapped metrics\n",
+    "    for key, val in chain_metrics.items():\n",
+    "        print(f\"\\n{key}:\")\n",
+    "        for chain_id, metric in val.items():\n",
+    "            print(f\"  Chain {chain_id}: {metric}\")\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Load CIF file\n",
+    "# Note: Adjust the file path to your actual CIF file\n",
+    "cif_file_path = \"\"\n",
+    "structure, cif_content = read_cif_file(cif_file_path)\n",
+    "show_structure_3d(cif_content)\n",
+    "\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "\n",
+    "# Load and plot PAE matrix\n",
+    "# Note: Adjust the file path to your actual PAE JSON file\n",
+    "pae_json_file_path = \"\"  \n",
+    "pae, token_chain_ids = extract_pae_from_json(pae_json_file_path)\n",
+    "plot_pae_matrix(pae)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Display summary of confidence metrices\n",
+    "# Note: Adjust the file path to your actual PAE Summary JSON file\n",
+    "summary_confidences_file = \"\"\n",
+    "summary_data = extract_summary_confidences_obj(summary_confidences_file)\n",
+    "\n",
+    "# Get chain ID list\n",
+    "chain_ids = list(set(token_chain_ids))\n",
+    "chain_ids.sort()\n",
+    "\n",
+    "display_summary_data(summary_data, chain_ids)"
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "name": "python",
+   "version": "3.x"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}

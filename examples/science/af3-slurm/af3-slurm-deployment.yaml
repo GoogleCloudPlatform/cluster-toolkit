@@ -26,8 +26,8 @@ vars:
   zone: us-central1-a                # supply zone with C3D-highmem and GPU capacity
 
   # Required buckets for weights and databases
-  modelweights_bucket: ""            # name of your bucket with af3 model weights
-  database_bucket: ""                # name of your bucket with the database files
+  modelweights_bucket:             # name of your bucket with af3 model weights
+  database_bucket:                 # name of your bucket with the database files
 
   # AF3 model - architecture mappings - typically do not need to be modified
   sif_dir: /opt/apps/af3/containers  # default path for the local copy of the container image
@@ -46,8 +46,13 @@ vars:
 
   # Choose if you want the AF3 Simple Service daemon started
   af3service_activate: false
-  af3service_jobbucket: ""           # set to "" if not used
+  af3service_jobbucket: ""          # set to "" if not used
   af3service_user: af3
+
+  # Choose if you want the Slurm REST API Simple Service daemon started
+  af3slurmrestapi_activate: true
+  af3slurmrestapi_user: af3
+
 
   # Choose Default Datapipeline Partition
   default_datapipeline_partition: $(vars.datapipeline_c3dhm_partition)
@@ -77,10 +82,10 @@ vars:
 
   inference_a2_partition:
     name: infa2
-    machine_type: a2-highgpu-1g      # a2-high with A100 GPUs has 40GB of GPU memory
+    machine_type: a2-highgpu-1g     # a2-high with A100 GPUs has 40GB of GPU memory
     memory: 80
     cpu_count: 12
-    node_count_static: 0             # number of static inference nodes; 1 GPU = 1 model inference
+    node_count_static: 0            # number of static inference nodes; 1 GPU = 1 model inference
     node_count_dynamic: 5           # number of dynamic inference nodes
 
   inference_a2u_partition:
@@ -90,3 +95,10 @@ vars:
     cpu_count: 12
     node_count_static: 0             # number of static inference nodes; 1 GPU = 1 model inference
     node_count_dynamic: 5           # number of dynamic inference nodes
+
+  notebook:
+    jupyter_notebook_bucket_local_mount: /home/jupyter/alphafold # local mount point of bucket on jupyter notebook, expect to be ended without /
+    slurm_node_notebook_bucket_local_mount: /jupyter/data # local mount point of bucket on slurm node, expect to be ended without /
+    machine_type: n1-standard-4   
+    secret_name: af3_slurm_api_token
+    api_port: 7080

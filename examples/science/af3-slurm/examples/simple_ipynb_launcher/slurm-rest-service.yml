@@ -1,0 +1,173 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+---
+- name: af3-slurm-rest-api-service
+  hosts: localhost
+  become: true
+  vars:
+    # variables set in af3-slurm-deployment.yaml
+    project_id:
+    af3slurmrestapi_activate:
+    service_user:
+    slurm_node_notebook_bucket_local_mount:
+    jupyter_notebook_bucket_local_mount:
+    secret_name:
+    api_port: 
+    sif_dir:
+    model_dir:
+    db_dir:
+    pdb_database_path:
+    jax_compilation_cache_path:
+
+    # Default Datapipeline Partition Config
+    default_datapipeline_partition_name:
+    default_datapipeline_timeout:
+    default_datapipeline_cpu_count:
+    default_datapipeline_memory:
+
+    # Default Inference Partition Config
+    default_inference_partition_name:
+    default_inference_timeout:
+    default_inference_cpu_count:
+    default_inference_memory:
+
+    # Configuration info for each partition
+    datapipeline_c3dhm_partition_name:
+    datapipeline_c3dhm_partition_machine_type:
+    datapipeline_c3dhm_partition_memory:
+    datapipeline_c3dhm_partition_cpu_count:
+    inference_g2_partition_name:
+    inference_g2_partition_machine_type:
+    inference_g2_partition_memory:
+    inference_g2_partition_cpu_count:
+    inference_a2_partition_name:
+    inference_a2_partition_machine_type:
+    inference_a2_partition_memory:
+    inference_a2_partition_cpu_count:
+    inference_a2u_partition_name:
+    inference_a2u_partition_machine_type:
+    inference_a2u_partition_memory:
+    inference_a2u_partition_cpu_count:
+
+    # AF3 Science Settings
+    max_template_date:
+    conformer_max_iterations:
+    num_recycles:
+    num_diffusion_samples:
+    num_seeds:
+    save_embeddings:
+
+    # fixed variables, not intended to be modified
+    service_name: af3slurmrestapi
+    service_type: simple
+    exec_start: "slurmrestd -u {{ service_user }} 0.0.0.0:{{ api_port }}"
+    start_after: network.target
+    working_directory: "/home/{{ service_user }}"
+    slurmrestapi_environment: "SLURM_JWT=daemon"
+    af3_job_template_path: "{{ slurm_node_notebook_bucket_local_mount }}/launch_af3_job.sh.j2"
+    af3_job_template_jupyter_path: "{{ jupyter_notebook_bucket_local_mount }}/launch_af3_job.sh.j2"
+  tasks:
+  - name: Ensure af3slurmrestapi_activate is boolean
+    set_fact:
+      activate: "{{ af3slurmrestapi_activate | bool }}"
+
+  - name: Copy predefined script to launch directory
+    ansible.builtin.copy:
+      src: /tmp/rest_api_launch_af3_job.sh.j2
+      dest: "{{ af3_job_template_path }}"
+      owner: root
+      group: root
+      mode: '0755'
+
+
+  - name: Copy predefined library to launch directory
+    ansible.builtin.copy:
+      src: /tmp/slurm_client.py
+      dest: "{{ slurm_node_notebook_bucket_local_mount }}/slurm_client.py" # Destination on target
+      owner: root
+      group: root
+      mode: '0755'
+
+  - name: Create /var/log/{{ service_name }} directory
+    file:
+      path: "/var/log/{{ service_name }}"
+      state: directory
+      owner: "{{ service_user }}"
+      group: "{{ service_user }}"
+      mode: '0755'
+
+  - name: Create Jupyter Notebook file
+    ansible.builtin.template:
+      src: /tmp/slurm-rest-api-notebook.ipynb.j2
+      dest: "{{ slurm_node_notebook_bucket_local_mount }}/slurm-rest-api-notebook.ipynb" # Destination on target
+      owner: root
+      group: root
+      mode: '0777' # Make accessible to all users
+
+  - name: Create the service file
+    copy:
+      dest: "/etc/systemd/system/{{ service_name }}.service"
+      content: |
+        [Unit]
+        Description={{ service_name }} Service
+        After={{ start_after }}
+        [Service]
+        Type={{ service_type }}
+        Environment={{ slurmrestapi_environment }}
+        ExecStart={{ exec_start }}
+        StandardOutput=append:/var/log/{{ service_name }}/{{ service_name }}.stdout.log
+        StandardError=append:/var/log/{{ service_name }}/{{ service_name }}.stderr.log
+        Restart=on-failure
+        RestartSec=30s
+        ExecReload=/bin/kill -HUP $MAINPID
+        User={{ service_user }}
+        WorkingDirectory={{ working_directory }}
+
+        [Install]
+        WantedBy=multi-user.target
+      owner: root
+      group: root
+      mode: '0644'
+    notify: Reload systemd
+
+  - name: Create logrotate configuration
+    copy:
+      dest: "/etc/logrotate.d/{{ service_name }}"
+      content: |
+        /var/log/{{ service_name }}/*.log {
+          daily
+          rotate 7
+          compress
+          delaycompress
+          missingok
+          notifempty
+          create 0640 {{ service_user }} {{ service_user }}
+        }
+      owner: root
+      group: root
+      mode: '0644'
+
+
+  handlers:
+  - name: Reload systemd
+    listen: Reload systemd
+    systemd:
+      daemon_reload: yes
+  post_tasks:
+  - name: Enable and start the service conditionally
+    systemd:
+      name: "{{ service_name }}.service"
+      enabled: yes
+      state: started
+    when: activate
