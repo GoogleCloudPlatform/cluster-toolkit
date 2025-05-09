@@ -17,7 +17,7 @@
 # This script executes all *.sh scripts found in /slurm/custom_scripts/task_prolog.d/
 #
 # slurm.conf configuration:
-# TaskProlog=/slurm/custom_scripts/task_prolog.d/main_task_prolog
+# TaskProlog=/slurm/custom_scripts/task_prolog.d/main.taskprolog
 
 # Directory containing the individual task prolog scripts
 PROLOG_D_DIR="/slurm/custom_scripts/task_prolog.d"

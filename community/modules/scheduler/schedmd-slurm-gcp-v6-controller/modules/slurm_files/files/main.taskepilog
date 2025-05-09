@@ -17,7 +17,7 @@
 # This script executes all *.sh scripts found in /slurm/custom_scripts/task_epilog.d/
 #
 # slurm.conf configuration:
-# TaskEpilog=/slurm/custom_scripts/task_epilog.d/main_task_epilog
+# TaskEpilog=/slurm/custom_scripts/task_epilog.d/main.taskepilog
 
 # Directory containing the individual task epilog scripts
 EPILOG_D_DIR="/slurm/custom_scripts/task_epilog.d"

@@ -295,11 +295,11 @@ data "local_file" "setup_external" {
 }
 
 data "local_file" "main_task_prolog" {
-  filename = "${path.module}/files/main_task_prolog"
+  filename = "${path.module}/files/main.taskprolog"
 }
 
 data "local_file" "main_task_epilog" {
-  filename = "${path.module}/files/main_task_epilog"
+  filename = "${path.module}/files/main.taskepilog"
 }
 
 locals {
@@ -327,7 +327,7 @@ locals {
   ext_prolog     = var.enable_external_prolog_epilog ? local.external_prolog : []
   prolog_scripts = concat(local.chs_prolog, local.ext_prolog, var.prolog_scripts)
   task_prolog_scripts = length(var.task_prolog_scripts) > 0 ? concat(var.task_prolog_scripts, [{
-    filename = "main_task_prolog"
+    filename = "main.taskprolog"
     content  = data.local_file.main_task_prolog.content
     source   = null
   }]) : var.task_prolog_scripts
@@ -336,7 +336,7 @@ locals {
   ext_epilog     = var.enable_external_prolog_epilog ? local.external_epilog : []
   epilog_scripts = concat(local.chs_epilog, local.ext_epilog, var.epilog_scripts)
   task_epilog_scripts = length(var.task_epilog_scripts) > 0 ? concat(var.task_epilog_scripts, [{
-    filename = "main_task_epilog"
+    filename = "main.taskepilog"
     content  = data.local_file.main_task_epilog.content
     source   = null
   }]) : var.task_epilog_scripts
