@@ -21,7 +21,7 @@ import logging
 import re
 import sys
 import shlex
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from itertools import chain
 from pathlib import Path
 from dataclasses import dataclass
@@ -41,12 +41,12 @@ from util import (
     NodeState,
     chunked,
     dirs,
-    parse_gcp_timestamp,
 )
 from util import lookup
 from suspend import delete_instances
 import tpu
 import conf
+import watch_delete_vm_op
 
 log = logging.getLogger()
 
@@ -586,6 +586,14 @@ def sync_opportunistic_maintenance(lkp: util.Lookup) -> None:
 def sync_flex_migs(lkp: util.Lookup) -> None:
     pass
 
+
+def process_messages(lkp: util.Lookup) -> None:
+    try:
+        watch_delete_vm_op.watch_vm_delete_ops(lkp)
+    except:
+        log.exception("failed during watching delete VM operations")
+
+
 def main():
     try:
         reconfigure_slurm()
@@ -594,6 +602,11 @@ def main():
 
     lkp = lookup()
     if lkp.is_controller:
+        try:
+            process_messages(lkp)
+        except:
+            log.exception("failed to process messages")
+
         try:
             sync_instances()
         except Exception:
