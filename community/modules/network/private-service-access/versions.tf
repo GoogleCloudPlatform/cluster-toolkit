@@ -30,11 +30,11 @@ terraform {
     }
   }
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:private-service-access/v1.50.0"
+    module_name = "blueprints/terraform/hpc-toolkit:private-service-access/v1.51.00"
   }
 
   provider_meta "google-beta" {
-    module_name = "blueprints/terraform/hpc-toolkit:private-service-access/v1.50.0"
+    module_name = "blueprints/terraform/hpc-toolkit:private-service-access/v1.51.00"
   }
 
   required_version = ">= 1.2"
