@@ -25,6 +25,8 @@ spec:
       k8s-app: nccl-rdma-installer
   updateStrategy:
     type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 16
   template:
     metadata:
       labels:
@@ -34,13 +36,7 @@ spec:
       priorityClassName: system-node-critical
       affinity:
         nodeAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            nodeSelectorTerms:
-            - matchExpressions:
-              - key: cloud.google.com/gke-accelerator
-                operator: In
-                values:
-                - nvidia-h200-141gb
+          ${indent(10, yamlencode(node_affinity))}
       tolerations:
       - operator: "Exists"
       hostNetwork: true
@@ -62,15 +58,10 @@ spec:
         args:
         - -c
         - |
-          sysctl -w net.ipv4.conf.gpu0rdma0.log_martians=0
-          sysctl -w net.ipv4.conf.gpu1rdma0.log_martians=0
-          sysctl -w net.ipv4.conf.gpu2rdma0.log_martians=0
-          sysctl -w net.ipv4.conf.gpu3rdma0.log_martians=0
-          sysctl -w net.ipv4.conf.gpu4rdma0.log_martians=0
-          sysctl -w net.ipv4.conf.gpu5rdma0.log_martians=0
-          sysctl -w net.ipv4.conf.gpu6rdma0.log_martians=0
-          sysctl -w net.ipv4.conf.gpu7rdma0.log_martians=0
-      - image: us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib:v1.0.5
+          %{~ for i in range(accelerator_count) ~}
+          sysctl -w net.ipv4.conf.gpu${i}rdma0.log_martians=0
+          %{~ endfor ~}
+      - image: ${image}:${version}
         name: nccl-rdma-installer
         resources:
           requests:
