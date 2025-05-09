@@ -34,6 +34,8 @@ vars:
   static_node_count: # add this
   system_node_pool_disk_size_gb: 200
   a3ultra_node_pool_disk_size_gb: 100
+  accelerator_type: nvidia-h200-141gb
+  version_prefix: "1.31."
 
 deployment_groups:
 - group: primary
@@ -167,7 +169,7 @@ deployment_groups:
         ))
       # Cluster versions cannot be updated through the toolkit after creation
       # Please manage cluster version from the Google Cloud Console directly
-      version_prefix: "1.31."
+      version_prefix: $(vars.version_prefix)
       release_channel: RAPID
       maintenance_exclusions:
       - name: no-minor-or-node-upgrades-indefinite
@@ -186,7 +188,7 @@ deployment_groups:
       disk_size_gb: $(vars.a3ultra_node_pool_disk_size_gb)
       static_node_count: $(vars.static_node_count)
       guest_accelerator:
-      - type: nvidia-h200-141gb
+      - type: $(vars.accelerator_type)
         count: 8
       reservation_affinity:
         consume_reservation_type: SPECIFIC_RESERVATION
@@ -219,7 +221,7 @@ deployment_groups:
         config_path: $(vars.kueue_configuration_path)
         config_template_vars:
           num_gpus: $(a3-ultragpu-pool.static_gpu_count)
-          node_pool_name: $(a3-ultragpu-pool.node_pool_names[0])
+          accelerator_type: $(vars.accelerator_type)
       jobset:
         install: true
       apply_manifests:

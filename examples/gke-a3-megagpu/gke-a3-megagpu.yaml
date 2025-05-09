@@ -47,6 +47,9 @@ vars:
   # <project>/<reservation-name>/reservationBlocks/<reservation-block-name>
   extended_reservation:
 
+  accelerator_type: nvidia-h100-mega-80gb
+  version_prefix: "1.32."
+
 deployment_groups:
 - group: primary
   modules:
@@ -111,6 +114,7 @@ deployment_groups:
       k8s_network_names:
         gvnic_prefix: vpc
         gvnic_start_index: 1
+      version_prefix: $(vars.version_prefix)
     outputs: [instructions]
 
   - id: a3_megagpu_pool
@@ -120,6 +124,9 @@ deployment_groups:
       machine_type: a3-megagpu-8g
       static_node_count: $(vars.static_node_count)
       zones: [$(vars.zone)]
+      guest_accelerator:
+      - type: $(vars.accelerator_type)
+        count: 8
       reservation_affinity:
         consume_reservation_type: SPECIFIC_RESERVATION
         specific_reservations:
@@ -135,6 +142,6 @@ deployment_groups:
         config_path: $(vars.kueue_configuration_path)
         config_template_vars:
           num_gpus: $(a3_megagpu_pool.static_gpu_count)
-          node_pool_name: $(a3_megagpu_pool.node_pool_names[0])
+          accelerator_type: $(vars.accelerator_type)
       jobset:
         install: true

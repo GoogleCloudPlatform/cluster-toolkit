@@ -86,7 +86,6 @@ deployment_groups:
             "install_ompi": true,
             "monitoring_agent": "cloud-ops",
             "nvidia_version": "latest",
-            "slurm_version": "23.11.8",
             "install_nvidia_repo": false
           }
       - type: shell

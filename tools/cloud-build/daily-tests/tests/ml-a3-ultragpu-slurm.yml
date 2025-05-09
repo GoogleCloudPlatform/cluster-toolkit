@@ -24,14 +24,18 @@ login_node: "{{ slurm_cluster_name }}-slurm-login-*"
 controller_node: "{{ slurm_cluster_name }}-controller"
 region: europe-west1
 zone: europe-west1-b
-network: "{{ deployment_name }}-net-0"
+network: "{{ test_name }}-net-0"
 post_deploy_tests:
 - test-validation/test-mounts.yml
 - test-validation/test-partitions.yml
 - test-validation/test-enroot.yml
+- test-validation/test-gpus-slurm.yml
 post_destroy_tasks:
 - post-destroy-tasks/delete-image.yml
 custom_vars:
+  gpu_count: 8
+  gpu_partition: a3ultra
+  test_persistenced: true
   partitions:
   - a3ultra
   mounts:
@@ -43,3 +47,4 @@ cli_deployment_vars:
   disk_size_gb: 200
   a3u_cluster_size: 2
   a3u_reservation_name: hpc-exr-2
+  base_network_name: "{{ test_name }}"

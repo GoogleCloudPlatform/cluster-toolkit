@@ -24,13 +24,15 @@ vars:
   deployment_name: parallelstore-vm
   region: us-central1
   zone: us-central1-a
+  base_network_name: $(vars.deployment_name)
 
 deployment_groups:
 - group: primary
   modules:
   - id: network
     source: modules/network/vpc
-
+    settings:
+      network_name: $(vars.base_network_name)-net
   # Private Service Access (PSA) requires the compute.networkAdmin role which is
   # included in the Owner role, but not Editor.
   # PSA is required for all Parallelstore functionality.

@@ -23,6 +23,11 @@ tags:
 
 timeout: 14400s  # 4hr
 steps:
+# While using static network names we are gaurding against more than 1 instance running at a time (for multi-group tests)
+- id: check_for_running_build
+  name: gcr.io/cloud-builders/gcloud
+  script: "tools/cloud-build/check_running_build.sh tools/cloud-build/daily-tests/builds/h4d-vm.yaml"
+
 - id: h4d-vm
   name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
   entrypoint: /bin/bash
@@ -36,8 +41,8 @@ steps:
     cd /workspace && make
     BUILD_ID_FULL=$BUILD_ID
     BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
-    REGION=europe-west4
-    ZONE=europe-west4-b
+    REGION=us-central1
+    ZONE=us-central1-a
     BLUEPRINT="/workspace/examples/h4d-vm.yaml"
     sed -i -e '/deletion_protection:/{n;s/enabled: true/enabled: false/}' $${BLUEPRINT}
     sed -i -e '/reason:/d' $${BLUEPRINT}

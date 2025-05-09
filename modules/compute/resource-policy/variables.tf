@@ -38,3 +38,18 @@ variable "group_placement_max_distance" {
   type    = number
   default = 0
 }
+
+variable "workload_policy" {
+  description = "Describes the workload policy"
+  type = object({
+    type                  = optional(string, null)
+    max_topology_distance = optional(string, null)
+    accelerator_topology  = optional(string, null)
+  })
+  default = {
+    type                  = null
+    max_topology_distance = null
+    accelerator_topology  = null
+  }
+  nullable = false
+}
