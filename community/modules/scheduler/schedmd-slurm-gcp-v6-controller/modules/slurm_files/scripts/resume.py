@@ -15,7 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Any
 import argparse
 from datetime import timedelta
 import shlex
@@ -33,7 +33,6 @@ from util import (
     chunked,
     ensure_execute,
     execute_with_futures,
-    get_insert_operations,
     log_api_request,
     map_with_futures,
     run,
@@ -375,6 +374,40 @@ def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
         _handle_bulk_insert_op(op, grouped_nodes[group].nodes, resume_data)
         
 
+def _get_failed_zonal_instance_inserts(bulk_op: Any, zone: str, lkp: util.Lookup) -> list[Any]:
+    group_id = bulk_op["operationGroupId"]
+    user = bulk_op["user"]
+    started = bulk_op["startTime"]
+    ended = bulk_op["endTime"]
+   
+    fltr = f'(user eq "{user}") AND (operationType eq "insert") AND (creationTimestamp > "{started}") AND (creationTimestamp < "{ended}")'
+    act = lkp.compute.zoneOperations()
+    req = act.list(project=lkp.project, zone=zone, filter=fltr)
+    ops = []
+    while req is not None:
+        result = util.ensure_execute(req)
+        for op in result.get("items", []):
+            if op.get("operationGroupId") == group_id and "error" in op:
+                ops.append(op)
+        req = act.list_next(req, result)
+    return ops
+
+
+def _get_failed_instance_inserts(bulk_op: Any, lkp: util.Lookup) -> list[Any]:
+    zones = set() # gather zones that had failed inserts
+    for loc, stat in bulk_op.get("instancesBulkInsertOperationMetadata", {}).get("perLocationStatus", {}).items():
+        pref, zone = loc.split("/", 1)
+        if not pref == "zones":
+            log.error(f"Unexpected location: {loc} in operation {bulk_op['name']}")
+            continue
+        if stat.get("targetVmCount", 0) !=  stat.get("createdVmCount", 0):
+            zones.add(zone)
+    
+    res = []
+    for zone in zones:
+        res.extend(_get_failed_zonal_instance_inserts(bulk_op, zone, lkp))
+    return res
+
 def _handle_bulk_insert_op(op: Dict, nodes: List[str], resume_data: Optional[ResumeData]) -> None:
     """
     Handles **DONE** BulkInsert operations
@@ -384,10 +417,9 @@ def _handle_bulk_insert_op(op: Dict, nodes: List[str], resume_data: Optional[Res
     group_id = op["operationGroupId"]
     if "error" in op:
         error = op["error"]["errors"][0]
-        log.warning(
+        log.error(
             f"bulkInsert operation error: {error['code']} name={op['name']} operationGroupId={group_id} nodes={to_hostlist(nodes)}"
         )
-        # TODO: does it make sense to query for insert-ops in case of bulkInsert-op error?
     
     created = 0
     for status in op["instancesBulkInsertOperationMetadata"]["perLocationStatus"].values():
@@ -396,18 +428,13 @@ def _handle_bulk_insert_op(op: Dict, nodes: List[str], resume_data: Optional[Res
         log.info(f"created {len(nodes)} instances: nodes={to_hostlist(nodes)}")
         return # no need to gather status of insert-operations.
 
-    # TODO:
-    # * don't perform globalOperations aggregateList request to gather insert-operations,
-    #   instead use specific locations from `instancesBulkInsertOperationMetadata`,
-    #   most of the time single zone should be sufficient.
-    # * don't gather insert-operations per bulkInsert request, instead aggregate it across
-    #   all bulkInserts (goes one level above this function) 
-    successful_inserts, failed_inserts = separate(
-        lambda op: "error" in op, get_insert_operations(group_id)
-    )
-    # Apparently multiple errors are possible... so join with +.
+    # TODO: don't gather insert-operations per bulkInsert request, instead aggregate it
+    #  across all bulkInserts (goes one level above this function) 
+    failed = _get_failed_instance_inserts(op, util.lookup())
+    
+    # Multiple errors are possible, group by all of them (joined string codes)
     by_error_inserts = util.groupby_unsorted(
-        failed_inserts,
+        failed,
         lambda op: "+".join(err["code"] for err in op["error"]["errors"]),
     )
     for code, failed_ops in by_error_inserts:
@@ -427,10 +454,6 @@ def _handle_bulk_insert_op(op: Dict, nodes: List[str], resume_data: Optional[Res
         log.error(
             f"errors from insert for node '{failed_nodes[0]}' ({failed_ops[0]['name']}): {msg}"
         )
-
-    ready_nodes = {trim_self_link(op["targetLink"]) for op in successful_inserts}
-    if len(ready_nodes) > 0:
-        log.info(f"created {len(ready_nodes)} instances: nodes={to_hostlist(ready_nodes)}")
 
 
 def down_nodes_notify_jobs(nodes: List[str], reason: str, resume_data: Optional[ResumeData]) -> None:
