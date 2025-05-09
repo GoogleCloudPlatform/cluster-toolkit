@@ -30,7 +30,7 @@ terraform {
     }
   }
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:startup-script/v1.50.0"
+    module_name = "blueprints/terraform/hpc-toolkit:startup-script/v1.51.00"
   }
 
   required_version = ">= 1.5"
