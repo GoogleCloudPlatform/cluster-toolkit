@@ -46,9 +46,6 @@ if [[ ! -d "$PROLOG_D_DIR" ]]; then
   exit 1
 fi
 
-# Array to store executed scripts
-EXECUTED_SCRIPTS=()
-
 # Find and execute all *.sh scripts in the directory
 # Scripts will be executed in reverse alphabetical order of their filenames.
 find "$PROLOG_D_DIR" -maxdepth 1 -type f -name "*.sh" -print0 | sort -rz | while IFS= read -r -d $'\0' script; do
@@ -60,7 +57,6 @@ find "$PROLOG_D_DIR" -maxdepth 1 -type f -name "*.sh" -print0 | sort -rz | while
     # Its stderr will also be passed through.
     # If a sub-script exits with an error, 'set -e' will cause this wrapper to exit.
     "$script"
-    EXECUTED_SCRIPTS+=("$script")
   else
     # Log a warning in task stdout if a *.sh file is found but is not executable
     echo "print TaskProlog Warning: Script '$script' is not executable and will be skipped."
@@ -68,7 +64,7 @@ find "$PROLOG_D_DIR" -maxdepth 1 -type f -name "*.sh" -print0 | sort -rz | while
 done
 
 # Check if any scripts were found and executed
-if [[ ${#EXECUTED_SCRIPTS[@]} -eq 0 ]]; then
+if [[ $(find "$PROLOG_D_DIR" -maxdepth 1 -type f -name "*.sh" | wc -l) -eq 0 ]]; then
   # Log in task stdout if no scripts were found to execute
   echo "print TaskProlog Info: No executable *.sh scripts found in $PROLOG_D_DIR."
 fi
