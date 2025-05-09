@@ -47,9 +47,6 @@ fi
 # Scripts will be executed in reverse alphabetical order of their filenames.
 find "$EPILOG_D_DIR" -maxdepth 1 -type f -name "*.sh" -print0 | sort -rz | while IFS= read -r -d $'\0' script; do
   if [[ -x "$script" ]]; then
-    # Log which script is being executed (to this script's stderr, not task stdout)
-    echo "Executing TaskEpilog script: $script" >&2
-
     # Execute the script. Its stdout will be captured by this wrapper.
     # Its stderr will also be passed through.
     # If a sub-script exits with an error, 'set -e' will cause this wrapper to exit.
