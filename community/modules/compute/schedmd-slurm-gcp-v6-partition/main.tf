@@ -25,10 +25,9 @@ locals {
 locals {
   partition_conf = merge({
     "Default"        = var.is_default ? "YES" : null
-    "ResumeTimeout"  = var.resume_timeout != null ? var.resume_timeout : (local.has_tpu ? 600 : (local.has_flex ? 65535 : 300))
     "SuspendTime"    = var.suspend_time < 0 ? "INFINITE" : var.suspend_time
     "SuspendTimeout" = var.suspend_timeout != null ? var.suspend_timeout : (local.has_tpu ? 240 : 120)
-  }, var.partition_conf)
+  }, var.partition_conf, { "ResumeTimeout" = local.has_flex ? 65535 : try(var.partition_conf["ResumeTimeout"], coalesce(var.resume_timeout, (local.has_tpu ? 600 : 300))) })
 
   partition = {
     partition_name = var.partition_name
