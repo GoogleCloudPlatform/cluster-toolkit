@@ -345,4 +345,3 @@ def list_nodes(parent):
     except gExceptions.NotFound:
         res = None
     return res
-

@@ -20,6 +20,11 @@
 locals {
   name = substr(replace(var.name, "/[^a-z0-9]/", ""), 0, 14)
 
+  ghpc_startup_script = [{
+    filename = "ghpc_nodeset_startup.sh"
+    content  = var.startup_script
+  }]
+
   service_account = {
     email  = var.service_account_email
     scopes = var.service_account_scopes
@@ -48,6 +53,7 @@ locals {
     project_id      = var.project_id
     reserved        = var.reserved
     network_storage = var.network_storage
+    startup_script  = local.ghpc_startup_script
   }
 
   node_type_core_count = var.node_type == "" ? 0 : tonumber(regex("-(.*)", var.node_type)[0])

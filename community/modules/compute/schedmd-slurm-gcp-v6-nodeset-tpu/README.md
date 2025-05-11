@@ -175,7 +175,7 @@ python torchprime/torch_xla_models/train.py \
 Before submitting the job you need to login into Hugging Face:
 
 ```bash
-
+./venv/bin/huggingface-cli login
 ```
 
 Then submit the job using:
@@ -232,6 +232,7 @@ No resources.
 | <a name="input_service_account"></a> [service\_account](#input\_service\_account) | DEPRECATED: Use `service_account_email` and `service_account_scopes` instead. | <pre>object({<br/>    email  = string<br/>    scopes = set(string)<br/>  })</pre> | `null` | no |
 | <a name="input_service_account_email"></a> [service\_account\_email](#input\_service\_account\_email) | Service account e-mail address to attach to the TPU-vm. | `string` | `null` | no |
 | <a name="input_service_account_scopes"></a> [service\_account\_scopes](#input\_service\_account\_scopes) | Scopes to attach to the TPU-vm. | `set(string)` | <pre>[<br/>  "https://www.googleapis.com/auth/cloud-platform"<br/>]</pre> | no |
+| <a name="input_startup_script"></a> [startup\_script](#input\_startup\_script) | Startup script used by VMs in this nodeset | `string` | `"# no-op"` | no |
 | <a name="input_subnetwork_self_link"></a> [subnetwork\_self\_link](#input\_subnetwork\_self\_link) | The name of the subnetwork to attach the TPU-vm of this nodeset to. | `string` | n/a | yes |
 | <a name="input_zone"></a> [zone](#input\_zone) | Zone in which to create compute VMs. TPU partitions can only specify a single zone. | `string` | n/a | yes |
 

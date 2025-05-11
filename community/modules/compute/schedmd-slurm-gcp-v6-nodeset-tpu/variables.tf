@@ -169,3 +169,9 @@ variable "network_storage" {
   }))
   default = []
 }
+
+variable "startup_script" {
+  description = "Startup script used by VMs in this nodeset"
+  type        = string
+  default     = "# no-op"
+}
