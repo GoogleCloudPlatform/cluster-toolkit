@@ -20,6 +20,11 @@ In order to make use of DWS Flex Start mode with SlurmGCP, you must use the `dws
       # the rest of the settings, e.g. node_count_static, machine_type, additional_disks, etc.
 ```
 
+**Node behavior:**
+
+* Static nodes will be re-provisioned when `max_run_duration` ends.
+* Dynamic nodes in exclusive partitions will delete instances after the job completes (even if `max_run_duration` has yet to pass).
+
 > [!WARNING]
 > DWS Flex Start cannot be used in tandem with a reservation or placement policy.
 <p>
