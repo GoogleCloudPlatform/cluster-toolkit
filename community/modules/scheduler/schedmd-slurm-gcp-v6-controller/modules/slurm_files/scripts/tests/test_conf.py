@@ -168,12 +168,11 @@ TopologyParam=yellow"""),
             install_dir="ukulele",
             task_prolog_scripts=[Placeholder()],
             task_epilog_scripts=[Placeholder()],
-            slurm_bin_dir="/usr/local/bin"
         ),
          """LaunchParameters=enable_nss_slurm,use_interactive_step
 SlurmctldParameters=cloud_dns,enable_configless,idle_on_node_suspend
-TaskProlog=/usr/local/bin/task-prolog
-TaskEpilog=/usr/local/bin/task-epilog
+TaskProlog=/slurm/custom_scripts/task_prolog.d/task-prolog
+TaskEpilog=/slurm/custom_scripts/task_epilog.d/task-epilog
 SchedulerParameters=bf_continue,salloc_wait_nodes,ignore_prefer_validation
 ResumeProgram=ukulele/resume.py
 ResumeFailProgram=ukulele/suspend.py

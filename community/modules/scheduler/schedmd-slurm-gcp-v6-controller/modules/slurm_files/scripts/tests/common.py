@@ -61,7 +61,6 @@ class TstCfg:
     nodeset_tpu: dict[str, TstNodeset] = field(default_factory=dict)
     nodeset_dyn: dict[str, TstNodeset] = field(default_factory=dict)
 
-    slurm_bin_dir: Optional[str] = None
     install_dir: Optional[str] = None
     output_dir: Optional[str] = None
 

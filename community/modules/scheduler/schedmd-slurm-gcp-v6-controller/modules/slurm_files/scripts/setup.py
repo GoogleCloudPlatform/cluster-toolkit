@@ -383,9 +383,9 @@ def configure_dirs():
     # copy auxiliary scripts
     for dst_folder, src_file in ((lookup().cfg.slurm_bin_dir,
                                   Path("sort_nodes.py")),
-                                 (dirs.custom_scripts,
+                                 (Path(dirs.custom_scripts / "task_prolog.d"),
                                   Path("tools/task-prolog")),
-                                 (dirs.custom_scripts,
+                                 (Path(dirs.custom_scripts / "task_epilog.d"),
                                   Path("tools/task-epilog"))):
         dst = Path(dst_folder / src_file.name)
         shutil.copyfile(util.scripts_dir / src_file, dst)
