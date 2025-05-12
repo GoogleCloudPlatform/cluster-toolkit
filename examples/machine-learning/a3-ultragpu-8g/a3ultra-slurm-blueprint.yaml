@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 ---
 
 blueprint_name: a3ultra-slurm
@@ -22,11 +21,10 @@ vars:
   region: # supply region
   zone: # supply zone
   a3u_cluster_size: # supply cluster size
-  a3u_reservation_name: # supply reservation name
   # Image settings
   base_image:
     project: ubuntu-os-accelerator-images
-    image: ubuntu-accelerator-2204-amd64-with-nvidia-570-v20250425
+    family: ubuntu-accelerator-2204-amd64-with-nvidia-570
   image_build_machine_type: n2-standard-16
   build_slurm_from_git_ref: 6.10.0
   # Cluster env settings
@@ -40,9 +38,14 @@ vars:
   instance_image:
     project: $(vars.project_id)
     family: $(vars.deployment_name)-u22
-  disk_size_gb: 200
+  disk_size_gb: 100
   nccl_plugin_version: v1.0.5
   base_network_name: $(vars.deployment_name)
+
+  #Provisioning models (set to true or fill in reservation name, pick only one)
+  a3u_reservation_name: "" # supply reservation name
+  a3u_dws_flex_enabled: false
+  a3u_enable_spot_vm: false
 
 deployment_groups:
 - group: image-env
@@ -58,6 +61,7 @@ deployment_groups:
       install_ansible: true
       docker:
         enabled: true
+        world_writable: true
       runners:
       - type: shell
         destination: disable_unattended_upgrades.sh
@@ -137,22 +141,6 @@ deployment_groups:
               ansible.builtin.apt:
                 deb: "{{ cuda_repo_filename }}"
                 state: present
-            # The following 3 tasks work around a temporary issue with Ubuntu
-            # packaging of NVIDIA 570 driver series for kernel 6.8.0-1028
-            - name: Unfreeze 570 driver metapackage
-              ansible.builtin.command:
-                argv:
-                - apt-mark
-                - unhold
-                - linux-modules-nvidia-570-server-open-gcp
-            - name: Remove 570 driver metapackage
-              ansible.builtin.apt:
-                name: linux-modules-nvidia-570-server-open-gcp
-                state: absent
-            - name: Install latest 570 driver for kernel
-              ansible.builtin.apt:
-                name: linux-modules-nvidia-570-server-open-6.8.0-1028-gcp
-                state: latest
             - name: Reduce NVIDIA repository priority
               ansible.builtin.copy:
                 dest: /etc/apt/preferences.d/cuda-repository-pin-600
@@ -228,6 +216,11 @@ deployment_groups:
                 name:
                 - ibverbs-utils
                 state: present
+      - type: data
+        destination: /etc/enroot/enroot.conf
+        content: |
+          ENROOT_CONFIG_PATH     ${HOME}/.enroot
+
 
 - group: image
   modules:
@@ -237,7 +230,7 @@ deployment_groups:
     settings:
       disk_size: $(vars.disk_size_gb)
       machine_type: $(vars.image_build_machine_type)
-      source_image: $(vars.base_image.image)
+      source_image_family: $(vars.base_image.family)
       source_image_project_id: [$(vars.base_image.project)]
       image_family: $(vars.instance_image.family)
       omit_external_ip: false
@@ -350,6 +343,7 @@ deployment_groups:
       - type: data
         destination: /etc/enroot/enroot.conf
         content: |
+          ENROOT_CONFIG_PATH     ${HOME}/.enroot
           ENROOT_RUNTIME_PATH    $(vars.local_ssd_mountpoint)/${UID}/enroot/runtime
           ENROOT_CACHE_PATH      $(vars.local_ssd_mountpoint)/${UID}/enroot/cache
           ENROOT_DATA_PATH       $(vars.local_ssd_mountpoint)/${UID}/enroot/data
@@ -379,6 +373,7 @@ deployment_groups:
                   ExecStartPre=/snap/bin/gcloud auth configure-docker --quiet us-docker.pkg.dev
                   ExecStart=/usr/bin/docker run --rm --name nccl-gib-installer --volume /usr/local/gib:/var/lib/gib \
                       us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib:%i install --install-nccl
+                  ExecStartPost=/usr/bin/chmod -R a+r /usr/local/gib
 
                   [Install]
                   WantedBy=slurmd.service
@@ -458,11 +453,18 @@ deployment_groups:
       enable_placement: false
       disk_type: hyperdisk-balanced
       on_host_maintenance: TERMINATE
+
+      #Provisioning models
       reservation_name: $(vars.a3u_reservation_name)
+      enable_spot_vm: $(vars.a3u_enable_spot_vm)
+      dws_flex:
+        enabled: $(vars.a3u_dws_flex_enabled)
+
       advanced_machine_features:
         threads_per_core: null # Use platform default value
       node_conf:
         CoresPerSocket: 56
+        SocketsPerBoard: 2
         ThreadsPerCore: 2
       additional_networks:
         $(concat(

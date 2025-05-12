@@ -325,6 +325,12 @@ def get_credentials() -> Optional[service_account.Credentials]:
     return credentials
 
 
+@lru_cache(maxsize=1)
+def get_dev_key() -> Optional[str]:
+    """Get dev key for project"""
+    return os.environ.get("GOOGLE_DEVELOPER_KEY")
+
+
 def create_client_options(api: ApiEndpoint) -> ClientOptions:
     """Create client options for cloud endpoints"""
     ver = endpoint_version(api)
@@ -452,15 +458,11 @@ def hash_file(fullpath: Path) -> str:
 def install_custom_scripts(check_hash=False):
     """download custom scripts from gcs bucket"""
     role, tokens = lookup().instance_role, []
-
+    all_prolog_tokens = ["prolog", "epilog", "task_prolog", "task_epilog"]
     if role == "controller":
-        tokens = ["controller", "prolog", "epilog", "task_prolog", "task_epilog"]
+        tokens = ["controller"] + all_prolog_tokens
     elif role == "compute":
-        tokens = [
-            "prolog",
-            "epilog",
-            f"nodeset-{lookup().node_nodeset_name()}"
-        ]
+        tokens = [f"nodeset-{lookup().node_nodeset_name()}"] + all_prolog_tokens
     elif role == "login":
         tokens = [f"login-{instance_login_group()}"]
 
@@ -502,6 +504,7 @@ def compute_service(version="beta"):
     creates a new Http for each request
     """
     credentials = get_credentials()
+    dev_key = get_dev_key()
 
     def build_request(http, *args, **kwargs):
         new_http = set_user_agent(httplib2.Http(), USER_AGENT)
@@ -521,6 +524,7 @@ def compute_service(version="beta"):
         version,
         requestBuilder=build_request,
         credentials=credentials,
+        developerKey=dev_key,
         discoveryServiceUrl=disc_url,
         cache_discovery=False, # See https://github.com/googleapis/google-api-python-client/issues/299
     )
@@ -2038,6 +2042,17 @@ class Lookup:
             if node in instance_collection["name"] and instance_collection["currentAction"]=="CREATING":
                 return True
         return False
+    
+    def cluster_regions(self) -> list[str]:
+        """
+        Returns all regions used in cluster
+        NOTE: only concerned with normal nodesets, 
+        neither TPU, nor dynamic, nor login node, nor controller node are considered
+        """
+        res = set()
+        for nodeset in self.cfg.nodeset.values():
+            res.add(parse_self_link(nodeset.subnetwork).region)
+        return list(res)
 
 
 

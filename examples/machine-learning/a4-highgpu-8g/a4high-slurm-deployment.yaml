@@ -26,11 +26,11 @@ vars:
   a4h_cluster_size: # supply a4-highgpu-8g reservation size
   a4h_reservation_name: # supply a4-highgpu-8g reservation name
 
-# Additional consumption options (pick only one), can be used to substitute `a4h_reservation_name`:
+# Additional provisioning models (pick only one), can be used to substitute `a4h_reservation_name`:
 #
 # a4h_dws_flex_enabled: true
 #
-# To make use of DWS Flex, for more info visit: https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/docs/slurm-dws-flex.md)
+# To make use of DWS Flex, for more info visit: https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/docs/slurm-dws-flex.md
 #
 # a4h_enable_spot_vm: true
 #

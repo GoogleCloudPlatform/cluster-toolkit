@@ -28,6 +28,7 @@ locals {
   install_jobset            = try(var.jobset.install, false)
   install_gpu_operator      = try(var.gpu_operator.install, false)
   install_nvidia_dra_driver = try(var.nvidia_dra_driver.install, false)
+  install_gib               = try(var.gib.install, false)
   kueue_install_source      = format("${path.module}/manifests/kueue-%s.yaml", try(var.kueue.version, ""))
   jobset_install_source     = format("${path.module}/manifests/jobset-%s.yaml", try(var.jobset.version, ""))
 }
@@ -41,8 +42,9 @@ data "google_container_cluster" "gke_cluster" {
 data "google_client_config" "default" {}
 
 module "kubectl_apply_manifests" {
-  for_each = local.apply_manifests_map
-  source   = "./kubectl"
+  for_each   = local.apply_manifests_map
+  source     = "./kubectl"
+  depends_on = [var.gke_cluster_exists]
 
   content           = each.value.content
   source_path       = each.value.source
@@ -60,17 +62,7 @@ module "install_kueue" {
   source            = "./kubectl"
   source_path       = local.install_kueue ? local.kueue_install_source : null
   server_side_apply = true
-
-  providers = {
-    kubectl = kubectl
-    http    = http.h
-  }
-}
-
-module "install_jobset" {
-  source            = "./kubectl"
-  source_path       = local.install_jobset ? local.jobset_install_source : null
-  server_side_apply = true
+  depends_on        = [var.gke_cluster_exists]
 
   providers = {
     kubectl = kubectl
@@ -86,6 +78,18 @@ module "configure_kueue" {
 
   server_side_apply = true
   wait_for_rollout  = true
+
+  providers = {
+    kubectl = kubectl
+    http    = http.h
+  }
+}
+
+module "install_jobset" {
+  source            = "./kubectl"
+  source_path       = local.install_jobset ? local.jobset_install_source : null
+  server_side_apply = true
+  depends_on        = [var.gke_cluster_exists, module.configure_kueue]
 
   providers = {
     kubectl = kubectl
@@ -109,16 +113,16 @@ module "install_nvidia_dra_driver" {
   # This corresponds to the -f <(cat <<EOF ... EOF) part
   values_yaml = [<<EOF
       nvidiaDriverRoot: /home/kubernetes/bin/nvidia
-      nvidiaCtkPath: /home/kubernetes/bin/nvidia/toolkit/nvidia-ctk
+      nvidiaCtkPath: /home/kubernetes/bin/nvidia/nvidia-ctk
       resources:
         gpus:
           enabled: false
 
       controller:
         affinity:
-          nodeAffinity:
-            requiredDuringSchedulingIgnoredDuringExecution:
-              nodeSelectorTerms:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
                 - matchExpressions:
                   - key: "nvidia.com/gpu"
                     operator: "DoesNotExist"
@@ -129,20 +133,15 @@ module "install_nvidia_dra_driver" {
             requiredDuringSchedulingIgnoredDuringExecution:
               nodeSelectorTerms:
                 - matchExpressions:
-                    - key: feature.node.kubernetes.io/pci-10de.present
+                    - key: cloud.google.com/gke-accelerator
                       operator: In
                       values:
-                        - "true"
-                - matchExpressions:
-                    - key: feature.node.kubernetes.io/cpu-model.vendor_id
+                        - nvidia-gb200
+                    - key: kubernetes.io/arch
                       operator: In
                       values:
-                        - "ARM"
-                - matchExpressions:
-                    - key: "nvidia.com/gpu.present"
-                      operator: In
-                      values:
-                        - "true"
+                        - arm64
+
         tolerations:
           - key: nvidia.com/gpu
             operator: Equal
@@ -152,6 +151,7 @@ module "install_nvidia_dra_driver" {
             operator: Equal 
             value: arm64 
             effect: NoSchedule
+
       EOF
   ]
 
@@ -221,4 +221,16 @@ module "install_gpu_operator" {
   atomic          = true
   cleanup_on_fail = true
 
+}
+
+module "install_gib" {
+  source            = "./kubectl"
+  source_path       = local.install_gib ? var.gib.path : null
+  server_side_apply = true
+  template_vars     = var.gib.template_vars
+
+  providers = {
+    kubectl = kubectl
+    http    = http.h
+  }
 }

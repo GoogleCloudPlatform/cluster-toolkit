@@ -108,3 +108,18 @@ variable "gke_support_enabled" {
   nullable    = false
   default     = false
 }
+
+variable "import_gcs_bucket_uri" {
+  description = <<-EOT
+    The name of the GCS bucket to import data from to managed lustre. Data will
+    be imported to the local_mount directory. Changing this value will not
+    trigger a redeployment, to prevent data deletion.
+    EOT
+  type        = string
+  default     = null
+
+  validation {
+    condition     = startswith(coalesce(var.import_gcs_bucket_uri, "gs://"), "gs://")
+    error_message = "The GCS bucket uri must start with 'gs://'"
+  }
+}
