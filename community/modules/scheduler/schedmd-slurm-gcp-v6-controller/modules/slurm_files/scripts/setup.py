@@ -380,9 +380,16 @@ def configure_dirs():
             sl.unlink()
         sl.symlink_to(tgt)
 
-    for f in ("sort_nodes.py",): # copy auxiliary scripts
-        dst = Path(lookup().cfg.slurm_bin_dir) / f
-        shutil.copyfile(util.scripts_dir / f, dst)
+    # copy auxiliary scripts
+    for dst_folder, src_file in ((lookup().cfg.slurm_bin_dir,
+                                  Path("sort_nodes.py")),
+                                 (dirs.custom_scripts / "task_prolog.d",
+                                  Path("tools/task-prolog")),
+                                 (dirs.custom_scripts / "task_epilog.d",
+                                  Path("tools/task-epilog"))):
+        dst = Path(dst_folder / src_file.name)
+        util.mkdirp(dst.parent)
+        shutil.copyfile(util.scripts_dir / src_file, dst)
         os.chmod(dst, 0o755)
 
 
