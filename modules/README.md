@@ -99,8 +99,7 @@ Modules that are still in development and less stable are labeled with the
   [managed-lustred](https://cloud.google.com/managed-lustre) file system.
 * **[DDN-EXAScaler]** ![community-badge] ![deprecated-badge] : Creates
   a [DDN EXAscaler lustre](https://www.ddn.com/partners/google-cloud-platform/)
-  file system. This module has
-  [license costs](https://console.developers.google.com/marketplace/product/ddnstorage/exascaler-cloud).
+  file system. This module is deprecated and will be removed in a future release. Consider migrating to managed-lustre.
 * **[cloud-storage-bucket]** ![community-badge] ![experimental-badge] : Creates
   a Google Cloud Storage (GCS) bucket.
 * **[gke-persistent-volume]** ![core-badge] ![experimental-badge] : Creates
