@@ -70,6 +70,11 @@ output "nodeset" {
   }
 
   precondition {
+    condition     = !var.enable_spot_vm || !var.dws_flex.enabled
+    error_message = "Cannot use both Flex-Start and Spot VMs for provisioning."
+  }
+
+  precondition {
     condition     = var.reservation_name == "" || var.future_reservation == ""
     error_message = "Cannot use reservations and future reservations in the same nodeset"
   }
