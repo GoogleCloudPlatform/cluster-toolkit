@@ -955,7 +955,7 @@ GROMACS with GPUs and CPUs on Google Cloud. For full documentation, refer
 [document].
 
 [document]: ../docs/videos/healthcare-and-life-sciences/README.md
-[hcls-blueprint.yaml]:  ../example/hcls-blueprint.yaml
+[hcls-blueprint.yaml]:  ../examples/hcls-blueprint.yaml
 
 ### [hpc-gke.yaml] ![core-badge]
 
@@ -995,7 +995,7 @@ Toolkit. It includes:
 
   Users only need to provide machine type for standard ["a2", "a3" and "g2"] machine families,
   while the other settings like `type`, `count` , `gpu_driver_installation_config` will default to
-  machine family specific values. More on this [gke-node-pool](../community/modules/compute/gke-node-pool/README.md#gpus-examples)
+  machine family specific values. More on this [gke-node-pool](../modules/compute/gke-node-pool/README.md#gpus-examples)
 
 ```yaml
 machine_type: n1-standard-1
@@ -1252,7 +1252,7 @@ See the [full tutorial here](../docs/tutorials/fsi-montecarlo-on-batch/README.md
 This blueprint provisions an HPC cluster running Slurm for use with a Simcenter StarCCM+
 tutorial.
 
-> The main tutorial is described on the [Cluster Toolkit website](https://cloud.google.com/cluster-toolkit/docs/simcenter-starccm-slurm/run-workload).
+> The main tutorial is described on the [Cluster Toolkit website](https://cloud.google.com/cluster-toolkit/docs/simcenter-star-ccm/run-workload).
 
 [tutorial-starccm-slurm.yaml]: ../community/examples/tutorial-starccm-slurm.yaml
 
@@ -1322,7 +1322,7 @@ deployment_groups:
 
 ### [gke-tpu-v6] ![community-badge] ![experimental-badge]
 
-This example shows how TPU v6 cluster can be created and be used to run a job that requires TPU capacity on GKE. Additional information on TPU blueprint and associated changes are in this [README](/community/examples/gke-tpu-v6/README.md).
+This example shows how TPU v6 cluster can be created and be used to run a job that requires TPU capacity on GKE. Additional information on TPU blueprint and associated changes are in this [README](../community/examples/gke-tpu-v6/README.md).
 
 [gke-tpu-v6]: ../community/examples/gke-tpu-v6
 
