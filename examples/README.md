@@ -66,7 +66,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [Top Level Parameters](#top-level-parameters)
   * [Deployment Variables](#deployment-variables)
   * [Deployment Groups](#deployment-groups)
-* [Variables and expressions](#variables-and-expressions)
+* [Variables, expressions, and functions](#variables-expressions-and-functions)
 
 ## Instructions
 
@@ -1487,9 +1487,9 @@ vars:
 
 Deployment variables are set under the vars field at the top level of the
 blueprint file. These variables can be explicitly referenced in modules as
-[Blueprint Variables](#blueprint-variables). Any module setting (inputs) not
-explicitly provided and matching exactly a deployment variable name will
-automatically be set to these values.
+[Blueprint Variables](#variables-expressions-and-functions). Any module
+setting (inputs) not explicitly provided and matching exactly a deployment
+variable name will automatically be set to these values.
 
 Deployment variables should be used with care. Module default settings with the
 same name as a deployment variable and not explicitly set will be overwritten by
@@ -1550,7 +1550,7 @@ default in the [modules](../modules/README.md) folder.
 To learn more about how to refer to a module in a blueprint file, please consult the
 [modules README file.](../modules/README.md)
 
-## Variables, expressions and functions
+## Variables, expressions, and functions
 
 Variables can be used to refer both to values defined elsewhere in the blueprint
 and to the output and structure of other modules.
