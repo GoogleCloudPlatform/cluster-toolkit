@@ -92,7 +92,7 @@ variable "on_host_maintenance" {
 variable "region" {
   type        = string
   description = "Region where the instance template should be created."
-  default     = null
+  nullable    = false
 }
 
 variable "advanced_machine_features" {

@@ -56,6 +56,7 @@ module "slurm_nodeset_template" {
   name_prefix                = each.value.nodeset_name
   on_host_maintenance        = each.value.on_host_maintenance
   preemptible                = each.value.preemptible
+  region                     = each.value.region
   resource_manager_tags      = each.value.resource_manager_tags
   spot                       = each.value.spot
   termination_action         = each.value.termination_action
