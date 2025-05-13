@@ -1203,7 +1203,6 @@ If you see an error saying: `local-exec provisioner error` or `This environment 
 ### [gke-consumption-options] ![core-badge]
 
 This folder holds multiple GKE blueprint examples that display different consumption options on GKE.
-* [DWS Calendar](../examples/gke-consumption-options/dws-calendar)
 * [DWS Flex Start](../examples/gke-consumption-options/dws-flex-start)
 * [DWS Flex Start with Queued Provisioning](../examples/gke-consumption-options/dws-flex-start-queued-provisioning)
 
