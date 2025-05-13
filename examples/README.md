@@ -132,8 +132,8 @@ subcommands as well:
 > in both the blueprint and CLI, the tool uses values at CLI. "gcs" is set as
 > type by default.
 
-[terraform backends]: https://developer.hashicorp.com/terraform/language/settings/backends/configuration
-[configuration block]: https://developer.hashicorp.com/terraform/language/settings/backends/configuration#using-a-backend-block
+[terraform backends]: https://developer.hashicorp.com/terraform/language/backend
+[configuration block]: https://developer.hashicorp.com/terraform/language/backend#define-a-backend-block
 [gcs]: https://developer.hashicorp.com/terraform/language/settings/backends/gcs
 
 ## Blueprint Descriptions
