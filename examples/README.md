@@ -1235,7 +1235,7 @@ For more information see:
 
 ### [fsi-montecarlo-on-batch.yaml](../community/examples/fsi-montecarlo-on-batch.yaml) ![community-badge] ![experimental-badge]
 
-## Monte Carlo Simulations for Value at Risk
+#### Monte Carlo Simulations for Value at Risk
 
 This blueprint will take you through a tutorial on an FSI Value at Risk calculation using Cloud tools:
 
