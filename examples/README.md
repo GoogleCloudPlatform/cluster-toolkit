@@ -315,14 +315,14 @@ For more resources on static compute nodes see the following cloud docs pages:
 
 * [About [Slurm] node types](https://cloud.google.com/cluster-toolkit/docs/slurm/node-types)
 * [Best practices for static compute nodes]
-* [Reconfigure a running cluster](http://cloud/cluster-toolkit/docs/slurm/reconfigure-cluster)
-* [Manage static compute nodes](http://cloud/cluster-toolkit/docs/slurm/manage-static-nodes)
+* [Reconfigure a running cluster](https://cloud.google.com/cluster-toolkit/docs/slurm/reconfigure-cluster)
+* [Manage static compute nodes](https://cloud.google.com/cluster-toolkit/docs/slurm/manage-static-nodes)
 
 For a similar, more advanced, example which demonstrates static node
 functionality with GPUs, see the
 [ML Slurm A3 example](./machine-learning/README.md).
 
-[Best practices for static compute nodes]: http://cloud/cluster-toolkit/docs/slurm/static-nodes-best-practices
+[Best practices for static compute nodes]: https://cloud.google.com/cluster-toolkit/docs/slurm/static-nodes-best-practices
 [hpc-slurm-static.yaml]: ./hpc-slurm-static.yaml
 
 ### [hpc-slurm6-tpu.yaml] ![community-badge] ![experimental-badge]
