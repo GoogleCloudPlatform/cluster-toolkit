@@ -181,22 +181,24 @@ class MachineType:
 
 @dataclass(frozen=True)
 class UpcomingMaintenance:
-    window_start_time: datetime
+    type: str
+    window_start_time: Optional[datetime]
 
     @classmethod
     def from_json(cls, jo: Optional[dict]) -> Optional["UpcomingMaintenance"]:
         if jo is None:
             return None
         try:
+            type = jo["type"]
             if "windowStartTime" in jo:
                 ts = parse_gcp_timestamp(jo["windowStartTime"])
             elif "startTimeWindow" in jo:
                 ts = parse_gcp_timestamp(jo["startTimeWindow"]["earliest"])
             else:
-                raise Exception("Neither windowStartTime nor startTimeWindow are found")
+                ts = None
         except BaseException as e:
             raise ValueError(f"Unexpected format for upcomingMaintenance: {jo}") from e
-        return cls(window_start_time=ts)
+        return cls(type=type, window_start_time=ts)
 
 @dataclass(frozen=True)
 class InstanceResourceStatus:

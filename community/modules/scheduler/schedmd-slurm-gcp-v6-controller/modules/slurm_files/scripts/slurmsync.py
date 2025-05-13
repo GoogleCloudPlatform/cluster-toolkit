@@ -477,8 +477,17 @@ def get_upcoming_maintenance(lkp: util.Lookup) -> Dict[str, Tuple[str, datetime]
     upc_maint_map = {}
 
     for node, inst in lkp.instances().items():
-        if inst.resource_status.upcoming_maintenance:
-          upc_maint_map[node + "_maintenance"] = (node, inst.resource_status.upcoming_maintenance.window_start_time)
+        um = inst.resource_status.upcoming_maintenance
+        if not um:
+            continue
+        if um.type != "SCHEDULED":
+            log.warning(f"Maintenance event: can not handle non-scheduled maintenance of type {um.type} for node {node=}, skipping")
+            continue
+        if not um.window_start_time:
+            log.error(f"Maintenance event: {node=} upcoming scheduled maintenance doesn't have start time, skipping")
+            continue
+        
+        upc_maint_map[node + "_maintenance"] = (node, um.window_start_time)
 
     return upc_maint_map
 
