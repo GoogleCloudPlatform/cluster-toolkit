@@ -28,7 +28,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [serverless-batch.yaml](#serverless-batchyaml-) ![core-badge]
   * [serverless-batch-mpi.yaml](#serverless-batch-mpiyaml-) ![core-badge]
   * [pfs-lustre.yaml](#pfs-lustreyaml--) ![core-badge] ![deprecated-badge]
-  * [pfs-managed-lustre-vms.yaml](#pfs-managed-lustre-vmsyaml-) ![core-badge]
+  * [pfs-managed-lustre-vm.yaml](#pfs-managed-lustre-vmyaml-) ![core-badge]
   * [ps-slurm.yaml](#ps-slurmyaml--) ![core-badge] ![experimental-badge]
   * [pfs-parallelstore.yaml](#pfs-parallelstoreyaml--) ![core-badge] ![experimental-badge]
   * [cae-slurm.yaml](#cae-slurmyaml-) ![core-badge]
@@ -628,7 +628,7 @@ For this example the following is needed in the selected region:
 
 [pfs-lustre.yaml]: ./pfs-lustre.yaml
 
-### [pfs-managed-lustre-vms.yaml] ![core-badge]
+### [pfs-managed-lustre-vm.yaml] ![core-badge]
 
 Creates a Managed Lustre file-system that is mounted in one client instance.
 
@@ -641,7 +641,7 @@ After the creation of the file-system and the client instances, the lustre drive
 watch mount -t lustre
 ```
 
-#### Quota Requirements for pfs-managed-lustre.yaml
+#### Quota Requirements for pfs-managed-lustre-vm.yaml
 
 For this example, the following is needed in the selected region:
 
@@ -651,7 +651,7 @@ For this example, the following is needed in the selected region:
 * Compute Engine API: N2 CPUs: **~34: 32 MGS, 2 client-vm**
 * Compute Engine API: C3 CPUs: **~396: 44 MDS, 2*176 OSS**
 
-[pfs-managed-lustre-vms.yaml]: ./pfs-managed-lustre-vms.yaml
+[pfs-managed-lustre-vm.yaml]: ./pfs-managed-lustre-vm.yaml
 
 ### [ps-slurm.yaml] ![core-badge] ![experimental-badge]
 
