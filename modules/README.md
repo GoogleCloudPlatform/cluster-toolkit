@@ -89,22 +89,28 @@ Modules that are still in development and less stable are labeled with the
 
 ### File System
 
-* **[filestore]** ![core-badge] : Creates a [filestore](https://cloud.google.com/filestore) file system.
-* **[parallelstore]** ![core-badge] ![experimental-badge]: Creates a [parallelstore](https://cloud.google.com/parallelstore) file system.
+* **[filestore]** ![core-badge] : Creates a
+  [filestore](https://cloud.google.com/filestore) file system.
+* **[parallelstore]** ![core-badge] ![experimental-badge]: Creates a
+  [parallelstore](https://cloud.google.com/parallelstore) file system.
 * **[pre-existing-network-storage]** ![core-badge] : Specifies a
   pre-existing file system that can be mounted on a VM.
-* **[DDN-EXAScaler]** ![community-badge] : Creates
+* **[managed-lustre]** ![core-badge] ![experimental-badge]: Creates a
+  [managed-lustred](https://cloud.google.com/managed-lustre) file system.
+* **[DDN-EXAScaler]** ![community-badge] ![deprecated-badge] : Creates
   a [DDN EXAscaler lustre](https://www.ddn.com/partners/google-cloud-platform/)
-  file system. This module has
-  [license costs](https://console.developers.google.com/marketplace/product/ddnstorage/exascaler-cloud).
-* **[cloud-storage-bucket]** ![community-badge] ![experimental-badge] : Creates a Google Cloud Storage (GCS) bucket.
-* **[gke-persistent-volume]** ![core-badge] ![experimental-badge] : Creates persistent volumes and persistent volume claims for shared storage.
+  file system. This module is deprecated and will be removed in a future release. Consider migrating to managed-lustre.
+* **[cloud-storage-bucket]** ![community-badge] ![experimental-badge] : Creates
+  a Google Cloud Storage (GCS) bucket.
+* **[gke-persistent-volume]** ![core-badge] ![experimental-badge] : Creates
+  persistent volumes and persistent volume claims for shared storage.
 * **[nfs-server]** ![community-badge] ![experimental-badge] : Creates a VM and
   configures an NFS server that can be mounted by other VM.
 
 [filestore]: file-system/filestore/README.md
 [parallelstore]: file-system/parallelstore/README.md
 [pre-existing-network-storage]: file-system/pre-existing-network-storage/README.md
+[managed-lustre]: file-system/managed-lustre/README.md
 [ddn-exascaler]: ../community/modules/file-system/DDN-EXAScaler/README.md
 [nfs-server]: ../community/modules/file-system/nfs-server/README.md
 [cloud-storage-bucket]: ../community/modules/file-system/cloud-storage-bucket/README.md
