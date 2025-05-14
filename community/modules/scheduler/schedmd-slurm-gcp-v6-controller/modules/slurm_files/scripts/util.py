@@ -325,8 +325,13 @@ def get_credentials() -> Optional[service_account.Credentials]:
 
 @lru_cache(maxsize=1)
 def get_dev_key() -> Optional[str]:
-    """Get dev key for project"""
-    return os.environ.get("GOOGLE_DEVELOPER_KEY")
+    """Get dev key for project (uses json or yaml format)"""
+    try:
+        with open("/etc/slurm/slurm_vars.yaml", 'r') as file:
+            data = yaml.safe_load(file)
+            return data['google_developer_key']
+    except:
+        return None
 
 
 def create_client_options(api: ApiEndpoint) -> ClientOptions:
