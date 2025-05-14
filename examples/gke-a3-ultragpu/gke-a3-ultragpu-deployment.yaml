@@ -19,7 +19,7 @@ terraform_backend_defaults:
     bucket: BUCKET_NAME
 
 vars:
-  deployment_name: gke-a3-ultra
+  deployment_name: DEPLOYMENT_NAME
   project_id: PROJECT_ID
   region: COMPUTE_REGION
   zone: COMPUTE_ZONE
