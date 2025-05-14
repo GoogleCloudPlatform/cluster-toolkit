@@ -18,7 +18,7 @@ blueprint_name: gke-a3-highgpu
 
 vars:
   project_id:  ## Set GCP Project ID Here ##
-  deployment_name: gke-a3-highgpu
+  deployment_name: ## Set Deployment Name Here ##
   region: us-central1
   zone: us-central1-c
   # Cidr block containing the IP of the machine calling terraform.

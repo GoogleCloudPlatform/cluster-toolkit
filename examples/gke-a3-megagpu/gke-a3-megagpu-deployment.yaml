@@ -22,7 +22,7 @@ terraform_backend_defaults:
 vars:
   # This should be unique across all of your Cluster
   # Toolkit Deployments.
-  deployment_name: gke-a3-mega
+  deployment_name: DEPLOYMENT_NAME
 
   # Your GCP Project ID
   project_id: PROJECT_ID
