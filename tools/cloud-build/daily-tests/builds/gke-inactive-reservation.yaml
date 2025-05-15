@@ -39,13 +39,27 @@ steps:
     BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
     EXAMPLE_BP=examples/hpc-gke.yaml
 
-    # adding vm to act as remote node
-    echo '  - id: remote-node'                     >> $${EXAMPLE_BP}
-    echo '    source: modules/compute/vm-instance' >> $${EXAMPLE_BP}
-    echo '    use: [network1]'                     >> $${EXAMPLE_BP}
-    echo '    settings:'                           >> $${EXAMPLE_BP}
-    echo '      machine_type: e2-standard-2'       >> $${EXAMPLE_BP}
-    echo '      zone: us-central1-a'               >> $${EXAMPLE_BP}
+    # Adding vm to act as remote node
+    echo '  - id: remote-node'                                    >> $${EXAMPLE_BP}
+    echo '    source: modules/compute/vm-instance'                >> $${EXAMPLE_BP}
+    echo '    use: [network1]'                                    >> $${EXAMPLE_BP}
+    echo '    settings:'                                          >> $${EXAMPLE_BP}
+    echo '      machine_type: e2-standard-2'                      >> $${EXAMPLE_BP}
+    echo '      zone: us-central1-a'                              >> $${EXAMPLE_BP}
+
+    # Adding node pool with reservation defined
+    echo '  - id: compute-pool-reservation'                       >> $${EXAMPLE_BP}
+    echo '    source: modules/compute/gke-node-pool'              >> $${EXAMPLE_BP}
+    echo '    use: [gke_cluster, node_pool_service_account]'      >> $${EXAMPLE_BP}
+    echo '    settings:'                                          >> $${EXAMPLE_BP}
+    echo '      machine_type: e2-standard-2'                      >> $${EXAMPLE_BP}
+    echo '      zones: [us-central1-a]'                           >> $${EXAMPLE_BP}
+    echo '      static_node_count: 0'                             >> $${EXAMPLE_BP}
+    echo '      is_reservation_active: false'                     >> $${EXAMPLE_BP}
+    echo '      reservation_affinity:'                            >> $${EXAMPLE_BP}
+    echo '        consume_reservation_type: SPECIFIC_RESERVATION' >> $${EXAMPLE_BP}
+    echo '        specific_reservations:'                         >> $${EXAMPLE_BP}
+    echo '        - name: sample-reservation-01'                  >> $${EXAMPLE_BP}
 
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
       --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \

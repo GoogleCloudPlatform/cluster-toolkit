@@ -20,15 +20,10 @@ workspace: /workspace
 blueprint_yaml: "{{ workspace }}/examples/hpc-gke.yaml"
 network: "{{ deployment_name }}-net"
 remote_node: "{{ deployment_name }}-0"
-extended_reservation: sample-reservation-01
-static_node_count: 0
 cli_deployment_vars:
   gcp_public_cidrs_access_enabled: true
   region: "{{ region }}"
   zone: "{{ zone }}"
-  extended_reservation: "{{ extended_reservation }}"
-  static_node_count: "{{ static_node_count }}"
-  is_reservation_active: false
 custom_vars:
   project: "{{ project }}"
 post_deploy_tests:
