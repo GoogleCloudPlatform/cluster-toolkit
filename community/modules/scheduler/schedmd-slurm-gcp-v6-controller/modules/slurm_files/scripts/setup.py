@@ -387,7 +387,7 @@ def configure_dirs():
                                   Path("tools/task-prolog")),
                                  (dirs.custom_scripts / "task_epilog.d",
                                   Path("tools/task-epilog"))):
-        dst = Path(dst_folder / src_file.name)
+        dst = Path(dst_folder) / src_file.name
         util.mkdirp(dst.parent)
         shutil.copyfile(util.scripts_dir / src_file, dst)
         os.chmod(dst, 0o755)
