@@ -374,3 +374,29 @@ variable "access_config" {
   }))
   default = []
 }
+
+
+variable "startup_script" {
+  description = "Startup script used by VMs in this nodeset"
+  type        = string
+  default     = "# no-op"
+}
+
+variable "universe_domain" {
+  description = "Domain address for alternate API universe"
+  type        = string
+  default     = "googleapis.com"
+  nullable    = false
+}
+
+variable "network_storage" {
+  description = "An array of network attached storage mounts to be configured on nodes."
+  type = list(object({
+    server_ip     = string,
+    remote_mount  = string,
+    local_mount   = string,
+    fs_type       = string,
+    mount_options = string,
+  }))
+  default = []
+}
