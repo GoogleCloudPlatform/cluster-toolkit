@@ -58,15 +58,14 @@ class SSHManager:
 
     def get_keypath(self):
         key_path = os.path.expanduser("~/.ssh/google_compute_engine")
-        os.makedirs(os.path.dirname(key_path), exist_ok=True)
-
-        self.run_command(["ssh-keygen", "-t", "rsa", "-f", key_path, "-N", ""])
-
-        # Add the public key to OS Login
         public_key_path = key_path + ".pub"
-        self.run_command(["gcloud", "compute", "os-login", "ssh-keys", "add", "--key-file", public_key_path, "--ttl", "60m"])
-
+        os.makedirs(os.path.dirname(key_path), exist_ok=True)
+        
+        if not os.path.exists(public_key_path):
+            self.run_command(["ssh-keygen", "-t", "rsa", "-f", key_path, "-N", ""])
+            self.run_command(["gcloud", "compute", "os-login", "ssh-keys", "add", "--key-file", public_key_path, "--ttl", "60m"])
         return key_path
+
 
     def setup_connection(self, instance_name, project_id, zone):
         self.ssh_client = paramiko.SSHClient()
