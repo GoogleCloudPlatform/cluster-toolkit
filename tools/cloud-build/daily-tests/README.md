@@ -33,7 +33,7 @@ This example consists of 3 files:
 
 - tools/cloud-build/daily-tests/ansible_playbooks/hello-world-integration-test.yml
   - The playbook that is the root of the test
-- tools/cloud-build/daily-tests/ansible_playbooks/test-hello-world.yml
+- tools/cloud-build/daily-tests/ansible_playbooks/test-validation/test-hello-world.yml
   - The post deploy test (tasks) that is called by the playbook
 - tools/cloud-build/daily-tests/tests/hello-world-vars.yml
   - The variables passed into the playbook
