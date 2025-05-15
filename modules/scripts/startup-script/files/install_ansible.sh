@@ -14,12 +14,15 @@
 # limitations under the License.
 
 set -e
-REQ_ANSIBLE_VERSION=2.11
-REQ_ANSIBLE_PIP_VERSION=4.10.0
+
 REQ_PIP_WHEEL_VERSION=0.37.1
-REQ_PIP_SETUPTOOLS_VERSION=59.6.0
 REQ_PIP_MAJOR_VERSION=21
 REQ_PYTHON3_VERSION=6
+
+# Load OS vars for version checking
+load_os_vars() {
+	. /etc/os-release
+}
 
 apt_wait() {
 	while fuser /var/lib/dpkg/lock >/dev/null 2>&1; do
@@ -43,7 +46,11 @@ install_python_deps() {
 	if [ -f /etc/debian_version ] || grep -qi ubuntu /etc/lsb-release 2>/dev/null ||
 		grep -qi ubuntu /etc/os-release 2>/dev/null; then
 		apt-get update --allow-releaseinfo-change-origin --allow-releaseinfo-change-label
-		apt-get install -y python3-distutils python3-venv
+		if [ "$VERSION_CODENAME" = "noble" ]; then
+			apt-get install -y python3-venv python3-setuptools
+		else
+			apt-get install -y python3-distutils python3-venv
+		fi
 	fi
 }
 
@@ -106,7 +113,11 @@ install_python3_yum() {
 install_python3_apt() {
 	apt_wait
 	apt-get update --allow-releaseinfo-change-origin --allow-releaseinfo-change-label
-	apt-get install -y python3 python3-distutils python3-pip python3-venv
+	if [ "$VERSION_CODENAME" = "noble" ]; then
+		apt-get install -y python3 python3-setuptools python3-pip python3-venv
+	else
+		apt-get install -y python3 python3-distutils python3-pip python3-venv
+	fi
 	python_path=$(command -v python3)
 }
 
@@ -175,6 +186,19 @@ main() {
 	if [ $# -gt 1 ]; then
 		echo "Error: provide only 1 optional argument identifying virtual environment path for Ansible"
 		return 1
+	fi
+
+	load_os_vars
+
+	REQ_ANSIBLE_VERSION=2.11
+	REQ_ANSIBLE_PIP_VERSION=4.10.0
+	REQ_PIP_SETUPTOOLS_VERSION=59.6.0
+	if [ "$ID" = "ubuntu" ]; then
+		if [ "$VERSION_CODENAME" = "noble" ]; then
+			REQ_ANSIBLE_VERSION=2.16
+			REQ_ANSIBLE_PIP_VERSION=11.3.0
+			REQ_PIP_SETUPTOOLS_VERSION=73.0.0
+		fi
 	fi
 
 	venv_path="${1:-/usr/local/ghpc-venv}"
