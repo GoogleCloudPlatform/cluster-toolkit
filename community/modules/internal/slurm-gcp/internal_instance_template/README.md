@@ -60,7 +60,7 @@ No modules.
 | <a name="input_preemptible"></a> [preemptible](#input\_preemptible) | Allow the instance to be preempted | `bool` | `false` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The GCP project ID | `string` | `null` | no |
 | <a name="input_provisioning_model"></a> [provisioning\_model](#input\_provisioning\_model) | The provisioning model of the instance | `string` | `null` | no |
-| <a name="input_region"></a> [region](#input\_region) | Region where the instance template should be created. | `string` | `null` | no |
+| <a name="input_region"></a> [region](#input\_region) | Region where the instance template should be created. | `string` | n/a | yes |
 | <a name="input_reservation_affinity"></a> [reservation\_affinity](#input\_reservation\_affinity) | Specifies the reservations that this instance can consume from. | `object({ type = string })` | `null` | no |
 | <a name="input_resource_manager_tags"></a> [resource\_manager\_tags](#input\_resource\_manager\_tags) | (Optional) A set of key/value resource manager tag pairs to bind to the instances. Keys must be in the format tagKeys/{tag\_key\_id}, and values are in the format tagValues/456. | `map(string)` | `{}` | no |
 | <a name="input_service_account"></a> [service\_account](#input\_service\_account) | Service account to attach to the instance. See https://www.terraform.io/docs/providers/google/r/compute_instance_template#service_account. | <pre>object({<br/>    email  = optional(string)<br/>    scopes = set(string)<br/>  })</pre> | n/a | yes |

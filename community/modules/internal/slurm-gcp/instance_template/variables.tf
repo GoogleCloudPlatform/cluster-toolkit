@@ -75,7 +75,7 @@ EOD
 variable "region" {
   type        = string
   description = "Region where the instance template should be created."
-  default     = null
+  nullable    = false
 }
 
 variable "tags" {
