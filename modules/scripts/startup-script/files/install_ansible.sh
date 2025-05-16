@@ -22,34 +22,19 @@ REQ_PIP_MAJOR_VERSION=21
 REQ_PYTHON3_VERSION=6
 
 apt_wait() {
-	while fuser /var/lib/dpkg/lock >/dev/null 2>&1; do
-		echo "Sleeping for dpkg lock"
-		sleep 3
-	done
-	while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
-		echo "Sleeping for dpkg frontend lock"
-		sleep 3
-	done
 	while fuser /var/lib/apt/lists/lock >/dev/null 2>&1; do
 		echo "Sleeping for apt lists lock"
 		sleep 3
 	done
-	if [ -f /var/log/unattended-upgrades/unattended-upgrades.log ]; then
-		echo "Sleeping until unattended-upgrades finishes"
-		while fuser /var/log/unattended-upgrades/unattended-upgrades.log >/dev/null 2>&1; do
-			sleep 3
-		done
-	fi
 }
 
 # Installs any dependencies needed for python based on the OS
 install_python_deps() {
-	if [ -f /etc/debian_version ] || grep -qi ubuntu /etc/lsb-release 2>/dev/null ||
-		grep -qi ubuntu /etc/os-release 2>/dev/null; then
+	# this file is present on both Debian and Ubuntu OSes
+	if [ -f /etc/debian_version ]; then
 		apt_wait
 		apt-get update --allow-releaseinfo-change-origin --allow-releaseinfo-change-label
-		apt_wait
-		apt-get install -y python3-distutils python3-venv
+		apt-get install -o DPkg::Lock::Timeout=600 -y python3-distutils python3-venv
 	fi
 }
 
@@ -112,8 +97,7 @@ install_python3_yum() {
 install_python3_apt() {
 	apt_wait
 	apt-get update --allow-releaseinfo-change-origin --allow-releaseinfo-change-label
-	apt_wait
-	apt-get install -y python3 python3-distutils python3-pip python3-venv
+	apt-get install -o DPkg::Lock::Timeout=600 -y python3 python3-distutils python3-pip python3-venv
 	python_path=$(command -v python3)
 }
 
@@ -163,8 +147,7 @@ install_pip3_yum() {
 install_pip3_apt() {
 	apt_wait
 	apt-get update --allow-releaseinfo-change-origin --allow-releaseinfo-change-label
-	apt_wait
-	apt-get install -y python3-pip
+	apt-get install -o DPkg::Lock::Timeout=600 -y python3-pip
 }
 
 install_pip3() {
