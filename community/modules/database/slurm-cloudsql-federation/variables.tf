@@ -24,7 +24,7 @@ variable "authorized_networks" {
 variable "database_version" {
   description = "The version of the database to be created."
   type        = string
-  default     = "MYSQL_5_7"
+  default     = "MYSQL_8_0"
   validation {
     condition     = contains(["MYSQL_5_7", "MYSQL_8_0", "MYSQL_8_4"], var.database_version)
     error_message = "The database version must be either MYSQL_5_7, MYSQL_8_0 or MYSQL_8_4."
@@ -35,6 +35,13 @@ variable "data_cache_enabled" {
   description = "Whether data cache is enabled for the instance. Can be used with ENTERPRISE_PLUS edition."
   type        = bool
   default     = false
+}
+
+variable "database_flags" {
+  description = "Database flags to set on instance."
+  type        = map(string)
+  default     = {}
+  nullable    = false
 }
 
 variable "deployment_name" {
@@ -73,6 +80,19 @@ variable "enable_backups" {
 variable "project_id" {
   description = "Project in which the HPC deployment will be created"
   type        = string
+}
+
+variable "query_insights" {
+  description = "Query insights configuration."
+  nullable    = false
+  default     = {}
+  type = object({
+    enabled                 = optional(bool, false)
+    query_plans_per_minute  = optional(number)
+    query_string_length     = optional(number)
+    record_application_tags = optional(bool)
+    record_client_address   = optional(bool)
+  })
 }
 
 variable "region" {
