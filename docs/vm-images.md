@@ -131,26 +131,28 @@ description of our support for Windows images.
   <th>Deployment Type/Scheduler</th>
   <th>Feature</th>
   <th></th>
-  <th>Debian 11</th><th>Rocky Linux 8</th><th>Ubuntu 20.04</th>
+  <th>Debian 11</th><th>Rocky Linux 8</th><th>Ubuntu 20.04</th><th>Ubuntu 22.04</th>
 </tr>
 <tr>
-  <td></td><td></td><td></td><td></td><td></td><td></td>
+  <td></td><td></td><td></td><td></td><td></td><td></td><td></td>
 </tr>
 
 <tr>
   <th rowspan="3">Cloud Batch</th>
-  <th>Lustre</th>
+  <th>Managed Lustre</th>
   <th></th>
   <td></td>
+  <td><a href="../tools/validate_configs/os_compatibility_tests/batch-lustre.yaml">✓</a></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/batch-lustre.yaml">✓</a></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/batch-lustre.yaml">✓</a></td>
 </tr>
 <tr>
   <th>Shared filestore</th>
   <th></th>
-  <td><a href="../tools/validate_configs/os_compatibility_tests/batch-lustre.yaml">✓</a></td>
-  <td><a href="../tools/validate_configs/os_compatibility_tests/batch-lustre.yaml">✓</a></td>
-  <td><a href="../tools/validate_configs/os_compatibility_tests/batch-lustre.yaml">✓</a></td>
+  <td><a href="../tools/validate_configs/os_compatibility_tests/batch-filestore.yaml">✓</a></td>
+  <td><a href="../tools/validate_configs/os_compatibility_tests/batch-filestore.yaml">✓</a></td>
+  <td><a href="../tools/validate_configs/os_compatibility_tests/batch-filestore.yaml">✓</a></td>
+  <td></td>
 </tr>
 <tr>
   <th>Startup script</th>
@@ -158,14 +160,16 @@ description of our support for Windows images.
   <td><a href="../tools/validate_configs/os_compatibility_tests/batch-startup.yaml">✓</a></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/batch-startup.yaml">✓</a></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/batch-startup.yaml">✓</a></td>
+  <td></td>
 </tr>
 <tr>
-  <th>Lustre</th>
+  <th>Managed Lustre</th>
   <th></th>
   <td></td>
   <td></td>
   <td><a href="../examples/hpc-enterprise-slurm.yaml">✓</a></td>
   <td></td>
+  <td><a href="../examples/pfs-managed-lustre-vm.yaml">✓</a></td>
 </tr>
 <tr>
   <th>Shared filestore</th>
@@ -174,6 +178,7 @@ description of our support for Windows images.
   <td>✓</td>
   <td><a href="../examples/hpc-slurm.yaml">✓</a></td>
   <td><a href="../community/examples/hpc-slurm-ubuntu2004.yaml">✓</a></td>
+  <td></td>
 </tr>
 <tr>
   <th>Startup script</th>
@@ -182,6 +187,7 @@ description of our support for Windows images.
   <td>✓</td>
   <td><a href="../community/examples/hpc-slurm-ramble-gromacs.yaml">✓</a></td>
   <td>✓</td>
+  <td></td>
 </tr>
 
 <tr>
@@ -191,11 +197,13 @@ description of our support for Windows images.
   <td><a href="../tools/validate_configs/os_compatibility_tests/vm-crd.yaml">✓</a></td>
   <td></td>
   <td><sup><b>*</b></sup></td>
+  <td></td>
 </tr>
 <tr>
   <th>Lustre</th>
   <th></th>
   <td></td>
+  <td><a href="../tools/validate_configs/os_compatibility_tests/vm-lustre.yaml">✓</a></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/vm-lustre.yaml">✓</a></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/vm-lustre.yaml">✓</a></td>
 </tr>
@@ -205,6 +213,7 @@ description of our support for Windows images.
   <td><a href="../tools/validate_configs/os_compatibility_tests/vm-filestore.yaml">✓</a></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/vm-filestore.yaml">✓</a></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/vm-filestore.yaml">✓</a></td>
+  <td></td>
 </tr>
 <tr>
   <th>Startup script</th>
@@ -212,6 +221,7 @@ description of our support for Windows images.
   <td><a href="../tools/validate_configs/os_compatibility_tests/vm-startup.yaml">✓</a></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/vm-startup.yaml">✓</a></td>
   <td><a href="../tools/validate_configs/os_compatibility_tests/vm-startup.yaml">✓</a></td>
+  <td></td>
 </tr>
 <tr>
   <th rowspan="1">HTCondor</th>
@@ -219,6 +229,7 @@ description of our support for Windows images.
   <th></th>
   <td></td>
   <td>✓</td>
+  <td></td>
   <td></td>
 </tr>
 </table>

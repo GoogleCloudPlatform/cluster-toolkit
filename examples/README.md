@@ -27,7 +27,6 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [image-builder.yaml](#image-builderyaml-) ![core-badge]
   * [serverless-batch.yaml](#serverless-batchyaml-) ![core-badge]
   * [serverless-batch-mpi.yaml](#serverless-batch-mpiyaml-) ![core-badge]
-  * [pfs-lustre.yaml](#pfs-lustreyaml-) ![core-badge] ![deprecated-badge]
   * [pfs-managed-lustre-vms.yaml](#pfs-managed-lustre-vmsyaml-) ![core-badge]
   * [ps-slurm.yaml](#ps-slurmyaml--) ![core-badge] ![experimental-badge]
   * [pfs-parallelstore.yaml](#pfs-parallelstoreyaml--) ![core-badge] ![experimental-badge]
@@ -260,37 +259,35 @@ File systems:
 * The projectsfs is mounted at `/projects` and is a high scale SSD filestore
   instance with 10TiB of capacity.
 * The scratchfs is mounted at `/scratch` and is a
-  [DDN Exascaler Lustre](../community/modules/file-system/DDN-EXAScaler/README.md)
-  file system designed for high IO performance. The capacity is ~10TiB.
-
-> **Warning**: The DDN Exascaler Lustre file system has a license cost as
-> described in the pricing section of the
-> [DDN EXAScaler Cloud Marketplace Solution](https://console.developers.google.com/marketplace/product/ddnstorage/).
+  [Managed Lustre](../modules/file-system/managed-lustre/README.md)
+  file system designed for high IO performance. The capacity is ~18TiB.
 
 #### Quota Requirements for hpc-enterprise-slurm.yaml
 
 For this example the following is needed in the selected region:
 
 * Cloud Filestore API: Basic SSD capacity (GB) per region: **2,560 GB**
-* Cloud Filestore API: High Scale SSD capacity (GB) per region: **10,240 GiB** -
-  _min quota request is 61,440 GiB_
+* Cloud Filestore API: High Scale SSD capacity (GB) per region:
+  **10,240 GiB** - _min quota request is 61,440 GiB_
 * Compute Engine API: Persistent Disk SSD (GB): **~14,050 GB** static +
   **100 GB/node** up to 23,250 GB
 * Compute Engine API: Persistent Disk Standard (GB): **~396 GB** static +
   **50 GB/node** up to 596 GB
-* Compute Engine API: N2 CPUs: **116** for login and lustre and **2/node** active
- in `n2` partition up to 124.
+* Compute Engine API: N2 CPUs: **36** for login and lustre and **2/node**
+  active in `n2` partition up to 124.
 * Compute Engine API: C2 CPUs: **4** for controller node and **60/node** active
   in `c2` partition up to 1,204
-* Compute Engine API: C2D CPUs: **112/node** active in `c2d` partition up to 2,240
-* Compute Engine API: C3 CPUs: **176/node** active in `c3` partition up to 3,520
+* Compute Engine API: C2D CPUs: **112/node** active in `c2d` partition up to
+  2,240
+* Compute Engine API: C3 CPUs: **196** for lustre and **176/node** active in
+  `c3` partition up to 3,520
 * Compute Engine API: H3 CPUs: **88/node** active in `h3` partition up to 1,408
-* Compute Engine API: A2 CPUs: **96/node** active in `a208` and `a216` partitions
-up to 3,072
-* Compute Engine API: NVIDIA A100 80GB GPUs: **8/node** active in `a208` partition
- up to 128
-* Compute Engine API: NVIDIA A100 GPUs: **8/node** active in `a216` partition up
-to 256
+* Compute Engine API: A2 CPUs: **96/node** active in `a208` and `a216`
+  partitions up to 3,072
+* Compute Engine API: NVIDIA A100 80GB GPUs: **8/node** active in `a208`
+  partition up to 128
+* Compute Engine API: NVIDIA A100 GPUs: **8/node** active in `a216` partition
+  up to 256
 * Compute Engine API: Resource policies: **one for each job in parallel** -
   _not needed for `n2` partition_
 
@@ -598,49 +595,6 @@ The blueprint contains the following:
     inspect the `rsl.out.0000` file for a summary of the job.
 
 [serverless-batch-mpi.yaml]: ../examples/serverless-batch-mpi.yaml
-
-### [pfs-lustre.yaml] ![core-badge] ![deprecated-badge]
-
-_This blueprint has been deprecated and will be removed on August 1, 2025._
-
-Creates a DDN EXAScaler lustre file-system that is mounted in two client instances.
-
-The [DDN Exascaler Lustre](../community/modules/file-system/DDN-EXAScaler/README.md)
-file system is designed for high IO performance. It has a default capacity of
-~10TiB and is mounted at `/lustre`.
-
-> **Warning**: The DDN Exascaler Lustre file system has a license cost as
-> described in the pricing section of the
-> [DDN EXAScaler Cloud Marketplace Solution](https://console.developers.google.com/marketplace/product/ddnstorage/).
-
-After the creation of the file-system and the client instances, the startup
-scripts on the client instances will automatically install the lustre drivers,
-configure the mount-point, and mount the file system to the specified
-directory. This may take a few minutes after the VMs are created and can be
-verified by running:
-
-```sh
-watch df
-```
-
-Eventually you should see a line similar to:
-
-```sh
-<IP>:<remote_mount>  lustre   100G   15G  85G  15% <local_mount>
-```
-
-with remote_mount, and local_mount reflecting the settings of the module and
-IP being set to the lustre instance's IP.
-
-#### Quota Requirements for pfs-lustre.yaml
-
-For this example the following is needed in the selected region:
-
-* Compute Engine API: Persistent Disk SSD (GB): **~14TB: 3500GB MDT, 3500GB OST[0-2]**
-* Compute Engine API: Persistent Disk Standard (GB): **~756GB: 20GB MDS, 276GB MGS, 3x20GB OSS, 2x200GB client-vms**
-* Compute Engine API: N2 CPUs: **~116: 32 MDS, 32 MGS, 3x16 OSS, 2x2 client-vms**
-
-[pfs-lustre.yaml]: ./pfs-lustre.yaml
 
 ### [pfs-managed-lustre-vms.yaml] ![core-badge]
 

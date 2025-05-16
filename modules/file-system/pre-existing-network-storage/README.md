@@ -45,22 +45,6 @@ were directories. This is important when working with files that were created by
 another source, but there may have performance impacts. The `_netdev` mount option
 denotes that the storage device requires network access.
 
-The following is an example of using `pre-existing-network-storage` with the `lustre`
-filesystem:
-
-```yaml
-- id: lustrefs
-  source: modules/file-system/pre-existing-network-storage
-  settings:
-    fs_type: lustre
-    server_ip: 192.168.227.11@tcp
-    local_mount: /scratch
-    remote_mount: /exacloud
-```
-
-Note the use of the MGS NID (Network ID) in the `server_ip` field - in
-particular, note the `@tcp` suffix.
-
 The following is an example of using `pre-existing-network-storage` with the
 `managed_lustre` filesystem:
 
@@ -74,14 +58,13 @@ The following is an example of using `pre-existing-network-storage` with the
     remote_mount: /mg_lustre
 ```
 
-This is similar to the `lustre` filesystem, with the exception that it connects
-with a managed Lustre instance hosted by GCP.  Currently only Rocky 8 and
-Ubuntu 20.04 and Ubuntu 22.04 are supported.
+This mounts a `lustre` filesystem, using a Managed Lustre instance hosted by
+GCP.  Currently only Rocky 8 and Ubuntu 20.04 and Ubuntu 22.04 are supported.
 
-The following is an example of using `pre-existing-network-storage` with the `daos`
-filesystem. In order to use existing `parallelstore` instance, `fs_type` needs to be
-explicitly mentioned in blueprint. The `remote_mount` option refers to `access_points`
-for `parallelstore` instance.
+The following is an example of using `pre-existing-network-storage` with the
+`daos` filesystem. In order to use existing `parallelstore` instance, `fs_type`
+needs to be explicitly mentioned in blueprint. The `remote_mount` option refers
+to `access_points` for `parallelstore` instance.
 
 ```yaml
 - id: parallelstorefs
@@ -133,7 +116,6 @@ mount the network storage system.
 Supported `fs_type`:
 
 - nfs
-- lustre
 - managed_lustre
 - gcsfuse
 - daos
@@ -174,7 +156,7 @@ No resources.
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_fs_type"></a> [fs\_type](#input\_fs\_type) | Type of file system to be mounted (e.g., nfs, lustre) | `string` | `"nfs"` | no |
+| <a name="input_fs_type"></a> [fs\_type](#input\_fs\_type) | Type of file system to be mounted (e.g. nfs, managed\_lustre) | `string` | `"nfs"` | no |
 | <a name="input_local_mount"></a> [local\_mount](#input\_local\_mount) | The mount point where the contents of the device may be accessed after mounting. | `string` | `"/mnt"` | no |
 | <a name="input_managed_lustre_options"></a> [managed\_lustre\_options](#input\_managed\_lustre\_options) | Managed Lustre specific options:<br/>  gke\_support\_enabled (bool, default = false)<br/>Note: gke\_support\_enabled does not work with Slurm, the Slurm image must be built with<br/>the correct compatibility. | <pre>object({<br/>    gke_support_enabled = optional(bool, false)<br/>  })</pre> | `{}` | no |
 | <a name="input_mount_options"></a> [mount\_options](#input\_mount\_options) | Options describing various aspects of the file system. Consider adding setting to 'defaults,\_netdev,implicit\_dirs' when using gcsfuse. | `string` | `"defaults,_netdev"` | no |

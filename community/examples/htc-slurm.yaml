@@ -69,13 +69,19 @@ deployment_groups:
       size_gb: 10240
       local_mount: /projects
 
-  # This file system has an associated license cost.
-  # https://console.developers.google.com/marketplace/product/ddnstorage/exascaler-cloud
-  - id: scratchfs
-    source: community/modules/file-system/DDN-EXAScaler
+  # Required for Managed Lustre instance
+  - id: private_service_access
+    source: community/modules/network/private-service-access
     use: [network]
+
+  - id: scratchfs
+    source: modules/file-system/managed-lustre
+    use: [network, private_service_access]
     settings:
+      name: lustre_instance
       local_mount: /scratch
+      remote_mount: lustrefs
+      size_gib: 18000
 
   # The compute partition is designed for performance.
   # Use:

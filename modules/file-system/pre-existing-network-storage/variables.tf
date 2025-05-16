@@ -32,7 +32,7 @@ variable "local_mount" {
 }
 
 variable "fs_type" {
-  description = "Type of file system to be mounted (e.g., nfs, lustre)"
+  description = "Type of file system to be mounted (e.g. nfs, managed_lustre)"
   type        = string
   default     = "nfs"
 }
