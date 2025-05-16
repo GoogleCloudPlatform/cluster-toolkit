@@ -1,6 +1,6 @@
 # mypy: ignore-errors
 # This implementation of TPU integration is to be deprecated
-# Copyright 2024 "Google LLC"
+# Copyright 2025 "Google LLC"
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -218,7 +218,7 @@ class TPU:
         echo "startup script not found > /var/log/startup_error.log"
         """
         with open(
-            Path(self.lkp.cfg.slurm_scripts_dir or util.dirs.scripts) / "startup.sh", "r"
+            Path(self.lkp.cfg.slurm_scripts_dir or util.dirs.scripts) / "tpu-startup.sh", "r"
         ) as script:
             startup_script = script.read()
         if isinstance(nodename, list):
@@ -335,13 +335,19 @@ def start_tpu(node: List[str]):
         if not tpuobj.create_node(nodename=node):
             log.error("Error creating tpu node {node}")
 
-@functools.lru_cache(maxsize=2)
-def list_nodes(parent):
+@functools.lru_cache(maxsize=128)
+def list_nodes(zone: str) -> list:
+    """
+    Cached function to return nodes within the zone
+
+    :param zone: zone identifier in form projects/{project_id}/locations/{zone_name}
+    """
     try:
-        request = tpu.ListNodesRequest(parent=parent)
+        request = tpu.ListNodesRequest(parent=zone)
         co = create_client_options(ApiEndpoint.TPU)
         client = tpu.TpuClient(client_options=co)
         res = client.list_nodes(request=request)
     except gExceptions.NotFound:
-        res = None
-    return res
+        res = []
+    # wrap in list, to ensure that all results are cached and returned
+    return list(res)

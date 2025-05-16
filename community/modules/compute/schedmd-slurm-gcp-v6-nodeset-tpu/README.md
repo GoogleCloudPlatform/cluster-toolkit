@@ -7,14 +7,14 @@ learning workloads.
 TPU nodes run on one of the predefined TPU node runtimes and runs Slurm from within Docker container.
 
 To set runtime version, please consult [runtimes documentation](https://cloud.google.com/tpu/docs/runtimes) and set appropriate runtime for your use case and TPU version. There
-are prebuilt docker containers including different TensorFlow versions included available at `us-docker.pkg.dev/schedmd-slurm-public/tpu/slurm-gcp-6-9:tf-<tensorflow version in x.y format>`.
+are prebuilt docker containers including different TensorFlow versions included available at `us-docker.pkg.dev/schedmd-slurm-public/tpu/slurm-gcp-6-9:tf-<tensorflow version in x.y.z format>`.
 
 ### Example
 
 The following code snippet creates TPU partition with following attributes.
 
 - TPU nodeset module is connected to `network` module.
-- TPU nodeset is of type `v2-8`, runtime_version `2.10.0`, and uses `us-docker.pkg.dev/schedmd-slurm-public/tpu/slurm-gcp-6-9:tf-2.10` docker image
+- TPU nodeset is of type `v2-8`, runtime_version `2.10.0`, and uses `us-docker.pkg.dev/schedmd-slurm-public/tpu/slurm-gcp-6-9:tf-2.10.0` docker image
 - TPU vms are preemptible.
 - `preserve_tpu` is set to false. This means, suspended vms will be deleted.
 - Partition module uses this defined `tpu_nodeset` module and this partition can
@@ -28,7 +28,7 @@ be accessed as `tpu` partition.
       node_type: v2-8
       tf_version: 2.10.0
       runtime_version: tpu-vm-tf-2.10
-      docker_image: us-docker.pkg.dev/schedmd-slurm-public/tpu/slurm-gcp-6-9:tf-2.10 
+      docker_image: us-docker.pkg.dev/schedmd-slurm-public/tpu/slurm-gcp-6-9:tf-2.10.0
       disable_public_ips: false
       preemptible: true
       preserve_tpu: false
@@ -140,6 +140,7 @@ set -o xtrace
 source venv/bin/activate
 
 export JOB_DIR=$(pwd)/job-outputs/slurm-${SLURM_JOB_ID}-${SLURM_JOB_NAME}
+export CACHE_DIRECTORY=$(pwd)/cache
 export PJRT_DEVICE=TPU
 ulimit -n 1048576
 # too low maximum locked memory limit may result in the job freezing during the training  
@@ -161,6 +162,8 @@ export MEGASCALE_NUM_SLICES=${SLURM_NNODES}
 srun --label /bin/bash -o xtrace -c '
 export XLA_FLAGS="${XLA_FLAGS} --xla_dump_to=${JOB_DIR}/xla_dumps/${SLURMD_NODENAME}/ --xla_dump_hlo_as_proto --xla_dump_hlo_as_text"
 export MEGASCALE_SLICE_ID=${SLURM_NODEID}
+export HF_HUB_CACHE="${CACHE_DIRECTORY}/${SLURM_NODEID}"
+export HF_DATASETS_CACHE="${CACHE_DIRECTORY}/${SLURM_NODEID}"
 python torchprime/torch_xla_models/train.py \
         model=llama-3.1-8b \
         profile_dir=${JOB_DIR}/profile/${SLURMD_NODENAME}/ \
