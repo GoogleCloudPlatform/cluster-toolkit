@@ -1,0 +1,126 @@
+# Copyright 2022 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: hpc-gcnv-smb-slurm-v1
+
+vars:
+  project_id:  global-file-cache-cm
+  deployment_name: hpc-gcnv-smb-slurm-v1
+  region: us-central1
+  zone: us-central1-a
+
+# Documentation for each of the modules used below can be found at
+# https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
+
+deployment_groups:
+- group: primary
+  modules:
+  # Source is an embedded module, denoted by "modules/*" without ./, ../, /
+  # as a prefix. To refer to a local module, prefix with ./, ../ or /
+  # Example - ./modules/network/vpc
+  - id: network
+    source: modules/network/vpc
+
+  - id: netapp_vpc_peering # required for parallelstore
+    source: community/modules/network/netapp-vpc-peering
+    use: 
+    - network
+    #settings:
+    #  vpc_address_ip_range: 10.2.0.0
+    #  vpc_peering_address_ip_range: 192.168.0.0
+
+  - id: netapp_volume
+    source: community/modules/file-system/gcnv/smb
+    use: 
+    - network
+    - netapp_vpc_peering
+    settings:
+      volume_capacity_gib: 250
+      volume_share_name: hpc-share1
+      volume_protocol: ["SMB"]
+      
+
+  - id: debug_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: 
+    - network
+    settings:
+      node_count_dynamic_max: 4
+      machine_type: n2-standard-2
+      enable_placement: false # the default is: true
+
+  - id: debug_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use:
+    - debug_nodeset
+    settings:
+      partition_name: debug
+      exclusive: false # allows nodes to stay up after jobs are done
+      is_default: true
+
+  - id: compute_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use:
+    - network
+    settings:
+      node_count_dynamic_max: 20
+      bandwidth_tier: gvnic_enabled
+
+  - id: compute_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use:
+    - compute_nodeset
+    settings:
+      partition_name: compute
+
+  - id: h3_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: 
+    - network
+    settings:
+      node_count_dynamic_max: 20
+      machine_type: h3-standard-88
+      # H3 does not support pd-ssd and pd-standard
+      # https://cloud.google.com/compute/docs/compute-optimized-machines#h3_disks
+      disk_type: pd-balanced
+      bandwidth_tier: gvnic_enabled
+
+  - id: h3_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use:
+    - h3_nodeset
+    settings:
+      partition_name: h3
+
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    use: 
+    - network
+    settings:
+      machine_type: n2-standard-4
+      enable_login_public_ips: true
+
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    use:
+    - network
+    - debug_partition
+    - compute_partition
+    - h3_partition
+    - netapp_volume
+    - slurm_login    
+    settings:
+      enable_controller_public_ips: true
