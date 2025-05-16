@@ -26,7 +26,7 @@ this solution provisions an auto-scaling HPC environment. Using the Slurm Worklo
 can dynamically spin up and spin down compute resources for the Datapipeline stage and Inference stage
 respectively and as required by your folding workloads.
 
-<img src="adm/af3-htc-architecture.png" alt="af3-slurm architecture" width="700">
+<img src="adm/AlphaFold-architecture.png" alt="af3-slurm architecture" width="700">
 
 The AlphaFold 3 High Throughput solution maps the Datapipeline and Inference steps to Google Compute Engine
 VM families that give you a **high number of folding executions/$** and that can horizontally scale out.
@@ -60,7 +60,7 @@ GPU at the expense of throughput. See
 [Other Hardware Configurations](https://github.com/google-deepmind/alphafold3/blob/main/docs/performance.md#other-hardware-configurations)
 in the original AlphaFold 3 documentation.
 
-For the two example launchers (see [Examples](#examples)), the solution sets the g2-based partition (infg2) as
+For the three example launchers (see [Examples](#examples)), the solution sets the g2-based partition (infg2) as
 the default since this is the most cost-effective inference platform as long as your sequences fit into the
 available GPU memory. You can change the default in the `af3-slurm-deployment.yaml` file via the variable
 `default_inference_partition`. There currently is no auto-selection of GPUs; see [Known Limitations](#known-limitations).
@@ -110,7 +110,7 @@ but additional customizations to your environment may be necessary.
 
 To illustrate the capability of the solution, we provide a few simple examples that represent
 different ways users may want to interact with the high throughput folding capability.
-At the moment, we include 2 example launchers, which provide basic templates
+At the moment, we include 3 example launchers, which provide basic templates
 for different ways of interacting with the AlphaFold 3 solution:
 
 ### Simple Job Launcher
@@ -131,6 +131,16 @@ Refer to [Service Launcher Instructions](examples/simple_service_launcher/README
 > Careful review and modification are strongly advised before using them in production or for non-demonstration
 > tasks.
 
+### Simple Ipynb Launcher
+The Simple Ipynb Launcher has a Jupyter Notebook that allows user interact with the AlphaFold 3 data pipeline or/and inference operation.
+
+Refer to [Ipynb Launcher Instructions](examples/simple_ipynb_launcher/README.md) for more details.
+
+> [!WARNING]
+> While these launchers illustrate potential user workflows, they are intended for demonstration purposes only.
+> Careful review and modification are strongly advised before using them in production or for non-demonstration
+> tasks.
+
 ## Costs
 > [!WARNING]
 > Installing this blueprint uses the following billable components of Google
@@ -140,6 +150,8 @@ Refer to [Service Launcher Instructions](examples/simple_service_launcher/README
 > - Google Compute Engine
 > - Google Cloud Build
 > - Google Artifact Registry
+> - Google Secret Manager
+> - Google Vertex AI Workbench
 >
 > To avoid continued billing after use, closely follow the
 > [teardown instructions](#teardown-instructions).
@@ -417,6 +429,11 @@ vars:
   af3service_activate: false
   af3service_jobbucket: ""           # set to "" if not used
   af3service_user: af3
+
+  # Choose if you want the Slurm REST API Simple Service daemon started
+  af3slurmrestapi_activate: false
+  af3slurmrestapi_user: af3
+
 
   # Choose Default Datapipeline Partition 
   default_datapipeline_partition: $(vars.datapipeline_c3dhm_partition)

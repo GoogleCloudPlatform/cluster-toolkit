@@ -1,0 +1,221 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+---
+- name: af3-slurm-rest-api-service
+  hosts: localhost
+  become: true
+  vars:
+    # variables set in af3-slurm-deployment.yaml
+    project_id:
+    af3ipynb_activate:
+    service_user:
+    af3ipynb_bucket:
+    secret_name:
+    api_port:
+    sif_dir:
+    model_dir:
+    db_dir:
+    pdb_database_path:
+    jax_compilation_cache_path:
+    jupyter_notebook_bucket_local_mount:
+    inference_enable_unified_memory:
+
+    # Default Datapipeline Partition Config
+    default_datapipeline_partition_name:
+    default_datapipeline_timeout:
+
+    # Default Inference Partition Config
+    default_inference_partition_name:
+    default_inference_timeout:
+
+    # Configuration info for each partition
+    datapipeline_c3dhm_partition_name:
+    datapipeline_c3dhm_partition_machine_type:
+    datapipeline_c3dhm_partition_memory:
+    datapipeline_c3dhm_partition_cpu_count:
+    inference_g2_partition_name:
+    inference_g2_partition_machine_type:
+    inference_g2_partition_memory:
+    inference_g2_partition_cpu_count:
+    inference_a2_partition_name:
+    inference_a2_partition_machine_type:
+    inference_a2_partition_memory:
+    inference_a2_partition_cpu_count:
+    inference_a2u_partition_name:
+    inference_a2u_partition_machine_type:
+    inference_a2u_partition_memory:
+    inference_a2u_partition_cpu_count:
+
+    # AF3 Science Settings
+    max_template_date:
+    conformer_max_iterations:
+    num_recycles:
+    num_diffusion_samples:
+    num_seeds:
+    save_embeddings:
+
+    # fixed variables, not intended to be modified
+    service_name: af3slurmrestapi
+    service_type: simple
+    exec_start: "slurmrestd -u {{ service_user }} 0.0.0.0:{{ api_port }}"
+    start_after: network.target
+    slurmrestapi_environment: "SLURM_JWT=daemon"
+    af3_job_template_jupyter_path: "{{ jupyter_notebook_bucket_local_mount }}/libs/launch_af3_job.sh.j2"
+    slurm_info_json_path: "{{ jupyter_notebook_bucket_local_mount }}/libs/slurm_info.json"
+    slurm_node_working_directory: "/home/{{ service_user }}"
+
+  tasks:
+  - name: Ensure af3ipynb_activate is boolean
+    set_fact:
+      activate: "{{ af3ipynb_activate | bool }}"
+
+  - name: Run all slurm rest service required operation only if activated
+    block:
+    - name: Create the service file
+      ansible.builtin.copy:
+        dest: "/etc/systemd/system/{{ service_name }}.service"
+        content: |
+          [Unit]
+          Description={{ service_name }} Service
+          After={{ start_after }}
+          [Service]
+          Type={{ service_type }}
+          Environment={{ slurmrestapi_environment }}
+          ExecStart={{ exec_start }}
+          StandardOutput=append:/var/log/{{ service_name }}/{{ service_name }}.stdout.log
+          StandardError=append:/var/log/{{ service_name }}/{{ service_name }}.stderr.log
+          Restart=on-failure
+          RestartSec=30s
+          ExecReload=/bin/kill -HUP $MAINPID
+          User={{ service_user }}
+          WorkingDirectory={{ slurm_node_working_directory }}
+
+          [Install]
+          WantedBy=multi-user.target
+        owner: root
+        group: root
+        mode: '0644'
+      notify: Reload systemd
+
+    - name: Create /var/log/{{ service_name }} directory
+      ansible.builtin.file:
+        path: "/var/log/{{ service_name }}"
+        state: directory
+        owner: "{{ service_user }}"
+        group: "{{ service_user }}"
+        mode: '0755'
+
+    - name: Create logrotate configuration
+      ansible.builtin.copy:
+        dest: "/etc/logrotate.d/{{ service_name }}"
+        content: |
+          /var/log/{{ service_name }}/*.log {
+            daily
+            rotate 7
+            compress
+            delaycompress
+            missingok
+            notifempty
+            create 0640 {{ service_user }} {{ service_user }}
+          }
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Get hostname from GCP metadata
+      uri:
+        url: http://metadata.google.internal/computeMetadata/v1/instance/name
+        method: GET
+        headers:
+          Metadata-Flavor: Google
+        return_content: yes
+      register: gcp_metadata_response
+
+    - name: Ensure google-cloud-storage Python package is installed
+      ansible.builtin.pip:
+        name: google-cloud-storage
+        state: present
+        extra_args: --upgrade
+      delegate_to: localhost
+
+    - name: Save hostname to JSON file and upload to GCS
+      ansible.builtin.copy:
+        dest: /tmp/slurm_info.json
+        content: |
+          {
+            "hostname": "{{ gcp_metadata_response.content }}"
+          }
+        mode: '0644'
+
+    - name: Upload slurm_info.json to GCS
+      ansible.builtin.command:
+        cmd: gcloud storage cp /tmp/slurm_info.json gs://{{ af3ipynb_bucket }}/libs/slurm_info.json
+
+    - name: Upload rest_api_launch_af3_job.sh.j2 to GCS
+      ansible.builtin.command:
+        cmd: gcloud storage cp /tmp/rest_api_launch_af3_job.sh.j2 gs://{{ af3ipynb_bucket }}/libs/launch_af3_job.sh.j2
+
+    - name: Upload notebook-requirements.txt to GCS
+      ansible.builtin.command:
+        cmd: gcloud storage cp /tmp/notebook-requirements.txt gs://{{ af3ipynb_bucket }}/libs/notebook-requirements.txt
+
+    - name: Upload visualization.py to GCS
+      ansible.builtin.command:
+        cmd: gcloud storage cp /tmp/visualization.py gs://{{ af3ipynb_bucket }}/libs/visualization.py
+
+    - name: Render slurm_client.py from template locally
+      ansible.builtin.template:
+        src: /tmp/slurm_client.py.j2
+        dest: /tmp/slurm_client.py
+
+    - name: Upload slurm_client.py to GCS
+      ansible.builtin.command:
+        cmd: gcloud storage cp /tmp/slurm_client.py gs://{{ af3ipynb_bucket }}/libs/slurm_client.py
+
+    - name: Render Jupyter Notebook locally
+      ansible.builtin.template:
+        src: /tmp/slurm-rest-api-notebook.ipynb.j2
+        dest: /tmp/slurm-rest-api-notebook.ipynb
+
+    - name: Upload slurm-rest-api-notebook.ipynb to GCS
+      ansible.builtin.command:
+        cmd: gcloud storage cp /tmp/slurm-rest-api-notebook.ipynb gs://{{ af3ipynb_bucket }}/slurm-rest-api-notebook.ipynb
+
+    - name: Create empty __init__.py file
+      ansible.builtin.file:
+        path: /tmp/__init__.py
+        state: touch
+        mode: '0644'
+        owner: root
+        group: root
+
+    - name: Upload empty __init__.py to GCS
+      ansible.builtin.command:
+        cmd: gcloud storage cp /tmp/__init__.py gs://{{ af3ipynb_bucket }}/libs/__init__.py
+
+    when: activate
+
+  handlers:
+  - name: Reload systemd
+    listen: Reload systemd
+    systemd:
+      daemon_reload: yes
+
+  post_tasks:
+  - name: Enable and start the service conditionally
+    systemd:
+      name: "{{ service_name }}.service"
+      enabled: yes
+      state: started
+    when: activate
