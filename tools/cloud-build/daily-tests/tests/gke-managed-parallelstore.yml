@@ -14,11 +14,11 @@
 ---
 test_name: gke-managed-parallelstore
 deployment_name: gke-ps-{{ build }}
-zone: us-central1-a  # for remote node
-region: us-central1
+zone: us-east4-b  # for remote node
+region: us-east4
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/examples/gke-managed-parallelstore.yaml"
-network: "{{ test_name }}-net"
+network: "{{ test_name }}-basic-net"
 remote_node: "{{ deployment_name }}-0"
 post_deploy_tests:
 - test-validation/test-gke-managed-parallelstore.yml
@@ -26,5 +26,6 @@ custom_vars:
   project: "{{ project }}"
 cli_deployment_vars:
   region: "{{ region }}"
+  zone: "{{ zone }}"
   gcp_public_cidrs_access_enabled: true
-  base_network_name: "{{ test_name }}"
+  base_network_name: "{{ test_name }}-basic"
