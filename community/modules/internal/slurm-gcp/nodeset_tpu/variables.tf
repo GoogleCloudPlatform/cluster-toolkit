@@ -41,8 +41,8 @@ variable "accelerator_config" {
     version  = ""
   }
   validation {
-    condition     = var.accelerator_config.version == "" ? true : contains(["V2", "V3", "V4"], upper(var.accelerator_config.version))
-    error_message = "accelerator_config.version must be one of [\"V2\", \"V3\", \"V4\"]"
+    condition     = var.accelerator_config.version == "" ? true : contains(["V2", "V3", "V4", "V5e", "V5p", "V5e", "V6e"], upper(var.accelerator_config.version))
+    error_message = "accelerator_config.version must be one of [\"V2\", \"V3\", \"V4\", \"V5e\", \"V5p\", \"V6e\"]"
   }
   validation {
     condition     = var.accelerator_config.topology == "" ? true : can(regex("^[1-9]x[1-9](x[1-9])?$", var.accelerator_config.topology))
@@ -51,14 +51,15 @@ variable "accelerator_config" {
 }
 
 variable "docker_image" {
-  description = "The gcp container registry id docker image to use in the TPU vms, it defaults to gcr.io/schedmd-slurm-public/tpu:slurm-gcp-6-9-tf-<var.tf_version>"
+  description = "The gcp container registry id docker image to use in the TPU vms, it defaults to us-docker.pkg.dev/schedmd-slurm-public/tpu/slurm-gcp-6-9:tf-none"
   type        = string
-  default     = ""
+  default     = null
 }
 
-variable "tf_version" {
-  description = "Nodeset Tensorflow version, see https://cloud.google.com/tpu/docs/supported-tpu-configurations#tpu_vm for details."
+variable "runtime_version" {
+  description = "Nodeset runtinme version, see https://cloud.google.com/tpu/docs/runtimes#tpu_vm for details."
   type        = string
+  default     = "tpu-ubuntu2204-base"
 }
 
 variable "zone" {
@@ -73,6 +74,12 @@ variable "zone" {
 
 variable "preemptible" {
   description = "Specify whether TPU-vms in this nodeset are preemtible, see https://cloud.google.com/tpu/docs/preemptible for details."
+  type        = bool
+  default     = false
+}
+
+variable "spot" {
+  description = "Specify whether TPU-vms in this nodeset are spot, see https://cloud.google.com/tpu/docs/spot for details."
   type        = bool
   default     = false
 }
