@@ -80,15 +80,27 @@ deployment_groups:
         family: ubuntu-2204-lts
         project: ubuntu-os-cloud
 
-  - id: workstation-debian
+  - id: workstation-debian-11
     source: modules/compute/vm-instance
     use:
     - network1
     - startup-script
     settings:
-      name_prefix: debian
+      name_prefix: deb11
       instance_image:
         family: debian-11
+        project: debian-cloud
+
+  - id: workstation-debian-12
+    source: modules/compute/vm-instance
+    use:
+    - network1
+    - startup-script
+    settings:
+      name_prefix: deb12
+      add_deployment_name_before_prefix: true
+      instance_image:
+        family: debian-12
         project: debian-cloud
 
   - id: workstation-rocky-8
@@ -146,7 +158,8 @@ deployment_groups:
       - $(workstation-centos.name[0])
       - $(workstation-ubuntu-2004.name[0])
       - $(workstation-ubuntu-2204.name[0])
-      - $(workstation-debian.name[0])
+      - $(workstation-debian-11.name[0])
+      - $(workstation-debian-12.name[0])
       - $(workstation-rocky-8.name[0])
       - $(workstation-rocky-9.name[0])
       - $(workstation-rhel-8.name[0])
