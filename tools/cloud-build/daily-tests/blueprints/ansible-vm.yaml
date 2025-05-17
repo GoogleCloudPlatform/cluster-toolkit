@@ -68,6 +68,18 @@ deployment_groups:
         family: ubuntu-2204-lts
         project: ubuntu-os-cloud
 
+  - id: workstation-ubuntu-2404
+    source: modules/compute/vm-instance
+    use:
+    - network1
+    - startup-script
+    settings:
+      name_prefix: ubuntu2404
+      add_deployment_name_before_prefix: true
+      instance_image:
+        family: ubuntu-2404-lts-amd64
+        project: ubuntu-os-cloud
+
   - id: workstation-debian-11
     source: modules/compute/vm-instance
     use:
@@ -146,6 +158,7 @@ deployment_groups:
       instance_names:
       - $(workstation-ubuntu-2004.name[0])
       - $(workstation-ubuntu-2204.name[0])
+      - $(workstation-ubuntu-2404.name[0])
       - $(workstation-debian-11.name[0])
       - $(workstation-debian-12.name[0])
       - $(workstation-rocky-8.name[0])
