@@ -87,6 +87,7 @@ deployment_groups:
     - startup-script
     settings:
       name_prefix: deb11
+      add_deployment_name_before_prefix: true
       instance_image:
         family: debian-11
         project: debian-cloud
