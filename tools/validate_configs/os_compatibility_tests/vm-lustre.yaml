@@ -35,35 +35,23 @@ deployment_groups:
   - id: network1
     source: modules/network/pre-existing-vpc
 
+  # Required for Managed Lustre instance
+  - id: private_service_access
+    source: community/modules/network/private-service-access
+    use: [network1]
+
   ###########
   # Storage #
   ###########
 
-  # This file system has an associated license cost.
-  # https://console.developers.google.com/marketplace/product/ddnstorage/exascaler-cloud
   - id: lustre
-    source: community/modules/file-system/DDN-EXAScaler
-    use: [network1]
+    source: modules/file-system/managed-lustre
+    use: [network1, private_service_access]
     settings:
+      name: lustre_instance
       local_mount: /lustre
-      mgs:
-        nic_type: "GVNIC"
-        node_type: n2-standard-2
-        node_count: 1
-        node_cpu: "Intel Cascade Lake"
-        public_ip: true
-      mds:
-        nic_type: "GVNIC"
-        node_type: n2-standard-2
-        node_count: 1
-        node_cpu: "Intel Cascade Lake"
-        public_ip: true
-      oss:
-        nic_type: "GVNIC"
-        node_type: n2-standard-2
-        node_count: 3
-        node_cpu: "Intel Cascade Lake"
-        public_ip: true
+      remote_mount: lustrefs
+      size_gib: 18000
 
   #############
   # Simple VM #
@@ -105,7 +93,7 @@ deployment_groups:
       instance_name: ((module.workstation-rocky.name[0]))
       timeout: 7200
 
-  - id: workstation-ubuntu
+  - id: workstation-ubuntu-20
     source: modules/compute/vm-instance
     use:
     - network1
@@ -117,8 +105,28 @@ deployment_groups:
       instance_image:
         family: ubuntu-2004-lts
         project: ubuntu-os-cloud
-  - id: wait-ubuntu
+
+  - id: wait-ubuntu-20
     source: community/modules/scripts/wait-for-startup
     settings:
-      instance_name: ((module.workstation-ubuntu.name[0]))
+      instance_name: ((module.workstation-ubuntu-20.name[0]))
+      timeout: 7200
+
+  - id: workstation-ubuntu-22
+    source: modules/compute/vm-instance
+    use:
+    - network1
+    - lustre
+    - startup-script
+    settings:
+      name_prefix: ubuntu
+      instance_count: 1
+      instance_image:
+        family: ubuntu-2204-lts
+        project: ubuntu-os-cloud
+
+  - id: wait-ubuntu-22
+    source: community/modules/scripts/wait-for-startup
+    settings:
+      instance_name: ((module.workstation-ubuntu-22.name[0]))
       timeout: 7200

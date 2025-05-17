@@ -33,10 +33,19 @@ deployment_groups:
     settings:
       local_mount: /apps
 
-  - id: lustrefs
-    source: community/modules/file-system/DDN-EXAScaler
+  # Required for Managed Lustre instance
+  - id: private_service_access
+    source: community/modules/network/private-service-access
     use: [network1]
-    settings: {local_mount: /scratch}
+
+  - id: lustrefs
+    source: modules/file-system/managed-lustre
+    use: [network1, private_service_access]
+    settings:
+      name: lustre_instance
+      local_mount: /scratch
+      remote_mount: lustrefs
+      size_gib: 18000
 
   - id: batch-job
     source: modules/scheduler/batch-job-template
