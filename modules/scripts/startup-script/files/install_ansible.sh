@@ -14,12 +14,12 @@
 # limitations under the License.
 
 set -ex
-REQ_ANSIBLE_VERSION=2.11
-REQ_ANSIBLE_PIP_VERSION=4.10.0
-REQ_PIP_WHEEL_VERSION=0.37.1
-REQ_PIP_SETUPTOOLS_VERSION=59.6.0
-REQ_PIP_MAJOR_VERSION=21
-REQ_PYTHON3_VERSION=6
+REQ_ANSIBLE_VERSION=2.13
+REQ_ANSIBLE_PIP_VERSION=6.7.0
+REQ_PIP_WHEEL_VERSION=0.45.1
+REQ_PIP_SETUPTOOLS_VERSION=75.3.2
+REQ_PIP_MAJOR_VERSION=25
+REQ_PYTHON3_VERSION=8
 
 apt_wait() {
 	while fuser /var/lib/apt/lists/lock >/dev/null 2>&1; do
@@ -34,7 +34,7 @@ install_python_deps() {
 	if [ -f /etc/debian_version ]; then
 		apt_wait
 		apt-get update --allow-releaseinfo-change-origin --allow-releaseinfo-change-label
-		apt-get install -o DPkg::Lock::Timeout=600 -y python3-distutils python3-venv
+		apt-get install -o DPkg::Lock::Timeout=600 -y python3-setuptools python3-venv
 	fi
 }
 
@@ -65,31 +65,21 @@ get_python_minor_version() {
 
 # Install python3 with the yum package manager. Updates python_path to the
 # newly installed packaged.
-install_python3_yum() {
-	major_version=$(rpm -E "%{rhel}")
+install_python3_dnf() {
 	set -- "--disablerepo=*" "--enablerepo=baseos,appstream"
-
-	if grep -qi 'ID="rhel"' /etc/os-release && {
-		[ "${major_version}" -eq "7" ] || [ "${major_version}" -eq "8" ] ||
-			[ "${major_version}" -eq "9" ]
-	}; then
+	if grep -qi 'ID="rhel"' /etc/os-release; then
 		# Do not set --disablerepo / --enablerepo on RedHat, due to complex repo names
 		# clear array
 		set --
-	elif [ "${major_version}" -eq "7" ]; then
-		set -- "--disablerepo=*" "--enablerepo=base,epel"
-	elif [ "${major_version}" -eq "8" ]; then
-		# use defaults
-		true
-	elif [ "${major_version}" -eq "9" ]; then
-		# use defaults
-		true
-	else
-		echo "Unsupported version of centos/RHEL/Rocky"
-		return 1
 	fi
-	yum install "$@" -y python3 python3-pip
-	python_path=$(rpm -ql python3 | grep 'bin/python3$')
+	# On Rocky Linux 9, python 3.9 is installed by default but this
+	# has already been dropped by ansible-core for control nodes.
+	# https://docs.ansible.com/ansible/latest/reference_appendices/release_and_maintenance.html#ansible-core-support-matrix
+	# Python 3.12 aligns with both RHEL 10 and currently supported
+	# Ansible releases. To make this command work on RHEL10, must
+	# modify it to read python3 and python3-pip.
+	dnf install "$@" -y python3.12 python3.12-pip
+	python_path=$(command -v python3.12)
 }
 
 # Install python3 with the apt package manager. Updates python_path to the
@@ -97,16 +87,15 @@ install_python3_yum() {
 install_python3_apt() {
 	apt_wait
 	apt-get update --allow-releaseinfo-change-origin --allow-releaseinfo-change-label
-	apt-get install -o DPkg::Lock::Timeout=600 -y python3 python3-distutils python3-pip python3-venv
+	apt-get install -o DPkg::Lock::Timeout=600 -y python3 python3-setuptools python3-pip python3-venv
 	python_path=$(command -v python3)
 }
 
 install_python3() {
-	if [ -f /etc/centos-release ] || [ -f /etc/redhat-release ] ||
-		[ -f /etc/oracle-release ] || [ -f /etc/system-release ]; then
-		install_python3_yum
-	elif [ -f /etc/debian_version ] || grep -qi ubuntu /etc/lsb-release 2>/dev/null ||
-		grep -qi ubuntu /etc/os-release 2>/dev/null; then
+	if [ -f /etc/redhat-release ] || [ -f /etc/oracle-release ] ||
+		[ -f /etc/system-release ]; then
+		install_python3_dnf
+	elif [ -f /etc/debian_version ]; then
 		install_python3_apt
 	else
 		echo "Error: Unsupported Distribution"
@@ -114,35 +103,19 @@ install_python3() {
 	fi
 }
 
-# Install python3 with the yum package manager. Updates python_path to the
+# Install pip3 with the dnf package manager. Updates python_path to the
 # newly installed packaged.
-install_pip3_yum() {
-	major_version=$(rpm -E "%{rhel}")
+install_pip3_dnf() {
 	set -- "--disablerepo=*" "--enablerepo=baseos,appstream"
-
-	if grep -qi 'ID="rhel"' /etc/os-release && {
-		[ "${major_version}" -eq "7" ] || [ "${major_version}" -eq "8" ] ||
-			[ "${major_version}" -eq "9" ]
-	}; then
+	if grep -qi 'ID="rhel"' /etc/os-release; then
 		# Do not set --disablerepo / --enablerepo on RedHat, due to complex repo names
 		# clear array
 		set --
-	elif [ "${major_version}" -eq "7" ]; then
-		set -- "--disablerepo=*" "--enablerepo=base,epel"
-	elif [ "${major_version}" -eq "8" ]; then
-		# use defaults
-		true
-	elif [ "${major_version}" -eq "9" ]; then
-		# use defaults
-		true
-	else
-		echo "Unsupported version of centos/RHEL/Rocky"
-		return 1
 	fi
-	yum install "$@" -y python3-pip
+	dnf install "$@" -y python3.12-pip
 }
 
-# Install python3 with the apt package manager. Updates python_path to the
+# Install pip3 with the apt package manager. Updates python_path to the
 # newly installed packaged.
 install_pip3_apt() {
 	apt_wait
@@ -153,9 +126,8 @@ install_pip3_apt() {
 install_pip3() {
 	if [ -f /etc/centos-release ] || [ -f /etc/redhat-release ] ||
 		[ -f /etc/oracle-release ] || [ -f /etc/system-release ]; then
-		install_pip3_yum
-	elif [ -f /etc/debian_version ] || grep -qi ubuntu /etc/lsb-release 2>/dev/null ||
-		grep -qi ubuntu /etc/os-release 2>/dev/null; then
+		install_pip3_dnf
+	elif [ -f /etc/debian_version ]; then
 		install_pip3_apt
 	else
 		echo "Error: Unsupported Distribution"
