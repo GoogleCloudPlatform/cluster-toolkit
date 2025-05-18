@@ -22,6 +22,7 @@ import shutil
 import subprocess
 import stat
 import time
+from google_crc32c import exc
 import yaml
 from pathlib import Path
 
@@ -450,7 +451,11 @@ def setup_controller():
     run("systemctl status slurmctld", timeout=30)
     run("systemctl status slurmrestd", timeout=30)
 
-    slurmsync.sync_instances()
+    try:
+        slurmsync.sync_instances()
+    except Exception:
+        log.exception("Failed to sync instances, will try next time.")
+
     run("systemctl enable slurm_load_bq.timer", timeout=30)
     run("systemctl start slurm_load_bq.timer", timeout=30)
     run("systemctl status slurm_load_bq.timer", timeout=30)
