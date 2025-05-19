@@ -34,7 +34,7 @@ install_python_deps() {
 	if [ -f /etc/debian_version ]; then
 		apt_wait
 		apt-get update --allow-releaseinfo-change-origin --allow-releaseinfo-change-label
-		apt-get install -o DPkg::Lock::Timeout=600 -y python3-distutils python3-venv
+		apt-get install -o DPkg::Lock::Timeout=600 -y python3-setuptools python3-venv
 	fi
 }
 
@@ -93,7 +93,7 @@ install_python3_dnf() {
 install_python3_apt() {
 	apt_wait
 	apt-get update --allow-releaseinfo-change-origin --allow-releaseinfo-change-label
-	apt-get install -o DPkg::Lock::Timeout=600 -y python3 python3-distutils python3-pip python3-venv
+	apt-get install -o DPkg::Lock::Timeout=600 -y python3 python3-setuptools python3-pip python3-venv
 	python_path=$(command -v python3)
 }
 
