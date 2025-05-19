@@ -53,6 +53,12 @@ deployment_groups:
         enabled: true
         world_writable: true
       runners:
+      - type: data
+        destination: /etc/apt/preferences.d/block-broken-nvidia-container
+        content: |
+          Package: nvidia-container-toolkit nvidia-container-toolkit-base libnvidia-container-tools libnvidia-container1
+          Pin: version 1.17.7-1
+          Pin-Priority: 100
       # it is important that kernel upgrades do not occur before running the
       # solution for building Slurm (which doesn't handle them well on the fly)
       # if you follow this rule, any module which supports DKMS will be
