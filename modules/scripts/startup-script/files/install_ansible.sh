@@ -65,31 +65,15 @@ get_python_minor_version() {
 
 # Install python3 with the yum package manager. Updates python_path to the
 # newly installed packaged.
-install_python3_yum() {
-	major_version=$(rpm -E "%{rhel}")
+install_python3_dnf() {
 	set -- "--disablerepo=*" "--enablerepo=baseos,appstream"
-
-	if grep -qi 'ID="rhel"' /etc/os-release && {
-		[ "${major_version}" -eq "7" ] || [ "${major_version}" -eq "8" ] ||
-			[ "${major_version}" -eq "9" ]
-	}; then
+	if grep -qi 'ID="rhel"' /etc/os-release; then
 		# Do not set --disablerepo / --enablerepo on RedHat, due to complex repo names
 		# clear array
 		set --
-	elif [ "${major_version}" -eq "7" ]; then
-		set -- "--disablerepo=*" "--enablerepo=base,epel"
-	elif [ "${major_version}" -eq "8" ]; then
-		# use defaults
-		true
-	elif [ "${major_version}" -eq "9" ]; then
-		# use defaults
-		true
-	else
-		echo "Unsupported version of centos/RHEL/Rocky"
-		return 1
 	fi
-	yum install "$@" -y python3 python3-pip
-	python_path=$(rpm -ql python3 | grep 'bin/python3$')
+	dnf install "$@" -y python3 python3-pip
+	python_path=$(command -v python3)
 }
 
 # Install python3 with the apt package manager. Updates python_path to the
@@ -102,11 +86,10 @@ install_python3_apt() {
 }
 
 install_python3() {
-	if [ -f /etc/centos-release ] || [ -f /etc/redhat-release ] ||
-		[ -f /etc/oracle-release ] || [ -f /etc/system-release ]; then
-		install_python3_yum
-	elif [ -f /etc/debian_version ] || grep -qi ubuntu /etc/lsb-release 2>/dev/null ||
-		grep -qi ubuntu /etc/os-release 2>/dev/null; then
+	if [ -f /etc/redhat-release ] || [ -f /etc/oracle-release ] ||
+		[ -f /etc/system-release ]; then
+		install_python3_dnf
+	elif [ -f /etc/debian_version ]; then
 		install_python3_apt
 	else
 		echo "Error: Unsupported Distribution"
@@ -114,35 +97,19 @@ install_python3() {
 	fi
 }
 
-# Install python3 with the yum package manager. Updates python_path to the
+# Install pip3 with the dnf package manager. Updates python_path to the
 # newly installed packaged.
-install_pip3_yum() {
-	major_version=$(rpm -E "%{rhel}")
+install_pip3_dnf() {
 	set -- "--disablerepo=*" "--enablerepo=baseos,appstream"
-
-	if grep -qi 'ID="rhel"' /etc/os-release && {
-		[ "${major_version}" -eq "7" ] || [ "${major_version}" -eq "8" ] ||
-			[ "${major_version}" -eq "9" ]
-	}; then
+	if grep -qi 'ID="rhel"' /etc/os-release; then
 		# Do not set --disablerepo / --enablerepo on RedHat, due to complex repo names
 		# clear array
 		set --
-	elif [ "${major_version}" -eq "7" ]; then
-		set -- "--disablerepo=*" "--enablerepo=base,epel"
-	elif [ "${major_version}" -eq "8" ]; then
-		# use defaults
-		true
-	elif [ "${major_version}" -eq "9" ]; then
-		# use defaults
-		true
-	else
-		echo "Unsupported version of centos/RHEL/Rocky"
-		return 1
 	fi
-	yum install "$@" -y python3-pip
+	dnf install "$@" -y python3-pip
 }
 
-# Install python3 with the apt package manager. Updates python_path to the
+# Install pip3 with the apt package manager. Updates python_path to the
 # newly installed packaged.
 install_pip3_apt() {
 	apt_wait
@@ -151,11 +118,10 @@ install_pip3_apt() {
 }
 
 install_pip3() {
-	if [ -f /etc/centos-release ] || [ -f /etc/redhat-release ] ||
-		[ -f /etc/oracle-release ] || [ -f /etc/system-release ]; then
-		install_pip3_yum
-	elif [ -f /etc/debian_version ] || grep -qi ubuntu /etc/lsb-release 2>/dev/null ||
-		grep -qi ubuntu /etc/os-release 2>/dev/null; then
+	if [ -f /etc/redhat-release ] || [ -f /etc/oracle-release ] ||
+		[ -f /etc/system-release ]; then
+		install_pip3_dnf
+	elif [ -f /etc/debian_version ]; then
 		install_pip3_apt
 	else
 		echo "Error: Unsupported Distribution"
