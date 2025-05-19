@@ -171,20 +171,10 @@ main() {
 		install_python_deps
 	fi
 
-	# Install and/or upgrade pip
+	# Install OS-packaged pip
 	if ! ${python_path} -m pip --version 2>/dev/null; then
 		if ! install_pip3; then
 			return 1
-		fi
-	fi
-
-	# Upgrade system-wide pip
-	# Do not run on Debian 12 - system pip package modification is forbidden
-	if [ ! -f /etc/debian_version ] || [ "$(lsb_release -a 2>/dev/null | sed -n 's/Release:\s\+\([0-9]\+\).\?.*/\1/p')" -ne "12" ]; then
-		pip_version=$(${python_path} -m pip --version | sed -nr 's/^pip ([0-9]+\.[0-9]+).*$/\1/p')
-		pip_major_version=$(echo "${pip_version}" | cut -d '.' -f 1)
-		if [ "${pip_major_version}" -lt "${REQ_PIP_MAJOR_VERSION}" ]; then
-			${python_path} -m pip install --upgrade pip
 		fi
 	fi
 
