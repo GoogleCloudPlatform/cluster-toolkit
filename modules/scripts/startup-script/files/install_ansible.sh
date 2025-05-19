@@ -14,12 +14,12 @@
 # limitations under the License.
 
 set -ex
-REQ_ANSIBLE_VERSION=2.11
-REQ_ANSIBLE_PIP_VERSION=4.10.0
-REQ_PIP_WHEEL_VERSION=0.37.1
-REQ_PIP_SETUPTOOLS_VERSION=59.6.0
-REQ_PIP_MAJOR_VERSION=21
-REQ_PYTHON3_VERSION=6
+REQ_ANSIBLE_VERSION=2.13
+REQ_ANSIBLE_PIP_VERSION=6.7.0
+REQ_PIP_WHEEL_VERSION=0.45.1
+REQ_PIP_SETUPTOOLS_VERSION=75.3.2
+REQ_PIP_MAJOR_VERSION=25
+REQ_PYTHON3_VERSION=8
 
 apt_wait() {
 	while fuser /var/lib/apt/lists/lock >/dev/null 2>&1; do
@@ -66,14 +66,26 @@ get_python_minor_version() {
 # Install python3 with the yum package manager. Updates python_path to the
 # newly installed packaged.
 install_python3_dnf() {
+	major_version=$(rpm -E "%{rhel}")
 	set -- "--disablerepo=*" "--enablerepo=baseos,appstream"
 	if grep -qi 'ID="rhel"' /etc/os-release; then
-		# Do not set --disablerepo / --enablerepo on RedHat, due to complex repo names
-		# clear array
+		# Do not set --disablerepo / --enablerepo on RedHat, due to
+		# complex repo names; clear array
 		set --
 	fi
-	dnf install "$@" -y python3 python3-pip
-	python_path=$(command -v python3)
+	# On Rocky Linux 9, Python 3.9 is installed by default but this
+	# has already been dropped by ansible-core for control nodes.
+	# https://docs.ansible.com/ansible/latest/reference_appendices/release_and_maintenance.html#ansible-core-support-matrix
+	# Python 3.12 aligns with RHEL 10 default (GA: 13 May 2025) where
+	# it is available as "python3*" but must be named explicitly on
+	# older releases. It also ensures longer support for Ansible.
+	if [ "${major_version}" -lt "10" ]; then
+		dnf install "$@" -y python3.12 python3.12-pip
+		python_path=$(command -v python3.12)
+	else
+		dnf install "$@" -y python3 python3-pip
+		python_path=$(command -v python3)
+	fi
 }
 
 # Install python3 with the apt package manager. Updates python_path to the
@@ -100,13 +112,21 @@ install_python3() {
 # Install pip3 with the dnf package manager. Updates python_path to the
 # newly installed packaged.
 install_pip3_dnf() {
+	major_version=$(rpm -E "%{rhel}")
 	set -- "--disablerepo=*" "--enablerepo=baseos,appstream"
 	if grep -qi 'ID="rhel"' /etc/os-release; then
 		# Do not set --disablerepo / --enablerepo on RedHat, due to complex repo names
 		# clear array
 		set --
 	fi
-	dnf install "$@" -y python3-pip
+	# Python 3.12 aligns with RHEL 10 default (GA: 13 May 2025) where
+	# it is available as "python3*" but must be named explicitly on
+	# older releases. It also ensures longer support for Ansible.
+	if [ "${major_version}" -lt "10" ]; then
+		dnf install "$@" -y python3.12-pip
+	else
+		dnf install "$@" -y python3-pip
+	fi
 }
 
 # Install pip3 with the apt package manager. Updates python_path to the
