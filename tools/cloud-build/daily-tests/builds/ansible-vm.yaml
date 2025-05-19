@@ -22,7 +22,7 @@ tags:
 
 timeout: 14400s  # 4hr
 steps:
-- id: anisble-vm
+- id: ansible-vm
   name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
   entrypoint: /bin/bash
   env:
