@@ -64,6 +64,12 @@ deployment_groups:
         enabled: true
         world_writable: true
       runners:
+      - type: data
+        destination: /etc/apt/preferences.d/block-broken-nvidia-container
+        content: |
+          Package: nvidia-container-toolkit nvidia-container-toolkit-base libnvidia-container-tools libnvidia-container1
+          Pin: version 1.17.7-1
+          Pin-Priority: 100
       - type: shell
         destination: disable_unattended_upgrades.sh
         content: |
