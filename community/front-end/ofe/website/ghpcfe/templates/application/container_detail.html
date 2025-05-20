@@ -1,0 +1,98 @@
+<!--
+ Copyright 2025 "Google LLC"
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+{% extends "base_generic.html" %}
+
+{% block meta %}
+  {% if object.status in "pqi" %}
+    <meta http-equiv="refresh" content="15" />
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+  <h2>Application Detail (Container)</h2>
+  
+  <p><b>Application ID:</b> {{ object.id }}</p>
+  <p><b>Name:</b> {{ object.name }}</p>
+  <p><b>Cluster Name:</b> {{ object.cluster.name }}</p>
+
+  <p><b>Status:</b>
+    {% if object.status in "pqi" %}
+       <img src="/static/img/loading.gif" style="width:32px;height:32px;">
+    {% elif object.status == "r" %}
+       <img src="/static/img/status-ready.png" style="width:32px;height:32px;">
+    {% endif %}
+    {{ object.get_status_display }}
+  </p>
+
+  <hr>
+
+  <p style="text-decoration: underline; font-size: large;">Container details</p>
+  <p><b>Registry:</b>
+    {% if application.registry %}
+        {{ application.registry.repository_id }}
+    {% else %}
+        <em>None selected</em>
+    {% endif %}
+</p>
+
+<p><b>Container Image:</b>
+    {% if application.container_image %}
+        {{ application.container_image }}
+    {% else %}
+        <em>Not available</em>
+    {% endif %}
+</p>
+
+<p><b>Full Container Image URI:</b>
+    {% if application.full_container_image_uri %}
+        {{ application.full_container_image_uri }}
+    {% else %}
+        <em>Not available</em>
+    {% endif %}
+</p>
+  <p><b>Registry Mode:</b> {{ registry_mode }}</p>
+
+  <p><b>Registry Console URL:</b>
+    {% if registry_console_url %}
+        <a href="{{ registry_console_url }}" target="_blank">Open in GCP</a>
+    {% else %}
+        <em>Not available</em>
+    {% endif %}
+  </p>
+
+  <hr>
+
+  {% if object.status == "x" %}
+    <div class="alert alert-info">
+      The cluster hosting this application has been destroyed. This application is no longer available for new jobs.
+    </div> 
+  {% endif %}
+
+  {% if object.status == "n" %}
+    <a href="{% url 'application-update' object.id %}" class="btn btn-primary">Edit</a>
+    <a href="{% url 'application-delete' object.id %}" class="btn btn-primary">Delete</a>
+    <a href="{% url 'backend-container-install' object.id %}" class="btn btn-primary">Install</a>
+  {% endif %}
+
+  {% if object.status == "r" %}
+    <a href="{% url 'job-create' object.id %}" class="btn btn-primary">New Job</a>
+  {% endif %}
+
+  {% if admin_view == 1 and object.status in "re" %}
+    <a href="{% url 'application-log' object.id %}" class="btn btn-primary">View Logs</a>
+  {% endif %}
+{% endblock %}

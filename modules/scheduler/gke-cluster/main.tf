@@ -239,6 +239,12 @@ resource "google_container_cluster" "gke_cluster" {
     }
   }
 
+  control_plane_endpoints_config {
+    dns_endpoint_config {
+      allow_external_traffic = var.enable_external_dns_endpoint
+    }
+  }
+
   lifecycle {
     # Ignore all changes to the default node pool. It's being removed after creation.
     ignore_changes = [
@@ -271,41 +277,18 @@ resource "google_container_cluster" "gke_cluster" {
   }
 }
 
-resource "kubernetes_resource_quota" "gpu_operator_quota" {
-  count = var.enable_gpu_operator ? 1 : 0
-
-  metadata {
-    name      = "gpu-operator-quota"
-    namespace = "gpu-operator"
-  }
-  spec {
-    hard = {
-      pods = "100"
-    }
-    scope_selector {
-      match_expression {
-        scope_name = "PriorityClass"
-        operator   = "In"
-        values = [
-          "system-node-critical",
-          "system-cluster-critical",
-        ]
-      }
-    }
-  }
-}
-
 # We define explicit node pools, so that it can be modified without
 # having to destroy the entire cluster.
 resource "google_container_node_pool" "system_node_pools" {
   provider = google-beta
   count    = var.system_node_pool_enabled ? 1 : 0
 
-  project  = var.project_id
-  name     = var.system_node_pool_name
-  cluster  = var.cluster_reference_type == "NAME" ? google_container_cluster.gke_cluster.name : google_container_cluster.gke_cluster.self_link
-  location = var.cluster_availability_type == "ZONAL" ? var.zone : var.region
-  version  = local.master_version
+  project        = var.project_id
+  name           = var.system_node_pool_name
+  cluster        = var.cluster_reference_type == "NAME" ? google_container_cluster.gke_cluster.name : google_container_cluster.gke_cluster.self_link
+  location       = var.cluster_availability_type == "ZONAL" ? var.zone : var.region
+  node_locations = var.system_node_pool_zones
+  version        = local.master_version
 
   autoscaling {
     total_min_node_count = var.system_node_pool_node_count.total_min_nodes

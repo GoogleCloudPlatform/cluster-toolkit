@@ -216,18 +216,23 @@ deployment_groups:
           mkdir -m 0755 -p "${SLURM_ROOT}/scripts"
           mkdir -p "${SLURM_ROOT}/partition-$(vars.a3mega_partition_name)-prolog_slurmd.d"
           mkdir -p "${SLURM_ROOT}/partition-$(vars.a3mega_partition_name)-epilog_slurmd.d"
+          mkdir -p "${SLURM_ROOT}/prolog_slurmd.d"
+          mkdir -p "${SLURM_ROOT}/epilog_slurmd.d"
+          # enable the use of password-free sudo within Slurm jobs on all compute nodes
+          # feature is restricted to users with OS Admin Login IAM role
+          # https://cloud.google.com/iam/docs/understanding-roles#compute.osAdminLogin
           curl -s -o "${SLURM_ROOT}/scripts/sudo-oslogin" \
               https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/master/tools/prologs-epilogs/sudo-oslogin
           chmod 0755 "${SLURM_ROOT}/scripts/sudo-oslogin"
-          ln -s "${SLURM_ROOT}/scripts/sudo-oslogin" "${SLURM_ROOT}/partition-$(vars.a3mega_partition_name)-prolog_slurmd.d/sudo-oslogin.prolog_slurmd"
-          ln -s "${SLURM_ROOT}/scripts/sudo-oslogin" "${SLURM_ROOT}/partition-$(vars.a3mega_partition_name)-epilog_slurmd.d/sudo-oslogin.epilog_slurmd"
+          ln -s "${SLURM_ROOT}/scripts/sudo-oslogin" "${SLURM_ROOT}/prolog_slurmd.d/sudo-oslogin.prolog_slurmd"
+          ln -s "${SLURM_ROOT}/scripts/sudo-oslogin" "${SLURM_ROOT}/epilog_slurmd.d/sudo-oslogin.epilog_slurmd"
           curl -s -o "${SLURM_ROOT}/scripts/rxdm" \
               https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/master/tools/prologs-epilogs/receive-data-path-manager-mega
           chmod 0755 "${SLURM_ROOT}/scripts/rxdm"
           ln -s "${SLURM_ROOT}/scripts/rxdm" "${SLURM_ROOT}/partition-$(vars.a3mega_partition_name)-prolog_slurmd.d/rxdm.prolog_slurmd"
           ln -s "${SLURM_ROOT}/scripts/rxdm" "${SLURM_ROOT}/partition-$(vars.a3mega_partition_name)-epilog_slurmd.d/rxdm.epilog_slurmd"
-          # Uncomment the line below to enable epilog that will check health of GPUs and drain node if problem is detected.
-          # ln -s "/slurm/scripts/tools/gpu-test" "${SLURM_ROOT}/partition-$(vars.a3mega_partition_name)-epilog_slurmd.d/gpu-test.epilog_slurmd"
+          # enable a GPU health check that runs at the completion of all jobs on A3mega nodes
+          ln -s "/slurm/scripts/tools/gpu-test" "${SLURM_ROOT}/partition-$(vars.a3mega_partition_name)-epilog_slurmd.d/gpu-test.epilog_slurmd"
       - type: shell
         destination: reset_enroot.sh
         content: |

@@ -19,12 +19,13 @@ region: us-central1
 zone: us-central1-a
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/examples/ps-slurm.yaml"
-network: "{{ deployment_name }}-net"
+network: "{{ test_name }}-net"
 slurm_cluster_name: "psslurm{{ build[0:3] }}"
 cli_deployment_vars:
   region: "{{ region }}"
   zone: "{{ zone }}"
   compute_node_machine_type: c2-standard-4
+  base_network_name: "{{ test_name }}"
 # Note: Pattern matching in gcloud only supports 1 wildcard.
 login_node: "{{ slurm_cluster_name }}-slurm-login-*"
 controller_node: "{{ slurm_cluster_name }}-controller"

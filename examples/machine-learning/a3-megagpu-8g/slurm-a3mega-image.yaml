@@ -24,7 +24,7 @@ validators:
 # deployment-image-cluster.yaml
 vars:
   deployment_name: a3mega-image
-  source_image: debian-12-bookworm-v20240815
+  source_image: debian-12-bookworm-v20250415
 
 deployment_groups:
 - group: build_script
@@ -53,6 +53,12 @@ deployment_groups:
         enabled: true
         world_writable: true
       runners:
+      - type: data
+        destination: /etc/apt/preferences.d/block-broken-nvidia-container
+        content: |
+          Package: nvidia-container-toolkit nvidia-container-toolkit-base libnvidia-container-tools libnvidia-container1
+          Pin: version 1.17.7-1
+          Pin-Priority: 100
       # it is important that kernel upgrades do not occur before running the
       # solution for building Slurm (which doesn't handle them well on the fly)
       # if you follow this rule, any module which supports DKMS will be
@@ -61,6 +67,18 @@ deployment_groups:
         destination: prevent_unintentional_upgrades.sh
         content: |
           #!/bin/bash
+          # Unattended upgrades are disabled in this blueprint so that software does not
+          # get updated daily and lead to potential instability in the cluster environment.
+          #
+          # Unattended Upgrades installs available security updates from the Ubuntu
+          # security pocket for installed packages daily by default. Administrators who
+          # disable this feature assume all responsibility for manually reviewing and
+          # patching their systems against vulnerabilities.
+          #
+          # To enable unattended upgrades, please remove the following lines:
+          #   systemctl stop unattended-upgrades.service
+          #   systemctl disable unattended-upgrades.service
+          #   systemctl mask unattended-upgrades.service
           set -e -o pipefail
           systemctl stop unattended-upgrades.service
           systemctl disable unattended-upgrades.service
@@ -77,7 +95,7 @@ deployment_groups:
             hosts: all
             become: true
             vars:
-              package_url: https://snapshot.debian.org/archive/debian/20240819T204354Z/pool/main/l/linux/linux-headers-6.1.0-23-amd64_6.1.99-1_amd64.deb
+              package_url: https://snapshot.debian.org/archive/debian/20250415T211946Z/pool/main/l/linux/linux-headers-6.1.0-33-cloud-amd64_6.1.133-1_amd64.deb
               package_filename: /tmp/{{ package_url | basename }}
             tasks:
             - name: Download kernel headers package

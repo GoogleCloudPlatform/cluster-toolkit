@@ -230,22 +230,23 @@ def _find_tpu_node_action(nodename, state) -> NodeAction:
 
 def get_node_action(nodename: str) -> NodeAction:
     """Determine node/instance status that requires action"""
-    state = lookup().node_state(nodename)
+    lkp = lookup()
+    state = lkp.node_state(nodename)
 
-    if lookup().node_is_fr(nodename):
-        fr = lookup().future_reservation(lookup().node_nodeset(nodename))
+    if lkp.node_is_fr(nodename):
+        fr = lkp.future_reservation(lkp.node_nodeset(nodename))
         assert fr
         if action := get_fr_action(fr, state):
             return action
 
-    if lookup().node_is_dyn(nodename):
+    if lkp.node_is_dyn(nodename):
         return _find_dynamic_node_status()
 
-    if lookup().node_is_tpu(nodename):
+    if lkp.node_is_tpu(nodename):
         return _find_tpu_node_action(nodename, state)
 
     # split below is workaround for VMs whose hostname is FQDN
-    inst = lookup().instance(nodename.split(".")[0])
+    inst = lkp.instance(nodename.split(".")[0])
     power_flags = frozenset(
         ("POWER_DOWN", "POWERING_UP", "POWERING_DOWN", "POWERED_DOWN")
     ) & (state.flags if state is not None else set())
@@ -253,7 +254,6 @@ def get_node_action(nodename: str) -> NodeAction:
     if (state is None) and (inst is None):
         # Should never happen
         return NodeActionUnknown(None, None)
-
     if inst is None:
         assert state is not None # to keep type-checker happy
         if "POWERING_UP" in state.flags:
@@ -268,7 +268,7 @@ def get_node_action(nodename: str) -> NodeAction:
             return NodeActionDown(reason="Unbacked instance")
         if state.base == "DOWN" and not power_flags:
             return NodeActionPowerDown()
-        if "POWERED_DOWN" in state.flags and lookup().is_static_node(nodename):
+        if "POWERED_DOWN" in state.flags and lkp.is_static_node(nodename):
             return NodeActionPowerUp()
     elif (
         state is not None
@@ -296,14 +296,12 @@ def get_node_action(nodename: str) -> NodeAction:
     return NodeActionUnchanged()
 
 
-def delete_placement_groups(placement_groups):
-    requests = {
-        pg["name"]: lookup().compute.resourcePolicies().delete(
-            project=lookup().project,
-            region=util.trim_self_link(pg["region"]),
-            resourcePolicy=pg["name"])
-        for pg in placement_groups
-    }
+def delete_resource_policies(links: list[str], lkp: util.Lookup) -> None:
+    requests = {}
+    for link in links:
+        name = util.trim_self_link(link)
+        region = util.parse_self_link(link).region
+        requests[name] = lkp.compute.resourcePolicies().delete(project=lkp.project, region=region, resourcePolicy=name)
 
     def swallow_err(_: str) -> None:
         pass
@@ -318,9 +316,30 @@ def delete_placement_groups(placement_groups):
         if failures:
             log.error(f"some placement groups failed to delete: {failures}")
     log.info(
-        f"deleted {len(done)} of {len(placement_groups)} placement groups ({to_hostlist(done.keys())})"
+        f"deleted {len(done)} of {len(links)} placement groups ({to_hostlist(done.keys())})"
     )
 
+
+
+@lru_cache
+def _get_resource_policies_in_region(lkp: util.Lookup, region: str) -> list[Any]:
+    res = []
+    act = lkp.compute.resourcePolicies()
+    op = act.list(project=lkp.project, region=region)
+    prefix = f"{lkp.cfg.slurm_cluster_name}-slurmgcp-managed-"
+    while op is not None:
+        result = ensure_execute(op)
+        res.extend([p for p in result.get("items", []) if p.get("name", "").startswith(prefix)])
+        op = act.list_next(op, result)
+    return res
+
+
+@lru_cache
+def _get_resource_policies(lkp: util.Lookup) -> list[Any]:
+    res = []
+    for region in lkp.cluster_regions():
+        res.extend(_get_resource_policies_in_region(lkp, region))
+    return res
 
 def sync_placement_groups():
     """Delete placement policies that are for jobs that have completed/terminated"""
@@ -335,43 +354,33 @@ def sync_placement_groups():
         ]
     )
 
+    lkp = lookup()
     keep_jobs = {
         str(job.id)
-        for job in lookup().get_jobs()
+        for job in lkp.get_jobs()
         if job.job_state in keep_states
     }
     keep_jobs.add("0")  # Job 0 is a placeholder for static node placement
 
-    fields = "items.regions.resourcePolicies,nextPageToken"
-    flt = f"name={lookup().cfg.slurm_cluster_name}-*"
-    act = lookup().compute.resourcePolicies()
-    op = act.aggregatedList(project=lookup().project, fields=fields, filter=flt)
-    placement_groups = {}
+    to_delete = []
     pg_regex = re.compile(
-        rf"{lookup().cfg.slurm_cluster_name}-slurmgcp-managed-(?P<partition>[^\s\-]+)-(?P<job_id>\d+)-(?P<index>\d+)"
+        rf"{lkp.cfg.slurm_cluster_name}-slurmgcp-managed-(?P<ns>[^\s\-]+)-(?P<job_id>\d+)-(?P<index>\d+)"
     )
-    while op is not None:
-        result = ensure_execute(op)
-        # merge placement group info from API and job_id,partition,index parsed from the name
-        pgs = (
-            {**pg, **pg_regex.match(pg["name"]).groupdict()} # type: ignore
-            for pg in chain.from_iterable(
-                item["resourcePolicies"]
-                for item in result.get("items", {}).values()
-                if item
-            )
-            if pg_regex.match(pg["name"]) is not None
-        )
-        placement_groups.update(
-            {pg["name"]: pg for pg in pgs if pg.get("job_id") not in keep_jobs}
-        )
-        op = act.aggregatedList_next(op, result)
+    
+    for pg in _get_resource_policies(lkp):
+        name = pg["name"]
+    
+        if (mtch := pg_regex.match(name)) is None:
+            log.warning(f"Unexpected resource policy {name=}")
+            continue
+        if mtch.group("job_id") not in keep_jobs:
+            to_delete.append(pg["selfLink"])
 
-    if len(placement_groups) > 0:
-        delete_placement_groups(list(placement_groups.values()))
+    if to_delete:
+        delete_resource_policies(to_delete, lkp)
 
 
-def sync_slurm():
+def sync_instances():
     compute_instances = {
         name for name, inst in lookup().instances().items() if inst.role == "compute"
     }
@@ -573,17 +582,27 @@ def sync_opportunistic_maintenance(lkp: util.Lookup) -> None:
         create_maintenance_job(job_name, node)
 
 
+
+def sync_flex_migs(lkp: util.Lookup) -> None:
+    pass
+
 def main():
     try:
         reconfigure_slurm()
     except Exception:
         log.exception("failed to reconfigure slurm")
 
-    if lookup().is_controller:
+    lkp = lookup()
+    if lkp.is_controller:
         try:
-            sync_slurm()
+            sync_instances()
         except Exception:
             log.exception("failed to sync instances")
+
+        try:
+            sync_flex_migs(lkp)
+        except Exception:
+            log.exception("failed to sync DWS Flex MIGs")
 
         try:
             sync_placement_groups()
@@ -591,17 +610,17 @@ def main():
             log.exception("failed to sync placement groups")
 
         try:
-            update_topology(lookup())
+            update_topology(lkp)
         except Exception:
             log.exception("failed to update topology")
 
         try:
-            sync_maintenance_reservation(lookup())
+            sync_maintenance_reservation(lkp)
         except Exception:
             log.exception("failed to sync slurm reservation for scheduled maintenance")
 
         try:
-            sync_opportunistic_maintenance(lookup())
+            sync_opportunistic_maintenance(lkp)
         except Exception:
             log.exception("failed to sync opportunistic reservation for scheduled maintenance")
 

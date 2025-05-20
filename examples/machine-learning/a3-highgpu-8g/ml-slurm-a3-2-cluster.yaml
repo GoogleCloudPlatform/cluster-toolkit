@@ -213,13 +213,27 @@ deployment_groups:
         destination: stage_scripts.sh
         content: |
           #!/bin/bash
-          curl -s --create-dirs -o /opt/apps/adm/slurm/scripts/receive-data-path-manager \
+          SLURM_ROOT=/opt/apps/adm/slurm
+          mkdir -m 0755 -p "${SLURM_ROOT}/scripts"
+          mkdir -p "${SLURM_ROOT}/prolog_slurmd.d"
+          mkdir -p "${SLURM_ROOT}/epilog_slurmd.d"
+          mkdir -p "${SLURM_ROOT}/partition-$(vars.a3_partition_name)-prolog_slurmd.d"
+          mkdir -p "${SLURM_ROOT}/partition-$(vars.a3_partition_name)-epilog_slurmd.d"
+          # enable the use of password-free sudo within Slurm jobs on all compute nodes
+          # feature is restricted to users with OS Admin Login IAM role
+          # https://cloud.google.com/iam/docs/understanding-roles#compute.osAdminLogin
+          curl -s -o "${SLURM_ROOT}/scripts/sudo-oslogin" \
+              https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/master/tools/prologs-epilogs/sudo-oslogin
+          chmod 0755 "${SLURM_ROOT}/scripts/sudo-oslogin"
+          ln -s "${SLURM_ROOT}/scripts/sudo-oslogin" "${SLURM_ROOT}/prolog_slurmd.d/sudo-oslogin.prolog_slurmd"
+          ln -s "${SLURM_ROOT}/scripts/sudo-oslogin" "${SLURM_ROOT}/epilog_slurmd.d/sudo-oslogin.epilog_slurmd"
+          curl -s -o "${SLURM_ROOT}/scripts/receive-data-path-manager" \
               https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/master/tools/prologs-epilogs/receive-data-path-manager
-          chmod 0755 /opt/apps/adm/slurm/scripts/receive-data-path-manager
-          mkdir -p /opt/apps/adm/slurm/partition-$(vars.a3_partition_name)-prolog_slurmd.d
-          mkdir -p /opt/apps/adm/slurm/partition-$(vars.a3_partition_name)-epilog_slurmd.d
-          ln -s /opt/apps/adm/slurm/scripts/receive-data-path-manager /opt/apps/adm/slurm/partition-$(vars.a3_partition_name)-prolog_slurmd.d/start-rxdm.prolog_slurmd
-          ln -s /opt/apps/adm/slurm/scripts/receive-data-path-manager /opt/apps/adm/slurm/partition-$(vars.a3_partition_name)-epilog_slurmd.d/stop-rxdm.epilog_slurmd
+          chmod 0755 "${SLURM_ROOT}/scripts/receive-data-path-manager"
+          ln -s "${SLURM_ROOT}/scripts/receive-data-path-manager" "${SLURM_ROOT}/partition-$(vars.a3_partition_name)-prolog_slurmd.d/start-rxdm.prolog_slurmd"
+          ln -s "${SLURM_ROOT}/scripts/receive-data-path-manager" "${SLURM_ROOT}/partition-$(vars.a3_partition_name)-epilog_slurmd.d/stop-rxdm.epilog_slurmd"
+          # enable a GPU health check that runs at the completion of all jobs on A3high nodes
+          ln -s "/slurm/scripts/tools/gpu-test" "${SLURM_ROOT}/partition-$(vars.a3_partition_name)-epilog_slurmd.d/gpu-test.epilog_slurmd"
       - type: shell
         destination: reset_enroot.sh
         content: |

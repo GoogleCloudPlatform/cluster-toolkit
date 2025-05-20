@@ -163,7 +163,7 @@ variable "enable_filestore_csi" {
 }
 
 variable "enable_gcsfuse_csi" {
-  description = "The status of the GCSFuse Filestore Container Storage Interface (CSI) driver addon, which allows the usage of a gcs bucket as volumes."
+  description = "The status of the GCSFuse Container Storage Interface (CSI) driver addon, which allows the usage of a GCS bucket as volumes."
   type        = bool
   default     = false
 }
@@ -271,6 +271,12 @@ variable "system_node_pool_enable_secure_boot" {
   description = "Enable secure boot for the nodes.  Keep enabled unless custom kernel modules need to be loaded. See [here](https://cloud.google.com/compute/shielded-vm/docs/shielded-vm#secure-boot) for more info."
   type        = bool
   default     = true
+}
+
+variable "system_node_pool_zones" {
+  description = "The zones to use for the system node pool. If not specified, the cluster default node zone(s) will be used."
+  type        = list(string)
+  default     = null
 }
 
 variable "enable_private_nodes" {
@@ -505,8 +511,11 @@ variable "enable_k8s_beta_apis" {
   default     = null
 }
 
-variable "enable_gpu_operator" {
-  description = "Describes if a gpu operator resource quota should be created or not."
+variable "enable_external_dns_endpoint" {
+  description = <<-EOT
+  Allow [DNS-based approach](https://cloud.google.com/kubernetes-engine/docs/concepts/network-isolation#dns-based_endpoint) for accessing the GKE control plane.
+  Refer this [dedicated blog](https://cloud.google.com/blog/products/containers-kubernetes/new-dns-based-endpoint-for-the-gke-control-plane) for more details.
+  EOT
   type        = bool
   default     = false
 }

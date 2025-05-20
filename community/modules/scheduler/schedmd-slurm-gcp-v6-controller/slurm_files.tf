@@ -46,7 +46,7 @@ module "bucket" {
 locals {
   compute_sa     = toset(flatten([for x in module.slurm_nodeset_template : x.service_account]))
   compute_tpu_sa = toset(flatten([for x in module.slurm_nodeset_tpu : x.service_account]))
-  login_sa       = toset(flatten([for x in module.slurm_login_template : x.service_account]))
+  login_sa       = toset(flatten([for x in module.login : x.service_account]))
 
   viewers = toset(flatten([
     "serviceAccount:${module.slurm_controller_template.service_account.email}",
@@ -57,16 +57,18 @@ locals {
 }
 
 
-resource "google_storage_bucket_iam_binding" "viewers" {
-  bucket  = local.bucket_name
-  role    = "roles/storage.objectViewer"
-  members = compact(local.viewers)
+resource "google_storage_bucket_iam_member" "viewers" {
+  for_each = local.viewers
+  bucket   = local.bucket_name
+  role     = "roles/storage.objectViewer"
+  member   = each.value
 }
 
-resource "google_storage_bucket_iam_binding" "legacy_readers" {
-  bucket  = local.bucket_name
-  role    = "roles/storage.legacyBucketReader"
-  members = compact(local.viewers)
+resource "google_storage_bucket_iam_member" "legacy_readers" {
+  for_each = local.viewers
+  bucket   = local.bucket_name
+  role     = "roles/storage.legacyBucketReader"
+  member   = each.value
 }
 
 locals {
@@ -111,12 +113,7 @@ locals {
     device_name : try(google_compute_disk.controller_disk[0].name, null)
   }
 
-  ghpc_startup_login = [{
-    filename = "ghpc_startup.sh"
-    content  = var.login_startup_script
-  }]
 
-  login_startup_scripts   = { for g in var.login_nodes : g.group_name => concat(local.common_scripts, local.ghpc_startup_login) }
   nodeset_startup_scripts = { for k, v in local.nodeset_map : k => concat(local.common_scripts, v.startup_script) }
 }
 
@@ -140,10 +137,11 @@ module "slurm_files" {
   bucket_name                   = local.bucket_name
   controller_network_attachment = var.controller_network_attachment
 
-  slurmdbd_conf_tpl = var.slurmdbd_conf_tpl
-  slurm_conf_tpl    = var.slurm_conf_tpl
-  cgroup_conf_tpl   = var.cgroup_conf_tpl
-  cloud_parameters  = var.cloud_parameters
+  slurmdbd_conf_tpl   = var.slurmdbd_conf_tpl
+  slurm_conf_tpl      = var.slurm_conf_tpl
+  slurm_conf_template = var.slurm_conf_template
+  cgroup_conf_tpl     = var.cgroup_conf_tpl
+  cloud_parameters    = var.cloud_parameters
   cloudsql_secret = try(
     one(google_secret_manager_secret_version.cloudsql_version[*].id),
   null)
@@ -152,12 +150,12 @@ module "slurm_files" {
   controller_startup_scripts_timeout = var.controller_startup_scripts_timeout
   nodeset_startup_scripts            = local.nodeset_startup_scripts
   compute_startup_scripts_timeout    = var.compute_startup_scripts_timeout
-  login_startup_scripts              = local.login_startup_scripts
-  login_startup_scripts_timeout      = var.login_startup_scripts_timeout
   controller_state_disk              = local.controller_state_disk
 
   enable_debug_logging = var.enable_debug_logging
   extra_logging_flags  = var.extra_logging_flags
+
+  enable_slurm_auth = var.enable_slurm_auth
 
   enable_bigquery_load               = var.enable_bigquery_load
   enable_external_prolog_epilog      = var.enable_external_prolog_epilog
@@ -165,6 +163,8 @@ module "slurm_files" {
   enable_chs_gpu_health_check_epilog = var.enable_chs_gpu_health_check_epilog
   epilog_scripts                     = var.epilog_scripts
   prolog_scripts                     = var.prolog_scripts
+  task_epilog_scripts                = var.task_epilog_scripts
+  task_prolog_scripts                = var.task_prolog_scripts
 
   disable_default_mounts = !var.enable_default_mounts
   network_storage = [
@@ -177,9 +177,6 @@ module "slurm_files" {
     }
     if storage.fs_type != "daos"
   ]
-  login_network_storage = var.login_network_storage
-
-  partitions = var.partitions
 
   nodeset     = local.nodesets
   nodeset_dyn = values(local.nodeset_dyn_map)

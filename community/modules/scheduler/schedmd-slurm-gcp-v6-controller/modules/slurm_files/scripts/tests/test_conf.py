@@ -14,7 +14,7 @@
 
 import pytest
 from mock import Mock
-from common import TstNodeset, TstCfg, TstMachineConf, TstTemplateInfo
+from common import TstNodeset, TstCfg, TstMachineConf, TstTemplateInfo, Placeholder
 
 import addict # type: ignore
 import conf
@@ -164,6 +164,26 @@ SuspendTimeout=4
 TreeWidth=5
 TopologyPlugin=guess
 TopologyParam=yellow"""),
+        (TstCfg(
+            install_dir="ukulele",
+            task_prolog_scripts=[Placeholder()],
+            task_epilog_scripts=[Placeholder()]
+        ),
+         """LaunchParameters=enable_nss_slurm,use_interactive_step
+SlurmctldParameters=cloud_dns,enable_configless,idle_on_node_suspend
+TaskProlog=/slurm/custom_scripts/task_prolog.d/*
+TaskEpilog=/slurm/custom_scripts/task_epilog.d/*
+SchedulerParameters=bf_continue,salloc_wait_nodes,ignore_prefer_validation
+ResumeProgram=ukulele/resume.py
+ResumeFailProgram=ukulele/suspend.py
+ResumeRate=0
+ResumeTimeout=300
+SuspendProgram=ukulele/suspend.py
+SuspendRate=0
+SuspendTimeout=300
+TreeWidth=128
+TopologyPlugin=topology/tree
+TopologyParam=SwitchAsNodeRank"""),
     ])
 def test_conflines(cfg, want):
     assert conf.conflines(util.Lookup(cfg)) == want

@@ -66,6 +66,8 @@ class TstCfg:
 
     prolog_scripts: Optional[list[Placeholder]] = field(default_factory=list)
     epilog_scripts: Optional[list[Placeholder]] = field(default_factory=list)
+    task_prolog_scripts: Optional[list[Placeholder]] = field(default_factory=list)
+    task_epilog_scripts: Optional[list[Placeholder]] = field(default_factory=list)
     
 
 @dataclass
@@ -99,6 +101,7 @@ def tstInstance(name: str, physical_host: Optional[str] = None):
         ),
         scheduling=util.NSDict(),
         role="compute",
+        metadata={},
     )
 
 def make_to_hostnames_mock(tbl: Optional[dict[str, list[str]]]):

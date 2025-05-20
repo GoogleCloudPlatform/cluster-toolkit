@@ -23,19 +23,12 @@ If you are using Hyperdisk storage, check the possible disk size, IOPS, and thro
 - id: homefs
   source: community/modules/file-system/nfs-server
   use: [network1]
-  settings:
-    auto_delete_disk: true
 ```
 
 This creates a NFS on a virtual machine which allow other VMs to mount the
 volume as an external file system.
 
-> **_NOTE:_** `auto_delete_disk` is set to true in this example, which means
-> that running `terraform destroy` also deletes the disk. To retain the disk
-> after `terraform destroy` either set this to false or don't include the
-> settings so it defaults to false. Note that with `auto_delete_disk: false`,
-> you will need to manually delete the disk after destroying a deployment group
-> with `nfs-server`.
+> **_NOTE:_** All disks are destroyed along with the instance, during a `gcluster destroy`/`terraform destroy` event. However, you can setup data retention with `create_boot_snapshot_before_destroy` (boot disk) and `create_snapshot_before_destroy` (data disk).
 
 ## Mounting
 
@@ -92,7 +85,7 @@ limitations under the License.
 | Name | Version |
 |------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 0.14.0 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | >= 3.83 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.14 |
 | <a name="requirement_null"></a> [null](#requirement\_null) | >= 3.0 |
 | <a name="requirement_random"></a> [random](#requirement\_random) | ~> 3.0 |
 
@@ -100,7 +93,7 @@ limitations under the License.
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google"></a> [google](#provider\_google) | >= 3.83 |
+| <a name="provider_google"></a> [google](#provider\_google) | >= 6.14 |
 | <a name="provider_null"></a> [null](#provider\_null) | >= 3.0 |
 | <a name="provider_random"></a> [random](#provider\_random) | ~> 3.0 |
 
@@ -124,9 +117,11 @@ No modules.
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_auto_delete_disk"></a> [auto\_delete\_disk](#input\_auto\_delete\_disk) | Whether or not the NFS disk should be auto-deleted | `bool` | `false` | no |
+| <a name="input_auto_delete_disk"></a> [auto\_delete\_disk](#input\_auto\_delete\_disk) | DEPRECATED: Whether or not the NFS disk should be auto-deleted | `string` | `null` | no |
 | <a name="input_boot_disk_size"></a> [boot\_disk\_size](#input\_boot\_disk\_size) | Storage size in GB for the boot disk | `number` | `null` | no |
 | <a name="input_boot_disk_type"></a> [boot\_disk\_type](#input\_boot\_disk\_type) | Storage type for the boot disk | `string` | `null` | no |
+| <a name="input_create_boot_snapshot_before_destroy"></a> [create\_boot\_snapshot\_before\_destroy](#input\_create\_boot\_snapshot\_before\_destroy) | Whether to create a snapshot before destroying the boot disk | `bool` | `false` | no |
+| <a name="input_create_snapshot_before_destroy"></a> [create\_snapshot\_before\_destroy](#input\_create\_snapshot\_before\_destroy) | Whether to create a snapshot before destroying the NFS data disk | `bool` | `false` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the HPC deployment, used as name of the NFS instance if no name is specified. | `string` | n/a | yes |
 | <a name="input_disk_size"></a> [disk\_size](#input\_disk\_size) | Storage size in GB for the NFS data disk | `number` | `"100"` | no |
 | <a name="input_image"></a> [image](#input\_image) | DEPRECATED: The VM image used by the NFS server | `string` | `null` | no |

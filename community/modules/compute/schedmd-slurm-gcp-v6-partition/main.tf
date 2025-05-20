@@ -14,20 +14,20 @@
 
 locals {
   use_static        = [for ns in concat(var.nodeset, var.nodeset_tpu) : ns.nodeset_name if ns.node_count_static > 0]
-  uses_job_duration = length([for ns in var.nodeset : ns.dws_flex.use_job_duration if ns.dws_flex.use_job_duration]) > 0 ? true : false
+  uses_job_duration = length([for ns in var.nodeset : ns.dws_flex.use_job_duration if ns.dws_flex.use_job_duration]) > 0
 
   has_node = length(var.nodeset) > 0
   has_dyn  = length(var.nodeset_dyn) > 0
   has_tpu  = length(var.nodeset_tpu) > 0
+  has_flex = length([for ns in var.nodeset : ns.dws_flex.enabled if ns.dws_flex.enabled]) > 0
 }
 
 locals {
   partition_conf = merge({
     "Default"        = var.is_default ? "YES" : null
-    "ResumeTimeout"  = var.resume_timeout != null ? var.resume_timeout : (local.has_tpu ? 600 : 300)
     "SuspendTime"    = var.suspend_time < 0 ? "INFINITE" : var.suspend_time
     "SuspendTimeout" = var.suspend_timeout != null ? var.suspend_timeout : (local.has_tpu ? 240 : 120)
-  }, var.partition_conf)
+  }, var.partition_conf, { "ResumeTimeout" = local.has_flex ? 65535 : try(var.partition_conf["ResumeTimeout"], coalesce(var.resume_timeout, (local.has_tpu ? 600 : 300))) })
 
   partition = {
     partition_name = var.partition_name

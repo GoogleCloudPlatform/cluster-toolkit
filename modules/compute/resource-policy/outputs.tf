@@ -23,6 +23,6 @@ output "placement_policy" {
 
   value = {
     type = var.group_placement_max_distance > 0 ? "COMPACT" : null
-    name = var.group_placement_max_distance > 0 ? var.name : null
+    name = (var.group_placement_max_distance > 0 || var.workload_policy.type != null) ? var.name : null
   }
 }

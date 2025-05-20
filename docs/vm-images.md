@@ -221,14 +221,6 @@ description of our support for Windows images.
   <td>✓</td>
   <td></td>
 </tr>
-<tr>
-  <th rowspan="1">Omnia</th>
-  <th></th>
-  <th></th>
-  <td></td>
-  <td>✓</td>
-  <td></td>
-</tr>
 </table>
 
 <sup><b>*</b></sup> Chrome Remote desktop does not support Ubuntu 20.04, but it does support Ubuntu 22.04.
@@ -292,11 +284,9 @@ These instructions apply to the following modules:
 [batch-job]: ../modules/scheduler/batch-job-template
 [batch-login]: ../modules/scheduler/batch-login-node
 [htcondor-setup]: ../community/modules/scheduler/htcondor-setup
-[omnia-install]: ../community/modules/scripts/omnia-install
 [hpc-slurm-ubuntu2004.yaml]: ../community/examples/hpc-slurm-ubuntu2004.yaml
 
 [htc-htcondor.yaml]: ../community/examples/htc-htcondor.yaml
-[omnia-cluster.yaml]: ../community/examples/omnia-cluster.yaml
 [vm-startup.yaml]: ../tools/validate_configs/os_compatibility_tests/vm-startup.yaml
 [vm-crd.yaml]: ../tools/validate_configs/os_compatibility_tests/vm-crd.yaml
 [vm-filestore.yaml]: ../tools/validate_configs/os_compatibility_tests/vm-filestore.yaml

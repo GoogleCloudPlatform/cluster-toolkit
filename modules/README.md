@@ -220,10 +220,6 @@ Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial][fsi-monteca
   and VM images.
 * **[htcondor-install]** ![community-badge] ![experimental-badge] : Creates
   a startup script to install HTCondor and exports a list of required APIs
-* **[omnia-install]** ![community-badge] ![experimental-badge] ![deprecated-badge] :
-  Installs Slurm via [Dell Omnia](https://github.com/dellhpc/omnia) onto a
-  cluster of VM instances. _This module has been deprecated and will be removed
-  on August 1, 2024_.
 * **[pbspro-preinstall]** ![community-badge] ![experimental-badge] : Creates a
   Cloud Storage bucket with PBS Pro RPM packages for use by PBS clusters.
 * **[pbspro-install]** ![community-badge] ![experimental-badge] : Creates a
@@ -250,7 +246,6 @@ Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial][fsi-monteca
 [windows-startup-script]: ../community/modules/scripts/windows-startup-script/README.md
 [htcondor-install]: ../community/modules/scripts/htcondor-install/README.md
 [kubernetes-operations]: ../community/modules/scripts/kubernetes-operations/README.md
-[omnia-install]: ../community/modules/scripts/omnia-install/README.md
 [pbspro-install]: ../community/modules/scripts/pbspro-install/README.md
 [pbspro-preinstall]: ../community/modules/scripts/pbspro-preinstall/README.md
 [pbspro-qmgr]: ../community/modules/scripts/pbspro-qmgr/README.md
@@ -260,15 +255,6 @@ Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial][fsi-monteca
 [spack-setup]: ../community/modules/scripts/spack-setup/README.md
 [spack-execute]: ../community/modules/scripts/spack-execute/README.md
 [wait-for-startup]: ../community/modules/scripts/wait-for-startup/README.md
-
-> **_NOTE:_** Slurm-GCP V4 is deprecated. In case, you want to use V4 modules, please use
-[ghpc-v1.27.0](https://github.com/GoogleCloudPlatform/hpc-toolkit/releases/tag/v1.27.0)
-source code and build ghpc binary from this. This source code also contains
-deprecated examples using V4 modules for your reference.
-> **_NOTE:_** Slurm-GCP V5 is deprecated. In case, you want to use V5 modules, please use
-[ghpc-v1.44.1](https://github.com/GoogleCloudPlatform/hpc-toolkit/releases/tag/v1.44.1)
-source code and build ghpc binary from this. This source code also contains
-deprecated examples using V5 modules for your reference.
 
 ## Module Fields
 

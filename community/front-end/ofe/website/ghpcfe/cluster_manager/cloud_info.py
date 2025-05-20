@@ -24,6 +24,7 @@ import archspec.cpu
 import google.cloud.exceptions
 import googleapiclient.discovery
 from google.cloud import storage as gcs
+import google.cloud.secretmanager as secretmanager
 from google.cloud.billing_v1.services import cloud_catalog
 from google.oauth2 import service_account
 
@@ -513,13 +514,18 @@ def _get_gcp_instance_pricing(
             "c2": "Compute optimized Core",
             "c2d": "C2D AMD Instance Core",
             "c3d": "C3D AMD Instance Core",
+            "c4a": "C4A Arm Instance Core",
+            "t2a": "T2A Arm Instance Core",
             "t2d": "T2D AMD Instance Core",
             "a2": "A2 Instance Core",
+            "a3": "A3 Instance Core",
+            "g2": "G2 Custom Instance Core",
             "m1": "Memory-optimized Instance Core",  # ??
             "m2": "Memory Optimized Upgrade Premium for Memory-optimized Instance Core",  # pylint: disable=line-too-long
             "m3": "Memory-optimized Instance Core",
             "n2": "N2 Instance Core",
             "n1": "Custom Instance Core",  # ??
+            "n4": "N4 Custom Instance Core",
         }
         instance_class = instance_type.split("-")[0]
         if instance_class not in instance_description_mapper:
@@ -562,14 +568,19 @@ def _get_gcp_instance_pricing(
             "h3": "Compute optimized Ram",
             "c2d": "C2D AMD Instance Ram",
             "c3d": "C3D AMD Instance Ram",
+            "c4a": "C4A Instance Ram",
+            "t2a": "T2A Instance Ram",
             "c4": "C4 Instance RAM",
             "t2d": "T2D AMD Instance Ram",
             "a2": "A2 Instance Ram",
+            "a3": "A3 Instance Ram",
+            "g2": "G2 Custom Instance Ram",
             "m1": "Memory-optimized Instance Ram",
             "m2": "Memory-optimized Instance Ram",
             "m3": "Memory-optimized Instance Ram",  # ??
             "n2": "N2 Instance Ram",
             "n1": "Custom Instance Ram", # ??
+            "n4": "N4 Instance Ram",
         }
         # TODO: Deal with 'Extended Instance Ram'
         instance_class = instance_type.split("-")[0]
@@ -777,3 +788,35 @@ def get_gcp_filestores(credentials):
     )
     result = request.execute()
     return result["instances"]
+
+
+def get_secret_value(credentials_json, project_id, secret_name):
+    """
+    Retrieve the latest secret value from Google Secret Manager.
+
+    Args:
+        credentials_json (str): JSON string of the service account credentials.
+        project_id (str): The GCP project where the secret is located.
+        secret_name (str): The name of the secret (without 'projects/...').
+
+    Returns:
+        str: The secret value (decoded to UTF-8).
+    """
+    # Parse the JSON credentials
+    creds_info = json.loads(credentials_json)
+    creds = service_account.Credentials.from_service_account_info(creds_info)
+
+    # Build the Secret Manager client
+    client = secretmanager.SecretManagerServiceClient(credentials=creds)
+
+    # Construct the resource name of the secret version to access
+    # e.g. "projects/my-gcp-project/secrets/guacamole-auth-token/versions/latest"
+    secret_version_path = f"projects/{project_id}/secrets/{secret_name}/versions/latest"
+
+    # Access the secret
+    response = client.access_secret_version(request={"name": secret_version_path})
+
+    # Decode the secret payload
+    secret_value = response.payload.data.decode("UTF-8")
+
+    return secret_value

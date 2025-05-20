@@ -23,6 +23,8 @@ changelog:
   categories:
   - title: Key New Features 🎉
     labels: [release-key-new-features]
+  - title: Breaking Changes 🚨
+    labels: [release-breaking-changes]
   - title: New Modules 🧱
     labels: [release-new-modules]
   - title: Module Improvements 🔨

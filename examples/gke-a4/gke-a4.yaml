@@ -43,14 +43,14 @@ vars:
   # <project>/<reservation-name>/reservationBlocks/<reservation-block-name>
   extended_reservation:
 
-  # Installs NCCL library and Google NCCL plugin
-  # Runs an init container on all H200 GPU nodes with the NCCL plugin image
-  nccl_installer_path: $(ghpc_stage("./nccl-installer.yaml"))
   # Temporary fix for COS issue, will be fixed in next release
   mglru_disable_path: $(ghpc_stage("./mglru-disable.yaml"))
   kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
+  gib_installer_path: $(ghpc_stage("./nccl-installer.yaml.tftpl"))
   system_node_pool_disk_size_gb: 200
   a4_node_pool_disk_size_gb: 100
+  accelerator_type: nvidia-b200
+  version_prefix: "1.32."
 
 
 deployment_groups:
@@ -120,7 +120,7 @@ deployment_groups:
       - monitoring.metricWriter
       - monitoring.viewer
       - stackdriver.resourceMetadata.writer
-      - storage.objectViewer
+      - storage.objectAdmin
       - artifactregistry.reader
 
   - id: workload_service_account
@@ -185,7 +185,7 @@ deployment_groups:
         ))
       # Cluster versions cannot be updated through the toolkit after creation
       # Please manage cluster version from the Google Cloud Console directly
-      version_prefix: "1.32."
+      version_prefix: $(vars.version_prefix)
       release_channel: RAPID
       maintenance_exclusions:
       - name: no-minor-or-node-upgrades-indefinite
@@ -204,7 +204,7 @@ deployment_groups:
       disk_size_gb: $(vars.a4_node_pool_disk_size_gb)
       static_node_count: $(vars.static_node_count)
       guest_accelerator:
-      - type: nvidia-b200
+      - type: $(vars.accelerator_type)
         count: 8
       reservation_affinity:
         consume_reservation_type: SPECIFIC_RESERVATION
@@ -238,11 +238,16 @@ deployment_groups:
         config_path: $(vars.kueue_configuration_path)
         config_template_vars:
           num_gpus: $(a4-pool.static_gpu_count)
-          node_pool_name: $(a4-pool.node_pool_names[0])
+          accelerator_type: $(vars.accelerator_type)
       jobset:
         install: true
+      gib:
+        install: true  # NCCL gIB plugin via DaemonSet initContainer
+        path: $(vars.gib_installer_path)
+        template_vars:
+          version: v1.0.5
+          accelerator_count: 8
       apply_manifests:
-      - source: $(vars.nccl_installer_path)
       - source: $(vars.mglru_disable_path)
 
   - id: job-template
