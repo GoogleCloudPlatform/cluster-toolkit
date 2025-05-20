@@ -49,7 +49,7 @@ you can launch the script as follows:
 
 ```bash
 /opt/apps/af3/venv/bin/activate
-python3 /opt/apps/af3/launchers/simple_service_launcher/simple_service_launcher.py --config-file /etc/af3config.json
+python3 /opt/apps/af3/examples/simple_service_launcher/simple_service_launcher.py --config-file /etc/af3config.json
 ```
 
 This will run the script with the default parameters initialized from the `#AF3 Simple Service` section in
