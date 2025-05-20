@@ -22,7 +22,6 @@ import shutil
 import subprocess
 import stat
 import time
-from google_crc32c import exc
 import yaml
 from pathlib import Path
 
