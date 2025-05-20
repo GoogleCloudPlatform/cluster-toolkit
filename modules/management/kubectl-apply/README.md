@@ -134,6 +134,7 @@ limitations under the License.
 | Name | Source | Version |
 |------|--------|---------|
 | <a name="module_configure_kueue"></a> [configure\_kueue](#module\_configure\_kueue) | ./kubectl | n/a |
+| <a name="module_install_gib"></a> [install\_gib](#module\_install\_gib) | ./kubectl | n/a |
 | <a name="module_install_gpu_operator"></a> [install\_gpu\_operator](#module\_install\_gpu\_operator) | ./helm_install | n/a |
 | <a name="module_install_jobset"></a> [install\_jobset](#module\_install\_jobset) | ./kubectl | n/a |
 | <a name="module_install_kueue"></a> [install\_kueue](#module\_install\_kueue) | ./kubectl | n/a |
@@ -144,6 +145,8 @@ limitations under the License.
 
 | Name | Type |
 |------|------|
+| [terraform_data.gib_validations](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
+| [terraform_data.initial_gib_version](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
 | [terraform_data.jobset_validations](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
 | [terraform_data.kueue_validations](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
 | [google_client_config.default](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/client_config) | data source |
@@ -155,6 +158,7 @@ limitations under the License.
 |------|-------------|------|---------|:--------:|
 | <a name="input_apply_manifests"></a> [apply\_manifests](#input\_apply\_manifests) | A list of manifests to apply to GKE cluster using kubectl. For more details see [kubectl module's inputs](kubectl/README.md). | <pre>list(object({<br/>    content           = optional(string, null)<br/>    source            = optional(string, null)<br/>    template_vars     = optional(map(any), null)<br/>    server_side_apply = optional(bool, false)<br/>    wait_for_rollout  = optional(bool, true)<br/>  }))</pre> | `[]` | no |
 | <a name="input_cluster_id"></a> [cluster\_id](#input\_cluster\_id) | An identifier for the gke cluster resource with format projects/<project\_id>/locations/<region>/clusters/<name>. | `string` | n/a | yes |
+| <a name="input_gib"></a> [gib](#input\_gib) | Install the NCCL gIB plugin | <pre>object({<br/>    install = bool<br/>    path    = string<br/>    template_vars = object({<br/>      image   = optional(string, "us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib")<br/>      version = string<br/>      node_affinity = optional(any, {<br/>        requiredDuringSchedulingIgnoredDuringExecution = {<br/>          nodeSelectorTerms = [{<br/>            matchExpressions = [{<br/>              key      = "cloud.google.com/gke-gpu",<br/>              operator = "In",<br/>              values   = ["true"]<br/>            }]<br/>          }]<br/>        }<br/>      })<br/>      accelerator_count = number<br/>    })<br/>  })</pre> | <pre>{<br/>  "install": false,<br/>  "path": "",<br/>  "template_vars": {<br/>    "accelerator_count": 0,<br/>    "version": ""<br/>  }<br/>}</pre> | no |
 | <a name="input_gke_cluster_exists"></a> [gke\_cluster\_exists](#input\_gke\_cluster\_exists) | A static flag that signals to downstream modules that a cluster has been created. Needed by community/modules/scripts/kubernetes-operations. | `bool` | `false` | no |
 | <a name="input_gpu_operator"></a> [gpu\_operator](#input\_gpu\_operator) | Install [GPU Operator](https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/getting-started.html) which uses the [Kubernetes operator](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/) to automate the management of all NVIDIA software components needed to provision GPU. | <pre>object({<br/>    install = optional(bool, false)<br/>    version = optional(string, "v25.3.0")<br/>  })</pre> | `{}` | no |
 | <a name="input_jobset"></a> [jobset](#input\_jobset) | Install [Jobset](https://github.com/kubernetes-sigs/jobset) which manages a group of K8s [jobs](https://kubernetes.io/docs/concepts/workloads/controllers/job/) as a unit. | <pre>object({<br/>    install = optional(bool, false)<br/>    version = optional(string, "v0.7.2")<br/>  })</pre> | `{}` | no |

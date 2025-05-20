@@ -44,18 +44,6 @@ deployment_groups:
           set -ex
           echo \$(ansible --version)
 
-  - id: workstation-centos
-    source: modules/compute/vm-instance
-    use:
-    - network1
-    - startup-script
-    settings:
-      name_prefix: centos
-      add_deployment_name_before_prefix: true
-      instance_image:
-        name: centos-7-v20240611
-        project: centos-cloud
-
   - id: workstation-ubuntu-2004
     source: modules/compute/vm-instance
     use:
@@ -80,15 +68,40 @@ deployment_groups:
         family: ubuntu-2204-lts
         project: ubuntu-os-cloud
 
-  - id: workstation-debian
+  - id: workstation-ubuntu-2404
     source: modules/compute/vm-instance
     use:
     - network1
     - startup-script
     settings:
-      name_prefix: debian
+      name_prefix: ubuntu2404
+      add_deployment_name_before_prefix: true
+      instance_image:
+        family: ubuntu-2404-lts-amd64
+        project: ubuntu-os-cloud
+
+  - id: workstation-debian-11
+    source: modules/compute/vm-instance
+    use:
+    - network1
+    - startup-script
+    settings:
+      name_prefix: deb11
+      add_deployment_name_before_prefix: true
       instance_image:
         family: debian-11
+        project: debian-cloud
+
+  - id: workstation-debian-12
+    source: modules/compute/vm-instance
+    use:
+    - network1
+    - startup-script
+    settings:
+      name_prefix: deb12
+      add_deployment_name_before_prefix: true
+      instance_image:
+        family: debian-12
         project: debian-cloud
 
   - id: workstation-rocky-8
@@ -143,10 +156,11 @@ deployment_groups:
     source: community/modules/scripts/wait-for-startup
     settings:
       instance_names:
-      - $(workstation-centos.name[0])
       - $(workstation-ubuntu-2004.name[0])
       - $(workstation-ubuntu-2204.name[0])
-      - $(workstation-debian.name[0])
+      - $(workstation-ubuntu-2404.name[0])
+      - $(workstation-debian-11.name[0])
+      - $(workstation-debian-12.name[0])
       - $(workstation-rocky-8.name[0])
       - $(workstation-rocky-9.name[0])
       - $(workstation-rhel-8.name[0])

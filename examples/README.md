@@ -49,7 +49,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [gke-a3-ultragpu.yaml](#gke-a3-ultragpuyaml-) ![core-badge]
   * [gke-a3-megagpu](#gke-a3-megagpuyaml-) ![core-badge]
   * [gke-a3-highgpu](#gke-a3-highgpuyaml-) ![core-badge]
-  * [gke-dws-flex-start](#gke-dws-flex-start-) ![core-badge]
+  * [gke-consumption-options](#gke-consumption-options-) ![core-badge]
   * [htc-slurm.yaml](#htc-slurmyaml-) ![community-badge]
   * [htc-htcondor.yaml](#htc-htcondoryaml--) ![community-badge] ![experimental-badge]
   * [fsi-montecarlo-on-batch.yaml](#fsi-montecarlo-on-batchyaml-) ![community-badge] ![experimental-badge]
@@ -606,17 +606,31 @@ _This blueprint has been deprecated and will be removed on August 1, 2025._
 Creates a DDN EXAScaler lustre file-system that is mounted in two client instances.
 
 The [DDN Exascaler Lustre](../community/modules/file-system/DDN-EXAScaler/README.md)
-file system is designed for high IO performance. It has a default capacity of ~10TiB and is mounted at `/lustre`.
+file system is designed for high IO performance. It has a default capacity of
+~10TiB and is mounted at `/lustre`.
 
 > **Warning**: The DDN Exascaler Lustre file system has a license cost as
 > described in the pricing section of the
 > [DDN EXAScaler Cloud Marketplace Solution](https://console.developers.google.com/marketplace/product/ddnstorage/).
 
-After the creation of the file-system and the client instances, the lustre drivers will be automatically installed and the mount-point configured on the VMs. This may take a few minutes after the VMs are created and can be verified by running:
+After the creation of the file-system and the client instances, the startup
+scripts on the client instances will automatically install the lustre drivers,
+configure the mount-point, and mount the file system to the specified
+directory. This may take a few minutes after the VMs are created and can be
+verified by running:
 
 ```sh
-watch mount -t lustre
+watch df
 ```
+
+Eventually you should see a line similar to:
+
+```sh
+<IP>:<remote_mount>  lustre   100G   15G  85G  15% <local_mount>
+```
+
+with remote_mount, and local_mount reflecting the settings of the module and
+IP being set to the lustre instance's IP.
 
 #### Quota Requirements for pfs-lustre.yaml
 
@@ -635,11 +649,24 @@ Creates a Managed Lustre file-system that is mounted in one client instance.
 The [GCP Managed Lustre](../modules/file-system/managed-lustre/README.md)
 file system is designed for high IO performance. It has a minimum capacity of ~18TiB and is mounted at `/lustre`.
 
-After the creation of the file-system and the client instances, the lustre drivers will be automatically installed and the mount-point configured on the VMs. This may take a few minutes after the VMs are created and can be verified by running:
+After the creation of the file-system and the client instances, the startup
+scripts on the client instances will automatically install the lustre drivers,
+configure the mount-point, and mount the file system to the specified
+directory. This may take a few minutes after the VMs are created and can be
+verified by running:
 
 ```sh
-watch mount -t lustre
+watch df
 ```
+
+Eventually you should see a line similar to:
+
+```sh
+<IP>:<remote_mount>  lustre   100G   15G  85G  15% <local_mount>
+```
+
+with remote_mount, and local_mount reflecting the settings of the module and
+IP being set to the lustre instance's IP.
 
 #### Quota Requirements for pfs-managed-lustre.yaml
 
@@ -1200,11 +1227,14 @@ If you see an error saying: `local-exec provisioner error` or `This environment 
 
 [gke-a3-highgpu.yaml]: ../examples/gke-a3-highgpu.yaml
 
-### [gke-dws-flex-start] ![core-badge]
+### [gke-consumption-options] ![core-badge]
 
-This example shows how DWS Flex Start mode can be used to run a job that requires GPU capacity on GKE. Additional information on DWS Flex Start mode and the required steps are captured in this [README](../examples/gke-dws-flex-start/README.md).
+This folder holds multiple GKE blueprint examples that display different consumption options on GKE.
+* [DWS Calendar](../examples/gke-consumption-options/dws-calendar)
+* [DWS Flex Start](../examples/gke-consumption-options/dws-flex-start)
+* [DWS Flex Start with Queued Provisioning](../examples/gke-consumption-options/dws-flex-start-queued-provisioning)
 
-[gke-dws-flex-start]: ../examples/gke-dws-flex-start
+[gke-consumption-options]: ../examples/gke-consumption-options
 
 ### [htc-htcondor.yaml] ![community-badge] ![experimental-badge]
 

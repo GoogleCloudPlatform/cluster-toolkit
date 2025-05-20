@@ -58,7 +58,7 @@ install the client and mount the file system. See the following example:
 
 See [additional documentation][ddn-install-docs] from DDN EXAScaler.
 
-[ddn-install-docs]: https://github.com/DDNStorage/exascaler-cloud-terraform/tree/master/gcp#install-new-exascaler-cloud-clients
+[ddn-install-docs]: https://github.com/DDNStorage/exascaler-cloud-terraform/tree/scripts/2.2.2/gcp#install-new-exascaler-cloud-clients
 [matrix]: ../../../../docs/network_storage.md#compatibility-matrix
 
 ## Support

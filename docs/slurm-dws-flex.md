@@ -1,9 +1,7 @@
 # Obtaining SlurmGCP nodes with DWS Flex
 
 > [!NOTE]
-> DWS Flex Start is currently in early development and undergoing extensive testing. While it
-> can be used with other machine families, we strongly recommend utilizing it primarily with
-> A3 machine families during this phase.
+> DWS Flex Start is currently in early development and undergoing extensive testing.
 
 [Dynamic Workload Scheduler](https://cloud.google.com/blog/products/compute/introducing-dynamic-workload-scheduler) Flex Start mode is designed for fine-tuning models, experimentation, shorter training jobs, distillation, offline inference, and batch jobs.
 
@@ -21,6 +19,11 @@ In order to make use of DWS Flex Start mode with SlurmGCP, you must use the `dws
       enable_placement: false
       # the rest of the settings, e.g. node_count_static, machine_type, additional_disks, etc.
 ```
+
+**Node behavior:**
+
+* Static nodes will be re-provisioned when `max_run_duration` ends.
+* Dynamic nodes in exclusive partitions will delete instances after the job completes (even if `max_run_duration` has yet to pass).
 
 > [!WARNING]
 > DWS Flex Start cannot be used in tandem with a reservation or placement policy.

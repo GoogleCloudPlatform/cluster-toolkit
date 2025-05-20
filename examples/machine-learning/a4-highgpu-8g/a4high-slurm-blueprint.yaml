@@ -24,7 +24,7 @@ vars:
   # Image settings
   base_image:
     project: ubuntu-os-accelerator-images
-    image: ubuntu-accelerator-2204-amd64-with-nvidia-570-v20250425
+    family: ubuntu-accelerator-2204-amd64-with-nvidia-570
   image_build_machine_type: n2-standard-16
   build_slurm_from_git_ref: 6.10.0
   # Cluster env settings
@@ -42,10 +42,11 @@ vars:
   nccl_plugin_version: v1.0.5
   benchmark_dir: $(ghpc_stage("system_benchmarks"))
   base_network_name: $(vars.deployment_name)
-  #Consumption options (set to true or fill in reservation name, pick only one)
+
+  #Provisioning models (set to true or fill in reservation name, pick only one)
+  a4h_reservation_name: "" # supply reservation name
   a4h_dws_flex_enabled: false
   a4h_enable_spot_vm: false
-  a4h_reservation_name: ""
 
 deployment_groups:
 - group: image-env
@@ -141,22 +142,6 @@ deployment_groups:
               ansible.builtin.apt:
                 deb: "{{ cuda_repo_filename }}"
                 state: present
-            # The following 3 tasks work around a temporary issue with Ubuntu
-            # packaging of NVIDIA 570 driver series for kernel 6.8.0-1028
-            - name: Unfreeze 570 driver metapackage
-              ansible.builtin.command:
-                argv:
-                - apt-mark
-                - unhold
-                - linux-modules-nvidia-570-server-open-gcp
-            - name: Remove 570 driver metapackage
-              ansible.builtin.apt:
-                name: linux-modules-nvidia-570-server-open-gcp
-                state: absent
-            - name: Install latest 570 driver for kernel
-              ansible.builtin.apt:
-                name: linux-modules-nvidia-570-server-open-6.8.0-1028-gcp
-                state: latest
             - name: Reduce NVIDIA repository priority
               ansible.builtin.copy:
                 dest: /etc/apt/preferences.d/cuda-repository-pin-600
@@ -246,7 +231,7 @@ deployment_groups:
     settings:
       disk_size: $(vars.disk_size_gb)
       machine_type: $(vars.image_build_machine_type)
-      source_image: $(vars.base_image.image)
+      source_image_family: $(vars.base_image.family)
       source_image_project_id: [$(vars.base_image.project)]
       image_family: $(vars.instance_image.family)
       omit_external_ip: false
@@ -470,7 +455,7 @@ deployment_groups:
       disk_type: hyperdisk-balanced
       on_host_maintenance: TERMINATE
 
-      #Consumption options
+      #Provisioning models
       reservation_name: $(vars.a4h_reservation_name)
       enable_spot_vm: $(vars.a4h_enable_spot_vm)
       dws_flex:

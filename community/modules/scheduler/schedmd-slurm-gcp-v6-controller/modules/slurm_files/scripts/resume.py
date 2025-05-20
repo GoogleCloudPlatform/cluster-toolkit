@@ -91,8 +91,8 @@ def instance_properties(nodeset: NSDict, model:str, placement_group:Optional[str
     props = NSDict()
 
     if labels: # merge in extra labels on instance and disks
-        template = lookup().node_template(model)
-        template_info = lookup().template_info(template)
+        template_link = lookup().node_template(model)
+        template_info = lookup().template_info(template_link)
 
         props.labels = {**template_info.labels, **labels}
         
@@ -435,28 +435,21 @@ def _handle_bulk_insert_op(op: Dict, nodes: List[str], resume_data: Optional[Res
 
 def down_nodes_notify_jobs(nodes: List[str], reason: str, resume_data: Optional[ResumeData]) -> None:
     """set nodes down with reason"""
-    nodelist = util.to_hostlist(nodes)
-    reason_quoted = shlex.quote(reason)
-    
-    log.error(f"Marking nodes {nodelist} as DOWN, reason: {reason}")
-    run(f"{lookup().scontrol} update nodename={nodelist} state=down reason={reason_quoted}")
-
-    if resume_data is None:
-        log.warning("Cannot update and notify jobs with API failures as no valid resume file is present.")
-        return
-    
     nodes_set = set(nodes) # turn into set to speed up intersection
-    for job in resume_data.jobs:
+    jobs = resume_data.jobs if resume_data else []
+    reason_quoted = shlex.quote(reason)
+
+    for job in jobs:
         if not (set(job.nodes_alloc) & nodes_set):
             continue
-        run(f"{lookup().scontrol} update jobid={job.job_id} admincomment='{reason_quoted}'")
-        run(f"{lookup().scontrol} notify {job.job_id} '{reason_quoted}'")
+        run(f"{lookup().scontrol} update jobid={job.job_id} admincomment={reason_quoted}", check=False)
+        run(f"{lookup().scontrol} notify {job.job_id} {reason_quoted}", check=False)
 
-
-def hold_job(job_id, reason):
-    """hold job, set comment to reason"""
-    run(f"{lookup().scontrol} hold jobid={job_id}")
-    run(f"{lookup().scontrol} update jobid={job_id} comment='{reason}'")
+    nodelist = util.to_hostlist(nodes)
+    log.error(f"Marking nodes {nodelist} as DOWN, reason: {reason}")
+    run(f"{lookup().scontrol} update nodename={nodelist} state=down reason={reason_quoted}", check=False)
+    
+    
 
 
 def create_placement_request(pg_name: str, region: str, max_distance: Optional[int]):
