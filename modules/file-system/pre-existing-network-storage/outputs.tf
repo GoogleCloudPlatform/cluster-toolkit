@@ -43,21 +43,12 @@ locals {
   fs_type = strcontains(var.fs_type, "lustre") ? "lustre" : var.fs_type
 
   # Client Install
-  ddn_lustre_client_install_script = templatefile(
-    "${path.module}/templates/ddn_exascaler_luster_client_install.tftpl",
-    {
-      server_ip    = split("@", var.server_ip)[0]
-      remote_mount = local.remote_mount
-      local_mount  = var.local_mount
-    }
-  )
   managed_lustre_client_install_script = file("${path.module}/scripts/install-managed-lustre-client.sh")
   nfs_client_install_script            = file("${path.module}/scripts/install-nfs-client.sh")
   gcs_fuse_install_script              = file("${path.module}/scripts/install-gcs-fuse.sh")
   daos_client_install_script           = file("${path.module}/scripts/install-daos-client.sh")
 
   install_scripts = {
-    "lustre"         = local.ddn_lustre_client_install_script
     "managed_lustre" = local.managed_lustre_client_install_script
     "nfs"            = local.nfs_client_install_script
     "gcsfuse"        = local.gcs_fuse_install_script
