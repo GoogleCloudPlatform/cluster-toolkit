@@ -1155,7 +1155,7 @@ Refer to [AI Hypercomputer Documentation](https://cloud.google.com/ai-hypercompu
 
 ### [gke-a3-megagpu.yaml] ![core-badge]
 
-This blueprint shows how to provision a GKE cluster with A3 Mega machines in the toolkit.
+This blueprint shows how to provision a GKE cluster with A3 Mega machines in the toolkit. [Deploy an A3 Mega GKE cluster for ML training](https://cloud.google.com/cluster-toolkit/docs/deploy/deploy-a3-mega-gke-cluster) has the steps documented.
 
 After provisioning the cluster and the nodepool, the below components will be installed
 to enable GPUDirect for the A3 Mega machines.
@@ -1189,7 +1189,7 @@ If you see an error saying: `local-exec provisioner error` or `This environment 
   source $VENV_DIR/bin/activate
 ```
 
-[gke-a3-megagpu.yaml]: ../examples/gke-a3-megagpu.yaml
+[gke-a3-megagpu.yaml]: ../examples/gke-a3-megagpu
 
 ### [gke-a3-highgpu.yaml] ![core-badge]
 
