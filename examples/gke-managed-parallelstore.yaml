@@ -15,7 +15,7 @@
 blueprint_name: gke-managed-parallelstore
 vars:
   project_id:  ## Set GCP Project ID Here ##
-  deployment_name: gke-storage-managed-ps
+  deployment_name: gke-managed-ps
   region: us-central1
   zone: us-central1-c
   # Cidr block containing the IP of the machine calling terraform.
