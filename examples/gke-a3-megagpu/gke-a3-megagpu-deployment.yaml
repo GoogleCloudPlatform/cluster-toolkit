@@ -40,8 +40,8 @@ vars:
   # The number of nodes to be created
   static_node_count: NODE_COUNT
 
-  # The name of the compute engine reservation of A3 Mega nodes in the form of
-  # <project>/<reservation-name>
+  # The name of the compute engine reservation in the form of
+  # <reservation-name>
   # In order to target a BLOCK_NAME, extended_reservation can be inputted as
-  # <project>/<reservation-name>/reservationBlocks/<reservation-block-name>
+  # <reservation-name>/reservationBlocks/<reservation-block-name>
   extended_reservation: RESERVATION_NAME
