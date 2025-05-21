@@ -99,7 +99,7 @@ module "install_jobset" {
 
 module "install_nvidia_dra_driver" {
   count      = local.install_nvidia_dra_driver ? 1 : 0
-  depends_on = [module.kubectl_apply_manifests, var.gke_cluster_exists]
+  depends_on = [module.kubectl_apply_manifests, var.gke_cluster_exists, module.configure_kueue]
   source     = "./helm_install"
 
   release_name     = "nvidia-dra-driver-gpu"              # The release name
