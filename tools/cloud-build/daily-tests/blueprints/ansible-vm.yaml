@@ -44,11 +44,26 @@ deployment_groups:
           set -ex
           echo \$(ansible --version)
 
+  - id: startup-script-u20
+    # this source line is deliberate; it is the last to support Ubuntu 20.04
+    # Ubuntu 20.04 coverage may be removed when the a3-highgpu-8g solution is
+    # refactored to use Ubuntu 22.04 or later
+    source: github.com/GoogleCloudPlatform/cluster-toolkit//modules/scripts/startup-script?ref=v1.51.1&depth=1
+    settings:
+      install_ansible: true
+      runners:
+      - type: shell
+        destination: startup.sh
+        content: |
+          #!/bin/bash
+          set -ex
+          echo \$(ansible --version)
+
   - id: workstation-ubuntu-2004
     source: modules/compute/vm-instance
     use:
     - network1
-    - startup-script
+    - startup-script-u20
     settings:
       name_prefix: ubuntu2004
       add_deployment_name_before_prefix: true

@@ -106,7 +106,8 @@ deployment_groups:
       exclusive: false
 
   - id: a3_startup
-    source: modules/scripts/startup-script
+    # this source line is deliberate; it is the last to support Ubuntu 20.04
+    source: github.com/GoogleCloudPlatform/cluster-toolkit//modules/scripts/startup-script?ref=v1.51.1&depth=1
     settings:
       # When shutting down a VM with local SSD disks, we strongly recommend the
       # automatic migration of data following these instructions:
@@ -206,7 +207,8 @@ deployment_groups:
         OverSubscribe: EXCLUSIVE
 
   - id: controller_startup
-    source: modules/scripts/startup-script
+    # this source line is deliberate; it is the last to support Ubuntu 20.04
+    source: github.com/GoogleCloudPlatform/cluster-toolkit//modules/scripts/startup-script?ref=v1.51.1&depth=1
     settings:
       runners:
       - type: shell

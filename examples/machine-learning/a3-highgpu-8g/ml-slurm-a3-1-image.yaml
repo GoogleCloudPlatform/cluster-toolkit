@@ -43,7 +43,8 @@ deployment_groups:
       subnetwork_name: $(vars.subnetwork_name_system)
 
   - id: image_build_script
-    source: modules/scripts/startup-script
+    # this source line is deliberate; it is the last to support Ubuntu 20.04
+    source: github.com/GoogleCloudPlatform/cluster-toolkit//modules/scripts/startup-script?ref=v1.51.1&depth=1
     settings:
       install_ansible: true
       docker:
