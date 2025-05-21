@@ -5,8 +5,9 @@
   * [Pinning Specific Images](#pinning-specifics-images)
 * [Cluster Toolkit Supported Images](#cluster-toolkit-supported-images)
   * [HPC Rocky Linux 8](#hpc-rocky-linux-8)
-  * [Debian 11](#debian-11)
-  * [Ubuntu 20.04 LTS](#ubuntu-2004-lts)
+  * [Debian 12](#debian-12)
+  * [Ubuntu 22.04 LTS](#ubuntu-2204-lts)
+  * [Ubuntu 24.04 LTS](#ubuntu-2404-lts)
   * [Windows](#windows)
   * [Other Images](#other-images)
   * [Slurm on GCP](#slurm-on-gcp)
@@ -36,9 +37,9 @@ either the specific module definition or the global variables. The
 
 ```yaml
 instance_image:
-  project: centos-cloud
-  family: centos-v7        # If family is defined, omit name
-  name: centos-7-v20230809 # If name is defined, omit family
+  project: cloud-hpc-image-public
+  family: hpc-rocky-linux-8        # If family is defined, omit name
+  name: hpc-rocky-linux-8-v20250508 # If name is defined, omit family
 ```
 
 The `project` setting defines the space where the image will be found. Either
@@ -71,11 +72,11 @@ blueprint:
         project: cloud-hpc-image-public
 
       instance_image:
-        family: debian-11
+        family: debian-12
         project: debian-cloud
 
       instance_image:
-        family: ubuntu-2004-lts
+        family: ubuntu-2204-lts
         project: ubuntu-os-cloud
 ```
 
@@ -109,14 +110,18 @@ project and the new image name in the `instance_image` field discussed in
 
 HPC Rocky Linux 8 is the primary supported VM image for HPC workloads on Google Cloud.
 
-### Debian 11
+### Debian 12
 
-The Cluster Toolkit officially supports Debian 11 based VM images in the majority of
+The Cluster Toolkit officially supports Debian 12 based VM images in the majority of
 our modules, with a couple of exceptions.
 
-### Ubuntu 20.04 LTS
+### Ubuntu 22.04 LTS
 
-The Cluster Toolkit officially supports Ubuntu 20.04 LTS based VM images in the
+The Cluster Toolkit officially supports Ubuntu 22.04 LTS based VM images in the
+majority of our modules, with a couple of exceptions.
+
+### Ubuntu 24.04 LTS
+The Cluster Toolkit officially supports Ubuntu 22.04 LTS based VM images in the
 majority of our modules, with a couple of exceptions.
 
 ### Windows
@@ -131,7 +136,7 @@ description of our support for Windows images.
   <th>Deployment Type/Scheduler</th>
   <th>Feature</th>
   <th></th>
-  <th>Debian 11</th><th>Rocky Linux 8</th><th>Ubuntu 20.04</th>
+  <th>Debian 12</th><th>Rocky Linux 8</th><th>Ubuntu 22.04</th><th>Ubuntu 24.04</th>
 </tr>
 <tr>
   <td></td><td></td><td></td><td></td><td></td><td></td>
@@ -223,7 +228,7 @@ description of our support for Windows images.
 </tr>
 </table>
 
-<sup><b>*</b></sup> Chrome Remote desktop does not support Ubuntu 20.04, but it does support Ubuntu 22.04.
+<sup><b>*</b></sup> Chrome Remote desktop supports Ubuntu 22.04.
 
 ### Other Images
 
