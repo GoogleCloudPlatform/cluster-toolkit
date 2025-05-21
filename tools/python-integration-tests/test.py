@@ -48,15 +48,13 @@ class SlurmTest(Test):
         self.ssh_client.connect("localhost", self.ssh_manager.local_port, username=self.deployment.username, pkey=self.ssh_manager.key)
 
     def close_ssh(self):
-        self.ssh_manager.close()
+        if self.ssh_manager:
+            self.ssh_manager.close()
 
     def setUp(self):
-        try:
-            super().setUp()
-            hostname = self.get_login_node()
-            self.ssh(hostname)
-        except Exception as err:
-            self.fail(f"Unexpected error encountered. stderr: {err.stderr}")
+        super().setUp()
+        hostname = self.get_login_node()
+        self.ssh(hostname)
 
     def clean_up(self):
         super().clean_up()
