@@ -684,6 +684,12 @@ For this example, the following is needed in the selected region:
 
 Creates a Slurm cluster with [Parallelstore] instance mounted.
 
+To provision the cluster, please run:
+
+```text
+./gcluster deploy examples/ps-slurm.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
+```
+
 After cluster is deployed, parallelstore drivers and DAOS client will be installed
 and mount-point will be configured on the VMs. You can SSH to login/ controller
 and verify by running:
@@ -715,6 +721,12 @@ For this example the following is needed in the selected region:
 
 This creates 1 compute VM running debian 12 and 1 compute VM running ubuntu 20.04
 and connect with [Parallelstore] instance mounted.
+
+To provision the cluster, please run:
+
+```text
+./gcluster deploy examples/pfs-parallelstore.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
+```
 
 After cluster is deployed, parallelstore drivers and DAOS client will be installed
 and mount-point will be configured on the VMs. You can SSH to compute VM
