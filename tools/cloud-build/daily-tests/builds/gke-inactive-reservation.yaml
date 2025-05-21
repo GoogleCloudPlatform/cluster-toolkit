@@ -1,0 +1,66 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+tags:
+- m.gke-cluster
+- m.gke-job-template
+- m.gke-node-pool
+- m.service-account
+- m.vpc
+- gke
+
+timeout: 3600s  # 1hr
+
+steps:
+- id: gke-inactive-reservation
+  name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
+  entrypoint: /bin/bash
+  env:
+  - "ANSIBLE_HOST_KEY_CHECKING=false"
+  - "ANSIBLE_CONFIG=/workspace/tools/cloud-build/ansible.cfg"
+  args:
+  - -c
+  - |
+    set -x -e
+    cd /workspace && make
+    BUILD_ID_FULL=$BUILD_ID
+    BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
+    EXAMPLE_BP=examples/hpc-gke.yaml
+
+    # Adding vm to act as remote node
+    echo '  - id: remote-node'                                    >> $${EXAMPLE_BP}
+    echo '    source: modules/compute/vm-instance'                >> $${EXAMPLE_BP}
+    echo '    use: [network1]'                                    >> $${EXAMPLE_BP}
+    echo '    settings:'                                          >> $${EXAMPLE_BP}
+    echo '      machine_type: e2-standard-2'                      >> $${EXAMPLE_BP}
+    echo '      zone: us-central1-a'                              >> $${EXAMPLE_BP}
+
+    # Adding node pool with reservation defined
+    echo '  - id: compute-pool-reservation'                       >> $${EXAMPLE_BP}
+    echo '    source: modules/compute/gke-node-pool'              >> $${EXAMPLE_BP}
+    echo '    use: [gke_cluster, node_pool_service_account]'      >> $${EXAMPLE_BP}
+    echo '    settings:'                                          >> $${EXAMPLE_BP}
+    echo '      machine_type: e2-standard-2'                      >> $${EXAMPLE_BP}
+    echo '      zones: [us-central1-a]'                           >> $${EXAMPLE_BP}
+    echo '      static_node_count: 0'                             >> $${EXAMPLE_BP}
+    echo '      is_reservation_active: false'                     >> $${EXAMPLE_BP}
+    echo '      reservation_affinity:'                            >> $${EXAMPLE_BP}
+    echo '        consume_reservation_type: SPECIFIC_RESERVATION' >> $${EXAMPLE_BP}
+    echo '        specific_reservations:'                         >> $${EXAMPLE_BP}
+    echo '        - name: sample-reservation-01'                  >> $${EXAMPLE_BP}
+
+    ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
+      --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
+      --extra-vars="@tools/cloud-build/daily-tests/tests/gke-inactive-reservation.yml"
