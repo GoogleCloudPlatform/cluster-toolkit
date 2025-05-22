@@ -150,6 +150,7 @@ while [ "$JNUM" -gt 0 ]; do
 done
 
 run_test "examples/machine-learning/a3-megagpu-8g/slurm-a3mega-base.yaml" "examples/machine-learning/a3-megagpu-8g/deployment-base.yaml"
+run_test "examples/machine-learning/a3-megagpu-8g/debian/slurm-a3mega-image.yaml" "examples/machine-learning/a3-megagpu-8g/deployment-image-cluster.yaml"
 run_test "examples/machine-learning/a3-megagpu-8g/slurm-a3mega-image.yaml" "examples/machine-learning/a3-megagpu-8g/deployment-image-cluster.yaml"
 run_test "examples/machine-learning/a3-megagpu-8g/slurm-a3mega-cluster.yaml" "examples/machine-learning/a3-megagpu-8g/deployment-image-cluster.yaml"
 
