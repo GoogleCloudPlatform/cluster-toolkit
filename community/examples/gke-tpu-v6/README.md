@@ -70,7 +70,7 @@ This section guides you through the cluster creation process, ensuring that your
    * `tpu_topology`: the TPU placement topology for pod slice node pool.
    * `static_node_count`: the number of TPU nodes in your cluster.
    * `authorized_cidr`: The IP address range that you want to allow to connect with the cluster. This CIDR block must include the IP address of the machine to call Terraform.
-   * `extended_reservation`: the name of your reservation in the form of <project>/<reservation-name>
+   * `extended_reservation`: the name of your reservation. To target a specific block within your reservation, use the reservation and block names in the format `RESERVATION_NAME/reservationBlocks/BLOCK_NAME`.
 
     To modify advanced settings, edit `community/examples/gke-tpu-v6/gke-tpu-v6.yaml`.
 

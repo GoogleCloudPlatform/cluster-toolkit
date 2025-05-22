@@ -15,7 +15,7 @@
 blueprint_name: gke-managed-hyperdisk
 vars:
   project_id:  ## Set GCP Project ID Here ##
-  deployment_name: gke-managed-hyperdisk
+  deployment_name: gke-managed-hd
   region: europe-west1
   zone: europe-west1-b
 
