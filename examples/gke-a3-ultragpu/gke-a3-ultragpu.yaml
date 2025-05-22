@@ -245,6 +245,7 @@ deployment_groups:
 
   # Create a remote mount of training_bucket using
   # mount options optimized for reading training data.
+  # Based on https://github.com/GoogleCloudPlatform/gcsfuse/blob/master/samples/gke-csi-yaml/gpu/training-pv.yaml
   - id: gcs-training
     source: modules/file-system/pre-existing-network-storage
     settings:
@@ -262,6 +263,7 @@ deployment_groups:
 
 # Create a remote mount of checkpoint_bucket using mount
   # options optimized for writing and reading checkpoint data.
+  # Based on https://github.com/GoogleCloudPlatform/gcsfuse/blob/master/samples/gke-csi-yaml/gpu/checkpointing-pv.yaml
   - id: gcs-checkpointing
     source: modules/file-system/pre-existing-network-storage
     settings:
@@ -269,12 +271,13 @@ deployment_groups:
       local_mount: /checkpoint-data
       fs_type: gcsfuse
       mount_options: >-
-        implicit-dirs,
-        metadata-cache:ttl-secs:0,
-        file-cache:max-size-mb:-1,
-        file-cache:cache-file-for-range-read:true,
-        file-system:kernel-list-cache-ttl-secs:0,
-        file-cache:enable-parallel-downloads:true,
+        implicit-dirs,                              # Create implicit directories locally when accessed.
+        metadata-cache:ttl-secs:-1,                 # Keep cached metadata (file attributes, types) indefinitely time-wise.
+        metadata-cache:stat-cache-max-size-mb:-1    # Allow unlimited size for the file attribute (stat) cache.
+        metadata-cache:type-cache-max-size-mb:-1    # Allow unlimited size for the file/directory type cache.
+        file-cache:max-size-mb:-1,                  # Allow unlimited size for the file content cache.
+        file-cache:cache-file-for-range-read:true,  # Cache the entire file when any part is read sequentially.
+        file-cache:enable-parallel-downloads:true,  # Use multiple streams to download file content faster.
         rename-dir-limit=200000
 
   # Persistent Volume for training data
