@@ -26,7 +26,7 @@ this solution provisions an auto-scaling HPC environment. Using the Slurm Worklo
 can dynamically spin up and spin down compute resources for the Datapipeline stage and Inference stage
 respectively and as required by your folding workloads.
 
-<img src="adm/af3-htc-architecture.png" alt="af3-slurm architecture" width="700">
+<img src="adm/AlphaFold-architecture.png" alt="af3-slurm architecture" width="700">
 
 The AlphaFold 3 High Throughput solution maps the Datapipeline and Inference steps to Google Compute Engine
 VM families that give you a **high number of folding executions/$** and that can horizontally scale out.
@@ -60,7 +60,7 @@ GPU at the expense of throughput. See
 [Other Hardware Configurations](https://github.com/google-deepmind/alphafold3/blob/main/docs/performance.md#other-hardware-configurations)
 in the original AlphaFold 3 documentation.
 
-For the two example launchers (see [Examples](#examples)), the solution sets the g2-based partition (infg2) as
+For the three example launchers (see [Examples](#examples)), the solution sets the g2-based partition (infg2) as
 the default since this is the most cost-effective inference platform as long as your sequences fit into the
 available GPU memory. You can change the default in the `af3-slurm-deployment.yaml` file via the variable
 `default_inference_partition`. There currently is no auto-selection of GPUs; see [Known Limitations](#known-limitations).
@@ -110,7 +110,7 @@ but additional customizations to your environment may be necessary.
 
 To illustrate the capability of the solution, we provide a few simple examples that represent
 different ways users may want to interact with the high throughput folding capability.
-At the moment, we include 2 example launchers, which provide basic templates
+At the moment, we include 3 example launchers, which provide basic templates
 for different ways of interacting with the AlphaFold 3 solution:
 
 ### Simple Job Launcher
@@ -126,6 +126,11 @@ controller-node, not requiring any user interaction with the AlphaFold 3 environ
 
 Refer to [Service Launcher Instructions](examples/simple_service_launcher/README.md) for more details.
 
+### Simple Ipynb Launcher
+The Simple Ipynb Launcher has a Jupyter Notebook that allows user interact with the AlphaFold 3 data pipeline and inference operation.
+
+Refer to [Ipynb Launcher Instructions](examples/simple_ipynb_launcher/README.md) for more details.
+
 > [!WARNING]
 > While these launchers illustrate potential user workflows, they are intended for demonstration purposes only.
 > Careful review and modification are strongly advised before using them in production or for non-demonstration
@@ -140,6 +145,8 @@ Refer to [Service Launcher Instructions](examples/simple_service_launcher/README
 > - Google Compute Engine
 > - Google Cloud Build
 > - Google Artifact Registry
+> - Google Secret Manager
+> - Google Vertex AI Workbench
 >
 > To avoid continued billing after use, closely follow the
 > [teardown instructions](#teardown-instructions).
@@ -149,7 +156,13 @@ To generate a cost estimate based on your projected usage, use the
 
 ## Known Limitations
 This solution currently has the following known limitations:
-- **Out-of-memory Condition**: For certain amino-acid input sequences the Jackhmmer software that is used in the Datapipeline step is known to produce too many outputs causing it to run out of memory. In the current solution, these jobs are eventually terminated through the job runtime limit and are marked as failed. Running these jobs with more per-job memory in most cases does not resolve the issue. Resolution to this requires modifications of the Jackhmmer software and will be addressed in future versions of the solution. Mitigation: users can run with an input JSON that provides their own MSA, thus skipping the JackHmmer run for this input
+- **Data Pipeline Out-of-memory Condition**: For certain amino-acid input sequences the Jackhmmer software that is used in the Datapipeline step is known to produce too many outputs causing it to run out of memory. In the current solution, these jobs are eventually terminated through the job runtime limit and are marked as failed. Running these jobs with more per-job memory in most cases does not resolve the issue. Resolution to this requires modifications of the Jackhmmer software and will be addressed in future versions of the solution. Mitigation: users can run with an input JSON that provides their own MSA, thus skipping the JackHmmer run for this input
+- **Inference Out-of-memory Condition**: Inference also encountered an "Out of Memory" issue, similar to the data pipeline. While not all sequences can be handled with this approach, some can be resolved by enabling [unified memory](https://github.com/google-deepmind/alphafold3/blob/main/docs/performance.md#unified-memory) . To do this, set the following variable in `af3-slurm-deployment.yaml`:
+
+```yaml
+inference_enable_unified_memory: true
+```
+
 - **Recompute vs Reuse**: The Datapipeline step of the solution is stateless and does not keep track of previously processed inputs. Thus, if previously submitted sequences are submitted again (e.g. with a different ligand), all parts will be recomputed. Mitigation: none needed. But if uses want to benefit from reuse, they can obtain MSA and templates and provide them in the input JSON file for the Inference step.
 
 Limitations of the example launchers:
@@ -398,6 +411,11 @@ vars:
   modelweights_bucket:  <YOUR_WEIGHTS_BUCKET_NAME>  # name of your bucket with af3 model weights
   database_bucket: <YOUR_DATABASE_BUCKET_NAME>      # name of your bucket with the database files
 
+  # Set to True to enable unified memory during inference.
+  # This is recommended when processing large input data or when running on machines with limited GPU memory.
+  # Reference: https://github.com/google-deepmind/alphafold3/blob/main/docs/performance.md#unified-memory
+  inference_enable_unified_memory: false
+
   # AF3 model - architecture mappings - typically do not need to be modified
   sif_dir: /opt/apps/af3/containers  # default path for the local copy of the container image
   model_dir: /opt/apps/af3/models    # default path for the local copy of the model weights
@@ -414,7 +432,7 @@ vars:
   save_embeddings: ""
 
   # Choose if you want the AF3 Simple Service daemon started
-  af3service_activate: false
+  af3service_activate: true
   af3service_jobbucket: ""           # set to "" if not used
   af3service_user: af3
 
@@ -430,7 +448,6 @@ vars:
 ```
 
 #### Deploy the cluster
-
 If you want to configure and deploy your cluster in one go, simply type:
 
 ```bash
@@ -462,6 +479,31 @@ If you modify your configuration but do not touch the image, it may save you tim
 #!/bin/bash
 ./gcluster deploy af3-slurm --auto-approve --skip image  
 ```
+
+### (Optional) Deploying a Jupyter Notebook for AlphaFold
+
+You can optionally deploy a Jupyter Notebook environment to run AlphaFold step-by-step. This is useful for interactive exploration and making custom modifications to the AlphaFold pipeline.
+
+> **Important:** To enable the Jupyter Notebook deployment, you **must provide a cloud storage bucket**. If no bucket is specified, the notebook environment will not be created.
+
+#### Steps to Deploy
+
+1. Ensure you have provided a valid cloud storage bucket in your `af3-slurm-deployment.yaml`:
+
+    ```yaml
+    af3ipynb_bucket: "<your-pre-existing-bucket-name>"
+    ```
+
+2. If you have already deployed the cluster (see [Deploy the Cluster](#deploy-the-cluster)) **without specifying** the `af3ipynb_bucket` in your `af3-slurm-deployment.yaml` file and now wish to enable the Jupyter Notebook functionality, you must [**tear down the existing cluster**](#teardown-instructions) and [**redeploy a new cluster**](#deploy-the-cluster) with the correct `af3ipynb_bucket` value. Could follow `--skip image` command while deploying to reduce deployment time.
+Note that the Jupyter Notebook will not function properly if added to an already deployed cluster without this configuration.
+
+3. Build the Jupyter notebook with `af3-slurm-ipynb.yaml`:
+
+    ```bash
+    ./gcluster deploy -d example/af3/af3-slurm-deployment.yaml example/af3/af3-slurm-ipynb.yaml --auto-approve 
+    ```
+
+For more details, please refer to the [Simple Ipynb Launcher](examples/simple_ipynb_launcher/README.md).
 
 #### Bootstrapping of the Databases Bucket
 
@@ -522,8 +564,16 @@ reverse order. Leave out the `--auto-approve` if you want control over each depl
 ./gcluster destroy af3-slurm --auto-approve
 ```
 
+### (Optional) Teardown Jupyter Notebook
+
+If you have previously deployed the Jupyter Notebook by following [Deploying a Jupyter Notebook for AlphaFold](#optional-deploying-a-jupyter-notebook-for-alphafold) and would like to tear down the notebook deployment, use the command below.
+
+```bash
+./gcluster destroy af3-slurm-ipynb --auto-approve
+```
+
 > [!WARNING]
-> If you do not destroy all three deployment groups then there may be continued
+> If you do not destroy all three deployment groups and/or the notebook deployment, then there may be continued
 > associated costs. Also, the buckets you may have created via the cloud console or CLI will
 > not be destroyed by the above command (they would be, however, destroyed if you deleted the project).
 > For deleting the buckets consult [Delete buckets](https://cloud.google.com/storage/docs/deleting-buckets).

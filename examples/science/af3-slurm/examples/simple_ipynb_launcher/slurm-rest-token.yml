@@ -1,0 +1,74 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+---
+- name: af3-slurm-rest-api-token
+  hosts: localhost
+  become: true
+  gather_facts: false
+
+  vars:
+    # variables set in af3-slurm-deployment.yaml
+    project_id:
+    slurm_rest_server_activate:
+    service_user:
+    secret_name:
+
+    # not meant to be modified
+    slurm_token_path: "/tmp/slurm_jwt_token.txt"
+
+  tasks:
+
+  - name: Ensure slurm_rest_server_activate is boolean
+    set_fact:
+      activate: "{{ slurm_rest_server_activate | bool }}"
+
+  - name: Run SLURM rest token and secret ops if activated
+    block:
+    - name: Generate SLURM JWT token and write to file
+      ansible.builtin.shell: |
+        scontrol token username="{{ service_user }}" lifespan=31536000 | grep SLURM_JWT | cut -d'=' -f2 > "{{ slurm_token_path }}"
+      args:
+        executable: /bin/bash
+
+    - name: Set fact for token value
+      ansible.builtin.slurp:
+        src: "{{ slurm_token_path }}"
+      register: slurm_token_encoded
+
+    - name: Decode SLURM token value
+      ansible.builtin.set_fact:
+        slurm_token: "{{ slurm_token_encoded.content | b64decode  | trim }}"
+
+    - name: Check if GCP secret exists
+      ansible.builtin.shell: |
+        gcloud secrets describe "{{ secret_name }}" --project="{{ project_id }}"
+      register: gcp_secret_check
+      failed_when: false
+      changed_when: false
+
+    - name: Create GCP secret if not exists
+      ansible.builtin.shell: |
+        gcloud secrets create "{{ secret_name }}" --replication-policy="automatic" --project="{{ project_id }}"
+      when: gcp_secret_check.rc != 0
+
+    - name: Save SLURM token to GCP Secret Manager
+      ansible.builtin.shell: |
+        echo -n "{{ slurm_token }}" | gcloud secrets versions add "{{ secret_name }}" --data-file=- --project="{{ project_id }}"
+
+    rescue:
+    - name: Debug failure
+      debug:
+        msg: "Something went wrong during SLURM token generation or secret upload."
+
+    when: activate and secret_name | length > 0
