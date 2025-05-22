@@ -59,6 +59,23 @@ resource "google_sql_database_instance" "instance" {
         data_cache_enabled = var.data_cache_enabled
       }
     }
+
+    dynamic "database_flags" {
+      for_each = var.database_flags
+      content {
+        name  = database_flags.key
+        value = database_flags.value
+      }
+    }
+
+    insights_config {
+      query_insights_enabled  = var.query_insights.enabled
+      query_plans_per_minute  = var.query_insights.query_plans_per_minute
+      query_string_length     = var.query_insights.query_string_length
+      record_application_tags = var.query_insights.record_application_tags
+      record_client_address   = var.query_insights.record_client_address
+    }
+
     ip_configuration {
       ipv4_enabled                                  = false
       private_network                               = var.use_psc_connection ? null : var.network_id

@@ -166,6 +166,7 @@ resource "google_secret_manager_secret" "cloudsql" {
   count = var.cloudsql != null ? 1 : 0
 
   secret_id = "${local.slurm_cluster_name}-slurm-secret-cloudsql"
+  project   = var.project_id
 
   replication {
     dynamic "auto" {

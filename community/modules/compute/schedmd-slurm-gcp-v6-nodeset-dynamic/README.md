@@ -113,6 +113,7 @@ modules. For support with the underlying modules, see the instructions in the
 | <a name="input_metadata"></a> [metadata](#input\_metadata) | Metadata, provided as a map. | `map(string)` | `{}` | no |
 | <a name="input_min_cpu_platform"></a> [min\_cpu\_platform](#input\_min\_cpu\_platform) | The name of the minimum CPU platform that you want the instance to use. | `string` | `null` | no |
 | <a name="input_name"></a> [name](#input\_name) | Name of the nodeset. Automatically populated by the module id if not set.<br/>If setting manually, ensure a unique value across all nodesets. | `string` | n/a | yes |
+| <a name="input_network_storage"></a> [network\_storage](#input\_network\_storage) | An array of network attached storage mounts to be configured on nodes. | <pre>list(object({<br/>    server_ip     = string,<br/>    remote_mount  = string,<br/>    local_mount   = string,<br/>    fs_type       = string,<br/>    mount_options = string,<br/>  }))</pre> | `[]` | no |
 | <a name="input_on_host_maintenance"></a> [on\_host\_maintenance](#input\_on\_host\_maintenance) | Instance availability Policy.<br/><br/>Note: Placement groups are not supported when on\_host\_maintenance is set to<br/>"MIGRATE" and will be deactivated regardless of the value of<br/>enable\_placement. To support enable\_placement, ensure on\_host\_maintenance is<br/>set to "TERMINATE". | `string` | `"TERMINATE"` | no |
 | <a name="input_preemptible"></a> [preemptible](#input\_preemptible) | Should use preemptibles to burst. | `bool` | `false` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project ID to create resources in. | `string` | n/a | yes |
@@ -123,8 +124,10 @@ modules. For support with the underlying modules, see the instructions in the
 | <a name="input_slurm_bucket_path"></a> [slurm\_bucket\_path](#input\_slurm\_bucket\_path) | Path to the Slurm bucket. | `string` | n/a | yes |
 | <a name="input_slurm_cluster_name"></a> [slurm\_cluster\_name](#input\_slurm\_cluster\_name) | Name of the Slurm cluster. | `string` | n/a | yes |
 | <a name="input_spot_instance_config"></a> [spot\_instance\_config](#input\_spot\_instance\_config) | Configuration for spot VMs. | <pre>object({<br/>    termination_action = string<br/>  })</pre> | `null` | no |
+| <a name="input_startup_script"></a> [startup\_script](#input\_startup\_script) | Startup script used by VMs in this nodeset | `string` | `"# no-op"` | no |
 | <a name="input_subnetwork_self_link"></a> [subnetwork\_self\_link](#input\_subnetwork\_self\_link) | Subnet to deploy to. | `string` | n/a | yes |
 | <a name="input_tags"></a> [tags](#input\_tags) | Network tag list. | `list(string)` | `[]` | no |
+| <a name="input_universe_domain"></a> [universe\_domain](#input\_universe\_domain) | Domain address for alternate API universe | `string` | `"googleapis.com"` | no |
 
 ## Outputs
 

@@ -110,8 +110,8 @@ def conflines(lkp: util.Lookup) -> str:
         **(comma_params if not no_comma_params else {}),
         "Prolog": f"{prolog_path}/*" if lkp.cfg.prolog_scripts else None,
         "Epilog": f"{epilog_path}/*" if lkp.cfg.epilog_scripts else None,
-        "TaskProlog": f"{task_prolog_path}/*" if lkp.cfg.task_prolog_scripts else None,
-        "TaskEpilog": f"{task_epilog_path}/*" if lkp.cfg.task_epilog_scripts else None,
+        "TaskProlog": f"{task_prolog_path}/task-prolog" if lkp.cfg.task_prolog_scripts else None,
+        "TaskEpilog": f"{task_epilog_path}/task-epilog" if lkp.cfg.task_epilog_scripts else None,
         "PrivateData": get("private_data", []),
         "SchedulerParameters": get("scheduler_parameters", [
             "bf_continue",

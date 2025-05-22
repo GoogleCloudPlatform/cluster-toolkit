@@ -10,9 +10,9 @@ accounting data storage.
 ### Example
 
 ```yaml
-- id: project
-  source: community/modules/database/cloudsql-federation
-  use: [network1]
+- id: cloudsql
+  source: community/modules/database/slurm-cloudsql-federation
+  use: [network]
   settings:
     sql_instance_name: slurm-sql6-demo
     tier: "db-f1-micro"
@@ -77,7 +77,8 @@ No modules.
 |------|-------------|------|---------|:--------:|
 | <a name="input_authorized_networks"></a> [authorized\_networks](#input\_authorized\_networks) | IP address ranges as authorized networks of the Cloud SQL for MySQL instances | `list(string)` | `[]` | no |
 | <a name="input_data_cache_enabled"></a> [data\_cache\_enabled](#input\_data\_cache\_enabled) | Whether data cache is enabled for the instance. Can be used with ENTERPRISE\_PLUS edition. | `bool` | `false` | no |
-| <a name="input_database_version"></a> [database\_version](#input\_database\_version) | The version of the database to be created. | `string` | `"MYSQL_5_7"` | no |
+| <a name="input_database_flags"></a> [database\_flags](#input\_database\_flags) | Database flags to set on instance. | `map(string)` | `{}` | no |
+| <a name="input_database_version"></a> [database\_version](#input\_database\_version) | The version of the database to be created. | `string` | `"MYSQL_8_0"` | no |
 | <a name="input_deletion_protection"></a> [deletion\_protection](#input\_deletion\_protection) | Whether or not to allow Terraform to destroy the instance. | `string` | `false` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | The name of the current deployment | `string` | n/a | yes |
 | <a name="input_disk_autoresize"></a> [disk\_autoresize](#input\_disk\_autoresize) | Set to false to disable automatic disk grow. | `bool` | `true` | no |
@@ -88,6 +89,7 @@ No modules.
 | <a name="input_network_id"></a> [network\_id](#input\_network\_id) | The ID of the GCE VPC network to which the instance is going to be created in.:<br/>`projects/<project_id>/global/networks/<network_name>`" | `string` | n/a | yes |
 | <a name="input_private_vpc_connection_peering"></a> [private\_vpc\_connection\_peering](#input\_private\_vpc\_connection\_peering) | The name of the VPC Network peering connection, used only as dependency for Cloud SQL creation. | `string` | `null` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created | `string` | n/a | yes |
+| <a name="input_query_insights"></a> [query\_insights](#input\_query\_insights) | Query insights configuration. | <pre>object({<br/>    enabled                 = optional(bool, false)<br/>    query_plans_per_minute  = optional(number)<br/>    query_string_length     = optional(number)<br/>    record_application_tags = optional(bool)<br/>    record_client_address   = optional(bool)<br/>  })</pre> | `{}` | no |
 | <a name="input_region"></a> [region](#input\_region) | The region where SQL instance will be configured | `string` | n/a | yes |
 | <a name="input_sql_instance_name"></a> [sql\_instance\_name](#input\_sql\_instance\_name) | name given to the sql instance for ease of identificaion | `string` | n/a | yes |
 | <a name="input_sql_password"></a> [sql\_password](#input\_sql\_password) | Password for the SQL database. | `any` | `null` | no |

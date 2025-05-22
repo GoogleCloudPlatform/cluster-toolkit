@@ -24,7 +24,7 @@ vars:
 
   # This should be unique across all of your Cluster
   # Toolkit Deployments.
-  deployment_name: gke-a3u-dws-fs-qp
+  deployment_name:
 
   # The GCP Region used for this deployment.
   region:

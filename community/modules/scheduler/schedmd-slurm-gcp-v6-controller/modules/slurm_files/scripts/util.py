@@ -29,7 +29,6 @@ import logging.handlers
 import math
 import os
 import re
-import shelve
 import shlex
 import shutil
 import socket
@@ -44,7 +43,6 @@ from functools import lru_cache, reduce, wraps
 from itertools import chain, islice
 from pathlib import Path
 from time import sleep, time
-
 
 # TODO: remove "type: ignore" once moved to newer version of libraries
 from google.cloud import secretmanager
@@ -65,7 +63,7 @@ from requests.exceptions import RequestException
 
 import yaml
 from addict import Dict as NSDict # type: ignore
-
+import file_cache
 
 USER_AGENT = "Slurm_GCP_Scripts/1.5 (GPN:SchedMD)"
 ENV_CONFIG_YAML = os.getenv("SLURM_CONFIG_YAML")
@@ -327,8 +325,13 @@ def get_credentials() -> Optional[service_account.Credentials]:
 
 @lru_cache(maxsize=1)
 def get_dev_key() -> Optional[str]:
-    """Get dev key for project"""
-    return os.environ.get("GOOGLE_DEVELOPER_KEY")
+    """Get dev key for project (uses json or yaml format)"""
+    try:
+        with open("/etc/slurm/slurm_vars.yaml", 'r') as file:
+            data = yaml.safe_load(file)
+            return data['google_developer_key']
+    except:
+        return None
 
 
 def create_client_options(api: ApiEndpoint) -> ClientOptions:
@@ -797,17 +800,54 @@ def run(
     if not shell and isinstance(args, str):
         args = shlex.split(args)
     log.debug(f"run: {args}")
-    result = subprocess.run(
-        args,
-        stdout=stdout,
-        stderr=stderr,
-        shell=shell,
-        timeout=timeout,
-        check=check,
-        universal_newlines=universal_newlines,
-        **kwargs,
-    )
+    try:
+        result = subprocess.run(
+            args,
+            stdout=stdout,
+            stderr=stderr,
+            shell=shell,
+            timeout=timeout,
+            check=check,
+            universal_newlines=universal_newlines,
+            **kwargs,
+        )
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+        log_subprocess(e)
+        raise
+    log_subprocess(result)
     return result
+
+def log_subprocess(subj: subprocess.CalledProcessError | subprocess.TimeoutExpired | subprocess.CompletedProcess) -> None:
+    match subj:
+        case subprocess.CompletedProcess(returncode=0):
+            # Do not log successful runs, to not overwhelm logs (e.g. scontrol show jobs --json)
+            # TODO: consider still doing it in DEBUG or trim output to few KBs. 
+            return
+        case subprocess.CompletedProcess(): # non-zero returncode
+            log.error(f"Command '{subj.args}' returned exit status {subj.returncode}.")
+        case subprocess.CalledProcessError() | subprocess.TimeoutExpired():
+            log.error(str(subj))
+        
+
+    def normalize(out: None | str | bytes) -> None | str:
+        """
+        Turns stderr and stdout into string:
+        > A bytes sequence, or a string if run() was called with an encoding, errors, or text=True. None if was not captured.
+        """
+        match out:
+            case None:
+                return None
+            case str():
+                return out.strip()
+            case bytes():
+                return out.decode().strip()
+            case _:
+                return repr(out)
+
+    if stdout := normalize(subj.stdout):
+        log.error(f"stdout: {stdout}")
+    if stderr := normalize(subj.stderr):
+        log.error(f"stderr: {stderr}")
 
 
 def chown_slurm(path: Path, mode=None) -> None:
@@ -1114,13 +1154,15 @@ def to_hostnames(nodelist: str) -> List[str]:
     return hostnames
 
 
-def retry_exception(exc):
+def retry_exception(exc) -> bool:
     """return true for exceptions that should always be retried"""
+    msg = str(exc)
     retry_errors = (
         "Rate Limit Exceeded",
         "Quota Exceeded",
+        "Quota exceeded",
     )
-    return any(e in str(exc) for e in retry_errors)
+    return any(err in msg for err in retry_errors)
 
 
 def ensure_execute(request):
@@ -1207,6 +1249,13 @@ def batch_execute(requests, retry_cb=None, log_err=log.error):
     return done, failed
 
 
+def get_operation_req(lkp: "Lookup", name: str, region: Optional[str]=None, zone: Optional[str]=None) -> Any:
+  if zone:
+    return lkp.compute.zoneOperations().get(project=lkp.project, zone=zone, operation=name)
+  elif region:
+    return lkp.compute.regionOperations().get(project=lkp.project, region=region, operation=name)
+  return lkp.compute.globalOperations().get(project=lkp.project, operation=name)
+
 def wait_request(operation, project: str):
     """makes the appropriate wait request for a given operation"""
     if "zone" in operation:
@@ -1242,11 +1291,6 @@ def wait_for_operation(operation) -> Dict[str, Any]:
             )
             return result
 
-
-def wait_for_operations(operations):
-    return [
-        wait_for_operation(op) for op in operations
-    ]
 
 
 def get_filtered_operations(op_filter):
@@ -1369,8 +1413,6 @@ class Lookup:
 
     def __init__(self, cfg):
         self._cfg = cfg
-        self.template_cache_path = Path(__file__).parent / "template_info.cache"
-        self.template_cache_path_exists = Path(__file__).parent / "template_info.cache.exists"
 
     @property
     def cfg(self):
@@ -1524,7 +1566,8 @@ class Lookup:
         nodeset = self.node_nodeset_name(node_name)
         return self.cfg.nodeset_dyn.get(nodeset) is not None
 
-    def node_template(self, node_name=None):
+    def node_template(self, node_name=None) -> str:
+        """ Self link of nodeset template """
         return self.node_nodeset(node_name).instance_template
 
     def node_template_info(self, node_name=None):
@@ -1827,38 +1870,13 @@ class Lookup:
         machine_conf.memory = machine.memory_mb - (400 + (30 * gb))
         return machine_conf
 
-    @contextmanager
-    def template_cache(self, writeback=False):
-        flag: Literal["c", "r"] = "c" if writeback else "r"
-        err = None
-        for wait in backoff_delay(0.125, timeout=60, count=20):
-            try:
-                cache = shelve.open(
-                    str(self.template_cache_path), flag=flag, writeback=writeback
-                )
-                break
-            except OSError as e:
-                err = e
-                log.debug(f"Failed to access template info cache: {e}")
-                sleep(wait)
-                continue
-        else:
-            # reached max_count of waits
-            raise Exception(f"Failed to access cache file. latest error: {err}")
-        try:
-            yield cache
-        finally:
-            cache.close()
-
     @lru_cache(maxsize=None)
     def template_info(self, template_link):
         template_name = trim_self_link(template_link)
-        # split read and write access to minimize write-lock. This might be a
-        # bit slower? TODO measure
-        if self.template_cache_path_exists.exists():
-            with self.template_cache() as cache:
-                if template_name in cache:
-                    return NSDict(cache[template_name])
+        cache = file_cache.cache("template_cache")
+
+        if cached := cache.get(template_name):
+            return NSDict(cached)
 
         template = ensure_execute(
             self.compute.instanceTemplates().get(
@@ -1884,26 +1902,7 @@ class Lookup:
         else:
             template.gpu = None
 
-        # keep write access open for minimum time
-        with self.template_cache(writeback=True) as cache:
-            cache[template_name] = template.to_dict()
-        
-        # Note that shelve database may add custom suffix on top of the path
-        # > The filename specified is the base filename for the underlying database. 
-        # We find all files which could be the database and open the first one.
-        cache_files = [filename for filename in os.listdir(self.template_cache_path.parent) if filename.startswith(self.template_cache_path.name)]
-        if not cache_files:
-            # No cache files found, skip
-            return template
-        # Change ownership of the cache files to the slurm user
-        # This is needed to avoid permission issues when running slurmsync
-        # as a different user (e.g. when using sudo)
-        for filename in cache_files:
-            chown_slurm(Path(self.template_cache_path.parent) / filename)
-        
-        # Create a marker file to indicate that the cache file exists
-        self.template_cache_path_exists.touch()
-        chown_slurm(self.template_cache_path_exists)
+        cache.set(template_name, template.to_dict())
         return template
 
 
