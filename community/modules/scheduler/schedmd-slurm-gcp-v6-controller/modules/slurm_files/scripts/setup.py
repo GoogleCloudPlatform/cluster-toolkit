@@ -93,12 +93,9 @@ def start_motd():
     util.run(f"wall -n '{wall_msg}'", timeout=30)
 
 
-def end_motd(broadcast=True):
+def end_motd():
     """modify motd to signal that setup is complete"""
     Path("/etc/motd").write_text(MOTD_HEADER)
-
-    if not broadcast:
-        return
 
     run(
         "wall -n '*** Slurm {} setup complete ***'".format(lookup().instance_role),
