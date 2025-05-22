@@ -16,7 +16,7 @@
 
 terraform {
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:windows-startup-script/v1.51.0"
+    module_name = "blueprints/terraform/hpc-toolkit:windows-startup-script/v1.52.0"
   }
 
   required_version = ">= 0.14.0"
