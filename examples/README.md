@@ -1006,6 +1006,80 @@ secondary IP ranges defined.
 The `gke-job-template` module is used to create a job file that can be submitted
 to the cluster using `kubectl` and will run on the specified node pool.
 
+#### Steps to deploy the blueprint
+
+1. Install Cluster Toolkit
+    1. Install [dependencies](https://cloud.google.com/cluster-toolkit/docs/setup/install-dependencies).
+    1. Set up [Cluster Toolkit](https://cloud.google.com/cluster-toolkit/docs/setup/configure-environment).
+1. Switch to the Cluster Toolkit directory
+
+   ```sh
+   cd cluster-toolkit
+   ```
+
+1. Get the IP address for your host machine
+
+   ```sh
+   curl ifconfig.me
+   ```
+
+1. Update the vars block of the blueprint file
+    1. `project_id`: ID of the project where you are deploying the cluster.
+    1. `deployment_name`: Name of the deployment.
+    1. `authorized_cidr`: update the IP address in <your-ip-address>/32.
+1. Build the Cluster Toolkit binary
+
+   ```sh
+   make
+   ```
+
+1. Provision the GKE cluster
+
+   ```sh
+   ./gcluster deploy examples/hpc-gke.yaml
+   ```
+
+1. Run the job
+
+    1. Connect to your cluster
+
+       ```sh
+       gcloud container clusters get-credentials CLUSTER_NAME --location=COMPUTE_REGION --project=PROJECT_ID
+       ```
+
+       * Update the `CLUSTER_NAME` to the `deployment_name`
+       * Update the `COMPUTE_REGION` to the `region` used in blueprint vars
+       * Update the `PROJECT_ID` to the `project_id` used in blueprint vars
+
+    1. The output of the `./gcluster deploy` on CLI includes a `kubectl create` command to create the job.
+
+       ```sh
+       kubectl create -f <job-yaml-path> 
+       ```
+
+       This command creates a job that uses busybox image and prints `Hello World`. This result can be viewed by looking at the pod logs.
+
+    1. List pods
+
+       ```sh
+       kubectl get pods
+       ```
+
+    1. Get the pod logs
+
+       ```sh
+       kubectl logs <pod-name>
+       ```
+
+#### Clean Up
+To destroy all resources associated with creating the GKE cluster, from Cloud Shell run the following command:
+
+```sh
+./gcluster destroy CLUSTER-NAME
+```
+
+Replace `CLUSTER-NAME` with the `deployment_name` used in blueprint vars block.
+
 [hpc-gke.yaml]: ../examples/hpc-gke.yaml
 
 ### [ml-gke.yaml] ![core-badge]
