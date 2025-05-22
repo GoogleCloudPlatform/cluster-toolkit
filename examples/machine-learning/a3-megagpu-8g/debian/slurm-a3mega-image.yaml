@@ -24,8 +24,7 @@ validators:
 # deployment-image-cluster.yaml
 vars:
   deployment_name: a3mega-image
-  source_image_family: ubuntu-accelerator-2204-amd64-with-nvidia-570
-  source_image_project_id: [ubuntu-os-accelerator-images]
+  source_image: debian-12-bookworm-v20250415
 
 deployment_groups:
 - group: build_script
@@ -88,15 +87,38 @@ deployment_groups:
           apt-mark hold google-compute-engine-oslogin
           apt-mark hold google-guest-agent
           apt-mark hold google-osconfig-agent
+      - type: ansible-local
+        destination: install_headers_archive.yml
+        content: |
+          ---
+          - name: Install kernel headers from Debian archive
+            hosts: all
+            become: true
+            vars:
+              package_url: https://snapshot.debian.org/archive/debian/20250415T211946Z/pool/main/l/linux/linux-headers-6.1.0-33-cloud-amd64_6.1.133-1_amd64.deb
+              package_filename: /tmp/{{ package_url | basename }}
+            tasks:
+            - name: Download kernel headers package
+              ansible.builtin.get_url:
+                url: "{{ package_url }}"
+                dest: "{{ package_filename }}"
+              retries: 3
+              delay: 60
+              register: result
+              until: result is success
+              failed_when: result is failure
+            - name: Install kernel headers
+              ansible.builtin.apt:
+                deb: "{{ package_filename }}"
+                state: present
       - type: data
         destination: /var/tmp/slurm_vars.json
         content: |
           {
             "reboot": false,
-            "install_cuda": false,
+            "install_cuda": true,
             "install_ompi": true,
-            "install_lustre": false,
-            "install_managed_lustre": false,
+            "install_lustre": true,
             "install_gcsfuse": true,
             "monitoring_agent": "cloud-ops",
             "use_open_drivers": true
@@ -129,6 +151,8 @@ deployment_groups:
               ansible.builtin.apt:
                 name:
                 - dkms
+                - linux-headers-{{ ansible_kernel }}
+                - linux-headers-cloud-amd64
             - name: Download gVNIC package
               ansible.builtin.get_url:
                 url: "{{ package_url }}"
@@ -163,7 +187,6 @@ deployment_groups:
       - type: data
         destination: /etc/enroot/enroot.conf
         content: |
-          ENROOT_CONFIG_PATH     ${HOME}/.enroot
           ENROOT_RUNTIME_PATH    /mnt/localssd/${UID}/enroot/runtime
           ENROOT_CACHE_PATH      /mnt/localssd/${UID}/enroot/cache
           ENROOT_DATA_PATH       /mnt/localssd/${UID}/enroot/data
@@ -176,7 +199,7 @@ deployment_groups:
             hosts: all
             become: true
             vars:
-              distribution: "{{ ansible_distribution | lower }}{{ ansible_distribution_version | replace('.','') }}"
+              distribution: "{{ ansible_distribution | lower }}{{ ansible_distribution_major_version }}"
               package_url: https://developer.download.nvidia.com/compute/cuda/repos/{{ distribution }}/x86_64/cuda-keyring_1.1-1_all.deb
               package_filename: /tmp/{{ package_url | basename }}
               enable_ops_agent: $(vars.enable_ops_agent)
@@ -215,23 +238,79 @@ deployment_groups:
             hosts: all
             become: true
             tasks:
-            - name: Setup apt-transport-artifact-registry repository
-              ansible.builtin.apt_repository:
-                repo: deb http://packages.cloud.google.com/apt apt-transport-artifact-registry-stable main
-                state: present
             - name: Install driver dependencies
               ansible.builtin.apt:
                 name:
                 - dkms
+                - linux-headers-{{ ansible_kernel }}
+                - linux-headers-cloud-amd64
                 - apt-transport-artifact-registry
             - name: Setup gpudirect-tcpxo apt repository
               ansible.builtin.apt_repository:
-                repo: deb [arch=all trusted=yes ] ar+https://us-apt.pkg.dev/projects/gce-ai-infra gpudirect-tcpxo-apt main
+                repo: deb [arch=all] ar+https://us-apt.pkg.dev/projects/gce-ai-infra gpudirect-tcpxo-apt main
                 state: present
             - name: Install DMABUF import helper DKMS package
               ansible.builtin.apt:
                 name: dmabuf-import-helper
                 state: present
+      - type: ansible-local
+        destination: timesyncd.yml
+        content: |
+          ---
+          - name: Configure timesyncd to increase StartLimitBurst
+            hosts: all
+            become: true
+            tasks:
+            - name: Create timeysncd override directory
+              ansible.builtin.file:
+                path: /etc/systemd/system/systemd-timesyncd.service.d
+                state: directory
+                owner: root
+                group: root
+                mode: 0o755
+            - name: Configure timesyncd StartLimitBurst
+              ansible.builtin.copy:
+                dest: /etc/systemd/system/systemd-timesyncd.service.d/burst_limit.conf
+                owner: root
+                group: root
+                mode: 0o644
+                content: |
+                  [Unit]
+                  # Increase start burst limit to exceed number of network adapters
+                  # in the system (rapid restart 1 per NIC)
+                  StartLimitBurst=10
+              notify: Reload SystemD
+            handlers:
+            - name: Reload SystemD
+              ansible.builtin.systemd:
+                daemon_reload: true
+      - type: ansible-local
+        destination: bash_completion_patch.yml
+        content: |
+          ---
+          - name: Patch bash-completion to fix hanging query
+            hosts: all
+            become: true
+            tasks:
+            - name: Create bash-completion patch
+              ansible.builtin.copy:
+                dest: /tmp/bash_completion.patch
+                owner: root
+                group: root
+                mode: 0o644
+                content: |
+                  551c551
+                  <     elif [[ $1 == ~* ]]; then
+                  ---
+                  >     elif [[ $1 == \~* ]]; then
+                  553c553
+                  <         printf -v $2 ~%q "${1:1}"
+                  ---
+                  >         printf -v $2 \~%q "${1:1}"
+            - name: Apply bash-completion patch
+              ansible.posix.patch:
+                src: /tmp/bash_completion.patch
+                dest: /usr/share/bash-completion/bash_completion
       - type: ansible-local
         destination: aperture_devices.yml
         content: |
@@ -255,36 +334,43 @@ deployment_groups:
             handlers:
             - name: Update initramfs
               ansible.builtin.command: /usr/sbin/update-initramfs -u -k all
-      - type: shell
-        destination: remove_snap_gcloud.sh
+      - type: data
+        destination: /etc/netplan/90-default.yaml
         content: |
-          #!/bin/bash
-          # IMPORTANT: This script should be run *last* in any sequence of setup steps
-          # that use 'gsutil' or other gcloud commands.
-          # This is because removing the Snap version of the GCloud SDK can temporarily
-          # break existing 'gsutil' paths, which might disrupt other scripts still running
-          # that rely on the Snap-installed version.
-
-          set -e -o pipefail
-
-          # Remove the previously installed Google Cloud SDK (google-cloud-cli) and
-          # the LXD container manager, both of which might have been installed via Snap.
-          # This step is crucial to prevent conflicts with the upcoming APT installation
-          # and address potential issues with Snapd and NFS mounts in specific environments
-          snap remove google-cloud-cli lxd
-          # Install key and google-cloud-cli from apt repo
-          GCLOUD_APT_SOURCE="/etc/apt/sources.list.d/google-cloud-sdk.list"
-          if [ ! -f "${GCLOUD_APT_SOURCE}" ]; then
-              # indentation matters in EOT below; do not blindly edit!
-              cat <<EOT > "${GCLOUD_APT_SOURCE}"
-          deb [signed-by=/usr/share/keyrings/cloud.google.asc] https://packages.cloud.google.com/apt cloud-sdk main
-          EOT
-          fi
-          curl -o /usr/share/keyrings/cloud.google.asc https://packages.cloud.google.com/apt/doc/apt-key.gpg
-          apt-get update
-          apt-get install --assume-yes google-cloud-cli
-          # Clean up the bash executable hash for subsequent steps using gsutil
-          hash -r
+          network:
+              version: 2
+              ethernets:
+                  00-primary:
+                      match:
+                          name: enp0*
+                      dhcp4: true
+                      dhcp4-overrides:
+                          use-domains: true
+                      dhcp6: true
+                      dhcp6-overrides:
+                          use-domains: true
+                  90-gpu-nets:
+                      match:
+                          name: en*
+                      dhcp4: true
+                      dhcp4-overrides:
+                          use-domains: true
+                          use-dns: false
+                          use-ntp: false
+                      dhcp6: true
+                      dhcp6-overrides:
+                          use-domains: true
+                          use-dns: false
+                          use-ntp: false
+                  99-all-eth:
+                      match:
+                          name: eth*
+                      dhcp4: true
+                      dhcp4-overrides:
+                          use-domains: true
+                      dhcp6: true
+                      dhcp6-overrides:
+                          use-domains: true
 
 - group: slurm-build
   modules:
@@ -298,8 +384,7 @@ deployment_groups:
       # building this image does not require a GPU-enabled VM but must *not* be
       # run on a N-series VM otherwise, the "open" drivers will not install
       machine_type: c2-standard-8
-      source_image_family: $(vars.source_image_family)
-      source_image_project_id: $(vars.source_image_project_id)
+      source_image: $(vars.source_image)
       image_family: $(vars.final_image_family)
       disk_size: $(vars.disk_size_gb)
       omit_external_ip: false

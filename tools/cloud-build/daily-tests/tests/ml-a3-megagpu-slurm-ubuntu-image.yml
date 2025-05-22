@@ -17,7 +17,7 @@
 test_name: a3m-image
 deployment_name: a3mimg{{ build }}
 workspace: /workspace
-blueprint_yaml: "{{ workspace }}/examples/machine-learning/a3-megagpu-8g/debian/slurm-a3mega-image.yaml"
+blueprint_yaml: "{{ workspace }}/examples/machine-learning/a3-megagpu-8g/slurm-a3mega-image.yaml"
 packer_group_name: slurm-build
 packer_module_id: slurm-image
 delete_image: false
