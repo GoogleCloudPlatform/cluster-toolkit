@@ -199,7 +199,7 @@ deployment_groups:
             hosts: all
             become: true
             vars:
-              distribution: "{{ ansible_distribution | lower }}{{ ansible_distribution_version | replace('.','') }}"
+              distribution: "{{ ansible_distribution | lower }}{{ ansible_distribution_major_version }}"
               package_url: https://developer.download.nvidia.com/compute/cuda/repos/{{ distribution }}/x86_64/cuda-keyring_1.1-1_all.deb
               package_filename: /tmp/{{ package_url | basename }}
               enable_ops_agent: $(vars.enable_ops_agent)
