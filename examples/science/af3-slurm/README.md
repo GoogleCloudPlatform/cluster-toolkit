@@ -66,14 +66,13 @@ available GPU memory. You can change the default in the `af3-slurm-deployment.ya
 `default_inference_partition`. There currently is no auto-selection of GPUs; see [Known Limitations](#known-limitations).
 
 Compared to Nvidia A100 GPUs, Nvidia's H100 GPU gives a \< 2x speed-up; see [Performance](https://github.com/google-deepmind/alphafold3/blob/main/docs/performance.md)
-published in the original AlphaFold 3 repository. While this is useful for faster time to solution, our solution is optimized for best throughput/$ and thus opts for
-Nvidia A100 and L4 GPUs.
+published in the original AlphaFold 3 repository. While this is useful for faster time to solution, our solution is optimizing throughput/$ and thus opts for Nvidia A100 and L4 GPUs.
 
 ## Performance
 We designed the AlphaFold 3 solution for high performance. Specifically, we designed it to give you
-**highest throughput per $**, which is different from other optimization goals such as *fastest time to
-solution*. By choosing for example GCP VM families with Nvidia H100, you could accelerate the inference step,
-but the speed-up may not make up for the higher price.
+**high throughput per $**, which is different from other optimization goals such as *fastest time to
+solution*. By choosing for example GCP VM families with Nvidia H100, you can accelerate the inference step,
+but the speed-up may not make up fully for the higher price.
 
 Apart from the choice of VM, your input is the most determining factor of performance. The longer the
 sequences (see also explanation for memory in section [Choice of Default Inference GPU family](#choice-of-default-inference-gpu-family),
