@@ -235,7 +235,7 @@ The AlphaFold 3 container requires a larger Cloud Build environment. For this we
 Build Pool. The `gcloud` command to create a custom build pool is shown below.
 
 ```bash
-gcloud builds worker-pools create mypool --region=us-central1 --worker-disk-size=100 \
+gcloud builds worker-pools create mypool --region=<your region> --worker-disk-size=100 \
 --worker-machine-type=e2-highmem-8
 ```
 
@@ -248,7 +248,7 @@ PROJECT_ID=$(gcloud config get-value project)
 gcloud artifacts repositories create docker --repository-format=docker --location=<your region>
 gcloud artifacts repositories create sifs --repository-format=docker --location=<your region>
 
-gcloud builds submit --region=us-central1 --config=apptainer_cloudbuild.yaml --worker-pool=projects/${PROJECT_ID}/locations/us-central1/workerPools/mypool
+gcloud builds submit --region=<your region> --config=apptainer_cloudbuild.yaml --worker-pool=projects/${PROJECT_ID}/locations/<your region>/workerPools/mypool
 ```
 
 The first two commands create repositories in the Artifact Repository. The last command builds the containers.
@@ -260,12 +260,16 @@ Note:
 
 There is an AlphaFold 3 Docker container (under `docker`) and an Apptainer container (under `sifs`).
 
+> [!TIP]
+> Consider to use a multi-region artifacts repository (using `--location=us/europe/asia`) to simplify if you want to use the same
+> artifacts in different regions. This is a specific feature of Artifact Repository.
+
 **Cleaning up**
 To avoid further billing from the Cloud Build, you should issue:
 
 ```bash
 #!/bin/bash
-gcloud builds worker-pools delete mypool --region=us-central1
+gcloud builds worker-pools delete mypool --region=<your region>
 ``` 
 
 ### Prepare Google Cloud Storage Buckets
