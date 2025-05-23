@@ -187,6 +187,12 @@ def mount_fstab(mounts: list[NSMount], log):
 def munge_mount_handler():
     if lookup().is_controller:
         return
+
+    munge_key = Path(dirs.munge / "munge.key")
+    if munge_key.is_file():
+        log.info("Key already in place")
+        return
+
     mnt = lookup().munge_mount
 
     log.info(f"Mounting munge share to: {mnt.local_mount}")
@@ -222,7 +228,6 @@ def munge_mount_handler():
     else:
         raise err
 
-    munge_key = Path(dirs.munge / "munge.key")
     log.info(f"Copy munge.key from: {mnt.local_mount}")
     shutil.copy2(Path(mnt.local_mount / "munge.key"), munge_key)
 
@@ -239,6 +244,12 @@ def munge_mount_handler():
 
 def slurm_key_mount_handler():
     if lookup().is_controller:
+        return
+
+    file_name = "slurm.key"
+    slurm_key = Path(util.slurmdirs.etc / file_name)
+    if slurm_key.is_file():
+        log.info("slurm key already in place")
         return
     mnt = lookup().slurm_key_mount
 
@@ -273,13 +284,11 @@ def slurm_key_mount_handler():
     else:
         raise err
 
-    file_name = "slurm.key"
-    dst = Path(util.slurmdirs.etc / file_name)
     log.info(f"Copy slurm.key from: {mnt.local_mount}")
-    shutil.copy2(mnt.local_mount / file_name, dst)
+    shutil.copy2(mnt.local_mount / file_name, slurm_key)
 
     log.info("Restrict permissions of slurm.key")
-    util.chown_slurm(dst, mode=0o400)
+    util.chown_slurm(slurm_key, mode=0o400)
 
     log.info(f"Unmount {mnt.local_mount}")
     if mnt.fs_type == "gcsfuse":
