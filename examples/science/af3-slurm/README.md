@@ -353,7 +353,12 @@ This solution uses various GCS buckets to store required persistent information:
 ### Deploy the Auto-scaling Cluster
 
 #### Build the Cluster Toolkit gcluster binary
-Follow instructions [here](https://cloud.google.com/cluster-toolkit/docs/setup/configure-environment)
+Follow instructions [here](https://cloud.google.com/cluster-toolkit/docs/setup/configure-environment).
+
+However, in the section [Clone the Cluster Toolkit GitHub repository](https://cloud.google.com/cluster-toolkit/docs/setup/configure-environment#clone-repo) after the second step execute a `git checkout cloudnext25`
+
+> [!TIP]
+> The need of having to change to the `cloudnext25` branch will go away once the AF3 High Throughput solution is merged into main.
 
 #### (Optional, but recommended) Create a GCS Bucket for storing terraform state
 
