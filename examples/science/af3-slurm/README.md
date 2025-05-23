@@ -240,14 +240,14 @@ gcloud builds worker-pools create mypool --region=us-central1 --worker-disk-size
 --worker-machine-type=e2-highmem-8
 ```
 
-With a custom build pool created, the Cloud Build command is as follows:
+With a custom build pool created, the Cloud Build command is as follows (use the [apptainer_cloudbuild.yaml](adm/apptainer_cloudbuild.yaml)):
 
 ```bash
 #!/bin/bash
 PROJECT_ID=$(gcloud config get-value project)
 
-gcloud artifacts repository create docker --repository-format=docker --location=<your region>
-gcloud artifacts repository create sifs --repository-format=docker --location=<your region>
+gcloud artifacts repositories create docker --repository-format=docker --location=<your region>
+gcloud artifacts repositories create sifs --repository-format=docker --location=<your region>
 
 gcloud builds submit --region=us-central1 --config=apptainer_cloudbuild.yaml --worker-pool=projects/${PROJECT_ID}/locations/us-central1/workerPools/mypool
 ```
