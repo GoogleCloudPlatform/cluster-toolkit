@@ -56,3 +56,6 @@ fi
 echo "Mounting --target ${LOCAL_MOUNT} from fstab"
 mkdir -p "${LOCAL_MOUNT}"
 mount --target "${LOCAL_MOUNT}"
+
+# Support for Netapp Volumes
+chmod a+x "${LOCAL_MOUNT}"
