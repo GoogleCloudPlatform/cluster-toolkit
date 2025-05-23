@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+# WARNING
+# This module is deprecated and will be removed on July 1, 2025
+# The recommended replacement is the Managed Lustre module
+# https://github.com/GoogleCloudPlatform/cluster-toolkit/tree/main/modules/file-system/managed-lustre
+
 output "private_addresses" {
   description = "Private IP addresses for all instances."
   value       = module.ddn_exascaler.private_addresses

@@ -1,5 +1,9 @@
-## Description
+> [!WARNING]
+> This module is deprecated and will be removed on July 1, 2025. The
+> recommended replacement is the
+> [GCP Managed Lustre module](../../../../modules/file-system/managed-lustre/README.md)
 
+## Description
 This module creates a DDN EXAScaler Cloud Lustre file system using code based on DDN's
 [exascaler-cloud-terraform](https://github.com/DDNStorage/exascaler-cloud-terraform/tree/scripts/2.2.2/gcp) (`scripts/2.2.2` is last release with GCP-specific module).
 
