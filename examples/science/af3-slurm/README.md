@@ -439,7 +439,7 @@ If you want to configure and deploy your cluster in one go, simply type:
 
 ```bash
 #!/bin/bash
-./gcluster deploy -d example/af3/af3-slurm-deployment.yaml example/af3/af3-slurm.yaml --auto-approve 
+./gcluster deploy -d examples/science/af3-slurm/af3-slurm-deployment.yaml examples/science/af3-slurm/af3-slurm.yaml --auto-approve 
 ```
 
 In some cases, it may be useful to exert more fine-grained control.The `af3-slurm.yaml` has
@@ -450,7 +450,7 @@ For example, you can first build the deployment folder by:
 
 ```bash
 #!/bin/bash
-./gcluster create -d example/af3/af3-slurm-deployment.yaml example/af3/af3-slurm.yaml -w 
+./gcluster create -d examples/science/af3-slurm/af3-slurm-deployment.yaml examples/science/af3-slurm/af3-slurm.yaml -w 
 ```
 
 And then deploy (or destroy) the different deployment groups in sequence:
