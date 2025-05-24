@@ -194,21 +194,6 @@ deployment_groups:
     source: modules/scripts/startup-script
     settings:
       runners:
-      - $(spack-execute.spack_runner)
-
-      - type: shell
-        destination: data_staging.sh
-        content: |
-          #!/bin/bash
-          wget --no-verbose -P /data_input/protein_data_bank/ https://files.rcsb.org/download/1AKI.pdb
-          wget --no-verbose -P /tmp/ https://ftp.gromacs.org/pub/benchmarks/water_GMX50_bare.tar.gz && \
-            mkdir -p /data_input/gromacs_inputs/ && \
-            tar xzf /tmp/water_GMX50_bare.tar.gz -C /data_input/gromacs_inputs/ && \
-            rm /tmp/water_GMX50_bare.tar.gz
-
-          # Set permissions for Spack environment
-          chmod -R a+rwX /apps/spack/var/spack/environments/gromacs
-
       - type: data
         destination: /apps/gromacs/submit_gromacs_water_cpu.sh
         content: |
@@ -220,8 +205,17 @@ deployment_groups:
           # Size can be 0000.65  0000.96  0001.5  0003  0006  0012  0024  0048  0096  0192  0384  0768  1536  3072
           # Type can be 'pme' or 'rf'
 
-          source /apps/spack/share/spack/setup-env.sh
-          spack env activate gromacs
+          if [ -f /apps/spack/share/spack/setup-env.sh ]; then
+              source /apps/spack/share/spack/setup-env.sh
+          else
+              echo "Spack is not yet installed. Please wait approx. 10 minutes and try again."
+              exit 1
+          fi
+
+          if ! spack env activate gromacs 2>/dev/null; then
+              echo "Gromacs is not yet installed. Build may take several hours. Please wait and try again."
+              exit 1
+          fi
 
           # Check that gmx_mpi exists
           which gmx_mpi
@@ -229,7 +223,6 @@ deployment_groups:
           cp /data_input/gromacs_inputs/water-cut1.0_GMX50_bare/1536/* .
           mpirun -n 1 gmx_mpi grompp -f pme.mdp -c conf.gro -p topol.top -o input.tpr
           mpirun -n 30 gmx_mpi mdrun -notunepme -dlb yes -v -resethway -noconfout -nsteps 4000 -s input.tpr
-
       - type: data
         destination: /apps/gromacs/submit_gromacs_water_gpu.sh
         content: |
@@ -242,8 +235,17 @@ deployment_groups:
           # Size can be 0000.65  0000.96  0001.5  0003  0006  0012  0024  0048  0096  0192  0384  0768  1536  3072
           # Type can be 'pme' or 'rf'
 
-          source /apps/spack/share/spack/setup-env.sh
-          spack env activate gromacs
+          if [ -f /apps/spack/share/spack/setup-env.sh ]; then
+              source /apps/spack/share/spack/setup-env.sh
+          else
+              echo "Spack is not yet installed. Please wait approx. 10 minutes and try again."
+              exit 1
+          fi
+
+          if ! spack env activate gromacs 2>/dev/null; then
+              echo "Gromacs is not yet installed. Build may take several hours. Please wait and try again."
+              exit 1
+          fi
 
           # Check that gmx_mpi exists
           which gmx_mpi
@@ -261,7 +263,19 @@ deployment_groups:
             env GMX_ENABLE_DIRECT_GPU_COMM=1 \
             gmx_mpi mdrun -v -nsteps 100000 -resetstep 90000 -noconfout \
             -pme gpu -update gpu -nb gpu -gputasks 00 -s input.tpr
+      - $(spack-execute.spack_runner)
+      - type: shell
+        destination: data_staging.sh
+        content: |
+          #!/bin/bash
+          wget --no-verbose -P /data_input/protein_data_bank/ https://files.rcsb.org/download/1AKI.pdb
+          wget --no-verbose -P /tmp/ https://ftp.gromacs.org/pub/benchmarks/water_GMX50_bare.tar.gz && \
+            mkdir -p /data_input/gromacs_inputs/ && \
+            tar xzf /tmp/water_GMX50_bare.tar.gz -C /data_input/gromacs_inputs/ && \
+            rm /tmp/water_GMX50_bare.tar.gz
 
+          # Set permissions for Spack environment
+          chmod -R a+rwX /apps/spack/var/spack/environments/gromacs
       - type: shell
         destination: shutdown.sh
         content: |
