@@ -16,6 +16,7 @@ import json
 import subprocess
 import time
 import unittest
+import re
 from ssh import SSHManager
 from deployment import Deployment
 
@@ -61,7 +62,8 @@ class SlurmTest(Test):
         self.close_ssh()
 
     def get_login_node(self):
-        return self.deployment.deployment_name.replace("-", "")[:10] + "-slurm-login-001"
+        login_name = re.sub(r"^[^a-z]*|[^a-z0-9]", "", self.deployment.deployment_name)[:10]
+        return login_name+"-slurm-login-001"
 
     def assert_equal(self, value1, value2, message=None):
         if value1 != value2:
