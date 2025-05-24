@@ -1293,42 +1293,6 @@ def wait_for_operation(operation) -> Dict[str, Any]:
 
 
 
-def get_filtered_operations(op_filter):
-    """get list of operations associated with group id"""
-    project = lookup().project
-    operations: List[Any] = []
-
-    def get_aggregated_operations(items):
-        # items is a dict of location key to value: dict(operations=<list of operations>) or an empty dict
-        operations.extend(
-            chain.from_iterable(
-                ops["operations"] for ops in items.values() if "operations" in ops
-            )
-        )
-
-    act = lookup().compute.globalOperations()
-    op = act.aggregatedList(
-        project=project, filter=op_filter, fields="items.*.operations,nextPageToken"
-    )
-
-    while op is not None:
-        result = ensure_execute(op)
-        get_aggregated_operations(result["items"])
-        op = act.aggregatedList_next(op, result)
-    return operations
-
-
-def get_insert_operations(group_ids):
-    """get all insert operations from a list of operationGroupId"""
-    if isinstance(group_ids, str):
-        group_ids = group_ids.split(",")
-    filters = [
-        "operationType=insert",
-        " OR ".join(f"(operationGroupId={id})" for id in group_ids),
-    ]
-    return get_filtered_operations(" AND ".join(f"({f})" for f in filters if f))
-
-
 def getThreadsPerCore(template) -> int:
     if not template.machine_type.supports_smt:
         return 1
