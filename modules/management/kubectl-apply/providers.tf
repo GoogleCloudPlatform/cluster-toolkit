@@ -31,7 +31,3 @@ provider "helm" {
     )
   }
 }
-
-provider "http" {
-  alias = "h"
-}
