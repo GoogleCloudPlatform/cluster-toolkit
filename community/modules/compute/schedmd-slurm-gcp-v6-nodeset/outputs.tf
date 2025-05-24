@@ -33,6 +33,11 @@ output "nodeset" {
   }
 
   precondition {
+    condition     = var.accelerator_topology == null || var.enable_placement
+    error_message = "accelerator_topology requires enable_placement to be set to true."
+  }
+
+  precondition {
     condition     = var.placement_max_distance == null || var.enable_placement
     error_message = "placement_max_distance requires enable_placement to be set to true."
   }
