@@ -14,14 +14,14 @@
 
 - name: Get cluster credentials for kubectl
   delegate_to: localhost
-  ansible.builtin.command: gcloud container clusters get-credentials {{ deployment_name }} --region {{ cli_deployment_vars.region }} --project {{ custom_vars.project }}
+  ansible.builtin.command: gcloud container clusters get-credentials {{ deployment_name }} --region {{ cli_deployment_vars.region }} --project {{ custom_vars.project }} --verbosity=debug
 
 - name: Execute the job
   delegate_to: localhost
   ansible.builtin.shell: |
     jobs=({{ workspace }}/{{ deployment_name }}/primary/tensorflow*)
     for job in "${jobs[@]}"; do
-      kubectl create -f "$job"
+      kubectl create -f "$job" -v=9
     done
   args:
     executable: /bin/bash
@@ -30,7 +30,7 @@
 - name: Wait for job to complete
   delegate_to: localhost
   ansible.builtin.command: |
-    kubectl get job --field-selector  status.successful=1
+    kubectl get job --field-selector  status.successful=1 -v=9
   register: job_completion
   until: job_completion.stdout_lines | length > 3 # 3 jobs total
   retries: 80
