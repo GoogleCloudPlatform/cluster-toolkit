@@ -263,9 +263,10 @@ File systems:
   [DDN Exascaler Lustre](../community/modules/file-system/DDN-EXAScaler/README.md)
   file system designed for high IO performance. The capacity is ~10TiB.
 
-> **Warning**: The DDN Exascaler Lustre file system has a license cost as
-> described in the pricing section of the
-> [DDN EXAScaler Cloud Marketplace Solution](https://console.developers.google.com/marketplace/product/ddnstorage/).
+> [!WARNING]
+> This module is deprecated and will be removed on July 1, 2025. The
+> recommended replacement is the
+> [GCP Managed Lustre module](../../../../modules/file-system/managed-lustre/README.md)
 
 #### Quota Requirements for hpc-enterprise-slurm.yaml
 
