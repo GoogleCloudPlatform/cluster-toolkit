@@ -324,9 +324,12 @@ This solution uses various GCS buckets to store required persistent information:
    gcloud storage cp af3.bin gs://<your-globally-unique-af3-modelweights-bucket> 
    ```
 
+   Having the weights installed as described in the bucket is a **prerequisite** for provisioning the cluster. If you do not have the weights,
+   don't proceed with the cluster deployment.
+
    > [!WARNING]
    > AF3 weights are shared with you personally or for your organization, please take precautions
-   > that the bucket with your weights copy is not accessible to other people.
+   > that the bucket with your weights copy is not accessible to unauthorized people.
 
 1. Deferred Bootstrapping of **Databases Bucket**
 
@@ -514,6 +517,13 @@ login node:
 > You only need to follow this Bootstrapping process once. If you keep the databases bucket around,
 > all nodes will be able to hydrate from this bucket. You can also destroy and rebuild clusters without
 > having to do this step again.
+
+### Using the AlphaFold 3 High Throughput Solution
+
+Once your cluster is provisioned, keep on reading here for how to use the AlphaFold 3 High Throughput Solution:
+
+- [Simple Job Launcher Example](examples/simple_job_launcher/README.md): Use the login node's command line to submit datapipeline and inference jobs to the cluster
+- [Simple Service Launcher Example](examples/simple_service_launcher/README.md): Drop folding job json files to a GCS buckets for the cluster to pick up. Note that you probably want to activate the daemon in the deployment file before you bring up the cluster, see [here](#modify-the-af3-slurm-deploymentyaml-file-with-your-preferred-configuration)
 
 ## Teardown Instructions
 
