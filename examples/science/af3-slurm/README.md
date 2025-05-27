@@ -66,14 +66,13 @@ available GPU memory. You can change the default in the `af3-slurm-deployment.ya
 `default_inference_partition`. There currently is no auto-selection of GPUs; see [Known Limitations](#known-limitations).
 
 Compared to Nvidia A100 GPUs, Nvidia's H100 GPU gives a \< 2x speed-up; see [Performance](https://github.com/google-deepmind/alphafold3/blob/main/docs/performance.md)
-published in the original AlphaFold 3 repository. While this is useful for faster time to solution, our solution is optimized for best throughput/$ and thus opts for
-Nvidia A100 and L4 GPUs.
+published in the original AlphaFold 3 repository. While this is useful for faster time to solution, our solution is optimizing throughput/$ and thus opts for Nvidia A100 and L4 GPUs.
 
 ## Performance
 We designed the AlphaFold 3 solution for high performance. Specifically, we designed it to give you
-**highest throughput per $**, which is different from other optimization goals such as *fastest time to
-solution*. By choosing for example GCP VM families with Nvidia H100, you could accelerate the inference step,
-but the speed-up may not make up for the higher price.
+**high throughput per $**, which is different from other optimization goals such as *fastest time to
+solution*. By choosing for example GCP VM families with Nvidia H100, you can accelerate the inference step,
+but the speed-up may not make up fully for the higher price.
 
 Apart from the choice of VM, your input is the most determining factor of performance. The longer the
 sequences (see also explanation for memory in section [Choice of Default Inference GPU family](#choice-of-default-inference-gpu-family),
@@ -236,20 +235,20 @@ The AlphaFold 3 container requires a larger Cloud Build environment. For this we
 Build Pool. The `gcloud` command to create a custom build pool is shown below.
 
 ```bash
-gcloud builds worker-pools create mypool --region=us-central1 --worker-disk-size=100 \
+gcloud builds worker-pools create mypool --region=<your region> --worker-disk-size=100 \
 --worker-machine-type=e2-highmem-8
 ```
 
-With a custom build pool created, the Cloud Build command is as follows:
+With a custom build pool created, the Cloud Build command is as follows (use the [apptainer_cloudbuild.yaml](adm/apptainer_cloudbuild.yaml)):
 
 ```bash
 #!/bin/bash
 PROJECT_ID=$(gcloud config get-value project)
 
-gcloud artifacts repository create docker --repository-format=docker --location=<your region>
-gcloud artifacts repository create sifs --repository-format=docker --location=<your region>
+gcloud artifacts repositories create docker --repository-format=docker --location=<your region>
+gcloud artifacts repositories create sifs --repository-format=docker --location=<your region>
 
-gcloud builds submit --region=us-central1 --config=apptainer_cloudbuild.yaml --worker-pool=projects/${PROJECT_ID}/locations/us-central1/workerPools/mypool
+gcloud builds submit --region=<your region> --config=apptainer_cloudbuild.yaml --worker-pool=projects/${PROJECT_ID}/locations/<your region>/workerPools/mypool
 ```
 
 The first two commands create repositories in the Artifact Repository. The last command builds the containers.
@@ -261,12 +260,16 @@ Note:
 
 There is an AlphaFold 3 Docker container (under `docker`) and an Apptainer container (under `sifs`).
 
+> [!TIP]
+> Consider to use a multi-region artifacts repository (using `--location=us/europe/asia`) to simplify if you want to use the same
+> artifacts in different regions. This is a specific feature of Artifact Repository.
+
 **Cleaning up**
 To avoid further billing from the Cloud Build, you should issue:
 
 ```bash
 #!/bin/bash
-gcloud builds worker-pools delete mypool --region=us-central1
+gcloud builds worker-pools delete mypool --region=<your region>
 ``` 
 
 ### Prepare Google Cloud Storage Buckets
@@ -321,9 +324,12 @@ This solution uses various GCS buckets to store required persistent information:
    gcloud storage cp af3.bin gs://<your-globally-unique-af3-modelweights-bucket> 
    ```
 
+   Having the weights installed as described in the bucket is a **prerequisite** for provisioning the cluster. If you do not have the weights,
+   don't proceed with the cluster deployment.
+
    > [!WARNING]
    > AF3 weights are shared with you personally or for your organization, please take precautions
-   > that the bucket with your weights copy is not accessible to other people.
+   > that the bucket with your weights copy is not accessible to unauthorized people.
 
 1. Deferred Bootstrapping of **Databases Bucket**
 
@@ -354,7 +360,12 @@ This solution uses various GCS buckets to store required persistent information:
 ### Deploy the Auto-scaling Cluster
 
 #### Build the Cluster Toolkit gcluster binary
-Follow instructions [here](https://cloud.google.com/cluster-toolkit/docs/setup/configure-environment)
+Follow instructions [here](https://cloud.google.com/cluster-toolkit/docs/setup/configure-environment).
+
+However, in the section [Clone the Cluster Toolkit GitHub repository](https://cloud.google.com/cluster-toolkit/docs/setup/configure-environment#clone-repo) after the second step execute a `git checkout cloudnext25`
+
+> [!TIP]
+> The need of having to change to the `cloudnext25` branch will go away once the AF3 High Throughput solution is merged into main.
 
 #### (Optional, but recommended) Create a GCS Bucket for storing terraform state
 
@@ -435,7 +446,7 @@ If you want to configure and deploy your cluster in one go, simply type:
 
 ```bash
 #!/bin/bash
-./gcluster deploy -d example/af3/af3-slurm-deployment.yaml example/af3/af3-slurm.yaml --auto-approve 
+./gcluster deploy -d examples/science/af3-slurm/af3-slurm-deployment.yaml examples/science/af3-slurm/af3-slurm.yaml --auto-approve 
 ```
 
 In some cases, it may be useful to exert more fine-grained control.The `af3-slurm.yaml` has
@@ -446,7 +457,7 @@ For example, you can first build the deployment folder by:
 
 ```bash
 #!/bin/bash
-./gcluster create -d example/af3/af3-slurm-deployment.yaml example/af3/af3-slurm.yaml -w 
+./gcluster create -d examples/science/af3-slurm/af3-slurm-deployment.yaml examples/science/af3-slurm/af3-slurm.yaml -w 
 ```
 
 And then deploy (or destroy) the different deployment groups in sequence:
@@ -506,6 +517,13 @@ login node:
 > You only need to follow this Bootstrapping process once. If you keep the databases bucket around,
 > all nodes will be able to hydrate from this bucket. You can also destroy and rebuild clusters without
 > having to do this step again.
+
+### Using the AlphaFold 3 High Throughput Solution
+
+Once your cluster is provisioned, keep on reading here for how to use the AlphaFold 3 High Throughput Solution:
+
+- [Simple Job Launcher Example](examples/simple_job_launcher/README.md): Use the login node's command line to submit datapipeline and inference jobs to the cluster
+- [Simple Service Launcher Example](examples/simple_service_launcher/README.md): Drop folding job json files to a GCS buckets for the cluster to pick up. Note that you probably want to activate the daemon in the deployment file before you bring up the cluster, see [here](#modify-the-af3-slurm-deploymentyaml-file-with-your-preferred-configuration)
 
 ## Teardown Instructions
 
