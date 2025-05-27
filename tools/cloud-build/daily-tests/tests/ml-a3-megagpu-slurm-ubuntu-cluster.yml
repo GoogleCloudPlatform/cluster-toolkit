@@ -32,6 +32,7 @@ post_deploy_tests:
 custom_vars:
   gpu_partition: a3mega
   gpu_count: 8
+  test_persistenced: true
   partitions:
   - a3mega
   - debug
@@ -49,6 +50,6 @@ cli_deployment_vars:
   a3mega_cluster_size: 2
   enable_ops_agent: "true"
   enable_nvidia_dcgm: "true"
-  enable_nvidia_persistenced: "false"
+  enable_nvidia_persistenced: "true"
   a3mega_reservation_name: a3mega-reservation-0
   final_image_family: "{{ final_image_family }}"
