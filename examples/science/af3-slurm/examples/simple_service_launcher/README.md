@@ -211,7 +211,7 @@ gsutil cp your-folding.json gs://[your-globally-unique-af3-jobs-bucket]/inferenc
 Results will be found in
 
 ```bash
-gs://<your-globally-unique-af3-jobs-bucket>/data_pipeline_results
+gs://<your-globally-unique-af3-jobs-bucket>/inference_results
 ```
 
 By default, the service will move results from the data pipeline step results folder into the
