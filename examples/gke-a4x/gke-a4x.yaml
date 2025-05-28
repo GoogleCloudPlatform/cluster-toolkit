@@ -108,6 +108,7 @@ deployment_groups:
         - protocol: udp
           ports: ["0-65535"]
         - protocol: icmp
+
   - id: gke-a4x-net-1
     source: modules/network/vpc
     settings:
@@ -125,6 +126,7 @@ deployment_groups:
         - protocol: udp
           ports: ["0-65535"]
         - protocol: icmp
+
   - id: gke-a4x-rdma-net
     source: modules/network/gpu-rdma-vpc
     settings:
@@ -136,6 +138,7 @@ deployment_groups:
         count: 4
         ip_range: 192.168.128.0/18
         region: $(vars.region)
+
   - id: node_pool_service_account
     source: community/modules/project/service-account
     settings:
@@ -147,6 +150,7 @@ deployment_groups:
       - stackdriver.resourceMetadata.writer
       - storage.objectViewer
       - artifactregistry.reader
+
   - id: workload_service_account
     source: community/modules/project/service-account
     settings:
@@ -158,6 +162,7 @@ deployment_groups:
       - stackdriver.resourceMetadata.writer
       - storage.objectAdmin
       - artifactregistry.reader
+
   - id: a4x-cluster
     source: modules/scheduler/gke-cluster
     use: [gke-a4x-net-0, workload_service_account]
@@ -202,6 +207,7 @@ deployment_groups:
          gke-a4x-rdma-net.subnetwork_interfaces_gke
         ))
     outputs: [instructions]
+
   - id: workload_policy
     source: modules/compute/resource-policy
     settings:
@@ -211,6 +217,7 @@ deployment_groups:
       workload_policy:
         accelerator_topology: "1x72"
         type: "HIGH_THROUGHPUT"
+
   - id: a4x-pool
     source: modules/compute/gke-node-pool
     use: [a4x-cluster, node_pool_service_account, workload_policy]
@@ -247,6 +254,7 @@ deployment_groups:
          gke-a4x-rdma-net.subnetwork_interfaces_gke
         ))
     outputs: [instructions]
+
   - id: workload-manager-install
     source: modules/management/kubectl-apply
     use: [a4x-cluster]
@@ -266,6 +274,7 @@ deployment_groups:
       - source: $(vars.nccl_rdma_installer_path)
       - source: $(vars.imex_path)
       - source: $(vars.nvidia_dra_driver_path)
+
   - id: job-template
     source: modules/compute/gke-job-template
     use: [a4x-pool]
