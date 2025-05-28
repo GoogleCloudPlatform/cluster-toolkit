@@ -1,6 +1,6 @@
 ## Deployment Instructions
 
-1. Create a Google Cloud Workstation. If you are facing access issues, reach out to kamesh-team@google.com.
+1. Create a Google Cloud Workstation.
 1. Clone the Cluster Toolkit repository.
 
         git clone https://github.com/GoogleCloudPlatform/cluster-toolkit.git
