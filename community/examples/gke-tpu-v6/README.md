@@ -70,9 +70,13 @@ This section guides you through the cluster creation process, ensuring that your
    * `tpu_topology`: the TPU placement topology for pod slice node pool.
    * `static_node_count`: the number of TPU nodes in your cluster.
    * `authorized_cidr`: The IP address range that you want to allow to connect with the cluster. This CIDR block must include the IP address of the machine to call Terraform.
-   * `extended_reservation`: the name of your reservation. To target a specific block within your reservation, use the reservation and block names in the format `RESERVATION_NAME/reservationBlocks/BLOCK_NAME`.
+   * `reservation`: the name of the compute engine reservation of TPU v6 nodes.
 
     To modify advanced settings, edit `community/examples/gke-tpu-v6/gke-tpu-v6.yaml`.
+
+1. To use on-demand capacity, you can remove the reservation usage by making the following changes.
+   1. Remove the `reservation` variable from the [`gke-tpu-v6-deployment.yaml`](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/community/examples/gke-tpu-v6/gke-tpu-v6-deployment.yaml) file.
+   1. Remove the `reservation_affinity` block from the nodepool module.
 
 1. Generate [Application Default Credentials (ADC)](https://cloud.google.com/docs/authentication/provide-credentials-adc#google-idp) to provide access to Terraform.
 
