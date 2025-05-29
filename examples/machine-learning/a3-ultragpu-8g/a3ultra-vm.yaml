@@ -119,6 +119,7 @@ deployment_groups:
       automatic_restart: true
       on_host_maintenance: TERMINATE
       reservation_name: $(vars.a3u_reservation_name)
+      skip_reservation_validation: false
       provisioning_model: $(vars.a3u_provisioning_model)
       network_interfaces:
         $(concat(

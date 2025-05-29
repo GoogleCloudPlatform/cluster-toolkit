@@ -170,7 +170,7 @@ locals {
 
 # tflint-ignore: terraform_unused_declarations
 data "google_compute_reservation" "reservation" {
-  count = length(local.reservation_name) > 0 ? 1 : 0
+  count = length(local.reservation_name) > 0 && !var.skip_reservation_validation ? 1 : 0
 
   name    = local.res_short_name
   project = local.res_project

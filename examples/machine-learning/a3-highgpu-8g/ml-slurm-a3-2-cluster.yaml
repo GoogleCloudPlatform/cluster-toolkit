@@ -180,6 +180,7 @@ deployment_groups:
     - a3_startup
     settings:
       reservation_name: $(vars.a3_reservation_name)
+      skip_reservation_validation: false
       maintenance_interval: $(vars.a3_maintenance_interval)
       node_count_static: $(vars.a3_static_cluster_size)
       node_count_dynamic_max: 0

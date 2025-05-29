@@ -188,6 +188,7 @@ deployment_groups:
       on_host_maintenance: TERMINATE
       bandwidth_tier: gvnic_enabled
       reservation_name: $(vars.a3mega_reservation_name)
+      skip_reservation_validation: false
       maintenance_interval: $(vars.a3mega_maintenance_interval)
       startup_script: $(a3mega_startup.startup_script)
 
