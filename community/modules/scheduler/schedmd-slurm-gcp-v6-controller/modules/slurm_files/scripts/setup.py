@@ -341,23 +341,13 @@ innodb_lock_wait_timeout=900
     run("systemctl enable mariadb", timeout=30)
     run("systemctl restart mariadb", timeout=30)
 
-    mysql = "mysql -u root -e"
-    run(f"""{mysql} "drop user 'slurm'@'localhost'";""", timeout=30, check=False)
+    mysql, host = "mysql -u root -e", lookup().control_host
+    run(f"""{mysql} "drop user if exists 'slurm'@'localhost'";""", timeout=30)
     run(f"""{mysql} "create user 'slurm'@'localhost'";""", timeout=30)
-    run(
-        f"""{mysql} "grant all on slurm_acct_db.* TO 'slurm'@'localhost'";""",
-        timeout=30,
-    )
-    run(
-        f"""{mysql} "drop user 'slurm'@'{lookup().control_host}'";""",
-        timeout=30,
-        check=False,
-    )
-    run(f"""{mysql} "create user 'slurm'@'{lookup().control_host}'";""", timeout=30)
-    run(
-        f"""{mysql} "grant all on slurm_acct_db.* TO 'slurm'@'{lookup().control_host}'";""",
-        timeout=30,
-    )
+    run(f"""{mysql} "grant all on slurm_acct_db.* TO 'slurm'@'localhost'";""", timeout=30)
+    run(f"""{mysql} "drop user if exists 'slurm'@'{host}'";""", timeout=30)
+    run(f"""{mysql} "create user 'slurm'@'{host}'";""", timeout=30)
+    run(f"""{mysql} "grant all on slurm_acct_db.* TO 'slurm'@'{host}'";""", timeout=30)
 
 
 def configure_dirs():
