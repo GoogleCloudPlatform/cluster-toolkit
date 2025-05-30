@@ -305,7 +305,13 @@ deployment_groups:
     source: modules/compute/gke-job-template
     use: [checkpointing-pv, training-pv, a3-ultragpu-pool]
     settings:
-
+      security_context:  # to make sure the job have enough access to install the fio packages
+        - key: runAsUser
+          value: 0
+        - key: runAsGroup
+          value: 100
+        - key: fsGroup
+          value: 100
       # By adding an ephemeral volume, this will ensure that the job adds:
       # nodeSelector:
       #   cloud.google.com/gke-ephemeral-storage-local-ssd: "true"
