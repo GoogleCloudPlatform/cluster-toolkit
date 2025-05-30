@@ -93,7 +93,7 @@ steps:
       --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT} nfs_ip=$${NFS_IP}" \
       --extra-vars="region=$${REGION} zone=$${ZONE} remote_mount_homefs=/exports/home" \
       --extra-vars="final_image_family=$${FAMILY_NAME}" \
-      --extra-vars="@tools/cloud-build/daily-tests/tests/ml-a3-megagpu-slurm-cluster.yml"
+      --extra-vars="@tools/cloud-build/daily-tests/tests/ml-a3-megagpu-slurm-ubuntu-cluster.yml"
   volumes:
   - name: 'persistent_volume'
     path: '/persistent_volume'
