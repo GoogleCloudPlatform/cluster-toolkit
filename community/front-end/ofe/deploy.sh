@@ -46,40 +46,40 @@ export WORKDIR CLEAN_MODE
 
 ## GCP APIs needed by GCP project (indexed arrays for Bash < 3.2)
 PRJ_API_IDS=(
-  monitoring.googleapis.com
-  logging.googleapis.com
-  compute.googleapis.com
-  pubsub.googleapis.com
-  file.googleapis.com
-  cloudresourcemanager.googleapis.com
-  iam.googleapis.com
-  oslogin.googleapis.com
-  cloudbilling.googleapis.com
-  aiplatform.googleapis.com
-  bigqueryconnection.googleapis.com
-  sqladmin.googleapis.com
-  servicenetworking.googleapis.com
-  secretmanager.googleapis.com
-  serviceusage.googleapis.com
-  storage.googleapis.com
+	monitoring.googleapis.com
+	logging.googleapis.com
+	compute.googleapis.com
+	pubsub.googleapis.com
+	file.googleapis.com
+	cloudresourcemanager.googleapis.com
+	iam.googleapis.com
+	oslogin.googleapis.com
+	cloudbilling.googleapis.com
+	aiplatform.googleapis.com
+	bigqueryconnection.googleapis.com
+	sqladmin.googleapis.com
+	servicenetworking.googleapis.com
+	secretmanager.googleapis.com
+	serviceusage.googleapis.com
+	storage.googleapis.com
 )
 PRJ_API_DESCS=(
-  "Cloud Monitoring API"
-  "Cloud Logging API"
-  "Compute Engine API"
-  "Cloud Pub/Sub API"
-  "Cloud Filestore API"
-  "Cloud Resource Manager API"
-  "Identity and Access Management (IAM) API"
-  "Cloud OS Login API"
-  "Cloud Billing API"
-  "Vertex AI API"
-  "BigQuery Connection API"
-  "Cloud SQL Admin API"
-  "Service Networking API"
-  "Secret Manager API"
-  "Service Usage API"
-  "Cloud Storage API"
+	"Cloud Monitoring API"
+	"Cloud Logging API"
+	"Compute Engine API"
+	"Cloud Pub/Sub API"
+	"Cloud Filestore API"
+	"Cloud Resource Manager API"
+	"Identity and Access Management (IAM) API"
+	"Cloud OS Login API"
+	"Cloud Billing API"
+	"Vertex AI API"
+	"BigQuery Connection API"
+	"Cloud SQL Admin API"
+	"Service Networking API"
+	"Secret Manager API"
+	"Service Usage API"
+	"Cloud Storage API"
 )
 
 # Location for output credential file = pwd/credential.json
@@ -935,7 +935,8 @@ SERVICEACC
 
 setup_local_dev() {
 	# collect start time
-	local start_ts=$(date +%s)
+	local start_ts
+	start_ts=$(date +%s)
 
 	"${SCRIPTS_DIR}/local_setup.sh" \
 		"${WORKDIR}" \
@@ -947,8 +948,9 @@ setup_local_dev() {
 		"${project_id}" \
 		"${deployment_name}"
 
-	local end_ts=$(date +%s)
-	local elapsed=$(( end_ts - start_ts ))
+	local end_ts
+	end_ts=$(date +%s)
+	local elapsed=$((end_ts - start_ts))
 	echo "[deploy] Local setup completed in ${elapsed}s"
 }
 
@@ -958,28 +960,28 @@ deploy_from_config() {
 	# -- Read each "key: value" line into variables in the current shell
 	while IFS=: read -r raw_key raw_val; do
 		key="${raw_key//[[:space:]]/}"
-		val="$(printf "%s" "$raw_val" \
-		  | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+		val="$(printf "%s" "$raw_val" |
+			sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
 
 		case "$key" in
-			deployment_name)            deployment_name="$val"            ;;
-			project_id)                 project_id="$val"                 ;;
-			zone)                       zone="$val"                       ;;
-			subnet_name)                subnet_name="$val"                ;;
-			dns_hostname)               dns_hostname="$val"               ;;
-			ip_address)                 ip_address="$val"                 ;;
-			django_superuser_username)  django_superuser_username="$val"  ;;
-			django_superuser_password)  password_from_yaml="$val"         ;;
-			django_superuser_email)     django_superuser_email="$val"     ;;
-			deployment_mode)            deployment_mode="$val"            ;;
-			repo_fork)                  repo_fork="$val"                  ;;
-			repo_branch)                repo_branch="$val"                ;;
-			# dev-env specific
-			runtime_mode)               runtime_mode="$val"               ;;
-			runtime_path)               WORKDIR="$val"                    ;;
-			clean_mode)                 CLEAN_MODE="$val"                 ;;
-			# ignore anything else
-			*)   ;;
+		deployment_name) deployment_name="$val" ;;
+		project_id) project_id="$val" ;;
+		zone) zone="$val" ;;
+		subnet_name) subnet_name="$val" ;;
+		dns_hostname) dns_hostname="$val" ;;
+		ip_address) ip_address="$val" ;;
+		django_superuser_username) django_superuser_username="$val" ;;
+		django_superuser_password) password_from_yaml="$val" ;;
+		django_superuser_email) django_superuser_email="$val" ;;
+		deployment_mode) deployment_mode="$val" ;;
+		repo_fork) repo_fork="$val" ;;
+		repo_branch) repo_branch="$val" ;;
+		# dev-env specific
+		runtime_mode) runtime_mode="$val" ;;
+		runtime_path) WORKDIR="$val" ;;
+		clean_mode) CLEAN_MODE="$val" ;;
+		# ignore anything else
+		*) ;;
 		esac
 	done < <(grep -vE '^\s*#|^\s*$' "$config_file")
 
@@ -1043,7 +1045,7 @@ deploy_from_config() {
 	echo "    Admin email:      ${django_superuser_email}"
 	echo ""
 
-	# If we’re doing local dev from a config file and theres no db
+	# If we're doing local dev from a config file and there's no db
 	if [[ "$runtime_mode" == "local" ]]; then
 		setup_local_dev
 	fi
@@ -1107,8 +1109,8 @@ while [[ ${#} -gt 0 ]]; do
 done
 
 if [ "$LOCAL_MODE" = true ]; then
-  setup_local_dev
-  exit 0
+	setup_local_dev
+	exit 0
 fi
 
 setup

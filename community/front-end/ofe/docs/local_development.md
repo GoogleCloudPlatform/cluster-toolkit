@@ -16,6 +16,7 @@ This guide explains how to set up a local development environment for the Cluste
 ```
 
 The `--local` command will:
+
 1. Copy the project to a 'local-dev-env' subdirectory
 2. Create a Python virtual environment (if not exists)
 3. Install all required dependencies
@@ -24,14 +25,17 @@ The `--local` command will:
 6. Start the Django development server
 
 The optional `--clean` flag will:
+
 1. Remove existing database file
 2. Remove virtual environment
 3. Clear Python cache files and dependencies
 4. Ensure a completely fresh setup
 
 The optional `--workdir` flag will:
-1. Check for existing test OFE instances
-2. Deploy to the selected path for testing
+
+1. Be used as the runtime path
+2. Check for existing test OFE instances
+3. Deploy to the selected path for testing
 
 ## Prerequisites
 
@@ -42,25 +46,31 @@ The optional `--workdir` flag will:
 ## Development Environment Details
 
 ### Configuration
+
 The local development environment uses a simplified configuration:
+
 ```yaml
 config:
   server:
-    runtime_mode: "local"
     gcp_project: "local-dev-project"
     gcs_bucket: "local-dev-bucket"
     c2_topic: "local-dev-topic"
     deployment_name: "local-dev"
+    runtime_mode: "local"
+    runtime_path: "/choose/a/path"
 ```
 
 ### Default Credentials
+
 - Username: admin
 - Password: admin
 - URL: http://localhost:8000
 
 ### Custom Local Credentials
+
 You can override default admin credentials by setting them via config file
 or by environment variables:
+
 ```bash
 export LOCAL_DJANGO_USERNAME="myuser"
 export LOCAL_DJANGO_PASSWORD="mypassword"
@@ -69,20 +79,23 @@ export LOCAL_DJANGO_EMAIL="myemail@example.com"
 ```
 
 ### Database
+
 - Uses SQLite for development
 - Located at `website/db.sqlite3`
 - Automatically migrated during setup
 - Use `--clean` flag to remove existing database and start fresh
 
 ### Static Files
+
 - Collected in `website/static/`
 - Served directly by Django development server
 
 ## Development Workflow
 
-1. Make code changes in the `website/` directory
+1. Make code changes in the `$workdir/website/` directory
 2. Django's development server will automatically reload when you save changes
 3. Database migrations:
+
    ```bash
    python manage.py makemigrations
    python manage.py migrate
@@ -91,11 +104,15 @@ export LOCAL_DJANGO_EMAIL="myemail@example.com"
 ## Testing
 
 For local testing:
+
 1. Activate the virtual environment:
+
    ```bash
    source venv/bin/activate
    ```
+
 2. Run tests:
+
    ```bash
    cd website
    python manage.py test
@@ -104,11 +121,13 @@ For local testing:
 ## Troubleshooting
 
 1. If you want to start fresh:
+
    ```bash
    ./deploy.sh --local --clean
    ```
 
 2. If the virtual environment is missing:
+
    ```bash
    python -m venv venv
    source venv/bin/activate
@@ -116,6 +135,7 @@ For local testing:
    ```
 
 3. If database is corrupted or you want to reset it:
+
    ```bash
    # Option 1: Use the clean flag (recommended)
    ./deploy.sh --local --clean
@@ -127,6 +147,7 @@ For local testing:
    ```
 
 4. If static files are missing:
+
    ```bash
    python manage.py collectstatic
    ```

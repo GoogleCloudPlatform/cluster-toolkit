@@ -1,4 +1,18 @@
 #!/usr/bin/env bash
+# Copyright 2025 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 # scripts/local_setup.sh
 
 set -euo pipefail
@@ -47,64 +61,64 @@ echo ""
 
 mkdir -p "${WORKDIR}"
 if [[ "${CLEAN_MODE}" == "true" ]]; then
-  echo "[local_setup] CLEAN_MODE is set. Deleting ${WORKDIR}"
-  echo ""
-  rm -rf "${WORKDIR}"
-  mkdir -p "${WORKDIR}"
+	echo "[local_setup] CLEAN_MODE is set. Deleting ${WORKDIR}"
+	echo ""
+	rm -rf "${WORKDIR}"
+	mkdir -p "${WORKDIR}"
 elif [[ -f "${TMP_OFE_DIR}/website/db.sqlite3" ]]; then
-  echo "[local_setup] Warning: existing DB found in ${TMP_OFE_DIR}"
+	echo "[local_setup] Warning: existing DB found in ${TMP_OFE_DIR}"
 	echo "[local_setup] Warning: Database file exists. Use --clean flag to start fresh."
-  echo ""
+	echo ""
 	read -r -p "Do you want to clean the environment and start fresh? [y/N] " response
 	case "$response" in
-		[yY][eE][sS]|[yY])
-			echo "Cleaning up existing environment..."
-      echo ""
-			rm -rf "${WORKDIR}"
-			mkdir -p "${WORKDIR}"
-			CLEAN_MODE=true
-			;;
+	[yY][eE][sS] | [yY])
+		echo "Cleaning up existing environment..."
+		echo ""
+		rm -rf "${WORKDIR}"
+		mkdir -p "${WORKDIR}"
+		CLEAN_MODE=true
+		;;
 	*)
 		read -r -p "Do you want to continue with existing database? [y/N] " continue_response
 		case "$continue_response" in
-			[yY][eE][sS]|[yY])
-				echo "Continuing with existing database..."
-				;;
-			*)
-				echo "Exiting. Run with --clean flag to start fresh."
-				exit 1
-				;;
+		[yY][eE][sS] | [yY])
+			echo "Continuing with existing database..."
+			;;
+		*)
+			echo "Exiting. Run with --clean flag to start fresh."
+			exit 1
+			;;
 		esac
 		;;
 	esac
 fi
 
 # Todo: OAuth test setup for local dev server
-if [[ -z "${DNS_HOSTNAME:-}" ]]; then 
-  echo "[local_setup] DNS_HOSTNAME not set; skipping OAuth setup."
-  export GOOGLE_CLIENT_ID="" GOOGLE_CLIENT_SECRET=""
+if [[ -z "${DNS_HOSTNAME:-}" ]]; then
+	echo "[local_setup] DNS_HOSTNAME not set; skipping OAuth setup."
+	export GOOGLE_CLIENT_ID="" GOOGLE_CLIENT_SECRET=""
 else
-  # Todo: OAuth test setup for local dev server
-  echo "[local_setup] OAuth secrets can be added manually for dev env."
+	# Todo: OAuth test setup for local dev server
+	echo "[local_setup] OAuth secrets can be added manually for dev env."
 fi
 
 echo "[local_setup] GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}"
-echo "[local_setup] GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}"  
+echo "[local_setup] GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}"
 
 # Copy the project files to the workdir and create a virtualenv
 echo "[local_setup] rsync from ${PROJECT_ROOT} to ${WORKDIR}"
 rsync -a --progress \
-  --exclude=.terraform \
-  --exclude=.terraform.lock.hcl \
-  --exclude=tf \
-  "${PROJECT_ROOT}/" "${WORKDIR}/"
+	--exclude=.terraform \
+	--exclude=.terraform.lock.hcl \
+	--exclude=tf \
+	"${PROJECT_ROOT}/" "${WORKDIR}/"
 
 cd "${TMP_OFE_DIR}"
 mkdir -p run
 
 # virtualenv
 if [[ ! -d venv ]]; then
-  python3 -m venv venv
+	python3 -m venv venv
 fi
 source venv/bin/activate
 pip install --upgrade pip
@@ -114,18 +128,19 @@ pip install -r requirements.txt
 mkdir -p dependencies
 cd dependencies
 if [[ ! -d spack ]]; then
-  git clone -b v0.21.0 --depth 1 https://github.com/spack/spack.git
+	git clone -b v0.21.0 --depth 1 https://github.com/spack/spack.git
 fi
 cd ..
 
 # build gcluster
 cd "${WORKDIR}"
 if ! command -v go &>/dev/null; then
-  echo "[local_setup] ERROR: go not installed" >&2
-  exit 1
+	echo "[local_setup] ERROR: go not installed" >&2
+	exit 1
 fi
 make gcluster
-export PATH="$PATH:$(pwd)/bin"
+BIN_PATH="$(pwd)/bin"
+export PATH="$PATH:$BIN_PATH"
 
 echo "[local_setup] gcluster: $(which gcluster)"
 echo "[local_setup] version: $(gcluster --version)"
@@ -134,7 +149,7 @@ echo "[local_setup] version: $(gcluster --version)"
 BASE_DIR="${TMP_OFE_DIR}"
 echo "[local_setup] Generating configuration file for backend..."
 cd "${TMP_OFE_DIR}"
-cat > configuration.yaml <<EOL
+cat >configuration.yaml <<EOL
 config:
   server:
     host_type: "local"
@@ -155,7 +170,7 @@ cd "${TMP_OFE_DIR}/website"
 # Check if this is the first run so the user creation only runs once
 IS_FIRST_RUN=false
 if [[ ! -f db.sqlite3 ]]; then
-  IS_FIRST_RUN=true
+	IS_FIRST_RUN=true
 fi
 
 # Django migrations and setup
@@ -164,13 +179,13 @@ python manage.py migrate
 
 # superuser
 if [[ "${CLEAN_MODE}" == "true" || "${IS_FIRST_RUN}" == "true" ]]; then
-  echo "[local_setup] Creating superuser with username: ${DJANGO_SUPERUSER_USERNAME}"
-  echo "[local_setup] Creating superuser with email: ${DJANGO_SUPERUSER_EMAIL}"
-  export DJANGO_SUPERUSER_PASSWORD="${DJANGO_SUPERUSER_PASSWORD}"
-  python manage.py createsuperuser \
-    --username "${DJANGO_SUPERUSER_USERNAME}" \
-    --email    "${DJANGO_SUPERUSER_EMAIL}" \
-    --noinput
+	echo "[local_setup] Creating superuser with username: ${DJANGO_SUPERUSER_USERNAME}"
+	echo "[local_setup] Creating superuser with email: ${DJANGO_SUPERUSER_EMAIL}"
+	export DJANGO_SUPERUSER_PASSWORD="${DJANGO_SUPERUSER_PASSWORD}"
+	python manage.py createsuperuser \
+		--username "${DJANGO_SUPERUSER_USERNAME}" \
+		--email "${DJANGO_SUPERUSER_EMAIL}" \
+		--noinput
 fi
 
 # custom setup, collectstatic, seed, runserver
@@ -187,11 +202,11 @@ echo "[local_setup] Total local deployment time: ${ELAPSED}s"
 echo ""
 
 if [[ "${DNS_HOSTNAME}" == "localhost" ]]; then
-  echo "[local_setup] Running dev server at http://localhost:8000"
-  exec python manage.py runserver
+	echo "[local_setup] Running dev server at http://localhost:8000"
+	exec python manage.py runserver
 else
-  echo "[local_setup] Running dev server at https://${DNS_HOSTNAME}:8000"
-  # Todo: add cert and key to run server with OAuth
-  # exec python manage.py runserver --cert run/cert.pem --key run/key.pem 0.0.0.0:8000
-  exec python manage.py runserver
+	echo "[local_setup] Running dev server at https://${DNS_HOSTNAME}:8000"
+	# Todo: add cert and key to run server with OAuth
+	# exec python manage.py runserver --cert run/cert.pem --key run/key.pem 0.0.0.0:8000
+	exec python manage.py runserver
 fi
