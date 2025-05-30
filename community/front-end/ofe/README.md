@@ -6,7 +6,36 @@ of a web interface, system administrators can manage the life cycles of HPC
 clusters and install applications; users can prepare & submit HPC jobs and run
 benchmarks. This web application is built upon the Django framework.
 
-## Deployment
+## Quick Start
+
+### Local Development
+
+For local development and testing:
+```bash
+./deploy.sh --local
+# Or to clean left over files from previous testing
+./deploy.sh --local --clean
+```
+This will set up a local development environment with:
+- Default admin credentials when deploying from config file (admin/admin)
+- Django development server
+- No GCP resources required / placeholder content populating forms
+
+A config file can also be provided to set up a local OFE instance
+```bash
+./deploy.sh --config config.yaml --clean
+```
+
+For more details, see [Local Development Guide](docs/local_development.md)
+
+### Deploy On GCP
+
+For deployment on GCP:
+```bash
+./deploy.sh
+# Or with a configuration file:
+./deploy.sh --config config.yaml
+```
 
 This system can be deployed on GCP by an administrator using the following
 steps:
@@ -27,6 +56,13 @@ Once the deployment is done, the administrator can use the web interface to
 create HPC clusters, install applications, and set up other users. More
 information is available in the [Administrator's Guide](docs/admin_guide.md)
 and [User Guide](docs/user_guide.md).
+
+## Documentation
+
+- [Local Development Guide](docs/local_development.md) - Setting up for development
+- [Administrator's Guide](docs/admin_guide.md) - Deployment and administration
+- [User Guide](docs/user_guide.md) - Using the application
+- [Developer's Guide](docs/developer_guide.md) - Implementation details
 
 You are welcome to contribute to this project. The
 [Developer's Guide](docs/developer_guide.md) contains more information on the

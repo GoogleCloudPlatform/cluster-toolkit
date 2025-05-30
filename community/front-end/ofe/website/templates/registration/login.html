@@ -54,9 +54,10 @@
   <p></p>
   <p><a href="{% url 'password_reset' %}">Lost password?</a></p>
 
-  {# Use Google login #}
-  {% load socialaccount %}
-  <a href="{% provider_login_url 'google' %}">Login with Google</a>
-
+  {# Use Google login only in non-local environments #}
+  {% if not is_local_mode %}
+    {% load socialaccount %}
+    <a href="{% provider_login_url 'google' %}">Login with Google</a>
+  {% endif %}
 
 {% endblock %}

@@ -32,33 +32,55 @@
 #
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
+SCRIPTS_DIR="${SCRIPT_DIR}/script"
 
 # Default GCP zone to use for FrontEnd server
 #
 DEFAULT_ZONE='europe-west4-a'
 
-# GCP APIs needed by GCP project
-# - using a bash associative array to hold key-value of API and description,
-#   similar to Python
-#
-declare -A PRJ_API
-PRJ_API['monitoring.googleapis.com']='Cloud Monitoring API'
-PRJ_API['logging.googleapis.com']='Cloud Logging API'
-PRJ_API['compute.googleapis.com']='Compute Engine API'
-PRJ_API['pubsub.googleapis.com']='Cloud Pub/Sub API'
-PRJ_API['file.googleapis.com']='Cloud Filestore API'
-PRJ_API['cloudresourcemanager.googleapis.com']='Cloud Resource Manager API'
-PRJ_API['pubsub.googleapis.com']='Cloud Pub/Sub API'
-PRJ_API['iam.googleapis.com']='Identity and Access Management (IAM) API'
-PRJ_API['oslogin.googleapis.com']='Cloud OS Login API'
-PRJ_API['cloudbilling.googleapis.com']='Cloud Billing API'
-PRJ_API['aiplatform.googleapis.com']='Vertex AI API'
-PRJ_API['bigqueryconnection.googleapis.com']='BigQuery Connection API'
-PRJ_API['sqladmin.googleapis.com']='Cloud SQL Admin API'
-PRJ_API['servicenetworking.googleapis.com']='Service Networking API'
-PRJ_API['secretmanager.googleapis.com']='Secret Manager API'
-PRJ_API['serviceusage.googleapis.com']='Service Usage API'
-PRJ_API['storage.googleapis.com']='Cloud Storage API'
+# default local-workdir and clean-mode if using local dev environment
+XDG_CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
+WORKDIR="${WORKDIR:=${XDG_CACHE_HOME}/local-ofe-dev-env}"
+CLEAN_MODE="${CLEAN_MODE:-false}"
+export WORKDIR CLEAN_MODE
+
+## GCP APIs needed by GCP project (indexed arrays for Bash < 3.2)
+PRJ_API_IDS=(
+  monitoring.googleapis.com
+  logging.googleapis.com
+  compute.googleapis.com
+  pubsub.googleapis.com
+  file.googleapis.com
+  cloudresourcemanager.googleapis.com
+  iam.googleapis.com
+  oslogin.googleapis.com
+  cloudbilling.googleapis.com
+  aiplatform.googleapis.com
+  bigqueryconnection.googleapis.com
+  sqladmin.googleapis.com
+  servicenetworking.googleapis.com
+  secretmanager.googleapis.com
+  serviceusage.googleapis.com
+  storage.googleapis.com
+)
+PRJ_API_DESCS=(
+  "Cloud Monitoring API"
+  "Cloud Logging API"
+  "Compute Engine API"
+  "Cloud Pub/Sub API"
+  "Cloud Filestore API"
+  "Cloud Resource Manager API"
+  "Identity and Access Management (IAM) API"
+  "Cloud OS Login API"
+  "Cloud Billing API"
+  "Vertex AI API"
+  "BigQuery Connection API"
+  "Cloud SQL Admin API"
+  "Service Networking API"
+  "Secret Manager API"
+  "Service Usage API"
+  "Cloud Storage API"
+)
 
 # Location for output credential file = pwd/credential.json
 #
@@ -137,7 +159,14 @@ HELP1
 	deployment_mode:             The mode used to deploy the FrontEnd, which must be either 'git' or 'tarball'
 	repo_fork:					 The GitHub owner of the forked repo that is used for the deployment, if the 'git' deployment mode is used
 	repo_branch:				 The git branch of the forked repo that is used for the deployment, if the 'git' deployment mode is used
-  
+
+
+  The following deployment variables are optional for a local test environment:
+
+    runtime_mode:                DEV ENV: Defaults to remote. For a local development environment set to 'local'
+    runtime_path:                DEV ENV: If runtime_mode is set to 'local', this is the path to the local files that are copied to for
+                                 running the dev server. Defaults to user's default cache directory.
+
   To set the Django superuser password securely, you can set the DJANGO_SUPERUSER_PASSWORD
   environment variable with the password you want to use, like this:
   
@@ -365,13 +394,14 @@ check_apis() {
 	# Check all required APIs are present, prompt and enable for any missing
 	#
 	local id
-	for id in "${!PRJ_API[@]}"; do
-		local desc=${PRJ_API[$id]}
+	for i in "${!PRJ_API_IDS[@]}"; do
+		id=${PRJ_API_IDS[i]}
+		desc=${PRJ_API_DESCS[i]}
 
 		verbose "checking API: ${desc}"
 		set +e
 		echo "${enabled_apis}" | grep -q "${id}"
-		local ok=$?
+		ok=$?
 		set -e
 
 		if [[ ${ok} -ne 0 ]]; then
@@ -853,6 +883,7 @@ SERVICEACC
 	echo "Please select deployment method of server software:"
 	echo "  1) Clone the git repo when server deploys"
 	echo "  2) Use a copy of the code from this computer"
+	echo "  3) Local development mode"
 	deploy_choice=$(ask "  Please choose one of the above options", "1")
 	if [ "${deploy_choice}" == "1" ]; then
 		deployment_mode="git"
@@ -860,6 +891,9 @@ SERVICEACC
 		repo_branch=$(ask "Please specify the forked repo branch (or just press Enter)", "main")
 	elif [ "${deploy_choice}" == "2" ]; then
 		deployment_mode="tarball"
+	elif [ "${deploy_choice}" == "3" ]; then
+		setup_local_dev
+		exit 0
 	else
 		error "Invalid selection"
 		exit 1
@@ -889,53 +923,91 @@ SERVICEACC
 	else
 		echo "    IP address:       Automatically created"
 	fi
+	if [[ "${runtime_mode}" == "local" ]]; then
+		echo "    Runtime mode:     ${runtime_mode:-remote}"
+		echo "    Runtime path:     ${WORKDIR}"
+	fi
 	echo ""
 	echo "    Admin username:   ${django_superuser_username}"
 	echo "    Admin email:      ${django_superuser_email}"
 	echo ""
 }
 
-deploy_from_config() {
-	# Read the YAML file as an associative array
-	declare -A yaml_array
-	while IFS='=: ' read -r key value; do
-		[[ -n $key ]] && yaml_array[$key]=$value
-	done < <(grep -vE '^#|^\s*$' "$config_file" | sed -n '/:/p')
+setup_local_dev() {
+	# collect start time
+	local start_ts=$(date +%s)
 
-	local required_params=("deployment_name" "project_id" "zone" "django_superuser_username" "django_superuser_email")
-	# Check that all required parameters are present in the YAML file
-	for param in "${required_params[@]}"; do
-		if [[ -z ${yaml_array[$param]} ]]; then
-			echo "Required parameter '$param' not found in YAML file"
+	"${SCRIPTS_DIR}/local_setup.sh" \
+		"${WORKDIR}" \
+		"${CLEAN_MODE}" \
+		"${django_superuser_password}" \
+		"${django_superuser_username}" \
+		"${django_superuser_email}" \
+		"${dns_hostname:-localhost}" \
+		"${project_id}" \
+		"${deployment_name}"
+
+	local end_ts=$(date +%s)
+	local elapsed=$(( end_ts - start_ts ))
+	echo "[deploy] Local setup completed in ${elapsed}s"
+}
+
+deploy_from_config() {
+	local password_from_yaml=""
+
+	# -- Read each "key: value" line into variables in the current shell
+	while IFS=: read -r raw_key raw_val; do
+		key="${raw_key//[[:space:]]/}"
+		val="$(printf "%s" "$raw_val" \
+		  | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+
+		case "$key" in
+			deployment_name)            deployment_name="$val"            ;;
+			project_id)                 project_id="$val"                 ;;
+			zone)                       zone="$val"                       ;;
+			subnet_name)                subnet_name="$val"                ;;
+			dns_hostname)               dns_hostname="$val"               ;;
+			ip_address)                 ip_address="$val"                 ;;
+			django_superuser_username)  django_superuser_username="$val"  ;;
+			django_superuser_password)  password_from_yaml="$val"         ;;
+			django_superuser_email)     django_superuser_email="$val"     ;;
+			deployment_mode)            deployment_mode="$val"            ;;
+			repo_fork)                  repo_fork="$val"                  ;;
+			repo_branch)                repo_branch="$val"                ;;
+			# dev-env specific
+			runtime_mode)               runtime_mode="$val"               ;;
+			runtime_path)               WORKDIR="$val"                    ;;
+			clean_mode)                 CLEAN_MODE="$val"                 ;;
+			# ignore anything else
+			*)   ;;
+		esac
+	done < <(grep -vE '^\s*#|^\s*$' "$config_file")
+
+	# -- Defaults
+	deployment_mode=${deployment_mode:-tarball}
+	repo_fork=${repo_fork:-GoogleCloudPlatform}
+	repo_branch=${repo_branch:-main}
+	runtime_mode=${runtime_mode:-remote}
+	WORKDIR=${runtime_path:-$WORKDIR}
+	CLEAN_MODE=${clean_mode:-$CLEAN_MODE}
+	export WORKDIR CLEAN_MODE
+
+	# --- required checks
+	for f in deployment_name project_id zone django_superuser_username django_superuser_email; do
+		if [[ -z "${!f}" ]]; then
+			echo "ERROR: Required parameter '$f' not found in YAML file" >&2
 			exit 1
 		fi
 	done
 
-	# Set variables based on keys in the array
-	deployment_name=${yaml_array[deployment_name]}
-	project_id=${yaml_array[project_id]}
-	zone=${yaml_array[zone]}
-	subnet_name=${yaml_array[subnet_name]}
-	dns_hostname=${yaml_array[dns_hostname]}
-	ip_address=${yaml_array[ip_address]}
-	django_superuser_username=${yaml_array[django_superuser_username]}
-	django_superuser_email=${yaml_array[django_superuser_email]}
-	deployment_mode=${yaml_array[deployment_mode]:-tarball}
-	repo_fork=${yaml_array[repo_fork]:-GoogleCloudPlatform}
-	repo_branch=${yaml_array[repo_branch]:-main}
-
 	# Set password from environment variable if it exists, otherwise from YAML file
 	if [[ -n ${DJANGO_SUPERUSER_PASSWORD+x} ]]; then
-		echo "Django superuser password environment variable detected"
 		django_superuser_password=${DJANGO_SUPERUSER_PASSWORD}
+	elif [[ -n $password_from_yaml ]]; then
+		django_superuser_password=$password_from_yaml
 	else
-		if [[ -z ${yaml_array[django_superuser_password]} ]]; then
-			echo "Required parameter 'django_superuser_password' not found in YAML file"
-			echo "DJANGO_SUPERUSER_PASSWORD environment variable is not set"
-			exit 1
-		else
-			django_superuser_password=${yaml_array[django_superuser_password]}
-		fi
+		echo "ERROR: superuser password missing (set DJANGO_SUPERUSER_PASSWORD or in YAML)" >&2
+		exit 1
 	fi
 
 	# Print deployment summary
@@ -961,10 +1033,20 @@ deploy_from_config() {
 	else
 		echo "    IP address:       Automatically created"
 	fi
+	if [[ "${runtime_mode}" == "local" ]]; then
+		echo "    Runtime mode:     ${runtime_mode}"
+		echo "    Workdir:          ${WORKDIR}"
+		echo "    Clean mode:       ${CLEAN_MODE}"
+	fi
 	echo ""
 	echo "    Admin username:   ${django_superuser_username}"
 	echo "    Admin email:      ${django_superuser_email}"
 	echo ""
+
+	# If we’re doing local dev from a config file and theres no db
+	if [[ "$runtime_mode" == "local" ]]; then
+		setup_local_dev
+	fi
 
 	deploy
 }
@@ -991,6 +1073,18 @@ while [[ ${#} -gt 0 ]]; do
 		help
 		exit 0
 		;;
+	--local)
+		LOCAL_MODE=true
+		shift
+		;;
+	--clean)
+		CLEAN_MODE=true
+		shift
+		;;
+	--workdir)
+		WORKDIR="${2}"
+		shift 2
+		;;
 	--config)
 		if [[ ${2} == "" ]]; then
 			echo "Error: --config option requires an argument - path to deployment config. "
@@ -1011,6 +1105,11 @@ while [[ ${#} -gt 0 ]]; do
 		;;
 	esac
 done
+
+if [ "$LOCAL_MODE" = true ]; then
+  setup_local_dev
+  exit 0
+fi
 
 setup
 deploy

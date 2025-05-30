@@ -56,7 +56,10 @@ class ClusterInfo:
 
     def __init__(self, cluster):
         self.config = utils.load_config()
-        self.ghpc_path = "/opt/gcluster/cluster-toolkit/ghpc"
+        if utils.is_local_mode():
+            self.ghpc_path = self.config["server"]["gcluster_path"]
+        else:
+            self.ghpc_path = "/opt/gcluster/cluster-toolkit/ghpc"
 
         self.cluster = cluster
         self.cluster_dir = (
@@ -105,6 +108,15 @@ class ClusterInfo:
         try:
             self._run_ghpc()
             self._initialize_terraform()
+
+            if utils.is_local_mode():
+                # In local mode we don't want to actually apply the Terraform
+                # Just update the status to indicate accordingly
+                self.cluster.cloud_state = "m"
+                self.cluster.status = "v"
+                self.cluster.save()
+                return
+
             self._apply_terraform()
 
             dash = grafana.create_cluster_dashboard(self.cluster)
@@ -123,6 +135,15 @@ class ClusterInfo:
         try:
             self._run_ghpc()
             self._initialize_terraform()
+
+            if utils.is_local_mode():
+                # In local mode we don't want to actually apply the Terraform
+                # Just update the status to indicate accordingly
+                self.cluster.cloud_state = "m"
+                self.cluster.status = "v"
+                self.cluster.save()
+                return
+
             self._apply_terraform()
             self.cluster.status = "r"
             self.cluster.cloud_state = "m"
@@ -300,7 +321,10 @@ class ClusterInfo:
     def _prepare_ghpc_yaml(self):
         try:
             yaml_file = self.cluster_dir / "cluster.yaml"
-            project_id = json.loads(self.cluster.cloud_credential.detail)["project_id"]
+            if utils.is_local_mode():
+                project_id = self.config["server"]["gcp_project"]
+            else:
+                project_id = json.loads(self.cluster.cloud_credential.detail)["project_id"]
             filesystems_yaml, filesystems_refs = self._prepare_ghpc_filesystems()
             partitions_yaml, partitions_refs = self._prepare_ghpc_partitions(filesystems_refs)
             artifact_registry_yaml, use_containers = self._prepare_ghpc_artifact_registry()
@@ -387,8 +411,9 @@ class ClusterInfo:
             logger.info("Invoking Terraform Init")
             utils.run_terraform(terraform_dir, "init")
             utils.run_terraform(terraform_dir, "validate", extra_env=extra_env)
-            logger.info("Invoking Terraform Plan")
-            utils.run_terraform(terraform_dir, "plan", extra_env=extra_env)
+            if not utils.is_local_mode():
+                logger.info("Invoking Terraform Plan")
+                utils.run_terraform(terraform_dir, "plan", extra_env=extra_env)
         except subprocess.CalledProcessError as cpe:
             logger.error("Terraform exec failed", exc_info=cpe)
             if cpe.stdout:

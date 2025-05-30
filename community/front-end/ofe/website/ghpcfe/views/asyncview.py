@@ -28,6 +28,7 @@ from rest_framework.permissions import IsAuthenticated
 
 from ..models import Cluster, Role, Task
 from ..serializers import TaskSerializer
+# from ..cluster_manager import utils
 
 logger = logging.getLogger(__name__)
 
@@ -100,6 +101,14 @@ class BackendAsyncView(generic.View):
         await sync_to_async(self.cmd, thread_sensitive=False)(*args, **kwargs)
 
     async def create_task(self, title, *args, **kwargs):
+        # # This can be used to run tasks synchronously in local mode
+        # # for debugging purposes:
+        # if utils.is_local_mode():
+        #     logger.info("Running task %s synchronously in local mode", title)
+        #     token = await self.get_user_token(self.request.user)
+        #     record = await self.make_task_record(self.request.user, title=title)
+        #     await sync_to_async(self.cmd)(record.pk, token, *args, **kwargs)
+        #     return record
         logger.info("Creating task %s", title)
         token = await self.get_user_token(self.request.user)
         record = await self.make_task_record(self.request.user, title=title)
