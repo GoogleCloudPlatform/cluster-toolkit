@@ -20,7 +20,7 @@ test_name: a3m-cluster
 deployment_name: a3mc-{{ build }}
 slurm_cluster_name: "a3mc{{ build[0:4] }}"
 workspace: /workspace
-blueprint_yaml: "{{ workspace }}/examples/machine-learning/a3-megagpu-8g/slurm-a3mega-cluster.yaml"
+blueprint_yaml: "{{ workspace }}/examples/machine-learning/a3-megagpu-8g/debian/slurm-a3mega-cluster.yaml"
 login_node: "{{ slurm_cluster_name }}-login-*"
 controller_node: "{{ slurm_cluster_name }}-controller"
 network: default

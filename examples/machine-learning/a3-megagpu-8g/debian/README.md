@@ -5,11 +5,11 @@ This directory contains the previous Slurm image blueprint for **A3-Megagpu-8G**
 
 ## Reason for Deprecation
 
-Effective immediately, new **A3-Megagpu-8G Slurm** solutions should utilize the **Ubuntu 22.04**-based Slurm image blueprint. This transition is being made to standardize on **Ubuntu 22.04** on the **A3** platform.
+Effective immediately, new **A3-Megagpu-8G Slurm** solutions should utilize the **Ubuntu 22.04**-based Slurm blueprint. This transition is being made to standardize on **Ubuntu 22.04** on the **A3** platform.
 
 ## What You Should Do
 
-* **For New Deployments:** Please refer to the new **Ubuntu 22.04**-based Slurm image blueprint for **A3-Megagpu-8G**. You'll find it in `examples/machine-learning/a3-megagpu-8g/ubuntu`.
+* **For New Deployments:** Please refer to the new **Ubuntu 22.04**-based Slurm blueprint for **A3-Megagpu-8G**. You'll find it at `examples/machine-learning/a3-megagpu-8g/a3mega-slurm-blueprint.yaml`.
 * **For Existing Deployments:** While your current **Debian 12**-based deployments may continue to function, we strongly recommend planning a migration to the **Ubuntu 22.04**-based solution as soon as possible.
 * **Testing:** This blueprint may still be used for compatibility testing purposes until its final removal.
 
