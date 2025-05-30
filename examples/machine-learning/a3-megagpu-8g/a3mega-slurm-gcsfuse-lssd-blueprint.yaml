@@ -17,6 +17,11 @@ blueprint_name: a3mega-slurm
 
 # this blueprint should be used with the extra variables defined in
 # a3mega-slurm-deployment.yaml
+validators:
+- validator: test_deployment_variable_not_used
+  inputs: {}
+  skip: true
+
 vars:
   sys_net_range: 172.16.0.0/16
   source_image_family: ubuntu-accelerator-2204-amd64-with-nvidia-570
@@ -688,9 +693,9 @@ deployment_groups:
       size_gb: 10240
       local_mount: /home
       mount_options: "defaults,hard"
-      # deletion_protection:
-      #   enabled: true
-      #   reason: Avoid data loss
+      deletion_protection:
+        enabled: true
+        reason: Avoid data loss
     outputs:
     - network_storage
 
@@ -743,7 +748,6 @@ deployment_groups:
       disk_type: pd-ssd
       machine_type: a3-megagpu-8g
       enable_public_ips: false
-      enable_smt: true
       node_conf:
         CoresPerSocket: 52
         ThreadsPerCore: 2
