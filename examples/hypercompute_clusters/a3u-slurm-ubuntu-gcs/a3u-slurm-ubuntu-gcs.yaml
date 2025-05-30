@@ -636,6 +636,7 @@ deployment_groups:
       disk_type: hyperdisk-balanced
       on_host_maintenance: TERMINATE
       reservation_name: $(vars.a3u_reservation_name)
+      skip_reservation_validation: false
       advanced_machine_features:
         threads_per_core: null # Use platform default value
       node_conf:

@@ -463,6 +463,7 @@ deployment_groups:
 
       #Provisioning models
       reservation_name: $(vars.a4h_reservation_name)
+      skip_reservation_validation: false
       enable_spot_vm: $(vars.a4h_enable_spot_vm)
       dws_flex:
         enabled: $(vars.a4h_dws_flex_enabled)

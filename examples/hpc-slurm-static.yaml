@@ -48,6 +48,7 @@ deployment_groups:
       node_count_static: $(vars.static_node_count)
       node_count_dynamic_max: 0
       reservation_name: $(vars.static_reservation_name)
+      skip_reservation_validation: false
       machine_type: $(vars.static_reservation_machine_type)
       instance_image: $(vars.slurm_instance_image)
       allow_automatic_updates: false

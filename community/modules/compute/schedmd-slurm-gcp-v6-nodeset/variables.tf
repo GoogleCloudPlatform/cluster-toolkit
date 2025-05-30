@@ -520,6 +520,14 @@ variable "reservation_name" {
   }
 }
 
+variable "skip_reservation_validation" {
+  description = <<-EOD
+    If true, skips validation of the reservation. This is helpful if the user or service account does not have read access to a reservation but has access to use the reservation.
+  EOD
+  type        = bool
+  default     = false
+}
+
 variable "future_reservation" {
   description = <<-EOD
   If set, will make use of the future reservation for the nodeset. Input can be either the future reservation name or its selfLink in the format 'projects/PROJECT_ID/zones/ZONE/futureReservations/FUTURE_RESERVATION_NAME'.
