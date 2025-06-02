@@ -290,3 +290,9 @@ variable "set_ofi_cloud_rdma_tunables" {
   type        = bool
   default     = false
 }
+
+variable "enable_gpu_network_wait_online" {
+  description = "Enable a SystemD unit that blocks execution of startup-scripts until after all network interfaces are online. (Works on reboots or boots of an image built using this solution)"
+  type        = bool
+  default     = false
+}
