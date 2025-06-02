@@ -226,19 +226,6 @@ locals {
   }
 }
 
-check "health_check" {
-  assert {
-    condition     = local.docker_config == {}
-    error_message = <<-EOT
-      This message is only a warning. The Toolkit performs no validation of the
-      Docker daemon configuration. VM startup scripts will fail if the file is not
-      a valid Docker JSON configuration. Please review the Docker documentation:
-
-      https://docs.docker.com/engine/daemon/
-    EOT
-  }
-}
-
 resource "random_id" "resource_name_suffix" {
   byte_length = 4
 }
