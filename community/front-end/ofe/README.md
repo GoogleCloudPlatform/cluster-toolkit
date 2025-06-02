@@ -11,17 +11,21 @@ benchmarks. This web application is built upon the Django framework.
 ### Local Development
 
 For local development and testing:
+
 ```bash
 ./deploy.sh --local
 # Or to clean left over files from previous testing
 ./deploy.sh --local --clean
 ```
+
 This will set up a local development environment with:
+
 - Default admin credentials when deploying from config file (admin/admin)
 - Django development server
 - No GCP resources required / placeholder content populating forms
 
 A config file can also be provided to set up a local OFE instance
+
 ```bash
 ./deploy.sh --config config.yaml --clean
 ```
@@ -31,6 +35,7 @@ For more details, see [Local Development Guide](docs/local_development.md)
 ### Deploy On GCP
 
 For deployment on GCP:
+
 ```bash
 ./deploy.sh
 # Or with a configuration file:
@@ -40,14 +45,14 @@ For deployment on GCP:
 This system can be deployed on GCP by an administrator using the following
 steps:
 
-* Arrange a hosting GCP project for this web application.
-* Prepare the client side environment and secure sufficient IAM permissions for
+- Arrange a hosting GCP project for this web application.
+- Prepare the client side environment and secure sufficient IAM permissions for
   the system deployment.
-* When ready, clone this repository and run the deployment script at
+- When ready, clone this repository and run the deployment script at
   `cluster-toolkit/community/front-end/ofe/deploy.sh` from a client machine or a Cloud
   Shell. Follow instructions to complete the deployment. The whole process is
   automated via Terraform and should complete within 15 minutes.
-* Perform post-deployment configurations.
+- Perform post-deployment configurations.
 
 Please visit the [Administrator's Guide](docs/admin_guide.md) for more
 information on system deployment.
