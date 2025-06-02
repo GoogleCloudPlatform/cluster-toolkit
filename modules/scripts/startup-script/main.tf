@@ -143,6 +143,15 @@ locals {
     },
   ]
 
+  gpu_network_wait_online_runner = !var.enable_gpu_network_wait_online ? [] : [
+    {
+      type        = "ansible-local"
+      destination = "install_gpu_network_wait_online.yml"
+      content     = file("${path.module}/files/install_gpu_network_wait_online.yml")
+      args        = ""
+    },
+  ]
+
   local_ssd_filesystem_enabled = can(coalesce(var.local_ssd_filesystem.mountpoint))
   raid_setup = !local.local_ssd_filesystem_enabled ? [] : [
     {
@@ -163,6 +172,7 @@ locals {
     local.configure_ssh,
     var.docker.enabled,
     var.managed_lustre.enabled,
+    var.enable_gpu_network_wait_online,
     local.local_ssd_filesystem_enabled
   ])
 
@@ -192,6 +202,7 @@ locals {
     local.managed_lustre_runner,
     local.configure_ssh_runners,
     local.docker_runner,
+    local.gpu_network_wait_online_runner,
     var.runners
   )
 
