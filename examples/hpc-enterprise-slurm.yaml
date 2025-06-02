@@ -94,6 +94,16 @@ deployment_groups:
       - storage.objectViewer
       # - storage.objectUser # add if using Cloud Storage Bucket as storage
 
+  - id: ddn_sa
+    source: community/modules/project/service-account
+    settings:
+      name: ddn
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
+      - compute.viewer
+      - runtimeconfig.admin
+
   - id: homefs
     source: modules/file-system/filestore
     use: [network, private_service_access]
@@ -113,6 +123,9 @@ deployment_groups:
     use: [network]
     settings:
       local_mount: /scratch
+      service_account:
+        email: $(ddn_sa.service_account_email)
+        new: false
 
   - id: n2_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
