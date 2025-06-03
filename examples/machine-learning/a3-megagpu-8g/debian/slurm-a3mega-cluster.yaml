@@ -134,6 +134,7 @@ deployment_groups:
             vars:
               enable_ops_agent: $(vars.enable_ops_agent)
               enable_nvidia_dcgm: $(vars.enable_nvidia_dcgm)
+              enable_nvidia_persistenced: $(vars.enable_nvidia_persistenced)
             tasks:
             - name: Update Ops Agent configuration
               ansible.builtin.blockinfile:
@@ -168,6 +169,11 @@ deployment_groups:
                 name: nvidia-dcgm.service
                 state: "{{ 'started' if enable_nvidia_dcgm else 'stopped' }}"
                 enabled: "{{ enable_nvidia_dcgm }}"
+            - name: Enable NVIDIA Persistence Daemon
+              ansible.builtin.service:
+                name: nvidia-persistenced.service
+                state: "{{ 'started' if enable_nvidia_persistenced else 'stopped' }}"
+                enabled: "{{ enable_nvidia_persistenced }}"
 
   - id: a3mega_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
