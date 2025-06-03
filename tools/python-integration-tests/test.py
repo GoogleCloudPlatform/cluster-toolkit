@@ -12,7 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
+import sys
+import argparse
 import subprocess
 import time
 import unittest
@@ -21,24 +22,24 @@ from ssh import SSHManager
 from deployment import Deployment
 
 class Test(unittest.TestCase):  # Inherit from unittest.TestCase
-    def __init__(self, deployment):
-        super().__init__()  # Call the superclass constructor
-        self.deployment = deployment
-        self.ssh_manager = None
-        self.ssh_client = None
-
     def run_command(self, cmd: str) -> subprocess.CompletedProcess:
         res = subprocess.run(cmd, shell=True, text=True, check=True,
                     stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         return res
 
     def setUp(self):
+        self.deployment = self.get_deployment()
+
         self.addCleanup(self.clean_up)
         self.deployment.deploy()
         time.sleep(120)
 
     def clean_up(self):
         self.deployment.destroy()
+
+
+    def get_deployment(self) -> Deployment:
+        raise NotImplementedError("TestCases should implement get_deployment()")
 
 class SlurmTest(Test):
     # Base class for Slurm-specific tests.
@@ -77,3 +78,20 @@ class SlurmTest(Test):
         for line in stdout.read().decode().splitlines():
             nodes.append(line.split()[0].split("=")[1])
         return nodes
+
+
+SLURMTESTS_ARGS = None
+
+def slurmtests_main():
+    # we can't just use argparse together with `unittest.main`.
+    # Instead of doing this hack consider implementing 
+    # https://docs.python.org/dev/library/unittest.html#unittest.TextTestRunner
+    # or some other better solution
+    prs = argparse.ArgumentParser()
+    prs.add_argument('--blueprint')
+    prs.add_argument('unittest_args', nargs='*')
+    global SLURMTESTS_ARGS
+    SLURMTESTS_ARGS = prs.parse_args()
+
+    sys.argv[1:] = SLURMTESTS_ARGS.unittest_args
+    unittest.main()

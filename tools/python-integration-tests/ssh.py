@@ -57,10 +57,13 @@ class SSHManager:
         time.sleep(3)
 
     def get_keypath(self):
-        key_path = os.path.expanduser("~/.ssh/google_compute_engine")
+        key_path = os.path.expanduser("~/.ssh/slurm_tests")
         os.makedirs(os.path.dirname(key_path), exist_ok=True)
 
-        self.run_command(["ssh-keygen", "-t", "rsa", "-f", key_path, "-N", ""])
+        if os.path.exists(key_path):
+            pass
+        else:
+            self.run_command(["ssh-keygen", "-t", "rsa", "-f", key_path, "-N", ""])
 
         # Add the public key to OS Login
         public_key_path = key_path + ".pub"
