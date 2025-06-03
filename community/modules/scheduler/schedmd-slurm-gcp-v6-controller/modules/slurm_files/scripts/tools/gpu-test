@@ -37,6 +37,26 @@ if ! type -P nv-hostengine 1>/dev/null; then
     exit 0
 fi
 
+###################################################
+# Disable running health checks
+###################################################
+# The following change was implemented for https://b.corp.google.com/issues/421985463 and
+# https://b.corp.google.com/issues/421983794
+# Check if the environment variable '$SLURM_JOB_EXTRA' is set and contains the
+# substring 'healthchecks_prolog=off'
+if [[ -n "$SLURM_JOB_EXTRA" ]]; then
+  log_step "Environment variable SLURM_JOB_EXTRA is set. Checking if it contains healthchecks_prolog=off."
+  # Check if the value of the variable matches the string "healthchecks_prolog=off"
+  if [[ "$SLURM_JOB_EXTRA" == *"healthchecks_prolog=off"* ]]; then
+    log_step "Environment variable SLURM_JOB_EXTRA matches substring healthchecks_prolog=off. Skipping health checks."
+    exit 0
+  else
+    log_step "Environment variable SLURM_JOB_EXTRA does NOT match substring healthchecks_prolog=off. Attempting to run health checks."
+  fi
+else
+    log_step "Environment variable SLURM_JOB_EXTRA is NOT set. Attempting to run health checks."
+fi
+
 # Exit if GPU isn't H/B 100/200
 GPU_MODEL=$(nvidia-smi --query-gpu=name --format=csv,noheader)
 if ! [[ "$GPU_MODEL" =~ [BH][1-2]00 ]]; then
