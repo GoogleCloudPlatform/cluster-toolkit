@@ -20,9 +20,11 @@ import time
 import unittest
 import re
 import logging
-from ssh import SSHManager
+import ssh
 from deployment import Deployment
 from external_deployment import ExternalDeployment
+
+log = logging.getLogger()
 
 class Test(unittest.TestCase):  # Inherit from unittest.TestCase
     def run_command(self, cmd: str) -> subprocess.CompletedProcess:
@@ -35,7 +37,6 @@ class Test(unittest.TestCase):  # Inherit from unittest.TestCase
 
         self.addCleanup(self.clean_up)
         self.deployment.deploy()
-        time.sleep(120)
 
     def clean_up(self):
         self.deployment.destroy()
@@ -47,7 +48,7 @@ class Test(unittest.TestCase):  # Inherit from unittest.TestCase
 class SlurmTest(Test):
     # Base class for Slurm-specific tests.
     def ssh(self, hostname):
-        self.ssh_manager = SSHManager()
+        self.ssh_manager = ssh.SSHManager()
         self.ssh_manager.setup_connection(hostname, self.deployment.project_id, self.deployment.zone)
         self.ssh_client = self.ssh_manager.ssh_client
         self.ssh_client.connect("localhost", self.ssh_manager.local_port, username=self.deployment.username, pkey=self.ssh_manager.key)
@@ -60,6 +61,7 @@ class SlurmTest(Test):
         super().setUp()
         hostname = self.get_login_node()
         self.ssh(hostname)
+        self.wait_for_setup()
 
     def clean_up(self):
         super().clean_up()
@@ -77,8 +79,8 @@ class SlurmTest(Test):
 
     def get_nodes(self):
         nodes = []
-        stdin, stdout, stderr = self.ssh_client.exec_command("scontrol show node| grep NodeName")
-        for line in stdout.read().decode().splitlines():
+        stdout = ssh.exec_and_check(self.ssh_client, "scontrol show node | grep NodeName")
+        for line in stdout.splitlines():
             nodes.append(line.split()[0].split("=")[1])
         return nodes
     
@@ -94,6 +96,19 @@ class SlurmTest(Test):
                 username=SLURMTESTS_ARGS.username, 
                 deployment_name=SLURMTESTS_ARGS.deployment_name)
         raise ValueError(msg)
+    
+    def wait_for_setup(self):
+        log.info("Waiting for login node setup:")
+        timeout = 5 * 60 # 5 minutes
+        _, stdout, _ = self.ssh_client.exec_command('sudo tail -f -n +1 /slurm/scripts/log/setup.log', get_pty=True, timeout=timeout)
+
+        for line in stdout:
+            log.info(f"setup.log: {line.rstrip()}")
+            if "Done setting up" in line:
+                stdout.channel.close()
+            if "Aborting setup..." in line:
+                stdout.channel.close()
+                raise ValueError("Setup failed")
 
 
 SLURMTESTS_ARGS = None
