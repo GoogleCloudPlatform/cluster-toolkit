@@ -42,6 +42,51 @@
     executable: /bin/bash
   changed_when: False
 
+- name: Verify Kueue Topology gke-default exists with correct levels
+  delegate_to: localhost
+  ansible.builtin.shell: |
+    # Get the YAML for the Topology and check for specific lines
+    kubectl get topology gke-default -o yaml | grep -q -E "nodeLabel: cloud.google.com/gce-topology-block" &&
+    kubectl get topology gke-default -o yaml | grep -q -E "nodeLabel: cloud.google.com/gce-topology-subblock" &&
+    kubectl get topology gke-default -o yaml | grep -q -E "nodeLabel: cloud.google.com/gce-topology-host" &&
+    kubectl get topology gke-default -o yaml | grep -q -E "nodeLabel: kubernetes.io/hostname"
+  register: topology_validation
+  until: topology_validation.rc == 0
+  retries: 5
+  delay: 5
+
+- name: Verify Kueue ResourceFlavor exists with correct properties
+  delegate_to: localhost
+  ansible.builtin.shell: |
+    # Get the YAML for the ResourceFlavor and check for key properties
+    kubectl get resourceflavor {{instance_type}} -o yaml | grep -q -E "topologyName: gke-default" &&
+    kubectl get resourceflavor {{instance_type}} -o yaml | grep -q -E "cloud.google.com/gke-accelerator: {{ accelerator_type }}" &&
+    kubectl get resourceflavor {{instance_type}} -o yaml | grep -q -E "key: nvidia.com/gpu"
+  register: resourceflavor_validation
+  until: resourceflavor_validation.rc == 0
+  retries: 5
+  delay: 5
+
+- name: Verify Kueue ClusterQueue exists with correct quota and covered resources
+  delegate_to: localhost
+  ansible.builtin.shell: |
+    # Get the YAML for the ClusterQueue and check for key properties
+    kubectl get clusterqueue {{instance_type}} -o yaml | grep -q -E "nominalQuota: \"{{ num_gpus }}\""
+  register: clusterqueue_validation
+  until: clusterqueue_validation.rc == 0
+  retries: 5
+  delay: 5
+
+- name: Verify Kueue LocalQueue {{instance_type}} exists and links to ClusterQueue
+  delegate_to: localhost
+  ansible.builtin.shell: |
+    # Get the YAML for the LocalQueue and check its clusterQueue link
+    kubectl get localqueue {{instance_type}} -n default -o yaml | grep -q -E "clusterQueue: {{instance_type}}"
+  register: localqueue_validation
+  until: localqueue_validation.rc == 0
+  retries: 5
+  delay: 5
+
 - name: Ensure all pods are on the same host
   delegate_to: localhost
   ansible.builtin.shell: |
