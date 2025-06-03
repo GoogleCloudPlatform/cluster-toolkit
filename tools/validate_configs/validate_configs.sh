@@ -120,7 +120,7 @@ check_background() {
 	fi
 }
 
-CONFIGS=$(find examples/ community/examples/ tools/validate_configs/test_configs/ docs/tutorials/ docs/videos/build-your-own-blueprint/ -name "*.yaml" -type f -not -path 'examples/machine-learning/a3-megagpu-8g/*' -not -path 'examples/machine-learning/a3-ultragpu-8g/*' -not -path 'examples/gke-a3-ultragpu/*' -not -path 'examples/hypercompute_clusters/*' -not -path 'examples/gke-consumption-options/*' -not -path 'examples/gke-a4/*' -not -path 'examples/gke-a3-megagpu/*' -not -path 'examples/machine-learning/a4-highgpu-8g/*' -not -path 'community/examples/gke-tpu-v6/*' -not -path 'community/examples/xpk-n2-filestore/*')
+CONFIGS=$(find examples/ community/examples/ tools/validate_configs/test_configs/ docs/tutorials/ docs/videos/build-your-own-blueprint/ -name "*.yaml" -type f -not -path 'examples/machine-learning/a3-megagpu-8g/*' -not -path 'examples/machine-learning/a3-ultragpu-8g/*' -not -path 'examples/gke-a3-ultragpu/*' -not -path 'examples/hypercompute_clusters/*' -not -path 'examples/gke-consumption-options/*' -not -path 'examples/gke-a4/*' -not -path 'examples/gke-a3-megagpu/*' -not -path 'examples/machine-learning/a4-highgpu-8g/*' -not -path 'community/examples/gke-tpu-v6/*' -not -path 'community/examples/xpk-n2-filestore/*' -not -path 'examples/gke-a4x/*')
 # Exclude blueprints that use v5 modules.
 declare -A EXCLUDE_EXAMPLE
 EXCLUDE_EXAMPLE["tools/validate_configs/test_configs/two-clusters-sql.yaml"]=
@@ -149,9 +149,8 @@ while [ "$JNUM" -gt 0 ]; do
 	JNUM=$(jobs | wc -l)
 done
 
-run_test "examples/machine-learning/a3-megagpu-8g/slurm-a3mega-base.yaml" "examples/machine-learning/a3-megagpu-8g/deployment-base.yaml"
-run_test "examples/machine-learning/a3-megagpu-8g/debian/slurm-a3mega-image.yaml" "examples/machine-learning/a3-megagpu-8g/deployment-image-cluster.yaml"
-run_test "examples/machine-learning/a3-megagpu-8g/slurm-a3mega-image.yaml" "examples/machine-learning/a3-megagpu-8g/deployment-image-cluster.yaml"
-run_test "examples/machine-learning/a3-megagpu-8g/slurm-a3mega-cluster.yaml" "examples/machine-learning/a3-megagpu-8g/deployment-image-cluster.yaml"
+run_test "examples/machine-learning/a3-megagpu-8g/debian/slurm-a3mega-base.yaml" "examples/machine-learning/a3-megagpu-8g/debian/deployment-base.yaml"
+run_test "examples/machine-learning/a3-megagpu-8g/debian/slurm-a3mega-image.yaml" "examples/machine-learning/a3-megagpu-8g/debian/deployment-image-cluster.yaml"
+run_test "examples/machine-learning/a3-megagpu-8g/debian/slurm-a3mega-cluster.yaml" "examples/machine-learning/a3-megagpu-8g/debian/deployment-image-cluster.yaml"
 
 echo "All configs have been validated successfully (passed)."

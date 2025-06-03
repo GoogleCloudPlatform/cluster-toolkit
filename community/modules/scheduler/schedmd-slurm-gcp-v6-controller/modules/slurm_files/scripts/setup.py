@@ -24,6 +24,7 @@ import stat
 import time
 import yaml
 from pathlib import Path
+import functools
 
 import util
 from util import (
@@ -341,23 +342,13 @@ innodb_lock_wait_timeout=900
     run("systemctl enable mariadb", timeout=30)
     run("systemctl restart mariadb", timeout=30)
 
-    mysql = "mysql -u root -e"
-    run(f"""{mysql} "drop user 'slurm'@'localhost'";""", timeout=30, check=False)
+    mysql, host = "mysql -u root -e", lookup().control_host
+    run(f"""{mysql} "drop user if exists 'slurm'@'localhost'";""", timeout=30)
     run(f"""{mysql} "create user 'slurm'@'localhost'";""", timeout=30)
-    run(
-        f"""{mysql} "grant all on slurm_acct_db.* TO 'slurm'@'localhost'";""",
-        timeout=30,
-    )
-    run(
-        f"""{mysql} "drop user 'slurm'@'{lookup().control_host}'";""",
-        timeout=30,
-        check=False,
-    )
-    run(f"""{mysql} "create user 'slurm'@'{lookup().control_host}'";""", timeout=30)
-    run(
-        f"""{mysql} "grant all on slurm_acct_db.* TO 'slurm'@'{lookup().control_host}'";""",
-        timeout=30,
-    )
+    run(f"""{mysql} "grant all on slurm_acct_db.* TO 'slurm'@'localhost'";""", timeout=30)
+    run(f"""{mysql} "drop user if exists 'slurm'@'{host}'";""", timeout=30)
+    run(f"""{mysql} "create user 'slurm'@'{host}'";""", timeout=30)
+    run(f"""{mysql} "grant all on slurm_acct_db.* TO 'slurm'@'{host}'";""", timeout=30)
 
 
 def configure_dirs():
@@ -393,6 +384,15 @@ def configure_dirs():
         os.chmod(dst, 0o755)
 
 
+def self_report_controller_address(lkp: util.Lookup) -> None:
+    if not lkp.cfg.controller_network_attachment:
+        return # only self report address if network attachment is used
+    data = { "slurm_control_addr": lkp.cfg.slurm_control_addr }
+    bucket, prefix = util._get_bucket_and_common_prefix()
+    blob = util.storage_client().bucket(bucket).blob(f"{prefix}/controller_addr.yaml")
+    with blob.open('w') as f:
+        f.write(yaml.dump(data))
+
 def setup_controller():
     """Run controller setup"""
     log.info("Setting up controller")
@@ -412,7 +412,7 @@ def setup_controller():
 
     run_custom_scripts()
 
-    if not lookup().cfg.cloudsql_secret:
+    if not lkp.cfg.cloudsql_secret:
         configure_mysql()
 
     run("systemctl enable slurmdbd", timeout=30)
@@ -423,7 +423,7 @@ def setup_controller():
 
     sacctmgr = f"{slurmdirs.prefix}/bin/sacctmgr -i"
     result = run(
-        f"{sacctmgr} add cluster {lookup().cfg.slurm_cluster_name}", timeout=30, check=False
+        f"{sacctmgr} add cluster {lkp.cfg.slurm_cluster_name}", timeout=30, check=False
     )
     if "already exists" in result.stdout:
         log.info(result.stdout)
@@ -461,6 +461,8 @@ def setup_controller():
 
     # Add script to perform maintenance
     setup_maintenance_script()
+
+    self_report_controller_address(lkp)
 
     log.info("Done setting up controller")
     pass
@@ -596,6 +598,7 @@ def setup_cloud_ops() -> None:
         yaml.safe_dump(file, f, sort_keys=False)
 
     run("systemctl restart google-cloud-ops-agent.service", timeout=30)
+
 
 def main():
     start_motd()
