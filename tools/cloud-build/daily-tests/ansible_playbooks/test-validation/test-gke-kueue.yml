@@ -32,6 +32,58 @@
     executable: /bin/bash
   changed_when: False
 
+
+- name: Verify Kueue Topology 'gke-default' exists with correct levels
+  delegate_to: localhost
+  ansible.builtin.shell: |
+    # Get the YAML for the Topology and check for specific lines
+    kubectl get topology gke-default -o yaml | grep -q -E "nodeLabel: cloud.google.com/gce-topology-block" && 
+    kubectl get topology gke-default -o yaml | grep -q -E "nodeLabel: cloud.google.com/gce-topology-subblock" && 
+    kubectl get topology gke-default -o yaml | grep -q -E "nodeLabel: cloud.google.com/gce-topology-host" && 
+    kubectl get topology gke-default -o yaml | grep -q -E "nodeLabel: kubernetes.io/hostname"
+  register: topology_validation
+  until: topology_validation.rc == 0
+  retries: 5
+  delay: 5
+  comment: "Ensures 'gke-default' Topology CR is applied with all expected nodeLabel levels."
+
+- name: Verify Kueue ResourceFlavor 'a3-ultra' exists with correct properties
+  delegate_to: localhost
+  ansible.builtin.shell: |
+    # Get the YAML for the ResourceFlavor and check for key properties
+    kubectl get resourceflavor a3-ultra -o yaml | grep -q -E "topologyName: gke-default" && 
+    kubectl get resourceflavor a3-ultra -o yaml | grep -q -E "cloud.google.com/gke-accelerator: {{ accelerator_type }}" && 
+    kubectl get resourceflavor a3-ultra -o yaml | grep -q -E "key: nvidia.com/gpu"
+  register: resourceflavor_validation
+  until: resourceflavor_validation.rc == 0
+  retries: 5
+  delay: 5
+  comment: "Ensures 'a3-ultra' ResourceFlavor CR is applied with correct topology link, accelerator, and toleration."
+
+- name: Verify Kueue ClusterQueue 'a3-ultra' exists with correct quota and covered resources
+  delegate_to: localhost
+  ansible.builtin.shell: |
+    # Get the YAML for the ClusterQueue and check for key properties
+    kubectl get clusterqueue a3-ultra -o yaml | grep -q -E "nominalQuota: \"{{ num_gpus }}\"" && 
+    kubectl get clusterqueue a3-ultra -o yaml | pcregrep -q -M  "coveredResources:.*(\n|.)* - nvidia.com/gpu" && 
+    kubectl get clusterqueue a3-ultra -o yaml | pcregrep -q -M "flavors:.*(\n|.)*- name: a3-ultra"
+  register: clusterqueue_validation
+  until: clusterqueue_validation.rc == 0
+  retries: 5
+  delay: 5
+  comment: "Ensures 'a3-ultra' ClusterQueue CR is applied with correct GPU quota and resource/flavor links."
+
+- name: Verify Kueue LocalQueue 'a3-ultra' exists and links to ClusterQueue
+  delegate_to: localhost
+  ansible.builtin.shell: |
+    # Get the YAML for the LocalQueue and check its clusterQueue link
+    kubectl get localqueue a3-ultra -n default -o yaml | grep -q -E "clusterQueue: a3-ultra"
+  register: localqueue_validation
+  until: localqueue_validation.rc == 0
+  retries: 5
+  delay: 5
+  comment: "Ensures 'a3-ultra' LocalQueue CR is applied in 'default' namespace and links to 'a3-ultra' ClusterQueue."
+
 - name: Create the host topology kueue job
   delegate_to: localhost
   ansible.builtin.shell: |
