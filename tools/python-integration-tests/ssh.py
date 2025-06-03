@@ -90,3 +90,11 @@ class SSHManager:
             self.tunnel.stdout.close()
             self.tunnel.stderr.close()
             self.tunnel = None
+
+
+def exec_and_check(ssh: paramiko.SSHClient, cmd: str) -> str:
+    _, stdout, stderr = ssh.exec_command(cmd)
+    rc = stdout.channel.recv_exit_status()
+    if rc != 0:
+        raise RuntimeError(f"'{cmd}' exited with code {rc}: {stderr.read().decode()}")
+    return stdout.read().decode()

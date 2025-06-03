@@ -12,14 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import typing
 import sys
 import argparse
 import subprocess
 import time
 import unittest
 import re
+import logging
 from ssh import SSHManager
 from deployment import Deployment
+from external_deployment import ExternalDeployment
 
 class Test(unittest.TestCase):  # Inherit from unittest.TestCase
     def run_command(self, cmd: str) -> subprocess.CompletedProcess:
@@ -38,7 +41,7 @@ class Test(unittest.TestCase):  # Inherit from unittest.TestCase
         self.deployment.destroy()
 
 
-    def get_deployment(self) -> Deployment:
+    def get_deployment(self) -> typing.Union[Deployment, ExternalDeployment]:
         raise NotImplementedError("TestCases should implement get_deployment()")
 
 class SlurmTest(Test):
@@ -78,6 +81,19 @@ class SlurmTest(Test):
         for line in stdout.read().decode().splitlines():
             nodes.append(line.split()[0].split("=")[1])
         return nodes
+    
+    def get_deployment(self) -> typing.Union[Deployment, ExternalDeployment]:
+        msg = "Can't construct deployment, please provide either --blueprint argument OR --project, --zone, --deployment-name and --username"
+        assert SLURMTESTS_ARGS, msg
+        if SLURMTESTS_ARGS.blueprint:
+            return Deployment(SLURMTESTS_ARGS.blueprint)
+        if SLURMTESTS_ARGS.project and SLURMTESTS_ARGS.zone and SLURMTESTS_ARGS.deployment_name and SLURMTESTS_ARGS.username:
+            return ExternalDeployment(
+                project_id=SLURMTESTS_ARGS.project, 
+                zone=SLURMTESTS_ARGS.zone, 
+                username=SLURMTESTS_ARGS.username, 
+                deployment_name=SLURMTESTS_ARGS.deployment_name)
+        raise ValueError(msg)
 
 
 SLURMTESTS_ARGS = None
@@ -89,9 +105,17 @@ def slurmtests_main():
     # or some other better solution
     prs = argparse.ArgumentParser()
     prs.add_argument('--blueprint')
+    prs.add_argument('--project')
+    prs.add_argument('--zone')
+    prs.add_argument('--username')
+    prs.add_argument('--deployment-name')
     prs.add_argument('unittest_args', nargs='*')
     global SLURMTESTS_ARGS
     SLURMTESTS_ARGS = prs.parse_args()
 
     sys.argv[1:] = SLURMTESTS_ARGS.unittest_args
+
+    logging.basicConfig(level=logging.DEBUG)
+    logging.getLogger("paramiko").setLevel(logging.INFO)
+
     unittest.main()

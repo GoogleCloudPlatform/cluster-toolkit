@@ -12,17 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from deployment import Deployment
 import test
 import time
 import json
+import logging
+import ssh
+
+log = logging.getLogger()
+
 
 class SlurmSimpleJobCompletionTest(test.SlurmTest):
-    def get_deployment(self) -> Deployment:
-        bp = test.SLURMTESTS_ARGS.blueprint
-        assert bp
-        return Deployment(bp)
-
     # Class to test simple slurm job completion
     def runTest(self):
         # Submits 5 jobs and checks if they are successful.
@@ -37,22 +36,21 @@ class SlurmSimpleJobCompletionTest(test.SlurmTest):
 
     def wait_until_squeue_is_empty(self):
         while True:
-            stdin, stdout, stderr = self.ssh_client.exec_command('squeue')
-            lines = stdout.read().decode().splitlines()[1:] # Skip header
+            stdout = ssh.exec_and_check(self.ssh_client, 'squeue')
+            log.debug(f"squeue:\n{stdout}")
+            lines = stdout.splitlines()[1:] # Skip header
 
             if not lines:
                 break
             time.sleep(5)
 
     def job_state(self, job_id: str) -> list[str]:
-        # Checks if a job successfully completed.
-        stdin, stdout, stderr = self.ssh_client.exec_command(f'scontrol show job {job_id} --json')
-        content = json.load(stdout)
-        return content["jobs"][0]["job_state"]
+        stdout = ssh.exec_and_check(self.ssh_client, f'scontrol show job {job_id} --json')
+        return json.loads(stdout)["jobs"][0]["job_state"]
 
     def submit_job(self, cmd: str) -> str:
-        stdin, stdout, stderr = self.ssh_client.exec_command(cmd)
-        return stdout.read().decode().split()[-1]
+        stdout = ssh.exec_and_check(self.ssh_client, cmd)
+        return stdout.split()[-1]
 
 if __name__ == "__main__":
     test.slurmtests_main()
