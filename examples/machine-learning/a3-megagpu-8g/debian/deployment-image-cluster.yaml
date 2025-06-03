@@ -26,6 +26,7 @@ vars:
   subnetwork_name_system: a3mega-sys-subnet
   enable_ops_agent: true
   enable_nvidia_dcgm: true
+  enable_nvidia_persistenced: false
   disk_size_gb: 200
   final_image_family: slurm-a3mega
   slurm_cluster_name: a3mega

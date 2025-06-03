@@ -261,8 +261,7 @@ deployment_groups:
         metadata-cache:stat-cache-max-size-mb:-1,
         metadata-cache:type-cache-max-size-mb:-1,
         file-cache:max-size-mb:-1,
-        file-cache:cache-file-for-range-read:true,
-        file-system:kernel-list-cache-ttl-secs:-1
+        file-cache:cache-file-for-range-read:true
 
   # Create a remote mount of checkpoint_bucket using mount
   # options optimized for writing and reading checkpoint data.
@@ -275,13 +274,13 @@ deployment_groups:
       local_mount: /checkpoint-data
       fs_type: gcsfuse
       mount_options: >-
-        implicit-dirs,                              # Create implicit directories locally when accessed.
-        metadata-cache:ttl-secs:-1,                 # Keep cached metadata (file attributes, types) indefinitely time-wise.
-        metadata-cache:stat-cache-max-size-mb:-1    # Allow unlimited size for the file attribute (stat) cache.
-        metadata-cache:type-cache-max-size-mb:-1    # Allow unlimited size for the file/directory type cache.
-        file-cache:max-size-mb:-1,                  # Allow unlimited size for the file content cache.
-        file-cache:cache-file-for-range-read:true,  # Cache the entire file when any part is read sequentially.
-        file-cache:enable-parallel-downloads:true,  # Use multiple streams to download file content faster.
+        implicit-dirs,
+        metadata-cache:ttl-secs:-1,
+        metadata-cache:stat-cache-max-size-mb:-1,
+        metadata-cache:type-cache-max-size-mb:-1,
+        file-cache:max-size-mb:-1,
+        file-cache:cache-file-for-range-read:true,
+        file-cache:enable-parallel-downloads:true,
         rename-dir-limit=200000
 
   # Persistent Volume for training data
@@ -306,7 +305,13 @@ deployment_groups:
     source: modules/compute/gke-job-template
     use: [checkpointing-pv, training-pv, a3-ultragpu-pool]
     settings:
-
+      security_context:  # to make sure the job have enough access to install the fio packages
+      - key: runAsUser
+        value: 0
+      - key: runAsGroup
+        value: 100
+      - key: fsGroup
+        value: 100
       # By adding an ephemeral volume, this will ensure that the job adds:
       # nodeSelector:
       #   cloud.google.com/gke-ephemeral-storage-local-ssd: "true"
