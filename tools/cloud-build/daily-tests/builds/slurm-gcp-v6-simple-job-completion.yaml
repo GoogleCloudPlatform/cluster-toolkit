@@ -34,4 +34,3 @@ steps:
     export BUILD_ID="${BUILD_ID}"
     pip install tenacity
     python3 tools/python-integration-tests/slurm_simple_job_completion.py tools/python-integration-tests/blueprints/slurm-simple.yaml
-    
