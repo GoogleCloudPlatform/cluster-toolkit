@@ -22,8 +22,10 @@ vars:
   # Cidr block containing the IP of the machine calling terraform.
   # The following line must be updated for this example to work.
   authorized_cidr: # add this
+  # The name of the compute engine reservation in the form of
+  # <reservation-name>
   # In order to target a BLOCK_NAME, extended_reservation can be inputted as
-  # extended_reservation: RESERVATION_NAME/reservationBlocks/BLOCK_NAME
+  # <reservation-name>/reservationBlocks/<reservation-block-name>
   extended_reservation: # add this
   # Temporary fix for COS issue, will be fixed in next release
   mglru_disable_path: $(ghpc_stage("./mglru-disable.yaml"))
@@ -245,6 +247,8 @@ deployment_groups:
 
   # Create a remote mount of training_bucket using
   # mount options optimized for reading training data.
+  # Based on Source of truth https://github.com/GoogleCloudPlatform/gcsfuse/blob/d1373b665b7f60e98856d2181f1193396ef16427/samples/gke-csi-yaml/gpu/training-pv.yaml#L15
+  # Some of the options might be available only on latest GKE version, please check the cluster version to meet the required version https://cloud.google.com/kubernetes-engine/docs/how-to/cloud-storage-fuse-csi-driver-perf
   - id: gcs-training
     source: modules/file-system/pre-existing-network-storage
     settings:
@@ -257,11 +261,12 @@ deployment_groups:
         metadata-cache:stat-cache-max-size-mb:-1,
         metadata-cache:type-cache-max-size-mb:-1,
         file-cache:max-size-mb:-1,
-        file-cache:cache-file-for-range-read:true,
-        file-system:kernel-list-cache-ttl-secs:-1
+        file-cache:cache-file-for-range-read:true
 
-# Create a remote mount of checkpoint_bucket using mount
+  # Create a remote mount of checkpoint_bucket using mount
   # options optimized for writing and reading checkpoint data.
+  # Based on Source of truth https://github.com/GoogleCloudPlatform/gcsfuse/blob/d1373b665b7f60e98856d2181f1193396ef16427/samples/gke-csi-yaml/gpu/checkpointing-pv.yaml#L15
+  # Some of the options might be available only on latest GKE version, please check the cluster version to meet the required version https://cloud.google.com/kubernetes-engine/docs/how-to/cloud-storage-fuse-csi-driver-perf
   - id: gcs-checkpointing
     source: modules/file-system/pre-existing-network-storage
     settings:
@@ -270,10 +275,11 @@ deployment_groups:
       fs_type: gcsfuse
       mount_options: >-
         implicit-dirs,
-        metadata-cache:ttl-secs:0,
+        metadata-cache:ttl-secs:-1,
+        metadata-cache:stat-cache-max-size-mb:-1,
+        metadata-cache:type-cache-max-size-mb:-1,
         file-cache:max-size-mb:-1,
         file-cache:cache-file-for-range-read:true,
-        file-system:kernel-list-cache-ttl-secs:0,
         file-cache:enable-parallel-downloads:true,
         rename-dir-limit=200000
 
@@ -299,7 +305,13 @@ deployment_groups:
     source: modules/compute/gke-job-template
     use: [checkpointing-pv, training-pv, a3-ultragpu-pool]
     settings:
-
+      security_context:  # to make sure the job have enough access to install the fio packages
+      - key: runAsUser
+        value: 0
+      - key: runAsGroup
+        value: 100
+      - key: fsGroup
+        value: 100
       # By adding an ephemeral volume, this will ensure that the job adds:
       # nodeSelector:
       #   cloud.google.com/gke-ephemeral-storage-local-ssd: "true"

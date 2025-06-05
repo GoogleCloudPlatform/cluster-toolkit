@@ -6,7 +6,7 @@ storage.
 The Toolkit contains modules that will **provision**:
 
 - [Filestore (GCP managed NFS)][filestore]
-- [DDN EXAScaler lustre][ddn-exascaler]
+- [DDN EXAScaler lustre][ddn-exascaler] (Deprecated, removal on July 1, 2025)
 - [Managed Lustre][managed-lustre]
 - [Parallelstore][parallelstore]
 - [NFS server (non-GCP managed)][nfs-server]
@@ -16,7 +16,7 @@ with a network storage device that is already set up. The
 `pre-existing-network-storage` module supports the following file systems types:
 
 - nfs
-- lustre
+- daos
 - managed-lustre
 - gcsfuse
 

@@ -1,0 +1,58 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+tags:
+- m.custom-image
+- m.filestore
+- m.gpu-rdma-vpc
+- m.schedmd-slurm-gcp-v6-controller
+- m.schedmd-slurm-gcp-v6-login
+- m.schedmd-slurm-gcp-v6-nodeset
+- m.schedmd-slurm-gcp-v6-partition
+- m.startup-script
+- m.vpc
+- slurm6
+
+timeout: 14400s  # 4hr
+steps:
+# While using static network names we are gaurding against more than 1 instance running at a time (for multi-group tests)
+- id: check_for_running_build
+  name: gcr.io/cloud-builders/gcloud
+  script: "tools/cloud-build/check_running_build.sh tools/cloud-build/daily-tests/builds/ml-a4-highgpu-slurm-flex.yaml"
+
+- id: ml-a4-highgpu-slurm-flex
+  name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
+  entrypoint: /bin/bash
+  env:
+  - "ANSIBLE_HOST_KEY_CHECKING=false"
+  - "ANSIBLE_CONFIG=/workspace/tools/cloud-build/ansible.cfg"
+  args:
+  - -c
+  - |
+    set -x -e
+    cd /workspace && make
+    BUILD_ID_FULL=$BUILD_ID
+    BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
+    REGION=europe-west1
+    ZONE=europe-west1-b
+    BLUEPRINT="/workspace/examples/machine-learning/a4-highgpu-8g/a4high-slurm-blueprint.yaml"
+    sed -i -e '/deletion_protection:/{n;s/enabled: true/enabled: false/}' $${BLUEPRINT}
+    sed -i -e 's/\breservation_name\b/future_reservation/g' $${BLUEPRINT}
+    sed -i -e '/reason:/d' $${BLUEPRINT}
+    ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/slurm-integration-test.yml \
+        --user=sa_106486320838376751393 \
+        --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
+        --extra-vars="region=$${REGION} zone=$${ZONE}" \
+        --extra-vars="@tools/cloud-build/daily-tests/tests/ml-a4-highgpu-slurm-flex.yml"

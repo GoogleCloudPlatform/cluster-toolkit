@@ -54,10 +54,8 @@ class Deployment:
 
     def generate_uniq_deployment_name(self):
         BUILD_ID = os.environ.get('BUILD_ID')
-        if BUILD_ID:
-            return "-".join([self.blueprint_name, str(BUILD_ID[:6])])
-        else:
-            return "-".join([self.blueprint_name, str(uuid.uuid4())[:6]])
+        prefix = (BUILD_ID if BUILD_ID else str(uuid.uuid4()))[:6]
+        return f"{prefix}-{self.blueprint_name}"
 
     def set_deployment_variables(self):
         self.workspace = os.path.abspath(os.getcwd().strip())

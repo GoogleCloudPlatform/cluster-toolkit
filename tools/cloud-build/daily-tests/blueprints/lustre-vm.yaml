@@ -88,24 +88,6 @@ deployment_groups:
   # Simple VM #
   #############
 
-  - id: workstation-centos
-    source: modules/compute/vm-instance
-    use:
-    - network1
-    - lustre
-    - startup-script
-    settings:
-      name_prefix: centos
-      add_deployment_name_before_prefix: true
-      instance_image:
-        name: centos-7-v20240611
-        project: centos-cloud
-  - id: wait-centos
-    source: community/modules/scripts/wait-for-startup
-    settings:
-      instance_name: $(workstation-centos.name[0])
-      timeout: 7200
-
   - id: workstation-rocky
     source: modules/compute/vm-instance
     use:
@@ -123,20 +105,3 @@ deployment_groups:
     settings:
       instance_name: $(workstation-rocky.name[0])
       timeout: 7200
-
-  # - id: workstation-ubuntu
-  #   source: modules/compute/vm-instance
-  #   use:
-  #   - network1
-  #   - lustre
-  #   - startup-script
-  #   settings:
-  #     name_prefix: ubuntu
-  #     instance_image:
-  #       family: ubuntu-2004-lts
-  #       project: ubuntu-os-cloud
-  # - id: wait-ubuntu
-  #   source: community/modules/scripts/wait-for-startup
-  #   settings:
-  #     instance_name: $(workstation-ubuntu.name[0])
-  #     timeout: 7200
