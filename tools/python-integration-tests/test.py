@@ -12,20 +12,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
 import subprocess
-import time
 import unittest
 import re
-from ssh import SSHManager
+import ssh
 from deployment import Deployment
+
+import logging
+log = logging.getLogger()
 
 class Test(unittest.TestCase):  # Inherit from unittest.TestCase
     def __init__(self, deployment):
         super().__init__()  # Call the superclass constructor
         self.deployment = deployment
-        self.ssh_manager = None
-        self.ssh_client = None
+        self.ssh_mngr = None
+        
 
     def run_command(self, cmd: str) -> subprocess.CompletedProcess:
         res = subprocess.run(cmd, shell=True, text=True, check=True,
@@ -33,47 +34,41 @@ class Test(unittest.TestCase):  # Inherit from unittest.TestCase
         return res
 
     def setUp(self):
-        self.addCleanup(self.clean_up)
+        self.addCleanup(self.deployment.destroy)
+        self.addCleanup(lambda: self.ssh_mngr.close() if self.ssh_mngr else None)
+
         self.deployment.deploy()
-        time.sleep(120)
-
-    def clean_up(self):
-        self.deployment.destroy()
-
+        self.ssh_mngr = ssh.SSHManager(self.deployment.username, self.deployment.project_id, self.deployment.zone)
+        
 class SlurmTest(Test):
-    # Base class for Slurm-specific tests.
-    def ssh(self, hostname):
-        self.ssh_manager = SSHManager()
-        self.ssh_manager.setup_connection(hostname, self.deployment.project_id, self.deployment.zone)
-        self.ssh_client = self.ssh_manager.ssh_client
-        self.ssh_client.connect("localhost", self.ssh_manager.local_port, username=self.deployment.username, pkey=self.ssh_manager.key)
+    def __init__(self, deployment: Deployment):
+        super().__init__(deployment)
 
-    def close_ssh(self):
-        if self.ssh_manager:
-            self.ssh_manager.close()
-
-    def setUp(self):
-        super().setUp()
-        hostname = self.get_login_node()
-        self.ssh(hostname)
-
-    def clean_up(self):
-        super().clean_up()
-        self.close_ssh()
-
-    def get_login_node(self):
-        login_name = re.sub(r"^[^a-z]*|[^a-z0-9]", "", self.deployment.deployment_name)[:10]
-        return login_name+"-slurm-login-001"
-
-    def assert_equal(self, value1, value2, message=None):
-        if value1 != value2:
-            if message is None:
-                message = f"Assertion failed: {value1} != {value2}"
-            raise AssertionError(message)
+    def ssh_login(self):
+        host = re.sub(r"^[^a-z]*|[^a-z0-9]", "", self.deployment.deployment_name)[:10] + "-slurm-login-001"
+        return self.ssh_mngr.ssh(host)
 
     def get_nodes(self):
         nodes = []
-        stdin, stdout, stderr = self.ssh_client.exec_command("scontrol show node| grep NodeName")
-        for line in stdout.read().decode().splitlines():
+        stdout = ssh.exec_and_check(self.ssh_login(), "scontrol show node| grep NodeName")
+        for line in stdout.splitlines():
             nodes.append(line.split()[0].split("=")[1])
         return nodes
+    
+    def setUp(self):
+        super().setUp()
+        self.wait_for_setup()
+
+    def wait_for_setup(self):
+        log.info("Waiting for login node setup:")
+        timeout = 5 * 60 # 5 minutes
+        sess = self.ssh_login()
+        _, stdout, _ = sess.exec_command('sudo tail -f -n +1 /slurm/scripts/log/setup.log', get_pty=True, timeout=timeout)
+
+        for line in stdout:
+            log.info(f"setup.log: {line.rstrip()}")
+            if "Done setting up" in line:
+                stdout.channel.close()
+            if "Aborting setup..." in line:
+                stdout.channel.close()
+                raise ValueError("Setup failed")

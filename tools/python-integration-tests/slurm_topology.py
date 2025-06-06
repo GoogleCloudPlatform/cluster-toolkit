@@ -12,12 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ssh import SSHManager
 from deployment import Deployment
 from test import SlurmTest
 from collections import defaultdict
 import unittest
 import logging
+import ssh
 
 logging.basicConfig(level=logging.INFO) 
 log = logging.getLogger()
@@ -32,7 +32,8 @@ class SlurmTopologyTest(SlurmTest):
         r_rack, s_rack = defaultdict(set), defaultdict(set)
         nodes = self.get_nodes()
 
-        self.get_slurm_topology()
+        topo = ssh.exec_and_check(self.ssh_login(), "scontrol show topo")
+        log.info(f"Slurm topology: {topo}")
         for node in nodes:
             r_rack[self.get_real_rack(node)].add(node)
             s_rack[self.get_slurm_rack(node)].add(node)
@@ -40,11 +41,7 @@ class SlurmTopologyTest(SlurmTest):
         r_rack_set = [set(v) for v in r_rack.values()]
         s_rack_set = [set(v) for v in s_rack.values()]
 
-        self.assert_equal(r_rack_set, s_rack_set, "The two sets did not match.")
-
-    def get_slurm_topology(self):
-        stdin, stdout, stderr = self.ssh_client.exec_command("scontrol show topo")
-        log.info(f"Slurm topology: {stdout.read().decode()}")
+        self.assertEqual(r_rack_set, s_rack_set, "The two sets did not match.")
 
     def get_node_depth(self, switch_name: str):
         return switch_name.count("_")
@@ -56,16 +53,12 @@ class SlurmTopologyTest(SlurmTest):
         return physicalHost.split("/")[1]
 
     def get_slurm_rack(self, node: str):
-        stdin, stdout, stderr = self.ssh_client.exec_command(f"scontrol show topology {node} | tail -1 | cut -d' ' -f1")
-        switch_name = stdout.read().decode()
-        err = stderr.read().decode()
+        switch_name = ssh.exec_and_check(self.ssh_login(), f"scontrol show topology {node} | tail -1 | cut -d' ' -f1")
         log.info(f"Slurm rack for {node}: {switch_name}")
-        if err:
-            raise Exception(f"Slurm topology error for {node}: {err}") 
-
         depth = self.get_node_depth(switch_name)
-        self.assert_equal(depth, 2, f"{node} has a topology depth of {depth} which does not match expected topology depth of 2.")
+        self.assertEqual(depth, 2, f"{node} has a topology depth of {depth} which does not match expected topology depth of 2.")
         return switch_name
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.DEBUG)
     unittest.main()

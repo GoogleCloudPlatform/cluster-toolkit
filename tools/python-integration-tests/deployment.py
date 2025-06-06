@@ -18,6 +18,9 @@ import os
 import subprocess
 import yaml
 import uuid
+import logging
+
+log = logging.getLogger()
 
 class Deployment:
     def __init__(self, blueprint: str):
@@ -25,7 +28,6 @@ class Deployment:
         self.state_bucket = "daily-tests-tf-state"
         self.project_id = None
         self.workspace = None
-        self.instance_name = None
         self.username = None
         self.deployment_name = None
         self.blueprint_name = None
@@ -42,15 +44,16 @@ class Deployment:
         self.zone = content["vars"]["zone"]
         self.blueprint_name = content["blueprint_name"]
 
-    def get_posixAccount_info(self):
+    def get_posixAccount_info(self) -> tuple[str, str]:
         # Extract the username from posixAccounts
-        result = self.run_command(f"gcloud compute os-login describe-profile --format=json").stdout
+        result = self.run_command("gcloud compute os-login describe-profile --format=json").stdout
         posixAccounts = json.loads(result)
 
         for account in posixAccounts.get('posixAccounts', []):
             if 'accountId' in account:
-                self.project_id = account['accountId']
-                self.username = account['username']
+                return account['accountId'], account['username']
+        raise RuntimeError("Can not find a project in `gcloud compute os-login describe-profile`")
+                
 
     def generate_uniq_deployment_name(self):
         BUILD_ID = os.environ.get('BUILD_ID')
@@ -61,8 +64,7 @@ class Deployment:
         self.workspace = os.path.abspath(os.getcwd().strip())
         self.parse_blueprint(self.blueprint_file)
         self.deployment_name = self.generate_uniq_deployment_name()
-        self.get_posixAccount_info()
-        self.instance_name = self.deployment_name.replace("-", "")[:10] + "-slurm-login-001"
+        self.project_id, self.username = self.get_posixAccount_info()
 
     def create_blueprint(self):
         cmd = [
@@ -121,7 +123,7 @@ class Deployment:
               self.deployment_name,
               "--auto-approve"
           ]
-
+        log.info(f"Deploying {self.deployment_name}")
         subprocess.run(cmd, check=True, cwd=self.workspace)
 
     def destroy(self):

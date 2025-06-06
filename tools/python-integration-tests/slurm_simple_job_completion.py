@@ -12,18 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ssh import SSHManager
 from deployment import Deployment
 from test import SlurmTest
-import argparse
 import sys
 import unittest
 import time
 import json
+import ssh
+
+import logging
+log = logging.getLogger()
 
 class SlurmSimpleJobCompletionTest(SlurmTest):
     # Class to test simple slurm job completion
-    def __init__(self, deployment):
+    def __init__(self, unused_deployment):
         super().__init__(Deployment(self.Blueprint))
         self.job_list = {}
 
@@ -35,26 +37,25 @@ class SlurmSimpleJobCompletionTest(SlurmTest):
 
         for job_id in self.job_list.keys():
             result = self.is_job_complete(job_id)
-            self.assert_equal(True, result, f"Something went wrong with JobID:{job_id}.")
-            print(f"JobID {job_id} finished successfully.")
+            self.assertTrue(result, f"Something went wrong with job:{job_id}.")
+            log.info(f"JobID {job_id} finished successfully.")
 
     def monitor_squeue(self):
         # Monitors squeue and updates self.job_list until all running jobs are complete.
         lines = []
 
         while True:
-            stdin, stdout, stderr = self.ssh_client.exec_command('squeue')
-
-            lines = stdout.read().decode().splitlines()[1:] # Skip header
+            stdout = ssh.exec_and_check(self.ssh_login(), 'squeue')
+            lines = stdout.splitlines()[1:] # Skip header
 
             if not lines:
                 break
             for line in lines:
-                parts = line.split()
+                log.info(f"squeue: {line}")
                 job_id, partition, _, _, state, times, nodes, nodelist = line.split()
 
                 if job_id not in self.job_list:
-                    print(f"Job id {job_id} is not recognized.")
+                    log.warning(f"Job id {job_id} is not recognized.")
                 else:
                     self.job_list[job_id].update({
                         "partition": partition,
@@ -65,18 +66,20 @@ class SlurmSimpleJobCompletionTest(SlurmTest):
                     })
             time.sleep(5)
 
-    def is_job_complete(self, job_id: str):
+    def is_job_complete(self, job_id: str) -> bool:
         # Checks if a job successfully completed.
-        stdin, stdout, stderr = self.ssh_client.exec_command(f'scontrol show job {job_id} --json')
-        content = json.load(stdout)
+        stdout = ssh.exec_and_check(self.ssh_login(), f"scontrol show job {job_id} --json")
+        content = json.loads(stdout)
+        log.info(f"show job {job_id}: {content}")
         return content["jobs"][0]["job_state"][0] == "COMPLETED"
 
-    def submit_job(self, cmd: str):
-        stdin, stdout, stderr = self.ssh_client.exec_command(cmd)
-        jobID = stdout.read().decode().split()[-1]
-        self.job_list[jobID] = {}
+    def submit_job(self, cmd: str) -> None:
+        stdout = ssh.exec_and_check(self.ssh_login(), cmd)
+        job_id = stdout.split()[-1]
+        self.job_list[job_id] = {}
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.DEBUG)
     if len(sys.argv) > 1:
         SlurmSimpleJobCompletionTest.Blueprint = sys.argv.pop()
     unittest.main()

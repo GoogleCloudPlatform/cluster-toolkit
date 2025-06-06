@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ssh import SSHManager
 from deployment import Deployment
 from test import SlurmTest
 import unittest
 import time
+import logging
 
 class SlurmReconfigureSize(SlurmTest):
     # Class to test simple reconfiguration
@@ -26,7 +26,7 @@ class SlurmReconfigureSize(SlurmTest):
     
     def runTest(self):
         # Check 5 nodes are available
-        self.assert_equal(len(self.get_nodes()), 5)
+        self.assertEqual(len(self.get_nodes()), 5)
         
         self.deployment = Deployment(self.reconfig_blueprint)
         self.deployment.deploy()
@@ -35,7 +35,8 @@ class SlurmReconfigureSize(SlurmTest):
         time.sleep(90)
 
         # Check 3 nodes are available
-        self.assert_equal(len(self.get_nodes()), 3)
+        self.assertEqual(len(self.get_nodes()), 3)
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.DEBUG)
     unittest.main()
