@@ -1,0 +1,299 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+blueprint_name: af3-slurm
+
+# this blueprint should be used with the extra variables defined in
+# af3-slurm-deployment.yaml
+vars:
+  # Image settings
+  base_image:
+    project: schedmd-slurm-public
+    # see latest in https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#published-image-family
+    family: slurm-gcp-6-9-hpc-rocky-linux-8
+   # You can find size of source image by using following command
+   # gcloud compute images describe-from-family <source_image_family> --project schedmd-slurm-public
+  image_build_machine_type: n2-standard-16
+  # Cluster settings
+  instance_image:
+    project: $(vars.project_id)
+    family: $(vars.deployment_name)-slurm-apptainer
+  disk_size_gb: 64
+
+  login_runners:
+  - type: ansible-local
+    destination: "onetime_prepare_databasebucket.yml"
+    source: $(ghpc_stage("adm/onetime_prepare_databasebucket.yml"))
+    args: "-e database_bucket=$(vars.database_bucket) -e datapipeline_partition=$(vars.default_datapipeline_partition.name)"
+
+  controller_runners:
+  - type: ansible-local
+    destination: "controller.yml"
+    source: $(ghpc_stage("adm/controller.yml"))
+    args: "-e modelweights_bucket=$(vars.modelweights_bucket) -e model_dir=$(vars.model_dir) -e sif_dir=$(vars.sif_dir)"
+
+  datapipeline_runners:
+  - type: ansible-local
+    destination: "datapipeline.yml"
+    source: $(ghpc_stage("adm/datapipeline.yml"))
+    args: "-e database_bucket=$(vars.database_bucket) -e db_dir=$(vars.db_dir)"
+
+  inference_runners:
+  - type: ansible-local
+    destination: "inference.yml"
+    source: $(ghpc_stage("adm/inference.yml"))
+    args: "-e jax_compilation_cache_path=$(vars.jax_compilation_cache_path)"
+
+  # Installs simple job launcher script
+  af3_job_launcher_runner:
+  - type: data
+    destination: "/tmp/launch_af3_job.sh.j2"
+    source: $(ghpc_stage("examples/simple_job_launcher/launch_af3_job.sh.j2"))
+  - type: ansible-local
+    destination: "af3-job-launcher.yml"
+    source: $(ghpc_stage("examples/simple_job_launcher/af3-job-launcher.yml"))
+    args: "-e sif_dir=$(vars.sif_dir) -e db_dir=$(vars.db_dir) -e model_dir=$(vars.model_dir) -e pdb_database_path=$(vars.pdb_database_path) -e jax_compilation_cache_path=$(vars.jax_compilation_cache_path) -e datapipeline_partition=$(vars.default_datapipeline_partition.name) -e datapipeline_memory=$(vars.default_datapipeline_partition.memory) -e datapipeline_cpu_count=$(vars.default_datapipeline_partition.cpu_count) -e datapipeline_timeout=$(vars.default_datapipeline_timeout) -e inference_partition=$(vars.default_inference_partition.name) -e inference_memory=$(vars.default_inference_partition.memory) -e inference_cpu_count=$(vars.default_inference_partition.cpu_count) -e inference_timeout=$(vars.default_inference_timeout) -e max_template_date=$(vars.max_template_date) -e conformer_max_iterations=$(vars.conformer_max_iterations) -e num_recycles=$(vars.num_recycles) -e num_diffusion_samples=$(vars.num_diffusion_samples) -e num_seeds=$(vars.num_seeds) -e save_embeddings=$(vars.save_embeddings)"
+
+  # The next two runners are only needed if an AF3 service daemon is wanted
+  af3_service_user_runner:
+  - type: ansible-local
+    destination: "af3-user.yml"
+    source: $(ghpc_stage("examples/simple_service_launcher/af3-user.yml"))
+    args: "-e service_user=$(vars.af3service_user)"
+
+  af3_service_runners:
+  - type: data
+    destination: "/tmp/af3config.json.j2"
+    source: $(ghpc_stage("examples/simple_service_launcher/af3config.json.j2"))
+  - type: data
+    destination: "/opt/apps/af3/examples/simple_service_launcher/requirements.txt"
+    source: $(ghpc_stage("examples/simple_service_launcher/requirements.txt"))
+  - type: shell
+    destination: "install-service-requirements.sh"
+    content: |
+      #!/bin/bash
+      install -d /opt/apps/af3/venv
+      chown $(vars.af3service_user) /opt/apps/af3/venv
+      sudo -u $(vars.af3service_user) python3 -m venv /opt/apps/af3/venv
+      sudo -u $(vars.af3service_user) /opt/apps/af3/venv/bin/pip install -r /opt/apps/af3/examples/simple_service_launcher/requirements.txt
+      chmod -R 755 /opt/apps/af3/venv
+  - type: data
+    destination: "/opt/apps/af3/examples/simple_service_launcher/simple_service_launcher.py"
+    source: $(ghpc_stage("examples/simple_service_launcher/simple_service_launcher.py"))
+  - type: ansible-local
+    destination: "af3-service.yml"
+    source: $(ghpc_stage("examples/simple_service_launcher/af3-service.yml"))
+    args: "-e service_user=$(vars.af3service_user) -e af3service_activate=$(vars.af3service_activate) -e bucket_name=$(vars.af3service_jobbucket) -e sif_dir=$(vars.sif_dir) -e db_dir=$(vars.db_dir) -e model_dir=$(vars.model_dir) -e pdb_database_path=$(vars.pdb_database_path) -e jax_compilation_cache_path=$(vars.jax_compilation_cache_path) -e datapipeline_partition=$(vars.default_datapipeline_partition.name) -e datapipeline_memory=$(vars.default_datapipeline_partition.memory) -e datapipeline_cpu_count=$(vars.default_datapipeline_partition.cpu_count) -e datapipeline_timeout=$(vars.default_datapipeline_timeout) -e inference_partition=$(vars.default_inference_partition.name) -e inference_memory=$(vars.default_inference_partition.memory) -e inference_cpu_count=$(vars.default_inference_partition.cpu_count) -e inference_timeout=$(vars.default_inference_timeout)  -e max_template_date=$(vars.max_template_date) -e conformer_max_iterations=$(vars.conformer_max_iterations) -e num_recycles=$(vars.num_recycles) -e num_diffusion_samples=$(vars.num_diffusion_samples) -e num_seeds=$(vars.num_seeds) -e save_embeddings=$(vars.save_embeddings)"
+
+deployment_groups:
+- group: environment
+  modules:
+  - id: af3_network
+    source: modules/network/vpc
+
+  - id: enable_apis
+    source: community/modules/project/service-enablement
+    settings:
+      gcp_service_list: [
+        "cloudresourcemanager.googleapis.com",
+        "container.googleapis.com",
+        "logging.googleapis.com",
+        "compute.googleapis.com"
+      ]
+
+  - id: slurm-image-build-script
+    source: modules/scripts/startup-script
+    settings:
+      runners:
+      - type: ansible-local
+        destination: "apptainer_image.yml"
+        source: $(ghpc_stage("adm/apptainer_image.yml"))
+
+- group: image
+  modules:
+  - id: slurm_image
+    source: modules/packer/custom-image
+    kind: packer
+    use:
+    - slurm-image-build-script
+    - af3_network
+    settings:
+      disk_size: $(vars.disk_size_gb)
+      machine_type: $(vars.image_build_machine_type)
+      source_image_family: $(vars.base_image.family)
+      source_image_project_id: [$(vars.base_image.project)]
+      image_family: $(vars.instance_image.family)
+      omit_external_ip: false
+      state_timeout: 15m
+
+- group: cluster
+  modules:
+  # this bucket needs to contain the uncompressed pdb cif files in a folder [mybucket]/v3.0/uncompressed/mmcif_files
+  - id: database_bucket
+    source: modules/file-system/pre-existing-network-storage
+    settings:
+      remote_mount: $(vars.database_bucket)
+      local_mount: /mnt/databases
+      fs_type: gcsfuse
+      mount_options: defaults,_netdev,implicit_dirs,allow_other,dir_mode=0555,file_mode=555
+
+  - id: login_startup
+    source: modules/scripts/startup-script
+    settings:
+      runners: $(flatten([vars.login_runners, vars.af3_service_user_runner]))
+
+  - id: datapipeline_startup
+    source: modules/scripts/startup-script
+    settings:
+      runners: $(flatten([vars.datapipeline_runners, vars.af3_service_user_runner]))
+
+  - id: inference_startup
+    source: modules/scripts/startup-script
+    settings:
+      runners: $(flatten([vars.inference_runners, vars.af3_service_user_runner]))
+
+  - id: controller_startup
+    source: modules/scripts/startup-script
+    settings:
+      runners: $(flatten([vars.controller_runners, vars.af3_job_launcher_runner, vars.af3_service_user_runner, vars.af3_service_runners]))
+
+  - id: datapipeline_c3dhm_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [af3_network]
+    settings:
+      node_count_static: $(vars.datapipeline_c3dhm_partition.node_count_static)
+      node_count_dynamic_max: $(vars.datapipeline_c3dhm_partition.node_count_dynamic)
+      disk_type: pd-balanced
+      disk_size_gb: $(vars.disk_size_gb)
+      instance_image_custom: true
+      machine_type: $(vars.datapipeline_c3dhm_partition.machine_type)
+      bandwidth_tier: tier_1_enabled
+      allow_automatic_updates: false
+      startup_script: $(datapipeline_startup.startup_script)
+      advanced_machine_features:
+        threads_per_core: null
+
+  - id: datapipeline_c3dhm_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use: [datapipeline_c3dhm_nodeset]
+    settings:
+      partition_name: datac3d
+      exclusive: false
+
+  - id: inference_g2_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [af3_network]
+    settings:
+      node_count_static: $(vars.inference_g2_partition.node_count_static)
+      node_count_dynamic_max: $(vars.inference_g2_partition.node_count_dynamic)
+      disk_type: pd-balanced
+      disk_size_gb: $(vars.disk_size_gb)
+      instance_image_custom: true
+      machine_type: $(vars.inference_g2_partition.machine_type)
+      startup_script: $(inference_startup.startup_script)
+      bandwidth_tier: gvnic_enabled
+      allow_automatic_updates: false
+      advanced_machine_features:
+        threads_per_core: null
+
+  - id: inference_g2_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use:
+    - inference_g2_nodeset
+    settings:
+      partition_name: infg2
+      exclusive: false
+
+  - id: inference_a2_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [af3_network]
+    settings:
+      node_count_static: $(vars.inference_a2_partition.node_count_static)
+      node_count_dynamic_max: $(vars.inference_a2_partition.node_count_dynamic)
+      disk_type: pd-balanced
+      disk_size_gb: $(vars.disk_size_gb)
+      instance_image_custom: true
+      machine_type: $(vars.inference_a2_partition.machine_type)
+      startup_script: $(inference_startup.startup_script)
+      bandwidth_tier: gvnic_enabled
+      allow_automatic_updates: false
+      advanced_machine_features:
+        threads_per_core: null
+
+  - id: inference_a2_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use:
+    - inference_a2_nodeset
+    settings:
+      partition_name: infa2
+      exclusive: false
+
+  - id: inference_a2u_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [af3_network]
+    settings:
+      node_count_static: $(vars.inference_a2u_partition.node_count_static)
+      node_count_dynamic_max: $(vars.inference_a2u_partition.node_count_dynamic)
+      disk_type: pd-balanced
+      disk_size_gb: $(vars.disk_size_gb)
+      instance_image_custom: true
+      machine_type: $(vars.inference_a2u_partition.machine_type)
+      startup_script: $(inference_startup.startup_script)
+      bandwidth_tier: gvnic_enabled
+      allow_automatic_updates: false
+      advanced_machine_features:
+        threads_per_core: null
+
+  - id: inference_a2u_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use:
+    - inference_a2u_nodeset
+    settings:
+      partition_name: infa2u
+      exclusive: false
+
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    use: [af3_network]
+    settings:
+      name_prefix: login
+      enable_login_public_ips: true
+      machine_type: n2-standard-4
+      disk_size_gb: $(vars.disk_size_gb)
+      instance_image_custom: true
+
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    use:
+    - af3_network
+    - datapipeline_c3dhm_partition
+    - inference_g2_partition
+    - inference_a2_partition
+    - inference_a2u_partition
+    - slurm_login
+    - database_bucket
+    settings:
+      enable_controller_public_ips: true
+      disk_size_gb: $(vars.disk_size_gb)
+      machine_type: c2-standard-8
+      instance_image_custom: true
+      enable_external_prolog_epilog: true
+      login_startup_script: $(login_startup.startup_script)
+      controller_startup_script: $(controller_startup.startup_script)
+      compute_startup_scripts_timeout: 2000
+
+  - id: hpc_dashboard
+    source: modules/monitoring/dashboard
+    outputs: [instructions]

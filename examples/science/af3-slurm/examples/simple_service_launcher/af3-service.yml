@@ -1,0 +1,120 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+---
+- name: af3-service
+  hosts: localhost
+  become: true
+  vars:
+    # variables set in af3-slurm-deployment.yaml
+    af3service_activate:
+    service_user:
+    bucket_name:
+    sif_dir:
+    db_dir:
+    model_dir:
+    pdb_database_path:
+    jax_compilation_cache_path:
+    datapipeline_partition:
+    datapipeline_memory:
+    datapipeline_cpu_count:
+    datapipeline_timeout:
+    inference_partition:
+    inference_memory:
+    inference_cpu_count:
+    inference_timeout:
+    max_template_date:
+    conformer_max_iterations:
+    num_recycles:
+    num_diffusion_samples:
+    num_seeds:
+    save_embeddings:
+    # fixed variables, not intended to be modified
+    service_name: af3
+    service_type: simple
+    exec_start: "/opt/apps/af3/venv/bin/python /opt/apps/af3/examples/simple_service_launcher/simple_service_launcher.py --config-file /etc/af3config.json"
+    start_after: network.target
+    working_directory: "/home/{{ service_user }}"
+
+  tasks:
+  - name: Ensure af3service_activate is boolean
+    set_fact:
+      activate: "{{ af3service_activate | bool }}"
+
+  - name: Create /var/log/{{ service_name }} directory
+    file:
+      path: "/var/log/{{ service_name }}"
+      state: directory
+      owner: "{{ service_user }}"
+      group: "{{ service_user }}"
+      mode: '0755'
+
+  - name: Create service config file
+    ansible.builtin.template:
+      src: /tmp/af3config.json.j2
+      dest: /etc/af3config.json # Destination on target
+      owner: root
+      group: root
+      mode: '0755' # Make executable
+
+  - name: Create the service file
+    copy:
+      dest: "/etc/systemd/system/{{ service_name }}.service"
+      content: |
+        [Unit]
+        Description={{ service_name }} Service
+        After={{ start_after }}
+        [Service]
+        Type={{ service_type }}
+        ExecStart={{ exec_start }}
+        StandardOutput=append:/var/log/{{ service_name }}/{{ service_name }}.stdout.log
+        StandardError=append:/var/log/{{ service_name }}/{{ service_name }}.stderr.log
+        Restart=always
+        User={{ service_user }}
+        WorkingDirectory={{ working_directory }}
+
+        [Install]
+        WantedBy=multi-user.target
+      owner: root
+      group: root
+      mode: '0644'
+    notify: Reload systemd
+
+  - name: Create logrotate configuration
+    copy:
+      dest: "/etc/logrotate.d/{{ service_name }}"
+      content: |
+        /var/log/{{ service_name }}/*.log {
+          daily
+          rotate 7
+          compress
+          delaycompress
+          missingok
+          notifempty
+          create 0640 {{ service_user }} {{ service_user }}
+        }
+      owner: root
+      group: root
+      mode: '0644'
+  handlers:
+  - name: Reload systemd
+    listen: Reload systemd
+    systemd:
+      daemon_reload: yes
+  post_tasks:
+  - name: Enable and start the service conditionally
+    systemd:
+      name: "{{ service_name }}.service"
+      enabled: yes
+      state: started
+    when: activate

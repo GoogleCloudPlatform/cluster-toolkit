@@ -1,0 +1,53 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+---
+- name: Startup scripts for Slurm Controller
+  hosts: localhost
+  become: true
+
+  vars:
+    model_dir:
+    sif_dir:
+    modelweights_bucket:
+
+  tasks:
+  - name: Install AF model parameters (weights)
+    ansible.builtin.shell: |
+      #!/bin/sh
+      set -e -o pipefail
+      install -d {{ model_dir }}
+      gcloud storage cp gs://{{ modelweights_bucket }}/af3.bin {{ model_dir }}
+      chmod -R 0555 {{ model_dir }}
+    args:
+      executable: /bin/bash
+    register: script_output
+    failed_when: script_output.rc != 0
+
+  - name: Pull apptainer sif from Artifact Repository
+    ansible.builtin.shell: |
+      #!/bin/bash
+      set -e -o pipefail
+      install -d {{ sif_dir }}
+      cd {{ sif_dir }}
+      # pull apptainer container
+      if [[ ! -f af3.sif ]]; then
+        export PID=$(gcloud config get-value project)
+        apptainer registry login --username=oauth2accesstoken --password=$(gcloud auth print-access-token) oras://us-docker.pkg.dev
+        apptainer pull af3.sif oras://us-docker.pkg.dev/$PID/sifs/af3
+      fi
+      chmod -R 0555 {{ sif_dir }}
+    args:
+      executable: /bin/bash
+    register: script_output
+    failed_when: script_output.rc != 0

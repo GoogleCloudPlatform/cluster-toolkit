@@ -1,0 +1,365 @@
+#!/bin/bash
+
+# --- Capture Launch Directory ---
+LAUNCH_DIR=$(pwd)
+
+# --- Script Defaults (Set via Ansible Variables) ---
+DEFAULT_PARTITION_DATAPIPELINE="{{ datapipeline_partition }}"
+DEFAULT_PARTITION_INFERENCE="{{ inference_partition }}"
+DEFAULT_MEM_DATAPIPELINE="{{ datapipeline_memory }}"
+DEFAULT_MEM_INFERENCE="{{ inference_memory }}"
+DEFAULT_CPUS_DATAPIPELINE="{{ datapipeline_cpu_count }}"
+DEFAULT_CPUS_INFERENCE="{{ inference_cpu_count }}"
+DEFAULT_TIME_DATAPIPELINE="{{ datapipeline_timeout | default(3600) }}" # Expecting seconds
+DEFAULT_TIME_INFERENCE="{{ inference_timeout | default(3600) }}"    # Expecting seconds
+DEFAULT_GRES="{{ af3_default_gres | default('') }}"
+DEFAULT_LOG_BASE_DIR="{{ af3_log_base_dir | default('$HOME/slurm_logs') }}"
+DEFAULT_JOB_NAME_BASE="{{ af3_job_name_base | default('alphafold3') }}"
+
+# --- AlphaFold 3 Science Variables (Set via Ansible Variables) ---
+DEFAULT_MAX_TEMPLATE_DATE="{{ max_template_date }}"
+DEFAULT_CONFORMER_MAX_ITERATIONS="{{ conformer_max_iterations }}"
+DEFAULT_NUM_RECYCLES="{{ num_recycles }}"
+DEFAULT_NUM_DIFFUSION_SAMPLES="{{ num_diffusion_samples }}"
+DEFAULT_NUM_SEEDS="{{ num_seeds }}"
+DEFAULT_SAVE_EMBEDDINGS="{{ save_embeddings }}"
+
+# --- Fixed Configuration (Set via Ansible Variables) ---
+CONTAINER_IMAGE="{{ sif_dir }}/af3.sif"
+ALPHAFOLD_SCRIPT="/app/alphafold/run_alphafold.py"
+MODEL_DIR="{{ model_dir }}"
+DB_DIR="{{ db_dir }}"
+PDB_DATABASE_PATH="{{ pdb_database_path }}"
+DEFAULT_JAX_COMPILATION_CACHE_PATH="{{ jax_compilation_cache_path }}"
+
+# --- Initialize variables ---
+JOB_TYPE="" PARTITION="" MEM="" CPUS=""
+TIME_SECONDS="" # Initialize as empty - will hold user input OR default
+GRES="${DEFAULT_GRES}" LOG_BASE_DIR="${DEFAULT_LOG_BASE_DIR}"
+JOB_NAME_BASE="${DEFAULT_JOB_NAME_BASE}" JAX_COMPILATION_CACHE_PATH="${DEFAULT_JAX_COMPILATION_CACHE_PATH}"
+INPUT_PATH="" OUTPUT_DIR=""
+GRES_USER_SET="false" # Flag to track if user provided --gres
+
+# Initialize AF3 science variables with defaults
+MAX_TEMPLATE_DATE="${DEFAULT_MAX_TEMPLATE_DATE}"
+CONFORMER_MAX_ITERATIONS="${DEFAULT_CONFORMER_MAX_ITERATIONS}"
+NUM_RECYCLES="${DEFAULT_NUM_RECYCLES}"
+NUM_DIFFUSION_SAMPLES="${DEFAULT_NUM_DIFFUSION_SAMPLES}"
+NUM_SEEDS="${DEFAULT_NUM_SEEDS}"
+SAVE_EMBEDDINGS="${DEFAULT_SAVE_EMBEDDINGS}"
+
+
+# --- Helper Functions ---
+error_exit() { echo "Error: $1" >&2; usage >&2; exit 1; }
+
+# Function to convert seconds to HH:MM:SS
+format_time_hhmmss() {
+  local total_seconds=$1
+  if ! [[ "$total_seconds" =~ ^[0-9]+$ ]] || [ "$total_seconds" -lt 0 ]; then
+    echo "Error: Invalid time value (seconds): '$total_seconds'. Must be a non-negative integer." >&2
+    return 1 # Indicate failure
+  fi
+   if [ "$total_seconds" -eq 0 ]; then printf "00:00:00"; return 0; fi
+  local ss=$((total_seconds % 60))
+  local total_minutes=$((total_seconds / 60))
+  local mm=$((total_minutes % 60))
+  local hh=$((total_minutes / 60))
+  printf "%02d:%02d:%02d" "$hh" "$mm" "$ss"
+  return 0
+}
+
+# --- Function to Print Usage ---
+usage() {
+  # --- Pre-calculate display strings for defaults ---
+  # Simple defaults (use directly in heredoc or pre-calculate if complex logic needed)
+  local default_partition_datapipeline_disp="${DEFAULT_PARTITION_DATAPIPELINE}"
+  local default_partition_inference_disp="${DEFAULT_PARTITION_INFERENCE}"
+  local default_time_datapipeline_disp="${DEFAULT_TIME_DATAPIPELINE}"
+  local default_time_inference_disp="${DEFAULT_TIME_INFERENCE}"
+  local default_gres_disp="${DEFAULT_GRES:-gpu:1}" # Handle potential empty DEFAULT_GRES
+  local default_job_name_base_disp="${DEFAULT_JOB_NAME_BASE}"
+  local default_log_base_dir_disp="${DEFAULT_LOG_BASE_DIR}"
+
+  # AF3 specific defaults - use :- expansion here to decide display text
+  local default_jax_cache_disp="${DEFAULT_JAX_COMPILATION_CACHE_PATH:-using AF3 run_alphafold.py defaults}"
+  local default_max_template_date_disp="${DEFAULT_MAX_TEMPLATE_DATE:-using AF3 run_alphafold.py defaults}"
+  local default_conformer_iter_disp="${DEFAULT_CONFORMER_MAX_ITERATIONS:-using AF3 run_alphafold.py defaults}"
+  local default_num_recycles_disp="${DEFAULT_NUM_RECYCLES:-using AF3 run_alphafold.py defaults}"
+  local default_num_diffusion_disp="${DEFAULT_NUM_DIFFUSION_SAMPLES:-using AF3 run_alphafold.py defaults}"
+  local default_num_seeds_disp="${DEFAULT_NUM_SEEDS:-using AF3 run_alphafold.py defaults}"
+  local default_save_embeddings_disp="${DEFAULT_SAVE_EMBEDDINGS:-using AF3 run_alphafold.py defaults}"
+  # --- End Pre-calculation ---
+
+  cat << EOF
+Usage: $0 --job-type <type> [OPTIONS] <input_path> <output_directory_path>
+
+Submits an AlphaFold3 data pipeline OR inference job to Slurm.
+Input and Output paths can be relative to the launch directory.
+
+Required Arguments:
+  --job-type TYPE           Job type: 'datapipeline' or 'inference'.
+  <input_path>              Path to the input JSON file OR a directory containing input files.
+  <output_directory_path>   Path to the desired output directory.
+
+Options (override defaults):
+  --partition PART                   Slurm partition (Defaults: datapipeline='${default_partition_datapipeline_disp}', inference='${default_partition_inference_disp}')
+  --mem MEMORY                       Slurm memory request in GigaBytes (Default depends on job type)
+  --cpus NUM                         Number of CPUs per task (Default depends on job type)
+  --time SECONDS                     Slurm time limit in TOTAL SECONDS (e.g., 3600 for 1h).
+                                     (Default depends on job type: '${default_time_datapipeline_disp}'s / '${default_time_inference_disp}'s)
+  --gres SPEC                        Slurm GPU request.
+                                     (Default: none for datapipeline, '${default_gres_disp}' for inference if unset)
+  --job-name-base NAME               Base name for Slurm job (Default: '${default_job_name_base_disp}')
+  --log-base-dir DIR                 Base directory for logs (Default: '${default_log_base_dir_disp}')
+
+AlphaFold 3 Specific Options (Inference only):
+  --jax-compilation-cache-path DIR   JAX cache directory (Inference only) (Default: ${default_jax_cache_disp})
+  --max-template-date DATE           Maximum template date (YYYY-MM-DD) (Default: ${default_max_template_date_disp})
+  --conformer-max-iterations NUM     Maximum conformer iterations (Default: ${default_conformer_iter_disp})
+  --num-recycles NUM                 Number of recycles (Default: ${default_num_recycles_disp})
+  --num-diffusion-samples NUM        Number of diffusion samples (Default: ${default_num_diffusion_disp})
+  --num-seeds NUM                    Number of seeds (Default: ${default_num_seeds_disp})
+  --save-embeddings VALUE            Save embeddings ('true'/'false') (Default: ${default_save_embeddings_disp})
+
+  -h, --help                         Display this help message and exit.
+
+Examples:
+  # Data pipeline job, time override in seconds
+  $0 --job-type datapipeline --time 7200 input.json output_pipe/ # 7200 seconds = 2 hours
+  # Inference job (uses default GRES & time if not overridden) with AF3 options
+  $0 --job-type inference --mem 64G --num-recycles 6 --num-seeds 3 input.json output_infer/
+EOF
+}
+
+# --- Argument Parsing ---
+while [[ $# -gt 0 ]]; do
+  key="$1"
+  case $key in
+    --job-type)       JOB_TYPE="$2"; shift 2 ;;
+    --partition)      PARTITION="$2"; shift 2 ;;
+    --time)
+        if ! [[ "$2" =~ ^[0-9]+$ ]]; then error_exit "Invalid format for --time: '$2'. Expected total seconds (integer)."; fi
+        TIME_SECONDS="$2"; shift 2 ;;
+    --mem)            MEM="$2"; shift 2 ;;
+    --cpus)           CPUS="$2"; shift 2 ;;
+    --gres)           GRES="$2"; GRES_USER_SET="true"; shift 2 ;;
+    --job-name-base)  JOB_NAME_BASE="$2"; shift 2 ;;
+    --log-base-dir)   LOG_BASE_DIR="$2"; shift 2 ;;
+    --jax-compilation-cache-path)  JAX_COMPILATION_CACHE_PATH="$2"; shift 2 ;;
+    # --- NEW AF3 ARG PARSING ---
+    --max-template-date)          MAX_TEMPLATE_DATE="$2"; shift 2 ;;
+    --conformer-max-iterations)   CONFORMER_MAX_ITERATIONS="$2"; shift 2 ;;
+    --num-recycles)               NUM_RECYCLES="$2"; shift 2 ;;
+    --num-diffusion-samples)      NUM_DIFFUSION_SAMPLES="$2"; shift 2 ;;
+    --num-seeds)                  NUM_SEEDS="$2"; shift 2 ;;
+    --save-embeddings)            SAVE_EMBEDDINGS="$2"; shift 2 ;;
+    # --- END NEW AF3 ARG PARSING ---
+    -h|--help)        usage; exit 0 ;;
+    -*)               error_exit "Unknown option: $1" ;;
+    *) # Positional arguments
+      if [ -z "$INPUT_PATH" ]; then INPUT_PATH="$1";
+      elif [ -z "$OUTPUT_DIR" ]; then OUTPUT_DIR="$1";
+      else error_exit "Unexpected argument: $1"; fi
+      shift ;;
+  esac
+done
+
+
+# --- Input Validation & Path Resolution ---
+[ -z "$JOB_TYPE" ] && error_exit "--job-type is required ('datapipeline' or 'inference')."
+[[ "$JOB_TYPE" != "datapipeline" && "$JOB_TYPE" != "inference" ]] && \
+    error_exit "Invalid --job-type: '$JOB_TYPE'. Must be 'datapipeline' or 'inference'."
+[ -z "$INPUT_PATH" ] || [ -z "$OUTPUT_DIR" ] && \
+    error_exit "Missing required arguments: input_path and output_directory_path."
+
+original_input_path="$INPUT_PATH"
+if [[ ! "$INPUT_PATH" == /* ]]; then INPUT_PATH="${LAUNCH_DIR}/${INPUT_PATH}"; fi
+INPUT_PATH=$(readlink -m "$INPUT_PATH")
+if [ $? -ne 0 ] || [ -z "$INPUT_PATH" ]; then error_exit "Could not resolve absolute path for input path '$original_input_path'."; fi
+echo "Info: Using absolute input path: $INPUT_PATH"
+if [ ! -f "$INPUT_PATH" ] && [ ! -d "$INPUT_PATH" ]; then error_exit "Resolved input path '$INPUT_PATH' not found or is not a regular file or directory."; fi
+
+original_output_path="$OUTPUT_DIR"
+if [[ ! "$OUTPUT_DIR" == /* ]]; then OUTPUT_DIR="${LAUNCH_DIR}/${OUTPUT_DIR}"; fi
+OUTPUT_DIR=$(readlink -m "$OUTPUT_DIR")
+if [ $? -ne 0 ] || [ -z "$OUTPUT_DIR" ]; then error_exit "Could not resolve absolute path for output directory '$original_output_path'."; fi
+echo "Info: Using absolute output directory path: $OUTPUT_DIR"
+
+if [ -d "$INPUT_PATH" ]; then python_input_flag="--input_dir"; else python_input_flag="--json_path"; fi
+python_input_value="$INPUT_PATH"
+
+
+# --- Set Defaults Based on Job Type (if not set by user) ---
+if [ "$JOB_TYPE" = "datapipeline" ]; then
+    [ -z "$PARTITION" ] && PARTITION="$DEFAULT_PARTITION_DATAPIPELINE"
+    [ -z "$MEM" ]       && MEM="$DEFAULT_MEM_DATAPIPELINE"
+    [ -z "$CPUS" ]      && CPUS="$DEFAULT_CPUS_DATAPIPELINE"
+    [ -z "$TIME_SECONDS" ] && TIME_SECONDS="$DEFAULT_TIME_DATAPIPELINE"
+elif [ "$JOB_TYPE" = "inference" ]; then
+    [ -z "$PARTITION" ] && PARTITION="$DEFAULT_PARTITION_INFERENCE"
+    [ -z "$MEM" ]       && MEM="$DEFAULT_MEM_INFERENCE"
+    [ -z "$CPUS" ]      && CPUS="$DEFAULT_CPUS_INFERENCE"
+    [ -z "$TIME_SECONDS" ] && TIME_SECONDS="$DEFAULT_TIME_INFERENCE"
+    # Set default GRES for inference only if user did not specify --gres
+    if [ "$GRES_USER_SET" = "false" ] && [ -n "${DEFAULT_GRES}" ]; then
+        GRES="${DEFAULT_GRES}" # Use Ansible default GRES if user didn't provide one
+        echo "Info: Using default GRES for inference from config: ${GRES}"
+    elif [ "$GRES_USER_SET" = "false" ]; then
+         GRES="gpu:1" # Fallback default GRES if Ansible default is empty
+         echo "Info: Using fallback default GRES for inference: ${GRES}"
+    fi
+fi
+
+
+# --- Format Final Time Value ---
+TIME_HMS=$(format_time_hhmmss "$TIME_SECONDS")
+if [ $? -ne 0 ]; then
+    error_exit "Invalid time value obtained: $TIME_SECONDS seconds."
+fi
+
+
+# --- Job Type Specific Configuration ---
+declare -a apptainer_binds=()
+apptainer_nv_flag="" run_data_pipeline_flag="" run_inference_flag=""
+base_python_opts="" # Base options for both types
+job_specific_python_opts="" # Options specific to job type
+
+apptainer_binds+=("--bind" "$(dirname "${INPUT_PATH}")")
+apptainer_binds+=("--bind" "${OUTPUT_DIR}")
+
+# Construct base python options applicable to both (if any in future)
+# base_python_opts+="..."
+
+if [ "$JOB_TYPE" = "datapipeline" ]; then
+    final_job_name="${JOB_NAME_BASE}_datapipeline"
+    run_data_pipeline_flag="--run_data_pipeline=True"; run_inference_flag="--run_inference=False"
+    job_specific_python_opts="--jackhmmer_n_cpu=${CPUS} --nhmmer_n_cpu=${CPUS}"
+    apptainer_binds+=("--bind" "${DB_DIR}"); apptainer_binds+=("--bind" "${PDB_DATABASE_PATH}")
+elif [ "$JOB_TYPE" = "inference" ]; then
+    final_job_name="${JOB_NAME_BASE}_inference"
+    run_data_pipeline_flag="--run_data_pipeline=False"; run_inference_flag="--run_inference=True"
+    [ -n "$GRES" ] && apptainer_nv_flag="--nv"
+    apptainer_binds+=("--bind" "${MODEL_DIR}")
+
+    # Add JAX cache path if set
+    if [ -n "$JAX_COMPILATION_CACHE_PATH" ]; then
+        job_specific_python_opts+=" --jax_compilation_cache_path='${JAX_COMPILATION_CACHE_PATH}'"
+        apptainer_binds+=("--bind" "${JAX_COMPILATION_CACHE_PATH}")
+        echo "Info: JAX cache enabled at ${JAX_COMPILATION_CACHE_PATH}"
+    else
+        echo "Info: JAX cache directory not set, JAX caching disabled."
+    fi
+
+    # --- Add AF3 science python options conditionally ---
+    af3_extra_opts=""
+    [ -n "$MAX_TEMPLATE_DATE" ] && af3_extra_opts+=" --max_template_date=\"${MAX_TEMPLATE_DATE}\""
+    [ -n "$CONFORMER_MAX_ITERATIONS" ] && af3_extra_opts+=" --conformer_max_iterations=${CONFORMER_MAX_ITERATIONS}"
+    [ -n "$NUM_RECYCLES" ] && af3_extra_opts+=" --num_recycles=${NUM_RECYCLES}"
+    [ -n "$NUM_DIFFUSION_SAMPLES" ] && af3_extra_opts+=" --num_diffusion_samples=${NUM_DIFFUSION_SAMPLES}"
+    [ -n "$NUM_SEEDS" ] && af3_extra_opts+=" --num_seeds=${NUM_SEEDS}"
+    [ -n "$SAVE_EMBEDDINGS" ] && af3_extra_opts+=" --save_embeddings=${SAVE_EMBEDDINGS}"
+
+    job_specific_python_opts+="${af3_extra_opts}" # Append AF3 specific options
+fi
+
+
+# --- Create Log Dir & Pre-submission Checks ---
+mkdir -p "$LOG_BASE_DIR" || echo "Warning: Could not create log base dir '$LOG_BASE_DIR'." >&2
+[ ! -f "${CONTAINER_IMAGE}" ] && { echo "Error: Container image '${CONTAINER_IMAGE}' not found." >&2; exit 1; }
+
+
+# --- Assemble sbatch Command ---
+SBATCH_DIRECTIVES=$(cat << SBD
+#!/bin/bash
+#SBATCH --job-name=${final_job_name}
+#SBATCH --partition=${PARTITION}
+#SBATCH --time=${TIME_HMS}
+#SBATCH --mem=${MEM}G
+#SBATCH --cpus-per-task=${CPUS}
+#SBATCH --output=${LOG_BASE_DIR}/job_%j/out.txt
+#SBATCH --error=${LOG_BASE_DIR}/job_%j/err.txt
+SBD
+)
+# Only add --gres directive if GRES is non-empty
+[ -n "$GRES" ] && SBATCH_DIRECTIVES+=$'\n'"#SBATCH --gres=${GRES}"
+
+
+# --- Submit sbatch Command ---
+bind_args_str=$(printf "%s " "${apptainer_binds[@]}")
+echo "Submitting job ${final_job_name} to partition ${PARTITION}..."
+echo "Time Limit:       ${TIME_HMS} (${TIME_SECONDS} seconds)"
+echo "Memory:           ${MEM}G"
+echo "CPUs:             ${CPUS}"
+[ -n "$GRES" ] && echo "GRES:             ${GRES}" || echo "GRES:             None"
+echo "Log File Pattern: ${LOG_BASE_DIR}/job_%j/{out.txt,err.txt}"
+
+# Combine all python options
+all_python_opts="${base_python_opts} ${job_specific_python_opts}"
+
+sbatch << EOF
+${SBATCH_DIRECTIVES}
+
+# --- Job Environment & Setup ---
+echo "--- Job Info ---"
+echo "Job Type: $JOB_TYPE"
+echo "ID: \$SLURM_JOB_ID (\${final_job_name}), Host: \$(hostname), Partition: \${SLURM_JOB_PARTITION}"
+echo "Allocated CPUs: \$SLURM_CPUS_PER_TASK, Mem: \$SLURM_MEM_PER_NODE G"
+[ -n "\$SLURM_JOB_GPUS" ] && echo "Allocated GPUs: \$SLURM_JOB_GPUS (\`nvidia-smi -L 2>/dev/null | grep \${CUDA_VISIBLE_DEVICES:-NONE} || echo 'GPU details unavailable'\`)" || echo "Allocated GPUs: None"
+echo "Input Path (${python_input_flag}): ${python_input_value}"
+echo "Output Dir: ${OUTPUT_DIR}"
+if [ "$JOB_TYPE" = "inference" ]; then
+    JAX_CACHE_DIR_ACTUAL="${JAX_COMPILATION_CACHE_PATH:-}" # Use shell parameter expansion for safety
+    if [ -n "\${JAX_CACHE_DIR_ACTUAL}" ]; then
+        echo "JAX Cache: \${JAX_CACHE_DIR_ACTUAL}"
+        mkdir -p "\${JAX_CACHE_DIR_ACTUAL}" # Ensure JAX cache dir exists on compute node
+        export XLA_FLAGS="--xla_gpu_force_compilation_cache_path=\${JAX_CACHE_DIR_ACTUAL}"
+        export JAX_CACHE_DIR="\${JAX_CACHE_DIR_ACTUAL}" # Also set JAX_CACHE_DIR just in case
+        echo "Set XLA_FLAGS: \$XLA_FLAGS"
+        echo "Set JAX_CACHE_DIR: \$JAX_CACHE_DIR"
+    else
+        echo "JAX Cache: Disabled (JAX_COMPILATION_CACHE_PATH not set)"
+    fi
+    # Print AF3 specific options used
+    echo "--- AlphaFold 3 Inference Options ---"
+    echo "Max Template Date: ${MAX_TEMPLATE_DATE:-AF3 default}"
+    echo "Conformer Max Iterations: ${CONFORMER_MAX_ITERATIONS:-AF3 default}"
+    echo "Num Recycles: ${NUM_RECYCLES:-AF3 default}"
+    echo "Num Diffusion Samples: ${NUM_DIFFUSION_SAMPLES:-AF3 default}"
+    echo "Num Seeds: ${NUM_SEEDS:-AF3 default}"
+    echo "Save Embeddings: ${SAVE_EMBEDDINGS:-AF3 default}"
+    echo "-------------------------------------"
+fi
+echo "--- Start: \$(date) ---"
+mkdir -p "${OUTPUT_DIR}"
+
+# --- Execute the AlphaFold Command ---
+echo "Launching AlphaFold ($JOB_TYPE)..."
+set -e # Exit on error
+set -x # Print command being executed
+
+apptainer run ${apptainer_nv_flag} \\
+    ${bind_args_str} \\
+  "${CONTAINER_IMAGE}" python3 "${ALPHAFOLD_SCRIPT}" \\
+    ${python_input_flag} "${python_input_value}" \\
+    --output_dir "${OUTPUT_DIR}" \\
+    ${run_data_pipeline_flag} \\
+    ${run_inference_flag} \\
+    --model_dir="${MODEL_DIR}" \\
+    --db_dir="${DB_DIR}" \\
+    --pdb_database_path="${PDB_DATABASE_PATH}" \\
+    ${all_python_opts}
+
+set +x
+echo "--- End: \$(date), Exit Code: \$? ---"
+exit 0
+EOF
+
+# --- Post-submission Check ---
+if [ $? -eq 0 ]; then
+    echo "Job successfully submitted (Job ID printed above by sbatch)."
+else
+    echo "Error submitting job to Slurm." >&2
+    exit 1
+fi
+
+exit 0

@@ -1,0 +1,92 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+#terraform_backend_defaults:
+#  type: gcs
+#  configuration:
+#    bucket: customer-bucket
+
+vars:
+  # Define overall deployment variables
+  deployment_name: af3-slurm         # adjust if necessary
+  project_id:                        # supply existing project id
+  region: us-central1                # supply region with C3D-highmem and GPU capacity
+  zone: us-central1-a                # supply zone with C3D-highmem and GPU capacity
+
+  # Required buckets for weights and databases
+  modelweights_bucket: ""            # name of your bucket with af3 model weights
+  database_bucket: ""                # name of your bucket with the database files
+
+  # AF3 model - architecture mappings - typically do not need to be modified
+  sif_dir: /opt/apps/af3/containers  # default path for the local copy of the container image
+  model_dir: /opt/apps/af3/models    # default path for the local copy of the model weights
+  db_dir: /dev/shm/public_databases  # default path for the local copy of the public databases
+  pdb_database_path: /mnt/databases/v3.0/uncompressed/mmcif_files  # default path for pdb database
+  jax_compilation_cache_path: ""     # give "" if you do not want to use jax compilation path
+
+  # AF science parameters - use AF3 defaults if "", see AlphaFold 3 documentation
+  max_template_date: ""
+  conformer_max_iterations: ""
+  num_recycles: ""
+  num_diffusion_samples: ""
+  num_seeds: ""
+  save_embeddings: ""
+
+  # Choose if you want the AF3 Simple Service daemon started
+  af3service_activate: false
+  af3service_jobbucket: ""           # set to "" if not used
+  af3service_user: af3
+
+  # Choose Default Datapipeline Partition
+  default_datapipeline_partition: $(vars.datapipeline_c3dhm_partition)
+  default_datapipeline_timeout: 5400
+
+  # Choose Default Inference Partition
+  default_inference_partition: $(vars.inference_g2_partition)
+  default_inference_timeout: 3600
+
+  # Datapipeline Partition Presets
+  datapipeline_c3dhm_partition:
+    name: datac3d
+    machine_type: c3d-highmem-180    # minimal sku to hold databases in in memory file system
+    memory: 60
+    cpu_count: 8
+    node_count_static: 0             # number of datapipeline nodes; 1 node can run multiple concurrent datapipeline jobs
+    node_count_dynamic: 3            # number of dynamic datapipeline nodes
+
+  # Inference Partitions Presets
+  inference_g2_partition:
+    name: infg2
+    machine_type: g2-standard-12     # g2 with L4 GPUs has 24GB of GPU memory; see README.md for recommendation
+    memory: 46
+    cpu_count: 12
+    node_count_static: 0             # number of static inference nodes; 1 GPU = 1 model inference
+    node_count_dynamic: 10           # number of dynamic inference nodes
+
+  inference_a2_partition:
+    name: infa2
+    machine_type: a2-highgpu-1g      # a2-high with A100 GPUs has 40GB of GPU memory
+    memory: 80
+    cpu_count: 12
+    node_count_static: 0             # number of static inference nodes; 1 GPU = 1 model inference
+    node_count_dynamic: 5           # number of dynamic inference nodes
+
+  inference_a2u_partition:
+    name: infa2u
+    machine_type: a2-ultragpu-1g     # a2-ultra with A100 GPUs has 80GB of GPU memory
+    memory: 160
+    cpu_count: 12
+    node_count_static: 0             # number of static inference nodes; 1 GPU = 1 model inference
+    node_count_dynamic: 5           # number of dynamic inference nodes
