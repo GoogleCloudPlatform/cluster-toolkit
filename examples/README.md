@@ -39,7 +39,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [client-google-cloud-storage.yaml](#client-google-cloud-storageyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-gromacs.yaml](#hpc-slurm-gromacsyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-local-ssd.yaml](#hpc-slurm-local-ssdyaml--) ![community-badge] ![experimental-badge]
-  * [hpc-slurm-h4d.yaml](#hpc-slurm-h4dyaml--) ![community-badge] ![experimental-badge]
+  * [hpc-slurm-h4d.yaml](#hpc-slurm-h4dyaml--) ![core-badge]
   * [hcls-blueprint.yaml](#hcls-blueprintyaml-) ![core-badge]
   * [hpc-gke.yaml](#hpc-gkeyaml-) ![core-badge]
   * [ml-gke](#ml-gkeyaml-) ![core-badge]
@@ -981,12 +981,12 @@ that have local ssd drives deployed.
 
 [hpc-slurm-local-ssd.yaml]: ../community/examples/hpc-slurm-local-ssd.yaml
 
-### [hpc-slurm-h4d.yaml] ![community-badge] ![experimental-badge]
+### [hpc-slurm-h4d.yaml] ![core-badge]
 
 Creates a basic auto-scaling Slurm cluster with mostly default settings. The
 blueprint also creates two new VPC networks, one configured for RDMA networking and the other for non-RDMA networking, along with two filestore instances mounted to `/home` and `/apps`. There is an `h4d` partition that uses compute-optimized `h4d-highmem-192-lssd` machine type.
 
-[hpc-slurm-h4d.yaml]: ../community/examples/hpc-slurm-h4d.yaml
+[hpc-slurm-h4d.yaml]: ../examples/hpc-slurm-h4d.yaml
 
 ### [hcls-blueprint.yaml]: ![core-badge]
 
