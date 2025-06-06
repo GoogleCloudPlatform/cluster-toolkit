@@ -13,7 +13,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/spf13/afero v1.14.0
 	github.com/spf13/cobra v1.9.1
-	github.com/zclconf/go-cty v1.16.2
+	github.com/zclconf/go-cty v1.16.3
 	golang.org/x/exp v0.0.0-20240719175910-8a7402abbf56
 	google.golang.org/genproto v0.0.0-20241118233622-e639e219e697 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c
@@ -112,7 +112,7 @@ require (
 	golang.org/x/crypto v0.37.0 // indirect
 	golang.org/x/net v0.39.0 // indirect
 	golang.org/x/oauth2 v0.25.0 // indirect
-	golang.org/x/sys v0.32.0
+	golang.org/x/sys v0.33.0
 	golang.org/x/text v0.24.0 // indirect
 	google.golang.org/grpc v1.67.3 // indirect
 	google.golang.org/protobuf v1.36.1 // indirect

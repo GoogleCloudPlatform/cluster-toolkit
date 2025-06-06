@@ -567,6 +567,7 @@ class _ConfigBlobs:
     "Private" class that represent a collection of GCS blobs for configuration
     """
     core: storage.Blob
+    controller_addr: Optional[storage.Blob]
     partition: List[storage.Blob] = field(default_factory=list)
     nodeset: List[storage.Blob] = field(default_factory=list)
     nodeset_dyn: List[storage.Blob] = field(default_factory=list)
@@ -577,6 +578,9 @@ class _ConfigBlobs:
     def hash(self) -> str:
         h = hashlib.md5()
         all = [self.core] + self.partition + self.nodeset + self.nodeset_dyn + self.nodeset_tpu
+        if self.controller_addr:
+            all.append(self.controller_addr)
+    
         # sort blobs so hash is consistent
         for blob in sorted(all, key=lambda b: b.name):
             h.update(blob.md5_hash.encode("utf-8"))
@@ -586,18 +590,29 @@ def _list_config_blobs() -> _ConfigBlobs:
     _, common_prefix = _get_bucket_and_common_prefix()
 
     core: Optional[storage.Blob] = None
+    controller_addr: Optional[storage.Blob] = None
     rest: Dict[str, List[storage.Blob]] = {"partition": [], "nodeset": [], "nodeset_dyn": [], "nodeset_tpu": [], "login_group": []}
+
+    is_controller = instance_role() == "controller"
 
     for blob in blob_list(prefix=""):
         if blob.name == f"{common_prefix}/config.yaml":
             core = blob
+        if blob.name == f"{common_prefix}/controller_addr.yaml" and not is_controller:
+            # Don't add this config blobs for controller to avoid "double reconfiguration":
+            # Initially this file doesn't exist and produce later by `setup_controller`;
+            # Appearance of this blob would trigger change in combined hash of config files;
+            # Ignore existence of this file for controller, assume that
+            # no other instance nodes will proceed with configuration until this file is created.
+            controller_addr = blob
         for key in rest.keys():
             if blob.name.startswith(f"{common_prefix}/{key}_configs/"):
                 rest[key].append(blob)
 
     if core is None:
         raise DeffetiveStoredConfigError(f"{common_prefix}/config.yaml not found in bucket")
-    return _ConfigBlobs(core=core, **rest)
+    
+    return _ConfigBlobs(core=core, controller_addr=controller_addr, **rest)
 
 def _fetch_config(old_hash: Optional[str]) -> Optional[Tuple[NSDict, str]]:
     """Fetch config from bucket, returns None if no changes are detected."""
@@ -610,6 +625,7 @@ def _fetch_config(old_hash: Optional[str]) -> Optional[Tuple[NSDict, str]]:
 
     return _assemble_config(
         core=_download([blobs.core])[0],
+        controller_addr=_download([blobs.controller_addr])[0] if blobs.controller_addr else None,
         partitions=_download(blobs.partition),
         nodesets=_download(blobs.nodeset),
         nodesets_dyn=_download(blobs.nodeset_dyn),
@@ -617,8 +633,17 @@ def _fetch_config(old_hash: Optional[str]) -> Optional[Tuple[NSDict, str]]:
         login_groups=_download(blobs.login_group),
     ), blobs.hash
 
+
+def controller_lookup_self_ip() -> str:
+    assert instance_role() == "controller"
+    # Get IP of LAST network-interface
+    # TODO: Consider change order of NICs definition, so right NIC is always @0.
+    idx = instance_metadata("network-interfaces").split()[-1] # either `0/` or `1/`
+    return instance_metadata(f"network-interfaces/{idx}ip")
+
 def _assemble_config(
         core: Any,
+        controller_addr: Optional[Any],
         partitions: List[Any],
         nodesets: List[Any],
         nodesets_dyn: List[Any],
@@ -626,6 +651,16 @@ def _assemble_config(
         login_groups: List[Any],
     ) -> NSDict:
     cfg = NSDict(core)
+
+    if cfg.controller_network_attachment:
+        # lookup controller address
+        if instance_role() == "controller":
+            # ignore stored value of `controller_addr`, it will be overwritten during `setup_controller`
+            cfg.slurm_control_addr = controller_lookup_self_ip()
+        else:   
+            if not controller_addr: 
+                raise DeffetiveStoredConfigError("controller_addr.yaml not found in bucket")
+            cfg.slurm_control_addr = controller_addr["slurm_control_addr"]
 
     # add partition configs
     for p_yaml in partitions:
@@ -1062,18 +1097,6 @@ def project_metadata(key):
     """Get project metadata project/attributes/<slurm_cluster_name>-<path>"""
     return get_metadata(key, root=f"{ROOT_URL}/project/attributes")
 
-
-def bucket_blob_download(bucket_name, blob_name):
-    bucket = storage_client().bucket(bucket_name)
-    blob = bucket.blob(blob_name)
-    contents = None
-    with tempfile.NamedTemporaryFile(mode="w+t") as tmp:
-        blob.download_to_filename(tmp.name)
-        with open(tmp.name, "r") as f:
-            contents = f.read()
-    return contents
-
-
 def natural_sort(text):
     def atoi(text):
         return int(text) if text.isdigit() else text
@@ -1386,30 +1409,9 @@ class Lookup:
     def project(self):
         return self.cfg.project or authentication_project()
 
-    @lru_cache(maxsize=None)
-    def _lookup_network_attachment(self, self_link: str) -> str:
-        resp = self.compute.networkAttachments().get(
-            project=self.project,
-            region=parse_self_link(self_link).region,
-            networkAttachment=trim_self_link(self_link)
-        ).execute()
-        eps = resp.get("connectionEndpoints", [])
-        if not eps or len(eps) > 2:
-            raise Exception(f"Expect exactly one connected endpoint, got {resp}")
-        ep: Dict[str, str] = eps[0]
-        if "ipAddress" not in ep:
-            raise Exception(f"Expect endpoints to have ipAddress, got {resp}")
-        return ep["ipAddress"]
-
     @cached_property
     def control_addr(self) -> Optional[str]:
-        if self.cfg.slurm_control_addr:
-            return self.cfg.slurm_control_addr
-
-        if self.cfg.controller_network_attachment:
-            return self._lookup_network_attachment(self.cfg.controller_network_attachment)
-
-        return None
+        return self.cfg.get("slurm_control_addr", None)
 
     @property
     def control_host(self):

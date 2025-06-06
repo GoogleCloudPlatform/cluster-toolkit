@@ -173,7 +173,7 @@ deployment_groups:
             - name: Install NVIDIA DCGM
               ansible.builtin.apt:
                 name:
-                - datacenter-gpu-manager
+                - datacenter-gpu-manager-4-cuda12
                 - libnvidia-nscq-550
                 update_cache: true
             post_tasks:

@@ -89,6 +89,7 @@ resource "google_container_cluster" "gke_cluster" {
   # decouple node pool lifecycle from cluster life cycle
   remove_default_node_pool = true
   initial_node_count       = 1 # must be set when remove_default_node_pool is set
+  node_locations           = var.system_node_pool_zones
 
   deletion_protection = var.deletion_protection
 

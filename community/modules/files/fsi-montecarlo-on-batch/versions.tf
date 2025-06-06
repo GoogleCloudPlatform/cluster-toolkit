@@ -35,9 +35,9 @@ terraform {
     }
   }
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:fsi-montecarlo-on-batch/v1.53.0"
+    module_name = "blueprints/terraform/hpc-toolkit:fsi-montecarlo-on-batch/v1.54.0"
   }
   provider_meta "google-beta" {
-    module_name = "blueprints/terraform/hpc-toolkit:fsi-montecarlo-on-batch/v1.53.0"
+    module_name = "blueprints/terraform/hpc-toolkit:fsi-montecarlo-on-batch/v1.54.0"
   }
 }
