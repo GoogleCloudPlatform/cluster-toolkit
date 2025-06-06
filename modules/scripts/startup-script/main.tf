@@ -100,10 +100,14 @@ locals {
       content     = <<-EOT
         #!/bin/bash
         export FI_PROVIDER="verbs;ofi_rxm"
-        export FI_OFI_RXM_USE_RNDV_WRITE=1
+        export FI_OFI_RXM_USE_RNDV_WRITE=0
         export FI_VERBS_INLINE_SIZE=39
         export I_MPI_FABRICS="shm:ofi"
         export FI_UNIVERSE_SIZE=3072
+        export I_MPI_ADJUST_ALLTOALL=1
+        export I_MPI_ADJUST_IALLTOALL=1
+        export I_MPI_ADJUST_BCAST=4
+        export I_MPI_ADJUST_IBCAST=1
         EOT
     },
   ]
