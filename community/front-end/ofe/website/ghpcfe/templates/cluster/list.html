@@ -29,6 +29,13 @@
 
 {% block content %}
   <h2>Cluster List</h2>
+
+  {% if is_local_mode %}
+  <div class="alert alert-info" role="alert">
+    <strong>Note:</strong> Development mode enabled. Cluster blueprint validation will run but no resources will be deployed.
+  </div>
+  {% endif %}
+
   {% if cluster_list %}
   <div class="table-responsive" style="min-height:25em;">
   <table class="table align-middle" id="id_cluster_table">
@@ -73,6 +80,9 @@
           <img src="/static/img/loading.gif" style="width:32px;height:32px;">
           {% endif %}
           {% if cluster.status == "r" %}
+          <img src="/static/img/status-ready.png" style="width:32px;height:32px;">
+          {% endif %}
+          {% if cluster.status == "v" %}
           <img src="/static/img/status-ready.png" style="width:32px;height:32px;">
           {% endif %}
           {% if cluster.status == "n" %}
