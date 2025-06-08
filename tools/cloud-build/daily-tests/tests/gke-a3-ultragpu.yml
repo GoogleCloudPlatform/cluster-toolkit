@@ -29,6 +29,7 @@ static_node_count: 2
 instance_type: a3-ultra
 accelerator_type: nvidia-h200-141gb
 num_gpus: 16
+acc_suffix: h200
 cli_deployment_vars:
   region: "{{ region }}"
   zone: "{{ zone }}"
@@ -42,3 +43,4 @@ post_deploy_tests:
 - test-validation/test-gke-job.yml
 - test-validation/test-gke-a3-ultra.yml
 - test-validation/test-gke-kueue-config.yml
+

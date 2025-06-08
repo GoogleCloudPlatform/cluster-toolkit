@@ -29,6 +29,7 @@ static_node_count: 2
 instance_type: a3-mega
 accelerator_type: nvidia-h100-mega-80gb
 num_gpus: 16
+acc_suffix: h100
 cli_deployment_vars:
   region: "{{ region }}"
   zone: "{{ zone }}"
@@ -44,3 +45,4 @@ post_deploy_tests:
 - test-validation/test-gke-job.yml
 - test-validation/test-gke-a3-mega.yml
 - test-validation/test-gke-kueue-config.yml
+
