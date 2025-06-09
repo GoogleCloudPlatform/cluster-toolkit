@@ -1,0 +1,161 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+---
+- name: database_bucket_setup
+  hosts: localhost
+  become: true
+  vars:
+    database_bucket: #hand in via command line
+    datapipeline_partition: #hand in via command line
+    af_db_mirror_bucket: alphafold-databases #do not change unless you have a different mirror
+    af_db_path: v3.0 #do not change
+    database_target_path: v3.0/uncompressed
+
+    # use in memory file system for fast cp, unzip, and untar
+    local_database_path: /dev/shm/public_databases
+
+  tasks:
+  - name: Ensure the destination directory exists
+    ansible.builtin.file:
+      path: "/opt/apps/af3/onetime"
+      state: directory
+      mode: '0755' # Or appropriate permissions for the directory
+      owner: root
+      group: root
+
+  - name: Create database fetch and preparation script
+    copy:
+      dest: "/opt/apps/af3/onetime/db_fetch_and_prepare_bucket.sh"
+      content: |
+        #!/bin/bash
+        set -e # Exit immediately if a command exits with a non-zero status.
+
+        LOCAL_DB_PATH="{{ local_database_path }}"
+        DB_BUCKET="{{ database_bucket }}"
+        DB_TARGET_PATH="{{ database_target_path }}"
+        AF_DB_MIRROR_BUCKET="{{ af_db_mirror_bucket }}"
+        AF_DB_PATH="{{ af_db_path }}"
+
+        echo "Creating temporary directory: ${LOCAL_DB_PATH}"
+        install -d "${LOCAL_DB_PATH}"
+
+        PDB_TAR_FILE_BASENAME="pdb_2022_09_28_mmcif_files.tar"
+        PDB_COMPRESSED_FILE="${PDB_TAR_FILE_BASENAME}.zst"
+        PDB_COMPRESSED_PATH="${LOCAL_DB_PATH}/${PDB_COMPRESSED_FILE}"
+        PDB_TAR_PATH="${LOCAL_DB_PATH}/${PDB_TAR_FILE_BASENAME}"
+        PDB_SOURCE_PATH="gs://${AF_DB_MIRROR_BUCKET}/${AF_DB_PATH}/${PDB_COMPRESSED_FILE}"
+
+        echo "Fetching '${PDB_COMPRESSED_FILE}' from ${PDB_SOURCE_PATH} to ${PDB_COMPRESSED_PATH}"
+        gcloud storage cp "${PDB_SOURCE_PATH}" "${PDB_COMPRESSED_PATH}"
+
+        echo "Decompressing ${PDB_COMPRESSED_PATH}"
+        unzstd -fq "${PDB_COMPRESSED_PATH}" -o "${PDB_TAR_PATH}"
+
+        echo "Untaring ${PDB_TAR_PATH}"
+        tar xf "${PDB_TAR_PATH}" -C "${LOCAL_DB_PATH}"
+
+        echo "Removing ${PDB_TAR_PATH}"
+        rm "${PDB_TAR_PATH}"
+
+        echo "Removing ${PDB_COMPRESSED_PATH}"
+        rm "${PDB_COMPRESSED_PATH}"
+
+        # Copy remaining FASTA files
+        echo "Fetching remaining FASTA files"
+        FILES=(
+            "mgy_clusters_2022_05.fa"
+            "bfd-first_non_consensus_sequences.fasta"
+            "uniref90_2022_05.fa"
+            "uniprot_all_2021_04.fa"
+            "pdb_seqres_2022_09_28.fasta"
+            "rnacentral_active_seq_id_90_cov_80_linclust.fasta"
+            "nt_rna_2023_02_23_clust_seq_id_90_cov_80_rep_seq.fasta"
+            "rfam_14_9_clust_seq_id_90_cov_80_rep_seq.fasta"
+        )
+
+        for NAME in "${FILES[@]}"; do
+          COMPRESSED_NAME="${NAME}.zst"
+          SOURCE_PATH="gs://${AF_DB_MIRROR_BUCKET}/${AF_DB_PATH}/${COMPRESSED_NAME}"
+          TMP_COMPRESSED_PATH="${LOCAL_DB_PATH}/${COMPRESSED_NAME}"
+          TMP_DECOMPRESSED_PATH="${LOCAL_DB_PATH}/${NAME}"
+
+          echo "Fetching '${NAME}' from ${SOURCE_PATH} to ${TMP_COMPRESSED_PATH}"
+          gcloud storage cp "${SOURCE_PATH}" "${TMP_COMPRESSED_PATH}"
+
+          echo "Decompressing ${TMP_COMPRESSED_PATH}"
+          # Use -f to force overwrite if destination exists, -q for quiet
+          unzstd -fq "${TMP_COMPRESSED_PATH}" -o "${TMP_DECOMPRESSED_PATH}"
+
+          echo "Cleaning up ${TMP_COMPRESSED_PATH}"
+          rm "${TMP_COMPRESSED_PATH}"
+        done
+
+        echo "Setting permissions in ${LOCAL_DB_PATH}"
+        chmod -R 0755 "${LOCAL_DB_PATH}"
+
+        TARGET_GCS_PATH="gs://${DB_BUCKET}/${DB_TARGET_PATH}"
+        echo "Copying processed files from ${LOCAL_DB_PATH} to ${TARGET_GCS_PATH}"
+
+        if [[ "${DB_TARGET_PATH}" != */ ]]; then
+            TARGET_GCS_PATH="${TARGET_GCS_PATH}/"
+        fi
+        gcloud storage cp -r "${LOCAL_DB_PATH}/"* "${TARGET_GCS_PATH}"
+
+        echo "Script finished successfully."
+      owner: root
+      group: root
+      mode: '0755' # Execute permission needed
+
+  - name: Create sbatch job file
+    copy:
+      dest: "/opt/apps/af3/onetime/db_fetch_and_prepare_bucket.job"
+      content: |
+        #!/bin/bash
+        #SBATCH --job-name=fetch_databases_and_prepare_bucket
+        #SBATCH --partition={{ datapipeline_partition }}
+        #SBATCH --output=fetch_db_out_%j.txt
+        #SBATCH --error=fetch_db_err_%j.txt
+        #SBATCH --exclusive
+        #SBATCH --mem=0
+        #SBATCH --time=01:00:00    # should not take longer than ~30min
+
+        echo "Starting database fetch script..."
+        bash /opt/apps/af3/onetime/db_fetch_and_prepare_bucket.sh
+        echo "Database fetch script finished with exit code $?."
+      owner: root
+      group: root
+      mode: '0644'
+
+  - name: hydrate running non-hydrated static node_count_static
+    copy:
+      dest: "/opt/apps/af3/onetime/hydrate_static_nodes.sh"
+      content: |
+        #!/bin/bash
+        STATIC_NODE_LIST=$(sinfo -p {{ datapipeline_partition }} -h -N -o "%N %T" | awk '$2 !~ /~$/ {print $1}' | paste -sd,)
+        NUM_NODES=$(echo "$NODE_LIST" | tr ',' '\n' | wc -l)
+
+        sbatch --partition={{ datapipeline_partition }} \
+          --nodelist="$STATIC_NODE_LIST" \
+          --nodes="$NUM_NODES" \
+          --ntasks="$NUM_NODES" \
+          --ntasks-per-node=1 \
+          --exclusive \
+          --mem=0 \
+          --job-name="fetch_install" \
+          --output="fetch_install_%j.out" \
+          --error="fetch_install_%j.err" \
+          --wrap="srun bash /tmp/hydrate_node_from_gcs.sh"
+      owner: root
+      group: root
+      mode: '0755'
