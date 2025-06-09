@@ -20,6 +20,12 @@ variable "content" {
   default     = null
 }
 
+variable "source_path" {
+  description = "The source for manifest(s) to apply to gke cluster. Acceptable sources are a local yaml or template (.tftpl) file path, a directory (ends with '/') containing yaml or template files, and a url for a yaml file."
+  type        = string
+  default     = null
+}
+
 variable "template_vars" {
   description = "The values to populate template file(s) with."
   type        = any
@@ -37,12 +43,6 @@ variable "wait_for_fields" {
   description = "(Optional) A map of attribute paths and desired patterns to be matched. After each apply the provider will wait for all attributes listed here to reach a value that matches the desired pattern."
   type        = map(string)
   default     = {}
-}
-
-variable "source_paths" {
-  description = "The source for manifest(s) to apply to gke cluster. Acceptable sources are a local yaml or template (.tftpl) file path, a directory (ends with '/') containing yaml or template files, and a url for a yaml file."
-  type        = string
-  default     = null
 }
 
 variable "resource_timeouts" {

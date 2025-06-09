@@ -12,12 +12,78 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+locals {
+  yaml_separator = "\n---"
+
+  # --- 1. Determine the primary source of YAML content ---
+  # Prioritize 'content' variable if provided
+  primary_content_body = var.content != "" ? var.content : null
+
+  # Prepare a null-safe version of var.source_path for conditional checks
+  null_safe_source_path = coalesce(var.source_path, "")
+
+  # --- 2. Handle 'source_path' based on its type (File vs. Directory) ---
+
+  # Check if source_path is a directory (indicated by trailing slash)
+  is_directory            = endswith(local.null_safe_source_path, "/")
+  directory_absolute_path = local.is_directory ? abspath(local.null_safe_source_path) : null
+
+  # Check if source_path is a single yaml or tftpl file (only if not a directory)
+  is_single_file = !local.is_directory && (
+    length(regexall("\\.yaml$", lower(local.null_safe_source_path))) > 0 ||
+    length(regexall("\\.tftpl$", lower(local.null_safe_source_path))) > 0
+  )
+  single_file_raw_content = local.is_single_file ? (
+    length(regexall("\\.tftpl$", lower(local.null_safe_source_path))) > 0 ?
+    templatefile(abspath(local.null_safe_source_path), var.template_vars) :
+    file(abspath(local.null_safe_source_path))
+  ) : null
+
+  # Docs from primary_content_body
+  docs_from_primary_source = [
+    for doc in split(local.yaml_separator, coalesce(local.primary_content_body, local.single_file_raw_content, "")) : trimspace(doc)
+    if length(trimspace(doc)) > 0
+  ]
+
+  # Docs from .yaml files in a directory
+  directory_yaml_files = local.is_directory ? fileset(local.directory_absolute_path, "*.yaml") : []
+  docs_from_directory_yamls = flatten([
+    for file_name in local.directory_yaml_files :
+    [
+      for doc in split(local.yaml_separator, file(format("%s/%s", local.directory_absolute_path, file_name))) : trimspace(doc)
+      if length(trimspace(doc)) > 0
+    ]
+  ])
+
+  # Docs from .tftpl files in a directory
+  directory_template_files = local.is_directory ? fileset(local.directory_absolute_path, "*.tftpl") : []
+  docs_from_directory_templates = flatten([
+    for file_name in local.directory_template_files :
+    [
+      for doc in split(local.yaml_separator, templatefile(format("%s/%s", local.directory_absolute_path, file_name), var.template_vars)) : trimspace(doc)
+      if length(trimspace(doc)) > 0
+    ]
+  ])
+
+  all_parsed_docs = concat(
+    local.docs_from_primary_source,
+    local.docs_from_directory_yamls,
+    local.docs_from_directory_templates
+  )
+
+  # --- 5. Create the final map for `for_each` (keys must be unique strings) ---
+  docs_map = tomap({
+    for index, doc in local.all_parsed_docs : index => doc
+    if length(trimspace(doc)) > 0
+  })
+}
+
+
 
 # Apply all manifest files dynamically
 resource "kubernetes_manifest" "apply_manifests" {
-  # Conditional logic to determine manifest content from 'content' or 'source'
-  manifest = var.source_paths != null ? yamldecode(templatefile(var.source_paths, var.template_vars)) : yamldecode(var.content)
-
+  for_each = local.docs_map
+  manifest = yamldecode(each.value)
   timeouts {
     create = var.resource_timeouts.create
     update = var.resource_timeouts.update
@@ -27,7 +93,6 @@ resource "kubernetes_manifest" "apply_manifests" {
   dynamic "wait" {
     for_each = var.wait_for_rollout ? [1] : []
     content {
-
       rollout = var.wait_for_rollout
       fields  = var.wait_for_fields
     }
