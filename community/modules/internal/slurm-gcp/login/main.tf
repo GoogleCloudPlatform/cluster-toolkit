@@ -54,6 +54,8 @@ module "template" {
   subnetwork               = var.login_nodes.subnetwork
   tags                     = concat([var.slurm_cluster_name], var.login_nodes.tags)
   termination_action       = var.login_nodes.termination_action
+
+  internal_startup_script = var.internal_startup_script
 }
 
 module "instance" {

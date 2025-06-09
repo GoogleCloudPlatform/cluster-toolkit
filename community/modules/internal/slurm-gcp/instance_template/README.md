@@ -43,6 +43,7 @@
 | <a name="input_enable_oslogin"></a> [enable\_oslogin](#input\_enable\_oslogin) | Enables Google Cloud os-login for user login and authentication for VMs.<br/>See https://cloud.google.com/compute/docs/oslogin | `bool` | `true` | no |
 | <a name="input_enable_shielded_vm"></a> [enable\_shielded\_vm](#input\_enable\_shielded\_vm) | Enable the Shielded VM configuration. Note: the instance image must support option. | `bool` | `false` | no |
 | <a name="input_gpu"></a> [gpu](#input\_gpu) | GPU information. Type and count of GPU to attach to the instance template. See<br/>https://cloud.google.com/compute/docs/gpus more details.<br/>- type : the GPU type<br/>- count : number of GPUs | <pre>object({<br/>    type  = string<br/>    count = number<br/>  })</pre> | `null` | no |
+| <a name="input_internal_startup_script"></a> [internal\_startup\_script](#input\_internal\_startup\_script) | FOR INTERNAL TOOLKIT USAGE ONLY. | `string` | `null` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels, provided as a map | `map(string)` | `{}` | no |
 | <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | Machine type to create. | `string` | `"n1-standard-1"` | no |
 | <a name="input_max_run_duration"></a> [max\_run\_duration](#input\_max\_run\_duration) | The duration (in whole seconds) of the instance. Instance will run and be terminated after then. | `number` | `null` | no |

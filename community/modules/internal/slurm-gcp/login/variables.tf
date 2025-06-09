@@ -180,3 +180,9 @@ variable "replace_trigger" {
   type        = string
   default     = ""
 }
+
+variable "internal_startup_script" {
+  description = "FOR INTERNAL TOOLKIT USAGE ONLY."
+  type        = string
+  default     = null
+}
