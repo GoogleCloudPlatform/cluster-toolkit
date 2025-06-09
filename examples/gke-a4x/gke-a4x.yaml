@@ -53,9 +53,6 @@ vars:
   # Installs NCCL library and Google NCCL plugin
   # Runs an init container on all GB200 GPU nodes with the NCCL plugin image
   nccl_rdma_installer_path: $(ghpc_stage("./nccl-rdma-installer.yaml"))
-
-  # Temporary fix for COS issue, will be fixed in next release
-  mglru_disable_path: $(ghpc_stage("./mglru-disable.yaml"))
   nvidia_dra_driver_path: $(ghpc_stage("./nvidia-dra-driver.yaml"))
   imex_path: $(ghpc_stage("./imex.yaml"))
   kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
@@ -270,7 +267,6 @@ deployment_groups:
       nvidia_dra_driver:
         install: true
       apply_manifests:
-      - source: $(vars.mglru_disable_path)
       - source: $(vars.nccl_rdma_installer_path)
       - source: $(vars.imex_path)
       - source: $(vars.nvidia_dra_driver_path)

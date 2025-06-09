@@ -30,8 +30,6 @@ vars:
   authorized_cidr:
   gcp_public_cidrs_access_enabled: false
   kueue_configuration_path: $(ghpc_stage("./dws-queues.yaml.tftpl"))
-  # Temporary fix for COS issue, will be fixed in next release
-  mglru_disable_path: $(ghpc_stage("./mglru-disable.yaml"))
   # Installs NCCL library and Google NCCL plugin
   # Runs an init container on all H200 GPU nodes with the NCCL plugin image
   nccl_installer_path: $(ghpc_stage("./nccl-installer.yaml"))
@@ -203,4 +201,3 @@ deployment_groups:
         install: true
       apply_manifests:
       - source: $(vars.nccl_installer_path)
-      - source: $(vars.mglru_disable_path)

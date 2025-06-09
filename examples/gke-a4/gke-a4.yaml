@@ -43,8 +43,6 @@ vars:
   # <reservation-name>/reservationBlocks/<reservation-block-name>
   extended_reservation:
 
-  # Temporary fix for COS issue, will be fixed in next release
-  mglru_disable_path: $(ghpc_stage("./mglru-disable.yaml"))
   kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
   gib_installer_path: $(ghpc_stage("./nccl-installer.yaml.tftpl"))
   system_node_pool_disk_size_gb: 200
@@ -247,8 +245,6 @@ deployment_groups:
         template_vars:
           version: v1.0.5
           accelerator_count: 8
-      apply_manifests:
-      - source: $(vars.mglru_disable_path)
 
   - id: job-template
     source: modules/compute/gke-job-template
