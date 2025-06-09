@@ -1,4 +1,4 @@
-# Copyright 2023 Google LLC
+# Copyright 2025 "Google LLC"
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,23 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-terraform {
-  required_version = ">= 1.0"
-  required_providers {
-    google = {
-      source  = "hashicorp/google"
-      version = ">= 4.42"
-    }
-    kubectl = {
-      source  = "gavinbunney/kubectl"
-      version = ">= 1.7.0"
-    }
-    local = {
-      source  = "hashicorp/local"
-      version = ">= 2.0.0"
-    }
-  }
-  provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:gke-persistent-volume/v1.53.0"
-  }
-}
+class ExternalDeployment:
+    def __init__(self, *, project_id: str, zone: str, username: str, deployment_name: str) -> None:
+        self.project_id = project_id
+        self.zone = zone
+        self.username = username
+        self.deployment_name = deployment_name
+
+    def deploy(self) -> None:
+        pass
+
+    def destroy(self) -> None:
+        pass
+    

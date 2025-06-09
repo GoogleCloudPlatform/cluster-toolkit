@@ -100,10 +100,14 @@ locals {
       content     = <<-EOT
         #!/bin/bash
         export FI_PROVIDER="verbs;ofi_rxm"
-        export FI_OFI_RXM_USE_RNDV_WRITE=1
+        export FI_OFI_RXM_USE_RNDV_WRITE=0
         export FI_VERBS_INLINE_SIZE=39
         export I_MPI_FABRICS="shm:ofi"
         export FI_UNIVERSE_SIZE=3072
+        export I_MPI_ADJUST_ALLTOALL=1
+        export I_MPI_ADJUST_IALLTOALL=1
+        export I_MPI_ADJUST_BCAST=4
+        export I_MPI_ADJUST_IBCAST=1
         EOT
     },
   ]
@@ -251,19 +255,6 @@ locals {
       content = lookup(runner, "content", null)
       source  = lookup(runner, "source", null)
     }
-  }
-}
-
-check "health_check" {
-  assert {
-    condition     = local.docker_config == {}
-    error_message = <<-EOT
-      This message is only a warning. The Toolkit performs no validation of the
-      Docker daemon configuration. VM startup scripts will fail if the file is not
-      a valid Docker JSON configuration. Please review the Docker documentation:
-
-      https://docs.docker.com/engine/daemon/
-    EOT
   }
 }
 

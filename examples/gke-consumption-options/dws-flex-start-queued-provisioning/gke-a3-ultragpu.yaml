@@ -22,9 +22,9 @@ vars:
   region:
   zone:
   # Enable DWS Flex Start.
-  enable_flex_start:
+  enable_flex_start: true
   # Enable queued provisioning.
-  enable_queued_provisioning:
+  enable_queued_provisioning: true
   # Cidr block containing the IP of the machine calling terraform.
   # The following line must be updated for this example to work.
   authorized_cidr:

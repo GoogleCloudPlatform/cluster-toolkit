@@ -41,18 +41,12 @@ deployment_groups:
       network_routing_mode: REGIONAL
       enable_cloud_router: false
       enable_cloud_nat: false
+      enable_internal_traffic: false
       subnetworks:
       - subnet_name: $(vars.deployment_name)-rdma-sub-0
         subnet_region: $(vars.region)
         subnet_ip: $(vars.rdma_net_range)
         region: $(vars.region)
-      firewall_rules:
-      - name: $(vars.deployment_name)-rdma-0
-        ranges: [$(vars.rdma_net_range)]
-        allow:
-        - protocol: tcp
-        - protocol: udp
-        - protocol: icmp
 
   - id: homefs
     source: modules/file-system/filestore
