@@ -39,9 +39,9 @@ vars:
 
   # The name of the compute engine reservation in the form of
   # <reservation-name>
-  # In order to target a BLOCK_NAME, extended_reservation can be inputted as
-  # <reservation-name>/reservationBlocks/<reservation-block-name>
-  extended_reservation:
+  # To target a BLOCK_NAME, the name of the extended reservation
+  # can be inputted as <reservation-name>/reservationBlocks/<reservation-block-name>
+  reservation:
 
   kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
   gib_installer_path: $(ghpc_stage("./nccl-installer.yaml.tftpl"))
@@ -207,7 +207,7 @@ deployment_groups:
       reservation_affinity:
         consume_reservation_type: SPECIFIC_RESERVATION
         specific_reservations:
-        - name: $(vars.extended_reservation)
+        - name: $(vars.reservation)
       additional_networks:
         $(concat(
           [{

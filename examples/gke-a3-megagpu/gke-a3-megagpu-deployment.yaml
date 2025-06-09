@@ -42,6 +42,6 @@ vars:
 
   # The name of the compute engine reservation in the form of
   # <reservation-name>
-  # In order to target a BLOCK_NAME, extended_reservation can be inputted as
-  # <reservation-name>/reservationBlocks/<reservation-block-name>
-  extended_reservation: RESERVATION_NAME
+  # To target a BLOCK_NAME, the name of the extended reservation
+  # can be inputted as <reservation-name>/reservationBlocks/<reservation-block-name>
+  reservation: RESERVATION_NAME
