@@ -19,24 +19,21 @@ locals {
   # Prioritize 'content' variable if provided
   primary_content_body = var.content != "" ? var.content : null
 
-  # Prepare a null-safe version of var.source_path for conditional checks
-  null_safe_source_path = coalesce(var.source_path, "")
-
   # --- 2. Handle 'source_path' based on its type (File vs. Directory) ---
 
   # Check if source_path is a directory (indicated by trailing slash)
-  is_directory            = endswith(local.null_safe_source_path, "/")
-  directory_absolute_path = local.is_directory ? abspath(local.null_safe_source_path) : null
+  is_directory            = endswith(var.source_path, "/")
+  directory_absolute_path = local.is_directory ? abspath(var.source_path) : null
 
   # Check if source_path is a single yaml or tftpl file (only if not a directory)
   is_single_file = !local.is_directory && (
-    length(regexall("\\.yaml$", lower(local.null_safe_source_path))) > 0 ||
-    length(regexall("\\.tftpl$", lower(local.null_safe_source_path))) > 0
+    length(regexall("\\.yaml$", lower(var.source_path))) > 0 ||
+    length(regexall("\\.tftpl$", lower(var.source_path))) > 0
   )
   single_file_raw_content = local.is_single_file ? (
-    length(regexall("\\.tftpl$", lower(local.null_safe_source_path))) > 0 ?
-    templatefile(abspath(local.null_safe_source_path), var.template_vars) :
-    file(abspath(local.null_safe_source_path))
+    length(regexall("\\.tftpl$", lower(var.source_path))) > 0 ?
+    templatefile(abspath(var.source_path), var.template_vars) :
+    file(abspath(var.source_path))
   ) : null
 
   # Docs from primary_content_body
@@ -78,8 +75,6 @@ locals {
   })
 }
 
-
-
 # Apply all manifest files dynamically
 resource "kubernetes_manifest" "apply_manifests" {
   for_each = local.docs_map
@@ -106,5 +101,4 @@ resource "kubernetes_manifest" "apply_manifests" {
       force_conflicts = field_manager.value.force_conflicts
     }
   }
-
 }

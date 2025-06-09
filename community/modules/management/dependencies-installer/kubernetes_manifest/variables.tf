@@ -23,7 +23,7 @@ variable "content" {
 variable "source_path" {
   description = "The source for manifest(s) to apply to gke cluster. Acceptable sources are a local yaml or template (.tftpl) file path, a directory (ends with '/') containing yaml or template files, and a url for a yaml file."
   type        = string
-  default     = null
+  default     = ""
 }
 
 variable "template_vars" {

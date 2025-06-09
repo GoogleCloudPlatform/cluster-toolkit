@@ -13,12 +13,12 @@
 # limitations under the License.
 
 terraform {
-  required_version = ">= 1.0.0"
   # Defines the providers that this module depends on and their versions.
   required_providers {
     kubernetes = {
       source  = "hashicorp/kubernetes"
-      version = "~> 2.23" #
+      version = "~> 2.23"
     }
   }
+  required_version = ">= 1.3"
 }
