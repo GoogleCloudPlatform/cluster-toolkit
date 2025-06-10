@@ -12,6 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+data "local_file" "login_startup" {
+  filename = "${path.module}/files/login_startup.sh"
+}
 
 locals {
   # TODO: deprecate `var.login_[ startup_script, startup_scripts_timeout, network_storage]`
@@ -47,4 +50,6 @@ module "login" {
   # trigger replacement of login nodes when the controller instance is replaced
   # Needed for re-mounting volumes hosted on controller
   replace_trigger = google_compute_instance_from_template.controller.self_link
+
+  internal_startup_script = data.local_file.login_startup.content
 }
