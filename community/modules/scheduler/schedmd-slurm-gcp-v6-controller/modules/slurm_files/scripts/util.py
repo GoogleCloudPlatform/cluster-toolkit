@@ -14,8 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from importlib import metadata
-from typing import Iterable, List, Tuple, Optional, Any, Dict, Sequence, Type, Callable, Literal
+from typing import Iterable, List, Tuple, Optional, Any, Dict, Sequence, Type, Callable, Union
 import argparse
 import base64
 from dataclasses import dataclass, field
@@ -34,7 +33,6 @@ import shutil
 import socket
 import subprocess
 import sys
-import tempfile
 from enum import Enum
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -58,8 +56,7 @@ import httplib2
 
 import google.api_core.exceptions as gExceptions
 
-from requests import get as get_url
-from requests.exceptions import RequestException
+import requests as requests_lib
 
 import yaml
 from addict import Dict as NSDict # type: ignore
@@ -93,6 +90,7 @@ dirs = NSDict(
     munge = Path("/etc/munge"),
     secdisk = Path("/mnt/disks/sec"),
     log = Path("/var/log/slurm"),
+    slurm_bucket_mount = Path("/slurm/bucket"),
 )
 
 slurmdirs = NSDict(
@@ -427,6 +425,13 @@ def map_with_futures(func, seq):
             except Exception as e:
                 res = e
             yield res
+
+def should_mount_slurm_bucket() -> bool:
+    try:
+        return instance_metadata("attributes/slurm_bucket_mount").lower() == "true"
+    except MetadataNotFoundError:
+        return False
+
 
 def _get_bucket_and_common_prefix() -> Tuple[str, str]:
     uri = instance_metadata("attributes/slurm_bucket_path")
@@ -1066,18 +1071,20 @@ def backoff_delay(start, timeout=None, ratio=None, count: int = 0):
 
 ROOT_URL = "http://metadata.google.internal/computeMetadata/v1"
 
+class MetadataNotFoundError(Exception):
+    pass
 
 def get_metadata(path, root=ROOT_URL):
     """Get metadata relative to metadata/computeMetadata/v1"""
     HEADERS = {"Metadata-Flavor": "Google"}
     url = f"{root}/{path}"
     try:
-        resp = get_url(url, headers=HEADERS)
+        resp = requests_lib.get(url, headers=HEADERS)
         resp.raise_for_status()
         return resp.text
-    except RequestException:
-        log.debug(f"metadata not found ({url})")
-        raise Exception(f"failed to get_metadata from {url}")
+    except requests_lib.exceptions.HTTPError:
+        log.exception(f"metadata not found ({url})")
+        raise MetadataNotFoundError(f"failed to get_metadata from {url}")
 
 
 @lru_cache(maxsize=None)
@@ -1925,10 +1932,16 @@ class Lookup:
     def etc_dir(self) -> Path:
         return Path(self.cfg.output_dir or slurmdirs.etc)
 
-    def normalize_ns_mount(self, ns: Dict[str, str]) -> NSMount:
+    def controller_mount_server_ip(self) -> str:
+        return self.control_addr or self.control_host
+
+    def normalize_ns_mount(self, ns: Union[dict, NSMount]) -> NSMount:
+        if isinstance(ns, NSMount):
+            return ns
+
         server_ip = ns.get("server_ip") or "$controller"
         if server_ip == "$controller":
-            server_ip = self.control_addr or self.control_host
+            server_ip = self.controller_mount_server_ip()
 
         return NSMount(
             server_ip=server_ip,
@@ -1943,30 +1956,30 @@ class Lookup:
         if self.cfg.munge_mount:
             mnt = self.cfg.munge_mount
             mnt.local_mount = mnt.local_mount or "/mnt/munge"
+            return self.normalize_ns_mount(mnt)
         else:
-            mnt = NSDict(
-                server_ip="$controller",
-                local_mount="/mnt/munge",
+            return NSMount(
+                server_ip=self.controller_mount_server_ip(),
+                local_mount=Path("/mnt/munge"),
                 remote_mount=dirs.munge,
                 fs_type="nfs",
                 mount_options="defaults,hard,intr,_netdev",
             )
-        return self.normalize_ns_mount(mnt)
 
     @property
     def slurm_key_mount(self) -> NSMount:
         if self.cfg.slurm_key_mount:
             mnt = self.cfg.slurm_key_mount
             mnt.local_mount = mnt.local_mount or slurmdirs.key_distribution
+            return self.normalize_ns_mount(mnt)
         else:
-            mnt = NSDict(
-                server_ip="$controller",
+            return NSMount(
+                server_ip=self.controller_mount_server_ip(),
                 local_mount=slurmdirs.key_distribution,
                 remote_mount=slurmdirs.key_distribution,
                 fs_type="nfs",
                 mount_options="defaults,hard,intr,_netdev",
             )
-        return self.normalize_ns_mount(mnt)
 
     def is_flex_node(self, node: str) -> bool:
         try:
