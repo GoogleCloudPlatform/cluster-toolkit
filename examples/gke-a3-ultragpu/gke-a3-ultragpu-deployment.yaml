@@ -28,9 +28,9 @@ vars:
   authorized_cidr: IP_ADDRESS/SUFFIX
   # The name of the compute engine reservation in the form of
   # <reservation-name>
-  # In order to target a BLOCK_NAME, extended_reservation can be inputted as
-  # <reservation-name>/reservationBlocks/<reservation-block-name>
-  extended_reservation: RESERVATION_NAME
+  # To target a BLOCK_NAME, the name of the extended reservation
+  # can be inputted as <reservation-name>/reservationBlocks/<reservation-block-name>
+  reservation: RESERVATION_NAME
   static_node_count: NODE_COUNT
   system_node_pool_disk_size_gb: SYSTEM_NODE_POOL_DISK_SIZE_GB # the size of
   # disk for each node of the system node pool.

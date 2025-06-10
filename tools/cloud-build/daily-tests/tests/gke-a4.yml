@@ -34,7 +34,7 @@ cli_deployment_vars:
   region: "{{ region }}"
   zone: "{{ zone }}"
   static_node_count: "{{ static_node_count }}"
-  extended_reservation: "{{ extended_reservation }}"
+  reservation: "{{ extended_reservation }}"
   authorized_cidr: "{{ build_ip.stdout }}/32"
   gcp_public_cidrs_access_enabled: true
   k8s_service_account_name: "{{ k8s_service_account_name}}"

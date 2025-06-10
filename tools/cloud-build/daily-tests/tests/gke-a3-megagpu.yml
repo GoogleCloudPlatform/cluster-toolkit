@@ -33,7 +33,7 @@ cli_deployment_vars:
   region: "{{ region }}"
   zone: "{{ zone }}"
   static_node_count: "{{ static_node_count }}"
-  extended_reservation: "{{ extended_reservation }}"
+  reservation: "{{ extended_reservation }}"
   authorized_cidr: "{{ build_ip.stdout }}/32"
   network_name: "{{ network }}"
   local_ssd_count_nvme_block: 16

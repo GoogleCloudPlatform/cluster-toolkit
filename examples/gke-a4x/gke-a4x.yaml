@@ -44,9 +44,9 @@ vars:
 
   # The name of the compute engine reservation of A4X nodes in the form of
   # <project>/<reservation-name>
-  # In order to target a BLOCK_NAME, extended_reservation can be inputted as
-  # <project>/<reservation-name>/reservationBlocks/<reservation-block-name>
-  extended_reservation:
+  # To target a BLOCK_NAME, the name of the extended reservation
+  # can be inputted as <reservation-name>/reservationBlocks/<reservation-block-name>
+  reservation:
   compute_nodepool_machine_type: a4x-highgpu-4g-nolssd
   system_nodepool_machine_type: e2-standard-16
 
@@ -233,7 +233,7 @@ deployment_groups:
       reservation_affinity:
         consume_reservation_type: SPECIFIC_RESERVATION
         specific_reservations:
-        - name: $(vars.extended_reservation)
+        - name: $(vars.reservation)
       additional_networks:
         $(concat(
           [{
