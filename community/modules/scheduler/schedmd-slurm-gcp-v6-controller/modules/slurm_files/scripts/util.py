@@ -452,6 +452,16 @@ def blob_list(prefix="", delimiter=None):
     )
     return [blob for blob in blobs]
 
+def file_list(prefix="", subpath="") -> List[os.DirEntry]:
+    path = dirs.slurm_bucket_mount
+    file_prefix = f"{path}/{subpath}"
+    try:
+        files = os.scandir(file_prefix)
+        return [file for file in files if file.name.startswith(prefix)]
+    except:
+        return [] 
+     # Not considering lack of file's existence as fatal (we may check for files we know don't exist).
+     # Responsibility of callee to determine if it is fatal or not, blob_list returns empty iterator in similar cases.
 
 def hash_file(fullpath: Path) -> str:
     with open(fullpath, "rb") as f:
@@ -463,9 +473,14 @@ def hash_file(fullpath: Path) -> str:
     return base64.b64encode(file_hash.digest()).decode("utf-8")
 
 
-def install_custom_scripts(check_hash=False):
+def install_custom_scripts(check_hash:bool=False):
     """download custom scripts from gcs bucket"""
     role, tokens = lookup().instance_role, []
+
+    mounted_scripts=False
+    if should_mount_slurm_bucket() and role != "controller":
+        mounted_scripts=True
+
     all_prolog_tokens = ["prolog", "epilog", "task_prolog", "task_epilog"]
     if role == "controller":
         tokens = ["controller"] + all_prolog_tokens
@@ -477,13 +492,20 @@ def install_custom_scripts(check_hash=False):
     prefixes = [f"slurm-{tok}-script" for tok in tokens]
 
     # TODO: use single `blob_list`, to reduce ~4x number of GCS requests
-    blobs = list(chain.from_iterable(blob_list(prefix=p) for p in prefixes))
+    if mounted_scripts:
+        source_collection = list(chain.from_iterable(file_list(prefix=p) for p in prefixes))
+    else:
+        source_collection = list(chain.from_iterable(blob_list(prefix=p) for p in prefixes))
 
-    script_pattern = re.compile(r"slurm-(?P<path>\S+)-script-(?P<name>\S+)")
-    for blob in blobs:
-        m = script_pattern.match(Path(blob.name).name)
+    script_pattern = re.compile(r"^slurm-(?P<path>\S+)-script-(?P<name>\S+)")
+    for source in source_collection:
+        if mounted_scripts:
+            m = script_pattern.match(source.name)
+        else:
+            m = script_pattern.match(Path(source.name).name)
+
         if not m:
-            log.warning(f"found blob that doesn't match expected pattern: {blob.name}")
+            log.warning(f"found blob that doesn't match expected pattern: {source.name}")
             continue
         path_parts = m["path"].split("-")
         path_parts[0] += ".d"
@@ -497,14 +519,21 @@ def install_custom_scripts(check_hash=False):
         for par in path.parents:
             chown_slurm(dirs.custom_scripts / par)
         need_update = True
-        if check_hash and fullpath.exists():
+
+        if check_hash and fullpath.exists() and isinstance(source,storage.Blob):
             # TODO: MD5 reported by gcloud may differ from the one calculated here (e.g. if blob got gzipped),
             # consider using gCRC32C
-            need_update = hash_file(fullpath) != blob.md5_hash
-        if need_update:
-            log.info(f"installing custom script: {path} from {blob.name}")
+            need_update = hash_file(fullpath) != source.md5_hash
+
+        log.info(f"installing custom script: {path} from {source.name}")
+
+        if isinstance(source,os.DirEntry):
+            shutil.copy(source.path, fullpath) #Needs to be copied since mounted nfs is read-only
+            chown_slurm(fullpath, mode=0o755)
+
+        elif need_update:
             with fullpath.open("wb") as f:
-                blob.download_to_file(f)
+                source.download_to_file(f)
             chown_slurm(fullpath, mode=0o755)
 
 def compute_service(version="beta"):
@@ -591,6 +620,19 @@ class _ConfigBlobs:
             h.update(blob.md5_hash.encode("utf-8"))
         return h.hexdigest()
 
+@dataclass
+class _ConfigFiles:
+    """
+    "Private" class that represent a collection of files for configuration
+    """
+    core: Path
+    controller_addr: Optional[Path]
+    partition: List[Path] = field(default_factory=list)
+    nodeset: List[Path] = field(default_factory=list)
+    nodeset_dyn: List[Path] = field(default_factory=list)
+    nodeset_tpu: List[Path] = field(default_factory=list)
+    login_group: List[Path] = field(default_factory=list)
+
 def _list_config_blobs() -> _ConfigBlobs:
     _, common_prefix = _get_bucket_and_common_prefix()
 
@@ -619,6 +661,24 @@ def _list_config_blobs() -> _ConfigBlobs:
     
     return _ConfigBlobs(core=core, controller_addr=controller_addr, **rest)
 
+def _list_config_files() -> _ConfigFiles:
+    file_dir = dirs.slurm_bucket_mount
+    core: Optional[Path] = None
+    controller_addr: Optional[Path] = None
+    rest: Dict[str, List[Path]] = {"partition": [], "nodeset": [], "nodeset_dyn": [], "nodeset_tpu": [], "login_group": []}
+
+    if Path(f"{file_dir}/config.yaml").exists():
+        core = Path(f"{file_dir}/config.yaml")
+
+    for key in rest.keys():
+        for f in file_list(subpath=f"{key}_configs"):
+            rest[key].append(f.path)
+
+    if core is None:
+        raise Exception(f"config.yaml was not found in mounted folder: {dirs.slurm_bucket_mount}") #Intentionally not using DeffetiveStoredConfigError as this is considered a fatal error
+    
+    return _ConfigFiles(core=core, controller_addr=None, **rest)
+
 def _fetch_config(old_hash: Optional[str]) -> Optional[Tuple[NSDict, str]]:
     """Fetch config from bucket, returns None if no changes are detected."""
     blobs = _list_config_blobs()
@@ -638,6 +698,28 @@ def _fetch_config(old_hash: Optional[str]) -> Optional[Tuple[NSDict, str]]:
         login_groups=_download(blobs.login_group),
     ), blobs.hash
 
+def _fetch_mounted_config() -> Optional[Tuple[NSDict, str]]:
+    if not dirs.slurm_bucket_mount.is_mount():
+        raise Exception(f"{dirs.slurm_bucket_mount} is not mounted")
+
+    files = _list_config_files()
+
+    def _load(files) -> List[Any]:
+        file_yaml=[]
+        for file in files:
+            with open(file, "r") as f:
+                file_yaml.append(yaml.safe_load(f))
+        return file_yaml
+
+    return _assemble_config(
+        core=_load([files.core])[0],
+        controller_addr=None,
+        partitions=_load(files.partition),
+        nodesets=_load(files.nodeset),
+        nodesets_dyn=_load(files.nodeset_dyn),
+        nodesets_tpu=_load(files.nodeset_tpu),
+        login_groups=_load(files.login_group),
+    )
 
 def controller_lookup_self_ip() -> str:
     assert instance_role() == "controller"
@@ -717,8 +799,15 @@ def fetch_config() -> Tuple[bool, NSDict]:
     """
     hash_file = Path("/slurm/scripts/.config.hash")
     old_hash = hash_file.read_text() if hash_file.exists() else None
-
+    
+    if should_mount_slurm_bucket() and instance_role() != "controller":
+        cfg = _fetch_mounted_config()
+        CONFIG_FILE.write_text(yaml.dump(cfg, Dumper=Dumper))
+        chown_slurm(CONFIG_FILE)
+        return False, cfg
+    
     cfg_and_hash = _fetch_config(old_hash=old_hash)
+    
     if not cfg_and_hash:
         return False, _load_config()
 
