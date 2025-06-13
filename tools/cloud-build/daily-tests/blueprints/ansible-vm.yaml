@@ -59,18 +59,6 @@ deployment_groups:
           set -ex
           echo \$(ansible --version)
 
-  - id: workstation-ubuntu-2004
-    source: modules/compute/vm-instance
-    use:
-    - network1
-    - startup-script-u20
-    settings:
-      name_prefix: ubuntu2004
-      add_deployment_name_before_prefix: true
-      instance_image:
-        family: ubuntu-2004-lts
-        project: ubuntu-os-cloud
-
   - id: workstation-ubuntu-2204
     source: modules/compute/vm-instance
     use:
@@ -185,7 +173,6 @@ deployment_groups:
     source: community/modules/scripts/wait-for-startup
     settings:
       instance_names:
-      - $(workstation-ubuntu-2004.name[0])
       - $(workstation-ubuntu-2204.name[0])
       - $(workstation-ubuntu-2404.name[0])
       - $(workstation-ubuntu-2404-arm.name[0])
