@@ -1,0 +1,225 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+---
+- name: af3-ipynb-setup-config
+  hosts: localhost
+  become: true
+  vars:
+    # variables set in af3-slurm-deployment.yaml
+    project_id:
+    slurm_rest_server_activate:
+    service_user:
+    af3ipynb_bucket:
+    slurm_rest_token_secret_name:
+    slurm_rest_api_port:
+    sif_dir:
+    model_dir:
+    db_dir:
+    pdb_database_path:
+    jax_compilation_cache_path:
+    af3ipynb_bucket_local_mount:
+    inference_enable_unified_memory:
+    slurm_rest_info_path:
+
+    # Default Datapipeline Partition Config
+    default_datapipeline_partition_name:
+    default_datapipeline_timeout:
+
+    # Default Inference Partition Config
+    default_inference_partition_name:
+    default_inference_timeout:
+
+    # Configuration info for each partition
+    datapipeline_c3dhm_partition_name:
+    datapipeline_c3dhm_partition_machine_type:
+    datapipeline_c3dhm_partition_memory:
+    datapipeline_c3dhm_partition_cpu_count:
+    inference_g2_partition_name:
+    inference_g2_partition_machine_type:
+    inference_g2_partition_memory:
+    inference_g2_partition_cpu_count:
+    inference_a2_partition_name:
+    inference_a2_partition_machine_type:
+    inference_a2_partition_memory:
+    inference_a2_partition_cpu_count:
+    inference_a2u_partition_name:
+    inference_a2u_partition_machine_type:
+    inference_a2u_partition_memory:
+    inference_a2u_partition_cpu_count:
+
+    # AF3 Science Settings
+    max_template_date:
+    conformer_max_iterations:
+    num_recycles:
+    num_diffusion_samples:
+    num_seeds:
+    save_embeddings:
+
+    # fixed variables, not intended to be modified
+    af3_job_template_jupyter_path: "{{ af3ipynb_bucket_local_mount }}/libs/rest_api_launch_af3_job.sh.j2"
+    slurm_info_json_path: "{{ af3ipynb_bucket_local_mount }}/libs/slurm_info.json"
+    ipynb_setup_folder: "/home/{{ service_user }}/ipynb_setup"
+    slurm_node_working_directory: "/home/{{ service_user }}"
+
+  tasks:
+  - name: Upload files to AF3 Ipynb if bucket is defined and not empty
+    when: af3ipynb_bucket is defined and af3ipynb_bucket | length > 0
+    block:
+    - name: Ensure a directory exists
+      ansible.builtin.file:
+        path: "{{ ipynb_setup_folder }}/libs"
+        state: directory
+        mode: '0777'
+        owner: root
+        group: root
+      register: create_folder
+
+    - name: Copy rest_api_launch_af3_job.sh.j2
+      ansible.builtin.copy:
+        src: /tmp/rest_api_launch_af3_job.sh.j2
+        dest: "{{ ipynb_setup_folder }}/libs/rest_api_launch_af3_job.sh.j2"
+      register: copy_launch_script
+      ignore_errors: true
+
+    - name: Copy notebook-requirements.txt
+      ansible.builtin.copy:
+        src: /tmp/notebook-requirements.txt
+        dest: "{{ ipynb_setup_folder }}/libs/notebook-requirements.txt"
+      register: copy_requirements
+      ignore_errors: true
+
+    - name: Copy visualization.py
+      ansible.builtin.copy:
+        src: /tmp/visualization.py
+        dest: "{{ ipynb_setup_folder }}/libs/visualization.py"
+      register: copy_visualization
+      ignore_errors: true
+
+    - name: Render slurm_client.py from template locally
+      ansible.builtin.template:
+        src: /tmp/slurm_client.py.j2
+        dest: "{{ ipynb_setup_folder }}/libs/slurm_client.py"
+      register: copy_slurm_client
+      ignore_errors: true
+
+    - name: Render Jupyter Notebook locally
+      ansible.builtin.template:
+        src: /tmp/slurm-rest-api-notebook.ipynb.j2
+        dest: "{{ ipynb_setup_folder }}/slurm-rest-api-notebook.ipynb"
+      register: copy_notebook
+      ignore_errors: true
+
+    - name: Create empty __init__.py file
+      ansible.builtin.file:
+        path: "{{ ipynb_setup_folder }}/libs/__init__.py"
+        state: touch
+        mode: "0644"
+        owner: root
+        group: root
+      register: copy_init
+      ignore_errors: true
+
+    - name: Copy ipynb-upload-config.yml
+      ansible.builtin.copy:
+        src: /tmp/ipynb-upload-config.yml
+        dest: "{{ ipynb_setup_folder }}/ipynb-upload-config.yml"
+      register: copy_ipynb_upload_config
+      ignore_errors: true
+
+    - name: Dump all vars to a YAML file
+      ansible.builtin.copy:
+        dest: "{{ ipynb_setup_folder }}/ipynb-config-vars.yml"
+        mode: '0777'
+        content: |
+          {{ vars | dict2items
+                  | selectattr('key', 'in', [
+                      'project_id',
+                      'slurm_rest_server_activate',
+                      'service_user',
+                      'af3ipynb_bucket',
+                      'slurm_rest_token_secret_name',
+                      'slurm_rest_api_port',
+                      'sif_dir',
+                      'model_dir',
+                      'db_dir',
+                      'pdb_database_path',
+                      'jax_compilation_cache_path',
+                      'af3ipynb_bucket_local_mount',
+                      'inference_enable_unified_memory',
+                      'default_datapipeline_partition_name',
+                      'default_datapipeline_timeout',
+                      'default_inference_partition_name',
+                      'default_inference_timeout',
+                      'datapipeline_c3dhm_partition_name',
+                      'datapipeline_c3dhm_partition_machine_type',
+                      'datapipeline_c3dhm_partition_memory',
+                      'datapipeline_c3dhm_partition_cpu_count',
+                      'inference_g2_partition_name',
+                      'inference_g2_partition_machine_type',
+                      'inference_g2_partition_memory',
+                      'inference_g2_partition_cpu_count',
+                      'inference_a2_partition_name',
+                      'inference_a2_partition_machine_type',
+                      'inference_a2_partition_memory',
+                      'inference_a2_partition_cpu_count',
+                      'inference_a2u_partition_name',
+                      'inference_a2u_partition_machine_type',
+                      'inference_a2u_partition_memory',
+                      'inference_a2u_partition_cpu_count',
+                      'max_template_date',
+                      'conformer_max_iterations',
+                      'num_recycles',
+                      'num_diffusion_samples',
+                      'num_seeds',
+                      'save_embeddings',
+                      'af3_job_template_jupyter_path',
+                      'slurm_info_json_path',
+                      'ipynb_setup_folder',
+                      'slurm_rest_info_path',
+                  ])
+                  | items2dict
+                  | to_nice_yaml(indent=2, sort_keys=False)
+          }}
+
+    # ==========================
+    # Upload Failure Reporting
+    # ==========================
+    - name: Set fact for failed uploads
+      set_fact:
+        failed_copies: >-
+          {{
+            [
+              {'name': 'rest_api_launch_af3_job.sh.j2', 'result': copy_launch_script},
+              {'name': 'notebook-requirements.txt', 'result': copy_requirements},
+              {'name': 'visualization.py', 'result': copy_visualization},
+              {'name': 'slurm_client.py', 'result': copy_slurm_client},
+              {'name': 'slurm-rest-api-notebook.ipynb', 'result': copy_notebook},
+              {'name': '__init__.py', 'result': copy_init},
+              {'name': 'ipynb-upload-config.yml', 'result': copy_ipynb_upload_config},
+            ] | selectattr('result.failed', 'defined') | selectattr('result.failed') | list
+          }}
+
+    - name: Print list of failed uploads
+      ansible.builtin.debug:
+        msg: >
+          The following file copies failed:
+          {% for item in failed_copies %}
+            - {{ item.name }}
+          {% endfor %}
+      when: failed_copies | length > 0
+
+    - name: Fail the play if any copies failed
+      ansible.builtin.fail:
+        msg: "One or more file copies failed."
+      when: failed_copies | length > 0
