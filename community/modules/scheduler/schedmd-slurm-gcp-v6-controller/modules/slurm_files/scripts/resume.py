@@ -67,9 +67,10 @@ class ResumeJobData:
 class ResumeData:
     jobs: List[ResumeJobData]
 
-def get_resume_file_data() -> Optional[ResumeData]:
-    if not (path := os.getenv("SLURM_RESUME_FILE")):
-        log.error("SLURM_RESUME_FILE was not in environment. Cannot get detailed job, node, partition allocation data.")
+def get_resume_file_data(resume_file_path: Optional[str] = None) -> Optional[ResumeData]:
+    path = resume_file_path or os.getenv("SLURM_RESUME_FILE")
+    if not path:
+        log.error("Resume data file was not provided via --resume-file and SLURM_RESUME_FILE was not in environment. Cannot get detailed job, node, partition allocation data.")
         return None
     blob = Path(path).read_text()
     log.debug(f"Resume data: {blob}")
@@ -77,7 +78,6 @@ def get_resume_file_data() -> Optional[ResumeData]:
 
     jobs = []
     for jo in data.get("jobs", []):
-
         job = ResumeJobData(
             job_id = jo.get("job_id"),
             partition = jo.get("partition"),
@@ -181,7 +181,7 @@ def create_instances_request(nodes: List[str], placement_group: Optional[str], e
         ),
     )
 
-    if placement_group:
+    if placement_group and excl_job_id is not None:
         pass # do not set minCount to force "all or nothing" behavior
     else:
         body["minCount"] = 1
@@ -638,7 +638,7 @@ def valid_placement_node(node: str) -> bool:
     return True
 
 
-def main(nodelist: str) -> None:
+def main(nodelist: str, resume_file: Optional[str] = None) -> None:
     """main called when run as script"""
     log.debug(f"ResumeProgram {nodelist}")
     # Filter out nodes not in config.yaml
@@ -653,13 +653,13 @@ def main(nodelist: str) -> None:
     if not nodes:
         log.info("No nodes to resume")
         return
-
-    resume_data = get_resume_file_data()
+    resume_data = get_resume_file_data(resume_file)
     log.info(f"resume {util.to_hostlist(nodes)}")
     resume_nodes(nodes, resume_data)
-    
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("nodelist", help="list of nodes to resume")
+    parser.add_argument("--resume-file", help="Path to a persistent copy of the Slurm resume data file.")
     args = util.init_log_and_parse(parser)
-    main(args.nodelist)
+    main(args.nodelist, args.resume_file)
