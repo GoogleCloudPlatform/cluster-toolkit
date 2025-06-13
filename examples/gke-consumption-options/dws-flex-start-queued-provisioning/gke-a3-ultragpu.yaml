@@ -33,7 +33,7 @@ vars:
   # Installs NCCL library and Google NCCL plugin
   # Runs an init container on all H200 GPU nodes with the NCCL plugin image
   nccl_installer_path: $(ghpc_stage("./nccl-installer.yaml"))
-  static_gpu_count: 512
+  gpu_nominal_quota: 512
   system_node_pool_disk_size_gb: 100
   a3ultra_node_pool_disk_size_gb: 100
 
@@ -196,7 +196,7 @@ deployment_groups:
         install: true
         config_path: $(vars.kueue_configuration_path)
         config_template_vars:
-          num_gpus: $(vars.static_gpu_count)
+          num_gpus: $(vars.gpu_nominal_quota)
       jobset:
         install: true
       apply_manifests:
