@@ -15,7 +15,6 @@
 locals {
   # This label allows for billing report tracking based on module.
   labels = merge(var.labels, { ghpc_module = "schedmd-slurm-gcp-v6-nodeset-dynamic", ghpc_role = "compute" })
-  placement_policy_name = coalesce(var.placement_policy_name, format("%s-%s-compact-policy", var.slurm_cluster_name, local.nodeset_name))
 }
 
 module "gpu" {
@@ -26,7 +25,8 @@ module "gpu" {
 }
 
 locals {
-  guest_accelerator = module.gpu.guest_accelerator
+  placement_policy_name = coalesce(var.placement_policy_name, format("%s-%s-compact-policy", var.slurm_cluster_name, local.nodeset_name))
+  guest_accelerator     = module.gpu.guest_accelerator
 
   nodeset_name = substr(replace(var.name, "/[^a-z0-9]/", ""), 0, 14)
   feature      = coalesce(var.feature, local.nodeset_name)
@@ -130,9 +130,9 @@ module "slurm_nodeset_template" {
   source_image_project = local.source_image_project_normalized # requires source_image_logic.tf
   source_image         = local.source_image                    # requires source_image_logic.tf
 
-  subnetwork          = var.subnetwork_self_link
-  additional_networks = var.additional_networks
-  access_config       = local.access_config
-  tags                = concat([var.slurm_cluster_name], var.tags)
+  subnetwork                = var.subnetwork_self_link
+  additional_networks       = var.additional_networks
+  access_config             = local.access_config
+  tags                      = concat([var.slurm_cluster_name], var.tags)
   resource_policy_self_link = var.enable_placement ? google_compute_resource_policy.compact_placement[0].self_link : null
 }

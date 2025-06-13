@@ -80,6 +80,7 @@ resource "google_compute_instance_template" "tpl" {
   region                  = var.region
   min_cpu_platform        = var.min_cpu_platform
   resource_manager_tags   = var.resource_manager_tags
+  resource_policies       = var.resource_policy_self_link != null ? [var.resource_policy_self_link] : null
 
   service_account {
     email  = coalesce(var.service_account.email, "${data.google_project.this.number}-compute@developer.gserviceaccount.com")
@@ -173,13 +174,13 @@ resource "google_compute_instance_template" "tpl" {
     create_before_destroy = "true"
   }
 
+
   scheduling {
     preemptible                 = local.preemptible
     provisioning_model          = local.provisioning_model
     automatic_restart           = local.automatic_restart
     on_host_maintenance         = local.on_host_maintenance
     instance_termination_action = var.instance_termination_action
-    resource_policies           = var.resource_policy_self_link != null ? [var.resource_policy_self_link] : null # Add this line
 
     dynamic "max_run_duration" {
       for_each = var.max_run_duration != null ? [var.max_run_duration] : []
