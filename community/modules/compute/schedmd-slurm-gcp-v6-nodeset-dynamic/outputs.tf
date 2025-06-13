@@ -34,3 +34,13 @@ output "node_name_prefix" {
   value       = "${var.slurm_cluster_name}-${local.nodeset_name}"
 
 }
+
+output "placement_policy_name" {
+  description = "The name of the created placement policy, if enabled."
+  value       = var.enable_placement ? local.placement_policy_name : null
+}
+
+output "placement_policy_self_link" {
+  description = "The self_link of the created placement policy, if enabled."
+  value       = var.enable_placement ? google_compute_resource_policy.compact_placement[0].self_link : null
+}

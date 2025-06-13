@@ -15,6 +15,7 @@
 locals {
   # This label allows for billing report tracking based on module.
   labels = merge(var.labels, { ghpc_module = "schedmd-slurm-gcp-v6-nodeset-dynamic", ghpc_role = "compute" })
+  placement_policy_name = coalesce(var.placement_policy_name, format("%s-%s-compact-policy", var.slurm_cluster_name, local.nodeset_name))
 }
 
 module "gpu" {
@@ -74,6 +75,21 @@ locals {
 
 }
 
+resource "google_compute_resource_policy" "compact_placement" {
+  count = var.enable_placement ? 1 : 0
+
+  name        = local.placement_policy_name
+  project     = var.project_id
+  region      = var.region
+  description = "Compact placement policy for Slurm nodeset ${local.nodeset_name}"
+
+  group_placement_policy {
+    collocation = var.placement_policy_collocation
+    # vm_count is not specified here as this policy is for an instance template,
+    # and the number of VMs will be determined by the MIG.
+  }
+}
+
 module "slurm_nodeset_template" {
   source = "../../internal/slurm-gcp/instance_template"
 
@@ -118,4 +134,5 @@ module "slurm_nodeset_template" {
   additional_networks = var.additional_networks
   access_config       = local.access_config
   tags                = concat([var.slurm_cluster_name], var.tags)
+  resource_policy_self_link = var.enable_placement ? google_compute_resource_policy.compact_placement[0].self_link : null
 }

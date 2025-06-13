@@ -45,7 +45,7 @@ locals {
   alias_ip_range_enabled = var.alias_ip_range != null
   preemptible            = var.preemptible || var.spot
   on_host_maintenance = (
-    local.preemptible || var.enable_confidential_vm || local.gpu_enabled
+    local.preemptible || var.enable_confidential_vm || local.gpu_enabled || var.resource_policy_self_link != null
     ? "TERMINATE"
     : var.on_host_maintenance
   )
@@ -179,6 +179,7 @@ resource "google_compute_instance_template" "tpl" {
     automatic_restart           = local.automatic_restart
     on_host_maintenance         = local.on_host_maintenance
     instance_termination_action = var.instance_termination_action
+    resource_policies           = var.resource_policy_self_link != null ? [var.resource_policy_self_link] : null # Add this line
 
     dynamic "max_run_duration" {
       for_each = var.max_run_duration != null ? [var.max_run_duration] : []

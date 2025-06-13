@@ -126,6 +126,7 @@ module "instance_template" {
   labels                      = local.labels
   instance_termination_action = var.termination_action
   resource_manager_tags       = var.resource_manager_tags
+  resource_policy_self_link = var.resource_policy_self_link
 
   # Metadata
   startup_script = data.local_file.startup.content
