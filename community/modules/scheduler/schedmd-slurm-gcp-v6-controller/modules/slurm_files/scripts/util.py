@@ -561,7 +561,11 @@ def _fill_cfg_defaults(cfg: NSDict) -> NSDict:
     if not cfg.slurm_bin_dir:
         cfg.slurm_bin_dir = slurmdirs.prefix / "bin"
     if not cfg.slurm_control_host:
-        cfg.slurm_control_host = f"{cfg.slurm_cluster_name}-controller"
+        try:
+            control_dns_name = instance_metadata("attributes/slurm_control_dns")
+            cfg.slurm_control_host = control_dns_name
+        except MetadataNotFoundError:
+            cfg.slurm_control_host = f"{cfg.slurm_cluster_name}-controller"
     if not cfg.slurm_control_host_port:
         cfg.slurm_control_host_port = "6820-6830"
     return cfg
