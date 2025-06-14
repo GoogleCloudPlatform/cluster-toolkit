@@ -14,18 +14,17 @@
 
 from ssh import SSHManager
 from deployment import Deployment
-from test import SlurmTest
 from collections import defaultdict
-import unittest
 import logging
+import test
 
 logging.basicConfig(level=logging.INFO) 
 log = logging.getLogger()
 
-class SlurmTopologyTest(SlurmTest):
+class SlurmTopologyTest(test.SlurmTest):
     # Class to test Slurm topology
-    def __init__(self, deployment):
-        super().__init__(Deployment("tools/python-integration-tests/blueprints/topology-test.yaml"))
+    def get_deployment(self) -> Deployment:
+        return Deployment("tools/python-integration-tests/blueprints/topology-test.yaml")
 
     def runTest(self):
         # Checks isomorphism of last layer of nodes to determine topology.
@@ -68,4 +67,4 @@ class SlurmTopologyTest(SlurmTest):
         return switch_name
 
 if __name__ == "__main__":
-    unittest.main()
+    test.slurmtests_main()

@@ -25,7 +25,6 @@ class Deployment:
         self.state_bucket = "daily-tests-tf-state"
         self.project_id = None
         self.workspace = None
-        self.instance_name = None
         self.username = None
         self.deployment_name = None
         self.blueprint_name = None
@@ -44,13 +43,14 @@ class Deployment:
 
     def get_posixAccount_info(self):
         # Extract the username from posixAccounts
-        result = self.run_command(f"gcloud compute os-login describe-profile --format=json").stdout
+        cmd = "gcloud compute os-login describe-profile --format=json"
+        result = self.run_command(cmd).stdout
         posixAccounts = json.loads(result)
 
         for account in posixAccounts.get('posixAccounts', []):
             if 'accountId' in account:
-                self.project_id = account['accountId']
-                self.username = account['username']
+                return account['accountId'], account['username']
+        raise RuntimeError(f"Can not find a project in `{cmd}`")
 
     def generate_uniq_deployment_name(self):
         BUILD_ID = os.environ.get('BUILD_ID')
@@ -61,8 +61,7 @@ class Deployment:
         self.workspace = os.path.abspath(os.getcwd().strip())
         self.parse_blueprint(self.blueprint_file)
         self.deployment_name = self.generate_uniq_deployment_name()
-        self.get_posixAccount_info()
-        self.instance_name = self.deployment_name.replace("-", "")[:10] + "-slurm-login-001"
+        self.project_id, self.username = self.get_posixAccount_info()
 
     def create_blueprint(self):
         cmd = [

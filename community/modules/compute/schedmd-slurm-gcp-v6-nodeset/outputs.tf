@@ -48,11 +48,6 @@ output "nodeset" {
   }
 
   precondition {
-    condition     = local.nodeset.gpu != null || !var.dws_flex.enabled || var.dws_flex.use_bulk_insert
-    error_message = "DWS Flex-Start is only supported for GPU instances"
-  }
-
-  precondition {
     condition     = !var.enable_placement || !var.dws_flex.enabled
     error_message = "Cannot use DWS Flex with `enable_placement`."
   }

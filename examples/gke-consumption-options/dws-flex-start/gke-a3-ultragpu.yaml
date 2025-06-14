@@ -22,8 +22,6 @@ vars:
   # Cidr block containing the IP of the machine calling terraform.
   # The following line must be updated for this example to work.
   authorized_cidr:
-  # Temporary fix for COS issue, will be fixed in next release
-  mglru_disable_path: $(ghpc_stage("./mglru-disable.yaml"))
   # Installs NCCL library and Google NCCL plugin
   # Runs an init container on all H200 GPU nodes with the NCCL plugin image
   nccl_installer_path: $(ghpc_stage("./nccl-installer.yaml"))
@@ -194,4 +192,3 @@ deployment_groups:
         install: true
       apply_manifests:
       - source: $(vars.nccl_installer_path)
-      - source: $(vars.mglru_disable_path)

@@ -12,23 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ssh import SSHManager
 from deployment import Deployment
-from test import SlurmTest
-import unittest
+import test
 import time
 
-class SlurmReconfigureSize(SlurmTest):
-    # Class to test simple reconfiguration
-    def __init__(self, deployment):
-        super().__init__(Deployment("tools/python-integration-tests/blueprints/slurm-reconfig-before.yaml"))
-        self.reconfig_blueprint = "tools/python-integration-tests/blueprints/slurm-reconfig-after.yaml"
+class SlurmReconfigureSize(test.SlurmTest):
+    INIT_BP = "tools/python-integration-tests/blueprints/slurm-reconfig-before.yaml"
+    RECONFIG_BP = "tools/python-integration-tests/blueprints/slurm-reconfig-after.yaml"
+    
+    def get_deployment(self) -> Deployment:
+        return Deployment(SlurmReconfigureSize.INIT_BP)
+    
     
     def runTest(self):
         # Check 5 nodes are available
         self.assert_equal(len(self.get_nodes()), 5)
         
-        self.deployment = Deployment(self.reconfig_blueprint)
+        self.deployment = Deployment(SlurmReconfigureSize.RECONFIG_BP)
         self.deployment.deploy()
         
         # Wait 90 seconds for reconfig
@@ -38,4 +38,4 @@ class SlurmReconfigureSize(SlurmTest):
         self.assert_equal(len(self.get_nodes()), 3)
 
 if __name__ == "__main__":
-    unittest.main()
+    test.slurmtests_main()

@@ -44,18 +44,15 @@ vars:
 
   # The name of the compute engine reservation of A4X nodes in the form of
   # <project>/<reservation-name>
-  # In order to target a BLOCK_NAME, extended_reservation can be inputted as
-  # <project>/<reservation-name>/reservationBlocks/<reservation-block-name>
-  extended_reservation:
+  # To target a BLOCK_NAME, the name of the extended reservation
+  # can be inputted as <reservation-name>/reservationBlocks/<reservation-block-name>
+  reservation:
   compute_nodepool_machine_type: a4x-highgpu-4g-nolssd
   system_nodepool_machine_type: e2-standard-16
 
   # Installs NCCL library and Google NCCL plugin
   # Runs an init container on all GB200 GPU nodes with the NCCL plugin image
   nccl_rdma_installer_path: $(ghpc_stage("./nccl-rdma-installer.yaml"))
-
-  # Temporary fix for COS issue, will be fixed in next release
-  mglru_disable_path: $(ghpc_stage("./mglru-disable.yaml"))
   nvidia_dra_driver_path: $(ghpc_stage("./nvidia-dra-driver.yaml"))
   imex_path: $(ghpc_stage("./imex.yaml"))
   kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
@@ -236,7 +233,7 @@ deployment_groups:
       reservation_affinity:
         consume_reservation_type: SPECIFIC_RESERVATION
         specific_reservations:
-        - name: $(vars.extended_reservation)
+        - name: $(vars.reservation)
       additional_networks:
         $(concat(
           [{
@@ -270,7 +267,6 @@ deployment_groups:
       nvidia_dra_driver:
         install: true
       apply_manifests:
-      - source: $(vars.mglru_disable_path)
       - source: $(vars.nccl_rdma_installer_path)
       - source: $(vars.imex_path)
       - source: $(vars.nvidia_dra_driver_path)

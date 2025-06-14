@@ -41,5 +41,5 @@ done
 
 for policy in "${!policies[@]}"; do
 	gcloud compute resource-policies delete "$policy" \
-		--project "${PROJECT_ID}" --region "${policies[$policy]}"
+		--project "${PROJECT_ID}" --region "${policies[$policy]}" || true
 done

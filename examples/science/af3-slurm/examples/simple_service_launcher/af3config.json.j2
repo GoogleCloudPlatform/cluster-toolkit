@@ -1,0 +1,39 @@
+{
+    "bucket_name": "{{ bucket_name }}",
+    "time_interval": 30,
+    "run_data_pipeline": true,
+    "run_inference": true,
+    "sif_dir": "{{ sif_dir }}",
+    "db_dir": "{{ db_dir }}",
+    "model_dir": "{{ model_dir }}",
+    "pdb_database_path": "{{ pdb_database_path }}",
+    "jax_compilation_cache_path": "{{ jax_compilation_cache_path }}",
+    "data_pipeline": {
+      "bucket_input_dir": "data_pipeline_toprocess",
+      "bucket_running_dir": "data_pipeline_running",
+      "bucket_done_dir": "data_pipeline_success",
+      "bucket_failed_dir": "data_pipeline_failed",
+      "bucket_result_dir": "data_pipeline_results",
+      "partition_name": "{{ datapipeline_partition }}",
+      "job_memory_size": {{ datapipeline_memory }},
+      "job_cpu_count": {{ datapipeline_cpu_count }},
+      "job_timeout": {{ datapipeline_timeout }}
+    },
+    "inference": {
+      "bucket_input_dir": "inference_toprocess",
+      "bucket_running_dir": "inference_running",
+      "bucket_done_dir": "inference_success",
+      "bucket_failed_dir": "inference_failed",
+      "bucket_result_dir": "inference_results",
+      "partition_name": "{{ inference_partition }}",
+      "job_memory_size": {{ inference_memory }},
+      "job_cpu_count": {{ inference_cpu_count }},
+      "job_timeout": {{ inference_timeout }},
+      "max_template_date": "{{ max_template_date }}",
+      "conformer_max_iterations": "{{ conformer_max_iterations }}",
+      "num_recycles": "{{ num_recycles }}",
+      "num_diffusion_samples": "{{ num_diffusion_samples }}",
+      "num_seeds": "{{ num_seeds }}",
+      "save_embeddings": "{{ save_embeddings }}"
+    }
+ }

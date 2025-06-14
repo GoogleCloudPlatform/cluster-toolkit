@@ -1,0 +1,41 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+---
+- name: Startup scripts for Datapipeline nodes
+  hosts: localhost
+  become: true
+
+  vars:
+    db_dir:
+    database_bucket:
+
+  tasks:
+  - name: Hydrate datapipeline node from GCS
+    ansible.builtin.shell: |
+      #!/bin/bash
+      set -e -o pipefail
+      install -d {{ db_dir }}
+      if gcloud storage cp gs://{{ database_bucket }}/v3.0/uncompressed/*.fa* {{ db_dir }}; then
+        echo "Hydration successful. Setting permissions."
+        chmod -R 0755 {{ db_dir }}
+        echo "Setup complete for {{ db_dir }}."
+      else
+        echo "Hydration from bucket unsuccessful. Is bucket {{ database_bucket }} set up properly? Follow instructions for ontime script. Cleaning up..." >&2
+        rm -rf {{ db_dir }}
+        echo "Cleanup finished."
+      fi
+    args:
+      executable: /bin/bash
+    register: script_output
+    failed_when: script_output.rc != 0
