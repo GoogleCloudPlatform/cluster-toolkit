@@ -114,7 +114,7 @@ locals {
   }
 
 
-  nodeset_startup_scripts = { for k, v in local.nodeset_map : k => concat(local.common_scripts, v.startup_script) }
+  nodeset_startup_scripts = { for k, v in merge(local.nodeset_map, local.nodeset_tpu_map) : k => concat(local.common_scripts, v.startup_script) }
 }
 
 module "daos_network_storage_scripts" {
