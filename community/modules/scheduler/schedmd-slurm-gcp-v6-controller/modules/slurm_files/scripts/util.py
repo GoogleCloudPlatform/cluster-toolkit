@@ -605,7 +605,6 @@ class _ConfigBlobs:
     "Private" class that represent a collection of GCS blobs for configuration
     """
     core: storage.Blob
-    controller_addr: Optional[storage.Blob]
     partition: List[storage.Blob] = field(default_factory=list)
     nodeset: List[storage.Blob] = field(default_factory=list)
     nodeset_dyn: List[storage.Blob] = field(default_factory=list)
@@ -616,8 +615,6 @@ class _ConfigBlobs:
     def hash(self) -> str:
         h = hashlib.md5()
         all = [self.core] + self.partition + self.nodeset + self.nodeset_dyn + self.nodeset_tpu
-        if self.controller_addr:
-            all.append(self.controller_addr)
     
         # sort blobs so hash is consistent
         for blob in sorted(all, key=lambda b: b.name):
@@ -630,7 +627,6 @@ class _ConfigFiles:
     "Private" class that represent a collection of files for configuration
     """
     core: Path
-    controller_addr: Optional[Path]
     partition: List[Path] = field(default_factory=list)
     nodeset: List[Path] = field(default_factory=list)
     nodeset_dyn: List[Path] = field(default_factory=list)
@@ -641,7 +637,6 @@ def _list_config_blobs() -> _ConfigBlobs:
     _, common_prefix = _get_bucket_and_common_prefix()
 
     core: Optional[storage.Blob] = None
-    controller_addr: Optional[storage.Blob] = None
     rest: Dict[str, List[storage.Blob]] = {"partition": [], "nodeset": [], "nodeset_dyn": [], "nodeset_tpu": [], "login_group": []}
 
     is_controller = instance_role() == "controller"
@@ -649,13 +644,6 @@ def _list_config_blobs() -> _ConfigBlobs:
     for blob in blob_list(prefix=""):
         if blob.name == f"{common_prefix}/config.yaml":
             core = blob
-        if blob.name == f"{common_prefix}/controller_addr.yaml" and not is_controller:
-            # Don't add this config blobs for controller to avoid "double reconfiguration":
-            # Initially this file doesn't exist and produce later by `setup_controller`;
-            # Appearance of this blob would trigger change in combined hash of config files;
-            # Ignore existence of this file for controller, assume that
-            # no other instance nodes will proceed with configuration until this file is created.
-            controller_addr = blob
         for key in rest.keys():
             if blob.name.startswith(f"{common_prefix}/{key}_configs/"):
                 rest[key].append(blob)
@@ -663,12 +651,11 @@ def _list_config_blobs() -> _ConfigBlobs:
     if core is None:
         raise DeffetiveStoredConfigError(f"{common_prefix}/config.yaml not found in bucket")
     
-    return _ConfigBlobs(core=core, controller_addr=controller_addr, **rest)
+    return _ConfigBlobs(core=core, **rest)
 
 def _list_config_files() -> _ConfigFiles:
     file_dir = dirs.slurm_bucket_mount
     core: Optional[Path] = None
-    controller_addr: Optional[Path] = None
     rest: Dict[str, List[Path]] = {"partition": [], "nodeset": [], "nodeset_dyn": [], "nodeset_tpu": [], "login_group": []}
 
     if Path(f"{file_dir}/config.yaml").exists():
@@ -681,7 +668,7 @@ def _list_config_files() -> _ConfigFiles:
     if core is None:
         raise Exception(f"config.yaml was not found in mounted folder: {dirs.slurm_bucket_mount}") #Intentionally not using DeffetiveStoredConfigError as this is considered a fatal error
     
-    return _ConfigFiles(core=core, controller_addr=None, **rest)
+    return _ConfigFiles(core=core, **rest)
 
 def _fetch_config(old_hash: Optional[str]) -> Optional[Tuple[NSDict, str]]:
     """Fetch config from bucket, returns None if no changes are detected."""
@@ -694,7 +681,6 @@ def _fetch_config(old_hash: Optional[str]) -> Optional[Tuple[NSDict, str]]:
 
     return _assemble_config(
         core=_download([blobs.core])[0],
-        controller_addr=_download([blobs.controller_addr])[0] if blobs.controller_addr else None,
         partitions=_download(blobs.partition),
         nodesets=_download(blobs.nodeset),
         nodesets_dyn=_download(blobs.nodeset_dyn),
@@ -717,7 +703,6 @@ def _fetch_mounted_config() -> Optional[Tuple[NSDict, str]]:
 
     return _assemble_config(
         core=_load([files.core])[0],
-        controller_addr=None,
         partitions=_load(files.partition),
         nodesets=_load(files.nodeset),
         nodesets_dyn=_load(files.nodeset_dyn),
@@ -725,16 +710,8 @@ def _fetch_mounted_config() -> Optional[Tuple[NSDict, str]]:
         login_groups=_load(files.login_group),
     )
 
-def controller_lookup_self_ip() -> str:
-    assert instance_role() == "controller"
-    # Get IP of LAST network-interface
-    # TODO: Consider change order of NICs definition, so right NIC is always @0.
-    idx = instance_metadata("network-interfaces").split()[-1] # either `0/` or `1/`
-    return instance_metadata(f"network-interfaces/{idx}ip")
-
 def _assemble_config(
         core: Any,
-        controller_addr: Optional[Any],
         partitions: List[Any],
         nodesets: List[Any],
         nodesets_dyn: List[Any],
@@ -742,16 +719,6 @@ def _assemble_config(
         login_groups: List[Any],
     ) -> NSDict:
     cfg = NSDict(core)
-
-    if cfg.controller_network_attachment:
-        # lookup controller address
-        if instance_role() == "controller":
-            # ignore stored value of `controller_addr`, it will be overwritten during `setup_controller`
-            cfg.slurm_control_addr = controller_lookup_self_ip()
-        else:   
-            if not controller_addr: 
-                raise DeffetiveStoredConfigError("controller_addr.yaml not found in bucket")
-            cfg.slurm_control_addr = controller_addr["slurm_control_addr"]
 
     # add partition configs
     for p_yaml in partitions:

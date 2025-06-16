@@ -384,15 +384,6 @@ def configure_dirs():
         os.chmod(dst, 0o755)
 
 
-def self_report_controller_address(lkp: util.Lookup) -> None:
-    if not lkp.cfg.controller_network_attachment:
-        return # only self report address if network attachment is used
-    data = { "slurm_control_addr": lkp.cfg.slurm_control_addr }
-    bucket, prefix = util._get_bucket_and_common_prefix()
-    blob = util.storage_client().bucket(bucket).blob(f"{prefix}/controller_addr.yaml")
-    with blob.open('w') as f:
-        f.write(yaml.dump(data))
-
 def setup_controller():
     """Run controller setup"""
     log.info("Setting up controller")
@@ -461,8 +452,6 @@ def setup_controller():
 
     # Add script to perform maintenance
     setup_maintenance_script()
-
-    self_report_controller_address(lkp)
 
     log.info("Done setting up controller")
     pass
