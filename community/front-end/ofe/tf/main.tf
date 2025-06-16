@@ -22,6 +22,15 @@
 # Create VPC and subnet
 # Create VM instance
 
+# Data source to get current user info for IAP brand
+data "google_client_openid_userinfo" "me" {}
+
+# Data source to get project information when using existing brand
+data "google_project" "oauth_project" {
+  count      = local.use_existing_brand ? 1 : 0
+  project_id = local.oauth_project
+}
+
 locals {
   sa_roles = [
     "storage.objectAdmin",
@@ -35,6 +44,21 @@ locals {
 
   deploy_key1 = var.deployment_key != "" ? filebase64(var.deployment_key) : ""
 
+  # OAuth/IAP configuration
+  oauth_enabled = length(trimspace(var.webserver_hostname)) > 0
+  oauth_project = var.oauth_project_id != "" ? var.oauth_project_id : var.project_id
+  oauth_support_email = var.oauth_support_email != "" ? var.oauth_support_email : var.django_su_email
+  oauth_app_title = var.oauth_application_title != "" ? var.oauth_application_title : "${var.deployment_name} - ${var.webserver_hostname}"
+  oauth_client_name = var.oauth_client_display_name != "" ? var.oauth_client_display_name : "${var.deployment_name} OAuth Client"
+
+  # Determine if we should create a new brand or use existing
+  create_new_brand = local.oauth_enabled && !var.oauth_attach_existing
+  use_existing_brand = local.oauth_enabled && var.oauth_attach_existing
+
+  # Standard IAP brand name pattern: projects/{project_number}/brands/{project_number}
+  # Get the project number and construct the brand name
+  oauth_brand_name = local.use_existing_brand ? "projects/${data.google_project.oauth_project[0].number}/brands/${data.google_project.oauth_project[0].number}" : google_iap_brand.project_brand[0].name
+
   server_config_file = <<-EOT
 django_username: "${var.django_su_username}"
 django_password: "${var.django_su_password}"
@@ -42,8 +66,8 @@ django_email: "${var.django_su_email}"
 deploy_key1: "${local.deploy_key1}"
 git_branch: "${var.repo_branch}"
 git_fork: "${var.repo_fork}"
-google_client_id: PLACEHOLDER
-google_client_secret: PLACEHOLDER
+google_client_id: ${local.oauth_enabled && length(google_iap_client.project_client) > 0 ? google_iap_client.project_client[0].client_id : "PLACEHOLDER"}
+google_client_secret: ${local.oauth_enabled && length(google_iap_client.project_client) > 0 ? google_iap_client.project_client[0].secret : "PLACEHOLDER"}
 EOT
 
   default_labels = {
@@ -189,6 +213,21 @@ resource "google_compute_instance" "server_vm" {
     }
   }
 
+}
+
+
+# OAuth/IAP Resources - only created when hostname is provided
+resource "google_iap_brand" "project_brand" {
+  count               = local.create_new_brand ? 1 : 0
+  support_email       = local.oauth_support_email
+  application_title   = local.oauth_app_title
+  project             = local.oauth_project
+}
+
+resource "google_iap_client" "project_client" {
+  count        = local.oauth_enabled ? 1 : 0
+  display_name = local.oauth_client_name
+  brand        = local.oauth_brand_name
 }
 
 

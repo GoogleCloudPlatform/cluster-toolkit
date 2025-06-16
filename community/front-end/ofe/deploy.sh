@@ -62,6 +62,7 @@ PRJ_API_IDS=(
 	secretmanager.googleapis.com
 	serviceusage.googleapis.com
 	storage.googleapis.com
+	iap.googleapis.com
 )
 PRJ_API_DESCS=(
 	"Cloud Monitoring API"
@@ -80,6 +81,7 @@ PRJ_API_DESCS=(
 	"Secret Manager API"
 	"Service Usage API"
 	"Cloud Storage API"
+	"Identity-Aware Proxy API"
 )
 
 # Location for output credential file = pwd/credential.json
@@ -120,7 +122,7 @@ HELP1
   If you do not have permission to modify APIs on the project, these will need
   to be added by an administrator (with Owner or Editor privileges).
   Please see the Administrator's Guide for details on the APIs.
-  
+
   This deployment creates GCP resources, so a number of roles/permissions are
   also required on the account.  If the account is the Owner or Editor of the
   GCP host project, this is sufficient and it can deploy without any problem.
@@ -133,26 +135,31 @@ HELP1
         (or Service Account Admin)
       - Project IAM Admin
 
+  For cross-project OAuth scenarios, additional permissions are required in the
+  OAuth project:
+      - IAP Settings Admin (roles/iap.settingsAdmin)
+      - Service Usage Consumer (roles/serviceusage.serviceUsageConsumer)
+
   Usage: ./deploy.sh [--config <path-to-config-file>] [--help]
-  
+
     --config <path-to-config-file> : path to YAML configuration file containing deployment variables.
                                      If not specified, script will prompt user for input.
     --help                         : display this help message
-  
+
   If --config option is used, all variables required for deployment must be specified in the YAML
   file. The script will not prompt for any input in this case.
-  
+
   The following deployment variables are required:
-  
+
     deployment_name:             Name of the deployment
     project_id:                  ID of the Google Cloud project
     zone:                        Zone where the deployment will be created
     django_superuser_username:   Username for the Django superuser
     django_superuser_password:   Password for the Django superuser (optional if DJANGO_SUPERUSER_PASSWORD is set)
     django_superuser_email:      Email for the Django superuser
-  
+
   The following deployment variables are optional:
-  
+
     subnet_name:                 Name of the subnet to use for the deployment
     dns_hostname:                Hostname to assign to the deployment's IP address
     ip_address:                  Static IP address to use for the deployment
@@ -160,6 +167,13 @@ HELP1
 	repo_fork:					 The GitHub owner of the forked repo that is used for the deployment, if the 'git' deployment mode is used
 	repo_branch:				 The git branch of the forked repo that is used for the deployment, if the 'git' deployment mode is used
 
+  The following OAuth/IAP variables are optional (OAuth is automatically enabled when dns_hostname is provided):
+
+    oauth_attach_existing:       Set to 'true' if you want to use an existing IAP brand (required if one exists)
+    oauth_project_id:            Project ID for OAuth/IAP resources (defaults to main project_id if not specified)
+    oauth_support_email:         Support email for OAuth brand (defaults to django_superuser_email)
+    oauth_application_title:     Application title for OAuth brand (defaults to "deployment_name - hostname")
+    oauth_client_display_name:   Display name for OAuth client (defaults to "deployment_name OAuth Client")
 
   The following deployment variables are optional for a local test environment:
 
@@ -169,18 +183,18 @@ HELP1
 
   To set the Django superuser password securely, you can set the DJANGO_SUPERUSER_PASSWORD
   environment variable with the password you want to use, like this:
-  
+
     export DJANGO_SUPERUSER_PASSWORD=my_password
-  
+
   Replace 'my_password' with the actual password you want to use. The script will automatically
   read the password from the DJANGO_SUPERUSER_PASSWORD environment variable if it is set, and
   will fall back to the YAML file if it is not set.
-  
+
   If you are running the script as a different user, you may need to use 'sudo -E' to preserve
   the environment variable when running the script, like this:
-  
+
     sudo -E ./deploy.sh --config my-config.yaml
-  
+
   This will run the script with elevated privileges (sudo) and preserve the environment variable (-E)
   so that it can be used by the script.
 
@@ -197,6 +211,11 @@ HELP1
   deployment_mode: git (optional)
   repo_fork: GoogleCloudPlatform (optional)
   repo_branch: develop (optional)
+  oauth_attach_existing: true (optional, required if IAP brand exists)
+  oauth_project_id: shared-oauth-project (optional, for cross-project OAuth)
+  oauth_support_email: admin@example.com (optional)
+  oauth_application_title: "My Custom App" (optional)
+  oauth_client_display_name: "My OAuth Client" (optional)
 
 HELP2
 }
@@ -586,6 +605,27 @@ extra_labels = {
 TFVARS
 		if [[ ${dns_hostname} ]]; then
 			echo "webserver_hostname = \"${dns_hostname}\"" >>terraform.tfvars
+
+			# Add OAuth/IAP configuration variabless
+			echo "oauth_attach_existing = ${oauth_attach_existing:-false}" >>terraform.tfvars
+			if [[ ${oauth_project_id} ]]; then
+				echo "oauth_project_id = \"${oauth_project_id}\"" >>terraform.tfvars
+			fi
+			if [[ ${oauth_support_email} ]]; then
+				# Strip any existing quotes before adding new ones
+				oauth_support_email_clean="${oauth_support_email//\"/}"
+				echo "oauth_support_email = \"${oauth_support_email_clean}\"" >>terraform.tfvars
+			fi
+			if [[ ${oauth_application_title} ]]; then
+				# Strip any existing quotes before adding new ones
+				oauth_application_title_clean="${oauth_application_title//\"/}"
+				echo "oauth_application_title = \"${oauth_application_title_clean}\"" >>terraform.tfvars
+			fi
+			if [[ ${oauth_client_display_name} ]]; then
+				# Strip any existing quotes before adding new ones
+				oauth_client_display_name_clean="${oauth_client_display_name//\"/}"
+				echo "oauth_client_display_name = \"${oauth_client_display_name_clean}\"" >>terraform.tfvars
+			fi
 		fi
 		if [[ ${ip_address} ]]; then
 			echo "static_ip = \"${ip_address}\"" >>terraform.tfvars
@@ -798,6 +838,124 @@ SUBNET
 DNSHOST
 	dns_hostname=$(ask "    DNS hostname (or just press Enter)")
 
+	# -- Check OAuth/IAP setup if hostname provided
+	#
+	if [[ ${dns_hostname} ]]; then
+		echo ""
+		echo "* OAuth/IAP Setup"
+		echo ""
+		echo "    Since you provided a DNS hostname, OAuth authentication will be configured"
+		echo "    automatically. This requires setting up Identity-Aware Proxy (IAP)."
+		echo ""
+
+		# Interactive OAuth configuration
+		echo "    Checking for existing IAP configuration..."
+		echo ""
+
+		# Check if IAP brand already exists
+		if bash "${SCRIPT_DIR}/script/oauth_client.sh" check_brand "${project_id}" >/dev/null 2>&1; then
+			# Brand exists - show details and prompt user
+			echo "    An existing IAP brand was found:"
+			bash "${SCRIPT_DIR}/script/oauth_client.sh" list_brands "${project_id}"
+			echo ""
+
+			# Check if it's properly configured (Internal vs External)
+			if ! bash "${SCRIPT_DIR}/script/oauth_client.sh" check_type "${project_id}" >/dev/null 2>&1; then
+				echo "       Warning: The existing IAP brand is set to 'External' type."
+				echo "       OAuth clients can only be created for 'Internal' brands."
+				echo ""
+				echo "       Please change the brand to 'Internal' using the GCP Console:"
+				echo "       1. Go to https://console.cloud.google.com/apis/credentials/consent"
+				echo "       2. Select project: ${project_id}"
+				echo "       3. Select the audience tab"
+				echo "       4. Change 'User Type' from 'External' to 'Internal'"
+				echo "       5. Save the changes"
+				echo ""
+				case $(ask "    Has the brand been changed to Internal? [y/N] ") in
+				[Yy]*)
+					echo "    Proceeding with Internal brand..."
+					;;
+				*)
+					echo "    Please change the brand to Internal and restart deployment."
+					exit 1
+					;;
+				esac
+				echo ""
+			fi
+
+			# Prompt to use existing brand
+			case $(ask "    Use the existing IAP brand for this deployment? [Y/n] " "Y") in
+			[Nn]*)
+				echo ""
+				echo "    You cannot create a new IAP brand in a project that already has one."
+				echo "    Options:"
+				echo "    1. Use the existing brand (recommended)"
+				echo "    2. Deploy to a different project"
+				echo "    3. Use cross-project OAuth (advanced)"
+				echo ""
+				case $(ask "    Would you like to configure cross-project OAuth? [y/N] ") in
+				[Yy]*)
+					oauth_project_id=$(ask "    OAuth project ID (where IAP brand should be created)")
+					if [[ -z ${oauth_project_id} ]]; then
+						echo "    Error: OAuth project ID cannot be empty"
+						exit 1
+					fi
+					echo "    Using OAuth project: ${oauth_project_id}"
+					oauth_attach_existing="true"
+					;;
+				*)
+					echo "Exiting. Please resolve OAuth configuration and restart deployment."
+					exit 1
+					;;
+				esac
+				;;
+			*)
+				oauth_attach_existing="true"
+				echo "      Will use existing IAP brand"
+				;;
+			esac
+		else
+			echo "      No existing IAP brand found. Will create new Internal brand."
+			oauth_attach_existing="false"
+		fi
+
+		echo ""
+		echo "    Optional OAuth customization:"
+
+		# Optional OAuth customization prompts
+		case $(ask "    Customize OAuth application details? [y/N] ") in
+		[Yy]*)
+			echo ""
+			oauth_support_email=$(ask "    Support email (default: ${django_superuser_email})" "${django_superuser_email}")
+			oauth_application_title=$(ask "    Application title (default: ${deployment_name} - ${dns_hostname})" "${deployment_name} - ${dns_hostname}")
+			oauth_client_display_name=$(ask "    OAuth client display name (default: ${deployment_name} OAuth Client)" "${deployment_name} OAuth Client")
+			;;
+		*)
+			# Use defaults
+			oauth_support_email="${django_superuser_email}"
+			oauth_application_title="${deployment_name} - ${dns_hostname}"
+			oauth_client_display_name="${deployment_name} OAuth Client"
+			;;
+		esac
+
+		echo ""
+		echo "    OAuth Configuration Summary:"
+		echo "    - Attach to existing brand: ${oauth_attach_existing}"
+		if [[ ${oauth_project_id} && ${oauth_project_id} != ${project_id} ]]; then
+			echo "    - OAuth project: ${oauth_project_id}"
+		fi
+		echo "    - Support email: ${oauth_support_email}"
+		echo "    - Application title: ${oauth_application_title}"
+		echo "    - Client display name: ${oauth_client_display_name}"
+		echo ""
+
+		# Final validation with enhanced guidance
+		if ! bash "${SCRIPT_DIR}/script/oauth_client.sh" guidance "${project_id}" "${oauth_attach_existing}" "${oauth_project_id:-${project_id}}" "${dns_hostname}"; then
+			echo "Exiting due to OAuth configuration conflict."
+			exit 1
+		fi
+	fi
+
 	cat <<IPADDRESS
     
 * IP address
@@ -904,7 +1062,7 @@ SERVICEACC
 	echo ""
 	echo "***  Deployment summary:  ***"
 	echo ""
-	echo "    Deploymnet mode:  ${deployment_mode}"
+	echo "    Deployment mode:  ${deployment_mode}"
 	echo "    Deployment name:  ${deployment_name}"
 	echo "    GCP project ID:   ${project_id}"
 	echo "    GCP zone:         ${zone}"
@@ -913,24 +1071,45 @@ SERVICEACC
 	else
 		echo "    GCP subnet:       Automatically created"
 	fi
-	if [[ ${dns_hostname} ]]; then
-		echo "    DNS hostname:     ${dns_hostname}"
-	else
-		echo "    DNS hostname:     None - will use standard HTTP"
-	fi
 	if [[ ${ip_address} ]]; then
 		echo "    IP address:       ${ip_address}"
 	else
 		echo "    IP address:       Automatically created"
 	fi
-	if [[ "${runtime_mode}" == "local" ]]; then
-		echo "    Runtime mode:     ${runtime_mode:-remote}"
-		echo "    Runtime path:     ${WORKDIR}"
+	if [[ ${dns_hostname} ]]; then
+		echo "    DNS hostname:     ${dns_hostname}"
 	fi
 	echo ""
 	echo "    Admin username:   ${django_superuser_username}"
 	echo "    Admin email:      ${django_superuser_email}"
 	echo ""
+	if [[ ${dns_hostname} ]]; then
+		echo "    OAuth/IAP Configuration:"
+		echo "    Authentication:   Enabled (IAP)"
+		echo "    Attach existing:  ${oauth_attach_existing:-false}"
+		if [[ ${oauth_project_id} && ${oauth_project_id} != ${project_id} ]]; then
+			echo "    OAuth project:    ${oauth_project_id}"
+		fi
+		if [[ ${oauth_support_email} ]]; then
+			echo "    Support email:    ${oauth_support_email}"
+		fi
+		if [[ ${oauth_application_title} ]]; then
+			echo "    App title:        ${oauth_application_title}"
+		fi
+		if [[ ${oauth_client_display_name} ]]; then
+			echo "    Client name:      ${oauth_client_display_name}"
+		fi
+		echo ""
+	else
+		echo "    OAuth/IAP:        Disabled"
+		echo ""
+	fi
+	if [[ "${runtime_mode}" == "local" ]]; then
+		echo "    Runtime mode:     ${runtime_mode}"
+		echo "    Runtime path:     ${WORKDIR}"
+		echo "    Clean mode:       ${CLEAN_MODE}"
+		echo ""
+	fi
 }
 
 setup_local_dev() {
@@ -976,6 +1155,12 @@ deploy_from_config() {
 		deployment_mode) deployment_mode="$val" ;;
 		repo_fork) repo_fork="$val" ;;
 		repo_branch) repo_branch="$val" ;;
+		# OAuth/IAP configuration
+		oauth_attach_existing) oauth_attach_existing="$val" ;;
+		oauth_project_id) oauth_project_id="$val" ;;
+		oauth_support_email) oauth_support_email="$val" ;;
+		oauth_application_title) oauth_application_title="$val" ;;
+		oauth_client_display_name) oauth_client_display_name="$val" ;;
 		# dev-env specific
 		runtime_mode) runtime_mode="$val" ;;
 		runtime_path) WORKDIR="$val" ;;
@@ -1012,11 +1197,30 @@ deploy_from_config() {
 		exit 1
 	fi
 
+	# -- Create service account and credential
+	echo ""
+	echo "Creating service account and credential..."
+	create_service_account "${project_id}" \
+		"${deployment_name}" \
+		"${CREDENTIAL_FILE}"
+
+	# -- Check OAuth/IAP setup if hostname provided
+	if [[ ${dns_hostname} ]]; then
+		echo ""
+		echo "OAuth/IAP Setup: DNS hostname provided, checking OAuth configuration..."
+
+		# Check if IAP brand already exists and oauth_attach_existing is properly set
+		if ! bash "${SCRIPT_DIR}/script/oauth_client.sh" guidance "${project_id}" "${oauth_attach_existing:-false}" "${oauth_project_id:-${project_id}}" "${dns_hostname}"; then
+			echo "ERROR: OAuth configuration conflict. See above for resolution." >&2
+			exit 1
+		fi
+	fi
+
 	# Print deployment summary
 	echo ""
 	echo "***  Deployment summary:  ***"
 	echo ""
-	echo "    Deploymnet mode:  ${deployment_mode}"
+	echo "    Deployment mode:  ${deployment_mode}"
 	echo "    Deployment name:  ${deployment_name}"
 	echo "    GCP project ID:   ${project_id}"
 	echo "    GCP zone:         ${zone}"
@@ -1025,25 +1229,45 @@ deploy_from_config() {
 	else
 		echo "    GCP subnet:       Automatically created"
 	fi
-	if [[ ${dns_hostname} ]]; then
-		echo "    DNS hostname:     ${dns_hostname}"
-	else
-		echo "    DNS hostname:     None - will use standard HTTP"
-	fi
 	if [[ ${ip_address} ]]; then
 		echo "    IP address:       ${ip_address}"
 	else
 		echo "    IP address:       Automatically created"
 	fi
-	if [[ "${runtime_mode}" == "local" ]]; then
-		echo "    Runtime mode:     ${runtime_mode}"
-		echo "    Workdir:          ${WORKDIR}"
-		echo "    Clean mode:       ${CLEAN_MODE}"
+	if [[ ${dns_hostname} ]]; then
+		echo "    DNS hostname:     ${dns_hostname}"
 	fi
 	echo ""
 	echo "    Admin username:   ${django_superuser_username}"
 	echo "    Admin email:      ${django_superuser_email}"
 	echo ""
+	if [[ ${dns_hostname} ]]; then
+		echo "    OAuth/IAP Configuration:"
+		echo "    Authentication:   Enabled (IAP)"
+		echo "    Attach existing:  ${oauth_attach_existing:-false}"
+		if [[ ${oauth_project_id} && ${oauth_project_id} != ${project_id} ]]; then
+			echo "    OAuth project:    ${oauth_project_id}"
+		fi
+		if [[ ${oauth_support_email} ]]; then
+			echo "    Support email:    ${oauth_support_email}"
+		fi
+		if [[ ${oauth_application_title} ]]; then
+			echo "    App title:        ${oauth_application_title}"
+		fi
+		if [[ ${oauth_client_display_name} ]]; then
+			echo "    Client name:      ${oauth_client_display_name}"
+		fi
+		echo ""
+	else
+		echo "    OAuth/IAP:        Disabled"
+		echo ""
+	fi
+	if [[ "${runtime_mode}" == "local" ]]; then
+		echo "    Runtime mode:     ${runtime_mode}"
+		echo "    Runtime path:     ${WORKDIR}"
+		echo "    Clean mode:       ${CLEAN_MODE}"
+		echo ""
+	fi
 
 	# If we're doing local dev from a config file and there's no db
 	if [[ "$runtime_mode" == "local" ]]; then
