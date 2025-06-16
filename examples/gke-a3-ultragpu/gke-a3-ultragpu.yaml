@@ -24,11 +24,9 @@ vars:
   authorized_cidr: # add this
   # The name of the compute engine reservation in the form of
   # <reservation-name>
-  # In order to target a BLOCK_NAME, extended_reservation can be inputted as
-  # <reservation-name>/reservationBlocks/<reservation-block-name>
-  extended_reservation: # add this
-  # Temporary fix for COS issue, will be fixed in next release
-  mglru_disable_path: $(ghpc_stage("./mglru-disable.yaml"))
+  # To target a BLOCK_NAME, the name of the extended reservation
+  # can be inputted as <reservation-name>/reservationBlocks/<reservation-block-name>
+  reservation: # add this
   kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
   gib_installer_path: $(ghpc_stage("./nccl-installer.yaml.tftpl"))
   static_node_count: # add this
@@ -193,7 +191,7 @@ deployment_groups:
       reservation_affinity:
         consume_reservation_type: SPECIFIC_RESERVATION
         specific_reservations:
-        - name: $(vars.extended_reservation)
+        - name: $(vars.reservation)
       additional_networks:
         $(concat(
           [{
@@ -230,8 +228,6 @@ deployment_groups:
         template_vars:
           version: v1.0.5
           accelerator_count: 8
-      apply_manifests:
-      - source: $(vars.mglru_disable_path)
 
   - id: job-template
     source: modules/compute/gke-job-template

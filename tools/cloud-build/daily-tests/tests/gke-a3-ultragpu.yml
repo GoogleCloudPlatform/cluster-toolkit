@@ -33,7 +33,7 @@ cli_deployment_vars:
   region: "{{ region }}"
   zone: "{{ zone }}"
   static_node_count: "{{ static_node_count }}"
-  extended_reservation: "{{ extended_reservation }}"
+  reservation: "{{ extended_reservation }}"
   authorized_cidr: "{{ build_ip.stdout }}/32"
   gcp_public_cidrs_access_enabled: true
 custom_vars:
@@ -41,3 +41,4 @@ custom_vars:
 post_deploy_tests:
 - test-validation/test-gke-job.yml
 - test-validation/test-gke-a3-ultra.yml
+- test-validation/test-gke-kueue-config.yml

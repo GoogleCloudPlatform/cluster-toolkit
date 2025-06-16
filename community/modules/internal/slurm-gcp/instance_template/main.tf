@@ -128,7 +128,7 @@ module "instance_template" {
   resource_manager_tags       = var.resource_manager_tags
 
   # Metadata
-  startup_script = data.local_file.startup.content
+  startup_script = coalesce(var.internal_startup_script, data.local_file.startup.content)
   metadata = merge(
     var.metadata,
     {
