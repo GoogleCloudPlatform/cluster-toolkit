@@ -283,7 +283,7 @@ def install_slurm_conf(lkp: util.Lookup) -> None:
 
     conf_options = {
         "name": lkp.cfg.slurm_cluster_name,
-        "control_addr": lkp.control_addr if lkp.control_addr else lkp.hostname_fqdn,
+        "control_addr": lkp.control_addr if lkp.control_addr else lkp.controller_hostname_fqdn,
         "control_host": lkp.control_host,
         "accounting_storage_host": lkp.control_addr if lkp.cfg.controller_network_attachment else lkp.control_host,
         "control_host_port": lkp.control_host_port,

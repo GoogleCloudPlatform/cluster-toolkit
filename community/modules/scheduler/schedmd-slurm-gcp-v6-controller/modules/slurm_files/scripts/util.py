@@ -590,10 +590,8 @@ def _fill_cfg_defaults(cfg: NSDict) -> NSDict:
     if not cfg.slurm_bin_dir:
         cfg.slurm_bin_dir = slurmdirs.prefix / "bin"
     if not cfg.slurm_control_host:
-        try:
-            control_dns_name = instance_metadata("attributes/slurm_control_dns")
-            cfg.slurm_control_host = control_dns_name
-        except MetadataNotFoundError:
+        cfg.slurm_control_host = get_controller_dns()
+        if not cfg.slurm_control_host:
             cfg.slurm_control_host = f"{cfg.slurm_cluster_name}-controller"
     if not cfg.slurm_control_host_port:
         cfg.slurm_control_host_port = "6820-6830"
@@ -748,10 +746,13 @@ def _assemble_config(
         if instance_role() == "controller":
             # ignore stored value of `controller_addr`, it will be overwritten during `setup_controller`
             cfg.slurm_control_addr = controller_lookup_self_ip()
-        else:   
-            if not controller_addr: 
+        else:
+            if controller_addr:
+                cfg.slurm_control_addr = controller_addr["slurm_control_addr"]              
+            elif get_controller_dns():
+                cfg.slurm_control_addr = get_controller_dns()
+            else:
                 raise DeffetiveStoredConfigError("controller_addr.yaml not found in bucket")
-            cfg.slurm_control_addr = controller_addr["slurm_control_addr"]
 
     # add partition configs
     for p_yaml in partitions:
@@ -1188,6 +1189,12 @@ def instance_metadata(path):
 def instance_role():
     return instance_metadata("attributes/slurm_instance_role")
 
+def get_controller_dns():
+    try:
+        if instance_role() != "controller":
+            return instance_metadata("attributes/slurm_control_dns")
+    except MetadataNotFoundError:
+        return
 
 def instance_login_group():
     return instance_metadata("attributes/slurm_login_group")
@@ -1566,8 +1573,9 @@ class Lookup:
         return socket.gethostname()
 
     @cached_property
-    def hostname_fqdn(self):
-        return socket.getfqdn()
+    def controller_hostname_fqdn(self):
+        hostname_fqdn = get_controller_dns()
+        return hostname_fqdn if hostname_fqdn else socket.getfqdn()
 
     @cached_property
     def zone(self):
