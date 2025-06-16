@@ -24,7 +24,7 @@ validators:
 # deployment-image-cluster.yaml
 vars:
   deployment_name: a3mega-image
-  source_image: debian-12-bookworm-v20250415
+  source_image: debian-12-bookworm-v20250610
 
 deployment_groups:
 - group: build_script
@@ -95,7 +95,7 @@ deployment_groups:
             hosts: all
             become: true
             vars:
-              package_url: https://snapshot.debian.org/archive/debian/20250415T211946Z/pool/main/l/linux/linux-headers-6.1.0-33-cloud-amd64_6.1.133-1_amd64.deb
+              package_url: https://snapshot.debian.org/archive/debian/20250525T205402Z/pool/main/l/linux/linux-headers-6.1.0-37-cloud-amd64_6.1.140-1_amd64.deb
               package_filename: /tmp/{{ package_url | basename }}
             tasks:
             - name: Download kernel headers package
