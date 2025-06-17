@@ -88,16 +88,27 @@ install_sqlite() {
 	local src_dir="/usr/local/src"
 	local tarball="sqlite-autoconf-3490100.tar.gz"
 	local url="https://www.sqlite.org/2025/${tarball}"
+	local max_retries=5
+	local retry_count=0
 
 	cd "$src_dir" || {
 		echo "ERROR: Could not change directory to $src_dir"
 		exit 1
 	}
 
-	if ! wget "$url"; then
-		echo "ERROR: Failed to download SQLite from $url"
-		exit 1
-	fi
+	while [ $retry_count -lt $max_retries ]; do
+		if wget "$url"; then
+			break
+		fi
+		retry_count=$((retry_count + 1))
+		if [ $retry_count -lt $max_retries ]; then
+			echo "Retry $retry_count of $max_retries..."
+			sleep 5
+		else
+			echo "ERROR: Failed to download SQLite after $max_retries attempts"
+			exit 1
+		fi
+	done
 
 	tar xzf sqlite-autoconf-3490100.tar.gz
 	cd sqlite-autoconf-3490100 || exit 1
