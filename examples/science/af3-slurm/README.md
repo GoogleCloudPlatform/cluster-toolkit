@@ -1,3 +1,6 @@
+> [!WARNING]
+>  **Deprecation Notice**: this branch is deprecated and will ultimately be removed. The content of this branch is now maintained in branch [develop](https://github.com/GoogleCloudPlatform/cluster-toolkit/tree/develop) and from there it will be eventually merged to [main](https://github.com/GoogleCloudPlatform/cluster-toolkit/tree/main).
+
 # AlphaFold 3 High Throughput Solution
 Welcome to the Cluster Toolkit AlphaFold 3 High Throughput Solution!
 
