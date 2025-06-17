@@ -51,11 +51,11 @@ check_iap_brand() {
 	# List IAP brands for the project
 	local brands
 	brands=$(gcloud iap oauth-brands list --project="${project}" --format="value(name)" 2>${devnull})
-	
+
 	if [[ -n ${brands} ]]; then
-		return 0  # Brand exists
+		return 0 # Brand exists
 	else
-		return 1  # No brand exists
+		return 1 # No brand exists
 	fi
 }
 
@@ -74,13 +74,13 @@ check_brand_type() {
 	# Get brand internal flag - should be true for OAuth clients (Internal brands)
 	local org_internal_only
 	org_internal_only=$(gcloud iap oauth-brands list --project="${project}" --format="value(orgInternalOnly)" 2>${devnull})
-	
+
 	if [[ ${org_internal_only} == "True" ]]; then
-		return 0  # Internal - can create OAuth clients
+		return 0 # Internal - can create OAuth clients
 	elif [[ ${org_internal_only} == "False" ]]; then
-		return 1  # External - cannot create OAuth clients
+		return 1 # External - cannot create OAuth clients
 	else
-		return 99  # Error or unknown type
+		return 99 # Error or unknown type
 	fi
 }
 
@@ -96,11 +96,11 @@ list_iap_brands() {
 	fi
 
 	echo "Checking for existing IAP OAuth brands in project [${project}]..."
-	
+
 	# Get brand info and format it nicely
 	local brands_json
 	brands_json=$(gcloud iap oauth-brands list --project="${project}" --format="json" 2>${devnull})
-	
+
 	if [[ -n ${brands_json} && ${brands_json} != "[]" ]]; then
 		echo "Found existing IAP brand(s):"
 		echo "NAME                                       APPLICATION_TITLE  TYPE      SUPPORT_EMAIL"
@@ -124,8 +124,8 @@ ask() {
 
 	read -r -p "${prompt} " answer
 	case "${answer:-${default}}" in
-		[Yy]*) return 0 ;;
-		*) return 1 ;;
+	[Yy]*) return 0 ;;
+	*) return 1 ;;
 	esac
 }
 
@@ -145,7 +145,7 @@ check_authorized_domain() {
 	# Extract top-level domain
 	local top_level_domain
 	top_level_domain=$(echo "${domain}" | awk -F. '{print $(NF-1)"."$NF}')
-	
+
 	# Always show domain authorization instructions
 	echo ""
 	echo "   Domain Authorization Required"
@@ -161,7 +161,7 @@ check_authorized_domain() {
 	echo "    Note: You only need to add the top-level domain once."
 	echo "          All subdomains will be automatically authorized."
 	echo ""
-	
+
 	# Ask user to confirm domain authorization
 	if ask "    Has the domain been authorized? [y/N] "; then
 		echo "    Proceeding with deployment..."
@@ -193,7 +193,7 @@ oauth_guidance() {
 		echo "      Main project: ${main_project}"
 		echo "      OAuth project: ${oauth_project}"
 		echo ""
-		
+
 		# Validate OAuth project access
 		if ! gcloud projects describe "${oauth_project}" &>/dev/null; then
 			error "Error: Cannot access OAuth project [${oauth_project}]."
@@ -211,7 +211,7 @@ oauth_guidance() {
 		echo "Info: IAP brand found in project [${oauth_project}]."
 		list_iap_brands "${oauth_project}"
 		echo ""
-		
+
 		# Check brand application type
 		if ! check_brand_type "${oauth_project}"; then
 			error "Error: IAP brand application type is set to 'External'."
@@ -222,7 +222,7 @@ oauth_guidance() {
 			error "       Option 1 - Using GCP Console:"
 			error "         1. Go to https://console.cloud.google.com/auth/overview"
 			error "         2. Select project: ${oauth_project}"
-			error "         3. Go to 'Audience' tab"    
+			error "         3. Go to 'Audience' tab"
 			error "         4. Change 'User Type' from 'External' to 'Internal'"
 			error "         5. Confirm the changes (you may need to wait for the change to apply)"
 			error ""
@@ -243,7 +243,7 @@ oauth_guidance() {
 				return 1
 			fi
 		fi
-		
+
 		if [[ ${attach_existing} != "true" ]]; then
 			error ""
 			error "Error: An IAP OAuth brand already exists for project [${oauth_project}]."
@@ -337,30 +337,30 @@ HELP
 # Main function dispatcher
 #
 case "${1}" in
-	check_brand)
-		check_iap_brand "${2}"
-		;;
-	check_type)
-		if check_brand_type "${2}"; then
-			echo "IAP brand application type: Internal (can create OAuth clients)"
-			exit 0
-		else
-			echo "IAP brand application type: External (cannot create OAuth clients)"
-			exit 1
-		fi
-		;;
-	list_brands)
-		list_iap_brands "${2}"
-		;;
-	guidance)
-		oauth_guidance "${2}" "${3}" "${4}" "${5}"
-		;;
-	help|--help|-h)
-		help
-		;;
-	*)
-		error "Error: Unknown command: ${1}"
-		help
+check_brand)
+	check_iap_brand "${2}"
+	;;
+check_type)
+	if check_brand_type "${2}"; then
+		echo "IAP brand application type: Internal (can create OAuth clients)"
+		exit 0
+	else
+		echo "IAP brand application type: External (cannot create OAuth clients)"
 		exit 1
-		;;
-esac 
+	fi
+	;;
+list_brands)
+	list_iap_brands "${2}"
+	;;
+guidance)
+	oauth_guidance "${2}" "${3}" "${4}" "${5}"
+	;;
+help | --help | -h)
+	help
+	;;
+*)
+	error "Error: Unknown command: ${1}"
+	help
+	exit 1
+	;;
+esac

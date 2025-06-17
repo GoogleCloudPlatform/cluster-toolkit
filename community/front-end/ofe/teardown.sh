@@ -172,7 +172,10 @@ delete_service_account "${project}" "${dname}"
 # -- Now check TKFE was deployed - get server name from terraform
 #
 tname=$(
-	cd tf 2>/dev/null || { echo "Error: tf directory not found"; exit 1; }
+	cd tf 2>/dev/null || {
+		echo "Error: tf directory not found"
+		exit 1
+	}
 	if [[ ! -f terraform.tfstate ]]; then
 		echo "Error: No terraform state file found"
 		exit 1

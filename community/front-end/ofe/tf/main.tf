@@ -22,9 +22,6 @@
 # Create VPC and subnet
 # Create VM instance
 
-# Data source to get current user info for IAP brand
-data "google_client_openid_userinfo" "me" {}
-
 # Data source to get project information when using existing brand
 data "google_project" "oauth_project" {
   count      = local.use_existing_brand ? 1 : 0
@@ -45,14 +42,14 @@ locals {
   deploy_key1 = var.deployment_key != "" ? filebase64(var.deployment_key) : ""
 
   # OAuth/IAP configuration
-  oauth_enabled = length(trimspace(var.webserver_hostname)) > 0
-  oauth_project = var.oauth_project_id != "" ? var.oauth_project_id : var.project_id
+  oauth_enabled       = length(trimspace(var.webserver_hostname)) > 0
+  oauth_project       = var.oauth_project_id != "" ? var.oauth_project_id : var.project_id
   oauth_support_email = var.oauth_support_email != "" ? var.oauth_support_email : var.django_su_email
-  oauth_app_title = var.oauth_application_title != "" ? var.oauth_application_title : "${var.deployment_name} - ${var.webserver_hostname}"
-  oauth_client_name = var.oauth_client_display_name != "" ? var.oauth_client_display_name : "${var.deployment_name} OAuth Client"
+  oauth_app_title     = var.oauth_application_title != "" ? var.oauth_application_title : "${var.deployment_name} - ${var.webserver_hostname}"
+  oauth_client_name   = var.oauth_client_display_name != "" ? var.oauth_client_display_name : "${var.deployment_name} OAuth Client"
 
   # Determine if we should create a new brand or use existing
-  create_new_brand = local.oauth_enabled && !var.oauth_attach_existing
+  create_new_brand   = local.oauth_enabled && !var.oauth_attach_existing
   use_existing_brand = local.oauth_enabled && var.oauth_attach_existing
 
   # Standard IAP brand name pattern: projects/{project_number}/brands/{project_number}
@@ -218,10 +215,10 @@ resource "google_compute_instance" "server_vm" {
 
 # OAuth/IAP Resources - only created when hostname is provided
 resource "google_iap_brand" "project_brand" {
-  count               = local.create_new_brand ? 1 : 0
-  support_email       = local.oauth_support_email
-  application_title   = local.oauth_app_title
-  project             = local.oauth_project
+  count             = local.create_new_brand ? 1 : 0
+  support_email     = local.oauth_support_email
+  application_title = local.oauth_app_title
+  project           = local.oauth_project
 }
 
 resource "google_iap_client" "project_client" {
