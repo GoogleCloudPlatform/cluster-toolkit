@@ -105,7 +105,9 @@ list_iap_brands() {
 		echo "Found existing IAP brand(s):"
 		echo "NAME                                       APPLICATION_TITLE  TYPE      SUPPORT_EMAIL"
 		echo "${brands_json}" | jq -r '.[] | "\(.name) \(.applicationTitle) \(if .orgInternalOnly then "Internal" else "External" end) \(.supportEmail)"' | while read -r line; do
-			printf "%-40s %-18s %-9s %s\n" ${line}
+			# Split the line into fields and print with formatting
+			IFS='|' read -r name title type email <<<"${line}"
+			printf "%-40s %-18s %-9s %s\n" "${name}" "${title}" "${type}" "${email}"
 		done
 		return 0
 	else
@@ -187,7 +189,7 @@ oauth_guidance() {
 	fi
 
 	# Check if using cross-project OAuth
-	if [[ ${oauth_project} != ${main_project} ]]; then
+	if [[ "${oauth_project}" != "${main_project}" ]]; then
 		echo ""
 		echo "Info: Cross-project OAuth configuration detected."
 		echo "      Main project: ${main_project}"
@@ -248,7 +250,7 @@ oauth_guidance() {
 			error ""
 			error "Error: An IAP OAuth brand already exists for project [${oauth_project}]."
 			error ""
-			if [[ ${oauth_project} != ${main_project} ]]; then
+			if [[ "${oauth_project}" != "${main_project}" ]]; then
 				error "       Since you're using cross-project OAuth, you likely want to"
 				error "       attach to the existing brand. Add this to your configuration:"
 			else
@@ -258,7 +260,7 @@ oauth_guidance() {
 			fi
 			error ""
 			error "           oauth_attach_existing: true"
-			if [[ ${oauth_project} != ${main_project} ]]; then
+			if [[ "${oauth_project}" != "${main_project}" ]]; then
 				error "           oauth_project_id: ${oauth_project}"
 			fi
 			error ""
@@ -267,7 +269,7 @@ oauth_guidance() {
 			return 1
 		else
 			echo ""
-			if [[ ${oauth_project} != ${main_project} ]]; then
+			if [[ "${oauth_project}" != "${main_project}" ]]; then
 				echo "Info: Using existing Internal IAP brand from OAuth project [${oauth_project}]."
 			else
 				echo "Info: Using existing Internal IAP brand for OAuth authentication."
@@ -277,7 +279,7 @@ oauth_guidance() {
 		fi
 	else
 		echo ""
-		if [[ ${oauth_project} != ${main_project} ]]; then
+		if [[ "${oauth_project}" != "${main_project}" ]]; then
 			echo "Info: No existing IAP brand found in OAuth project [${oauth_project}]."
 			echo "      Will create new Internal brand and client in the OAuth project."
 		else

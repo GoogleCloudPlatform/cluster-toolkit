@@ -608,7 +608,7 @@ TFVARS
 
 			# Add OAuth/IAP configuration variabless
 			echo "oauth_attach_existing = ${oauth_attach_existing:-false}" >>terraform.tfvars
-			if [[ ${oauth_project_id} ]]; then
+			if [[ ${oauth_project_id} && "${oauth_project_id}" != "${project_id}" ]]; then
 				echo "oauth_project_id = \"${oauth_project_id}\"" >>terraform.tfvars
 			fi
 			if [[ ${oauth_support_email} ]]; then
@@ -941,8 +941,8 @@ DNSHOST
 		echo ""
 		echo "    OAuth Configuration Summary:"
 		echo "    - Attach to existing brand: ${oauth_attach_existing}"
-		if [[ ${oauth_project_id} && ${oauth_project_id} != ${project_id} ]]; then
-			echo "    - OAuth project: ${oauth_project_id}"
+		if [[ ${oauth_project_id} && "${oauth_project_id}" != "${project_id}" ]]; then
+			echo "    - OAuth project:    ${oauth_project_id}"
 		fi
 		echo "    - Support email: ${oauth_support_email}"
 		echo "    - Application title: ${oauth_application_title}"
@@ -1087,7 +1087,7 @@ SERVICEACC
 		echo "    OAuth/IAP Configuration:"
 		echo "    Authentication:   Enabled (IAP)"
 		echo "    Attach existing:  ${oauth_attach_existing:-false}"
-		if [[ ${oauth_project_id} && ${oauth_project_id} != ${project_id} ]]; then
+		if [[ ${oauth_project_id} && "${oauth_project_id}" != "${project_id}" ]]; then
 			echo "    OAuth project:    ${oauth_project_id}"
 		fi
 		if [[ ${oauth_support_email} ]]; then
@@ -1245,7 +1245,7 @@ deploy_from_config() {
 		echo "    OAuth/IAP Configuration:"
 		echo "    Authentication:   Enabled (IAP)"
 		echo "    Attach existing:  ${oauth_attach_existing:-false}"
-		if [[ ${oauth_project_id} && ${oauth_project_id} != ${project_id} ]]; then
+		if [[ ${oauth_project_id} && "${oauth_project_id}" != "${project_id}" ]]; then
 			echo "    OAuth project:    ${oauth_project_id}"
 		fi
 		if [[ ${oauth_support_email} ]]; then
