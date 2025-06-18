@@ -1176,7 +1176,7 @@ def get_metadata(path, root=ROOT_URL):
         resp.raise_for_status()
         return resp.text
     except requests_lib.exceptions.HTTPError:
-        log.exception(f"metadata not found ({url})")
+        log.warn(f"metadata not found ({url})")
         raise MetadataNotFoundError(f"failed to get_metadata from {url}")
 
 
