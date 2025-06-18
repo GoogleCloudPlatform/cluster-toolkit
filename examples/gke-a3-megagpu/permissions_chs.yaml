@@ -13,36 +13,36 @@ metadata:
 rules:
   - apiGroups: [""]
     resources:
-      - "pods"
-      - "pods/log"   
-      - "pods/exec"
-      - "nodes"
-      - "events"
-      - "services"
-      - "secrets"
-      - "configmaps"
-      - "serviceaccounts"
+    - "pods"
+    - "pods/log"   
+    - "pods/exec"
+    - "nodes"
+    - "events"
+    - "services"
+    - "secrets"
+    - "configmaps"
+    - "serviceaccounts"
     verbs: ["list", "get", "create", "delete", "watch", "patch", "update"]
 
   - apiGroups: ["apps"]
     resources:
-      - "daemonsets"
-      - "deployments"
-      - "replicasets"
+    - "daemonsets"
+    - "deployments"
+    - "replicasets"
     verbs: ["list", "get", "create", "delete", "watch", "patch", "update"]
 
   - apiGroups: ["batch"]
     resources:
-      - "jobs"
-      - "jobs/status"
+    - "jobs"
+    - "jobs/status"
     verbs: ["list", "get", "create", "delete", "watch", "patch", "update"]
 
   - apiGroups: ["rbac.authorization.k8s.io"]
     resources:
-      - "clusterrolebindings"
-      - "clusterroles"
-      - "roles"
-      - "rolebindings"
+    - "clusterrolebindings"
+    - "clusterroles"
+    - "roles"
+    - "rolebindings"
     verbs: ["list", "get", "create", "delete", "watch", "patch", "update"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -50,9 +50,9 @@ kind: ClusterRoleBinding
 metadata:
   name: cluster-health-scanner-job-binding
 subjects:
-  - kind: ServiceAccount
-    name: workload-identity-k8s-sa
-    namespace: default
+- kind: ServiceAccount
+  name: workload-identity-k8s-sa
+  namespace: default
 roleRef:
   kind: ClusterRole
   name: cluster-health-scanner-job-role
