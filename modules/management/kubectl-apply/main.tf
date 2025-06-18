@@ -28,7 +28,7 @@ locals {
     )
   }
 
-  # 2. Rebuild the map by populating the 'content' field for URLs based manifest
+  # Rebuild the map by populating the 'content' field for URLs based manifest
   processed_apply_manifests_map = tomap({
     for index, manifest in var.apply_manifests : tostring(index) => {
       # If this manifest was a URL, its content is the body from the HTTP call.
