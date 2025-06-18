@@ -20,8 +20,28 @@ locals {
   cluster_location = local.cluster_id_parts[3]
   project_id       = var.project_id != null ? var.project_id : local.cluster_id_parts[1]
 
-  apply_manifests_map = tomap({
+  # Identify URL-based manifests
+  url_manifests = {
     for index, manifest in var.apply_manifests : index => manifest
+    if try(manifest.source, "") != "" && (
+      startswith(manifest.source, "http://") || startswith(manifest.source, "https://")
+    )
+  }
+
+  # 2. Rebuild the map by populating the 'content' field for URLs based manifest
+  processed_apply_manifests_map = tomap({
+    for index, manifest in var.apply_manifests : tostring(index) => {
+      # If this manifest was a URL, its content is the body from the HTTP call.
+      content = contains(keys(local.url_manifests), tostring(index)) ? data.http.manifest_from_url[tostring(index)].body : manifest.content
+
+      # If this was a URL, its source path is now null. Otherwise, use original.
+      source = contains(keys(local.url_manifests), tostring(index)) ? null : manifest.source
+
+      # Pass other vars
+      template_vars     = manifest.template_vars
+      server_side_apply = manifest.server_side_apply
+      wait_for_rollout  = manifest.wait_for_rollout
+    }
   })
 
   install_kueue             = try(var.kueue.install, false)
@@ -33,6 +53,11 @@ locals {
   jobset_install_source     = format("${path.module}/manifests/jobset-%s.yaml", try(var.jobset.version, ""))
 }
 
+data "http" "manifest_from_url" {
+  for_each = local.url_manifests
+  url      = each.value.source
+}
+
 data "google_container_cluster" "gke_cluster" {
   project  = local.project_id
   name     = local.cluster_name
@@ -42,7 +67,7 @@ data "google_container_cluster" "gke_cluster" {
 data "google_client_config" "default" {}
 
 module "kubectl_apply_manifests" {
-  for_each   = local.apply_manifests_map
+  for_each   = local.processed_apply_manifests_map
   source     = "./kubectl"
   depends_on = [var.gke_cluster_exists]
 

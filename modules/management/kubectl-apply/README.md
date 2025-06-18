@@ -119,6 +119,7 @@ limitations under the License.
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.3 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | > 5.0 |
 | <a name="requirement_helm"></a> [helm](#requirement\_helm) | ~> 2.17 |
+| <a name="requirement_http"></a> [http](#requirement\_http) | ~> 3.0 |
 | <a name="requirement_kubectl"></a> [kubectl](#requirement\_kubectl) | >= 1.7.0 |
 
 ## Providers
@@ -126,6 +127,7 @@ limitations under the License.
 | Name | Version |
 |------|---------|
 | <a name="provider_google"></a> [google](#provider\_google) | > 5.0 |
+| <a name="provider_http"></a> [http](#provider\_http) | ~> 3.0 |
 | <a name="provider_terraform"></a> [terraform](#provider\_terraform) | n/a |
 
 ## Modules
@@ -150,6 +152,7 @@ limitations under the License.
 | [terraform_data.kueue_validations](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
 | [google_client_config.default](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/client_config) | data source |
 | [google_container_cluster.gke_cluster](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/container_cluster) | data source |
+| [http_http.manifest_from_url](https://registry.terraform.io/providers/hashicorp/http/latest/docs/data-sources/http) | data source |
 
 ## Inputs
 
