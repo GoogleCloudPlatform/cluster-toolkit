@@ -52,7 +52,7 @@ spec:
               OUTPUT_DIR="/mnt/output"
               mkdir -p $OUTPUT_DIR
               TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-              OUTPUT_FILENAME="healthscan_result_${TIMESTAMP}.txt"
+              OUTPUT_FILENAME="${deployment_name}_healthscan_result_${TIMESTAMP}.txt"
               FULL_OUTPUT_PATH="$OUTPUT_DIR/$OUTPUT_FILENAME"
               python3 cli/cluster_diag.py -o gke healthscan ${machine_type} -c gpu --run_only_on_available_nodes
               python3 cli/cluster_diag.py -o gke healthscan ${machine_type} -c nccl --run_only_on_available_nodes
