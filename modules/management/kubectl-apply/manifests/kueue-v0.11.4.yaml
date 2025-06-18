@@ -11427,6 +11427,14 @@ metadata:
   name: kueue-manager-role
 rules:
 - apiGroups:
+    - batch
+  resources:
+    - cronjobs 
+  verbs:
+    - get
+    - list
+    - watch
+- apiGroups:
   - ""
   resources:
   - events
