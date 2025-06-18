@@ -591,8 +591,7 @@ def _fill_cfg_defaults(cfg: NSDict) -> NSDict:
         cfg.slurm_bin_dir = slurmdirs.prefix / "bin"
     if not cfg.slurm_control_host:
         try:
-            control_dns_name = instance_metadata("attributes/slurm_control_dns")
-            cfg.slurm_control_host = control_dns_name
+            cfg.slurm_control_host = instance_metadata("attributes/slurm_control_dns")
         except MetadataNotFoundError:
             cfg.slurm_control_host = f"{cfg.slurm_cluster_name}-controller"
     if not cfg.slurm_control_host_port:
@@ -702,7 +701,7 @@ def _fetch_config(old_hash: Optional[str]) -> Optional[Tuple[NSDict, str]]:
         login_groups=_download(blobs.login_group),
     ), blobs.hash
 
-def _fetch_mounted_config() -> Optional[Tuple[NSDict, str]]:
+def _fetch_mounted_config() -> NSDict:
     if not dirs.slurm_bucket_mount.is_mount():
         raise Exception(f"{dirs.slurm_bucket_mount} is not mounted")
 
@@ -725,6 +724,16 @@ def _fetch_mounted_config() -> Optional[Tuple[NSDict, str]]:
         login_groups=_load(files.login_group),
     )
 
+
+def use_published_controller_address() -> bool:
+    try:
+        return instance_metadata("attributes/publish_controller_address").lower() == "true"
+    except MetadataNotFoundError:
+        return False
+    return False
+
+
+
 def controller_lookup_self_ip() -> str:
     assert instance_role() == "controller"
     # Get IP of LAST network-interface
@@ -743,7 +752,7 @@ def _assemble_config(
     ) -> NSDict:
     cfg = NSDict(core)
 
-    if cfg.controller_network_attachment:
+    if use_published_controller_address():
         # lookup controller address
         if instance_role() == "controller":
             # ignore stored value of `controller_addr`, it will be overwritten during `setup_controller`
@@ -1176,7 +1185,7 @@ def get_metadata(path, root=ROOT_URL):
         resp.raise_for_status()
         return resp.text
     except requests_lib.exceptions.HTTPError:
-        log.warn(f"metadata not found ({url})")
+        log.warning(f"metadata not found ({url})")
         raise MetadataNotFoundError(f"failed to get_metadata from {url}")
 
 
