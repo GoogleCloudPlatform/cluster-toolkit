@@ -70,4 +70,11 @@ spec:
             persistentVolumeClaim:
               claimName: ${gcs_pvc}
           restartPolicy: Never
+          tolerations:
+          - key: "nvidia.com/gpu"
+            operator: "Exists"
+            effect: "NoSchedule"
+          - key: "components.gke.io/gke-managed-components"
+            operator: "Exists"
+            effect: "NoSchedule"
       backoffLimit: 0
