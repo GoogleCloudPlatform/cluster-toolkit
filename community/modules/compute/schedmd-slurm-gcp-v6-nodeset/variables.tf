@@ -321,6 +321,13 @@ variable "guest_accelerator" {
   }
 }
 
+variable "accelerator_topology" {
+  type        = string
+  description = "Specifies the shape of the Accelerator (GPU/TPU) slice."
+  nullable    = true
+  default     = null
+}
+
 variable "preemptible" {
   description = "Should use preemptibles to burst."
   type        = bool
