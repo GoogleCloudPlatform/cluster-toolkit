@@ -21,22 +21,22 @@ output "server_ip" {
 
 output "oauth_enabled" {
   description = "Whether OAuth/IAP is enabled for this deployment"
-  value       = length(google_iap_client.project_client) > 0
+  value       = local.oauth_enabled
 }
 
 output "oauth_project_id" {
   description = "Project ID where OAuth/IAP resources are located"
-  value       = length(google_iap_client.project_client) > 0 ? local.oauth_project : null
+  value       = local.oauth_enabled ? local.oauth_project : null
 }
 
 output "oauth_client_id" {
   description = "OAuth Client ID (only available when OAuth is enabled)"
-  value       = length(google_iap_client.project_client) > 0 ? google_iap_client.project_client[0].client_id : null
+  value       = local.oauth_enabled && length(google_iap_client.project_client) > 0 ? google_iap_client.project_client[0].client_id : null
   sensitive   = false
 }
 
 output "oauth_client_secret" {
   description = "OAuth Client Secret (only available when OAuth is enabled)"
-  value       = length(google_iap_client.project_client) > 0 ? google_iap_client.project_client[0].secret : null
+  value       = local.oauth_enabled && length(google_iap_client.project_client) > 0 ? google_iap_client.project_client[0].secret : null
   sensitive   = true
 }
