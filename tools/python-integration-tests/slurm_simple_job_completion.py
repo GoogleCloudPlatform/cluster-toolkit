@@ -27,7 +27,7 @@ class SlurmSimpleJobCompletionTest(test.SlurmTest):
         # Submits 5 jobs and checks if they are successful.
         job_ids = []
         for _ in range(5):
-            job_ids.append(self.submit_job('sbatch -N 1 --wrap "sleep 20"'))
+            job_ids.append(self.submit_job('sbatch -N 1 --wrap "sleep 5"'))
         self.wait_until_squeue_is_empty()
 
         for job_id in job_ids:
