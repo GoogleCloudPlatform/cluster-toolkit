@@ -97,6 +97,73 @@ You can specify a particular kueue version that you would like to use using the 
 >
 > Terraform may apply resources in parallel, leading to potential dependency issues. If a resource's dependencies aren't ready, it will be applied again up to 15 times.
 
+## Gotchas
+
+### Applying Manifests from URLs: Considerations & Gotchas
+
+While this module supports applying manifests directly from remote `http://` or `https://` URLs, this method introduces complexities not present when using local files. For production environments, we recommend sourcing manifests from local paths or a version-controlled Git repository.
+
+If you choose to use the URL method, be aware of the following potential issues and their solutions.
+
+#### **1. Apply Order and Race Conditions**
+
+The module applies manifests from the `apply_manifests` list in parallel. This can create a **race condition** if one manifest depends on another. The most common example is applying a manifest with custom resources (like a `ClusterQueue`) at the same time as the manifest that defines it (the `CustomResourceDefinition` or CRD).
+
+There is **no guarantee** that the CRD will be applied before the resource that uses it. This can lead to non-deterministic deployment failures with errors like:
+
+```Error: resource [kueue.x-k8s.io/v1beta1/ClusterQueue] isn't valid for cluster```
+
+##### **Recommended Workaround: Two-Stage Apply**
+
+To ensure a reliable deployment, you must manually enforce the correct order of operations.
+
+1. **Initial Deployment:** In your blueprint, include **only** the manifest(s) containing the `CustomResourceDefinition` (CRD) resources in the `apply_manifests` list.
+
+    *Example `settings` for the first run:*
+
+    ```yaml
+    settings:
+      apply_manifests:
+      # This manifest contains the CRDs for Kueue
+      - source: "https://raw.githubusercontent.com/GoogleCloudPlatform/cluster-toolkit/refs/heads/develop/modules/management/kubectl-apply/manifests/kueue-v0.11.4.yaml"
+        server_side_apply: true
+    ```
+
+2. **Run the deployment** (`gcluster deploy` or `terraform apply`).
+
+3. **Second Deployment:** Once the first apply is successful, **add** the manifests containing your custom resources (like `ClusterQueue`, `LocalQueue`) to the list.
+
+    *Example `settings` for the second run:*
+
+    ```yaml
+    settings:
+      apply_manifests:
+      # The CRD manifest is still present
+      - source: "https://raw.githubusercontent.com/GoogleCloudPlatform/cluster-toolkit/refs/heads/develop/modules/management/kubectl-apply/manifests/kueue-v0.11.4.yaml"
+        server_side_apply: true
+
+      # Now, add your configuration manifest
+      - source: "https://gist.githubusercontent.com/YourUser/..." # Your configuration URL
+        server_side_apply: true
+    ```
+
+4. **Run the deployment command again.** Since the CRDs are now guaranteed to exist in the cluster, this second apply will succeed reliably.
+
+#### **2. Large Manifests (CRDs)**
+
+* **Issue:** Applying very large manifests can fail with a `metadata.annotations: Too long` error.
+* **Solution:** Enable Server-Side Apply by setting `server_side_apply: true` for the manifest entry.
+
+#### **3. Conflicts on Re-application**
+
+* **Issue:** Re-running a deployment after a partial failure can cause server-side apply field manager `conflicts`.
+* **Solution:** Forcibly take ownership of the resource fields by setting `force_conflicts: true`.
+
+#### **4. Terraform Template Files (`.tftpl`)**
+
+* **Limitation:** This module **cannot** render a template file (`.tftpl`) when sourced from a remote URL.
+* **Workaround:** You must render the template into a pure YAML file locally, host that rendered file at a URL, and provide the URL of the rendered file in your blueprint.
+
 ## License
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
@@ -172,72 +239,5 @@ limitations under the License.
 
 ## Outputs
 No outputs.
-
-## Gotchas
-
-### Applying Manifests from URLs: Considerations & Gotchas
-
-While this module supports applying manifests directly from remote `http://` or `https://` URLs, this method introduces complexities not present when using local files. For production environments, we recommend sourcing manifests from local paths or a version-controlled Git repository.
-
-If you choose to use the URL method, be aware of the following potential issues and their solutions.
-
-#### **1. Apply Order and Race Conditions**
-
-The module applies manifests from the `apply_manifests` list in parallel. This can create a **race condition** if one manifest depends on another. The most common example is applying a manifest with custom resources (like a `ClusterQueue`) at the same time as the manifest that defines it (the `CustomResourceDefinition` or CRD).
-
-There is **no guarantee** that the CRD will be applied before the resource that uses it. This can lead to non-deterministic deployment failures with errors like:
-
-```Error: resource [kueue.x-k8s.io/v1beta1/ClusterQueue] isn't valid for cluster```
-
-##### **Recommended Workaround: Two-Stage Apply**
-
-To ensure a reliable deployment, you must manually enforce the correct order of operations.
-
-1. **Initial Deployment:** In your blueprint, include **only** the manifest(s) containing the `CustomResourceDefinition` (CRD) resources in the `apply_manifests` list.
-
-    *Example `settings` for the first run:*
-
-    ```yaml
-    settings:
-      apply_manifests:
-      # This manifest contains the CRDs for Kueue
-      - source: "https://raw.githubusercontent.com/GoogleCloudPlatform/cluster-toolkit/refs/heads/develop/modules/management/kubectl-apply/manifests/kueue-v0.11.4.yaml"
-        server_side_apply: true
-    ```
-
-2. **Run the deployment** (`gcluster deploy` or `terraform apply`).
-
-3. **Second Deployment:** Once the first apply is successful, **add** the manifests containing your custom resources (like `ClusterQueue`, `LocalQueue`) to the list.
-
-    *Example `settings` for the second run:*
-
-    ```yaml
-    settings:
-      apply_manifests:
-      # The CRD manifest is still present
-      - source: "https://raw.githubusercontent.com/GoogleCloudPlatform/cluster-toolkit/refs/heads/develop/modules/management/kubectl-apply/manifests/kueue-v0.11.4.yaml"
-        server_side_apply: true
-
-      # Now, add your configuration manifest
-      - source: "https://gist.githubusercontent.com/YourUser/..." # Your configuration URL
-        server_side_apply: true
-    ```
-
-4. **Run the deployment command again.** Since the CRDs are now guaranteed to exist in the cluster, this second apply will succeed reliably.
-
-#### **2. Large Manifests (CRDs)**
-
-* **Issue:** Applying very large manifests can fail with a `metadata.annotations: Too long` error.
-* **Solution:** Enable Server-Side Apply by setting `server_side_apply: true` for the manifest entry.
-
-#### **3. Conflicts on Re-application**
-
-* **Issue:** Re-running a deployment after a partial failure can cause server-side apply field manager `conflicts`.
-* **Solution:** Forcibly take ownership of the resource fields by setting `force_conflicts: true`.
-
-#### **4. Terraform Template Files (`.tftpl`)**
-
-* **Limitation:** This module **cannot** render a template file (`.tftpl`) when sourced from a remote URL.
-* **Workaround:** You must render the template into a pure YAML file locally, host that rendered file at a URL, and provide the URL of the rendered file in your blueprint.
 
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
