@@ -1,0 +1,369 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# 🛠️ Install Dependencies\n",
+    "First, install the required dependencies from `notebook-requirements.txt`."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "!pip install -r libs/notebook-requirements.txt\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# 🚀 AF3 - System Settings\n",
+    "These settings configure partitions, memory, CPU, and default timeouts. Below are the detailed system settings you can choose to change the `af3_config` on the next section:"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Datapipeline Partition (C3DH)\n",
+    "- **Partition Name**: {{ datapipeline_c3dhm_partition_name }}\n",
+    "- **Machine Type**: {{ datapipeline_c3dhm_partition_machine_type }}\n",
+    "- **Memory**: {{ datapipeline_c3dhm_partition_memory }} GB\n",
+    "- **CPU Count**: {{ datapipeline_c3dhm_partition_cpu_count }}\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Inference Partition (G2)\n",
+    "- **Partition Name**: {{ inference_g2_partition_name }}\n",
+    "- **Machine Type**: {{ inference_g2_partition_machine_type }}\n",
+    "- **Memory**: {{ inference_g2_partition_memory }} GB\n",
+    "- **CPU Count**: {{ inference_g2_partition_cpu_count }}\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Inference Partition (A2)\n",
+    "- **Partition Name**: {{ inference_a2_partition_name }}\n",
+    "- **Machine Type**: {{ inference_a2_partition_machine_type }}\n",
+    "- **Memory**: {{ inference_a2_partition_memory }} GB\n",
+    "- **CPU Count**: {{ inference_a2_partition_cpu_count }}\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Inference Partition (A2U)\n",
+    "- **Partition Name**: {{ inference_a2u_partition_name }}\n",
+    "- **Machine Type**: {{ inference_a2u_partition_machine_type }}\n",
+    "- **Memory**: {{ inference_a2u_partition_memory }} GB\n",
+    "- **CPU Count**: {{ inference_a2u_partition_cpu_count }}\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# 🔬 AF3 - Science Settings\n",
+    "Scientific parameters for model behavior like seeds, iterations, and templates."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# This is optional, no changes required to run default settings\n",
+    "max_template_date = \"{{ max_template_date }}\"\n",
+    "conformer_max_iterations = \"{{ conformer_max_iterations }}\"\n",
+    "num_recycles = \"{{ num_recycles }}\"\n",
+    "num_diffusion_samples = \"{{ num_diffusion_samples }}\"\n",
+    "num_seeds = \"{{ num_seeds }}\"\n",
+    "save_embeddings = \"{{ save_embeddings }}\"\n",
+    "\n",
+    "science_settings = {\n",
+    "    \"max_template_date\": max_template_date,\n",
+    "    \"conformer_max_iterations\": conformer_max_iterations,\n",
+    "    \"num_recycles\": num_recycles,\n",
+    "    \"num_diffusion_samples\": num_diffusion_samples,\n",
+    "    \"num_seeds\": num_seeds,\n",
+    "    \"save_embeddings\": save_embeddings,\n",
+    "}"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# 🔑 AF3 - SLURM REST API\n",
+    "This section contains the SLURM REST API configuration. The API is used to interact with the SLURM job scheduler."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# GCP Secret Name retrieved from deployment variable\n",
+    "# No changes required to run default settings\n",
+    "\n",
+    "from google.cloud import secretmanager_v1\n",
+    "from google.api_core.exceptions import NotFound\n",
+    "\n",
+    "gcp_secret_name = \"{{ slurm_rest_token_secret_name }}\"\n",
+    "gcp_project_id = \"{{ project_id }}\"\n",
+    "\n",
+    "secret_manager_client = secretmanager_v1.SecretManagerServiceClient()\n",
+    "secret_path = f\"projects/{gcp_project_id}/secrets/{gcp_secret_name}/versions/latest\"\n",
+    "\n",
+    "try:\n",
+    "    response = secret_manager_client.access_secret_version(name=secret_path)\n",
+    "    slurm_rest_api_token = response.payload.data.decode(\"UTF-8\")\n",
+    "    print(\"[INFO] Retrieved token from Secret Manager.\")\n",
+    "except NotFound:\n",
+    "    print(f\"[ERROR] Secret '{gcp_secret_name}' not found.\")\n",
+    "    raise NotFound(\n",
+    "        f\"[ERROR] Secret '{gcp_secret_name}' not found.\")\n",
+    "except Exception as e:\n",
+    "    print(f\"[ERROR] Failed to retrieve token: {e}\")\n",
+    "    raise Exception(f\"[ERROR] Failed to retrieve token: {e}\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from libs.slurm_client import AF3SlurmClient\n",
+    "import json\n",
+    "\n",
+    "# Retrieve hostname/remote ip address\n",
+    "# No changes required to run default settings\n",
+    "try:\n",
+    "    with open(\"{{ slurm_info_json_path }}\", \"r\", encoding=\"utf-8\") as f:\n",
+    "        data = json.load(f)\n",
+    "except FileNotFoundError:\n",
+    "    print(\"Can't find slurm info file.\")\n",
+    "    raise FileNotFoundError(\"Can't find slurm info file.\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Initialize AF3SlurmClient\n",
+    "client = AF3SlurmClient(\n",
+    "    hostname=data[\"hostname\"],\n",
+    "    port={{ slurm_rest_api_port }},\n",
+    "    token=slurm_rest_api_token,\n",
+    "    science_settings=science_settings,\n",
+    ")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Example Usage: Ping\n",
+    "ping_response = client.ping()\n",
+    "print(\"Ping Response:\", ping_response.status_code)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# 🧮 Datapipeline\n",
+    "Run Datapipeline from uploaded files. This is a simple example of how to run a Datapipeline job using the AF3 SLURM REST API."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Example of how to use SlurmClient to submit datapipeline job\n",
+    "# Make sure to use the correct partition name that listed on AF3 System setting section\n",
+    "# No changes required to run default settings\n",
+    "datapipeline_partition_name = \"{{ default_datapipeline_partition_name }}\"\n",
+    "\n",
+    "# Assign `input_file` with datapipeline input file path\n",
+    "input_file= \"\" # Replace with your input file path (relative path from the jupyter notebook directory)\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Submit a datapipeline job\n",
+    "datapipeline_submit_job_response = client.submit_data_pipeline_job(\n",
+    "    partition_name=datapipeline_partition_name, \n",
+    "    input_file=input_file\n",
+    ")\n",
+    "print(\"Submit Job Response:\", json.dumps(datapipeline_submit_job_response,indent=4))"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Check datapipeline job status\n",
+    "job_id = datapipeline_submit_job_response[\"job_id\"]\n",
+    "datapipeline_job_state_response = client.get_job_state(job_id)\n",
+    "print(\"Job State Response:\", datapipeline_job_state_response)\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# 🤖 Inference\n",
+    "Run inference jobs using the AF3 SLURM REST API. This section demonstrates how to configure and submit an inference job through Slurm."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Example of how to use SlurmClient to submit inference job\n",
+    "# Make sure to use the correct partition name that listed on AF3 System setting section\n",
+    "inference_partition_name = \"{{ default_inference_partition_name }}\"\n",
+    "\n",
+    "# Assign `input_file` with inference input file path\n",
+    "# You can use the output from the datapipeline job as input for inference\n",
+    "# or you can use your own input file relative path from the jupyter notebook directory\n",
+    "inference_input_file = datapipeline_submit_job_response[\"datapipeline_output_path\"]\n",
+    "\n",
+    "# Assign `enable_unified_memory` with True or False\n",
+    "# No changes required to run default settings\n",
+    "inference_enable_unified_memory = {{ inference_enable_unified_memory | default(false) | bool}}\n",
+    "\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Submit Inference Job\n",
+    "inference_submit_job_response = client.submit_inference_job(\n",
+    "    partition_name = inference_partition_name,\n",
+    "    input_file = inference_input_file,\n",
+    "    enable_unified_memory=inference_enable_unified_memory\n",
+    ")\n",
+    "print(\"Submit Inference Job Response:\", json.dumps(inference_submit_job_response,indent=4))\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Check inference job status\n",
+    "job_id = inference_submit_job_response[\"job_id\"]\n",
+    "inference_job_state_response = client.get_job_state(job_id)\n",
+    "print(\"Job State Response:\", inference_job_state_response)\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# 🧬 Structure & PAE Viewer\n",
+    "Run visualization from inference files. This is a simple example of how to run a visualization from inference result"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from libs.visualization import (\n",
+    "    read_cif_file,show_structure_3d,extract_pae_from_json,plot_pae_matrix,\n",
+    "    extract_summary_confidences_obj,display_summary_data\n",
+    ")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Load CIF file\n",
+    "# Note: Adjust the file path to your actual CIF file\n",
+    "cif_file_path = inference_submit_job_response[\"cif_output_path\"]\n",
+    "structure, cif_content = read_cif_file(cif_file_path)\n",
+    "show_structure_3d(cif_content)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Load and plot PAE matrix\n",
+    "# Note: Adjust the file path to your actual PAE JSON file\n",
+    "pae_json_file_path = inference_submit_job_response[\"confidences_output_path\"]\n",
+    "pae, token_chain_ids = extract_pae_from_json(pae_json_file_path)\n",
+    "plot_pae_matrix(pae,token_chain_ids)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Display summary of confidence metrices\n",
+    "# Note: Adjust the file path to your actual PAE Summary JSON file\n",
+    "summary_confidences_file = inference_submit_job_response[\"summary_confidences_output_path\"]\n",
+    "summary_data = extract_summary_confidences_obj(summary_confidences_file)\n",
+    "\n",
+    "# Get chain ID list\n",
+    "chain_ids = sorted(list(set(token_chain_ids)))\n",
+    "display_summary_data(summary_data, chain_ids)"
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "name": "python",
+   "version": "3.x"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}

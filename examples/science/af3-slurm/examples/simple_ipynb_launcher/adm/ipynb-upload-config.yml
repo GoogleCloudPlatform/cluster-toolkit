@@ -1,0 +1,103 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+---
+- name: af3-ipynb-upload-config
+  hosts: localhost
+  become: true
+  vars_files:
+  - ipynb-config-vars.yml
+
+  tasks:
+  - name: Upload files to AF3 Ipynb if bucket is defined and not empty
+    when: af3ipynb_bucket is defined and af3ipynb_bucket | length > 0
+    block:
+    - name: Ensure google-cloud-storage Python package is installed
+      ansible.builtin.pip:
+        name: google-cloud-storage
+        state: present
+        extra_args: --upgrade
+      delegate_to: localhost
+
+    - name: Upload rest_api_launch_af3_job.sh to GCS
+      ansible.builtin.command:
+        cmd: gcloud storage cp {{ ipynb_setup_folder }}/libs/rest_api_launch_af3_job.sh.j2 gs://{{ af3ipynb_bucket }}/libs/rest_api_launch_af3_job.sh.j2
+      register: upload_launch_script
+      ignore_errors: true
+
+    - name: Upload notebook-requirements.txt to GCS
+      ansible.builtin.command:
+        cmd: gcloud storage cp {{ ipynb_setup_folder }}/libs/notebook-requirements.txt gs://{{ af3ipynb_bucket }}/libs/notebook-requirements.txt
+      register: upload_requirements
+      ignore_errors: true
+
+    - name: Upload visualization.py to GCS
+      ansible.builtin.command:
+        cmd: gcloud storage cp {{ ipynb_setup_folder }}/libs/visualization.py gs://{{ af3ipynb_bucket }}/libs/visualization.py
+      register: upload_visualization
+      ignore_errors: true
+
+    - name: Upload slurm_client.py to GCS
+      ansible.builtin.command:
+        cmd: gcloud storage cp {{ ipynb_setup_folder }}/libs/slurm_client.py gs://{{ af3ipynb_bucket }}/libs/slurm_client.py
+      register: upload_slurm_client
+      ignore_errors: true
+
+    - name: Upload empty __init__.py to GCS
+      ansible.builtin.command:
+        cmd: gcloud storage cp {{ ipynb_setup_folder }}/libs/__init__.py gs://{{ af3ipynb_bucket }}/libs/__init__.py
+      register: upload_init
+      ignore_errors: true
+
+    - name: Upload slurm-rest-api-notebook.ipynb to GCS
+      ansible.builtin.command:
+        cmd: gcloud storage cp {{ ipynb_setup_folder }}/slurm-rest-api-notebook.ipynb gs://{{ af3ipynb_bucket }}/slurm-rest-api-notebook.ipynb
+      register: upload_notebook
+      ignore_errors: true
+
+    - name: Upload slurm_info.json to GCS
+      ansible.builtin.command:
+        cmd: gcloud storage cp {{ slurm_rest_info_path }} gs://{{ af3ipynb_bucket }}/libs/slurm_info.json
+      register: upload_slurm_info
+
+    # ==========================
+    # Upload Failure Reporting
+    # ==========================
+    - name: Set fact for failed uploads
+      set_fact:
+        failed_uploads: >-
+          {{
+            [
+              {'name': 'rest_api_launch_af3_job.sh.j2', 'result': upload_launch_script},
+              {'name': 'notebook-requirements.txt', 'result': upload_requirements},
+              {'name': 'visualization.py', 'result': upload_visualization},
+              {'name': 'slurm_client.py', 'result': upload_slurm_client},
+              {'name': '__init__.py', 'result': upload_init},
+              {'name': 'slurm-rest-api-notebook.ipynb', 'result': upload_notebook},
+              {'name': 'slurm_info.json', 'result': upload_slurm_info},
+            ] | selectattr('result.failed', 'defined') | selectattr('result.failed') | list
+          }}
+
+    - name: Print list of failed uploads
+      ansible.builtin.debug:
+        msg: >
+          The following file uploads failed:
+          {% for item in failed_uploads %}
+            - {{ item.name }}
+          {% endfor %}
+      when: failed_uploads | length > 0
+
+    - name: Fail the play if any uploads failed
+      ansible.builtin.fail:
+        msg: "One or more file uploads to GCS failed."
+      when: failed_uploads | length > 0
