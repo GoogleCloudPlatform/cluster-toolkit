@@ -17,7 +17,7 @@ Run the following commands,
 cd cluster-toolkit/examples/machine-learning/build-service-images/
 PROJECT=<your-project-id>
 SUFFIX=slurm-image
-./build.sh a3m $SUFFIX $PROJECT
+bash build.sh a3m $SUFFIX $PROJECT
 ```
 
 ## Build common image
@@ -28,7 +28,7 @@ Run the following commands,
 cd cluster-toolkit/examples/machine-learning/build-service-images/
 PROJECT=<your-project-id>
 SUFFIX=slurm-image
-./build.sh common $SUFFIX $PROJECT
+bash build.sh common $SUFFIX $PROJECT
 ```
 
 ## Next Steps
