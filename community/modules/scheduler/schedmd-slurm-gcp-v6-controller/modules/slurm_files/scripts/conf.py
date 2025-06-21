@@ -118,7 +118,7 @@ def conflines(lkp: util.Lookup) -> str:
             "salloc_wait_nodes",
             "ignore_prefer_validation",
         ]),
-        "ResumeProgram": f"{scripts_dir}/resume.py",
+        "ResumeProgram": f"{scripts_dir}/resume_wrapper.sh",
         "ResumeFailProgram": f"{scripts_dir}/suspend.py",
         "ResumeRate": get("resume_rate", 0),
         "ResumeTimeout": get("resume_timeout", 300),
