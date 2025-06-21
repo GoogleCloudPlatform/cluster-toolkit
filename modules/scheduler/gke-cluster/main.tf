@@ -62,6 +62,19 @@ locals {
     "SYSTEM_COMPONENTS",
     "WORKLOADS"
   ]
+
+  required_permissions = [
+    "resourcemanager.projects.setIamPolicy",
+    "container.clusters.create",
+    "container.clusters.delete",
+    "compute.instances.create",
+    "compute.instances.delete",
+    "storage.buckets.create",
+    "iam.serviceAccounts.create",
+    "iam.serviceAccounts.setIamPolicy",
+    "iam.serviceAccounts.actAs",
+    "serviceusage.services.use"
+  ]
 }
 
 data "google_project" "project" {
@@ -276,6 +289,7 @@ resource "google_container_cluster" "gke_cluster" {
   logging_config {
     enable_components = local.default_logging_component
   }
+  depends_on = [module.iam_precheck]
 }
 
 # We define explicit node pools, so that it can be modified without
@@ -419,6 +433,13 @@ locals {
   ]
 
   all_networks = concat(local.gvnic_networks, local.rdma_networks)
+}
+
+module "iam_precheck" {
+  source = "../../internal/iam-validator"
+
+  project_id           = var.project_id
+  required_permissions = toset(local.required_permissions)
 }
 
 module "kubectl_apply" {
