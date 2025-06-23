@@ -29,6 +29,6 @@ terraform {
   }
 
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:htcondor-execute-point/v1.55.0"
+    module_name = "blueprints/terraform/hpc-toolkit:htcondor-execute-point/v1.56.0"
   }
 }
