@@ -126,7 +126,7 @@ data:
           | sed 's/ / -x /g')
 
         container_name: nccl-tests
-        container_uri: us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib-diagnostic:v1.0.5
+        container_uri: us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib-diagnostic:v1.0.6
         gke_container_name: nccl
         gke_namespace: ramble
         gpus_per_node: 8
