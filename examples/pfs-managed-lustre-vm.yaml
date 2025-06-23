@@ -25,6 +25,25 @@ vars:
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
 
+terraform_providers:
+  google:
+    source: hashicorp/google
+    version: 6.41.0
+    configuration:
+      project: $(vars.project_id)
+      region: $(vars.region)
+      zone: $(vars.zone)
+      compute_custom_endpoint: "https://www.googleapis.com/compute/beta/"
+
+  google-beta:
+    source: hashicorp/google-beta
+    version: 6.41.0
+    configuration:
+      project: $(vars.project_id)
+      region: $(vars.region)
+      zone: $(vars.zone)
+      compute_custom_endpoint: "https://www.googleapis.com/compute/beta/"
+
 deployment_groups:
 - group: primary
   modules:
