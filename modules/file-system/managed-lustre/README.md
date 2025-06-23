@@ -42,7 +42,7 @@ that the correct subnetwork has private service access.
 ### Example - Slurm
 
 When using Slurm you must take into consideration whether or not you are using
-an official image from the `schedmd-slurm-public` project or building your own.
+an official image from the `schedmd-public-292016` project or building your own.
 The Lustre client modules are pre-installed in the official images.  With the
 official images, Lustre can be used as follows:
 

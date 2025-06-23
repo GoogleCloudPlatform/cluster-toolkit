@@ -26,7 +26,7 @@ vars:
   num_nodes: 1
   rocky_image:
     family: slurm-gcp-6-9-hpc-rocky-linux-8
-    project: schedmd-slurm-public
+    project: schedmd-public-292016
 
 deployment_groups:
 - group: primary
@@ -78,7 +78,7 @@ deployment_groups:
   #     node_count_dynamic_max: $(vars.num_nodes)
   #     instance_image:
   #       family: slurm-gcp-6-9-ubuntu-2004-lts
-  #       project: schedmd-slurm-public
+  #       project: schedmd-public-292016
 
   # - id: ubuntu_partition
   #   source: community/modules/compute/schedmd-slurm-gcp-v6-partition

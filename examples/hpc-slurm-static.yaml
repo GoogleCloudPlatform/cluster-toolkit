@@ -28,10 +28,6 @@ vars:
   static_reservation_machine_type: <machine_type> ## Machine must match reservation above ##
   static_node_count: 2 ## Must be <= number of reserved machines ##
 
-  slurm_instance_image:
-    family: slurm-gcp-6-9-hpc-rocky-linux-8
-    project: schedmd-slurm-public
-  instance_image_custom: false  # true if using custom image in lines above
   bandwidth_tier: gvnic_enabled
 
 

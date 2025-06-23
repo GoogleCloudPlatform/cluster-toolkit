@@ -17,7 +17,7 @@
 locals {
   # Currently supported images and projects
   known_project_families = {
-    schedmd-slurm-public = [
+    schedmd-public-292016 = [
       "slurm-gcp-6-9-debian-11",
       "slurm-gcp-6-9-hpc-rocky-linux-8",
       "slurm-gcp-6-9-ubuntu-2004-lts",

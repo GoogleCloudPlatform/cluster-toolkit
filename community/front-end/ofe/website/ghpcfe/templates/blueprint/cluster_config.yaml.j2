@@ -65,7 +65,7 @@ deployment_groups:
     settings:
       instance_image:
         family: slurm-gcp-6-9-hpc-rocky-linux-8
-        project: schedmd-slurm-public
+        project: schedmd-public-292016
       cloud_parameters:
         resume_rate: 0
         resume_timeout: 500
@@ -103,7 +103,7 @@ deployment_groups:
     settings:
       instance_image:
         family: slurm-gcp-6-9-hpc-rocky-linux-8
-        project: schedmd-slurm-public
+        project: schedmd-public-292016
       num_instances: {{ cluster.num_login_nodes }}
       subnetwork_self_link: "projects/{{ cluster.project_id }}/regions/{{ cluster.cloud_region }}/subnetworks/{{ cluster.subnet.cloud_id }}"
       machine_type: {{ cluster.login_node_instance_type }}

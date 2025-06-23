@@ -58,11 +58,11 @@ deployment_groups:
     - network
     - scripts_for_image
     settings:
-      source_image_project_id: [schedmd-slurm-public]
+      source_image_project_id: [schedmd-public-292016]
       # see latest in https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#published-image-family
       source_image_family: slurm-gcp-6-9-hpc-rocky-linux-8
       # You can find size of source image by using following command
-      # gcloud compute images describe-from-family <source_image_family> --project schedmd-slurm-public
+      # gcloud compute images describe-from-family <source_image_family> --project schedmd-public-292016
       disk_size: $(vars.disk_size)
       image_family: $(vars.custom_image.family)
       state_timeout: 15m

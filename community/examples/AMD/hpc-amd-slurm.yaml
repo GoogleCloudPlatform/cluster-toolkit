@@ -169,7 +169,7 @@ deployment_groups:
         # we are building OpenMPI with PMI support in libraries contained in
         # Slurm installation
         family: slurm-gcp-6-9-hpc-rocky-linux-8
-        project: schedmd-slurm-public
+        project: schedmd-public-292016
 
   - id: low_cost_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset

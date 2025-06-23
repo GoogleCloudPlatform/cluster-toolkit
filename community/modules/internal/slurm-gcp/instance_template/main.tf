@@ -50,7 +50,7 @@ locals {
   source_image_project = (
     var.source_image_project != "" && var.source_image_project != null
     ? var.source_image_project
-    : "projects/schedmd-slurm-public/global/images/family"
+    : "projects/schedmd-public-292016/global/images/family"
   )
 
   source_image = (

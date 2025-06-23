@@ -31,7 +31,7 @@ region = "us-central1"
 
 slurm_image = {
   family  = "slurm-gcp-6-9-hpc-rocky-linux-8"
-  project = "schedmd-slurm-public"
+  project = "schedmd-public-292016"
 }
 
 zone = "us-central1-a"

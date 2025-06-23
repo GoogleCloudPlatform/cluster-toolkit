@@ -88,8 +88,8 @@ variable "instance_image" {
     EOD
   type        = map(string)
   default = {
-    family  = "slurm-gcp-6-9-hpc-rocky-linux-8"
-    project = "schedmd-slurm-public"
+    name    = "slurm-gcp-6-9-hpc-rocky-linux-8-1750262368"
+    project = "schedmd-public-292016"
   }
 
   validation {
