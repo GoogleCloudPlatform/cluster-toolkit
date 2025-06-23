@@ -57,6 +57,7 @@ deployment_groups:
             "install_managed_lustre": true,
             "install_gcsfuse": true,
             "monitoring_agent": "cloud-ops",
+            "slurm_patch_files": ["task_prolog_epilog.patch"],
             "use_open_drivers": true
           }
       - type: shell

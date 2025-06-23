@@ -48,6 +48,7 @@ deployment_groups:
             "install_managed_lustre": true,
             "install_nvidia_repo": true,
             "install_ompi": true,
+            "slurm_patch_files": ["task_prolog_epilog.patch"],
             "allow_kernel_upgrades": false,
             "monitoring_agent": "cloud-ops",
           }
