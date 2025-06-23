@@ -1,0 +1,307 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: roll-a3m-image
+
+deployment_groups:
+- group: image-env
+  modules:
+  - id: image-net
+    source: modules/network/vpc
+
+  - id: build-script
+    source: modules/scripts/startup-script
+    settings:
+      install_ansible: true
+      docker:
+        enabled: true
+        world_writable: true
+      runners:
+      - type: data
+        destination: /etc/apt/preferences.d/block-broken-nvidia-container
+        content: |
+          Package: nvidia-container-toolkit nvidia-container-toolkit-base libnvidia-container-tools libnvidia-container1
+          Pin: version 1.17.7-1
+          Pin-Priority: 100
+      - $(vars.runner_disable_unattended_upgrades)
+      - type: shell
+        destination: hold_google_services.sh
+        content: |
+          #!/bin/bash
+          set -e -o pipefail
+          apt-mark hold google-compute-engine
+          apt-mark hold google-compute-engine-oslogin
+          apt-mark hold google-guest-agent
+          apt-mark hold google-osconfig-agent
+      - type: data
+        destination: /var/tmp/slurm_vars.json
+        content: |
+          {
+            "reboot": false,
+            "install_cuda": false,
+            "install_ompi": true,
+            "install_lustre": false,
+            "install_managed_lustre": true,
+            "install_gcsfuse": true,
+            "monitoring_agent": "cloud-ops",
+            "slurm_patch_files": ["task_prolog_epilog.patch"],
+            "use_open_drivers": true
+          }
+      - type: shell
+        destination: install_git.sh
+        content: |
+          #!/bin/bash
+          set -e -o pipefail
+          apt-get update
+          apt-get install -y git
+      - $(vars.runner_install_slurm)
+      - type: ansible-local
+        destination: update-gvnic.yml
+        content: |
+          ---
+          - name: Install updated gVNIC driver from GitHub
+            hosts: all
+            become: true
+            vars:
+              package_url: https://github.com/GoogleCloudPlatform/compute-virtual-ethernet-linux/releases/download/v1.4.3/gve-dkms_1.4.3_all.deb
+              package_filename: /tmp/{{ package_url | basename }}
+            tasks:
+            - name: Install driver dependencies
+              ansible.builtin.apt:
+                name:
+                - dkms
+            - name: Download gVNIC package
+              ansible.builtin.get_url:
+                url: "{{ package_url }}"
+                dest: "{{ package_filename }}"
+            - name: Install updated gVNIC
+              ansible.builtin.apt:
+                deb: "{{ package_filename }}"
+                state: present
+      - type: shell
+        destination: install-nvidia.sh
+        content: |
+          #!/bin/bash
+          set -ex -o pipefail
+          # Install nvidia container toolkit
+          curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | \
+            gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg  && \
+            curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
+            sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
+            tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+          apt-get update -y
+          apt-get install -y nvidia-container-toolkit
+      # this duplicates the ulimits configuration of the HPC VM Image
+      - $(vars.runner_setup_hpc_vm_image_ulimits)
+      - type: data
+        destination: /etc/enroot/enroot.conf
+        content: |
+          ENROOT_CONFIG_PATH     ${HOME}/.enroot
+          ENROOT_RUNTIME_PATH    /mnt/localssd/${UID}/enroot/runtime
+          ENROOT_CACHE_PATH      /mnt/localssd/${UID}/enroot/cache
+          ENROOT_DATA_PATH       /mnt/localssd/${UID}/enroot/data
+          ENROOT_TEMP_PATH       /mnt/localssd/${UID}/enroot
+      - type: ansible-local
+        destination: configure_gpu_monitoring.yml
+        content: |
+          ---
+          - name: Install NVIDIA DCGM and Configure Ops Agent
+            hosts: all
+            become: true
+            vars:
+              distribution: "{{ ansible_distribution | lower }}{{ ansible_distribution_version | replace('.','') }}"
+              package_url: https://developer.download.nvidia.com/compute/cuda/repos/{{ distribution }}/x86_64/cuda-keyring_1.1-1_all.deb
+              package_filename: /tmp/{{ package_url | basename }}
+              enable_ops_agent: true
+              enable_nvidia_dcgm: true
+              nvidia_packages:
+              - cuda-toolkit-12-8
+              - datacenter-gpu-manager-4-cuda12
+              - libnvidia-cfg1-570-server
+              - libnvidia-nscq-570
+              - nvidia-compute-utils-570-server
+            tasks:
+            - name: Download NVIDIA repository package
+              ansible.builtin.get_url:
+                url: "{{ package_url }}"
+                dest: "{{ package_filename }}"
+            - name: Install NVIDIA repository package
+              ansible.builtin.apt:
+                deb: "{{ package_filename }}"
+                state: present
+            - name: Reduce NVIDIA repository priority
+              ansible.builtin.copy:
+                dest: /etc/apt/preferences.d/cuda-repository-pin-600
+                mode: 0o0644
+                owner: root
+                group: root
+                content: |
+                  Package: nsight-compute
+                  Pin: origin *ubuntu.com*
+                  Pin-Priority: -1
+
+                  Package: nsight-systems
+                  Pin: origin *ubuntu.com*
+                  Pin-Priority: -1
+
+                  Package: *
+                  Pin: release l=NVIDIA CUDA
+                  Pin-Priority: 400
+            - name: Install NVIDIA fabric and CUDA
+              ansible.builtin.apt:
+                name: "{{ item }}"
+                update_cache: true
+              loop: "{{ nvidia_packages }}"
+            - name: Freeze NVIDIA fabric and CUDA
+              ansible.builtin.dpkg_selections:
+                name: "{{ item }}"
+                selection: hold
+              loop: "{{ nvidia_packages }}"
+            - name: Create nvidia-persistenced override directory
+              ansible.builtin.file:
+                path: /etc/systemd/system/nvidia-persistenced.service.d
+                state: directory
+                owner: root
+                group: root
+                mode: 0o755
+            - name: Configure nvidia-persistenced override
+              ansible.builtin.copy:
+                dest: /etc/systemd/system/nvidia-persistenced.service.d/persistence_mode.conf
+                owner: root
+                group: root
+                mode: 0o644
+                content: |
+                  [Service]
+                  ExecStart=
+                  ExecStart=/usr/bin/nvidia-persistenced --user nvidia-persistenced --verbose
+              notify: Reload SystemD
+            handlers:
+            - name: Reload SystemD
+              ansible.builtin.systemd:
+                daemon_reload: true
+            post_tasks:
+            - name: Enable Google Cloud Ops Agent
+              ansible.builtin.service:
+                name: google-cloud-ops-agent.service
+                state: "{{ 'started' if enable_ops_agent else 'stopped' }}"
+                enabled: "{{ enable_ops_agent }}"
+            - name: Disable NVIDIA DCGM by default (enable during boot on GPU nodes)
+              ansible.builtin.service:
+                name: nvidia-dcgm.service
+                state: stopped
+                enabled: false
+            - name: Disable nvidia-persistenced SystemD unit (enable during boot on GPU nodes)
+              ansible.builtin.service:
+                name: nvidia-persistenced.service
+                state: stopped
+                enabled: false
+      - type: ansible-local
+        destination: install_dmabuf.yml
+        content: |
+          ---
+          - name: Install DMBABUF import helper
+            hosts: all
+            become: true
+            tasks:
+            - name: Setup apt-transport-artifact-registry repository
+              ansible.builtin.apt_repository:
+                repo: deb http://packages.cloud.google.com/apt apt-transport-artifact-registry-stable main
+                state: present
+            - name: Install driver dependencies
+              ansible.builtin.apt:
+                name:
+                - dkms
+                - apt-transport-artifact-registry
+            - name: Setup gpudirect-tcpxo apt repository
+              ansible.builtin.apt_repository:
+                repo: deb [arch=all trusted=yes ] ar+https://us-apt.pkg.dev/projects/gce-ai-infra gpudirect-tcpxo-apt main
+                state: present
+            - name: Install DMABUF import helper DKMS package
+              ansible.builtin.apt:
+                name: dmabuf-import-helper
+                state: present
+      - type: ansible-local
+        destination: aperture_devices.yml  # This still needs to be run during startup http://google3/cloud/hosted/hypercomputecluster/terraform/slurm/nodeset_a3m.tf;l=16;rcl=767407261
+        content: |
+          ---
+          - name: Setup GPUDirect-TCPXO aperture devices
+            hosts: all
+            become: true
+            tasks:
+            - name: Mount aperture devices to /dev and make writable
+              ansible.builtin.copy:
+                dest: /etc/udev/rules.d/00-a3-megagpu.rules
+                owner: root
+                group: root
+                mode: 0o644
+                content: |
+                  ACTION=="add", SUBSYSTEM=="pci", ATTR{vendor}=="0x1ae0", ATTR{device}=="0x0084", TAG+="systemd", \
+                      RUN+="/usr/bin/mkdir --mode=0755 -p /dev/aperture_devices", \
+                      RUN+="/usr/bin/systemd-mount --type=none --options=bind --collect %S/%p /dev/aperture_devices/%k", \
+                      RUN+="/usr/bin/bash -c '/usr/bin/chmod 0666 /dev/aperture_devices/%k/resource*'"
+              notify: Update initramfs
+            handlers:
+            - name: Update initramfs
+              ansible.builtin.command: /usr/sbin/update-initramfs -u -k all
+      - type: shell
+        destination: remove_snap_gcloud.sh
+        content: |
+          #!/bin/bash
+          # IMPORTANT: This script should be run *last* in any sequence of setup steps
+          # that use 'gsutil' or other gcloud commands.
+          # This is because removing the Snap version of the GCloud SDK can temporarily
+          # break existing 'gsutil' paths, which might disrupt other scripts still running
+          # that rely on the Snap-installed version.
+
+          set -e -o pipefail
+
+          # Remove the previously installed Google Cloud SDK (google-cloud-cli) and
+          # the LXD container manager, both of which might have been installed via Snap.
+          # This step is crucial to prevent conflicts with the upcoming APT installation
+          # and address potential issues with Snapd and NFS mounts in specific environments
+          snap remove google-cloud-cli lxd
+          # Install key and google-cloud-cli from apt repo
+          GCLOUD_APT_SOURCE="/etc/apt/sources.list.d/google-cloud-sdk.list"
+          if [ ! -f "${GCLOUD_APT_SOURCE}" ]; then
+              # indentation matters in EOT below; do not blindly edit!
+              cat <<EOT > "${GCLOUD_APT_SOURCE}"
+          deb [signed-by=/usr/share/keyrings/cloud.google.asc] https://packages.cloud.google.com/apt cloud-sdk main
+          EOT
+          fi
+          curl -o /usr/share/keyrings/cloud.google.asc https://packages.cloud.google.com/apt/doc/apt-key.gpg
+          apt-get update
+          apt-get install --assume-yes google-cloud-cli
+          # Clean up the bash executable hash for subsequent steps using gsutil
+          hash -r
+
+
+- group: image
+  modules:
+  - id: image
+    source: modules/packer/custom-image
+    kind: packer
+    use:
+    - image-net
+    - build-script
+    settings:
+      disk_size: 100
+      machine_type: c2-standard-8
+
+      source_image_family: ubuntu-accelerator-2204-amd64-with-nvidia-570
+      source_image_project_id: [ubuntu-os-accelerator-images]
+
+      image_family: $(vars.family)
+      omit_external_ip: false
