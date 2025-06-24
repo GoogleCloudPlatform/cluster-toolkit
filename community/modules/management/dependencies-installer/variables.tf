@@ -48,3 +48,23 @@ variable "nvidia_dra_driver" {
   })
   default = {}
 }
+
+variable "kueue" {
+  description = "Install and configure [Kueue](https://kueue.sigs.k8s.io/docs/overview/) workload scheduler. A configuration yaml/template file can be provided with config_path to be applied right after kueue installation. If a template file provided, its variables can be set to config_template_vars."
+  type = object({
+    install              = optional(bool, false)
+    version              = optional(string, "v0.11.4")
+    config_path          = optional(string, null)
+    config_template_vars = optional(map(any), null)
+  })
+  default = {}
+}
+
+variable "jobset" {
+  description = "Install [Jobset](https://github.com/kubernetes-sigs/jobset) which manages a group of K8s [jobs](https://kubernetes.io/docs/concepts/workloads/controllers/job/) as a unit."
+  type = object({
+    install = optional(bool, false)
+    version = optional(string, "v0.7.2")
+  })
+  default = {}
+}

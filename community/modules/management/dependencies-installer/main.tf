@@ -39,7 +39,7 @@ module "install_kueue" {
   release_name = "kueue"
 
   chart_name    = "oci://registry.k8s.io/kueue/charts/kueue"
-  chart_version = "0.11.4" # Specify your desired Kueue version
+  chart_version = var.kueue.version # Specify your desired Kueue version
 
   create_namespace = true # Helm can also create the namespace
   wait             = true
@@ -48,10 +48,10 @@ module "install_kueue" {
 
 module "install_jobset" {
   source           = "./helm_install"
-  depends_on       = [var.gke_cluster_exists]
+  depends_on       = [var.gke_cluster_exists, module.install_kueue]
   release_name     = "jobset-controller"                          # The release name for your JobSet installation
   chart_name       = "oci://registry.k8s.io/jobset/charts/jobset" # The Helm repository URL for nvidia charts
-  chart_version    = "0.5.2"
+  chart_version    = var.jobset.version
   create_namespace = true
   namespace        = "jobset-system"
 }
