@@ -58,6 +58,6 @@ command for grabbing logs, e.g.:
 infrastructure (VPC), please perform following:
 
 ```sh
-gcluster destroy /tmp/build_a3m-slurm-image/roll --auto-approve
-gcluster destroy /tmp/build_common-slurm-image/roll --auto-approve
+gcluster destroy build_a3m-slurm-image/$USER-a3m-slurm-image/ --auto-approve
+gcluster destroy build_common-slurm-image/$USER-a3m-slurm-image/ --auto-approve
 ```
