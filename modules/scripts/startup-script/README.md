@@ -326,7 +326,7 @@ No modules.
 | <a name="input_http_proxy"></a> [http\_proxy](#input\_http\_proxy) | Web (http and https) proxy configuration for pip, apt, and yum/dnf and interactive shells | `string` | `""` | no |
 | <a name="input_install_ansible"></a> [install\_ansible](#input\_install\_ansible) | Run Ansible installation script if either set to true or unset and runner of type 'ansible-local' are used. | `bool` | `null` | no |
 | <a name="input_install_cloud_ops_agent"></a> [install\_cloud\_ops\_agent](#input\_install\_cloud\_ops\_agent) | Warning: Consider using `install_stackdriver_agent` for better performance. Run Google Ops Agent installation script if set to true. | `bool` | `false` | no |
-| <a name="input_install_cloud_rdma_drivers"></a> [install\_cloud\_rdma\_drivers](#input\_install\_cloud\_rdma\_drivers) | If true, will install and reload Cloud RDMA drivers. Currently only supported on Rocky Linux 8. | `bool` | `false` | no |
+| <a name="input_install_cloud_rdma_drivers"></a> [install\_cloud\_rdma\_drivers](#input\_install\_cloud\_rdma\_drivers) | If true, will install and reload Cloud RDMA drivers. Currently only supported on Rocky Linux 8. Should not be enabled if using the HPC VM Image. | `bool` | `false` | no |
 | <a name="input_install_docker"></a> [install\_docker](#input\_install\_docker) | DEPRECATED: use var.docker. | `bool` | `null` | no |
 | <a name="input_install_stackdriver_agent"></a> [install\_stackdriver\_agent](#input\_install\_stackdriver\_agent) | Run Google Stackdriver Agent installation script if set to true. Preferred over ops agent for performance. | `bool` | `false` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels for the created GCS bucket. Key-value pairs. | `map(string)` | n/a | yes |
