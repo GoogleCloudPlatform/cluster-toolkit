@@ -1,0 +1,59 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: workload-identity-k8s-sa
+  namespace: default
+  annotations:
+    iam.gke.io/gcp-service-account: gke-wl-sa@${project_id}.iam.gserviceaccount.com
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cluster-health-scanner-job-role
+rules:
+  - apiGroups: [""]
+    resources:
+    - "pods"
+    - "pods/log"   
+    - "pods/exec"
+    - "nodes"
+    - "events"
+    - "services"
+    - "secrets"
+    - "configmaps"
+    - "serviceaccounts"
+    verbs: ["list", "get", "create", "delete", "watch", "patch", "update"]
+
+  - apiGroups: ["apps"]
+    resources:
+    - "daemonsets"
+    - "deployments"
+    - "replicasets"
+    verbs: ["list", "get", "create", "delete", "watch", "patch", "update"]
+
+  - apiGroups: ["batch"]
+    resources:
+    - "jobs"
+    - "jobs/status"
+    verbs: ["list", "get", "create", "delete", "watch", "patch", "update"]
+
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources:
+    - "clusterrolebindings"
+    - "clusterroles"
+    - "roles"
+    - "rolebindings"
+    verbs: ["list", "get", "create", "delete", "watch", "patch", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cluster-health-scanner-job-binding
+subjects:
+- kind: ServiceAccount
+  name: workload-identity-k8s-sa
+  namespace: default
+roleRef:
+  kind: ClusterRole
+  name: cluster-health-scanner-job-role
+  apiGroup: rbac.authorization.k8s.io
