@@ -12624,6 +12624,8 @@ spec:
         - --config=/controller_manager_config.yaml
         - --zap-log-level=2
         - --enable-topology-aware-scheduling=true
+        - --kube-api-qps=50    # Example: Increase from default 20
+        - --kube-api-burst=100 # Example: Increase from default 40
         command:
         - /manager
         image: registry.k8s.io/kueue/kueue:v0.11.4
@@ -12653,11 +12655,11 @@ spec:
           periodSeconds: 10
         resources:
           limits:
-            cpu: "2"
-            memory: 512Mi
+            cpu: "4" #"2"
+            memory: 2Gi #512Mi
           requests:
-            cpu: 500m
-            memory: 512Mi
+            cpu: 1000m # 500Mi
+            memory: 1Gi # 512Mi
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
