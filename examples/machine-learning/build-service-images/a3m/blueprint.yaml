@@ -256,6 +256,22 @@ deployment_groups:
             handlers:
             - name: Update initramfs
               ansible.builtin.command: /usr/sbin/update-initramfs -u -k all
+      - type: ansible-local
+        destination: patch-gve-udev-rule.yml
+        content: |
+          ---
+          - name: patch-gve-udev-rule
+            hosts: all
+            become: true
+            tasks:
+            - name: patch-gve-udev-rule
+              ansible.builtin.blockinfile:
+                path: /lib/udev/rules.d/75-gce-network.rules
+                block: |
+                  # Custom Rule Override
+                  SUBSYSTEM=="net", ACTION=="add", DRIVERS=="gve", PCI_SLOT_NAME=="0000:06:00.0", NAME="enp6s0f0"
+                insertafter: EOF # block is added at the end of the file
+                create: true
       - type: shell
         destination: remove_snap_gcloud.sh
         content: |
