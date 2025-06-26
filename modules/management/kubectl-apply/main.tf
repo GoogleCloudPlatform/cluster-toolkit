@@ -22,6 +22,7 @@ locals {
 
   apply_manifests_map = tomap({
     for index, manifest in var.apply_manifests : index => manifest
+    if manifest.enable
   })
 
   install_kueue             = try(var.kueue.install, false)
