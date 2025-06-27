@@ -110,6 +110,7 @@ locals {
     zone_policy_deny                 = ns.zone_policy_deny
     enable_maintenance_reservation   = ns.enable_maintenance_reservation
     enable_opportunistic_maintenance = ns.enable_opportunistic_maintenance
+    accelerator_topology             = ns.accelerator_topology
   }]
 }
 
