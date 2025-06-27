@@ -124,28 +124,595 @@ def cb_update(message, source_id):
     return True
 
 
-def cb_cluster_status(message, source_id):
+def cb_cluster_status(message, source_id=None):
+    """Handle cluster status updates"""
+    # Import here to avoid circular imports
     from ..models import Cluster
 
-    try:
-        cid = message["cluster_id"]
-        if f"cluster_{cid}" != source_id:
-            raise ValueError(
-                "Message comes from {source_id}, but claims cluster {cid}. "
-                "Ignoring."
-            )
+    cluster_id = message.get("cluster_id")
+    status = message.get("status")
 
-        cluster = Cluster.objects.get(pk=cid)
-        logger.info(
-            "Cluster Status message for %s: %s", cluster.id, message["message"]
-        )
-        new_status = message.get("status", None)
-        if new_status:
-            cluster.status = new_status
+    if cluster_id and status:
+        try:
+            cluster = Cluster.objects.get(id=cluster_id)
+            cluster.status = status
             cluster.save()
-    # This logs the fall-through errors
-    except Exception as ex:  # pylint: disable=broad-except
-        logger.error("Cluster status callback error!", exc_info=ex)
+            logger.info(f"Updated cluster {cluster_id} status to {status}")
+        except Cluster.DoesNotExist:
+            logger.warning(f"Cluster {cluster_id} not found in database")
+        except Exception as e:
+            logger.error(f"Error updating cluster {cluster_id} status: {e}")
+
+    return True
+
+
+def _extract_number(val, default=1):
+    """Extract numeric value from various formats (dict, list, or direct value)"""
+    if isinstance(val, dict) and 'number' in val:
+        return val['number']
+    elif isinstance(val, list):
+        return _extract_number(val[0], default) if val else default
+    elif isinstance(val, (int, float)):
+        return val
+    return default
+
+
+def _normalize_slurm_status(status_raw):
+    """Normalize SLURM status to a string, handling list format"""
+    if isinstance(status_raw, list) and len(status_raw) > 0:
+        logger.debug(f"slurm_status was a list, using first element: {status_raw[0]}")
+        primary_status = status_raw[0]
+        additional_states = status_raw[1:] if len(status_raw) > 1 else []
+        return primary_status, additional_states
+    elif isinstance(status_raw, str):
+        return status_raw, []
+    else:
+        return str(status_raw) if status_raw is not None else "", []
+
+
+def _is_job_successful(slurm_status, exit_code):
+    """Determine if a job was successful based on SLURM status and exit code"""
+    # For jobs created by OFE applications, we don't want to override their status
+    # These jobs are handled by the existing application logic
+
+    # If status is explicitly FAILED or CANCELLED, it's a failure
+    if slurm_status in ['FAILED', 'CANCELLED']:
+        return False
+
+    # If status is COMPLETED, check the exit code
+    if slurm_status == 'COMPLETED':
+        if exit_code is None:
+            # No exit code available, assume success (for backward compatibility)
+            return True
+
+        # Parse exit code - can be various formats
+        try:
+            # First, try to parse as JSON if it's a string
+            if isinstance(exit_code, str):
+                try:
+                    import json
+                    exit_code = json.loads(exit_code)
+                except (ValueError, TypeError):
+                    pass  # Not JSON, treat as regular string
+
+            if isinstance(exit_code, dict):
+                # Complex JSON format from SLURM: {'return_code': {'number': 1}, 'signal': {'id': {'number': 0}}}
+                logger.debug(f"Parsing dict exit code: {exit_code}")
+                if 'return_code' in exit_code and isinstance(exit_code['return_code'], dict):
+                    return_code_data = exit_code['return_code']
+                    if 'number' in return_code_data:
+                        exit_code_num = return_code_data['number']
+                        logger.debug(f"Extracted exit code number: {exit_code_num}")
+                        result = exit_code_num == 0
+                        logger.debug(f"Exit code {exit_code_num} == 0: {result}")
+                        return result
+                # Fallback: check if there's a direct 'number' field
+                elif 'number' in exit_code:
+                    exit_code_num = exit_code['number']
+                    logger.debug(f"Extracted direct number: {exit_code_num}")
+                    result = exit_code_num == 0
+                    logger.debug(f"Direct exit code {exit_code_num} == 0: {result}")
+                    return result
+            elif isinstance(exit_code, str):
+                logger.debug(f"Parsing string exit code: {exit_code}")
+                if ':' in exit_code:
+                    signal, code = exit_code.split(':', 1)
+                    exit_code_num = int(code)
+                else:
+                    exit_code_num = int(exit_code)
+                logger.debug(f"Extracted exit code number: {exit_code_num}")
+                result = exit_code_num == 0
+                logger.debug(f"String exit code {exit_code_num} == 0: {result}")
+                return result
+            elif isinstance(exit_code, (int, float)):
+                logger.debug(f"Parsing numeric exit code: {exit_code}")
+                result = int(exit_code) == 0
+                logger.debug(f"Numeric exit code {exit_code} == 0: {result}")
+                return result
+            else:
+                # Unknown format, assume success for backward compatibility
+                logger.debug(f"Unknown exit code format: {exit_code}, assuming success")
+                return True
+        except (ValueError, TypeError, KeyError) as e:
+            # If we can't parse the exit code, assume success (for backward compatibility)
+            logger.debug(f"Could not parse exit code '{exit_code}': {e}, assuming success")
+            return True
+
+    # For other statuses (RUNNING, PENDING, etc.), not yet completed
+    return None
+
+
+def cb_slurm_job_update(message, source_id=None):
+    """Handle SLURM job updates"""
+    # Import here to avoid circular imports
+    from ..models import Job, Cluster
+    from django.db import transaction
+
+    data = message.get("data", {})
+    cluster_id = message.get("cluster_id")
+
+    if not cluster_id:
+        logger.warning("Received SLURM job update without cluster ID")
+        return True
+
+    try:
+        cluster = Cluster.objects.get(id=cluster_id, status='r')
+    except Cluster.DoesNotExist:
+        logger.warning(f"Cluster {cluster_id} not found or not ready")
+        return True
+
+    slurm_jobid = data.get('slurm_jobid')
+    if not slurm_jobid:
+        logger.warning("Received SLURM job update without job ID")
+        return True
+
+    # Normalize slurm_jobid if it's a list
+    if isinstance(slurm_jobid, list):
+        slurm_jobid = slurm_jobid[0] if slurm_jobid else None
+        logger.debug(f"slurm_jobid was a list, using first element: {slurm_jobid}")
+
+    try:
+        # Try to find existing job
+        job = Job.objects.filter(slurm_jobid=slurm_jobid).first()
+
+        if job:
+            # Update existing job
+            updates = {}
+
+            # Parse timestamps
+            if data.get('slurm_start_time'):
+                start_time = _parse_slurm_timestamp(data['slurm_start_time'])
+                if start_time:
+                    updates['slurm_start_time'] = start_time
+
+            if data.get('slurm_end_time'):
+                end_time = _parse_slurm_timestamp(data['slurm_end_time'])
+                if end_time:
+                    updates['slurm_end_time'] = end_time
+                    # Calculate runtime if we have both start and end times
+                    if job.slurm_start_time:
+                        try:
+                            # Ensure both times are timezone-aware for comparison
+                            start_time_for_calc = job.slurm_start_time
+                            if start_time_for_calc.tzinfo is None:
+                                from django.utils import timezone
+                                start_time_for_calc = timezone.make_aware(start_time_for_calc)
+
+                            end_time_for_calc = end_time
+                            if end_time_for_calc.tzinfo is None:
+                                from django.utils import timezone
+                                end_time_for_calc = timezone.make_aware(end_time_for_calc)
+
+                            runtime = (end_time_for_calc - start_time_for_calc).total_seconds()
+                            updates['runtime'] = runtime
+                        except Exception as e:
+                            logger.debug(f"Could not calculate runtime for job {slurm_jobid}: {e}")
+                            # Don't fail the entire update if runtime calculation fails
+
+            # Handle slurm_status
+            slurm_status, additional_states = _normalize_slurm_status(data.get('slurm_status', ''))
+            if slurm_status:
+                updates['slurm_status'] = slurm_status
+
+            # Store additional states if any
+            if additional_states:
+                updates['slurm_additional_states'] = additional_states
+                logger.debug(f"Storing additional states for job {slurm_jobid}: {additional_states}")
+
+            # Extract exit code for job success determination
+            exit_code = data.get('exit_code')
+            if exit_code:
+                logger.debug(f"Raw exit code from data: {exit_code} (type: {type(exit_code)})")
+                updates['slurm_exit_code'] = exit_code
+
+            # Extract numeric values using helper function
+            nodes_allocated = _extract_number(data.get('nodes_allocated'), None)
+            if nodes_allocated is not None:
+                updates['number_of_nodes'] = nodes_allocated
+
+            ntasks_per_node = _extract_number(data.get('ntasks_per_node'), None)
+            if ntasks_per_node is not None:
+                updates['ranks_per_node'] = ntasks_per_node
+
+            cpus_per_task = _extract_number(data.get('cpus_per_task'), None)
+            if cpus_per_task is not None:
+                updates['threads_per_rank'] = cpus_per_task
+
+            time_limit = _extract_number(data.get('time_limit'), None)
+            if time_limit is not None:
+                updates['wall_clock_time_limit'] = time_limit // 60  # Convert to minutes
+
+            if updates:
+                # Store old values for comparison
+                old_slurm_status = getattr(job, 'slurm_status', None)
+                old_start_time = getattr(job, 'slurm_start_time', None)
+                old_end_time = getattr(job, 'slurm_end_time', None)
+
+                # Protect cancelled jobs from being overwritten with completed status
+                if old_slurm_status == 'CANCELLED' and 'slurm_status' in updates:
+                    new_slurm_status = updates['slurm_status']
+                    if new_slurm_status == 'COMPLETED':
+                        logger.info(f'Job {job.id} (SLURM {slurm_jobid}) is already CANCELLED, preventing overwrite to COMPLETED')
+                        # Remove the slurm_status update to preserve cancelled status
+                        del updates['slurm_status']
+                        # Also remove slurm_end_time if it would cause completion detection
+                        if 'slurm_end_time' in updates:
+                            logger.info(f'Job {job.id} (SLURM {slurm_jobid}) is cancelled, preserving original end time')
+                            del updates['slurm_end_time']
+
+                with transaction.atomic():
+                    for field, value in updates.items():
+                        setattr(job, field, value)
+                    job.save(update_fields=list(updates.keys()))
+
+                # Log only significant updates, not every field
+                significant_fields = ['slurm_status', 'slurm_start_time', 'slurm_end_time', 'status']
+                significant_updates = {k: v for k, v in updates.items() if k in significant_fields}
+                if significant_updates:
+                    # Check if this is a meaningful status change
+                    status_changed = 'slurm_status' in updates and updates['slurm_status'] != old_slurm_status
+                    time_changed = ('slurm_start_time' in updates and updates['slurm_start_time'] != old_start_time) or \
+                                 ('slurm_end_time' in updates and updates['slurm_end_time'] != old_end_time)
+
+                    if status_changed or time_changed:
+                        logger.info(f'Updated job {job.id} (SLURM {slurm_jobid}): {significant_updates}')
+                    else:
+                        logger.debug(f'Updated job {job.id} (SLURM {slurm_jobid}): {significant_updates}')
+
+                # Special handling for completed jobs
+                if slurm_status in ['COMPLETED', 'FAILED', 'CANCELLED']:
+                    # For cancelled jobs, use the stored status to prevent incorrect mapping
+                    status_for_mapping = job.slurm_status if job.slurm_status == 'CANCELLED' else slurm_status
+                    # Determine OFE status based on SLURM status and exit code
+                    new_ofe_status = _map_slurm_status(status_for_mapping, exit_code)
+                    logger.info(f'Job {job.id} (SLURM {slurm_jobid}) has SLURM status {status_for_mapping}, mapping to OFE status {new_ofe_status}')
+                    if job.status != new_ofe_status:
+                        job.status = new_ofe_status
+                        job.save(update_fields=['status'])
+                        logger.info(f'Updated OFE status for job {job.id} to {job.status} based on exit code and SLURM status')
+                    else:
+                        logger.debug(f'Job {job.id} already has OFE status {job.status}, not updating')
+
+                # Additional completion detection: if job has end time but no specific status, determine completion
+                elif job.slurm_end_time and job.slurm_end_time > (job.slurm_start_time or 0):
+                    # Only mark as completed if we don't have a specific SLURM status that indicates error
+                    if job.status not in ['c', 'e'] and slurm_status not in ['FAILED', 'CANCELLED', 'TIMEOUT', 'PREEMPTED']:
+                        logger.info(f'Job {job.id} (SLURM {slurm_jobid}) has end time, marking as completed')
+                        job.status = 'c'
+                        job.save(update_fields=['status'])
+                        logger.info(f'Updated OFE status for job {job.id} to completed based on end time')
+                    elif slurm_status in ['FAILED', 'CANCELLED', 'TIMEOUT', 'PREEMPTED']:
+                        # If SLURM status indicates error, mark as error
+                        if job.status != 'e':
+                            logger.info(f'Job {job.id} (SLURM {slurm_jobid}) has end time and error status {slurm_status}, marking as error')
+                            job.status = 'e'
+                            job.save(update_fields=['status'])
+                            logger.info(f'Updated OFE status for job {job.id} to error based on SLURM status {slurm_status}')
+
+                    # Also update the slurm_status field if it's None or empty, but preserve cancelled status
+                    if not job.slurm_status or job.slurm_status == '':
+                        # Don't overwrite cancelled status with completed
+                        if slurm_status not in ['FAILED', 'CANCELLED', 'TIMEOUT', 'PREEMPTED']:
+                            job.slurm_status = 'COMPLETED'
+                            job.save(update_fields=['slurm_status'])
+                            logger.info(f'Updated slurm_status for job {job.id} to COMPLETED')
+                        else:
+                            # Preserve the error status
+                            job.slurm_status = slurm_status
+                            job.save(update_fields=['slurm_status'])
+                            logger.info(f'Updated slurm_status for job {job.id} to {slurm_status} (preserving error status)')
+
+                # Handle case where slurm_status is None but we have completion info
+                elif slurm_status is None and job.slurm_end_time:
+                    # If we have an end time but no status, assume completed (but not if we already have error status)
+                    if job.status not in ['c', 'e']:
+                        job.status = 'c'
+                        job.save(update_fields=['status'])
+                        logger.info(f'Updated OFE status for job {job.id} to completed (status was None)')
+
+                    # Update slurm_status to COMPLETED, but only if we don't already have an error status
+                    if job.slurm_status not in ['FAILED', 'CANCELLED', 'TIMEOUT', 'PREEMPTED']:
+                        job.slurm_status = 'COMPLETED'
+                        job.save(update_fields=['slurm_status'])
+                        logger.info(f'Updated slurm_status for job {job.id} to COMPLETED (was None)')
+                    else:
+                        logger.debug(f'Preserving existing error status {job.slurm_status} for job {job.id}')
+        else:
+            # Create new external job
+            _create_external_job(data, cluster)
+
+    except Exception as e:
+        logger.error(f'Error processing SLURM job update for job {slurm_jobid}: {e}')
+        import traceback
+        logger.debug(f'Traceback: {traceback.format_exc()}')
+
+    return True
+
+
+def _parse_slurm_timestamp(timestamp_data):
+    """Parse SLURM timestamp data which can be in various formats"""
+    from datetime import datetime
+    from django.utils import timezone
+
+    if not timestamp_data:
+        return None
+
+    try:
+        # Handle different timestamp formats
+        if isinstance(timestamp_data, dict):
+            # Format: {"number": 1234567890}
+            if 'number' in timestamp_data:
+                dt = datetime.fromtimestamp(timestamp_data['number'])
+                return timezone.make_aware(dt)
+            # Format: {"set": true, "infinite": false, "number": 1234567890}
+            elif 'set' in timestamp_data and timestamp_data.get('set') and 'number' in timestamp_data:
+                dt = datetime.fromtimestamp(timestamp_data['number'])
+                return timezone.make_aware(dt)
+        elif isinstance(timestamp_data, (int, float)):
+            # Direct timestamp value
+            dt = datetime.fromtimestamp(timestamp_data)
+            return timezone.make_aware(dt)
+        elif isinstance(timestamp_data, str):
+            # String timestamp
+            dt = datetime.fromtimestamp(float(timestamp_data))
+            return timezone.make_aware(dt)
+        elif isinstance(timestamp_data, list) and len(timestamp_data) > 0:
+            # List format - take first element
+            return _parse_slurm_timestamp(timestamp_data[0])
+    except (ValueError, TypeError, KeyError) as e:
+        logger.debug(f"Failed to parse timestamp {timestamp_data}: {e}")
+        return None
+
+    return None
+
+
+def _create_external_job(job_data, cluster):
+    """Create a new external job from SLURM data"""
+    # Import here to avoid circular imports
+    from ..models import Job, ClusterPartition, User, Role
+    from django.db import transaction
+    from django.utils import timezone
+    from datetime import datetime
+    from decimal import Decimal
+
+    # Ensure slurm_jobid is an integer
+    slurm_jobid_raw = job_data.get('slurm_jobid')
+    if isinstance(slurm_jobid_raw, list):
+        slurm_jobid = slurm_jobid_raw[0] if slurm_jobid_raw else None
+        logger.warning(f"slurm_jobid was a list, using first element: {slurm_jobid}")
+    else:
+        slurm_jobid = slurm_jobid_raw
+
+    user_name = job_data.get('user_name', 'unknown')
+    partition_name = job_data.get('partition', 'default')
+    job_name = job_data.get('name', '')
+
+    # Determine job type based on job name pattern
+    job_type = 'external'
+    if job_name and '-install' in job_name:
+        job_type = 'installation'
+        logger.debug(f"Detected installation job from name pattern: {job_name}")
+
+    # Normalize user_name if it's a list or other format
+    if isinstance(user_name, list):
+        user_name = user_name[0] if user_name else 'unknown'
+        logger.debug(f"user_name was a list, using first element: {user_name}")
+
+    # Ensure user_name is a valid string
+    if not isinstance(user_name, str) or not user_name.strip():
+        user_name = 'unknown'
+        logger.warning(f"Invalid user_name, using 'unknown': {job_data.get('user_name')}")
+
+    # Clean the username to ensure it's valid
+    user_name = user_name.strip()
+    if not user_name:
+        user_name = 'unknown'
+
+    # Get or create user
+    try:
+        user, created = User.objects.get_or_create(
+            username=user_name,
+            defaults={
+                'email': f'{user_name}@external.local',
+                'first_name': user_name,
+                'last_name': 'External'
+            }
+        )
+
+        if created:
+            default_role = Role.objects.get(id=Role.NORMALUSER)
+            user.roles.add(default_role)
+            logger.debug(f"Created new user: {user_name}")
+    except Exception as e:
+        logger.error(f"Error creating/finding user '{user_name}': {e}")
+        # Fallback to a default user
+        try:
+            user = User.objects.get(username='unknown')
+        except User.DoesNotExist:
+            # Create a fallback user
+            user = User.objects.create(
+                username='unknown',
+                email='unknown@external.local',
+                first_name='Unknown',
+                last_name='External'
+            )
+            default_role = Role.objects.get(id=Role.NORMALUSER)
+            user.roles.add(default_role)
+            logger.info("Created fallback user 'unknown'")
+
+    # Get partition
+    try:
+        partition = ClusterPartition.objects.get(
+            cluster=cluster,
+            name=partition_name
+        )
+    except ClusterPartition.DoesNotExist:
+        # Create default partition if needed
+        partition = ClusterPartition.objects.create(
+            cluster=cluster,
+            name=partition_name,
+            machine_type='unknown',
+            dynamic_node_count=0,
+            static_node_count=0
+        )
+
+    # Parse timestamps
+    start_time = None
+    end_time = None
+
+    if job_data.get('slurm_start_time'):
+        start_time = _parse_slurm_timestamp(job_data['slurm_start_time'])
+
+    if job_data.get('slurm_end_time'):
+        end_time = _parse_slurm_timestamp(job_data['slurm_end_time'])
+
+    # Calculate runtime
+    runtime = None
+    if start_time and end_time:
+        runtime = (end_time - start_time).total_seconds()
+
+    # Map SLURM status to OFE status
+    slurm_status, additional_states = _normalize_slurm_status(job_data.get('slurm_status', ''))
+    ofe_status = _map_slurm_status(slurm_status, job_data.get('exit_code'))
+
+    # Extract exit code if available
+    exit_code = job_data.get('exit_code')
+
+    # Extract numeric values using helper function
+    nodes_allocated = _extract_number(job_data.get('nodes_allocated'), 1)
+    ntasks_per_node = _extract_number(job_data.get('ntasks_per_node'), 1)
+    cpus_per_task = _extract_number(job_data.get('cpus_per_task'), 1)
+    time_limit = _extract_number(job_data.get('time_limit'), 0)
+
+    job_data_dict = {
+        'name': job_data.get('name', f'External Job {slurm_jobid}'),
+        'user': user,
+        'cluster': cluster,
+        'partition': partition,
+        'application': None,  # External jobs don't have applications
+        'number_of_nodes': nodes_allocated,
+        'ranks_per_node': ntasks_per_node,
+        'threads_per_rank': cpus_per_task,
+        'wall_clock_time_limit': time_limit // 60,  # Convert to minutes
+        'run_script': f'External job {slurm_jobid}',
+        'status': ofe_status,
+        'slurm_jobid': slurm_jobid,
+        'slurm_status': slurm_status,
+        'slurm_additional_states': additional_states if additional_states else [],
+        'slurm_start_time': start_time,
+        'slurm_end_time': end_time,
+        'slurm_exit_code': exit_code,
+        'runtime': runtime,
+        'job_cost': Decimal('0.00'),  # External jobs don't have cost tracking
+        'date_time_submission': start_time or timezone.now(),
+        'job_type': job_type,
+    }
+
+    with transaction.atomic():
+        job = Job.objects.create(**job_data_dict)
+    logger.info(f'Created {job_type} job {job.id} for SLURM job {slurm_jobid}')
+
+
+def _map_slurm_status(slurm_status, exit_code=None):
+    """Map SLURM job status to OFE job status, considering exit code for completion"""
+    status_mapping = {
+        'PENDING': 'q',
+        'CONFIGURING': 'q',
+        'RUNNING': 'r',
+        'COMPLETING': 'r',
+        'SUSPENDED': 'q',
+        'REQUEUED': 'q',
+        'FAILED': 'e',
+        'CANCELLED': 'e',
+        'TIMEOUT': 'e',
+        'PREEMPTED': 'e',
+    }
+
+    # Handle COMPLETED status based on exit code
+    if slurm_status == 'COMPLETED':
+        if exit_code is not None:
+            # Determine success based on exit code
+            job_success = _is_job_successful(slurm_status, exit_code)
+            return 'c' if job_success else 'e'
+        else:
+            # If no exit code available, default to completed successfully
+            return 'c'
+
+    return status_mapping.get(slurm_status, 'n')
+
+
+def cb_slurm_queue_status(message, source_id=None):
+    """Handle SLURM queue status updates"""
+    # Import here to avoid circular imports
+    from ..models import SlurmQueueStatus, Cluster, ClusterPartition
+    from django.db import transaction
+
+    data = message.get("data", {})
+    cluster_id = message.get("cluster_id")
+
+    if not cluster_id:
+        logger.warning("Received SLURM queue status without cluster ID")
+        return True
+
+    try:
+        cluster = Cluster.objects.get(id=cluster_id, status='r')
+    except Cluster.DoesNotExist:
+        logger.warning(f"Cluster {cluster_id} not found or not ready")
+        return True
+
+    partition_name = data.get("partition", "default")
+    queue_stats = data.get("queue_stats", {})
+    node_stats = data.get("node_stats", {})
+
+    # Debug logging
+    logger.debug(f"SLURM queue status for cluster {cluster_id}, partition {partition_name}: queue_stats={queue_stats}, node_stats={node_stats}")
+    logger.debug(f"Full queue_stats data: {json.dumps(queue_stats, indent=2)}")
+    logger.debug(f"Full node_stats data: {json.dumps(node_stats, indent=2)}")
+
+    try:
+        partition = ClusterPartition.objects.get(
+            cluster=cluster,
+            name=partition_name
+        )
+    except ClusterPartition.DoesNotExist:
+        logger.warning(f"Partition {partition_name} not found for cluster {cluster_id}")
+        return True
+
+    try:
+        with transaction.atomic():
+            queue_status = SlurmQueueStatus.objects.create(
+                cluster=cluster,
+                partition=partition,
+                pending_jobs=queue_stats.get("pending", 0),
+                running_jobs=queue_stats.get("running", 0),
+                completed_jobs=queue_stats.get("completed", 0),
+                available_nodes=node_stats.get("available", 0),
+                total_nodes=node_stats.get("total", 0)
+            )
+        logger.debug(f"Updated queue status for cluster {cluster_id}, partition {partition_name}: pending={queue_status.pending_jobs}, running={queue_status.running_jobs}")
+    except Exception as e:
+        logger.error(f"Error updating queue status for cluster {cluster_id}: {e}")
+
     return True
 
 
@@ -348,6 +915,8 @@ def startup():
     register_command("PING", c2_ping)
     register_command("PONG", c2_pong)
     register_command("CLUSTER_STATUS", cb_cluster_status)
+    register_command("SLURM_JOB_UPDATE", cb_slurm_job_update)
+    register_command("SLURM_QUEUE_STATUS", cb_slurm_queue_status)
 
 
 def send_command(cluster_id, cmd, data, on_response=None):
@@ -394,7 +963,7 @@ def _cloud_build_logs_callback(message):
             if text in ["DONE", "PUSH"]:
                 status_str = "SUCCESS"
                 logger.info("Interpreting textPayload '%s' as final success for build_id=%s", text, build_id)
-            elif "FAIL" in text or "ERROR" in text or "CANCELLED" in text or "FAILED" in text:
+            elif "FAIL" in text or "ERROR" in text or "CANCELLED" in text:
                 status_str = "FAILURE"
                 logger.info("Interpreting textPayload '%s' as failure for build_id=%s", text, build_id)
             else:

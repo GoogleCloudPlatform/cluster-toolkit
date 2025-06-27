@@ -54,7 +54,7 @@ locals {
 
   # Standard IAP brand name pattern: projects/{project_number}/brands/{project_number}
   # Get the project number and construct the brand name
-  oauth_brand_name = local.use_existing_brand ? "projects/${data.google_project.oauth_project[0].number}/brands/${data.google_project.oauth_project[0].number}" : google_iap_brand.project_brand[0].name
+  oauth_brand_name = local.use_existing_brand ? "projects/${data.google_project.oauth_project[0].number}/brands/${data.google_project.oauth_project[0].number}" : (local.create_new_brand ? google_iap_brand.project_brand[0].name : "")
 
   server_config_file = <<-EOT
 django_username: "${var.django_su_username}"
@@ -222,7 +222,7 @@ resource "google_iap_brand" "project_brand" {
 }
 
 resource "google_iap_client" "project_client" {
-  count        = local.oauth_enabled ? 1 : 0
+  count        = local.oauth_enabled && length(local.oauth_brand_name) > 0 ? 1 : 0
   display_name = local.oauth_client_name
   brand        = local.oauth_brand_name
 }

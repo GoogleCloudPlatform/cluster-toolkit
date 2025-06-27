@@ -847,9 +847,237 @@ class Cluster(CloudResource):
 
         return len(jobs)
 
+    def active_job_count(self):
+        """Get count of currently active jobs (running, queued, preparing, etc.)"""
+        # Try to get the most recent SLURM queue status for this cluster
+        try:
+            latest_queue_status = SlurmQueueStatus.objects.filter(
+                cluster=self
+            ).order_by('-timestamp').first()
+
+            if latest_queue_status:
+                # Use actual SLURM queue data
+                slurm_active_count = latest_queue_status.pending_jobs + latest_queue_status.running_jobs
+                logger = logging.getLogger(__name__)
+                logger.debug(f"Cluster {self.id}: Using SLURM queue data for active count: {slurm_active_count}")
+
+                # If SLURM data shows non-zero jobs, use it
+                if slurm_active_count > 0:
+                    return slurm_active_count
+                else:
+                    # SLURM data shows 0 jobs, but let's check if we have active OFE jobs
+                    # This handles the case where SLURM queue data is incorrect
+                    ofe_active_count = self._get_ofe_active_job_count()
+                    if ofe_active_count > 0:
+                        logger.debug(f"Cluster {self.id}: SLURM queue shows 0 jobs but OFE shows {ofe_active_count} active jobs - using OFE data")
+                        return ofe_active_count
+                    else:
+                        return 0
+            else:
+                logger = logging.getLogger(__name__)
+                logger.debug(f"Cluster {self.id}: No SLURM queue status found for active count")
+        except Exception as e:
+            logger = logging.getLogger(__name__)
+            logger.debug(f"Cluster {self.id}: Exception getting SLURM queue status for active count: {e}")
+            # Fallback to OFE job status if SLURM data is not available
+            pass
+
+        # Fallback to OFE job status methods
+        ofe_count = self._get_ofe_active_job_count()
+
+        logger = logging.getLogger(__name__)
+        logger.debug(f"Cluster {self.id}: Using OFE job status for active count: {ofe_count}")
+        return ofe_count
+
+    def running_job_count(self):
+        """Get count of currently running jobs"""
+        # Try to get the most recent SLURM queue status for this cluster
+        try:
+            latest_queue_status = SlurmQueueStatus.objects.filter(
+                cluster=self
+            ).order_by('-timestamp').first()
+
+            if latest_queue_status:
+                # Use actual SLURM queue data
+                slurm_running_count = latest_queue_status.running_jobs
+                logger = logging.getLogger(__name__)
+                logger.debug(f"Cluster {self.id}: Using SLURM queue data for running count: {slurm_running_count}")
+
+                # If SLURM data shows non-zero jobs, use it
+                if slurm_running_count > 0:
+                    return slurm_running_count
+                else:
+                    # SLURM data shows 0 jobs, but let's check if we have active OFE jobs
+                    ofe_running_count = self._get_ofe_running_job_count()
+                    if ofe_running_count > 0:
+                        logger.debug(f"Cluster {self.id}: SLURM queue shows 0 running jobs but OFE shows {ofe_running_count} running jobs - using OFE data")
+                        return ofe_running_count
+                    else:
+                        return 0
+            else:
+                logger = logging.getLogger(__name__)
+                logger.debug(f"Cluster {self.id}: No SLURM queue status found for running count")
+        except Exception as e:
+            logger = logging.getLogger(__name__)
+            logger.debug(f"Cluster {self.id}: Exception getting SLURM queue status for running count: {e}")
+            # Fallback to OFE job status if SLURM data is not available
+            pass
+
+        # Fallback to OFE job status methods
+        ofe_count = self._get_ofe_running_job_count()
+
+        logger = logging.getLogger(__name__)
+        logger.debug(f"Cluster {self.id}: Using OFE job status for running count: {ofe_count}")
+        return ofe_count
+
+    def queued_job_count(self):
+        """Get count of currently queued jobs"""
+        # Try to get the most recent SLURM queue status for this cluster
+        try:
+            latest_queue_status = SlurmQueueStatus.objects.filter(
+                cluster=self
+            ).order_by('-timestamp').first()
+
+            if latest_queue_status:
+                # Use actual SLURM queue data
+                slurm_pending_count = latest_queue_status.pending_jobs
+                logger = logging.getLogger(__name__)
+                logger.debug(f"Cluster {self.id}: Using SLURM queue data for queued count: {slurm_pending_count}")
+
+                # If SLURM data shows non-zero jobs, use it
+                if slurm_pending_count > 0:
+                    return slurm_pending_count
+                else:
+                    # SLURM data shows 0 jobs, but let's check if we have active OFE jobs
+                    ofe_queued_count = self._get_ofe_queued_job_count()
+                    if ofe_queued_count > 0:
+                        logger.debug(f"Cluster {self.id}: SLURM queue shows 0 queued jobs but OFE shows {ofe_queued_count} queued jobs - using OFE data")
+                        return ofe_queued_count
+                    else:
+                        return 0
+            else:
+                logger = logging.getLogger(__name__)
+                logger.debug(f"Cluster {self.id}: No SLURM queue status found for queued count")
+        except Exception as e:
+            logger = logging.getLogger(__name__)
+            logger.debug(f"Cluster {self.id}: Exception getting SLURM queue status for queued count: {e}")
+            # Fallback to OFE job status if SLURM data is not available
+            pass
+
+        # Fallback to OFE job status methods
+        ofe_count = self._get_ofe_queued_job_count()
+
+        logger = logging.getLogger(__name__)
+        logger.debug(f"Cluster {self.id}: Using OFE job status for queued count: {ofe_count}")
+        return ofe_count
+
+    def has_active_jobs(self):
+        """Check if cluster has any active jobs"""
+        return self.active_job_count() > 0
+
+    def get_slurm_status_summary(self):
+        """Get a summary of SLURM job status for this cluster using actual SLURM queue data"""
+        # Try to get the most recent SLURM queue status for this cluster
+        try:
+            latest_queue_status = SlurmQueueStatus.objects.filter(
+                cluster=self
+            ).order_by('-timestamp').first()
+
+            if latest_queue_status:
+                # Use actual SLURM queue data
+                pending_count = latest_queue_status.pending_jobs
+                running_count = latest_queue_status.running_jobs
+                total_active = pending_count + running_count
+
+                # Debug logging
+                logger = logging.getLogger(__name__)
+                logger.debug(f"Cluster {self.id}: Found SLURM queue status - pending: {pending_count}, running: {running_count}, total: {total_active}")
+
+                # If SLURM data shows non-zero jobs, use it
+                if total_active > 0:
+                    if running_count > 0 and pending_count > 0:
+                        return f"{running_count} running, {pending_count} queued"
+                    elif running_count > 0:
+                        return f"{running_count} running"
+                    elif pending_count > 0:
+                        return f"{pending_count} queued"
+                    else:
+                        return f"{total_active} active"
+                else:
+                    # SLURM data shows 0 jobs, but let's check if we have active OFE jobs
+                    # This handles the case where SLURM queue data is incorrect
+                    ofe_active_count = self._get_ofe_active_job_count()
+                    if ofe_active_count > 0:
+                        logger.debug(f"Cluster {self.id}: SLURM queue shows 0 jobs but OFE shows {ofe_active_count} active jobs - using OFE data")
+                        ofe_running_count = self._get_ofe_running_job_count()
+                        ofe_queued_count = self._get_ofe_queued_job_count()
+
+                        if ofe_running_count > 0 and ofe_queued_count > 0:
+                            return f"{ofe_running_count} running, {ofe_queued_count} queued"
+                        elif ofe_running_count > 0:
+                            return f"{ofe_running_count} running"
+                        elif ofe_queued_count > 0:
+                            return f"{ofe_queued_count} queued"
+                        else:
+                            return f"{ofe_active_count} active"
+                    else:
+                        return "Idle"
+            else:
+                # Debug logging
+                logger = logging.getLogger(__name__)
+                logger.debug(f"Cluster {self.id}: No SLURM queue status found, falling back to OFE job status")
+        except Exception as e:
+            # Debug logging
+            logger = logging.getLogger(__name__)
+            logger.debug(f"Cluster {self.id}: Exception getting SLURM queue status: {e}")
+            # Fallback to OFE job status if SLURM data is not available
+            pass
+
+        # Fallback to OFE job status methods
+        active_count = self._get_ofe_active_job_count()
+        running_count = self._get_ofe_running_job_count()
+        queued_count = self._get_ofe_queued_job_count()
+
+        # Debug logging
+        logger = logging.getLogger(__name__)
+        logger.debug(f"Cluster {self.id}: Using OFE job status - active: {active_count}, running: {running_count}, queued: {queued_count}")
+
+        if active_count == 0:
+            return "Idle"
+        elif running_count > 0 and queued_count > 0:
+            return f"{running_count} running, {queued_count} queued"
+        elif running_count > 0:
+            return f"{running_count} running"
+        elif queued_count > 0:
+            return f"{queued_count} queued"
+        else:
+            return f"{active_count} active"
+
     def __str__(self):
         """String for representing the Model object."""
         return f"Cluster '{self.name}'"
+
+    def _get_ofe_active_job_count(self):
+        """Get count of currently active jobs using OFE job status"""
+        active_statuses = ['p', 'q', 'd', 'r', 'u']  # preparing, queued, downloading, running, uploading
+        return Job.objects.filter(
+            cluster=self,
+            status__in=active_statuses
+        ).count()
+
+    def _get_ofe_running_job_count(self):
+        """Get count of currently running jobs using OFE job status"""
+        return Job.objects.filter(
+            cluster=self,
+            status='r'
+        ).count()
+
+    def _get_ofe_queued_job_count(self):
+        """Get count of currently queued jobs using OFE job status"""
+        return Job.objects.filter(
+            cluster=self,
+            status='q'
+        ).count()
 
 
 class ComputeInstance(CloudResource):
@@ -1459,8 +1687,10 @@ class Job(models.Model):
 
     application = models.ForeignKey(
         Application,
-        help_text="Which application installation to use?",
+        help_text="Which application installation to use? (null for external jobs)",
         on_delete=models.RESTRICT,
+        null=True,
+        blank=True,
     )
     cluster = models.ForeignKey(
         Cluster,
@@ -1584,6 +1814,33 @@ class Job(models.Model):
         null=True,
         help_text="SLURM Job ID",
     )
+    slurm_status = models.CharField(
+        max_length=20,
+        help_text="SLURM job status",
+        blank=True,
+        null=True,
+    )
+    slurm_start_time = models.DateTimeField(
+        help_text="SLURM job start time",
+        blank=True,
+        null=True,
+    )
+    slurm_end_time = models.DateTimeField(
+        help_text="SLURM job end time",
+        blank=True,
+        null=True,
+    )
+    slurm_exit_code = models.TextField(
+        help_text="SLURM job exit code (can be complex JSON format from scontrol)",
+        blank=True,
+        null=True,
+    )
+    slurm_additional_states = models.JSONField(
+        help_text="Additional SLURM job states (e.g., CONFIGURING, POWER_UP_NODE)",
+        blank=True,
+        null=True,
+        default=list,
+    )
     status = models.CharField(
         max_length=1,
         choices=JOB_STATUS,
@@ -1640,9 +1897,42 @@ class Job(models.Model):
         null=True,
     )
 
+    JOB_TYPE = (
+        ("user", "User job - created through OFE interface"),
+        ("installation", "Installation job - created for application installation"),
+        ("external", "External job - created outside OFE system"),
+    )
+    job_type = models.CharField(
+        max_length=20,
+        choices=JOB_TYPE,
+        default="user",
+        help_text="Type of job (user, installation, or external)",
+    )
+
     def __str__(self):
         """String for representing the Model object."""
         return f"#{self.id} - '{self.name}' on {self.application.cluster}"
+
+
+class SlurmQueueStatus(models.Model):
+    """Model representing SLURM queue status for monitoring"""
+
+    cluster = models.ForeignKey(Cluster, on_delete=models.CASCADE)
+    partition = models.ForeignKey(ClusterPartition, on_delete=models.CASCADE)
+    timestamp = models.DateTimeField(auto_now_add=True)
+    pending_jobs = models.IntegerField()
+    running_jobs = models.IntegerField()
+    completed_jobs = models.IntegerField()
+    available_nodes = models.IntegerField()
+    total_nodes = models.IntegerField()
+
+    class Meta:
+        verbose_name = "SLURM Queue Status"
+        verbose_name_plural = "SLURM Queue Status"
+        ordering = ['-timestamp']
+
+    def __str__(self):
+        return f"{self.cluster.name} - {self.partition.name} - {self.timestamp}"
 
 
 class ContainerJob(Job):
