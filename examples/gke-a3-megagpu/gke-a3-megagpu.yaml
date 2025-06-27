@@ -149,8 +149,10 @@ deployment_groups:
     settings:
       apply_manifests:
       - source: $(vars.permissions_file_staged_path)
+        enable: $(vars.enable_periodic_health_checks)
         template_vars:
           project_id: $(vars.project_id)
+          deployment_name: $(vars.deployment_name)
       - source: $(vars.chs_pvc_rendered_path)
         enable: $(vars.enable_periodic_health_checks)
         template_vars:

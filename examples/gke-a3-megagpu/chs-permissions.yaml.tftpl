@@ -4,7 +4,7 @@ metadata:
   name: workload-identity-k8s-sa
   namespace: default
   annotations:
-    iam.gke.io/gcp-service-account: gke-wl-sa@${project_id}.iam.gserviceaccount.com
+    iam.gke.io/gcp-service-account: ${deployment_name}-gke-wl-sa@${project_id}.iam.gserviceaccount.com
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
