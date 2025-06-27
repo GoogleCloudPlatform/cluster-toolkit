@@ -51,3 +51,6 @@ vars:
 
   # The disk size of a4 node pool for this deployment.
   a4_node_pool_disk_size_gb:
+
+  enable_periodic_health_checks: # Make this true to run CHS (healthchecks)
+  health_check_schedule: # Run the health check at 12:00 AM (midnight) every Sunday
