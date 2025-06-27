@@ -14,7 +14,7 @@ This module simplifies the following functionality:
   * **File/Template/Directory Reference:** Set `source` to the path to:
     * A single URL to a manifest file. Ex.: `https://github.com/.../myrepo/manifest.yaml`.
 
-    > **Note:** Applying from a URL has important limitations. Please review the [Considerations & Gotchas for Applying from URLs](#applying-manifests-from-urls-considerations--gotchas) section below.
+    > **Note:** Applying from a URL has important limitations. Please review the [Considerations & Callouts for Applying from URLs](#applying-manifests-from-urls-considerations--callouts) section below.
     * A single local YAML manifest file (`.yaml`). Ex.: `./manifest.yaml`.
     * A template file (`.tftpl`) to generate a manifest. Ex.: `./template.yaml.tftpl`. You can pass the variables to format the template file in `template_vars`.
     * A directory containing multiple YAML or template files. Ex: `./manifests/`. You can pass the variables to format the template files in `template_vars`.
@@ -97,11 +97,12 @@ You can specify a particular kueue version that you would like to use using the 
 >
 > Terraform may apply resources in parallel, leading to potential dependency issues. If a resource's dependencies aren't ready, it will be applied again up to 15 times.
 
-## Gotchas
+## Callouts
 
-### Applying Manifests from URLs: Considerations & Gotchas
+### Applying Manifests from URLs: Considerations & Callouts
 
-While this module supports applying manifests directly from remote `http://` or `https://` URLs, this method introduces complexities not present when using local files. For production environments, we recommend sourcing manifests from local paths or a version-controlled Git repository.
+While this module supports applying manifests directly from remote `http://` or `https://` URLs, this method introduces complexities not present when using local files. For production environments, we recommend sourcing manifests from local paths or a version-controlled Git repository. Moreover, this method will be deprecated soon. Hence we recommend to use other methods to source manifests.
+
 
 If you choose to use the URL method, be aware of the following potential issues and their solutions.
 
