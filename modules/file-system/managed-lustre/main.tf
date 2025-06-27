@@ -65,8 +65,9 @@ resource "google_lustre_instance" "lustre_instance" {
   instance_id = local.instance_id
   location    = var.zone
 
-  filesystem   = var.remote_mount
-  capacity_gib = var.size_gib
+  filesystem                  = var.remote_mount
+  capacity_gib                = var.size_gib
+  per_unit_storage_throughput = var.per_unit_storage_throughput
 
   labels  = local.labels
   network = var.network_id

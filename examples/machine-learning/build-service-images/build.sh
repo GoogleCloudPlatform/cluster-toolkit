@@ -30,10 +30,10 @@ if [[ ! -d "$RECIPE" ]]; then
 fi
 
 readonly FAMILY="$RECIPE-$SUFFIX"
-LONG_DEPLOYMENT_NAME="$USER-roll-$FAMILY"
+LONG_DEPLOYMENT_NAME="$USER-$FAMILY"
 readonly DEPLOYMENT_NAME="${LONG_DEPLOYMENT_NAME:0:31}"
 
-readonly OUT_DIR="/tmp/build_$FAMILY"
+readonly OUT_DIR="./build_$FAMILY"
 
 echo "Building image in family: $FAMILY"
 gcluster deploy "$RECIPE"/blueprint.yaml \

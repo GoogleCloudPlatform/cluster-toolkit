@@ -69,7 +69,6 @@ deployment_groups:
     settings:
       configure_ssh_host_patterns:
       - $(vars.hostname_prefix)-*
-      install_cloud_rdma_drivers: true
       set_ofi_cloud_rdma_tunables: true
       local_ssd_filesystem:
         fs_type: ext4

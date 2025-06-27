@@ -39,7 +39,7 @@ vars:
     project: $(vars.project_id)
     family: $(vars.deployment_name)-u22
   disk_size_gb: 100
-  nccl_plugin_version: v1.0.5
+  nccl_plugin_version: v1.0.6
   benchmark_dir: $(ghpc_stage("system_benchmarks"))
   base_network_name: $(vars.deployment_name)
 

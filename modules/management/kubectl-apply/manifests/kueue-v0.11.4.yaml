@@ -11427,6 +11427,14 @@ metadata:
   name: kueue-manager-role
 rules:
 - apiGroups:
+    - batch
+  resources:
+    - cronjobs 
+  verbs:
+    - get
+    - list
+    - watch
+- apiGroups:
   - ""
   resources:
   - events
@@ -12623,6 +12631,7 @@ spec:
       - args:
         - --config=/controller_manager_config.yaml
         - --zap-log-level=2
+        - --feature-gates=TopologyAwareScheduling=true
         command:
         - /manager
         image: registry.k8s.io/kueue/kueue:v0.11.4

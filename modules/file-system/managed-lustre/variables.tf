@@ -77,6 +77,12 @@ variable "size_gib" {
   default     = 18000
 }
 
+variable "per_unit_storage_throughput" {
+  description = "Throughput of the instance in MB/s/TiB. Valid values are 125, 250, 500, 1000."
+  type        = number
+  default     = 1000
+}
+
 variable "labels" {
   description = "Labels to add to the Managed Lustre instance. Key-value pairs."
   type        = map(string)

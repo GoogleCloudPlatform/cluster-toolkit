@@ -597,7 +597,7 @@ def setup_cloud_ops() -> None:
     with open("/etc/google-cloud-ops-agent/config.yaml", "w") as f:
         yaml.safe_dump(file, f, sort_keys=False)
 
-    run("systemctl restart google-cloud-ops-agent.service", timeout=30)
+    run("systemctl restart google-cloud-ops-agent.service", timeout=90)
 
 
 def main():
