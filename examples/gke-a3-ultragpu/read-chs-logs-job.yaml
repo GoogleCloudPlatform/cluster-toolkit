@@ -1,0 +1,67 @@
+# Copyright 2025 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: chs-output-reader-job
+  namespace: default
+spec:
+  template:
+    spec:
+      serviceAccountName: workload-identity-k8s-sa
+      containers:
+      - name: reader-container
+        image: busybox
+        imagePullPolicy: IfNotPresent
+        command:
+        - /bin/sh
+        - -c
+        - |
+          echo "--- Listing all contents of /mnt/output ---"
+          ls -la /mnt/output
+
+          echo ""
+          echo "--- Attempting to read the latest health scan result file ---"
+
+          # Find the latest .txt file in /mnt/output using ls -t (sort by time, newest first)
+          # and head -1 to get only the first (newest) result.
+          LATEST_FILE=$(ls -t /mnt/output/*_healthscan_result_*.txt 2>/dev/null | head -n 1)
+
+          if [ -n "$LATEST_FILE" ]; then # Check if LATEST_FILE is not empty
+            echo "Found latest health scan file: $LATEST_FILE"
+            echo ""
+            cat "$LATEST_FILE"
+          else
+            echo "No 'healthscan_result_*.txt' files found in /mnt/output."
+          fi
+
+          echo ""
+          echo "--- Reading complete. Pod will exit. ---"
+        volumeMounts:
+        - name: chs-result
+          mountPath: /mnt/output
+      volumes:
+      - name: chs-result
+        persistentVolumeClaim:
+          claimName: chs-output-pvc
+      restartPolicy: Never
+      tolerations:
+      - key: "nvidia.com/gpu"
+        operator: "Exists"
+        effect: "NoSchedule"
+      - key: "components.gke.io/gke-managed-components"
+        operator: "Exists"
+        effect: "NoSchedule"
+  backoffLimit: 0
