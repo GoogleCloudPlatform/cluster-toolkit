@@ -454,7 +454,7 @@ def process_queue_data(queue_data, node_data):
         elif _job_state_matches(state, "COMPLETED") or _job_state_matches(state, "COMPLETING"):
             partition_stats[partition]["completed"] += 1
             logger.debug(f"Job {job_id} counted as COMPLETED")
-        else:
+    else:
             logger.debug(f"Job {job_id} with state '{state}' not counted in any category")
 
     # Debug: Log final statistics
