@@ -19,16 +19,28 @@ from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib import messages
-from django.http import HttpResponseRedirect
-from django.urls import reverse, reverse_lazy
-from django.views import generic
+from django.core.exceptions import ValidationError
+from django.db.models import Q
+from django.http import HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404
+from django.urls import reverse, reverse_lazy
+from django.utils import timezone
+from django.views import generic
+from django.views.decorators.csrf import csrf_exempt
+from django.utils.decorators import method_decorator
+from rest_framework import viewsets
+from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.authentication import SessionAuthentication, TokenAuthentication
 from ..permissions import SuperUserRequiredMixin
 from ..models import Application, Job, Role, Cluster, ContainerJob
-from ..serializers import JobSerializer
 from ..forms import JobForm, ContainerJobForm
+from ..serializers import JobSerializer
 from ..cluster_manager import c2, cloud_info, utils
 from .view_utils import GCSFile, StreamingFileView, RegistryDataHelper
+from datetime import timedelta
+import csv
+import json
 import logging
 
 logger = logging.getLogger(__name__)
@@ -38,28 +50,93 @@ class JobListView(LoginRequiredMixin, generic.ListView):
     """Custom ListView for Job model"""
 
     template_name = "job/list.html"
+    paginate_by = 10  # Show 10 jobs per page
 
     def get_queryset(self):
-        jobs = Job.objects.filter(
-            user=self.request.user
-        )  # user only sees its own jobs
+        # Get all jobs from the database
+        jobs = Job.objects.all()
+
+        # Apply user-based filtering
         roles = []
         for role in list(self.request.user.roles.all()):
             roles.append(role.id)
-        if Role.CLUSTERADMIN in roles:
-            jobs = Job.objects.all()  # admin gets to see everything
-        return jobs
+
+        if Role.CLUSTERADMIN not in roles:
+            # Regular users only see their own jobs
+            jobs = jobs.filter(user=self.request.user)
+
+        # Apply search filtering if provided
+        search_query = self.request.GET.get('search', '')
+        if search_query:
+            jobs = jobs.filter(
+                Q(name__icontains=search_query) |
+                Q(application__name__icontains=search_query) |
+                Q(application__cluster__name__icontains=search_query) |
+                Q(cluster__name__icontains=search_query) |
+                Q(slurm_jobid__icontains=search_query)
+            )
+
+        # Apply status filtering if provided
+        status_filter = self.request.GET.get('status', '')
+        if status_filter:
+            jobs = jobs.filter(status=status_filter)
+
+        # Apply cluster filtering if provided
+        cluster_filter = self.request.GET.get('cluster', '')
+        if cluster_filter:
+            jobs = jobs.filter(
+                Q(application__cluster_id=cluster_filter) |
+                Q(cluster_id=cluster_filter)
+            )
+
+        # Apply job type filtering if provided (admin only)
+        job_type_filter = self.request.GET.get('job_type', '')
+        if job_type_filter and Role.CLUSTERADMIN in roles:
+            jobs = jobs.filter(job_type=job_type_filter)
+
+        # Order by most recent first (with job ID as secondary sort for jobs with same timestamp)
+        return jobs.order_by('-date_time_submission', '-id')
 
     def get_context_data(self, *args, **kwargs):
+        context = super().get_context_data(*args, **kwargs)
+
+        # Smart auto-refresh logic
         loading = 0
         jobs = self.get_queryset()
-        for job in jobs:
-            if job.status in ["p", "q", "d", "r", "u"]:
-                loading = 1
-                break
-        context = super().get_context_data(*args, **kwargs)
-        context["loading"] = loading
-        context["navtab"] = "job"
+
+        # Check for active jobs (like clusters page)
+        active_jobs = jobs.filter(status__in=["p", "q", "d", "r", "u"])
+        if active_jobs.exists():
+            loading = 1
+            logger.debug(f"Auto-refresh enabled: {active_jobs.count()} active jobs found")
+
+        # Check for recent jobs (last 24 hours) to catch external jobs
+        recent_cutoff = timezone.now() - timedelta(hours=24)
+        recent_jobs = jobs.filter(date_time_submission__gte=recent_cutoff)
+
+        # If we have recent jobs but no active ones, still refresh to catch external jobs
+        if recent_jobs.exists() and not active_jobs.exists():
+            loading = 1
+            logger.debug(f"Auto-refresh enabled: {recent_jobs.count()} recent jobs found (monitoring for external jobs)")
+
+        if not loading:
+            logger.debug("Auto-refresh disabled: no active or recent jobs")
+
+        # Add search and filter context
+        context.update({
+            "loading": loading,
+            "navtab": "job",
+            "search_query": self.request.GET.get('search', ''),
+            "status_filter": self.request.GET.get('status', ''),
+            "cluster_filter": self.request.GET.get('cluster', ''),
+            "job_type_filter": self.request.GET.get('job_type', ''),
+            "available_clusters": Cluster.objects.filter(status='r').order_by('name'),
+            "status_choices": Job.JOB_STATUS,
+            "job_type_choices": Job.JOB_TYPE,
+            "active_job_count": active_jobs.count(),
+            "recent_job_count": recent_jobs.count(),
+        })
+
         return context
 
 

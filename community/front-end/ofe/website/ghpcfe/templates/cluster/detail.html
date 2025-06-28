@@ -42,6 +42,29 @@
     white-space: pre;
     font-family: monospace;
   }
+
+  .btn-block {
+    min-height: 40px;
+  }
+
+  .card-header h5 {
+    margin-bottom: 0;
+  }
+
+  .text-muted h6 {
+    font-size: 0.9rem;
+    font-weight: 600;
+  }
+
+  .text-danger h6 {
+    font-size: 0.9rem;
+    font-weight: 600;
+  }
+
+  .badge-light {
+    background-color: #f8f9fa;
+    color: #6c757d;
+  }
 </style>
 {% endif %}
 {% endblock %}
@@ -233,23 +256,152 @@
 {% if object.status == "d" %}
 <div class="alert alert-info">This cluster is destroyed and its settings archived. No further change is possible.</div>
 {% endif %}
-{% if cluster.status == "e" %}
-<a href="{% url 'backend-start-cluster' object.id %}" class="btn btn-primary">Retry</a>
+
+<!-- Action Buttons Section -->
+<div class="card mt-4">
+  <div class="card-header">
+    <h5 class="mb-0"><i class="fas fa-cogs"></i> Cluster Actions</h5>
+  </div>
+  <div class="card-body">
+
+    <!-- Primary Actions Row -->
+    <div class="row mb-3">
+      {% if cluster.status == "e" %}
+      <div class="col-md-3 mb-2">
+        <a href="{% url 'backend-start-cluster' object.id %}" class="btn btn-warning btn-block">
+          <i class="fas fa-redo"></i> Retry
+        </a>
+      </div>
+      {% endif %}
+
+      {% if object.status == "r" %}
+      <div class="col-md-3 mb-2">
+        <a href="{% url 'backend-sync-cluster' object.id %}" class="btn btn-info btn-block">
+          <i class="fas fa-sync"></i> Sync Cluster
+        </a>
+      </div>
+      <div class="col-md-3 mb-2">
+        <a href="{% url 'cluster-update' object.id %}" class="btn btn-primary btn-block">
+          <i class="fas fa-edit"></i> Edit Cluster
+        </a>
+      </div>
+      {% endif %}
+
+      {% if object.status != "n" %}
+      <div class="col-md-3 mb-2">
+        <a href="{% url 'cluster-log' cluster.id %}" class="btn btn-secondary btn-block">
+          <i class="fas fa-file-alt"></i> View Logs
+        </a>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Application Management Row -->
+    {% if object.status == "r" %}
+    <div class="row mb-3">
+      <div class="col-12">
+        <h6 class="text-muted mb-2"><i class="fas fa-cube"></i> Application Management</h6>
+      </div>
+      <div class="col-md-3 mb-2">
+        <a href="{% url 'application-create-spack-cluster' object.id %}" class="btn btn-success btn-block">
+          <i class="fas fa-download"></i> Install Spack App
+        </a>
+      </div>
+      <div class="col-md-3 mb-2">
+        <a href="{% url 'application-create-install' object.id %}" class="btn btn-success btn-block">
+          <i class="fas fa-wrench"></i> Install Custom App
+        </a>
+      </div>
+      <div class="col-md-3 mb-2">
+        <a href="{% url 'application-create' object.id %}" class="btn btn-success btn-block">
+          <i class="fas fa-plus"></i> Add Manual App
+        </a>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Danger Zone Row -->
+    <div class="row">
+      <div class="col-12">
+        <h6 class="text-danger mb-2"><i class="fas fa-exclamation-triangle"></i> Danger Zone</h6>
+      </div>
+
+      {% if cluster.status == "r" or cluster.status == "i" or cluster.status == "s" or cluster.status == "e" %}
+      <div class="col-md-4 mb-2">
+        {% if has_active_jobs %}
+        <button type="button" class="btn btn-danger btn-block" data-toggle="modal" data-target="#forceDeleteModal">
+          <i class="fas fa-trash"></i> Delete Cluster
+          <span class="badge badge-light ml-1">{{ active_jobs }}</span>
+        </button>
+        {% else %}
+        <button type="button" class="btn btn-danger btn-block" onclick="deleteCluster({{ object.id }})">
+          <i class="fas fa-trash"></i> Delete Cluster
+        </button>
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Active Jobs Warning -->
+    {% if has_active_jobs %}
+    <div class="alert alert-warning mt-3" role="alert">
+      <h6><i class="fas fa-exclamation-triangle"></i> Active Jobs Detected</h6>
+      <p class="mb-1">This cluster currently has <strong>{{ active_jobs }} active job(s)</strong>:</p>
+      <ul class="mb-1">
+        <li><strong>SLURM Status:</strong> {{ slurm_summary }}</li>
+        <li><strong>Cluster Status:</strong> {{ object.get_status_display }}</li>
+      </ul>
+      <p class="mb-0"><strong>Deleting this cluster will terminate all running jobs and may result in data loss.</strong></p>
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+
+<!-- Force Delete Modal -->
+{% if has_active_jobs %}
+<div class="modal fade" id="forceDeleteModal" tabindex="-1" role="dialog" aria-labelledby="forceDeleteModalLabel" aria-hidden="true">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header bg-danger text-white">
+        <h5 class="modal-title" id="forceDeleteModalLabel">
+          <i class="fas fa-exclamation-triangle"></i> Confirm Force Delete
+        </h5>
+        <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-danger">
+          <h6><i class="fas fa-exclamation-triangle"></i> Warning: Active Jobs Detected</h6>
+          <p>This cluster currently has <strong>{{ active_jobs }} active job(s)</strong>:</p>
+          <ul>
+            <li><strong>SLURM Status:</strong> {{ slurm_summary }}</li>
+            <li><strong>Cluster Status:</strong> {{ object.get_status_display }}</li>
+          </ul>
+          <p><strong>Deleting this cluster will:</strong></p>
+          <ul>
+            <li>Terminate all running jobs immediately</li>
+            <li>Cause data loss for jobs in progress</li>
+            <li>Destroy cluster resources permanently</li>
+          </ul>
+          <p><strong>Note: Compute instances may still require manual deletion after force deletion.</strong></p>
+          <p class="mb-0"><strong>This action cannot be undone.</strong></p>
+        </div>
+        <p>Are you absolutely sure you want to force delete this cluster?</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">
+          <i class="fas fa-times"></i> Cancel
+        </button>
+        <button type="button" class="btn btn-danger" onclick="forceDeleteCluster({{ object.id }})">
+          <i class="fas fa-trash"></i> Force Delete Cluster
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
 {% endif %}
-{% if cluster.status == "r" or cluster.status == "i" or cluster.status == "s" or cluster.status == "e" %}
-<a href="#" class="btn btn-danger" onclick="deleteCluster({{ object.id }})">Delete</a>
-{% endif %}
-{% if object.status == "r" %}
-<a href="{% url 'backend-sync-cluster' object.id %}" class="btn btn-primary">Sync Cluster</a>
-<a href="{% url 'application-create-spack-cluster' object.id %}" class="btn btn-primary">Install Spack Application</a>
-<a href="{% url 'application-create-install' object.id %}" class="btn btn-primary">Install Custom Application</a>
-<a href="{% url 'application-create' object.id %}" class="btn btn-primary">Add Manually-configured Application</a>
-<a href="{% url 'cluster-update' object.id %}" class="btn btn-primary">Edit Cluster</a>
-{% endif %}
-{% if object.status != "n" %}
-<a href="{% url 'cluster-log' cluster.id %}" class="btn btn-primary">View Logs</a>
-{% endif %}
-<br /><br />
 
 {% if object.status == "c" or object.status == "t" %}
 {# aka, if Terraform running, let's show the TF log #}
@@ -284,6 +436,35 @@
           }
       })
       .catch(error => console.error('Error:', error));
+
+      return false; // Prevent the default link behavior
+  }
+
+  function forceDeleteCluster(clusterId) {
+      // Close the modal
+      $('#forceDeleteModal').modal('hide');
+
+      // Send the DELETE request (same as regular delete, but user has already confirmed)
+      fetch('{% url "backend-destroy-cluster" 0 %}'.replace('0', clusterId), {
+          method: 'POST',
+          headers: {
+              'X-CSRFToken': getCookie('csrftoken'), // Include the CSRF token
+          },
+      })
+      .then(response => {
+          if (response.ok) {
+              // Handle success, e.g., redirect to another page
+              window.location.href = '/clusters/';
+          } else {
+              // Handle errors
+              console.error('Failed to force delete cluster');
+              alert('Failed to delete cluster. Please try again.');
+          }
+      })
+      .catch(error => {
+          console.error('Error:', error);
+          alert('An error occurred while deleting the cluster. Please try again.');
+      });
 
       return false; // Prevent the default link behavior
   }
