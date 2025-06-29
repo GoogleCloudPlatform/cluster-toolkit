@@ -385,8 +385,8 @@ def configure_dirs():
 
 
 def self_report_controller_address(lkp: util.Lookup) -> None:
-    if not lkp.cfg.controller_network_attachment:
-        return # only self report address if network attachment is used
+    if not util.use_published_controller_address():
+        return
     data = { "slurm_control_addr": lkp.cfg.slurm_control_addr }
     bucket, prefix = util._get_bucket_and_common_prefix()
     blob = util.storage_client().bucket(bucket).blob(f"{prefix}/controller_addr.yaml")
