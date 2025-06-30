@@ -45,3 +45,6 @@ vars:
   # To target a BLOCK_NAME, the name of the extended reservation
   # can be inputted as <reservation-name>/reservationBlocks/<reservation-block-name>
   reservation: RESERVATION_NAME
+
+  enable_periodic_health_checks: false # Make this true to run CHS (healthchecks)
+  health_check_schedule: "0 0 * * 0" # Run the health check at 12:00 AM (midnight) every Sunday
