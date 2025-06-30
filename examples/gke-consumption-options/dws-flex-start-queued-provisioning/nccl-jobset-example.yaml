@@ -36,7 +36,6 @@ spec:
         template:
           metadata:
             annotations:
-              kueue.x-k8s.io/podset-preferred-topology: "kubernetes.io/hostname"
               networking.gke.io/default-interface: 'eth0'
               networking.gke.io/interfaces: |
                 [
