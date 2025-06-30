@@ -1,0 +1,68 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+vars:
+  region: us-central1
+  zone: us-central1-a
+
+  slurm_gcp_version: 6.10.4
+
+  # to supply
+  family:
+  project_id:
+  deployment_name:
+
+  # Runners that are used across multiple blueprints
+  runner_disable_unattended_upgrades:
+    type: shell
+    destination: disable_unattended_upgrades.sh
+    content: |
+      #!/bin/bash
+      # Unattended upgrades are disabled in this blueprint so that software does not
+      # get updated daily and lead to potential instability in the cluster environment.
+      #
+      # Unattended Upgrades installs available security updates from the Ubuntu
+      # security pocket for installed packages daily by default. Administrators who
+      # disable this feature assume all responsibility for manually reviewing and
+      # patching their systems against vulnerabilities.
+      #
+      # To enable unattended upgrades, please remove this section.
+      set -e -o pipefail
+      systemctl stop unattended-upgrades.service
+      systemctl disable unattended-upgrades.service
+      systemctl mask unattended-upgrades.service
+
+  runner_install_slurm:
+    type: shell
+    destination: install_slurm.sh
+    content: |
+      #!/bin/bash
+      set -e -o pipefail
+      ansible-pull \
+          -U https://github.com/GoogleCloudPlatform/slurm-gcp -C $(vars.slurm_gcp_version) \
+          -i localhost, --limit localhost --connection=local \
+          -e @/var/tmp/slurm_vars.json \
+          ansible/playbook.yml
+
+  # this duplicates the ulimits configuration of the HPC VM Image
+  runner_setup_hpc_vm_image_ulimits:
+    type: data
+    destination: /etc/security/limits.d/99-unlimited.conf
+    content: |
+      * - memlock unlimited
+      * - nproc unlimited
+      * - stack unlimited
+      * - nofile 1048576
+      * - cpu unlimited
+      * - rtprio unlimited

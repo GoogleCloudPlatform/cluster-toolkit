@@ -67,6 +67,7 @@ class ResumeJobData:
 class ResumeData:
     jobs: List[ResumeJobData]
 
+
 def get_resume_file_data() -> Optional[ResumeData]:
     if not (path := os.getenv("SLURM_RESUME_FILE")):
         log.error("SLURM_RESUME_FILE was not in environment. Cannot get detailed job, node, partition allocation data.")
@@ -77,7 +78,6 @@ def get_resume_file_data() -> Optional[ResumeData]:
 
     jobs = []
     for jo in data.get("jobs", []):
-
         job = ResumeJobData(
             job_id = jo.get("job_id"),
             partition = jo.get("partition"),
@@ -181,7 +181,7 @@ def create_instances_request(nodes: List[str], placement_group: Optional[str], e
         ),
     )
 
-    if placement_group:
+    if placement_group and excl_job_id is not None:
         pass # do not set minCount to force "all or nothing" behavior
     else:
         body["minCount"] = 1
@@ -653,11 +653,10 @@ def main(nodelist: str) -> None:
     if not nodes:
         log.info("No nodes to resume")
         return
-
     resume_data = get_resume_file_data()
     log.info(f"resume {util.to_hostlist(nodes)}")
     resume_nodes(nodes, resume_data)
-    
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("nodelist", help="list of nodes to resume")

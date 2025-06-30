@@ -20,17 +20,23 @@ locals {
   cluster_location = local.cluster_id_parts[3]
   project_id       = var.project_id != null ? var.project_id : local.cluster_id_parts[1]
 
-  # Identify URL-based manifests
-  url_manifests = {
+  # 1. First, Identify manifests that are explicitly enabled.
+  enabled_manifests = {
     for index, manifest in var.apply_manifests : index => manifest
+    if try(manifest.enable, true)
+  }
+
+  # 2. Identify URL-based manifests
+  url_manifests = {
+    for index, manifest in local.enabled_manifests : index => manifest
     if try(manifest.source, "") != "" && (
       startswith(manifest.source, "http://") || startswith(manifest.source, "https://")
     )
   }
 
-  # Rebuild the map by populating the 'content' field for URLs based manifest
+  # 3. Rebuild the map by populating the 'content' field for URLs based manifest
   processed_apply_manifests_map = tomap({
-    for index, manifest in var.apply_manifests : tostring(index) => {
+    for index, manifest in local.enabled_manifests : tostring(index) => {
       # If this manifest was a URL, its content is the body from the HTTP call.
       content = contains(keys(local.url_manifests), tostring(index)) ? data.http.manifest_from_url[tostring(index)].body : manifest.content
 
@@ -86,6 +92,7 @@ module "install_kueue" {
   source            = "./kubectl"
   source_path       = local.install_kueue ? local.kueue_install_source : null
   server_side_apply = true
+  wait_for_rollout  = true
   depends_on        = [var.gke_cluster_exists]
 
   providers = {
@@ -111,6 +118,7 @@ module "install_jobset" {
   source            = "./kubectl"
   source_path       = local.install_jobset ? local.jobset_install_source : null
   server_side_apply = true
+  wait_for_rollout  = true
   depends_on        = [var.gke_cluster_exists, module.configure_kueue]
 
   providers = {
@@ -249,6 +257,7 @@ module "install_gib" {
   source_path       = local.install_gib ? var.gib.path : null
   server_side_apply = true
   template_vars     = var.gib.template_vars
+  wait_for_rollout  = true
 
   providers = {
     kubectl = kubectl
