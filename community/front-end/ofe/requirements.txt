@@ -23,7 +23,7 @@ git+https://github.com/jazzband/django-revproxy.git@d2234005135dc0771b7c4e0bb046
 Django==5.1.10
 django-allauth==65.6.0
 django-crispy-forms==2.3
-django-extensions==3.2.3
+django-extensions==4.1
 djangorestframework==3.16.0
 filelock==3.18.0
 google-api-core==2.24.2
