@@ -686,7 +686,7 @@ def _list_config_files() -> _ConfigFiles:
 def _fetch_config(old_hash: Optional[str]) -> Optional[Tuple[NSDict, str]]:
     """Fetch config from bucket, returns None if no changes are detected."""
     blobs = _list_config_blobs()
-    if old_hash == blobs.hash:
+    if Path(CONFIG_FILE).exists() and old_hash == blobs.hash:
         return None
 
     def _download(bs) -> List[Any]:
