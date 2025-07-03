@@ -33,7 +33,6 @@ variable "storage_type" {
   description = <<-EOT
   The type of [GKE supported storage options](https://cloud.google.com/kubernetes-engine/docs/concepts/storage-overview)
   to used. This module currently support dynamic provisioning for the below storage options
-  - Parallelstore
   - Hyperdisk-balanced
   - Hyperdisk-throughput
   - Hyperdisk-extreme
@@ -41,8 +40,8 @@ variable "storage_type" {
   type        = string
   nullable    = false
   validation {
-    condition     = var.storage_type == null ? false : contains(["parallelstore", "hyperdisk-balanced", "hyperdisk-throughput", "hyperdisk-extreme"], lower(var.storage_type))
-    error_message = "Allowed string values for var.storage_type are \"Parallelstore\", \"Hyperdisk-balanced\", \"Hyperdisk-throughput\", \"Hyperdisk-extreme\"."
+    condition     = var.storage_type == null ? false : contains(["hyperdisk-balanced", "hyperdisk-throughput", "hyperdisk-extreme"], lower(var.storage_type))
+    error_message = "Allowed string values for var.storage_type are \", \"Hyperdisk-balanced\", \"Hyperdisk-throughput\", \"Hyperdisk-extreme\"."
   }
 }
 
@@ -127,12 +126,3 @@ variable "capacity_gb" {
   type        = number
 }
 
-variable "private_vpc_connection_peering" {
-  description = <<-EOT
-    The name of the VPC Network peering connection.
-    If using new VPC, please use community/modules/network/private-service-access to create private-service-access and
-    If using existing VPC with private-service-access enabled, set this manually follow [user guide](https://cloud.google.com/parallelstore/docs/vpc).
-    EOT
-  type        = string
-  default     = null
-}
