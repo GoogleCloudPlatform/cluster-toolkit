@@ -29,9 +29,7 @@ locals {
   # 2. Identify URL-based manifests
   url_manifests = {
     for index, manifest in local.enabled_manifests : index => manifest
-    if try(manifest.source, "") != "" && (
-      startswith(manifest.source, "http://") || startswith(manifest.source, "https://")
-    )
+    if startswith(try(manifest.source, ""), "http://") || startswith(try(manifest.source, ""), "https://")
   }
 
   # 3. Rebuild the map by populating the 'content' field for URLs based manifest
