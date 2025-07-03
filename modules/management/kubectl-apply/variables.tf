@@ -75,7 +75,7 @@ variable "cluster_id" {
 }
 
 variable "apply_manifests" {
-  description = "A list of manifests to apply to GKE cluster using kubectl. For more details see [kubectl module's inputs](kubectl/README.md)."
+  description = "A list of manifests to apply to GKE cluster using kubectl. For more details see [kubectl module's inputs](kubectl/README.md).\n NOTE: The `enable` input acts as a FF to apply a manifest or not. By default it is always set to `true`. "
   type = list(object({
     enable            = optional(bool, true)
     content           = optional(string, null)
