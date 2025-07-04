@@ -1,5 +1,5 @@
 /**
-  * Copyright 2024 Google LLC
+  * Copyright 2025 Google LLC
   *
   * Licensed under the Apache License, Version 2.0 (the "License");
   * you may not use this file except in compliance with the License.
@@ -20,18 +20,8 @@ locals {
   cluster_location = local.cluster_id_parts[3]
   project_id       = var.project_id != null ? var.project_id : local.cluster_id_parts[1]
 
-  apply_manifests_map = tomap({
-    for index, manifest in var.apply_manifests : index => manifest
-    if manifest.enable
-  })
-
-  install_kueue             = try(var.kueue.install, false)
-  install_jobset            = try(var.jobset.install, false)
   install_gpu_operator      = try(var.gpu_operator.install, false)
   install_nvidia_dra_driver = try(var.nvidia_dra_driver.install, false)
-  install_gib               = try(var.gib.install, false)
-  kueue_install_source      = format("${path.module}/manifests/kueue-%s.yaml", try(var.kueue.version, ""))
-  jobset_install_source     = format("${path.module}/manifests/jobset-%s.yaml", try(var.jobset.version, ""))
 }
 
 data "google_container_cluster" "gke_cluster" {
@@ -42,63 +32,33 @@ data "google_container_cluster" "gke_cluster" {
 
 data "google_client_config" "default" {}
 
-module "kubectl_apply_manifests" {
-  for_each   = local.apply_manifests_map
-  source     = "./kubectl"
+module "install_kueue" {
+  source     = "./helm_install"
   depends_on = [var.gke_cluster_exists]
 
-  content           = each.value.content
-  source_path       = each.value.source
-  template_vars     = each.value.template_vars
-  server_side_apply = each.value.server_side_apply
-  wait_for_rollout  = each.value.wait_for_rollout
+  release_name = "kueue"
 
-  providers = {
-    kubectl = kubectl
-  }
-}
+  chart_name    = "oci://registry.k8s.io/kueue/charts/kueue"
+  chart_version = var.kueue.version # Specify your desired Kueue version
 
-module "install_kueue" {
-  source            = "./kubectl"
-  source_path       = local.install_kueue ? local.kueue_install_source : null
-  server_side_apply = true
-  wait_for_rollout  = true
-  depends_on        = [var.gke_cluster_exists]
-
-  providers = {
-    kubectl = kubectl
-  }
-}
-
-module "configure_kueue" {
-  source        = "./kubectl"
-  source_path   = local.install_kueue ? try(var.kueue.config_path, "") : null
-  template_vars = local.install_kueue ? try(var.kueue.config_template_vars, null) : null
-  depends_on    = [module.install_kueue]
-
-  server_side_apply = true
-  wait_for_rollout  = true
-
-  providers = {
-    kubectl = kubectl
-  }
+  create_namespace = true # Helm can also create the namespace
+  wait             = true
+  timeout          = 600 # seconds
 }
 
 module "install_jobset" {
-  source            = "./kubectl"
-  source_path       = local.install_jobset ? local.jobset_install_source : null
-  server_side_apply = true
-  wait_for_rollout  = true
-  depends_on        = [var.gke_cluster_exists, module.configure_kueue]
-
-  providers = {
-    kubectl = kubectl
-  }
+  source           = "./helm_install"
+  depends_on       = [var.gke_cluster_exists, module.install_kueue]
+  release_name     = "jobset-controller"                          # The release name for your JobSet installation
+  chart_name       = "oci://registry.k8s.io/jobset/charts/jobset" # The Helm repository URL for nvidia charts
+  chart_version    = var.jobset.version
+  create_namespace = true
+  namespace        = "jobset-system"
 }
 
 module "install_nvidia_dra_driver" {
   count      = local.install_nvidia_dra_driver ? 1 : 0
-  depends_on = [module.kubectl_apply_manifests, var.gke_cluster_exists, module.configure_kueue]
+  depends_on = [var.gke_cluster_exists]
   source     = "./helm_install"
 
   release_name     = "nvidia-dra-driver-gpu"              # The release name
@@ -162,7 +122,7 @@ module "install_gpu_operator" {
   count            = local.install_gpu_operator ? 1 : 0
   source           = "./helm_install"
   chart_repository = "https://helm.ngc.nvidia.com/nvidia"
-  depends_on       = [module.kubectl_apply_manifests, var.gke_cluster_exists]
+  depends_on       = [var.gke_cluster_exists]
 
   namespace        = "gpu-operator"
   create_namespace = true
@@ -220,16 +180,4 @@ module "install_gpu_operator" {
   atomic          = true
   cleanup_on_fail = true
 
-}
-
-module "install_gib" {
-  source            = "./kubectl"
-  source_path       = local.install_gib ? var.gib.path : null
-  server_side_apply = true
-  template_vars     = var.gib.template_vars
-  wait_for_rollout  = true
-
-  providers = {
-    kubectl = kubectl
-  }
 }

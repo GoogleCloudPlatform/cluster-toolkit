@@ -1,0 +1,73 @@
+# Copyright 2025 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: workload-identity-k8s-sa
+  namespace: default
+  annotations:
+    iam.gke.io/gcp-service-account: ${deployment_name}-gke-wl-sa@${project_id}.iam.gserviceaccount.com
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cluster-health-scanner-job-role
+rules:
+  - apiGroups: [""]
+    resources:
+    - "pods"
+    - "pods/log"   
+    - "pods/exec"
+    - "nodes"
+    - "events"
+    - "services"
+    - "secrets"
+    - "configmaps"
+    - "serviceaccounts"
+    verbs: ["list", "get", "create", "delete", "watch", "patch", "update"]
+
+  - apiGroups: ["apps"]
+    resources:
+    - "daemonsets"
+    - "deployments"
+    - "replicasets"
+    verbs: ["list", "get", "create", "delete", "watch", "patch", "update"]
+
+  - apiGroups: ["batch"]
+    resources:
+    - "jobs"
+    - "jobs/status"
+    verbs: ["list", "get", "create", "delete", "watch", "patch", "update"]
+
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources:
+    - "clusterrolebindings"
+    - "clusterroles"
+    - "roles"
+    - "rolebindings"
+    verbs: ["list", "get", "create", "delete", "watch", "patch", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cluster-health-scanner-job-binding
+subjects:
+- kind: ServiceAccount
+  name: workload-identity-k8s-sa
+  namespace: default
+roleRef:
+  kind: ClusterRole
+  name: cluster-health-scanner-job-role
+  apiGroup: rbac.authorization.k8s.io
