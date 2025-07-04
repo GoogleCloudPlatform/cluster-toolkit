@@ -1,7 +1,6 @@
 # mypy: ignore-errors
 # This implementation of TPU integration is to be deprecated
-
-# Copyright 2024 "Google LLC"
+# Copyright 2025 "Google LLC"
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,6 +17,7 @@
 from typing import List
 
 import socket
+import functools
 import logging
 from pathlib import Path
 import yaml
@@ -36,17 +36,18 @@ class TPU:
     """Class for handling the TPU-vm nodes"""
 
     State = tpu.types.cloud_tpu.Node.State
-    TPUS_PER_VM = 4
     __expected_states = {
         "create": State.READY,
         "start": State.READY,
         "stop": State.STOPPED,
     }
-
     __tpu_version_mapping = {
         "V2": tpu.AcceleratorConfig().Type.V2,
         "V3": tpu.AcceleratorConfig().Type.V3,
         "V4": tpu.AcceleratorConfig().Type.V4,
+        "V5e": tpu.AcceleratorConfig().Type.V5LITE_POD,
+        "V5p": tpu.AcceleratorConfig().Type.V5P,
+        "V6e": tpu.AcceleratorConfig().Type.V6E,
     }
 
     @classmethod
@@ -96,8 +97,8 @@ class TPU:
         return self._nodeset.node_type
 
     @property
-    def tf_version(self):
-        return self._nodeset.tf_version
+    def runtime_version(self):
+        return self._nodeset.runtime_version
 
     @property
     def enable_public_ip(self):
@@ -114,6 +115,10 @@ class TPU:
     @property
     def service_account(self):
         return self._nodeset.service_account
+
+    @property
+    def spot(self):
+        return self._nodeset.spot
 
     @property
     def zone(self):
@@ -133,18 +138,24 @@ class TPU:
     def check_tf_version(self):
         try:
             request = tpu.GetRuntimeVersionRequest(
-                name=f"{self._parent}/runtimeVersions/{self.tf_version}"
+                name=f"{self._parent}/runtimeVersions/{self.runtime_version}"
             )
             return self._client.get_runtime_version(request=request) is not None
         except Exception:
             return False
 
-    def __calc_vm_from_topology(self, topology):
+    def __calc_vm_from_topology(self, topology: str):
+        # TPUs per VM:
+        # generally 4, but v5e-8 and v6e-8 is 8,
+        # minimum is 1 (for smaller number of TPUs you always get a VM)
+        tpus_per_vm = 4
+        if self.node_type in ("v5e-8", "v6e-8"):
+            tpus_per_vm = 8
         topo = topology.split("x")
         tot = 1
         for num in topo:
             tot = tot * int(num)
-        return tot // self.TPUS_PER_VM
+        return max(1, tot // tpus_per_vm)
 
     def __check_resp(self, response, op_name):
         des_state = self.__expected_states.get(op_name)
@@ -158,12 +169,7 @@ class TPU:
         return False
 
     def list_nodes(self):
-        try:
-            request = tpu.ListNodesRequest(parent=self._parent)
-            res = self._client.list_nodes(request=request)
-        except gExceptions.NotFound:
-            res = None
-        return res
+        return list_nodes(self._parent)
 
     def list_node_names(self):
         return [node.name.split("/")[-1] for node in self.list_nodes()]
@@ -179,12 +185,10 @@ class TPU:
         return self.__check_resp(resp, "stop")
 
     def get_node(self, nodename):
-        try:
-            request = tpu.GetNodeRequest(name=f"{self._parent}/nodes/{nodename}")
-            res = self._client.get_node(request=request)
-        except gExceptions.NotFound:
-            res = None
-        return res
+        for node in self.list_nodes():
+            if node.name == nodename:
+                return node
+        return None
 
     def _register_node(self, nodename, ip_addr):
         dns_name = socket.getnameinfo((ip_addr, 0), 0)[0]
@@ -208,13 +212,13 @@ class TPU:
 
         node = tpu.Node()
         node.accelerator_config = self.ac
-        node.runtime_version = f"tpu-vm-tf-{self.tf_version}"
+        node.runtime_version = self.runtime_version
         startup_script = """
         #!/bin/bash
         echo "startup script not found > /var/log/startup_error.log"
         """
         with open(
-            Path(self.lkp.cfg.slurm_scripts_dir or util.dirs.scripts) / "startup.sh", "r"
+            Path(self.lkp.cfg.slurm_scripts_dir or util.dirs.scripts) / "tpu-startup.sh", "r"
         ) as script:
             startup_script = script.read()
         if isinstance(nodename, list):
@@ -242,6 +246,7 @@ class TPU:
             node.service_account.scope = self.nodeset.service_account.scopes
         node.scheduling_config.preemptible = self.preemptible
         node.scheduling_config.reserved = self.reserved
+        node.scheduling_config.spot = self.spot
         node.network_config.subnetwork = self.nodeset.subnetwork
         node.network_config.enable_external_ips = self.enable_public_ip
         if self.data_disks:
@@ -309,7 +314,7 @@ def start_tpu(node: List[str]):
     if len(node) == 1:
         node = node[0]
         log.debug(
-            f"Will create a TPU of type {tpuobj.node_type} tf_version {tpuobj.tf_version} in zone {tpuobj.zone} with name {node}"
+            f"Will create a TPU of type {tpuobj.node_type} runtime_version {tpuobj.runtime_version} in zone {tpuobj.zone} with name {node}"
         )
         tpunode = tpuobj.get_node(node)
         if tpunode is None:
@@ -325,7 +330,24 @@ def start_tpu(node: List[str]):
                 )
     else:
         log.debug(
-            f"Will create a multi-vm TPU of type {tpuobj.node_type} tf_version {tpuobj.tf_version} in zone {tpuobj.zone} with name {node[0]}"
+            f"Will create a multi-vm TPU of type {tpuobj.node_type} tf_version {tpuobj.runtime_version} in zone {tpuobj.zone} with name {node[0]}"
         )
         if not tpuobj.create_node(nodename=node):
             log.error("Error creating tpu node {node}")
+
+@functools.lru_cache(maxsize=128)
+def list_nodes(zone: str) -> list:
+    """
+    Cached function to return nodes within the zone
+
+    :param zone: zone identifier in form projects/{project_id}/locations/{zone_name}
+    """
+    try:
+        request = tpu.ListNodesRequest(parent=zone)
+        co = create_client_options(ApiEndpoint.TPU)
+        client = tpu.TpuClient(client_options=co)
+        res = client.list_nodes(request=request)
+    except gExceptions.NotFound:
+        res = []
+    # wrap in list, to ensure that all results are cached and returned
+    return list(res)
