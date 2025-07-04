@@ -42,6 +42,7 @@ class TstNodeset:
     zone_policy_allow: Optional[list[str]] = field(default_factory=list)
     enable_placement: bool = True
     placement_max_distance: Optional[int] = None
+    accelerator_topology: Optional[str] = ""
     future_reservation: Optional[str] = ""
 
 @dataclass
