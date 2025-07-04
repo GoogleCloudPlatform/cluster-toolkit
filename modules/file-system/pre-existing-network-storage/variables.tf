@@ -44,15 +44,6 @@ variable "mount_options" {
   nullable    = false
 }
 
-variable "parallelstore_options" {
-  description = "Parallelstore specific options"
-  type = object({
-    daos_agent_config = optional(string, "")
-    dfuse_environment = optional(map(string), {})
-  })
-  default = {}
-}
-
 variable "managed_lustre_options" {
   description = <<-EOT
     Managed Lustre specific options:
