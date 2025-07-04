@@ -1,0 +1,37 @@
+#!/bin/bash
+# Copyright 2024 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+set -e -o pipefail
+
+echo Downloading and installing Weka client
+
+if [ ! -x /bin/weka ] ;  then
+    echo Downloading and installing Weka client
+    # shellcheck disable=SC2154
+    curl --max-time 10 "http://${server_ip}:14000/dist/v1/install" | sh
+fi
+
+WEKA_VERSION=$(
+    curl --fail -s -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/attributes/weka-version || exit 0
+)
+if [[ -n "$WEKA_VERSION" ]] ; then
+    # set desired version for Weka, otherwise use whatever is installed by default
+    weka version get "$WEKA_VERSION"
+    weka version set "$WEKA_VERSION"
+fi
+weka local stop || echo Could not stop local Weka
+weka local rm -f --all || echo Could not remove local containers
+
+exit 0
