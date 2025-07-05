@@ -27,10 +27,13 @@ https://docs.djangoproject.com/en/3.1/ref/settings/
 # At this level all errors are fatal and long lines are a fact of life
 # pylint: disable=line-too-long,broad-except
 
+from ghpcfe.cluster_manager import utils
 from django.core.management.utils import get_random_secret_key
 from pathlib import Path
 import os
 import requests
+
+IS_LOCAL = utils.is_local_mode()
 
 
 def get_listen_hosts():
@@ -81,7 +84,10 @@ def get_site_name():
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-MEDIA_ROOT = "/opt/gcluster/cluster-toolkit/community/front-end/ofe/website/startup-scripts:"
+if IS_LOCAL:
+    MEDIA_ROOT = BASE_DIR / 'media'
+else:
+    MEDIA_ROOT = "/opt/gcluster/cluster-toolkit/community/front-end/ofe/website/startup-scripts:"
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/3.1/howto/deployment/checklist/
@@ -100,7 +106,11 @@ else:
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
 
-ALLOWED_HOSTS = get_listen_hosts()
+if IS_LOCAL:
+    DEBUG = True
+    ALLOWED_HOSTS = ["localhost", "127.0.0.1", "[::1]"]
+else:
+    ALLOWED_HOSTS = get_listen_hosts()
 
 SITE_NAME = get_site_name()
 
@@ -126,18 +136,28 @@ INSTALLED_APPS = [
     "crispy_bootstrap5",
 ]
 
-MIDDLEWARE = [
-    "django.middleware.security.SecurityMiddleware",
-    "django.contrib.sessions.middleware.SessionMiddleware",
-    "django.middleware.common.CommonMiddleware",
-    "django.middleware.csrf.CsrfViewMiddleware",
-    "django.contrib.auth.middleware.AuthenticationMiddleware",
-    "django.contrib.messages.middleware.MessageMiddleware",
-    "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "allauth.account.middleware.AccountMiddleware",
-    #    'whitenoise.middleware.WhiteNoiseMiddleware',
-
-]
+# Middleware configuration
+if IS_LOCAL:
+    MIDDLEWARE = [
+        "django.contrib.sessions.middleware.SessionMiddleware",
+        "django.contrib.auth.middleware.AuthenticationMiddleware",
+        "django.middleware.common.CommonMiddleware",
+        "django.middleware.csrf.CsrfViewMiddleware",
+        "django.contrib.messages.middleware.MessageMiddleware",
+        "allauth.account.middleware.AccountMiddleware",
+    ]
+else:
+    MIDDLEWARE = [
+        "django.middleware.security.SecurityMiddleware",
+        "django.contrib.sessions.middleware.SessionMiddleware",
+        "django.middleware.common.CommonMiddleware",
+        "django.middleware.csrf.CsrfViewMiddleware",
+        "django.contrib.auth.middleware.AuthenticationMiddleware",
+        "django.contrib.messages.middleware.MessageMiddleware",
+        "django.middleware.clickjacking.XFrameOptionsMiddleware",
+        "allauth.account.middleware.AccountMiddleware",
+        #    'whitenoise.middleware.WhiteNoiseMiddleware',
+    ]
 
 ROOT_URLCONF = "website.urls"
 
@@ -152,6 +172,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "ghpcfe.context_processors.runtime_flags",
             ],
         },
     },
@@ -226,17 +247,31 @@ AUTHENTICATION_BACKENDS = (
 )
 SITE_ID = 1
 LOGIN_REDIRECT_URL = "/"
-SOCIALACCOUNT_PROVIDERS = {
-    "google": {
-        "SCOPE": [
-            "profile",
-            "email",
-        ],
-        "AUTH_PARAMS": {
-            "access_type": "online",
-        },
+
+# Disable Google OAuth for local development
+if IS_LOCAL:
+    SOCIALACCOUNT_PROVIDERS = {
+        'google': {
+            'APP': {
+                'client_id': 'dummy-local-dev-client-id',
+                'secret': 'dummy-local-dev-secret',
+                'key': ''
+            }
+        }
     }
-}
+else:
+    SOCIALACCOUNT_PROVIDERS = {
+        "google": {
+            "SCOPE": [
+                "profile",
+                "email",
+            ],
+            "AUTH_PARAMS": {
+                "access_type": "online",
+            },
+        }
+    }
+
 ACCOUNT_ADAPTER = "ghpcfe.adapters.CustomAccountAdapter"
 SOCIALACCOUNT_ADAPTER = "ghpcfe.adapters.CustomSocialAccountAdapter"
 
@@ -245,30 +280,66 @@ STATIC_ROOT = os.path.join(BASE_DIR, "static")
 
 MESSAGE_STORAGE = "django.contrib.messages.storage.session.SessionStorage"
 
-LOGGING = {
-    "version": 1,
-    "disable_existing_loggers": False,
-    "formatters": {
-        "std": {
-            "format": "{levelname}:{module}:{filename}:{lineno}:{message}",
-            "style": "{",
+if IS_LOCAL:
+    LOGGING = {
+        "version": 1,
+        "disable_existing_loggers": False,
+        "handlers": {
+            # print everything to the console
+            "console": {
+                "class": "logging.StreamHandler",
+                "formatter": "simple",
+            },
         },
-    },
-    "handlers": {
-        "console": {"level": "WARNING", "class": "logging.StreamHandler"},
-        "file": {
-            "class": "logging.FileHandler",
-            "filename": BASE_DIR.parents[4] / "run" / "django.log",
-            "formatter": "std",
+        "formatters": {
+            "simple": {
+                "format": "[{levelname}] {name}:{message}",
+                "style": "{",
+            },
         },
-    },
-    "loggers": {
-        "": {
-            "handlers": ["file", "console"],
-            "level": "INFO",
+        "root": {
+            # catch all logs at DEBUG and send to console
+            "handlers": ["console"],
+            "level": "DEBUG",
         },
-    },
-}
+        "loggers": {
+            "django.db.backends": {
+                "handlers": ["console"],
+                "level": "WARNING",
+                "propagate": False,
+            },
+            "django.request": {
+                "handlers": ["console"],
+                "level": "ERROR",
+                "propagate": False,
+            },
+        },
+    }
+else:
+    LOGGING = {
+        "version": 1,
+        "disable_existing_loggers": False,
+        "formatters": {
+            "std": {
+                "format": "{levelname}:{module}:{filename}:{lineno}:{message}",
+                "style": "{",
+            },
+        },
+        "handlers": {
+            "console": {"level": "WARNING", "class": "logging.StreamHandler"},
+            "file": {
+                "class": "logging.FileHandler",
+                "filename": BASE_DIR.parents[4] / "run" / "django.log",
+                "formatter": "std",
+            },
+        },
+        "loggers": {
+            "": {
+                "handlers": ["file", "console"],
+                "level": "INFO",
+            },
+        },
+    }
 
 CRISPY_ALLOWED_TEMPLATE_PACKS = "bootstrap5"
 CRISPY_TEMPLATE_PACK = "bootstrap5"
