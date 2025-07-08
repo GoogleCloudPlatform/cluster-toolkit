@@ -515,9 +515,8 @@ def setup_compute():
     ]
 
     try:
-        slurmd_feature = util.instance_metadata("attributes/slurmd_feature")
-    except Exception:
-        # TODO: differentiate between unset and error
+        slurmd_feature = util.instance_metadata("attributes/slurmd_feature", silent=True)
+    except util.MetadataNotFoundError:
         slurmd_feature = None
 
     if slurmd_feature is not None:
