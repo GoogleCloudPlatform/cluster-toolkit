@@ -9,6 +9,7 @@ ignore:
 - modules/management/kubectl-apply/manifests/*
 - examples/gke-a4x/nvidia-dra-driver.yaml
 - examples/gke-a4x/nccl-rdma-installer.yaml
+- examples/gke-a4x/nccl-jobset-example.yaml
 
 rules:
   # Defaults
