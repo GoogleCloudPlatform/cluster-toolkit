@@ -14,8 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from importlib import metadata
-from typing import Iterable, List, Tuple, Optional, Any, Dict, Sequence, Type, Callable, Literal
+from typing import Iterable, List, Tuple, Optional, Any, Dict, Sequence, Type, Callable, Union
 import argparse
 import base64
 from dataclasses import dataclass, field
@@ -34,7 +33,6 @@ import shutil
 import socket
 import subprocess
 import sys
-import tempfile
 from enum import Enum
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -58,8 +56,7 @@ import httplib2
 
 import google.api_core.exceptions as gExceptions
 
-from requests import get as get_url
-from requests.exceptions import RequestException
+import requests as requests_lib
 
 import yaml
 from addict import Dict as NSDict # type: ignore
@@ -93,6 +90,7 @@ dirs = NSDict(
     munge = Path("/etc/munge"),
     secdisk = Path("/mnt/disks/sec"),
     log = Path("/var/log/slurm"),
+    slurm_bucket_mount = Path("/slurm/bucket"),
 )
 
 slurmdirs = NSDict(
@@ -428,6 +426,13 @@ def map_with_futures(func, seq):
                 res = e
             yield res
 
+def should_mount_slurm_bucket() -> bool:
+    try:
+        return instance_metadata("attributes/slurm_bucket_mount").lower() == "true"
+    except MetadataNotFoundError:
+        return False
+
+
 def _get_bucket_and_common_prefix() -> Tuple[str, str]:
     uri = instance_metadata("attributes/slurm_bucket_path")
     return parse_bucket_uri(uri)
@@ -447,6 +452,16 @@ def blob_list(prefix="", delimiter=None):
     )
     return [blob for blob in blobs]
 
+def file_list(prefix="", subpath="") -> List[os.DirEntry]:
+    path = dirs.slurm_bucket_mount
+    file_prefix = f"{path}/{subpath}"
+    try:
+        files = os.scandir(file_prefix)
+        return [file for file in files if file.name.startswith(prefix)]
+    except:
+        return [] 
+     # Not considering lack of file's existence as fatal (we may check for files we know don't exist).
+     # Responsibility of callee to determine if it is fatal or not, blob_list returns empty iterator in similar cases.
 
 def hash_file(fullpath: Path) -> str:
     with open(fullpath, "rb") as f:
@@ -458,9 +473,14 @@ def hash_file(fullpath: Path) -> str:
     return base64.b64encode(file_hash.digest()).decode("utf-8")
 
 
-def install_custom_scripts(check_hash=False):
+def install_custom_scripts(check_hash:bool=False):
     """download custom scripts from gcs bucket"""
     role, tokens = lookup().instance_role, []
+
+    mounted_scripts=False
+    if should_mount_slurm_bucket() and role != "controller":
+        mounted_scripts=True
+
     all_prolog_tokens = ["prolog", "epilog", "task_prolog", "task_epilog"]
     if role == "controller":
         tokens = ["controller"] + all_prolog_tokens
@@ -472,13 +492,20 @@ def install_custom_scripts(check_hash=False):
     prefixes = [f"slurm-{tok}-script" for tok in tokens]
 
     # TODO: use single `blob_list`, to reduce ~4x number of GCS requests
-    blobs = list(chain.from_iterable(blob_list(prefix=p) for p in prefixes))
+    if mounted_scripts:
+        source_collection = list(chain.from_iterable(file_list(prefix=p) for p in prefixes))
+    else:
+        source_collection = list(chain.from_iterable(blob_list(prefix=p) for p in prefixes))
 
-    script_pattern = re.compile(r"slurm-(?P<path>\S+)-script-(?P<name>\S+)")
-    for blob in blobs:
-        m = script_pattern.match(Path(blob.name).name)
+    script_pattern = re.compile(r"^slurm-(?P<path>\S+)-script-(?P<name>\S+)")
+    for source in source_collection:
+        if mounted_scripts:
+            m = script_pattern.match(source.name)
+        else:
+            m = script_pattern.match(Path(source.name).name)
+
         if not m:
-            log.warning(f"found blob that doesn't match expected pattern: {blob.name}")
+            log.warning(f"found blob that doesn't match expected pattern: {source.name}")
             continue
         path_parts = m["path"].split("-")
         path_parts[0] += ".d"
@@ -492,14 +519,21 @@ def install_custom_scripts(check_hash=False):
         for par in path.parents:
             chown_slurm(dirs.custom_scripts / par)
         need_update = True
-        if check_hash and fullpath.exists():
+
+        if check_hash and fullpath.exists() and isinstance(source,storage.Blob):
             # TODO: MD5 reported by gcloud may differ from the one calculated here (e.g. if blob got gzipped),
             # consider using gCRC32C
-            need_update = hash_file(fullpath) != blob.md5_hash
-        if need_update:
-            log.info(f"installing custom script: {path} from {blob.name}")
+            need_update = hash_file(fullpath) != source.md5_hash
+
+        log.info(f"installing custom script: {path} from {source.name}")
+
+        if isinstance(source,os.DirEntry):
+            shutil.copy(source.path, fullpath) #Needs to be copied since mounted nfs is read-only
+            chown_slurm(fullpath, mode=0o755)
+
+        elif need_update:
             with fullpath.open("wb") as f:
-                blob.download_to_file(f)
+                source.download_to_file(f)
             chown_slurm(fullpath, mode=0o755)
 
 def compute_service(version="beta"):
@@ -556,7 +590,11 @@ def _fill_cfg_defaults(cfg: NSDict) -> NSDict:
     if not cfg.slurm_bin_dir:
         cfg.slurm_bin_dir = slurmdirs.prefix / "bin"
     if not cfg.slurm_control_host:
-        cfg.slurm_control_host = f"{cfg.slurm_cluster_name}-controller"
+        try:
+            control_dns_name = instance_metadata("attributes/slurm_control_dns")
+            cfg.slurm_control_host = control_dns_name
+        except MetadataNotFoundError:
+            cfg.slurm_control_host = f"{cfg.slurm_cluster_name}-controller"
     if not cfg.slurm_control_host_port:
         cfg.slurm_control_host_port = "6820-6830"
     return cfg
@@ -586,6 +624,19 @@ class _ConfigBlobs:
             h.update(blob.md5_hash.encode("utf-8"))
         return h.hexdigest()
 
+@dataclass
+class _ConfigFiles:
+    """
+    "Private" class that represent a collection of files for configuration
+    """
+    core: Path
+    controller_addr: Optional[Path]
+    partition: List[Path] = field(default_factory=list)
+    nodeset: List[Path] = field(default_factory=list)
+    nodeset_dyn: List[Path] = field(default_factory=list)
+    nodeset_tpu: List[Path] = field(default_factory=list)
+    login_group: List[Path] = field(default_factory=list)
+
 def _list_config_blobs() -> _ConfigBlobs:
     _, common_prefix = _get_bucket_and_common_prefix()
 
@@ -614,6 +665,24 @@ def _list_config_blobs() -> _ConfigBlobs:
     
     return _ConfigBlobs(core=core, controller_addr=controller_addr, **rest)
 
+def _list_config_files() -> _ConfigFiles:
+    file_dir = dirs.slurm_bucket_mount
+    core: Optional[Path] = None
+    controller_addr: Optional[Path] = None
+    rest: Dict[str, List[Path]] = {"partition": [], "nodeset": [], "nodeset_dyn": [], "nodeset_tpu": [], "login_group": []}
+
+    if Path(f"{file_dir}/config.yaml").exists():
+        core = Path(f"{file_dir}/config.yaml")
+
+    for key in rest.keys():
+        for f in file_list(subpath=f"{key}_configs"):
+            rest[key].append(f.path)
+
+    if core is None:
+        raise Exception(f"config.yaml was not found in mounted folder: {dirs.slurm_bucket_mount}") #Intentionally not using DeffetiveStoredConfigError as this is considered a fatal error
+    
+    return _ConfigFiles(core=core, controller_addr=None, **rest)
+
 def _fetch_config(old_hash: Optional[str]) -> Optional[Tuple[NSDict, str]]:
     """Fetch config from bucket, returns None if no changes are detected."""
     blobs = _list_config_blobs()
@@ -633,6 +702,28 @@ def _fetch_config(old_hash: Optional[str]) -> Optional[Tuple[NSDict, str]]:
         login_groups=_download(blobs.login_group),
     ), blobs.hash
 
+def _fetch_mounted_config() -> Optional[Tuple[NSDict, str]]:
+    if not dirs.slurm_bucket_mount.is_mount():
+        raise Exception(f"{dirs.slurm_bucket_mount} is not mounted")
+
+    files = _list_config_files()
+
+    def _load(files) -> List[Any]:
+        file_yaml=[]
+        for file in files:
+            with open(file, "r") as f:
+                file_yaml.append(yaml.safe_load(f))
+        return file_yaml
+
+    return _assemble_config(
+        core=_load([files.core])[0],
+        controller_addr=None,
+        partitions=_load(files.partition),
+        nodesets=_load(files.nodeset),
+        nodesets_dyn=_load(files.nodeset_dyn),
+        nodesets_tpu=_load(files.nodeset_tpu),
+        login_groups=_load(files.login_group),
+    )
 
 def controller_lookup_self_ip() -> str:
     assert instance_role() == "controller"
@@ -712,8 +803,15 @@ def fetch_config() -> Tuple[bool, NSDict]:
     """
     hash_file = Path("/slurm/scripts/.config.hash")
     old_hash = hash_file.read_text() if hash_file.exists() else None
-
+    
+    if should_mount_slurm_bucket() and instance_role() != "controller":
+        cfg = _fetch_mounted_config()
+        CONFIG_FILE.write_text(yaml.dump(cfg, Dumper=Dumper))
+        chown_slurm(CONFIG_FILE)
+        return False, cfg
+    
     cfg_and_hash = _fetch_config(old_hash=old_hash)
+    
     if not cfg_and_hash:
         return False, _load_config()
 
@@ -1066,18 +1164,20 @@ def backoff_delay(start, timeout=None, ratio=None, count: int = 0):
 
 ROOT_URL = "http://metadata.google.internal/computeMetadata/v1"
 
+class MetadataNotFoundError(Exception):
+    pass
 
 def get_metadata(path, root=ROOT_URL):
     """Get metadata relative to metadata/computeMetadata/v1"""
     HEADERS = {"Metadata-Flavor": "Google"}
     url = f"{root}/{path}"
     try:
-        resp = get_url(url, headers=HEADERS)
+        resp = requests_lib.get(url, headers=HEADERS)
         resp.raise_for_status()
         return resp.text
-    except RequestException:
-        log.debug(f"metadata not found ({url})")
-        raise Exception(f"failed to get_metadata from {url}")
+    except requests_lib.exceptions.HTTPError:
+        log.warn(f"metadata not found ({url})")
+        raise MetadataNotFoundError(f"failed to get_metadata from {url}")
 
 
 @lru_cache(maxsize=None)
@@ -1925,10 +2025,16 @@ class Lookup:
     def etc_dir(self) -> Path:
         return Path(self.cfg.output_dir or slurmdirs.etc)
 
-    def normalize_ns_mount(self, ns: Dict[str, str]) -> NSMount:
+    def controller_mount_server_ip(self) -> str:
+        return self.control_addr or self.control_host
+
+    def normalize_ns_mount(self, ns: Union[dict, NSMount]) -> NSMount:
+        if isinstance(ns, NSMount):
+            return ns
+
         server_ip = ns.get("server_ip") or "$controller"
         if server_ip == "$controller":
-            server_ip = self.control_addr or self.control_host
+            server_ip = self.controller_mount_server_ip()
 
         return NSMount(
             server_ip=server_ip,
@@ -1943,30 +2049,30 @@ class Lookup:
         if self.cfg.munge_mount:
             mnt = self.cfg.munge_mount
             mnt.local_mount = mnt.local_mount or "/mnt/munge"
+            return self.normalize_ns_mount(mnt)
         else:
-            mnt = NSDict(
-                server_ip="$controller",
-                local_mount="/mnt/munge",
+            return NSMount(
+                server_ip=self.controller_mount_server_ip(),
+                local_mount=Path("/mnt/munge"),
                 remote_mount=dirs.munge,
                 fs_type="nfs",
                 mount_options="defaults,hard,intr,_netdev",
             )
-        return self.normalize_ns_mount(mnt)
 
     @property
     def slurm_key_mount(self) -> NSMount:
         if self.cfg.slurm_key_mount:
             mnt = self.cfg.slurm_key_mount
             mnt.local_mount = mnt.local_mount or slurmdirs.key_distribution
+            return self.normalize_ns_mount(mnt)
         else:
-            mnt = NSDict(
-                server_ip="$controller",
+            return NSMount(
+                server_ip=self.controller_mount_server_ip(),
                 local_mount=slurmdirs.key_distribution,
                 remote_mount=slurmdirs.key_distribution,
                 fs_type="nfs",
                 mount_options="defaults,hard,intr,_netdev",
             )
-        return self.normalize_ns_mount(mnt)
 
     def is_flex_node(self, node: str) -> bool:
         try:

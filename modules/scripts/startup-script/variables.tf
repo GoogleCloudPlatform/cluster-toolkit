@@ -280,7 +280,7 @@ variable "http_no_proxy" {
 }
 
 variable "install_cloud_rdma_drivers" {
-  description = "If true, will install and reload Cloud RDMA drivers. Currently only supported on Rocky Linux 8."
+  description = "If true, will install and reload Cloud RDMA drivers. Currently only supported on Rocky Linux 8. Should not be enabled if using the HPC VM Image."
   type        = bool
   default     = false
 }

@@ -129,7 +129,7 @@ module "instance_template" {
   resource_policy_self_link = var.resource_policy_self_link
 
   # Metadata
-  startup_script = data.local_file.startup.content
+  startup_script = coalesce(var.internal_startup_script, data.local_file.startup.content)
   metadata = merge(
     var.metadata,
     {

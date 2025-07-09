@@ -42,12 +42,15 @@ vars:
 
   # The name of the compute engine reservation in the form of
   # <reservation-name>
-  # In order to target a BLOCK_NAME, extended_reservation can be inputted as
-  # <reservation-name>/reservationBlocks/<reservation-block-name>
-  extended_reservation:
+  # To target a BLOCK_NAME, the name of the extended reservation
+  # can be inputted as <reservation-name>/reservationBlocks/<reservation-block-name>
+  reservation:
 
   # The disk size of system node pool for this deployment.
   system_node_pool_disk_size_gb:
 
   # The disk size of a4 node pool for this deployment.
   a4_node_pool_disk_size_gb:
+
+  enable_periodic_health_checks: # Make this true to run CHS (healthchecks)
+  health_check_schedule: # Run the health check at 12:00 AM (midnight) every Sunday
