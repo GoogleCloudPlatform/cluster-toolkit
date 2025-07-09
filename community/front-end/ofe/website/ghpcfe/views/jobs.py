@@ -100,19 +100,30 @@ class JobListView(LoginRequiredMixin, generic.ListView):
     def get_context_data(self, *args, **kwargs):
         context = super().get_context_data(*args, **kwargs)
 
-        # Smart auto-refresh logic
+        # Smart auto-refresh logic - check unfiltered jobs, not filtered ones
         loading = 0
-        jobs = self.get_queryset()
 
-        # Check for active jobs (like clusters page)
-        active_jobs = jobs.filter(status__in=["p", "q", "d", "r", "u"])
+        # Get unfiltered jobs for auto-refresh detection
+        unfiltered_jobs = Job.objects.all()
+
+        # Apply user-based filtering to unfiltered jobs (same as get_queryset)
+        roles = []
+        for role in list(self.request.user.roles.all()):
+            roles.append(role.id)
+
+        if Role.CLUSTERADMIN not in roles:
+            # Regular users only see their own jobs
+            unfiltered_jobs = unfiltered_jobs.filter(user=self.request.user)
+
+        # Check for active jobs in unfiltered queryset
+        active_jobs = unfiltered_jobs.filter(status__in=["p", "q", "d", "r", "u"])
         if active_jobs.exists():
             loading = 1
             logger.debug(f"Auto-refresh enabled: {active_jobs.count()} active jobs found")
 
         # Check for recent jobs (last 24 hours) to catch external jobs
         recent_cutoff = timezone.now() - timedelta(hours=24)
-        recent_jobs = jobs.filter(date_time_submission__gte=recent_cutoff)
+        recent_jobs = unfiltered_jobs.filter(date_time_submission__gte=recent_cutoff)
 
         # If we have recent jobs but no active ones, still refresh to catch external jobs
         if recent_jobs.exists() and not active_jobs.exists():
@@ -121,6 +132,11 @@ class JobListView(LoginRequiredMixin, generic.ListView):
 
         if not loading:
             logger.debug("Auto-refresh disabled: no active or recent jobs")
+
+        # Get filtered jobs for display counts
+        filtered_jobs = self.get_queryset()
+        filtered_active_jobs = filtered_jobs.filter(status__in=["p", "q", "d", "r", "u"])
+        filtered_recent_jobs = filtered_jobs.filter(date_time_submission__gte=recent_cutoff)
 
         # Add search and filter context
         context.update({
@@ -133,8 +149,8 @@ class JobListView(LoginRequiredMixin, generic.ListView):
             "available_clusters": Cluster.objects.filter(status='r').order_by('name'),
             "status_choices": Job.JOB_STATUS,
             "job_type_choices": Job.JOB_TYPE,
-            "active_job_count": active_jobs.count(),
-            "recent_job_count": recent_jobs.count(),
+            "active_job_count": filtered_active_jobs.count(),  # Use filtered count for display
+            "recent_job_count": filtered_recent_jobs.count(),  # Use filtered count for display
         })
 
         return context

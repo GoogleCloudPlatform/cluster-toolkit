@@ -314,10 +314,21 @@ def cb_slurm_job_update(message, source_id=None):
             if slurm_status:
                 updates['slurm_status'] = slurm_status
 
-            # Store additional states if any
-            if additional_states:
+            # Store additional states if any, but clear them for completed jobs
+            if 'slurm_additional_states' in data:
+                # Always update additional states field, even if empty (to clear them)
+                updates['slurm_additional_states'] = data['slurm_additional_states']
+                if data['slurm_additional_states']:
+                    logger.debug(f"Storing additional states for job {slurm_jobid}: {data['slurm_additional_states']}")
+                else:
+                    logger.debug(f"Clearing additional states for job {slurm_jobid}")
+            elif additional_states:
                 updates['slurm_additional_states'] = additional_states
                 logger.debug(f"Storing additional states for job {slurm_jobid}: {additional_states}")
+            elif slurm_status in ['COMPLETED', 'FAILED', 'CANCELLED']:
+                # Explicitly clear additional states for completed jobs
+                updates['slurm_additional_states'] = []
+                logger.debug(f"Clearing additional states for completed job {slurm_jobid}")
 
             # Extract exit code for job success determination
             exit_code = data.get('exit_code')
@@ -383,13 +394,30 @@ def cb_slurm_job_update(message, source_id=None):
                 if slurm_status in ['COMPLETED', 'FAILED', 'CANCELLED']:
                     # For cancelled jobs, use the stored status to prevent incorrect mapping
                     status_for_mapping = job.slurm_status if job.slurm_status == 'CANCELLED' else slurm_status
+                    # Use additional states from the data if available, otherwise from normalized status
+                    states_for_mapping = data.get('slurm_additional_states', additional_states)
                     # Determine OFE status based on SLURM status and exit code
-                    new_ofe_status = _map_slurm_status(status_for_mapping, exit_code)
+                    new_ofe_status = _map_slurm_status(status_for_mapping, exit_code, states_for_mapping)
                     logger.info(f'Job {job.id} (SLURM {slurm_jobid}) has SLURM status {status_for_mapping}, mapping to OFE status {new_ofe_status}')
                     if job.status != new_ofe_status:
                         job.status = new_ofe_status
                         job.save(update_fields=['status'])
                         logger.info(f'Updated OFE status for job {job.id} to {job.status} based on exit code and SLURM status')
+                    else:
+                        logger.debug(f'Job {job.id} already has OFE status {job.status}, not updating')
+
+                # Handle running and pending jobs - update OFE status to match SLURM status
+                elif slurm_status in ['RUNNING', 'COMPLETING', 'PENDING', 'CONFIGURING', 'SUSPENDED', 'REQUEUED']:
+                    # Use additional states from the data if available, otherwise from normalized status
+                    states_for_mapping = data.get('slurm_additional_states', additional_states)
+                    logger.debug(f'Job {job.id} (SLURM {slurm_jobid}) mapping status: slurm_status={slurm_status}, data_additional_states={data.get("slurm_additional_states")}, normalized_additional_states={additional_states}, states_for_mapping={states_for_mapping}')
+                    # Map SLURM status to OFE status for active jobs
+                    new_ofe_status = _map_slurm_status(slurm_status, additional_states=states_for_mapping)
+                    logger.debug(f'Job {job.id} (SLURM {slurm_jobid}) has SLURM status {slurm_status} with additional states {states_for_mapping}, mapping to OFE status {new_ofe_status}')
+                    if job.status != new_ofe_status:
+                        job.status = new_ofe_status
+                        job.save(update_fields=['status'])
+                        logger.info(f'Updated OFE status for job {job.id} to {job.status} based on SLURM status and additional states')
                     else:
                         logger.debug(f'Job {job.id} already has OFE status {job.status}, not updating')
 
@@ -593,7 +621,15 @@ def _create_external_job(job_data, cluster):
 
     # Map SLURM status to OFE status
     slurm_status, additional_states = _normalize_slurm_status(job_data.get('slurm_status', ''))
-    ofe_status = _map_slurm_status(slurm_status, job_data.get('exit_code'))
+    ofe_status = _map_slurm_status(slurm_status, job_data.get('exit_code'), additional_states)
+
+    # Use additional states from the job data if explicitly provided, otherwise use normalized states
+    if 'slurm_additional_states' in job_data:
+        additional_states = job_data['slurm_additional_states']
+
+    # Clear additional states for completed jobs
+    if slurm_status in ['COMPLETED', 'FAILED', 'CANCELLED']:
+        additional_states = []
 
     # Extract exit code if available
     exit_code = job_data.get('exit_code')
@@ -633,8 +669,10 @@ def _create_external_job(job_data, cluster):
     logger.info(f'Created {job_type} job {job.id} for SLURM job {slurm_jobid}')
 
 
-def _map_slurm_status(slurm_status, exit_code=None):
-    """Map SLURM job status to OFE job status, considering exit code for completion"""
+def _map_slurm_status(slurm_status, exit_code=None, additional_states=None):
+    """Map SLURM job status to OFE job status, considering exit code for completion and additional states for running jobs"""
+    logger.debug(f"_map_slurm_status called with: slurm_status={slurm_status}, exit_code={exit_code}, additional_states={additional_states}")
+
     status_mapping = {
         'PENDING': 'q',
         'CONFIGURING': 'q',
@@ -657,6 +695,16 @@ def _map_slurm_status(slurm_status, exit_code=None):
         else:
             # If no exit code available, default to completed successfully
             return 'c'
+
+    # Special handling for RUNNING jobs with additional states
+    if slurm_status == 'RUNNING' and additional_states:
+        # Jobs that are "RUNNING" but still configuring/powering up should be treated as queued
+        configuration_states = ['CONFIGURING', 'POWER_UP_NODE', 'BOOT_FAIL', 'NODE_FAIL', 'RESIZING']
+        if any(state in configuration_states for state in additional_states):
+            logger.debug(f"Job with RUNNING status has configuration states {additional_states}, mapping to queued")
+            return 'q'
+        else:
+            logger.debug(f"Job with RUNNING status has non-configuration states {additional_states}, keeping as running")
 
     return status_mapping.get(slurm_status, 'n')
 

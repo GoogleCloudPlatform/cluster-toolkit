@@ -35,7 +35,7 @@
 
 .sidebar-collapsed .nav-link {
     text-align: center;
-    padding: 0.75rem 0px 0.75rem 0px !important; /* Reduced padding to provide right-side spacing */
+    padding: 0.75rem 0px 0.75rem 0px !important;
     justify-content: center;
     display: flex;
     align-items: center;

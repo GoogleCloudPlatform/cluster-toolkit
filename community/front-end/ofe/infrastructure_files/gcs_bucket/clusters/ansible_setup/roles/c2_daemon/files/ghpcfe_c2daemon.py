@@ -30,6 +30,7 @@ from functools import wraps
 from pathlib import Path
 from urllib.parse import urlparse
 from threading import Thread
+import traceback
 
 import pexpect
 import requests
@@ -410,11 +411,29 @@ def process_queue_data(queue_data, node_data):
 
     # Debug: Log what we're processing
     jobs = queue_data.get("jobs", [])
-    logger.debug(f"process_queue_data: Processing {len(jobs)} jobs")
+    nodes = node_data.get("nodes", [])
+    logger.debug(f"process_queue_data: Processing {len(jobs)} jobs and {len(nodes)} nodes")
+
+    # Log partition information from SLURM data
+    job_partitions = set()
+    node_partitions = set()
+
     for job in jobs:
         job_id = job.get("job_id", "unknown")
         state = job.get("job_state", "UNKNOWN")
-        logger.debug(f"process_queue_data: Job {job_id} state = {state}")
+        partition = job.get("partition")
+        logger.debug(f"process_queue_data: Job {job_id} state = {state}, partition = {partition}")
+        if partition:
+            job_partitions.add(partition)
+
+    for node in nodes:
+        partition = node.get("partition")
+        state = node.get("state", "UNKNOWN")
+        logger.debug(f"process_queue_data: Node partition = {partition}, state = {state}")
+        if partition:
+            node_partitions.add(partition)
+
+    logger.debug(f"process_queue_data: Found partitions - jobs: {job_partitions}, nodes: {node_partitions}")
 
     # Helper to check if a job's state matches a target state (handles list or str)
     def _job_state_matches(state, target):
@@ -422,22 +441,47 @@ def process_queue_data(queue_data, node_data):
             return target in state
         return state == target
 
-    # Group jobs by partition
+    # Initialize partition stats - start with empty counts
     partition_stats = {}
 
-    # Debug: Log the jobs we're processing
-    jobs = queue_data.get("jobs", [])
-    logger.debug(f"Processing {len(jobs)} jobs for queue statistics")
+    # Get all partitions from node data to ensure we have entries for all partitions
+    for node in node_data.get("nodes", []):
+        partition = node.get("partition")
+        if partition:  # Only add if partition is actually specified
+            if partition not in partition_stats:
+                partition_stats[partition] = {
+                    "pending": 0,
+                    "running": 0,
+                    "completed": 0
+                }
 
-    # Process jobs
+    # If no partitions found from node data, get them from SLURM configuration
+    if not partition_stats:
+        cluster_partitions = get_cluster_partitions()
+        for partition in cluster_partitions:
+            partition_stats[partition] = {
+                "pending": 0,
+                "running": 0,
+                "completed": 0
+            }
+        logger.debug(f"Initialized partition stats for partitions: {cluster_partitions}")
+    else:
+        logger.debug(f"Initialized partition stats from node data: {list(partition_stats.keys())}")
+
+    # Process jobs (if any)
     for job in jobs:
-        partition = job.get("partition", "default")
+        partition = job.get("partition")
+        if not partition:
+            logger.warning(f"Job {job.get('job_id', 'unknown')} has no partition specified, skipping")
+            continue
+
         state = job.get("job_state", "UNKNOWN")
         job_id = job.get("job_id", "unknown")
 
         # Debug: Log each job's state
         logger.debug(f"Job {job_id} (partition {partition}): state={state} (type: {type(state)})")
 
+        # Ensure partition exists in stats
         if partition not in partition_stats:
             partition_stats[partition] = {
                 "pending": 0,
@@ -454,7 +498,7 @@ def process_queue_data(queue_data, node_data):
         elif _job_state_matches(state, "COMPLETED") or _job_state_matches(state, "COMPLETING"):
             partition_stats[partition]["completed"] += 1
             logger.debug(f"Job {job_id} counted as COMPLETED")
-    else:
+        else:
             logger.debug(f"Job {job_id} with state '{state}' not counted in any category")
 
     # Debug: Log final statistics
@@ -464,7 +508,11 @@ def process_queue_data(queue_data, node_data):
     # Process nodes
     node_stats = {}
     for node in node_data.get("nodes", []):
-        partition = node.get("partition", "default")
+        partition = node.get("partition")
+        if not partition:
+            logger.warning(f"Node has no partition specified, skipping: {node}")
+            continue
+
         state = node.get("state", "UNKNOWN")
 
         if partition not in node_stats:
@@ -494,190 +542,124 @@ def process_queue_data(queue_data, node_data):
 
 # Global variable to track current jobs
 _CURRENT_JOBS = set()
+_PROCESSED_COMPLETED_JOBS = set()
 _LAST_CLEANUP_TIME = time.time()
+_CLUSTER_PARTITIONS = None  # Cache for cluster partitions
+
+
+def get_cluster_partitions():
+    """Get the list of partitions from SLURM configuration"""
+    global _CLUSTER_PARTITIONS
+
+    if _CLUSTER_PARTITIONS is not None:
+        return _CLUSTER_PARTITIONS
+
+    try:
+        # Get partitions from sinfo
+        result = subprocess.run(
+            [SINFO_CMD, "--format=%R", "--noheader"],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=30
+        )
+        partitions = [line.strip() for line in result.stdout.strip().split('\n') if line.strip()]
+
+        # Remove duplicates and filter out empty strings
+        partitions = list(set([p for p in partitions if p]))
+
+        if partitions:
+            _CLUSTER_PARTITIONS = partitions
+            logger.debug(f"Found cluster partitions: {partitions}")
+            return partitions
+        else:
+            logger.warning("No partitions found in sinfo output, using 'batch' as default")
+            _CLUSTER_PARTITIONS = ["batch"]
+            return _CLUSTER_PARTITIONS
+
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Failed to get partitions from sinfo: {e}")
+    except subprocess.TimeoutExpired as e:
+        logger.error(f"sinfo command timed out: {e}")
+    except Exception as e:
+        logger.error(f"Error getting cluster partitions: {e}")
+
+    # Fallback to common partition names
+    logger.warning("Could not get partitions from SLURM, using common defaults")
+    _CLUSTER_PARTITIONS = ["batch", "compute", "debug"]
+    return _CLUSTER_PARTITIONS
 
 
 def cleanup_old_job_tracking():
     """Clean up old jobs from tracking that are older than 24 hours"""
-    global _CURRENT_JOBS, _LAST_CLEANUP_TIME
+    global _CURRENT_JOBS, _PROCESSED_COMPLETED_JOBS, _LAST_CLEANUP_TIME
 
     current_time = time.time()
-    # Clean up every hour
-    if current_time - _LAST_CLEANUP_TIME > 3600:
-        logger.debug(f"Cleaning up job tracking, current size: {len(_CURRENT_JOBS)}")
 
-        # Get jobs from the last 24 hours to see what should still be tracked
-        history_data = get_recent_job_history()
-        if history_data:
-            recent_job_ids = set()
-            for job in history_data.get("jobs", []):
-                job_id = job.get("job_id")
-                if job_id:
-                    recent_job_ids.add(job_id)
+    # Only run cleanup every hour
+    if current_time - _LAST_CLEANUP_TIME < 3600:  # 1 hour
+        return
 
-            # Remove jobs that are older than 24 hours
-            old_jobs = _CURRENT_JOBS - recent_job_ids
-            for job_id in old_jobs:
-                _CURRENT_JOBS.discard(job_id)
+    _LAST_CLEANUP_TIME = current_time
 
-            logger.debug(f"Removed {len(old_jobs)} old jobs from tracking")
+    # Clean up jobs older than 24 hours from current jobs tracking
+    # This handles cases where jobs might get stuck in tracking
+    if _CURRENT_JOBS:
+        logger.debug(f"Cleaning up old job tracking. Current jobs: {_CURRENT_JOBS}")
+        # Note: We can't easily determine job age from just the ID, so we'll rely on
+        # the natural cleanup when jobs complete and are removed from tracking
 
-        _LAST_CLEANUP_TIME = current_time
+    # Clean up processed completed jobs older than 24 hours
+    # For now, we'll clean up all processed jobs every 24 hours to prevent memory buildup
+    if _PROCESSED_COMPLETED_JOBS:
+        logger.debug(f"Cleaning up processed completed jobs. Count: {len(_PROCESSED_COMPLETED_JOBS)}")
+        _PROCESSED_COMPLETED_JOBS.clear()
+        logger.debug("Cleared processed completed jobs cache")
+
+    logger.debug("Job tracking cleanup completed")
 
 
 def process_job_updates(queue_data, history_data):
-    """Process job data to send individual job updates"""
-    if not queue_data:
-        return []
-
+    """Process job updates from queue and history data"""
+    global _CURRENT_JOBS, _PROCESSED_COMPLETED_JOBS
     job_updates = []
+
+    # Get current job IDs from queue data
     current_job_ids = set()
+    if queue_data:
+        for job in queue_data.get("jobs", []):
+            job_id = job.get("job_id")
+            if job_id:
+                current_job_ids.add(job_id)
 
-    # Process current jobs
-    for job in queue_data.get("jobs", []):
-        job_id = job.get("job_id")
-        if job_id:
-            current_job_ids.add(job_id)
-
-        # Debug: Log the job structure to understand field names
-        if logger.isEnabledFor(logging.DEBUG):
-            logger.debug(f"Processing job {job_id}, full job data: {json.dumps(job, indent=2)}")
-
-        # Extract timestamps and job state using helper functions
-        start_time, end_time = _extract_timestamps_from_job(job)
-        job_state, exit_code = _determine_job_state_from_data(job, job_id)
-        user_name = _extract_username_from_job(job, job_id)
-
-        # Verify job status with scontrol and get username if needed
-        job_state, exit_code, user_name = _verify_job_status_with_scontrol(job_id, job_state, exit_code, user_name)
-
-        logger.debug(f"Job {job_id} processed: state={job_state}, user={user_name}, start={start_time}, end={end_time}")
-
-        job_update = {
-            "slurm_jobid": job.get("job_id"),
-            "slurm_status": job_state,
-            "slurm_start_time": start_time,
-            "slurm_end_time": end_time,
-            "user_name": user_name,
-            "partition": job.get("partition"),
-            "nodes_allocated": job.get("nodes_allocated"),
-            "ntasks_per_node": job.get("ntasks_per_node"),
-            "cpus_per_task": job.get("cpus_per_task"),
-            "time_limit": job.get("time_limit"),
-            "name": job.get("name"),
-            "exit_code": exit_code,
-            "update_type": "current"
-        }
-        job_updates.append(job_update)
-
-    # Check for jobs that disappeared from the queue (completed)
-    global _CURRENT_JOBS
+    # === STEP 1: Process jobs that have completed (were tracked but not in current queue) ===
     completed_job_ids = _CURRENT_JOBS - current_job_ids
-    if completed_job_ids:
-        logger.info(f"Jobs that disappeared from queue (likely completed): {completed_job_ids}")
+    new_completed_job_ids = completed_job_ids - _PROCESSED_COMPLETED_JOBS
 
-        # Try to get completion status from history
-        found_in_history = set()
-        if history_data:
-            for job in history_data.get("jobs", []):
-                if job.get("job_id") in completed_job_ids:
-                    found_in_history.add(job.get("job_id"))
+    if new_completed_job_ids:
+        logger.info(f"Found newly completed jobs: {new_completed_job_ids}")
 
-                    # Debug: Log the history job structure
-                    if logger.isEnabledFor(logging.DEBUG):
-                        logger.debug(f"Processing history job {job.get('job_id')}, full job data: {json.dumps(job, indent=2)}")
+        # Try to find completion data in history first, then fallback to scontrol
+        for job_id in new_completed_job_ids:
+            job_update = None
 
-                    # Extract timestamps and job state using helper functions
-                    start_time, end_time = _extract_timestamps_from_job(job)
-                    job_state, exit_code = _determine_job_state_from_data(job, job.get('job_id'))
-                    user_name = _extract_username_from_job(job, job.get('job_id'))
+            # Try to find in history data
+            if history_data:
+                for job in history_data.get("jobs", []):
+                    if job.get("job_id") == job_id:
+                        job_update = _create_job_update_from_data(job, "completed")
+                        logger.info(f"Found completion data in history for job {job_id}")
+                        break
 
-                    # For completed jobs, verify status with scontrol to catch cancelled jobs
-                    if job_state in ["COMPLETED", "FAILED"]:
-                        logger.debug(f"Verifying completed job {job.get('job_id')} status with scontrol (final history state: {job_state})")
-                        scontrol_state, scontrol_exit_code, scontrol_user = get_individual_job_status(job.get("job_id"))
-                        logger.debug(f"scontrol returned state: {scontrol_state}, exit_code: {scontrol_exit_code}, user: {scontrol_user}")
-                        if scontrol_state and scontrol_state != job_state:
-                            logger.info(f"Job {job.get('job_id')} final history state: {job_state}, scontrol state: {scontrol_state}, using scontrol state")
-                            job_state = scontrol_state
-                            exit_code = scontrol_exit_code
-                        elif scontrol_user and not user_name:
-                            user_name = scontrol_user
-                            logger.debug(f"Got username '{user_name}' from scontrol for final history job {job.get('job_id')}")
-
-                    logger.debug(f"Final history job {job.get('job_id')} processed: state={job_state}, user={user_name}, start={start_time}, end={end_time}")
-
-                    job_update = {
-                        "slurm_jobid": job.get("job_id"),
-                        "slurm_status": job_state,
-                        "slurm_start_time": start_time,
-                        "slurm_end_time": end_time,
-                        "user_name": user_name,
-                        "partition": job.get("partition"),
-                        "nodes_allocated": job.get("nodes_allocated"),
-                        "ntasks_per_node": job.get("ntasks_per_node"),
-                        "cpus_per_task": job.get("cpus_per_task"),
-                        "time_limit": job.get("time_limit"),
-                        "name": job.get("name"),
-                        "exit_code": exit_code,
-                        "update_type": "completed"
-                    }
-                    job_updates.append(job_update)
-
-        # For jobs not found in history, try to get them individually
-        missing_jobs = completed_job_ids - found_in_history
-        if missing_jobs:
-            logger.info(f"Jobs not found in history, trying individual lookup: {missing_jobs}")
-            for job_id in missing_jobs:
-                individual_job_data = get_individual_job_history(job_id)
-                if individual_job_data:
-                    time_data = individual_job_data.get("time", {})
-                    start_time = time_data.get("start") if time_data else None
-                    end_time = time_data.get("end") if time_data else None
-
-                    # Try different possible field names for username
-                    user_name = individual_job_data.get("user_name")
-                    if not user_name:
-                        user_name = individual_job_data.get("user")
-                    if not user_name:
-                        user_name = individual_job_data.get("user_id")
-                    if not user_name:
-                        user_name = individual_job_data.get("account")
-                    if not user_name:
-                        # Try scontrol as last resort
-                        job_state, exit_code, scontrol_user = get_individual_job_status(job_id)
-                        if scontrol_user:
-                            user_name = scontrol_user
-                        else:
-                            user_name = "unknown"
-
-                    job_update = {
-                        "slurm_jobid": individual_job_data.get("job_id"),
-                        "slurm_status": individual_job_data.get("job_state", "COMPLETED"),
-                        "slurm_start_time": start_time,
-                        "slurm_end_time": end_time,
-                        "user_name": user_name,
-                        "partition": individual_job_data.get("partition", "unknown"),
-                        "nodes_allocated": individual_job_data.get("nodes_allocated"),
-                        "ntasks_per_node": individual_job_data.get("ntasks_per_node"),
-                        "cpus_per_task": individual_job_data.get("cpus_per_task"),
-                        "time_limit": individual_job_data.get("time_limit"),
-                        "name": individual_job_data.get("name", f"Job {job_id}"),
-                        "exit_code": individual_job_data.get("exit_code"),
-                        "update_type": "completed"
-                    }
-                    job_updates.append(job_update)
-                else:
-                    # If we still can't get the job data, try scontrol as last resort
-                    job_state, exit_code, user_name = get_individual_job_status(job_id)
-                    if not user_name:
-                        user_name = "unknown"
-
-                    # If we still can't get the job data, mark as completed with assumed status
-                    logger.warning(f"Could not get history for job {job_id}, using scontrol result: {job_state}")
+            # Fallback to scontrol if not found in history
+            if not job_update:
+                logger.info(f"Job {job_id} not found in history, trying scontrol")
+                job_state, exit_code, user_name = get_individual_job_status(job_id)
+                if job_state:
                     job_update = {
                         "slurm_jobid": job_id,
-                        "slurm_status": job_state or "COMPLETED",  # Use scontrol result if available
+                        "slurm_status": job_state,
+                        "slurm_additional_states": [],
                         "slurm_start_time": None,
                         "slurm_end_time": None,
                         "user_name": user_name,
@@ -690,196 +672,136 @@ def process_job_updates(queue_data, history_data):
                         "exit_code": exit_code,
                         "update_type": "completed"
                     }
-                    job_updates.append(job_update)
+                    logger.info(f"Got completion data from scontrol for job {job_id}: {job_state}")
+                else:
+                    # Last resort: assume completed
+                    logger.warning(f"Could not get status for job {job_id}, assuming COMPLETED")
+                    job_update = {
+                        "slurm_jobid": job_id,
+                        "slurm_status": "COMPLETED",
+                        "slurm_additional_states": [],
+                        "slurm_start_time": None,
+                        "slurm_end_time": None,
+                        "user_name": "unknown",
+                        "partition": "unknown",
+                        "nodes_allocated": None,
+                        "ntasks_per_node": None,
+                        "cpus_per_task": None,
+                        "time_limit": None,
+                        "name": f"Job {job_id}",
+                        "exit_code": None,
+                        "update_type": "completed"
+                    }
 
-    # Update the global tracking - only remove completed jobs, keep new ones
-    _CURRENT_JOBS = _CURRENT_JOBS | current_job_ids  # Union of previous and current
+            if job_update:
+                job_updates.append(job_update)
+                _PROCESSED_COMPLETED_JOBS.add(job_id)
 
-    # Clean up completed jobs from tracking
-    for job_id in completed_job_ids:
-        _CURRENT_JOBS.discard(job_id)
+    # === STEP 2: Process currently active jobs ===
+    if queue_data:
+        for job in queue_data.get("jobs", []):
+            job_id = job.get("job_id")
+            if job_id:
+                job_update = _create_job_update_from_data(job, "current")
+                job_updates.append(job_update)
 
-    # Process recent history for completed jobs (additional check)
+    # === STEP 3: Process untracked terminal jobs (immediately cancelled, etc.) ===
     if history_data:
         for job in history_data.get("jobs", []):
-            # Determine job state - if None, use timestamps
-            job_state = job.get("job_state")
-            exit_code = job.get("exit_code")
-            user_name = _extract_username_from_job(job, job.get("job_id"))
-            start_time, end_time = _extract_timestamps_from_job(job)
+            job_id = job.get("job_id")
+            # Check if this is a terminal job that we haven't processed yet
+            # This includes immediately cancelled jobs that were never tracked
+            if job_id and job_id not in _PROCESSED_COMPLETED_JOBS:
+                # Extract job state from correct SLURM JSON field
+                # Handle both formats: sacct uses state.current, squeue uses job_state
+                job_state = None
 
-            if job_state is None:
-                time_data = job.get("time", {})
-                end_time = time_data.get("end") if time_data else None
-                if end_time and end_time > 0:
-                    job_state = "COMPLETED"
-                    logger.debug(f"Job {job.get('job_id')} had no state but end time, assuming COMPLETED")
-                else:
-                    job_state = "RUNNING"
-                    logger.debug(f"Job {job.get('job_id')} had no state and no end time, assuming RUNNING")
+                # Try sacct format first: state.current
+                state_data = job.get("state", {})
+                if isinstance(state_data, dict):
+                    job_state = state_data.get("current", [])
+                # Fallback to squeue format: job_state
+                if not job_state:
+                    job_state = job.get("job_state", [])
 
-            # Only include jobs that completed recently and aren't already in current jobs
-            if (job_state in ["COMPLETED", "FAILED", "CANCELLED"] and job.get("job_id") not in current_job_ids):
-                logger.debug(f"Processing completed job {job.get('job_id')} with state: {job_state}")
+                # Check if it's a terminal state
+                if job_state and any(state in ["COMPLETED", "FAILED", "CANCELLED", "TIMEOUT", "PREEMPTED", "NODE_FAIL"] for state in job_state):
+                    # Skip if this job is currently active (avoid duplicates)
+                    if job_id not in current_job_ids:
+                        logger.info(f"Found unprocessed terminal job {job_id} in history: {job_state}")
+                        job_update = _create_job_update_from_data(job, "completed")
+                        job_updates.append(job_update)
+                        _PROCESSED_COMPLETED_JOBS.add(job_id)
 
-                # For completed jobs, verify status with scontrol to catch cancelled jobs
-                # BUT skip verification for jobs that are already marked as CANCELLED
-                if job_state in ["COMPLETED", "FAILED"] and job_state != "CANCELLED":
-                    logger.debug(f"Verifying completed job {job.get('job_id')} status with scontrol (final history state: {job_state})")
-                    scontrol_state, scontrol_exit_code, scontrol_user = get_individual_job_status(job.get("job_id"))
-                    logger.debug(f"scontrol returned state: {scontrol_state}, exit_code: {scontrol_exit_code}, user: {scontrol_user}")
-                    if scontrol_state and scontrol_state != job_state:
-                        logger.info(f"Job {job.get('job_id')} final history state: {job_state}, scontrol state: {scontrol_state}, using scontrol state")
-                        job_state = scontrol_state
-                        exit_code = scontrol_exit_code
-                    elif scontrol_user and not user_name:
-                        user_name = scontrol_user
-                        logger.debug(f"Got username '{user_name}' from scontrol for final history job {job.get('job_id')}")
-                elif job_state == "CANCELLED":
-                    logger.info(f"Job {job.get('job_id')} is already marked as CANCELLED, skipping scontrol verification to preserve status")
+    # === STEP 4: Update global tracking ===
+    # Remove completed jobs from tracking
+    for job_id in new_completed_job_ids:
+        _CURRENT_JOBS.discard(job_id)
+        logger.debug(f"Removed completed job {job_id} from tracking")
 
-                logger.debug(f"Final history job {job.get('job_id')} processed: state={job_state}, user={user_name}, start={start_time}, end={end_time}")
-
-                job_update = {
-                    "slurm_jobid": job.get("job_id"),
-                    "slurm_status": job_state,
-                    "slurm_start_time": start_time,
-                    "slurm_end_time": end_time,
-                    "user_name": user_name,
-                    "partition": job.get("partition"),
-                    "nodes_allocated": job.get("nodes_allocated"),
-                    "ntasks_per_node": job.get("ntasks_per_node"),
-                    "cpus_per_task": job.get("cpus_per_task"),
-                    "time_limit": job.get("time_limit"),
-                    "name": job.get("name"),
-                    "exit_code": exit_code,
-                    "update_type": "completed"
-                }
-                job_updates.append(job_update)
+    # Add new jobs to tracking
+    _CURRENT_JOBS.update(current_job_ids)
+    logger.debug(f"Updated job tracking: current jobs = {_CURRENT_JOBS}")
 
     return job_updates
 
 
-def get_individual_job_status(job_id):
-    """Get job status and exit code using scontrol show job as fallback"""
-    if not SCONTROL_CMD:
-        return None, None, None
+def _create_job_update_from_data(job_data, update_type):
+    """Create a standardized job update from SLURM job data"""
+    job_id = job_data.get("job_id")
 
-    try:
-        result = subprocess.run(
-            [SCONTROL_CMD, "show", "job", str(job_id)],
-            capture_output=True,
-            text=True,
-            check=True,
-            timeout=30
-        )
+    # Extract job data using existing helper functions
+    start_time, end_time = _extract_timestamps_from_job(job_data)
+    job_state, exit_code = _determine_job_state_from_data(job_data, job_id)
+    user_name = _extract_username_from_job(job_data, job_id)
 
-        # Parse scontrol output
-        output = result.stdout
-        job_state = None
-        exit_code = None
-        user_name = None
+    # Verify with scontrol for final status (if needed)
+    if update_type == "completed":
+        scontrol_state, scontrol_exit_code, scontrol_user = get_individual_job_status(job_id)
+        if scontrol_state:
+            job_state = scontrol_state
+            exit_code = scontrol_exit_code
+            if scontrol_user and not user_name:
+                user_name = scontrol_user
 
-        # Look for JobState=, ExitCode=, and UserName= in the output
-        for line in output.split('\n'):
-            line = line.strip()  # Remove leading/trailing whitespace
-            if line.startswith('JobState='):
-                # Extract job state, handling cases like "CANCELLED Reason=None"
-                job_state_part = line.split('=')[1].strip()
-                # Split on space to get just the state (e.g., "CANCELLED" from "CANCELLED Reason=None")
-                job_state = job_state_part.split()[0] if job_state_part else None
-            elif line.startswith('ExitCode='):
-                exit_code_str = line.split('=')[1].strip()
-                # ExitCode format is typically "0:0" (signal:exit_code) or "0:1" etc.
-                if exit_code_str and exit_code_str != "0:0":
-                    exit_code = exit_code_str
-            elif line.startswith('UserName='):
-                user_name = line.split('=')[1].strip()
+    # Handle additional states for active jobs only
+    additional_states = []
+    if update_type == "current":
+        # Handle both SLURM JSON formats for additional states:
+        # - squeue --json uses: "job_state": ["RUNNING", "CONFIGURING"]  
+        # - sacct --json uses: "state": {"current": ["CANCELLED"]}
 
-        if job_state:
-            logger.info(f"scontrol returned job state for {job_id}: {job_state}, exit_code: {exit_code}, user_name: {user_name}")
-            # Special logging for cancelled jobs
-            if job_state == 'CANCELLED':
-                logger.info(f"*** DETECTED CANCELLED JOB {job_id} via scontrol ***")
-        else:
-            logger.debug(f"scontrol did not return job state for {job_id}, full output: {output}")
+        # Try sacct format first: state.current
+        state_data = job_data.get("state", {})
+        raw_job_state = None
+        if isinstance(state_data, dict):
+            raw_job_state = state_data.get("current", [])
 
-        return job_state, exit_code, user_name
+        # Fallback to squeue format: job_state
+        if not raw_job_state:
+            raw_job_state = job_data.get("job_state", [])
 
-    except subprocess.CalledProcessError as e:
-        # Check if it's "Invalid job id" error (job completed and removed)
-        if "Invalid job id" in e.stderr:
-            logger.debug(f"Job {job_id} not found in scontrol (likely completed and removed)")
-            return "COMPLETED", None, None  # Assume completed if job is not found
-        else:
-            logger.debug(f"Failed to get job status with scontrol for {job_id}: {e}")
-            return None, None, None
-    except Exception as e:
-        logger.debug(f"Failed to get job status with scontrol for {job_id}: {e}")
-        return None, None, None
+        if isinstance(raw_job_state, list) and len(raw_job_state) > 1:
+            if job_state not in ["COMPLETED", "FAILED", "CANCELLED", "TIMEOUT", "PREEMPTED"]:
+                additional_states = raw_job_state[1:]
+                logger.debug(f"Job {job_id} is active ({job_state}), including additional states: {additional_states}")
 
-
-def get_individual_job_history(job_id):
-    """Get history for a specific job using sacct"""
-    if not SACCT_CMD:
-        return None
-
-    try:
-        result = subprocess.run(
-            [SACCT_CMD, "--json", "--jobs", str(job_id)],
-            capture_output=True,
-            text=True,
-            check=True,
-            timeout=30
-        )
-        data = json.loads(result.stdout)
-        jobs = data.get("jobs", [])
-        if jobs:
-            job_data = jobs[0]  # Return the first (and should be only) job
-
-            # Debug: Log the full job data structure
-            if logger.isEnabledFor(logging.DEBUG):
-                logger.debug(f"Individual job history for {job_id}, full data: {json.dumps(job_data, indent=2)}")
-
-            # Extract username using helper function
-            user_name = _extract_username_from_job(job_data, job_id)
-
-            # If we don't have a username from sacct, try scontrol
-            if not user_name:
-                job_state, exit_code, scontrol_user = get_individual_job_status(job_id)
-                if scontrol_user:
-                    user_name = scontrol_user
-                    job_data["user_name"] = user_name
-                if job_state and not job_data.get("job_state"):
-                    job_data["job_state"] = job_state
-                if exit_code and not job_data.get("exit_code"):
-                    job_data["exit_code"] = exit_code
-
-            # If job_state is None, try to get it from scontrol
-            if job_data.get("job_state") is None:
-                job_state, exit_code, scontrol_user = get_individual_job_status(job_id)
-                if job_state:
-                    job_data["job_state"] = job_state
-                    job_data["exit_code"] = exit_code
-                    if scontrol_user and not user_name:
-                        job_data["user_name"] = scontrol_user
-                    logger.info(f"Got job state from scontrol for {job_id}: {job_state}")
-                else:
-                    # If we still can't get the state, determine from timestamps
-                    time_data = job_data.get("time", {})
-                    end_time = time_data.get("end") if time_data else None
-                    if end_time and end_time > 0:
-                        job_data["job_state"] = "COMPLETED"
-                        job_data["exit_code"] = "0:0"
-                        if not user_name:
-                            job_data["user_name"] = "unknown"
-                        logger.debug(f"Job {job_id} had no state from scontrol, assuming COMPLETED based on end time")
-
-            return job_data
-        return None
-    except Exception as e:
-        logger.debug(f"Failed to get individual job history for {job_id}: {e}")
-        return None
+    return {
+        "slurm_jobid": job_id,
+        "slurm_status": job_state,
+        "slurm_additional_states": additional_states,
+        "slurm_start_time": start_time,
+        "slurm_end_time": end_time,
+        "user_name": user_name,
+        "partition": job_data.get("partition"),
+        "nodes_allocated": job_data.get("nodes_allocated"),
+        "ntasks_per_node": job_data.get("ntasks_per_node"),
+        "cpus_per_task": job_data.get("cpus_per_task"),
+        "time_limit": job_data.get("time_limit"),
+        "name": job_data.get("name"),
+        "exit_code": exit_code,
+        "update_type": update_type
+    }
 
 
 def slurm_monitoring_loop():
@@ -888,72 +810,70 @@ def slurm_monitoring_loop():
 
     while EXIT_CODE == 0:
         try:
+            logger.debug("SLURM monitoring: Starting new monitoring cycle")
+
             # Clean up old job tracking
             cleanup_old_job_tracking()
 
             # Get SLURM status
+            logger.debug("SLURM monitoring: Getting queue and node status")
             queue_data, node_data = get_slurm_queue_status()
-            history_data = get_recent_job_history()
+
+            logger.debug("SLURM monitoring: Getting job history")
+            try:
+                history_data = get_recent_job_history()
+                logger.debug(f"SLURM monitoring: History query successful, got data: {history_data is not None}")
+            except Exception as history_error:
+                logger.error(f"SLURM monitoring: Failed to get job history: {history_error}")
+                logger.error(traceback.format_exc())
+                history_data = None
 
             # Debug: Log what we got from SLURM
+            logger.debug(f"SLURM monitoring: queue_data={queue_data is not None}, node_data={node_data is not None}, history_data={history_data is not None}")
+
             if queue_data:
                 jobs = queue_data.get("jobs", [])
                 logger.debug(f"SLURM monitoring: Got {len(jobs)} jobs from squeue --json")
                 for job in jobs:
-                    job_id = job.get("job_id", "unknown")
-                    state = job.get("job_state", "UNKNOWN")
-                    logger.debug(f"SLURM monitoring: Job {job_id} state = {state}")
+                    job_id = job.get("job_id")
+                    job_state = job.get("job_state")
+                    logger.debug(f"  Job {job_id}: {job_state}")
             else:
-                logger.debug("SLURM monitoring: No queue data received")
+                logger.debug("SLURM monitoring: No current jobs in queue")
 
-            # Process queue statistics if we have valid data
+            # Debug: Log current tracking state
+            logger.debug(f"SLURM monitoring: Currently tracking jobs: {_CURRENT_JOBS}")
+
+            # Process queue data for statistics
             if queue_data and node_data:
-                partition_stats = process_queue_data(queue_data, node_data)
-
-                # Debug: Log the processed statistics
-                for stats in partition_stats:
-                    logger.debug(f"SLURM monitoring: Processed stats for partition {stats['partition']}: {stats['queue_stats']}")
-
-                # Send queue status for each partition
-                for stats in partition_stats:
-                    message = {
-                        "data": stats
-                    }
-                    send_message("SLURM_QUEUE_STATUS", message)
-                    logger.debug("Sent queue status for partition %s", stats["partition"])
-
-                # Process individual job updates
-                job_updates = process_job_updates(queue_data, history_data)
-
-                # Send job updates (batch them to avoid overwhelming the system)
-                for job_update in job_updates:
-                    # Only log significant information, not the entire data structure
-                    job_id = job_update.get("slurm_jobid")
-                    job_status = job_update.get("slurm_status")
-                    update_type = job_update.get("update_type")
-
-                    if update_type == "completed":
-                        logger.info(f"Sending completion update for job {job_id}: {job_status}")
-                    elif job_status and job_status not in ["RUNNING", "PENDING", "CONFIGURING"]:
-                        logger.info(f"Sending status update for job {job_id}: {job_status}")
-                    else:
-                        logger.debug(f"Sending update for job {job_id}: {job_status}")
-
-                    message = {
-                        "data": job_update
-                    }
-                    send_message("SLURM_JOB_UPDATE", message)
+                logger.debug("SLURM monitoring: Processing queue data for statistics")
+                queue_stats = process_queue_data(queue_data, node_data)
+                for stat in queue_stats:
+                    send_message("SLURM_QUEUE_STATUS", {"data": stat})
             else:
-                logger.debug("Failed to get valid SLURM queue or node data, skipping this cycle")
+                logger.debug("SLURM monitoring: No queue or node data for statistics")
 
-            # Wait before next collection
-            time.sleep(30)  # 30 seconds
+            # Process job updates - this handles all job processing logic
+            logger.debug("SLURM monitoring: Processing job updates")
+            job_updates = process_job_updates(queue_data, history_data)
+            logger.debug(f"SLURM monitoring: Generated {len(job_updates)} job updates")
+
+            for update in job_updates:
+                send_message("SLURM_JOB_UPDATE", {"data": update})
+
+            # Debug: Log final tracking state
+            logger.debug(f"SLURM monitoring: Final tracking state: {_CURRENT_JOBS}")
+            logger.debug("SLURM monitoring: Completed monitoring cycle")
 
         except Exception as e:
-            logger.error("Error in SLURM monitoring loop: %s", e)
-            time.sleep(30)  # Wait 30 seconds before retrying
+            logger.error(f"Error in SLURM monitoring loop: {e}")
+            logger.error(traceback.format_exc())
 
-    logger.info("SLURM monitoring background thread stopping")
+        # Sleep before next iteration
+        logger.debug("SLURM monitoring: Sleeping for 30 seconds")
+        time.sleep(30)
+
+    logger.info("SLURM monitoring thread stopped")
 
 
 def _spack_submit_build(app_id, partition, app_name, spec, extra_sbatch=None):
@@ -1964,7 +1884,27 @@ def _extract_timestamps_from_job(job_data):
 
 def _determine_job_state_from_data(job_data, job_id=None):
     """Determine job state from job data, with fallback logic"""
-    job_state = job_data.get("job_state")
+    job_state = None
+
+    # Handle both SLURM JSON formats:
+    # - squeue --json uses: "job_state": ["RUNNING", "CONFIGURING"]  
+    # - sacct --json uses: "state": {"current": ["CANCELLED"]}
+
+    # Try sacct format first: state.current
+    state_data = job_data.get("state", {})
+    if isinstance(state_data, dict):
+        raw_job_state = state_data.get("current")
+        if isinstance(raw_job_state, list) and raw_job_state:
+            job_state = raw_job_state[0]  # Take the first state
+
+    # Fallback to squeue format: job_state
+    if job_state is None:
+        raw_job_state = job_data.get("job_state")
+        if isinstance(raw_job_state, list) and raw_job_state:
+            job_state = raw_job_state[0]  # Take the first state
+        elif isinstance(raw_job_state, str):
+            job_state = raw_job_state
+
     exit_code = job_data.get("exit_code")
 
     if job_state is None:
@@ -1980,31 +1920,63 @@ def _determine_job_state_from_data(job_data, job_id=None):
     return job_state, exit_code
 
 
-def _verify_job_status_with_scontrol(job_id, job_state, exit_code, user_name):
-    """Verify job status with scontrol and return updated values if different"""
-    if job_state in ["PENDING", "RUNNING", "SUSPENDED", "COMPLETED", "FAILED", "CANCELLED"]:
-        logger.debug(f"Checking scontrol for job {job_id} (current state: {job_state})")
-        scontrol_state, scontrol_exit_code, scontrol_user = get_individual_job_status(job_id)
+def get_individual_job_status(job_id):
+    """Get job status and exit code using scontrol show job as fallback"""
+    if not SCONTROL_CMD:
+        return None, None, None
 
-        # Special handling for cancelled jobs - preserve their status
-        if job_state == "CANCELLED":
-            logger.info(f"Job {job_id} is marked as CANCELLED, preserving this status")
-            # Only update username if we don't have one
-            if scontrol_user and not user_name:
-                user_name = scontrol_user
-                logger.debug(f"Got username '{user_name}' from scontrol for cancelled job {job_id}")
+    try:
+        result = subprocess.run(
+            [SCONTROL_CMD, "show", "job", str(job_id)],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=30
+        )
+
+        # Parse scontrol output
+        output = result.stdout
+        job_state = None
+        exit_code = None
+        user_name = None
+
+        # Look for JobState=, ExitCode=, and UserName= in the output
+        for line in output.split('\n'):
+            line = line.strip()  # Remove leading/trailing whitespace
+            if line.startswith('JobState='):
+                # Extract job state, handling cases like "CANCELLED Reason=None"
+                job_state_part = line.split('=')[1].strip()
+                # Split on space to get just the state (e.g., "CANCELLED" from "CANCELLED Reason=None")
+                job_state = job_state_part.split()[0] if job_state_part else None
+            elif line.startswith('ExitCode='):
+                exit_code_str = line.split('=')[1].strip()
+                # ExitCode format is typically "0:0" (signal:exit_code) or "0:1" etc.
+                if exit_code_str and exit_code_str != "0:0":
+                    exit_code = exit_code_str
+            elif line.startswith('UserName='):
+                user_name = line.split('=')[1].strip()
+
+        if job_state:
+            logger.info(f"scontrol returned job state for {job_id}: {job_state}, exit_code: {exit_code}, user_name: {user_name}")
+            # Special logging for cancelled jobs
+            if job_state == 'CANCELLED':
+                logger.info(f"*** DETECTED CANCELLED JOB {job_id} via scontrol ***")
         else:
-            # For non-cancelled jobs, allow state updates
-            if scontrol_state and scontrol_state != job_state:
-                logger.info(f"Job {job_id} state updated from scontrol: {job_state} -> {scontrol_state}")
-                job_state = scontrol_state
-                exit_code = scontrol_exit_code
+            logger.debug(f"scontrol did not return job state for {job_id}, full output: {output}")
 
-            if scontrol_user and not user_name:
-                user_name = scontrol_user
-                logger.debug(f"Got username '{user_name}' from scontrol for job {job_id}")
+        return job_state, exit_code, user_name
 
-    return job_state, exit_code, user_name
+    except subprocess.CalledProcessError as e:
+        # Check if it's "Invalid job id" error (job completed and removed)
+        if "Invalid job id" in e.stderr:
+            logger.debug(f"Job {job_id} not found in scontrol (likely completed and removed)")
+            return "COMPLETED", None, None  # Assume completed if job is not found
+        else:
+            logger.debug(f"Failed to get job status with scontrol for {job_id}: {e}")
+            return None, None, None
+    except Exception as e:
+        logger.debug(f"Failed to get job status with scontrol for {job_id}: {e}")
+        return None, None, None
 
 
 def get_slurm_queue_status():
