@@ -48,4 +48,4 @@ function setActiveTab(tabId) {
     if (tab) {
         tab.classList.add('active');
     }
-} 
+}
