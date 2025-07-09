@@ -61,8 +61,8 @@ node_filter="name:${cluster_name}-${nodeset_name}-* labels.slurm_cluster_name=${
 running_nodes_filter="${node_filter} AND status!=STOPPING"
 # List all currently running instances and attempt to delete them
 gcloud compute instances list --format="value(selfLink)" --filter="${running_nodes_filter}" >"$tmpfile"
-# Do 10 instances at a time
-while batch="$(head -n 10)" && [[ ${#batch} -gt 0 ]]; do
+# Do 500 instances at a time
+while batch="$(head -n 500)" && [[ ${#batch} -gt 0 ]]; do
 	nodes=$(echo "$batch" | paste -sd " " -) # concat into a single space-separated line
 	# The lack of quotes around ${nodes} is intentional and causes each new space-separated "word" to
 	# be treated as independent arguments. See PR#2523
@@ -83,7 +83,7 @@ while true; do
 done
 
 echo "Deleting resource policies"
-policies_filter="name:${cluster_name}-${nodeset_name}-slurmgcp-managed-*"
+policies_filter="name:${cluster_name}-slurmgcp-managed-${nodeset_name}-*"
 gcloud compute resource-policies list --format="value(selfLink)" --filter="${policies_filter}" | while read -r line; do
 	echo "Deleting resource policy: $line"
 	gcloud compute resource-policies delete --quiet "${line}" || {
