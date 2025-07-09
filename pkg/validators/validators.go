@@ -15,12 +15,14 @@
 package validators
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"hpc-toolkit/pkg/config"
 	"strings"
 
 	"github.com/zclconf/go-cty/cty"
+	"github.com/zclconf/go-cty/cty/gocty"
 )
 
 func projectError(p string) error {
@@ -54,7 +56,44 @@ const (
 	testZoneInRegionName              = "test_zone_in_region"
 	testModuleNotUsedName             = "test_module_not_used"
 	testDeploymentVariableNotUsedName = "test_deployment_variable_not_used"
+	testReservationCapacityAvailableName= "test_reservation_capacity_available"
 )
+
+func testReservationCapacityAvailable(bp config.Blueprint, _ config.Dict) error {
+	requiredVars := []string{"project_id", "zone", "reservation", "static_node_count"}
+	errs := config.Errors{}
+	for _, v := range requiredVars {
+		if !bp.Vars.Has(v) {
+			errs.Add(fmt.Errorf("missing required variable: %q", v))
+		}
+	}
+	if errs.Any() {
+		return errs
+	}
+
+	projectID := bp.Vars.Get(requiredVars[0]).AsString()
+	zone := bp.Vars.Get(requiredVars[1]).AsString()
+	reservationName := bp.Vars.Get(requiredVars[2]).AsString()
+	
+	var requestedCount int
+	if err := gocty.FromCtyValue(bp.Vars.Get(requiredVars[3]), &requestedCount); err != nil {
+		return fmt.Errorf("invalid value for static_node_count: %w", err)
+	}
+
+	ctx := context.Background()
+	available, err := GetAvailableReservationCount(ctx, projectID, zone, reservationName)
+	
+	if err != nil {
+		return fmt.Errorf("failed to fetch reservation availability: %w", err)
+	}
+
+	if requestedCount > available {
+		return fmt.Errorf("reservation %q in zone %q has only %d instances available, but %d were requested",
+			reservationName, zone, available, requestedCount)
+	}
+
+	return nil
+}
 
 func implementations() map[string]func(config.Blueprint, config.Dict) error {
 	return map[string]func(config.Blueprint, config.Dict) error{
@@ -65,6 +104,7 @@ func implementations() map[string]func(config.Blueprint, config.Dict) error {
 		testZoneInRegionName:              testZoneInRegion,
 		testModuleNotUsedName:             testModuleNotUsed,
 		testDeploymentVariableNotUsedName: testDeploymentVariableNotUsed,
+		testReservationCapacityAvailableName: testReservationCapacityAvailable,
 	}
 }
 
@@ -210,6 +250,12 @@ func defaults(bp config.Blueprint) []config.Validator {
 				"region":     regionRef,
 				"zone":       zoneRef,
 			}),
+		})
+	}
+
+	if projectIDExists && zoneExists && bp.Vars.Has("reservation") && bp.Vars.Has("static_node_count") {
+		defaults = append(defaults, config.Validator{
+			Validator: testReservationCapacityAvailableName,
 		})
 	}
 	return defaults
