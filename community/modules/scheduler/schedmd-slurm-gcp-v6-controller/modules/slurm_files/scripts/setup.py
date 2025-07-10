@@ -324,8 +324,24 @@ def update_system_config(file, content):
     slurmd_file = Path(conf_dir, file)
     slurmd_file.write_text(content)
 
+def _symlink_mysql_datadir(lkp: util.Lookup) -> None:
+    """ Symlink /var/lib/mysql to controller state disk if needed. """
+    if not lkp.cfg.controller_state_disk.device_name:
+        return
+    
+    datadir = Path("/var/lib/mysql")
+    dst = slurmdirs.state / "mysql"
 
-def configure_mysql():
+    if dst.exists():
+        run(f"rm -rf {datadir}")
+    else:
+        shutil.move(datadir, dst)    
+
+    datadir.symlink_to(dst, target_is_directory=True)
+    shutil.chown(datadir, user="mysql", group="mysql")
+    run(f"chown -R mysql:mysql {dst}")
+
+def configure_mysql(lkp: util.Lookup) -> None:
     cnfdir = Path("/etc/my.cnf.d")
     if not cnfdir.exists():
         cnfdir = Path("/etc/mysql/conf.d")
@@ -339,16 +355,21 @@ innodb_log_file_size=64M
 innodb_lock_wait_timeout=900
 """
         )
+
+    run("systemctl stop mariadb", timeout=30)
+    _symlink_mysql_datadir(lkp)
+
     run("systemctl enable mariadb", timeout=30)
     run("systemctl restart mariadb", timeout=30)
+    
+    db_name = "slurm_acct_db"
+    
 
-    mysql, host = "mysql -u root -e", lookup().control_host
-    run(f"""{mysql} "drop user if exists 'slurm'@'localhost'";""", timeout=30)
-    run(f"""{mysql} "create user 'slurm'@'localhost'";""", timeout=30)
-    run(f"""{mysql} "grant all on slurm_acct_db.* TO 'slurm'@'localhost'";""", timeout=30)
-    run(f"""{mysql} "drop user if exists 'slurm'@'{host}'";""", timeout=30)
-    run(f"""{mysql} "create user 'slurm'@'{host}'";""", timeout=30)
-    run(f"""{mysql} "grant all on slurm_acct_db.* TO 'slurm'@'{host}'";""", timeout=30)
+    cmd = "mysql -u root -e"
+    for host  in ("localhost", lkp.control_host):
+        run(f"""{cmd} "drop user if exists 'slurm'@'{host}'";""", timeout=30)
+        run(f"""{cmd} "create user 'slurm'@'{host}'";""", timeout=30)
+        run(f"""{cmd} "grant all on {db_name}.* TO 'slurm'@'{host}'";""", timeout=30)
 
 
 def configure_dirs():
@@ -413,7 +434,7 @@ def setup_controller():
     run_custom_scripts()
 
     if not lkp.cfg.cloudsql_secret:
-        configure_mysql()
+        configure_mysql(lkp)
 
     run("systemctl enable slurmdbd", timeout=30)
     run("systemctl restart slurmdbd", timeout=30)
