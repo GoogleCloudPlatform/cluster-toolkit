@@ -66,3 +66,24 @@ vars:
       * - nofile 1048576
       * - cpu unlimited
       * - rtprio unlimited
+
+  runner_install_cluster_health_scanner:
+    type: ansible-local
+    destination: install_cluster_health_scanner.yml
+    content: |
+      ---
+      - name: Install Cluster Health Scanner
+        hosts: localhost
+        vars:
+          git_version: a3d3e15b1aaad987d5a162c84088b1e1caacaace
+        tasks:
+        - name: Clone cluster-health-scanner
+          ansible.builtin.git:
+            repo: https://github.com/GoogleCloudPlatform/cluster-health-scanner.git
+            dest: /opt/cluster-health-scanner
+            version: "{{ git_version }}"
+            force: true
+        - name: Change permissions of cluster-validation.sh
+          ansible.builtin.file:
+            path: /opt/cluster-health-scanner/deploy/slurm/cluster-validation.sh
+            mode: '0755'
