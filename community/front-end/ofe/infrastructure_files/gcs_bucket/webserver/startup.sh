@@ -20,6 +20,9 @@
 
 #set -v
 
+# record start time
+START_TS=$(date +%s)
+
 # Obtain metadata of this server
 #
 GCP_PROJECT=$(curl --silent --show-error http://metadata.google.internal/computeMetadata/v1/project/project-id -H "Metadata-Flavor: Google")
@@ -85,16 +88,27 @@ install_sqlite() {
 	local src_dir="/usr/local/src"
 	local tarball="sqlite-autoconf-3490100.tar.gz"
 	local url="https://www.sqlite.org/2025/${tarball}"
+	local max_retries=5
+	local retry_count=0
 
 	cd "$src_dir" || {
 		echo "ERROR: Could not change directory to $src_dir"
 		exit 1
 	}
 
-	if ! wget "$url"; then
-		echo "ERROR: Failed to download SQLite from $url"
-		exit 1
-	fi
+	while [ $retry_count -lt $max_retries ]; do
+		if wget "$url"; then
+			break
+		fi
+		retry_count=$((retry_count + 1))
+		if [ $retry_count -lt $max_retries ]; then
+			echo "Retry $retry_count of $max_retries..."
+			sleep 5
+		else
+			echo "ERROR: Failed to download SQLite after $max_retries attempts"
+			exit 1
+		fi
+	done
 
 	tar xzf sqlite-autoconf-3490100.tar.gz
 	cd sqlite-autoconf-3490100 || exit 1
@@ -237,6 +251,7 @@ sudo su - gcluster -c /bin/bash <<EOF
   echo "    gcs_bucket: \"${config_bucket}\"" >> configuration.yaml
   echo "    c2_topic: \"${c2_topic}\"" >> configuration.yaml
   echo "    deployment_name: \"${deployment_name}\"" >> configuration.yaml
+  echo "    runtime_mode: \"remote\"" >> configuration.yaml
 
   printf "\nInitalising Django environments...\n"
   mkdir /opt/gcluster/run
@@ -335,6 +350,14 @@ if [ -n "${SERVER_HOSTNAME}" ]; then
 	crontab -u root "${tmpcron}"
 	rm "${tmpcron}"
 fi
+
+# record end and elapsed time
+END_TS=$(date +%s)
+ELAPSED=$((END_TS - START_TS))
+
+echo ""
+echo "[setup] Total deployment time: ${ELAPSED}s"
+echo ""
 
 #set +v
 
