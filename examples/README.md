@@ -1005,9 +1005,10 @@ This blueprint lets you create a high-throughput execution environment for Googl
 in your own GCP project. It uses the unmodified [AlphaFold 3 package](https://github.com/google-deepmind/alphafold3),
 and provides a best-practices mapping of it to Google Cloud, leveraging Google Cloud's HPC technology.
 
-We provide two simple examples that serve as basic templates for different ways of interacting with the
+We provide three simple examples that serve as basic templates for different ways of interacting with the
 AlphaFold 3 solution:
 
+* A Simple Ipynb Launcher that enables users to interactively configure and submit AlphaFold 3 jobs (Datapipeline or Inference) through the SLURM REST API via a Jupyter Notebook interface. This option provides an interactive, browser-based experience ideal for exploration and prototyping within the AlphaFold 3 environment.
 * A Simple Job Launcher bash script that takes an AlphaFold 3 json file input (for the Datapipeline
 step or the Inference step) and submits it for processing to the AlphaFold 3 autoscaling Slurm cluster.
 * A Simple Service Launcher that has a central Python script that runs a loop monitoring directories on a
