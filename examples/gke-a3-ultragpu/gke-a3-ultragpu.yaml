@@ -35,6 +35,15 @@ vars:
   accelerator_type: nvidia-h200-141gb
   version_prefix: "1.31."
 
+  enable_periodic_health_checks: false # Make this true to run CHS (healthchecks)
+  health_check_schedule: "0 0 * * 0" # Run the health check at 12:00 AM (midnight) every Sunday
+
+  permissions_file_staged_path: $(ghpc_stage("./chs-permissions.yaml.tftpl"))
+  chs_output_bucket_name: chs-result
+  chs_pvc_claim_name: chs-output-pvc
+  chs_cronjob_rendered_path: $(ghpc_stage("./chs-cronjob.yaml.tftpl"))
+  chs_pvc_rendered_path: $(ghpc_stage("./chs-pvc.yaml.tftpl"))
+
 deployment_groups:
 - group: primary
   modules:
@@ -116,6 +125,7 @@ deployment_groups:
       - stackdriver.resourceMetadata.writer
       - storage.objectAdmin
       - artifactregistry.reader
+      - container.admin
 
   - id: training_bucket
     source: community/modules/file-system/cloud-storage-bucket
@@ -214,6 +224,29 @@ deployment_groups:
     source: modules/management/kubectl-apply
     use: [a3-ultragpu-cluster]
     settings:
+      apply_manifests:
+      - source: $(vars.permissions_file_staged_path)
+        enable: $(vars.enable_periodic_health_checks)
+        template_vars:
+          project_id: $(vars.project_id)
+          deployment_name: $(vars.deployment_name)
+      - source: $(vars.chs_pvc_rendered_path)
+        enable: $(vars.enable_periodic_health_checks)
+        template_vars:
+          pvc_name: $(vars.chs_pvc_claim_name)
+          access_mode: ReadWriteOnce
+          capacity: 1Gi
+          storage_class_name: standard-rwo
+      - source: $(vars.chs_cronjob_rendered_path)
+        enable: $(vars.enable_periodic_health_checks)
+        template_vars:
+          project_id: $(vars.project_id)
+          deployment_name: $(vars.deployment_name)
+          region: $(vars.region)
+          machine_type: a3-ultragpu-8g
+          gcs_bucket: $(vars.chs_output_bucket_name)
+          gcs_pvc: $(vars.chs_pvc_claim_name)
+          cronjob_schedule: $(vars.health_check_schedule)
       kueue:
         install: true
         config_path: $(vars.kueue_configuration_path)
@@ -226,7 +259,7 @@ deployment_groups:
         install: true  # NCCL gIB plugin via DaemonSet initContainer
         path: $(vars.gib_installer_path)
         template_vars:
-          version: v1.0.5
+          version: v1.0.6
           accelerator_count: 8
 
   - id: job-template

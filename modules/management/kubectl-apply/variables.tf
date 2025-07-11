@@ -15,9 +15,9 @@
   */
 
 locals {
-  kueue_supported_versions  = ["v0.11.4", "v0.10.1", "v0.10.0", "v0.9.1", "v0.9.0", "v0.8.1"]
+  kueue_supported_versions  = ["v0.12.2", "v0.11.4", "v0.10.1", "v0.10.0"]
   jobset_supported_versions = ["v0.8.1", "v0.7.2", "v0.5.2"]
-  gib_supported_versions    = ["v1.0.2", "v1.0.3", "v1.0.5"]
+  gib_supported_versions    = ["v1.0.2", "v1.0.3", "v1.0.5", "v1.0.6"]
 }
 
 resource "terraform_data" "kueue_validations" {
@@ -77,6 +77,7 @@ variable "cluster_id" {
 variable "apply_manifests" {
   description = "A list of manifests to apply to GKE cluster using kubectl. For more details see [kubectl module's inputs](kubectl/README.md)."
   type = list(object({
+    enable            = optional(bool, true)
     content           = optional(string, null)
     source            = optional(string, null)
     template_vars     = optional(map(any), null)
@@ -91,7 +92,7 @@ variable "kueue" {
   description = "Install and configure [Kueue](https://kueue.sigs.k8s.io/docs/overview/) workload scheduler. A configuration yaml/template file can be provided with config_path to be applied right after kueue installation. If a template file provided, its variables can be set to config_template_vars."
   type = object({
     install              = optional(bool, false)
-    version              = optional(string, "v0.11.4")
+    version              = optional(string, "v0.12.2")
     config_path          = optional(string, null)
     config_template_vars = optional(map(any), null)
   })

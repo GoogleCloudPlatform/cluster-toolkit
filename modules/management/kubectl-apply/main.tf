@@ -22,6 +22,7 @@ locals {
 
   apply_manifests_map = tomap({
     for index, manifest in var.apply_manifests : index => manifest
+    if manifest.enable
   })
 
   install_kueue             = try(var.kueue.install, false)
@@ -61,6 +62,7 @@ module "install_kueue" {
   source            = "./kubectl"
   source_path       = local.install_kueue ? local.kueue_install_source : null
   server_side_apply = true
+  wait_for_rollout  = true
   depends_on        = [var.gke_cluster_exists]
 
   providers = {
@@ -86,6 +88,7 @@ module "install_jobset" {
   source            = "./kubectl"
   source_path       = local.install_jobset ? local.jobset_install_source : null
   server_side_apply = true
+  wait_for_rollout  = true
   depends_on        = [var.gke_cluster_exists, module.configure_kueue]
 
   providers = {
@@ -224,6 +227,7 @@ module "install_gib" {
   source_path       = local.install_gib ? var.gib.path : null
   server_side_apply = true
   template_vars     = var.gib.template_vars
+  wait_for_rollout  = true
 
   providers = {
     kubectl = kubectl
