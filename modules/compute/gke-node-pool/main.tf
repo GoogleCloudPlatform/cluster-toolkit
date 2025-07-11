@@ -68,7 +68,7 @@ data "google_container_cluster" "gke_cluster" {
 }
 
 resource "google_container_node_pool" "node_pool" {
-  provider = google-beta
+  provider = google
 
   count = max(var.num_node_pools, var.num_slices)
 
