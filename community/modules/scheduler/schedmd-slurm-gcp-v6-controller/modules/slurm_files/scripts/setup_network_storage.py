@@ -46,7 +46,7 @@ def _get_default_mounts(lkp: util.Lookup) -> list[NSMount]:
         return []
     return [
         NSMount(
-                server_ip=lkp.controller_mount_server_ip(),
+                server_ip=lkp.cfg.slurm_state_ip or lkp.controller_mount_server_ip(),
                 remote_mount=path,
                 local_mount=path,
                 fs_type="nfs",
@@ -111,7 +111,7 @@ def setup_network_storage():
     log.info("Set up network storage")
     
     all_mounts = resolve_network_storage()
-    if lookup().is_controller:
+    if lookup().is_primary_controller:
         mounts, _ = separate(is_controller_mount, all_mounts)
     else:
         mounts = all_mounts
@@ -185,7 +185,7 @@ def mount_fstab(mounts: list[NSMount], log):
 
 
 def munge_mount_handler():
-    if lookup().is_controller:
+    if lookup().is_primary_controller:
         return
     mnt = lookup().munge_mount
 
@@ -206,8 +206,8 @@ def munge_mount_handler():
             f"{mnt.server_ip}:{mnt.remote_mount}",
             str(mnt.local_mount),
         ]
-    # wait max 120s for munge mount
-    timeout = 120
+    # wait max 300s for munge mount
+    timeout = 300
     for retry, wait in enumerate(util.backoff_delay(0.5, timeout), 1):
         try:
             run(cmd, timeout=timeout)
@@ -238,7 +238,7 @@ def munge_mount_handler():
     shutil.rmtree(mnt.local_mount)
 
 def slurm_key_mount_handler():
-    if lookup().is_controller:
+    if lookup().is_primary_controller:
         return
     mnt = lookup().slurm_key_mount
 
@@ -258,7 +258,7 @@ def slurm_key_mount_handler():
             f"{mnt.server_ip}:{mnt.remote_mount}",
             str(mnt.local_mount),
         ]
-    timeout = 120 # wait max 120s to mount
+    timeout = 300 # wait max 300s to mount
     for retry, wait in enumerate(util.backoff_delay(0.5, timeout), 1):
         try:
             run(cmd, timeout=timeout)
@@ -288,14 +288,52 @@ def slurm_key_mount_handler():
         run(f"umount {mnt.local_mount}", timeout=120)
     shutil.rmtree(mnt.local_mount)
 
+def spool_mount_handler():
+    """setup spool mount"""
+    
+    if lookup().cfg.controller_state_disk.device_name == None and lookup().is_primary_controller: 
+        return
+    
+    mnt = lookup().spool_mount  
 
+    log.info(f"Mounting spool share to: {mnt.local_mount}")
+    mnt.local_mount.mkdir(parents=True, exist_ok=True)
+
+    cmd = [
+        "mount",
+        f"--types={mnt.fs_type}",
+        f"--options={mnt.mount_options}" if mnt.mount_options else None,
+        f"{mnt.server_ip}:{mnt.remote_mount}",
+        str(mnt.local_mount),
+    ]
+    cmd = [c for c in cmd if c] 
+
+    timeout = 120
+    for retry, wait in enumerate(util.backoff_delay(0.5, timeout), 1):
+        try:
+            run(cmd, timeout=timeout)
+            break
+        except Exception as e:
+            log.error(
+                f"spool mount failed: '{cmd}' {e}, try {retry}, waiting {wait:0.2f}s"
+            )
+            time.sleep(wait)
+            err = e
+    else:
+        raise err
+    util.chown_slurm(mnt.local_mount)
+    log.info(f"Successfully mounted spool on {mnt.server_ip}:{mnt.remote_mount}")
+    
 def setup_nfs_exports():
     """nfs export all needed directories"""
     lkp = util.lookup()
-    assert lkp.is_controller
+    assert lkp.is_primary_controller
 
     # The controller only needs to set up exports for cluster-internal mounts
     exported_mounts = [m for m in resolve_network_storage() if is_controller_mount(m)]
+
+    if lookup().cfg.controller_state_disk.device_name == None : 
+        exported_mounts.append(lkp.spool_mount)
 
     # key by remote mount path since that is what needs exporting
     to_export = {m.remote_mount: "*(rw,no_subtree_check,no_root_squash)" for m in exported_mounts}

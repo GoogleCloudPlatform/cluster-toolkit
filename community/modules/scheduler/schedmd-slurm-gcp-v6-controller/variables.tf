@@ -393,8 +393,8 @@ EOD
 
 variable "controller_state_disk" {
   description = <<EOD
-  A disk that will be attached to the controller instance template to save state of slurm. The disk is created and used by default.
-  To disable this feature, set this variable to null.
+  This disk is not attached to the controllers directly, 
+  but instead to a dedicated VM (`machine_slurm_state_storage`) deployed via a regional MIG.
 
   NOTE: This will not save the contents at /opt/apps and /home. To preserve those, they must be saved externally.
   EOD
@@ -806,4 +806,36 @@ DEPRECATED: `compute_startup_script` has been deprecated.
 Use `startup_script` of nodeset module instead.
 EOD
   }
+}
+
+variable "machine_slurm_state_storage" {
+  description = "Configuration of slurm_state_storage machine"
+  type = object({
+    machine_type = string
+    disk = object({
+      source_image         = string
+      source_image_project = optional(string)
+      type                 = string
+      size                 = number
+    })
+  })
+  default = {
+    machine_type = "e2-medium",
+    disk = {
+      source_image = "projects/rocky-linux-cloud/global/images/family/rocky-linux-9",
+      type         = "pd-balanced",
+      size         = 50,
+    },
+  }
+}
+
+variable "slurm_state_storage_scopes" {
+  description = "Scopes to apply to the slurm-state-storage"
+  type        = list(string)
+  default     = ["https://www.googleapis.com/auth/cloud-platform"]
+}
+
+variable "slurm_state_ip" {
+  type    = string
+  default = null
 }

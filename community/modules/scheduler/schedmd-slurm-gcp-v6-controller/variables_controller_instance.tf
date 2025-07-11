@@ -12,6 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+variable "nb_controllers" {
+  type    = number
+  default = 2
+}
+
+
 variable "disk_type" {
   type        = string
   description = "Boot disk type, can be either hyperdisk-balanced, pd-ssd, pd-standard, pd-balanced, or pd-extreme."
@@ -105,8 +111,8 @@ variable "static_ips" {
   description = "List of static IPs for VM instances."
   default     = []
   validation {
-    condition     = length(var.static_ips) <= 1
-    error_message = "The Slurm modules supports 0 or 1 static IPs on controller instance."
+    condition     = length(var.static_ips) <= var.nb_controllers
+    error_message = "The number of static IPs must be less than or equal to the number of controllers."
   }
 }
 
