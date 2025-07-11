@@ -16,11 +16,22 @@
 
 blueprint_name: roll-a3m-image
 
+vars:
+  sys_net_range: 172.16.0.0/16
+  region: us-central1
+  subnet_name: image-subnet
+
 deployment_groups:
 - group: image-env
   modules:
   - id: image-net
     source: modules/network/vpc
+    settings:
+      network_address_range: $(vars.sys_net_range)
+      subnetworks:
+      - subnet_name: $(vars.subnet_name)
+        subnet_region: $(vars.region)
+        new_bits: 4
 
   - id: build-script
     source: modules/scripts/startup-script
