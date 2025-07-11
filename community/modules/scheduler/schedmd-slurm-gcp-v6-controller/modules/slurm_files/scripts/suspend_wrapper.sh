@@ -1,10 +1,12 @@
+#!/bin/bash
+#
 # Copyright 2024 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#      http://www.apache.org/licenses/LICENSE-2.0
+#     http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -12,20 +14,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
----
+set -e -o pipefail
 
-test_name: test-parallelstore-vm-debian
-deployment_name: "parallelstore-vm-{{ build }}"
-region: us-central1
-zone: us-central1-a
-workspace: /workspace
-blueprint_yaml: "{{ workspace }}/examples/pfs-parallelstore.yaml"
-network: "{{ test_name }}-net"
-remote_node: "{{ deployment_name }}-debian-0"
-post_deploy_tests:
-- test-validation/test-mounts.yml
-custom_vars:
-  mounts:
-  - /parallelstore
-cli_deployment_vars:
-  base_network_name: "{{ test_name }}"
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
+PYTHON_SCRIPT="${SCRIPT_DIR}/suspend.py"
+
+# Capture all arguments passed by Slurm (the nodelist).
+ALL_ARGS=("$@")
+
+"${PYTHON_SCRIPT}" "${ALL_ARGS[@]}" &
+disown
+
+exit 0
