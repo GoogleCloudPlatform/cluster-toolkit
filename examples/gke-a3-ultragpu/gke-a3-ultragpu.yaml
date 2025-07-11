@@ -51,6 +51,7 @@ deployment_groups:
     source: modules/network/vpc
     settings:
       network_name: $(vars.deployment_name)-net-0
+      ips_per_nat: 6
       subnetworks:
       - subnet_name: $(vars.deployment_name)-sub-0
         subnet_region: $(vars.region)
@@ -76,6 +77,7 @@ deployment_groups:
     source: modules/network/vpc
     settings:
       network_name: $(vars.deployment_name)-net-1
+      ips_per_nat: 6
       subnetworks:
       - subnet_name: $(vars.deployment_name)-sub-1
         subnet_region: $(vars.region)
