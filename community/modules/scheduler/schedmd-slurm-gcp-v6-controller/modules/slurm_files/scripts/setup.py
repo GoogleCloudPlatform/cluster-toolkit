@@ -40,6 +40,7 @@ import slurmsync
 from setup_network_storage import (
     setup_network_storage,
     setup_nfs_exports,
+    spool_mount_handler,
 )
 
 
@@ -209,11 +210,47 @@ def setup_jwt_key():
     jwt_key = Path(slurmdirs.state / "jwt_hs256.key")
 
     if jwt_key.exists():
-        log.info("JWT key already exists. Skipping key generation.")
-    else:
-        run("dd if=/dev/urandom bs=32 count=1 > " + str(jwt_key), shell=True)
+        try:
+            stat_info = jwt_key.stat()
+            if stat_info.st_mode & 0o777 == 0o400:
+                log.info("JWT key already exists with correct permissions...Skipping key generation")
+                return
+            else:
+                log.warning("JWT key exists but has incorrect permissions. Fixing...")
+        except OSError as e:
+            log.error(f"Error checking JWT key permissions: {e}")
 
-    util.chown_slurm(jwt_key, mode=0o400)
+    max_attempts = 3
+    for attempt in range(max_attempts):
+        try:
+            if not jwt_key.exists():
+                result = run("dd if=/dev/urandom bs=32 count=1 > " + str(jwt_key), shell=True)
+                if result.returncode != 0:
+                    raise RuntimeError(f"Failed to generate JWT key: {result.stderr}")
+            
+            util.chown_slurm(jwt_key, mode=0o400)
+            
+            if jwt_key.exists():
+                stat_info = jwt_key.stat()
+                if stat_info.st_mode & 0o777 == 0o400 and stat_info.st_size == 32:
+                    log.info("JWT key successfully created with correct permissions.")
+                    return
+                else:
+                    raise RuntimeError("JWT key created but permissions or size incorrect")
+            else:
+                raise RuntimeError("JWT key file not found after creation")
+                
+        except Exception as e:
+            log.error(f"Attempt {attempt + 1}/{max_attempts} failed: {e}")
+            
+            try:
+                if jwt_key.exists():
+                    jwt_key.unlink()
+            except:
+                pass
+            
+            if attempt == max_attempts - 1:
+                raise RuntimeError(f"Failed to create JWT key after {max_attempts} attempts: {e}")
 
 
 def _generate_key(p: Path) -> None:
@@ -329,11 +366,11 @@ def configure_mysql():
     cnfdir = Path("/etc/my.cnf.d")
     if not cnfdir.exists():
         cnfdir = Path("/etc/mysql/conf.d")
-    if not (cnfdir / "mysql_slurm.cnf").exists():
-        (cnfdir / "mysql_slurm.cnf").write_text(
+        
+    (cnfdir / "mysql_slurm.cnf").write_text(
             """
 [mysqld]
-bind-address=127.0.0.1
+bind-address=0.0.0.0
 innodb_buffer_pool_size=1024M
 innodb_log_file_size=64M
 innodb_lock_wait_timeout=900
@@ -342,14 +379,12 @@ innodb_lock_wait_timeout=900
     run("systemctl enable mariadb", timeout=30)
     run("systemctl restart mariadb", timeout=30)
 
-    mysql, host = "mysql -u root -e", lookup().control_host
-    run(f"""{mysql} "drop user if exists 'slurm'@'localhost'";""", timeout=30)
-    run(f"""{mysql} "create user 'slurm'@'localhost'";""", timeout=30)
-    run(f"""{mysql} "grant all on slurm_acct_db.* TO 'slurm'@'localhost'";""", timeout=30)
-    run(f"""{mysql} "drop user if exists 'slurm'@'{host}'";""", timeout=30)
-    run(f"""{mysql} "create user 'slurm'@'{host}'";""", timeout=30)
-    run(f"""{mysql} "grant all on slurm_acct_db.* TO 'slurm'@'{host}'";""", timeout=30)
-
+    mysql = "mysql -u root -e"
+    for host in lookup().control_hosts:
+        control_host = util.host_lookup(host)
+        run(f"""{mysql} "drop user if exists 'slurm'@'{control_host}'";""", timeout=30,check=False,)
+        run(f"""{mysql} "create user 'slurm'@'{control_host}'";""", timeout=30)
+        run(f"""{mysql} "grant all on slurm_acct_db.* TO 'slurm'@'{control_host}'";""", timeout=30)
 
 def configure_dirs():
     for p in dirs.values():
@@ -396,23 +431,27 @@ def self_report_controller_address(lkp: util.Lookup) -> None:
 def setup_controller():
     """Run controller setup"""
     log.info("Setting up controller")
+    run(["hostnamectl", "set-hostname", lookup().hostname])
     lkp = util.lookup()
     util.chown_slurm(dirs.scripts / "config.yaml", mode=0o600)
     install_custom_scripts()
     conf.gen_controller_configs(lkp)
-
-    if lkp.cfg.controller_state_disk.device_name != None:
-        mount_save_state_disk()
-
-    setup_jwt_key()
-    setup_key(lkp)
-
+        
+    spool_mount_handler()
+    
+    if lkp.is_primary_controller:
+        setup_jwt_key()
+        setup_key(lkp)
+    
     setup_sudoers()
     setup_network_storage()
-
+    
+    if not lkp.is_primary_controller:
+        run("systemctl restart munge", timeout=30)
     run_custom_scripts()
 
-    if not lkp.cfg.cloudsql_secret:
+    if not lookup().cfg.cloudsql_secret and lookup().is_primary_controller:
+        log.info("Configure mysql on primary controller...")
         configure_mysql()
 
     run("systemctl enable slurmdbd", timeout=30)
@@ -440,7 +479,9 @@ def setup_controller():
     run("systemctl enable nfs-server", timeout=30)
     run("systemctl start nfs-server", timeout=30)
 
-    setup_nfs_exports()
+    if lookup().is_primary_controller :
+        setup_nfs_exports()
+
     run("systemctl enable --now slurmcmd.timer", timeout=30)
 
     log.info("Check status of cluster services")
@@ -462,6 +503,15 @@ def setup_controller():
     # Add script to perform maintenance
     setup_maintenance_script()
 
+    # Start Healthcheck
+    shutil.copy(
+        "/slurm/scripts/slurmhcd.service",
+        "/etc/systemd/system/slurmhcd.service"
+    )
+    run("systemctl enable slurmhcd.service", timeout=30)
+    run("systemctl start slurmhcd.service", timeout=30)
+    log.info(f"Start Healthchekc service deamon")
+    
     self_report_controller_address(lkp)
 
     log.info("Done setting up controller")

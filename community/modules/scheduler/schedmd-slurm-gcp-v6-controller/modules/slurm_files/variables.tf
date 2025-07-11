@@ -67,6 +67,10 @@ variable "slurm_cluster_name" {
   }
 }
 
+variable "slurm_control_hosts" {
+  type    = list(string)
+}
+
 variable "controller_state_disk" {
   description = <<EOD
   A disk that will be attached to the controller instance template to save state of slurm. The disk is created and used by default.
@@ -81,6 +85,14 @@ variable "controller_state_disk" {
   default = {
     device_name = null
   }
+}
+
+variable "slurm_state_ip" {
+  type    = string
+  default = null
+  description = <<EOD
+  Static internal IP address to assign to the Slurm state storage VM.
+  EOD
 }
 
 variable "enable_bigquery_load" {
