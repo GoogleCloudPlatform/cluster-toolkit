@@ -27,6 +27,12 @@ variable "on_host_maintenance" {
   default     = "MIGRATE"
 }
 
+variable "resource_policy_self_link" {
+  description = "Optional self_link of a Google Compute Resource Policy to attach to the instances created by this template. Used for features like compact placement."
+  type        = string
+  default     = null
+}
+
 variable "labels" {
   type        = map(string)
   description = "Labels, provided as a map"
