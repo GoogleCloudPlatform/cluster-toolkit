@@ -98,6 +98,7 @@ slurmdirs = NSDict(
     etc = Path("/usr/local/etc/slurm"),
     state = Path("/var/spool/slurm"),
     key_distribution = Path("/slurm/key_distribution"),
+    home = Path("/var/lib/slurm"),
 )
 
 
@@ -297,6 +298,8 @@ def parse_gcp_timestamp(s: str) -> datetime:
 
 
 def universe_domain() -> str:
+    if lookup().is_hybrid_setup:
+        return DEFAULT_UNIVERSE_DOMAIN
     try:
         return instance_metadata("attributes/universe_domain")
     except MetadataNotFoundError:
@@ -443,8 +446,8 @@ def blob_get(file):
     return storage_client().get_bucket(bucket_name).blob(blob_name)
 
 
-def blob_list(prefix="", delimiter=None):
-    bucket_name, path = _get_bucket_and_common_prefix()
+def blob_list(prefix="", delimiter=None, bucket: Optional[str] = None):
+    bucket_name, path = parse_bucket_uri(bucket) if bucket else _get_bucket_and_common_prefix()
     blob_prefix = f"{path}/{prefix}"
     # Note: The call returns a response only when the iterator is consumed.
     blobs = storage_client().list_blobs(
@@ -585,18 +588,29 @@ class DeffetiveStoredConfigError(Exception):
 
 
 def _fill_cfg_defaults(cfg: NSDict) -> NSDict:
-    if not cfg.slurm_log_dir:
+    hybrid_conf = cfg.hybrid_conf
+    if not hybrid_conf:
         cfg.slurm_log_dir = dirs.log
-    if not cfg.slurm_bin_dir:
         cfg.slurm_bin_dir = slurmdirs.prefix / "bin"
-    if not cfg.slurm_control_host:
         try:
             control_dns_name = instance_metadata("attributes/slurm_control_dns", silent=True)
             cfg.slurm_control_host = control_dns_name
         except MetadataNotFoundError:
             cfg.slurm_control_host = f"{cfg.slurm_cluster_name}-controller"
-    if not cfg.slurm_control_host_port:
         cfg.slurm_control_host_port = "6820-6830"
+    else:
+        #Required values
+        cfg.slurm_control_host = hybrid_conf.slurm_control_host
+        #Default by terraform
+        cfg.slurm_control_host_port = hybrid_conf.slurm_control_host_port
+        #Default by python
+        cfg.slurm_log_dir = hybrid_conf.slurm_log_dir if hybrid_conf.slurm_log_dir else dirs.log
+        cfg.slurm_bin_dir = hybrid_conf.slurm_bin_dir if hybrid_conf.slurm_bin_dir else slurmdirs.prefix / "bin"
+        #Optional values
+        if hybrid_conf.slurm_control_addr:
+            cfg.slurm_control_addr = hybrid_conf.slurm_control_addr
+        if hybrid_conf.google_app_cred_path:
+            cfg.google_app_cred_path = hybrid_conf.google_app_cred_path
     return cfg
 
 @dataclass
@@ -637,16 +651,16 @@ class _ConfigFiles:
     nodeset_tpu: List[Path] = field(default_factory=list)
     login_group: List[Path] = field(default_factory=list)
 
-def _list_config_blobs() -> _ConfigBlobs:
-    _, common_prefix = _get_bucket_and_common_prefix()
+def _list_config_blobs(bucket: Optional[str] = None) -> _ConfigBlobs:
+    _, common_prefix = parse_bucket_uri(bucket) if bucket else _get_bucket_and_common_prefix()
 
     core: Optional[storage.Blob] = None
     controller_addr: Optional[storage.Blob] = None
     rest: Dict[str, List[storage.Blob]] = {"partition": [], "nodeset": [], "nodeset_dyn": [], "nodeset_tpu": [], "login_group": []}
 
-    is_controller = instance_role() == "controller"
+    is_controller = bucket is None and instance_role() == "controller"
 
-    for blob in blob_list(prefix=""):
+    for blob in blob_list(prefix="",bucket=bucket):
         if blob.name == f"{common_prefix}/config.yaml":
             core = blob
         if blob.name == f"{common_prefix}/controller_addr.yaml" and not is_controller:
@@ -683,10 +697,10 @@ def _list_config_files() -> _ConfigFiles:
     
     return _ConfigFiles(core=core, controller_addr=None, **rest)
 
-def _fetch_config(old_hash: Optional[str]) -> Optional[Tuple[NSDict, str]]:
+def _fetch_config(old_hash: Optional[str], bucket: Optional[str] = None) -> Optional[Tuple[NSDict, str]]:
     """Fetch config from bucket, returns None if no changes are detected."""
-    blobs = _list_config_blobs()
-    if old_hash == blobs.hash:
+    blobs = _list_config_blobs(bucket=bucket)
+    if Path(CONFIG_FILE).exists() and old_hash == blobs.hash:
         return None
 
     def _download(bs) -> List[Any]:
@@ -796,12 +810,12 @@ def _assemble_config(
 
     return _fill_cfg_defaults(cfg)
 
-def fetch_config() -> Tuple[bool, NSDict]:
+def fetch_config(bucket: Optional[str] = None) -> Tuple[bool, NSDict]:
     """
     Fetches config from bucket and saves it locally
     Returns True if new (updated) config was fetched
     """
-    hash_file = Path("/slurm/scripts/.config.hash")
+    hash_file = Path(CONFIG_FILE).with_name(".config.hash")
     old_hash = hash_file.read_text() if hash_file.exists() else None
     
     if should_mount_slurm_bucket() and instance_role() != "controller":
@@ -810,7 +824,7 @@ def fetch_config() -> Tuple[bool, NSDict]:
         chown_slurm(CONFIG_FILE)
         return False, cfg
     
-    cfg_and_hash = _fetch_config(old_hash=old_hash)
+    cfg_and_hash = _fetch_config(old_hash=old_hash,bucket=bucket)
     
     if not cfg_and_hash:
         return False, _load_config()
@@ -853,13 +867,14 @@ def init_log_and_parse(parser: argparse.ArgumentParser) -> argparse.Namespace:
         help="Enable detailed api request output",
     )
     args = parser.parse_args()
+    lookup().hybrid_setup = getattr(args, 'hybrid', False)
     loglevel = args.loglevel
     if lookup().cfg.enable_debug_logging:
         loglevel = logging.DEBUG
     if args.trace_api:
         lookup().cfg.extra_logging_flags["trace_api"] = True
     # Configure root logger
-    logging.config.dictConfig({
+    log_config:dict = {
         "version": 1,
         "disable_existing_loggers": True,
         "formatters": {
@@ -876,19 +891,25 @@ def init_log_and_parse(parser: argparse.ArgumentParser) -> argparse.Namespace:
                 "formatter": "standard",
                 "class": "logging.StreamHandler",
                 "stream": sys.stdout,
-            },
-            "file_handler": {
-                "()": owned_file_handler,
-                "level": logging.DEBUG,
-                "formatter": "stamp",
-                "filename": get_log_path(),
-            },
+            }
         },
         "root": {
-            "handlers": ["stdout_handler", "file_handler"],
+            "handlers": ["stdout_handler"],
             "level": loglevel,
         },
-    })
+    }
+
+    if not lookup().is_hybrid_setup: #Regular install
+        log_config["handlers"]["file_handler"] = {
+            "()":  owned_file_handler,
+            "level": logging.DEBUG,
+            "formatter": "stamp",
+            "filename": get_log_path(),
+        }
+        log_config["root"]["handlers"].append("file_handler")
+
+    # Apply logging configuration
+    logging.config.dictConfig(log_config)
 
     sys.excepthook = _handle_exception
 
@@ -984,6 +1005,9 @@ def log_subprocess(subj: subprocess.CalledProcessError | subprocess.TimeoutExpir
 
 
 def chown_slurm(path: Path, mode=None) -> None:
+    if lookup().is_hybrid_setup:
+        #In hybrid setup we do not want to chown to slurm as the host might not have slurm user
+        return
     if path.exists():
         if mode:
             path.chmod(mode)
@@ -1183,6 +1207,8 @@ def get_metadata(path:str, silent=False) -> str:
 
 @lru_cache(maxsize=None)
 def instance_metadata(path: str, silent:bool=False) -> str:
+    if lookup().is_hybrid_setup:
+        return ""
     return get_metadata(f"instance/{path}", silent=silent)
 
 def instance_role():
@@ -1496,6 +1522,7 @@ class Lookup:
 
     def __init__(self, cfg):
         self._cfg = cfg
+        self.hybrid_setup = False
 
     @property
     def cfg(self):
@@ -1549,6 +1576,10 @@ class Lookup:
     @property
     def is_login_node(self):
         return self.instance_role_safe == "login"
+
+    @property
+    def is_hybrid_setup(self):
+        return self.hybrid_setup
 
     @cached_property
     def compute(self):
@@ -2019,7 +2050,8 @@ class Lookup:
 
     @property
     def etc_dir(self) -> Path:
-        return Path(self.cfg.output_dir or slurmdirs.etc)
+        hybrid_conf = self.cfg.hybrid_conf
+        return Path(hybrid_conf.output_dir if hybrid_conf else slurmdirs.etc)
 
     def controller_mount_server_ip(self) -> str:
         return self.control_addr or self.control_host

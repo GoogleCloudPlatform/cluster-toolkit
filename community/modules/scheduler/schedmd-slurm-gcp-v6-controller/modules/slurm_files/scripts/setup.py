@@ -16,6 +16,7 @@
 # limitations under the License.
 
 import argparse
+from itertools import chain
 import logging
 import os
 import shutil
@@ -25,6 +26,7 @@ import time
 import yaml
 from pathlib import Path
 import functools
+import grp, pwd
 
 import util
 from util import (
@@ -116,6 +118,9 @@ Log back in to ensure your home directory is correct.
 
 
 def failed_motd():
+    if lookup().is_hybrid_setup:
+        #Do not modify motd for hybrid setup
+        return
     """modify motd to signal that setup is failed"""
     wall_msg = f"*** Slurm setup failed! Please view log: {util.get_log_path()} ***"
     motd_msg = MOTD_HEADER + wall_msg + "\n\n"
@@ -358,9 +363,10 @@ def configure_dirs():
     for p in (dirs.slurm, dirs.scripts, dirs.custom_scripts):
         util.chown_slurm(p)
 
-    for p in slurmdirs.values():
-        util.mkdirp(p)
-        util.chown_slurm(p)
+    for name, path in slurmdirs.items():
+        util.mkdirp(path)
+        if name != "prefix":
+            util.chown_slurm(path)
 
     for sl, tgt in ( # create symlinks
         (Path("/etc/slurm"), slurmdirs.etc),
@@ -500,12 +506,64 @@ def setup_login():
 
     log.info("Done setting up login")
 
+def _cond_chown(path: Path, uid: int, gid: int, previous_uid: int = -1, previous_gid: int = -1):
+    """
+    If the current owner of the file at path is previous_uid change it to uid.
+    The same goes for the group.
+    """
+    st = path.stat()
+    my_uid = uid if (previous_uid == -1 or st.st_uid == previous_uid) else -1
+    my_gid = gid if (previous_gid == -1 or st.st_gid == previous_gid) else -1
+    if my_uid != -1 or my_gid != -1:
+        os.chown(path,my_uid,my_gid)
+
+def recursive_chown(path: Path, uid: int, gid: int, previous_uid: int = -1, previous_gid: int = -1):
+    """
+    This is the python equivalent of doing:
+    find path -uid previous_uid -exec chown uid {} +
+    find path -uid previous_gid -exec chgrp gid {} +
+    """
+    # Change ownership for the root directory
+    _cond_chown(path, uid, gid, previous_uid, previous_gid)
+
+    for root, dirs, files in os.walk(path):
+        for item in chain(dirs,files):
+            _cond_chown(Path(os.path.join(root, item)), uid, gid, previous_uid, previous_gid)
+
+
+def change_uid_gid_slurm():
+    lkp = lookup()
+    need_chown = False
+    cur_gid = grp.getgrnam("slurm").gr_gid
+    gid = lkp.cfg.hybrid_conf.slurm_gid
+    if (cur_gid != gid):
+        need_chown = True
+        grc = run(f"groupmod -g {gid} slurm")
+        if grc.returncode:
+            log.error(f"Cannot change the gid of slurm rc={grc.returncode} stdout={grc.stdout} stderr={grc.stderr}")
+            return
+
+    cur_uid = pwd.getpwnam("slurm").pw_uid
+    uid = lkp.cfg.hybrid_conf.slurm_uid
+    if (cur_uid != uid):
+        need_chown = True
+        urc = run(f"usermod -u {uid} slurm")
+        if urc.returncode:
+            log.error(f"Cannot change the uid of slurm rc={urc.returncode} stdout={urc.stdout} stderr={urc.stderr}")
+            return
+    if need_chown:
+        recursive_chown(slurmdirs.home, uid, gid)
+        recursive_chown(slurmdirs.etc, uid, gid, cur_uid, cur_gid)
+        recursive_chown(Path(lkp.cfg.slurm_log_dir), uid, gid, cur_uid, cur_gid)
+        recursive_chown(dirs.slurm, uid, gid, cur_uid, cur_gid) #/slurm
 
 def setup_compute():
     """run compute node setup"""
     log.info("Setting up compute")
 
     lkp = lookup()
+    if lkp.cfg.hybrid:
+        change_uid_gid_slurm()
     util.chown_slurm(dirs.scripts / "config.yaml", mode=0o600)
     slurmctld_host = f"{lkp.control_host}"
     if lkp.control_addr:
@@ -605,16 +663,16 @@ def setup_cloud_ops() -> None:
             log.error(f"System logs for google-cloud-ops-agent-opentelemetry-collector.service:\n{result.stdout}")
         raise
 
-
-def main():
-    start_motd()
-
-    log.info("Starting setup, fetching config")
+def get_config(bucket = None):
     sleep_seconds = 5
     while True:
         try:
-            _, cfg = util.fetch_config()
+            if bucket is not None:
+                lookup().hybrid_setup = True
+            _, cfg = util.fetch_config(bucket=bucket)
             util.update_config(cfg)
+            if bucket is not None:
+                lookup().hybrid_setup = True
             break
         except util.DeffetiveStoredConfigError as e:
             log.warning(f"config is not ready yet: {e}, sleeping for {sleep_seconds}s")
@@ -622,6 +680,19 @@ def main():
             log.exception(f"unexpected error while fetching config, sleeping for {sleep_seconds}s")
         time.sleep(sleep_seconds)
     log.info("Config fetched")
+
+def setup_hybrid(bucket: str):
+    log.info("Starting hybrid setup, fetching config")
+    get_config(bucket)
+    log.info("Generating the config files")
+    conf.gen_controller_configs(lookup())
+    log.info("Success")
+
+def main():
+    start_motd()
+
+    log.info("Starting setup, fetching config")
+    get_config()
     setup_cloud_ops()
     configure_dirs()
     # call the setup function for the instance type
@@ -639,10 +710,19 @@ def main():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--slurmd-feature", dest="slurmd_feature", help="Unused, to be removed.")
-    _ = util.init_log_and_parse(parser)
+    parser.add_argument("--hybrid", dest="hybrid", action="store_true", help="Do the hybrid setup.")
+    parser.add_argument("--bucket", dest="bucket", help="The bucket URI where config.yaml is.")
+    args = util.init_log_and_parse(parser)
 
     try:
-        main()
+        if args.hybrid:
+            if args.bucket:
+                setup_hybrid(args.bucket)
+            else:
+                log.error("--bucket argument cannot be empty when using --hybrid")
+                log.error("Aborting setup...")
+        else:
+            main()
     except Exception:
         log.exception("Aborting setup...")
         failed_motd()

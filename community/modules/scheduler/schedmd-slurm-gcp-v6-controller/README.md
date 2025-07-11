@@ -264,6 +264,7 @@ limitations under the License.
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.3 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 4.84 |
 | <a name="requirement_google-beta"></a> [google-beta](#requirement\_google-beta) | >= 6.0.0 |
+| <a name="requirement_local"></a> [local](#requirement\_local) | ~> 2.0 |
 
 ## Providers
 
@@ -271,6 +272,7 @@ limitations under the License.
 |------|---------|
 | <a name="provider_google"></a> [google](#provider\_google) | >= 4.84 |
 | <a name="provider_google-beta"></a> [google-beta](#provider\_google-beta) | >= 6.0.0 |
+| <a name="provider_local"></a> [local](#provider\_local) | ~> 2.0 |
 
 ## Modules
 
@@ -299,6 +301,7 @@ limitations under the License.
 | [google_storage_bucket_iam_member.legacy_readers](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_iam_member) | resource |
 | [google_storage_bucket_iam_member.viewers](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_iam_member) | resource |
 | [google_storage_bucket_object.parition_config](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_object) | resource |
+| [local_file.hybrid_install](https://registry.terraform.io/providers/hashicorp/local/latest/docs/resources/file) | resource |
 | [google_compute_image.slurm](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_image) | data source |
 | [google_project.controller_project](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/project) | data source |
 
@@ -340,9 +343,10 @@ limitations under the License.
 | <a name="input_enable_confidential_vm"></a> [enable\_confidential\_vm](#input\_enable\_confidential\_vm) | Enable the Confidential VM configuration. Note: the instance image must support option. | `bool` | `false` | no |
 | <a name="input_enable_controller_public_ips"></a> [enable\_controller\_public\_ips](#input\_enable\_controller\_public\_ips) | If set to true. The controller will have a random public IP assigned to it. Ignored if access\_config is set. | `bool` | `false` | no |
 | <a name="input_enable_debug_logging"></a> [enable\_debug\_logging](#input\_enable\_debug\_logging) | Enables debug logging mode. | `bool` | `false` | no |
-| <a name="input_enable_default_mounts"></a> [enable\_default\_mounts](#input\_enable\_default\_mounts) | Enable default global network storage from the controller<br/>- /home<br/>- /apps | `bool` | `true` | no |
+| <a name="input_enable_default_mounts"></a> [enable\_default\_mounts](#input\_enable\_default\_mounts) | Enable default global network storage from the controller<br/>- /home<br/>- /apps | `bool` | `null` | no |
 | <a name="input_enable_devel"></a> [enable\_devel](#input\_enable\_devel) | DEPRECATED: `enable_devel` is always on. | `bool` | `null` | no |
 | <a name="input_enable_external_prolog_epilog"></a> [enable\_external\_prolog\_epilog](#input\_enable\_external\_prolog\_epilog) | Automatically enable a script that will execute prolog and epilog scripts<br/>shared by NFS from the controller to compute nodes. Find more details at:<br/>https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/tools/prologs-epilogs/README.md | `bool` | `null` | no |
+| <a name="input_enable_hybrid"></a> [enable\_hybrid](#input\_enable\_hybrid) | Enables use of hybrid controller mode. When true, controller\_hybrid\_config will<br/>be used instead of controller\_instance\_config and will disable login instances. | `bool` | `false` | no |
 | <a name="input_enable_oslogin"></a> [enable\_oslogin](#input\_enable\_oslogin) | Enables Google Cloud os-login for user login and authentication for VMs.<br/>See https://cloud.google.com/compute/docs/oslogin | `bool` | `true` | no |
 | <a name="input_enable_shielded_vm"></a> [enable\_shielded\_vm](#input\_enable\_shielded\_vm) | Enable the Shielded VM configuration. Note: the instance image must support option. | `bool` | `false` | no |
 | <a name="input_enable_slurm_auth"></a> [enable\_slurm\_auth](#input\_enable\_slurm\_auth) | Enables slurm authentication instead of munge. | `bool` | `false` | no |
@@ -353,6 +357,7 @@ limitations under the License.
 | <a name="input_extra_logging_flags"></a> [extra\_logging\_flags](#input\_extra\_logging\_flags) | The only available flag is `trace_api` | `map(bool)` | `{}` | no |
 | <a name="input_gcloud_path_override"></a> [gcloud\_path\_override](#input\_gcloud\_path\_override) | Directory of the gcloud executable to be used during cleanup | `string` | `""` | no |
 | <a name="input_guest_accelerator"></a> [guest\_accelerator](#input\_guest\_accelerator) | List of the type and count of accelerator cards attached to the instance. | <pre>list(object({<br/>    type  = string,<br/>    count = number<br/>  }))</pre> | `[]` | no |
+| <a name="input_hybrid_conf"></a> [hybrid\_conf](#input\_hybrid\_conf) | The hybrid configuration | <pre>object({<br/>    slurm_bin_dir           = optional(string)<br/>    slurm_log_dir           = optional(string)<br/>    slurm_control_host      = string<br/>    slurm_control_host_port = optional(string)<br/>    slurm_control_addr      = optional(string)<br/>    output_dir              = optional(string)<br/>    install_dir             = optional(string)<br/>    slurm_uid               = optional(number)<br/>    slurm_gid               = optional(number)<br/>    service_account_email   = optional(string)<br/>    google_app_cred_path    = optional(string)<br/>  })</pre> | `null` | no |
 | <a name="input_instance_image"></a> [instance\_image](#input\_instance\_image) | Defines the image that will be used in the Slurm controller VM instance.<br/><br/>Expected Fields:<br/>name: The name of the image. Mutually exclusive with family.<br/>family: The image family to use. Mutually exclusive with name.<br/>project: The project where the image is hosted.<br/><br/>For more information on creating custom images that comply with Slurm on GCP<br/>see the "Slurm on GCP Custom Images" section in docs/vm-images.md. | `map(string)` | <pre>{<br/>  "family": "slurm-gcp-6-9-hpc-rocky-linux-8",<br/>  "project": "schedmd-slurm-public"<br/>}</pre> | no |
 | <a name="input_instance_image_custom"></a> [instance\_image\_custom](#input\_instance\_image\_custom) | A flag that designates that the user is aware that they are requesting<br/>to use a custom and potentially incompatible image for this Slurm on<br/>GCP module.<br/><br/>If the field is set to false, only the compatible families and project<br/>names will be accepted.  The deployment will fail with any other image<br/>family or name.  If set to true, no checks will be done.<br/><br/>See: https://goo.gle/hpc-slurm-images | `bool` | `false` | no |
 | <a name="input_instance_template"></a> [instance\_template](#input\_instance\_template) | DEPRECATED: Instance template can not be specified for controller. | `string` | `null` | no |
