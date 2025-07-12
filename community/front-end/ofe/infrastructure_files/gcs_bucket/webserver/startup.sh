@@ -20,6 +20,9 @@
 
 #set -v
 
+# record start time
+START_TS=$(date +%s)
+
 # Obtain metadata of this server
 #
 GCP_PROJECT=$(curl --silent --show-error http://metadata.google.internal/computeMetadata/v1/project/project-id -H "Metadata-Flavor: Google")
@@ -237,6 +240,7 @@ sudo su - gcluster -c /bin/bash <<EOF
   echo "    gcs_bucket: \"${config_bucket}\"" >> configuration.yaml
   echo "    c2_topic: \"${c2_topic}\"" >> configuration.yaml
   echo "    deployment_name: \"${deployment_name}\"" >> configuration.yaml
+  echo "    runtime_mode: \"remote\"" >> configuration.yaml
 
   printf "\nInitalising Django environments...\n"
   mkdir /opt/gcluster/run
@@ -335,6 +339,14 @@ if [ -n "${SERVER_HOSTNAME}" ]; then
 	crontab -u root "${tmpcron}"
 	rm "${tmpcron}"
 fi
+
+# record end and elapsed time
+END_TS=$(date +%s)
+ELAPSED=$((END_TS - START_TS))
+
+echo ""
+echo "[setup] Total deployment time: ${ELAPSED}s"
+echo ""
 
 #set +v
 
