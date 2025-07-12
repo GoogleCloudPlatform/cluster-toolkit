@@ -303,7 +303,8 @@ variable "nodeset" {
     future_reservation = string
     startup_script = optional(list(object({
       filename = string
-    content = string })), [])
+      content  = string
+    })), [])
 
     zone_target_shape = string
     zone_policy_allow = set(string)
@@ -327,12 +328,12 @@ variable "nodeset_tpu" {
       topology = ""
       version  = ""
     })
-    tf_version   = string
-    preemptible  = optional(bool, false)
-    preserve_tpu = optional(bool, false)
-    zone         = string
-    data_disks   = optional(list(string), [])
-    docker_image = optional(string, "")
+    runtime_version = string
+    preemptible     = optional(bool, false)
+    preserve_tpu    = optional(bool, false)
+    zone            = string
+    data_disks      = optional(list(string), [])
+    docker_image    = optional(string, "")
     network_storage = optional(list(object({
       server_ip             = string
       remote_mount          = string
@@ -347,6 +348,11 @@ variable "nodeset_tpu" {
       email  = optional(string)
       scopes = optional(list(string), ["https://www.googleapis.com/auth/cloud-platform"])
     }))
+    spot = optional(bool, false)
+    startup_script = optional(list(object({
+      filename = string
+      content  = string
+    })), [])
     project_id = string
     reserved   = optional(string, false)
   }))
