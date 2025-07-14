@@ -64,9 +64,7 @@ modules. For support with the underlying modules, see the instructions in the
 
 ## Providers
 
-| Name | Version |
-|------|---------|
-| <a name="provider_google"></a> [google](#provider\_google) | >= 3.83 |
+No providers.
 
 ## Modules
 
@@ -76,9 +74,7 @@ modules. For support with the underlying modules, see the instructions in the
 
 ## Resources
 
-| Name | Type |
-|------|------|
-| [google_compute_image.slurm](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_image) | data source |
+No resources.
 
 ## Inputs
 
