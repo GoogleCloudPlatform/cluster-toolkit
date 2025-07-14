@@ -89,6 +89,12 @@ variable "on_host_maintenance" {
   default     = "MIGRATE"
 }
 
+variable "resource_policy_self_link" {
+  description = "Optional self_link of a Google Compute Resource Policy to attach to this instance template. Used for features like compact placement. If provided, 'on_host_maintenance' will be set to 'TERMINATE'."
+  type        = string
+  default     = null
+}
+
 variable "region" {
   type        = string
   description = "Region where the instance template should be created."

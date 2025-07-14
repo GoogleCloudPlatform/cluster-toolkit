@@ -155,6 +155,24 @@ variable "additional_disks" {
   default = []
 }
 
+variable "enable_placement" {
+  description = "If true, creates a compact placement policy for the nodeset and attaches it to the instance template. This can improve inter-node communication performance. Ensure 'on_host_maintenance' is set to 'TERMINATE'."
+  type        = bool
+  default     = true
+}
+
+variable "placement_policy_name" {
+  description = "Optional custom name for the Google Compute Resource Policy. If null, a name will be generated based on the nodeset name."
+  type        = string
+  default     = null
+}
+
+variable "placement_policy_collocation" {
+  description = "Defines the collocation strategy for the placement policy. Typically 'COLLOCATED'."
+  type        = string
+  default     = "COLLOCATED"
+}
+
 variable "enable_confidential_vm" {
   type        = bool
   description = "Enable the Confidential VM configuration. Note: the instance image must support option."
