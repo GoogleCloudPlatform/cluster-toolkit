@@ -151,7 +151,6 @@ modules. For support with the underlying modules, see the instructions in the
 | Name | Type |
 |------|------|
 | [terraform_data.machine_type_zone_validation](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
-| [google_compute_image.slurm](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_image) | data source |
 | [google_compute_machine_types.machine_types_by_zone](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_machine_types) | data source |
 | [google_compute_reservation.reservation](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_reservation) | data source |
 | [google_compute_zones.available](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_zones) | data source |
