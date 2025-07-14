@@ -51,7 +51,9 @@ locals {
     enable_debug_logging  = var.enable_debug_logging
     extra_logging_flags   = var.extra_logging_flags
     controller_state_disk = var.controller_state_disk
-
+    slurm_state_ip        = var.slurm_state_ip
+    slurm_control_hosts   = var.slurm_control_hosts
+    
     # storage
     disable_default_mounts = var.disable_default_mounts
     network_storage        = var.network_storage
