@@ -53,10 +53,11 @@ locals {
   filestore_pvc_contents = templatefile(
     "${path.module}/templates/filestore-pvc.yaml.tftpl",
     {
-      pv_name  = local.pv_name
-      capacity = "${var.capacity_gb}Gi"
-      pvc_name = local.pvc_name
-      labels   = local.labels
+      pv_name   = local.pv_name
+      capacity  = "${var.capacity_gb}Gi"
+      pvc_name  = local.pvc_name
+      labels    = local.labels
+      namespace = var.namespace
     }
   )
 
@@ -74,10 +75,11 @@ locals {
   gcs_pvc_contents = templatefile(
     "${path.module}/templates/gcs-pvc.yaml.tftpl",
     {
-      pv_name  = local.pv_name
-      pvc_name = local.pvc_name
-      labels   = local.labels
-      capacity = "${var.capacity_gb}Gi"
+      pv_name   = local.pv_name
+      pvc_name  = local.pvc_name
+      labels    = local.labels
+      capacity  = "${var.capacity_gb}Gi"
+      namespace = var.namespace
     }
   )
 

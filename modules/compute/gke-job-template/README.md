@@ -121,6 +121,7 @@ No modules.
 | <a name="input_restart_policy"></a> [restart\_policy](#input\_restart\_policy) | Job restart policy. Only a RestartPolicy equal to `Never` or `OnFailure` is allowed. | `string` | `"Never"` | no |
 | <a name="input_security_context"></a> [security\_context](#input\_security\_context) | The security options the container should be run with. More info: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/ | <pre>list(object({<br/>    key   = string<br/>    value = string<br/>  }))</pre> | `[]` | no |
 | <a name="input_tolerations"></a> [tolerations](#input\_tolerations) | Tolerations allow the scheduler to schedule pods with matching taints. Generally populated from gke-node-pool via `use` field. | <pre>list(object({<br/>    key      = string<br/>    operator = string<br/>    value    = string<br/>    effect   = string<br/>  }))</pre> | <pre>[<br/>  {<br/>    "effect": "NoSchedule",<br/>    "key": "user-workload",<br/>    "operator": "Equal",<br/>    "value": "true"<br/>  }<br/>]</pre> | no |
+| <a name="input_namespace"></a> [namespace](#input\_namespace) | Kubernetes namespace where the Job will be deployed. If the namespace does not exist, you may need to create it separately or enable namespace creation in the module | `string` | `"default"` | no |
 
 ## Outputs
 

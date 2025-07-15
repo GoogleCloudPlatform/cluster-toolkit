@@ -1,8 +1,13 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ${namespace}
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: ${pvc_name}
+  namespace: ${namespace}
   labels:
   %{~ for key, val in labels ~}
     ${key}: ${val}
