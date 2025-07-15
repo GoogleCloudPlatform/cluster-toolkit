@@ -30,6 +30,7 @@ deployment_groups:
         enabled: true
         world_writable: true
       runners:
+      - $(vars.runner_install_cluster_health_scanner)
       - type: data  # see https://github.com/GoogleCloudPlatform/cluster-toolkit/pull/4152
         destination: /etc/apt/preferences.d/block-broken-nvidia-container
         content: |

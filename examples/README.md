@@ -30,7 +30,6 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [pfs-lustre.yaml](#pfs-lustreyaml-) ![core-badge] ![deprecated-badge]
   * [pfs-managed-lustre-vms.yaml](#pfs-managed-lustre-vmsyaml-) ![core-badge]
   * [ps-slurm.yaml](#ps-slurmyaml--) ![core-badge] ![experimental-badge]
-  * [pfs-parallelstore.yaml](#pfs-parallelstoreyaml--) ![core-badge] ![experimental-badge]
   * [cae-slurm.yaml](#cae-slurmyaml-) ![core-badge]
   * [hpc-build-slurm-image.yaml](#hpc-build-slurm-imageyaml--) ![community-badge] ![experimental-badge]
   * [hpc-slurm-ubuntu2004.yaml](#hpc-slurm-ubuntu2004yaml--) ![community-badge]
@@ -46,7 +45,6 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [ml-gke](#ml-gkeyaml-) ![core-badge]
   * [storage-gke](#storage-gkeyaml-) ![core-badge]
   * [gke-managed-hyperdisk.yaml](#gke-managed-hyperdiskyaml--) ![core-badge] ![experimental-badge]
-  * [gke-managed-parallelstore.yaml](#gke-managed-parallelstoreyaml--) ![core-badge] ![experimental-badge]
   * [gke-a3-ultragpu.yaml](#gke-a3-ultragpuyaml-) ![core-badge]
   * [gke-a3-megagpu](#gke-a3-megagpuyaml-) ![core-badge]
   * [gke-a3-highgpu](#gke-a3-highgpuyaml-) ![core-badge]
@@ -61,6 +59,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [tutorial-fluent.yaml](#tutorial-fluentyaml--) ![community-badge] ![experimental-badge]
   * [gke-tpu-v6](#gke-tpu-v6--) ![community-badge] ![experimental-badge]
   * [xpk-n2-filestore](#xpk-n2-filestore--) ![community-badge] ![experimental-badge]
+  * [gke-h4d](#gke-h4d-) ![core-badge]
 * [Blueprint Schema](#blueprint-schema)
 * [Writing an HPC Blueprint](#writing-an-hpc-blueprint)
   * [Blueprint Boilerplate](#blueprint-boilerplate)
@@ -682,79 +681,6 @@ For this example, the following is needed in the selected region:
 
 [pfs-managed-lustre-vms.yaml]: ./pfs-managed-lustre-vms.yaml
 
-### [ps-slurm.yaml] ![core-badge] ![experimental-badge]
-
-Creates a Slurm cluster with [Parallelstore] instance mounted.
-
-To provision the cluster, please run:
-
-```text
-./gcluster deploy examples/ps-slurm.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
-```
-
-After cluster is deployed, parallelstore drivers and DAOS client will be installed
-and mount-point will be configured on the VMs. You can SSH to login/ controller
-and verify by running:
-
-```sh
-df -H
-```
-
-This would show `dfuse` file system being attached at `/parallelstore` mount-point.
-
-#### Quota Requirements for ps-slurm.yaml
-
-To get access to a private preview of Parallelstore APIs, your project needs to
-be allowlisted. To set this up, please work with your account representative.
-
-For this example the following is needed in the selected region:
-
-* Cloud Parallelstore API: capacity (GB) per region: 12000 GB
-* Compute Engine API: Persistent Disk SSD (GB): ~100 GB for controller and login node.
-* Compute Engine API: Persistent Disk Standard (GB): 50 GB/node up to 200 GB.
-* Compute Engine API: N2 CPUs: 2 for the login node and 2/node active in the `debug` partition.
-* Compute Engine API: C2 CPUs: 4 for the controller node.
-* Compute Engine API: C2 CPUs: 60/node active in the `debug` partition up to 240.
-
-[ps-slurm.yaml]: ./ps-slurm.yaml
-[Parallelstore]: ../modules/file-system/parallelstore/README.md
-
-### [pfs-parallelstore.yaml] ![core-badge] ![experimental-badge]
-
-This creates 1 compute VM running debian 12 and 1 compute VM running ubuntu 20.04
-and connect with [Parallelstore] instance mounted.
-
-To provision the cluster, please run:
-
-```text
-./gcluster deploy examples/pfs-parallelstore.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
-```
-
-After cluster is deployed, parallelstore drivers and DAOS client will be installed
-and mount-point will be configured on the VMs. You can SSH to compute VM
-and verify by running:
-
-```sh
-df -H
-```
-
-This would show `dfuse` file system being attached at `/parallelstore` mount-point.
-
-#### Quota Requirements for pfs-parallelstore.yaml
-
-To get access to a private preview of Parallelstore APIs, your project needs to
-be allowlisted. To set this up, please work with your account representative.
-
-For this example the following is needed in the selected region:
-
-* Cloud Parallelstore API: capacity (GB) per region: 12000 GB
-* Compute Engine API: Persistent Disk Standard (GB): ~100 GB static.
-* Compute Engine API: N2 CPUs: 112 for the compute VM running debian 12.
-* Compute Engine API: N2 CPUs: 112 for the compute VM running ubuntu 22.04.
-
-[pfs-parallelstore.yaml]: ./pfs-parallelstore.yaml
-[Parallelstore]: ../modules/file-system/parallelstore/README.md
-
 ### [cae-slurm.yaml] ![core-badge]
 
 The Computer Aided Engineering (CAE) blueprint captures a reference architecture
@@ -1276,74 +1202,6 @@ Replace `CLUSTER-NAME` with the `deployment_name` used in blueprint vars block.
 
 [gke-managed-hyperdisk.yaml]: ../examples/gke-managed-hyperdisk.yaml
 
-### [gke-managed-parallelstore.yaml] ![core-badge] ![experimental-badge]
-
-This blueprint shows how to use managed parallelstore storage options with GKE in the toolkit.
-
-The blueprint contains the following:
-
-* A K8s Job that uses a managed parallelstore storage volume option.
-* A K8s Job that demonstrates ML training workload with managed parallelstore storage disk operation.
-  * The sample training workload manifest will be generated under the gke-managed-parallelstore/primary folder, as tensorflow-GUID.yaml
-  * You can deploy this sample training workload using "kubectl apply -f tensorflow-GUID.yaml" to start the training
-
-> **Warning**: In this example blueprint, when storage type `Parallelstore` is specified in `gke-storage` module.
-> The lifecycle of the parallelstore is managed by the blueprint.
-> On glcuster destroy operation, the Parallelstore storage created will also be destroyed.
->
-> [!Note]
-> The Kubernetes API server will only allow requests from authorized networks.
-> The `gke-cluster` module needs access to the Kubernetes API server
-> to create a Persistent Volume and a Persistent Volume Claim. **You must use
-> the `authorized_cidr` variable to supply an authorized network which contains
-> the IP address of the machine deploying the blueprint, for example
-> `--vars authorized_cidr=<your-ip-address>/32`.** You can use a service like
-> [whatismyip.com](https://whatismyip.com) to determine your IP address.
-
-#### Steps to deploy the blueprint
-
-1. Install Cluster Toolkit
-    1. Install [dependencies](https://cloud.google.com/cluster-toolkit/docs/setup/install-dependencies).
-    1. Set up [Cluster Toolkit](https://cloud.google.com/cluster-toolkit/docs/setup/configure-environment).
-1. Switch to the Cluster Toolkit directory
-
-   ```sh
-   cd cluster-toolkit
-   ```
-
-1. Get the IP address for your host machine
-
-   ```sh
-   curl ifconfig.me
-   ```
-
-1. Update the vars block of the blueprint file
-    1. `project_id`: ID of the project where you are deploying the cluster.
-    1. `deployment_name`: Name of the deployment.
-    1. `authorized_cidr`: update the IP address in <your-ip-address>/32.
-1. Build the Cluster Toolkit binary
-
-   ```sh
-   make
-   ```
-
-1. Provision the GKE cluster
-
-   ```sh
-   ./gcluster deploy examples/gke-managed-parallelstore.yaml
-   ```
-
-#### Clean Up
-To destroy all resources associated with creating the GKE cluster, from Cloud Shell run the following command:
-
-```sh
-./gcluster destroy CLUSTER-NAME
-```
-
-Replace `CLUSTER-NAME` with the `deployment_name` used in blueprint vars block.
-
-[gke-managed-parallelstore.yaml]: ../examples/gke-managed-parallelstore.yaml
-
 ### [gke-a3-ultragpu.yaml] ![core-badge]
 
 Refer to [AI Hypercomputer Documentation](https://cloud.google.com/ai-hypercomputer/docs/create/gke-ai-hypercompute#create-cluster) for instructions.
@@ -1595,6 +1453,12 @@ python3 xpk.py info --cluster xpk-01
 ```
 
 [xpk-n2-filestore]: ../community/examples/xpk-n2-filestore/xpk-n2-filestore.yaml
+
+### [gke-h4d] ![core-badge]
+
+This blueprint uses GKE to provision a Kubernetes cluster and a H4D node pool, along with networks and service accounts. Information about H4D machines can be found [here](https://cloud.google.com/blog/products/compute/new-h4d-vms-optimized-for-hpc). The deployment instructions can be found in the [README](/examples/gke-h4d/README.md).
+
+[gke-h4d]: ../examples/gke-h4d
 
 ## Blueprint Schema
 

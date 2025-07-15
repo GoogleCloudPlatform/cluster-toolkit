@@ -26,6 +26,8 @@ apiVersion: jobset.x-k8s.io/v1alpha2
 kind: JobSet
 metadata:
   name: nccl-all
+  labels:
+    kueue.x-k8s.io/queue-name: a4x
 spec:
   ttlSecondsAfterFinished: 1200
   network:
@@ -39,6 +41,7 @@ spec:
         template:
           metadata:
             annotations:
+              kueue.x-k8s.io/podset-required-topology: "cloud.google.com/gce-topology-subblock"
               networking.gke.io/default-interface: 'eth0'
               networking.gke.io/interfaces: |
                 [

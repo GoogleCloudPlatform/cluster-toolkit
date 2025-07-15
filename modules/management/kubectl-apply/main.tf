@@ -112,7 +112,6 @@ module "install_nvidia_dra_driver" {
   # This corresponds to the -f <(cat <<EOF ... EOF) part
   values_yaml = [<<EOF
       nvidiaDriverRoot: /home/kubernetes/bin/nvidia
-      nvidiaCtkPath: /home/kubernetes/bin/nvidia/nvidia-ctk
       resources:
         gpus:
           enabled: false
