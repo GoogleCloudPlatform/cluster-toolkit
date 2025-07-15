@@ -57,6 +57,7 @@ locals {
       capacity = "${var.capacity_gb}Gi"
       pvc_name = local.pvc_name
       labels   = local.labels
+      namespace = var.namespace
     }
   )
 
@@ -78,6 +79,7 @@ locals {
       pvc_name = local.pvc_name
       labels   = local.labels
       capacity = "${var.capacity_gb}Gi"
+      namespace = var.namespace
     }
   )
 
