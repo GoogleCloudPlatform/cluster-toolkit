@@ -475,13 +475,14 @@ def down_nodes_notify_jobs(nodes: List[str], reason: str, resume_data: Optional[
     
 
 
-def create_placement_request(pg_name: str, region: str, max_distance: Optional[int]):
+def create_placement_request(pg_name: str, region: str, max_distance: Optional[int], gpu_topology: Optional[str]):
     config = {
         "name": pg_name,
         "region": region,
         "groupPlacementPolicy": {
             "collocation": "COLLOCATED",
-            "maxDistance": max_distance
+            "maxDistance": max_distance,
+            "gpuTopology": gpu_topology
         },
     }
     
@@ -553,14 +554,45 @@ def _allocate_nodes_to_placements(nodes: List[str], excl_job_id:Optional[int], l
 
     return placements
 
+def calculate_hosts_per_topo(gpu_topology: str, machine_type: NSDict) -> int:
+    # Calculate total number of hosts per topology (Assumes format: '1x72')
+    try:
+        top_split = [int(x) for x in str(gpu_topology).split("x")]
+    except Exception as e:
+        log.error("Incorrectly formatted accelerator topology")
+        return 0
+
+    gpus_per_machine = machine_type.accelerators[0].count
+
+    if len(top_split) != 2:
+        log.error("Incorrectly formatted accelerator topology")
+    elif gpus_per_machine <= 0:
+        log.error("Cannot use accelerator topology with machine type that has no accelerators")
+    elif top_split[1] % machine_type.accelerators[0].count != 0:
+        log.error("GPU count per node must be a factor of the gpu topology")
+    else:
+        return (top_split[0] * top_split[1]) // gpus_per_machine
+    
+    return 0
+ 
 def calculate_chunk_size(nodeset: NSDict, lkp: util.Lookup) -> int:
-    # Calculates the chunk size based on max distance value received
-    machine_type = lkp.template_info(nodeset.instance_template).machine_type.family
+    # Calculates the chunk size based on max distance value received or gpu topology
+    # Assuming nodeset is not tpu
+    machine_type = lkp.template_info(nodeset.instance_template).machine_type
     max_distance = nodeset.placement_max_distance
+    gpu_topology = nodeset.get("accelerator_topology")
+
+    # Look for gpu topology first
+    if gpu_topology is not None:
+        hosts_per_topo = calculate_hosts_per_topo(gpu_topology, machine_type)
+        if hosts_per_topo > 0:
+            return hosts_per_topo
+
+
     if max_distance == 1:
         return 22
     elif max_distance == 2:
-        if machine_type.startswith("a3"):
+        if machine_type.family.startswith("a3"):
             return 256
         else:
             return 150
@@ -573,6 +605,7 @@ def create_nodeset_placements(nodes: List[str], excl_job_id:Optional[int], lkp: 
     placements = _allocate_nodes_to_placements(nodes, excl_job_id, lkp)
     region = lkp.node_region(nodes[0])
     max_distance = lkp.node_nodeset(nodes[0]).get('placement_max_distance')
+    gpu_topology = lkp.nodeset_gpu_topology(lkp.node_nodeset_name(nodes[0]))
 
     if log.isEnabledFor(logging.DEBUG):
         debug_p = {p.placement: to_hostlist(p.nodes) for p in placements}
@@ -581,7 +614,7 @@ def create_nodeset_placements(nodes: List[str], excl_job_id:Optional[int], lkp: 
         )
 
     requests = {
-        p.placement: create_placement_request(p.placement, region, max_distance) for p in placements if p.placement
+        p.placement: create_placement_request(p.placement, region, max_distance, gpu_topology) for p in placements if p.placement
     }
     if not requests:
         return placements
