@@ -59,6 +59,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [tutorial-fluent.yaml](#tutorial-fluentyaml--) ![community-badge] ![experimental-badge]
   * [gke-tpu-v6](#gke-tpu-v6--) ![community-badge] ![experimental-badge]
   * [xpk-n2-filestore](#xpk-n2-filestore--) ![community-badge] ![experimental-badge]
+  * [gke-h4d](#gke-h4d-) ![core-badge]
 * [Blueprint Schema](#blueprint-schema)
 * [Writing an HPC Blueprint](#writing-an-hpc-blueprint)
   * [Blueprint Boilerplate](#blueprint-boilerplate)
@@ -1452,6 +1453,12 @@ python3 xpk.py info --cluster xpk-01
 ```
 
 [xpk-n2-filestore]: ../community/examples/xpk-n2-filestore/xpk-n2-filestore.yaml
+
+### [gke-h4d] ![core-badge]
+
+This blueprint uses GKE to provision a Kubernetes cluster and a H4D node pool, along with networks and service accounts. Information about H4D machines can be found [here](https://cloud.google.com/blog/products/compute/new-h4d-vms-optimized-for-hpc). The deployment instructions can be found in the [README](/examples/gke-h4d/README.md).
+
+[gke-h4d]: ../examples/gke-h4d
 
 ## Blueprint Schema
 

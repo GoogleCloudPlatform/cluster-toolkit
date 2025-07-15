@@ -1,0 +1,184 @@
+# Copyright 2025 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+blueprint_name: gke-h4d
+
+vars:
+  # The following variables should be over-written in the deployment.yaml file.
+  # Your GCP Project ID
+  project_id:
+
+  # This should be unique across all of your Cluster
+  # Toolkit Deployments.
+  deployment_name: gke-h4d
+
+  # The GCP Region used for this deployment.
+  region:
+
+  # The GCP Zone used for this deployment.
+  zone:
+
+  # The number of nodes to be created.
+  static_node_count:
+
+  # Cidr block containing the IP of the machine calling terraform.
+  # The following line must be updated for this example to work.
+  authorized_cidr:
+
+  system_node_pool_disk_size_gb: 100
+  h4d_node_pool_disk_size_gb: 100
+
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: gke-h4d-net
+    source: modules/network/vpc
+    settings:
+      network_name: $(vars.deployment_name)-net
+      subnetworks:
+      - subnet_name: $(vars.deployment_name)-sub
+        subnet_region: $(vars.region)
+        subnet_ip: 192.168.0.0/24
+      secondary_ranges_list:
+      - subnetwork_name: $(vars.deployment_name)-sub
+        ranges:
+        - range_name: pods
+          ip_cidr_range: 10.64.0.0/19
+        - range_name: services
+          ip_cidr_range: 10.65.0.0/19
+      firewall_rules:
+      - name: $(vars.deployment_name)-internal
+        ranges: [192.168.0.0/24]
+        allow:
+        - protocol: tcp
+          ports: ["0-65535"]
+        - protocol: udp
+          ports: ["0-65535"]
+        - protocol: icmp
+
+  - id: gke-h4d-rdma-net
+    source: modules/network/vpc
+    settings:
+      network_name: $(vars.deployment_name)-rdma-net
+      network_profile: https://www.googleapis.com/compute/beta/projects/$(vars.project_id)/global/networkProfiles/$(vars.zone)-vpc-falcon
+      network_routing_mode: REGIONAL
+      enable_cloud_router: false
+      enable_cloud_nat: false
+      subnetworks:
+      - subnet_name: $(vars.deployment_name)-rdma-sub
+        subnet_region: $(vars.region)
+        subnet_ip: 192.168.1.0/24
+        region: $(vars.region)
+
+  - id: node_pool_service_account
+    source: community/modules/project/service-account
+    settings:
+      name: gke-np-sa
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
+      - monitoring.viewer
+      - stackdriver.resourceMetadata.writer
+      - storage.objectViewer
+      - artifactregistry.reader
+
+  - id: workload_service_account
+    source: community/modules/project/service-account
+    settings:
+      name: gke-wl-sa
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
+      - monitoring.viewer
+      - stackdriver.resourceMetadata.writer
+      - storage.objectAdmin
+      - artifactregistry.reader
+
+  - id: h4d-cluster
+    source: modules/scheduler/gke-cluster
+    use: [gke-h4d-net, workload_service_account]
+    settings:
+      system_node_pool_machine_type: "e2-standard-16"
+      system_node_pool_disk_size_gb: $(vars.system_node_pool_disk_size_gb)
+      system_node_pool_taints: []
+      enable_multi_networking: true
+      enable_dcgm_monitoring: true
+      gcp_public_cidrs_access_enabled: false
+      enable_private_endpoint: false # Allows access from authorized public IPs
+      configure_workload_identity_sa: true
+      master_authorized_networks:
+      - cidr_block: $(vars.authorized_cidr) # Allows your machine to run the kubectl command. Required for multi network setup.
+        display_name: "kubectl-access-network"
+      additional_networks:
+        $(concat(
+          [{
+            network=gke-h4d-rdma-net.network_name,
+            subnetwork=gke-h4d-rdma-net.subnetwork_name,
+            subnetwork_project=vars.project_id,
+            nic_type="IRDMA",
+            queue_count=null,
+            network_ip=null,
+            stack_type=null,
+            access_config=[{nat_ip=null, public_ptr_domain_name=null, network_tier=null}],
+            ipv6_access_config=[],
+            alias_ip_range=[]
+          }]
+        ))
+      # Cluster versions cannot be updated through the toolkit after creation
+      # Please manage cluster version from the Google Cloud Console directly
+      version_prefix: "1.32."
+      release_channel: RAPID
+      maintenance_exclusions:
+      - name: no-minor-or-node-upgrades-indefinite
+        start_time: "2024-12-01T00:00:00Z"
+        end_time: "2025-12-22T00:00:00Z"
+        exclusion_scope: NO_MINOR_OR_NODE_UPGRADES
+    outputs: [instructions]
+
+  - id: h4d-pool
+    source: modules/compute/gke-node-pool
+    use: [h4d-cluster, node_pool_service_account]
+    settings:
+      machine_type: h4d-highmem-192-lssd
+      auto_upgrade: true
+      zones: [$(vars.zone)]
+      disk_size_gb: $(vars.h4d_node_pool_disk_size_gb)
+      static_node_count: $(vars.static_node_count)
+      additional_networks:
+        $(concat(
+          [{
+            network=gke-h4d-rdma-net.network_name,
+            subnetwork=gke-h4d-rdma-net.subnetwork_name,
+            subnetwork_project=vars.project_id,
+            nic_type="IRDMA",
+            queue_count=null,
+            network_ip=null,
+            stack_type=null,
+            access_config=[{nat_ip=null, public_ptr_domain_name=null, network_tier=null}],
+            ipv6_access_config=[],
+            alias_ip_range=[]
+          }]
+        ))
+    outputs: [instructions]
+
+  # Install Kueue and Jobset
+  - id: workload-manager-install
+    source: modules/management/kubectl-apply
+    use: [h4d-cluster]
+    settings:
+      kueue:
+        install: true
+      jobset:
+        install: true
