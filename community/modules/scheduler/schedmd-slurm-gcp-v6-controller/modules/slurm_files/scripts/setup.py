@@ -617,14 +617,17 @@ def setup_cloud_ops() -> None:
     with open("/etc/google-cloud-ops-agent/config.yaml", "w") as f:
         yaml.safe_dump(file, f, sort_keys=False)
 
-    try:
-        run("systemctl restart google-cloud-ops-agent.service", timeout=30)
-    except subprocess.TimeoutExpired:
-        log.error("google-cloud-ops-agent.service did not restart within 30s.")
-        result=run("journalctl -u google-cloud-ops-agent-opentelemetry-collector.service", timeout=30, shell=True) #Gives more in-depth logs than cloud ops agent
-        if result.stdout:
-            log.error(f"System logs for google-cloud-ops-agent-opentelemetry-collector.service:\n{result.stdout}")
-        raise
+    retries=2
+    for retry in range(retries):
+        try:
+            run("systemctl restart google-cloud-ops-agent.service", timeout=120)
+            break
+        except subprocess.TimeoutExpired:
+            log.error("google-cloud-ops-agent.service did not restart within 120s.")
+            result=run("journalctl -u google-cloud-ops-agent-fluent-bit.service", timeout=120, shell=True) #Gives more in-depth logs than cloud ops agent
+            if result.stdout:
+                log.error(f"System logs for google-cloud-ops-agent-fluent-bit.service:\n{result.stdout}")
+            raise
 
 
 def main():
