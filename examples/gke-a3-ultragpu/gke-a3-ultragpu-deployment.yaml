@@ -36,3 +36,5 @@ vars:
   # disk for each node of the system node pool.
   a3ultra_node_pool_disk_size_gb: A3ULTRA_NODE_POOL_DISK_SIZE_GB # the size of
   # disk for each node.
+  enable_periodic_health_checks: # Make this true to run CHS (healthchecks)
+  health_check_schedule: # Run the health check at 12:00 AM (midnight) every Sunday

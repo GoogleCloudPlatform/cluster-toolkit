@@ -36,112 +36,64 @@ spec:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
             nodeSelectorTerms:
-            - matchExpressions:
-              - key: cloud.google.com/gke-accelerator
-                operator: In
-                values:
-                - nvidia-gb200
-              - key: kubernetes.io/arch
-                operator: In
-                values:
-                - arm64
+              - matchExpressions:
+                  - key: cloud.google.com/gke-accelerator
+                    operator: In
+                    values:
+                      - nvidia-gb200
+                  - key: kubernetes.io/arch
+                    operator: In
+                    values:
+                      - arm64
       tolerations:
-      - operator: "Exists"
+        - operator: "Exists"
       hostNetwork: true
       hostPID: true
       volumes:
-      - name: library-dir-host
-        hostPath:
-          path: /home/kubernetes/bin/nvidia/lib64
-          type: DirectoryOrCreate
-      - name: gib
-        hostPath:
-          path: /home/kubernetes/bin/gib
-      - name: nvidia-dir
-        hostPath:
-          path: /home/kubernetes/bin/nvidia
-          type: Directory
-      initContainers:
-      - name: disable-log-martian
-        image: alpine:latest
-        command: ["/bin/sh"]
-        securityContext:
-          privileged: true
-        args:
-        - -c
-        - |
-          sysctl -w net.ipv4.conf.gpu0rdma0.log_martians=0
-          sysctl -w net.ipv4.conf.gpu1rdma0.log_martians=0
-          sysctl -w net.ipv4.conf.gpu2rdma0.log_martians=0
-          sysctl -w net.ipv4.conf.gpu3rdma0.log_martians=0
-      - name: nvidia-container-toolkit-installer
-        image: ubuntu:22.04
-        securityContext:
-          privileged: true
-        env:
-        - name: LD_LIBRARY_PATH
-          value: /host/home/kubernetes/bin/nvidia/lib64
-        volumeMounts:
-        - name: nvidia-dir
-          mountPath: /host/home/kubernetes/bin/nvidia
-        command:
-        - bash
-        - -c
-        - |
-          set -ex
-          if [ -f /host/home/kubernetes/bin/nvidia/nvidia-ctk ]; then
-            echo "NVIDIA Container Toolkit already exists, skipping installation."
-          else
-            echo "Installing NVIDIA Container Toolkit..."
-
-            while true; do
-              DRIVER_VERSION=$("/host/home/kubernetes/bin/nvidia/bin/nvidia-smi" --query-gpu=driver_version --format=csv,noheader --id=0 2>&1)
-
-              if [ $? -eq 0 ] && [ -n "$DRIVER_VERSION" ]; then
-                echo "NVIDIA driver detected: version $DRIVER_VERSION"
-                break
-              else
-                echo "NVIDIA driver not available yet. Retrying in 5 seconds..."
-                sleep 5
-              fi
-            done
-
-            apt update
-            apt install -y curl gnupg2 ca-certificates
-
-            curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | \
-              gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
-
-            curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
-              sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
-              tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
-
-            apt update
-            apt install -y nvidia-container-toolkit
-
-            cp /usr/bin/nvidia-* /host/home/kubernetes/bin/nvidia
-            echo "NVIDIA Container Toolkit installation complete."
-          fi
-      - image: us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib-arm64:v1.0.4
-        name: nccl-rdma-installer
-        resources:
-          requests:
-            cpu: 150m
-        securityContext:
-          privileged: true
-        volumeMounts:
         - name: library-dir-host
-          mountPath: /usr/local/home/kubernetes/bin/nvidia/lib64
+          hostPath:
+            path: /home/kubernetes/bin/nvidia/lib64
+            type: DirectoryOrCreate
         - name: gib
-          mountPath: /usr/local/home/kubernetes/bin/gib
-        command: ["/bin/sh", "-c"]
-        args:
-        - |
-          set -ex
-          /scripts/container_entry.sh install --install-nccl
-          cp -r /var/lib/gib/lib64/. /usr/local/home/kubernetes/bin/nvidia/lib64
-          cp -r /var/lib/gib/. /usr/local/home/kubernetes/bin/gib
-          echo "installation finishes"
+          hostPath:
+            path: /home/kubernetes/bin/gib
+        - name: nvidia-dir
+          hostPath:
+            path: /home/kubernetes/bin/nvidia
+            type: Directory
+      initContainers:
+        - name: disable-log-martian
+          image: alpine:latest
+          command: ["/bin/sh"]
+          securityContext:
+            privileged: true
+          args:
+            - -c
+            - |
+              sysctl -w net.ipv4.conf.gpu0rdma0.log_martians=0
+              sysctl -w net.ipv4.conf.gpu1rdma0.log_martians=0
+              sysctl -w net.ipv4.conf.gpu2rdma0.log_martians=0
+              sysctl -w net.ipv4.conf.gpu3rdma0.log_martians=0
+        - image: us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib-arm64:v1.0.4
+          name: nccl-rdma-installer
+          resources:
+            requests:
+              cpu: 150m
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: library-dir-host
+              mountPath: /usr/local/home/kubernetes/bin/nvidia/lib64
+            - name: gib
+              mountPath: /usr/local/home/kubernetes/bin/gib
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -ex
+              /scripts/container_entry.sh install --install-nccl
+              cp -r /var/lib/gib/lib64/. /usr/local/home/kubernetes/bin/nvidia/lib64
+              cp -r /var/lib/gib/. /usr/local/home/kubernetes/bin/gib
+              echo "installation finishes"
       containers:
-      - image: "gke.gcr.io/pause:3.8@sha256:880e63f94b145e46f1b1082bb71b85e21f16b99b180b9996407d61240ceb9830"
-        name: pause
+        - image: "gke.gcr.io/pause:3.8@sha256:880e63f94b145e46f1b1082bb71b85e21f16b99b180b9996407d61240ceb9830"
+          name: pause

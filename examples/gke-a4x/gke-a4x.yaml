@@ -47,14 +47,13 @@ vars:
   # To target a BLOCK_NAME, the name of the extended reservation
   # can be inputted as <reservation-name>/reservationBlocks/<reservation-block-name>
   reservation:
-  compute_nodepool_machine_type: a4x-highgpu-4g-nolssd
+  compute_nodepool_machine_type: a4x-highgpu-4g
   system_nodepool_machine_type: e2-standard-16
 
   # Installs NCCL library and Google NCCL plugin
   # Runs an init container on all GB200 GPU nodes with the NCCL plugin image
   nccl_rdma_installer_path: $(ghpc_stage("./nccl-rdma-installer.yaml"))
   nvidia_dra_driver_path: $(ghpc_stage("./nvidia-dra-driver.yaml"))
-  imex_path: $(ghpc_stage("./imex.yaml"))
   kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
   accelerator_type: nvidia-gb200
 
@@ -85,6 +84,7 @@ deployment_groups:
     source: modules/network/vpc
     settings:
       network_name: $(vars.deployment_name)-net-0
+      ips_per_nat: 6
       subnetworks:
       - subnet_name: $(vars.deployment_name)-sub-0
         subnet_region: $(vars.region)
@@ -110,6 +110,7 @@ deployment_groups:
     source: modules/network/vpc
     settings:
       network_name: $(vars.deployment_name)-net-1
+      ips_per_nat: 6
       subnetworks:
       - subnet_name: $(vars.deployment_name)-sub-1
         subnet_region: $(vars.region)
@@ -229,7 +230,7 @@ deployment_groups:
       - type: nvidia-gb200
         count: 4
         gpu_driver_installation_config:
-          gpu_driver_version: LATEST
+          gpu_driver_version: DEFAULT
       reservation_affinity:
         consume_reservation_type: SPECIFIC_RESERVATION
         specific_reservations:
@@ -268,7 +269,6 @@ deployment_groups:
         install: true
       apply_manifests:
       - source: $(vars.nccl_rdma_installer_path)
-      - source: $(vars.imex_path)
       - source: $(vars.nvidia_dra_driver_path)
 
   - id: job-template

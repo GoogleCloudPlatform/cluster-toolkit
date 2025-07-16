@@ -15,11 +15,12 @@
 apiVersion: kueue.x-k8s.io/v1alpha1
 kind: Topology
 metadata:
-  name: "gke-default"
+  name: "a4x-default"
 spec:
   levels:
   - nodeLabel: "cloud.google.com/gce-topology-block"
   - nodeLabel: "cloud.google.com/gce-topology-subblock"
+  - nodeLabel: "cloud.google.com/gke-nodepool"
   - nodeLabel: "cloud.google.com/gce-topology-host"
   - nodeLabel: "kubernetes.io/hostname"
 ---
@@ -30,9 +31,12 @@ metadata:
 spec:
   nodeLabels:
     cloud.google.com/gke-accelerator: ${accelerator_type}
-  topologyName: "gke-default"
+  topologyName: "a4x-default"
   tolerations:
   - key: "nvidia.com/gpu"
+    operator: "Exists"
+    effect: NoSchedule
+  - key: "kubernetes.io/arch"
     operator: "Exists"
     effect: NoSchedule
 ---
