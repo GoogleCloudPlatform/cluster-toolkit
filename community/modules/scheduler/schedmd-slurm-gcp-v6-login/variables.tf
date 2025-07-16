@@ -93,14 +93,14 @@ variable "disk_resource_manager_tags" {
 
 variable "additional_disks" {
   type = list(object({
-    disk_name                  = string
-    device_name                = string
-    disk_type                  = string
-    disk_size_gb               = number
-    disk_labels                = map(string)
-    auto_delete                = bool
-    boot                       = bool
-    disk_resource_manager_tags = map(string)
+    disk_name                  = optional(string)
+    device_name                = optional(string)
+    disk_size_gb               = optional(number)
+    disk_type                  = optional(string)
+    disk_labels                = optional(map(string))
+    auto_delete                = optional(bool)
+    boot                       = optional(bool)
+    disk_resource_manager_tags = optional(map(string))
   }))
   description = "List of maps of disks."
   default     = []
