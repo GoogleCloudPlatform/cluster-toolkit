@@ -29,5 +29,5 @@ spec:
     - operator: In
       scopeName: PriorityClass
       values:
-      - system-node-critical
-      - system-cluster-critical
+        - system-node-critical
+        - system-cluster-critical

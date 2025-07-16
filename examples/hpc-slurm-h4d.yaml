@@ -69,7 +69,6 @@ deployment_groups:
   - id: h4d_startup
     source: modules/scripts/startup-script
     settings:
-      install_cloud_rdma_drivers: true
       set_ofi_cloud_rdma_tunables: true
       local_ssd_filesystem:
         fs_type: ext4

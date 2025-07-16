@@ -28,7 +28,7 @@ DebugFlags=Power
 #
 #
 # TIMERS
-MessageTimeout=120
+MessageTimeout=60
 
 ################################################################################
 #              vvvvv  WARNING: DO NOT MODIFY SECTION BELOW  vvvvv              #

@@ -4,7 +4,7 @@ go 1.23.0
 
 require (
 	cloud.google.com/go/storage v1.49.0 // indirect
-	github.com/go-git/go-git/v5 v5.16.0
+	github.com/go-git/go-git/v5 v5.16.2
 	github.com/hashicorp/go-getter v1.7.8
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/hashicorp/hcl/v2 v2.23.0
