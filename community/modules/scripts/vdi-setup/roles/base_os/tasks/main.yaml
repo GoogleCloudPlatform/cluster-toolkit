@@ -1,0 +1,104 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+- name: Gather distribution facts
+  ansible.builtin.setup:
+    gather_subset: platform
+
+# GPU / vWS driver setup
+- name: Check if NVIDIA GPU is present
+  ansible.builtin.shell: lspci | grep -i nvidia
+  register: nvidia_gpu_present
+  failed_when: false
+
+- name: Set package manager and desktop-packages
+  ansible.builtin.set_fact:
+    # pkg_mgr: "{{ 'yum' if ansible_facts.os_family == 'RedHat' else 'apt' }}"
+    gui_packages: >-
+      {{
+        ['@Xfce','@base-x']
+          if ansible_facts.os_family == 'RedHat'
+        else
+        (
+          ['xfce4', 'xserver-xorg-core', 'dbus-x11']
+            if ansible_facts.distribution == 'Debian'
+          else
+          ['xfce4', 'xserver-xorg-core']
+        )
+      }}
+    vnc_pkg: >-
+      {%- if vnc_flavor|lower == 'tigervnc' and ansible_facts.os_family == 'RedHat' -%}
+      tigervnc-server
+      {%- elif vnc_flavor|lower == 'tigervnc' -%}
+      tigervnc-standalone-server
+      {%- elif vnc_flavor|lower == 'tightvnc' and ansible_facts.os_family == 'RedHat' -%}
+      tightvnc-server
+      {%- else -%}
+      tightvnc-standalone-server
+      {%- endif %}
+    xorg_dev_packages: >-
+      {{
+        ['pkgconfig', 'xorg-x11-server-devel', 'xorg-x11-util-macros', 'libglvnd-devel']
+          if ansible_facts.os_family == 'RedHat'
+        else
+        (
+          ['pkg-config', 'xserver-xorg-dev', 'libx11-dev', 'libxext-dev', 'libglvnd-dev', 'build-essential']
+            if ansible_facts.distribution == 'Debian'
+          else
+          ['pkg-config', 'xserver-xorg-dev', 'libx11-dev', 'libxext-dev', 'libglvnd-dev']
+        )
+      }}
+
+- name: Update repository cache & install EPEL (RedHat only)
+  ansible.builtin.package:
+    name: epel-release
+    state: present
+    update_cache: yes
+  when: ansible_facts.os_family == 'RedHat'
+  retries: 10
+  delay: 3
+
+- name: Install desktop prerequisites & VNC package
+  ansible.builtin.package:
+    name: "{{ gui_packages + [vnc_pkg] + xorg_dev_packages }}"
+    state: present
+  retries: 10
+  delay: 3
+
+- name: Install kernel headers for running kernel (Debian only)
+  ansible.builtin.package:
+    name: "linux-headers-{{ ansible_kernel }}"
+    state: present
+  when: ansible_facts.distribution == 'Debian'
+  retries: 10
+  delay: 3
+
+- name: Ensure requests package is installed
+  pip:
+    name: requests
+    state: present
+
+- name: Ensure Python & tooling are installed
+  ansible.builtin.package:
+    name:
+      - python3
+      - python3-pip
+      - jq
+    state: present
+
+# GPU / vWS driver setup
+- name: Provision GPU setup
+  ansible.builtin.include_tasks: gpu_driver_setup.yaml
+  when: nvidia_gpu_present.rc == 0
