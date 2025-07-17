@@ -49,26 +49,21 @@
       
       {%- endif %}
 
-# Block for NVIDIA vWS driver setup
-- block:
-    - name: Install NVIDIA Vulkan ICD loader
-      ansible.builtin.package:
-        name: vulkan-loader
-        state: present
-      retries: 10
-      delay: 3
-      when: ansible_facts.os_family == 'RedHat'
-    - name: Download NVIDIA vWS driver
-      ansible.builtin.uri:
-        url: "{{ driver_url }}"
-        method: GET
-        dest: /tmp/nvidia-driver.run
-        mode: '0755'
-        status_code:
-        - 200
-        - 304
-    - name: Install NVIDIA vWS driver
-      ansible.builtin.command:
-        cmd: /tmp/nvidia-driver.run --dkms --silent
-        creates: /usr/bin/nvidia-smi
-  when: is_nvidia_vws_supported
+# Include distribution-specific GPU driver setup
+- name: Include Ubuntu GPU driver setup
+  ansible.builtin.include_tasks: gpu_driver_setup/ubuntu.yaml
+  when:
+    - ansible_facts.distribution == 'Ubuntu'
+    - is_nvidia_vws_supported
+
+- name: Include Rocky Linux GPU driver setup
+  ansible.builtin.include_tasks: gpu_driver_setup/rocky.yaml
+  when:
+    - ansible_facts.distribution == 'Rocky'
+    - is_nvidia_vws_supported
+
+- name: Include Debian GPU driver setup
+  ansible.builtin.include_tasks: gpu_driver_setup/debian.yaml
+  when:
+    - ansible_facts.distribution == 'Debian'
+    - is_nvidia_vws_supported

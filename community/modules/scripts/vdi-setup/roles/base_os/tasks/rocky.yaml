@@ -1,0 +1,42 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+- name: Set Rocky Linux specific variables
+  ansible.builtin.set_fact:
+    gui_packages: ['@Xfce','@base-x']
+    vnc_pkg: >-
+      {%- if vnc_flavor|lower == 'tigervnc' -%}
+      tigervnc-server
+      {%- elif vnc_flavor|lower == 'tightvnc' -%}
+      tightvnc-server
+      {%- else -%}
+      tightvnc-standalone-server
+      {%- endif %}
+    xorg_dev_packages: ['pkgconfig', 'xorg-x11-server-devel', 'xorg-x11-util-macros', 'libglvnd-devel']
+
+- name: Update repository cache & install EPEL (Rocky Linux only)
+  ansible.builtin.package:
+    name: epel-release
+    state: present
+    update_cache: yes
+  retries: 10
+  delay: 3
+
+- name: Install desktop prerequisites & VNC package (Rocky Linux)
+  ansible.builtin.package:
+    name: "{{ gui_packages + [vnc_pkg] + xorg_dev_packages }}"
+    state: present
+  retries: 10
+  delay: 3

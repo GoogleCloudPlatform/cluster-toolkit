@@ -1,38 +1,31 @@
-# Copyright 2025 Google LLC
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#      http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+/**
+ * Copyright 2025 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 ## Description
 
 Creates a containerised Guacamole instance. Works with the Debian and Ubuntu images shown in blueprint example below.
-
-### Service Startup and Health Checking
-
-The VDI module includes basic health checks to ensure services start properly:
 
 ### Secret Manager Integration
 
 The VDI module supports flexible Secret Manager integration:
 
 - **Default Behavior**: Secrets are stored in the deployment project
-- **Cross-Project Secrets**: Use `secret_project` to specify a different GCP project if providing user secrets
 - **Automatic Password Generation**: If no `secret_name` is provided, random passwords are generated and stored
 - **Existing Secret Retrieval**: Provide `secret_name` to use existing secrets from Secret Manager
-
-- **Database Health Check**: Waits for PostgreSQL to be ready on port 5432 (60 second timeout)
-- **Guacamole Web Interface**: Checks HTTP endpoint availability
-- **API Verification**: Verifies Guacamole admin login functionality
-- **VNC Service Restart**: Systemd services configured with automatic restart on failure
+- **Cross-Project Secrets**: Use `secret_project` to specify a different GCP project if providing secrets
 
 ## Outputs
 
@@ -45,13 +38,13 @@ The module provides the following outputs:
   - `username`: The VDI user's username
   - `port`: The VNC port assigned to the user
   - `secret_name`: The name of the Secret Manager secret containing the user's password
-  - `secret_project`: The GCP project where the user's secret is stored (defaults to deployment project) 
+  - `secret_project`: The GCP project where the user's secret is stored (defaults to deployment project)
 - `vdi_instance_ip`: The IP address of the VDI instance (null until VM is created)
 - `vdi_instance_name`: The name of the VDI instance (null until VM is created)
 
 ## Basic Example (Guacamole)
 
-```
+```yaml
 blueprint_name: vdi-test
 
 vars:
@@ -110,7 +103,7 @@ deployment_groups:
     source: modules/compute/vm-instance
     settings:
       instance_image:
-        # Several spported image families:
+        # Several supported image families:
         family: hpc-rocky-linux-8
         project: cloud-hpc-image-public
         #family: debian-11
@@ -143,7 +136,7 @@ After deployment, you can access the VDI in several ways:
 1. **Guacamole Web Interface**:
    - Access web interface:
      - http://$VM_PUBLIC_IP:8080/guacamole/#/
-     - Note: It is not advisable to serve Guacamole directly from a public IP in production environments. Consider serving your VDI from behind a reverse proxy, load balancer, or tunnel to it directly over IAP (see below).
+     - Note: It is not advisable to serve Guacamole directly from a public IP in production environments. You should consider placing the VDI behind a reverse proxy, load balancer, or tunnel to it directly over IAP (see below).
 
    - Admin credentials:
      - Username: `guacadmin`
@@ -155,11 +148,13 @@ After deployment, you can access the VDI in several ways:
    - Or use the custom secret name specified in the `vdi_users` configuration
 
 3. **IAP Tunnel** (for development/testing):
-   ```
+
+   ```bash
    gcloud compute start-iap-tunnel vdi-test-0 8080 \
        --local-host-port=localhost:8080 \
        --zone=us-central1-a
    ```
+
    - Guacamole will then be accessible from http://localhost:8080/guacamole/
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

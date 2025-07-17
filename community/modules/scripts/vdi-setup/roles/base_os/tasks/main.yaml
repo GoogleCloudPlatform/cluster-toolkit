@@ -23,68 +23,20 @@
   register: nvidia_gpu_present
   failed_when: false
 
-- name: Set package manager and desktop-packages
-  ansible.builtin.set_fact:
-    # pkg_mgr: "{{ 'yum' if ansible_facts.os_family == 'RedHat' else 'apt' }}"
-    gui_packages: >-
-      {{
-        ['@Xfce','@base-x']
-          if ansible_facts.os_family == 'RedHat'
-        else
-        (
-          ['xfce4', 'xserver-xorg-core', 'dbus-x11']
-            if ansible_facts.distribution == 'Debian'
-          else
-          ['xfce4', 'xserver-xorg-core']
-        )
-      }}
-    vnc_pkg: >-
-      {%- if vnc_flavor|lower == 'tigervnc' and ansible_facts.os_family == 'RedHat' -%}
-      tigervnc-server
-      {%- elif vnc_flavor|lower == 'tigervnc' -%}
-      tigervnc-standalone-server
-      {%- elif vnc_flavor|lower == 'tightvnc' and ansible_facts.os_family == 'RedHat' -%}
-      tightvnc-server
-      {%- else -%}
-      tightvnc-standalone-server
-      {%- endif %}
-    xorg_dev_packages: >-
-      {{
-        ['pkgconfig', 'xorg-x11-server-devel', 'xorg-x11-util-macros', 'libglvnd-devel']
-          if ansible_facts.os_family == 'RedHat'
-        else
-        (
-          ['pkg-config', 'xserver-xorg-dev', 'libx11-dev', 'libxext-dev', 'libglvnd-dev', 'build-essential']
-            if ansible_facts.distribution == 'Debian'
-          else
-          ['pkg-config', 'xserver-xorg-dev', 'libx11-dev', 'libxext-dev', 'libglvnd-dev']
-        )
-      }}
+# Include distribution-specific tasks
+- name: Include Ubuntu-specific tasks
+  ansible.builtin.include_tasks: ubuntu.yaml
+  when: ansible_facts.distribution == 'Ubuntu'
 
-- name: Update repository cache & install EPEL (RedHat only)
-  ansible.builtin.package:
-    name: epel-release
-    state: present
-    update_cache: yes
-  when: ansible_facts.os_family == 'RedHat'
-  retries: 10
-  delay: 3
+- name: Include Rocky Linux specific tasks
+  ansible.builtin.include_tasks: rocky.yaml
+  when: ansible_facts.distribution == 'Rocky'
 
-- name: Install desktop prerequisites & VNC package
-  ansible.builtin.package:
-    name: "{{ gui_packages + [vnc_pkg] + xorg_dev_packages }}"
-    state: present
-  retries: 10
-  delay: 3
-
-- name: Install kernel headers for running kernel (Debian only)
-  ansible.builtin.package:
-    name: "linux-headers-{{ ansible_kernel }}"
-    state: present
+- name: Include Debian-specific tasks
+  ansible.builtin.include_tasks: debian.yaml
   when: ansible_facts.distribution == 'Debian'
-  retries: 10
-  delay: 3
 
+# Common tasks for all distributions
 - name: Ensure requests package is installed
   pip:
     name: requests
