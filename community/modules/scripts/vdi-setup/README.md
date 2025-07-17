@@ -33,7 +33,7 @@ deployment_groups:
       - name: allow-guacamole-8080-ext
         description: Allow external ingress to Guacamole on TCP port 8080
         direction: INGRESS
-        ranges: ["0.0.0.0/0"] # or rev proxy address?
+        ranges: ["0.0.0.0/0"]
         allow:
           - protocol: tcp
             ports: ["8080"]
