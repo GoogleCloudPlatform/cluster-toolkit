@@ -13,6 +13,7 @@
 # limitations under the License.
 
 locals {
+  # This label allows for billing report tracking based on module.
   labels = merge(var.labels, { ghpc_module = "vdi-setup", ghpc_role = "scripts" })
 }
 
@@ -80,25 +81,21 @@ locals {
 
     # Run the rendered playbook via ansible-local
     {
-      type        = "ansible-local"
-      content     = templatefile("${path.module}/templates/install.yaml.tftpl",
+      type = "ansible-local"
+      content = templatefile("${path.module}/templates/install.yaml.tftpl",
         {
-          roles           = ["base_os", "secret_manager", "user_provision", "vnc", "vdi_tool"],
+          roles = ["base_os", "secret_manager", "user_provision", "vnc", "vdi_tool"],
         }
       )
       destination = "/tmp/vdi/install.yaml"
-      # Todo: turn off debug and '-v' later:
-      args        = "--extra-vars @/tmp/vdi/vars.yaml -v --extra-vars debug=true"
+      # Debug mode:
+      # args = "--extra-vars @/tmp/vdi/vars.yaml -v --extra-vars debug=true"
+      args = "--extra-vars @/tmp/vdi/vars.yaml"
     },
     # Todo: another runner here to delete /tmp/vdi afterwards?
   ]
 
-  required_apis = [
-    "compute.googleapis.com",
-    "secretmanager.googleapis.com",
-  ]
-
-  bucket_name = "${substr(var.deployment_name,0,39)}-vdi-scripts-${substr(md5(var.deployment_name),0,8)}"
+  bucket_name = "${substr(var.deployment_name, 0, 39)}-vdi-scripts-${substr(md5(var.deployment_name), 0, 8)}"
 }
 
 # Bucket to stage runners

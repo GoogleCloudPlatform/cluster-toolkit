@@ -41,9 +41,9 @@ output "vdi_user_credentials" {
   description = "Map of VDI user credentials stored in Secret Manager"
   value = {
     for user in var.vdi_users : user.username => {
-      username     = user.username
-      port         = user.port
-      secret_name  = user.secret_name != null ? user.secret_name : "vdi-user-password-${user.username}-${var.deployment_name}"
+      username    = user.username
+      port        = user.port
+      secret_name = user.secret_name != null ? user.secret_name : "vdi-user-password-${user.username}-${var.deployment_name}"
     }
   }
 }

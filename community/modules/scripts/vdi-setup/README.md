@@ -14,8 +14,7 @@
 
 ## Description
 
-Mostly tested with Rocky. Working on Debian and Ubuntu images (commented in blueprint example below).
-Distro / VDI 'flavour' variations are handled in the 'base_os' role for the most part.
+Creates a containerised Guacamole instance. Works with the Debian and Ubuntu images shown in blueprint example below.
 
 ### Service Startup and Health Checking
 
@@ -26,7 +25,7 @@ The VDI module includes basic health checks to ensure services start properly:
 The VDI module supports flexible Secret Manager integration:
 
 - **Default Behavior**: Secrets are stored in the deployment project
-- **Cross-Project Secrets**: Use `secret_project` to specify a different GCP project for user secrets
+- **Cross-Project Secrets**: Use `secret_project` to specify a different GCP project if providing user secrets
 - **Automatic Password Generation**: If no `secret_name` is provided, random passwords are generated and stored
 - **Existing Secret Retrieval**: Provide `secret_name` to use existing secrets from Secret Manager
 
@@ -162,3 +161,64 @@ After deployment, you can access the VDI in several ways:
        --zone=us-central1-a
    ```
    - Guacamole will then be accessible from http://localhost:8080/guacamole/
+
+<!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
+## Requirements
+
+No requirements.
+
+## Providers
+
+| Name | Version |
+|------|---------|
+| <a name="provider_archive"></a> [archive](#provider\_archive) | n/a |
+| <a name="provider_google"></a> [google](#provider\_google) | n/a |
+| <a name="provider_terraform"></a> [terraform](#provider\_terraform) | n/a |
+
+## Modules
+
+| Name | Source | Version |
+|------|--------|---------|
+| <a name="module_startup_script"></a> [startup\_script](#module\_startup\_script) | ../../../../modules/scripts/startup-script | n/a |
+
+## Resources
+
+| Name | Type |
+|------|------|
+| [google_storage_bucket.bucket](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket) | resource |
+| [terraform_data.input_validation](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
+| [archive_file.roles_tar](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
+
+## Inputs
+
+| Name | Description | Type | Default | Required |
+|------|-------------|------|---------|:--------:|
+| <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | The name of the deployment. | `string` | n/a | yes |
+| <a name="input_labels"></a> [labels](#input\_labels) | Key-value pairs of labels to be added to created resources. | `map(string)` | n/a | yes |
+| <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created. | `string` | n/a | yes |
+| <a name="input_region"></a> [region](#input\_region) | Region to place bucket containing startup script. | `string` | n/a | yes |
+| <a name="input_user_provision"></a> [user\_provision](#input\_user\_provision) | User type to create (local\_users supported. os-login to do. | `string` | `"local_users"` | no |
+| <a name="input_vdi_instance_ip"></a> [vdi\_instance\_ip](#input\_vdi\_instance\_ip) | The IP address of the VDI instance | `string` | `null` | no |
+| <a name="input_vdi_instance_name"></a> [vdi\_instance\_name](#input\_vdi\_instance\_name) | The name of the VDI instance | `string` | `null` | no |
+| <a name="input_vdi_resolution"></a> [vdi\_resolution](#input\_vdi\_resolution) | Desktop resolution for VNC sessions (e.g. 1920x1080). | `string` | `"1920x1080"` | no |
+| <a name="input_vdi_tool"></a> [vdi\_tool](#input\_vdi\_tool) | VDI tool to deploy (guacamole currently supported). | `string` | `"guacamole"` | no |
+| <a name="input_vdi_user_group"></a> [vdi\_user\_group](#input\_vdi\_user\_group) | Unix group to create/use for VDI users. | `string` | `"vdiusers"` | no |
+| <a name="input_vdi_users"></a> [vdi\_users](#input\_vdi\_users) | List of VDI users to configure. Passwords are handled securely by the Ansible roles: if secret\_name is provided, the password is fetched from Secret Manager; if neither password nor secret\_name is provided, a random password is generated and stored in Secret Manager. If secret\_project is provided, it specifies the GCP project where the secret is stored (defaults to the deployment project). | <pre>list(object({<br/>    username       = string<br/>    port           = number<br/>    secret_name    = optional(string)<br/>    secret_project = optional(string)<br/>  }))</pre> | `[]` | no |
+| <a name="input_vdi_webapp_port"></a> [vdi\_webapp\_port](#input\_vdi\_webapp\_port) | Port to serve the Webapp interface from if applicable | `string` | `"8080"` | no |
+| <a name="input_vnc_flavor"></a> [vnc\_flavor](#input\_vnc\_flavor) | The VNC server flavor to use (tigervnc currently supported) | `string` | `"tigervnc"` | no |
+| <a name="input_vnc_port_max"></a> [vnc\_port\_max](#input\_vnc\_port\_max) | Maximum valid VNC port. | `number` | `5999` | no |
+| <a name="input_vnc_port_min"></a> [vnc\_port\_min](#input\_vnc\_port\_min) | Minimum valid VNC port. | `number` | `5901` | no |
+
+## Outputs
+
+| Name | Description |
+|------|-------------|
+| <a name="output_guacamole_admin_password_secret"></a> [guacamole\_admin\_password\_secret](#output\_guacamole\_admin\_password\_secret) | The name of the Secret Manager secret containing the Guacamole admin password |
+| <a name="output_guacamole_admin_username"></a> [guacamole\_admin\_username](#output\_guacamole\_admin\_username) | The admin username for Guacamole |
+| <a name="output_guacamole_url"></a> [guacamole\_url](#output\_guacamole\_url) | The URL to access the Guacamole web interface |
+| <a name="output_startup_script"></a> [startup\_script](#output\_startup\_script) | Combined startup script that installs VDI (VNC, Guacamole, users). |
+| <a name="output_vdi_instance_ip"></a> [vdi\_instance\_ip](#output\_vdi\_instance\_ip) | The IP address of the VDI instance |
+| <a name="output_vdi_instance_name"></a> [vdi\_instance\_name](#output\_vdi\_instance\_name) | The name of the VDI instance |
+| <a name="output_vdi_runner"></a> [vdi\_runner](#output\_vdi\_runner) | Shell runner wrapping Ansible playbook + roles (for custom-image or direct use). |
+| <a name="output_vdi_user_credentials"></a> [vdi\_user\_credentials](#output\_vdi\_user\_credentials) | Map of VDI user credentials stored in Secret Manager |
+<!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

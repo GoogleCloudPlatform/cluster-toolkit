@@ -42,10 +42,10 @@ resource "terraform_data" "input_validation" {
     precondition {
       condition = (
         var.vnc_flavor != "tigervnc" && var.vnc_flavor != "tightvnc"
-      ) || alltrue([
-        for user in var.vdi_users : (
-          user.port >= var.vnc_port_min && user.port <= var.vnc_port_max
-        )
+        ) || alltrue([
+          for user in var.vdi_users : (
+            user.port >= var.vnc_port_min && user.port <= var.vnc_port_max
+          )
       ])
       error_message = "Each VDI user must have a port between 5901 and 5999 when VNC is used."
     }
