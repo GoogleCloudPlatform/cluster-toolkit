@@ -22,11 +22,6 @@ output "vdi_runner" {
   value       = local.combined_runner
 }
 
-output "guacamole_url" {
-  description = "The URL to access the Guacamole web interface"
-  value       = var.vdi_instance_ip != null ? "http://${var.vdi_instance_ip}:${var.vdi_webapp_port}/guacamole/" : null
-}
-
 output "guacamole_admin_username" {
   description = "The admin username for Guacamole"
   value       = "guacadmin"
@@ -46,14 +41,4 @@ output "vdi_user_credentials" {
       secret_name = user.secret_name != null ? user.secret_name : "vdi-user-password-${user.username}-${var.deployment_name}"
     }
   }
-}
-
-output "vdi_instance_ip" {
-  description = "The IP address of the VDI instance"
-  value       = var.vdi_instance_ip
-}
-
-output "vdi_instance_name" {
-  description = "The name of the VDI instance"
-  value       = var.vdi_instance_name
 }

@@ -89,15 +89,3 @@ variable "vnc_port_max" {
   default     = 5999
   description = "Maximum valid VNC port."
 }
-
-variable "vdi_instance_ip" {
-  description = "The IP address of the VDI instance"
-  type        = string
-  default     = null
-}
-
-variable "vdi_instance_name" {
-  description = "The name of the VDI instance"
-  type        = string
-  default     = null
-}

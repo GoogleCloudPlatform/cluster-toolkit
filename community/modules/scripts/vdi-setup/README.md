@@ -166,8 +166,6 @@ After deployment, you can access the VDI in several ways:
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project in which the HPC deployment will be created. | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | Region to place bucket containing startup script. | `string` | n/a | yes |
 | <a name="input_user_provision"></a> [user\_provision](#input\_user\_provision) | User type to create (local\_users supported. os-login to do. | `string` | `"local_users"` | no |
-| <a name="input_vdi_instance_ip"></a> [vdi\_instance\_ip](#input\_vdi\_instance\_ip) | The IP address of the VDI instance | `string` | `null` | no |
-| <a name="input_vdi_instance_name"></a> [vdi\_instance\_name](#input\_vdi\_instance\_name) | The name of the VDI instance | `string` | `null` | no |
 | <a name="input_vdi_resolution"></a> [vdi\_resolution](#input\_vdi\_resolution) | Desktop resolution for VNC sessions (e.g. 1920x1080). | `string` | `"1920x1080"` | no |
 | <a name="input_vdi_tool"></a> [vdi\_tool](#input\_vdi\_tool) | VDI tool to deploy (guacamole currently supported). | `string` | `"guacamole"` | no |
 | <a name="input_vdi_user_group"></a> [vdi\_user\_group](#input\_vdi\_user\_group) | Unix group to create/use for VDI users. | `string` | `"vdiusers"` | no |
@@ -183,10 +181,7 @@ After deployment, you can access the VDI in several ways:
 |------|-------------|
 | <a name="output_guacamole_admin_password_secret"></a> [guacamole\_admin\_password\_secret](#output\_guacamole\_admin\_password\_secret) | The name of the Secret Manager secret containing the Guacamole admin password |
 | <a name="output_guacamole_admin_username"></a> [guacamole\_admin\_username](#output\_guacamole\_admin\_username) | The admin username for Guacamole |
-| <a name="output_guacamole_url"></a> [guacamole\_url](#output\_guacamole\_url) | The URL to access the Guacamole web interface |
 | <a name="output_startup_script"></a> [startup\_script](#output\_startup\_script) | Combined startup script that installs VDI (VNC, Guacamole, users). |
-| <a name="output_vdi_instance_ip"></a> [vdi\_instance\_ip](#output\_vdi\_instance\_ip) | The IP address of the VDI instance |
-| <a name="output_vdi_instance_name"></a> [vdi\_instance\_name](#output\_vdi\_instance\_name) | The name of the VDI instance |
 | <a name="output_vdi_runner"></a> [vdi\_runner](#output\_vdi\_runner) | Shell runner wrapping Ansible playbook + roles (for custom-image or direct use). |
 | <a name="output_vdi_user_credentials"></a> [vdi\_user\_credentials](#output\_vdi\_user\_credentials) | Map of VDI user credentials stored in Secret Manager |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
