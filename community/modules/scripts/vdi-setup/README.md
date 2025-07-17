@@ -11,21 +11,6 @@ The VDI module supports flexible Secret Manager integration:
 - **Existing Secret Retrieval**: Provide `secret_name` to use existing secrets from Secret Manager
 - **Cross-Project Secrets**: Use `secret_project` to specify a different GCP project if providing secrets
 
-## Outputs
-
-The module provides the following outputs:
-
-- `guacamole_url`: The URL to access the Guacamole web interface (null until VM is created)
-- `guacamole_admin_username`: The admin username for Guacamole (default: "guacadmin")
-- `guacamole_admin_password_secret`: The name of the Secret Manager secret containing the Guacamole admin password
-  - `vdi_user_credentials`: A map of VDI user credentials stored in Secret Manager, including:
-  - `username`: The VDI user's username
-  - `port`: The VNC port assigned to the user
-  - `secret_name`: The name of the Secret Manager secret containing the user's password
-  - `secret_project`: The GCP project where the user's secret is stored (defaults to deployment project)
-- `vdi_instance_ip`: The IP address of the VDI instance (null until VM is created)
-- `vdi_instance_name`: The name of the VDI instance (null until VM is created)
-
 ## Basic Example (Guacamole)
 
 ```yaml
