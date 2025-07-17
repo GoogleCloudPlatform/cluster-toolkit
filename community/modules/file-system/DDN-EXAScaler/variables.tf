@@ -266,19 +266,13 @@ variable "instance_image" {
 variable "mgs" {
   description = "Management server properties"
   type = object({
-    node_type  = string
-    node_cpu   = string
-    nic_type   = string
-    node_count = number
-    public_ip  = bool
+    node_type  = optional(string, "n2-standard-32")
+    node_cpu   = optional(string, "Intel Cascade Lake")
+    nic_type   = optional(string, "GVNIC")
+    node_count = optional(number, 1)
+    public_ip  = optional(bool, false)
   })
-  default = {
-    node_type  = "n2-standard-32"
-    node_cpu   = "Intel Cascade Lake"
-    nic_type   = "GVNIC"
-    public_ip  = true
-    node_count = 1
-  }
+  default = {}
 }
 
 # Management target properties
@@ -344,19 +338,13 @@ variable "mnt" {
 variable "mds" {
   description = "Metadata server properties"
   type = object({
-    node_type  = string
-    node_cpu   = string
-    nic_type   = string
-    node_count = number
-    public_ip  = bool
+    node_type  = optional(string, "n2-standard-32")
+    node_cpu   = optional(string, "Intel Cascade Lake")
+    nic_type   = optional(string, "GVNIC")
+    node_count = optional(number, 1)
+    public_ip  = optional(bool, false)
   })
-  default = {
-    node_type  = "n2-standard-32"
-    node_cpu   = "Intel Cascade Lake"
-    nic_type   = "GVNIC"
-    public_ip  = true
-    node_count = 1
-  }
+  default = {}
 }
 
 # Metadata target properties
@@ -396,19 +384,13 @@ variable "mdt" {
 variable "oss" {
   description = "Object Storage server properties"
   type = object({
-    node_type  = string
-    node_cpu   = string
-    nic_type   = string
-    node_count = number
-    public_ip  = bool
+    node_type  = optional(string, "n2-standard-16")
+    node_cpu   = optional(string, "Intel Cascade Lake")
+    nic_type   = optional(string, "GVNIC")
+    node_count = optional(number, 3)
+    public_ip  = optional(bool, false)
   })
-  default = {
-    node_type  = "n2-standard-16"
-    node_cpu   = "Intel Cascade Lake"
-    nic_type   = "GVNIC"
-    public_ip  = true
-    node_count = 3
-  }
+  default = {}
 }
 
 # Object Storage target properties
@@ -448,19 +430,13 @@ variable "ost" {
 variable "cls" {
   description = "Compute client properties"
   type = object({
-    node_type  = string
-    node_cpu   = string
-    nic_type   = string
-    node_count = number
-    public_ip  = bool
+    node_type  = optional(string, "n2-standard-2")
+    node_cpu   = optional(string, "Intel Cascade Lake")
+    nic_type   = optional(string, "GVNIC")
+    node_count = optional(number, 0)
+    public_ip  = optional(bool, false)
   })
-  default = {
-    node_type  = "n2-standard-2"
-    node_cpu   = "Intel Cascade Lake"
-    nic_type   = "GVNIC"
-    public_ip  = true
-    node_count = 0
-  }
+  default = {}
 }
 # Compute client target properties
 # https://cloud.google.com/compute/docs/disks
