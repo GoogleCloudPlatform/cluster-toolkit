@@ -1,6 +1,6 @@
 ## Description
 
-Creates a containerised Guacamole instance. Works with the Debian and Ubuntu images shown in blueprint example below.
+Creates a containerised Guacamole instance. Works with the Rocky, Debian and Ubuntu images shown in blueprint example below.
 
 ### Secret Manager Integration
 
