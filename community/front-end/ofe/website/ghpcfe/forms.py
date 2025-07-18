@@ -30,6 +30,7 @@ from crispy_forms.bootstrap import InlineCheckboxes
 from .cluster_manager import cloud_info
 from .cluster_manager import validate_credential
 from .views.view_utils import RegistryDataHelper
+from .cluster_manager import utils
 
 # If we have a model, it has a form - pretty much
 from .models import *  # pylint: disable=wildcard-import,unused-wildcard-import
