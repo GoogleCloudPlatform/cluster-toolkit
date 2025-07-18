@@ -52,7 +52,7 @@
 
 - name: Debug kernel GCC version extraction
   ansible.builtin.debug:
-    msg: 
+    msg:
     - "Raw kernel GCC version: {{ kernel_gcc_version.stdout }}"
     - "Extracted required GCC version: {{ required_gcc_version }}"
 
