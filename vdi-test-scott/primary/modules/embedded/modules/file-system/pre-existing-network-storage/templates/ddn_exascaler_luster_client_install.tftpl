@@ -1,0 +1,50 @@
+#!/bin/sh
+
+# Copyright 2022 DataDirect Networks
+# Modifications Copyright 2022 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Prior Art: https://github.com/DDNStorage/exascaler-cloud-terraform/blob/78deadbb2c1fa7e4603cf9605b0f7d1782117954/gcp/templates/client-script.tftpl
+
+# install new EXAScaler Cloud clients:
+# all instances must be in the same zone
+# and connected to the same network and subnet
+# to set up EXAScaler Cloud filesystem on a new client instance,
+# run the following commands on the client with root privileges:
+set -e
+if [[ ! -z $(cat /proc/filesystems | grep lustre) ]]; then
+  echo "Skipping lustre client install as it is already supported"
+  exit 0
+fi
+
+cat >/etc/esc-client.conf<<EOF
+{
+  "Version": "2.0.0",
+  "MountConfig": {
+    "ClientDevice": "${server_ip}@tcp:${remote_mount}",
+    "Mountpoint": "${local_mount}",
+    "PackageSource": "http://${server_ip}/client-packages"
+  }
+}
+EOF
+
+for i in 1 2 3 4 5 6 7 8 9 10;
+do
+  echo $i
+  curl -fsSL http://${server_ip}/client-setup-tool -o /usr/sbin/esc-client && break || sleep 3;
+done
+chmod +x /usr/sbin/esc-client
+esc-client auto setup --config /etc/esc-client.conf
+esc-client unmount -m "${local_mount}"
+mv /etc/fstab.last /etc/fstab

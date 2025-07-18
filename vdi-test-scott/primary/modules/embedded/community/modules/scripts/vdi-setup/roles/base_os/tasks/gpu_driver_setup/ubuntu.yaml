@@ -1,0 +1,73 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+# Block for NVIDIA vWS driver setup (Ubuntu)
+- block:
+    - name: Download NVIDIA vWS driver
+      ansible.builtin.uri:
+        url: "{{ driver_url }}"
+        method: GET
+        dest: /tmp/nvidia-driver.run
+        mode: '0755'
+        status_code:
+        - 200
+        - 304
+
+    - name: Verify GCC version before driver installation
+      ansible.builtin.shell: gcc --version | head -1
+      register: gcc_version_check
+      changed_when: false
+
+    - name: Debug GCC version before driver installation
+      ansible.builtin.debug:
+        msg: "GCC version before driver installation: {{ gcc_version_check.stdout }}"
+
+    - name: Install NVIDIA vWS driver (Ubuntu)
+      ansible.builtin.command:
+        cmd: /tmp/nvidia-driver.run --dkms --silent
+        creates: /usr/bin/nvidia-smi
+      register: nvidia_install_result
+      failed_when: false
+
+    - name: Check if NVIDIA driver installation succeeded
+      ansible.builtin.stat:
+        path: /usr/bin/nvidia-smi
+      register: nvidia_smi_check
+
+    - name: Debug NVIDIA installation result
+      ansible.builtin.debug:
+        msg: 
+          - "NVIDIA installer exit code: {{ nvidia_install_result.rc }}"
+          - "nvidia-smi exists: {{ nvidia_smi_check.stat.exists }}"
+          - "Installation stdout: {{ nvidia_install_result.stdout }}"
+          - "Installation stderr: {{ nvidia_install_result.stderr }}"
+
+    - name: Fail if NVIDIA driver installation failed
+      ansible.builtin.fail:
+        msg: "NVIDIA driver installation failed. Check /var/log/nvidia-installer.log for details."
+      when: 
+        - nvidia_install_result.rc != 0
+        - not nvidia_smi_check.stat.exists
+
+    - name: Verify NVIDIA driver installation
+      ansible.builtin.command: nvidia-smi
+      register: nvidia_smi_test
+      changed_when: false
+      when: nvidia_smi_check.stat.exists
+
+    - name: Debug NVIDIA driver verification
+      ansible.builtin.debug:
+        msg: "NVIDIA driver verification: {{ nvidia_smi_test.stdout }}"
+      when: nvidia_smi_check.stat.exists

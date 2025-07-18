@@ -21,8 +21,8 @@
     group: root
     mode: '0755'
   loop:
-    - /opt/guacamole-db/data
-    - /opt/guacamole-db/initdb
+  - /opt/guacamole-db/data
+  - /opt/guacamole-db/initdb
 
 - name: Check Docker service status
   ansible.builtin.service_facts:
@@ -110,16 +110,16 @@
 - name: Pull required Docker images
   ansible.builtin.command: docker pull {{ item }}
   loop:
-    - postgres:latest
-    - guacamole/guacd:latest
-    - guacamole/guacamole:latest
+  - postgres:latest
+  - guacamole/guacd:latest
+  - guacamole/guacamole:latest
 
 - name: Create a dedicated Docker network
   ansible.builtin.command: docker network create guac_net
   register: network_create
-  failed_when: 
-    - network_create.rc != 0 
-    - "'already exists' not in network_create.stderr"
+  failed_when:
+  - network_create.rc != 0
+  - "'already exists' not in network_create.stderr"
 
 - name: Start Guacamole PostgreSQL container
   ansible.builtin.command: >
@@ -133,9 +133,9 @@
     --restart always
     postgres:latest
   register: postgres_start
-  failed_when: 
-    - postgres_start.rc != 0 
-    - "'already in use' not in postgres_start.stderr"
+  failed_when:
+  - postgres_start.rc != 0
+  - "'already in use' not in postgres_start.stderr"
 
 - name: Wait for PostgreSQL on host port
   ansible.builtin.wait_for:
@@ -150,9 +150,9 @@
     --restart always
     guacamole/guacd:latest
   register: guacd_start
-  failed_when: 
-    - guacd_start.rc != 0 
-    - "'already in use' not in guacd_start.stderr"
+  failed_when:
+  - guacd_start.rc != 0
+  - "'already in use' not in guacd_start.stderr"
 
 - name: Start Guacamole webapp container
   ansible.builtin.command: >
@@ -168,9 +168,9 @@
     --restart always
     guacamole/guacamole:latest
   register: guac_app_start
-  failed_when: 
-    - guac_app_start.rc != 0 
-    - "'already in use' not in guac_app_start.stderr"
+  failed_when:
+  - guac_app_start.rc != 0
+  - "'already in use' not in guac_app_start.stderr"
 
 - name: Wait for Guacamole HTTP endpoint
   ansible.builtin.wait_for:
@@ -200,8 +200,8 @@
     return_content: yes
   register: guac_api
   until:
-    - guac_api.status == 200
-    - guac_api.json.authToken is defined
+  - guac_api.status == 200
+  - guac_api.json.authToken is defined
   retries: 10
   delay: 3
 

@@ -1,0 +1,23 @@
+Advanced Deployment Instructions
+================================
+
+Terraform group 'primary' was successfully created in directory vdi-test-scott/primary
+To deploy, run the following commands:
+
+terraform -chdir=vdi-test-scott/primary init
+terraform -chdir=vdi-test-scott/primary validate
+terraform -chdir=vdi-test-scott/primary apply
+
+Destroying infrastructure when no longer needed
+===============================================
+
+Automated
+---------
+
+gcluster destroy vdi-test-scott
+
+Advanced / Manual
+-----------------
+Infrastructure should be destroyed in reverse order of creation:
+
+terraform -chdir=vdi-test-scott/primary destroy

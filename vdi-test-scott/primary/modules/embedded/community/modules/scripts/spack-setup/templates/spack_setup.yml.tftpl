@@ -1,0 +1,157 @@
+# Copyright 2023 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+- name: Install Software
+  hosts: localhost
+  vars:
+    sw_name: ${sw_name}
+    profile_script: ${profile_script}
+    install_dir: ${install_dir}
+    git_url: ${git_url}
+    git_ref: ${git_ref}
+    chmod_mode: ${chmod_mode}
+    system_user_name: ${system_user_name}
+    system_user_uid: ${system_user_uid}
+    system_user_gid: ${system_user_gid}
+    finalize_setup_script: ${finalize_setup_script}
+    profile_script_path: ${profile_script_path}
+  tasks:
+  - name: Print software name
+    ansible.builtin.debug:
+      msg: "Running installation for software: {{  sw_name  }}"
+
+  - name: Add profile script for software
+    ansible.builtin.copy:
+      dest: "{{ profile_script_path }}"
+      mode: '0644'
+      content: "{{ profile_script }}"
+    when: profile_script
+
+  - name: Look up user to use for install
+    block:
+
+    - name: Check if user already exists
+      ansible.builtin.getent:
+        database: passwd
+        key: "{{ system_user_name }}"
+
+    - name: Look up existing user details
+      ansible.builtin.user:
+        name: "{{ system_user_name }}"
+      register: system_user
+
+    rescue:
+    - name: User did not exist, create group for system user
+      ansible.builtin.group:
+        name: "{{ system_user_name }}"
+        gid: "{{ system_user_gid }}"
+        system: true
+      register: system_group
+
+    - name: Create system user
+      ansible.builtin.user:
+        name: "{{ system_user_name }}"
+        comment: "{{ sw_name }} installation"
+        uid: "{{ system_user_uid }}"
+        group: "{{ system_group.name }}"
+        system: true
+      register: system_user
+
+  - name: Create parent of install directory
+    ansible.builtin.file:
+      path: "{{ install_dir | dirname }}"
+      state: directory
+
+  - name: Set lock dir
+    ansible.builtin.set_fact:
+      lock_dir: "{{ install_dir | dirname }}/.install_{{ sw_name }}_lock"
+
+  - name: Acquire lock
+    ansible.builtin.command:
+      mkdir "{{ lock_dir }}"
+    register: lock_out
+    changed_when: lock_out.rc == 0
+    failed_when: false
+
+  - name: Add hostname to lock_dir
+    ansible.builtin.file:
+      path:  "{{ lock_dir }}/{{ ansible_hostname }}"
+      state: touch
+    when: lock_out.rc == 0
+
+  - name: Clone branch or tag into installation directory
+    ansible.builtin.command: git clone --branch {{ git_ref }} {{ git_url }} {{ install_dir }}
+    failed_when: false
+    register: clone_res
+    when: lock_out.rc == 0
+
+  - name: Clone commit hash into installation directory
+    ansible.builtin.command: "{{ item }}"
+    with_items:
+      - git clone {{ git_url }} {{ install_dir }}
+      - git -C {{ install_dir }} checkout {{ git_ref }}
+    when: lock_out.rc == 0 and clone_res.rc != 0
+
+  - name: Transfer ownership to system user
+    ansible.builtin.file:
+      path: "{{ install_dir }}"
+      owner: "{{ system_user.name }}"
+      group: "{{ system_user.group }}"
+      recurse: true
+      follow: false
+    when: lock_out.rc == 0
+
+  - name: Finalize setup
+    ansible.builtin.shell: "{{ finalize_setup_script }}"
+    when: lock_out.rc == 0 and finalize_setup_script
+    become: true
+    become_user: "{{ system_user.name }}"
+
+  - name: Apply chmod
+    ansible.builtin.file:
+      path: "{{ install_dir }}"
+      mode: "{{ chmod_mode | default(omit, true)  }}"
+      recurse: true
+      follow: false
+    when: (lock_out.rc == 0) and (chmod_mode != None)
+
+  - name: Release lock
+    ansible.builtin.file:
+      path:  "{{ lock_dir }}/done"
+      state: touch
+    when: lock_out.rc == 0
+
+  - name: Wait for lock
+    block:
+    - name: Wait for lock
+      ansible.builtin.wait_for:
+        path: "{{ lock_dir }}/done"
+        state: present
+        timeout: 600
+        sleep: 10
+      when: lock_out.rc != 0
+
+    rescue:
+    - name: Timed out on waiting for lock, get lock directory contents
+      ansible.builtin.find:
+        paths: "{{ lock_dir }}"
+      register: lock_dir_contents
+
+    - name: Print lock directory contents, it should contain name of host that is holding lock
+      ansible.builtin.debug:
+        msg: "{{ lock_dir_contents.files|map(attribute='path')|map('basename')|list }}"
+
+    - name: Failed to get lock
+      ansible.builtin.fail:
+        msg: "Timeout waiting on lock for ${sw_name}, exiting"

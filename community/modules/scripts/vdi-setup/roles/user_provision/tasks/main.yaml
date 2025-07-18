@@ -17,7 +17,7 @@
   group:
     name: wheel
     state: present
-        
+
 - name: Ensure VDI user group exists
   ansible.builtin.group:
     name: "{{ vdi_user_group }}"

@@ -1,0 +1,9 @@
+---
+apiVersion: networking.gke.io/v1
+kind: GKENetworkParamSet
+metadata:
+  name: ${name}
+spec:
+  vpc: ${network_name}
+  vpcSubnet: ${subnetwork_name}
+  deviceMode: ${device_mode}

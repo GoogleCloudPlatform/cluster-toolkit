@@ -16,36 +16,36 @@
 - name: Provision VDI users (custom or generated passwords)
   block:
 
-    # Create the Linux user with a hashed password
-    - name: Create VDI user {{ item.username }}
-      ansible.builtin.user:
-        name: "{{ item.username }}"
-        groups: "{{ vdi_user_group }},wheel"
-        shell: /bin/bash
-        create_home: yes
-        append: true
-        password: "{{ item.password | password_hash('sha512') }}"
-        update_password: on_create # sets pw if user is newly created
+  # Create the Linux user with a hashed password
+  - name: Create VDI user {{ item.username }}
+    ansible.builtin.user:
+      name: "{{ item.username }}"
+      groups: "{{ vdi_user_group }},wheel"
+      shell: /bin/bash
+      create_home: yes
+      append: true
+      password: "{{ item.password | password_hash('sha512') }}"
+      update_password: on_create # sets pw if user is newly created
 
-    # SSH key setup
-    - name: Ensure .ssh directory for {{ item.username }}
-      ansible.builtin.file:
-        path: "/home/{{ item.username }}/.ssh"
-        state: directory
-        owner: "{{ item.username }}"
-        group: "{{ vdi_user_group }}"
-        mode: '0700'
+  # SSH key setup
+  - name: Ensure .ssh directory for {{ item.username }}
+    ansible.builtin.file:
+      path: "/home/{{ item.username }}/.ssh"
+      state: directory
+      owner: "{{ item.username }}"
+      group: "{{ vdi_user_group }}"
+      mode: '0700'
 
-    - name: Generate SSH key pair for {{ item.username }}
-      community.crypto.openssh_keypair:
-        path: "/home/{{ item.username }}/.ssh/id_rsa"
-        owner: "{{ item.username }}"
-        group: "{{ vdi_user_group }}"
-        mode: '0600'
-      register: ssh_key
+  - name: Generate SSH key pair for {{ item.username }}
+    community.crypto.openssh_keypair:
+      path: "/home/{{ item.username }}/.ssh/id_rsa"
+      owner: "{{ item.username }}"
+      group: "{{ vdi_user_group }}"
+      mode: '0600'
+    register: ssh_key
 
-    - name: Add public key to authorized_keys for {{ item.username }}
-      ansible.builtin.authorized_key:
-        user: "{{ item.username }}"
-        key: "{{ ssh_key.public_key }}"
-        state: present
+  - name: Add public key to authorized_keys for {{ item.username }}
+    ansible.builtin.authorized_key:
+      user: "{{ item.username }}"
+      key: "{{ ssh_key.public_key }}"
+      state: present

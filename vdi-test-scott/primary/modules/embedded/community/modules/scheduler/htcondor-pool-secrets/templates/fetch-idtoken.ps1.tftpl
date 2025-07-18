@@ -1,0 +1,26 @@
+Set-StrictMode -Version latest
+$ErrorActionPreference = 'Stop'
+
+$config_dir = 'C:\Condor\config'
+if(!(test-path -PathType container -Path $config_dir))
+{
+    New-Item -ItemType Directory -Path $config_dir
+}
+$config_file = "$config_dir\51-ghpc-trust-domain"
+
+$config_string = @'
+# these lines must appear AFTER any "use role:" settings
+UID_DOMAIN = ${trust_domain}
+TRUST_DOMAIN = ${trust_domain}
+'@
+
+Set-Content -Path "$config_file" -Value "$config_string"
+
+# obtain IDTOKEN for authentication by StartD to Central Manager
+gcloud secrets versions access latest --secret ${xp_idtoken_secret_id} `
+    --out-file C:\condor\tokens.d\condor@${trust_domain}
+
+if ($LASTEXITCODE -ne 0)
+{
+    throw "Could not download HTCondor IDTOKEN; exiting startup script"
+}

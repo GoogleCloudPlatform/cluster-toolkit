@@ -1,0 +1,98 @@
+# Copyright 2022 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# This playbook makes the assumption that a virtual environment has been created
+# with the autoscaler and its dependencies previously installed. A runner that
+# does this is provided as an output of the htcondor-install module within the
+# Cluster Toolkit at community/modules/scripts/htcondor-install.
+
+---
+- name: Configure HTCondor Autoscaler
+  hosts: all
+  vars:
+    python: /usr/local/htcondor/bin/python3
+    autoscaler: /usr/local/htcondor/bin/autoscaler.py
+    systemd_override_path: /etc/systemd/system
+  become: true
+  tasks:
+  - name: User must supply HTCondor role
+    ansible.builtin.assert:
+      that:
+      - project_id is defined
+      - region is defined
+      - zone is defined
+      - mig_id is defined
+      - max_size is defined
+  - name: Create SystemD service for HTCondor autoscaler
+    ansible.builtin.copy:
+      dest: "{{ systemd_override_path }}/htcondor-autoscaler@.service"
+      mode: 0644
+      content: |
+        [Unit]
+        Description=HTCondor Autoscaler MIG: %i
+
+        [Service]
+        User=condor
+        Type=oneshot
+        ExecStart={{ python }} {{ autoscaler }} --p $PROJECT_ID --r $REGION --z $ZONE --mz --g %i --c $MAX_SIZE --i $MIN_IDLE
+    notify:
+    - Reload SystemD
+  - name: Create SystemD override directory for autoscaler configuration
+    ansible.builtin.file:
+      path: "{{ systemd_override_path }}/htcondor-autoscaler@{{ mig_id }}.service.d"
+      state: directory
+      owner: root
+      group: root
+      mode: 0755
+  - name: Create autoscaler configuration
+    ansible.builtin.copy:
+      dest: "{{ systemd_override_path }}/htcondor-autoscaler@{{ mig_id }}.service.d/miglimit.conf"
+      mode: 0644
+      content: |
+        [Service]
+        Environment=PROJECT_ID={{ project_id }}
+        Environment=REGION={{ region }}
+        Environment=ZONE={{ zone }}
+        Environment=MAX_SIZE={{ max_size }}
+        Environment=MIN_IDLE={{ min_idle }}
+    notify:
+    - Reload SystemD
+  - name: Create SystemD timer for HTCondor autoscaler
+    ansible.builtin.copy:
+      dest: "{{ systemd_override_path }}/htcondor-autoscaler@.timer"
+      mode: 0644
+      content: |
+        [Unit]
+        Description=Run HTCondor Autoscaler Periodically
+
+        [Timer]
+        OnCalendar=minutely
+        AccuracySec=1us
+        RandomizedDelaySec=30
+        # the directive below is ignored harmlessly on CentOS 7; this has impact
+        # that timing averages to 1 minute but is not precisely 1 minute; still
+        # useful to ensure that timers for different MIGs do not overlap
+        FixedRandomDelay=true
+    notify:
+    - Reload SystemD
+  handlers:
+  - name: Reload SystemD
+    ansible.builtin.systemd:
+      daemon_reload: true
+  post_tasks:
+  - name: Activate HTCondor Autoscaler timer
+    ansible.builtin.systemd:
+      name: htcondor-autoscaler@{{ mig_id }}.timer
+      enabled: true
+      state: started

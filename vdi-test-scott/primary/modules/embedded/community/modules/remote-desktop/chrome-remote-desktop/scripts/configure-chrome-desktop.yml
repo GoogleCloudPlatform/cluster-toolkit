@@ -1,0 +1,61 @@
+# Copyright 2022 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+- name: Ensure Desktop OS and Chrome Remote Desktop is installed
+  hosts: localhost
+  become: true
+  module_defaults:
+    ansible.builtin.apt:
+      update_cache: true
+      cache_valid_time: 3600
+  tasks:
+  - name: Install desktop packages
+    ansible.builtin.apt:
+      name:
+      - xfce4
+      - xfce4-goodies
+      state: present
+    register: apt_result
+    retries: 10
+    delay: 30
+    until: apt_result is success
+
+  - name: Download and configure CRD
+    ansible.builtin.get_url:
+      url: https://dl.google.com/linux/direct/chrome-remote-desktop_current_amd64.deb
+      dest: /tmp/chrome-remote-desktop_current_amd64.deb
+      mode: "0755"
+      timeout: 30
+
+  - name: Install CRD
+    ansible.builtin.apt:
+      deb: /tmp/chrome-remote-desktop_current_amd64.deb
+    environment:
+      DEBIAN_FRONTEND: noninteractive
+    register: apt_result
+    retries: 10
+    delay: 30
+    until: apt_result is success
+
+  - name: Configure CRD to use Xfce by default
+    ansible.builtin.copy:
+      dest: /etc/chrome-remote-desktop-session
+      content: "exec /etc/X11/Xsession /usr/bin/xfce4-session"
+      mode: 0644
+
+  - name: Start Chrome remote desktop
+    ansible.builtin.command: /etc/init.d/chrome-remote-desktop start
+    register: result
+    changed_when: result.rc == 0

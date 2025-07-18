@@ -15,7 +15,7 @@
 ---
 - name: Set Rocky Linux specific variables
   ansible.builtin.set_fact:
-    gui_packages: ['@Xfce','@base-x']
+    gui_packages: ['@Xfce', '@base-x']
     vnc_pkg: >-
       {%- if vnc_flavor|lower == 'tigervnc' -%}
       tigervnc-server

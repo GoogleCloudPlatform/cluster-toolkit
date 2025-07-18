@@ -46,24 +46,24 @@
       {%- if is_nvidia_vws_supported -%}
       https://storage.googleapis.com/nvidia-drivers-us-public/GRID/vGPU18.1/NVIDIA-Linux-x86_64-570.133.20-grid.run
       {%- else -%}
-      
+
       {%- endif %}
 
 # Include distribution-specific GPU driver setup
 - name: Include Ubuntu GPU driver setup
   ansible.builtin.include_tasks: gpu_driver_setup/ubuntu.yaml
   when:
-    - ansible_facts.distribution == 'Ubuntu'
-    - is_nvidia_vws_supported
+  - ansible_facts.distribution == 'Ubuntu'
+  - is_nvidia_vws_supported
 
 - name: Include Rocky Linux GPU driver setup
   ansible.builtin.include_tasks: gpu_driver_setup/rocky.yaml
   when:
-    - ansible_facts.distribution == 'Rocky'
-    - is_nvidia_vws_supported
+  - ansible_facts.distribution == 'Rocky'
+  - is_nvidia_vws_supported
 
 - name: Include Debian GPU driver setup
   ansible.builtin.include_tasks: gpu_driver_setup/debian.yaml
   when:
-    - ansible_facts.distribution == 'Debian'
-    - is_nvidia_vws_supported
+  - ansible_facts.distribution == 'Debian'
+  - is_nvidia_vws_supported

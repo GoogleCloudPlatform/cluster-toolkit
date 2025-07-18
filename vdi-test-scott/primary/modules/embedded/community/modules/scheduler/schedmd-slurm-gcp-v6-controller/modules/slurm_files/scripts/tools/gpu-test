@@ -1,0 +1,129 @@
+#!/bin/bash
+# Copyright 2024 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+LOG_FILE="/var/log/slurm/chs_health_check.log"
+TMP_DCGM_OUT="/tmp/dcgm.out"
+TMP_ECC_ERRORS_OUT="/tmp/ecc_errors.out"
+
+log_step() {
+  echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> "$LOG_FILE"
+}
+
+# Fail gracefully if nvidia-smi or dcgmi doesn't exist
+if ! type -P nvidia-smi 1>/dev/null; then
+    log_step "nvidia-smi not found - this script requires nvidia-smi to function"
+    exit 0
+fi
+
+if ! type -P dcgmi 1>/dev/null; then
+    log_step "dcgmi not found - this script requires dcgmi to function"
+    exit 0
+fi
+
+if ! type -P nv-hostengine 1>/dev/null; then
+    log_step "nv-hostengine not found - this script requires nv-hostengine to function"
+    exit 0
+fi
+
+###################################################
+# Disable running health checks
+###################################################
+# Check if the environment variable '$SLURM_JOB_EXTRA' is set and contains the
+# substring 'healthchecks_prolog=off'
+if [[ -n "$SLURM_JOB_EXTRA" ]]; then
+  log_step "Environment variable SLURM_JOB_EXTRA is set. Checking if it contains healthchecks_prolog=off."
+  # Check if the value of the variable matches the string "healthchecks_prolog=off"
+  if [[ "$SLURM_JOB_EXTRA" == *"healthchecks_prolog=off"* ]]; then
+    log_step "Environment variable SLURM_JOB_EXTRA matches substring healthchecks_prolog=off. Skipping health checks."
+    exit 0
+  else
+    log_step "Environment variable SLURM_JOB_EXTRA does NOT match substring healthchecks_prolog=off. Attempting to run health checks."
+  fi
+else
+    log_step "Environment variable SLURM_JOB_EXTRA is NOT set. Attempting to run health checks."
+fi
+
+# Exit if GPU isn't H/B 100/200
+GPU_MODEL=$(nvidia-smi --query-gpu=name --format=csv,noheader)
+if ! [[ "$GPU_MODEL" =~ [BH][1-2]00 ]]; then
+    log_step "No Supported GPU detected"
+    exit 0
+fi
+
+NUMGPUS=$(nvidia-smi -L | wc -l)
+
+# Check that all GPUs are healthy via DCGM and check for ECC errors
+if [ $NUMGPUS -gt 0 ]; then
+    log_step "Execute DCGM health check, ECC error check, and NVLink error check for GPUs"
+    GPULIST=$(nvidia-smi --query-gpu=index --format=csv,noheader | tr '\n' ',' | sed 's/,$//')
+    rm -f $TMP_DCGM_OUT
+    rm -f $TMP_ECC_ERRORS_OUT
+
+    # Run DCGM checks
+    START_HOSTENGINE=false
+    if ! pidof nv-hostengine > /dev/null; then
+        log_step "Starting nv-hostengine..."
+        nv-hostengine >> "$LOG_FILE" 2>&1
+        sleep 1  # Give it a moment to start up
+        START_HOSTENGINE=true
+    fi
+    GROUPID=$(dcgmi group -c gpuinfo | awk '{print $NF}' | tr -d ' ')
+    dcgmi group -g $GROUPID -a $GPULIST >> "$LOG_FILE" 2>&1
+    dcgmi diag -g $GROUPID -r 1 > "$TMP_DCGM_OUT" 2>&1
+    cat "$TMP_DCGM_OUT" >> "$LOG_FILE"
+    dcgmi group -d $GROUPID >> "$LOG_FILE" 2>&1
+
+    # Terminate the host engine if it was manually started
+    if [ "$START_HOSTENGINE" = true ]; then
+        log_step "Terminating nv-hostengine..."
+        nv-hostengine -t >> "$LOG_FILE" 2>&1
+    fi
+
+    # Check for DCGM failures
+    DCGM_FAILED=0
+    if grep -i fail "$TMP_DCGM_OUT" > /dev/null; then
+      DCGM_FAILED=1
+    fi
+
+    # Check for ECC errors
+    nvidia-smi --query-gpu=ecc.errors.uncorrected.volatile.total --format=csv,noheader > "$TMP_ECC_ERRORS_OUT"
+    cat "$TMP_ECC_ERRORS_OUT" >> "$LOG_FILE"
+    ECC_ERRORS=$(awk -F', ' '{sum += $2} END {print sum}' "$TMP_ECC_ERRORS_OUT")
+    log_step "ECC Errors: $ECC_ERRORS"
+
+    # Check for NVLink errors
+    NVLINK_ERRORS=$(nvidia-smi nvlink -sc 0bz -i 0 2>/dev/null | grep -i "Error Count" | awk '{sum += $3} END {print sum}')
+    # Set to 0 if empty/null
+    NVLINK_ERRORS=${NVLINK_ERRORS:-0}
+    log_step "NVLink Errors: $NVLINK_ERRORS"
+
+    if [ $DCGM_FAILED -eq 1 ] || \
+       [ $ECC_ERRORS -gt 0 ] || \
+       [ $NVLINK_ERRORS -gt 0 ]; then
+        REASON="GPU issues detected: "
+        if [ $DCGM_FAILED -eq 1 ]; then
+          REASON+="DCGM test failed, "
+        fi
+        if [ $ECC_ERRORS -gt 0 ]; then
+          REASON+="ECC errors found ($ECC_ERRORS double-bit errors), "
+        fi
+        if [ $NVLINK_ERRORS -gt 0 ]; then
+          REASON+="NVLink errors detected ($NVLINK_ERRORS errors), "
+        fi
+        REASON+="see $LOG_FILE"
+        log_step "$REASON"
+        exit 1
+    fi
+fi

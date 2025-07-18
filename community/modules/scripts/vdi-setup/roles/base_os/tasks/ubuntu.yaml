@@ -53,8 +53,8 @@
 - name: Debug kernel GCC version extraction
   ansible.builtin.debug:
     msg: 
-      - "Raw kernel GCC version: {{ kernel_gcc_version.stdout }}"
-      - "Extracted required GCC version: {{ required_gcc_version }}"
+     - "Raw kernel GCC version: {{ kernel_gcc_version.stdout }}"
+    - "Extracted required GCC version: {{ required_gcc_version }}"
 
 - name: Get current GCC version
   ansible.builtin.shell: gcc --version | head -1 | grep -o '[0-9]*\.[0-9]*' | head -1
@@ -67,72 +67,72 @@
 
 - name: Debug current GCC version extraction
   ansible.builtin.debug:
-    msg: 
-      - "Raw current GCC version: {{ current_gcc_version.stdout }}"
-      - "Extracted current GCC major: {{ current_gcc_major }}"
+    msg:
+    - "Raw current GCC version: {{ current_gcc_version.stdout }}"
+    - "Extracted current GCC major: {{ current_gcc_major }}"
 
 - name: Debug GCC version information
   ansible.builtin.debug:
-    msg: 
-      - "Kernel was built with GCC {{ required_gcc_version }}"
-      - "Current system GCC version: {{ current_gcc_major }}"
-      - "GCC update needed: {{ required_gcc_version != current_gcc_major }}"
+    msg:
+    - "Kernel was built with GCC {{ required_gcc_version }}"
+    - "Current system GCC version: {{ current_gcc_major }}"
+    - "GCC update needed: {{ required_gcc_version != current_gcc_major }}"
 
 - name: Install required GCC version if different from current
   block:
-    - name: Install GCC {{ required_gcc_version }}
-      ansible.builtin.package:
-        name: "gcc-{{ required_gcc_version }}"
-        state: present
-      retries: 10
-      delay: 3
+  - name: Install GCC {{ required_gcc_version }}
+    ansible.builtin.package:
+      name: "gcc-{{ required_gcc_version }}"
+      state: present
+    retries: 10
+    delay: 3
 
-    - name: Install G++ {{ required_gcc_version }}
-      ansible.builtin.package:
-        name: "g++-{{ required_gcc_version }}"
-        state: present
-      retries: 10
-      delay: 3
+  - name: Install G++ {{ required_gcc_version }}
+    ansible.builtin.package:
+      name: "g++-{{ required_gcc_version }}"
+      state: present
+    retries: 10
+    delay: 3
 
-    - name: Set GCC {{ required_gcc_version }} as default
-      ansible.builtin.alternatives:
-        name: gcc
-        path: "/usr/bin/gcc-{{ required_gcc_version }}"
-        priority: "{{ required_gcc_version }}"
-        link: /usr/bin/gcc
+  - name: Set GCC {{ required_gcc_version }} as default
+    ansible.builtin.alternatives:
+      name: gcc
+      path: "/usr/bin/gcc-{{ required_gcc_version }}"
+      priority: "{{ required_gcc_version }}"
+      link: /usr/bin/gcc
 
-    - name: Set G++ {{ required_gcc_version }} as default
-      ansible.builtin.alternatives:
-        name: g++
-        path: "/usr/bin/g++-{{ required_gcc_version }}"
-        priority: "{{ required_gcc_version }}"
-        link: /usr/bin/g++
+  - name: Set G++ {{ required_gcc_version }} as default
+    ansible.builtin.alternatives:
+      name: g++
+      path: "/usr/bin/g++-{{ required_gcc_version }}"
+      priority: "{{ required_gcc_version }}"
+      link: /usr/bin/g++
 
-    - name: Verify GCC version after update
-      ansible.builtin.shell: gcc --version | head -1
-      register: updated_gcc_version
-      changed_when: false
+  - name: Verify GCC version after update
+    ansible.builtin.shell: gcc --version | head -1
+    register: updated_gcc_version
+    changed_when: false
 
-    - name: Debug updated GCC version
-      ansible.builtin.debug:
-        msg: "Updated GCC version: {{ updated_gcc_version.stdout }}"
+  - name: Debug updated GCC version
+    ansible.builtin.debug:
+      msg: "Updated GCC version: {{ updated_gcc_version.stdout }}"
 
-    - name: Verify G++ version after update
-      ansible.builtin.shell: g++ --version | head -1
-      register: updated_gpp_version
-      changed_when: false
+  - name: Verify G++ version after update
+    ansible.builtin.shell: g++ --version | head -1
+    register: updated_gpp_version
+    changed_when: false
 
-    - name: Debug updated G++ version
-      ansible.builtin.debug:
-        msg: "Updated G++ version: {{ updated_gpp_version.stdout }}"
+  - name: Debug updated G++ version
+    ansible.builtin.debug:
+      msg: "Updated G++ version: {{ updated_gpp_version.stdout }}"
 
-    - name: Verify alternatives are set correctly
-      ansible.builtin.shell: update-alternatives --display gcc
-      register: gcc_alternatives_check
-      changed_when: false
+  - name: Verify alternatives are set correctly
+    ansible.builtin.shell: update-alternatives --display gcc
+    register: gcc_alternatives_check
+    changed_when: false
 
-    - name: Debug GCC alternatives status
-      ansible.builtin.debug:
-        msg: "GCC alternatives status: {{ gcc_alternatives_check.stdout }}"
+  - name: Debug GCC alternatives status
+    ansible.builtin.debug:
+      msg: "GCC alternatives status: {{ gcc_alternatives_check.stdout }}"
 
   when: required_gcc_version != current_gcc_major

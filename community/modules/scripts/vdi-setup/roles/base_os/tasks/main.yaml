@@ -45,9 +45,9 @@
 - name: Ensure Python & tooling are installed
   ansible.builtin.package:
     name:
-      - python3
-      - python3-pip
-      - jq
+    - python3
+    - python3-pip
+    - jq
     state: present
 
 # GPU / vWS driver setup
