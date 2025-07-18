@@ -1,0 +1,69 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+---
+
+# Per-user configuration
+- name: Configure per-user VNC settings
+  include_tasks: vnc_user_config.yaml
+  loop: "{{ vdi_users_updated }}"
+  loop_control:
+    loop_var: vdi_user
+
+# Global VNC users mapping (for systemd service)
+- name: Template TigerVNC users file
+  ansible.builtin.template:
+    src: vncserver.users.j2
+    dest: /etc/tigervnc/vncserver.users
+    mode: '0644'
+  vars:
+    guac_map: "{{ vdi_users_updated }}"
+
+# Systemd units
+- name: Deploy per-user TigerVNC systemd unit (Ubuntu/Debian)
+  ansible.builtin.template:
+    src: vncserver@.service.ubuntu.j2
+    dest: "/etc/systemd/system/vncserver@{{ item.username }}.service"
+    mode: '0644'
+  vars:
+    display_number: "{{ item.display_number }}"
+  when: ansible_distribution in ["Ubuntu", "Debian"]
+  loop: "{{ vdi_users_updated }}"
+
+- name: Deploy TigerVNC systemd unit (Rocky)
+  ansible.builtin.template:
+    src: vncserver@.service.rocky.j2
+    dest: /etc/systemd/system/vncserver@.service
+    mode: '0644'
+  when: ansible_os_family == "RedHat"
+
+- name: Reload systemd daemon
+  ansible.builtin.systemd:
+    daemon_reload: yes
+
+# Enable & start each user's VNC server service
+- name: Enable & start TigerVNC (Ubuntu/Debian)
+  systemd:
+    name: "vncserver@{{ item.username }}"
+    enabled: yes
+    state: started
+  when: ansible_distribution in ["Ubuntu", "Debian"]
+  loop: "{{ vdi_users_updated }}"
+
+- name: Enable & start TigerVNC (Rocky)
+  systemd:
+    name: "vncserver@:{{ item.display_number }}"
+    enabled: yes
+    state: started
+  when: ansible_os_family == "RedHat"
+  loop: "{{ vdi_users_updated }}"
