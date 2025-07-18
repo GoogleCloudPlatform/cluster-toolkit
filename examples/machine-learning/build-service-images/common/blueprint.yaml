@@ -175,7 +175,7 @@ deployment_groups:
       disk_size: 100
       machine_type: n2-standard-16
 
-      source_image_family: ubuntu-accelerator-2204-amd64-with-nvidia-570
+      source_image: ubuntu-accelerator-2204-amd64-with-nvidia-570-v20250712
       source_image_project_id: [ubuntu-os-accelerator-images]
 
       image_family: $(vars.family)
