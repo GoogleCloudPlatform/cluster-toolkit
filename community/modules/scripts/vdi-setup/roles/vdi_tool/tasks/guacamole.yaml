@@ -124,7 +124,6 @@
 - name: Start Guacamole PostgreSQL container
   ansible.builtin.command: >
     docker run -d --name guac_db --network guac_net
-    -p 5432:5432
     -e POSTGRES_USER=guacamole_db
     -e POSTGRES_PASSWORD={{ database_password }}
     -e POSTGRES_DB=guacamole_db
@@ -137,16 +136,25 @@
   - postgres_start.rc != 0
   - "'already in use' not in postgres_start.stderr"
 
-- name: Wait for PostgreSQL on host port
+- name: Wait for PostgreSQL container to be ready
   ansible.builtin.wait_for:
     host: 127.0.0.1
     port: 5432
     delay: 2
     timeout: 60
+  ignore_errors: true
+
+- name: Wait for PostgreSQL via Docker exec
+  ansible.builtin.command: docker exec guac_db pg_isready -U guacamole_db
+  register: postgres_ready
+  until: postgres_ready.rc == 0
+  retries: 30
+  delay: 2
 
 - name: Start guacd container
   ansible.builtin.command: >
-    docker run -d --name guacd --network host
+    docker run -d --name guacd --network guac_net
+    -p 4822:4822
     --restart always
     guacamole/guacd:latest
   register: guacd_start
@@ -156,14 +164,15 @@
 
 - name: Start Guacamole webapp container
   ansible.builtin.command: >
-    docker run -d --name guac_app --network host
-    -e POSTGRES_HOSTNAME=127.0.0.1
+    docker run -d --name guac_app --network guac_net
+    -p {{ vdi_webapp_port }}:8080
+    -e POSTGRES_HOSTNAME=guac_db
     -e POSTGRES_PORT=5432
     -e POSTGRES_DATABASE=guacamole_db
     -e POSTGRES_USER=guacamole_db
     -e POSTGRES_PASSWORD={{ database_password }}
     -e POSTGRES_AUTO_CREATE_ACCOUNTS=true
-    -e GUACD_HOSTNAME=localhost
+    -e GUACD_HOSTNAME=guacd
     -e GUACD_PORT=4822
     --restart always
     guacamole/guacamole:latest
@@ -171,6 +180,15 @@
   failed_when:
   - guac_app_start.rc != 0
   - "'already in use' not in guac_app_start.stderr"
+
+- name: Debug container status before waiting for Guacamole
+  ansible.builtin.command: docker ps
+  register: container_status
+  changed_when: false
+
+- name: Show container status
+  ansible.builtin.debug:
+    msg: "{{ container_status.stdout }}"
 
 - name: Wait for Guacamole HTTP endpoint
   ansible.builtin.wait_for:
