@@ -196,7 +196,7 @@ variable "network_description" {
 
 variable "ips_per_nat" {
   type        = number
-  description = "The number of IP addresses to allocate for each regional Cloud NAT (set to 0 to disable NAT)"
+  description = "The number of IP addresses to allocate for each regional Cloud NAT (set to 0 to disable NAT). The number of NAT IPs depend on the port reservation allocated for each node and the number of ports that a single NAT IP can serve. Refer this documentation for more details: https://cloud.google.com/nat/docs/ports-and-addresses#port-reservation-examples"
   default     = 2
 }
 

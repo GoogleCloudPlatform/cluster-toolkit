@@ -1615,6 +1615,9 @@ class Lookup:
         nodeset_name = self.node_nodeset_name(node_name)
         return self.cfg.nodeset_tpu.get(nodeset_name) is not None
 
+    def nodeset_is_tpu(self, nodeset_name=None) -> bool:
+        return self.cfg.nodeset_tpu.get(nodeset_name) is not None
+
     def node_is_fr(self, node_name:str) -> bool:
         return bool(self.node_nodeset(node_name).future_reservation)
 
@@ -1638,6 +1641,11 @@ class Lookup:
     def node_region(self, node_name=None):
         nodeset = self.node_nodeset(node_name)
         return parse_self_link(nodeset.subnetwork).region
+
+    def nodeset_accelerator_topology(self, nodeset_name: str) -> Optional[str]:
+        if not self.nodeset_is_tpu(nodeset_name):
+            return self.cfg.nodeset[nodeset_name].get('accelerator_topology')
+        return None
 
     def nodeset_prefix(self, nodeset_name):
         return f"{self.cfg.slurm_cluster_name}-{nodeset_name}"

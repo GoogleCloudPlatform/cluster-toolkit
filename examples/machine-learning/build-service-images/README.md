@@ -59,5 +59,5 @@ infrastructure (VPC), please perform following:
 
 ```sh
 gcluster destroy build_a3m-slurm-image/$USER-a3m-slurm-image/ --auto-approve
-gcluster destroy build_common-slurm-image/$USER-a3m-slurm-image/ --auto-approve
+gcluster destroy build_common-slurm-image/$USER-common-slurm-image/ --auto-approve
 ```
