@@ -380,3 +380,36 @@ variable "resource_manager_tags" {
     error_message = "All Resource Manager tag keys should be in the format 'tagKeys/[0-9]+'"
   }
 }
+variable "with_kms" {
+  description = "Enable or disable KMS resource creation"
+  type        = bool
+  default     = false
+}
+
+variable "kms" {
+  description = "KMS configuration. If location is not specified, var.region will be used."
+  type = object({
+    location = optional(string)
+    rotation = optional(string, "2592000s")
+  })
+  default = {}
+}
+
+
+variable "kms_key" {
+  description = "Key to use to encrypt/decrypt secrets"
+  type        = string
+  default     = null
+}
+
+variable "munge_key" {
+  description = "Specific munge key to use"
+  type        = string
+  default     = null
+}
+
+variable "jwt_key" {
+  description = "Specific libjwt key to use"
+  type        = string
+  default     = null
+}
