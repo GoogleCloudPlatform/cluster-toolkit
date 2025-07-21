@@ -22,6 +22,16 @@ vars:
   family:
   project_id:
   deployment_name:
+  packer_metadata:
+    user-data: |
+      #cloud-config
+      write_files:
+      - path: /etc/apt/apt.conf.d/20auto-upgrades
+        permissions: '0644'
+        owner: root
+        content: |
+          APT::Periodic::Update-Package-Lists "0";
+          APT::Periodic::Unattended-Upgrade "0";
 
   runner_install_slurm:
     type: shell

@@ -315,13 +315,4 @@ deployment_groups:
       # patching their systems against vulnerabilities.
       #
       # To enable unattended upgrades, please remove this section.
-      metadata:
-        user-data: |
-          #cloud-config
-          write_files:
-          - path: /etc/apt/apt.conf.d/20auto-upgrades
-            permissions: '0644'
-            owner: root
-            content: |
-              APT::Periodic::Update-Package-Lists "0";
-              APT::Periodic::Unattended-Upgrade "0";
+      metadata: $(vars.packer_metadata)
