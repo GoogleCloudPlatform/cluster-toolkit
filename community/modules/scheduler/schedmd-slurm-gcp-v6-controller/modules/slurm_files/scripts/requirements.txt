@@ -16,3 +16,4 @@ httplib2==0.22.0
 more-executors==2.11.4
 pyyaml==6.0.2
 requests==2.32.4
+google-cloud-kms==3.5.1

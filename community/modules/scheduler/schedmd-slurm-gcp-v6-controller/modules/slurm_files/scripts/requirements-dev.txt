@@ -7,3 +7,4 @@ types-mock
 types-httplib2
 types-requests
 types-PyYAML
+google-cloud-kms
