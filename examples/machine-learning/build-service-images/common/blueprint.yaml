@@ -37,7 +37,6 @@ deployment_groups:
           Package: nvidia-container-toolkit nvidia-container-toolkit-base libnvidia-container-tools libnvidia-container1
           Pin: version 1.17.7-1
           Pin-Priority: 100
-      - $(vars.runner_disable_unattended_upgrades)
       - type: data
         destination: /var/tmp/slurm_vars.json
         content: |
@@ -198,3 +197,23 @@ deployment_groups:
 
       image_family: $(vars.family)
       omit_external_ip: false
+
+      # Unattended upgrades are disabled in this blueprint so that software does not
+      # get updated daily and lead to potential instability in the cluster environment.
+      #
+      # Unattended Upgrades installs available security updates from the Ubuntu
+      # security pocket for installed packages daily by default. Administrators who
+      # disable this feature assume all responsibility for manually reviewing and
+      # patching their systems against vulnerabilities.
+      #
+      # To enable unattended upgrades, please remove this section.
+      metadata:
+        user-data: |
+          #cloud-config
+          write_files:
+          - path: /etc/apt/apt.conf.d/20auto-upgrades
+            permissions: '0644'
+            owner: root
+            content: |
+              APT::Periodic::Update-Package-Lists "0";
+              APT::Periodic::Unattended-Upgrade "0";
