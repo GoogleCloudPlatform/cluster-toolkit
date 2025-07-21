@@ -75,7 +75,7 @@ vars:
       - name: Install Cluster Health Scanner
         hosts: localhost
         vars:
-          git_version: a3d3e15b1aaad987d5a162c84088b1e1caacaace
+          git_version: d9268a0a331eb5c4f7214b33fc0814f60afce846
         tasks:
         - name: Clone cluster-health-scanner
           ansible.builtin.git:
