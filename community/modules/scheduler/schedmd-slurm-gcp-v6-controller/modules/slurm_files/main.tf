@@ -108,7 +108,7 @@ locals {
   slurm_log_dir        = var.slurm_log_dir != null ? abspath(var.slurm_log_dir) : null
 
   munge_mount = var.enable_hybrid ? {
-    server_ip     = lookup(var.munge_mount, "server_ip", coalesce(var.slurm_control_addr, var.slurm_control_host))
+    server_ip     = lookup(var.munge_mount, "server_ip", "$controller")
     remote_mount  = lookup(var.munge_mount, "remote_mount", "/etc/munge/")
     fs_type       = lookup(var.munge_mount, "fs_type", "nfs")
     mount_options = lookup(var.munge_mount, "mount_options", "")
