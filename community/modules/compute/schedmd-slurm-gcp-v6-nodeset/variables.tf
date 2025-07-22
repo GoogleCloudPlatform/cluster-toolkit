@@ -371,9 +371,7 @@ variable "spot_instance_config" {
   type = object({
     termination_action = string
   })
-  default = {
-    termination_action = "STOP"
-  }
+  default = null
 }
 
 variable "bandwidth_tier" {
