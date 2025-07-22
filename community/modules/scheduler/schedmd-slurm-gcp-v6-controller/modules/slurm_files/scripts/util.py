@@ -299,7 +299,7 @@ def parse_gcp_timestamp(s: str) -> datetime:
 def universe_domain() -> str:
     try:
         return instance_metadata("attributes/universe_domain")
-    except Exception:
+    except MetadataNotFoundError:
         return DEFAULT_UNIVERSE_DOMAIN
 
 
@@ -428,7 +428,7 @@ def map_with_futures(func, seq):
 
 def should_mount_slurm_bucket() -> bool:
     try:
-        return instance_metadata("attributes/slurm_bucket_mount").lower() == "true"
+        return instance_metadata("attributes/slurm_bucket_mount", silent=True).lower() == "true"
     except MetadataNotFoundError:
         return False
 
@@ -591,7 +591,7 @@ def _fill_cfg_defaults(cfg: NSDict) -> NSDict:
         cfg.slurm_bin_dir = slurmdirs.prefix / "bin"
     if not cfg.slurm_control_host:
         try:
-            control_dns_name = instance_metadata("attributes/slurm_control_dns")
+            control_dns_name = instance_metadata("attributes/slurm_control_dns", silent=True)
             cfg.slurm_control_host = control_dns_name
         except MetadataNotFoundError:
             cfg.slurm_control_host = f"{cfg.slurm_cluster_name}-controller"
@@ -1167,23 +1167,23 @@ ROOT_URL = "http://metadata.google.internal/computeMetadata/v1"
 class MetadataNotFoundError(Exception):
     pass
 
-def get_metadata(path, root=ROOT_URL):
+def get_metadata(path:str, silent=False) -> str:
     """Get metadata relative to metadata/computeMetadata/v1"""
     HEADERS = {"Metadata-Flavor": "Google"}
-    url = f"{root}/{path}"
+    url = f"{ROOT_URL}/{path}"
     try:
         resp = requests_lib.get(url, headers=HEADERS)
         resp.raise_for_status()
         return resp.text
     except requests_lib.exceptions.HTTPError:
-        log.warn(f"metadata not found ({url})")
+        if not silent:
+            log.warning(f"metadata not found ({url})")
         raise MetadataNotFoundError(f"failed to get_metadata from {url}")
 
 
 @lru_cache(maxsize=None)
-def instance_metadata(path):
-    """Get instance metadata"""
-    return get_metadata(path, root=f"{ROOT_URL}/instance")
+def instance_metadata(path: str, silent:bool=False) -> str:
+    return get_metadata(f"instance/{path}", silent=silent)
 
 def instance_role():
     return instance_metadata("attributes/slurm_instance_role")
@@ -1192,10 +1192,6 @@ def instance_role():
 def instance_login_group():
     return instance_metadata("attributes/slurm_login_group")
 
-@lru_cache(maxsize=None)
-def project_metadata(key):
-    """Get project metadata project/attributes/<slurm_cluster_name>-<path>"""
-    return get_metadata(key, root=f"{ROOT_URL}/project/attributes")
 
 def natural_sort(text):
     def atoi(text):
@@ -1619,6 +1615,9 @@ class Lookup:
         nodeset_name = self.node_nodeset_name(node_name)
         return self.cfg.nodeset_tpu.get(nodeset_name) is not None
 
+    def nodeset_is_tpu(self, nodeset_name=None) -> bool:
+        return self.cfg.nodeset_tpu.get(nodeset_name) is not None
+
     def node_is_fr(self, node_name:str) -> bool:
         return bool(self.node_nodeset(node_name).future_reservation)
 
@@ -1642,6 +1641,11 @@ class Lookup:
     def node_region(self, node_name=None):
         nodeset = self.node_nodeset(node_name)
         return parse_self_link(nodeset.subnetwork).region
+
+    def nodeset_accelerator_topology(self, nodeset_name: str) -> Optional[str]:
+        if not self.nodeset_is_tpu(nodeset_name):
+            return self.cfg.nodeset[nodeset_name].get('accelerator_topology')
+        return None
 
     def nodeset_prefix(self, nodeset_name):
         return f"{self.cfg.slurm_cluster_name}-{nodeset_name}"

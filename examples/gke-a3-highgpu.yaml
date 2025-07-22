@@ -33,6 +33,7 @@ deployment_groups:
     source: modules/network/vpc
     settings:
       subnetwork_name: $(vars.deployment_name)-subnet
+      ips_per_nat: 6
       mtu: 8244
       secondary_ranges_list:
       - subnetwork_name: $(vars.deployment_name)-subnet

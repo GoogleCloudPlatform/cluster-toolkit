@@ -30,13 +30,13 @@ deployment_groups:
         enabled: true
         world_writable: true
       runners:
+      - $(vars.runner_install_cluster_health_scanner)
       - type: data
         destination: /etc/apt/preferences.d/block-broken-nvidia-container
         content: |
           Package: nvidia-container-toolkit nvidia-container-toolkit-base libnvidia-container-tools libnvidia-container1
           Pin: version 1.17.7-1
           Pin-Priority: 100
-      - $(vars.runner_disable_unattended_upgrades)
       - type: shell
         destination: hold_google_services.sh
         content: |
@@ -300,8 +300,19 @@ deployment_groups:
       disk_size: 100
       machine_type: c2-standard-8
 
-      source_image_family: ubuntu-accelerator-2204-amd64-with-nvidia-570
+      source_image: ubuntu-accelerator-2204-amd64-with-nvidia-570-v20250712
       source_image_project_id: [ubuntu-os-accelerator-images]
 
       image_family: $(vars.family)
       omit_external_ip: false
+
+      # Unattended upgrades are disabled in this blueprint so that software does not
+      # get updated daily and lead to potential instability in the cluster environment.
+      #
+      # Unattended Upgrades installs available security updates from the Ubuntu
+      # security pocket for installed packages daily by default. Administrators who
+      # disable this feature assume all responsibility for manually reviewing and
+      # patching their systems against vulnerabilities.
+      #
+      # To enable unattended upgrades, please remove this section.
+      metadata: $(vars.packer_metadata)

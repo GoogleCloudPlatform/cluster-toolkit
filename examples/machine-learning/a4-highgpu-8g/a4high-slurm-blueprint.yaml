@@ -24,7 +24,7 @@ vars:
   # Image settings
   base_image:
     project: ubuntu-os-accelerator-images
-    family: ubuntu-accelerator-2204-amd64-with-nvidia-570
+    image: ubuntu-accelerator-2204-amd64-with-nvidia-570-v20250712
   image_build_machine_type: n2-standard-16
   build_slurm_from_git_ref: 6.10.0
   # Cluster env settings
@@ -70,23 +70,6 @@ deployment_groups:
           Package: nvidia-container-toolkit nvidia-container-toolkit-base libnvidia-container-tools libnvidia-container1
           Pin: version 1.17.7-1
           Pin-Priority: 100
-      - type: shell
-        destination: disable_unattended_upgrades.sh
-        content: |
-          #!/bin/bash
-          # Unattended upgrades are disabled in this blueprint so that software does not
-          # get updated daily and lead to potential instability in the cluster environment.
-          #
-          # Unattended Upgrades installs available security updates from the Ubuntu
-          # security pocket for installed packages daily by default. Administrators who
-          # disable this feature assume all responsibility for manually reviewing and
-          # patching their systems against vulnerabilities.
-          #
-          # To enable unattended upgrades, please remove this section.
-          set -e -o pipefail
-          systemctl stop unattended-upgrades.service
-          systemctl disable unattended-upgrades.service
-          systemctl mask unattended-upgrades.service
       - type: data
         destination: /var/tmp/slurm_vars.json
         content: |
@@ -148,6 +131,24 @@ deployment_groups:
               ansible.builtin.apt:
                 deb: "{{ cuda_repo_filename }}"
                 state: present
+            # The following 2 tasks work around a temporary issue with Ubuntu
+            # packaging of NVIDIA 570 driver series for kernel 6.8.0-1032
+            # This command ensures that any holds are removed before attempting an upgrade.
+            # We ignore failures in case the packages were not held.
+            - name: Unhold NVIDIA driver packages
+              ansible.builtin.command:
+                cmd: apt-mark unhold linux-modules-nvidia-570-server-open-gcp linux-modules-nvidia-570-server-open-6.8.0-1032-gcp
+              become: true
+              changed_when: false
+              failed_when: false
+            - name: Install latest NVIDIA driver metapackage and kernel module
+              ansible.builtin.apt:
+                name:
+                  - linux-modules-nvidia-570-server-open-gcp
+                  - linux-modules-nvidia-570-server-open-6.8.0-1032-gcp
+                state: latest
+                update_cache: yes
+              become: true
             - name: Reduce NVIDIA repository priority
               ansible.builtin.copy:
                 dest: /etc/apt/preferences.d/cuda-repository-pin-600
@@ -237,10 +238,30 @@ deployment_groups:
     settings:
       disk_size: $(vars.disk_size_gb)
       machine_type: $(vars.image_build_machine_type)
-      source_image_family: $(vars.base_image.family)
+      source_image: $(vars.base_image.image)
       source_image_project_id: [$(vars.base_image.project)]
       image_family: $(vars.instance_image.family)
       omit_external_ip: false
+
+      # Unattended upgrades are disabled in this blueprint so that software does not
+      # get updated daily and lead to potential instability in the cluster environment.
+      #
+      # Unattended Upgrades installs available security updates from the Ubuntu
+      # security pocket for installed packages daily by default. Administrators who
+      # disable this feature assume all responsibility for manually reviewing and
+      # patching their systems against vulnerabilities.
+      #
+      # To enable unattended upgrades, please remove this section.
+      metadata:
+        user-data: |
+          #cloud-config
+          write_files:
+          - path: /etc/apt/apt.conf.d/20auto-upgrades
+            permissions: '0644'
+            owner: root
+            content: |
+              APT::Periodic::Update-Package-Lists "0";
+              APT::Periodic::Unattended-Upgrade "0";
     use:
     - slurm-image-network
     - slurm-build-script

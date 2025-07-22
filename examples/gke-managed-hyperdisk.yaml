@@ -154,7 +154,8 @@ deployment_groups:
         from transformers import AutoTokenizer
         import numpy as np
         tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
-        tokenized_data = tokenizer(dataset["sentence"], return_tensors="np", padding=True)
+        sentences = [str(s) for s in dataset["sentence"]]
+        tokenized_data = tokenizer(sentences, return_tensors="np", padding=True)
         tokenized_data = dict(tokenized_data)
         labels = np.array(dataset["label"])
         from transformers import TFAutoModelForSequenceClassification
@@ -195,7 +196,8 @@ deployment_groups:
         from transformers import AutoTokenizer
         import numpy as np
         tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
-        tokenized_data = tokenizer(dataset["sentence"], return_tensors="np", padding=True)
+        sentences = [str(s) for s in dataset["sentence"]]
+        tokenized_data = tokenizer(sentences, return_tensors="np", padding=True)
         tokenized_data = dict(tokenized_data)
         labels = np.array(dataset["label"])
         from transformers import TFAutoModelForSequenceClassification
@@ -236,7 +238,8 @@ deployment_groups:
         from transformers import AutoTokenizer
         import numpy as np
         tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
-        tokenized_data = tokenizer(dataset["sentence"], return_tensors="np", padding=True)
+        sentences = [str(s) for s in dataset["sentence"]]
+        tokenized_data = tokenizer(sentences, return_tensors="np", padding=True)
         tokenized_data = dict(tokenized_data)
         labels = np.array(dataset["label"])
         from transformers import TFAutoModelForSequenceClassification
