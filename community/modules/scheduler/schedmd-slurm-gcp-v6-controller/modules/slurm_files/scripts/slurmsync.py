@@ -126,7 +126,7 @@ def start_instance_op(node: str) -> Any:
     return lookup().compute.instances().start(
         project=lookup().project,
         zone=inst.zone,
-        instance=inst,
+        instance=inst.name,
     )
 
 
