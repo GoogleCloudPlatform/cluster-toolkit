@@ -33,6 +33,16 @@ output "nodeset" {
   }
 
   precondition {
+    condition     = var.accelerator_topology == null || var.enable_placement
+    error_message = "accelerator_topology requires enable_placement to be set to true."
+  }
+
+  precondition {
+    condition     = (var.accelerator_topology == null) || try(tonumber(split("x", var.accelerator_topology)[1]) % local.guest_accelerator[0].count == 0, false)
+    error_message = "accelerator_topology must be divisible by number of gpus in machine."
+  }
+
+  precondition {
     condition     = var.placement_max_distance == null || var.enable_placement
     error_message = "placement_max_distance requires enable_placement to be set to true."
   }
