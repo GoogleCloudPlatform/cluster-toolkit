@@ -72,6 +72,16 @@ To make use of these other models, replace `a4h_reservation_name` in the deploym
 
 `a4h_enable_spot_vm: true` for spot or `a4h_dws_flex_enabled: true` for DWS Flex-Start.
 
+### GCS FUSE
+
+This blueprint includes two GCS FUSE mounts to provide a simple and scalable way
+to manage data.
+
+1. `/gcs` is a general purpose mount that can be used for shared tools and data.
+1. `/gcs-checkpoints` is an optimized mount for writing and reading checkpoints. It
+    uses the local SSD for caching and enables parallel downloads to improve
+    performance.
+
 ### Deploy the VMs
 
 ```bash

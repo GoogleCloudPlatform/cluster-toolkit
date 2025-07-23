@@ -29,3 +29,13 @@ We provide ways to enable the alternative provisioning models in the `a3ultra-sl
 To make use of these other models, replace `a3u_reservation_name` in the deployment file with the variable of choice below.
 
 `a3u_enable_spot_vm: true` for spot or `a3u_dws_flex_enabled: true` for DWS Flex-Start.
+
+### GCS FUSE
+
+This blueprint includes two GCS FUSE mounts to provide a simple and scalable way
+to manage data.
+
+1. `/gcs` is a general purpose mount that can be used for shared tools and data.
+1. `/gcs-checkpoints` is an optimized mount for writing and reading checkpoints. It
+    uses the local SSD for caching and enables parallel downloads to improve
+    performance.
