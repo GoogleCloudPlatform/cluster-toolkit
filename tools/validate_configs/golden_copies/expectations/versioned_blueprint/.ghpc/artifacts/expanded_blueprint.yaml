@@ -39,7 +39,7 @@ vars:
   project_id: invalid-project
   region: us-central1
   slurm_image:
-    family: slurm-gcp-6-9-hpc-rocky-linux-8
+    family: slurm-gcp-6-10-hpc-rocky-linux-8
     project: schedmd-slurm-public
   zone: us-central1-a
 deployment_groups:
