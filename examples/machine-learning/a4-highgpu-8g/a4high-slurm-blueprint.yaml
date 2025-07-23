@@ -356,6 +356,98 @@ deployment_groups:
   #   outputs:
   #   - network_storage
 
+  # The following four modules create and mount a Cloud Storage Bucket with
+  # gcsfuse.  They are optional but recommended for many use cases.
+  # (Optional) The following creates a GCS bucket that will be mounted
+  # using gcsfuse. If you prefer to use a pre-existing bucket, use the
+  # modules/file-system/pre-existing-network-storage module.
+  - id: gcs_bucket
+    source: community/modules/file-system/cloud-storage-bucket
+    settings:
+      enable_hierarchical_namespace: true
+      local_mount: /gcs
+      random_suffix: true
+      mount_options: "implicit-dirs,\
+                      metadata-cache-negative-ttl-secs=0,\
+                      metadata-cache-ttl-secs=-1,\
+                      stat-cache-max-size-mb=-1,\
+                      type-cache-max-size-mb=-1,\
+                      enable-streaming-writes=true,\
+                      dir-mode=777,\
+                      file-mode=777,\
+                      allow_other"
+
+  # (Optional) Create a mount-point optimized for checkpoint writing/reading Uses
+  # local-ssd for and enables parallel downloads.  For more information on
+  # these flags, see
+  # https://github.com/GoogleCloudPlatform/gcsfuse/tree/master/samples/gcsfuse_config
+  - id: gcs_checkpoints
+    source: modules/file-system/pre-existing-network-storage
+    settings:
+      remote_mount: $(gcs_bucket.gcs_bucket_name)
+      local_mount: /gcs-checkpoints
+      fs_type: gcsfuse
+      mount_options: "implicit-dirs,\
+                      metadata-cache-negative-ttl-secs=0,\
+                      metadata-cache-ttl-secs=-1,\
+                      stat-cache-max-size-mb=-1,\
+                      type-cache-max-size-mb=-1,\
+                      file-cache-max-size-mb=-1,\
+                      file-cache-cache-file-for-range-read=true,\
+                      file-cache-enable-parallel-downloads=true,\
+                      cache-dir=/mnt/localssd,\
+                      enable-streaming-writes=true,\
+                      dir-mode=777,\
+                      file-mode=777,\
+                      allow_other"
+
+  # (Optional) Create a mount-point optimized for reading training data.
+  # For more information on these flags, see
+  # https://github.com/GoogleCloudPlatform/gcsfuse/tree/master/samples/gcsfuse_config
+  # If your training dataset fits on localssd, then you may want to enable file
+  # cache as well, which is done by adding
+  # cache-dir=/mnt/localssd,\
+  # file-cache-max-size-mb=<DATASET_SIZE>,\
+  # file-cache-cache-file-for-range-read=true,\
+  # to the mount_options.
+  - id: gcs_training_data
+    source: modules/file-system/pre-existing-network-storage
+    settings:
+      remote_mount: $(gcs_bucket.gcs_bucket_name)
+      local_mount: /gcs-training-data
+      fs_type: gcsfuse
+      mount_options: "implicit-dirs,\
+                      metadata-cache-negative-ttl-secs=0,\
+                      metadata-cache-ttl-secs=-1,\
+                      stat-cache-max-size-mb=-1,\
+                      type-cache-max-size-mb=-1,\
+                      enable-streaming-writes=true,\
+                      dir-mode=777,\
+                      file-mode=777,\
+                      allow_other"
+
+  # (Optional) Create a mount-point optimized for model serving.
+  # For more information on these flags, see
+  # https://github.com/GoogleCloudPlatform/gcsfuse/tree/master/samples/gcsfuse_config
+  - id: gcs_model_serving
+    source: modules/file-system/pre-existing-network-storage
+    settings:
+      remote_mount: $(gcs_bucket.gcs_bucket_name)
+      local_mount: /gcs-model-serving
+      fs_type: gcsfuse
+      mount_options: "implicit-dirs,\
+                      cache-dir=/mnt/localssd,\
+                      metadata-cache-negative-ttl-secs=0,\
+                      metadata-cache-ttl-secs=-1,\
+                      stat-cache-max-size-mb=-1,\
+                      type-cache-max-size-mb=-1,\
+                      file-cache-max-size-mb=-1,\
+                      file-cache-cache-file-for-range-read=true,\
+                      file-cache-enable-parallel-downloads=true,\
+                      dir-mode=777,\
+                      file-mode=777,\
+                      allow_other"
+
 - group: cluster
   modules:
   - id: a4high_startup
@@ -372,6 +464,12 @@ deployment_groups:
             "data-root": "$(vars.local_ssd_mountpoint)/docker"
           }
       runners:
+      - $(gcs_checkpoints.client_install_runner)
+      - $(gcs_checkpoints.mount_runner)
+      - $(gcs_training_data.client_install_runner)
+      - $(gcs_training_data.mount_runner)
+      - $(gcs_model_serving.client_install_runner)
+      - $(gcs_model_serving.mount_runner)
       - type: data
         destination: /etc/enroot/enroot.conf
         content: |
@@ -575,6 +673,7 @@ deployment_groups:
     - a4high_partition
     - slurm_login
     - homefs
+    - gcs_bucket
     settings:
       enable_controller_public_ips: true
       instance_image_custom: true
