@@ -37,29 +37,29 @@ vars:
   authorized_cidr:
 
   system_node_pool_disk_size_gb: 100
-  g4_node_pool_disk_size_gb: 100
+  # g4_node_pool_disk_size_gb: 100
 
 
 deployment_groups:
 - group: primary
   modules:
-  - id: gke-g4-net
+  - id: gke-g4-net-0
     source: modules/network/vpc
     settings:
-      network_name: $(vars.deployment_name)-net
+      network_name: $(vars.deployment_name)-net-0
       subnetworks:
-      - subnet_name: $(vars.deployment_name)-sub
+      - subnet_name: $(vars.deployment_name)-sub-0
         subnet_region: $(vars.region)
         subnet_ip: 192.168.0.0/24
       secondary_ranges_list:
-      - subnetwork_name: $(vars.deployment_name)-sub
+      - subnetwork_name: $(vars.deployment_name)-sub-0
         ranges:
         - range_name: pods
           ip_cidr_range: 10.64.0.0/19
         - range_name: services
           ip_cidr_range: 10.65.0.0/19
       firewall_rules:
-      - name: $(vars.deployment_name)-internal
+      - name: $(vars.deployment_name)-internal-0
         ranges: [192.168.0.0/24]
         allow:
         - protocol: tcp
@@ -68,19 +68,24 @@ deployment_groups:
           ports: ["0-65535"]
         - protocol: icmp
 
-  - id: gke-g4-rdma-net
+  - id: gke-g4-net-1
     source: modules/network/vpc
     settings:
-      network_name: $(vars.deployment_name)-rdma-net
-      network_profile: https://www.googleapis.com/compute/beta/projects/$(vars.project_id)/global/networkProfiles/$(vars.zone)-vpc-falcon
-      network_routing_mode: REGIONAL
-      enable_cloud_router: false
-      enable_cloud_nat: false
+      network_name: $(vars.deployment_name)-net-1
+      ips_per_nat: 6
       subnetworks:
-      - subnet_name: $(vars.deployment_name)-rdma-sub
+      - subnet_name: $(vars.deployment_name)-sub-1
         subnet_region: $(vars.region)
-        subnet_ip: 192.168.1.0/24
-        region: $(vars.region)
+        subnet_ip: 192.168.64.0/18
+      firewall_rules:
+      - name: $(vars.deployment_name)-internal-1
+        ranges: [192.168.0.0/16]
+        allow:
+        - protocol: tcp
+          ports: ["0-65535"]
+        - protocol: udp
+          ports: ["0-65535"]
+        - protocol: icmp
 
   - id: node_pool_service_account
     source: community/modules/project/service-account
@@ -108,7 +113,7 @@ deployment_groups:
 
   - id: g4-cluster
     source: modules/scheduler/gke-cluster
-    use: [gke-g4-net, workload_service_account]
+    use: [gke-g4-net-0, workload_service_account]
     settings:
       system_node_pool_machine_type: "e2-standard-16"
       system_node_pool_disk_size_gb: $(vars.system_node_pool_disk_size_gb)
@@ -124,10 +129,10 @@ deployment_groups:
       additional_networks:
         $(concat(
           [{
-            network=gke-g4-rdma-net.network_name,
-            subnetwork=gke-g4-rdma-net.subnetwork_name,
+            network=gke-g4-net-1.network_name,
+            subnetwork=gke-g4-net-1.subnetwork_name,
             subnetwork_project=vars.project_id,
-            nic_type="IRDMA",
+            nic_type="GVNIC",
             queue_count=null,
             network_ip=null,
             stack_type=null,
@@ -151,18 +156,18 @@ deployment_groups:
     source: modules/compute/gke-node-pool
     use: [g4-cluster, node_pool_service_account]
     settings:
-      machine_type: g4-standard-48
+      machine_type: g4-standard-96
       auto_upgrade: true
       zones: [$(vars.zone)]
-      disk_size_gb: $(vars.g4_node_pool_disk_size_gb)
+      # disk_size_gb: $(vars.g4_node_pool_disk_size_gb)
       static_node_count: $(vars.static_node_count)
       additional_networks:
         $(concat(
           [{
-            network=gke-g4-rdma-net.network_name,
-            subnetwork=gke-g4-rdma-net.subnetwork_name,
+            network=gke-g4-net-1.network_name,
+            subnetwork=gke-g4-net-1.subnetwork_name,
             subnetwork_project=vars.project_id,
-            nic_type="IRDMA",
+            nic_type="GVNIC",
             queue_count=null,
             network_ip=null,
             stack_type=null,
