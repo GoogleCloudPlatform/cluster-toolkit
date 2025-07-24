@@ -13,6 +13,8 @@ This module simplifies the following functionality:
   * **Raw String:** Specify manifests directly within the module configuration using the `content: manifest_body` format.
   * **File/Template/Directory Reference:** Set `source` to the path to:
     * A single URL to a manifest file. Ex.: `https://github.com/.../myrepo/manifest.yaml`.
+
+    > **Note:** Applying from a URL has important limitations. Please review the [Considerations & Callouts for Applying from URLs](#applying-manifests-from-urls-considerations--callouts) section below.
     * A single local YAML manifest file (`.yaml`). Ex.: `./manifest.yaml`.
     * A template file (`.tftpl`) to generate a manifest. Ex.: `./template.yaml.tftpl`. You can pass the variables to format the template file in `template_vars`.
     * A directory containing multiple YAML or template files. Ex: `./manifests/`. You can pass the variables to format the template files in `template_vars`.
@@ -95,6 +97,73 @@ You can specify a particular kueue version that you would like to use using the 
 >
 > Terraform may apply resources in parallel, leading to potential dependency issues. If a resource's dependencies aren't ready, it will be applied again up to 15 times.
 
+## Callouts
+
+### Applying Manifests from URLs: Considerations & Callouts
+
+While this module supports applying manifests directly from remote `http://` or `https://` URLs, this method introduces complexities not present when using local files. For production environments, we recommend sourcing manifests from local paths or a version-controlled Git repository. Moreover, this method will be deprecated soon. Hence we recommend to use other methods to source manifests.
+
+If you choose to use the URL method, be aware of the following potential issues and their solutions.
+
+#### **1. Apply Order and Race Conditions**
+
+The module applies manifests from the `apply_manifests` list in parallel. This can create a **race condition** if one manifest depends on another. The most common example is applying a manifest with custom resources (like a `ClusterQueue`) at the same time as the manifest that defines it (the `CustomResourceDefinition` or CRD).
+
+There is **no guarantee** that the CRD will be applied before the resource that uses it. This can lead to non-deterministic deployment failures with errors like:
+
+```Error: resource [kueue.x-k8s.io/v1beta1/ClusterQueue] isn't valid for cluster```
+
+##### **Recommended Workaround: Two-Stage Apply**
+
+To ensure a reliable deployment, you must manually enforce the correct order of operations.
+
+1. **Initial Deployment:** In your blueprint, include **only** the manifest(s) containing the `CustomResourceDefinition` (CRD) resources in the `apply_manifests` list.
+
+    *Example `settings` for the first run:*
+
+    ```yaml
+    settings:
+      apply_manifests:
+      # This manifest contains the CRDs for Kueue
+      - source: "https://raw.githubusercontent.com/GoogleCloudPlatform/cluster-toolkit/refs/heads/develop/modules/management/kubectl-apply/manifests/kueue-v0.11.4.yaml"
+        server_side_apply: true
+    ```
+
+2. **Run the deployment** (`gcluster deploy` or `terraform apply`).
+
+3. **Second Deployment:** Once the first apply is successful, **add** the manifests containing your custom resources (like `ClusterQueue`, `LocalQueue`) to the list.
+
+    *Example `settings` for the second run:*
+
+    ```yaml
+    settings:
+      apply_manifests:
+      # The CRD manifest is still present
+      - source: "https://raw.githubusercontent.com/GoogleCloudPlatform/cluster-toolkit/refs/heads/develop/modules/management/kubectl-apply/manifests/kueue-v0.11.4.yaml"
+        server_side_apply: true
+
+      # Now, add your configuration manifest
+      - source: "https://gist.githubusercontent.com/YourUser/..." # Your configuration URL
+        server_side_apply: true
+    ```
+
+4. **Run the deployment command again.** Since the CRDs are now guaranteed to exist in the cluster, this second apply will succeed reliably.
+
+#### **2. Large Manifests (CRDs)**
+
+* **Issue:** Applying very large manifests can fail with a `metadata.annotations: Too long` error.
+* **Solution:** Enable Server-Side Apply by setting `server_side_apply: true` for the manifest entry.
+
+#### **3. Conflicts on Re-application**
+
+* **Issue:** Re-running a deployment after a partial failure can cause server-side apply field manager `conflicts`.
+* **Solution:** Forcibly take ownership of the resource fields by setting `force_conflicts: true`.
+
+#### **4. Terraform Template Files (`.tftpl`)**
+
+* **Limitation:** This module **cannot** render a template file (`.tftpl`) when sourced from a remote URL.
+* **Workaround:** You must render the template into a pure YAML file locally, host that rendered file at a URL, and provide the URL of the rendered file in your blueprint.
+
 ## License
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
@@ -119,6 +188,7 @@ limitations under the License.
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.3 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | > 5.0 |
 | <a name="requirement_helm"></a> [helm](#requirement\_helm) | ~> 2.17 |
+| <a name="requirement_http"></a> [http](#requirement\_http) | ~> 3.0 |
 | <a name="requirement_kubectl"></a> [kubectl](#requirement\_kubectl) | >= 1.7.0 |
 
 ## Providers
@@ -126,6 +196,7 @@ limitations under the License.
 | Name | Version |
 |------|---------|
 | <a name="provider_google"></a> [google](#provider\_google) | > 5.0 |
+| <a name="provider_http"></a> [http](#provider\_http) | ~> 3.0 |
 | <a name="provider_terraform"></a> [terraform](#provider\_terraform) | n/a |
 
 ## Modules
@@ -150,12 +221,13 @@ limitations under the License.
 | [terraform_data.kueue_validations](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
 | [google_client_config.default](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/client_config) | data source |
 | [google_container_cluster.gke_cluster](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/container_cluster) | data source |
+| [http_http.manifest_from_url](https://registry.terraform.io/providers/hashicorp/http/latest/docs/data-sources/http) | data source |
 
 ## Inputs
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_apply_manifests"></a> [apply\_manifests](#input\_apply\_manifests) | A list of manifests to apply to GKE cluster using kubectl. For more details see [kubectl module's inputs](kubectl/README.md). | <pre>list(object({<br/>    enable            = optional(bool, true)<br/>    content           = optional(string, null)<br/>    source            = optional(string, null)<br/>    template_vars     = optional(map(any), null)<br/>    server_side_apply = optional(bool, false)<br/>    wait_for_rollout  = optional(bool, true)<br/>  }))</pre> | `[]` | no |
+| <a name="input_apply_manifests"></a> [apply\_manifests](#input\_apply\_manifests) | A list of manifests to apply to GKE cluster using kubectl. For more details see [kubectl module's inputs](kubectl/README.md).<br/> NOTE: The `enable` input acts as a FF to apply a manifest or not. By default it is always set to `true`. | <pre>list(object({<br/>    enable            = optional(bool, true)<br/>    content           = optional(string, null)<br/>    source            = optional(string, null)<br/>    template_vars     = optional(map(any), null)<br/>    server_side_apply = optional(bool, false)<br/>    wait_for_rollout  = optional(bool, true)<br/>  }))</pre> | `[]` | no |
 | <a name="input_cluster_id"></a> [cluster\_id](#input\_cluster\_id) | An identifier for the gke cluster resource with format projects/<project\_id>/locations/<region>/clusters/<name>. | `string` | n/a | yes |
 | <a name="input_gib"></a> [gib](#input\_gib) | Install the NCCL gIB plugin | <pre>object({<br/>    install = bool<br/>    path    = string<br/>    template_vars = object({<br/>      image   = optional(string, "us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib")<br/>      version = string<br/>      node_affinity = optional(any, {<br/>        requiredDuringSchedulingIgnoredDuringExecution = {<br/>          nodeSelectorTerms = [{<br/>            matchExpressions = [{<br/>              key      = "cloud.google.com/gke-gpu",<br/>              operator = "In",<br/>              values   = ["true"]<br/>            }]<br/>          }]<br/>        }<br/>      })<br/>      accelerator_count = number<br/>    })<br/>  })</pre> | <pre>{<br/>  "install": false,<br/>  "path": "",<br/>  "template_vars": {<br/>    "accelerator_count": 0,<br/>    "version": ""<br/>  }<br/>}</pre> | no |
 | <a name="input_gke_cluster_exists"></a> [gke\_cluster\_exists](#input\_gke\_cluster\_exists) | A static flag that signals to downstream modules that a cluster has been created. Needed by community/modules/scripts/kubernetes-operations. | `bool` | `false` | no |
