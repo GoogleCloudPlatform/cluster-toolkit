@@ -64,7 +64,7 @@ deployment_groups:
     id: slurm_controller
     settings:
       instance_image:
-        family: slurm-gcp-6-9-hpc-rocky-linux-8
+        family: slurm-gcp-6-10-hpc-rocky-linux-8
         project: schedmd-slurm-public
       cloud_parameters:
         resume_rate: 0
@@ -102,7 +102,7 @@ deployment_groups:
     id: slurm_login
     settings:
       instance_image:
-        family: slurm-gcp-6-9-hpc-rocky-linux-8
+        family: slurm-gcp-6-10-hpc-rocky-linux-8
         project: schedmd-slurm-public
       num_instances: {{ cluster.num_login_nodes }}
       subnetwork_self_link: "projects/{{ cluster.project_id }}/regions/{{ cluster.cloud_region }}/subnetworks/{{ cluster.subnet.cloud_id }}"

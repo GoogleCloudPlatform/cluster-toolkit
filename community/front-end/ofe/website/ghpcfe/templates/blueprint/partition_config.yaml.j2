@@ -33,7 +33,7 @@
       family: {% if part.image.source_image_family == "Imported" %}{{ part.image.family }}{% else %}image-{{ part.image.family }}{% endif %}
       project: {{ cluster.project_id }}
     {% else %}
-      family: slurm-gcp-6-9-hpc-rocky-linux-8
+      family: slurm-gcp-6-10-hpc-rocky-linux-8
       project: schedmd-slurm-public
     {% endif %}
     {% if part.additional_disk_count > 0 %}

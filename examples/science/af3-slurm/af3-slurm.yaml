@@ -22,7 +22,7 @@ vars:
   base_image:
     project: schedmd-slurm-public
     # see latest in https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#published-image-family
-    family: slurm-gcp-6-9-hpc-rocky-linux-8
+    family: slurm-gcp-6-10-hpc-rocky-linux-8
    # You can find size of source image by using following command
    # gcloud compute images describe-from-family <source_image_family> --project schedmd-slurm-public
   image_build_machine_type: n2-standard-16
