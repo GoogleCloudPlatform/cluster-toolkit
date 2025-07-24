@@ -24,6 +24,10 @@ data "archive_file" "roles_tar" {
   output_path = "${path.module}/roles.tar.gz"
 }
 
+resource "random_id" "resource_name_suffix" {
+  byte_length = 4
+}
+
 # Generate vars content using templatefile
 locals {
   vdi_vars_content = templatefile("${path.module}/templates/vars.yaml.tftpl", {
@@ -36,6 +40,9 @@ locals {
     vdi_webapp_port = var.vdi_webapp_port
     vdi_resolution  = var.vdi_resolution
     vdi_users       = var.vdi_users
+    debug           = var.debug
+    vdi_bucket_name = local.bucket_name
+    zone            = var.zone
   })
 }
 
@@ -84,18 +91,16 @@ locals {
       type = "ansible-local"
       content = templatefile("${path.module}/templates/install.yaml.tftpl",
         {
-          roles = ["base_os", "secret_manager", "user_provision", "vnc", "vdi_tool"],
+          roles = ["lock_manager", "base_os", "secret_manager", "user_provision", "vnc", "vdi_tool"],
         }
       )
       destination = "/tmp/vdi/install.yaml"
-      # Debug mode:
-      # args = "--extra-vars @/tmp/vdi/vars.yaml -v --extra-vars debug=true"
-      args = "--extra-vars @/tmp/vdi/vars.yaml"
+      args = var.debug ? "--extra-vars @/tmp/vdi/vars.yaml -v --extra-vars debug=true" : "--extra-vars @/tmp/vdi/vars.yaml"
     },
     # Todo: another runner here to delete /tmp/vdi afterwards?
   ]
 
-  bucket_name = "${substr(var.deployment_name, 0, 39)}-vdi-scripts-${substr(md5(var.deployment_name), 0, 8)}"
+  bucket_name = "${substr(var.deployment_name, 0, 39)}-vdi-scripts-${random_id.resource_name_suffix.hex}"
 }
 
 # Bucket to stage runners

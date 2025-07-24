@@ -58,7 +58,7 @@
 
 - name: Template per-user Guacamole user SQL
   ansible.builtin.template:
-    src: user_bootstrap.sql.j2
+    src: guacamole/user_bootstrap.sql.j2
     dest: "/opt/guacamole-db/initdb/02-{{ item.username }}_user.sql"
     owner: root
     group: root
@@ -72,7 +72,7 @@
 
 - name: Template per-user SQL for Guacamole connections
   ansible.builtin.template:
-    src: connection_bootstrap.sql.j2
+    src: guacamole/connection_bootstrap.sql.j2
     dest: "/opt/guacamole-db/initdb/03-{{ item.username }}_connection.sql"
     owner: root
     group: root
@@ -84,6 +84,16 @@
     port: "{{ item.port }}"
     username: "{{ item.username }}"
     vnc_password: "{{ item.vncserver_password }}"
+
+- name: Template user cleanup SQL for removed users
+  ansible.builtin.template:
+    src: guacamole/user_cleanup.sql.j2
+    dest: "/opt/guacamole-db/initdb/04-user_cleanup.sql"
+    owner: root
+    group: root
+    mode: '0644'
+  vars:
+    vdi_users_updated: "{{ vdi_users_updated }}"
 
 - name: Generate combined initdb.sql
   ansible.builtin.shell: |
@@ -150,6 +160,83 @@
   until: postgres_ready.rc == 0
   retries: 30
   delay: 2
+
+- name: Check if database needs re-initialization due to user changes
+  ansible.builtin.command: >
+    docker exec guac_db psql -U guacamole_db -d guacamole_db 
+    -c "SELECT COUNT(*) FROM guacamole_entity WHERE type='USER' AND name != 'guacadmin';"
+  register: existing_users_check
+  changed_when: false
+
+- name: Debug user configuration status
+  ansible.builtin.debug:
+    msg: |
+      Database user check: {{ existing_users_check.stdout.strip() }}
+      Current users in config: {{ vdi_users_updated | length }}
+      Lock file exists: {{ lock_file_stat.stat.exists }}
+      User secrets hash changed: {{ vdi_setup_status.user_secrets_status.user_secrets_hash != current_user_secrets_hash if lock_file_stat.stat.exists else 'N/A' }}
+      User secrets hash (stored): {{ vdi_setup_status.user_secrets_status.user_secrets_hash if lock_file_stat.stat.exists else 'N/A' }}
+      User secrets hash (current): {{ current_user_secrets_hash }}
+
+- name: Check if user configuration has changed
+  ansible.builtin.set_fact:
+    users_changed: "{{ not lock_file_stat.stat.exists or vdi_setup_status.user_secrets_status.user_secrets_hash != current_user_secrets_hash }}"
+
+- name: Debug user change detection
+  ansible.builtin.debug:
+    msg: "Users changed: {{ users_changed }}"
+
+- name: Re-initialize database if users have changed
+  block:
+    - name: Stop Guacamole containers
+      ansible.builtin.command: docker stop guac_app guacd
+      ignore_errors: true
+
+    - name: Remove Guacamole containers
+      ansible.builtin.command: docker rm guac_app guacd
+      ignore_errors: true
+
+    - name: Stop and remove PostgreSQL container
+      ansible.builtin.command: docker stop guac_db
+      ignore_errors: true
+
+    - name: Remove PostgreSQL container
+      ansible.builtin.command: docker rm guac_db
+      ignore_errors: true
+
+    - name: Backup existing database data
+      ansible.builtin.command: >
+        tar -czf /opt/guacamole-db/backup-$(date +%Y%m%d-%H%M%S).tar.gz 
+        -C /opt/guacamole-db data/
+      ignore_errors: true
+
+    - name: Remove existing database data
+      ansible.builtin.command: rm -rf /opt/guacamole-db/data/*
+      ignore_errors: true
+
+    - name: Start Guacamole PostgreSQL container (re-initialized)
+      ansible.builtin.command: >
+        docker run -d --name guac_db --network guac_net
+        -e POSTGRES_USER=guacamole_db
+        -e POSTGRES_PASSWORD={{ database_password }}
+        -e POSTGRES_DB=guacamole_db
+        -v /opt/guacamole-db/data:/var/lib/postgresql/data
+        -v /opt/guacamole-db/initdb:/docker-entrypoint-initdb.d
+        --restart always
+        postgres:latest
+      register: postgres_restart
+      failed_when:
+      - postgres_restart.rc != 0
+      - "'already in use' not in postgres_restart.stderr"
+
+    - name: Wait for PostgreSQL to be ready after re-initialization
+      ansible.builtin.command: docker exec guac_db pg_isready -U guacamole_db
+      register: postgres_ready_after_restart
+      until: postgres_ready_after_restart.rc == 0
+      retries: 30
+      delay: 2
+
+  when: users_changed
 
 - name: Start guacd container
   ansible.builtin.command: >

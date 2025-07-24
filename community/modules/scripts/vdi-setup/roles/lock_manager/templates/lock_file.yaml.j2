@@ -1,0 +1,35 @@
+# VDI Setup Lock File
+# Generated on {{ ansible_date_time.iso8601 }}
+
+vdi_setup_status:
+  deployment_name: "{{ deployment_name }}"
+  deployment_hash: "{{ current_deployment_hash }}"
+  lock_version: "1.0"
+  created_at: "{{ ansible_date_time.iso8601 }}"
+  last_updated: "{{ ansible_date_time.iso8601 }}"
+  force_rerun: false
+  setup_status: "configuring"  # configuring, available, error
+  
+  completed_roles:
+    base_os:
+      completed: false
+    lock_manager:
+      completed: false
+    secret_manager:
+      completed: false
+    user_provision:
+      completed: false
+    vnc:
+      completed: false
+    vdi_tool:
+      completed: false
+  
+  user_secrets_status:
+    last_secret_check: "{{ ansible_date_time.iso8601 }}"
+    user_secrets_hash: "{{ current_user_secrets_hash }}"
+    users_updated: []
+  
+  user_management:
+    current_users: []
+    previous_users: []
+    removed_users: [] 

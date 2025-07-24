@@ -13,34 +13,72 @@
 # limitations under the License.
 
 ---
+- name: DEBUG About to import lock_manager for base_os
+  debug:
+    msg: "About to import lock_manager for base_os"
+
+# Check if this role should run
+- name: Set current role for lock manager check
+  ansible.builtin.set_fact:
+    current_role: "base_os"
+
+- name: Check if base_os role should run
+  ansible.builtin.import_role:
+    name: lock_manager
+    tasks_from: check_lock
+  register: lock_check_result
+
+- name: DEBUG Finished import_role for base_os
+  debug:
+    msg: "Finished import_role for base_os"
+
+- name: Set role_should_run from lock check result
+  ansible.builtin.set_fact:
+    role_should_run: "{{ lock_check_result.ansible_facts.role_should_run | default(true) }}"
+
+# Skip all tasks if role should not run
+- name: Skip base_os tasks if role should not run
+  ansible.builtin.debug:
+    msg: "Skipping base_os role - already completed or not needed"
+  when: not role_should_run
+
 - name: Gather distribution facts
   ansible.builtin.setup:
     gather_subset: platform
+  when: role_should_run
 
 # GPU / vWS driver setup
 - name: Check if NVIDIA GPU is present
   ansible.builtin.shell: lspci | grep -i nvidia
   register: nvidia_gpu_present
   failed_when: false
+  when: role_should_run
 
 # Include distribution-specific tasks
 - name: Include Ubuntu-specific tasks
   ansible.builtin.include_tasks: ubuntu.yaml
-  when: ansible_facts.distribution == 'Ubuntu'
+  when: 
+    - ansible_facts.distribution == 'Ubuntu'
+    - role_should_run
 
 - name: Include Rocky Linux specific tasks
   ansible.builtin.include_tasks: rocky.yaml
-  when: ansible_facts.distribution == 'Rocky'
+  when: 
+    - ansible_facts.distribution == 'Rocky'
+    - role_should_run
 
 - name: Include Debian-specific tasks
   ansible.builtin.include_tasks: debian.yaml
-  when: ansible_facts.distribution == 'Debian'
+  when: 
+    - ansible_facts.distribution == 'Debian'
+    - role_should_run
 
 # Common tasks for all distributions
 - name: Ensure requests package is installed
   pip:
     name: requests
     state: present
+  when: role_should_run
 
 - name: Ensure Python & tooling are installed
   ansible.builtin.package:
@@ -49,8 +87,24 @@
     - python3-pip
     - jq
     state: present
+  when: role_should_run
 
 # GPU / vWS driver setup
 - name: Provision GPU setup
   ansible.builtin.include_tasks: gpu_driver_setup.yaml
-  when: nvidia_gpu_present.rc == 0
+  when: 
+    - nvidia_gpu_present.rc == 0
+    - role_should_run
+
+# Mark role as completed
+- name: Set current role for lock manager completion
+  ansible.builtin.set_fact:
+    current_role: "base_os"
+    role_completed: true
+  when: role_should_run
+
+- name: Mark base_os role as completed
+  ansible.builtin.import_role:
+    name: lock_manager
+    tasks_from: create_lock
+  when: role_should_run

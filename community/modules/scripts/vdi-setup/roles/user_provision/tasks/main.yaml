@@ -13,28 +13,67 @@
 # limitations under the License.
 ---
 
-- name: Ensure 'wheel' group is present
-  group:
-    name: wheel
-    state: present
+# Check if this role should run
+- name: Set current role for lock manager check
+  ansible.builtin.set_fact:
+    current_role: "user_provision"
 
-- name: Ensure VDI user group exists
-  ansible.builtin.group:
-    name: "{{ vdi_user_group }}"
-    state: present
+- name: Check if user_provision role should run
+  ansible.builtin.import_role:
+    name: lock_manager
+    tasks_from: check_lock
+  register: lock_check_result
 
-# Run local‐user provisioning if selected
-- name: Provision local users
-  ansible.builtin.include_tasks: local_users.yaml
-  loop: "{{ vdi_users_updated }}"
-  loop_control:
-    loop_var: item
-  when: user_provision | lower == 'local_users'
+- name: Set role_should_run from lock check result
+  ansible.builtin.set_fact:
+    role_should_run: "{{ lock_check_result.ansible_facts.role_should_run | default(true) }}"
 
-# Run OS Login tasks if selected
-- name: Provision OS Login users
-  ansible.builtin.include_tasks: os_login.yaml
-  loop: "{{ vdi_users_updated }}"
-  loop_control:
-    loop_var: item
-  when: user_provision | lower == 'os_login'
+# Skip all tasks if role should not run
+- name: Skip user_provision tasks if role should not run
+  ansible.builtin.debug:
+    msg: "Skipping user_provision role - already completed or not needed"
+  when: not role_should_run
+
+# Run user provision tasks only if needed
+- name: Run user provision tasks
+  block:
+  - name: Ensure 'wheel' group is present
+    group:
+      name: wheel
+      state: present
+
+  - name: Ensure VDI user group exists
+    ansible.builtin.group:
+      name: "{{ vdi_user_group }}"
+      state: present
+
+  # Run local‐user provisioning if selected
+  - name: Provision local users
+    ansible.builtin.include_tasks: local_users.yaml
+    loop: "{{ vdi_users_updated }}"
+    loop_control:
+      loop_var: item
+    when: user_provision | lower == 'local_users'
+
+  # Run OS Login tasks if selected
+  - name: Provision OS Login users
+    ansible.builtin.include_tasks: os_login.yaml
+    loop: "{{ vdi_users_updated }}"
+    loop_control:
+      loop_var: item
+    when: user_provision | lower == 'os_login'
+
+  when: role_should_run
+
+# Mark role as completed
+- name: Set current role for lock manager completion
+  ansible.builtin.set_fact:
+    current_role: "user_provision"
+    role_completed: true
+  when: role_should_run
+
+- name: Mark user_provision role as completed
+  ansible.builtin.import_role:
+    name: lock_manager
+    tasks_from: create_lock
+  when: role_should_run

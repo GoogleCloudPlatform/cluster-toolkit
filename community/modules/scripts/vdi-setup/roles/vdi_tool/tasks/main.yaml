@@ -13,14 +13,54 @@
 # limitations under the License.
 ---
 
+# Check if this role should run
+- name: Set current role for lock manager check
+  ansible.builtin.set_fact:
+    current_role: "vdi_tool"
+
+- name: Check if vdi_tool role should run
+  ansible.builtin.import_role:
+    name: lock_manager
+    tasks_from: check_lock
+  register: lock_check_result
+
+- name: Set role_should_run from lock check result
+  ansible.builtin.set_fact:
+    role_should_run: "{{ lock_check_result.ansible_facts.role_should_run | default(true) }}"
+
+# Skip all tasks if role should not run
+- name: Skip vdi_tool tasks if role should not run
+  ansible.builtin.debug:
+    msg: "Skipping vdi_tool role - already completed or not needed"
+  when: not role_should_run
+
 - name: "Install Guacamole"
   include_tasks: guacamole.yaml
-  when: vdi_tool | lower == 'guacamole'
+  when: 
+    - vdi_tool | lower == 'guacamole'
+    - role_should_run
 
 - name: "Install NoMachine"
   include_tasks: nomachine.yaml
-  when: vdi_tool | lower == 'nomachine'
+  when: 
+    - vdi_tool | lower == 'nomachine'
+    - role_should_run
 
 - name: "Install Workspot"
   include_tasks: workspot.yaml
-  when: vdi_tool | lower == 'workspot'
+  when: 
+    - vdi_tool | lower == 'workspot'
+    - role_should_run
+
+# Mark role as completed
+- name: Set current role for lock manager completion
+  ansible.builtin.set_fact:
+    current_role: "vdi_tool"
+    role_completed: true
+  when: role_should_run
+
+- name: Mark vdi_tool role as completed
+  ansible.builtin.import_role:
+    name: lock_manager
+    tasks_from: create_lock
+  when: role_should_run

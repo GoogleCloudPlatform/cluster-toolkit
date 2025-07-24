@@ -27,6 +27,11 @@ variable "region" {
   type        = string
 }
 
+variable "zone" {
+  description = "Zone in which the VDI instances are created."
+  type        = string
+}
+
 variable "labels" {
   description = "Key-value pairs of labels to be added to created resources."
   type        = map(string)
@@ -88,4 +93,10 @@ variable "vnc_port_max" {
   type        = number
   default     = 5999
   description = "Maximum valid VNC port."
+}
+
+variable "debug" {
+  type        = bool
+  default     = false
+  description = "Enable debug mode for verbose logging during VDI setup."
 }

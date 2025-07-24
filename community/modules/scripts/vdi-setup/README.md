@@ -174,6 +174,7 @@ After deployment, you can access the VDI in several ways:
 | <a name="input_vnc_flavor"></a> [vnc\_flavor](#input\_vnc\_flavor) | The VNC server flavor to use (tigervnc currently supported) | `string` | `"tigervnc"` | no |
 | <a name="input_vnc_port_max"></a> [vnc\_port\_max](#input\_vnc\_port\_max) | Maximum valid VNC port. | `number` | `5999` | no |
 | <a name="input_vnc_port_min"></a> [vnc\_port\_min](#input\_vnc\_port\_min) | Minimum valid VNC port. | `number` | `5901` | no |
+| <a name="input_debug"></a> [debug](#input\_debug) | Enable debug mode for verbose logging during VDI setup. | `bool` | `false` | no |
 
 ## Outputs
 

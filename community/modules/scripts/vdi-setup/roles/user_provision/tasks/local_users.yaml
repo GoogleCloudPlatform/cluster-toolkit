@@ -13,6 +13,34 @@
 # limitations under the License.
 ---
 
+- name: Check if user exists
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ item.username }}"
+  register: user_exists_check
+  ignore_errors: true
+  when: debug | default(false)
+
+- name: Set user exists status for debug
+  ansible.builtin.set_fact:
+    user_exists_status: false
+  when: debug | default(false) and user_exists_check is failed
+
+- name: Set user exists status for debug (success case)
+  ansible.builtin.set_fact:
+    user_exists_status: "{{ user_exists_check.ansible_facts.getent_passwd is defined }}"
+  when: debug | default(false) and user_exists_check is not failed
+
+- name: Debug user provision for {{ item.username }}
+  ansible.builtin.debug:
+    msg: |
+      Provisioning user {{ item.username }}:
+        - user_secrets_changed: {{ user_secrets_changed }}
+        - password_actually_changed: {{ password_actually_changed | default(false) }}
+        - password_update_mode: {{ 'always' if password_actually_changed | default(user_secrets_changed) else 'on_create' }}
+        - user_exists: {{ user_exists_status | default(false) }}
+  when: debug | default(false)
+
 - name: Provision VDI users (custom or generated passwords)
   block:
 
@@ -25,7 +53,7 @@
       create_home: yes
       append: true
       password: "{{ item.password | password_hash('sha512') }}"
-      update_password: on_create # sets pw if user is newly created
+      update_password: "{{ 'always' if password_actually_changed | default(user_secrets_changed) else 'on_create' }}"
 
   # SSH key setup
   - name: Ensure .ssh directory for {{ item.username }}
@@ -49,3 +77,25 @@
       user: "{{ item.username }}"
       key: "{{ ssh_key.public_key }}"
       state: present
+
+- name: Get users to remove from lock file
+  ansible.builtin.set_fact:
+    users_to_remove: "{{ vdi_setup_status.user_management.removed_users | default([]) }}"
+  when: lock_file_stat.stat.exists
+
+- name: Debug local user cleanup
+  ansible.builtin.debug:
+    msg: |
+      Local user cleanup:
+        - users_to_remove: {{ users_to_remove }}
+  when: debug | default(false) and lock_file_stat.stat.exists
+
+- name: Remove local user accounts
+  ansible.builtin.user:
+    name: "{{ item }}"
+    state: absent
+    remove: yes
+  loop: "{{ users_to_remove }}"
+  when: 
+    - lock_file_stat.stat.exists
+    - users_to_remove | length > 0

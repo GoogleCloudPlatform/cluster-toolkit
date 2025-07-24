@@ -6,7 +6,14 @@
     - "/tmp/vdi/vars.yaml"
   tasks:
 
+    # Initialize lock manager
+    - name: Initialize lock manager
+      ansible.builtin.import_role:
+        name: lock_manager
+        tasks_from: check_lock
+
 %{ for r in roles }
-    - import_role:
+    - name: Execute ${r} role
+      ansible.builtin.import_role:
         name: "${r}"
 %{ endfor }
