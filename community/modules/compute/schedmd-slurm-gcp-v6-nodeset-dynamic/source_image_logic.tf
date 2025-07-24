@@ -18,10 +18,12 @@ locals {
   # Currently supported images and projects
   known_project_families = {
     schedmd-slurm-public = [
-      "slurm-gcp-6-9-debian-11",
-      "slurm-gcp-6-9-hpc-rocky-linux-8",
-      "slurm-gcp-6-9-ubuntu-2004-lts",
-      "slurm-gcp-6-9-ubuntu-2204-lts-arm64"
+      "slurm-gcp-6-11-debian-12",
+      "slurm-gcp-6-11-hpc-rocky-linux-8",
+      "slurm-gcp-6-11-ubuntu-2204-lts-nvidia-570",
+      "slurm-gcp-6-11-ubuntu-2404-lts-nvidia-570",
+      "slurm-gcp-6-11-ubuntu-2204-lts-arm64",
+      "slurm-gcp-6-11-ubuntu-2404-lts-arm64"
     ]
   }
 
