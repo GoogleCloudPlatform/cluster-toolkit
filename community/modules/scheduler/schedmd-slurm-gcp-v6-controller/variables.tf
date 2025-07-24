@@ -480,7 +480,7 @@ variable "enable_default_mounts" {
     - /apps
     EOD
   type        = bool
-  default     = true
+  default     = null
 }
 
 variable "network_storage" {
@@ -750,6 +750,33 @@ variable "gcloud_path_override" {
   type        = string
   default     = ""
   nullable    = false
+}
+
+variable "enable_hybrid" {
+  description = <<EOD
+Enables use of hybrid controller mode. When true, controller_hybrid_config will
+be used instead of controller_instance_config and will disable login instances.
+EOD
+  type        = bool
+  default     = false
+}
+
+variable "hybrid_conf" {
+  description = "The hybrid configuration"
+  type = object({
+    slurm_bin_dir           = optional(string)
+    slurm_log_dir           = optional(string)
+    slurm_control_host      = string
+    slurm_control_host_port = optional(string)
+    slurm_control_addr      = optional(string)
+    output_dir              = optional(string)
+    install_dir             = optional(string)
+    slurm_uid               = optional(number)
+    slurm_gid               = optional(number)
+    service_account_email   = optional(string)
+    google_app_cred_path    = optional(string)
+  })
+  default = null
 }
 
 # DEPRECATED VARIABLES
