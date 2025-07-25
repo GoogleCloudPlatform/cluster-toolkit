@@ -69,6 +69,36 @@ deployment_groups:
           Package: nvidia-container-toolkit nvidia-container-toolkit-base libnvidia-container-tools libnvidia-container1
           Pin: version 1.17.7-1
           Pin-Priority: 100
+
+      # The following holds NVIDIA software that was already installed on the
+      # accelerator base image to be the same driver version. This reduces the
+      # risk of a driver version mismatch.
+      # Additional packages are held by:
+      # https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/ansible/group_vars/os_ubuntu.yml
+      - type: ansible-local
+        destination: hold-nvidia-packages.yml
+        content: |
+          ---
+          - name: Hold nvidia packages
+            hosts: all
+            become: true
+            vars:
+              nvidia_packages_to_hold:
+              - libnvidia-cfg1-*-server
+              - libnvidia-compute-*-server
+              - libnvidia-nscq-*
+              - nvidia-compute-utils-*-server
+              - nvidia-fabricmanager-*
+              - nvidia-utils-*-server
+            tasks:
+            - name: Hold nvidia packages
+              ansible.builtin.command:
+                argv:
+                - apt-mark
+                - hold
+                - "{{ item }}"
+              loop: "{{ nvidia_packages_to_hold }}"
+
       - type: data
         destination: /var/tmp/slurm_vars.json
         content: |
@@ -93,7 +123,7 @@ deployment_groups:
               -i localhost, --limit localhost --connection=local \
               -e @/var/tmp/slurm_vars.json \
               ansible/playbook.yml
-            # this duplicates the ulimits configuration of the HPC VM Image
+      # this duplicates the ulimits configuration of the HPC VM Image
       - type: data
         destination: /etc/security/limits.d/99-unlimited.conf
         content: |
@@ -103,11 +133,12 @@ deployment_groups:
           * - nofile 1048576
           * - cpu unlimited
           * - rtprio unlimited
+
       - type: ansible-local
-        destination: configure_gpu.yml
+        destination: install_cuda_dcgm.yml
         content: |
           ---
-          - name: Install NVIDIA packages
+          - name: Install CUDA & DCGM
             hosts: all
             become: true
             vars:
@@ -118,9 +149,6 @@ deployment_groups:
               nvidia_packages:
               - cuda-toolkit-12-8
               - datacenter-gpu-manager-4-cuda12
-              - libnvidia-cfg1-570-server
-              - libnvidia-nscq-570
-              - nvidia-compute-utils-570-server
             tasks:
             - name: Download NVIDIA repository package
               ansible.builtin.get_url:
@@ -130,7 +158,6 @@ deployment_groups:
               ansible.builtin.apt:
                 deb: "{{ cuda_repo_filename }}"
                 state: present
-
             - name: Reduce NVIDIA repository priority
               ansible.builtin.copy:
                 dest: /etc/apt/preferences.d/cuda-repository-pin-600
@@ -149,15 +176,10 @@ deployment_groups:
                   Package: *
                   Pin: release l=NVIDIA CUDA
                   Pin-Priority: 400
-            - name: Install NVIDIA fabric and CUDA
+            - name: Install CUDA & DCGM
               ansible.builtin.apt:
                 name: "{{ item }}"
                 update_cache: true
-              loop: "{{ nvidia_packages }}"
-            - name: Freeze NVIDIA fabric and CUDA
-              ansible.builtin.dpkg_selections:
-                name: "{{ item }}"
-                selection: hold
               loop: "{{ nvidia_packages }}"
             - name: Create nvidia-persistenced override directory
               ansible.builtin.file:
