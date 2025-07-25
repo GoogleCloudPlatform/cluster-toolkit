@@ -118,14 +118,10 @@ deployment_groups:
       system_node_pool_machine_type: "e2-standard-16"
       system_node_pool_disk_size_gb: $(vars.system_node_pool_disk_size_gb)
       system_node_pool_taints: []
-      enable_multi_networking: true
       enable_dcgm_monitoring: true
       gcp_public_cidrs_access_enabled: false
       enable_private_endpoint: false # Allows access from authorized public IPs
       configure_workload_identity_sa: true
-      master_authorized_networks:
-      - cidr_block: $(vars.authorized_cidr) # Allows your machine to run the kubectl command. Required for multi network setup.
-        display_name: "kubectl-access-network"
       additional_networks:
         $(concat(
           [{

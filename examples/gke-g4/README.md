@@ -1,6 +1,6 @@
 # GKE G4 Blueprint
 
-This blueprint uses GKE to provision a Kubernetes cluster and a G4 node pool, along with networks and service accounts. 
+This blueprint uses GKE to provision a Kubernetes cluster and a G4 node pool, along with networks and service accounts. Information about the G4 machines can be found [here](https://cloud.google.com/blog/products/compute/introducing-g4-vm-with-nvidia-rtx-pro-6000).
 
 > **_NOTE:_** The required GKE version for G4 support is >= 1.32.3-gke.1170000.
 
