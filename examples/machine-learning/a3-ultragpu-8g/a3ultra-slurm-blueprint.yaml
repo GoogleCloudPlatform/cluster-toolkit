@@ -24,7 +24,7 @@ vars:
   # Image settings
   base_image:
     project: ubuntu-os-accelerator-images
-    image: ubuntu-accelerator-2204-amd64-with-nvidia-570-v20250712
+    image: ubuntu-accelerator-2204-amd64-with-nvidia-570-v20250722
   image_build_machine_type: n2-standard-16
   build_slurm_from_git_ref: 6.10.0
   # Cluster env settings
@@ -147,24 +147,7 @@ deployment_groups:
               ansible.builtin.apt:
                 deb: "{{ cuda_repo_filename }}"
                 state: present
-            # The following 2 tasks work around a temporary issue with Ubuntu
-            # packaging of NVIDIA 570 driver series for kernel 6.8.0-1032
-            # This command ensures that any holds are removed before attempting an upgrade.
-            # We ignore failures in case the packages were not held.
-            - name: Unhold NVIDIA driver packages
-              ansible.builtin.command:
-                cmd: apt-mark unhold linux-modules-nvidia-570-server-open-gcp linux-modules-nvidia-570-server-open-6.8.0-1032-gcp
-              become: true
-              changed_when: false
-              failed_when: false
-            - name: Install latest NVIDIA driver metapackage and kernel module
-              ansible.builtin.apt:
-                name:
-                  - linux-modules-nvidia-570-server-open-gcp
-                  - linux-modules-nvidia-570-server-open-6.8.0-1032-gcp
-                state: latest
-                update_cache: yes
-              become: true
+
             - name: Reduce NVIDIA repository priority
               ansible.builtin.copy:
                 dest: /etc/apt/preferences.d/cuda-repository-pin-600
