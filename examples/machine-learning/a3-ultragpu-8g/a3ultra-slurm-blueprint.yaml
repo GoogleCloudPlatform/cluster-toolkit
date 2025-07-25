@@ -93,7 +93,7 @@ deployment_groups:
               -i localhost, --limit localhost --connection=local \
               -e @/var/tmp/slurm_vars.json \
               ansible/playbook.yml
-            # this duplicates the ulimits configuration of the HPC VM Image
+      # this duplicates the ulimits configuration of the HPC VM Image
       - type: data
         destination: /etc/security/limits.d/99-unlimited.conf
         content: |
@@ -241,6 +241,7 @@ deployment_groups:
       source_image_project_id: [$(vars.base_image.project)]
       image_family: $(vars.instance_image.family)
       omit_external_ip: false
+
       # Unattended upgrades are disabled in this blueprint so that software does not
       # get updated daily and lead to potential instability in the cluster environment.
       #
@@ -350,6 +351,50 @@ deployment_groups:
   #   outputs:
   #   - network_storage
 
+  # (Optional) The following creates a GCS bucket that will be mounted
+  # using gcsfuse. If you prefer to use a pre-existing bucket, use the
+  # modules/file-system/pre-existing-network-storage module.
+  - id: gcs_bucket
+    source: community/modules/file-system/cloud-storage-bucket
+    settings:
+      enable_hierarchical_namespace: true
+      local_mount: /gcs
+      random_suffix: true
+      mount_options: "implicit-dirs,\
+                      metadata-cache-negative-ttl-secs=0,\
+                      metadata-cache-ttl-secs=-1,\
+                      stat-cache-max-size-mb=-1,\
+                      type-cache-max-size-mb=-1,\
+                      enable-streaming-writes=true,\
+                      dir-mode=777,\
+                      file-mode=777,\
+                      allow_other"
+
+  # Create a mount-point optimized for checkpoint writing/reading Uses
+  # local-ssd for and enables parallel downloads.  For more information on
+  # these flags, see
+  # https://github.com/GoogleCloudPlatform/gcsfuse/tree/master/samples/gcsfuse_config
+  - id: checkpoint_lssd
+    source: modules/file-system/pre-existing-network-storage
+    settings:
+      remote_mount: $(gcs_bucket.gcs_bucket_name)
+      local_mount: /gcs-checkpoints
+      fs_type: gcsfuse
+      mount_options: "implicit-dirs,\
+                      metadata-cache-negative-ttl-secs=0,\
+                      metadata-cache-ttl-secs=-1,\
+                      stat-cache-max-size-mb=-1,\
+                      type-cache-max-size-mb=-1,\
+                      file-cache-max-size-mb=-1,\
+                      file-cache-cache-file-for-range-read=true,\
+                      file-cache-enable-parallel-downloads=true,\
+                      temp_dir=/mnt/localssd,\
+                      cache-dir=/mnt/localssd,\
+                      enable-streaming-writes=true,\
+                      dir-mode=777,\
+                      file-mode=777,\
+                      allow_other"
+
 - group: cluster
   modules:
   - id: a3ultra_startup
@@ -366,6 +411,8 @@ deployment_groups:
             "data-root": "$(vars.local_ssd_mountpoint)/docker"
           }
       runners:
+      - $(checkpoint_lssd.client_install_runner)
+      - $(checkpoint_lssd.mount_runner)
       - type: data
         destination: /etc/enroot/enroot.conf
         content: |
@@ -563,6 +610,7 @@ deployment_groups:
     - a3_ultra_partition
     - slurm_login
     - homefs
+    - gcs_bucket
     settings:
       enable_controller_public_ips: true
       instance_image_custom: true
