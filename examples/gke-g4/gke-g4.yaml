@@ -152,7 +152,7 @@ deployment_groups:
     source: modules/compute/gke-node-pool
     use: [g4-cluster, node_pool_service_account]
     settings:
-      machine_type: g4-standard-96
+      machine_type: g4-standard-384
       auto_upgrade: true
       zones: [$(vars.zone)]
       # disk_size_gb: $(vars.g4_node_pool_disk_size_gb)
