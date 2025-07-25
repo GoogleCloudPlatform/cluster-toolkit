@@ -37,7 +37,36 @@ deployment_groups:
           Package: nvidia-container-toolkit nvidia-container-toolkit-base libnvidia-container-tools libnvidia-container1
           Pin: version 1.17.7-1
           Pin-Priority: 100
-      - $(vars.runner_disable_unattended_upgrades)
+
+      # The following holds NVIDIA software that was already installed on the
+      # accelerator base image to be the same driver version. This reduces the
+      # risk of a driver version mismatch.
+      # Additional packages are held by:
+      # https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/ansible/group_vars/os_ubuntu.yml
+      - type: ansible-local
+        destination: hold-nvidia-packages.yml
+        content: |
+          ---
+          - name: Hold nvidia packages
+            hosts: all
+            become: true
+            vars:
+              nvidia_packages_to_hold:
+              - libnvidia-cfg1-*-server
+              - libnvidia-compute-*-server
+              - libnvidia-nscq-*
+              - nvidia-compute-utils-*-server
+              - nvidia-fabricmanager-*
+              - nvidia-utils-*-server
+            tasks:
+            - name: Hold nvidia packages
+              ansible.builtin.command:
+                argv:
+                - apt-mark
+                - hold
+                - "{{ item }}"
+              loop: "{{ nvidia_packages_to_hold }}"
+
       - type: data
         destination: /var/tmp/slurm_vars.json
         content: |
@@ -56,10 +85,10 @@ deployment_groups:
       - $(vars.runner_install_slurm)
       - $(vars.runner_setup_hpc_vm_image_ulimits)
       - type: ansible-local
-        destination: configure_gpu.yml
+        destination: install_cuda_dcgm.yml
         content: |
           ---
-          - name: Install NVIDIA packages
+          - name: Install CUDA & DCGM
             hosts: all
             become: true
             vars:
@@ -69,10 +98,7 @@ deployment_groups:
               enable_nvidia_dcgm: false
               nvidia_packages:
               - cuda-toolkit-12-8
-              - datacenter-gpu-manager
-              - libnvidia-cfg1-570-server
-              - libnvidia-nscq-570
-              - nvidia-compute-utils-570-server
+              - datacenter-gpu-manager-4-cuda12
             tasks:
             - name: Download NVIDIA repository package
               ansible.builtin.get_url:
@@ -82,24 +108,6 @@ deployment_groups:
               ansible.builtin.apt:
                 deb: "{{ cuda_repo_filename }}"
                 state: present
-            # The following 2 tasks work around a temporary issue with Ubuntu
-            # packaging of NVIDIA 570 driver series for kernel 6.8.0-1032
-            # This command ensures that any holds are removed before attempting an upgrade.
-            # We ignore failures in case the packages were not held.
-            - name: Unhold NVIDIA driver packages
-              ansible.builtin.command:
-                cmd: apt-mark unhold linux-modules-nvidia-570-server-open-gcp linux-modules-nvidia-570-server-open-6.8.0-1032-gcp
-              become: true
-              changed_when: false
-              failed_when: false
-            - name: Install latest NVIDIA driver metapackage and kernel module
-              ansible.builtin.apt:
-                name:
-                  - linux-modules-nvidia-570-server-open-gcp
-                  - linux-modules-nvidia-570-server-open-6.8.0-1032-gcp
-                state: latest
-                update_cache: yes
-              become: true
             - name: Reduce NVIDIA repository priority
               ansible.builtin.copy:
                 dest: /etc/apt/preferences.d/cuda-repository-pin-600
@@ -118,15 +126,10 @@ deployment_groups:
                   Package: *
                   Pin: release l=NVIDIA CUDA
                   Pin-Priority: 400
-            - name: Install NVIDIA fabric and CUDA
+            - name: Install CUDA & DCGM
               ansible.builtin.apt:
                 name: "{{ item }}"
                 update_cache: true
-              loop: "{{ nvidia_packages }}"
-            - name: Freeze NVIDIA fabric and CUDA
-              ansible.builtin.dpkg_selections:
-                name: "{{ item }}"
-                selection: hold
               loop: "{{ nvidia_packages }}"
             - name: Create nvidia-persistenced override directory
               ansible.builtin.file:
@@ -193,8 +196,19 @@ deployment_groups:
       disk_size: 100
       machine_type: n2-standard-16
 
-      source_image: ubuntu-accelerator-2204-amd64-with-nvidia-570-v20250712
+      source_image: ubuntu-accelerator-2204-amd64-with-nvidia-570-v20250722
       source_image_project_id: [ubuntu-os-accelerator-images]
 
       image_family: $(vars.family)
       omit_external_ip: false
+
+      # Unattended upgrades are disabled in this blueprint so that software does not
+      # get updated daily and lead to potential instability in the cluster environment.
+      #
+      # Unattended Upgrades installs available security updates from the Ubuntu
+      # security pocket for installed packages daily by default. Administrators who
+      # disable this feature assume all responsibility for manually reviewing and
+      # patching their systems against vulnerabilities.
+      #
+      # To enable unattended upgrades, please remove this section.
+      metadata: $(vars.packer_metadata)

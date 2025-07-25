@@ -19,7 +19,7 @@
         gcloud compute reservations create RESERVATION_NAME \
                 --require-specific-reservation \
                 --project=PROJECT_ID \
-                --machine-type=a4x-highgpu-4g-nolssd \
+                --machine-type=a4x-highgpu-4g \
                 --vm-count=NUMBER_OF_VMS \
                 --zone=ZONE
 
@@ -27,7 +27,7 @@
    1. `RESERVATION_NAME`: a name for your reservation.
    1. `PROJECT_ID`: your project ID.
    1. `NUMBER_OF_VMS`: the number of VMs needed for the cluster.
-   1. `ZONE`: a zone that has `a4x-highgpu-4g-nolssd` machine types.
+   1. `ZONE`: a zone that has `a4x-highgpu-4g` machine types.
 1. Create a cluster.
 
    Use the following instructions to create a cluster using Cluster Toolkit.
