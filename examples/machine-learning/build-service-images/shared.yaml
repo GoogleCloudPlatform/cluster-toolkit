@@ -33,6 +33,17 @@ vars:
           APT::Periodic::Update-Package-Lists "0";
           APT::Periodic::Unattended-Upgrade "0";
 
+  runner_hold_google_services:
+    type: shell
+    destination: hold_google_services.sh
+    content: |
+      #!/bin/bash
+      set -e -o pipefail
+      apt-mark hold google-compute-engine
+      apt-mark hold google-compute-engine-oslogin
+      apt-mark hold google-guest-agent
+      apt-mark hold google-osconfig-agent
+
   runner_install_slurm:
     type: shell
     destination: install_slurm.sh

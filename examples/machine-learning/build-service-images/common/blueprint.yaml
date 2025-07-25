@@ -37,6 +37,7 @@ deployment_groups:
           Package: nvidia-container-toolkit nvidia-container-toolkit-base libnvidia-container-tools libnvidia-container1
           Pin: version 1.17.7-1
           Pin-Priority: 100
+      - $(vars.runner_hold_google_services)
       - type: data
         destination: /var/tmp/slurm_vars.json
         content: |
