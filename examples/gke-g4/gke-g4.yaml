@@ -122,6 +122,9 @@ deployment_groups:
       gcp_public_cidrs_access_enabled: false
       enable_private_endpoint: false # Allows access from authorized public IPs
       configure_workload_identity_sa: true
+      master_authorized_networks:
+      - cidr_block: $(vars.authorized_cidr) # Allows your machine to run the kubectl command. Required for multi network setup.
+        display_name: "kubectl-access-network"
       additional_networks:
         $(concat(
           [{
