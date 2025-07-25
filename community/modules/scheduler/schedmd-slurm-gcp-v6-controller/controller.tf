@@ -34,8 +34,8 @@ locals {
   ]
 
   state_disk = var.controller_state_disk != null ? [{
-    source      = google_compute_disk.controller_disk[0].name
-    device_name = google_compute_disk.controller_disk[0].name
+    source      = google_compute_region_disk.disk[0].id
+    device_name = google_compute_region_disk.disk[0].name
     disk_labels = null
     auto_delete = false
     boot        = false
@@ -57,24 +57,64 @@ locals {
   )
 
   controller_project_id = coalesce(var.controller_project_id, var.project_id)
+  replica_zones         = [data.google_compute_zones.zones.names[0], data.google_compute_zones.zones.names[length(data.google_compute_zones.zones.names) - 1]]
 }
 
 data "google_project" "controller_project" {
   project_id = local.controller_project_id
 }
 
-resource "google_compute_disk" "controller_disk" {
-  count = var.controller_state_disk != null ? 1 : 0
+resource "google_compute_address" "controllers_ips" {
+  count        = var.nb_controllers
+  name         = "${local.slurm_cluster_name}-controller-${count.index}-ip"
+  region       = var.region
+  subnetwork   = var.subnetwork_self_link
+  address_type = "INTERNAL"
+}
+data "google_compute_subnetwork" "subnet" {
+  self_link = var.subnetwork_self_link
+}
+resource "google_dns_managed_zone" "dns-managed-zone" {
+  name       = "dns-managed-zone"
+  dns_name   = "${local.slurm_cluster_name}.internal."
+  visibility = "private"
 
-  project = local.controller_project_id
-  name    = "${local.slurm_cluster_name}-controller-save"
-  type    = var.controller_state_disk.type
-  size    = var.controller_state_disk.size
-  zone    = var.zone
+  private_visibility_config {
+    networks {
+      network_url = data.google_compute_subnetwork.subnet.network
+    }
+  }
+}
+
+resource "google_dns_record_set" "record" {
+  count        = var.nb_controllers
+  name         = "controller${count.index}.${google_dns_managed_zone.dns-managed-zone.dns_name}"
+  project      = var.project_id
+  type         = "A"
+  ttl          = 30
+  managed_zone = google_dns_managed_zone.dns-managed-zone.name
+  rrdatas      = [google_compute_address.controllers_ips[count.index].address]
+}
+locals {
+  slurm_control_hosts = [for name in google_dns_record_set.record[*].name : trim(name, ".")]
+}
+data "google_compute_zones" "zones" {
+  region = var.region
+}
+resource "google_compute_region_disk" "disk" {
+  count         = var.controller_state_disk != null ? 1 : 0
+  project       = var.project_id
+  name          = "${local.slurm_cluster_name}-controller-save-regiondisk"
+  type          = var.controller_state_disk.type
+  region        = var.region
+  size          = var.controller_state_disk.size
+  access_mode   = "READ_WRITE_MANY"
+  replica_zones = local.replica_zones
 }
 
 # INSTANCE TEMPLATE
 module "slurm_controller_template" {
+  count  = var.nb_controllers
   source = "../../internal/slurm-gcp/instance_template"
 
   project_id          = local.controller_project_id
@@ -89,12 +129,11 @@ module "slurm_controller_template" {
   disk_type                  = var.disk_type
   disk_resource_manager_tags = var.disk_resource_manager_tags
   additional_disks           = concat(local.additional_disks, local.state_disk)
-
-  bandwidth_tier            = var.bandwidth_tier
-  slurm_bucket_path         = module.slurm_files.slurm_bucket_path
-  can_ip_forward            = var.can_ip_forward
-  advanced_machine_features = var.advanced_machine_features
-  resource_manager_tags     = var.resource_manager_tags
+  bandwidth_tier             = var.bandwidth_tier
+  slurm_bucket_path          = module.slurm_files.slurm_bucket_path
+  can_ip_forward             = var.can_ip_forward
+  advanced_machine_features  = var.advanced_machine_features
+  resource_manager_tags      = var.resource_manager_tags
 
   enable_confidential_vm   = var.enable_confidential_vm
   enable_oslogin           = var.enable_oslogin
@@ -104,7 +143,7 @@ module "slurm_controller_template" {
   gpu = one(module.gpu.guest_accelerator)
 
   machine_type     = var.machine_type
-  metadata         = local.metadata
+  metadata         = merge(local.metadata, { "hostname" = local.slurm_control_hosts[count.index], })
   min_cpu_platform = var.min_cpu_platform
 
   on_host_maintenance = var.on_host_maintenance
@@ -116,49 +155,82 @@ module "slurm_controller_template" {
   source_image         = local.source_image                    # requires source_image_logic.tf
 
   subnetwork = var.subnetwork_self_link
+  network_ip = length(var.static_ips) == 0 ? google_compute_address.controllers_ips[count.index].address : var.static_ips[count.index]
 
   tags = concat([local.slurm_cluster_name], var.tags)
   # termination_action = TODO: add support for termination_action (?)
 }
 
-# INSTANCE
-resource "google_compute_instance_from_template" "controller" {
-  provider = google-beta
+# HEALTH CHECK CONTROLLERS
 
-  name                     = "${local.slurm_cluster_name}-controller"
-  project                  = local.controller_project_id
-  zone                     = var.zone
-  source_instance_template = module.slurm_controller_template.self_link
-  # Due to https://github.com/hashicorp/terraform-provider-google/issues/21693
-  # we have to explicitly override instance labels instead of inheriting them from template.
-  labels = module.slurm_controller_template.labels
-
-  allow_stopping_for_update = true
-
-  # Can't rely on template to specify nics due to usage of static_ip
-  network_interface {
-    dynamic "access_config" {
-      for_each = var.enable_controller_public_ips ? ["unit"] : []
-      content {
-        nat_ip       = null
-        network_tier = null
-      }
-    }
-    network_ip = length(var.static_ips) == 0 ? "" : var.static_ips[0]
-    subnetwork = var.subnetwork_self_link
+data "google_netblock_ip_ranges" "hcs" {
+  range_type = "health-checkers"
+}
+resource "google_compute_firewall" "ingress_google" {
+  name                    = "${local.slurm_cluster_name}-allow-google"
+  network                 = data.google_compute_subnetwork.subnet.network
+  source_ranges           = data.google_netblock_ip_ranges.hcs.cidr_blocks
+  target_service_accounts = [local.service_account.email]
+  direction               = "INGRESS"
+  allow {
+    protocol = "tcp"
+    ports    = ["6819-6830", "6842", "8642", "8080"]
   }
+}
+resource "google_compute_health_check" "controller" {
+  name = "${local.slurm_cluster_name}-ctrl-health-check"
 
-  dynamic "network_interface" {
-    for_each = var.controller_network_attachment != null ? [1] : []
-    content {
-      network_attachment = var.controller_network_attachment
-    }
+  timeout_sec         = 10
+  check_interval_sec  = 30
+  healthy_threshold   = 1
+  unhealthy_threshold = 3
+
+  http_health_check {
+    port = 8080
+  }
+  log_config {
+    enable = true
   }
 }
 
-moved {
-  from = module.slurm_controller_instance.google_compute_instance_from_template.slurm_instance[0]
-  to   = google_compute_instance_from_template.controller
+# MIG CONTROLLERS
+resource "google_compute_region_instance_group_manager" "controller_mig" {
+
+  name                      = "${local.slurm_cluster_name}-controller-mig"
+  base_instance_name        = "${local.slurm_cluster_name}-controller"
+  region                    = var.region
+  target_size               = var.nb_controllers
+  distribution_policy_zones = local.replica_zones
+
+  dynamic "version" {
+    for_each = module.slurm_controller_template
+
+    content {
+      name              = "controller-${version.key}"
+      instance_template = version.value.self_link
+
+      dynamic "target_size" {
+        for_each = toset(version.key > 0 ? [1] : [])
+        content {
+          fixed = 1
+        }
+      }
+    }
+  }
+  wait_for_instances = false
+  auto_healing_policies {
+    health_check      = google_compute_health_check.controller.id
+    initial_delay_sec = 300
+  }
+
+  update_policy {
+    type                         = "PROACTIVE"
+    instance_redistribution_type = "PROACTIVE"
+    minimal_action               = "REPLACE"
+    replacement_method           = "RECREATE"
+    max_surge_fixed              = 0
+    max_unavailable_fixed        = 4
+  }
 }
 
 # SECRETS: CLOUDSQL

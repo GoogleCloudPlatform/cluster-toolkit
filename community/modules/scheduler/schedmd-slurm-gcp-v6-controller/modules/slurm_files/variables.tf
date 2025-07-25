@@ -67,6 +67,10 @@ variable "slurm_cluster_name" {
   }
 }
 
+variable "slurm_control_hosts" {
+  type = list(string)
+}
+
 variable "controller_state_disk" {
   description = <<EOD
   A disk that will be attached to the controller instance template to save state of slurm. The disk is created and used by default.

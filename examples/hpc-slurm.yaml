@@ -17,7 +17,7 @@
 blueprint_name: hpc-slurm
 
 vars:
-  project_id:  ## Set GCP Project ID Here ##
+  project_id: hpc4-gcp-renault
   deployment_name: hpc-slurm
   region: us-central1
   zone: us-central1-a
@@ -39,15 +39,15 @@ deployment_groups:
   # removed by deleting the private_service_access module and any references to
   # the module by Filestore modules.
   # https://cloud.google.com/vpc/docs/configure-private-services-access#permissions
-  - id: private_service_access
-    source: community/modules/network/private-service-access
-    use: [network]
+  # - id: private_service_access
+  #   source: community/modules/network/private-service-access
+  #   use: [network]
 
-  - id: homefs
-    source: modules/file-system/filestore
-    use: [network, private_service_access]
-    settings:
-      local_mount: /home
+  # - id: homefs
+  #   source: modules/file-system/filestore
+  #   use: [network, private_service_access]
+  #   settings:
+  #     local_mount: /home
 
   - id: debug_nodeset
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
@@ -115,7 +115,6 @@ deployment_groups:
     - debug_partition
     - compute_partition
     - h3_partition
-    - homefs
     - slurm_login
     settings:
       enable_controller_public_ips: true
