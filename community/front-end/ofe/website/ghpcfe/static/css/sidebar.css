@@ -1,0 +1,178 @@
+/**
+ * Copyright 2025 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/* Sidebar and navigation styles */
+
+/* Basic nav item styling */
+.nav-item a img {
+    display: inline-block;
+    margin-right: 20px;
+    width: 24px;
+}
+
+/* Sidebar collapse functionality */
+.sidebar {
+    transition: width 0.3s ease;
+    width: 16.666667% !important; /* col-sm-2 equivalent */
+    min-width: 16.666667% !important;
+    max-width: 16.666667% !important;
+}
+
+.sidebar-collapsed {
+    width: 60px !important;
+    min-width: 60px !important;
+    max-width: 60px !important;
+}
+
+.sidebar-collapsed .nav-link span {
+    display: none;
+}
+
+.sidebar-collapsed .nav-link img {
+    margin-right: 0 !important;
+    margin-left: 0 !important;
+    display: block;
+    width: 24px;
+    height: auto;
+}
+
+.sidebar-collapsed .nav-link {
+    text-align: center;
+    padding: 0.75rem 0px 0.75rem 0px !important;
+    justify-content: center;
+    display: flex;
+    align-items: center;
+}
+
+.sidebar-collapsed .navbar-nav {
+    width: 100%;
+}
+
+.sidebar-collapsed .col-1 {
+    display: none;
+}
+
+/* Main content area */
+.main-content {
+    transition: margin-left 0.3s ease;
+    margin-left: 0;
+    flex: 1;
+    width: 83.333333% !important; /* col-sm-10 equivalent */
+    min-width: 83.333333% !important;
+    max-width: 83.333333% !important;
+}
+
+.main-content-expanded {
+    margin-left: 0;
+    flex: 1;
+    width: calc(100% - 60px) !important;
+    min-width: calc(100% - 60px) !important;
+    max-width: calc(100% - 60px) !important;
+}
+
+/* Hamburger button styling */
+.hamburger-btn {
+    background: none;
+    border: none;
+    color: white;
+    cursor: pointer;
+    padding: 0.25rem 0.5rem;
+    margin-right: 0.5rem;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.hamburger-icon {
+    width: 20px;
+    height: 16px;
+    position: relative;
+    display: block;
+}
+
+.hamburger-icon::before,
+.hamburger-icon::after,
+.hamburger-icon span {
+    content: '';
+    position: absolute;
+    left: 0;
+    width: 100%;
+    height: 2px;
+    background-color: white;
+    transition: all 0.3s ease;
+}
+
+.hamburger-icon::before { top: 0; }
+.hamburger-icon span { top: 50%; transform: translateY(-50%); }
+.hamburger-icon::after { bottom: 0; }
+
+.hamburger-btn:hover .hamburger-icon::before,
+.hamburger-btn:hover .hamburger-icon::after,
+.hamburger-btn:hover .hamburger-icon span {
+    background-color: #e9ecef;
+}
+
+/* Tooltip for collapsed sidebar */
+.sidebar-collapsed .nav-link {
+    position: relative;
+}
+
+.sidebar-collapsed .nav-link:hover::after {
+    content: attr(data-title);
+    position: absolute;
+    left: 100%;
+    top: 50%;
+    transform: translateY(-50%);
+    background: #333;
+    color: white;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+    font-size: 0.875rem;
+    white-space: nowrap;
+    z-index: 1000;
+    margin-left: 0.5rem;
+}
+
+/* Layout container */
+.layout-container {
+    background-color: #fbfbfb;
+    display: flex;
+}
+
+.sidebar-container {
+    background-color: #306dc1;
+    min-height: calc(100vh - 57px);
+}
+
+/* Navbar styling */
+.navbar-brand {
+    color: white !important;
+}
+
+.dev-mode-badge {
+    font-size: 0.65em;
+    vertical-align: middle;
+}
+
+.user-info {
+    color: white;
+}
+
+.user-avatar {
+    border-radius: 50%;
+} 
