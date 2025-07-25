@@ -48,6 +48,8 @@ import tpu
 import conf
 import watch_delete_vm_op
 
+import yaml
+
 log = logging.getLogger()
 
 TOT_REQ_CNT = 1000
@@ -427,16 +429,56 @@ def reconfigure_slurm():
         log.debug("Done.")
 
 
-def update_topology(lkp: util.Lookup) -> None:
-    if conf.topology_plugin(lkp) != conf.TOPOLOGY_PLUGIN_TREE:
-        return
-    updated, summary = conf.gen_topology_conf(lkp)
-    if updated:
-        log.info("Topology configuration updated. Reconfiguring Slurm.")
-        util.scontrol_reconfigure(lkp)
-        # Safe summary only after Slurm got reconfigured, so summary reflects Slurm POV
-        summary.dump(lkp)
+def _get_existing_nodes_from_topology_yaml(topology_yaml_path: Path):
+    existing_nodes = ""
+    
+    if not topology_yaml_path.exists():
+        log.warning(f"Topology file not found at {topology_yaml_path}. Assuming no existing nodes.")
+        return existing_nodes
 
+    try:
+        with open(topology_yaml_path, 'r') as f:
+            topology_data = yaml.safe_load(f)
+
+        if not isinstance(topology_data, list) or not topology_data:
+            log.error(f"Topology file {topology_yaml_path} is empty or has unexpected top-level format.")
+            return existing_nodes
+
+        default_topo_entry = None
+        for entry in topology_data:
+            if isinstance(entry, dict) and entry.get('topology') == 'slurm_gcp_default_topo':
+                default_topo_entry = entry
+                break
+
+        if not default_topo_entry:
+            log.error(f"Topology 'slurm_gcp_default_topo' not found in {topology_yaml_path}.")
+            return existing_nodes
+
+        if isinstance(default_topo_entry['tree']['switches'], list): 
+            first_switch_dict = default_topo_entry['tree']['switches'][0]
+            existing_nodes = nodes_string = first_switch_dict['nodes']
+        else:
+            log.error(f"Topology 'slurm_gcp_default_topo' missing 'tree' or 'switches' structure, or 'switches' list is empty.")
+
+    except Exception as e:
+        log.error(f"An unexpected error occurred while processing {topology_yaml_path}: {e}", exc_info=True)
+
+    return existing_nodes
+
+def update_topology(lkp: util.Lookup) -> None:
+    lkp = util.lookup()
+
+    topology_yaml_path = lkp.etc_dir / "topology.yaml"    
+    existing_combined_nodelist_str = _get_existing_nodes_from_topology_yaml(topology_yaml_path)
+    expected_combined_nodelist_str = conf.gen_nodelist(lkp)
+
+    if existing_combined_nodelist_str != expected_combined_nodelist_str:
+        try:
+            log.info("Topology configuration updated. Reconfiguring Slurm.")
+            conf.gen_topology_yaml_content(lkp)
+            util.scontrol_reconfigure(lkp)
+        except Exception as e:
+            log.error(f"Failed to update topology.yaml: {e}", exc_info=True)
 
 def delete_reservation(lkp: util.Lookup, reservation_name: str) -> None:
     util.run(f"{lkp.scontrol} delete reservation {reservation_name}")
