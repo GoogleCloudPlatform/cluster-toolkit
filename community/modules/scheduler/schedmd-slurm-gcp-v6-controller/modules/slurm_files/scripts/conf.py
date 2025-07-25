@@ -23,6 +23,7 @@ import util
 from util import dirs, slurmdirs
 import tpu
 from addict import Dict as NSDict # type: ignore
+import yaml
 
 FILE_PREAMBLE = """
 # Warning:
@@ -596,6 +597,23 @@ def gen_topology(lkp: util.Lookup) -> TopologyBuilder:
         add_nodeset_topology(ns, bldr, lkp)
     return bldr
 
+def gen_nodelist(lkp: util.Lookup):
+    all_defined_nodelist_strings: List[str] = []
+    for nodeset in lkp.cfg.nodeset.values():
+        all_defined_nodelist_strings.append(lkp.nodelist(nodeset))
+    for nodeset_tpu in lkp.cfg.nodeset_tpu.values():
+        static_list, dynamic_list = lkp.nodenames(nodeset_tpu)
+        if static_list:
+            all_defined_nodelist_strings.append(util.to_hostlist(static_list))
+        if dynamic_list:
+            all_defined_nodelist_strings.append(util.to_hostlist(dynamic_list))
+    for nodeset_dyn in lkp.cfg.nodeset_dyn.values():
+        all_defined_nodelist_strings.append(lkp.nodelist(nodeset_dyn))
+
+    combined_nodelist_str = ",".join(filter(None, all_defined_nodelist_strings))
+
+    return combined_nodelist_str
+
 def gen_topology_conf(lkp: util.Lookup) -> Tuple[bool, TopologySummary]:
     """
     Generates slurm topology.conf.
@@ -625,6 +643,28 @@ def install_topology_conf(lkp: util.Lookup) -> None:
     util.chown_slurm(conf_file, mode=0o600)
     util.chown_slurm(summary_file, mode=0o600)
 
+def gen_topology_yaml_content(lkp):
+    ns_list = gen_nodelist(lkp)
+
+    topology_file = lkp.etc_dir / "topology.yaml" 
+
+    final_yaml_data = [ {
+        "topology": "slurm_gcp_default_topo", 
+        "cluster_default": True,
+        "tree": {
+            "switches": [{
+                "switch": "root", 
+                "nodes": ns_list,
+            }]
+        }
+    } ]
+
+    with open(topology_file, "w") as f:
+        f.write(FILE_PREAMBLE)
+        f.write("---\n")
+        yaml.dump(final_yaml_data, f, indent=2, default_flow_style=False, sort_keys=False)
+
+    util.chown_slurm(topology_file, mode=0o644)
 
 def gen_controller_configs(lkp: util.Lookup) -> None:
     install_slurm_conf(lkp)
@@ -634,6 +674,7 @@ def gen_controller_configs(lkp: util.Lookup) -> None:
     install_gres_conf(lkp)
     install_cgroup_conf(lkp)
     install_jobsubmit_lua(lkp)
+    gen_topology_yaml_content(lkp)
 
     if topology_plugin(lkp) == TOPOLOGY_PLUGIN_TREE:
         _, summary = gen_topology_conf(lkp)
