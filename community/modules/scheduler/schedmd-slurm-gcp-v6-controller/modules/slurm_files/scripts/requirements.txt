@@ -16,3 +16,6 @@ httplib2==0.22.0
 more-executors==2.11.4
 pyyaml==6.0.2
 requests==2.32.4
+python-daemon==3.0.1
+PyMySQL==1.1.0
+psutil==5.9.8

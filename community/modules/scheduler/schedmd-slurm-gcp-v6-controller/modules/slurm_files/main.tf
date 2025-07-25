@@ -34,6 +34,15 @@ data "google_storage_bucket" "this" {
 
 resource "random_uuid" "cluster_id" {
 }
+resource "random_password" "password" {
+  length      = 8
+  special     = false
+  upper       = false
+  lower       = true
+  numeric     = true
+  min_lower   = 1
+  min_numeric = 1
+}
 
 ##################
 # CLUSTER CONFIG #
@@ -51,6 +60,8 @@ locals {
     enable_debug_logging  = var.enable_debug_logging
     extra_logging_flags   = var.extra_logging_flags
     controller_state_disk = var.controller_state_disk
+    slurm_control_hosts   = var.slurm_control_hosts
+    gfs2_pass             = random_password.password.result
 
     # storage
     disable_default_mounts = var.disable_default_mounts
@@ -201,6 +212,8 @@ locals {
     "tpu.py",
     "util.py",
     "watch_delete_vm_op.py",
+    "slurmhcd.py",
+    "slurmhcd.service"
   ]
 
   compute_files = [
