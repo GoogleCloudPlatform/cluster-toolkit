@@ -1,0 +1,16 @@
+[Unit]
+Description=TigerVNC server for user %i
+After=network.target
+
+[Service]
+Type=forking
+User=%i 
+Environment=HOME=/home/%i
+ExecStart=/usr/bin/vncserver -localhost no :{{ display_number }}
+ExecStop=/usr/bin/vncserver -kill :{{ display_number }}
+
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
