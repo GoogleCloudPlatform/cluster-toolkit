@@ -220,9 +220,6 @@ resource "google_container_cluster" "gke_cluster" {
     dns_cache_config {
       enabled = var.enable_node_local_dns_cache
     }
-    parallelstore_csi_driver_config {
-      enabled = var.enable_parallelstore_csi
-    }
     ray_operator_config {
       enabled = var.enable_ray_operator
     }
