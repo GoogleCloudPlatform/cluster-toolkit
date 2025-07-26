@@ -185,3 +185,9 @@ variable "labels" {
   description = "Labels to add to the GKE job template. Key-value pairs."
   type        = map(string)
 }
+
+variable "namespace" {
+  description = "The Kubernetes namespace where the GKE Job will be deployed."
+  type        = string
+  default     = "gke-job-namespace"
+}

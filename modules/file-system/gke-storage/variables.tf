@@ -136,3 +136,9 @@ variable "private_vpc_connection_peering" {
   type        = string
   default     = null
 }
+
+variable "namespace" {
+  description = "Kubernetes namespace to deploy the storage PVC/PV"
+  type        = string
+  default     = "gke-storage-namespace"
+}

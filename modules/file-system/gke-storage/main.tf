@@ -69,6 +69,7 @@ module "kubectl_apply" {
                 capacity           = "${var.capacity_gb}Gi"
                 access_mode        = var.access_mode
                 storage_class_name = local.storage_class_name
+                namespace          = var.namespace
               }
             )
           }

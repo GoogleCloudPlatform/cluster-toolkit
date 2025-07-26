@@ -60,3 +60,9 @@ variable "labels" {
   description = "GCE resource labels to be applied to resources. Key-value pairs."
   type        = map(string)
 }
+
+variable "namespace" {
+  description = "Kubernetes namespace to deploy the storage PVC/PV"
+  type        = string
+  default     = "gke-persistent-namespace"
+}

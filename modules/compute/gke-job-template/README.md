@@ -111,6 +111,7 @@ No modules.
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the GKE job template. Key-value pairs. | `map(string)` | n/a | yes |
 | <a name="input_machine_family"></a> [machine\_family](#input\_machine\_family) | The machine family to use in the node selector (example: `n2`). If null then machine family will not be used as selector criteria. | `string` | `null` | no |
 | <a name="input_name"></a> [name](#input\_name) | The name of the job. | `string` | `"my-job"` | no |
+| <a name="input_namespace"></a> [namespace](#input\_namespace) | The Kubernetes namespace where the GKE Job will be deployed. | `string` | `"gke-job-namespace"` | no |
 | <a name="input_node_count"></a> [node\_count](#input\_node\_count) | How many nodes the job should run in parallel. | `number` | `1` | no |
 | <a name="input_node_pool_names"></a> [node\_pool\_names](#input\_node\_pool\_names) | A list of node pool names on which to run the job. Can be populated via `use` field. | `list(string)` | `[]` | no |
 | <a name="input_node_selectors"></a> [node\_selectors](#input\_node\_selectors) | A list of node selectors to use to place the job. | <pre>list(object({<br/>    key   = string<br/>    value = string<br/>  }))</pre> | `[]` | no |

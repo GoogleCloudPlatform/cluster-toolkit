@@ -141,6 +141,7 @@ locals {
       memory_request       = local.memory_request_string
       ephemeral_request    = local.ephemeral_request_string
       gcs_annotation       = local.any_gcs
+      namespace            = var.namespace
     }
   )
 
