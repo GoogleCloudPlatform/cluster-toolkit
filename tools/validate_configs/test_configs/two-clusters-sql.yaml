@@ -25,7 +25,6 @@ vars:
   enable_cleanup_compute: False
   enable_cleanup_subscriptions: True
   enable_bigquery_load: True
-  instance_image_custom: True
 
 terraform_providers:
   google:

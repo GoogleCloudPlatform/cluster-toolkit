@@ -194,7 +194,6 @@ deployment_groups:
       bandwidth_tier: gvnic_enabled
       machine_type: a2-highgpu-1g
       instance_image: $(vars.new_image)
-      instance_image_custom: true
 
   - id: a2_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
@@ -211,7 +210,6 @@ deployment_groups:
       bandwidth_tier: gvnic_enabled
       machine_type: g2-standard-4
       instance_image: $(vars.new_image)
-      instance_image_custom: true
 
   - id: g2_partition
     source: community/modules/compute/schedmd-slurm-gcp-v6-partition
@@ -226,7 +224,6 @@ deployment_groups:
     settings:
       enable_login_public_ips: true
       instance_image: $(vars.new_image)
-      instance_image_custom: true
 
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
@@ -239,5 +236,4 @@ deployment_groups:
     settings:
       enable_controller_public_ips: true
       instance_image: $(vars.new_image)
-      instance_image_custom: true
       login_startup_script: $(examples.startup_script)

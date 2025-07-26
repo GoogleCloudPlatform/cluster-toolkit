@@ -103,7 +103,7 @@ variable "instance_image" {
   }
 }
 
-variable "instance_image_custom" {
+variable "instance_image_custom" { # tflint-ignore: terraform_unused_declarations
   description = <<-EOD
     A flag that designates that the user is aware that they are requesting
     to use a custom and potentially incompatible image for this Slurm on
