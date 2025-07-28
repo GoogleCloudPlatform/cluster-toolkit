@@ -7,7 +7,7 @@ vars:
   zone: {{ cluster.cloud_zone }}
   enable_cleanup_compute: True
   enable_bigquery_load: {{ cluster.use_bigquery }}
-  instance_image_custom: True
+  
   labels:
     created_by: {{ site_name }}
 

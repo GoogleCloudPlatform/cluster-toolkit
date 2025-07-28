@@ -477,7 +477,7 @@ deployment_groups:
     settings:
       bandwidth_tier: gvnic_enabled
       machine_type: a3-ultragpu-8g
-      instance_image_custom: true
+
       enable_public_ips: true
       node_count_static: $(vars.a3u_cluster_size)
       node_count_dynamic_max: 0
@@ -531,7 +531,6 @@ deployment_groups:
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
     use: [a3ultra-slurm-net-0]
     settings:
-      instance_image_custom: true
       disk_size_gb: 300
       enable_login_public_ips: true
       machine_type: n2-standard-8
@@ -570,7 +569,6 @@ deployment_groups:
     - homefs
     settings:
       enable_controller_public_ips: true
-      instance_image_custom: true
       disk_type: pd-extreme
       disk_size_gb: 300
       machine_type: n2-standard-80
