@@ -305,6 +305,7 @@ limitations under the License.
 | [null_resource.enable_tcpxo_in_workload](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
 | [null_resource.install_dependencies](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
 | [google_compute_machine_types.machine_info](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_machine_types) | data source |
+| [google_compute_reservation.specific](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_reservation) | data source |
 | [google_compute_reservation.specific_reservations](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_reservation) | data source |
 | [google_container_cluster.gke_cluster](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/container_cluster) | data source |
 
