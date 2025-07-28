@@ -59,14 +59,6 @@ duplicates = [
         "community/modules/scripts/ramble-setup/scripts/install_ramble_deps.yml",
     ],
     [
-        "modules/file-system/parallelstore/scripts/install-daos-client.sh",
-        "modules/file-system/pre-existing-network-storage/scripts/install-daos-client.sh",
-    ],
-    [
-        "modules/file-system/parallelstore/templates/mount-daos.sh.tftpl",
-        "modules/file-system/pre-existing-network-storage/templates/mount-daos.sh.tftpl",
-    ],
-    [
         "modules/compute/vm-instance/compute_image.tf"
         "modules/scheduler/batch-job-template/compute_image.tf"
         "community/modules/compute/htcondor-execute-point/compute_image.tf"

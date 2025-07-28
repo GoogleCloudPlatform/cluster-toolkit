@@ -54,14 +54,12 @@ locals {
   managed_lustre_client_install_script = file("${path.module}/scripts/install-managed-lustre-client.sh")
   nfs_client_install_script            = file("${path.module}/scripts/install-nfs-client.sh")
   gcs_fuse_install_script              = file("${path.module}/scripts/install-gcs-fuse.sh")
-  daos_client_install_script           = file("${path.module}/scripts/install-daos-client.sh")
 
   install_scripts = {
     "lustre"         = local.ddn_lustre_client_install_script
     "managed_lustre" = local.managed_lustre_client_install_script
     "nfs"            = local.nfs_client_install_script
     "gcsfuse"        = local.gcs_fuse_install_script
-    "daos"           = local.daos_client_install_script
   }
 
   client_install_runner = {
@@ -90,24 +88,10 @@ locals {
     "content"     = file("${path.module}/scripts/mount.sh")
   }
 
-  mount_runner_daos = {
-    "type" = "shell"
-    "content" = templatefile("${path.module}/templates/mount-daos.sh.tftpl", {
-      access_points     = var.remote_mount
-      daos_agent_config = var.parallelstore_options.daos_agent_config
-      dfuse_environment = var.parallelstore_options.dfuse_environment
-      local_mount       = var.local_mount
-      # avoid passing "--" as mount option to dfuse
-      mount_options = length(var.mount_options) == 0 ? "" : join(" ", [for opt in split(",", var.mount_options) : "--${opt}"])
-    })
-    "destination" = "mount_filesystem${replace(var.local_mount, "/", "_")}.sh"
-  }
-
   mount_scripts = {
     "lustre"  = local.mount_runner_vanilla
     "nfs"     = local.mount_runner_vanilla
     "gcsfuse" = local.mount_runner_gcsfuse
-    "daos"    = local.mount_runner_daos
   }
 
   mount_runner = lookup(local.mount_scripts, local.fs_type, local.mount_runner_vanilla)
