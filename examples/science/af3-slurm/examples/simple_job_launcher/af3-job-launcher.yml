@@ -35,6 +35,7 @@
     num_diffusion_samples:
     num_seeds:
     save_embeddings:
+    inference_enable_unified_memory:
 
   tasks:
   - name: Ensure target directory exists (if needed)

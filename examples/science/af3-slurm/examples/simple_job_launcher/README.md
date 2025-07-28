@@ -102,4 +102,5 @@ Options (override defaults):
 - `--job-name-base NAME`  Base name for Slurm job (Default: 'alphafold3')
 - `--log-base-dir DIR`    Base directory for logs (Default: '/home/fschuermann_google_com/slurm_logs')
 - `--jax-cache-dir DIR`   JAX cache directory (Inference only) (Default: '')
+- `--enable-inference-unified-memory`: Whether to enable unified memory on inference process. See AF3 [unified-memory](https://github.com/google-deepmind/alphafold3/blob/main/docs/performance.md#unified-memory) for more details.
 - `-h, --help`            Display this help message and exit.

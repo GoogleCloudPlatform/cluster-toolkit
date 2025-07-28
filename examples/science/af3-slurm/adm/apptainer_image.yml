@@ -36,3 +36,13 @@
       dnf config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel8/x86_64/cuda-rhel8.repo
       dnf clean all
       dnf -y module install nvidia-driver:570-open
+
+  - name: Ensure pip is installed
+    ansible.builtin.package:
+      name: python3-pip
+      state: present
+
+  - name: Install Ansible using pip
+    ansible.builtin.pip:
+      name: ansible
+      executable: pip3

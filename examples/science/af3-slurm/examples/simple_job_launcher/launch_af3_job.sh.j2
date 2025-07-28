@@ -1,20 +1,4 @@
 #!/bin/bash
-{#
-Copyright 2025 "Google LLC"
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-#}
-
 
 # --- Capture Launch Directory ---
 LAUNCH_DIR=$(pwd)
@@ -39,6 +23,7 @@ DEFAULT_NUM_RECYCLES="{{ num_recycles }}"
 DEFAULT_NUM_DIFFUSION_SAMPLES="{{ num_diffusion_samples }}"
 DEFAULT_NUM_SEEDS="{{ num_seeds }}"
 DEFAULT_SAVE_EMBEDDINGS="{{ save_embeddings }}"
+DEFAULT_INFERENCE_ENABLE_UNIFIED_MEMORY="{{ inference_enable_unified_memory | default('false') | trim }}"
 
 # --- Fixed Configuration (Set via Ansible Variables) ---
 CONTAINER_IMAGE="{{ sif_dir }}/af3.sif"
@@ -63,7 +48,7 @@ NUM_RECYCLES="${DEFAULT_NUM_RECYCLES}"
 NUM_DIFFUSION_SAMPLES="${DEFAULT_NUM_DIFFUSION_SAMPLES}"
 NUM_SEEDS="${DEFAULT_NUM_SEEDS}"
 SAVE_EMBEDDINGS="${DEFAULT_SAVE_EMBEDDINGS}"
-
+INFERENCE_ENABLE_UNIFIED_MEMORY="${DEFAULT_INFERENCE_ENABLE_UNIFIED_MEMORY}"
 
 # --- Helper Functions ---
 error_exit() { echo "Error: $1" >&2; usage >&2; exit 1; }
@@ -95,6 +80,7 @@ usage() {
   local default_gres_disp="${DEFAULT_GRES:-gpu:1}" # Handle potential empty DEFAULT_GRES
   local default_job_name_base_disp="${DEFAULT_JOB_NAME_BASE}"
   local default_log_base_dir_disp="${DEFAULT_LOG_BASE_DIR}"
+  local default_inference_enable_unified_memory_disp="${DEFAULT_INFERENCE_ENABLE_UNIFIED_MEMORY}"
 
   # AF3 specific defaults - use :- expansion here to decide display text
   local default_jax_cache_disp="${DEFAULT_JAX_COMPILATION_CACHE_PATH:-using AF3 run_alphafold.py defaults}"
@@ -127,6 +113,7 @@ Options (override defaults):
                                      (Default: none for datapipeline, '${default_gres_disp}' for inference if unset)
   --job-name-base NAME               Base name for Slurm job (Default: '${default_job_name_base_disp}')
   --log-base-dir DIR                 Base directory for logs (Default: '${default_log_base_dir_disp}')
+  --inference-enable-unified-memory VALUE Flag to enable unified memory setting for inference process (Default: ${default_inference_enable_unified_memory_disp})
 
 AlphaFold 3 Specific Options (Inference only):
   --jax-compilation-cache-path DIR   JAX cache directory (Inference only) (Default: ${default_jax_cache_disp})
@@ -162,6 +149,7 @@ while [[ $# -gt 0 ]]; do
     --job-name-base)  JOB_NAME_BASE="$2"; shift 2 ;;
     --log-base-dir)   LOG_BASE_DIR="$2"; shift 2 ;;
     --jax-compilation-cache-path)  JAX_COMPILATION_CACHE_PATH="$2"; shift 2 ;;
+    --inference-enable-unified-memory)  INFERENCE_ENABLE_UNIFIED_MEMORY="$2"; shift 2 ;;
     # --- NEW AF3 ARG PARSING ---
     --max-template-date)          MAX_TEMPLATE_DATE="$2"; shift 2 ;;
     --conformer-max-iterations)   CONFORMER_MAX_ITERATIONS="$2"; shift 2 ;;
@@ -236,12 +224,19 @@ fi
 
 # --- Job Type Specific Configuration ---
 declare -a apptainer_binds=()
-apptainer_nv_flag="" run_data_pipeline_flag="" run_inference_flag=""
+apptainer_nv_flag="" apptainer_env_flag="" run_data_pipeline_flag="" run_inference_flag=""
 base_python_opts="" # Base options for both types
 job_specific_python_opts="" # Options specific to job type
 
 apptainer_binds+=("--bind" "$(dirname "${INPUT_PATH}")")
 apptainer_binds+=("--bind" "${OUTPUT_DIR}")
+
+if [ "$INFERENCE_ENABLE_UNIFIED_MEMORY" == "true" ]; then
+    apptainer_env_flag="--env XLA_PYTHON_CLIENT_PREALLOCATE=false,TF_FORCE_UNIFIED_MEMORY=true,XLA_CLIENT_MEM_FRACTION=3.2"
+    echo "INFERENCE_ENABLE_UNIFIED_MEMORY is set to '$apptainer_env_flag'"
+else
+    echo "INFERENCE_ENABLE_UNIFIED_MEMORY is not true"
+fi
 
 # Construct base python options applicable to both (if any in future)
 # base_python_opts+="..."
@@ -259,7 +254,7 @@ elif [ "$JOB_TYPE" = "inference" ]; then
 
     # Add JAX cache path if set
     if [ -n "$JAX_COMPILATION_CACHE_PATH" ]; then
-        job_specific_python_opts+=" --jax_compilation_cache_path='${JAX_COMPILATION_CACHE_PATH}'"
+        job_specific_python_opts+=" --jax_compilation_cache_dir='${JAX_COMPILATION_CACHE_PATH}'"
         apptainer_binds+=("--bind" "${JAX_COMPILATION_CACHE_PATH}")
         echo "Info: JAX cache enabled at ${JAX_COMPILATION_CACHE_PATH}"
     else
@@ -355,6 +350,7 @@ set -x # Print command being executed
 
 apptainer run ${apptainer_nv_flag} \\
     ${bind_args_str} \\
+    ${apptainer_env_flag} \\
   "${CONTAINER_IMAGE}" python3 "${ALPHAFOLD_SCRIPT}" \\
     ${python_input_flag} "${python_input_value}" \\
     --output_dir "${OUTPUT_DIR}" \\

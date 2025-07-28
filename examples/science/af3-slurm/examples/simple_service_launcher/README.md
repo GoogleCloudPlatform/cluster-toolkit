@@ -119,50 +119,89 @@ python your_script.py --bucket-name your-bucket  --run-inference='False'
 
 #### Bucket Name and Config File
 `--bucket-name`: your bucket name
+
 `--config-file`: file to set all these argument
+
 #### Data Pipeline and Inference Options
 `--run-data-pipeline`: set to `True` to execute the data pipeline. Set to `False` to skip the pipeline execution
+
 `--run-inference`: set to `True` to run the inference process. Set to `False` to skip running inference
+
 #### Time Interval
 `--time-interval`: specifies the time interval (in seconds) for the Python daemon to check for input files
+
 #### Timeout
 `--inference-job-timeout`: inference timeout (seconds)
+
 `--data-pipeline-job-timeout`: data pipeline timeout (seconds)
+
 `--pending-job-time-limit`: Check for pending jobs older than this time limit (in seconds). If not provided, no time limit is applied.
+
 #### Data Pipeline Bucket Directories
 `--data-pipeline-bucket-input-dir`: bucket directory for data pipeline input files
+
 `--data-pipeline-bucket-running-dir`: bucket directory for running data pipelines
+
 `--data-pipeline-bucket-done-dir`: bucket directory for successful data pipelines
+
 `--data-pipeline-bucket-failed-dir`: bucket directory for failed data pipelines
+
 `--data-pipeline-bucket-result-dir`: bucket directory for storing data pipeline results
+
 #### Inference Bucket Directories
 `--inference-bucket-input-dir`: bucket directory for inference input files
+
 `--inference-bucket-running-dir`: bucket directory for running inferences
+
 `--inference-bucket-done-dir`: bucket directory for successful inferences
+
 `--inference-bucket-failed-dir`: bucket directory for failed inferences
+
 `--inference-bucket-result-dir`: bucket directory for storing inference results
+
 #### Local Directories (Slurm VM)
 `--local-data-pipeline-dir`: local directory for data pipelines
+
 `--local-inference-dir`: local directory for inferences
+
 `--sif-dir`: local directory for Singularity/Apptainer image (The image should be named as `af3.sif`)
+
 `--db-dir`: local directory for databases
+
 `--model-dir`: local directory for model file (model weight)
+
 `--pdb-database-path`: local directory for data-pipeline pdb database
+
 #### Slurm Partition
 `--data-pipeline-partition-name`: datapipeline slurm partition name
+
 `--data-pipeline-partition-memory-size`: data pipeline slurm partition memory size (GB)
+
 `--data-pipeline-partition-cpu-count`: data pipeline slurm partition cpu count
+
 `--inference-partition-name`: inference slurm partition name
+
 `--inference-partition-memory-size`: inference slurm partition memory size (GB)
+
 `--inference-partition-cpu-count`: inference slurm partition cpu count
+
 `--auto-calculate-resource`: calculate required resource based on input sequence length
+
+`--enable-inference-unified-memory`: Whether to enable unified memory on inference process. See AF3 [unified-memory](https://github.com/google-deepmind/alphafold3/blob/main/docs/performance.md#unified-memory) for more details.
+
 #### Scientific Inference Parameters
 `--inference-max-template-date`: Maximum template release date to consider. Format: YYYY-MM-DD
+
 `--inference-conformer-max-iterations`:  Optional override for maximum number of iterations to run for RDKit conformer search
+
 `--inference-num-recycles`: Number of recycles to use during inference. Lower bound=1
+
 `--inference-num-diffusion-samples`: Number of diffusion samples to generate. Lower bound=1
+
 `--inference-num-seeds`: Number of seeds to use for inference.
-`--inference-save-embeddings` : Whether to save the final trunk single and pair embeddings in the output
+
+`--inference-save-embeddings` : Whether to save the final trunk single and pair embeddings in the output.
+
 See AF3 [run_alphafold.py](https://github.com/google-deepmind/alphafold3/blob/main/run_alphafold.py) for more details.
 
 ## Prerequisites

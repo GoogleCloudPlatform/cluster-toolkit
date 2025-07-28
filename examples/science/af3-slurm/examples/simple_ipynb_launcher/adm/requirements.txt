@@ -1,0 +1,8 @@
+google-cloud-storage
+google-cloud-secret-manager
+jinja2
+biopython
+ijson
+py3Dmol
+plotly
+pandas
