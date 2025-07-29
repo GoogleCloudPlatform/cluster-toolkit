@@ -118,10 +118,16 @@ locals {
   install_dir = can(coalesce(var.install_dir)) ? abspath(var.install_dir) : local.output_dir
 }
 
+resource "local_file" "config" {
+  content  = yamlencode(local.config)
+  filename = "${local.build_dir}/config.yaml"
+}
+
 resource "google_storage_bucket_object" "config" {
-  bucket  = data.google_storage_bucket.this.name
-  name    = "${local.bucket_dir}/config.yaml"
-  content = yamlencode(local.config)
+  bucket         = data.google_storage_bucket.this.name
+  name           = "${local.bucket_dir}/config.yaml"
+  source         = local_file.config.filename
+  source_md5hash = local_file.config.content_md5
 
   # Take dependency on all other "config artifacts" so creation of `config.yaml`
   # can be used as a signal for setup.py that "everything is ready".
@@ -136,30 +142,58 @@ resource "google_storage_bucket_object" "config" {
   ]
 }
 
-resource "google_storage_bucket_object" "nodeset_config" {
-  for_each = { for ns in var.nodeset : ns.nodeset_name => merge(ns, {
+locals {
+  nodeset_config_map = { for ns in var.nodeset : ns.nodeset_name => merge(ns, {
     instance_properties = jsondecode(ns.instance_properties_json)
   }) }
+}
 
-  bucket  = data.google_storage_bucket.this.name
-  name    = "${local.bucket_dir}/nodeset_configs/${each.key}.yaml"
-  content = yamlencode(each.value)
+resource "local_file" "nodeset_config" {
+  for_each = local.nodeset_config_map
+
+  content  = yamlencode(each.value)
+  filename = "${local.build_dir}/nodeset_configs/${each.key}.yaml"
+}
+
+resource "google_storage_bucket_object" "nodeset_config" {
+  for_each = local.nodeset_config_map
+
+  bucket         = data.google_storage_bucket.this.name
+  name           = "${local.bucket_dir}/nodeset_configs/${each.key}.yaml"
+  source         = local_file.nodeset_config[each.key].filename
+  source_md5hash = local_file.nodeset_config[each.key].content_md5
+}
+
+resource "local_file" "nodeset_dyn_config" {
+  for_each = { for ns in var.nodeset_dyn : ns.nodeset_name => ns }
+
+  content  = yamlencode(each.value)
+  filename = "${local.build_dir}/nodeset_dyn_configs/${each.key}.yaml"
 }
 
 resource "google_storage_bucket_object" "nodeset_dyn_config" {
   for_each = { for ns in var.nodeset_dyn : ns.nodeset_name => ns }
 
-  bucket  = data.google_storage_bucket.this.name
-  name    = "${local.bucket_dir}/nodeset_dyn_configs/${each.key}.yaml"
-  content = yamlencode(each.value)
+  bucket         = data.google_storage_bucket.this.name
+  name           = "${local.bucket_dir}/nodeset_dyn_configs/${each.key}.yaml"
+  source         = local_file.nodeset_dyn_config[each.key].filename
+  source_md5hash = local_file.nodeset_dyn_config[each.key].content_md5
+}
+
+resource "local_file" "nodeset_tpu_config" {
+  for_each = { for n in var.nodeset_tpu[*].nodeset : n.nodeset_name => n }
+
+  content  = yamlencode(each.value)
+  filename = "${local.build_dir}/nodeset_tpu_configs/${each.key}.yaml"
 }
 
 resource "google_storage_bucket_object" "nodeset_tpu_config" {
   for_each = { for n in var.nodeset_tpu[*].nodeset : n.nodeset_name => n }
 
-  bucket  = data.google_storage_bucket.this.name
-  name    = "${local.bucket_dir}/nodeset_tpu_configs/${each.key}.yaml"
-  content = yamlencode(each.value)
+  bucket         = data.google_storage_bucket.this.name
+  name           = "${local.bucket_dir}/nodeset_tpu_configs/${each.key}.yaml"
+  source         = local_file.nodeset_tpu_config[each.key].filename
+  source_md5hash = local_file.nodeset_tpu_config[each.key].content_md5
 }
 
 #########
