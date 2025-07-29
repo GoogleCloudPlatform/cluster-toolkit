@@ -80,7 +80,7 @@ deployment_groups:
     use: [network1, gpunets, workload_service_account]
     settings:
       enable_private_endpoint: false  # Allows for access from authorized public IPs
-      release_channel: 'RAPID'
+      release_channel: 'STABLE'
       configure_workload_identity_sa: true
       master_authorized_networks:
       - cidr_block: $(vars.authorized_cidr)  # Allows your machine run kubectl command. It's required for the multi-network setup.
