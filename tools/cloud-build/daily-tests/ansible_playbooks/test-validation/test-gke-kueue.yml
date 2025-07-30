@@ -37,25 +37,29 @@
 - name: Create the host topology kueue job and capture its name
   delegate_to: localhost
   ansible.builtin.shell: |
-    kubectl create -f {{ workspace }}/tools/cloud-build/daily-tests/blueprints/kueue-config-files/host-topology-tas-small-job.yaml -o=jsonpath='{.metadata.name}' > /tmp/host_job_name.txt
-    cat /tmp/host_job_name.txt
+    # Use kubectl create -f ... -o name to get the full resource name (e.g., "job.batch/tas-sample-small-required-host-wn4nb")
+    # Then use awk to extract just the name part (e.g., "tas-sample-small-required-host-wn4nb")
+    JOB_FULL_NAME=$(kubectl create -f {{ workspace }}/tools/cloud-build/daily-tests/blueprints/kueue-config-files/host-topology-tas-small-job.yaml -o name)
+    JOB_NAME=$(echo $JOB_FULL_NAME | awk -F'/' '{print $2}')
+    echo $JOB_NAME > /tmp/host_job_name.txt
+    cat /tmp/host_job_name.txt # This prints to stdout, which Ansible captures in host_job_creation.stdout
   register: host_job_creation
-  changed_when: False
+  changed_when: true # Set to true because it creates a resource
 
 - name: Get host topology job name from file
+  # This task is now simpler because host_job_creation.stdout already contains the name
   delegate_to: localhost
-  ansible.builtin.command: cat /tmp/host_job_name.txt
-  register: host_job_name
-  changed_when: False
+  ansible.builtin.set_fact:
+    host_job_name_for_kueue_check: "{{ host_job_creation.stdout | trim }}" # Trim any whitespace
 
 - name: Wait for and get the workload name for the host topology job
   delegate_to: localhost
   ansible.builtin.shell: >
-    kubectl get workload -l kueue.x-k8s.io/job-name={{ host_job_name.stdout }} -o jsonpath='{.items[0].metadata.name}'
+    kubectl get workload -l kueue.x-k8s.io/job-name={{ host_job_name_for_kueue_check }} -o jsonpath='{.items[0].metadata.name}'
   register: workload_name
-  until: workload_name.stdout != ""
-  retries: 10
-  delay: 15
+  until: workload_name.stdout | length > 0 # Check length to ensure it's not empty
+  retries: 20 # Increased retries
+  delay: 10   # Increased delay, as Kueue processing takes time
 
 - name: PROXY CHECK - Ensure TopologyAssignment exists in Workload status
   delegate_to: localhost
