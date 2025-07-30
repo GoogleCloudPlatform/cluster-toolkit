@@ -3,7 +3,7 @@
 ## Description
 
 Cluster Toolkit is an open-source software offered by Google Cloud which makes it
-easy for customers to deploy AI/ML and HPC environments on Google Cloud.
+easy for customers to deploy AI/ML and HPC environments on Google Cloud
 
 Cluster Toolkit allows customers to deploy turnkey AI/ML and HPC environments (compute,
 networking, storage, etc.) following Google Cloud best-practices, in a repeatable
