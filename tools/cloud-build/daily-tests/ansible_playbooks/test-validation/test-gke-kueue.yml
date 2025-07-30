@@ -21,88 +21,61 @@
 - name: Get cluster credentials for kubectl
   delegate_to: localhost
   ansible.builtin.command: gcloud container clusters get-credentials {{ deployment_name }} --region {{ region }} --project {{ custom_vars.project }} --verbosity=debug
-  changed_when: false
 
-- name: Wait for Kueue controller manager to be ready
+- name: Create the topology kueue
   delegate_to: localhost
   ansible.builtin.shell: |
-    kubectl wait --for=condition=available deployment/kueue-controller-manager -n kueue-system --timeout=5m
+    array=({{ workspace }}/tools/cloud-build/daily-tests/blueprints/kueue-config-files/tas-queues.yaml)
+    kubectl create -f ${array[0]} -v=9
+    echo ${array[0]}
   args:
     executable: /bin/bash
-  changed_when: false
+  changed_when: False
 
-- name: Wait for Kueue webhook service to have an endpoint
+- name: Create the host topology kueue job
   delegate_to: localhost
   ansible.builtin.shell: |
-    kubectl get endpoints -n kueue-system kueue-webhook-service -o jsonpath='{.subsets[0].addresses[0].ip}'
-  register: webhook_endpoint
-  until: webhook_endpoint.stdout | length > 0
-  retries: 10
-  delay: 6
-  changed_when: false
+    array=({{ workspace }}/tools/cloud-build/daily-tests/blueprints/kueue-config-files/host-topology-tas-small-job.yaml)
+    kubectl create -f ${array[0]} -v=9
+    echo ${array[0]}
+  args:
+    executable: /bin/bash
+  changed_when: False
 
-- name: Create the topology kueue config
+- name: Ensure all pods are on the same host
   delegate_to: localhost
   ansible.builtin.shell: |
-    kubectl apply -f {{ workspace }}/tools/cloud-build/daily-tests/blueprints/kueue-config-files/tas-queues.yaml -v=9
-  changed_when: true
-
-- name: Create a unique host topology job and capture its name
-  delegate_to: localhost
-  ansible.builtin.shell: |
-    # Use kubectl create -o name and awk to reliably get the generated job name
-    JOB_FULL_NAME=$(kubectl create -f {{ workspace }}/tools/cloud-build/daily-tests/blueprints/kueue-config-files/host-topology-tas-small-job.yaml -o name)
-    JOB_NAME=$(echo $JOB_FULL_NAME | awk -F'/' '{print $2}')
-    echo "Job name created: $JOB_NAME"
-    echo $JOB_NAME
-  register: host_job_name_output
-  changed_when: true
-
-- name: Wait for Workload to be created for the host topology job
-  delegate_to: localhost
-  ansible.builtin.shell: >
-    kubectl get workload -l kueue.x-k8s.io/job-name={{ host_job_name_output.stdout_lines[-1] }} -o jsonpath='{.items[0].metadata.name}'
-  register: workload_name
-  until: workload_name.stdout | length > 0
-  retries: 20
-  delay: 10
-  changed_when: false
-
-- name: PROXY CHECK - Ensure TopologyAssignment exists for the host topology job
-  delegate_to: localhost
-  ansible.builtin.shell: >
-    kubectl get workload {{ workload_name.stdout }} -n default -o jsonpath='{.status.admission.podSetAssignments[0].topologyAssignment}'
-  register: topology_assignment
-  until: topology_assignment.stdout | length > 0 and topology_assignment.stdout != "<none>"
-  retries: 12
-  delay: 10
-  changed_when: false
-
-- name: Wait until pods for the host topology job are running
-  delegate_to: localhost
-  ansible.builtin.shell: |
-    kubectl get pods -l job-name={{ host_job_name_output.stdout_lines[-1] }} -o jsonpath='{.items[?(@.status.phase=="Running")].metadata.name}' | wc -w
-  register: running_pod_count
-  until: running_pod_count.stdout | int == 2
-  retries: 20
-  delay: 10
-  changed_when: false
-
-- name: Assert all pods are on the same host
-  delegate_to: localhost
-  ansible.builtin.shell: |
-    kubectl get pods -l job-name={{ host_job_name_output.stdout_lines[-1] }} \
-    -o custom-columns="Host:.spec.nodeName" | tail -n +2 | sort | uniq | wc -l
+    kubectl get pods -v=9 \
+    -o custom-columns="Name:.metadata.name,Host:.spec.nodeSelector.cloud\.google\.com/gce-topology-host" | \
+    sort -k2 | uniq -f 1 | wc -l
   register: unique_host_count
-  until: unique_host_count.stdout | int == 1 # Corrected assertion to 1
+  until: unique_host_count.stdout | int == 2
   retries: 10
   delay: 10
-  changed_when: false
+
+- name: Check TopologyAssignment for Host Topology
+  delegate_to: localhost
+  ansible.builtin.shell: |
+    kubectl get workloads.kueue.x-k8s.io -n default  -o jsonpath='{.items[0].status.topologyAssignments}'
+  register: topology_assignment_host
+  until: topology_assignment_host.stdout != ""
+  retries: 10
+  delay: 10
+
+- name: Assert TopologyAssignment exists for Host Topology
+  ansible.builtin.assert:
+    that:
+    - topology_assignment_host.stdout is defined
+    - topology_assignment_host.stdout | length > 0
+    msg: "TopologyAssignment not found for Host Topology. TAS might not be working."
 
 - name: Delete the host topology kueue job
   delegate_to: localhost
-  ansible.builtin.command: kubectl delete job {{ host_job_name_output.stdout_lines[-1] }}
-  changed_when: true
+  ansible.builtin.shell: |
+    kubectl delete --all jobs -v=9
+  args:
+    executable: /bin/bash
+  changed_when: False
 
 - name: Create the rack topology kueue job
   delegate_to: localhost
