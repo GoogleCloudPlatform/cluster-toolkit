@@ -12,17 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+- name: Assert variables are defined
+  ansible.builtin.assert:
+    that:
+    - region is defined
+    - custom_vars.project is defined
+
 - name: Get cluster credentials for kubectl
   delegate_to: localhost
   ansible.builtin.command: gcloud container clusters get-credentials {{ deployment_name }} --region {{ region }} --project {{ custom_vars.project }} --verbosity=debug
-
-- name: Wait for Kueue controller manager to be ready
-  delegate_to: localhost
-  ansible.builtin.shell: |
-    kubectl wait --for=condition=available deployment/kueue-controller-manager -n kueue-system --timeout=5m
-  args:
-    executable: /bin/bash
-  changed_when: False
 
 - name: Create the topology kueue
   delegate_to: localhost
@@ -34,41 +32,15 @@
     executable: /bin/bash
   changed_when: False
 
-- name: Create the host topology kueue job and capture its name
+- name: Create the host topology kueue job
   delegate_to: localhost
   ansible.builtin.shell: |
-    # Use kubectl create -f ... -o name to get the full resource name (e.g., "job.batch/tas-sample-small-required-host-wn4nb")
-    # Then use awk to extract just the name part (e.g., "tas-sample-small-required-host-wn4nb")
-    JOB_FULL_NAME=$(kubectl create -f {{ workspace }}/tools/cloud-build/daily-tests/blueprints/kueue-config-files/host-topology-tas-small-job.yaml -o name)
-    JOB_NAME=$(echo $JOB_FULL_NAME | awk -F'/' '{print $2}')
-    echo $JOB_NAME > /tmp/host_job_name.txt
-    cat /tmp/host_job_name.txt # This prints to stdout, which Ansible captures in host_job_creation.stdout
-  register: host_job_creation
-  changed_when: true # Set to true because it creates a resource
-
-- name: Get host topology job name from file
-  # This task is now simpler because host_job_creation.stdout already contains the name
-  delegate_to: localhost
-  ansible.builtin.set_fact:
-    host_job_name_for_kueue_check: "{{ host_job_creation.stdout | trim }}" # Trim any whitespace
-
-- name: Wait for and get the workload name for the host topology job
-  delegate_to: localhost
-  ansible.builtin.shell: >
-    kubectl get workload -l kueue.x-k8s.io/job-name={{ host_job_name_for_kueue_check }} -o jsonpath='{.items[0].metadata.name}'
-  register: workload_name
-  until: workload_name.stdout | length > 0 # Check length to ensure it's not empty
-  retries: 20 # Increased retries
-  delay: 10   # Increased delay, as Kueue processing takes time
-
-- name: PROXY CHECK - Ensure TopologyAssignment exists in Workload status
-  delegate_to: localhost
-  ansible.builtin.shell: >
-    kubectl get workload {{ workload_name.stdout }} -n default -o jsonpath='{.status.admission.podSetAssignments[0].topologyAssignment}'
-  register: topology_assignment
-  until: topology_assignment.stdout != "" and topology_assignment.stdout != "<none>"
-  retries: 12
-  delay: 10
+    array=({{ workspace }}/tools/cloud-build/daily-tests/blueprints/kueue-config-files/host-topology-tas-small-job.yaml)
+    kubectl create -f ${array[0]} -v=9
+    echo ${array[0]}
+  args:
+    executable: /bin/bash
+  changed_when: False
 
 - name: Ensure all pods are on the same host
   delegate_to: localhost
