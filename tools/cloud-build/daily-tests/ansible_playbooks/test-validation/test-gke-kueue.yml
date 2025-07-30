@@ -32,15 +32,37 @@
     executable: /bin/bash
   changed_when: False
 
-- name: Create the host topology kueue job
+- name: Create the host topology kueue job and capture its name
   delegate_to: localhost
   ansible.builtin.shell: |
-    array=({{ workspace }}/tools/cloud-build/daily-tests/blueprints/kueue-config-files/host-topology-tas-small-job.yaml)
-    kubectl create -f ${array[0]} -v=9
-    echo ${array[0]}
-  args:
-    executable: /bin/bash
+    kubectl create -f {{ workspace }}/tools/cloud-build/daily-tests/blueprints/kueue-config-files/host-topology-tas-small-job.yaml -o=jsonpath='{.metadata.name}' > /tmp/host_job_name.txt
+    cat /tmp/host_job_name.txt
+  register: host_job_creation
   changed_when: False
+
+- name: Get host topology job name from file
+  delegate_to: localhost
+  ansible.builtin.command: cat /tmp/host_job_name.txt
+  register: host_job_name
+  changed_when: False
+
+- name: Wait for and get the workload name for the host topology job
+  delegate_to: localhost
+  ansible.builtin.shell: >
+    kubectl get workload -l kueue.x-k8s.io/job-name={{ host_job_name.stdout }} -o jsonpath='{.items[0].metadata.name}'
+  register: workload_name
+  until: workload_name.stdout != ""
+  retries: 10
+  delay: 15
+
+- name: PROXY CHECK - Ensure TopologyAssignment exists in Workload status
+  delegate_to: localhost
+  ansible.builtin.shell: >
+    kubectl get workload {{ workload_name.stdout }} -n default -o jsonpath='{.status.admission.podSetAssignments[0].topologyAssignment}'
+  register: topology_assignment
+  until: topology_assignment.stdout != "" and topology_assignment.stdout != "<none>"
+  retries: 12
+  delay: 10
 
 - name: Ensure all pods are on the same host
   delegate_to: localhost
