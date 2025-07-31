@@ -1,0 +1,59 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+---
+
+- name: Ensure VNC configuration directory exists
+  ansible.builtin.file:
+    path: "/home/{{ vdi_user.username }}/.vnc"
+    state: directory
+    owner: "{{ vdi_user.username }}"
+    group: "{{ vdi_user_group }}"
+    mode: '0700'
+
+- name: Write VNC xstartup for {{ vdi_user.username }} (Ubuntu/Debian)
+  ansible.builtin.copy:
+    dest: "/home/{{ vdi_user.username }}/.vnc/xstartup"
+    content: |
+      #!/bin/sh
+      unset SESSION_MANAGER
+      unset DBUS_SESSION_BUS_ADDRESS
+      exec startxfce4
+    owner: "{{ vdi_user.username }}"
+    group: "{{ vdi_user_group }}"
+    mode: '0755'
+  when: ansible_distribution in ["Ubuntu", "Debian"]
+
+- name: Write VNC password file for {{ vdi_user.username }}
+  ansible.builtin.shell: |
+    echo "{{ vdi_user.vncserver_password }}" | vncpasswd -f > "/home/{{ vdi_user.username }}/.vnc/passwd"
+  args:
+    creates: "/home/{{ vdi_user.username }}/.vnc/passwd"
+  become_user: "{{ vdi_user.username }}"
+
+- name: Fix passwd file permissions
+  ansible.builtin.file:
+    path: "/home/{{ vdi_user.username }}/.vnc/passwd"
+    owner: "{{ vdi_user.username }}"
+    group: "{{ vdi_user_group }}"
+    mode: '0600'
+
+- name: Copy per-user VNC config
+  ansible.builtin.template:
+    src: config.j2
+    dest: "/home/{{ vdi_user.username }}/.vnc/config"
+    owner: "{{ vdi_user.username }}"
+    group: "{{ vdi_user_group }}"
+    mode: '0644'
+  vars:
+    vdi_resolution: "{{ vdi_resolution }}"
