@@ -105,7 +105,6 @@ def instance_properties(nodeset: NSDict, model:str, placement_group:Optional[str
         props.resourcePolicies = [placement_group]
 
     if reservation := lookup().nodeset_reservation(nodeset):
-
         update_reservation_props(reservation, props, placement_group, reservation.calendar)
 
     if (fr := lookup().future_reservation(nodeset)) and fr.specific:
@@ -295,12 +294,12 @@ def group_nodes_bulk(nodes: List[str], resume_data: Optional[ResumeData], lkp: u
 def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
     """resume nodes in nodelist"""
     lkp = lookup()
-    # Prevent dormant nodes associated with a future reservation from being resumed
-    nodes, dormant_fr_nodes = util.separate(lkp.is_dormant_fr_node, nodes)
+    # Prevent dormant nodes associated with a reservation from being resumed
+    nodes, dormant_res_nodes = util.separate(lkp.is_dormant_res_node, nodes)
     
-    if dormant_fr_nodes:
-        log.warning(f"Resume was unable to resume future reservation nodes={dormant_fr_nodes}")
-        down_nodes_notify_jobs(dormant_fr_nodes, "Reservation is not active, nodes cannot be resumed", resume_data)
+    if dormant_res_nodes:
+        log.warning(f"Resume was unable to resume reservation nodes={dormant_res_nodes}")
+        down_nodes_notify_jobs(dormant_res_nodes, "Reservation is not active, nodes cannot be resumed", resume_data)
 
     nodes, flex_managed = util.separate(lkp.is_provisioning_flex_node, nodes)
     if flex_managed:

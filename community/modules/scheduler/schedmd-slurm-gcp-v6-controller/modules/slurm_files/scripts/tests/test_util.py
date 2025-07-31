@@ -198,7 +198,7 @@ def test_nodeset_reservation_err(nodeset, err):
                     policies=[],
                     deployment_type=None,
                     reservation_mode=None,
-                    assured_count=None,
+                    assured_count=0,
                     delete_at_time=None,
                     bulk_insert_name="projects/bobin/reservations/robin")),
             (TstNodeset(
@@ -212,7 +212,7 @@ def test_nodeset_reservation_err(nodeset, err):
                     policies=["wanders", "apples", "yum"],
                     deployment_type=None,
                     reservation_mode=None,
-                    assured_count=None,
+                    assured_count=0,
                     delete_at_time=None,
                     bulk_insert_name="projects/bobin/reservations/robin")),
             (TstNodeset(
@@ -226,7 +226,7 @@ def test_nodeset_reservation_err(nodeset, err):
                     policies=[],
                     deployment_type=None,
                     reservation_mode=None,
-                    assured_count=1,
+                    assured_count=0,
                     delete_at_time=None,
                     bulk_insert_name="projects/bobin/reservations/robin/snek/cheese-brie-6")),
 
@@ -555,6 +555,8 @@ def test_future_reservation_active(_):
                 name='melon',
                 policies=[],
                 reservation_mode=None,
+                assured_count=0,
+                delete_at_time=None,
                 bulk_insert_name="projects/manhattan/reservations/melon",
                 deployment_type=None))
     
@@ -581,7 +583,7 @@ def test_future_reservation_inactive(_):
         TstNodeset(future_reservation="projects/manhattan/zones/danger/futureReservations/zebra")) == FutureReservation(
             project='manhattan', 
             zone='danger', 
-            name='zebra',
+            name='zebra', 
             specific=True, 
             start_time=datetime(2025, 1, 27, 23, 30, tzinfo=timezone.utc), 
             end_time=datetime(2025, 2, 21, 23, 30, tzinfo=timezone.utc), 
