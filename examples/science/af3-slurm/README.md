@@ -26,7 +26,7 @@ this solution provisions an auto-scaling HPC environment. Using the Slurm Worklo
 can dynamically spin up and spin down compute resources for the Datapipeline stage and Inference stage
 respectively and as required by your folding workloads.
 
-<img src="adm/af3-htc-architecture.png" alt="af3-slurm architecture" width="700">
+<img src="adm/AlphaFold3-architecture.png" alt="af3-slurm architecture" width="700">
 
 The AlphaFold 3 High Throughput solution maps the Datapipeline and Inference steps to Google Compute Engine
 VM families that give you a **high number of folding executions/$** and that can horizontally scale out.
@@ -57,10 +57,9 @@ non-standard polymer amino acids are also tokenized like ligands, i.e. per-atom.
 For example, the g2-based inference partition suffices to process inputs of up to 2000 tokens. The a2-ultragpu partition can process
 inputs of up to 5120 tokens. It is furthermore possible to use unified memory, increasing the number of tokens that can be handled by a
 GPU at the expense of throughput. See
-[Other Hardware Configurations](https://github.com/google-deepmind/alphafold3/blob/main/docs/performance.md#other-hardware-configurations)
-in the original AlphaFold 3 documentation.
+[Inference Out-of-memory Condition](#known-limitations) on how to activate this option.
 
-For the two example launchers (see [Examples](#examples)), the solution sets the g2-based partition (infg2) as
+For the three example launchers (see [Examples](#examples)), the solution sets the g2-based partition (infg2) as
 the default since this is the most cost-effective inference platform as long as your sequences fit into the
 available GPU memory. You can change the default in the `af3-slurm-deployment.yaml` file via the variable
 `default_inference_partition`. There currently is no auto-selection of GPUs; see [Known Limitations](#known-limitations).
@@ -109,7 +108,7 @@ but additional customizations to your environment may be necessary.
 
 To illustrate the capability of the solution, we provide a few simple examples that represent
 different ways users may want to interact with the high throughput folding capability.
-At the moment, we include 2 example launchers, which provide basic templates
+At the moment, we include 3 example launchers, which provide basic templates
 for different ways of interacting with the AlphaFold 3 solution:
 
 ### Simple Job Launcher
@@ -125,6 +124,11 @@ controller-node, not requiring any user interaction with the AlphaFold 3 environ
 
 Refer to [Service Launcher Instructions](examples/simple_service_launcher/README.md) for more details.
 
+### Simple Ipynb Launcher
+The Simple Ipynb Launcher has a Jupyter Notebook that allows a user to interact with the AlphaFold 3 High Throughput solution via Slurm's REST-API.
+
+Refer to [Ipynb Launcher Instructions](examples/simple_ipynb_launcher/README.md) for more details.
+
 > [!WARNING]
 > While these launchers illustrate potential user workflows, they are intended for demonstration purposes only.
 > Careful review and modification are strongly advised before using them in production or for non-demonstration
@@ -139,6 +143,8 @@ Refer to [Service Launcher Instructions](examples/simple_service_launcher/README
 > - Google Compute Engine
 > - Google Cloud Build
 > - Google Artifact Registry
+> - Google Secret Manager
+> - Google Vertex AI Workbench
 >
 > To avoid continued billing after use, closely follow the
 > [teardown instructions](#teardown-instructions).
@@ -148,7 +154,13 @@ To generate a cost estimate based on your projected usage, use the
 
 ## Known Limitations
 This solution currently has the following known limitations:
-- **Out-of-memory Condition**: For certain amino-acid input sequences the Jackhmmer software that is used in the Datapipeline step is known to produce too many outputs causing it to run out of memory. In the current solution, these jobs are eventually terminated through the job runtime limit and are marked as failed. Running these jobs with more per-job memory in most cases does not resolve the issue. Resolution to this requires modifications of the Jackhmmer software and will be addressed in future versions of the solution. Mitigation: users can run with an input JSON that provides their own MSA, thus skipping the JackHmmer run for this input
+- **Data Pipeline Out-of-memory Condition**: For certain amino-acid input sequences the Jackhmmer software that is used in the Datapipeline step is known to produce too many outputs causing it to run out of memory. In the current solution, these jobs are eventually terminated through the job runtime limit and are marked as failed. Running these jobs with more per-job memory in most cases does not resolve the issue. Resolution to this requires modifications of the Jackhmmer software and will be addressed in future versions of the solution. Mitigation: users can run with an input JSON that provides their own MSA, thus skipping the JackHmmer run for this input
+- **Inference Out-of-memory Condition**: The inference can also encountered an "Out of Memory" condition, similar to the data pipeline. Mitigation: while not all sequences can be handled with this approach, you can trade-off runtime for memory and activate the [unified memory](https://github.com/google-deepmind/alphafold3/blob/main/docs/performance.md#unified-memory) feature. To do this, set the following variable in `af3-slurm-deployment.yaml`:
+
+  ```yaml
+  inference_enable_unified_memory: true
+  ```
+
 - **Recompute vs Reuse**: The Datapipeline step of the solution is stateless and does not keep track of previously processed inputs. Thus, if previously submitted sequences are submitted again (e.g. with a different ligand), all parts will be recomputed. Mitigation: none needed. But if uses want to benefit from reuse, they can obtain MSA and templates and provide them in the input JSON file for the Inference step.
 
 Limitations of the example launchers:
@@ -157,7 +169,7 @@ Inference step requires more memory than available on the chosen GPU partition. 
 one of the inference partitions with larger GPU memory.
 - **No Dynamic Timeout**: The provided examples currently use global timeout settings for the Datapipeline and
 Inference partitions respectively. You can modify these timeouts if you use substantially larger input sequences,
-however, weigh this in conjunction with the **Out-of-memory Condition**.
+however, weigh this in conjunction with the **Datapipeline Out-of-memory Condition**.
 
 ***
 
@@ -397,7 +409,6 @@ terraform_backend_defaults:
 
 vars:
   # Define overall deployment variables
-  deployment_name: af3-slurm         # adjust if necessary
   project_id:  <PROJEC_ID>           # supply existing project id
   region: us-central1                # supply region with C3D-highmem and GPU capacity
   zone: us-central1-a                # supply zone with C3D-highmem and GPU capacity
@@ -405,6 +416,11 @@ vars:
   # Required buckets for weights and databases
   modelweights_bucket:  <YOUR_WEIGHTS_BUCKET_NAME>  # name of your bucket with af3 model weights
   database_bucket: <YOUR_DATABASE_BUCKET_NAME>      # name of your bucket with the database files
+
+  # Set to True to enable unified memory during inference.
+  # This is recommended when processing large input data or when running on machines with limited GPU memory.
+  # Reference: https://github.com/google-deepmind/alphafold3/blob/main/docs/performance.md#unified-memory
+  inference_enable_unified_memory: false
 
   # AF3 model - architecture mappings - typically do not need to be modified
   sif_dir: /opt/apps/af3/containers  # default path for the local copy of the container image
@@ -422,9 +438,20 @@ vars:
   save_embeddings: ""
 
   # Choose if you want the AF3 Simple Service daemon started
-  af3service_activate: false
+  af3service_activate: true
   af3service_jobbucket: ""           # set to "" if not used
   af3service_user: af3
+
+  # AF3 Ipynb Service config
+  af3ipynb_bucket: "" # bucket name to use for AF3 Ipynb service, set to "" if AF3 Ipynb service is not used
+  af3ipynb_bucket_local_mount: /home/jupyter/alphafold # local mount point of bucket on jupyter notebook, expect to be ended without /
+
+  # Slurm REST API Service config
+  slurm_rest_server_activate: true # enable slurm REST API server
+  slurm_rest_user: af3ipynb
+  slurm_rest_token_secret_name: "" # name of the secret manager to be used for saving the slurm auth token, set to "" if SLURM REST API is not used
+  slurm_rest_api_port: 7080 # port for the slurm REST API service
+  slurm_rest_info_path: /tmp/slurm_info.json # path to save slurm info, such as public ip
 
   # Choose Default Datapipeline Partition 
   default_datapipeline_partition: $(vars.datapipeline_c3dhm_partition)
@@ -437,9 +464,11 @@ vars:
   ... #more settings, consult the file af3-slurm-deployment.yaml
 ```
 
-#### Deploy the cluster
+#### Special Steps for Ipynb Notebook launcher (Optional)
+If you intend to launch the AF3 solution with the REST API and IPython Notebook, please complete the additional configuration steps outlined in the [IPython Notebook launcher deployment documentation](./examples/simple_ipynb_launcher/Setup-pre-cluster-deployment.md).
 
-If you want to configure and deploy your cluster in one go, simply type:
+#### Deploy Slurm cluster
+If you want to configure and deploy your Slurm cluster in one go, simply type:
 
 ```bash
 #!/bin/bash
@@ -470,6 +499,32 @@ If you modify your configuration but do not touch the image, it may save you tim
 #!/bin/bash
 ./gcluster deploy af3-slurm --auto-approve --skip image  
 ```
+
+### Startup Script Completion
+
+To ensure proper cluster initialization, please wait for the startup scripts to complete successfully on all relevant nodes (including login and controller nodes).
+
+**How to Verify Startup Script Completion:**
+
+You can check the `/var/log/slurm/setup.log` file on each node to confirm the successful execution of the startup script. Look for one of the following log entries, indicating completion for the respective node type:
+
+- **Login Node Completion:**
+
+  ```text
+  INFO: Done setting up login
+  ```
+
+  This message confirms that the startup script on a login node has finished its configuration.
+
+- **Controller Node Completion:**
+
+  ```text
+  INFO: Done setting up controller
+  ```
+  
+  This message confirms that the startup script on a controller node has finished its configuration.
+
+Monitoring these log files helps you track the cluster initialization process. Also make sure to operate all clusters and launchers—such as the `Ipynb notebook` launcher that submits Slurm API requests from the notebook—only after the appropriate `"Done setting up"` message appears on all required login and controller nodes.
 
 #### Bootstrapping of the Databases Bucket
 
@@ -521,6 +576,7 @@ Once your cluster is provisioned, keep on reading here for how to use the AlphaF
 
 - [Simple Job Launcher Example](examples/simple_job_launcher/README.md): Use the login node's command line to submit datapipeline and inference jobs to the cluster
 - [Simple Service Launcher Example](examples/simple_service_launcher/README.md): Drop folding job json files to a GCS buckets for the cluster to pick up. Note that you probably want to activate the daemon in the deployment file before you bring up the cluster, see [here](#modify-the-af3-slurm-deploymentyaml-file-with-your-preferred-configuration)
+- [Simple IPython Notebook Launcher Example](examples/simple_ipynb_launcher/Setup-post-cluster-deployment.md): Launches a Jupyter Notebook interface for interactively running AlphaFold 3 workflows using the SLURM REST API.  
 
 ## Teardown Instructions
 
@@ -538,7 +594,7 @@ reverse order. Leave out the `--auto-approve` if you want control over each depl
 ```
 
 > [!WARNING]
-> If you do not destroy all three deployment groups then there may be continued
-> associated costs. Also, the buckets you may have created via the cloud console or CLI will
+> If you do not delete all deployments, associated costs may continue to accrue.
+> Also, the buckets you may have created via the cloud console or CLI will
 > not be destroyed by the above command (they would be, however, destroyed if you deleted the project).
 > For deleting the buckets consult [Delete buckets](https://cloud.google.com/storage/docs/deleting-buckets).

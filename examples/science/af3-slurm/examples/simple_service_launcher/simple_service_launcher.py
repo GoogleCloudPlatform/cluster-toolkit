@@ -104,6 +104,7 @@ class ProcessConfig(BaseProcessConfig):
     num_diffusion_samples: Optional[int] = None
     num_seeds: Optional[int] = None
     save_embeddings: Optional[bool] = None
+    enable_unified_memory: Optional[bool] = None
 
 @dataclasses.dataclass
 class SlurmJobWorkspaceConfig:
@@ -272,7 +273,7 @@ def parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
     parser.add_argument("--model-dir", type=str, help="Global: Directory for model files")
     parser.add_argument("--time-interval", type=int, help="Global: Service check interval (seconds)")
     parser.add_argument("--pending-job-time-limit", type=int, help="Global: Max time (seconds) a job can be PENDING")
-
+    parser.add_argument("--inference-enable-unified-memory", type=str_to_bool, nargs='?', const=True, default=None, help="Inference: Enable unified memory")
     # Add inference-specific arguments
     parser.add_argument("--inference-max-template-date", type=str, help="Inference: Max template date (YYYY-MM-DD)")
     parser.add_argument("--inference-conformer-max-iterations", type=int, help="Inference: Max conformer iterations")
@@ -589,6 +590,9 @@ def generate_inference_slurm_script(
     apptainer_binds = [ f"--bind {p}:{p}" for p in [slurm_job_workspace_config.result_dir, process_config.model_dir] if p]
     if process_config.jax_compilation_cache_path: apptainer_binds.append(f"--bind {process_config.jax_compilation_cache_path}:{process_config.jax_compilation_cache_path}")
     apptainer_command = f"apptainer run --nv {' '.join(apptainer_binds)}"
+    
+    # Add unified memory settings if enabled
+    if process_config.enable_unified_memory: apptainer_command += " --env XLA_PYTHON_CLIENT_PREALLOCATE=false,TF_FORCE_UNIFIED_MEMORY=true,XLA_CLIENT_MEM_FRACTION=3.2"
 
     # Build AlphaFold command
     af3_fixed_args = {
@@ -1007,6 +1011,7 @@ def load_process_config(
             "partition_name": "inference", "job_memory_size": 64, "job_cpu_count": 12, "job_timeout": 7200,
             "max_template_date": None, "conformer_max_iterations": None, "num_recycles": None,
             "num_diffusion_samples": None, "num_seeds": None, "save_embeddings": None,
+            "enable_unified_memory": False,
         },
     }
 
@@ -1097,7 +1102,6 @@ def load_process_config(
         # Only create config if the corresponding run flag is True
         data_pipeline_config = create_process_config("data_pipeline", False) if final_config.get("run_data_pipeline") else None
         inference_config = create_process_config("inference", True) if final_config.get("run_inference") else None
-
         logger.info(f"Final Service Config: {service_config}")
         logger.info(f"Data Pipeline Active: {bool(data_pipeline_config)}. Config: {data_pipeline_config if data_pipeline_config else 'N/A'}")
         logger.info(f"Inference Active: {bool(inference_config)}. Config: {inference_config if inference_config else 'N/A'}")
