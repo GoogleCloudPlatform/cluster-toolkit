@@ -33,6 +33,11 @@ vars:
           APT::Periodic::Update-Package-Lists "0";
           APT::Periodic::Unattended-Upgrade "0";
 
+  runner_write_gcluster_build_info:
+    type: data
+    destination: /etc/gcluster-build-info
+    source: $(ghpc_stage("../gcluster-build-info"))
+
   runner_install_slurm:
     type: shell
     destination: install_slurm.sh

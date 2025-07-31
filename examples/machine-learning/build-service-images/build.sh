@@ -29,6 +29,25 @@ if [[ ! -d "$RECIPE" ]]; then
 	exit 1
 fi
 
+GCLUSTER_VERSION="$(gcluster --version 2>&1 || echo 'gcluster not found')"
+readonly GCLUSTER_VERSION
+GIT_STATUS="$(git status --porcelain 2>&1 || echo 'not a git repository')"
+readonly GIT_STATUS
+
+INFO_STRING=$(
+	cat <<EOF
+gcluster version:
+$GCLUSTER_VERSION
+
+Git Status:
+$GIT_STATUS
+EOF
+)
+
+GCLUSTER_BUILD_INFO=$(echo -n "$INFO_STRING")
+readonly GCLUSTER_BUILD_INFO
+echo "$GCLUSTER_BUILD_INFO" >./gcluster-build-info
+
 readonly FAMILY="$RECIPE-$SUFFIX"
 LONG_DEPLOYMENT_NAME="$USER-$FAMILY"
 readonly DEPLOYMENT_NAME="${LONG_DEPLOYMENT_NAME:0:31}"
