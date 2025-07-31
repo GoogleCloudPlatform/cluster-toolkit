@@ -105,6 +105,7 @@ def instance_properties(nodeset: NSDict, model:str, placement_group:Optional[str
         props.resourcePolicies = [placement_group]
 
     if reservation := lookup().nodeset_reservation(nodeset):
+
         update_reservation_props(reservation, props, placement_group, reservation.calendar)
 
     if (fr := lookup().future_reservation(nodeset)) and fr.specific:
