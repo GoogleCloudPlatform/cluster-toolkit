@@ -42,3 +42,4 @@ custom_vars:
 post_deploy_tests:
 - test-validation/test-gke-job.yml
 - test-validation/test-gke-a3-high.yml
+- test-validation/test-gke-kueue.yml

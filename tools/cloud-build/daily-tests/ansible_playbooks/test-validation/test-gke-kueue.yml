@@ -40,18 +40,60 @@
     echo ${array[0]}
   args:
     executable: /bin/bash
-  changed_when: False
+  register: host_job_creation
+  changed_when: true
 
-- name: Ensure all pods are on the same host
+- name: Wait for and get the workload name for the host topology job
   delegate_to: localhost
-  ansible.builtin.shell: |
-    kubectl get pods -v=9 \
-    -o custom-columns="Name:.metadata.name,Host:.spec.nodeSelector.cloud\.google\.com/gce-topology-host" | \
-    sort -k2 | uniq -f 1 | wc -l
-  register: unique_host_count
-  until: unique_host_count.stdout | int == 2
+  ansible.builtin.shell: >
+    kubectl get workload -l kueue.x-k8s.io/queue-name=tas-user-queue \
+    -o jsonpath='{.items[0].metadata.name}'
+  register: workload_name
+  until: workload_name.stdout | length > 0
+  retries: 15
+  delay: 10
+  changed_when: false
+
+- name: Debug - Get and print the full Workload status
+  delegate_to: localhost
+  ansible.builtin.command: kubectl get workload {{ workload_name.stdout }} -n default -o yaml
+  register: debug_workload_status
+  until: debug_workload_status.rc == 0
+  retries: 5
+  delay: 2
+  failed_when: false
+  changed_when: false
+
+- name: Print the full workload status
+  ansible.builtin.debug:
+    var: debug_workload_status.stdout
+
+- name: Wait for job to complete
+  delegate_to: localhost
+  ansible.builtin.command: |
+    kubectl get job --field-selector  status.successful=2 -n default
+  register: job_completion
+  until: job_completion.stdout_lines | length > 1
+  retries: 10
+  delay: 5
+
+- name: Check TopologyAssignment for Host Topology
+  delegate_to: localhost
+  ansible.builtin.shell: >
+    kubectl get workload {{ workload_name.stdout }} -n default -o jsonpath='{range .status.admission.podSetAssignments[*]}{@.topologyAssignment}{"\n"}{end}'
+  register: topology_assignment_host
+  until: topology_assignment_host.stdout | regex_search('^[^{<]+$') == False and topology_assignment_host.stdout != "<none>"
   retries: 10
   delay: 10
+  changed_when: false
+
+- name: Assert TopologyAssignment exists for Host Topology
+  ansible.builtin.assert:
+    that:
+    - topology_assignment_host.stdout is defined
+    - topology_assignment_host.stdout | length > 0
+    - topology_assignment_host.stdout | regex_search('^[^{<]+$') == False
+    msg: "TopologyAssignment not found for Host Topology. TAS might not be working."
 
 - name: Delete the host topology kueue job
   delegate_to: localhost
@@ -59,7 +101,7 @@
     kubectl delete --all jobs -v=9
   args:
     executable: /bin/bash
-  changed_when: False
+  changed_when: true
 
 - name: Create the rack topology kueue job
   delegate_to: localhost
@@ -110,16 +152,3 @@
   until: unique_host_count.stdout | int == 2
   retries: 10
   delay: 10
-
-- name: Wait for job to complete
-  delegate_to: localhost
-  ansible.builtin.command: |
-    kubectl get job --field-selector  status.successful=2
-  register: job_completion
-  until: job_completion.stdout_lines | length > 1
-  retries: 10
-  delay: 5
-
-- name: Print job_completion debug output
-  ansible.builtin.debug:
-    var: job_completion.stdout_lines
