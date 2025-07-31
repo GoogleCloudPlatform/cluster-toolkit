@@ -249,11 +249,30 @@ class Instance:
 
 @dataclass(frozen=True)
 class NSMount:
-    server_ip: str
     local_mount: Path
     remote_mount: Path
     fs_type: str
     mount_options: str
+    _server_ip: Optional[str] = None
+    _from_controller: bool = False
+
+    def server_ip(self, lkp: "Lookup") -> str:
+        if self._from_controller:
+            return lkp.control_addr or lkp.control_host
+        assert self._server_ip is not None
+        return self._server_ip
+
+    @classmethod
+    def contoller_nfs(cls, local_mount:str, remote_mount:str, mount_options:str) -> "NSMount":
+        return NSMount(
+            local_mount=Path(local_mount),
+            remote_mount=Path(remote_mount),
+            fs_type="nfs",
+            mount_options=mount_options,
+            _server_ip=None,
+            _from_controller=True
+        )
+
 
 @lru_cache(maxsize=1)
 def default_credentials():
@@ -1418,16 +1437,6 @@ def getThreadsPerCore(template) -> int:
     return template.advancedMachineFeatures.threadsPerCore or 2
 
 
-@retry(
-    max_retries=9,
-    init_wait_time=1,
-    warn_msg="Temporary failure in name resolution",
-    exc_type=socket.gaierror,
-)
-def host_lookup(host_name: str) -> str:
-    return socket.gethostbyname(host_name)
-
-
 class Dumper(yaml.SafeDumper):
     """Add representers for pathlib.Path and NSDict for yaml serialization"""
 
@@ -1512,10 +1521,6 @@ class Lookup:
     @property
     def control_host(self):
         return self.cfg.slurm_control_host
-
-    @cached_property
-    def control_host_addr(self):
-        return self.control_addr or host_lookup(self.cfg.slurm_control_host)
 
     @property
     def control_host_port(self):
@@ -2029,23 +2034,24 @@ class Lookup:
     def etc_dir(self) -> Path:
         return Path(self.cfg.output_dir or slurmdirs.etc)
 
-    def controller_mount_server_ip(self) -> str:
-        return self.control_addr or self.control_host
-
     def normalize_ns_mount(self, ns: Union[dict, NSMount]) -> NSMount:
         if isinstance(ns, NSMount):
             return ns
 
-        server_ip = ns.get("server_ip") or "$controller"
+        server_ip = ns.get("server_ip")
         if server_ip == "$controller":
-            server_ip = self.controller_mount_server_ip()
+            assert ns["fs_type"] == "nfs", f"Can only mount NFS from controller, got: {ns}"
+            return NSMount.contoller_nfs(
+                local_mount=ns["local_mount"],
+                remote_mount=ns["remote_mount"],
+                mount_options=ns["mount_options"])
 
         return NSMount(
-            server_ip=server_ip,
             local_mount=Path(ns["local_mount"]),
             remote_mount=Path(ns["remote_mount"]),
-            fs_type=ns["fs_type"],
             mount_options=ns["mount_options"],
+            fs_type=ns["fs_type"],
+            _server_ip=server_ip,
         )
 
     @property
@@ -2055,13 +2061,10 @@ class Lookup:
             mnt.local_mount = mnt.local_mount or "/mnt/munge"
             return self.normalize_ns_mount(mnt)
         else:
-            return NSMount(
-                server_ip=self.controller_mount_server_ip(),
-                local_mount=Path("/mnt/munge"),
+            return NSMount.contoller_nfs(
+                local_mount="/mnt/munge",
                 remote_mount=dirs.munge,
-                fs_type="nfs",
-                mount_options="defaults,hard,intr,_netdev",
-            )
+                mount_options="defaults,hard,intr,_netdev")
 
     @property
     def slurm_key_mount(self) -> NSMount:
@@ -2070,13 +2073,10 @@ class Lookup:
             mnt.local_mount = mnt.local_mount or slurmdirs.key_distribution
             return self.normalize_ns_mount(mnt)
         else:
-            return NSMount(
-                server_ip=self.controller_mount_server_ip(),
+            return NSMount.contoller_nfs(
                 local_mount=slurmdirs.key_distribution,
                 remote_mount=slurmdirs.key_distribution,
-                fs_type="nfs",
-                mount_options="defaults,hard,intr,_netdev",
-            )
+                mount_options="defaults,hard,intr,_netdev")
 
     def is_flex_node(self, node: str) -> bool:
         try:
