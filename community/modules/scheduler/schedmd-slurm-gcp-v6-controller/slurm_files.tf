@@ -49,7 +49,7 @@ locals {
   login_sa       = toset(flatten([for x in module.login : x.service_account]))
 
   viewers = toset(flatten([
-    "serviceAccount:${module.slurm_controller_template.service_account.email}",
+    "serviceAccount:${module.slurm_controller_template[0].service_account.email}",
     formatlist("serviceAccount:%s", [for x in local.compute_sa : x.email]),
     formatlist("serviceAccount:%s", [for x in local.compute_tpu_sa : x.email if x.email != null]),
     formatlist("serviceAccount:%s", [for x in local.login_sa : x.email]),
@@ -110,9 +110,8 @@ locals {
   }])
 
   controller_state_disk = {
-    device_name : try(google_compute_disk.controller_disk[0].name, null)
+    device_name : try(google_compute_region_disk.disk[0].name, null)
   }
-
 
   nodeset_startup_scripts = { for k, v in local.nodeset_map : k => concat(local.common_scripts, v.startup_script) }
 }
@@ -151,6 +150,7 @@ module "slurm_files" {
   nodeset_startup_scripts            = local.nodeset_startup_scripts
   compute_startup_scripts_timeout    = var.compute_startup_scripts_timeout
   controller_state_disk              = local.controller_state_disk
+  slurm_control_hosts                = local.slurm_control_hosts
 
   enable_debug_logging = var.enable_debug_logging
   extra_logging_flags  = var.extra_logging_flags

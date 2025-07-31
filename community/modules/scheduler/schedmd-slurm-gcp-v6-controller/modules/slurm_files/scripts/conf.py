@@ -286,8 +286,9 @@ def install_slurm_conf(lkp: util.Lookup) -> None:
     conf_options = {
         "name": lkp.cfg.slurm_cluster_name,
         "control_addr": lkp.control_addr if lkp.control_addr else lkp.hostname_fqdn,
-        "control_host": lkp.control_host,
-        "accounting_storage_host": lkp.control_addr if lkp.cfg.controller_network_attachment else lkp.control_host,
+        "control_host": "\n".join(f"SlurmctldHost={host}" for host in lkp.control_hosts),
+        "accounting_storage_host": lkp.control_hosts[0],
+        "accounting_backup_host": f"AccountingStorageBackupHost={lkp.control_hosts[1]}" if len(lkp.control_hosts) > 1 else "",
         "control_host_port": lkp.control_host_port,
         "scripts": dirs.scripts,
         "slurmlog": dirs.log,
@@ -306,13 +307,14 @@ def install_slurm_conf(lkp: util.Lookup) -> None:
 def install_slurmdbd_conf(lkp: util.Lookup) -> None:
     """install slurmdbd.conf"""
     conf_options = {
-        "control_host": lkp.control_host,
+        "control_host": lkp.control_hosts[0],
+        "DbdBackupHost": f"DbdBackupHost={lkp.control_hosts[1]}" if len(lkp.control_hosts) > 1 else "",
         "slurmlog": dirs.log,
         "state_save": slurmdirs.state,
         "db_name": "slurm_acct_db",
         "db_user": "slurm",
         "db_pass": '""',
-        "db_host": "localhost",
+        "db_host": util.host_lookup(lkp.control_hosts[0]),
         "db_port": "3306",
         "auth_key": "slurm" if lkp.cfg.enable_slurm_auth else "munge",
     }

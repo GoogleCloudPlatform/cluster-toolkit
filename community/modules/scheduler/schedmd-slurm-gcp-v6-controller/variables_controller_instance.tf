@@ -12,10 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+variable "nb_controllers" {
+  type    = number
+  default = 2
+
+  validation {
+    condition     = var.nb_controllers <= 3
+    error_message = "The number of Slurm controllers (slurmctld) must not exceed 3."
+  }
+}
+
 variable "disk_type" {
   type        = string
-  description = "Boot disk type, can be either hyperdisk-balanced, pd-ssd, pd-standard, pd-balanced, or pd-extreme."
-  default     = "pd-ssd"
+  description = "Boot disk type"
+  default     = "hyperdisk-balanced"
 }
 
 variable "disk_size_gb" {
@@ -105,8 +115,8 @@ variable "static_ips" {
   description = "List of static IPs for VM instances."
   default     = []
   validation {
-    condition     = length(var.static_ips) <= 1
-    error_message = "The Slurm modules supports 0 or 1 static IPs on controller instance."
+    condition     = length(var.static_ips) <= var.nb_controllers
+    error_message = "The number of static IPs must be less than or equal to the number of controllers."
   }
 }
 
@@ -221,7 +231,20 @@ variable "labels" {
 variable "machine_type" {
   type        = string
   description = "Machine type to create."
-  default     = "c2-standard-4"
+  default     = "n4-standard-4"
+
+
+  validation {
+    condition = (
+      var.nb_controllers <= 1 ||
+      (
+        can(regex("^(c3|c3d|c4a|n4|z3|m3|a3)-[a-z0-9-]+-\\d+$", var.machine_type)) &&
+        try(tonumber(regex("\\d+$", var.machine_type)), 0) >= 4
+      )
+    )
+
+    error_message = "The selected machine type is not compatible with 'hyperdisk-balanced-high-availability'. Please choose a supported type such as C4A, C3, C3D, N4, Z3, M3, or A3 (H100/H200)."
+  }
 }
 
 variable "metadata" {
