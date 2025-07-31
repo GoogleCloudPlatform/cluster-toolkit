@@ -25,7 +25,7 @@ vars:
   disk_type: pd-ssd
   num_nodes: 1
   rocky_image:
-    family: slurm-gcp-6-9-hpc-rocky-linux-8
+    family: slurm-gcp-6-10-hpc-rocky-linux-8
     project: schedmd-slurm-public
 
 deployment_groups:
@@ -77,7 +77,7 @@ deployment_groups:
   #   settings:
   #     node_count_dynamic_max: $(vars.num_nodes)
   #     instance_image:
-  #       family: slurm-gcp-6-9-ubuntu-2004-lts
+  #       family: slurm-gcp-6-10-ubuntu-2204-lts-nvidia-570
   #       project: schedmd-slurm-public
 
   # - id: ubuntu_partition

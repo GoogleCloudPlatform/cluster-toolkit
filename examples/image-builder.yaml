@@ -59,7 +59,7 @@ deployment_groups:
     settings:
       source_image_project_id: [schedmd-slurm-public]
       # see latest in https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#published-image-family
-      source_image_family: slurm-gcp-6-9-hpc-rocky-linux-8
+      source_image_family: slurm-gcp-6-10-hpc-rocky-linux-8
       # You can find size of source image by using following command
       # gcloud compute images describe-from-family <source_image_family> --project schedmd-slurm-public
       disk_size: $(vars.disk_size)
@@ -75,7 +75,6 @@ deployment_groups:
       node_count_dynamic_max: 20
       disk_size_gb: $(vars.disk_size)
       instance_image: $(vars.custom_image)
-      instance_image_custom: true
       bandwidth_tier: gvnic_enabled
       allow_automatic_updates: false
 
@@ -93,7 +92,6 @@ deployment_groups:
       enable_login_public_ips: true
       disk_size_gb: $(vars.disk_size)
       instance_image: $(vars.custom_image)
-      instance_image_custom: true
 
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
@@ -105,4 +103,3 @@ deployment_groups:
       enable_controller_public_ips: true
       disk_size_gb: $(vars.disk_size)
       instance_image: $(vars.custom_image)
-      instance_image_custom: true

@@ -24,7 +24,7 @@ vars:
   # Image settings
   base_image:
     project: ubuntu-os-accelerator-images
-    image: ubuntu-accelerator-2204-amd64-with-nvidia-570-v20250712
+    image: ubuntu-accelerator-2204-amd64-with-nvidia-570-v20250722
   image_build_machine_type: n2-standard-16
   build_slurm_from_git_ref: 6.10.0
   # Cluster env settings
@@ -69,6 +69,36 @@ deployment_groups:
           Package: nvidia-container-toolkit nvidia-container-toolkit-base libnvidia-container-tools libnvidia-container1
           Pin: version 1.17.7-1
           Pin-Priority: 100
+
+      # The following holds NVIDIA software that was already installed on the
+      # accelerator base image to be the same driver version. This reduces the
+      # risk of a driver version mismatch.
+      # Additional packages are held by:
+      # https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/ansible/group_vars/os_ubuntu.yml
+      - type: ansible-local
+        destination: hold-nvidia-packages.yml
+        content: |
+          ---
+          - name: Hold nvidia packages
+            hosts: all
+            become: true
+            vars:
+              nvidia_packages_to_hold:
+              - libnvidia-cfg1-*-server
+              - libnvidia-compute-*-server
+              - libnvidia-nscq-*
+              - nvidia-compute-utils-*-server
+              - nvidia-fabricmanager-*
+              - nvidia-utils-*-server
+            tasks:
+            - name: Hold nvidia packages
+              ansible.builtin.command:
+                argv:
+                - apt-mark
+                - hold
+                - "{{ item }}"
+              loop: "{{ nvidia_packages_to_hold }}"
+
       - type: data
         destination: /var/tmp/slurm_vars.json
         content: |
@@ -93,7 +123,7 @@ deployment_groups:
               -i localhost, --limit localhost --connection=local \
               -e @/var/tmp/slurm_vars.json \
               ansible/playbook.yml
-            # this duplicates the ulimits configuration of the HPC VM Image
+      # this duplicates the ulimits configuration of the HPC VM Image
       - type: data
         destination: /etc/security/limits.d/99-unlimited.conf
         content: |
@@ -103,11 +133,12 @@ deployment_groups:
           * - nofile 1048576
           * - cpu unlimited
           * - rtprio unlimited
+
       - type: ansible-local
-        destination: configure_gpu.yml
+        destination: install_cuda_dcgm.yml
         content: |
           ---
-          - name: Install NVIDIA packages
+          - name: Install CUDA & DCGM
             hosts: all
             become: true
             vars:
@@ -118,9 +149,6 @@ deployment_groups:
               nvidia_packages:
               - cuda-toolkit-12-8
               - datacenter-gpu-manager-4-cuda12
-              - libnvidia-cfg1-570-server
-              - libnvidia-nscq-570
-              - nvidia-compute-utils-570-server
             tasks:
             - name: Download NVIDIA repository package
               ansible.builtin.get_url:
@@ -130,24 +158,6 @@ deployment_groups:
               ansible.builtin.apt:
                 deb: "{{ cuda_repo_filename }}"
                 state: present
-            # The following 2 tasks work around a temporary issue with Ubuntu
-            # packaging of NVIDIA 570 driver series for kernel 6.8.0-1032
-            # This command ensures that any holds are removed before attempting an upgrade.
-            # We ignore failures in case the packages were not held.
-            - name: Unhold NVIDIA driver packages
-              ansible.builtin.command:
-                cmd: apt-mark unhold linux-modules-nvidia-570-server-open-gcp linux-modules-nvidia-570-server-open-6.8.0-1032-gcp
-              become: true
-              changed_when: false
-              failed_when: false
-            - name: Install latest NVIDIA driver metapackage and kernel module
-              ansible.builtin.apt:
-                name:
-                  - linux-modules-nvidia-570-server-open-gcp
-                  - linux-modules-nvidia-570-server-open-6.8.0-1032-gcp
-                state: latest
-                update_cache: yes
-              become: true
             - name: Reduce NVIDIA repository priority
               ansible.builtin.copy:
                 dest: /etc/apt/preferences.d/cuda-repository-pin-600
@@ -166,15 +176,10 @@ deployment_groups:
                   Package: *
                   Pin: release l=NVIDIA CUDA
                   Pin-Priority: 400
-            - name: Install NVIDIA fabric and CUDA
+            - name: Install CUDA & DCGM
               ansible.builtin.apt:
                 name: "{{ item }}"
                 update_cache: true
-              loop: "{{ nvidia_packages }}"
-            - name: Freeze NVIDIA fabric and CUDA
-              ansible.builtin.dpkg_selections:
-                name: "{{ item }}"
-                selection: hold
               loop: "{{ nvidia_packages }}"
             - name: Create nvidia-persistenced override directory
               ansible.builtin.file:
@@ -241,6 +246,7 @@ deployment_groups:
       source_image_project_id: [$(vars.base_image.project)]
       image_family: $(vars.instance_image.family)
       omit_external_ip: false
+
       # Unattended upgrades are disabled in this blueprint so that software does not
       # get updated daily and lead to potential instability in the cluster environment.
       #
@@ -350,6 +356,98 @@ deployment_groups:
   #   outputs:
   #   - network_storage
 
+  # The following four modules create and mount a Cloud Storage Bucket with
+  # gcsfuse.  They are optional but recommended for many use cases.
+  # (Optional) The following creates a GCS bucket that will be mounted
+  # using gcsfuse. If you prefer to use a pre-existing bucket, use the
+  # modules/file-system/pre-existing-network-storage module.
+  - id: gcs_bucket
+    source: community/modules/file-system/cloud-storage-bucket
+    settings:
+      enable_hierarchical_namespace: true
+      local_mount: /gcs
+      random_suffix: true
+      mount_options: "implicit-dirs,\
+                      metadata-cache-negative-ttl-secs=0,\
+                      metadata-cache-ttl-secs=-1,\
+                      stat-cache-max-size-mb=-1,\
+                      type-cache-max-size-mb=-1,\
+                      enable-streaming-writes=true,\
+                      dir-mode=777,\
+                      file-mode=777,\
+                      allow_other"
+
+  # (Optional) Create a mount-point optimized for checkpoint writing/reading Uses
+  # local-ssd for and enables parallel downloads.  For more information on
+  # these flags, see
+  # https://github.com/GoogleCloudPlatform/gcsfuse/tree/master/samples/gcsfuse_config
+  - id: gcs_checkpoints
+    source: modules/file-system/pre-existing-network-storage
+    settings:
+      remote_mount: $(gcs_bucket.gcs_bucket_name)
+      local_mount: /gcs-checkpoints
+      fs_type: gcsfuse
+      mount_options: "implicit-dirs,\
+                      metadata-cache-negative-ttl-secs=0,\
+                      metadata-cache-ttl-secs=-1,\
+                      stat-cache-max-size-mb=-1,\
+                      type-cache-max-size-mb=-1,\
+                      file-cache-max-size-mb=-1,\
+                      file-cache-cache-file-for-range-read=true,\
+                      file-cache-enable-parallel-downloads=true,\
+                      cache-dir=/mnt/localssd,\
+                      enable-streaming-writes=true,\
+                      dir-mode=777,\
+                      file-mode=777,\
+                      allow_other"
+
+  # (Optional) Create a mount-point optimized for reading training data.
+  # For more information on these flags, see
+  # https://github.com/GoogleCloudPlatform/gcsfuse/tree/master/samples/gcsfuse_config
+  # If your training dataset fits on localssd, then you may want to enable file
+  # cache as well, which is done by adding
+  # cache-dir=/mnt/localssd,\
+  # file-cache-max-size-mb=<DATASET_SIZE>,\
+  # file-cache-cache-file-for-range-read=true,\
+  # to the mount_options.
+  - id: gcs_training_data
+    source: modules/file-system/pre-existing-network-storage
+    settings:
+      remote_mount: $(gcs_bucket.gcs_bucket_name)
+      local_mount: /gcs-training-data
+      fs_type: gcsfuse
+      mount_options: "implicit-dirs,\
+                      metadata-cache-negative-ttl-secs=0,\
+                      metadata-cache-ttl-secs=-1,\
+                      stat-cache-max-size-mb=-1,\
+                      type-cache-max-size-mb=-1,\
+                      enable-streaming-writes=true,\
+                      dir-mode=777,\
+                      file-mode=777,\
+                      allow_other"
+
+  # (Optional) Create a mount-point optimized for model serving.
+  # For more information on these flags, see
+  # https://github.com/GoogleCloudPlatform/gcsfuse/tree/master/samples/gcsfuse_config
+  - id: gcs_model_serving
+    source: modules/file-system/pre-existing-network-storage
+    settings:
+      remote_mount: $(gcs_bucket.gcs_bucket_name)
+      local_mount: /gcs-model-serving
+      fs_type: gcsfuse
+      mount_options: "implicit-dirs,\
+                      cache-dir=/mnt/localssd,\
+                      metadata-cache-negative-ttl-secs=0,\
+                      metadata-cache-ttl-secs=-1,\
+                      stat-cache-max-size-mb=-1,\
+                      type-cache-max-size-mb=-1,\
+                      file-cache-max-size-mb=-1,\
+                      file-cache-cache-file-for-range-read=true,\
+                      file-cache-enable-parallel-downloads=true,\
+                      dir-mode=777,\
+                      file-mode=777,\
+                      allow_other"
+
 - group: cluster
   modules:
   - id: a3ultra_startup
@@ -366,6 +464,12 @@ deployment_groups:
             "data-root": "$(vars.local_ssd_mountpoint)/docker"
           }
       runners:
+      - $(gcs_checkpoints.client_install_runner)
+      - $(gcs_checkpoints.mount_runner)
+      - $(gcs_training_data.client_install_runner)
+      - $(gcs_training_data.mount_runner)
+      - $(gcs_model_serving.client_install_runner)
+      - $(gcs_model_serving.mount_runner)
       - type: data
         destination: /etc/enroot/enroot.conf
         content: |
@@ -472,7 +576,7 @@ deployment_groups:
     settings:
       bandwidth_tier: gvnic_enabled
       machine_type: a3-ultragpu-8g
-      instance_image_custom: true
+
       enable_public_ips: true
       node_count_static: $(vars.a3u_cluster_size)
       node_count_dynamic_max: 0
@@ -526,7 +630,6 @@ deployment_groups:
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
     use: [a3ultra-slurm-net-0]
     settings:
-      instance_image_custom: true
       disk_size_gb: 300
       enable_login_public_ips: true
       machine_type: n2-standard-8
@@ -563,9 +666,9 @@ deployment_groups:
     - a3_ultra_partition
     - slurm_login
     - homefs
+    - gcs_bucket
     settings:
       enable_controller_public_ips: true
-      instance_image_custom: true
       disk_type: pd-extreme
       disk_size_gb: 300
       machine_type: n2-standard-80

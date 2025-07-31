@@ -53,10 +53,11 @@ locals {
   filestore_pvc_contents = templatefile(
     "${path.module}/templates/filestore-pvc.yaml.tftpl",
     {
-      pv_name  = local.pv_name
-      capacity = "${var.capacity_gb}Gi"
-      pvc_name = local.pvc_name
-      labels   = local.labels
+      pv_name   = local.pv_name
+      capacity  = "${var.capacity_gb}Gi"
+      pvc_name  = local.pvc_name
+      labels    = local.labels
+      namespace = var.namespace
     }
   )
 
@@ -74,10 +75,11 @@ locals {
   gcs_pvc_contents = templatefile(
     "${path.module}/templates/gcs-pvc.yaml.tftpl",
     {
-      pv_name  = local.pv_name
-      pvc_name = local.pvc_name
-      labels   = local.labels
-      capacity = "${var.capacity_gb}Gi"
+      pv_name   = local.pv_name
+      pvc_name  = local.pvc_name
+      labels    = local.labels
+      capacity  = "${var.capacity_gb}Gi"
+      namespace = var.namespace
     }
   )
 
@@ -107,6 +109,14 @@ provider "kubectl" {
   load_config_file       = false
 }
 
+resource "kubectl_manifest" "pvc_namespace" {
+  count = var.namespace != "default" ? 1 : 0
+
+  yaml_body = templatefile("${path.module}/templates/namespace.yaml.tftpl", {
+    namespace = var.namespace
+  })
+}
+
 resource "kubectl_manifest" "pv" {
   yaml_body = local.is_gcs ? local.gcs_pv_contents : local.filestore_pv_contents
 
@@ -120,5 +130,5 @@ resource "kubectl_manifest" "pv" {
 
 resource "kubectl_manifest" "pvc" {
   yaml_body  = local.is_gcs ? local.gcs_pvc_contents : local.filestore_pvc_contents
-  depends_on = [kubectl_manifest.pv]
+  depends_on = [kubectl_manifest.pv, kubectl_manifest.pvc_namespace]
 }

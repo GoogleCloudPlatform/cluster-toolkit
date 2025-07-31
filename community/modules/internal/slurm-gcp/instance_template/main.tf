@@ -45,7 +45,7 @@ locals {
   source_image_family = (
     var.source_image_family != "" && var.source_image_family != null
     ? var.source_image_family
-    : "slurm-gcp-6-9-hpc-rocky-linux-8"
+    : "slurm-gcp-6-10-hpc-rocky-linux-8"
   )
   source_image_project = (
     var.source_image_project != "" && var.source_image_project != null
