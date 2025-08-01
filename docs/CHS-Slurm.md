@@ -39,7 +39,7 @@ To enable both prolog and epilog GPU health checks, include the following settin
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
     use:
     - slurm_login
-    # ...
+    ## ...
     settings:
       enable_chs_gpu_health_check_prolog: true # false by default
       enable_chs_gpu_health_check_epilog: true # false by default
