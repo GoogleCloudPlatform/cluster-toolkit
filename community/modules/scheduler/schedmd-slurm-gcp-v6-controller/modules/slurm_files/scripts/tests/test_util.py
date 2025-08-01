@@ -429,20 +429,33 @@ def test_parse_gcp_timestamp(got: str, want: datetime):
     [
         (None, None),
         (dict(
+            type="Might",
             windowStartTime="2025-01-15T00:00:00Z",
             somethingToIgnore="past failures",
-        ), UpcomingMaintenance(window_start_time=datetime(2025, 1, 15, 0, 0, tzinfo=UTC))),
+        ), UpcomingMaintenance(
+            type="Might",
+            window_start_time=datetime(2025, 1, 15, 0, 0, tzinfo=UTC))),
         (dict(
+            type="And",
             startTimeWindow=dict(
                 earliest="2025-01-15T00:00:00Z"),
             somethingToIgnore="past failures",
-        ), UpcomingMaintenance(window_start_time=datetime(2025, 1, 15, 0, 0, tzinfo=UTC))),
+        ), UpcomingMaintenance(
+            type="And", 
+            window_start_time=datetime(2025, 1, 15, 0, 0, tzinfo=UTC))),
         (dict(
+            type="Magic",
             windowStartTime="2025-01-15T00:00:00Z",
             startTimeWindow=dict(
                 earliest="2025-01-25T00:00:00Z"), # ignored
             somethingToIgnore="past failures",
-        ), UpcomingMaintenance(window_start_time=datetime(2025, 1, 15, 0, 0, tzinfo=UTC))),
+        ), UpcomingMaintenance(
+            type="Magic",
+            window_start_time=datetime(2025, 1, 15, 0, 0, tzinfo=UTC))),
+        (
+            dict(type="III"),
+            UpcomingMaintenance(type="III", window_start_time=None),
+        ),
     ])
 def tests_parse_UpcomingMaintenance_OK(got: dict, want: Optional[UpcomingMaintenance]):
     assert UpcomingMaintenance.from_json(got) == want
@@ -453,8 +466,8 @@ def tests_parse_UpcomingMaintenance_OK(got: dict, want: Optional[UpcomingMainten
     [
         {},
         dict(
-            windowStartTime=dict(
-                earliest="2025-01-15T00:00:00Z")),
+            # no type,
+            windowStartTime=dict(earliest="2025-01-15T00:00:00Z")),
     ])
 def tests_parse_UpcomingMaintenance_FAIL(got: dict):
     with pytest.raises(ValueError):
@@ -483,10 +496,13 @@ def tests_parse_UpcomingMaintenance_FAIL(got: dict):
             upcoming_maintenance=None)),
         (dict(
             physicalHost="/aaa/bbb/ccc",
-            upcomingMaintenance=dict(windowStartTime="2025-01-15T00:00:00Z")), 
+            upcomingMaintenance=dict(
+                type="Lilac",
+                windowStartTime="2025-01-15T00:00:00Z")), 
         InstanceResourceStatus(
             physical_host="/aaa/bbb/ccc",
             upcoming_maintenance=UpcomingMaintenance(
+                type="Lilac",
                 window_start_time=datetime(2025, 1, 15, 0, 0, tzinfo=UTC)))),
     ])
 def test_parse_InstanceResourceStatus(got: dict, want: Optional[InstanceResourceStatus]):
