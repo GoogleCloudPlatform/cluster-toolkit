@@ -35,7 +35,6 @@ if [ -n "${SLURM_RESUME_FILE-}" ] && [ -f "$SLURM_RESUME_FILE" ]; then
 fi
 
 SLURM_RESUME_FILE="${UNIQUE_RESUME_FILE}"
-"${PYTHON_SCRIPT}" "${ALL_ARGS[@]}" &
-disown
+setsid "${PYTHON_SCRIPT}" "${ALL_ARGS[@]}" &
 
 exit 0

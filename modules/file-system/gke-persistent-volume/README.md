@@ -143,6 +143,7 @@ No modules.
 |------|------|
 | [kubectl_manifest.pv](https://registry.terraform.io/providers/gavinbunney/kubectl/latest/docs/resources/manifest) | resource |
 | [kubectl_manifest.pvc](https://registry.terraform.io/providers/gavinbunney/kubectl/latest/docs/resources/manifest) | resource |
+| [kubectl_manifest.pvc_namespace](https://registry.terraform.io/providers/gavinbunney/kubectl/latest/docs/resources/manifest) | resource |
 | [local_file.debug_file](https://registry.terraform.io/providers/hashicorp/local/latest/docs/resources/file) | resource |
 | [google_client_config.default](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/client_config) | data source |
 | [google_container_cluster.gke_cluster](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/container_cluster) | data source |
@@ -156,6 +157,7 @@ No modules.
 | <a name="input_filestore_id"></a> [filestore\_id](#input\_filestore\_id) | An identifier for a filestore with the format `projects/{{project}}/locations/{{location}}/instances/{{name}}`. | `string` | `null` | no |
 | <a name="input_gcs_bucket_name"></a> [gcs\_bucket\_name](#input\_gcs\_bucket\_name) | The gcs bucket to be used with the persistent volume. | `string` | `null` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | GCE resource labels to be applied to resources. Key-value pairs. | `map(string)` | n/a | yes |
+| <a name="input_namespace"></a> [namespace](#input\_namespace) | Kubernetes namespace to deploy the storage PVC/PV | `string` | `"default"` | no |
 | <a name="input_network_storage"></a> [network\_storage](#input\_network\_storage) | Network attached storage mount to be configured. | <pre>object({<br/>    server_ip             = string,<br/>    remote_mount          = string,<br/>    local_mount           = string,<br/>    fs_type               = string,<br/>    mount_options         = string,<br/>    client_install_runner = map(string)<br/>    mount_runner          = map(string)<br/>  })</pre> | n/a | yes |
 
 ## Outputs

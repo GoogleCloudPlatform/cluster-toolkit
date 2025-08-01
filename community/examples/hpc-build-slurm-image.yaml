@@ -28,7 +28,6 @@ vars:
   built_instance_image:
     family: $(vars.built_image_family)
     project: $(vars.project_id)
-  instance_image_custom: true
 
 deployment_groups:
 - group: setup

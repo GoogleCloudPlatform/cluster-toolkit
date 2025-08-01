@@ -57,6 +57,13 @@ module "kubectl_apply" {
             topology_zones      = var.sc_topology_zones
         })
       },
+      var.namespace != "default" ? [{
+        content = templatefile(
+          "${path.module}/persistent-volume-claim/namespace.yaml.tftpl",
+          {
+            namespace = var.namespace
+        })
+      }] : [],
       # create PersistentVolumeClaim in the cluster
       flatten([
         for idx in range(var.pvc_count) : [
@@ -69,6 +76,7 @@ module "kubectl_apply" {
                 capacity           = "${var.capacity_gb}Gi"
                 access_mode        = var.access_mode
                 storage_class_name = local.storage_class_name
+                namespace          = var.namespace
               }
             )
           }

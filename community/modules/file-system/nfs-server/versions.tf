@@ -30,7 +30,7 @@ terraform {
     }
   }
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:nfs-server/v1.60.0"
+    module_name = "blueprints/terraform/hpc-toolkit:nfs-server/v1.61.0"
   }
 
   required_version = ">= 0.14.0"

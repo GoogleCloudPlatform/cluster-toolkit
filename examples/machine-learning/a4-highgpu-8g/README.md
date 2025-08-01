@@ -6,6 +6,21 @@ see:
 
 [Create an AI-optimized Slurm cluster](https://cloud.google.com/ai-hypercomputer/docs/create/create-slurm-cluster)
 
+### Cloud Storage FUSE
+
+This blueprint includes four Cloud Storage FUSE mounts to provide a simple and scalable way
+to manage data.
+
+1. `/gcs` is a general purpose mount that can be used for shared tools and data.
+1. `/gcs-checkpoints` is an optimized mount for writing and reading checkpoints. It
+    uses the local SSD for caching and enables parallel downloads to improve
+    performance.
+1. `/gcs-training-data` is an optimized mount for reading training data. It can
+   be further tuned if the training data fits fully within the local ssd
+   storage.
+1. `/gcs-model-serving` is an optimized mount for serving models, which
+   downloads model weights in parallel to local ssd.
+
 ## A4-High VMs
 
 ### Build the Cluster Toolkit gcluster binary
@@ -66,9 +81,11 @@ Cluster toolkit also supports DWS Flex-Start, Spot VMs, as well as reservations 
 [For more information on DWS Flex-Start in Slurm](https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/docs/slurm-dws-flex.md)
 [For more information on Spot VMs](https://cloud.google.com/compute/docs/instances/spot)
 
-We provide ways to enable the alternative provisioning models in the `a4high-slurm-deployment.yaml` file.
+We provide ways to enable the alternative provisioning models in the
+`a4high-slurm-deployment.yaml` file.
 
-To make use of these other models, replace `a4h_reservation_name` in the deployment file with the variable of choice below.
+To make use of these other models, replace `a4h_reservation_name` in the
+deployment file with the variable of choice below.
 
 `a4h_enable_spot_vm: true` for spot or `a4h_dws_flex_enabled: true` for DWS Flex-Start.
 
