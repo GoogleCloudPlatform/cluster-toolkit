@@ -19,6 +19,7 @@ It will automatically perform the following steps, as described in the
 
 ### Example
 
+Connecting services which use a service networking PSA connection:
 ```yaml
   - source: modules/network/vpc
     id: network
@@ -29,6 +30,19 @@ It will automatically perform the following steps, as described in the
   - source: community/modules/network/private-service-access
     id: ps_connect
     use: [network]
+```
+
+Connecting [Google Cloud NetApp Volumes](https://cloud.google.com/netapp/volumes/docs/discover/overview) for using it as a shared filesystem:
+```yaml
+  - source: modules/network/vpc
+    id: network
+
+  - source: community/modules/network/private-service-access
+    id: ps_connect
+    use: [network]
+    settings:
+      prefix_length: 24
+      service_name: "netapp.servicenetworking.goog"
 ```
 
 ## License
@@ -86,6 +100,7 @@ No modules.
 | <a name="input_network_id"></a> [network\_id](#input\_network\_id) | The ID of the GCE VPC network to configure private service Access.:<br/>`projects/<project_id>/global/networks/<network_name>`" | `string` | n/a | yes |
 | <a name="input_prefix_length"></a> [prefix\_length](#input\_prefix\_length) | The prefix length of the IP range allocated for the private service access. | `number` | `16` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | ID of project in which Private Service Access will be created. | `string` | n/a | yes |
+| <a name="input_project_id"></a> [service\_name](#input\_service\_name) | Service to connect to using Private Service Access. | `string` | servicenetworking.googleapis.com | no |
 
 ## Outputs
 

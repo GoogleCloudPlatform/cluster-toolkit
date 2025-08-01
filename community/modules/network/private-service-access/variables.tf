@@ -45,3 +45,9 @@ variable "project_id" {
   description = "ID of project in which Private Service Access will be created."
   type        = string
 }
+
+variable "service_name" {
+  description = "The name of the service to connect to. Defaults to 'servicenetworking.googleapis.com'."
+  type        = string
+  default     = "servicenetworking.googleapis.com"
+}
