@@ -1,0 +1,126 @@
+# Copyright 2024 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+blueprint_name: hpc-build-slurm-image
+
+vars:
+  project_id:  ## Set GCP Project ID Here ##
+  deployment_name: build-slurm-1
+  region: us-central1
+  zone: us-central1-a
+
+  image_build_machine_type: n2d-standard-16
+  build_from_image_family: hpc-rocky-linux-8
+  build_from_image_project: cloud-hpc-image-public
+  build_from_git_ref: 6.9.1
+  built_image_family: my-custom-slurm
+  built_instance_image:
+    family: $(vars.built_image_family)
+    project: $(vars.project_id)
+  instance_image_custom: true
+
+deployment_groups:
+- group: setup
+  modules:
+  - id: network
+    source: modules/network/vpc
+
+  - id: slurm-build-script
+    source: modules/scripts/startup-script
+    settings:
+      # Do not create Ansible virtual env; Install system wide Ansible below.
+      install_ansible: false
+      runners:
+      - type: shell
+        destination: prep-for-slurm-build.sh
+        content: |
+          #!/bin/bash
+          set -e -o pipefail
+          # Slurm build on Rocky8 will upgrade to python38 as part of build
+          # This is not compatible with ansible-local runner
+          dnf install -y python38 libffi-devel 
+          alternatives --set python3 /usr/bin/python3.8
+          python3 -m pip install pip --upgrade
+          python3 -m pip install ansible==6.7.0
+          python3 -m pip install selinux
+          export PATH=/usr/local/bin:$PATH
+          ansible --version
+          ansible-galaxy role install googlecloudplatform.google_cloud_ops_agents
+      - type: data
+        destination: /var/tmp/slurm_vars.json
+        content: |
+          {
+            "reboot": false,
+            "install_cuda": false,
+            "nvidia_version": "latest",
+            "install_ompi": true,
+            "install_lustre": false,
+            "install_gcsfuse": true
+          }
+      - type: data
+        destination: /var/tmp/custom-requirements.txt
+        content: |
+          google-cloud-kms==3.5.1
+      - type: shell
+        destination: install_slurm.sh
+        # Note: changes to slurm-gcp `/scripts` folder in the built image will not reflect in the deployed cluster.
+        # Instead the scripts referenced in `schedmd-slurm-gcp-v6-controller/slurm_files` will be used.
+        content: |
+          #!/bin/bash
+          set -e -o pipefail
+          ansible-pull \
+              -U https://github.com/GoogleCloudPlatform/slurm-gcp -C $(vars.build_from_git_ref) \
+              -i localhost, --limit localhost --connection=local \
+              -e @/var/tmp/slurm_vars.json \
+              ansible/playbook.yml
+              /slurm/python/venv/bin/pip install --upgrade -r /var/tmp/custom-requirements.txt
+- group: build-slurm
+  modules:
+  - id: slurm-custom-image
+    source: modules/packer/custom-image
+    kind: packer
+    settings:
+      machine_type: $(vars.image_build_machine_type)
+      source_image_family: $(vars.build_from_image_family)
+      source_image_project_id: [$(vars.build_from_image_project)]
+      image_family: $(vars.built_image_family)
+    use:
+    - network
+    - slurm-build-script
+
+- group: demo-cluster
+  modules:
+
+  - id: debug_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network]
+    settings:
+      machine_type: n2d-standard-2
+      instance_image: $(vars.built_instance_image)
+      allow_automatic_updates: false
+
+  - id: debug_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use: [debug_nodeset]
+    settings:
+      partition_name: debug
+
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    use:
+    - network
+    - debug_partition
+    settings:
+      machine_type: n2d-standard-4
+      instance_image: $(vars.built_instance_image)

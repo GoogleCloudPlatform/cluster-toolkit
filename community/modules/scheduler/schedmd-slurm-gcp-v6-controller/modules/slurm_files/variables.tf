@@ -500,3 +500,44 @@ variable "controller_network_attachment" {
   type        = string
   default     = null
 }
+
+variable "kms_key" {
+  description = "Key to use to encrypt/decrypt secrets"
+  type        = string
+  default     = null
+}
+
+variable "munge_key" {
+  description = "Specific munge key to use"
+  type        = string
+  default     = null
+}
+
+variable "jwt_key" {
+  description = "Specific libjwt key to use"
+  type        = string
+  default     = null
+}
+
+variable "cloudsql" {
+  description = <<EOD
+Use this database instead of the one on the controller.
+  server_ip : Address of the database server.
+  user      : The user to access the database as.
+  password  : The password, given the user, to access the given database. (sensitive)
+  db_name   : The database to access.
+  user_managed_replication : The list of location and (optional) kms_key_name for secret
+EOD
+  type = object({
+    server_ip = string
+    user      = string
+    password  = string # sensitive
+    db_name   = string
+    user_managed_replication = optional(list(object({
+      location     = string
+      kms_key_name = optional(string)
+    })), [])
+  })
+  default   = null
+  sensitive = true
+}

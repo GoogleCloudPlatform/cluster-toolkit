@@ -15,6 +15,18 @@
  */
 
 locals {
+  # Currently supported images and projects
+  known_project_families = {
+    schedmd-slurm-public = [
+      "slurm-gcp-6-10-debian-12",
+      "slurm-gcp-6-10-hpc-rocky-linux-8",
+      "slurm-gcp-6-10-ubuntu-2204-lts-nvidia-570",
+      "slurm-gcp-6-10-ubuntu-2404-lts-nvidia-570",
+      "slurm-gcp-6-10-ubuntu-2204-lts-arm64",
+      "slurm-gcp-6-10-ubuntu-2404-lts-arm64"
+    ]
+  }
+
   # This approach to "hacking" the project name allows a chain of Terraform
   # calls to set the instance source_image (boot disk) with a "relative
   # resource name" that passes muster with VPC Service Control rules
