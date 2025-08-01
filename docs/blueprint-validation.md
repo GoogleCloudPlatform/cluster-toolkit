@@ -96,7 +96,7 @@ validators:
       zone: $(vars.zone)
 ```
 
-### Skipping or disabling validators
+#### Skipping or disabling validators
 
 There are three methods to disable configured validators:
 
