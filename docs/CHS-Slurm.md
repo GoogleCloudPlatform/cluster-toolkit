@@ -43,7 +43,7 @@ To enable both prolog and epilog GPU health checks, include the following settin
     settings:
       enable_chs_gpu_health_check_prolog: true # false by default
       enable_chs_gpu_health_check_epilog: true # false by default
-      # the rest of the settings, e.g. mahcine_type, controller_startup_script, login_startup_script, etc.
+      ## the rest of the settings, e.g. mahcine_type, controller_startup_script, login_startup_script, etc.
 ```
 
 ### On-demand Cluster Health Checks
