@@ -295,7 +295,7 @@ def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
     """resume nodes in nodelist"""
     lkp = lookup()
     # Prevent dormant nodes associated with a future reservation from being resumed
-    nodes, dormant_fr_nodes = util.separate(lkp.is_dormant_fr_node, nodes)
+    nodes, dormant_fr_nodes = util.separate(lkp.is_dormant_res_node, nodes)
     
     if dormant_fr_nodes:
         log.warning(f"Resume was unable to resume future reservation nodes={dormant_fr_nodes}")
