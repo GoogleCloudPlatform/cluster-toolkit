@@ -58,3 +58,4 @@
   when: 
     - current_role == "lock_manager"
     - lock_operation | default('check') == 'check'
+ 

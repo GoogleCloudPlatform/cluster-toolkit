@@ -37,94 +37,131 @@
 # Run secret manager tasks only if needed
 - name: Run secret manager tasks
   block:
-  # General secret handling
-  - name: Generate random database password
-    ansible.builtin.set_fact:
-      database_password: "{{ lookup('password', '/dev/null length=32 chars=ascii_letters,digits') }}"
+    # General secret handling
+    - name: Generate random database password
+      ansible.builtin.set_fact:
+        database_password: "{{ lookup('password', '/dev/null length=32 chars=ascii_letters,digits') }}"
 
-  - name: Generate random webapp admin password
-    ansible.builtin.set_fact:
-      webapp_admin_password: "{{ lookup('password', '/dev/null length=32 chars=ascii_letters,digits') }}"
+    - name: Get access token for Secret Manager API
+      ansible.builtin.uri:
+        url: "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token"
+        method: GET
+        headers:
+          Metadata-Flavor: Google
+        return_content: true
+      register: access_token_result
 
-  - name: Compute Webapp admin password hash to save to Webapp server
-    ansible.builtin.set_fact:
-      webapp_admin_hash: "{{ webapp_admin_password | hash('sha256') | upper }}"
+    # Webapp admin password handling
+    - name: Fetch existing webapp admin password from Secret Manager
+      ansible.builtin.uri:
+        url: "https://secretmanager.googleapis.com/v1/projects/{{ secret_project }}/secrets/webapp-server-password-{{ deployment_name }}/versions/latest:access"
+        method: GET
+        headers:
+          Authorization: "Bearer {{ access_token_result.json.access_token }}"
+          Content-Type: "application/json"
+        return_content: true
+      register: webapp_admin_sm_result
+      failed_when: false
 
-  - name: Get access token for Secret Manager API
-    ansible.builtin.uri:
-      url: "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token"
-      method: GET
-      headers:
-        Metadata-Flavor: Google
-      return_content: true
-    register: access_token_result
+    - name: Set webapp admin password from Secret Manager (if available and not resetting)
+      ansible.builtin.set_fact:
+        webapp_admin_password: "{{ webapp_admin_sm_result.json.payload.data | b64decode }}"
+        webapp_password_was_fetched: true
+      when: 
+        - webapp_admin_sm_result.status == 200
+        - not (reset_webapp_admin_password | default(false))
 
-  - name: Create a GCP secret for webapp server login
-    ansible.builtin.uri:
-      url: "https://secretmanager.googleapis.com/v1/projects/{{ secret_project }}/secrets?secretId=webapp-server-password-{{ deployment_name }}"
-      method: POST
-      headers:
-        Authorization: "Bearer {{ access_token_result.json.access_token }}"
-        Content-Type: "application/json"
-      body_format: json
-      body:
-        replication:
-          automatic: {}
-      status_code: [200, 409]  # 409 = already exists
-    register: webapp_secret_create
+    - name: Generate new webapp admin password (if not available from Secret Manager or reset requested)
+      ansible.builtin.set_fact:
+        webapp_admin_password: "{{ lookup('password', '/dev/null length=32 chars=ascii_letters,digits') }}"
+        webapp_password_was_fetched: false
+      when: 
+        - webapp_admin_sm_result.status != 200 or (reset_webapp_admin_password | default(false))
 
-  - name: Add webapp password version to secret
-    ansible.builtin.uri:
-      url: "https://secretmanager.googleapis.com/v1/projects/{{ secret_project }}/secrets/webapp-server-password-{{ deployment_name }}:addVersion"
-      method: POST
-      headers:
-        Authorization: "Bearer {{ access_token_result.json.access_token }}"
-        Content-Type: "application/json"
-      body_format: json
-      body:
-        payload:
-          data: "{{ webapp_admin_password | b64encode }}"
-    register: webapp_secret
+    - name: Compute Webapp admin password hash to save to Webapp server
+      ansible.builtin.set_fact:
+        webapp_admin_hash: "{{ webapp_admin_password | hash('sha256') | upper }}"
 
-  - name: Create a GCP secret for database password
-    ansible.builtin.uri:
-      url: "https://secretmanager.googleapis.com/v1/projects/{{ secret_project }}/secrets?secretId=db-password-{{ deployment_name }}"
-      method: POST
-      headers:
-        Authorization: "Bearer {{ access_token_result.json.access_token }}"
-        Content-Type: "application/json"
-      body_format: json
-      body:
-        replication:
-          automatic: {}
-      status_code: [200, 409]  # 409 = already exists
-    register: database_secret_create
+    - name: Create a GCP secret for webapp server login
+      ansible.builtin.uri:
+        url: "https://secretmanager.googleapis.com/v1/projects/{{ secret_project }}/secrets?secretId=webapp-server-password-{{ deployment_name }}"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ access_token_result.json.access_token }}"
+          Content-Type: "application/json"
+        body_format: json
+        body:
+          replication:
+            automatic: {}
+        status_code: [200, 409]  # 409 = already exists
+      register: webapp_secret_create
 
-  - name: Add database password version to secret
-    ansible.builtin.uri:
-      url: "https://secretmanager.googleapis.com/v1/projects/{{ secret_project }}/secrets/db-password-{{ deployment_name }}:addVersion"
-      method: POST
-      headers:
-        Authorization: "Bearer {{ access_token_result.json.access_token }}"
-        Content-Type: "application/json"
-      body_format: json
-      body:
-        payload:
-          data: "{{ database_password | b64encode }}"
-    register: database_secret
+    - name: Add webapp password version to secret (only if new password was generated)
+      ansible.builtin.uri:
+        url: "https://secretmanager.googleapis.com/v1/projects/{{ secret_project }}/secrets/webapp-server-password-{{ deployment_name }}:addVersion"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ access_token_result.json.access_token }}"
+          Content-Type: "application/json"
+        body_format: json
+        body:
+          payload:
+            data: "{{ webapp_admin_password | b64encode }}"
+      register: webapp_secret
+      when: not (webapp_password_was_fetched | default(false))
 
-  # Per-user secret handling
-  - name: Generate per-user secrets and enrich list
-    include_tasks: user_secret_tasks.yaml
-    loop: "{{ vdi_users }}"
-    loop_control:
-      loop_var: item
+    - name: Debug webapp admin password handling
+      ansible.builtin.debug:
+        msg: |
+          Webapp admin password handling (secret_manager):
+            - reset_requested: {{ reset_webapp_admin_password | default(false) }}
+            - is_fresh_deployment: {{ is_fresh_deployment | default(false) }}
+            - reset_applied: {{ reset_webapp_admin_password | default(false) }}
+            - secret_manager_status: {{ webapp_admin_sm_result.status }}
+            - password_source: {{ 'Secret Manager' if webapp_admin_sm_result.status == 200 and not (reset_webapp_admin_password | default(false)) else 'Generated' }}
+            - password_was_fetched: {{ webapp_password_was_fetched | default(false) }}
+            - password_length: {{ webapp_admin_password | length if webapp_admin_password is defined else 'N/A' }}
+            - stored_in_secret_manager: {{ not (webapp_password_was_fetched | default(false)) }}
+      when: debug | default(false)
 
-  - name: Set enriched vdi_users_updated variable
-    ansible.builtin.set_fact:
-      vdi_users_updated: "{{ vdi_users_updated }}"
-    when: vdi_users_updated is defined
+    - name: Create a GCP secret for database password
+      ansible.builtin.uri:
+        url: "https://secretmanager.googleapis.com/v1/projects/{{ secret_project }}/secrets?secretId=db-password-{{ deployment_name }}"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ access_token_result.json.access_token }}"
+          Content-Type: "application/json"
+        body_format: json
+        body:
+          replication:
+            automatic: {}
+        status_code: [200, 409]  # 409 = already exists
+      register: database_secret_create
 
+    - name: Add database password version to secret
+      ansible.builtin.uri:
+        url: "https://secretmanager.googleapis.com/v1/projects/{{ secret_project }}/secrets/db-password-{{ deployment_name }}:addVersion"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ access_token_result.json.access_token }}"
+          Content-Type: "application/json"
+        body_format: json
+        body:
+          payload:
+            data: "{{ database_password | b64encode }}"
+      register: database_secret
+
+    # Per-user secret handling
+    - name: Generate per-user secrets and enrich list
+      include_tasks: user_secret_tasks.yaml
+      loop: "{{ vdi_users }}"
+      loop_control:
+        loop_var: item
+
+    - name: Set enriched vdi_users_updated variable
+      ansible.builtin.set_fact:
+        vdi_users_updated: "{{ vdi_users_updated }}"
+      when: vdi_users_updated is defined
   when: role_should_run
 
 # Mark role as completed

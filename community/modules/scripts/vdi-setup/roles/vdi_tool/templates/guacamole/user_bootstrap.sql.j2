@@ -1,10 +1,7 @@
--- Create or update Guacamole user for {{ username }}
--- First, ensure the entity exists
+-- Create Guacamole user for {{ username }}
 INSERT INTO guacamole_entity (name, type)
-VALUES ('{{ username }}', 'USER')
-ON CONFLICT (name, type) DO NOTHING;
+VALUES ('{{ username }}', 'USER');
 
--- Then, insert or update the user with the latest password
 INSERT INTO guacamole_user (
     entity_id,
     password_salt,
@@ -21,9 +18,4 @@ SELECT
     false,
     false
 FROM guacamole_entity
-WHERE name = '{{ username }}' AND type = 'USER'
-ON CONFLICT (entity_id) DO UPDATE SET
-    password_hash = EXCLUDED.password_hash,
-    password_date = EXCLUDED.password_date,
-    disabled = EXCLUDED.disabled,
-    expired = EXCLUDED.expired;
+WHERE name = '{{ username }}' AND type = 'USER';

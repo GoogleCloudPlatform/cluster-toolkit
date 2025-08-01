@@ -1,0 +1,138 @@
+#!/bin/bash
+
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# VDI Monitor Configuration Module
+# Contains constants, logging functions, and initialization logic
+
+# Constants
+LOCK_FILE="/opt/vdi-setup/.vdi-lock.yaml"
+CONFIG_HASH_FILE="/opt/vdi-setup/.config-hash"
+MONITOR_LOG="/var/log/vdi-monitor.log"
+ANSIBLE_LOG="/var/log/ansible-vdi-reconfig.log"
+VDI_SETUP_DIR="/opt/vdi-setup"
+
+# Reconfiguration cooldown (prevents rapid reconfigurations)
+RECONFIG_COOLDOWN={{ vdi_monitor_reconfig_cooldown | default(300) }} # seconds between reconfigurations
+
+# Function to log messages
+log_message() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" | tee -a "$MONITOR_LOG"
+}
+
+# Function to log messages without stdout output (for functions that return values)
+log_message_quiet() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> "$MONITOR_LOG"
+}
+
+# Function to get bucket name from vars file
+get_bucket_name() {
+    local vars_file="$VDI_SETUP_DIR/vars.yaml"
+    
+    log_message_quiet "DEBUG: Getting bucket name from: $vars_file"
+    
+    if [[ -f "$vars_file" ]]; then
+        log_message_quiet "DEBUG: vars.yaml file exists"
+        local bucket_name=$(grep "^vdi_bucket_name:" "$vars_file" | awk '{print $2}' | tr -d ' ')
+        log_message_quiet "DEBUG: Extracted bucket name: '$bucket_name'"
+        if [[ -n "$bucket_name" ]]; then
+            echo "$bucket_name"
+            return 0
+        else
+            log_message_quiet "WARNING: Bucket name is empty after extraction"
+        fi
+    else
+        log_message_quiet "WARNING: vars.yaml file not found: $vars_file"
+    fi
+    
+    echo ""
+    return 1
+}
+
+# Function to validate environment
+validate_environment() {
+    # Check if VDI setup directory exists
+    if [[ ! -d "$VDI_SETUP_DIR" ]]; then
+        log_message "ERROR: VDI setup directory not found: $VDI_SETUP_DIR"
+        return 1
+    fi
+    
+    # Check if vars.yaml exists
+    if [[ ! -f "$VDI_SETUP_DIR/vars.yaml" ]]; then
+        log_message "ERROR: vars.yaml not found: $VDI_SETUP_DIR/vars.yaml"
+        return 1
+    fi
+    
+    # Get and validate bucket name
+    local bucket_name=$(get_bucket_name)
+    if [[ -z "$bucket_name" ]]; then
+        log_message "ERROR: Could not extract bucket name from vars.yaml"
+        return 1
+    fi
+    
+    # Check if gcloud is available
+    if ! command -v gcloud >/dev/null 2>&1; then
+        log_message "ERROR: gcloud command not found"
+        return 1
+    fi
+    
+    # Check if gsutil is available
+    if ! command -v gsutil >/dev/null 2>&1; then
+        log_message "ERROR: gsutil command not found"
+        return 1
+    fi
+    
+    log_message "Environment validation passed"
+    return 0
+}
+
+# Function to create necessary directories and files
+setup_directories() {
+    # Ensure log directory exists
+    mkdir -p "$(dirname "$MONITOR_LOG")"
+    
+    # Ensure VDI setup directory exists
+    mkdir -p "$VDI_SETUP_DIR"
+    
+    # Create log files if they don't exist
+    touch "$MONITOR_LOG"
+    touch "$ANSIBLE_LOG"
+    
+    log_message "Directories and files setup complete"
+}
+
+# Function to initialize monitoring system
+initialize_monitoring() {
+    log_message "Initializing VDI monitoring system"
+    
+    # Setup directories
+    setup_directories
+    
+    # Validate environment
+    if ! validate_environment; then
+        log_message "ERROR: Environment validation failed"
+        exit 1
+    fi
+    
+    # Get bucket name
+    BUCKET_NAME=$(get_bucket_name)
+    if [[ -z "$BUCKET_NAME" ]]; then
+        log_message "ERROR: Bucket name not available. Cannot proceed with monitoring."
+        exit 1
+    fi
+    
+    log_message "Using bucket: gs://$BUCKET_NAME"
+    log_message "VDI monitoring system initialized successfully"
+} 

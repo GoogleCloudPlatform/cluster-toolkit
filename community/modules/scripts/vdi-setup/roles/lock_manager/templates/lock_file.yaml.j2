@@ -11,9 +11,9 @@ vdi_setup_status:
   setup_status: "configuring"  # configuring, available, error
   
   completed_roles:
-    base_os:
-      completed: false
     lock_manager:
+      completed: false
+    base_os:
       completed: false
     secret_manager:
       completed: false
@@ -22,6 +22,8 @@ vdi_setup_status:
     vnc:
       completed: false
     vdi_tool:
+      completed: false
+    vdi_monitor:
       completed: false
   
   user_secrets_status:
@@ -33,3 +35,4 @@ vdi_setup_status:
     current_users: []
     previous_users: []
     removed_users: [] 
+ 

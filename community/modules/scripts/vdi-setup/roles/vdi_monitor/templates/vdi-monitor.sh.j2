@@ -1,0 +1,132 @@
+#!/bin/bash
+
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# VDI Configuration Monitor - Main Orchestrator
+# Sources all modules and provides the main entry point
+
+# Source all modules
+source /opt/vdi-setup/vdi-monitor-lib/config.sh
+source /opt/vdi-setup/vdi-monitor-lib/file-monitor.sh
+source /opt/vdi-setup/vdi-monitor-lib/change-detector.sh
+source /opt/vdi-setup/vdi-monitor-lib/test-utils.sh
+
+# Function to update deployment status
+update_deployment_status() {
+    local status="$1"
+    local instance_name=$(curl -s -H "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/instance/name")
+    local zone=$(curl -s -H "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/instance/zone" | sed 's/.*\/\([^\/]*\)$/\1/')
+    local project_id=$(curl -s -H "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/project/project-id")
+    
+    if [[ -n "$instance_name" && -n "$zone" && -n "$project_id" ]]; then
+        log_message "Updating deployment status to: $status"
+        
+        # Retry logic for metadata updates to handle fingerprint conflicts
+        local max_retries=3
+        local retry_count=0
+        local success=false
+        
+        while [[ $retry_count -lt $max_retries && "$success" == "false" ]]; do
+            if gcloud compute instances add-metadata "$instance_name" \
+                --zone="$zone" \
+                --project="$project_id" \
+                --metadata="deployment-status=$status" \
+                --quiet 2>/dev/null; then
+                success=true
+                log_message "Successfully updated deployment status to: $status"
+            else
+                retry_count=$((retry_count + 1))
+                if [[ $retry_count -lt $max_retries ]]; then
+                    log_message "WARNING: Failed to update deployment status (attempt $retry_count/$max_retries), retrying in 2 seconds..."
+                    sleep 2
+                else
+                    log_message "WARNING: Failed to update deployment status after $max_retries attempts"
+                fi
+            fi
+        done
+    else
+        log_message "WARNING: Could not determine instance metadata for status update"
+    fi
+}
+
+# Main execution
+main() {
+    # Parse command line arguments
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --test)
+                run_tests
+                exit 0
+                ;;
+            --diagnostics)
+                run_diagnostics
+                exit 0
+                ;;
+            --help|-h)
+                show_help
+                exit 0
+                ;;
+            *)
+                echo "Unknown option: $1"
+                show_help
+                exit 1
+                ;;
+        esac
+    done
+    
+    # Initialize monitoring system
+    initialize_monitoring
+    
+    # Set initial deployment status to available
+    update_deployment_status "available"
+    
+    # Run the monitoring loop
+    run_monitoring_loop
+}
+
+# Entry point
+case "${1:-}" in
+    --test)
+        # Initialize for testing
+        initialize_monitoring
+        run_tests
+        ;;
+    --diagnostics)
+        # Initialize for diagnostics
+        initialize_monitoring
+        run_diagnostics
+        ;;
+    --help|-h)
+        echo "VDI Configuration Monitor"
+        echo ""
+        echo "Usage: $0 [OPTION]"
+        echo ""
+        echo "Options:"
+        echo "  --test         Run comprehensive tests"
+        echo "  --diagnostics  Run system diagnostics"
+        echo "  --help, -h     Show this help message"
+        echo "  (no args)      Start monitoring"
+        echo ""
+        echo "The VDI Configuration Monitor automatically detects changes in:"
+        echo "  - Configuration files (vars.yaml, install.yaml, roles.tar.gz)"
+        echo "  - Password reset flags"
+        echo ""
+        echo "When changes are detected, it triggers VDI reconfiguration."
+        ;;
+    *)
+        # Default: start monitoring
+        main
+        ;;
+esac

@@ -1,13 +1,6 @@
--- VNC Connection for {{ username }} (upsert pattern)
--- First, ensure the connection exists
+-- VNC Connection for {{ username }}
 INSERT INTO guacamole_connection (connection_name, protocol)
-VALUES ('{{ username }}', 'vnc')
-ON CONFLICT (connection_name) DO UPDATE SET
-    protocol = EXCLUDED.protocol;
-
--- Update connection parameters (delete old ones first, then insert new ones)
-DELETE FROM guacamole_connection_parameter 
-WHERE connection_id = (SELECT connection_id FROM guacamole_connection WHERE connection_name = '{{ username }}');
+VALUES ('{{ username }}', 'vnc');
 
 INSERT INTO guacamole_connection_parameter (connection_id, parameter_name, parameter_value)
 SELECT 
@@ -22,11 +15,6 @@ FROM guacamole_connection, (VALUES
 ) AS params(param_name, param_value)
 WHERE connection_name = '{{ username }}';
 
--- Update connection permissions (delete old ones first, then insert new ones)
-DELETE FROM guacamole_connection_permission 
-WHERE connection_id = (SELECT connection_id FROM guacamole_connection WHERE connection_name = '{{ username }}')
-AND entity_id = (SELECT entity_id FROM guacamole_entity WHERE name = '{{ username }}' AND type = 'USER');
-
 INSERT INTO guacamole_connection_permission (entity_id, connection_id, permission)
 SELECT
     (SELECT entity_id FROM guacamole_entity WHERE name = '{{ username }}' AND type = 'USER'),
@@ -34,16 +22,9 @@ SELECT
     perms.permission::guacamole_object_permission_type
 FROM (VALUES ('READ'),('UPDATE'),('DELETE'),('ADMINISTER')) AS perms(permission);
 
--- SSH Connection for {{ username }} (upsert pattern)
--- First, ensure the SSH connection exists
+-- SSH Connection for {{ username }}
 INSERT INTO guacamole_connection (connection_name, protocol)
-VALUES ('{{ username }} SSH', 'ssh')
-ON CONFLICT (connection_name) DO UPDATE SET
-    protocol = EXCLUDED.protocol;
-
--- Update SSH connection parameters (delete old ones first, then insert new ones)
-DELETE FROM guacamole_connection_parameter 
-WHERE connection_id = (SELECT connection_id FROM guacamole_connection WHERE connection_name = '{{ username }} SSH');
+VALUES ('{{ username }} SSH', 'ssh');
 
 INSERT INTO guacamole_connection_parameter (connection_id, parameter_name, parameter_value)
 SELECT 
@@ -64,11 +45,6 @@ FROM guacamole_connection, (VALUES
     )
 ) AS params(param_name, param_value)
 WHERE connection_name = '{{ username }} SSH';
-
--- Update SSH connection permissions (delete old ones first, then insert new ones)
-DELETE FROM guacamole_connection_permission 
-WHERE connection_id = (SELECT connection_id FROM guacamole_connection WHERE connection_name = '{{ username }} SSH')
-AND entity_id = (SELECT entity_id FROM guacamole_entity WHERE name = '{{ username }}' AND type = 'USER');
 
 INSERT INTO guacamole_connection_permission (entity_id, connection_id, permission)
 SELECT

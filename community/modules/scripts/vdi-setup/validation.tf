@@ -49,5 +49,14 @@ resource "terraform_data" "input_validation" {
       ])
       error_message = "Each VDI user must have a port between 5901 and 5999 when VNC is used."
     }
+
+    precondition {
+      condition = alltrue([
+        for user in var.vdi_users : (
+          user.reset_password == null || user.reset_password == true || user.reset_password == false
+        )
+      ])
+      error_message = "reset_password must be a boolean value (true/false) or null."
+    }
   }
 }

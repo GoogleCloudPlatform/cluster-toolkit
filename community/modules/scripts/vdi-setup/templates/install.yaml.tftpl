@@ -3,14 +3,8 @@
 - hosts: localhost
   become: true
   vars_files:
-    - "/tmp/vdi/vars.yaml"
+    - "/opt/vdi-setup/vars.yaml"
   tasks:
-
-    # Initialize lock manager
-    - name: Initialize lock manager
-      ansible.builtin.import_role:
-        name: lock_manager
-        tasks_from: check_lock
 
 %{ for r in roles }
     - name: Execute ${r} role

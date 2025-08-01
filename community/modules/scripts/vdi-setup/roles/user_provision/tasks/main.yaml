@@ -37,6 +37,7 @@
 # Run user provision tasks only if needed
 - name: Run user provision tasks
   block:
+
   - name: Ensure 'wheel' group is present
     group:
       name: wheel

@@ -74,12 +74,13 @@ variable "vdi_webapp_port" {
 }
 
 variable "vdi_users" {
-  description = "List of VDI users to configure. Passwords are handled securely by the Ansible roles: if secret_name is provided, the password is fetched from Secret Manager; if neither password nor secret_name is provided, a random password is generated and stored in Secret Manager. If secret_project is provided, it specifies the GCP project where the secret is stored (defaults to the deployment project)."
+  description = "List of VDI users to configure. Passwords are handled securely by the Ansible roles: if secret_name is provided, the password is fetched from Secret Manager; if neither password nor secret_name is provided, a random password is generated and stored in Secret Manager. If secret_project is provided, it specifies the GCP project where the secret is stored (defaults to the deployment project). Set reset_password to true to trigger password regeneration for auto-generated passwords."
   type = list(object({
     username       = string
     port           = number
     secret_name    = optional(string)
     secret_project = optional(string)
+    reset_password = optional(bool)
   }))
   default = []
 }
@@ -99,4 +100,16 @@ variable "debug" {
   type        = bool
   default     = false
   description = "Enable debug mode for verbose logging during VDI setup."
+}
+
+variable "reset_webapp_admin_password" {
+  type        = bool
+  default     = false
+  description = "Force reset of the webapp admin password during reconfiguration. If true, a new password will be generated and stored in Secret Manager, even if an existing password exists."
+}
+
+variable "force_rerun" {
+  type        = bool
+  default     = false
+  description = "Force complete container recreation and database re-initialization, bypassing all idempotency checks. Use only when troubleshooting or when the system is in a broken state."
 }

@@ -28,6 +28,24 @@
   ansible.builtin.set_fact:
     role_should_run: "{{ lock_check_result.ansible_facts.role_should_run | default(true) }}"
 
+- name: Check if user secrets changed
+  ansible.builtin.set_fact:
+    user_secrets_changed: "{{ lock_check_result.ansible_facts.user_secrets_changed | default(false) }}"
+
+- name: Override role_should_run if user secrets changed
+  ansible.builtin.set_fact:
+    role_should_run: true
+  when: user_secrets_changed
+
+- name: Debug vnc role execution reason
+  ansible.builtin.debug:
+    msg: |
+      VNC role execution:
+        - role_should_run: {{ role_should_run }}
+        - user_secrets_changed: {{ user_secrets_changed }}
+        - execution_reason: {{ 'User configuration changed' if user_secrets_changed else 'Normal role execution' }}
+  when: role_should_run
+
 # Skip all tasks if role should not run
 - name: Skip vnc tasks if role should not run
   ansible.builtin.debug:

@@ -40,6 +40,11 @@
     msg: "Lock file created: {{ lock_file_creation.changed }}"
   when: debug | default(false) and not lock_file_stat.stat.exists
 
+- name: Set fresh deployment flag (only when lock file is created)
+  ansible.builtin.set_fact:
+    is_fresh_deployment: true
+  when: lock_file_creation.changed
+
 - name: Load existing lock file data
   ansible.builtin.include_vars:
     file: /opt/vdi-setup/.vdi-lock.yaml
@@ -252,7 +257,7 @@
   register: lock_file_base64
   when: lock_file_write.changed
 
-- name: Add VDI lock file content to VM metadata
+- name: Add VDI lock file content to VM metadata (with retry)
   ansible.builtin.command: >
     gcloud compute instances add-metadata {{ ansible_hostname }}
     --metadata vdi-lock-content="{{ lock_file_base64.stdout }}"
@@ -261,6 +266,9 @@
     - lock_file_write.changed
     - lock_file_base64.rc == 0
   register: metadata_update
+  retries: 3
+  delay: 2
+  until: metadata_update.rc == 0
   changed_when: metadata_update.rc == 0
   failed_when: 
     - metadata_update.rc != 0
@@ -281,28 +289,13 @@
     msg: "Lock file validation: {{ lock_file_validation.rc == 0 }}"
   when: debug | default(false)
 
-- name: Check if VDI monitor service exists
-  ansible.builtin.stat:
-    path: /etc/systemd/system/vdi-monitor.service
-  register: vdi_monitor_service_stat
-
-- name: Debug VDI monitor setup conditions
+- name: Debug lock manager completion
   ansible.builtin.debug:
-    msg: |
-      VDI monitor setup conditions:
-        - current_role: {{ current_role }}
-        - vdi_monitor_service_exists: {{ vdi_monitor_service_stat.stat.exists }}
-        - lock_file_creation.changed: {{ lock_file_creation.changed | default(false) }}
-        - will_setup_monitor: {{ (not vdi_monitor_service_stat.stat.exists) and (lock_file_creation.changed | default(false)) }}
+    msg: "Lock manager role completed successfully"
   when: debug | default(false)
-
-- name: Setup VDI monitoring service (first time only)
-  ansible.builtin.include_tasks: monitor_setup.yaml
-  when: 
-    - not vdi_monitor_service_stat.stat.exists
-    - lock_file_creation.changed
 
 - name: Fail if lock file is invalid
   ansible.builtin.fail:
     msg: "Lock file validation failed: {{ lock_file_validation.stderr }}"
   when: lock_file_validation.rc != 0
+ 

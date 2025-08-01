@@ -31,18 +31,20 @@ resource "random_id" "resource_name_suffix" {
 # Generate vars content using templatefile
 locals {
   vdi_vars_content = templatefile("${path.module}/templates/vars.yaml.tftpl", {
-    deployment_name = var.deployment_name
-    project_id      = var.project_id
-    user_provision  = var.user_provision
-    vnc_flavor      = var.vnc_flavor
-    vdi_tool        = var.vdi_tool
-    vdi_user_group  = var.vdi_user_group
-    vdi_webapp_port = var.vdi_webapp_port
-    vdi_resolution  = var.vdi_resolution
-    vdi_users       = var.vdi_users
-    debug           = var.debug
-    vdi_bucket_name = local.bucket_name
-    zone            = var.zone
+    deployment_name             = var.deployment_name
+    project_id                  = var.project_id
+    user_provision              = var.user_provision
+    vnc_flavor                  = var.vnc_flavor
+    vdi_tool                    = var.vdi_tool
+    vdi_user_group              = var.vdi_user_group
+    vdi_webapp_port             = var.vdi_webapp_port
+    vdi_resolution              = var.vdi_resolution
+    vdi_users                   = var.vdi_users
+    debug                       = var.debug
+    reset_webapp_admin_password = var.reset_webapp_admin_password
+    force_rerun                 = var.force_rerun
+    vdi_bucket_name             = local.bucket_name
+    zone                        = var.zone
   })
 }
 
@@ -60,44 +62,55 @@ locals {
         ansible-galaxy collection install google.cloud
       EOT
     },
-    # Stage roles.tar.gz
+    # Stage roles.tar.gz to temporary location
     {
       type        = "data"
       source      = data.archive_file.roles_tar.output_path
       destination = "/tmp/vdi/roles.tar.gz"
     },
 
-    # Unpack into /tmp/vdi/roles
+    # Unpack into /opt/vdi-setup/roles (final location)
     {
       type        = "shell"
       destination = "unpack_roles.sh"
       content     = <<-EOT
         #!/bin/bash
         set -eux
-        mkdir -p /tmp/vdi/roles
-        tar xzf /tmp/vdi/roles.tar.gz -C /tmp/vdi/roles
+        mkdir -p /opt/vdi-setup/roles
+        tar xzf /tmp/vdi/roles.tar.gz -C /opt/vdi-setup/roles
+        # Clean up temporary file
+        rm -f /tmp/vdi/roles.tar.gz
       EOT
     },
 
-    # write out vars file as YAML
+    # write out vars file as YAML to final location
     {
       type        = "data"
       content     = local.vdi_vars_content
-      destination = "/tmp/vdi/vars.yaml"
+      destination = "/opt/vdi-setup/vars.yaml"
     },
 
-    # Run the rendered playbook via ansible-local
+    # Run the rendered playbook via ansible-local from final location
     {
       type = "ansible-local"
       content = templatefile("${path.module}/templates/install.yaml.tftpl",
         {
-          roles = ["lock_manager", "base_os", "secret_manager", "user_provision", "vnc", "vdi_tool"],
+          roles = ["lock_manager", "base_os", "secret_manager", "user_provision", "vnc", "vdi_tool", "vdi_monitor"],
         }
       )
-      destination = "/tmp/vdi/install.yaml"
-      args = var.debug ? "--extra-vars @/tmp/vdi/vars.yaml -v --extra-vars debug=true" : "--extra-vars @/tmp/vdi/vars.yaml"
+      destination = "/opt/vdi-setup/install.yaml"
+      args = var.debug ? "--extra-vars @/opt/vdi-setup/vars.yaml -v --extra-vars debug=true" : "--extra-vars @/opt/vdi-setup/vars.yaml"
     },
-    # Todo: another runner here to delete /tmp/vdi afterwards?
+    # Clean up temporary directory
+    {
+      type        = "shell"
+      destination = "cleanup.sh"
+      content     = <<-EOT
+        #!/bin/bash
+        set -eux
+        rm -rf /tmp/vdi
+      EOT
+    },
   ]
 
   bucket_name = "${substr(var.deployment_name, 0, 39)}-vdi-scripts-${random_id.resource_name_suffix.hex}"
