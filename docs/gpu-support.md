@@ -131,7 +131,7 @@ information, see the SchedMD documentation:
 [slurm-gcp]: https://github.com/GoogleCloudPlatform/slurm-gcp
 [cloud_parameters]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/scheduler/schedmd-slurm-gcp-v6-controller#input_cloud_parameters
 
-## Further Reading
+### Further Reading
 
 * [Cloud GPU Documentation](https://cloud.google.com/compute/docs/gpus/)
 * [GPU Information](https://cloud.google.com/compute/docs/gpus/about-gpus): More
