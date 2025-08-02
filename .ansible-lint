@@ -20,4 +20,4 @@ kinds:
 - playbook: "**/scripts/*.{yml,yaml}"
 - tasks: "**/ansible_playbooks/test*.{yml,yaml}"
 - tasks: "**/tasks/*"
-############
+
