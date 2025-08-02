@@ -201,6 +201,9 @@ class _C2State:
 
     def startup(self):
         conf = utils.load_config()
+        if utils.is_local_mode():
+            logger.info("Starting C2 in local development mode - PubSub operations will be bypassed")
+            return
         self._project_id = conf["server"]["gcp_project"]
         self._topic = conf["server"]["c2_topic"]
         self._topic_path = self.pub_client.topic_path(

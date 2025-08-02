@@ -33,7 +33,10 @@ class ImageBackend:
 
     def __init__(self, image):
         self.config = utils.load_config()
-        self.ghpc_path = "/opt/gcluster/cluster-toolkit/ghpc"
+        if utils.is_local_mode():
+            self.ghpc_path = self.config["server"]["gcluster_path"]
+        else:
+            self.ghpc_path = "/opt/gcluster/cluster-toolkit/ghpc"
         
         self.image = image
         self.image_dir = (
