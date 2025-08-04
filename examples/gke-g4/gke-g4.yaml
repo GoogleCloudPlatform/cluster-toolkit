@@ -37,8 +37,6 @@ vars:
   authorized_cidr:
 
   system_node_pool_disk_size_gb: 100
-  # g4_node_pool_disk_size_gb: 100
-
 
 deployment_groups:
 - group: primary
@@ -55,9 +53,9 @@ deployment_groups:
       - subnetwork_name: $(vars.deployment_name)-sub-0
         ranges:
         - range_name: pods
-          ip_cidr_range: 10.64.0.0/19
+          ip_cidr_range: 10.4.0.0/14
         - range_name: services
-          ip_cidr_range: 10.65.0.0/19
+          ip_cidr_range: 10.0.32.0/20
       firewall_rules:
       - name: $(vars.deployment_name)-internal-0
         ranges: [192.168.0.0/16]
