@@ -1644,7 +1644,7 @@ class Lookup:
 
     def nodeset_accelerator_topology(self, nodeset_name: str) -> Optional[str]:
         if not self.nodeset_is_tpu(nodeset_name):
-            return self.cfg.nodeset[nodeset_name].get('accelerator_topology')
+            return getattr(self.cfg.nodeset[nodeset_name], 'accelerator_topology', None)
         return None
 
     def nodeset_prefix(self, nodeset_name):
