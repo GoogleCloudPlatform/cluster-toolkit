@@ -26,7 +26,6 @@ vars:
     # https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/docs/images.md#supported-operating-systems
     family: slurm-gcp-6-10-ubuntu-2204-lts-nvidia-570
     project: schedmd-slurm-public
-  instance_image_custom: true
 
 deployment_groups:
 - group: primary
