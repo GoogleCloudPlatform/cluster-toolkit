@@ -50,7 +50,7 @@ deployment_groups:
       subnetworks:
       - subnet_name: $(vars.deployment_name)-sub-0
         subnet_region: $(vars.region)
-        subnet_ip: 192.168.0.0/24
+        subnet_ip: 192.168.0.0/18
       secondary_ranges_list:
       - subnetwork_name: $(vars.deployment_name)-sub-0
         ranges:
@@ -60,7 +60,7 @@ deployment_groups:
           ip_cidr_range: 10.65.0.0/19
       firewall_rules:
       - name: $(vars.deployment_name)-internal-0
-        ranges: [192.168.0.0/24]
+        ranges: [192.168.0.0/16]
         allow:
         - protocol: tcp
           ports: ["0-65535"]
@@ -72,7 +72,6 @@ deployment_groups:
     source: modules/network/vpc
     settings:
       network_name: $(vars.deployment_name)-net-1
-      ips_per_nat: 6
       subnetworks:
       - subnet_name: $(vars.deployment_name)-sub-1
         subnet_region: $(vars.region)
@@ -158,7 +157,6 @@ deployment_groups:
       machine_type: g4-standard-384
       auto_upgrade: true
       zones: [$(vars.zone)]
-      # disk_size_gb: $(vars.g4_node_pool_disk_size_gb)
       static_node_count: $(vars.static_node_count)
       additional_networks:
         $(concat(

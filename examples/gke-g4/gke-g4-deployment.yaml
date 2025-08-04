@@ -24,7 +24,7 @@ vars:
 
   # This should be unique across all of your Cluster
   # Toolkit Deployments.
-  deployment_name: poornima-g4-5
+  deployment_name: poornima-g4-7
 
   # The GCP Region used for this deployment.
   region: us-central1
@@ -37,4 +37,4 @@ vars:
 
   # Cidr block containing the IP of the machine calling terraform.
   # The following line must be updated for this example to work.
-  authorized_cidr: 0.0.0.0/0
+  authorized_cidr: 192.168.0.0/16
