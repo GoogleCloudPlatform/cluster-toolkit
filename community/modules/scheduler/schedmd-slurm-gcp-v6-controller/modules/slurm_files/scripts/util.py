@@ -1454,6 +1454,8 @@ class ReservationDetails:
     bulk_insert_name: str # name in format suitable for bulk insert (currently identical to user supplied name in long format)
     deployment_type: Optional[str]
     reservation_mode: Optional[str]
+    assured_count: int 
+    delete_at_time: Optional[datetime]
 
     @property
     def dense(self) -> bool:
@@ -1621,11 +1623,29 @@ class Lookup:
     def node_is_fr(self, node_name:str) -> bool:
         return bool(self.node_nodeset(node_name).future_reservation)
 
-    def is_dormant_fr_node(self, node_name:str) -> bool:
+    def is_dormant_res_node(self, node_name:str) -> bool:
         fr = self.future_reservation(self.node_nodeset(node_name))
-        if not fr:
+        res = self.nodeset_reservation(self.node_nodeset(node_name))
+        
+        if fr is None and res is None:
             return False
-        return fr.active_reservation is None
+        
+        if fr:
+            return fr.active_reservation is None
+        
+        if res:
+            if res.calendar:
+                # If reservation is calendar based, check if it is past the delete_at_time
+                if res.delete_at_time is not None and now() >= res.delete_at_time:
+                    log.info(f"DWS calendar reservation {res.bulk_insert_name} is past deletion time {res.delete_at_time}, skipping resume.")
+                    return True
+
+                # If assured_count is 0 do not resume nodes as they are not active yet
+                if  res.delete_at_time is not None and res.assured_count <= 0:
+                    log.info(f"DWS calendar reservation {res.bulk_insert_name} is not active yet, skipping resume.")
+                    return True
+                
+        return False    
 
     def node_is_dyn(self, node_name=None) -> bool:
         nodeset = self.node_nodeset_name(node_name)
@@ -1824,6 +1844,8 @@ class Lookup:
             policies=policies,
             deployment_type=reservation.get("deploymentType"),
             reservation_mode=reservation.get("reservationMode"),
+            assured_count=reservation.get("assuredCount") if reservation.get("assuredCount") else 0,
+            delete_at_time=parse_gcp_timestamp(reservation.get("deleteAtTime")) if reservation.get("deleteAtTime") else None,
             bulk_insert_name=bulk_insert_name)
 
     def nodeset_reservation(self, nodeset: NSDict) -> Optional[ReservationDetails]:
