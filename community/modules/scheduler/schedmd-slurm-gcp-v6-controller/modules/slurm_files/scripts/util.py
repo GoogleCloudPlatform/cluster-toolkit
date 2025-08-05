@@ -1784,18 +1784,18 @@ class Lookup:
             project=project, zone=zone, reservation=name).execute()
 
     @lru_cache()
-    def get_mig(self, project: str, zone: str, self_link:str) -> Any:
-        """https://cloud.google.com/compute/docs/reference/rest/v1/instanceGroupManagers"""
-        return self.compute.instanceGroupManagers().get(project=project, zone=zone, instanceGroupManager=self_link).execute()
+    def get_mig(self, project: str, region: str, self_link:str) -> Any:
+        """https://cloud.google.com/compute/docs/reference/rest/v1/regionInstanceGroupManagers"""
+        return self.compute.regionInstanceGroupManagers().get(project=project, region=region, instanceGroupManager=self_link).execute()
 
     @lru_cache
-    def get_mig_instances(self, project: str, zone: str, self_link:str) -> Any:
-        return self.compute.instanceGroupManagers().listManagedInstances(project=project, zone=zone, instanceGroupManager=self_link).execute() 
+    def get_mig_instances(self, project: str, region: str, self_link:str) -> Any:
+        return self.compute.regionInstanceGroupManagers().listManagedInstances(project=project, region=region, instanceGroupManager=self_link).execute() 
 
     @lru_cache()
-    def get_mig_list(self, project: str, zone: str) -> Any:
-        """https://cloud.google.com/compute/docs/reference/rest/v1/instanceGroupManagers"""
-        return self.compute.instanceGroupManagers().list(project=project, zone=zone).execute()
+    def get_mig_list(self, project: str, region: str) -> Any:
+        """https://cloud.google.com/compute/docs/reference/rest/v1/regionInstanceGroupManagers"""
+        return self.compute.regionInstanceGroupManagers().list(project=project, region=region).execute()
 
     @lru_cache()
     def _get_future_reservation(self, project:str, zone:str, name: str) -> Any:
@@ -2087,11 +2087,11 @@ class Lookup:
 
         nodeset = self.node_nodeset(node)
         zones = nodeset.zone_policy_allow
-        assert len(zones) == 1
-        zone = zones[0]
+        assert len(zones) > 0
+        region = self.node_region(node)
 
         potential_migs=[]
-        mig_list=self.get_mig_list(self.project, zone)
+        mig_list=self.get_mig_list(self.project, region)
         
         if not mig_list or not mig_list.get("items"):
             return False
@@ -2100,7 +2100,7 @@ class Lookup:
             if not mig.get("instanceTemplate"): #possibly an old MIG
                 return False
             if mig["instanceTemplate"] == self.node_template(node) and mig["currentActions"]["creating"] > 0:
-                potential_migs.append(self.get_mig_instances(self.project, zone, trim_self_link(mig["selfLink"])))
+                potential_migs.append(self.get_mig_instances(self.project, region, trim_self_link(mig["selfLink"])))
 
         if not potential_migs:
             return False
