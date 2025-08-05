@@ -1637,12 +1637,12 @@ class Lookup:
             if res.calendar:
                 # If reservation is calendar based, check if it is past the delete_at_time
                 if res.delete_at_time is not None and now() >= res.delete_at_time:
-                    log.info(f"DWS calendar reservation {res.bulk_insert_name} is past deletion time {res.delete_at_time}, skipping resume.")
+                    log.debug(f"DWS calendar reservation {res.bulk_insert_name} is past deletion time {res.delete_at_time}, skipping resume.")
                     return True
 
                 # If assured_count is 0 do not resume nodes as they are not active yet
                 if  res.delete_at_time is not None and res.assured_count <= 0:
-                    log.info(f"DWS calendar reservation {res.bulk_insert_name} is not active yet, skipping resume.")
+                    log.debug(f"DWS calendar reservation {res.bulk_insert_name} is not active yet, skipping resume.")
                     return True
                 
         return False    
