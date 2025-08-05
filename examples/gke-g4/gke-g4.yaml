@@ -37,6 +37,7 @@ vars:
   authorized_cidr:
 
   system_node_pool_disk_size_gb: 100
+  k8s_service_account_name: workload-identity-k8s-sa
 
 deployment_groups:
 - group: primary
@@ -183,14 +184,14 @@ deployment_groups:
       jobset:
         install: true
 
-  - id: job-template
+  - id: nvidia_smi_job_template
     source: modules/compute/gke-job-template
-    use: [a3-ultragpu-pool]
+    use: [g4-pool]
     settings:
-      image: nvidia/cuda:11.0.3-runtime-ubuntu20.04
+      image: nvidia/cuda:12.9.1-runtime-ubuntu24.04
       command:
       - nvidia-smi
-      node_count: 2
+      node_count: $(vars.static_node_count)
       name: run-nvidia-smi
-      k8s_service_account_name: workload-identity-k8s-sa
+      k8s_service_account_name: $(vars.k8s_service_account_name)
     outputs: [instructions]
