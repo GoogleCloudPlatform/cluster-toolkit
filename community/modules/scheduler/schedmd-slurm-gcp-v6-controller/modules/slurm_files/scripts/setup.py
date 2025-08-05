@@ -371,6 +371,13 @@ innodb_lock_wait_timeout=900
         run(f"""{cmd} "create user 'slurm'@'{host}'";""", timeout=30)
         run(f"""{cmd} "grant all on {db_name}.* TO 'slurm'@'{host}'";""", timeout=30)
 
+def setup_flex_db(lkp:util.Lookup) -> None:
+    cmd = "mysql -u root -e"
+    db_name = "mig_db"
+    run(f"""{cmd} "create database {db_name};";""", timeout=30)
+    create_table_query = "CREATE TABLE mig_table (Nodename VARCHAR(255) PRIMARY KEY, MIGOwner VARCHAR(255), NodeIntent VARCHAR(255), LastSync DATETIME)"
+    run(f"""mysql -u root -D {db_name} -e "{create_table_query};";""", timeout=30)
+
 
 def configure_dirs():
     for p in dirs.values():
@@ -435,6 +442,9 @@ def setup_controller():
 
     if not lkp.cfg.cloudsql_secret:
         configure_mysql(lkp)
+    
+    if lkp.has_flex():
+        setup_flex_db(lkp)
 
     run("systemctl enable slurmdbd", timeout=30)
     run("systemctl restart slurmdbd", timeout=30)
@@ -628,7 +638,6 @@ def setup_cloud_ops() -> None:
             if result.stdout:
                 log.error(f"System logs for google-cloud-ops-agent-fluent-bit.service:\n{result.stdout}")
             raise
-
 
 def main():
     start_motd()

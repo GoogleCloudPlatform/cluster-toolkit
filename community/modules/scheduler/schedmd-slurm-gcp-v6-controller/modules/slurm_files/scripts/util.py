@@ -1307,6 +1307,35 @@ def ensure_execute(request):
 
         break
 
+def insert_into_mig_db(nodename: str, mig_owner: str, node_intent:str, time:datetime) -> None:
+    #to make python datetime fit sql's datetime data type representation
+    formatted_date_time = time.strftime("%Y-%m-%d %H:%M:%S")
+    insert_query = f"INSERT INTO mig_table (Nodename, MIGOwner, NodeIntent, LastSync) VALUES ('{nodename}', '{mig_owner}', '{node_intent}', '{formatted_date_time}')"
+    run(f"""mysql -u root -D mig_db -e "{insert_query};";""", timeout=30)
+
+def remove_from_mig_db(nodes: List[str]) -> None:
+    removal_query = f"DELETE FROM mig_table WHERE Nodename ='{nodename}'"
+    result = run(f"""mysql -u root -D mig_db -e "{removal_query};";""", timeout=30)
+    if result.returncode != 0:
+        log.warning("MIG DB removal on {nodename}, failed")
+    
+def read_from_mig_db(nodename: str) -> NSDict:
+    read_query = f"SELECT * FROM mig_table WHERE Nodename='{nodename}'"
+    result = run(f"""mysql -u root -D mig_db -e "{read_query};";""", check=False, timeout=30)
+    if result.returncode != 0:
+        log.warning("MIG DB read on {nodename}, failed")
+        return None
+    log.info(result.stdout)
+    return result.stdout
+
+def convert_db_to_dict(db_entry: str) -> NSDict:
+    lines = db_entry.strip().split('\n')
+    keys = lines[0].split()
+    values = lines[1].split()
+    date_string = values[-2] = values[-2] + " " + values[-1]
+    format_string = "%Y-%m-%d %H:%M:%S"
+    datetime_object = datetime.strptime(date_string, format_string)
+    result_dict = dict(zip(keys, values))
 
 def batch_execute(requests, retry_cb=None, log_err=log.error):
     """execute list or dict<req_id, request> as batch requests
@@ -1678,6 +1707,12 @@ class Lookup:
             return idx < sum(self.static_dynamic_sizes(ns))
         except Exception:
             return False
+    
+    def has_flex(self) -> bool:
+        for ns in self.cfg.nodeset.values():
+            if ns.dws_flex.enabled:
+                return True
+        return False
 
     def is_static_node(self, node_name: str) -> bool:
         if not self.is_power_managed_node(node_name):
@@ -1784,18 +1819,18 @@ class Lookup:
             project=project, zone=zone, reservation=name).execute()
 
     @lru_cache()
-    def get_mig(self, project: str, zone: str, self_link:str) -> Any:
-        """https://cloud.google.com/compute/docs/reference/rest/v1/instanceGroupManagers"""
-        return self.compute.instanceGroupManagers().get(project=project, zone=zone, instanceGroupManager=self_link).execute()
+    def get_mig(self, project: str, region: str, self_link:str) -> Any:
+        """https://cloud.google.com/compute/docs/reference/rest/v1/regionInstanceGroupManagers"""
+        return self.compute.regionInstanceGroupManagers().get(project=project, region=region, instanceGroupManager=self_link).execute()
 
     @lru_cache
-    def get_mig_instances(self, project: str, zone: str, self_link:str) -> Any:
-        return self.compute.instanceGroupManagers().listManagedInstances(project=project, zone=zone, instanceGroupManager=self_link).execute() 
+    def get_mig_instances(self, project: str, region: str, self_link:str) -> Any:
+        return self.compute.regionInstanceGroupManagers().listManagedInstances(project=project, region=region, instanceGroupManager=self_link).execute() 
 
     @lru_cache()
-    def get_mig_list(self, project: str, zone: str) -> Any:
+    def get_mig_list(self, project: str, region: str) -> Any:
         """https://cloud.google.com/compute/docs/reference/rest/v1/instanceGroupManagers"""
-        return self.compute.instanceGroupManagers().list(project=project, zone=zone).execute()
+        return self.compute.regionInstanceGroupManagers().list(project=project, region=region).execute()
 
     @lru_cache()
     def _get_future_reservation(self, project:str, zone:str, name: str) -> Any:
@@ -2087,11 +2122,11 @@ class Lookup:
 
         nodeset = self.node_nodeset(node)
         zones = nodeset.zone_policy_allow
-        assert len(zones) == 1
-        zone = zones[0]
+        assert len(zones) > 0
+        region = self.node_region(node)
 
         potential_migs=[]
-        mig_list=self.get_mig_list(self.project, zone)
+        mig_list=self.get_mig_list(self.project, region)
         
         if not mig_list or not mig_list.get("items"):
             return False
@@ -2100,7 +2135,7 @@ class Lookup:
             if not mig.get("instanceTemplate"): #possibly an old MIG
                 return False
             if mig["instanceTemplate"] == self.node_template(node) and mig["currentActions"]["creating"] > 0:
-                potential_migs.append(self.get_mig_instances(self.project, zone, trim_self_link(mig["selfLink"])))
+                potential_migs.append(self.get_mig_instances(self.project, region, trim_self_link(mig["selfLink"])))
 
         if not potential_migs:
             return False
