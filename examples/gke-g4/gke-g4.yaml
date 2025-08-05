@@ -140,7 +140,7 @@ deployment_groups:
         ))
       # Cluster versions cannot be updated through the toolkit after creation
       # Please manage cluster version from the Google Cloud Console directly
-      version_prefix: "1.32."
+      version_prefix: "1.32.6-gke.1096000"
       release_channel: RAPID
       maintenance_exclusions:
       - name: no-minor-or-node-upgrades-indefinite
@@ -157,6 +157,9 @@ deployment_groups:
       auto_upgrade: true
       zones: [$(vars.zone)]
       static_node_count: $(vars.static_node_count)
+      guest_accelerator:
+        gpu_driver_installation_config:
+          gpu_driver_version: LATEST
       additional_networks:
         $(concat(
           [{
