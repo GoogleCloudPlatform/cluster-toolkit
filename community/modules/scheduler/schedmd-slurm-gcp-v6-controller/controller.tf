@@ -217,10 +217,12 @@ resource "google_secret_manager_secret_iam_member" "cloudsql_secret_accessor" {
 #############################
 
 resource "random_id" "munge_key" {
+  count = var.munge_key == null ? 1: 0
   byte_length = 1024
 }
 
 resource "random_id" "jwt_key" {
+  count = var.jwt_key == null ? 1: 0
   byte_length = 32
 }
 
@@ -298,11 +300,11 @@ resource "google_kms_secret_ciphertext" "sql_password" {
 resource "google_kms_secret_ciphertext" "munge_key" {
   count      = var.with_kms ? 1 : 0
   crypto_key = local.kms_key
-  plaintext  = random_id.munge_key.b64_std
+  plaintext  = var.munge_key != null ? var.munge_key : random_id.munge_key[0].b64_std
 }
 
 resource "google_kms_secret_ciphertext" "jwt_key" {
   count      = var.with_kms ? 1 : 0
   crypto_key = local.kms_key
-  plaintext  = random_id.jwt_key.b64_std
+  plaintext  = var.jwt_key != null ? var.jwt_key : random_id.jwt_key[0].b64_std
 }
