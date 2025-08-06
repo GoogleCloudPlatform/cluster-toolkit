@@ -36,13 +36,10 @@ vars:
   # The following line must be updated for this example to work.
   authorized_cidr:
 
-  enable_numa_aware_scheduling: true
   system_node_pool_disk_size_gb: 100
   k8s_service_account_name: workload-identity-k8s-sa
   accelerator_type: nvidia-rtx-pro-6000
   accelerator_count: 8
-  
-  # numa_kubelet_config_path: $(ghpc_stage("./numa-kubelet-config.yaml"))
 
 deployment_groups:
 - group: primary
@@ -123,6 +120,7 @@ deployment_groups:
       system_node_pool_taints: []
       enable_dcgm_monitoring: true
       enable_private_endpoint: false # Allows access from authorized public IPs
+      enable_numa_aware_scheduling: true
       configure_workload_identity_sa: true
       master_authorized_networks:
       - cidr_block: $(vars.authorized_cidr) # Allows your machine to run the kubectl command. Required for multi network setup.
@@ -144,7 +142,7 @@ deployment_groups:
         ))
       # Cluster versions cannot be updated through the toolkit after creation
       # Please manage cluster version from the Google Cloud Console directly
-      version_prefix: "1.32.6-gke.1096000"
+      version_prefix: "1.32."
       release_channel: RAPID
       maintenance_exclusions:
       - name: no-minor-or-node-upgrades-indefinite
@@ -192,8 +190,6 @@ deployment_groups:
         install: true
       jobset:
         install: true
-      # apply_manifests:
-      # - source: $(vars.numa_kubelet_config_path)
 
   - id: nvidia_smi_job_template
     source: modules/compute/gke-job-template
