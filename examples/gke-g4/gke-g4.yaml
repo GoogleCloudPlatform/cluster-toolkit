@@ -36,8 +36,13 @@ vars:
   # The following line must be updated for this example to work.
   authorized_cidr:
 
+  enable_numa_aware_scheduling: true
   system_node_pool_disk_size_gb: 100
   k8s_service_account_name: workload-identity-k8s-sa
+  accelerator_type: nvidia-rtx-pro-6000
+  accelerator_count: 8
+  
+  # numa_kubelet_config_path: $(ghpc_stage("./numa-kubelet-config.yaml"))
 
 deployment_groups:
 - group: primary
@@ -157,8 +162,8 @@ deployment_groups:
       zones: [$(vars.zone)]
       static_node_count: $(vars.static_node_count)
       guest_accelerator:
-      - type: nvidia-rtx-pro-6000
-        count: 8
+      - type: $(vars.accelerator_type)
+        count: $(vars.accelerator_count)
         gpu_driver_installation_config:
           gpu_driver_version: LATEST
       additional_networks:
@@ -187,6 +192,8 @@ deployment_groups:
         install: true
       jobset:
         install: true
+      # apply_manifests:
+      # - source: $(vars.numa_kubelet_config_path)
 
   - id: nvidia_smi_job_template
     source: modules/compute/gke-job-template

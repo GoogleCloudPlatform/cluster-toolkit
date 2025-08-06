@@ -315,6 +315,12 @@ resource "google_container_node_pool" "system_node_pools" {
     machine_type    = var.system_node_pool_machine_type
     disk_size_gb    = var.system_node_pool_disk_size_gb
     disk_type       = var.system_node_pool_disk_type
+    
+    kubelet_config {
+      cpu_manager_policy = var.enable_numa_aware_scheduling ? "static" : null
+      # topology_manager = var.numa_aware_scheduling ? "restricted" : null
+      # topology_manager_scope = var.numa_aware_scheduling ? "pod" : null
+    }
 
     dynamic "taint" {
       for_each = var.system_node_pool_taints
@@ -419,6 +425,12 @@ locals {
   ]
 
   all_networks = concat(local.gvnic_networks, local.rdma_networks)
+}
+
+locals {
+  kubelet_config =   {
+    cpu_manager_policy = "static"
+  }
 }
 
 module "kubectl_apply" {
