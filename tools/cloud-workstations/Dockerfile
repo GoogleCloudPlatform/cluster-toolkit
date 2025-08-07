@@ -52,11 +52,11 @@ RUN curl -fsSL https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/sh
 RUN add-apt-repository ppa:deadsnakes/ppa && \
     apt-get -y update && \
     apt-get -y install \
-        python3.10 \
-        python3.10-venv \
-        python3.10-dev \
+        python3.13.3 \
+        python3.13.3-venv \
+        python3.13.3-dev \
         python3-pip && \
-    update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.10 1 && \
+    update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.13.3 1 && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # --- Create Virtual Environment ---
