@@ -67,20 +67,6 @@ data "google_container_cluster" "gke_cluster" {
   location = local.cluster_location
 }
 
-data "google_compute_reservation" "specific" {
-  count   = local.input_specific_reservations_count == 1 ? 1 : 0
-  project = var.project_id
-  zone    = var.zones[0]
-  name    = var.reservation_affinity.specific_reservations[0].name
-}
-
-locals {
-  reservation_available_count = (local.input_specific_reservations_count == 1) ? (
-    try(data.google_compute_reservation.specific[0].specific_reservation[0].count, 0) -
-    try(data.google_compute_reservation.specific[0].specific_reservation[0].in_use_count, 0)
-  ) : 0
-}
-
 resource "google_container_node_pool" "node_pool" {
   provider = google
 
@@ -392,14 +378,6 @@ resource "google_container_node_pool" "node_pool" {
     precondition {
       condition     = var.enable_flex_start == true ? (var.spot == false) : true
       error_message = "Both enable_flex_start and spot consumption option cannot be set to true at the same time."
-    }
-    precondition {
-      condition     = var.reservation_affinity.consume_reservation_type != "SPECIFIC_RESERVATION" || (var.static_node_count != null && var.static_node_count <= local.reservation_available_count)
-      error_message = "Requested static_node_count (${coalesce(var.static_node_count, "not set")}) exceeds the available reservation capacity (${local.reservation_available_count})."
-    }
-    precondition {
-      condition     = local.input_specific_reservations_count == 1 || var.reservation_affinity.consume_reservation_type != "SPECIFIC_RESERVATION"
-      error_message = "Exactly one reservation must be specified when using SPECIFIC_RESERVATION."
     }
   }
 }
