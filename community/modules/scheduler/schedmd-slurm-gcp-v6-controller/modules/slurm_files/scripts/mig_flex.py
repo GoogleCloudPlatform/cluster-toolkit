@@ -74,6 +74,7 @@ def resume_flex_chunk(nodes: List[str], job_id: Optional[int], lkp: util.Lookup)
       #   targetShape="ANY_SINGLE_ZONE" ),
       #updatePolicy = dict(
       #  instanceRedistributionType = "NONE" ),
+      resourcePolicies = [workload_policy_name], 
       instanceLifecyclePolicy=dict(
           defaultActionOnFailure= "DO_NOTHING" ), # TODO(FLEX): Not supported yet, migrate once supported
     )
@@ -93,7 +94,9 @@ def resume_flex_chunk(nodes: List[str], job_id: Optional[int], lkp: util.Lookup)
       instances=[dict(name=n) for n in nodes],
       requested_run_duration=dict(
         seconds=_duration(nodeset.dws_flex, job_id, lkp)
-      )
+      ),
+      workloadPolicy=dict(name=workload_policy_name)
+
     )
   )
   util.log_api_request(req)

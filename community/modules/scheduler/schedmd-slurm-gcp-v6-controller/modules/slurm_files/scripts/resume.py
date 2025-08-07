@@ -519,7 +519,12 @@ def _allocate_nodes_to_placements(nodes: List[str], excl_job_id:Optional[int], l
         return no_pp # don't create placement_policy for just one node
 
     if lkp.is_flex_node(model):
-        return no_pp # TODO(FLEX): Add support for workload policies 
+        max_distance = nodeset.get('placement_max_distance')
+         # Only support a workload policy if a max_distance is specified and it's a gSC machine family.
+        if max_distance and lkp.is_gsc_flex_node(model): 
+            wp_name_prefix = f"{lkp.cfg.slurm_cluster_name}-wp-flex-{nodeset.nodeset_name}"
+            return [PlacementAndNodes(placement=wp_name, nodes=nodes)]
+        return no_pp # No policy to create for this Flex node, so use the default.
     if lkp.node_is_tpu(model):
         return no_pp
     if not (nodeset.enable_placement and valid_placement_node(model)):
@@ -610,6 +615,7 @@ def calculate_chunk_size(nodeset: NSDict, lkp: util.Lookup) -> int:
 def create_nodeset_placements(nodes: List[str], excl_job_id:Optional[int], lkp: util.Lookup) -> List[PlacementAndNodes]:    
     placements = _allocate_nodes_to_placements(nodes, excl_job_id, lkp)
     region = lkp.node_region(nodes[0])
+    is_flex_node = lkp.is_flex_node(nodes[0])
     max_distance = lkp.node_nodeset(nodes[0]).get('placement_max_distance')
     accelerator_topology = lkp.nodeset_accelerator_topology(lkp.node_nodeset_name(nodes[0]))
 
@@ -619,8 +625,10 @@ def create_nodeset_placements(nodes: List[str], excl_job_id:Optional[int], lkp: 
             f"creating {len(placements)} placement groups: \n{yaml.safe_dump(debug_p).rstrip()}"
         )
 
+     # Filter out Flex Start nodes as they will use Workload Policies, not Resource Policies.
     requests = {
-        p.placement: create_placement_request(p.placement, region, max_distance, accelerator_topology) for p in placements if p.placement
+        p.placement: create_placement_request(p.placement, region, max_distance, accelerator_topology) 
+        for p in placements if p.placement and not lkp.is_flex_node(p.nodes[0])
     }
     if not requests:
         return placements
