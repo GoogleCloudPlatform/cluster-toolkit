@@ -12,6 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# WARNING: this example has been deprecated as of v1.51.0 of the Cluster Toolkit
+
+# Our recommended solution is Managed Lustre, a Google Cloud supported product
+# https://cloud.google.com/products/managed-lustre
+#
+# See pfs-managed-lustre-slurm.yaml and pfs-managed-lustre-vm.yaml
+# for examples of how to adopt Managed Lustre
+
 ---
 blueprint_name: pfs-lustre
 

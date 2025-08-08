@@ -33,6 +33,16 @@ output "nodeset" {
   }
 
   precondition {
+    condition     = var.accelerator_topology == null || var.enable_placement
+    error_message = "accelerator_topology requires enable_placement to be set to true."
+  }
+
+  precondition {
+    condition     = (var.accelerator_topology == null) || try(tonumber(split("x", var.accelerator_topology)[1]) % local.guest_accelerator[0].count == 0, false)
+    error_message = "accelerator_topology must be divisible by number of gpus in machine."
+  }
+
+  precondition {
     condition     = var.placement_max_distance == null || var.enable_placement
     error_message = "placement_max_distance requires enable_placement to be set to true."
   }
@@ -50,6 +60,23 @@ output "nodeset" {
   precondition {
     condition     = !var.enable_placement || !var.dws_flex.enabled
     error_message = "Cannot use DWS Flex with `enable_placement`."
+  }
+
+  precondition {
+    condition     = length(var.zones) == 0 || !var.dws_flex.enabled
+    error_message = <<-EOD
+      If a DWS Flex is enabled, `var.zones` should be empty.
+    EOD
+  }
+
+  precondition {
+    condition     = var.on_host_maintenance == "TERMINATE" || !var.dws_flex.enabled
+    error_message = "If DWS Flex is used, `on_host_maintenance` should be set to 'TERMINATE'"
+  }
+
+  precondition {
+    condition     = !var.enable_spot_vm || !var.dws_flex.enabled
+    error_message = "Cannot use both Flex-Start and Spot VMs for provisioning."
   }
 
   precondition {

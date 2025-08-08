@@ -62,6 +62,8 @@ locals {
     content  = var.startup_script
   }]
 
+  termination_action = (var.dws_flex.enabled && !var.dws_flex.use_bulk_insert) ? "DELETE" : try(var.spot_instance_config.termination_action, null)
+
   nodeset = {
     node_count_static      = var.node_count_static
     node_count_dynamic_max = var.node_count_dynamic_max
@@ -85,6 +87,7 @@ locals {
     enable_oslogin         = var.enable_oslogin
     enable_shielded_vm     = var.enable_shielded_vm
     gpu                    = one(local.guest_accelerator)
+    accelerator_topology   = var.accelerator_topology
 
     labels                    = local.labels
     machine_type              = terraform_data.machine_type_zone_validation.output
@@ -106,7 +109,7 @@ locals {
     access_config            = local.access_config
     tags                     = var.tags
     spot                     = var.enable_spot_vm
-    termination_action       = try(var.spot_instance_config.termination_action, null)
+    termination_action       = local.termination_action
     reservation_name         = local.reservation_name
     future_reservation       = local.future_reservation
     maintenance_interval     = var.maintenance_interval
@@ -145,7 +148,7 @@ data "google_compute_zones" "available" {
 }
 
 locals {
-  res_match = regex("^(?P<whole>(?P<prefix>projects/(?P<project>[a-z0-9-]+)/reservations/)?(?P<name>[a-z0-9-]+)(?P<suffix>/[a-z0-9-]+/[a-z0-9-]+)?)?$", var.reservation_name)
+  res_match = regex("^(?P<whole>(?P<prefix>projects/(?P<project>[a-z0-9-]+)/reservations/)?(?P<name>[a-z0-9-]+)(?P<suffix>/reservationBlocks/[a-z0-9-]+)?)?$", var.reservation_name)
 
   res_short_name = local.res_match.name
   res_project    = coalesce(local.res_match.project, var.project_id)

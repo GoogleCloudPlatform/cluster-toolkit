@@ -68,7 +68,7 @@ variable "instance_image" {
     EOD
   type        = map(string)
   default = {
-    family  = "slurm-gcp-6-9-hpc-rocky-linux-8"
+    family  = "slurm-gcp-6-10-hpc-rocky-linux-8"
     project = "schedmd-slurm-public"
   }
 
@@ -83,7 +83,7 @@ variable "instance_image" {
   }
 }
 
-variable "instance_image_custom" {
+variable "instance_image_custom" { # tflint-ignore: terraform_unused_declarations
   description = <<-EOD
     A flag that designates that the user is aware that they are requesting
     to use a custom and potentially incompatible image for this Slurm on
@@ -371,6 +371,32 @@ variable "access_config" {
   type = list(object({
     nat_ip       = string
     network_tier = string
+  }))
+  default = []
+}
+
+
+variable "startup_script" {
+  description = "Startup script used by VMs in this nodeset"
+  type        = string
+  default     = "# no-op"
+}
+
+variable "universe_domain" {
+  description = "Domain address for alternate API universe"
+  type        = string
+  default     = "googleapis.com"
+  nullable    = false
+}
+
+variable "network_storage" {
+  description = "An array of network attached storage mounts to be configured on nodes."
+  type = list(object({
+    server_ip     = string,
+    remote_mount  = string,
+    local_mount   = string,
+    fs_type       = string,
+    mount_options = string,
   }))
   default = []
 }

@@ -14,24 +14,24 @@
 
 from ssh import SSHManager
 from deployment import Deployment
-from test import SlurmTest
 from collections import defaultdict
-import unittest
 import logging
+import test
 
 logging.basicConfig(level=logging.INFO) 
 log = logging.getLogger()
 
-class SlurmTopologyTest(SlurmTest):
+class SlurmTopologyTest(test.SlurmTest):
     # Class to test Slurm topology
-    def __init__(self, deployment):
-        super().__init__(Deployment("tools/python-integration-tests/blueprints/topology-test.yaml"))
+    def get_deployment(self) -> Deployment:
+        return Deployment("tools/python-integration-tests/blueprints/topology-test.yaml")
 
     def runTest(self):
         # Checks isomorphism of last layer of nodes to determine topology.
         r_rack, s_rack = defaultdict(set), defaultdict(set)
         nodes = self.get_nodes()
 
+        self.get_slurm_topology()
         for node in nodes:
             r_rack[self.get_real_rack(node)].add(node)
             s_rack[self.get_slurm_rack(node)].add(node)
@@ -43,14 +43,16 @@ class SlurmTopologyTest(SlurmTest):
 
     def get_slurm_topology(self):
         stdin, stdout, stderr = self.ssh_client.exec_command("scontrol show topo")
-        return stdout.read().decode() 
+        log.info(f"Slurm topology: {stdout.read().decode()}")
 
     def get_node_depth(self, switch_name: str):
         return switch_name.count("_")
 
     def get_real_rack(self, node: str):
         result = self.run_command(f"gcloud compute instances describe {node} --zone={self.deployment.zone} --project={self.deployment.project_id} --format='value(resourceStatus.physicalHost)'")
-        return result.stdout.split("/")[1]
+        physicalHost = result.stdout
+        log.info(f"physicalHost for {node}: {physicalHost.strip()}")
+        return physicalHost.split("/")[1]
 
     def get_slurm_rack(self, node: str):
         stdin, stdout, stderr = self.ssh_client.exec_command(f"scontrol show topology {node} | tail -1 | cut -d' ' -f1")
@@ -65,4 +67,4 @@ class SlurmTopologyTest(SlurmTest):
         return switch_name
 
 if __name__ == "__main__":
-    unittest.main()
+    test.slurmtests_main()

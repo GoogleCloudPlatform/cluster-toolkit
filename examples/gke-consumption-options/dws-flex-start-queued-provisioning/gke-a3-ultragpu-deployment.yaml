@@ -1,0 +1,50 @@
+# Copyright 2025 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+terraform_backend_defaults:
+  type: gcs
+  configuration:
+    bucket:
+
+vars:
+  # Your GCP Project ID
+  project_id:
+
+  # This should be unique across all of your Cluster
+  # Toolkit Deployments.
+  deployment_name:
+
+  # The GCP Region used for this deployment.
+  region:
+
+  # The GCP Zone used for this deployment.
+  zone:
+
+  # Enable DWS Flex Start.
+  enable_flex_start: true
+
+  # Enable queued provisioning.
+  enable_queued_provisioning: true
+
+  # Cidr block containing the IP of the machine calling terraform.
+  # To allow all (IAM restrictions still enforced), use 0.0.0.0/0
+  # To allow only your IP address, use <YOUR-IP-ADDRESS>/32
+  authorized_cidr:
+
+  # The disk size of system node pool for this deployment. Default value is 100.
+  system_node_pool_disk_size_gb:
+
+  # The disk size of a3 ultra node pool for this deployment. Default value is 100.
+  a3ultra_node_pool_disk_size_gb:

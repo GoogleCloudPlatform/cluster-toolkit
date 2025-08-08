@@ -1,0 +1,203 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: gke-a3-ultra
+
+vars:
+  project_id:
+  deployment_name: gke-a3u-dws-fs-qp
+  region:
+  zone:
+  # Enable DWS Flex Start.
+  enable_flex_start: true
+  # Enable queued provisioning.
+  enable_queued_provisioning: true
+  # Cidr block containing the IP of the machine calling terraform.
+  # The following line must be updated for this example to work.
+  authorized_cidr:
+  gcp_public_cidrs_access_enabled: false
+  kueue_configuration_path: $(ghpc_stage("./dws-queues.yaml.tftpl"))
+  # Installs NCCL library and Google NCCL plugin
+  # Runs an init container on all H200 GPU nodes with the NCCL plugin image
+  nccl_installer_path: $(ghpc_stage("./nccl-installer.yaml"))
+  gpu_nominal_quota: 512
+  system_node_pool_disk_size_gb: 100
+  a3ultra_node_pool_disk_size_gb: 100
+
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: gke-a3-ultra-net-0
+    source: modules/network/vpc
+    settings:
+      network_name: $(vars.deployment_name)-net-0
+      subnetworks:
+      - subnet_name: $(vars.deployment_name)-sub-0
+        subnet_region: $(vars.region)
+        subnet_ip: 192.168.0.0/18
+      secondary_ranges_list:
+      - subnetwork_name: $(vars.deployment_name)-sub-0
+        ranges:
+        - range_name: pods
+          ip_cidr_range: 10.4.0.0/14
+        - range_name: services
+          ip_cidr_range: 10.0.32.0/20
+      firewall_rules:
+      - name: $(vars.deployment_name)-internal-0
+        ranges: [192.168.0.0/16]
+        allow:
+        - protocol: tcp
+          ports: ["0-65535"]
+        - protocol: udp
+          ports: ["0-65535"]
+        - protocol: icmp
+
+  - id: gke-a3-ultra-net-1
+    source: modules/network/vpc
+    settings:
+      network_name: $(vars.deployment_name)-net-1
+      subnetworks:
+      - subnet_name: $(vars.deployment_name)-sub-1
+        subnet_region: $(vars.region)
+        subnet_ip: 192.168.64.0/18
+      firewall_rules:
+      - name: $(vars.deployment_name)-internal-1
+        ranges: [192.168.0.0/16]
+        allow:
+        - protocol: tcp
+          ports: ["0-65535"]
+        - protocol: udp
+          ports: ["0-65535"]
+        - protocol: icmp
+
+  - id: gke-a3-ultra-rdma-net
+    source: modules/network/gpu-rdma-vpc
+    settings:
+      network_name: $(vars.deployment_name)-rdma-net
+      network_profile: https://www.googleapis.com/compute/beta/projects/$(vars.project_id)/global/networkProfiles/$(vars.zone)-vpc-roce
+      network_routing_mode: REGIONAL
+      subnetworks_template:
+        name_prefix: $(vars.deployment_name)-rdma-sub
+        count: 8
+        ip_range: 192.168.128.0/18
+        region: $(vars.region)
+
+  - id: node_pool_service_account
+    source: community/modules/project/service-account
+    settings:
+      name: gke-np-sa
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
+      - monitoring.viewer
+      - stackdriver.resourceMetadata.writer
+      - storage.objectViewer
+      - artifactregistry.reader
+
+  - id: workload_service_account
+    source: community/modules/project/service-account
+    settings:
+      name: gke-wl-sa
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
+      - monitoring.viewer
+      - stackdriver.resourceMetadata.writer
+      - storage.objectAdmin
+      - artifactregistry.reader
+
+  - id: a3-ultragpu-cluster
+    source: modules/scheduler/gke-cluster
+    use: [gke-a3-ultra-net-0, workload_service_account]
+    settings:
+      system_node_pool_machine_type: "e2-standard-16"
+      system_node_pool_disk_size_gb: $(vars.system_node_pool_disk_size_gb)
+      system_node_pool_taints: []
+      enable_dcgm_monitoring: true
+      enable_gcsfuse_csi: true
+      enable_private_endpoint: false # Allows access from authorized public IPs
+      configure_workload_identity_sa: true
+      master_authorized_networks:
+      - cidr_block: $(vars.authorized_cidr) # Allows your machine to run the kubectl command. Required for multi network setup.
+        display_name: "kubectl-access-network"
+      additional_networks:
+        $(concat(
+          [{
+            network=gke-a3-ultra-net-1.network_name,
+            subnetwork=gke-a3-ultra-net-1.subnetwork_name,
+            subnetwork_project=vars.project_id,
+            nic_type="GVNIC",
+            queue_count=null,
+            network_ip=null,
+            stack_type=null,
+            access_config=[{nat_ip=null, public_ptr_domain_name=null, network_tier=null}],
+            ipv6_access_config=[],
+            alias_ip_range=[]
+          }],
+         gke-a3-ultra-rdma-net.subnetwork_interfaces_gke
+        ))
+      # Cluster versions cannot be updated through the toolkit after creation
+      # Please manage cluster version from the Google Cloud Console directly
+      version_prefix: "1.32."
+    outputs: [instructions]
+
+  - id: a3-ultragpu-pool
+    source: modules/compute/gke-node-pool
+    use: [a3-ultragpu-cluster, node_pool_service_account]
+    settings:
+      machine_type: a3-ultragpu-8g
+      enable_flex_start: $(vars.enable_flex_start) # dws flex-start
+      auto_repair: false # dws flex-start requirement
+      enable_queued_provisioning: $(vars.enable_queued_provisioning) # queued provisioning
+      auto_upgrade: false # queued provisioning requirement
+      autoscaling_total_min_nodes: 0 # queued provisioning requirement
+      zones: [$(vars.zone)]
+      disk_size_gb: $(vars.a3ultra_node_pool_disk_size_gb)
+      guest_accelerator:
+      - type: nvidia-h200-141gb
+        count: 8
+      additional_networks:
+        $(concat(
+          [{
+            network=gke-a3-ultra-net-1.network_name,
+            subnetwork=gke-a3-ultra-net-1.subnetwork_name,
+            subnetwork_project=vars.project_id,
+            nic_type="GVNIC",
+            queue_count=null,
+            network_ip=null,
+            stack_type=null,
+            access_config=[{nat_ip=null, public_ptr_domain_name=null, network_tier=null}],
+            ipv6_access_config=[],
+            alias_ip_range=[]
+          }],
+         gke-a3-ultra-rdma-net.subnetwork_interfaces_gke
+        ))
+    outputs: [instructions]
+
+  - id: workload-manager-install
+    source: modules/management/kubectl-apply
+    use: [a3-ultragpu-cluster]
+    settings:
+      kueue:
+        install: true
+        config_path: $(vars.kueue_configuration_path)
+        config_template_vars:
+          num_gpus: $(vars.gpu_nominal_quota)
+      jobset:
+        install: true
+      apply_manifests:
+      - source: $(vars.nccl_installer_path)

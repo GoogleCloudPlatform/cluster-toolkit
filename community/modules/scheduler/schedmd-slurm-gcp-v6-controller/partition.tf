@@ -21,10 +21,12 @@ locals {
 
   nodeset_dyn_map_ell = { for x in var.nodeset_dyn : x.nodeset_name => x... }
   nodeset_dyn_map     = { for k, vs in local.nodeset_dyn_map_ell : k => vs[0] }
+
+
+  no_reservation_affinity = { type : "NO_RESERVATION" }
 }
 
 # NODESET
-# TODO: remove dependency on slurm-gcp repo, move to local template module
 module "slurm_nodeset_template" {
   source   = "../../internal/slurm-gcp/instance_template"
   for_each = local.nodeset_map
@@ -54,6 +56,7 @@ module "slurm_nodeset_template" {
   name_prefix                = each.value.nodeset_name
   on_host_maintenance        = each.value.on_host_maintenance
   preemptible                = each.value.preemptible
+  region                     = each.value.region
   resource_manager_tags      = each.value.resource_manager_tags
   spot                       = each.value.spot
   termination_action         = each.value.termination_action
@@ -66,6 +69,10 @@ module "slurm_nodeset_template" {
   additional_networks        = each.value.additional_networks
   access_config              = each.value.access_config
   tags                       = concat([local.slurm_cluster_name], each.value.tags)
+
+  max_run_duration     = (each.value.dws_flex.enabled && !each.value.dws_flex.use_bulk_insert) ? each.value.dws_flex.max_run_duration : null
+  provisioning_model   = (each.value.dws_flex.enabled && !each.value.dws_flex.use_bulk_insert) ? "FLEX_START" : null
+  reservation_affinity = (each.value.dws_flex.enabled && !each.value.dws_flex.use_bulk_insert) ? local.no_reservation_affinity : null
 }
 
 module "nodeset_cleanup" {
@@ -79,6 +86,7 @@ module "nodeset_cleanup" {
   universe_domain        = var.universe_domain
   endpoint_versions      = var.endpoint_versions
   gcloud_path_override   = var.gcloud_path_override
+  nodeset_template       = module.slurm_nodeset_template[each.value.nodeset_name].self_link
 }
 
 locals {
@@ -102,6 +110,7 @@ locals {
     zone_policy_deny                 = ns.zone_policy_deny
     enable_maintenance_reservation   = ns.enable_maintenance_reservation
     enable_opportunistic_maintenance = ns.enable_opportunistic_maintenance
+    accelerator_topology             = ns.accelerator_topology
   }]
 }
 
@@ -148,4 +157,17 @@ module "nodeset_cleanup_tpu" {
     # subnetwork resourceInUseByAnotherResource error
     var.subnetwork_self_link
   ]
+}
+
+resource "google_storage_bucket_object" "parition_config" {
+  for_each = { for p in var.partitions : p.partition_name => p }
+
+  bucket  = module.slurm_files.bucket_name
+  name    = "${module.slurm_files.bucket_dir}/partition_configs/${each.key}.yaml"
+  content = yamlencode(each.value)
+}
+
+moved {
+  from = module.slurm_files.google_storage_bucket_object.parition_config
+  to   = google_storage_bucket_object.parition_config
 }

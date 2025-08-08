@@ -1,7 +1,11 @@
-## Description
+> [!WARNING]
+> This module is deprecated and will be removed on July 1, 2025. The
+> recommended replacement is the
+> [GCP Managed Lustre module](../../../../modules/file-system/managed-lustre/README.md)
 
-This module creates a DDN EXAScaler Cloud Lustre file system using
-[exascaler-cloud-terraform](https://github.com/DDNStorage/exascaler-cloud-terraform/tree/master/gcp).
+## Description
+This module creates a DDN EXAScaler Cloud Lustre file system using code based on DDN's
+[exascaler-cloud-terraform](https://github.com/DDNStorage/exascaler-cloud-terraform/tree/scripts/2.2.2/gcp) (`scripts/2.2.2` is last release with GCP-specific module).
 
 More information about the architecture can be found at
 [Overview of Lustre and EXAScaler Cloud][architecture].
@@ -58,7 +62,7 @@ install the client and mount the file system. See the following example:
 
 See [additional documentation][ddn-install-docs] from DDN EXAScaler.
 
-[ddn-install-docs]: https://github.com/DDNStorage/exascaler-cloud-terraform/tree/master/gcp#install-new-exascaler-cloud-clients
+[ddn-install-docs]: https://github.com/DDNStorage/exascaler-cloud-terraform/tree/scripts/2.2.2/gcp#install-new-exascaler-cloud-clients
 [matrix]: ../../../../docs/network_storage.md#compatibility-matrix
 
 ## Support

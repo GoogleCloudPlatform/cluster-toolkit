@@ -28,42 +28,7 @@ locals {
     }
   ]
 
-  firewall_log_api_values = {
-    "DISABLE_LOGGING"      = null
-    "INCLUDE_ALL_METADATA" = { metadata = "INCLUDE_ALL_METADATA" },
-    "EXCLUDE_ALL_METADATA" = { metadata = "EXCLUDE_ALL_METADATA" },
-  }
-  firewall_log_config = lookup(local.firewall_log_api_values, var.firewall_log_config, null)
-
-  allow_internal_traffic = {
-    name                    = "${local.network_name}-fw-allow-internal-traffic"
-    priority                = null
-    description             = "allow traffic between nodes of this VPC"
-    direction               = "INGRESS"
-    ranges                  = [var.subnetworks_template.ip_range]
-    source_tags             = null
-    source_service_accounts = null
-    target_tags             = null
-    target_service_accounts = null
-    allow = [{
-      protocol = "tcp"
-      ports    = ["0-65535"]
-      }, {
-      protocol = "udp"
-      ports    = ["0-65535"]
-      }, {
-      protocol = "icmp"
-      ports    = null
-      },
-    ]
-    deny       = []
-    log_config = local.firewall_log_config
-  }
-
-  firewall_rules = concat(
-    var.firewall_rules,
-    var.enable_internal_traffic ? [local.allow_internal_traffic] : [],
-  )
+  firewall_rules = []
 
   output_subnets = [
     for subnet in module.vpc.subnets : {

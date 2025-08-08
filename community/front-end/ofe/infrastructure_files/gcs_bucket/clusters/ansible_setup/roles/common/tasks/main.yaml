@@ -57,3 +57,7 @@
     - --uninstall-standalone-logging-agent
     - --uninstall-standalone-monitoring-agent
   when: install_ops.changed # noqa no-handler
+  retries: 5
+  delay: 3
+  register: result
+  until: result.rc == 0

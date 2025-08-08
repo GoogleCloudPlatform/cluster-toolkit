@@ -45,10 +45,6 @@ func defaultAPIList(source string) []string {
 			"compute.googleapis.com",
 			"storage.googleapis.com",
 		},
-		"community/modules/compute/pbspro-execution": {
-			"compute.googleapis.com",
-			"storage.googleapis.com",
-		},
 		"community/modules/database/slurm-cloudsql-federation": {
 			"bigqueryconnection.googleapis.com",
 			"sqladmin.googleapis.com",
@@ -104,22 +100,7 @@ func defaultAPIList(source string) []string {
 			"iam.googleapis.com",
 			"storage.googleapis.com",
 		},
-		"community/modules/scheduler/pbspro-client": {
-			"compute.googleapis.com",
-			"storage.googleapis.com",
-		},
-		"community/modules/scheduler/pbspro-server": {
-			"compute.googleapis.com",
-			"storage.googleapis.com",
-		},
 		"community/modules/scripts/htcondor-install": {},
-		"community/modules/scripts/omnia-install":    {},
-		"community/modules/scripts/pbspro-preinstall": {
-			"iam.googleapis.com",
-			"storage.googleapis.com",
-		},
-		"community/modules/scripts/pbspro-install": {},
-		"community/modules/scripts/pbspro-qmgr":    {},
 		"community/modules/scripts/spack-setup": {
 			"storage.googleapis.com",
 		},

@@ -22,7 +22,7 @@ output "placement_policy" {
   EOT
 
   value = {
-    type = var.group_placement_max_distance > 0 ? "COMPACT" : null
-    name = var.group_placement_max_distance > 0 ? var.name : null
+    type = (var.group_placement_max_distance > 0 || var.workload_policy.type != null) ? "COMPACT" : null
+    name = (var.group_placement_max_distance > 0 || var.workload_policy.type != null) ? local.name : null
   }
 }

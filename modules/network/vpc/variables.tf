@@ -196,7 +196,7 @@ variable "network_description" {
 
 variable "ips_per_nat" {
   type        = number
-  description = "The number of IP addresses to allocate for each regional Cloud NAT (set to 0 to disable NAT)"
+  description = "The number of IP addresses to allocate for each regional Cloud NAT (set to 0 to disable NAT). The number of NAT IPs depend on the port reservation allocated for each node and the number of ports that a single NAT IP can serve. Refer this documentation for more details: https://cloud.google.com/nat/docs/ports-and-addresses#port-reservation-examples"
   default     = 2
 }
 
@@ -295,6 +295,7 @@ variable "network_profile" {
   following are valid URLs:
   - https://www.googleapis.com/compute/beta/projects/{projectId}/global/networkProfiles/{network_profile_name}
   - projects/{projectId}/global/networkProfiles/{network_profile_name}}
+  When using a Mellanox network profile (contains 'roce'), if firewall_rules is specified or enable_internal_traffic is true, an error will be thrown
   EOT
   default     = null
 }

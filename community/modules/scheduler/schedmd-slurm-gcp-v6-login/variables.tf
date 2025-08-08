@@ -93,14 +93,14 @@ variable "disk_resource_manager_tags" {
 
 variable "additional_disks" {
   type = list(object({
-    disk_name                  = string
-    device_name                = string
-    disk_type                  = string
-    disk_size_gb               = number
-    disk_labels                = map(string)
-    auto_delete                = bool
-    boot                       = bool
-    disk_resource_manager_tags = map(string)
+    disk_name                  = optional(string)
+    device_name                = optional(string)
+    disk_size_gb               = optional(number)
+    disk_type                  = optional(string)
+    disk_labels                = optional(map(string))
+    auto_delete                = optional(bool)
+    boot                       = optional(bool)
+    disk_resource_manager_tags = optional(map(string))
   }))
   description = "List of maps of disks."
   default     = []
@@ -365,7 +365,7 @@ variable "instance_image" {
     EOD
   type        = map(string)
   default = {
-    family  = "slurm-gcp-6-9-hpc-rocky-linux-8"
+    family  = "slurm-gcp-6-10-hpc-rocky-linux-8"
     project = "schedmd-slurm-public"
   }
 
@@ -380,7 +380,7 @@ variable "instance_image" {
   }
 }
 
-variable "instance_image_custom" {
+variable "instance_image_custom" { # tflint-ignore: terraform_unused_declarations
   description = <<-EOD
     A flag that designates that the user is aware that they are requesting
     to use a custom and potentially incompatible image for this Slurm on

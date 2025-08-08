@@ -1,0 +1,128 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+---
+blueprint_name: slurm-h4d
+vars:
+  project_id: ## Set GCP Project ID Here ##
+  deployment_name: slurm-h4d
+  region: us-central1
+  zone: us-central1-a
+  rdma_net_range: 192.168.128.0/18
+
+# Documentation for each of the modules used below can be found at
+# https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
+deployment_groups:
+- group: primary
+  modules:
+
+  # Source is an embedded module, denoted by "modules/*" without ./, ../, /
+  # as a prefix. To refer to a local module, prefix with ./, ../ or /
+
+  - id: h4d-slurm-net-0
+    source: modules/network/vpc
+
+  - id: h4d-rdma-net
+    source: modules/network/vpc
+    settings:
+      network_name: $(vars.deployment_name)-rdma-net-0
+      mtu: 8896
+      network_profile: https://www.googleapis.com/compute/beta/projects/$(vars.project_id)/global/networkProfiles/$(vars.zone)-vpc-falcon
+      network_routing_mode: REGIONAL
+      enable_cloud_router: false
+      enable_cloud_nat: false
+      enable_internal_traffic: false
+      subnetworks:
+      - subnet_name: $(vars.deployment_name)-rdma-sub-0
+        subnet_region: $(vars.region)
+        subnet_ip: $(vars.rdma_net_range)
+        region: $(vars.region)
+
+  - id: homefs
+    source: modules/file-system/filestore
+    use: [h4d-slurm-net-0]
+    settings:
+      filestore_tier: BASIC_SSD
+      size_gb: 2560
+      filestore_share_name: homeshare
+      local_mount: /home
+
+  - id: appsfs
+    source: modules/file-system/filestore
+    use: [h4d-slurm-net-0]
+    settings:
+      filestore_tier: BASIC_SSD
+      size_gb: 2560
+      filestore_share_name: appsshare
+      local_mount: /apps
+
+  - id: h4d_startup
+    source: modules/scripts/startup-script
+    settings:
+      set_ofi_cloud_rdma_tunables: true
+      local_ssd_filesystem:
+        fs_type: ext4
+        mountpoint: /mnt/lssd
+        permissions: "1777"
+
+  - id: h4d_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [h4d_startup, h4d-slurm-net-0]
+    settings:
+      bandwidth_tier: gvnic_enabled
+      machine_type: h4d-highmem-192-lssd
+      node_count_static: 2
+      node_count_dynamic_max: 0
+      enable_placement: false
+      disk_type: hyperdisk-balanced
+      on_host_maintenance: TERMINATE
+      additional_networks:
+        $(concat(
+          [{
+            network=null,
+            subnetwork=h4d-rdma-net.subnetwork_self_link,
+            subnetwork_project=vars.project_id,
+            nic_type="IRDMA",
+            queue_count=null,
+            network_ip=null,
+            stack_type=null,
+            access_config=null,
+            ipv6_access_config=[],
+            alias_ip_range=[]
+          }]
+        ))
+
+  - id: h4d_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use:
+    - h4d_nodeset
+    settings:
+      exclusive: false
+      partition_name: h4d
+      is_default: true
+      partition_conf:
+        ResumeTimeout: 900
+        SuspendTimeout: 600
+
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    use: [h4d-slurm-net-0]
+    settings:
+      machine_type: n2-standard-4
+      enable_login_public_ips: true
+
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    use: [h4d-slurm-net-0, h4d_partition, slurm_login, homefs, appsfs]
+    settings:
+      enable_controller_public_ips: true

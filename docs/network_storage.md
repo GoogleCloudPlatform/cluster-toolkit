@@ -6,8 +6,8 @@ storage.
 The Toolkit contains modules that will **provision**:
 
 - [Filestore (GCP managed NFS)][filestore]
-- [DDN EXAScaler lustre][ddn-exascaler]
-- [Parallelstore][parallelstore]
+- [DDN EXAScaler lustre][ddn-exascaler] (Deprecated, removal on July 1, 2025)
+- [Managed Lustre][managed-lustre]
 - [NFS server (non-GCP managed)][nfs-server]
 
 The Toolkit also provides a **[pre-existing-network-storage]** module to work
@@ -15,7 +15,8 @@ with a network storage device that is already set up. The
 `pre-existing-network-storage` module supports the following file systems types:
 
 - nfs
-- lustre
+- daos
+- managed-lustre
 - gcsfuse
 
 ## Connecting to Network Storage
@@ -104,12 +105,12 @@ filestore | via USE | via USE | via USE | via STARTUP | via USE | via USE
 nfs-server | via USE | via USE | via USE | via STARTUP | via USE | via USE
 cloud-storage-bucket (GCS)| via USE | via USE | via USE | via STARTUP | via USE | via USE
 DDN EXAScaler lustre | via USE | via USE | via USE | Needs Testing | via USE | via USE
-Parallelstore | via USE | Needs Testing | via USE | Needs Testing | Needs Testing | Needs Testing
+Managed Lustre | via USE | Needs Testing | via USE | Needs Testing | Needs Testing |  Needs Testing
   |  |   |   |   |   |  
 filestore (pre-existing) | via USE | via USE | via USE | via STARTUP | via USE | via USE
 nfs-server (pre-existing) | via USE | via USE | via USE | via STARTUP | via USE | via USE
 DDN EXAScaler lustre (pre-existing) | via USE | via USE | via USE | Needs Testing | via USE | via USE
-Parallelstore (pre-existing) | via USE | Needs Testing | via USE | Needs Testing | Needs Testing | Needs Testing
+Managed Lustre (pre-existing) | via USE| Needs Testing | via USE | Needs Testing | Needs Testing |  Needs Testing
 GCS FUSE (pre-existing) | via USE | via USE | via USE | via STARTUP | via USE | Needs Testing
 
 - **via USE:** Client installation and mounting occur automatically when
@@ -126,5 +127,5 @@ GCS FUSE (pre-existing) | via USE | via USE | via USE | via STARTUP | via USE | 
 [filestore]: ../modules/file-system/filestore/README.md
 [pre-existing-network-storage]: ../modules/file-system/pre-existing-network-storage/README.md
 [ddn-exascaler]: ../community/modules/file-system/DDN-EXAScaler/README.md
-[parallelstore]: ../modules/file-system/parallelstore/README.md
+[managed-lustre]: ../modules/file-system/managed-lustre/README.md
 [nfs-server]: ../community/modules/file-system/nfs-server/README.md

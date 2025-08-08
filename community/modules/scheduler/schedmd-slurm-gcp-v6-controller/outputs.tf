@@ -24,13 +24,24 @@ output "slurm_controller_instance" {
 
 output "slurm_login_instances" {
   description = "Compute instances of login nodes"
-  value       = flatten([for k, v in module.slurm_login_instance : v.slurm_instances])
+  value       = flatten([for k, v in module.login : v.instances])
 }
 
 output "slurm_bucket_path" {
   description = "Bucket path used by cluster."
   value       = module.slurm_files.slurm_bucket_path
 }
+
+output "slurm_bucket_name" {
+  description = "GCS Bucket name of Slurm cluster file storage."
+  value       = module.slurm_files.bucket_name
+}
+
+output "slurm_bucket_dir" {
+  description = "Path directory within `bucket_name` for Slurm cluster file storage."
+  value       = module.slurm_files.bucket_dir
+}
+
 
 output "instructions" {
   description = "Post deployment instructions."

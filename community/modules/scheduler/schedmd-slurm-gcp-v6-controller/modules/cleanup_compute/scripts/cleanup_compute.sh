@@ -40,17 +40,29 @@ if ! type -P gcloud 1>/dev/null; then
 	exit 1
 fi
 
-echo "Deleting compute nodes"
-node_filter="name:${cluster_name}-${nodeset_name}-* labels.slurm_cluster_name=${cluster_name} AND labels.slurm_instance_role=compute"
-
 tmpfile=$(mktemp) # have to use a temp file, since `< <(gcloud ...)` doesn't work nicely with `head`
 trap 'rm -f "$tmpfile"' EXIT
+
+echo "Deleting managed instance groups"
+mig_filter="name:${cluster_name}-${nodeset_name}-* AND status!=STOPPING"
+gcloud compute instance-groups managed list --format="value(self_link)" --filter="${mig_filter}" >"$tmpfile"
+while batch="$(head -n 2)" && [[ ${#batch} -gt 0 ]]; do
+	groups=$(echo "$batch" | paste -sd " " -) # concat into a single space-separated line
+	# The lack of quotes around ${groups} is intentional and causes each new space-separated "word" to
+	# be treated as independent arguments. See PR#2523
+	# shellcheck disable=SC2086
+	gcloud compute instance-groups managed delete --quiet ${groups} || echo "Failed to delete some instance groups"
+done <"$tmpfile"
+true >"$tmpfile" # Wipe contents of tmp file
+
+echo "Deleting compute nodes"
+node_filter="name:${cluster_name}-${nodeset_name}-* labels.slurm_cluster_name=${cluster_name} AND labels.slurm_instance_role=compute"
 
 running_nodes_filter="${node_filter} AND status!=STOPPING"
 # List all currently running instances and attempt to delete them
 gcloud compute instances list --format="value(selfLink)" --filter="${running_nodes_filter}" >"$tmpfile"
-# Do 10 instances at a time
-while batch="$(head -n 10)" && [[ ${#batch} -gt 0 ]]; do
+# Do 500 instances at a time
+while batch="$(head -n 500)" && [[ ${#batch} -gt 0 ]]; do
 	nodes=$(echo "$batch" | paste -sd " " -) # concat into a single space-separated line
 	# The lack of quotes around ${nodes} is intentional and causes each new space-separated "word" to
 	# be treated as independent arguments. See PR#2523
@@ -71,7 +83,7 @@ while true; do
 done
 
 echo "Deleting resource policies"
-policies_filter="name:${cluster_name}-${nodeset_name}-slurmgcp-managed-*"
+policies_filter="name:${cluster_name}-slurmgcp-managed-${nodeset_name}-*"
 gcloud compute resource-policies list --format="value(selfLink)" --filter="${policies_filter}" | while read -r line; do
 	echo "Deleting resource policy: $line"
 	gcloud compute resource-policies delete --quiet "${line}" || {

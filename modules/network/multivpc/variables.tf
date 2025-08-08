@@ -195,6 +195,7 @@ variable "network_profile" {
   following are valid URLs:
   - https://www.googleapis.com/compute/beta/projects/{projectId}/global/networkProfiles/{network_profile_name}
   - projects/{projectId}/global/networkProfiles/{network_profile_name}}
+  When using a Mellanox network profile (contains 'roce'), if firewall_rules is specified or enable_internal_traffic is true, an error will be thrown
   EOT
   default     = null
 }

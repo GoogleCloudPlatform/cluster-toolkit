@@ -89,6 +89,7 @@ resource "google_container_cluster" "gke_cluster" {
   # decouple node pool lifecycle from cluster life cycle
   remove_default_node_pool = true
   initial_node_count       = 1 # must be set when remove_default_node_pool is set
+  node_locations           = var.system_node_pool_zones
 
   deletion_protection = var.deletion_protection
 
@@ -283,11 +284,12 @@ resource "google_container_node_pool" "system_node_pools" {
   provider = google-beta
   count    = var.system_node_pool_enabled ? 1 : 0
 
-  project  = var.project_id
-  name     = var.system_node_pool_name
-  cluster  = var.cluster_reference_type == "NAME" ? google_container_cluster.gke_cluster.name : google_container_cluster.gke_cluster.self_link
-  location = var.cluster_availability_type == "ZONAL" ? var.zone : var.region
-  version  = local.master_version
+  project        = var.project_id
+  name           = var.system_node_pool_name
+  cluster        = var.cluster_reference_type == "NAME" ? google_container_cluster.gke_cluster.name : google_container_cluster.gke_cluster.self_link
+  location       = var.cluster_availability_type == "ZONAL" ? var.zone : var.region
+  node_locations = var.system_node_pool_zones
+  version        = local.master_version
 
   autoscaling {
     total_min_node_count = var.system_node_pool_node_count.total_min_nodes

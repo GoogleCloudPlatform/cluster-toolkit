@@ -42,6 +42,7 @@ class TstNodeset:
     zone_policy_allow: Optional[list[str]] = field(default_factory=list)
     enable_placement: bool = True
     placement_max_distance: Optional[int] = None
+    accelerator_topology: Optional[str] = ""
     future_reservation: Optional[str] = ""
 
 @dataclass
@@ -66,6 +67,8 @@ class TstCfg:
 
     prolog_scripts: Optional[list[Placeholder]] = field(default_factory=list)
     epilog_scripts: Optional[list[Placeholder]] = field(default_factory=list)
+    task_prolog_scripts: Optional[list[Placeholder]] = field(default_factory=list)
+    task_epilog_scripts: Optional[list[Placeholder]] = field(default_factory=list)
     
 
 @dataclass
@@ -99,6 +102,7 @@ def tstInstance(name: str, physical_host: Optional[str] = None):
         ),
         scheduling=util.NSDict(),
         role="compute",
+        metadata={},
     )
 
 def make_to_hostnames_mock(tbl: Optional[dict[str, list[str]]]):

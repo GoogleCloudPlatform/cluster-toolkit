@@ -28,10 +28,13 @@
     node_count_static: {{ part.static_node_count }}
     disk_size_gb: {{ part.boot_disk_size }}
     disk_type: {{ part.boot_disk_type }}
-    {% if part.image %}
     instance_image:
+    {% if part.image %}
       family: {% if part.image.source_image_family == "Imported" %}{{ part.image.family }}{% else %}image-{{ part.image.family }}{% endif %}
       project: {{ cluster.project_id }}
+    {% else %}
+      family: slurm-gcp-6-10-hpc-rocky-linux-8
+      project: schedmd-slurm-public
     {% endif %}
     {% if part.additional_disk_count > 0 %}
     additional_disks:
@@ -50,3 +53,7 @@
       - type: {{ part.GPU_type }}
         count: {{ part.GPU_per_node }}
     {% endif %}
+    startup_script: |
+      echo "******************************************** CALLING COMPUTE STARTUP"
+      #!/bin/bash
+      gsutil cp gs://{{ startup_bucket }}/clusters/{{ cluster.id }}/bootstrap_compute.sh - | bash

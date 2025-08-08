@@ -154,6 +154,12 @@ variable "static_node_count" {
   default     = null
 }
 
+variable "is_reservation_active" {
+  description = "Whether the specified reservation is already created."
+  type        = bool
+  default     = true
+}
+
 variable "auto_repair" {
   description = "Whether the nodes will be automatically repaired."
   type        = bool
@@ -428,6 +434,23 @@ variable "enable_queued_provisioning" {
   description = "If true, enables Dynamic Workload Scheduler and adds the cloud.google.com/gke-queued taint to the node pool."
   type        = bool
   default     = false
+}
+
+variable "enable_flex_start" {
+  description = <<-EOT
+  If true, start the node pool with Flex Start provisioning model.
+  To learn more about flex-start mode, please refer to
+  https://cloud.google.com/kubernetes-engine/docs/how-to/dws-flex-start-training and
+  https://cloud.google.com/kubernetes-engine/docs/how-to/provisioningrequest
+  EOT
+  type        = bool
+  default     = false
+}
+
+variable "max_run_duration" {
+  description = "The duration (in whole seconds) of the instance. Instance will run and be terminated after then."
+  type        = number
+  default     = null
 }
 
 variable "enable_private_nodes" {

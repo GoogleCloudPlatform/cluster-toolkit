@@ -1,0 +1,126 @@
+# Copyright 2025 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+blueprint_name: gke-tpu-v6
+
+vars:
+  # The following variables should be over-written in the deployment.yaml file.
+  # Your GCP Project ID
+  project_id:
+
+  # This should be unique across all of your Cluster
+  # Toolkit Deployments.
+  deployment_name: gke-tpu-v6
+
+  # The GCP Region used for this deployment.
+  region:
+
+  # The GCP Zone used for this deployment.
+  zone:
+
+  # The number of TPU slices to create
+  num_slices:
+
+  # Machine type
+  machine_type:
+
+  # The TPU placement topology for pod slice node pool.
+  tpu_topology:
+
+  # The number of nodes to be created in each nodepool
+  static_node_count:
+
+  # Cidr block containing the IP of the machine calling terraform.
+  # To allow all (IAM restrictions still enforced), use 0.0.0.0/0
+  # To allow only your IP address, use <YOUR-IP-ADDRESS>/32
+  authorized_cidr:
+
+  # The name of the compute engine reservation of TPU v6 nodes
+  reservation:
+
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: gke-tpu-v6-net
+    source: modules/network/vpc
+    settings:
+      subnetworks:
+      - subnet_name: $(vars.deployment_name)-sub-0
+        subnet_region: $(vars.region)
+        subnet_ip: 192.168.0.0/18
+      secondary_ranges_list:
+      - subnetwork_name: $(vars.deployment_name)-sub-0
+        ranges:
+        - range_name: pods
+          ip_cidr_range: 10.4.0.0/14
+        - range_name: services
+          ip_cidr_range: 10.0.32.0/20
+      firewall_rules:
+      - name: $(vars.deployment_name)-internal-0
+        ranges: [192.168.0.0/18]
+        allow:
+        - protocol: tcp
+          ports: ["0-65535"]
+        - protocol: udp
+          ports: ["0-65535"]
+        - protocol: icmp
+
+  - id: gke-tpu-v6-cluster
+    source: modules/scheduler/gke-cluster
+    use: [gke-tpu-v6-net]
+    settings:
+      system_node_pool_machine_type: "n2-standard-8"
+      system_node_pool_taints: []
+      enable_private_endpoint: false # Allows access from authorized public IPs
+      master_authorized_networks:
+      - cidr_block: $(vars.authorized_cidr) # Allows your machine to run the kubectl command. Required for multi network setup.
+        display_name: "kubectl-access-network"
+      # Cluster versions cannot be updated through the toolkit after creation
+      # Please manage cluster version from the Google Cloud Console directly
+      version_prefix: "1.32."
+      release_channel: RAPID
+      maintenance_exclusions:
+      - name: no-minor-or-node-upgrades-indefinite
+        start_time: "2024-12-01T00:00:00Z"
+        end_time: "2025-12-22T00:00:00Z"
+        exclusion_scope: NO_MINOR_OR_NODE_UPGRADES
+    outputs: [instructions]
+
+  - id: gke-tpu-v6-pool
+    source: modules/compute/gke-node-pool
+    use: [gke-tpu-v6-cluster]
+    settings:
+      num_slices: $(vars.num_slices)
+      name: gke-tpu-v6-pool
+      disk_type: hyperdisk-balanced
+      machine_type: $(vars.machine_type)
+      auto_upgrade: true
+      zones: [$(vars.zone)]
+      static_node_count: $(vars.static_node_count)
+      reservation_affinity:
+        consume_reservation_type: SPECIFIC_RESERVATION
+        specific_reservations:
+        - name: $(vars.reservation)
+      placement_policy:
+        type: COMPACT
+        tpu_topology: $(vars.tpu_topology)
+    outputs: [instructions]
+
+  - id: workload-manager-install
+    source: modules/management/kubectl-apply
+    use: [gke-tpu-v6-cluster]
+    settings:
+      jobset:
+        install: true

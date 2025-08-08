@@ -7,7 +7,7 @@ vars:
   zone: {{ cluster.cloud_zone }}
   enable_cleanup_compute: True
   enable_bigquery_load: {{ cluster.use_bigquery }}
-  instance_image_custom: True
+  
   labels:
     created_by: {{ site_name }}
 
@@ -20,6 +20,18 @@ deployment_groups:
       network_name: {{ cluster.subnet.vpc.cloud_id }}
       subnetwork_name: {{ cluster.subnet.cloud_id }}
     id: hpc_network
+
+{% if artifact_registry_yaml %}
+  - id: services-api
+    source: community/modules/project/service-enablement
+    settings:
+      gcp_service_list:
+        - secretmanager.googleapis.com
+        - cloudbuild.googleapis.com
+        - artifactregistry.googleapis.com
+{% endif %}
+
+{{ artifact_registry_yaml | safe }}
 
 {{ filesystems_yaml | safe }}
 
@@ -40,6 +52,8 @@ deployment_groups:
       - iam.serviceAccountAdmin
       - resourcemanager.projectIamAdmin
       - compute.networkAdmin
+      - artifactregistry.admin
+      - secretmanager.secretAccessor
 
 {{ partitions_yaml | safe }}
 
@@ -49,6 +63,9 @@ deployment_groups:
     kind: terraform
     id: slurm_controller
     settings:
+      instance_image:
+        family: slurm-gcp-6-10-hpc-rocky-linux-8
+        project: schedmd-slurm-public
       cloud_parameters:
         resume_rate: 0
         resume_timeout: 500
@@ -66,14 +83,12 @@ deployment_groups:
         - https://www.googleapis.com/auth/logging.write
         - https://www.googleapis.com/auth/devstorage.read_write
         - https://www.googleapis.com/auth/pubsub
+      compute_startup_scripts_timeout: 1200
+      controller_startup_scripts_timeout: 1200
       controller_startup_script: |
         #!/bin/bash
         echo "******************************************** CALLING CONTROLLER STARTUP"
         gsutil cp gs://{{ startup_bucket }}/clusters/{{ cluster.id }}/bootstrap_controller.sh - | bash
-      compute_startup_script: |
-        echo "******************************************** CALLING COMPUTE STARTUP"
-        #!/bin/bash
-        gsutil cp gs://{{ startup_bucket }}/clusters/{{ cluster.id }}/bootstrap_compute.sh - | bash
       login_startup_script: |
         #!/bin/bash
         echo "******************************************** CALLING LOGIN STARTUP"
@@ -86,6 +101,9 @@ deployment_groups:
     kind: terraform
     id: slurm_login
     settings:
+      instance_image:
+        family: slurm-gcp-6-10-hpc-rocky-linux-8
+        project: schedmd-slurm-public
       num_instances: {{ cluster.num_login_nodes }}
       subnetwork_self_link: "projects/{{ cluster.project_id }}/regions/{{ cluster.cloud_region }}/subnetworks/{{ cluster.subnet.cloud_id }}"
       machine_type: {{ cluster.login_node_instance_type }}

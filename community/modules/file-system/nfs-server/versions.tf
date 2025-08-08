@@ -18,7 +18,7 @@ terraform {
   required_providers {
     google = {
       source  = "hashicorp/google"
-      version = ">= 3.83"
+      version = ">= 6.14"
     }
     random = {
       source  = "hashicorp/random"
@@ -30,7 +30,7 @@ terraform {
     }
   }
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:nfs-server/v1.48.0"
+    module_name = "blueprints/terraform/hpc-toolkit:nfs-server/v1.61.0"
   }
 
   required_version = ">= 0.14.0"

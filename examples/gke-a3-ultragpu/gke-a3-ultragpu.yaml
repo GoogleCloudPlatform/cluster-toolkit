@@ -22,18 +22,27 @@ vars:
   # Cidr block containing the IP of the machine calling terraform.
   # The following line must be updated for this example to work.
   authorized_cidr: # add this
-  # In order to target a BLOCK_NAME, extended_reservation can be inputted as
-  # extended_reservation: RESERVATION_NAME/reservationBlocks/BLOCK_NAME
-  extended_reservation: # add this
-  # Installs NCCL library and Google NCCL plugin
-  # Runs an init container on all H200 GPU nodes with the NCCL plugin image
-  nccl_installer_path: $(ghpc_stage("./nccl-installer.yaml"))
-  # Temporary fix for COS issue, will be fixed in next release
-  mglru_disable_path: $(ghpc_stage("./mglru-disable.yaml"))
+  # The name of the compute engine reservation in the form of
+  # <reservation-name>
+  # To target a BLOCK_NAME, the name of the extended reservation
+  # can be inputted as <reservation-name>/reservationBlocks/<reservation-block-name>
+  reservation: # add this
   kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
+  gib_installer_path: $(ghpc_stage("./nccl-installer.yaml.tftpl"))
   static_node_count: # add this
   system_node_pool_disk_size_gb: 200
   a3ultra_node_pool_disk_size_gb: 100
+  accelerator_type: nvidia-h200-141gb
+  version_prefix: "1.31."
+
+  enable_periodic_health_checks: false # Make this true to run CHS (healthchecks)
+  health_check_schedule: "0 0 * * 0" # Run the health check at 12:00 AM (midnight) every Sunday
+
+  permissions_file_staged_path: $(ghpc_stage("./chs-permissions.yaml.tftpl"))
+  chs_output_bucket_name: chs-result
+  chs_pvc_claim_name: chs-output-pvc
+  chs_cronjob_rendered_path: $(ghpc_stage("./chs-cronjob.yaml.tftpl"))
+  chs_pvc_rendered_path: $(ghpc_stage("./chs-pvc.yaml.tftpl"))
 
 deployment_groups:
 - group: primary
@@ -42,6 +51,7 @@ deployment_groups:
     source: modules/network/vpc
     settings:
       network_name: $(vars.deployment_name)-net-0
+      ips_per_nat: 6
       subnetworks:
       - subnet_name: $(vars.deployment_name)-sub-0
         subnet_region: $(vars.region)
@@ -67,6 +77,7 @@ deployment_groups:
     source: modules/network/vpc
     settings:
       network_name: $(vars.deployment_name)-net-1
+      ips_per_nat: 6
       subnetworks:
       - subnet_name: $(vars.deployment_name)-sub-1
         subnet_region: $(vars.region)
@@ -116,6 +127,7 @@ deployment_groups:
       - stackdriver.resourceMetadata.writer
       - storage.objectAdmin
       - artifactregistry.reader
+      - container.admin
 
   - id: training_bucket
     source: community/modules/file-system/cloud-storage-bucket
@@ -167,7 +179,7 @@ deployment_groups:
         ))
       # Cluster versions cannot be updated through the toolkit after creation
       # Please manage cluster version from the Google Cloud Console directly
-      version_prefix: "1.31."
+      version_prefix: $(vars.version_prefix)
       release_channel: RAPID
       maintenance_exclusions:
       - name: no-minor-or-node-upgrades-indefinite
@@ -186,12 +198,12 @@ deployment_groups:
       disk_size_gb: $(vars.a3ultra_node_pool_disk_size_gb)
       static_node_count: $(vars.static_node_count)
       guest_accelerator:
-      - type: nvidia-h200-141gb
+      - type: $(vars.accelerator_type)
         count: 8
       reservation_affinity:
         consume_reservation_type: SPECIFIC_RESERVATION
         specific_reservations:
-        - name: $(vars.extended_reservation)
+        - name: $(vars.reservation)
       additional_networks:
         $(concat(
           [{
@@ -214,17 +226,43 @@ deployment_groups:
     source: modules/management/kubectl-apply
     use: [a3-ultragpu-cluster]
     settings:
+      apply_manifests:
+      - source: $(vars.permissions_file_staged_path)
+        enable: $(vars.enable_periodic_health_checks)
+        template_vars:
+          project_id: $(vars.project_id)
+          deployment_name: $(vars.deployment_name)
+      - source: $(vars.chs_pvc_rendered_path)
+        enable: $(vars.enable_periodic_health_checks)
+        template_vars:
+          pvc_name: $(vars.chs_pvc_claim_name)
+          access_mode: ReadWriteOnce
+          capacity: 1Gi
+          storage_class_name: standard-rwo
+      - source: $(vars.chs_cronjob_rendered_path)
+        enable: $(vars.enable_periodic_health_checks)
+        template_vars:
+          project_id: $(vars.project_id)
+          deployment_name: $(vars.deployment_name)
+          region: $(vars.region)
+          machine_type: a3-ultragpu-8g
+          gcs_bucket: $(vars.chs_output_bucket_name)
+          gcs_pvc: $(vars.chs_pvc_claim_name)
+          cronjob_schedule: $(vars.health_check_schedule)
       kueue:
         install: true
         config_path: $(vars.kueue_configuration_path)
         config_template_vars:
           num_gpus: $(a3-ultragpu-pool.static_gpu_count)
-          node_pool_name: $(a3-ultragpu-pool.node_pool_names[0])
+          accelerator_type: $(vars.accelerator_type)
       jobset:
         install: true
-      apply_manifests:
-      - source: $(vars.nccl_installer_path)
-      - source: $(vars.mglru_disable_path)
+      gib:
+        install: true  # NCCL gIB plugin via DaemonSet initContainer
+        path: $(vars.gib_installer_path)
+        template_vars:
+          version: v1.0.6
+          accelerator_count: 8
 
   - id: job-template
     source: modules/compute/gke-job-template
@@ -240,6 +278,8 @@ deployment_groups:
 
   # Create a remote mount of training_bucket using
   # mount options optimized for reading training data.
+  # Based on Source of truth https://github.com/GoogleCloudPlatform/gcsfuse/blob/d1373b665b7f60e98856d2181f1193396ef16427/samples/gke-csi-yaml/gpu/training-pv.yaml#L15
+  # Some of the options might be available only on latest GKE version, please check the cluster version to meet the required version https://cloud.google.com/kubernetes-engine/docs/how-to/cloud-storage-fuse-csi-driver-perf
   - id: gcs-training
     source: modules/file-system/pre-existing-network-storage
     settings:
@@ -252,11 +292,12 @@ deployment_groups:
         metadata-cache:stat-cache-max-size-mb:-1,
         metadata-cache:type-cache-max-size-mb:-1,
         file-cache:max-size-mb:-1,
-        file-cache:cache-file-for-range-read:true,
-        file-system:kernel-list-cache-ttl-secs:-1
+        file-cache:cache-file-for-range-read:true
 
-# Create a remote mount of checkpoint_bucket using mount
+  # Create a remote mount of checkpoint_bucket using mount
   # options optimized for writing and reading checkpoint data.
+  # Based on Source of truth https://github.com/GoogleCloudPlatform/gcsfuse/blob/d1373b665b7f60e98856d2181f1193396ef16427/samples/gke-csi-yaml/gpu/checkpointing-pv.yaml#L15
+  # Some of the options might be available only on latest GKE version, please check the cluster version to meet the required version https://cloud.google.com/kubernetes-engine/docs/how-to/cloud-storage-fuse-csi-driver-perf
   - id: gcs-checkpointing
     source: modules/file-system/pre-existing-network-storage
     settings:
@@ -265,10 +306,11 @@ deployment_groups:
       fs_type: gcsfuse
       mount_options: >-
         implicit-dirs,
-        metadata-cache:ttl-secs:0,
+        metadata-cache:ttl-secs:-1,
+        metadata-cache:stat-cache-max-size-mb:-1,
+        metadata-cache:type-cache-max-size-mb:-1,
         file-cache:max-size-mb:-1,
         file-cache:cache-file-for-range-read:true,
-        file-system:kernel-list-cache-ttl-secs:0,
         file-cache:enable-parallel-downloads:true,
         rename-dir-limit=200000
 
@@ -294,7 +336,13 @@ deployment_groups:
     source: modules/compute/gke-job-template
     use: [checkpointing-pv, training-pv, a3-ultragpu-pool]
     settings:
-
+      security_context:  # to make sure the job have enough access to install the fio packages
+      - key: runAsUser
+        value: 0
+      - key: runAsGroup
+        value: 100
+      - key: fsGroup
+        value: 100
       # By adding an ephemeral volume, this will ensure that the job adds:
       # nodeSelector:
       #   cloud.google.com/gke-ephemeral-storage-local-ssd: "true"

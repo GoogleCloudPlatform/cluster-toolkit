@@ -51,8 +51,6 @@ Modules that are still in development and less stable are labeled with the
 * **[htcondor-execute-point]** ![community-badge] ![experimental-badge] :
   Manages a group of execute points for use in an [HTCondor
   pool][htcondor-setup].
-* **[pbspro-execution]** ![community-badge] ![experimental-badge] :
-  Creates execution hosts for use in a PBS Professional cluster.
 * **[mig]** ![community-badge] ![experimental-badge] : Creates a Managed Instance Group.
 * **[notebook]** ![community-badge] ![experimental-badge] : Creates a Vertex AI
   Notebook. Primarily used for [FSI - MonteCarlo Tutorial][fsi-montecarlo-on-batch-tutorial].
@@ -66,7 +64,6 @@ Modules that are still in development and less stable are labeled with the
 [schedmd-slurm-gcp-v6-nodeset-tpu]: ../community/modules/compute/schedmd-slurm-gcp-v6-nodeset-tpu/README.md
 [schedmd-slurm-gcp-v6-nodeset-dynamic]: ../community/modules/compute/schedmd-slurm-gcp-v6-nodeset-dynamic/README.md
 [htcondor-execute-point]: ../community/modules/compute/htcondor-execute-point/README.md
-[pbspro-execution]: ../community/modules/compute/pbspro-execution/README.md
 [mig]: ../community/modules/compute/mig/README.md
 [notebook]: ../community/modules/compute/notebook/README.md
 [fsi-montecarlo-on-batch-tutorial]: ../docs/tutorials/fsi-montecarlo-on-batch/README.md
@@ -89,22 +86,28 @@ Modules that are still in development and less stable are labeled with the
 
 ### File System
 
-* **[filestore]** ![core-badge] : Creates a [filestore](https://cloud.google.com/filestore) file system.
-* **[parallelstore]** ![core-badge] ![experimental-badge]: Creates a [parallelstore](https://cloud.google.com/parallelstore) file system.
+* **[filestore]** ![core-badge] : Creates a
+  [filestore](https://cloud.google.com/filestore) file system.
+* **[parallelstore]** ![core-badge] ![experimental-badge]: Creates a
+  [parallelstore](https://cloud.google.com/parallelstore) file system.
 * **[pre-existing-network-storage]** ![core-badge] : Specifies a
   pre-existing file system that can be mounted on a VM.
-* **[DDN-EXAScaler]** ![community-badge] : Creates
+* **[managed-lustre]** ![core-badge] ![experimental-badge]: Creates a
+  [managed-lustred](https://cloud.google.com/managed-lustre) file system.
+* **[DDN-EXAScaler]** ![community-badge] ![deprecated-badge] : Creates
   a [DDN EXAscaler lustre](https://www.ddn.com/partners/google-cloud-platform/)
-  file system. This module has
-  [license costs](https://console.developers.google.com/marketplace/product/ddnstorage/exascaler-cloud).
-* **[cloud-storage-bucket]** ![community-badge] ![experimental-badge] : Creates a Google Cloud Storage (GCS) bucket.
-* **[gke-persistent-volume]** ![core-badge] ![experimental-badge] : Creates persistent volumes and persistent volume claims for shared storage.
+  file system. This module is deprecated and will be removed by July 1, 2025. Consider migrating to managed-lustre.
+* **[cloud-storage-bucket]** ![community-badge] ![experimental-badge] : Creates
+  a Google Cloud Storage (GCS) bucket.
+* **[gke-persistent-volume]** ![core-badge] ![experimental-badge] : Creates
+  persistent volumes and persistent volume claims for shared storage.
 * **[nfs-server]** ![community-badge] ![experimental-badge] : Creates a VM and
   configures an NFS server that can be mounted by other VM.
 
 [filestore]: file-system/filestore/README.md
 [parallelstore]: file-system/parallelstore/README.md
 [pre-existing-network-storage]: file-system/pre-existing-network-storage/README.md
+[managed-lustre]: file-system/managed-lustre/README.md
 [ddn-exascaler]: ../community/modules/file-system/DDN-EXAScaler/README.md
 [nfs-server]: ../community/modules/file-system/nfs-server/README.md
 [cloud-storage-bucket]: ../community/modules/file-system/cloud-storage-bucket/README.md
@@ -194,10 +197,6 @@ Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial][fsi-monteca
 * **[htcondor-access-point]** ![community-badge] ![experimental-badge] : Creates
   a regional instance group managing a highly available HTCondor access point
   (login node).
-* **[pbspro-client]** ![community-badge] ![experimental-badge] : Creates
-  a client host for submitting jobs to a PBS Professional cluster.
-* **[pbspro-server]** ![community-badge] ![experimental-badge] : Creates
-  a server host for operating a PBS Professional cluster.
 
 [batch-job-template]: ../modules/scheduler/batch-job-template/README.md
 [batch-login-node]: ../modules/scheduler/batch-login-node/README.md
@@ -208,8 +207,6 @@ Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial][fsi-monteca
 [htcondor-access-point]: ../community/modules/scheduler/htcondor-access-point/README.md
 [schedmd-slurm-gcp-v6-controller]: ../community/modules/scheduler/schedmd-slurm-gcp-v6-controller/README.md
 [schedmd-slurm-gcp-v6-login]: ../community/modules/scheduler/schedmd-slurm-gcp-v6-login/README.md
-[pbspro-client]: ../community/modules/scheduler/pbspro-client/README.md
-[pbspro-server]: ../community/modules/scheduler/pbspro-server/README.md
 
 ### Scripts
 
@@ -220,16 +217,6 @@ Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial][fsi-monteca
   and VM images.
 * **[htcondor-install]** ![community-badge] ![experimental-badge] : Creates
   a startup script to install HTCondor and exports a list of required APIs
-* **[omnia-install]** ![community-badge] ![experimental-badge] ![deprecated-badge] :
-  Installs Slurm via [Dell Omnia](https://github.com/dellhpc/omnia) onto a
-  cluster of VM instances. _This module has been deprecated and will be removed
-  on August 1, 2024_.
-* **[pbspro-preinstall]** ![community-badge] ![experimental-badge] : Creates a
-  Cloud Storage bucket with PBS Pro RPM packages for use by PBS clusters.
-* **[pbspro-install]** ![community-badge] ![experimental-badge] : Creates a
-  Toolkit runner to install [PBS Professional][pbspro] from RPM packages.
-* **[pbspro-qmgr]** ![community-badge] ![experimental-badge] : Creates a Toolkit
-  runner to run common `qmgr` commands when configuring a PBS Pro cluster.
 * **[ramble-execute]** ![community-badge] ![experimental-badge] : Creates a
   startup script to execute
   [Ramble](https://github.com/GoogleCloudPlatform/ramble) commands on a target
@@ -250,25 +237,11 @@ Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial][fsi-monteca
 [windows-startup-script]: ../community/modules/scripts/windows-startup-script/README.md
 [htcondor-install]: ../community/modules/scripts/htcondor-install/README.md
 [kubernetes-operations]: ../community/modules/scripts/kubernetes-operations/README.md
-[omnia-install]: ../community/modules/scripts/omnia-install/README.md
-[pbspro-install]: ../community/modules/scripts/pbspro-install/README.md
-[pbspro-preinstall]: ../community/modules/scripts/pbspro-preinstall/README.md
-[pbspro-qmgr]: ../community/modules/scripts/pbspro-qmgr/README.md
-[pbspro]: https://www.altair.com/pbs-professional
 [ramble-execute]: ../community/modules/scripts/ramble-execute/README.md
 [ramble-setup]: ../community/modules/scripts/ramble-setup/README.md
 [spack-setup]: ../community/modules/scripts/spack-setup/README.md
 [spack-execute]: ../community/modules/scripts/spack-execute/README.md
 [wait-for-startup]: ../community/modules/scripts/wait-for-startup/README.md
-
-> **_NOTE:_** Slurm-GCP V4 is deprecated. In case, you want to use V4 modules, please use
-[ghpc-v1.27.0](https://github.com/GoogleCloudPlatform/hpc-toolkit/releases/tag/v1.27.0)
-source code and build ghpc binary from this. This source code also contains
-deprecated examples using V4 modules for your reference.
-> **_NOTE:_** Slurm-GCP V5 is deprecated. In case, you want to use V5 modules, please use
-[ghpc-v1.44.1](https://github.com/GoogleCloudPlatform/hpc-toolkit/releases/tag/v1.44.1)
-source code and build ghpc binary from this. This source code also contains
-deprecated examples using V5 modules for your reference.
 
 ## Module Fields
 

@@ -88,13 +88,6 @@ deployment_groups:
         count: 8
         ip_range: $(vars.rdma_net_range)
         region: $(vars.region)
-      firewall_rules:
-      - name: $(vars.deployment_name)-internal-rdma
-        ranges: [$(vars.rdma_net_range)]
-        allow:
-        - protocol: tcp
-        - protocol: udp
-        - protocol: icmp
 
   - id: homefs
     source: modules/file-system/filestore

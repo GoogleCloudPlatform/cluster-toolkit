@@ -13,12 +13,29 @@
   * See the License for the specific language governing permissions and
   * limitations under the License.
   */
+resource "random_id" "resource_name_suffix" {
+  byte_length = 4
+}
+
+locals {
+  name = "${var.name}-${random_id.resource_name_suffix.hex}"
+}
 
 resource "google_compute_resource_policy" "policy" {
-  name     = var.name
+  name     = local.name
   region   = var.region
   project  = var.project_id
   provider = google-beta
+
+  dynamic "workload_policy" {
+    for_each = var.workload_policy.type != null ? [1] : []
+
+    content {
+      type                  = var.workload_policy.type
+      max_topology_distance = var.workload_policy.max_topology_distance
+      accelerator_topology  = var.workload_policy.accelerator_topology
+    }
+  }
 
   dynamic "group_placement_policy" {
     for_each = var.group_placement_max_distance > 0 ? [1] : []

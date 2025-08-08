@@ -88,7 +88,7 @@ variable "instance_image" {
     EOD
   type        = map(string)
   default = {
-    family  = "slurm-gcp-6-9-hpc-rocky-linux-8"
+    family  = "slurm-gcp-6-10-hpc-rocky-linux-8"
     project = "schedmd-slurm-public"
   }
 
@@ -103,7 +103,7 @@ variable "instance_image" {
   }
 }
 
-variable "instance_image_custom" {
+variable "instance_image_custom" { # tflint-ignore: terraform_unused_declarations
   description = <<-EOD
     A flag that designates that the user is aware that they are requesting
     to use a custom and potentially incompatible image for this Slurm on
@@ -177,14 +177,14 @@ variable "disk_resource_manager_tags" {
 variable "additional_disks" {
   description = "Configurations of additional disks to be included on the partition nodes."
   type = list(object({
-    disk_name                  = string
-    device_name                = string
-    disk_size_gb               = number
-    disk_type                  = string
-    disk_labels                = map(string)
-    auto_delete                = bool
-    boot                       = bool
-    disk_resource_manager_tags = map(string)
+    disk_name                  = optional(string)
+    device_name                = optional(string)
+    disk_size_gb               = optional(number)
+    disk_type                  = optional(string)
+    disk_labels                = optional(map(string))
+    auto_delete                = optional(bool)
+    boot                       = optional(bool)
+    disk_resource_manager_tags = optional(map(string))
   }))
   default = []
 }
@@ -319,6 +319,13 @@ variable "guest_accelerator" {
     condition     = length(var.guest_accelerator) <= 1
     error_message = "The Slurm modules supports 0 or 1 models of accelerator card on each node."
   }
+}
+
+variable "accelerator_topology" {
+  type        = string
+  description = "Specifies the shape of the Accelerator (GPU/TPU) slice."
+  nullable    = true
+  default     = null
 }
 
 variable "preemptible" {
@@ -504,8 +511,8 @@ variable "access_config" {
 variable "reservation_name" {
   description = <<-EOD
     Name of the reservation to use for VM resources, should be in one of the following formats:
-    - projects/PROJECT_ID/reservations/RESERVATION_NAME[/SUFF/IX]
-    - RESERVATION_NAME[/SUFF/IX]
+    - projects/PROJECT_ID/reservations/RESERVATION_NAME[/reservationBlocks/BLOCK_ID]
+    - RESERVATION_NAME[/reservationBlocks/BLOCK_ID]
 
     Must be a "SPECIFIC" reservation
     Set to empty string if using no reservation or automatically-consumed reservations
@@ -515,8 +522,8 @@ variable "reservation_name" {
   nullable    = false
 
   validation {
-    condition     = length(regexall("^((projects/([a-z0-9-]+)/reservations/)?([a-z0-9-]+)(/[a-z0-9-]+/[a-z0-9-]+)?)?$", var.reservation_name)) > 0
-    error_message = "Reservation name must be either empty or in the format '[projects/PROJECT_ID/reservations/]RESERVATION_NAME[/SUFF/IX]', [...] are optional parts."
+    condition     = length(regexall("^((projects/([a-z0-9-]+)/reservations/)?([a-z0-9-]+)(/reservationBlocks/[a-z0-9-]+)?)?$", var.reservation_name)) > 0
+    error_message = "Reservation name must be either empty or in the format '[projects/PROJECT_ID/reservations/]RESERVATION_NAME[/reservationBlocks/BLOCK_ID]', [...] are optional parts."
   }
 }
 
@@ -598,6 +605,7 @@ variable "dws_flex" {
   - enable: Enable DWS Flex Start
   - max_run_duration: Maximum duration in seconds for the job to run, should not exceed 604,800 (one week).
   - use_job_duration: Use the job duration to determine the max_run_duration, if job duration is not set, max_run_duration will be used.
+  - use_bulk_insert: Uses the legacy implementation of DWS Flex Start with Bulk Insert for non-accelerator instances
 
  Limitations:
   - CAN NOT be used with reservations;
@@ -610,13 +618,14 @@ variable "dws_flex" {
     enabled          = optional(bool, true)
     max_run_duration = optional(number, 604800) # one week
     use_job_duration = optional(bool, false)
+    use_bulk_insert  = optional(bool, false)
   })
   default = {
     enabled = false
   }
   validation {
-    condition     = var.dws_flex.max_run_duration >= 30 && var.dws_flex.max_run_duration <= 604800
-    error_message = "Max duration must be more than 30 seconds, and cannot be more than one week."
+    condition     = var.dws_flex.max_run_duration >= 600 && var.dws_flex.max_run_duration <= 604800
+    error_message = "Max duration must be at least than 10 minutes, and cannot be more than one week."
   }
 }
 

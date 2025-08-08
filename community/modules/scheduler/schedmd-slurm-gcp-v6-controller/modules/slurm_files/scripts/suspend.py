@@ -21,15 +21,15 @@ import logging
 
 import util
 from util import (
-    groupby_unsorted,
     log_api_request,
     batch_execute,
     to_hostlist,
-    wait_for_operations,
     separate,
 )
 from util import lookup
 import tpu
+import mig_flex
+import watch_delete_vm_op
 
 log = logging.getLogger()
 
@@ -70,20 +70,27 @@ def delete_instances(instances):
 
     requests = {inst: delete_instance_request(inst) for inst in valid}
 
-    log.info(f"delete {len(valid)} instances ({to_hostlist(valid)})")
-    done, failed = batch_execute(requests)
+    log.info(f"to delete {len(valid)} instances ({to_hostlist(valid)})")
+    ops, failed = batch_execute(requests)
     for node, (_, err) in failed.items():
         log.error(f"instance {node} failed to delete: {err}")
-    wait_for_operations(done.values())
-    # TODO do we need to check each operation for success? That is a lot more API calls
-    log.info(f"deleted {len(done)} instances {to_hostlist(done.keys())}")
+    
+    log.info(f"deleting {len(ops)} instances {to_hostlist(ops.keys())}")
+
+    topic = watch_delete_vm_op.watch_delete_vm_op_topic()
+    for node, op in ops.items():
+        topic.publish(op, node)
+
+
 
 
 def suspend_nodes(nodes: List[str]) -> None:
     lkp = lookup()
     other_nodes, tpu_nodes = util.separate(lkp.node_is_tpu, nodes)
+    bulk_nodes, flex_nodes = util.separate(lkp.is_flex_node, other_nodes)
 
-    delete_instances(other_nodes)
+    mig_flex.suspend_flex_nodes(flex_nodes, lkp)
+    delete_instances(bulk_nodes)
     tpu.delete_tpu_instances(tpu_nodes)
 
 

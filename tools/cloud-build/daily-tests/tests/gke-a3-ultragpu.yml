@@ -26,17 +26,19 @@ zone: europe-west1-b
 remote_node: "{{ deployment_name }}-remote-node-0"
 extended_reservation: hpc-exr-2
 static_node_count: 2
-k8s_service_account_name: workload-identity-k8s-sa
+instance_type: a3-ultra
+accelerator_type: nvidia-h200-141gb
+num_gpus: 16
 cli_deployment_vars:
   region: "{{ region }}"
   zone: "{{ zone }}"
   static_node_count: "{{ static_node_count }}"
-  extended_reservation: "{{ extended_reservation }}"
+  reservation: "{{ extended_reservation }}"
   authorized_cidr: "{{ build_ip.stdout }}/32"
   gcp_public_cidrs_access_enabled: true
-  k8s_service_account_name: "{{ k8s_service_account_name}}"
 custom_vars:
   project: "{{ project }}"
 post_deploy_tests:
 - test-validation/test-gke-job.yml
 - test-validation/test-gke-a3-ultra.yml
+- test-validation/test-gke-kueue-config.yml

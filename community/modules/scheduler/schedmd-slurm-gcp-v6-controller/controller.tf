@@ -129,6 +129,9 @@ resource "google_compute_instance_from_template" "controller" {
   project                  = local.controller_project_id
   zone                     = var.zone
   source_instance_template = module.slurm_controller_template.self_link
+  # Due to https://github.com/hashicorp/terraform-provider-google/issues/21693
+  # we have to explicitly override instance labels instead of inheriting them from template.
+  labels = module.slurm_controller_template.labels
 
   allow_stopping_for_update = true
 
@@ -163,6 +166,7 @@ resource "google_secret_manager_secret" "cloudsql" {
   count = var.cloudsql != null ? 1 : 0
 
   secret_id = "${local.slurm_cluster_name}-slurm-secret-cloudsql"
+  project   = var.project_id
 
   replication {
     dynamic "auto" {

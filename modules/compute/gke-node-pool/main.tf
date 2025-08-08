@@ -67,8 +67,22 @@ data "google_container_cluster" "gke_cluster" {
   location = local.cluster_location
 }
 
+data "google_compute_reservation" "specific" {
+  count   = local.input_specific_reservations_count == 1 ? 1 : 0
+  project = var.project_id
+  zone    = var.zones[0]
+  name    = var.reservation_affinity.specific_reservations[0].name
+}
+
+locals {
+  reservation_available_count = (local.input_specific_reservations_count == 1) ? (
+    try(data.google_compute_reservation.specific[0].specific_reservation[0].count, 0) -
+    try(data.google_compute_reservation.specific[0].specific_reservation[0].in_use_count, 0)
+  ) : 0
+}
+
 resource "google_container_node_pool" "node_pool" {
-  provider = google-beta
+  provider = google
 
   count = max(var.num_node_pools, var.num_slices)
 
@@ -118,15 +132,17 @@ resource "google_container_node_pool" "node_pool" {
   }
 
   node_config {
-    disk_size_gb    = var.disk_size_gb
-    disk_type       = var.disk_type
-    resource_labels = local.labels
-    labels          = var.kubernetes_labels
-    service_account = var.service_account_email
-    oauth_scopes    = var.service_account_scopes
-    machine_type    = var.machine_type
-    spot            = var.spot
-    image_type      = var.image_type
+    disk_size_gb     = var.disk_size_gb
+    disk_type        = var.disk_type
+    resource_labels  = local.labels
+    labels           = var.kubernetes_labels
+    service_account  = var.service_account_email
+    oauth_scopes     = var.service_account_scopes
+    machine_type     = var.machine_type
+    spot             = var.spot
+    image_type       = var.image_type
+    flex_start       = var.enable_flex_start
+    max_run_duration = var.max_run_duration != null ? "${var.max_run_duration}s" : null
 
     dynamic "guest_accelerator" {
       for_each = local.guest_accelerator
@@ -221,11 +237,8 @@ resource "google_container_node_pool" "node_pool" {
 
     reservation_affinity {
       consume_reservation_type = var.reservation_affinity.consume_reservation_type
-      key                      = length(local.verified_specific_reservations) != 1 ? null : local.reservation_resource_api_label
-      values = length(local.verified_specific_reservations) != 1 ? null : [
-        for i, r in local.verified_specific_reservations :
-        (length(local.input_reservation_suffixes[i]) > 0 ? format("%s%s", r.name, local.input_reservation_suffixes[i]) : "projects/${r.project}/reservations/${r.name}")
-      ]
+      key                      = local.is_valid_reservation ? local.reservation_resource_api_label : null
+      values                   = local.is_valid_reservation ? (var.is_reservation_active ? local.active_reservation_values : local.default_reservation_values) : null
     }
 
     dynamic "host_maintenance_policy" {
@@ -295,8 +308,7 @@ resource "google_container_node_pool" "node_pool" {
     precondition {
       condition = (
         (local.input_specific_reservations_count == 0) ||
-        (local.input_specific_reservations_count == 1 &&
-          length(local.verified_specific_reservations) > 0 &&
+        ((length(local.verified_specific_reservations) == 1 || !var.is_reservation_active) &&
         length(local.specific_reservation_requirement_violations) == 0)
       )
       error_message = <<-EOT
@@ -364,6 +376,30 @@ resource "google_container_node_pool" "node_pool" {
     precondition {
       condition     = !(var.num_node_pools < 0 || var.num_slices < 0)
       error_message = "Negative integer value of num_node_pools or num_slices is not valid. Please use a positive integer value to set num_node_pools for CPUs and GPUS, and num_slices for TPUs."
+    }
+    precondition {
+      condition     = var.enable_flex_start == true ? (var.auto_repair == false) : true
+      error_message = "enable_flex_start needs node auto_repair set to false."
+    }
+    precondition {
+      condition     = var.enable_flex_start == true ? (var.static_node_count == null) : true
+      error_message = "enable_flex_start does not work with static_node_count. static_node_count should be set to null."
+    }
+    precondition {
+      condition     = var.enable_flex_start == true ? (var.reservation_affinity.consume_reservation_type == "NO_RESERVATION") : true
+      error_message = "enable_flex_start only works with reservation_affinity consume_reservation_type NO_RESERVATION."
+    }
+    precondition {
+      condition     = var.enable_flex_start == true ? (var.spot == false) : true
+      error_message = "Both enable_flex_start and spot consumption option cannot be set to true at the same time."
+    }
+    precondition {
+      condition     = var.reservation_affinity.consume_reservation_type != "SPECIFIC_RESERVATION" || (var.static_node_count != null && var.static_node_count <= local.reservation_available_count)
+      error_message = "Requested static_node_count (${coalesce(var.static_node_count, "not set")}) exceeds the available reservation capacity (${local.reservation_available_count})."
+    }
+    precondition {
+      condition     = local.input_specific_reservations_count == 1 || var.reservation_affinity.consume_reservation_type != "SPECIFIC_RESERVATION"
+      error_message = "Exactly one reservation must be specified when using SPECIFIC_RESERVATION."
     }
   }
 }

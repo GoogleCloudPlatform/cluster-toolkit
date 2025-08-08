@@ -93,7 +93,7 @@ schema_fields = [
     schema_field("cluster_id", "STRING", "UUID for the cluster", required=True),
     schema_field("entry_uuid", "STRING", "entry UUID for the job row", required=True),
     schema_field(
-        "job_db_uuid", "INT64", "job db index from the slurm database", required=True
+        "job_db_uuid", "STRING", "job db index from the slurm database", required=True
     ),
     schema_field("job_id_raw", "INT64", "raw job id", required=True),
     schema_field("job_id", "STRING", "job id", required=True),

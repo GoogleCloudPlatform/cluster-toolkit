@@ -22,6 +22,7 @@ import sys
 import stat
 import time
 import logging
+import uuid
 
 import shutil
 from pathlib import Path
@@ -35,21 +36,21 @@ from more_executors import Executors, ExceptionRetryPolicy
 
 log = logging.getLogger()
 
-def mounts_by_local(mounts):
+def mounts_by_local(mounts: list[NSMount]) -> dict[str, NSMount]:
     """convert list of mounts to dict of mounts, local_mount as key"""
-    return {str(Path(m.local_mount).resolve()): m for m in mounts}
+    return {str(m.local_mount.resolve()): m for m in mounts}
 
 
-def _get_default_mounts(lkp: util.Lookup) -> List[NSDict]:
+def _get_default_mounts(lkp: util.Lookup) -> list[NSMount]:
     if lkp.cfg.disable_default_mounts:
         return []
     return [
-        NSDict(
-                server_ip= "$controller",
-                remote_mount= path,
-                local_mount= path,
-                fs_type= "nfs",
-                mount_options= "defaults,hard,intr",
+        NSMount(
+                server_ip=lkp.controller_mount_server_ip(),
+                remote_mount=path,
+                local_mount=path,
+                fs_type="nfs",
+                mount_options="defaults,hard,intr",
         )
         for path in (
             dirs.home,
@@ -57,19 +58,35 @@ def _get_default_mounts(lkp: util.Lookup) -> List[NSDict]:
         )
     ]
 
-def resolve_network_storage(nodeset=None) -> List[NSMount]:
+def get_slurm_bucket_mount() -> NSMount:
+    bucket, path = util._get_bucket_and_common_prefix()
+    return  NSMount(
+        fs_type="gcsfuse",
+        server_ip="",
+        remote_mount=Path(bucket),
+        local_mount=dirs.slurm_bucket_mount,
+        mount_options=f"defaults,_netdev,implicit_dirs,only_dir={path}",
+    )
+
+def resolve_network_storage() -> List[NSMount]:
     """Combine appropriate network_storage fields to a single list"""
     lkp = lookup()
-    
+
     # create dict of mounts, local_mount: mount_info
     mounts = mounts_by_local(_get_default_mounts(lkp))
 
+    if lkp.is_controller and util.should_mount_slurm_bucket():
+        mounts.update(mounts_by_local([get_slurm_bucket_mount()]))
+
     # On non-controller instances, entries in network_storage could overwrite
     # default exports from the controller. Be careful, of course
-    mounts.update(mounts_by_local(lkp.cfg.network_storage))
+    common = [lkp.normalize_ns_mount(m) for m in lkp.cfg.network_storage]
+    mounts.update(mounts_by_local(common))
 
     if lkp.is_login_node:
-        mounts.update(mounts_by_local(lkp.cfg.login_network_storage))
+        login_group = lkp.cfg.login_groups[util.instance_login_group()] 
+        login_ns = [lkp.normalize_ns_mount(m) for m in login_group.network_storage]
+        mounts.update(mounts_by_local(login_ns))
 
     if lkp.instance_role == "compute":
         try:
@@ -77,74 +94,46 @@ def resolve_network_storage(nodeset=None) -> List[NSMount]:
         except Exception:
             pass # external nodename, skip lookup
         else:
-            mounts.update(mounts_by_local(nodeset.network_storage))
+            nodeset_ns = [lkp.normalize_ns_mount(m) for m in nodeset.network_storage]
+            mounts.update(mounts_by_local(nodeset_ns))
 
-    return [lkp.normalize_ns_mount(mnt) for mnt in mounts.values()]
+    return list(mounts.values())
 
 
-def separate_external_internal_mounts(mounts):
-    """separate into cluster-external and internal mounts"""
-
-    def internal_mount(mount):
-        # NOTE: Valid Lustre server_ip can take the form of '<IP>@tcp'
-        server_ip = mount.server_ip.split("@")[0]
-        mount_addr = util.host_lookup(server_ip)
-        return mount_addr == lookup().control_host_addr
-
-    return separate(internal_mount, mounts)
-
+def is_controller_mount(mount) -> bool:
+    # NOTE: Valid Lustre server_ip can take the form of '<IP>@tcp'
+    server_ip = mount.server_ip.split("@")[0]
+    mount_addr = util.host_lookup(server_ip)
+    return mount_addr == lookup().control_host_addr
 
 def setup_network_storage():
     """prepare network fs mounts and add them to fstab"""
     log.info("Set up network storage")
-    # filter mounts into two dicts, cluster-internal and external mounts
-
+    
     all_mounts = resolve_network_storage()
-    ext_mounts, int_mounts = separate_external_internal_mounts(all_mounts)
-
     if lookup().is_controller:
-        mounts = ext_mounts
+        mounts, _ = separate(is_controller_mount, all_mounts)
     else:
-        mounts = ext_mounts + int_mounts
+        mounts = all_mounts
 
     # Determine fstab entries and write them out
     fstab_entries = []
     for mount in mounts:
-        local_mount = Path(mount.local_mount)
-        remote_mount = mount.remote_mount
+        local_mount = mount.local_mount
         fs_type = mount.fs_type
         server_ip = mount.server_ip or ""
+        src = mount.remote_mount if fs_type == "gcsfuse" else f"{server_ip}:{mount.remote_mount}"
+        
+        log.info(f"Setting up mount ({fs_type}) {src} to {local_mount}")
         util.mkdirp(local_mount)
 
-        log.info(
-            "Setting up mount ({}) {}{} to {}".format(
-                fs_type,
-                server_ip + ":" if fs_type != "gcsfuse" else "",
-                remote_mount,
-                local_mount,
-            )
-        )
-
         mount_options = mount.mount_options.split(",") if mount.mount_options else []
-        if not mount_options or "_netdev" not in mount_options:
+        if "_netdev" not in mount_options:
             mount_options += ["_netdev"]
-
-        if fs_type == "gcsfuse":
-            fstab_entries.append(
-                "{0}   {1}     {2}     {3}     0 0".format(
-                    remote_mount, local_mount, fs_type, ",".join(mount_options)
-                )
-            )
-        else:
-            fstab_entries.append(
-                "{0}:{1}    {2}     {3}      {4}  0 0".format(
-                    server_ip,
-                    remote_mount,
-                    local_mount,
-                    fs_type,
-                    ",".join(mount_options),
-                )
-            )
+        options_line = ",".join(mount_options)
+        
+        
+        fstab_entries.append(f"{src}   {local_mount}     {fs_type}     {options_line}     0 0")
 
     fstab = Path("/etc/fstab")
     if not Path(fstab.with_suffix(".bak")).is_file():
@@ -156,13 +145,16 @@ def setup_network_storage():
             f.write(entry)
             f.write("\n")
 
-    mount_fstab(mounts_by_local(mounts), log)
-    munge_mount_handler()
+    mount_fstab(mounts, log)
+    if lookup().cfg.enable_slurm_auth:
+      slurm_key_mount_handler()
+    else:
+      munge_mount_handler()
 
 
-def mount_fstab(mounts, log):
+def mount_fstab(mounts: list[NSMount], log):
     """Wait on each mount, then make sure all fstab is mounted"""
-    def mount_path(path):
+    def mount_path(path: Path):
         log.info(f"Waiting for '{path}' to be mounted...")
         try:
             run(f"mount {path}", timeout=120)
@@ -180,8 +172,8 @@ def mount_fstab(mounts, log):
     with Executors.thread_pool().with_timeout(MAX_MOUNT_TIMEOUT).with_retry(
         retry_policy=retry_policy
     ) as exe:
-        for path in mounts:
-            future = exe.submit(mount_path, path)
+        for m in mounts:
+            future = exe.submit(mount_path, m.local_mount)
             future_list.append(future)
 
         # Iterate over futures, checking for exceptions
@@ -196,7 +188,7 @@ def munge_mount_handler():
     if lookup().is_controller:
         return
     mnt = lookup().munge_mount
-    
+
     log.info(f"Mounting munge share to: {mnt.local_mount}")
     mnt.local_mount.mkdir()
     if mnt.fs_type == "gcsfuse":
@@ -245,38 +237,91 @@ def munge_mount_handler():
         run(f"umount {mnt.local_mount}", timeout=120)
     shutil.rmtree(mnt.local_mount)
 
+def slurm_key_mount_handler():
+    if lookup().is_controller:
+        return
+    mnt = lookup().slurm_key_mount
+
+    log.info(f"Mounting slurm_key share to: {mnt.local_mount}")
+    if mnt.fs_type == "gcsfuse":
+        cmd = [
+            "gcsfuse",
+            f"--only-dir={mnt.remote_mount}" if mnt.remote_mount != "" else None,
+            mnt.server_ip,
+            str(mnt.local_mount),
+        ]
+    else:
+        cmd = [
+            "mount",
+            f"--types={mnt.fs_type}",
+            f"--options={mnt.mount_options}" if mnt.mount_options != "" else None,
+            f"{mnt.server_ip}:{mnt.remote_mount}",
+            str(mnt.local_mount),
+        ]
+    timeout = 120 # wait max 120s to mount
+    for retry, wait in enumerate(util.backoff_delay(0.5, timeout), 1):
+        try:
+            run(cmd, timeout=timeout)
+            break
+        except Exception as e:
+            log.error(
+                f"slurm key mount failed: '{cmd}' {e}, try {retry}, waiting {wait:0.2f}s"
+            )
+            time.sleep(wait)
+            err = e
+            continue
+    else:
+        raise err
+
+    file_name = "slurm.key"
+    dst = Path(util.slurmdirs.etc / file_name)
+    log.info(f"Copy slurm.key from: {mnt.local_mount}")
+    shutil.copy2(mnt.local_mount / file_name, dst)
+
+    log.info("Restrict permissions of slurm.key")
+    util.chown_slurm(dst, mode=0o400)
+
+    log.info(f"Unmount {mnt.local_mount}")
+    if mnt.fs_type == "gcsfuse":
+        run(f"fusermount -u {mnt.local_mount}", timeout=120)
+    else:
+        run(f"umount {mnt.local_mount}", timeout=120)
+    shutil.rmtree(mnt.local_mount)
+
 
 def setup_nfs_exports():
     """nfs export all needed directories"""
     lkp = util.lookup()
     assert lkp.is_controller
 
-
     # The controller only needs to set up exports for cluster-internal mounts
-    # switch the key to remote mount path since that is what needs exporting
-    mounts = resolve_network_storage()
-    mounts.append(lkp.munge_mount)
-   
-    # controller mounts
-    _, con_mounts = separate_external_internal_mounts(mounts)
-    con_mounts = {m.remote_mount: m for m in con_mounts}
-    for nodeset in lkp.cfg.nodeset.values():
-        # get internal mounts for each nodeset by calling
-        # resolve_network_storage as from a node in each nodeset
-        ns_mounts = resolve_network_storage(nodeset=nodeset)
-        _, int_mounts = separate_external_internal_mounts(ns_mounts)
-        con_mounts.update({m.remote_mount: m for m in int_mounts})
+    exported_mounts = [m for m in resolve_network_storage() if is_controller_mount(m)]
+
+    # key by remote mount path since that is what needs exporting
+    to_export = {m.remote_mount: "*(rw,no_subtree_check,no_root_squash)" for m in exported_mounts}
+
+    key_mount = lkp.slurm_key_mount if lkp.cfg.enable_slurm_auth else lkp.munge_mount
+    if is_controller_mount(key_mount):
+        # Export key mount as read-only
+        to_export[key_mount.remote_mount] = "*(ro,no_subtree_check,no_root_squash)"
+    
+    if util.should_mount_slurm_bucket():
+        mnt = get_slurm_bucket_mount()
+        # FSID is required for virtual filesystem that is not based on a device
+        # Also export it as read-only
+        fsid=str(uuid.uuid4())
+        to_export[mnt.local_mount] = f"*(ro,no_subtree_check,no_root_squash,fsid={fsid})"
 
     # export path if corresponding selector boolean is True
-    exports = []
-    for path in con_mounts:
+    lines = []
+    for path,options in to_export.items():
         util.mkdirp(Path(path))
         run(rf"sed -i '\#{path}#d' /etc/exports", timeout=30)
-        exports.append(f"{path}  *(rw,no_subtree_check,no_root_squash)")
+        lines.append(f"{path}  {options}")
 
     exportsd = Path("/etc/exports.d")
     util.mkdirp(exportsd)
     with (exportsd / "slurm.exports").open("w") as f:
         f.write("\n")
-        f.write("\n".join(exports))
+        f.write("\n".join(lines))
     run("exportfs -a", timeout=30)

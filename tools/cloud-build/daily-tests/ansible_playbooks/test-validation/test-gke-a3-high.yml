@@ -21,7 +21,7 @@
 - name: Get cluster credentials for kubectl
   delegate_to: localhost
   ansible.builtin.shell: |
-    gcloud container clusters get-credentials {{ deployment_name }} --region {{ region }} --project {{ custom_vars.project }}
+    gcloud container clusters get-credentials {{ deployment_name }} --region {{ region }} --project {{ custom_vars.project }} --verbosity=debug
 
 - name: Download NCCL test file
   delegate_to: localhost
@@ -38,12 +38,12 @@
 - name: Create NCCL config map and deploy NCCL test pods
   delegate_to: localhost
   ansible.builtin.shell: |
-    kubectl apply -f {{ workspace }}/examples/nccl-test.yaml
+    kubectl apply -f {{ workspace }}/examples/nccl-test.yaml -v=9
 
 - name: Wait until 2 pods are running
   delegate_to: localhost
   ansible.builtin.shell: |
-    kubectl get pod --field-selector status.phase=Running --no-headers
+    kubectl get pod --field-selector status.phase=Running --no-headers -v=9
   register: pod_running
   until: pod_running.stdout_lines | length == 2
   retries: 20
@@ -52,7 +52,7 @@
 - name: Trigger all-gather NCCL test
   delegate_to: localhost
   ansible.builtin.shell: |
-    kubectl exec --stdin --tty --container=nccl-test nccl-test-host-1 -- /configs/allgather.sh nccl-host-1 nccl-host-2 > pod_logs.txt
+    kubectl -v=9 exec --stdin --tty --container=nccl-test nccl-test-host-1 -- /configs/allgather.sh nccl-host-1 nccl-host-2 > pod_logs.txt
     cat pod_logs.txt
   register: nccl_test_logs
 
@@ -70,5 +70,5 @@
 - name: Clean up
   delegate_to: localhost
   ansible.builtin.shell: |
-    kubectl delete pod --all
-    kubectl delete service --all
+    kubectl delete pod --all -v=9
+    kubectl delete service --all -v=9

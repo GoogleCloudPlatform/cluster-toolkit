@@ -34,10 +34,10 @@ MessageTimeout=60
 
 SlurmctldHost={control_host}({control_addr})
 
-AuthType=auth/munge
+AuthType=auth/{auth_key}
 AuthInfo=cred_expire=120
 AuthAltTypes=auth/jwt
-CredType=cred/munge
+CredType=cred/{auth_key}
 MpiDefault={mpi_default}
 ReturnToService=2
 SlurmctldPort={control_host_port}
@@ -50,7 +50,7 @@ StateSaveLocation={state_save}
 #
 # LOGGING AND ACCOUNTING
 AccountingStorageType=accounting_storage/slurmdbd
-AccountingStorageHost={control_host}
+AccountingStorageHost={accounting_storage_host}
 ClusterName={name}
 SlurmctldLogFile={slurmlog}/slurmctld.log
 SlurmdLogFile={slurmlog}/slurmd-%n.log

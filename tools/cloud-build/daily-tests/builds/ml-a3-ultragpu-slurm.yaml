@@ -15,6 +15,8 @@
 ---
 tags:
 - m.custom-image
+- m.cloud-storage-bucket
+- m.pre-existing-network-storage
 - m.filestore
 - m.gpu-rdma-vpc
 - m.schedmd-slurm-gcp-v6-controller
@@ -27,6 +29,11 @@ tags:
 
 timeout: 14400s  # 4hr
 steps:
+# While using static network names we are gaurding against more than 1 instance running at a time (for multi-group tests)
+- id: check_for_running_build
+  name: gcr.io/cloud-builders/gcloud
+  script: "tools/cloud-build/check_running_build.sh tools/cloud-build/daily-tests/builds/ml-a3-ultragpu-slurm.yaml"
+
 - id: ml-a3-ultragpu-slurm
   name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner
   entrypoint: /bin/bash

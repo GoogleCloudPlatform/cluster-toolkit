@@ -26,3 +26,4 @@ class GHPCFEConfig(AppConfig):
         import ghpcfe.signals # pylint:disable=unused-import,import-outside-toplevel
 
         c2.startup()
+        c2.start_cloud_build_log_subscriber()

@@ -17,6 +17,8 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from .models import *  #pylint: disable=wildcard-import,unused-wildcard-import
 from .forms import UserCreationForm, UserUpdateForm
+import json
+from django.utils.safestring import mark_safe
 
 
 class UserAdmin(BaseUserAdmin):
@@ -71,6 +73,83 @@ class UserAdmin(BaseUserAdmin):
     )
 
 
+class ContainerRegistryInline(admin.TabularInline):
+    model = ContainerRegistry
+    extra = 1
+
+
+class ContainerRegistryAdmin(admin.ModelAdmin):
+    """ Custom ModelAdmin for ContainerRegistry model """
+    list_display = (
+        "id", 
+        "cluster", 
+        "repository_id", 
+        "repo_mode", 
+        "format", 
+        "status",
+        "get_registry_url",
+        "get_secret_url"
+    )
+    list_filter = (
+        "status",
+        "repo_mode",
+        "format",
+    )
+    search_fields = (
+        "repository_id",
+        "repo_mirror_url",
+    )
+    readonly_fields = (
+        "get_registry_url",
+        "get_secret_url",
+        "get_registry_console_url",
+        "get_build_url",
+        "display_build_info",
+    )
+    fieldsets = (
+        (None, {
+            "fields": (
+                "cluster",
+                "repository_id",
+                "secret_id",
+                "repo_mode",
+                "format",
+                "status",
+                "display_build_info",
+                "get_registry_url",
+                "get_secret_url",
+            )
+        }),
+        ("Authentication", {
+            "fields": (
+                "repo_username",
+                "use_upstream_credentials",
+            )
+        }),
+        ("Mirroring", {
+            "fields": (
+                "use_public_repository",
+                "repo_mirror_url",
+            )
+        }),
+    )
+
+    def display_build_info(self, obj):
+        """Return pretty-printed JSON for build_info."""
+        # Safe to mark as safe because we’re controlling the <pre> block ourselves.
+        pretty_json = json.dumps(obj.build_info, indent=2)
+        return mark_safe(f"<pre>{pretty_json}</pre>")
+    display_build_info.short_description = "Build Info (pretty-printed)"
+
+    def get_registry_url(self, obj):
+        return obj.get_registry_url()
+    get_registry_url.short_description = "Registry URL"
+
+    def get_secret_url(self, obj):
+        return obj.get_secret_url()
+    get_secret_url.short_description = "Secret URL"
+
+
 class MountPointInline(admin.TabularInline):
     """ To enable inline editing of instance types on cluster admin page """
     model = MountPoint
@@ -115,7 +194,7 @@ class FilesystemAdmin(admin.ModelAdmin):
 
 class ClusterAdmin(admin.ModelAdmin):
     """ Custom ModelAdmin for Cluster model """
-    inlines = (MountPointInline, ClusterPartitionInline)
+    inlines = (MountPointInline, ClusterPartitionInline, ContainerRegistryInline)
     list_display = ("id", "name", "cloud_zone", "_controller_node", "status")
 
     def _controller_node(self, obj):
@@ -176,3 +255,5 @@ admin.site.register(AuthorisedUser)
 admin.site.register(WorkbenchMountPoint)
 admin.site.register(StartupScript)
 admin.site.register(Image)
+admin.site.register(ContainerRegistry, ContainerRegistryAdmin)
+admin.site.register(ContainerApplication)

@@ -45,7 +45,7 @@ locals {
   source_image_family = (
     var.source_image_family != "" && var.source_image_family != null
     ? var.source_image_family
-    : "slurm-gcp-6-9-hpc-rocky-linux-8"
+    : "slurm-gcp-6-10-hpc-rocky-linux-8"
   )
   source_image_project = (
     var.source_image_project != "" && var.source_image_project != null
@@ -71,6 +71,13 @@ locals {
     tier_1_enabled   = "GVNIC"
   }
   nic_type = lookup(local.nic_type_map, var.bandwidth_tier, null)
+
+  labels = merge(var.labels,
+    {
+      slurm_cluster_name  = var.slurm_cluster_name
+      slurm_instance_role = var.slurm_instance_role
+    },
+  )
 }
 
 ########
@@ -104,30 +111,24 @@ module "instance_template" {
   access_config               = var.access_config
 
   # Instance
-  machine_type              = var.machine_type
-  min_cpu_platform          = var.min_cpu_platform
-  name_prefix               = local.name_prefix
-  gpu                       = var.gpu
-  service_account           = local.service_account
-  shielded_instance_config  = var.shielded_instance_config
-  advanced_machine_features = var.advanced_machine_features
-  enable_confidential_vm    = var.enable_confidential_vm
-  enable_shielded_vm        = var.enable_shielded_vm
-  preemptible               = var.preemptible
-  spot                      = var.spot
-  on_host_maintenance       = var.on_host_maintenance
-  labels = merge(
-    var.labels,
-    {
-      slurm_cluster_name  = var.slurm_cluster_name
-      slurm_instance_role = var.slurm_instance_role
-    },
-  )
+  machine_type                = var.machine_type
+  min_cpu_platform            = var.min_cpu_platform
+  name_prefix                 = local.name_prefix
+  gpu                         = var.gpu
+  service_account             = local.service_account
+  shielded_instance_config    = var.shielded_instance_config
+  advanced_machine_features   = var.advanced_machine_features
+  enable_confidential_vm      = var.enable_confidential_vm
+  enable_shielded_vm          = var.enable_shielded_vm
+  preemptible                 = var.preemptible
+  spot                        = var.spot
+  on_host_maintenance         = var.on_host_maintenance
+  labels                      = local.labels
   instance_termination_action = var.termination_action
   resource_manager_tags       = var.resource_manager_tags
 
   # Metadata
-  startup_script = data.local_file.startup.content
+  startup_script = coalesce(var.internal_startup_script, data.local_file.startup.content)
   metadata = merge(
     var.metadata,
     {
@@ -156,4 +157,8 @@ module "instance_template" {
   )
   disk_resource_manager_tags = var.disk_resource_manager_tags
   additional_disks           = local.additional_disks
+
+  max_run_duration     = var.max_run_duration
+  provisioning_model   = var.provisioning_model
+  reservation_affinity = var.reservation_affinity
 }

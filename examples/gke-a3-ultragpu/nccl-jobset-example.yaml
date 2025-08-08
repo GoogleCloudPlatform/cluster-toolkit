@@ -39,7 +39,6 @@ spec:
               networking.gke.io/interfaces: |
                 [
                   {"interfaceName":"eth0","network":"default"},
-                  {"interfaceName":"eth1","network":"gvnic-1"},
                   {"interfaceName":"eth2","network":"rdma-0"},
                   {"interfaceName":"eth3","network":"rdma-1"},
                   {"interfaceName":"eth4","network":"rdma-2"},
@@ -126,7 +125,7 @@ spec:
             - name: nccl
               stdin: true
               tty: true
-              image: us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib-diagnostic:v1.0.5
+              image: us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib-diagnostic:v1.0.6
               securityContext:
                 privileged: true
               env:

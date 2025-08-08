@@ -15,7 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Any
 import argparse
 from datetime import timedelta
 import shlex
@@ -26,13 +26,13 @@ import yaml
 import collections
 from pathlib import Path
 from dataclasses import dataclass
+from addict import Dict as NSDict # type: ignore
 
 import util
 from util import (
     chunked,
     ensure_execute,
     execute_with_futures,
-    get_insert_operations,
     log_api_request,
     map_with_futures,
     run,
@@ -41,8 +41,9 @@ from util import (
     trim_self_link,
     wait_for_operation,
 )
-from util import lookup, NSDict, ReservationDetails
+from util import lookup, ReservationDetails
 import tpu
+import mig_flex
 
 log = logging.getLogger()
 
@@ -51,6 +52,9 @@ PLACEMENT_MAX_CNT = 1500
 # if placement is used the actual BULK_INSERT_LIMIT will be
 # max([1000, PLACEMENT_MAX_CNT])
 BULK_INSERT_LIMIT = 5000
+
+# https://cloud.google.com/compute/docs/instance-groups#types_of_managed_instance_groups
+ZONAL_MIG_SIZE_LIMIT = 1000
 
 
 @dataclass(frozen=True)
@@ -63,6 +67,7 @@ class ResumeJobData:
 class ResumeData:
     jobs: List[ResumeJobData]
 
+
 def get_resume_file_data() -> Optional[ResumeData]:
     if not (path := os.getenv("SLURM_RESUME_FILE")):
         log.error("SLURM_RESUME_FILE was not in environment. Cannot get detailed job, node, partition allocation data.")
@@ -73,7 +78,6 @@ def get_resume_file_data() -> Optional[ResumeData]:
 
     jobs = []
     for jo in data.get("jobs", []):
-
         job = ResumeJobData(
             job_id = jo.get("job_id"),
             partition = jo.get("partition"),
@@ -86,8 +90,8 @@ def instance_properties(nodeset: NSDict, model:str, placement_group:Optional[str
     props = NSDict()
 
     if labels: # merge in extra labels on instance and disks
-        template = lookup().node_template(model)
-        template_info = lookup().template_info(template)
+        template_link = lookup().node_template(model)
+        template_info = lookup().template_info(template_link)
 
         props.labels = {**template_info.labels, **labels}
         
@@ -109,11 +113,11 @@ def instance_properties(nodeset: NSDict, model:str, placement_group:Optional[str
 
     if props.resourcePolicies:
        props.scheduling.onHostMaintenance = "TERMINATE"
-    
+
     if nodeset.maintenance_interval:
         props.scheduling.maintenanceInterval = nodeset.maintenance_interval
 
-    if nodeset.dws_flex.enabled:
+    if nodeset.dws_flex.enabled and nodeset.dws_flex.use_bulk_insert:
         update_props_dws(props, nodeset.dws_flex, job_id)
 
     # Override with properties explicit specified in the nodeset
@@ -155,7 +159,6 @@ def dws_flex_duration(dws_flex: NSDict, job_id: Optional[int]) -> int:
             log.info("Job TimeLimit cannot be less than 30 seconds or exceed one week")
     return max_duration
 
-
 def create_instances_request(nodes: List[str], placement_group: Optional[str], excl_job_id: Optional[int]):
     """Call regionInstances.bulkInsert to create instances"""
     assert 0 < len(nodes) <= BULK_INSERT_LIMIT
@@ -178,7 +181,7 @@ def create_instances_request(nodes: List[str], placement_group: Optional[str], e
         ),
     )
 
-    if placement_group:
+    if placement_group and excl_job_id is not None:
         pass # do not set minCount to force "all or nothing" behavior
     else:
         body["minCount"] = 1
@@ -258,10 +261,19 @@ def group_nodes_bulk(nodes: List[str], resume_data: Optional[ResumeData], lkp: u
     groups[None] = create_placements(sorted(non_excl), excl_job_id=None, lkp=lkp)
 
     def chunk_nodes(nodes: List[str]):
-        chunk_size = BULK_INSERT_LIMIT
-        if nodes and lkp.node_is_tpu(nodes[0]):
-            ns = lkp.node_nodeset_name(nodes[0])
-            chunk_size = tpu.TPU.make(ns, lkp).vmcount
+        if not nodes:
+            return []
+        
+        model = nodes[0]
+        
+        if lkp.is_flex_node(model):
+            chunk_size = ZONAL_MIG_SIZE_LIMIT
+        elif lkp.node_is_tpu(model):
+            ns_name = lkp.node_nodeset_name(model)
+            chunk_size = tpu.TPU.make(ns_name, lkp).vmcount
+        else:
+            chunk_size = BULK_INSERT_LIMIT
+
         return chunked(nodes, n=chunk_size)
     
     chunks = [
@@ -281,19 +293,25 @@ def group_nodes_bulk(nodes: List[str], resume_data: Optional[ResumeData], lkp: u
 
 def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
     """resume nodes in nodelist"""
-    # Prevent dormant nodes associated with a future reservation from being resumed
-    nodes, dormant_fr_nodes = util.separate(lookup().is_dormant_fr_node, nodes)
+    lkp = lookup()
+    # Prevent dormant nodes associated with a reservation from being resumed
+    nodes, dormant_res_nodes = util.separate(lkp.is_dormant_res_node, nodes)
     
-    if dormant_fr_nodes:
-        log.warning(f"Resume was unable to resume future reservation nodes={dormant_fr_nodes}")
-        down_nodes_notify_jobs(dormant_fr_nodes, "Reservation is not active, nodes cannot be resumed", resume_data)
+    if dormant_res_nodes:
+        log.warning(f"Resume was unable to resume reservation nodes={dormant_res_nodes}")
+        down_nodes_notify_jobs(dormant_res_nodes, "Reservation is not active, nodes cannot be resumed", resume_data)
+
+    nodes, flex_managed = util.separate(lkp.is_provisioning_flex_node, nodes)
+    if flex_managed:
+        log.warning(f"Resume was unable to resume nodes={flex_managed} already managed by MIGs")
+        down_nodes_notify_jobs(flex_managed, "VM is managed MIG, can not be resumed", resume_data)
 
     if not nodes:
         log.info("No nodes to resume")
         return
 
-    nodes = sorted(nodes, key=lookup().node_prefix)
-    grouped_nodes = group_nodes_bulk(nodes, resume_data, lookup())
+    nodes = sorted(nodes, key=lkp.node_prefix)
+    grouped_nodes = group_nodes_bulk(nodes, resume_data, lkp)
 
     if log.isEnabledFor(logging.DEBUG):
         grouped_nodelists = {
@@ -303,17 +321,23 @@ def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
             "node bulk groups: \n{}".format(yaml.safe_dump(grouped_nodelists).rstrip())
         )
 
-    tpu_chunks = []
+    tpu_chunks, flex_chunks = [], []
     bi_inserts = {}
 
     for group, chunk in grouped_nodes.items():
         model = chunk.nodes[0]
-        if lookup().node_is_tpu(model):
+
+        if lkp.node_is_tpu(model):
             tpu_chunks.append(chunk.nodes)
+        elif lkp.is_flex_node(model):
+            flex_chunks.append(chunk)
         else:
             bi_inserts[group] = create_instances_request(
                 chunk.nodes, chunk.placement_group, chunk.excl_job_id
             )
+
+    for chunk in flex_chunks:
+        mig_flex.resume_flex_chunk(chunk.nodes, chunk.excl_job_id, lkp)
 
     # execute all bulkInsert requests  with batch
     bulk_ops = dict(
@@ -350,6 +374,40 @@ def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
         _handle_bulk_insert_op(op, grouped_nodes[group].nodes, resume_data)
         
 
+def _get_failed_zonal_instance_inserts(bulk_op: Any, zone: str, lkp: util.Lookup) -> list[Any]:
+    group_id = bulk_op["operationGroupId"]
+    user = bulk_op["user"]
+    started = bulk_op["startTime"]
+    ended = bulk_op["endTime"]
+   
+    fltr = f'(user eq "{user}") AND (operationType eq "insert") AND (creationTimestamp > "{started}") AND (creationTimestamp < "{ended}")'
+    act = lkp.compute.zoneOperations()
+    req = act.list(project=lkp.project, zone=zone, filter=fltr)
+    ops = []
+    while req is not None:
+        result = util.ensure_execute(req)
+        for op in result.get("items", []):
+            if op.get("operationGroupId") == group_id and "error" in op:
+                ops.append(op)
+        req = act.list_next(req, result)
+    return ops
+
+
+def _get_failed_instance_inserts(bulk_op: Any, lkp: util.Lookup) -> list[Any]:
+    zones = set() # gather zones that had failed inserts
+    for loc, stat in bulk_op.get("instancesBulkInsertOperationMetadata", {}).get("perLocationStatus", {}).items():
+        pref, zone = loc.split("/", 1)
+        if not pref == "zones":
+            log.error(f"Unexpected location: {loc} in operation {bulk_op['name']}")
+            continue
+        if stat.get("targetVmCount", 0) !=  stat.get("createdVmCount", 0):
+            zones.add(zone)
+    
+    res = []
+    for zone in zones:
+        res.extend(_get_failed_zonal_instance_inserts(bulk_op, zone, lkp))
+    return res
+
 def _handle_bulk_insert_op(op: Dict, nodes: List[str], resume_data: Optional[ResumeData]) -> None:
     """
     Handles **DONE** BulkInsert operations
@@ -359,10 +417,9 @@ def _handle_bulk_insert_op(op: Dict, nodes: List[str], resume_data: Optional[Res
     group_id = op["operationGroupId"]
     if "error" in op:
         error = op["error"]["errors"][0]
-        log.warning(
+        log.error(
             f"bulkInsert operation error: {error['code']} name={op['name']} operationGroupId={group_id} nodes={to_hostlist(nodes)}"
         )
-        # TODO: does it make sense to query for insert-ops in case of bulkInsert-op error?
     
     created = 0
     for status in op["instancesBulkInsertOperationMetadata"]["perLocationStatus"].values():
@@ -371,18 +428,13 @@ def _handle_bulk_insert_op(op: Dict, nodes: List[str], resume_data: Optional[Res
         log.info(f"created {len(nodes)} instances: nodes={to_hostlist(nodes)}")
         return # no need to gather status of insert-operations.
 
-    # TODO:
-    # * don't perform globalOperations aggregateList request to gather insert-operations,
-    #   instead use specific locations from `instancesBulkInsertOperationMetadata`,
-    #   most of the time single zone should be sufficient.
-    # * don't gather insert-operations per bulkInsert request, instead aggregate it across
-    #   all bulkInserts (goes one level above this function) 
-    successful_inserts, failed_inserts = separate(
-        lambda op: "error" in op, get_insert_operations(group_id)
-    )
-    # Apparently multiple errors are possible... so join with +.
+    # TODO: don't gather insert-operations per bulkInsert request, instead aggregate it
+    #  across all bulkInserts (goes one level above this function) 
+    failed = _get_failed_instance_inserts(op, util.lookup())
+    
+    # Multiple errors are possible, group by all of them (joined string codes)
     by_error_inserts = util.groupby_unsorted(
-        failed_inserts,
+        failed,
         lambda op: "+".join(err["code"] for err in op["error"]["errors"]),
     )
     for code, failed_ops in by_error_inserts:
@@ -403,44 +455,34 @@ def _handle_bulk_insert_op(op: Dict, nodes: List[str], resume_data: Optional[Res
             f"errors from insert for node '{failed_nodes[0]}' ({failed_ops[0]['name']}): {msg}"
         )
 
-    ready_nodes = {trim_self_link(op["targetLink"]) for op in successful_inserts}
-    if len(ready_nodes) > 0:
-        log.info(f"created {len(ready_nodes)} instances: nodes={to_hostlist(ready_nodes)}")
-
 
 def down_nodes_notify_jobs(nodes: List[str], reason: str, resume_data: Optional[ResumeData]) -> None:
     """set nodes down with reason"""
-    nodelist = util.to_hostlist(nodes)
-    reason_quoted = shlex.quote(reason)
-    
-    log.error(f"Marking nodes {nodelist} as DOWN, reason: {reason}")
-    run(f"{lookup().scontrol} update nodename={nodelist} state=down reason={reason_quoted}")
-
-    if resume_data is None:
-        log.warning("Cannot update and notify jobs with API failures as no valid resume file is present.")
-        return
-    
     nodes_set = set(nodes) # turn into set to speed up intersection
-    for job in resume_data.jobs:
+    jobs = resume_data.jobs if resume_data else []
+    reason_quoted = shlex.quote(reason)
+
+    for job in jobs:
         if not (set(job.nodes_alloc) & nodes_set):
             continue
-        run(f"{lookup().scontrol} update jobid={job.job_id} admincomment='{reason_quoted}'")
-        run(f"{lookup().scontrol} notify {job.job_id} '{reason_quoted}'")
+        run(f"{lookup().scontrol} update jobid={job.job_id} admincomment={reason_quoted}", check=False)
+        run(f"{lookup().scontrol} notify {job.job_id} {reason_quoted}", check=False)
+
+    nodelist = util.to_hostlist(nodes)
+    log.error(f"Marking nodes {nodelist} as DOWN, reason: {reason}")
+    run(f"{lookup().scontrol} update nodename={nodelist} state=down reason={reason_quoted}", check=False)
+    
+    
 
 
-def hold_job(job_id, reason):
-    """hold job, set comment to reason"""
-    run(f"{lookup().scontrol} hold jobid={job_id}")
-    run(f"{lookup().scontrol} update jobid={job_id} comment='{reason}'")
-
-
-def create_placement_request(pg_name: str, region: str, max_distance: Optional[int]):
+def create_placement_request(pg_name: str, region: str, max_distance: Optional[int], accelerator_topology: Optional[str]):
     config = {
         "name": pg_name,
         "region": region,
         "groupPlacementPolicy": {
             "collocation": "COLLOCATED",
-            "maxDistance": max_distance
+            "maxDistance": max_distance,
+            "gpuTopology": accelerator_topology,
         },
     }
     
@@ -465,13 +507,19 @@ def create_placements(nodes: List[str], excl_job_id:Optional[int], lkp: util.Loo
 def _allocate_nodes_to_placements(nodes: List[str], excl_job_id:Optional[int], lkp: util.Lookup) -> List[PlacementAndNodes]:
     # canned result for no placement policies created
     no_pp = [PlacementAndNodes(placement=None, nodes=nodes)]
-    
-    if excl_job_id and len(nodes) < 2:
-        return no_pp # don't create placement_policy for just one node
-    
+
     model = nodes[0]
     nodeset = lkp.node_nodeset(model)
 
+    is_slice = bool(getattr(nodeset, 'accelerator_topology', None))
+
+    excl_job_placement = (excl_job_id is not None) and (not is_slice)
+    
+    if excl_job_placement and len(nodes) < 2:
+        return no_pp # don't create placement_policy for just one node
+
+    if lkp.is_flex_node(model):
+        return no_pp # TODO(FLEX): Add support for workload policies 
     if lkp.node_is_tpu(model):
         return no_pp
     if not (nodeset.enable_placement and valid_placement_node(model)):
@@ -480,7 +528,8 @@ def _allocate_nodes_to_placements(nodes: List[str], excl_job_id:Optional[int], l
     max_count = calculate_chunk_size(nodeset, lkp)
 
     name_prefix = f"{lkp.cfg.slurm_cluster_name}-slurmgcp-managed-{nodeset.nodeset_name}"
-    if excl_job_id: # simply chunk given nodes by max size of placement
+   
+    if excl_job_placement: # simply chunk given nodes by max size of placement
         return [
             PlacementAndNodes(placement=f"{name_prefix}-{excl_job_id}-{i}", nodes=chunk)
             for i, chunk in enumerate(chunked(nodes, n=max_count))
@@ -510,14 +559,46 @@ def _allocate_nodes_to_placements(nodes: List[str], excl_job_id:Optional[int], l
 
     return placements
 
+def calculate_hosts_per_topo(accelerator_topology: str, machine_type: NSDict) -> int:
+    # Calculate total number of hosts per topology (Assumes format: '1x72')
+    try:
+        top_split = [int(x) for x in accelerator_topology.split("x")]
+    except Exception as e:
+        log.error(f"Accelerator topology {accelerator_topology} is formatted incorrectly.")
+        raise e
+
+    if len(machine_type.accelerators) == 0:
+        gpus_per_machine = 0
+    else: 
+        gpus_per_machine = machine_type.accelerators[0].count
+
+    if len(top_split) != 2:
+        log.error(f"Accelerator topology {accelerator_topology} is formatted incorrectly.")
+    elif top_split[0] <= 0 or top_split[1] <= 0:
+        log.error(f"Accelerator topology {accelerator_topology} is formatted incorrectly.")
+    elif gpus_per_machine <= 0:
+        log.error(f"The machine type has no accelerators. Cannot use accelerator topology {accelerator_topology}.")
+    elif top_split[1] % gpus_per_machine:
+        log.error(f"The GPU count {gpus_per_machine} per node is not a factor of the accelerator topology {accelerator_topology}")
+    
+    return (top_split[0] * top_split[1]) // gpus_per_machine
+ 
 def calculate_chunk_size(nodeset: NSDict, lkp: util.Lookup) -> int:
-    # Calculates the chunk size based on max distance value received
-    machine_type = lkp.template_info(nodeset.instance_template).machine_type.family
+    # Calculates the chunk size based on max distance value received or accelerator topology
+    # Assuming nodeset is not tpu
+    machine_type = lkp.template_info(nodeset.instance_template).machine_type
     max_distance = nodeset.placement_max_distance
+    accelerator_topology = nodeset.accelerator_topology
+
+    # Look for accelerator topology first
+    if accelerator_topology:
+        hosts_per_topo = calculate_hosts_per_topo(accelerator_topology, machine_type)
+        return hosts_per_topo
+
     if max_distance == 1:
         return 22
     elif max_distance == 2:
-        if machine_type.startswith("a3"):
+        if machine_type.family.startswith("a3"):
             return 256
         else:
             return 150
@@ -530,6 +611,7 @@ def create_nodeset_placements(nodes: List[str], excl_job_id:Optional[int], lkp: 
     placements = _allocate_nodes_to_placements(nodes, excl_job_id, lkp)
     region = lkp.node_region(nodes[0])
     max_distance = lkp.node_nodeset(nodes[0]).get('placement_max_distance')
+    accelerator_topology = lkp.nodeset_accelerator_topology(lkp.node_nodeset_name(nodes[0]))
 
     if log.isEnabledFor(logging.DEBUG):
         debug_p = {p.placement: to_hostlist(p.nodes) for p in placements}
@@ -538,7 +620,7 @@ def create_nodeset_placements(nodes: List[str], excl_job_id:Optional[int], lkp: 
         )
 
     requests = {
-        p.placement: create_placement_request(p.placement, region, max_distance) for p in placements if p.placement
+        p.placement: create_placement_request(p.placement, region, max_distance, accelerator_topology) for p in placements if p.placement
     }
     if not requests:
         return placements
@@ -610,11 +692,10 @@ def main(nodelist: str) -> None:
     if not nodes:
         log.info("No nodes to resume")
         return
-
     resume_data = get_resume_file_data()
     log.info(f"resume {util.to_hostlist(nodes)}")
     resume_nodes(nodes, resume_data)
-    
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("nodelist", help="list of nodes to resume")

@@ -43,8 +43,10 @@
 | <a name="input_enable_oslogin"></a> [enable\_oslogin](#input\_enable\_oslogin) | Enables Google Cloud os-login for user login and authentication for VMs.<br/>See https://cloud.google.com/compute/docs/oslogin | `bool` | `true` | no |
 | <a name="input_enable_shielded_vm"></a> [enable\_shielded\_vm](#input\_enable\_shielded\_vm) | Enable the Shielded VM configuration. Note: the instance image must support option. | `bool` | `false` | no |
 | <a name="input_gpu"></a> [gpu](#input\_gpu) | GPU information. Type and count of GPU to attach to the instance template. See<br/>https://cloud.google.com/compute/docs/gpus more details.<br/>- type : the GPU type<br/>- count : number of GPUs | <pre>object({<br/>    type  = string<br/>    count = number<br/>  })</pre> | `null` | no |
+| <a name="input_internal_startup_script"></a> [internal\_startup\_script](#input\_internal\_startup\_script) | FOR INTERNAL TOOLKIT USAGE ONLY. | `string` | `null` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels, provided as a map | `map(string)` | `{}` | no |
 | <a name="input_machine_type"></a> [machine\_type](#input\_machine\_type) | Machine type to create. | `string` | `"n1-standard-1"` | no |
+| <a name="input_max_run_duration"></a> [max\_run\_duration](#input\_max\_run\_duration) | The duration (in whole seconds) of the instance. Instance will run and be terminated after then. | `number` | `null` | no |
 | <a name="input_metadata"></a> [metadata](#input\_metadata) | Metadata, provided as a map. | `map(string)` | `{}` | no |
 | <a name="input_min_cpu_platform"></a> [min\_cpu\_platform](#input\_min\_cpu\_platform) | Specifies a minimum CPU platform. Applicable values are the friendly names of<br/>CPU platforms, such as Intel Haswell or Intel Skylake. See the complete list:<br/>https://cloud.google.com/compute/docs/instances/specify-min-cpu-platform | `string` | `null` | no |
 | <a name="input_name_prefix"></a> [name\_prefix](#input\_name\_prefix) | Prefix for template resource. | `string` | `"default"` | no |
@@ -53,7 +55,9 @@
 | <a name="input_on_host_maintenance"></a> [on\_host\_maintenance](#input\_on\_host\_maintenance) | Instance availability Policy | `string` | `"MIGRATE"` | no |
 | <a name="input_preemptible"></a> [preemptible](#input\_preemptible) | Allow the instance to be preempted. | `bool` | `false` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | Project ID to create resources in. | `string` | n/a | yes |
-| <a name="input_region"></a> [region](#input\_region) | Region where the instance template should be created. | `string` | `null` | no |
+| <a name="input_provisioning_model"></a> [provisioning\_model](#input\_provisioning\_model) | The provisioning model of the instance | `string` | `null` | no |
+| <a name="input_region"></a> [region](#input\_region) | Region where the instance template should be created. | `string` | n/a | yes |
+| <a name="input_reservation_affinity"></a> [reservation\_affinity](#input\_reservation\_affinity) | Specifies the reservations that this instance can consume from. | `object({ type = string })` | `null` | no |
 | <a name="input_resource_manager_tags"></a> [resource\_manager\_tags](#input\_resource\_manager\_tags) | (Optional) A set of key/value resource manager tag pairs to bind to the instances. Keys must be in the format tagKeys/{tag\_key\_id}, and values are in the format tagValues/456. | `map(string)` | `{}` | no |
 | <a name="input_service_account"></a> [service\_account](#input\_service\_account) | Service account to attach to the instances. See<br/>'main.tf:local.service\_account' for the default. | <pre>object({<br/>    email  = string<br/>    scopes = set(string)<br/>  })</pre> | `null` | no |
 | <a name="input_shielded_instance_config"></a> [shielded\_instance\_config](#input\_shielded\_instance\_config) | Shielded VM configuration for the instance. Note: not used unless<br/>enable\_shielded\_vm is 'true'.<br/>- enable\_integrity\_monitoring : Compare the most recent boot measurements to the<br/>  integrity policy baseline and return a pair of pass/fail results depending on<br/>  whether they match or not.<br/>- enable\_secure\_boot : Verify the digital signature of all boot components, and<br/>  halt the boot process if signature verification fails.<br/>- enable\_vtpm : Use a virtualized trusted platform module, which is a<br/>  specialized computer chip you can use to encrypt objects like keys and<br/>  certificates. | <pre>object({<br/>    enable_integrity_monitoring = bool<br/>    enable_secure_boot          = bool<br/>    enable_vtpm                 = bool<br/>  })</pre> | <pre>{<br/>  "enable_integrity_monitoring": true,<br/>  "enable_secure_boot": true,<br/>  "enable_vtpm": true<br/>}</pre> | no |
@@ -67,13 +71,14 @@
 | <a name="input_subnetwork"></a> [subnetwork](#input\_subnetwork) | The name of the subnetwork to attach this interface to. The subnetwork must<br/>exist in the same region this instance will be created in. Either network or<br/>subnetwork must be provided. | `string` | `null` | no |
 | <a name="input_subnetwork_project"></a> [subnetwork\_project](#input\_subnetwork\_project) | The ID of the project in which the subnetwork belongs. If it is not provided, the provider project is used. | `string` | `null` | no |
 | <a name="input_tags"></a> [tags](#input\_tags) | Network tag list. | `list(string)` | `[]` | no |
-| <a name="input_termination_action"></a> [termination\_action](#input\_termination\_action) | Which action to take when Compute Engine preempts the VM. Value can be: 'STOP', 'DELETE'. The default value is 'STOP'.<br/>See https://cloud.google.com/compute/docs/instances/spot for more details. | `string` | `"STOP"` | no |
+| <a name="input_termination_action"></a> [termination\_action](#input\_termination\_action) | Which action to take when Compute Engine preempts the VM. Value can be: 'STOP', 'DELETE'. The default value is 'STOP'.<br/>See https://cloud.google.com/compute/docs/instances/spot for more details. | `string` | `null` | no |
 
 ## Outputs
 
 | Name | Description |
 |------|-------------|
 | <a name="output_instance_template"></a> [instance\_template](#output\_instance\_template) | Instance template details |
+| <a name="output_labels"></a> [labels](#output\_labels) | Labels attached to the instance template |
 | <a name="output_name"></a> [name](#output\_name) | Name of instance template |
 | <a name="output_self_link"></a> [self\_link](#output\_self\_link) | Self\_link of instance template |
 | <a name="output_service_account"></a> [service\_account](#output\_service\_account) | Service account object, includes email and scopes. |

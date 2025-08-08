@@ -5,17 +5,15 @@
 * [vm-instance] and therefore any module that relies on `vm-instance` including:
   * HTCondor modules including [htcondor-install], [htcondor-setup] and
     [htcondor-execute-point].
-  * [omnia-install]
 * Slurm on GCP modules version 6
   * `schedmd-slurm-gcp-v6-*`
-* PBS Pro modules (`pbspro-*`)
 * Cloud Batch modules through custom instance templates
 
 ## Accelerator definition automation
 
 The schedmd-slurm-gcp-v6 modules ([nodeset], [controller] and [login]),
-the [vm-instance] module and any module relying on [vm-instance] (HTCondor,
-Omnia, PBS Pro) support
+the [vm-instance] module and any module relying on [vm-instance] (HTCondor and
+PBS Pro) support
 automation for defining the `guest_accelerator` config. If the user supplies any
 value for this setting, the automation will be bypassed.
 
@@ -44,7 +42,6 @@ cannot be determined automatically like with `a2`.
 [nodeset]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/compute/schedmd-slurm-gcp-v6-nodeset
 [controller]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/scheduler/schedmd-slurm-gcp-v6-controller
 [login]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/scheduler/schedmd-slurm-gcp-v6-login
-[omnia-install]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/scripts/omnia-install
 [htcondor-install]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/scripts/htcondor-install
 [htcondor-setup]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/scheduler/htcondor-setup
 [htcondor-execute-point]: https://github.com/GoogleCloudPlatform/hpc-toolkit/tree/main/community/modules/compute/htcondor-execute-point
