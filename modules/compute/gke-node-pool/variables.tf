@@ -395,11 +395,6 @@ variable "initial_node_count" {
   default     = null
 }
 
-variable "gke_version" {
-  description = "GKE version"
-  type        = string
-}
-
 variable "max_pods_per_node" {
   description = "The maximum number of pods per node in this node pool. This will force replacement."
   type        = number

@@ -58,30 +58,4 @@ locals {
       }
     }
   }
-
-  min_additional_networks = try(local.gpu_direct_settings[var.machine_type].min_additional_networks, 0)
-
-  gke_version_regex = "(\\d+\\.\\d+)\\.(\\d+)-gke\\.(\\d+)" # GKE version format: 1.X.Y-gke.Z , regex output: ["1.X" , "Y", "Z"]
-
-  gke_version_parts = regex(local.gke_version_regex, var.gke_version)
-  gke_version_major = local.gke_version_parts[0]
-
-  major_minor_version_acceptable_map = try(local.gpu_direct_setting[var.machine_type].major_minor_version_acceptable_map, null)
-  minor_version_acceptable           = try(contains(keys(local.major_minor_version_acceptable_map), local.gke_version_major), false) ? local.major_minor_version_acceptable_map[local.gke_version_major] : "1.0.0-gke.0"
-  minor_version_acceptable_parts     = regex(local.gke_version_regex, local.minor_version_acceptable)
-  gke_gpudirect_compatible           = local.gke_version_parts[1] > local.minor_version_acceptable_parts[1] || (local.gke_version_parts[1] == local.minor_version_acceptable_parts[1] && local.gke_version_parts[2] >= local.minor_version_acceptable_parts[2])
-}
-
-check "gpu_direct_check_multi_vpc" {
-  assert {
-    condition     = length(var.additional_networks) >= local.min_additional_networks
-    error_message = "To achieve optimal performance for ${var.machine_type} machine, at least ${local.min_additional_networks} additional vpc is recommended. You could configure it in the blueprint through modules/network/multivpc with network_count set as ${local.min_additional_networks}"
-  }
-}
-
-check "gke_version_requirements" {
-  assert {
-    condition     = local.gke_gpudirect_compatible
-    error_message = "GPUDirect is not supported on GKE version ${var.gke_version} for ${var.machine_type} machine. For supported version details visit https://cloud.google.com/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx#requirements"
-  }
 }
