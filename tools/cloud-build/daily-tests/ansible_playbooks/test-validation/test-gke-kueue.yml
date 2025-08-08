@@ -1,10 +1,10 @@
-# Copyright 2024 Google LLC
+# Copyright 2025 "Google LLC"
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#      http://www.apache.org/licenses/LICENSE-2.0
+#     http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -42,6 +42,20 @@
     executable: /bin/bash
   changed_when: False
 
+- name: Check for host topologyAssignment in workloads
+  delegate_to: localhost
+  ansible.builtin.shell: |
+    kubectl get workloads -o yaml | grep "topologyAssignment" -A 5
+  register: tas_check_host
+  until: tas_check_host.stdout | length > 0
+  retries: 20
+  delay: 5
+  changed_when: false
+
+- name: Print the topologyAssignment details
+  ansible.builtin.debug:
+    msg: "Found topologyAssignment in workload status:\n{{ tas_check_host.stdout }}"
+
 - name: Ensure all pods are on the same host
   delegate_to: localhost
   ansible.builtin.shell: |
@@ -71,6 +85,20 @@
     executable: /bin/bash
   changed_when: False
 
+- name: Check for rack topologyAssignment in workloads
+  delegate_to: localhost
+  ansible.builtin.shell: |
+    kubectl get workloads -o yaml | grep "topologyAssignment" -A 5
+  register: tas_check_rack
+  until: tas_check_rack.stdout | length > 0
+  retries: 20
+  delay: 5
+  changed_when: false
+
+- name: Print the topologyAssignment details
+  ansible.builtin.debug:
+    msg: "Found topologyAssignment in workload status:\n{{ tas_check_rack.stdout }}"
+
 - name: Ensure all pods are on the same rack
   delegate_to: localhost
   ansible.builtin.shell: |
@@ -99,6 +127,20 @@
   args:
     executable: /bin/bash
   changed_when: False
+
+- name: Check for block topologyAssignment in workloads
+  delegate_to: localhost
+  ansible.builtin.shell: |
+    kubectl get workloads -o yaml | grep "topologyAssignment" -A 5
+  register: tas_check_block
+  until: tas_check_block.stdout | length > 0
+  retries: 20
+  delay: 5
+  changed_when: false
+
+- name: Print the topologyAssignment details
+  ansible.builtin.debug:
+    msg: "Found topologyAssignment in workload status:\n{{ tas_check_block.stdout }}"
 
 - name: Ensure all pods are on the same block
   delegate_to: localhost
