@@ -66,3 +66,15 @@ variable "namespace" {
   type        = string
   default     = "default"
 }
+
+variable "pv_name" {
+  description = "The name for PV. IF not set, a name will be generated based on the storage name."
+  type        = string
+  default     = ""
+}
+
+variable "pvc_name" {
+  description = "The name for PVC. IF not set, a name will be generated based on the storage name."
+  type        = string
+  default     = ""
+}
