@@ -32,8 +32,8 @@ locals {
   filestore_share_name = trimprefix(var.network_storage.remote_mount, "/")
   base_name            = local.is_gcs ? var.gcs_bucket_name : local.filestore_name
 
-  pv_name  = "${local.base_name}-pv"
-  pvc_name = "${local.base_name}-pvc"
+  pv_name  = var.pv_name != "" ? var.pv_name : "${local.base_name}-pv"
+  pvc_name = var.pvc_name != "" ? var.pvc_name : "${local.base_name}-pvc"
 
   list_mount_options = split(",", var.network_storage.mount_options)
 
@@ -47,6 +47,8 @@ locals {
       share_name     = local.filestore_share_name
       ip_address     = var.network_storage.server_ip
       labels         = local.labels
+      pvc_name       = local.pvc_name
+      namespace      = var.namespace
     }
   )
 
@@ -69,6 +71,9 @@ locals {
       labels        = local.labels
       mount_options = local.is_gcs ? local.list_mount_options : null
       bucket_name   = local.is_gcs ? var.gcs_bucket_name : ""
+      namespace     = var.namespace
+      pvc_name      = local.pvc_name
+      namespace     = var.namespace
     }
   )
 
