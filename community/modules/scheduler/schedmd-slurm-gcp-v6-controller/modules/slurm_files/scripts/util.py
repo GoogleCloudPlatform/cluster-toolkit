@@ -416,6 +416,32 @@ def trim_self_link(link: str):
         raise Exception(f"'/' not found, not a self link: '{link}' ")
 
 
+def get_self_link_component(link: str, component_name: str):
+    """
+    Extracts a component (e.g., 'region', 'project') from a self-link URL.
+    Args:
+        link: The self-link URL string.
+        component_name: The name of the component to extract (e.g., 'regions', 'projects').
+    Returns:
+        The extracted component value (e.g., '<region>', '<project>'),
+        or None if the component is not found in the link.
+    """
+    search_string = f"/{component_name}/"
+    start_index = link.rfind(search_string)
+
+    if start_index == -1:
+        return None
+
+    start_index += len(search_string)
+    end_index = link.find("/", start_index)
+
+    if end_index == -1:
+        # If no further slash, the rest of the string is the component
+        return link[start_index:]
+    else:
+        return link[start_index:end_index]
+
+
 def execute_with_futures(func, seq):
     with ThreadPoolExecutor() as exe:
         futures = []
@@ -1987,10 +2013,15 @@ class Lookup:
         if cached := cache.get(template_name):
             return NSDict(cached)
 
+        region = get_self_link_component(template_link, "regions")
+
         template = ensure_execute(
             self.compute.instanceTemplates().get(
                 project=self.project, instanceTemplate=template_name
-            )
+            ) if region is None else 
+            self.compute.regionInstanceTemplates().get(
+                project=self.project, region=region, instanceTemplate=template_name
+            ) 
         ).get("properties")
         template = NSDict(template)
         # name and link are not in properties, so stick them in
