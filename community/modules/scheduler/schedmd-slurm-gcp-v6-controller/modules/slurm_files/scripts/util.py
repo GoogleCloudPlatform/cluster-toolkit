@@ -1984,15 +1984,18 @@ class Lookup:
         # del template.metadata
 
         # translate gpus into an easier-to-read format
+        gpu_prefix = "nvidia-"
+        template.gpu = None
         if template.machine_type.accelerators:
-            template.gpu = template.machine_type.accelerators[0]
+            tma = template.machine_type.accelerators[0]
+            if tma.type.startswith(gpu_prefix):
+                template.gpu = tma
         elif template.guestAccelerators:
             tga = template.guestAccelerators[0]
-            template.gpu = AcceleratorInfo(
-                type=tga.acceleratorType,
-                count=tga.acceleratorCount)
-        else:
-            template.gpu = None
+            if tga.acceleratorType.startswith(gpu_prefix):
+                template.gpu = AcceleratorInfo(
+                    type=tga.acceleratorType,
+                    count=tga.acceleratorCount)
 
         cache.set(template_name, template.to_dict())
         return template
