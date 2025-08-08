@@ -36,7 +36,6 @@ spec:
         template:
           metadata:
             annotations:
-              kueue.x-k8s.io/podset-preferred-topology: "kubernetes.io/hostname"
               networking.gke.io/default-interface: 'eth0'
               networking.gke.io/interfaces: |
                 [
@@ -129,7 +128,7 @@ spec:
             - name: nccl
               stdin: true
               tty: true
-              image: us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib-diagnostic:v1.0.5
+              image: us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib-diagnostic:v1.0.6
               securityContext:
                 privileged: true
               env:

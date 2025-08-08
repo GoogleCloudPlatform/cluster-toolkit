@@ -225,6 +225,7 @@ variable "nodeset" {
       count = number
       type  = string
     }))
+    accelerator_topology = optional(string, null)
     dws_flex = object({
       enabled          = bool
       max_run_duration = number
@@ -465,6 +466,8 @@ variable "cloud_parameters" {
     topology_plugin      = optional(string)
     topology_param       = optional(string)
     tree_width           = optional(number)
+    prolog_flags         = optional(string)
+    switch_type          = optional(string)
   })
   default  = {}
   nullable = false

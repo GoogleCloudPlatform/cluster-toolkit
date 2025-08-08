@@ -43,7 +43,8 @@ deployment_groups:
       subnetwork_name: $(vars.subnetwork_name_system)
 
   - id: image_build_script
-    source: modules/scripts/startup-script
+    # this source line is deliberate; it is the last to support Ubuntu 20.04
+    source: github.com/GoogleCloudPlatform/cluster-toolkit//modules/scripts/startup-script?ref=v1.51.1&depth=1
     settings:
       install_ansible: true
       docker:
@@ -56,6 +57,12 @@ deployment_groups:
       - 10.3.0.*
       - $(vars.slurm_cluster_name)*
       runners:
+      - type: data
+        destination: /etc/apt/preferences.d/block-broken-nvidia-container
+        content: |
+          Package: nvidia-container-toolkit nvidia-container-toolkit-base libnvidia-container-tools libnvidia-container1
+          Pin: version 1.17.7-1
+          Pin-Priority: 100
       - type: shell
         destination: workaround_apt_change.sh
         content: |
@@ -166,7 +173,7 @@ deployment_groups:
             - name: Install NVIDIA DCGM
               ansible.builtin.apt:
                 name:
-                - datacenter-gpu-manager
+                - datacenter-gpu-manager-4-cuda12
                 - libnvidia-nscq-550
                 update_cache: true
             post_tasks:

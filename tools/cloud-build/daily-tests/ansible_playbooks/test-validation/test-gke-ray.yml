@@ -21,12 +21,12 @@
 
 - name: Get cluster credentials for kubectl
   delegate_to: localhost
-  ansible.builtin.command: gcloud container clusters get-credentials {{ deployment_name }} --region {{ region }} --project {{ custom_vars.project }}
+  ansible.builtin.command: gcloud container clusters get-credentials {{ deployment_name }} --region {{ region }} --project {{ custom_vars.project }} --verbosity=debug
 
 - name: Check ray CRDs exists in the cluster
   delegate_to: localhost
   ansible.builtin.shell: |
-    kubectl get rayjobs.ray.io
+    kubectl get rayjobs.ray.io -v=9
   args:
     executable: /bin/bash
   changed_when: False

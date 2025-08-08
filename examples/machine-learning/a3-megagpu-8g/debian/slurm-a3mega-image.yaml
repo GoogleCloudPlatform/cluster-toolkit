@@ -1,0 +1,390 @@
+# Copyright 2024 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+blueprint_name: a3mega-image
+
+validators:
+- validator: test_deployment_variable_not_used
+  inputs: {}
+  skip: true
+
+# this blueprint should be used with the extra variables defined in
+# deployment-image-cluster.yaml
+vars:
+  deployment_name: a3mega-image
+  source_image: debian-12-bookworm-v20250610
+
+deployment_groups:
+- group: build_script
+  modules:
+  - id: sysnet
+    source: modules/network/pre-existing-vpc
+    settings:
+      network_name: $(vars.network_name_system)
+      subnetwork_name: $(vars.subnetwork_name_system)
+
+  - id: image_build_script
+    source: modules/scripts/startup-script
+    settings:
+      install_ansible: true
+      configure_ssh_host_patterns:
+      - 10.0.0.*
+      - 10.1.0.*
+      - 10.2.0.*
+      - 10.3.0.*
+      - 10.4.0.*
+      - 10.5.0.*
+      - 10.6.0.*
+      - 10.7.0.*
+      - $(vars.slurm_cluster_name)*
+      docker:
+        enabled: true
+        world_writable: true
+      runners:
+      - type: data
+        destination: /etc/apt/preferences.d/block-broken-nvidia-container
+        content: |
+          Package: nvidia-container-toolkit nvidia-container-toolkit-base libnvidia-container-tools libnvidia-container1
+          Pin: version 1.17.7-1
+          Pin-Priority: 100
+      # it is important that kernel upgrades do not occur before running the
+      # solution for building Slurm (which doesn't handle them well on the fly)
+      # if you follow this rule, any module which supports DKMS will be
+      # properly configured at the end of image building (gVNIC, NVIDIA, ...)
+      - type: shell
+        destination: prevent_unintentional_upgrades.sh
+        content: |
+          #!/bin/bash
+          # Unattended upgrades are disabled in this blueprint so that software does not
+          # get updated daily and lead to potential instability in the cluster environment.
+          #
+          # Unattended Upgrades installs available security updates from the Ubuntu
+          # security pocket for installed packages daily by default. Administrators who
+          # disable this feature assume all responsibility for manually reviewing and
+          # patching their systems against vulnerabilities.
+          #
+          # To enable unattended upgrades, please remove the following lines:
+          #   systemctl stop unattended-upgrades.service
+          #   systemctl disable unattended-upgrades.service
+          #   systemctl mask unattended-upgrades.service
+          set -e -o pipefail
+          systemctl stop unattended-upgrades.service
+          systemctl disable unattended-upgrades.service
+          systemctl mask unattended-upgrades.service
+          apt-mark hold google-compute-engine
+          apt-mark hold google-compute-engine-oslogin
+          apt-mark hold google-guest-agent
+          apt-mark hold google-osconfig-agent
+      - type: ansible-local
+        destination: install_headers_archive.yml
+        content: |
+          ---
+          - name: Install kernel headers from Debian archive
+            hosts: all
+            become: true
+            vars:
+              package_url: https://snapshot.debian.org/archive/debian/20250525T205402Z/pool/main/l/linux/linux-headers-6.1.0-37-cloud-amd64_6.1.140-1_amd64.deb
+              package_filename: /tmp/{{ package_url | basename }}
+            tasks:
+            - name: Download kernel headers package
+              ansible.builtin.get_url:
+                url: "{{ package_url }}"
+                dest: "{{ package_filename }}"
+              retries: 3
+              delay: 60
+              register: result
+              until: result is success
+              failed_when: result is failure
+            - name: Install kernel headers
+              ansible.builtin.apt:
+                deb: "{{ package_filename }}"
+                state: present
+      - type: data
+        destination: /var/tmp/slurm_vars.json
+        content: |
+          {
+            "reboot": false,
+            "install_cuda": true,
+            "install_ompi": true,
+            "install_lustre": true,
+            "install_gcsfuse": true,
+            "monitoring_agent": "cloud-ops",
+            "use_open_drivers": true
+          }
+      - type: shell
+        destination: install_slurm.sh
+        content: |
+          #!/bin/bash
+          set -e -o pipefail
+          apt-get update
+          apt-get install -y git
+          ansible-galaxy role install googlecloudplatform.google_cloud_ops_agents
+          ansible-pull \
+              -U https://github.com/GoogleCloudPlatform/slurm-gcp -C 6.9.1 \
+              -i localhost, --limit localhost --connection=local \
+              -e @/var/tmp/slurm_vars.json \
+              ansible/playbook.yml
+      - type: ansible-local
+        destination: update-gvnic.yml
+        content: |
+          ---
+          - name: Install updated gVNIC driver from GitHub
+            hosts: all
+            become: true
+            vars:
+              package_url: https://github.com/GoogleCloudPlatform/compute-virtual-ethernet-linux/releases/download/v1.4.3/gve-dkms_1.4.3_all.deb
+              package_filename: /tmp/{{ package_url | basename }}
+            tasks:
+            - name: Install driver dependencies
+              ansible.builtin.apt:
+                name:
+                - dkms
+                - linux-headers-{{ ansible_kernel }}
+                - linux-headers-cloud-amd64
+            - name: Download gVNIC package
+              ansible.builtin.get_url:
+                url: "{{ package_url }}"
+                dest: "{{ package_filename }}"
+            - name: Install updated gVNIC
+              ansible.builtin.apt:
+                deb: "{{ package_filename }}"
+                state: present
+      - type: shell
+        destination: install-nvidia.sh
+        content: |
+          #!/bin/bash
+          set -ex -o pipefail
+          # Install nvidia container toolkit
+          curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | \
+            gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg  && \
+            curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
+            sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
+            tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+          apt-get update -y
+          apt-get install -y nvidia-container-toolkit
+      # this duplicates the ulimits configuration of the HPC VM Image
+      - type: data
+        destination: /etc/security/limits.d/99-unlimited.conf
+        content: |
+          * - memlock unlimited
+          * - nproc unlimited
+          * - stack unlimited
+          * - nofile 1048576
+          * - cpu unlimited
+          * - rtprio unlimited
+      - type: data
+        destination: /etc/enroot/enroot.conf
+        content: |
+          ENROOT_RUNTIME_PATH    /mnt/localssd/${UID}/enroot/runtime
+          ENROOT_CACHE_PATH      /mnt/localssd/${UID}/enroot/cache
+          ENROOT_DATA_PATH       /mnt/localssd/${UID}/enroot/data
+          ENROOT_TEMP_PATH       /mnt/localssd/${UID}/enroot
+      - type: ansible-local
+        destination: configure_gpu_monitoring.yml
+        content: |
+          ---
+          - name: Install NVIDIA DCGM and Configure Ops Agent
+            hosts: all
+            become: true
+            vars:
+              distribution: "{{ ansible_distribution | lower }}{{ ansible_distribution_major_version }}"
+              package_url: https://developer.download.nvidia.com/compute/cuda/repos/{{ distribution }}/x86_64/cuda-keyring_1.1-1_all.deb
+              package_filename: /tmp/{{ package_url | basename }}
+              enable_ops_agent: $(vars.enable_ops_agent)
+              enable_nvidia_dcgm: $(vars.enable_nvidia_dcgm)
+            tasks:
+            - name: Download NVIDIA repository package
+              ansible.builtin.get_url:
+                url: "{{ package_url }}"
+                dest: "{{ package_filename }}"
+            - name: Install NVIDIA repository package
+              ansible.builtin.apt:
+                deb: "{{ package_filename }}"
+                state: present
+            - name: Install NVIDIA DCGM
+              ansible.builtin.apt:
+                name:
+                - datacenter-gpu-manager
+                - libnvidia-nscq-550
+                update_cache: true
+            post_tasks:
+            - name: Enable Google Cloud Ops Agent
+              ansible.builtin.service:
+                name: google-cloud-ops-agent.service
+                state: "{{ 'started' if enable_ops_agent else 'stopped' }}"
+                enabled: "{{ enable_ops_agent }}"
+            - name: Disable NVIDIA DCGM by default (enable during boot on GPU nodes)
+              ansible.builtin.service:
+                name: nvidia-dcgm.service
+                state: stopped
+                enabled: false
+      - type: ansible-local
+        destination: install_dmabuf.yml
+        content: |
+          ---
+          - name: Install DMBABUF import helper
+            hosts: all
+            become: true
+            tasks:
+            - name: Install driver dependencies
+              ansible.builtin.apt:
+                name:
+                - dkms
+                - linux-headers-{{ ansible_kernel }}
+                - linux-headers-cloud-amd64
+                - apt-transport-artifact-registry
+            - name: Setup gpudirect-tcpxo apt repository
+              ansible.builtin.apt_repository:
+                repo: deb [arch=all] ar+https://us-apt.pkg.dev/projects/gce-ai-infra gpudirect-tcpxo-apt main
+                state: present
+            - name: Install DMABUF import helper DKMS package
+              ansible.builtin.apt:
+                name: dmabuf-import-helper
+                state: present
+      - type: ansible-local
+        destination: timesyncd.yml
+        content: |
+          ---
+          - name: Configure timesyncd to increase StartLimitBurst
+            hosts: all
+            become: true
+            tasks:
+            - name: Create timeysncd override directory
+              ansible.builtin.file:
+                path: /etc/systemd/system/systemd-timesyncd.service.d
+                state: directory
+                owner: root
+                group: root
+                mode: 0o755
+            - name: Configure timesyncd StartLimitBurst
+              ansible.builtin.copy:
+                dest: /etc/systemd/system/systemd-timesyncd.service.d/burst_limit.conf
+                owner: root
+                group: root
+                mode: 0o644
+                content: |
+                  [Unit]
+                  # Increase start burst limit to exceed number of network adapters
+                  # in the system (rapid restart 1 per NIC)
+                  StartLimitBurst=10
+              notify: Reload SystemD
+            handlers:
+            - name: Reload SystemD
+              ansible.builtin.systemd:
+                daemon_reload: true
+      - type: ansible-local
+        destination: bash_completion_patch.yml
+        content: |
+          ---
+          - name: Patch bash-completion to fix hanging query
+            hosts: all
+            become: true
+            tasks:
+            - name: Create bash-completion patch
+              ansible.builtin.copy:
+                dest: /tmp/bash_completion.patch
+                owner: root
+                group: root
+                mode: 0o644
+                content: |
+                  551c551
+                  <     elif [[ $1 == ~* ]]; then
+                  ---
+                  >     elif [[ $1 == \~* ]]; then
+                  553c553
+                  <         printf -v $2 ~%q "${1:1}"
+                  ---
+                  >         printf -v $2 \~%q "${1:1}"
+            - name: Apply bash-completion patch
+              ansible.posix.patch:
+                src: /tmp/bash_completion.patch
+                dest: /usr/share/bash-completion/bash_completion
+      - type: ansible-local
+        destination: aperture_devices.yml
+        content: |
+          ---
+          - name: Setup GPUDirect-TCPXO aperture devices
+            hosts: all
+            become: true
+            tasks:
+            - name: Mount aperture devices to /dev and make writable
+              ansible.builtin.copy:
+                dest: /etc/udev/rules.d/00-a3-megagpu.rules
+                owner: root
+                group: root
+                mode: 0o644
+                content: |
+                  ACTION=="add", SUBSYSTEM=="pci", ATTR{vendor}=="0x1ae0", ATTR{device}=="0x0084", TAG+="systemd", \
+                      RUN+="/usr/bin/mkdir --mode=0755 -p /dev/aperture_devices", \
+                      RUN+="/usr/bin/systemd-mount --type=none --options=bind --collect %S/%p /dev/aperture_devices/%k", \
+                      RUN+="/usr/bin/bash -c '/usr/bin/chmod 0666 /dev/aperture_devices/%k/resource*'"
+              notify: Update initramfs
+            handlers:
+            - name: Update initramfs
+              ansible.builtin.command: /usr/sbin/update-initramfs -u -k all
+      - type: data
+        destination: /etc/netplan/90-default.yaml
+        content: |
+          network:
+              version: 2
+              ethernets:
+                  00-primary:
+                      match:
+                          name: enp0*
+                      dhcp4: true
+                      dhcp4-overrides:
+                          use-domains: true
+                      dhcp6: true
+                      dhcp6-overrides:
+                          use-domains: true
+                  90-gpu-nets:
+                      match:
+                          name: en*
+                      dhcp4: true
+                      dhcp4-overrides:
+                          use-domains: true
+                          use-dns: false
+                          use-ntp: false
+                      dhcp6: true
+                      dhcp6-overrides:
+                          use-domains: true
+                          use-dns: false
+                          use-ntp: false
+                  99-all-eth:
+                      match:
+                          name: eth*
+                      dhcp4: true
+                      dhcp4-overrides:
+                          use-domains: true
+                      dhcp6: true
+                      dhcp6-overrides:
+                          use-domains: true
+
+- group: slurm-build
+  modules:
+  - id: slurm-image
+    source: modules/packer/custom-image
+    kind: packer
+    use:
+    - image_build_script
+    - sysnet
+    settings:
+      # building this image does not require a GPU-enabled VM but must *not* be
+      # run on a N-series VM otherwise, the "open" drivers will not install
+      machine_type: c2-standard-8
+      source_image: $(vars.source_image)
+      image_family: $(vars.final_image_family)
+      disk_size: $(vars.disk_size_gb)
+      omit_external_ip: false

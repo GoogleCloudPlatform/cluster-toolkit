@@ -126,7 +126,7 @@ def start_instance_op(node: str) -> Any:
     return lookup().compute.instances().start(
         project=lookup().project,
         zone=inst.zone,
-        instance=inst,
+        instance=inst.name,
     )
 
 
@@ -595,12 +595,13 @@ def process_messages(lkp: util.Lookup) -> None:
 
 
 def main():
+    lkp = lookup()
+    if util.should_mount_slurm_bucket() and not lkp.is_controller:
+        return
     try:
         reconfigure_slurm()
     except Exception:
         log.exception("failed to reconfigure slurm")
-
-    lkp = lookup()
     if lkp.is_controller:
         try:
             process_messages(lkp)

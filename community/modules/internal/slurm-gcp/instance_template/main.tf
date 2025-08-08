@@ -45,7 +45,7 @@ locals {
   source_image_family = (
     var.source_image_family != "" && var.source_image_family != null
     ? var.source_image_family
-    : "slurm-gcp-6-9-hpc-rocky-linux-8"
+    : "slurm-gcp-6-11-hpc-rocky-linux-8"
   )
   source_image_project = (
     var.source_image_project != "" && var.source_image_project != null
@@ -128,7 +128,7 @@ module "instance_template" {
   resource_manager_tags       = var.resource_manager_tags
 
   # Metadata
-  startup_script = data.local_file.startup.content
+  startup_script = coalesce(var.internal_startup_script, data.local_file.startup.content)
   metadata = merge(
     var.metadata,
     {

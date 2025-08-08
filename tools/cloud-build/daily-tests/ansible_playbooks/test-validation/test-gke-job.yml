@@ -20,13 +20,13 @@
 
 - name: Get cluster credentials for kubectl
   delegate_to: localhost
-  ansible.builtin.command: gcloud container clusters get-credentials {{ deployment_name }} --region {{ region }} --project {{ custom_vars.project }}
+  ansible.builtin.command: gcloud container clusters get-credentials {{ deployment_name }} --region {{ region }} --project {{ custom_vars.project }} --verbosity=debug
 
 - name: Execute the job
   delegate_to: localhost
   ansible.builtin.shell: |
     array=({{ workspace }}/{{ deployment_name }}/primary/my-job*)
-    kubectl create -f ${array[0]}
+    kubectl create -f ${array[0]} -v=9
   args:
     executable: /bin/bash
   changed_when: False
@@ -34,7 +34,7 @@
 - name: Wait for job to complete
   delegate_to: localhost
   ansible.builtin.command: |
-    kubectl get job --field-selector  status.successful=1
+    kubectl get job --field-selector  status.successful=1 -v=9
   register: job_completion
   until: job_completion.stdout_lines | length > 1
   retries: 40
@@ -47,4 +47,4 @@
 - name: Clean up
   delegate_to: localhost
   ansible.builtin.shell: |
-    kubectl delete job --all
+    kubectl delete job --all -v=9

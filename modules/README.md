@@ -51,8 +51,6 @@ Modules that are still in development and less stable are labeled with the
 * **[htcondor-execute-point]** ![community-badge] ![experimental-badge] :
   Manages a group of execute points for use in an [HTCondor
   pool][htcondor-setup].
-* **[pbspro-execution]** ![community-badge] ![experimental-badge] :
-  Creates execution hosts for use in a PBS Professional cluster.
 * **[mig]** ![community-badge] ![experimental-badge] : Creates a Managed Instance Group.
 * **[notebook]** ![community-badge] ![experimental-badge] : Creates a Vertex AI
   Notebook. Primarily used for [FSI - MonteCarlo Tutorial][fsi-montecarlo-on-batch-tutorial].
@@ -66,7 +64,6 @@ Modules that are still in development and less stable are labeled with the
 [schedmd-slurm-gcp-v6-nodeset-tpu]: ../community/modules/compute/schedmd-slurm-gcp-v6-nodeset-tpu/README.md
 [schedmd-slurm-gcp-v6-nodeset-dynamic]: ../community/modules/compute/schedmd-slurm-gcp-v6-nodeset-dynamic/README.md
 [htcondor-execute-point]: ../community/modules/compute/htcondor-execute-point/README.md
-[pbspro-execution]: ../community/modules/compute/pbspro-execution/README.md
 [mig]: ../community/modules/compute/mig/README.md
 [notebook]: ../community/modules/compute/notebook/README.md
 [fsi-montecarlo-on-batch-tutorial]: ../docs/tutorials/fsi-montecarlo-on-batch/README.md
@@ -99,7 +96,7 @@ Modules that are still in development and less stable are labeled with the
   [managed-lustred](https://cloud.google.com/managed-lustre) file system.
 * **[DDN-EXAScaler]** ![community-badge] ![deprecated-badge] : Creates
   a [DDN EXAscaler lustre](https://www.ddn.com/partners/google-cloud-platform/)
-  file system. This module is deprecated and will be removed in a future release. Consider migrating to managed-lustre.
+  file system. This module is deprecated and will be removed by July 1, 2025. Consider migrating to managed-lustre.
 * **[cloud-storage-bucket]** ![community-badge] ![experimental-badge] : Creates
   a Google Cloud Storage (GCS) bucket.
 * **[gke-persistent-volume]** ![core-badge] ![experimental-badge] : Creates
@@ -200,10 +197,6 @@ Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial][fsi-monteca
 * **[htcondor-access-point]** ![community-badge] ![experimental-badge] : Creates
   a regional instance group managing a highly available HTCondor access point
   (login node).
-* **[pbspro-client]** ![community-badge] ![experimental-badge] : Creates
-  a client host for submitting jobs to a PBS Professional cluster.
-* **[pbspro-server]** ![community-badge] ![experimental-badge] : Creates
-  a server host for operating a PBS Professional cluster.
 
 [batch-job-template]: ../modules/scheduler/batch-job-template/README.md
 [batch-login-node]: ../modules/scheduler/batch-login-node/README.md
@@ -214,8 +207,6 @@ Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial][fsi-monteca
 [htcondor-access-point]: ../community/modules/scheduler/htcondor-access-point/README.md
 [schedmd-slurm-gcp-v6-controller]: ../community/modules/scheduler/schedmd-slurm-gcp-v6-controller/README.md
 [schedmd-slurm-gcp-v6-login]: ../community/modules/scheduler/schedmd-slurm-gcp-v6-login/README.md
-[pbspro-client]: ../community/modules/scheduler/pbspro-client/README.md
-[pbspro-server]: ../community/modules/scheduler/pbspro-server/README.md
 
 ### Scripts
 
@@ -226,12 +217,6 @@ Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial][fsi-monteca
   and VM images.
 * **[htcondor-install]** ![community-badge] ![experimental-badge] : Creates
   a startup script to install HTCondor and exports a list of required APIs
-* **[pbspro-preinstall]** ![community-badge] ![experimental-badge] : Creates a
-  Cloud Storage bucket with PBS Pro RPM packages for use by PBS clusters.
-* **[pbspro-install]** ![community-badge] ![experimental-badge] : Creates a
-  Toolkit runner to install [PBS Professional][pbspro] from RPM packages.
-* **[pbspro-qmgr]** ![community-badge] ![experimental-badge] : Creates a Toolkit
-  runner to run common `qmgr` commands when configuring a PBS Pro cluster.
 * **[ramble-execute]** ![community-badge] ![experimental-badge] : Creates a
   startup script to execute
   [Ramble](https://github.com/GoogleCloudPlatform/ramble) commands on a target
@@ -252,10 +237,6 @@ Pub/Sub subscription. Primarily used for [FSI - MonteCarlo Tutorial][fsi-monteca
 [windows-startup-script]: ../community/modules/scripts/windows-startup-script/README.md
 [htcondor-install]: ../community/modules/scripts/htcondor-install/README.md
 [kubernetes-operations]: ../community/modules/scripts/kubernetes-operations/README.md
-[pbspro-install]: ../community/modules/scripts/pbspro-install/README.md
-[pbspro-preinstall]: ../community/modules/scripts/pbspro-preinstall/README.md
-[pbspro-qmgr]: ../community/modules/scripts/pbspro-qmgr/README.md
-[pbspro]: https://www.altair.com/pbs-professional
 [ramble-execute]: ../community/modules/scripts/ramble-execute/README.md
 [ramble-setup]: ../community/modules/scripts/ramble-setup/README.md
 [spack-setup]: ../community/modules/scripts/spack-setup/README.md

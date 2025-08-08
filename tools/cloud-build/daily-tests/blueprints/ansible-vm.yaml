@@ -44,17 +44,20 @@ deployment_groups:
           set -ex
           echo \$(ansible --version)
 
-  - id: workstation-ubuntu-2004
-    source: modules/compute/vm-instance
-    use:
-    - network1
-    - startup-script
+  - id: startup-script-u20
+    # this source line is deliberate; it is the last to support Ubuntu 20.04
+    # Ubuntu 20.04 coverage may be removed when the a3-highgpu-8g solution is
+    # refactored to use Ubuntu 22.04 or later
+    source: github.com/GoogleCloudPlatform/cluster-toolkit//modules/scripts/startup-script?ref=v1.51.1&depth=1
     settings:
-      name_prefix: ubuntu2004
-      add_deployment_name_before_prefix: true
-      instance_image:
-        family: ubuntu-2004-lts
-        project: ubuntu-os-cloud
+      install_ansible: true
+      runners:
+      - type: shell
+        destination: startup.sh
+        content: |
+          #!/bin/bash
+          set -ex
+          echo \$(ansible --version)
 
   - id: workstation-ubuntu-2204
     source: modules/compute/vm-instance
@@ -78,6 +81,20 @@ deployment_groups:
       add_deployment_name_before_prefix: true
       instance_image:
         family: ubuntu-2404-lts-amd64
+        project: ubuntu-os-cloud
+
+  - id: workstation-ubuntu-2404-arm
+    source: modules/compute/vm-instance
+    use:
+    - network1
+    - startup-script
+    settings:
+      name_prefix: ubuntu2404arm
+      machine_type: c4a-standard-4
+      disk_type: hyperdisk-balanced
+      add_deployment_name_before_prefix: true
+      instance_image:
+        family: ubuntu-2404-lts-arm64
         project: ubuntu-os-cloud
 
   - id: workstation-debian-11
@@ -156,9 +173,9 @@ deployment_groups:
     source: community/modules/scripts/wait-for-startup
     settings:
       instance_names:
-      - $(workstation-ubuntu-2004.name[0])
       - $(workstation-ubuntu-2204.name[0])
       - $(workstation-ubuntu-2404.name[0])
+      - $(workstation-ubuntu-2404-arm.name[0])
       - $(workstation-debian-11.name[0])
       - $(workstation-debian-12.name[0])
       - $(workstation-rocky-8.name[0])

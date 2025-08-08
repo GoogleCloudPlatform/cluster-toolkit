@@ -16,7 +16,6 @@
 tags:
 - m.custom-image
 - m.pre-existing-vpc
-- m.startup-script
 - slurm6
 
 timeout: 14400s  # 4hr

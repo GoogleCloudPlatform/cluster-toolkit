@@ -88,7 +88,7 @@ variable "instance_image" {
     EOD
   type        = map(string)
   default = {
-    family  = "slurm-gcp-6-9-hpc-rocky-linux-8"
+    family  = "slurm-gcp-6-11-hpc-rocky-linux-8"
     project = "schedmd-slurm-public"
   }
 
@@ -103,7 +103,7 @@ variable "instance_image" {
   }
 }
 
-variable "instance_image_custom" {
+variable "instance_image_custom" { # tflint-ignore: terraform_unused_declarations
   description = <<-EOD
     A flag that designates that the user is aware that they are requesting
     to use a custom and potentially incompatible image for this Slurm on
@@ -319,6 +319,13 @@ variable "guest_accelerator" {
     condition     = length(var.guest_accelerator) <= 1
     error_message = "The Slurm modules supports 0 or 1 models of accelerator card on each node."
   }
+}
+
+variable "accelerator_topology" {
+  type        = string
+  description = "Specifies the shape of the Accelerator (GPU/TPU) slice."
+  nullable    = true
+  default     = null
 }
 
 variable "preemptible" {

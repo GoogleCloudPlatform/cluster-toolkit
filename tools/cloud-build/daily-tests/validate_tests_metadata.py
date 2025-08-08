@@ -28,7 +28,6 @@ CATEGORICAL_TAGS = frozenset([
     "monitoring", 
     "ofe", 
     "packer", 
-    "pbspro",
     "slurm5", 
     "slurm6", 
     "spack",

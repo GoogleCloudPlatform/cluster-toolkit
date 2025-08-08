@@ -198,6 +198,8 @@ def test_nodeset_reservation_err(nodeset, err):
                     policies=[],
                     deployment_type=None,
                     reservation_mode=None,
+                    assured_count=0,
+                    delete_at_time=None,
                     bulk_insert_name="projects/bobin/reservations/robin")),
             (TstNodeset(
                 reservation_name="projects/bobin/reservations/robin",
@@ -210,6 +212,8 @@ def test_nodeset_reservation_err(nodeset, err):
                     policies=["wanders", "apples", "yum"],
                     deployment_type=None,
                     reservation_mode=None,
+                    assured_count=0,
+                    delete_at_time=None,
                     bulk_insert_name="projects/bobin/reservations/robin")),
             (TstNodeset(
                 reservation_name="projects/bobin/reservations/robin/snek/cheese-brie-6",
@@ -222,6 +226,8 @@ def test_nodeset_reservation_err(nodeset, err):
                     policies=[],
                     deployment_type=None,
                     reservation_mode=None,
+                    assured_count=0,
+                    delete_at_time=None,
                     bulk_insert_name="projects/bobin/reservations/robin/snek/cheese-brie-6")),
 
         ])
@@ -549,6 +555,8 @@ def test_future_reservation_active(_):
                 name='melon',
                 policies=[],
                 reservation_mode=None,
+                assured_count=0,
+                delete_at_time=None,
                 bulk_insert_name="projects/manhattan/reservations/melon",
                 deployment_type=None))
     

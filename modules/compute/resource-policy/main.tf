@@ -17,8 +17,12 @@ resource "random_id" "resource_name_suffix" {
   byte_length = 4
 }
 
+locals {
+  name = "${var.name}-${random_id.resource_name_suffix.hex}"
+}
+
 resource "google_compute_resource_policy" "policy" {
-  name     = "${var.name}-${random_id.resource_name_suffix.hex}"
+  name     = local.name
   region   = var.region
   project  = var.project_id
   provider = google-beta

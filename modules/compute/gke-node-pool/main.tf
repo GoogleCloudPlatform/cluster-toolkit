@@ -68,7 +68,7 @@ data "google_container_cluster" "gke_cluster" {
 }
 
 resource "google_container_node_pool" "node_pool" {
-  provider = google-beta
+  provider = google
 
   count = max(var.num_node_pools, var.num_slices)
 
@@ -223,11 +223,8 @@ resource "google_container_node_pool" "node_pool" {
 
     reservation_affinity {
       consume_reservation_type = var.reservation_affinity.consume_reservation_type
-      key                      = length(local.verified_specific_reservations) != 1 ? null : local.reservation_resource_api_label
-      values = length(local.verified_specific_reservations) != 1 ? null : [
-        for i, r in local.verified_specific_reservations :
-        (length(local.input_reservation_suffixes[i]) > 0 ? format("%s%s", r.name, local.input_reservation_suffixes[i]) : "projects/${r.project}/reservations/${r.name}")
-      ]
+      key                      = local.is_valid_reservation ? local.reservation_resource_api_label : null
+      values                   = local.is_valid_reservation ? (var.is_reservation_active ? local.active_reservation_values : local.default_reservation_values) : null
     }
 
     dynamic "host_maintenance_policy" {
@@ -297,8 +294,7 @@ resource "google_container_node_pool" "node_pool" {
     precondition {
       condition = (
         (local.input_specific_reservations_count == 0) ||
-        (local.input_specific_reservations_count == 1 &&
-          length(local.verified_specific_reservations) > 0 &&
+        ((length(local.verified_specific_reservations) == 1 || !var.is_reservation_active) &&
         length(local.specific_reservation_requirement_violations) == 0)
       )
       error_message = <<-EOT

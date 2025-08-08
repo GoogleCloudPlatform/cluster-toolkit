@@ -17,33 +17,42 @@
 locals {
   yaml_separator = "\n---"
 
+  # This locals block processes manifest inputs from one of four methods,
+  # evaluated in order of precedence using coalesce.
+
+  # --- METHOD 1: Direct Content Input ---
+  # Used when manifest content is passed directly as a string.
   content_yaml_body = var.content
 
+  # Fallback for safe path checking in subsequent methods.
   null_safe_source = coalesce(var.source_path, " ")
 
-  url         = startswith(local.null_safe_source, "http://") || startswith(local.null_safe_source, "https://") ? var.source_path : null
-  url_content = local.url != null ? data.http.yaml_content[0].response_body : null
-
-  yaml_file         = local.url == null && length(regexall("\\.yaml(_.*)?$", lower(local.null_safe_source))) == 1 ? abspath(var.source_path) : null
+  # --- METHOD 2: Single Local YAML File ---
+  # Used when var.source_path points to a local .yaml file.
+  yaml_file         = length(regexall("\\.yaml(_.*)?$", lower(local.null_safe_source))) == 1 ? abspath(var.source_path) : null
   yaml_file_content = local.yaml_file != null ? file(local.yaml_file) : null
 
-  template_file         = local.url == null && length(regexall("\\.tftpl(_.*)?$", lower(local.null_safe_source))) == 1 ? abspath(var.source_path) : null
+  # --- METHOD 3: Single Local Template File ---
+  # Used when var.source_path points to a local .tftpl file.
+  template_file         = length(regexall("\\.tftpl(_.*)?$", lower(local.null_safe_source))) == 1 ? abspath(var.source_path) : null
   template_file_content = local.template_file != null ? templatefile(local.template_file, var.template_vars) : null
 
-  yaml_body      = coalesce(local.content_yaml_body, local.url_content, local.yaml_file_content, local.template_file_content, " ")
-  yaml_body_docs = [for doc in split(local.yaml_separator, local.yaml_body) : trimspace(doc) if length(trimspace(doc)) > 0] # Split yaml to single docs because the kubectl provider only supports single resource
+  # --- CONSOLIDATE & PROCESS ---
+  # Coalesce finds the first non-null content from the methods above.
+  yaml_body      = coalesce(local.content_yaml_body, local.yaml_file_content, local.template_file_content, " ")
+  yaml_body_docs = [for doc in split(local.yaml_separator, local.yaml_body) : trimspace(doc) if length(trimspace(doc)) > 0]
 
+  # --- METHOD 4: Directory of Files ---
+  # If no content was found via the methods above AND the source path looks like a directory,
+  # we assume this is the desired method. The data blocks below will handle it.
   directory = length(local.yaml_body_docs) == 0 && endswith(local.null_safe_source, "/") ? abspath(var.source_path) : null
 
+  # --- FINAL AGGREGATION ---
+  # Combine documents from single-source methods and directory-scan methods into one list.
   docs_list = concat(try(local.yaml_body_docs, []), try(data.kubectl_path_documents.yamls[0].documents, []), try(data.kubectl_path_documents.templates[0].documents, []))
   docs_map = tomap({
     for index, doc in local.docs_list : index => doc
   })
-}
-
-data "http" "yaml_content" {
-  count = local.url != null ? 1 : 0
-  url   = local.url
 }
 
 data "kubectl_path_documents" "yamls" {
