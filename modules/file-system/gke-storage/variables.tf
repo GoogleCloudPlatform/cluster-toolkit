@@ -127,16 +127,6 @@ variable "capacity_gb" {
   type        = number
 }
 
-variable "private_vpc_connection_peering" {
-  description = <<-EOT
-    The name of the VPC Network peering connection.
-    If using new VPC, please use community/modules/network/private-service-access to create private-service-access and
-    If using existing VPC with private-service-access enabled, set this manually follow [user guide](https://cloud.google.com/parallelstore/docs/vpc).
-    EOT
-  type        = string
-  default     = null
-}
-
 variable "namespace" {
   description = "Kubernetes namespace to deploy the storage PVC/PV"
   type        = string
