@@ -58,5 +58,10 @@ resource "terraform_data" "input_validation" {
       ])
       error_message = "reset_password must be a boolean value (true/false) or null."
     }
+
+    precondition {
+      condition     = length(distinct([for user in var.vdi_users : user.port])) == length(var.vdi_users)
+      error_message = "All VDI users must have unique ports to prevent conflicts."
+    }
   }
 }

@@ -99,7 +99,7 @@ locals {
         }
       )
       destination = "/opt/vdi-setup/install.yaml"
-      args = var.debug ? "--extra-vars @/opt/vdi-setup/vars.yaml -v --extra-vars debug=true" : "--extra-vars @/opt/vdi-setup/vars.yaml"
+      args        = var.debug ? "--extra-vars @/opt/vdi-setup/vars.yaml -v --extra-vars debug=true" : "--extra-vars @/opt/vdi-setup/vars.yaml"
     },
     # Clean up temporary directory
     {

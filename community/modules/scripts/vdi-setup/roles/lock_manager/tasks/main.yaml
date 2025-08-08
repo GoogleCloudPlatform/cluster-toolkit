@@ -31,7 +31,7 @@
 - name: Debug lock directory status
   ansible.builtin.debug:
     msg: "Lock directory created: {{ lock_dir_creation.changed }}"
-  when: debug | default(false)
+  when: debug
 
 - name: Include check lock tasks
   ansible.builtin.include_tasks: check_lock.yaml
@@ -48,14 +48,3 @@
 - name: Debug lock manager role completion
   ansible.builtin.debug:
     msg: "Lock manager role completed - operation: {{ lock_operation | default('check') }}"
-
-# Mark lock_manager role as completed when running as a standalone role
-- name: Mark lock_manager role as completed
-  ansible.builtin.include_tasks: create_lock.yaml
-  vars:
-    current_role: "lock_manager"
-    role_completed: true
-  when: 
-    - current_role == "lock_manager"
-    - lock_operation | default('check') == 'check'
- 

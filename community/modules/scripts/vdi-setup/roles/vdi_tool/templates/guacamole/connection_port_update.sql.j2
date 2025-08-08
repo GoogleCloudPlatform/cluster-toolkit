@@ -1,0 +1,5 @@
+-- Update VNC Connection Port for {{ username }}
+UPDATE guacamole_connection_parameter 
+SET parameter_value = '{{ port }}'
+WHERE connection_id = (SELECT connection_id FROM guacamole_connection WHERE connection_name = '{{ username }}')
+AND parameter_name = 'port';

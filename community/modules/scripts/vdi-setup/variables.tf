@@ -69,7 +69,7 @@ variable "vdi_resolution" {
 
 variable "vdi_webapp_port" {
   type        = string
-  description = "Port to serve the Webapp interface from if applicable"
+  description = "Port to serve the Webapp interface from if applicable (note: containers will be recreated if changed)"
   default     = "8080"
 }
 
