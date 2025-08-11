@@ -113,6 +113,7 @@ deployment_groups:
       partition_conf:
         ResumeTimeout: 900
         SuspendTimeout: 600
+        SlurmdTimeout: 900
 
   - id: slurm_login
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
