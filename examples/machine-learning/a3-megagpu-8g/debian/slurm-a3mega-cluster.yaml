@@ -23,7 +23,6 @@ vars:
   a3mega_maintenance_interval: ""
   remote_mount_homefs: /nfsshare
   local_mount_homefs: /home
-  instance_image_custom: true
   instance_image:
     family: $(vars.final_image_family)
     project: $(vars.project_id)

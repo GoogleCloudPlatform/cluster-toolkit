@@ -33,7 +33,6 @@ vars:
   instance_image:
     family: slurm-dlvm
     project: $(vars.project_id)
-  instance_image_custom: true
   slurm_cluster_name: slurm0
   enable_cleanup_compute: true
   a3_partition_name: a3
