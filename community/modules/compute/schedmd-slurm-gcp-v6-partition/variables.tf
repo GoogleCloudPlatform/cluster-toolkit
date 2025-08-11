@@ -242,7 +242,7 @@ variable "resume_timeout" {
   description = <<-EOD
     Maximum time permitted (in seconds) between when a node resume request is issued and when the node is actually available for use.
     If null is given, then a smart default will be chosen depending on nodesets in partition.
-    This sets 'SuspendTime' in partition_conf.
+    This sets 'ResumeTimeout' in partition_conf.
     See https://slurm.schedmd.com/slurm.conf.html#OPT_ResumeTimeout_1 for details.
   EOD
   type        = number
