@@ -215,7 +215,7 @@ variable "delete_default_internet_gateway_routes" {
 variable "auto_delete_hierarchical_firewall_policies" {
   description = "If true, automatically delete auto-generated firewall rules at deletion time."
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "enable_iap_ssh_ingress" {
