@@ -499,6 +499,25 @@ def test_parse_InstanceResourceStatus(got: dict, want: Optional[InstanceResource
     assert InstanceResourceStatus.from_json(got) == want
 
 
+@pytest.mark.parametrize(
+    "link,component_name,expected",
+    [
+        (
+            "mylink/regions/us-cental1/other",
+            "regions",
+            "us-cental1"
+        ),
+        (
+            "mylink/global/other",
+            "regions",
+            None
+        ),
+    ],
+)
+def test_get_self_link_component(link, component_name, expected):
+    assert util.get_self_link_component(link, component_name) == expected
+
+
 def test_future_reservation_none():
     lkp = util.Lookup(TstCfg())
     assert lkp.future_reservation(TstNodeset()) == None
