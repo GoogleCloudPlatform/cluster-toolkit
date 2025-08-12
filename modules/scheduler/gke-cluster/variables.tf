@@ -61,6 +61,11 @@ variable "subnetwork_self_link" {
   type        = string
 }
 
+variable "subnetwork" {
+  description = "Primary subnetwork object"
+  type        = any
+}
+
 variable "pods_ip_range_name" {
   description = "The name of the secondary subnet ip range to use for pods."
   type        = string

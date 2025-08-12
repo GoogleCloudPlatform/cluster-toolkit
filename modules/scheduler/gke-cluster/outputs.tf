@@ -102,3 +102,8 @@ output "gke_version" {
   description = "GKE cluster's version."
   value       = google_container_cluster.gke_cluster.master_version
 }
+
+output "subnetwork" {
+  description = "Primary subnetwork object"
+  value       = var.subnetwork
+}

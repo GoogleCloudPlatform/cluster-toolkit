@@ -305,6 +305,7 @@ limitations under the License.
 | [null_resource.enable_tcpxo_in_workload](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
 | [null_resource.install_dependencies](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
 | [google_compute_machine_types.machine_info](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_machine_types) | data source |
+| [google_compute_region_instance_template.instance_template](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_region_instance_template) | data source |
 | [google_compute_reservation.specific_reservations](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_reservation) | data source |
 | [google_container_cluster.gke_cluster](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/container_cluster) | data source |
 
@@ -352,6 +353,7 @@ limitations under the License.
 | <a name="input_service_account_scopes"></a> [service\_account\_scopes](#input\_service\_account\_scopes) | Scopes to to use with the node pool. | `set(string)` | <pre>[<br/>  "https://www.googleapis.com/auth/cloud-platform"<br/>]</pre> | no |
 | <a name="input_spot"></a> [spot](#input\_spot) | Provision VMs using discounted Spot pricing, allowing for preemption | `bool` | `false` | no |
 | <a name="input_static_node_count"></a> [static\_node\_count](#input\_static\_node\_count) | The static number of nodes in the node pool. If set, autoscaling will be disabled. | `number` | `null` | no |
+| <a name="input_subnetwork"></a> [subnetwork](#input\_subnetwork) | Primary subnetwork object | `any` | n/a | yes |
 | <a name="input_taints"></a> [taints](#input\_taints) | Taints to be applied to the system node pool. | <pre>list(object({<br/>    key    = string<br/>    value  = any<br/>    effect = string<br/>  }))</pre> | `[]` | no |
 | <a name="input_threads_per_core"></a> [threads\_per\_core](#input\_threads\_per\_core) | Sets the number of threads per physical core. By setting threads\_per\_core<br/>to 2, Simultaneous Multithreading (SMT) is enabled extending the total number<br/>of virtual cores. For example, a machine of type c2-standard-60 will have 60<br/>virtual cores with threads\_per\_core equal to 2. With threads\_per\_core equal<br/>to 1 (SMT turned off), only the 30 physical cores will be available on the VM.<br/><br/>The default value of \"0\" will turn off SMT for supported machine types, and<br/>will fall back to GCE defaults for unsupported machine types (t2d, shared-core<br/>instances, or instances with less than 2 vCPU).<br/><br/>Disabling SMT can be more performant in many HPC workloads, therefore it is<br/>disabled by default where compatible.<br/><br/>null = SMT configuration will use the GCE defaults for the machine type<br/>0 = SMT will be disabled where compatible (default)<br/>1 = SMT will always be disabled (will fail on incompatible machine types)<br/>2 = SMT will always be enabled (will fail on incompatible machine types) | `number` | `0` | no |
 | <a name="input_timeout_create"></a> [timeout\_create](#input\_timeout\_create) | Timeout for creating a node pool | `string` | `null` | no |
@@ -367,9 +369,15 @@ limitations under the License.
 |------|-------------|
 | <a name="output_allocatable_cpu_per_node"></a> [allocatable\_cpu\_per\_node](#output\_allocatable\_cpu\_per\_node) | Number of CPUs available for scheduling pods on each node. |
 | <a name="output_allocatable_gpu_per_node"></a> [allocatable\_gpu\_per\_node](#output\_allocatable\_gpu\_per\_node) | Number of GPUs available for scheduling pods on each node. |
+| <a name="output_cluster_id"></a> [cluster\_id](#output\_cluster\_id) | An identifier for the gke cluster with format projects/{{project\_id}}/locations/{{region}}/clusters/{{name}}. |
+| <a name="output_guest_accelerator"></a> [guest\_accelerator](#output\_guest\_accelerator) | The accelerator type of the nodes. |
 | <a name="output_has_gpu"></a> [has\_gpu](#output\_has\_gpu) | Boolean value indicating whether nodes in the pool are configured with GPUs. |
+| <a name="output_instance_templates"></a> [instance\_templates](#output\_instance\_templates) | The URLs of Instance Templates |
 | <a name="output_instructions"></a> [instructions](#output\_instructions) | Instructions for submitting the sample GPUDirect enabled job. |
+| <a name="output_machine_type"></a> [machine\_type](#output\_machine\_type) | Machine Type |
+| <a name="output_node_count"></a> [node\_count](#output\_node\_count) | The number of nodes in the node pool. |
 | <a name="output_node_pool_names"></a> [node\_pool\_names](#output\_node\_pool\_names) | Names of the node pools. |
 | <a name="output_static_gpu_count"></a> [static\_gpu\_count](#output\_static\_gpu\_count) | Total number of GPUs in the node pool. Available only for static node pools. |
+| <a name="output_subnetwork"></a> [subnetwork](#output\_subnetwork) | Primary subnetwork object |
 | <a name="output_tolerations"></a> [tolerations](#output\_tolerations) | Tolerations needed for a pod to be scheduled on this node pool. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

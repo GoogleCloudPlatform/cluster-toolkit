@@ -185,6 +185,7 @@ limitations under the License.
 | <a name="input_service_account_email"></a> [service\_account\_email](#input\_service\_account\_email) | Service account e-mail address to use with the system node pool | `string` | `null` | no |
 | <a name="input_service_account_scopes"></a> [service\_account\_scopes](#input\_service\_account\_scopes) | Scopes to to use with the system node pool. | `set(string)` | <pre>[<br/>  "https://www.googleapis.com/auth/cloud-platform"<br/>]</pre> | no |
 | <a name="input_services_ip_range_name"></a> [services\_ip\_range\_name](#input\_services\_ip\_range\_name) | The name of the secondary subnet range to use for services. | `string` | `"services"` | no |
+| <a name="input_subnetwork"></a> [subnetwork](#input\_subnetwork) | Primary subnetwork object | `any` | n/a | yes |
 | <a name="input_subnetwork_self_link"></a> [subnetwork\_self\_link](#input\_subnetwork\_self\_link) | The self link of the subnetwork to host the cluster in. | `string` | n/a | yes |
 | <a name="input_system_node_pool_disk_size_gb"></a> [system\_node\_pool\_disk\_size\_gb](#input\_system\_node\_pool\_disk\_size\_gb) | Size of disk for each node of the system node pool. | `number` | `100` | no |
 | <a name="input_system_node_pool_disk_type"></a> [system\_node\_pool\_disk\_type](#input\_system\_node\_pool\_disk\_type) | Disk type for each node of the system node pool. | `string` | `null` | no |
@@ -212,4 +213,5 @@ limitations under the License.
 | <a name="output_gke_version"></a> [gke\_version](#output\_gke\_version) | GKE cluster's version. |
 | <a name="output_instructions"></a> [instructions](#output\_instructions) | Instructions on how to connect to the created cluster. |
 | <a name="output_k8s_service_account_name"></a> [k8s\_service\_account\_name](#output\_k8s\_service\_account\_name) | Name of k8s service account. |
+| <a name="output_subnetwork"></a> [subnetwork](#output\_subnetwork) | Primary subnetwork object |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
