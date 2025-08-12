@@ -23,6 +23,7 @@ from common import TstNodeset, TstCfg # needed to import util
 import util
 from util import NodeState, MachineType, AcceleratorInfo, UpcomingMaintenance, InstanceResourceStatus, FutureReservation, ReservationDetails
 from google.api_core.client_options import ClientOptions  # noqa: E402
+from addict import Dict as NSDict # type: ignore
 
 # Note: need to install pytest-mock
 
@@ -411,6 +412,60 @@ def test_node_state(node: str, state: Optional[NodeState], want: NodeState | Non
     ])
 def test_MachineType_from_json(jo: dict, want: MachineType):
     assert MachineType.from_json(jo) == want
+
+
+@pytest.mark.parametrize(
+    "template,expected",
+    [
+        (
+            NSDict({
+                "machine_type": MachineType(
+                                    name="e2",
+                                    guest_cpus=12,
+                                    memory_mb=87040,
+                                    accelerators=None),
+            }),
+            None
+        ),
+        (
+            NSDict({
+                "machine_type": MachineType(
+                                    name="tpu-machine",
+                                    guest_cpus=12,
+                                    memory_mb=87040,
+                                    accelerators=[
+                                        AcceleratorInfo(type="tpu-v6", count=1)
+                                    ]),
+            }),
+            None
+        ),
+        (
+            NSDict({
+                "machine_type": MachineType(
+                                    name="a2-highgpu-1g",
+                                    guest_cpus=12,
+                                    memory_mb=87040,
+                                    accelerators=[AcceleratorInfo(type="nvidia-tesla-a100", count=1)]
+                                    ),
+            }),
+            AcceleratorInfo(type="nvidia-tesla-a100", count=1)
+        ),
+        (
+            NSDict({
+                "machine_type": MachineType(
+                                    name="a2-highgpu-1g",
+                                    guest_cpus=12,
+                                    memory_mb=87040,
+                                    accelerators=None),
+                "guestAccelerators":[ { "acceleratorCount": 1, "acceleratorType": "nvidia-tesla-a100" } ],
+            }),
+            AcceleratorInfo(type="nvidia-tesla-a100", count=1)
+        ),
+    ],
+)
+def test_get_template_gpu(template, expected):
+    assert util.get_template_gpu(template) == expected
+
 
 UTC, PST = timezone.utc, timezone(timedelta(hours=-8))
 

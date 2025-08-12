@@ -388,6 +388,23 @@ def parse_bucket_uri(uri: str):
     return matches.group("bucket"), matches.group("path")
 
 
+def get_template_gpu(template):
+    """get gpu info from machine type or guest accelerators"""
+    gpu_keyword = "nvidia"
+    gpu = None
+    if template.machine_type.accelerators:
+        tma = template.machine_type.accelerators[0]
+        if gpu_keyword in tma.type.lower():
+            gpu = tma
+    elif template.guestAccelerators:
+        tga = template.guestAccelerators[0]
+        if gpu_keyword in tga.acceleratorType.lower():
+            gpu = AcceleratorInfo(
+                type=tga.acceleratorType,
+                count=tga.acceleratorCount)
+    return gpu
+
+
 def trim_self_link(link: str):
     """get resource name from self link url, eg.
     https://.../v1/projects/<project>/regions/<region>
@@ -1983,23 +2000,10 @@ class Lookup:
         # TODO delete metadata to reduce memory footprint?
         # del template.metadata
 
-        # translate gpus into an easier-to-read format
-        gpu_prefix = "nvidia-"
-        template.gpu = None
-        if template.machine_type.accelerators:
-            tma = template.machine_type.accelerators[0]
-            if tma.type.startswith(gpu_prefix):
-                template.gpu = tma
-        elif template.guestAccelerators:
-            tga = template.guestAccelerators[0]
-            if tga.acceleratorType.startswith(gpu_prefix):
-                template.gpu = AcceleratorInfo(
-                    type=tga.acceleratorType,
-                    count=tga.acceleratorCount)
+        template.gpu = get_template_gpu(template)
 
         cache.set(template_name, template.to_dict())
         return template
-
 
     def _parse_job_info(self, job_info: str) -> Job:
         """Extract job details"""
