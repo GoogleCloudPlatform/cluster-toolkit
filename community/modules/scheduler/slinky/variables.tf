@@ -89,3 +89,39 @@ variable "prometheus_values" {
     installCRDs = true
   }
 }
+
+variable "slurm_namespace" {
+  description = "slurm namespace for charts"
+  type        = string
+  default     = "slurm"
+}
+
+variable "slurm_operator_namespace" {
+  description = "slurm namespace for charts"
+  type        = string
+  default     = "slinky"
+}
+
+variable "install_slurm_chart" {
+  description = "Install slurm-operator chart."
+  type        = bool
+  default     = true
+}
+
+variable "install_slurm_operator_chart" {
+  description = "Install slurm-operator chart."
+  type        = bool
+  default     = true
+}
+
+variable "slurm_repository" {
+  description = "Value overrides for the Slinky release"
+  type        = string
+  default     = "oci://ghcr.io/slinkyproject/charts"
+}
+
+variable "slurm_operator_repository" {
+  description = "Value overrides for the Slinky release"
+  type        = string
+  default     = "oci://ghcr.io/slinkyproject/charts"
+}
