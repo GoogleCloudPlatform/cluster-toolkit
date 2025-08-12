@@ -52,11 +52,11 @@ RUN curl -fsSL https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/sh
 RUN add-apt-repository ppa:deadsnakes/ppa && \
     apt-get -y update && \
     apt-get -y install \
-        python3.13.3 \
-        python3.13.3-venv \
-        python3.13.3-dev \
+        python3.11 \
+        python3.11-venv \
+        python3.11-dev \
         python3-pip && \
-    update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.13.3 1 && \
+    update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1 && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # --- Create Virtual Environment ---
@@ -89,4 +89,9 @@ RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
     pip install --no-cache-dir --prefer-binary --no-build-isolation -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/master/scripts/requirements.txt && \
     pip install --no-cache-dir --prefer-binary --no-build-isolation -r cloud_build_requirements.txt && \
     pip install --no-cache-dir --prefer-binary --no-build-isolation -r slurm_requirements.txt && \
+    pip install --no-cache-dir --prefer-binary --no-build-isolation urllib3==2.5.0 && \
+    pip install --no-cache-dir --prefer-binary --no-build-isolation setuptools==70 && \
+    pip install --no-cache-dir --prefer-binary --no-build-isolation grpcio==1.60.0 && \
+    pip install --no-cache-dir --prefer-binary --no-build-isolation protobuf==4.25.8 && \
+
     rm -rf ~/.cache/pip/*
