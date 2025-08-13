@@ -261,7 +261,7 @@ deployment_groups:
         install: true  # NCCL gIB plugin via DaemonSet initContainer
         path: $(vars.gib_installer_path)
         template_vars:
-          version: v1.0.6
+          version: v1.1.0
           accelerator_count: 8
 
   - id: job-template
