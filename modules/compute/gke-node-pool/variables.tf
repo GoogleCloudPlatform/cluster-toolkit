@@ -353,11 +353,6 @@ variable "additional_networks" {
   nullable = false
 }
 
-variable "subnetwork" {
-  description = "Primary subnetwork object"
-  type        = any
-}
-
 variable "reservation_affinity" {
   description = <<-EOT
   Reservation resource to consume. When targeting SPECIFIC_RESERVATION, specific_reservations needs be specified.

@@ -116,11 +116,6 @@ output "node_count" {
   value       = coalesce(var.static_node_count, var.initial_node_count)
 }
 
-output "subnetwork" {
-  description = "Primary subnetwork object"
-  value       = var.subnetwork
-}
-
 output "guest_accelerator" {
   description = "The accelerator type of the nodes."
   value       = local.guest_accelerator
