@@ -31,6 +31,17 @@ SUFFIX=slurm-image
 ./build.sh common $SUFFIX $PROJECT
 ```
 
+## Build A4X image
+
+Run the following commands,
+
+```sh
+cd cluster-toolkit/examples/machine-learning/build-service-images/
+PROJECT=<your-project-id>
+SUFFIX=slurm-image
+./build.sh a4x $SUFFIX $PROJECT
+```
+
 ## Next Steps
 
 The two images that were build can be found under `*-slurm-image` family. Use the following
@@ -39,6 +50,7 @@ gcloud command to describe the images and confirm they were built.
 ```shell
 gcloud compute images describe-from-family a3m-slurm-image
 gcloud compute images describe-from-family common-slurm-image
+gcloud compute images describe-from-family a4x-slurm-image
 ```
 
 ## Troubleshooting
@@ -60,4 +72,5 @@ infrastructure (VPC), please perform following:
 ```sh
 gcluster destroy build_a3m-slurm-image/$USER-a3m-slurm-image/ --auto-approve
 gcluster destroy build_common-slurm-image/$USER-common-slurm-image/ --auto-approve
+gcluster destroy build_a4x-slurm-image/$USER-a4x-slurm-image/ --auto-approve
 ```
