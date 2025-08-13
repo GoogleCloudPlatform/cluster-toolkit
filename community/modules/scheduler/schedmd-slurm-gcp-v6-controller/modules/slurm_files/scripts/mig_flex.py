@@ -56,6 +56,8 @@ def resume_flex_chunk(nodes: List[str], job_id: Optional[int], lkp: util.Lookup)
   else:
     mig_name = f"{lkp.cfg.slurm_cluster_name}-{nodeset.nodeset_name}-{uid}"
 
+  util.update_mig_db_entries(nodes,{"MIGOwner":mig_name,"LastAction":"Resume","LastSync":util.now().strftime("%Y-%m-%d %H:%M:%S")})
+
   # Create MIG
   req = lkp.compute.regionInstanceGroupManagers().insert(
     project=lkp.project,
@@ -73,11 +75,14 @@ def resume_flex_chunk(nodes: List[str], job_id: Optional[int], lkp: util.Lookup)
       instanceLifecyclePolicy=dict(defaultActionOnFailure= "DO_NOTHING" ), # TODO(FLEX): Not supported yet, migrate once supported
     )
   )
-  util.log_api_request(req)
-  op = req.execute()
-  res = util.wait_for_operation(op)
-  assert "error" not in res, f"{res}"
-  
+  try:
+    util.log_api_request(req)
+    op = req.execute()
+    res = util.wait_for_operation(op)
+    assert "error" not in res, f"{res}"
+  except AssertionError as e:
+    util.reset_mig_owner_db(nodes,{"LastAction":"Resume Failed: MIG creation error","LastSync":util.now().strftime("%Y-%m-%d %H:%M:%S")})
+
   # Create resize request
   req = lkp.compute.regionInstanceGroupManagerResizeRequests().insert(
     project=lkp.project,
@@ -91,16 +96,24 @@ def resume_flex_chunk(nodes: List[str], job_id: Optional[int], lkp: util.Lookup)
       )
     )
   )
-  util.log_api_request(req)
-  op = req.execute()
-  res = util.wait_for_operation(op)
-  assert "error" not in res, f"{res}"
+
+  try:
+    util.log_api_request(req)
+    op = req.execute()
+    res = util.wait_for_operation(op)
+    assert "error" not in res, f"{res}"
+  except AssertionError:
+    util.reset_mig_owner_db(nodes,{"LastAction":"Resume Failed: MIG resize request error","LastSync":util.now().strftime("%Y-%m-%d %H:%M:%S")})
 
 def _suspend_flex_mig(mig_self_link: str, nodes: List[str], lkp: util.Lookup) -> None:
   assert nodes
   model = nodes[0]
   nodeset = lkp.node_nodeset(model)
   assert len(nodeset.zone_policy_allow) > 0
+
+
+  util.reset_mig_owner_db(nodes,{"LastAction":"Suspend","LastSync":util.now().strftime("%Y-%m-%d %H:%M:%S")})
+
   region = lkp.node_region(model)
   project=lkp.project
   instanceGroupManager=util.trim_self_link(mig_self_link)
@@ -115,14 +128,6 @@ def _suspend_flex_mig(mig_self_link: str, nodes: List[str], lkp: util.Lookup) ->
   target_mig=lkp.get_mig(lkp.project, region, instanceGroupManager)
   assert target_mig
 
-  # TODO(FLEX): This will not work if MIG didn't obtain capacity yet.
-  # The request will fail and MIG will continue provisioning.
-  # Instead whole MIG should be deleted.
-  # + All other instances in MIG are not provisioned also, safe to delete
-  # - Need to come up will clear test to differentiate non-provisioned MIG and single VM being down;
-  #   Particularly CRITICAL due to ActionOnFailure=DO_NOTHING 
-  # - Need to `down_nodes_notify_jobs` for all nodes in MIG, make sure that it doesn't interfere with Slurm suspend-flow. 
-  
   if target_mig["targetSize"] == len(nodes): #We can just delete the whole MIG in this case
     req = lkp.compute.regionInstanceGroupManagers().delete(
     project=project,
@@ -140,59 +145,54 @@ def _suspend_flex_mig(mig_self_link: str, nodes: List[str], lkp: util.Lookup) ->
       )
     )
   
-  util.log_api_request(req)
-  op = req.execute()
-   
-  res = util.wait_for_operation(op)
-  assert "error" not in res, f"{res}"
-
-def _suspend_provisioning_inst(nodes:List[str], node_template:str, lkp: util.Lookup) -> None:
+  try:
+    util.log_api_request(req)
+    op = req.execute()
+    res = util.wait_for_operation(op)
+    assert "error" not in res, f"{res}"
+  except AssertionError as e:
+    util.reset_mig_owner_db(nodes,{"LastAction":"Suspend Failed: MIG deletion error","LastSync":util.now().strftime("%Y-%m-%d %H:%M:%S")})
+ 
+def _suspend_provisioning_inst(mig_name:str, nodes:List[str], lkp: util.Lookup) -> None:
   assert nodes
   model = nodes[0]
   nodeset = lkp.node_nodeset(model)
   assert len(nodeset.zone_policy_allow) > 0
   region = lkp.node_region(model)
+  util.reset_mig_owner_db(nodes,{"LastAction":"Suspend","LastSync":util.now().strftime("%Y-%m-%d %H:%M:%S")})
 
-  mig_list=lkp.get_mig_list(lkp.project, region)
+  mig = lkp.get_mig(lkp.project, region, mig_name)
 
-  # FLEX (#TODO): If we enter this conditional it's likely this was called so early that MIG creation hasn't started
-  # Consider potentially retrying? No natural mechanism for retry currently but we could
-  # perhaps use slurmsync and then try it again to ensure it wasn't a case of being too early.
-  # This is important since we're now enabling long ResumeTimeout (Slurm won't call suspend on node within reasonable timeframe) 
-  # so until we do this is slurmsync this is a temporary workaround.
+  if not mig or not mig["currentActions"]: 
+    util.reset_mig_owner_db(nodes,{"LastAction":"Failed Suspend no MIG","LastSync":util.now().strftime("%Y-%m-%d %H:%M:%S")})
+    log.info("No matching MIG found to delete!")
+    return
 
-  if not mig_list or not mig_list.get("items"):
-    log.info("No matching MIG found to delete! Retrying...")
-    sleep(5)
-    mig_list=lkp.get_mig_list(lkp.project, region)
-    if not mig_list or not mig_list.get("items"):
-      return
 
-  for mig in mig_list["items"]:
-    if mig["instanceTemplate"] == node_template:
-      if mig["currentActions"]["creating"] > 0 and mig["targetSize"] == mig["currentActions"]["creating"]:
-        req = lkp.compute.regionInstanceGroupManagers().delete(
-          project=lkp.project,
-          region=region,
-          instanceGroupManager=util.trim_self_link(mig["selfLink"]),
-        )
-
-        util.log_api_request(req)
-        op = req.execute()
-        
-        res = util.wait_for_operation(op)
-        assert "error" not in res, f"{res}"
-        return
-  
-  log.info("No matching MIG found to delete!")
+  req = lkp.compute.regionInstanceGroupManagers().delete(
+    project=lkp.project,
+    region=region,
+    instanceGroupManager=util.trim_self_link(mig["selfLink"]),
+  )
+  try:
+    util.log_api_request(req)
+    op = req.execute()
+    res = util.wait_for_operation(op)
+    assert "error" not in res, f"{res}"
+    return
+  except AssertionError as e:
+    log.info("No matching MIG still creating nodes found!")
+  # Don't want to wipe out mig associate in case it failed and user would like to retry
+  util.update_mig_db_entries(nodes,{"LastAction":"Suspend Failed: MIG no longer creating instances","LastSync":util.now().strftime("%Y-%m-%d %H:%M:%S")})
+    
 
 def suspend_flex_nodes(nodes: List[str], lkp: util.Lookup) -> None:
   by_mig = defaultdict(list)
-  not_provisioned = defaultdict(list)
+  non_inst_nodes = []
   for node in nodes:
     inst = lkp.instance(node)
     if not inst:
-      not_provisioned[lkp.node_template(node)].append(node)
+      non_inst_nodes.append(node)
     else:
       mig = inst.metadata.get("created-by")
       if not mig:
@@ -203,5 +203,14 @@ def suspend_flex_nodes(nodes: List[str], lkp: util.Lookup) -> None:
   for mig, nodes in by_mig.items():
     _suspend_flex_mig(mig, nodes, lkp)
   
-  for node_template, nodes in not_provisioned.items():
-    _suspend_provisioning_inst(nodes, node_template, lkp)
+  db_results = util.read_from_mig_db(non_inst_nodes)
+  if db_results:
+    mig_groups = defaultdict(list)
+    for fields in db_results:
+      mig = fields.get('MIGOwner')
+      nodename = fields.get('Nodename')
+      if mig and nodename:
+        mig_groups[mig].append(nodename)
+
+    for mig, nodes in mig_groups.items():
+      _suspend_provisioning_inst(mig, nodes, lkp)

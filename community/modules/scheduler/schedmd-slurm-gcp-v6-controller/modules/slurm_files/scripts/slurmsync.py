@@ -86,7 +86,7 @@ class NodeActionPowerDown():
 class NodeActionPowerDownForce():
     def apply(self, nodes:List[str]) -> None:
         hostlist = util.to_hostlist(nodes)
-        log.info(f"{len(nodes)} instances to power down ({hostlist})")
+        log.info(f"{len(nodes)} instances to force power down ({hostlist})")
         run(f"{lookup().scontrol} update nodename={hostlist} state=power_down_force")
 
 
@@ -275,7 +275,7 @@ def get_node_action(nodename: str) -> NodeAction:
             return NodeActionDown(reason="Unbacked instance")
         if state.base != "DOWN" and not power_flags:
             return NodeActionDown(reason="Unbacked instance")
-        if state.base == "DOWN" and not power_flags:
+        if state.base == "DOWN" and not power_flags or "NOT_RESPONDING" in state.flags:
             return NodeActionPowerDown()
         if "POWERED_DOWN" in state.flags and lkp.is_static_node(nodename):
             return NodeActionPowerUp()

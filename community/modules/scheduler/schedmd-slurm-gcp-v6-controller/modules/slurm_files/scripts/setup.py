@@ -435,6 +435,9 @@ def setup_controller():
 
     if not lkp.cfg.cloudsql_secret:
         configure_mysql(lkp)
+    
+    if lkp.has_flex():
+        setup_flex_db(lkp)
 
     run("systemctl enable slurmdbd", timeout=30)
     run("systemctl restart slurmdbd", timeout=30)
@@ -570,6 +573,15 @@ def setup_compute():
     run("systemctl status slurmd", timeout=30)
 
     log.info("Done setting up compute")
+
+def setup_flex_db(lkp:util.Lookup) -> None:
+    cmd = "mysql -u root -e"
+    db_name = "mig_db"
+    run(f"""{cmd} "create database {db_name};";""", timeout=30)
+    for host  in ("localhost", lkp.control_host):
+        run(f"""{cmd} "grant all on {db_name}.* TO 'slurm'@'{host}'";""", timeout=30)
+    create_table_query = "CREATE TABLE instances_table (Nodename VARCHAR(255) PRIMARY KEY, MIGOwner VARCHAR(255), LastAction VARCHAR(255), LastSync DATETIME)"
+    run(f"""mysql -u slurm -D {db_name} -e "{create_table_query};";""", timeout=30)
 
 def setup_cloud_ops() -> None:
     """Add health checks, deployment info, and updated setup path to cloud ops config."""

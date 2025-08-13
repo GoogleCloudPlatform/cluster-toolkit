@@ -304,7 +304,6 @@ def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
     nodes, flex_managed = util.separate(lkp.is_provisioning_flex_node, nodes)
     if flex_managed:
         log.warning(f"Resume was unable to resume nodes={flex_managed} already managed by MIGs")
-        down_nodes_notify_jobs(flex_managed, "VM is managed MIG, can not be resumed", resume_data)
 
     if not nodes:
         log.info("No nodes to resume")

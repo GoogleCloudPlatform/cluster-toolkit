@@ -1367,6 +1367,56 @@ def batch_execute(requests, retry_cb=None, log_err=log.error):
 
     return done, failed
 
+def execute_mig_db_command(command:str) -> Any:
+    result = run(f"""mysql -u slurm -D mig_db -e "{command};";""", timeout=30)
+    if result.returncode != 0:
+        log.warning(f"Failed MIG DB command {command}; stdout:'{result.stdout}', stderr:'{result.stderr}'")
+    return result
+
+def initalize_node_entry(nodes: List[str], time:datetime) -> None:
+    formatted_date_time = time.strftime("%Y-%m-%d %H:%M:%S")
+    formatted_entries = ",".join([f"('{node}','{formatted_date_time}')" for node in nodes])
+    insert_query = f"START TRANSACTION; INSERT INTO instances_table (Nodename, LastSync) VALUES {formatted_entries}; COMMIT"
+    execute_mig_db_command(insert_query)
+
+def update_mig_db_entries(nodes:List[str], update_column_entry: NSDict) -> None:
+    formatted_update = ", ".join(f"{key} = '{value}'" for key, value in update_column_entry.items())
+    update_query = f"START TRANSACTION; UPDATE instances_table SET {formatted_update} WHERE Nodename in {nodes_db_form(nodes)}; COMMIT"
+    execute_mig_db_command(update_query)
+
+def reset_mig_owner_db(nodes:List[str], other_updates:Optional[NSDict]) -> None:
+    if not other_updates:
+        update_query = f"START TRANSACTION; UPDATE instances_table SET MIGOwner = NULL WHERE Nodename in {nodes_db_form(nodes)}; COMMIT"
+    else:
+        formatted_update = ", ".join(f"{key} = '{value}'" for key, value in other_updates.items())
+        update_query = f"START TRANSACTION; UPDATE instances_table SET MIGOwner = NULL, {formatted_update} WHERE Nodename in {nodes_db_form(nodes)}; COMMIT"
+    execute_mig_db_command(update_query)
+
+def read_from_mig_db(nodes: List[str]) -> Optional[List[NSDict]]:
+    if not nodes:
+        return None
+    read_query = f"SELECT * FROM instances_table WHERE Nodename IN {nodes_db_form(nodes)}"
+    result = execute_mig_db_command(read_query)
+    if result.returncode == 0:
+        return db_entry_to_dict(result.stdout)
+    return None
+
+def nodes_db_form(nodes: List[str]) -> Any:
+    assert nodes
+    if len(nodes) == 1:
+        return f"('{nodes[0]}')"
+    return tuple(nodes)
+
+def db_entry_to_dict(db_entries: str) -> Optional[List[NSDict]]:
+    lines = [s.split() for s in db_entries.strip().splitlines() if s]
+    if len(lines) < 2: return []
+    
+    headers, data_rows = lines[0], lines[1:]
+    
+    return [
+        dict(zip(headers, row[:len(headers)-1] + ([datetime.strptime(f"{row[-2]} {row[-1]}", "%Y-%m-%d %H:%M:%S")])))
+        for row in data_rows
+    ]
 
 def get_operation_req(lkp: "Lookup", name: str, region: Optional[str]=None, zone: Optional[str]=None) -> Any:
   if zone:
@@ -1822,7 +1872,6 @@ class Lookup:
 
     @lru_cache()
     def get_mig_list(self, project: str, region: str) -> Any:
-        """https://cloud.google.com/compute/docs/reference/rest/v1/regionInstanceGroupManagers"""
         return self.compute.regionInstanceGroupManagers().list(project=project, region=region).execute()
 
     @lru_cache()
@@ -2109,6 +2158,12 @@ class Lookup:
         except:
             return False
 
+    def has_flex(self) -> bool:
+        for ns in self.cfg.nodeset.values():
+            if ns.dws_flex.enabled:
+                return True
+        return False
+
     def is_provisioning_flex_node(self, node:str) -> bool:
         if not self.is_flex_node(node):
             return False
@@ -2119,26 +2174,20 @@ class Lookup:
         zones = nodeset.zone_policy_allow
         assert len(zones) > 0
         region = self.node_region(node)
-
-        potential_migs=[]
-        mig_list=self.get_mig_list(self.project, region)
-        
-        if not mig_list or not mig_list.get("items"):
+        node_dict = read_from_mig_db([node])
+        if not node_dict:
+            initalize_node_entry([node],now())
             return False
 
-        for mig in mig_list["items"]:
-            if not mig.get("instanceTemplate"): #possibly an old MIG
-                return False
-            if mig["instanceTemplate"] == self.node_template(node) and mig["currentActions"]["creating"] > 0:
-                potential_migs.append(self.get_mig_instances(self.project, region, trim_self_link(mig["selfLink"])))
-
-        if not potential_migs:
-            return False
-
-        for instance_collection in potential_migs[0]["managedInstances"]:
-            if node in instance_collection["name"] and instance_collection["currentAction"]=="CREATING":
+        assert len(node_dict) == 1
+        if node_dict[0].get("LastAction") == "Resume" and node_dict[0].get("MIGOwner") != "No MIG":
+            mig = self.get_mig(self.project, region, node_dict[0]["MIGOwner"])
+            if mig and mig["currentActions"]["creating"] > 0:
+                reset_mig_owner_db([node],{"LastSync":now().strftime("%Y-%m-%d %H:%M:%S")})
                 return True
+            reset_mig_owner_db([node],{"LastSync":now().strftime("%Y-%m-%d %H:%M:%S")})
         return False
+
     
     def cluster_regions(self) -> list[str]:
         """
