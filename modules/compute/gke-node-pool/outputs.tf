@@ -113,7 +113,7 @@ output "instructions" {
 
 output "node_count" {
   description = "The number of nodes in the node pool."
-  value       = coalesce(var.static_node_count, var.initial_node_count)
+  value       = coalesce(var.static_node_count, var.initial_node_count, 0)
 }
 
 output "guest_accelerator" {
