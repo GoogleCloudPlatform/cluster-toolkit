@@ -87,7 +87,7 @@ deployment_groups:
     source: modules/file-system/filestore
     use: [a3ultra-net-0]
     settings:
-      filestore_tier: BASIC_HDD
+      filestore_tier: BASIC_SSD
       size_gb: 10240
       local_mount: /home
       reserved_ip_range: $(vars.filestore_ip_range)
