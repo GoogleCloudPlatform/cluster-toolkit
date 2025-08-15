@@ -62,7 +62,7 @@ locals {
     content  = var.startup_script
   }]
 
-  termination_action = (var.dws_flex.enabled && !var.dws_flex.use_bulk_insert) ? "DELETE" : try(var.spot_instance_config.termination_action, null)
+  termination_action = (var.dws_flex.enabled && !var.dws_flex.use_bulk_insert) ? "DELETE" : (var.preemptible ? coalesce(var.spot_instance_config.termination_action, "STOP") : null)
 
   nodeset = {
     node_count_static      = var.node_count_static

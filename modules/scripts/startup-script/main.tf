@@ -250,12 +250,6 @@ locals {
   # Final content output to the user
   stdlib = join("", local.stdlib_list)
 
-  runners_map = { for runner in local.runners :
-    basename(runner["destination"]) => {
-      content = lookup(runner, "content", null)
-      source  = lookup(runner, "source", null)
-    }
-  }
 }
 
 resource "random_id" "resource_name_suffix" {
@@ -270,6 +264,13 @@ resource "google_storage_bucket" "configs_bucket" {
   location                    = var.region
   storage_class               = "REGIONAL"
   labels                      = local.labels
+
+  lifecycle {
+    precondition {
+      condition     = !(var.install_cloud_ops_agent && var.install_stackdriver_agent)
+      error_message = "Only one of var.install_stackdriver_agent or var.install_cloud_ops_agent can be set. Stackdriver is recommended for best performance."
+    }
+  }
 }
 
 resource "google_storage_bucket_iam_binding" "viewers" {
@@ -278,24 +279,19 @@ resource "google_storage_bucket_iam_binding" "viewers" {
   members = var.bucket_viewers
 }
 
-resource "google_storage_bucket_object" "scripts" {
-  # this writes all scripts exactly once into GCS
-  for_each = local.runners_map
-  name     = "${local.storage_folder_path_prefix}${each.key}-${substr(try(md5(each.value.content), filemd5(each.value.source)), 0, 4)}"
-  content  = each.value.content
-  source   = each.value.source
-  bucket   = local.storage_bucket_name
-  timeouts {
-    create = "10m"
-    update = "10m"
-  }
+resource "local_file" "scripts" {
+  for_each = { for r in local.runners : basename(r.destination) => r }
+  content  = try(each.value.content, file(each.value.source))
+  filename = "${path.module}/build/${each.key}"
+}
 
-  lifecycle {
-    precondition {
-      condition     = !(var.install_cloud_ops_agent && var.install_stackdriver_agent)
-      error_message = "Only one of var.install_stackdriver_agent or var.install_cloud_ops_agent can be set. Stackdriver is recommended for best performance."
-    }
-  }
+resource "google_storage_bucket_object" "scripts" {
+  for_each = { for r in local.runners : basename(r.destination) => r }
+
+  bucket         = local.storage_bucket_name
+  name           = "${local.storage_folder_path_prefix}${each.key}"
+  source         = local_file.scripts[each.key].filename
+  source_md5hash = local_file.scripts[each.key].content_md5
 }
 
 resource "local_file" "debug_file" {
