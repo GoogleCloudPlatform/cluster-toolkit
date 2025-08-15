@@ -18,6 +18,7 @@
 import argparse
 import logging
 import os
+import hashlib
 import shutil
 import subprocess
 import stat
@@ -522,6 +523,18 @@ def setup_login():
     log.info("Done setting up login")
 
 
+def _generate_hashed_path_components(base_path: str):
+    assert base_path.startswith("/"), f"Unexpected path format: {base_path}"
+    raw_segments = base_path.strip('/').split('/')
+    path_components = []
+    concat_segments = ""
+    for segment in raw_segments:
+        concat_segments += segment
+        hashed_component = hashlib.md5(concat_segments.encode()).hexdigest()[:16]
+        path_components.append(hashed_component)
+
+    return path_components
+
 def setup_compute():
     """run compute node setup"""
     log.info("Setting up compute")
@@ -534,7 +547,24 @@ def setup_compute():
     slurmd_options = [
         f'--conf-server="{slurmctld_host}:{lkp.control_host_port}"',
     ]
+    
+    physical_host_hash = []
 
+    try:
+        current_instance_name = lkp.hostname
+        current_instance = lkp.instances().get(current_instance_name)
+        physical_host_path = "Default/Physical/Host" 
+
+        if current_instance and current_instance.resource_status.physical_host:
+            physical_host_path = current_instance.resource_status.physical_host
+            physical_host_hash = _generate_hashed_path_components(physical_host_path)
+        else:
+            physical_host_hash = _generate_hashed_path_components(physical_host_path)
+    except Exception as e:
+        log.error(f"Error during local topology.yaml generation for compute node: {e}", exc_info=True)
+
+    slurmd_options.append(f'--conf="Topology=slurm_gcp_default_topo:root:{physical_host_hash[0]}:{physical_host_hash[1]}:{physical_host_hash[2]}"')
+    slurmd_options.append("-Z")
     try:
         slurmd_feature = util.instance_metadata("attributes/slurmd_feature", silent=True)
     except util.MetadataNotFoundError:
