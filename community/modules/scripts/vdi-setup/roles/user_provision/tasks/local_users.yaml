@@ -1,0 +1,103 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+---
+
+- name: Check if user exists
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ item.username }}"
+  register: user_exists_check
+  ignore_errors: true
+  when: debug
+
+- name: Set user exists status for debug
+  ansible.builtin.set_fact:
+    user_exists_status: false
+  when: debug and user_exists_check is failed
+
+- name: Set user exists status for debug (success case)
+  ansible.builtin.set_fact:
+    user_exists_status: "{{ user_exists_check.ansible_facts.getent_passwd is defined }}"
+  when: debug and user_exists_check is not failed
+
+- name: Debug user provision for {{ item.username }}
+  ansible.builtin.debug:
+    msg: |
+      Provisioning user {{ item.username }}:
+        - is_fresh_deployment: {{ is_fresh_deployment }}
+        - user_hash: {{ user_hash }}
+        - password_update_mode: {{ 'always' if is_fresh_deployment else 'on_create' }}
+        - user_exists: {{ user_exists_status | default(false) }}
+  when: debug
+
+- name: Provision VDI users (custom or generated passwords)
+  block:
+
+  # Handle group changes for existing users
+  - name: Debug group change detection for {{ item.username }}
+    ansible.builtin.debug:
+      msg: |
+        Group change detection for {{ item.username }}:
+          - old_group: {{ vdi_setup_status.vdi_user_group | default('not_set') }}
+          - new_group: {{ vdi_user_group }}
+          - group_changed: {{ vdi_setup_status.vdi_user_group is defined and vdi_setup_status.vdi_user_group != vdi_user_group }}
+    when:
+    - debug
+    - not is_fresh_deployment
+    - vdi_setup_status.vdi_user_group is defined
+
+  - name: Remove users from old VDI group (if group changed)
+    ansible.builtin.user:
+      name: "{{ item.username }}"
+      groups: "{{ vdi_setup_status.vdi_user_group }}"
+      remove: yes
+    when:
+    - not is_fresh_deployment
+    - vdi_setup_status.vdi_user_group is defined
+    - vdi_setup_status.vdi_user_group != vdi_user_group
+    ignore_errors: true
+
+  # Create the Linux user with a hashed password
+  - name: Create VDI user {{ item.username }}
+    ansible.builtin.user:
+      name: "{{ item.username }}"
+      groups: "{{ vdi_user_group }},wheel"
+      shell: /bin/bash
+      create_home: yes
+      append: true
+      password: "{{ item.password | password_hash('sha512') }}"
+      update_password: "{{ 'always' if is_fresh_deployment else 'on_create' }}"
+
+  # SSH key setup
+  - name: Ensure .ssh directory for {{ item.username }}
+    ansible.builtin.file:
+      path: "/home/{{ item.username }}/.ssh"
+      state: directory
+      owner: "{{ item.username }}"
+      group: "{{ vdi_user_group }}"
+      mode: '0700'
+
+  - name: Generate SSH key pair for {{ item.username }}
+    community.crypto.openssh_keypair:
+      path: "/home/{{ item.username }}/.ssh/id_rsa"
+      owner: "{{ item.username }}"
+      group: "{{ vdi_user_group }}"
+      mode: '0600'
+    register: ssh_key
+
+  - name: Add public key to authorized_keys for {{ item.username }}
+    ansible.builtin.authorized_key:
+      user: "{{ item.username }}"
+      key: "{{ ssh_key.public_key }}"
+      state: present

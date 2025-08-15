@@ -1,0 +1,141 @@
+#!/bin/bash
+
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# VDI Monitor Testing Module
+# Contains testing and diagnostic functions
+
+# Function to run comprehensive tests
+run_tests() {
+    log_message "VDI Configuration Monitor - Test Mode"
+    log_message "Testing GCS hash detection functionality..."
+    
+    # Test 1: Check if gcloud is available
+    log_message "Test 1: Checking gcloud availability..."
+    if command -v gcloud >/dev/null 2>&1; then
+        log_message "SUCCESS: gcloud is available"
+        gcloud --version | head -1
+    else
+        log_message "ERROR: gcloud is not available"
+        exit 1
+    fi
+    
+    # Test 2: Check if we can access the bucket
+    log_message "Test 2: Checking bucket access..."
+    if gsutil ls "gs://$BUCKET_NAME/" >/dev/null 2>&1; then
+        log_message "SUCCESS: Can access bucket gs://$BUCKET_NAME/"
+    else
+        log_message "ERROR: Cannot access bucket gs://$BUCKET_NAME/"
+        exit 1
+    fi
+    
+    # Test 3: List bucket contents
+    log_message "Test 3: Listing bucket contents..."
+    gsutil ls "gs://$BUCKET_NAME/"
+    
+    # Test 4: Test file detection
+    log_message "Test 4: Testing file detection..."
+    local test_vars_file=$(get_current_file_name "vars.yaml")
+    local test_install_file=$(get_current_file_name "install.yaml")
+    local test_roles_file=$(get_current_file_name "roles.tar.gz")
+    
+    if [[ -n "$test_vars_file" && -n "$test_install_file" && -n "$test_roles_file" ]]; then
+        log_message "SUCCESS: File detection works"
+        log_message "Current files:"
+        log_message "  vars.yaml: $test_vars_file"
+        log_message "  install.yaml: $test_install_file"
+        log_message "  roles.tar.gz: $test_roles_file"
+    else
+        log_message "ERROR: File detection failed"
+        log_message "  vars.yaml: $test_vars_file"
+        log_message "  install.yaml: $test_install_file"
+        log_message "  roles.tar.gz: $test_roles_file"
+        exit 1
+    fi
+    
+    # Test 5: Test reset password flag detection
+    log_message "Test 5: Testing reset password flag detection..."
+    if check_reset_password_flags; then
+        log_message "SUCCESS: Reset password flag detected"
+    else
+        log_message "INFO: No reset password flags found"
+    fi
+    
+    # Test 6: Check if configuration change detection works
+    log_message "Test 6: Testing configuration change detection..."
+    
+    # Check if system is properly initialized
+    if ! is_system_initialized; then
+        log_message "WARNING: System not fully initialized - initializing now..."
+        
+        # Initialize file tracking
+        local current_vars_file=$(get_current_file_name "vars.yaml")
+        if [[ -n "$current_vars_file" ]]; then
+            store_file_name "vars" "$current_vars_file"
+        fi
+        
+        local current_install_file=$(get_current_file_name "install.yaml")
+        if [[ -n "$current_install_file" ]]; then
+            store_file_name "install" "$current_install_file"
+        fi
+        
+        local current_roles_file=$(get_current_file_name "roles.tar.gz")
+        if [[ -n "$current_roles_file" ]]; then
+            store_file_name "roles" "$current_roles_file"
+        fi
+        
+        log_message "System initialization complete"
+    fi
+    
+    # Now test change detection
+    if check_config_changed; then
+        log_message "SUCCESS: Configuration change detected"
+        exit 0
+    else
+        log_message "INFO: No configuration changes detected"
+        exit 0
+    fi
+}
+
+# Function to run diagnostics
+run_diagnostics() {
+    log_message "VDI Monitor Diagnostics"
+    
+    # Environment information
+    log_message "Environment:"
+    log_message "  VDI_SETUP_DIR: $VDI_SETUP_DIR"
+    log_message "  BUCKET_NAME: $BUCKET_NAME"
+    log_message "  MONITOR_LOG: $MONITOR_LOG"
+    log_message "  ANSIBLE_LOG: $ANSIBLE_LOG"
+    
+    # Check file existence
+    log_message "File Status:"
+    log_message "  vars.yaml exists: $([[ -f "$VDI_SETUP_DIR/vars.yaml" ]] && echo 'yes' || echo 'no')"
+    log_message "  install.yaml exists: $([[ -f "$VDI_SETUP_DIR/install.yaml" ]] && echo 'yes' || echo 'no')"
+    log_message "  roles directory exists: $([[ -d "$VDI_SETUP_DIR/roles" ]] && echo 'yes' || echo 'no')"
+    
+    # Check tracking files
+    log_message "Tracking Files:"
+    log_message "  vars tracking: $([[ -f "/opt/vdi-setup/.current_vars_file" ]] && echo 'yes' || echo 'no')"
+    log_message "  install tracking: $([[ -f "/opt/vdi-setup/.current_install_file" ]] && echo 'yes' || echo 'no')"
+    log_message "  roles tracking: $([[ -f "/opt/vdi-setup/.current_roles_file" ]] && echo 'yes' || echo 'no')"
+    
+    # System status
+    log_message "System Status:"
+    log_message "  Initialized: $(is_system_initialized && echo 'yes' || echo 'no')"
+    log_message "  gcloud available: $(command -v gcloud >/dev/null 2>&1 && echo 'yes' || echo 'no')"
+    log_message "  gsutil available: $(command -v gsutil >/dev/null 2>&1 && echo 'yes' || echo 'no')"
+    log_message "  ansible-playbook available: $(command -v ansible-playbook >/dev/null 2>&1 && echo 'yes' || echo 'no')"
+}

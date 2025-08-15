@@ -1,0 +1,50 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+- name: Set current role (only if not already set)
+  ansible.builtin.set_fact:
+    current_role: "{{ current_role | default('lock_manager') }}"
+
+- name: Debug lock manager role execution
+  ansible.builtin.debug:
+    msg: "Lock manager role started - operation: {{ lock_operation | default('check') }} for role: {{ current_role }}"
+
+- name: Ensure lock directory exists
+  ansible.builtin.file:
+    path: /opt/vdi-setup
+    state: directory
+    mode: '0755'
+  register: lock_dir_creation
+
+- name: Debug lock directory status
+  ansible.builtin.debug:
+    msg: "Lock directory created: {{ lock_dir_creation.changed }}"
+  when: debug
+
+- name: Include check lock tasks
+  ansible.builtin.include_tasks: check_lock.yaml
+  when: lock_operation | default('check') == 'check'
+
+- name: Include create lock tasks
+  ansible.builtin.include_tasks: create_lock.yaml
+  when: lock_operation | default('check') == 'create'
+
+- name: Include cleanup lock tasks
+  ansible.builtin.include_tasks: cleanup_lock.yaml
+  when: lock_operation | default('check') == 'cleanup'
+
+- name: Debug lock manager role completion
+  ansible.builtin.debug:
+    msg: "Lock manager role completed - operation: {{ lock_operation | default('check') }}"

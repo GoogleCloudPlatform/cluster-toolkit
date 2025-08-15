@@ -1,0 +1,230 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+- name: Debug create lock operation
+  ansible.builtin.debug:
+    msg: "Creating/updating lock file for role: {{ current_role }}"
+
+- name: Check if lock file exists
+  ansible.builtin.stat:
+    path: /opt/vdi-setup/.vdi-lock.yaml
+  register: lock_file_stat
+
+- name: Debug lock file existence
+  ansible.builtin.debug:
+    msg: "Lock file exists: {{ lock_file_stat.stat.exists }}"
+  when: debug
+
+- name: Create initial lock file structure
+  ansible.builtin.template:
+    src: lock_file.yaml.j2
+    dest: /opt/vdi-setup/.vdi-lock.yaml
+    mode: '0644'
+  when: not lock_file_stat.stat.exists
+  register: lock_file_creation
+
+- name: Debug lock file creation
+  ansible.builtin.debug:
+    msg: "Lock file created: {{ lock_file_creation.changed }}"
+  when: debug and not lock_file_stat.stat.exists
+
+- name: Set fresh deployment flag (only when lock file is created)
+  ansible.builtin.set_fact:
+    is_fresh_deployment: true
+  when: lock_file_creation.changed
+
+- name: Load existing lock file data
+  ansible.builtin.include_vars:
+    file: /opt/vdi-setup/.vdi-lock.yaml
+  when: lock_file_stat.stat.exists or lock_file_creation.changed
+  register: existing_lock_data
+
+- name: Get current lock data
+  ansible.builtin.set_fact:
+    current_lock_data: "{{ existing_lock_data.ansible_facts.vdi_setup_status | default({}) }}"
+  when: lock_file_stat.stat.exists or lock_file_creation.changed
+
+- name: Update deployment hash
+  ansible.builtin.set_fact:
+    current_lock_data: "{{ current_lock_data | combine({'deployment_hash': current_deployment_hash}) }}"
+  when: lock_file_stat.stat.exists or lock_file_creation.changed
+
+- name: Update user hash
+  ansible.builtin.set_fact:
+    current_lock_data: "{{ current_lock_data | combine({'user_hash': current_user_secrets_hash}) }}"
+  when: lock_file_stat.stat.exists or lock_file_creation.changed
+
+- name: Update current users
+  ansible.builtin.set_fact:
+    current_lock_data: "{{ current_lock_data | combine({'current_users': vdi_users | map(attribute='username') | list}) }}"
+  when: lock_file_stat.stat.exists or lock_file_creation.changed
+
+- name: Update user ports
+  ansible.builtin.set_fact:
+    current_lock_data: "{{ current_lock_data | combine({'user_ports': vdi_users | items2dict(key_name='username', value_name='port')}) }}"
+  when: lock_file_stat.stat.exists or lock_file_creation.changed
+
+- name: Update webapp port
+  ansible.builtin.set_fact:
+    current_lock_data: "{{ current_lock_data | combine({'webapp_port': vdi_webapp_port}) }}"
+  when: lock_file_stat.stat.exists or lock_file_creation.changed
+
+- name: Update vdi user group
+  ansible.builtin.set_fact:
+    current_lock_data: "{{ current_lock_data | combine({'vdi_user_group': vdi_user_group}) }}"
+  when: lock_file_stat.stat.exists or lock_file_creation.changed
+
+- name: Get current timestamp
+  ansible.builtin.command: date -u "+%Y-%m-%dT%H:%M:%SZ"
+  register: current_timestamp
+  changed_when: false
+  when: lock_file_stat.stat.exists or lock_file_creation.changed
+
+- name: Update last updated timestamp
+  ansible.builtin.set_fact:
+    current_lock_data: "{{ current_lock_data | combine({'last_updated': current_timestamp.stdout}) }}"
+  when: lock_file_stat.stat.exists or lock_file_creation.changed
+
+- name: Create role status entry
+  ansible.builtin.set_fact:
+    role_status_entry: "{{ role_completed | default(false) }}"
+  when: lock_file_stat.stat.exists or lock_file_creation.changed
+
+- name: Debug role status entry
+  ansible.builtin.debug:
+    msg: |
+      Role status entry for {{ current_role | default(ansible_role_name | basename) }}:
+        - completed: {{ role_completed | default(false) }}
+  when: debug and (lock_file_stat.stat.exists or lock_file_creation.changed)
+
+- name: Debug current lock data before role update
+  ansible.builtin.debug:
+    msg: |
+      Current lock data before updating {{ current_role }}:
+        - current_lock_data: {{ current_lock_data | to_nice_yaml }}
+        - current_completed_roles: {{ current_lock_data.completed_roles | default({}) | to_nice_yaml }}
+        - role_completed: {{ role_completed }}
+        - current_role: {{ current_role }}
+  when: debug and (lock_file_stat.stat.exists or lock_file_creation.changed) and role_completed is defined
+
+- name: Get current completed roles
+  ansible.builtin.set_fact:
+    current_completed_roles: "{{ current_lock_data.completed_roles | default({}) }}"
+  when: lock_file_stat.stat.exists or lock_file_creation.changed
+
+- name: Update completed roles
+  ansible.builtin.set_fact:
+    updated_completed_roles: "{{ current_completed_roles | combine({current_role | default(ansible_role_name | basename): role_status_entry}) }}"
+  when: lock_file_stat.stat.exists or lock_file_creation.changed
+
+- name: Update lock data with completed roles
+  ansible.builtin.set_fact:
+    current_lock_data: "{{ current_lock_data | combine({'completed_roles': updated_completed_roles}) }}"
+  when: lock_file_stat.stat.exists or lock_file_creation.changed
+
+- name: Debug updated lock data after role update
+  ansible.builtin.debug:
+    msg: |
+      Updated lock data after updating {{ current_role | default(ansible_role_name | basename) }}:
+        - current_role: {{ current_role | default(ansible_role_name | basename) }}
+        - role_completed: {{ role_completed | default(false) }}
+        - completed_roles: {{ updated_completed_roles }}
+  when: debug and (lock_file_stat.stat.exists or lock_file_creation.changed)
+
+- name: Check if all roles are completed
+  ansible.builtin.set_fact:
+    all_roles_completed: "{{ updated_completed_roles.values() | select('equalto', true) | list | length == updated_completed_roles.keys() | list | length }}"
+  when: lock_file_stat.stat.exists or lock_file_creation.changed
+
+- name: Update setup status based on completion
+  ansible.builtin.set_fact:
+    current_lock_data: "{{ current_lock_data | combine({'setup_status': 'available' if all_roles_completed else 'configuring'}) }}"
+  when: lock_file_stat.stat.exists or lock_file_creation.changed
+
+- name: Debug setup status update
+  ansible.builtin.debug:
+    msg: |
+      Setup status update:
+        - all_roles_completed: {{ all_roles_completed | default(false) }}
+        - setup_status: {{ 'available' if all_roles_completed else 'configuring' }}
+        - completed_roles_count: {{ updated_completed_roles.values() | select('equalto', true) | list | length }}
+        - total_roles_count: {{ updated_completed_roles.keys() | list | length }}
+  when: debug and (lock_file_stat.stat.exists or lock_file_creation.changed)
+
+- name: Write updated lock file
+  ansible.builtin.copy:
+    content: |
+      vdi_setup_status:
+      {{ current_lock_data | to_nice_yaml(indent=2) | indent(2, first=true) }}
+    dest: /opt/vdi-setup/.vdi-lock.yaml
+    mode: '0644'
+  when: lock_file_stat.stat.exists or lock_file_creation.changed
+  register: lock_file_write
+
+- name: Debug VM metadata update
+  ansible.builtin.debug:
+    msg: |
+      VM metadata update info:
+        - hostname: {{ ansible_hostname }}
+        - zone: {{ zone }}
+        - lock_file_changed: {{ lock_file_write.changed }}
+  when: debug
+
+- name: Get lock file content as base64
+  ansible.builtin.shell: cat /opt/vdi-setup/.vdi-lock.yaml | base64 -w 0
+  register: lock_file_base64
+  when: lock_file_write.changed
+
+- name: Add VDI lock file content to VM metadata (with retry)
+  ansible.builtin.command: >
+    gcloud compute instances add-metadata {{ ansible_hostname }}
+    --metadata vdi-lock-content="{{ lock_file_base64.stdout }}"
+    --zone={{ zone }}
+  when:
+  - lock_file_write.changed
+  - lock_file_base64.rc == 0
+  register: metadata_update
+  retries: 3
+  delay: 2
+  until: metadata_update.rc == 0
+  changed_when: metadata_update.rc == 0
+  failed_when:
+  - metadata_update.rc != 0
+  - "'already exists' not in metadata_update.stderr | default('')"
+
+- name: Debug lock file write
+  ansible.builtin.debug:
+    msg: "Lock file written: {{ lock_file_write.changed }}"
+  when: debug
+
+- name: Verify lock file integrity
+  ansible.builtin.command: python3 -c "import yaml; yaml.safe_load(open('/opt/vdi-setup/.vdi-lock.yaml'))"
+  register: lock_file_validation
+  changed_when: false
+
+- name: Debug lock file validation
+  ansible.builtin.debug:
+    msg: "Lock file validation: {{ lock_file_validation.rc == 0 }}"
+  when: debug
+
+- name: Debug lock manager completion
+  ansible.builtin.debug:
+    msg: "Lock manager role completed successfully"
+  when: debug
+
+- name: Fail if lock file is invalid
+  ansible.builtin.fail:
+    msg: "Lock file validation failed: {{ lock_file_validation.stderr }}"
+  when: lock_file_validation.rc != 0

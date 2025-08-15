@@ -1,0 +1,21 @@
+-- Create Guacamole user for {{ username }}
+INSERT INTO guacamole_entity (name, type)
+VALUES ('{{ username }}', 'USER');
+
+INSERT INTO guacamole_user (
+    entity_id,
+    password_salt,
+    password_hash,
+    password_date,
+    disabled,
+    expired
+)
+SELECT
+    entity_id,
+    NULL,
+    digest('{{ vdi_password }}', 'SHA-256'),
+    now(),
+    false,
+    false
+FROM guacamole_entity
+WHERE name = '{{ username }}' AND type = 'USER';
