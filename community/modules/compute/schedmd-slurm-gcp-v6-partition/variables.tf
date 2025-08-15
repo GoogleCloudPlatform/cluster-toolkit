@@ -287,6 +287,22 @@ variable "suspend_timeout" {
   }
 }
 
+variable "slurmd_timeout" {
+  description = <<-EOD
+    Maximum time permitted (in seconds) for which slurm controller waits to get a response from slurmd before setting a nodes's state to DOWN 
+    A value of zero indicates the node will not be tested by slurmctld to confirm the state of slurmd.
+    This sets 'SlurmdTimeout' in partition_conf
+    See https://slurm.schedmd.com/slurm.conf.html#OPT_SlurmdTimeout_1 for details.
+  EOD
+  type        = number
+  default     = 900
+
+  validation {
+    condition     = var.slurmd_timeout >= 0 && var.slurmd_timeout < 65536
+    error_message = "Value must be >=0 and < 65536"
+  }
+}
+
 
 # tflint-ignore: terraform_unused_declarations
 variable "network_storage" {
