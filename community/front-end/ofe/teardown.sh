@@ -31,9 +31,18 @@ delete_service_account() {
 	local service_account="${server_name}-tkfe-sa"
 	local ready
 
+	# Set the gcloud project first
+	if ! gcloud config set project "${project}" &>/dev/null; then
+		echo "  Error: Failed to set gcloud project to ${project}"
+		return 1
+	fi
+
+	echo "  Checking for service account: ${service_account} in project: ${project}"
+
 	# -- If no detected service account, just return ok
 	if ! bash "${SCRIPT_DIR}/script/service_account.sh" check \
 		"${project}" "${service_account}"; then
+		echo "  No service account found"
 		return 0
 	fi
 
@@ -144,10 +153,16 @@ fi
 # -- Get project and deployment name used used for current TKFE
 #    This can be extracted from the terraform files
 #
-project=$(awk '$1 ~ /project_id/ {v=substr($3,2,length($3)-2); print v}' \
-	${tfvars})
-dname=$(awk '$1 ~ /deployment_name/ {v=substr($3,2,length($3)-2); print v}' \
-	${tfvars})
+project=$(awk -F'=' '/^project_id/ {gsub(/^[ \t]+|[ \t]+$|^"|"$/, "", $2); print $2}' ${tfvars} | tr -d '"')
+dname=$(awk -F'=' '/^deployment_name/ {gsub(/^[ \t]+|[ \t]+$|^"|"$/, "", $2); print $2}' ${tfvars} | tr -d '"')
+
+# -- Validate project and deployment name
+#
+if [[ -z "${project}" || -z "${dname}" ]]; then
+	echo "  Error: Could not extract project_id or deployment_name from ${tfvars}"
+	echo "Exiting."
+	exit 1
+fi
 
 # -- The tf directory can exist, but TKFE deployment was aborted
 #    If this happened, the service account may still need removing.
@@ -157,17 +172,41 @@ delete_service_account "${project}" "${dname}"
 # -- Now check TKFE was deployed - get server name from terraform
 #
 tname=$(
-	cd tf
-	terraform show |
-		awk '/ghpcfe_id/ {v=substr($3,2,length($3)-2); print v; exit}'
+	cd tf 2>/dev/null || {
+		echo "Error: tf directory not found"
+		exit 1
+	}
+	if [[ ! -f terraform.tfstate ]]; then
+		echo "Error: No terraform state file found"
+		exit 1
+	fi
+	terraform show -json 2>/dev/null | jq -r '.values.root_module.resources[] | select(.address=="google_compute_instance.server_vm") | .values.name' 2>/dev/null || echo ""
 )
 
 # -- If no name returned from terraform, there's nothing running
 #
 if [[ ! ${tname} ]]; then
 	echo "  Error: No terraform deployment found"
-	echo "Exiting."
-	exit 1
+	echo "         This could mean:"
+	echo "         1. The deployment was already destroyed"
+	echo "         2. The terraform state is missing"
+	echo "         3. The deployment failed before completion"
+	echo ""
+	echo "         You can safely proceed with cleanup."
+	echo ""
+	if [[ "$1" == "-y" ]]; then
+		echo "           -y flag passed. Proceeding with cleanup."
+	else
+		read -r -p "           Proceed with cleanup? [y/N]: " ready
+		case "$ready" in
+		[Yy]*) ;;
+		*)
+			echo "Exiting."
+			exit 0
+			;;
+		esac
+	fi
+	echo ""
 fi
 
 echo "  This will destroy the running FrontEnd: ${dname}"
