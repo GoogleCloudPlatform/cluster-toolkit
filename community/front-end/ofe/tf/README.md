@@ -43,6 +43,8 @@ limitations under the License.
 | Name | Type |
 |------|------|
 | [google_compute_instance.server_vm](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_instance) | resource |
+| [google_iap_brand.project_brand](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/iap_brand) | resource |
+| [google_iap_client.project_client](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/iap_client) | resource |
 | [google_logging_project_sink.build_sink](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/logging_project_sink) | resource |
 | [google_pubsub_subscription.cloud_build_logs_sub](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/pubsub_subscription) | resource |
 | [google_pubsub_topic.cloud_build_logs](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/pubsub_topic) | resource |
@@ -50,6 +52,7 @@ limitations under the License.
 | [google_storage_bucket_object.config_file](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_object) | resource |
 | [google_storage_bucket_object.deployment_file](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket_object) | resource |
 | [null_resource.uploader](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
+| [google_project.oauth_project](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/project) | data source |
 
 ## Inputs
 
@@ -62,6 +65,11 @@ limitations under the License.
 | <a name="input_django_su_password"></a> [django\_su\_password](#input\_django\_su\_password) | DJango Admin SuperUser password | `string` | n/a | yes |
 | <a name="input_django_su_username"></a> [django\_su\_username](#input\_django\_su\_username) | DJango Admin SuperUser username | `string` | `"admin"` | no |
 | <a name="input_extra_labels"></a> [extra\_labels](#input\_extra\_labels) | Extra labels to apply to created GCP resources. | `map(any)` | `{}` | no |
+| <a name="input_oauth_application_title"></a> [oauth\_application\_title](#input\_oauth\_application\_title) | Application title for OAuth/IAP brand. If not provided, will use 'deployment\_name - webserver\_hostname'. | `string` | `""` | no |
+| <a name="input_oauth_attach_existing"></a> [oauth\_attach\_existing](#input\_oauth\_attach\_existing) | Whether to attach to an existing IAP brand. Required when an IAP brand already exists in the project. | `bool` | `false` | no |
+| <a name="input_oauth_client_display_name"></a> [oauth\_client\_display\_name](#input\_oauth\_client\_display\_name) | Display name for OAuth/IAP client. If not provided, will use 'deployment\_name OAuth Client'. | `string` | `""` | no |
+| <a name="input_oauth_project_id"></a> [oauth\_project\_id](#input\_oauth\_project\_id) | Project ID where OAuth/IAP brand should be created or exists. If not provided, will use the main project\_id. | `string` | `""` | no |
+| <a name="input_oauth_support_email"></a> [oauth\_support\_email](#input\_oauth\_support\_email) | Support email for OAuth/IAP brand. If not provided, will use django\_su\_email. | `string` | `""` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | GCP Project in which to deploy the HPC Frontend. | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | GCP Region for HPC Frontend deployment. | `string` | n/a | yes |
 | <a name="input_repo_branch"></a> [repo\_branch](#input\_repo\_branch) | git branch to checkout when deploying the HPC Frontend | `string` | `"main"` | no |
@@ -76,5 +84,9 @@ limitations under the License.
 
 | Name | Description |
 |------|-------------|
+| <a name="output_oauth_client_id"></a> [oauth\_client\_id](#output\_oauth\_client\_id) | OAuth Client ID (only available when OAuth is enabled) |
+| <a name="output_oauth_client_secret"></a> [oauth\_client\_secret](#output\_oauth\_client\_secret) | OAuth Client Secret (only available when OAuth is enabled) |
+| <a name="output_oauth_enabled"></a> [oauth\_enabled](#output\_oauth\_enabled) | Whether OAuth/IAP is enabled for this deployment |
+| <a name="output_oauth_project_id"></a> [oauth\_project\_id](#output\_oauth\_project\_id) | Project ID where OAuth/IAP resources are located |
 | <a name="output_server_ip"></a> [server\_ip](#output\_server\_ip) | Webserver IP Address |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->
