@@ -120,7 +120,7 @@ resource "google_compute_instance_template" "tpl" {
     nic_type           = local.nic_type
     stack_type         = var.stack_type
     dynamic "access_config" {
-      for_each = var.access_config
+      for_each = coalesce(var.access_config, [])
       content {
         nat_ip       = access_config.value.nat_ip
         network_tier = access_config.value.network_tier
@@ -142,7 +142,7 @@ resource "google_compute_instance_template" "tpl" {
   }
 
   dynamic "network_interface" {
-    for_each = var.additional_networks
+    for_each = coalesce(var.additional_networks, [])
     content {
       network            = network_interface.value.network
       subnetwork         = network_interface.value.subnetwork
