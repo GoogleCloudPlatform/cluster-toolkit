@@ -27,3 +27,13 @@ output "instructions" {
       squeue
   EOT
 }
+
+output "slurm_namespace" {
+  description = "namespace for the slurm chart"
+  value       = var.slurm_namespace
+}
+
+output "slurm_operator_namespace" {
+  description = "namespace for the slinky operator chart"
+  value       = var.slurm_operator_namespace
+}

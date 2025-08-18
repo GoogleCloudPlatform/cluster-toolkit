@@ -52,11 +52,11 @@ RUN curl -fsSL https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/sh
 RUN add-apt-repository ppa:deadsnakes/ppa && \
     apt-get -y update && \
     apt-get -y install \
-        python3.10 \
-        python3.10-venv \
-        python3.10-dev \
+        python3.12 \
+        python3.12-venv \
+        python3.12-dev \
         python3-pip && \
-    update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.10 1 && \
+    update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 1 && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # --- Create Virtual Environment ---
@@ -86,7 +86,8 @@ COPY docs/hybrid-slurm-cluster/requirements.txt slurm_requirements.txt
 
 # --- Install Python Dependencies ---
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
-    pip install --no-cache-dir --prefer-binary --no-build-isolation -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/master/scripts/requirements.txt && \
+    pip install --no-cache-dir --prefer-binary --no-build-isolation -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/refs/heads/master/scripts/requirements.txt && \
     pip install --no-cache-dir --prefer-binary --no-build-isolation -r cloud_build_requirements.txt && \
     pip install --no-cache-dir --prefer-binary --no-build-isolation -r slurm_requirements.txt && \
+
     rm -rf ~/.cache/pip/*
