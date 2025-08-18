@@ -294,12 +294,12 @@ def group_nodes_bulk(nodes: List[str], resume_data: Optional[ResumeData], lkp: u
 def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
     """resume nodes in nodelist"""
     lkp = lookup()
-    # Prevent dormant nodes associated with a future reservation from being resumed
-    nodes, dormant_fr_nodes = util.separate(lkp.is_dormant_fr_node, nodes)
+    # Prevent dormant nodes associated with a reservation from being resumed
+    nodes, dormant_res_nodes = util.separate(lkp.is_dormant_res_node, nodes)
     
-    if dormant_fr_nodes:
-        log.warning(f"Resume was unable to resume future reservation nodes={dormant_fr_nodes}")
-        down_nodes_notify_jobs(dormant_fr_nodes, "Reservation is not active, nodes cannot be resumed", resume_data)
+    if dormant_res_nodes:
+        log.warning(f"Resume was unable to resume reservation nodes={dormant_res_nodes}")
+        down_nodes_notify_jobs(dormant_res_nodes, "Reservation is not active, nodes cannot be resumed", resume_data)
 
     nodes, flex_managed = util.separate(lkp.is_provisioning_flex_node, nodes)
     if flex_managed:
@@ -507,12 +507,16 @@ def create_placements(nodes: List[str], excl_job_id:Optional[int], lkp: util.Loo
 def _allocate_nodes_to_placements(nodes: List[str], excl_job_id:Optional[int], lkp: util.Lookup) -> List[PlacementAndNodes]:
     # canned result for no placement policies created
     no_pp = [PlacementAndNodes(placement=None, nodes=nodes)]
-    
-    if excl_job_id and len(nodes) < 2:
-        return no_pp # don't create placement_policy for just one node
-    
+
     model = nodes[0]
     nodeset = lkp.node_nodeset(model)
+
+    is_slice = bool(getattr(nodeset, 'accelerator_topology', None))
+
+    excl_job_placement = (excl_job_id is not None) and (not is_slice)
+    
+    if excl_job_placement and len(nodes) < 2:
+        return no_pp # don't create placement_policy for just one node
 
     if lkp.is_flex_node(model):
         return no_pp # TODO(FLEX): Add support for workload policies 
@@ -524,7 +528,8 @@ def _allocate_nodes_to_placements(nodes: List[str], excl_job_id:Optional[int], l
     max_count = calculate_chunk_size(nodeset, lkp)
 
     name_prefix = f"{lkp.cfg.slurm_cluster_name}-slurmgcp-managed-{nodeset.nodeset_name}"
-    if excl_job_id: # simply chunk given nodes by max size of placement
+   
+    if excl_job_placement: # simply chunk given nodes by max size of placement
         return [
             PlacementAndNodes(placement=f"{name_prefix}-{excl_job_id}-{i}", nodes=chunk)
             for i, chunk in enumerate(chunked(nodes, n=max_count))
