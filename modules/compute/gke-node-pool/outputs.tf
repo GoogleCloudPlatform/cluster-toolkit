@@ -110,3 +110,28 @@ output "instructions" {
   description = "Instructions for submitting the sample GPUDirect enabled job."
   value       = local.gpu_direct_enabled ? local.gpu_direct_instruction : null
 }
+
+output "node_count" {
+  description = "The number of nodes in the node pool."
+  value       = coalesce(var.static_node_count, var.initial_node_count, 0)
+}
+
+output "guest_accelerator" {
+  description = "The accelerator type of the nodes."
+  value       = local.guest_accelerator
+}
+
+output "cluster_id" {
+  description = "An identifier for the gke cluster with format projects/{{project_id}}/locations/{{region}}/clusters/{{name}}."
+  value       = var.cluster_id
+}
+
+output "machine_type" {
+  description = "Machine Type"
+  value       = var.machine_type
+}
+
+output "instance_templates" {
+  description = "The URLs of Instance Templates"
+  value       = [for key, template in data.google_compute_region_instance_template.instance_template : template.self_link]
+}
