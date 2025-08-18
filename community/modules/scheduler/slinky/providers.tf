@@ -1,4 +1,4 @@
-# Copyright 2024 Google LLC
+# Copyright 2025 "Google LLC"
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,10 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-terraform {
-  required_version = ">= 1.5"
-
-  provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:gke-storage/v1.62.0"
+provider "helm" {
+  kubernetes {
+    host  = "https://${data.google_container_cluster.gke_cluster.endpoint}"
+    token = data.google_client_config.default.access_token
+    cluster_ca_certificate = base64decode(
+      data.google_container_cluster.gke_cluster.master_auth[0].cluster_ca_certificate,
+    )
   }
 }

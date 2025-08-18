@@ -1,4 +1,4 @@
-# Copyright 2024 Google LLC
+# Copyright 2025 "Google LLC"
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,9 +13,16 @@
 # limitations under the License.
 
 terraform {
-  required_version = ">= 1.5"
+  required_version = ">= 1.3"
 
-  provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:gke-storage/v1.62.0"
+  required_providers {
+    helm = {
+      source  = "hashicorp/helm"
+      version = "~> 2.17"
+    }
+    google = {
+      source  = "hashicorp/google"
+      version = ">= 6.16"
+    }
   }
 }

@@ -1,4 +1,4 @@
-# Copyright 2024 Google LLC
+# Copyright 2025 "Google LLC"
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,10 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-terraform {
-  required_version = ">= 1.5"
+output "instructions" {
+  description = "Post deployment instructions."
+  value       = <<-EOT
+    To test Slurm functionality, connect to the controller to use Slurm client commands:
+      kubectl exec -it statefulsets/slurm-controller \
+        --namespace=slurm \
+        -- bash --login
 
-  provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:gke-storage/v1.62.0"
-  }
+    On the controller pod (e.g. host slurm@slurm-controller-0), run the following commands to quickly test Slurm is functioning:
+      sinfo
+      srun hostname
+      sbatch --wrap="sleep 60"
+      squeue
+  EOT
 }
