@@ -446,7 +446,7 @@ def reconfigure_slurm():
 def update_topology(lkp: util.Lookup) -> None:
     if conf.topology_plugin(lkp) != conf.TOPOLOGY_PLUGIN_TREE:
         return
-    updated, summary = conf.gen_topology_conf(lkp)
+    updated, summary = conf.gen_topology_yaml(lkp)
     if updated:
         log.info("Topology configuration updated. Reconfiguring Slurm.")
         util.scontrol_reconfigure(lkp)

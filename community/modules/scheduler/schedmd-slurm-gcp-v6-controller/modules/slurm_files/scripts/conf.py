@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Optional, Iterable, Dict, Set, Tuple
+from typing import List, Optional, Iterable, Dict, Set, Any, Tuple
 from itertools import chain
 from collections import defaultdict
 import json
@@ -23,6 +23,7 @@ import util
 from util import dirs, slurmdirs
 import tpu
 from addict import Dict as NSDict # type: ignore
+import yaml
 
 FILE_PREAMBLE = """
 # Warning:
@@ -433,19 +434,18 @@ class Switch:
         self.nodes = nodes or []
         self.switches = switches or {}
 
-    def conf_line(self) -> str:
-        d = {"SwitchName": self.name}
+    def render_yaml_switches(self):
+        this =  { "switch": self.name }
         if self.nodes:
-            d["Nodes"] = util.to_hostlist(self.nodes)
-        if self.switches:
-            d["Switches"] = util.to_hostlist(self.switches.keys())
-        return dict_to_conf(d)
+            this["nodes"] = util.to_hostlist(self.nodes)
+        else:
+            this["children"] = util.to_hostlist(self.switches.keys())
+        yield this
 
-    def render_conf_lines(self) -> Iterable[str]:
-        yield self.conf_line()
         for s in sorted(self.switches.values(), key=lambda s: s.name):
-            yield from s.render_conf_lines()
+            yield from s.render_yaml_switches()
 
+    
 class TopologySummary:
     """
     Represents a summary of the topology, to make judgements about changes.
@@ -522,11 +522,14 @@ class TopologyBuilder:
             n = n.switches.setdefault(p, Switch(p))
         n.nodes = [*n.nodes, *nodes]
 
-    def render_conf_lines(self) -> Iterable[str]:
-        if not self._r.switches:
-            return [] # type: ignore
-        for s in sorted(self._r.switches.values(), key=lambda s: s.name):
-            yield from s.render_conf_lines()
+    def render_yaml(self) -> List[Any]:
+        return [{
+            "topology": "topo",
+            "cluster_default": True,
+            "tree": {
+                "switches": list(chain.from_iterable(s.render_yaml_switches() for s in self._r.switches.values()))
+            }
+        }]
 
     def compress(self) -> "TopologyBuilder":
         compressed = TopologyBuilder()
@@ -612,28 +615,26 @@ def gen_topology(lkp: util.Lookup) -> TopologyBuilder:
         add_nodeset_topology(ns, bldr, lkp)
     return bldr
 
-def gen_topology_conf(lkp: util.Lookup) -> Tuple[bool, TopologySummary]:
+def gen_topology_yaml(lkp: util.Lookup) -> Tuple[bool, TopologySummary]:
     """
     Generates slurm topology.conf.
     Returns whether the topology.conf got updated.
     """
     topo = gen_topology(lkp).compress()
-    conf_file = lkp.etc_dir / "cloud_topology.conf"
+    conf_file = lkp.etc_dir / "cloud_topology.yaml"
 
     with open(conf_file, "w") as f:
-        f.writelines(FILE_PREAMBLE + "\n")
-        for line in topo.render_conf_lines():
-            f.write(line)
-            f.write("\n")
-        f.write("\n")
+        f.write(FILE_PREAMBLE)
+        f.write("---\n\n")
+        yaml.dump(topo.render_yaml(), f)
 
     prev_summary = TopologySummary.load(lkp)
     return topo.summary.requires_reconfigure(prev_summary), topo.summary
 
-def install_topology_conf(lkp: util.Lookup) -> None:
-    conf_file = lkp.etc_dir / "cloud_topology.conf"
+def install_topology_yaml(lkp: util.Lookup) -> None:
+    conf_file = lkp.etc_dir / "cloud_topology.yaml"
     summary_file = lkp.etc_dir / "cloud_topology.summary.json"
-    topo_conf = lkp.etc_dir / "topology.conf"
+    topo_conf = lkp.etc_dir / "topology.yaml"
 
     if not topo_conf.exists():
         topo_conf.symlink_to(conf_file)
@@ -652,6 +653,6 @@ def gen_controller_configs(lkp: util.Lookup) -> None:
     install_jobsubmit_lua(lkp)
 
     if topology_plugin(lkp) == TOPOLOGY_PLUGIN_TREE:
-        _, summary = gen_topology_conf(lkp)
+        _, summary = gen_topology_yaml(lkp)
         summary.dump(lkp)
-        install_topology_conf(lkp)
+        install_topology_yaml(lkp)
