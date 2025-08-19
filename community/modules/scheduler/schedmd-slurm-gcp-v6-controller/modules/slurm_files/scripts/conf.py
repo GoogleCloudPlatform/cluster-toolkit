@@ -334,7 +334,16 @@ def install_slurmdbd_conf(lkp: util.Lookup) -> None:
             conf_options["db_port"] = (
                 db_host_str[1] if len(db_host_str) >= 2 else "3306"
             )
+    
+    elif lkp.cfg.cloudsql:
+        conf_options['db_name'] = lkp.cfg.cloudsql['db_name']
+        conf_options['db_user'] = lkp.cfg.cloudsql['user']
+        conf_options['db_pass'] = util.decrypt(lkp.cfg.kms_key, lkp.cfg.cloudsql['password'])
 
+        db_host_str = lkp.cfg.cloudsql['server_ip'].split(':')
+        conf_options['db_host'] = db_host_str[0]
+        conf_options['db_port'] = db_host_str[1] if len(db_host_str) >= 2 else '3306'
+        
     conf = lkp.cfg.slurmdbd_conf_tpl.format(**conf_options)
 
     conf_file = lkp.etc_dir / "slurmdbd.conf"

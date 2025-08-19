@@ -1470,6 +1470,14 @@ def getThreadsPerCore(template) -> int:
 def host_lookup(host_name: str) -> str:
     return socket.gethostbyname(host_name)
 
+def decrypt(kms_key, ciphertext):
+    if not kms_key:
+        return ciphertext
+    from google.cloud import kms
+    return str(kms.KeyManagementServiceClient().decrypt(request = {
+        'name': kms_key,
+        'ciphertext': ciphertext,
+    }).plaintext, 'ASCII')
 
 class Dumper(yaml.SafeDumper):
     """Add representers for pathlib.Path and NSDict for yaml serialization"""
