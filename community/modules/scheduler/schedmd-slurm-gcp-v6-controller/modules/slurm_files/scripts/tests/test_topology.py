@@ -26,18 +26,34 @@ import tempfile
 PRELUDE = """
 # Warning:
 # This file is managed by a script. Manual modifications will be overwritten.
-
+---
 """
 
-def test_gen_topology_conf_empty():
+def test_gen_topology_yaml_empty():
     out_dir = tempfile.mkdtemp()
     cfg = TstCfg(output_dir=out_dir)
-    conf.gen_topology_conf(util.Lookup(cfg))
-    assert open(out_dir + "/cloud_topology.conf").read() == PRELUDE + "\n"
+    conf.gen_topology_yaml(util.Lookup(cfg))
+    assert open(out_dir + "/cloud_topology.yaml").read() ==  PRELUDE + """
+- cluster_default: true
+  topology: topo
+  tree:
+    switches: []
+"""
+
+
+def sw(name: str, switches: str|None=None, nodes: str|None=None) -> dict[str, str]:
+    assert (switches is None) != (nodes is None)
+    d = {"switch": name}
+    if switches is not None:
+        d["children"] = switches
+    if nodes is not None:
+        d["nodes"] = nodes
+    return d
+
 
 
 @mock.patch("tpu.TPU.make")
-def test_gen_topology_conf(tpu_mock):
+def test_gen_topology_yaml(tpu_mock):
     output_dir = tempfile.mkdtemp()
     cfg = TstCfg(
         nodeset_tpu={
@@ -77,55 +93,53 @@ def test_gen_topology_conf(tpu_mock):
     want_uncompressed = [ 
         #NOTE: the switch names are not unique, it's not valid content for topology.conf
         # The uniquefication and compression of names are done in the compress() method
-        "SwitchName=slurm-root Switches=a,b,ns_blue,ns_green,ns_pink",
+        sw("slurm-root", switches="a,b,ns_blue,ns_green,ns_pink"),
         # "physical" topology
-        'SwitchName=a Switches=a,b',
-        'SwitchName=a Nodes=m22-blue-[0-1],m22-green-3',
-        'SwitchName=b Nodes=m22-blue-2',
-        'SwitchName=b Switches=a',
-        'SwitchName=a Nodes=m22-blue-3',
+        sw("a", switches="a,b"),
+        sw("a", nodes="m22-blue-[0-1],m22-green-3"),
+        sw("b", nodes="m22-blue-2"),
+        sw("b", switches="a"),
+        sw("a", nodes="m22-blue-3"),
         # topology "by nodeset"
-        "SwitchName=ns_blue Nodes=m22-blue-[4-6]",
-        "SwitchName=ns_green Nodes=m22-green-[0-2,4]",
-        "SwitchName=ns_pink Nodes=m22-pink-[0-3]",
+        sw("ns_blue", nodes="m22-blue-[4-6]"),
+        sw("ns_green", nodes="m22-green-[0-2,4]"),
+        sw("ns_pink", nodes="m22-pink-[0-3]"),
         # TPU topology
-        "SwitchName=tpu-root Switches=ns_bold,ns_slim",
-        "SwitchName=ns_bold Switches=bold-[0-3]",
-        "SwitchName=bold-0 Nodes=m22-bold-[0-2]",
-        "SwitchName=bold-1 Nodes=m22-bold-3",
-        "SwitchName=bold-2 Nodes=m22-bold-[4-6]",
-        "SwitchName=bold-3 Nodes=m22-bold-[7-8]",
-        "SwitchName=ns_slim Nodes=m22-slim-[0-2]"]
-    assert list(uncompressed.render_conf_lines()) == want_uncompressed
+        sw("tpu-root", switches="ns_bold,ns_slim"),
+        sw("ns_bold", switches="bold-[0-3]"),
+        sw("bold-0", nodes="m22-bold-[0-2]"),
+        sw("bold-1", nodes="m22-bold-3"),
+        sw("bold-2", nodes="m22-bold-[4-6]"),
+        sw("bold-3", nodes="m22-bold-[7-8]"),
+        sw("ns_slim", nodes="m22-slim-[0-2]")]
+    assert uncompressed.render_yaml()[0]["tree"]["switches"] == unordered(want_uncompressed)
         
     compressed = uncompressed.compress()
     want_compressed = [
-        "SwitchName=s0 Switches=s0_[0-4]", # root
+        sw("s0", switches="s0_[0-4]"), # root
         # "physical" topology
-        'SwitchName=s0_0 Switches=s0_0_[0-1]', # /a
-        'SwitchName=s0_0_0 Nodes=m22-blue-[0-1],m22-green-3', # /a/a
-        'SwitchName=s0_0_1 Nodes=m22-blue-2',  # /a/b
-        'SwitchName=s0_1 Switches=s0_1_0',  # /b
-        'SwitchName=s0_1_0 Nodes=m22-blue-3',  # /b/a
+        sw("s0_0", switches="s0_0_[0-1]"), # /a
+        sw("s0_0_0", nodes="m22-blue-[0-1],m22-green-3"), # /a/a
+        sw("s0_0_1", nodes="m22-blue-2"),  # /a/b
+        sw("s0_1", switches="s0_1_0"),  # /b
+        sw("s0_1_0", nodes="m22-blue-3"),  # /b/a
         # topology "by nodeset"
-        "SwitchName=s0_2 Nodes=m22-blue-[4-6]",
-        "SwitchName=s0_3 Nodes=m22-green-[0-2,4]",
-        "SwitchName=s0_4 Nodes=m22-pink-[0-3]",
+        sw("s0_2", nodes="m22-blue-[4-6]"),
+        sw("s0_3", nodes="m22-green-[0-2,4]"),
+        sw("s0_4", nodes="m22-pink-[0-3]"),
         # TPU topology
-        "SwitchName=s1 Switches=s1_[0-1]",
-        "SwitchName=s1_0 Switches=s1_0_[0-3]",
-        "SwitchName=s1_0_0 Nodes=m22-bold-[0-2]",
-        "SwitchName=s1_0_1 Nodes=m22-bold-3",
-        "SwitchName=s1_0_2 Nodes=m22-bold-[4-6]",
-        "SwitchName=s1_0_3 Nodes=m22-bold-[7-8]",
-        "SwitchName=s1_1 Nodes=m22-slim-[0-2]"]
-    assert list(compressed.render_conf_lines()) == want_compressed
+        sw("s1", switches="s1_[0-1]"),
+        sw("s1_0", switches="s1_0_[0-3]"),
+        sw("s1_0_0", nodes="m22-bold-[0-2]"),
+        sw("s1_0_1", nodes="m22-bold-3"),
+        sw("s1_0_2", nodes="m22-bold-[4-6]"),
+        sw("s1_0_3", nodes="m22-bold-[7-8]"),
+        sw("s1_1", nodes="m22-slim-[0-2]")]
+    assert compressed.render_yaml()[0]["tree"]["switches"] == unordered(want_compressed)
 
-    upd, summary = conf.gen_topology_conf(lkp)
+    upd, summary = conf.gen_topology_yaml(lkp)
     assert upd == True
-    want_written = PRELUDE + "\n".join(want_compressed) + "\n\n"
-    assert open(output_dir + "/cloud_topology.conf").read() == want_written
-
+    
     summary.dump(lkp)
     summary_got = json.loads(open(output_dir + "/cloud_topology.summary.json").read())
     
@@ -147,7 +161,7 @@ def test_gen_topology_conf(tpu_mock):
 
 
 
-def test_gen_topology_conf_update():
+def test_gen_topology_yaml_update():
     cfg = TstCfg(
         nodeset={
             "c": TstNodeset("green", node_count_static=2),
@@ -160,46 +174,46 @@ def test_gen_topology_conf_update():
     } 
 
     # initial generation - reconfigure
-    upd, sum = conf.gen_topology_conf(lkp)
+    upd, sum = conf.gen_topology_yaml(lkp)
     assert upd == True
     sum.dump(lkp)
 
     # add node: node_count_static 2 -> 3 - reconfigure
     lkp.cfg.nodeset["c"].node_count_static = 3
-    upd, sum = conf.gen_topology_conf(lkp)
+    upd, sum = conf.gen_topology_yaml(lkp)
     assert upd == True
     sum.dump(lkp)
 
     # remove node: node_count_static 3 -> 2  - no reconfigure
     lkp.cfg.nodeset["c"].node_count_static = 2
-    upd, sum = conf.gen_topology_conf(lkp)
+    upd, sum = conf.gen_topology_yaml(lkp)
     assert upd == False
     # don't dump
 
     # set empty physicalHost - no reconfigure
     lkp.instances = lambda: { # type: ignore[assignment]
         n.name: n for n in [tstInstance("m22-green-0", physical_host="")]}
-    upd, sum = conf.gen_topology_conf(lkp)
+    upd, sum = conf.gen_topology_yaml(lkp)
     assert upd == False
     # don't dump
 
     # set physicalHost - reconfigure
     lkp.instances = lambda: { # type: ignore[assignment]
         n.name: n for n in [tstInstance("m22-green-0", physical_host="/a/b/c")]}
-    upd, sum = conf.gen_topology_conf(lkp)
+    upd, sum = conf.gen_topology_yaml(lkp)
     assert upd == True
     sum.dump(lkp)
 
     # change physicalHost - reconfigure
     lkp.instances = lambda: { # type: ignore[assignment]
         n.name: n for n in [tstInstance("m22-green-0", physical_host="/a/b/z")]}
-    upd, sum = conf.gen_topology_conf(lkp)
+    upd, sum = conf.gen_topology_yaml(lkp)
     assert upd == True
     sum.dump(lkp)
 
     # shut down node - no reconfigure
     lkp.instances = lambda: {} # type: ignore[assignment]
-    upd, sum = conf.gen_topology_conf(lkp)
+    upd, sum = conf.gen_topology_yaml(lkp)
     assert upd == False
     # don't dump
 
