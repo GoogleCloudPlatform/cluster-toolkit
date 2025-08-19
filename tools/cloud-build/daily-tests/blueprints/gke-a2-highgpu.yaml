@@ -25,6 +25,7 @@ vars:
   # Cidr block containing the IP of the machine calling terraform.
   # The following line must be updated for this example to work.
   authorized_cidr: 0.0.0.0/0
+  system_node_pool_disk_size_gb: 100
 
 deployment_groups:
 - group: primary
@@ -79,6 +80,9 @@ deployment_groups:
     source: modules/scheduler/gke-cluster
     use: [network1, gpunets, workload_service_account]
     settings:
+      system_node_pool_machine_type: "e2-standard-16"
+      system_node_pool_disk_size_gb: $(vars.system_node_pool_disk_size_gb)
+      system_node_pool_taints: []
       enable_private_endpoint: false  # Allows for access from authorized public IPs
       release_channel: 'STABLE'
       configure_workload_identity_sa: true
@@ -107,6 +111,5 @@ deployment_groups:
     settings:
       kueue:
         install: true
-        version: v0.10.0
       jobset:
         install: true
