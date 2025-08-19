@@ -482,43 +482,53 @@ deployment_groups:
         destination: nccl_plugin.yml
         content: |
           ---
-          - name: Install NCCL plugin for A4 High series
+          - name: Install NCCL/gIB Package
             hosts: all
             become: true
             tasks:
-            - name: Add SystemD unit for NCCL plugin installation
+          - name: Setup for Debian-based systems
+            block:
+              - name: Add Google Cloud GPG key
+                ansible.builtin.apt_key:
+                  url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
+                  state: present
+                environment: {} # Avoid issues with proxies
+
+              - name: Add gpudirect-gib-apt repository
+                ansible.builtin.apt_repository:
+                  repo: "deb https://packages.cloud.google.com/apt gpudirect-gib-apt main"
+                  state: present
+                  filename: nccl-gib
+
+              - name: Install nccl-gib
+                ansible.builtin.apt:
+                  name: nccl-gib
+                  update_cache: yes
+                  state: present
+                environment: {} # Avoid issues with proxies
+            # --------------------------------------------------------------------------
+            # Environment Configuration
+            # --------------------------------------------------------------------------
+            - name: Ensure NCCL/gIB environment script is sourced for all users
               ansible.builtin.copy:
-                dest: /etc/systemd/system/nccl-plugin@.service
-                mode: 0o0644
+                dest: /etc/profile.d/nccl-gib.sh
                 content: |
-                  [Unit]
-                  After=network-online.target docker.service
-                  Before=slurmd.service
-                  Requires=docker.service
+                  # Load NCCL/gIB environment
+                  if [ -f "/usr/local/gib/scripts/set_nccl_env.sh" ]; then
+                    source /usr/local/gib/scripts/set_nccl_env.sh
+                  fi
 
-                  [Service]
-                  Type=oneshot
-                  ExecStartPre=/usr/bin/rm -rf /usr/local/gib
-                  ExecStartPre=/usr/bin/mkdir -p /usr/local/gib
-                  ExecStartPre=/snap/bin/gcloud auth configure-docker --quiet us-docker.pkg.dev
-                  ExecStart=/usr/bin/docker run --rm --name nccl-gib-installer --volume /usr/local/gib:/var/lib/gib \
-                      us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib:%i install --install-nccl
-                  ExecStartPost=/usr/bin/chmod -R a+r /usr/local/gib
+                  # Ensure /usr/local/gib/lib64 is in LD_LIBRARY_PATH
+                  if [ -d "/usr/local/gib/lib64" ]; then
+                    export LD_LIBRARY_PATH="/usr/local/gib/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+                  fi
+                mode: '0644'
 
-                  [Install]
-                  WantedBy=slurmd.service
-              notify:
-              - Reload SystemD
-            handlers:
+          handlers:
             - name: Reload SystemD
               ansible.builtin.systemd:
                 daemon_reload: true
-            post_tasks:
-            - name: Enable NCCL plugin SystemD unit
-              ansible.builtin.service:
-                name: nccl-plugin@$(vars.nccl_plugin_version).service
-                state: started
-                enabled: true
+              environment: {} # Avoid issues with proxies
       - type: ansible-local
         destination: enable_dcgm.yml
         content: |
