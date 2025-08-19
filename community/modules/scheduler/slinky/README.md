@@ -118,9 +118,9 @@ No modules.
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The project ID that hosts the GKE cluster. | `string` | n/a | yes |
 | <a name="input_prometheus_chart_version"></a> [prometheus\_chart\_version](#input\_prometheus\_chart\_version) | Version of the Kube Prometheus Stack chart to install. | `string` | `"70.4.1"` | no |
 | <a name="input_prometheus_values"></a> [prometheus\_values](#input\_prometheus\_values) | Value overrides for the Prometheus release | `any` | <pre>{<br/>  "installCRDs": true<br/>}</pre> | no |
-| <a name="input_slurm_chart_version"></a> [slurm\_chart\_version](#input\_slurm\_chart\_version) | Version of the Slurm chart to install. | `string` | `"0.2.1"` | no |
+| <a name="input_slurm_chart_version"></a> [slurm\_chart\_version](#input\_slurm\_chart\_version) | Version of the Slurm chart to install. | `string` | `"0.3.0"` | no |
 | <a name="input_slurm_namespace"></a> [slurm\_namespace](#input\_slurm\_namespace) | slurm namespace for charts | `string` | `"slurm"` | no |
-| <a name="input_slurm_operator_chart_version"></a> [slurm\_operator\_chart\_version](#input\_slurm\_operator\_chart\_version) | Version of the Slurm Operator chart to install. | `string` | `"0.2.1"` | no |
+| <a name="input_slurm_operator_chart_version"></a> [slurm\_operator\_chart\_version](#input\_slurm\_operator\_chart\_version) | Version of the Slurm Operator chart to install. | `string` | `"0.3.0"` | no |
 | <a name="input_slurm_operator_namespace"></a> [slurm\_operator\_namespace](#input\_slurm\_operator\_namespace) | slurm namespace for charts | `string` | `"slinky"` | no |
 | <a name="input_slurm_operator_repository"></a> [slurm\_operator\_repository](#input\_slurm\_operator\_repository) | Value overrides for the Slinky release | `string` | `"oci://ghcr.io/slinkyproject/charts"` | no |
 | <a name="input_slurm_operator_values"></a> [slurm\_operator\_values](#input\_slurm\_operator\_values) | Value overrides for the Slinky release | `any` | `{}` | no |

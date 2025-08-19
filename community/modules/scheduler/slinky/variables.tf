@@ -48,7 +48,7 @@ variable "cert_manager_values" {
 variable "slurm_operator_chart_version" {
   description = "Version of the Slurm Operator chart to install."
   type        = string
-  default     = "0.2.1"
+  default     = "0.3.0"
 }
 
 variable "slurm_operator_values" {
@@ -60,7 +60,7 @@ variable "slurm_operator_values" {
 variable "slurm_chart_version" {
   description = "Version of the Slurm chart to install."
   type        = string
-  default     = "0.2.1"
+  default     = "0.3.0"
 }
 
 variable "slurm_values" {
