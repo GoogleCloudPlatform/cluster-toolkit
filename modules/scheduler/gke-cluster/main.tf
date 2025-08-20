@@ -316,11 +316,6 @@ resource "google_container_node_pool" "system_node_pools" {
     disk_size_gb    = var.system_node_pool_disk_size_gb
     disk_type       = var.system_node_pool_disk_type
 
-    kubelet_config {
-      cpu_manager_policy = var.enable_numa_aware_scheduling ? "static" : null
-      # Need to set topology_manager_policy to "restricted" and memory_managed_policy to "Static", but Terraform support is not yet provided for them.
-    }
-
     dynamic "taint" {
       for_each = var.system_node_pool_taints
       content {
@@ -424,12 +419,6 @@ locals {
   ]
 
   all_networks = concat(local.gvnic_networks, local.rdma_networks)
-}
-
-locals {
-  kubelet_config = {
-    cpu_manager_policy = "static"
-  }
 }
 
 module "kubectl_apply" {

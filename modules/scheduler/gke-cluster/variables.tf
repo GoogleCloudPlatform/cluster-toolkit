@@ -240,12 +240,6 @@ variable "system_node_pool_disk_type" {
   default     = null
 }
 
-variable "enable_numa_aware_scheduling" {
-  description = "Enable NUMA-aware scheduling"
-  type        = bool
-  default     = false
-}
-
 variable "system_node_pool_taints" {
   description = "Taints to be applied to the system node pool."
   type = list(object({
