@@ -52,6 +52,7 @@ if __name__ == "__main__":
     with pid_file.open("w") as fp:
         try:
             fcntl.lockf(fp, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            util.init_log("slurmsync")
             main()
         except BlockingIOError:
             sys.exit(0)

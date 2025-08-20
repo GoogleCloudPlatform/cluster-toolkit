@@ -30,6 +30,20 @@ import network_storage
 # !!!  logging file
 log = logging.getLogger()
 
+# !!!! TODO !!!!
+# [ ] Fetch real config
+# [X] Setup logging file
+# [ ] Check Filestore
+# [X] Setup & run custom scripts
+# [ ] Setup prologues / epilogues
+# [ ] Setup task prologues / epilogues
+# [ ] Check with real DNS setup
+# [ ] Move as much as possible to image (see XXX)
+# [ ] Check sinfo
+# [ ] Check sacct
+# [X] Check srun
+
+
 MOTD_HEADER = """
                                  SSSSSSS
                                 SSSSSSSSS
@@ -125,7 +139,7 @@ slurm ALL= NOPASSWD: /usr/bin/systemctl restart sackd.service
     sudoers_file.chmod(0o0440)
 
 
-def setup_login():
+def setup_login(cfg: util.Config) -> None:
     """run login node setup"""
     log.info("Setting up login")
 
@@ -133,9 +147,9 @@ def setup_login():
     
     sysconf = f"""SACKD_OPTIONS='{" ".join(sackd_options)}'"""
     update_system_config("sackd", sysconf)
-    #util.install_custom_scripts()
+    util.install_custom_scripts()
 
-    network_storage.setup_network_storage(util.config())
+    network_storage.setup_network_storage(cfg)
     network_storage.slurm_key_mount_handler()
     setup_sudoers()
     
@@ -143,14 +157,14 @@ def setup_login():
     util.run("systemctl restart sackd", timeout=30)
     util.run("systemctl enable --now slurmcmd.timer", timeout=30)
 
-    # !!! run_custom_scripts()
+    run_custom_scripts(cfg)
 
     log.info("Check status of cluster services")
     util.run("systemctl status sackd", timeout=30)
 
     log.info("Done setting up login")
 
-def setup_compute():
+def setup_compute(cfg: util.Config):
     """run compute node setup"""
     log.info("Setting up compute")
     
@@ -167,13 +181,13 @@ def setup_compute():
 
     sysconf = f"""SLURMD_OPTIONS='{" ".join(slurmd_options)}'"""
     update_system_config("slurmd", sysconf)
-    #util.install_custom_scripts()
+    util.install_custom_scripts()
 
     setup_nss_slurm()
-    network_storage.setup_network_storage(util.config())
+    network_storage.setup_network_storage(cfg)
     network_storage.slurm_key_mount_handler()
 
-    # !!! run_custom_scripts()
+    run_custom_scripts(cfg)
 
     setup_sudoers()
     
@@ -301,32 +315,13 @@ def setup_cloud_ops() -> None:
             raise
 
 
-def run_custom_scripts():
+def run_custom_scripts(cfg: util.Config):
     """run custom scripts based on instance_role"""
-    custom_dir = dirs.custom_scripts
+    suffix = "nodeset.d" if util.instance_role() == "compute" else "login.d"
+    dir = util.CUSTOM_SCRIPTS_DIR / suffix
     
-    elif lookup().instance_role == "compute":
-        # compute setup with nodeset.d
-        custom_dirs = [custom_dir / "nodeset.d"]
-    elif lookup().is_login_node:
-        # login setup with only login.d
-        custom_dirs = [custom_dir / "login.d"]
-    else:
-        # Unknown role: run nothing
-        custom_dirs = []
-
     timeout = cfg.startup_script_timeout
-    custom_scripts = [
-        p
-        for d in custom_dirs
-        for p in d.rglob("*")
-        if p.is_file() and not p.name.endswith(".disabled")
-    ]
-    print_scripts = ",".join(str(s.relative_to(custom_dir)) for s in custom_scripts)
-    log.debug(f"custom scripts to run: {custom_dir}/({print_scripts})")
-
-    
-    for script in custom_scripts:
+    for script in [s for s in dir.rglob("*") if s.is_file()]:
         log.info(f"running script {script.name} with timeout={timeout}")
         util.run(str(script), timeout=timeout, check=True, shell=True)
     
@@ -351,9 +346,9 @@ def main():
     configure_dirs()
 
     if util.instance_role() == "login":
-        setup_login()
+        setup_login(util.config())
     elif util.instance_role() == "compute":
-        setup_compute()
+        setup_compute(util.config())
     else:
         raise Exception(f"Unknown instance role: {util.instance_role()}")
     
@@ -361,6 +356,7 @@ def main():
 
 if __name__ == "__main__":
     try:
+        util.init_log("setup")
         main()
     except Exception:
         log.exception("Aborting setup...")

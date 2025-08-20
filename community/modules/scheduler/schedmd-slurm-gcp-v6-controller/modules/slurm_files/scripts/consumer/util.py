@@ -17,6 +17,9 @@
 import subprocess
 import shlex
 import logging
+import logging.config
+import logging.handlers
+import sys
 import functools
 import requests
 from pathlib import Path
@@ -24,10 +27,15 @@ import shutil
 from dataclasses import dataclass
 import re
 from google.cloud import storage
+import hashlib
+import base64
+
 
 
 log = logging.getLogger()
 
+CUSTOM_SCRIPTS_DIR = Path("/slurm/custom_scripts")
+LOG_DIR = Path("/var/log/slurm")
 
 def log_subprocess(subj: subprocess.CalledProcessError | subprocess.TimeoutExpired | subprocess.CompletedProcess) -> None:
     match subj:
@@ -42,7 +50,7 @@ def log_subprocess(subj: subprocess.CalledProcessError | subprocess.TimeoutExpir
 
 
 def run(
-    args:str,
+    cmd:str,
     stdout=subprocess.PIPE,
     stderr=subprocess.PIPE,
     shell=False,
@@ -52,9 +60,11 @@ def run(
     **kwargs,
 ):
     """Wrapper for subprocess.run() with convenient defaults"""
+    log.debug(f"run: {cmd}")
     if not shell:
-        args = shlex.split(args)
-    log.debug(f"run: {args}")
+        args = shlex.split(cmd)
+    else:
+        args = cmd
     try:
         result = subprocess.run(
             args,
@@ -106,7 +116,6 @@ def instance_metadata(path: str, silent:bool=False) -> str:
 def instance_role():
     return instance_metadata("attributes/slurm_instance_role")
 
-
 def instance_login_group():
     return instance_metadata("attributes/slurm_login_group")
 
@@ -122,49 +131,58 @@ def controller_host():
 
 def install_custom_scripts(check_hash:bool=False):
     """download custom scripts from gcs bucket"""
-    role, tokens = instance_role(), []
-
-
-    if role == "compute":
+    
+    if instance_role() == "compute":
         tokens = [f"nodeset-{instance_nodeset()}", "prolog", "epilog", "task_prolog", "task_epilog"]
-    elif role == "login":
+    else:
         tokens = [f"login-{instance_login_group()}"]
-
     prefixes = [f"slurm-{tok}-script" for tok in tokens]
 
-    
-    source_collection = list(chain.from_iterable(blob_list(prefix=p) for p in prefixes))
-
+    _, common_prefix = _get_bucket_and_common_prefix()
     script_pattern = re.compile(r"^slurm-(?P<path>\S+)-script-(?P<name>\S+)")
-    for source in source_collection:
-        m = script_pattern.match(Path(source.name).name)
+    for blob in blob_list():
+        if not any(blob.name.startswith(f"{common_prefix}/{p}") for p in prefixes):
+            continue # script for some other nodeset / login group
 
+        log.debug(f"found blob: {blob.name}")
+        m = script_pattern.match(Path(blob.name).name)
         if not m:
-            log.warning(f"found blob that doesn't match expected pattern: {source.name}")
+            log.warning(f"found blob that doesn't match expected pattern: {blob.name}")
             continue
+
         path_parts = m["path"].split("-")
         path_parts[0] += ".d"
         stem, _, ext = m["name"].rpartition("_")
         filename = ".".join((stem, ext))
 
         path = Path(*path_parts, filename)
-        fullpath = (dirs.custom_scripts / path).resolve()
-        mkdirp(fullpath.parent)
+        fullpath = (CUSTOM_SCRIPTS_DIR / path).resolve()
+        fullpath.parent.mkdir(parents=True, exist_ok=True)
 
         for par in path.parents:
-            chown_slurm(dirs.custom_scripts / par)
+            chown_slurm(CUSTOM_SCRIPTS_DIR / par)
         need_update = True
 
         if check_hash and fullpath.exists():
             # TODO: MD5 reported by gcloud may differ from the one calculated here (e.g. if blob got gzipped),
             # consider using gCRC32C
-            need_update = hash_file(fullpath) != source.md5_hash
+            need_update = hash_file(fullpath) != blob.md5_hash
 
         if need_update:
-            log.info(f"installing custom script: {path} from {source.name}")
+            log.info(f"installing custom script: {path} from {blob.name}")
             with fullpath.open("wb") as f:
-                source.download_to_file(f)
+                blob.download_to_file(f)
             chown_slurm(fullpath, mode=0o755)
+
+def hash_file(fullpath: Path) -> str:
+    """Calculate MD5 hash of a file, to be comparable with GCS blob MD5"""
+    with open(fullpath, "rb") as f:
+        file_hash = hashlib.md5()
+        chunk = f.read(8192)
+        while chunk:
+            file_hash.update(chunk)
+            chunk = f.read(8192)
+    return base64.b64encode(file_hash.digest()).decode("utf-8")
 
 
 @dataclass(frozen=True)
@@ -193,9 +211,16 @@ def _get_bucket_and_common_prefix() -> tuple[str, str]:
 def storage_client() -> storage.Client:
     return storage.Client()
 
+def blob_list(prefix="", delimiter=None):
+    bucket_name, path = _get_bucket_and_common_prefix()
+    blob_prefix = f"{path}/{prefix}"
+    blobs = storage_client().list_blobs(
+        bucket_name, prefix=blob_prefix, delimiter=delimiter
+    )
+    return [blob for blob in blobs]
 
 def fetch_config() -> tuple[bool, Config]:
-    return None, Config(
+    return False, Config(
         network_storage=[], # !!!
     )
     # bucket_name, path = _get_bucket_and_common_prefix()
@@ -209,3 +234,48 @@ def update_config(cfg: Config) -> None:
 def config() -> Config:
     assert _cfg, "Config is not initialized" # !!!!
     return _cfg
+
+
+def _owned_file_handler(filename):
+    """special handler that will not mess up log file ownership"""
+    path = Path(filename)
+    if not path.exists():
+        path.touch()
+    chown_slurm(path)
+    return logging.handlers.WatchedFileHandler(filename, delay=True)
+
+
+def init_log(filename: str) -> None:
+    # Hardcode DEBUG loglevel, to be restricted later
+    loglevel = logging.DEBUG
+    # Configure root logger
+    logging.config.dictConfig({
+        "version": 1,
+        "disable_existing_loggers": True,
+        "formatters": {
+            "standard": {
+                "format": "%(levelname)s: %(message)s",
+            },
+            "stamp": {
+                "format": "%(asctime)s %(levelname)s: %(message)s",
+            },
+        },
+        "handlers": {
+            "stdout_handler": {
+                "level": logging.DEBUG,
+                "formatter": "standard",
+                "class": "logging.StreamHandler",
+                "stream": sys.stdout,
+            },
+            "file_handler": {
+                "()": _owned_file_handler,
+                "level": logging.DEBUG,
+                "formatter": "stamp",
+                "filename": (LOG_DIR / filename).with_suffix(".log"),
+            },
+        },
+        "root": {
+            "handlers": ["stdout_handler", "file_handler"],
+            "level": loglevel,
+        },
+    })
