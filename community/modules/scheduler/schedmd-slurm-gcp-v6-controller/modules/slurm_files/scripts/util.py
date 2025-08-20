@@ -1887,7 +1887,7 @@ class Lookup:
             policies=policies,
             deployment_type=reservation.get("deploymentType"),
             reservation_mode=reservation.get("reservationMode"),
-            assured_count=reservation.get("assuredCount") if reservation.get("assuredCount") else 0,
+            assured_count=int(reservation.get("specificReservation", {}).get("assuredCount", 0)),
             delete_at_time=parse_gcp_timestamp(reservation.get("deleteAtTime")) if reservation.get("deleteAtTime") else None,
             bulk_insert_name=bulk_insert_name)
 

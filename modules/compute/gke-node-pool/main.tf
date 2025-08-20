@@ -386,6 +386,13 @@ locals {
   supported_machine_types_for_install_dependencies = ["a3-highgpu-8g", "a3-megagpu-8g"]
 }
 
+data "google_compute_region_instance_template" "instance_template" {
+  for_each    = { for idx, np in google_container_node_pool.node_pool : idx => np }
+  project     = var.project_id
+  filter      = "name : ${substr("gke-${local.cluster_name}-${each.value.name}", 0, 37)}*"
+  most_recent = true
+}
+
 resource "null_resource" "install_dependencies" {
   count = var.run_workload_script && contains(local.supported_machine_types_for_install_dependencies, var.machine_type) ? 1 : 0
   provisioner "local-exec" {
