@@ -1381,12 +1381,12 @@ def initalize_node_entry(nodes: List[str], time:datetime) -> None:
 
 def update_mig_db_entries(nodes:List[str], update_column_entry: NSDict) -> None:
     formatted_update = ", ".join(f"{key} = '{value}'" for key, value in update_column_entry.items())
-    update_query = f"START TRANSACTION; UPDATE instances_table SET {formatted_update} WHERE Nodename in {nodes_db_form(nodes)}; COMMIT"
+    update_query = f"START TRANSACTION; UPDATE instances_table SET {formatted_update} WHERE Nodename IN {nodes_db_form(nodes)}; COMMIT"
     execute_mig_db_command(update_query)
 
 def reset_mig_owner_db(nodes:List[str], other_updates:Optional[NSDict]) -> None:
     if not other_updates:
-        update_query = f"START TRANSACTION; UPDATE instances_table SET MIGOwner = NULL WHERE Nodename in {nodes_db_form(nodes)}; COMMIT"
+        update_query = f"START TRANSACTION; UPDATE instances_table SET MIGOwner = NULL WHERE Nodename IN {nodes_db_form(nodes)}; COMMIT"
     else:
         formatted_update = ", ".join(f"{key} = '{value}'" for key, value in other_updates.items())
         update_query = f"START TRANSACTION; UPDATE instances_table SET MIGOwner = NULL, {formatted_update} WHERE Nodename in {nodes_db_form(nodes)}; COMMIT"

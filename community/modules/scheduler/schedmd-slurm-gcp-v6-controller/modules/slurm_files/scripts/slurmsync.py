@@ -97,6 +97,14 @@ class NodeActionDelete():
         log.info(f"{len(nodes)} instances to delete ({hostlist})")
         delete_instances(nodes)
 
+# for cases of failed suspend call but vm provisioned anyway
+@dataclass(frozen=True)
+class NodeActionDeleteFlex():
+    def apply(self, nodes:List[str]) -> None:
+        hostlist = util.to_hostlist(nodes)
+        log.info(f"{len(nodes)} flex instances to delete ({hostlist})")
+        mig_flex.suspend_flex_nodes(nodes)
+
 @dataclass(frozen=True)
 class NodeActionPrempt():
     def apply(self, nodes:List[str]) -> None:
@@ -290,6 +298,8 @@ def get_node_action(nodename: str) -> NodeAction:
         if state.base != "DOWN":
             return NodeActionDown(reason="Instance terminated")
     elif (state is None or "POWERED_DOWN" in state.flags) and inst.status == "RUNNING":
+        if lkp.is_flex_node(nodename):
+            return NodeActionDeleteFlex()
         log.info("%s is potential orphan node", nodename)
         threshold = timedelta(seconds=90)
         age = util.now() - inst.creation_timestamp
@@ -594,12 +604,6 @@ def sync_opportunistic_maintenance(lkp: util.Lookup) -> None:
     for job_name, node in create_jobs.items():
         create_maintenance_job(job_name, node)
 
-
-
-def sync_flex_migs(lkp: util.Lookup) -> None:
-    pass
-
-
 def process_messages(lkp: util.Lookup) -> None:
     try:
         watch_delete_vm_op.watch_vm_delete_ops(lkp)
@@ -625,11 +629,6 @@ def main():
             sync_instances()
         except Exception:
             log.exception("failed to sync instances")
-
-        try:
-            sync_flex_migs(lkp)
-        except Exception:
-            log.exception("failed to sync DWS Flex MIGs")
 
         try:
             sync_placement_groups()
