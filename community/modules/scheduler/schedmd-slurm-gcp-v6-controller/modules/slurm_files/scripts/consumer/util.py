@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import stat
 import subprocess
 import shlex
 import logging
@@ -29,19 +30,18 @@ import re
 from google.cloud import storage
 import hashlib
 import base64
-
+import yaml
 
 
 log = logging.getLogger()
 
+SCRIPTS_DIR = Path("/slurm/scripts")
 CUSTOM_SCRIPTS_DIR = Path("/slurm/custom_scripts")
 LOG_DIR = Path("/var/log/slurm")
 
 def log_subprocess(subj: subprocess.CalledProcessError | subprocess.TimeoutExpired | subprocess.CompletedProcess) -> None:
     match subj:
         case subprocess.CompletedProcess(returncode=0):
-            # Do not log successful runs, to not overwhelm logs (e.g. scontrol show jobs --json)
-            # TODO: consider still doing it in DEBUG or trim output to few KBs. 
             return
         case subprocess.CompletedProcess(): # non-zero returncode
             log.error(f"Command '{subj.args}' returned exit status {subj.returncode}.")
@@ -129,7 +129,7 @@ def controller_host():
     return f"{cluster_name()}-controller" # !!!!
 
 
-def install_custom_scripts(check_hash:bool=False):
+def install_custom_scripts():
     """download custom scripts from gcs bucket"""
     
     if instance_role() == "compute":
@@ -161,9 +161,9 @@ def install_custom_scripts(check_hash:bool=False):
 
         for par in path.parents:
             chown_slurm(CUSTOM_SCRIPTS_DIR / par)
+        
         need_update = True
-
-        if check_hash and fullpath.exists():
+        if fullpath.exists():
             # TODO: MD5 reported by gcloud may differ from the one calculated here (e.g. if blob got gzipped),
             # consider using gCRC32C
             need_update = hash_file(fullpath) != blob.md5_hash
@@ -193,12 +193,28 @@ class NSMount:
     fs_type: str
     mount_options: str
 
+    @staticmethod
+    def from_dict(data: dict) -> "NSMount":
+        return NSMount(
+            server_ip=data["server_ip"],
+            local_mount=Path(data["local_mount"]),
+            remote_mount=Path(data["remote_mount"]),
+            fs_type=data["fs_type"],
+            mount_options=data["mount_options"],
+        )
+
 
 @dataclass
 class Config:
     network_storage: list[NSMount]
     startup_script_timeout: int = 300
 
+    @staticmethod
+    def from_dict(data: dict) -> "Config":
+        return Config(
+            network_storage=[NSMount.from_dict(ns) for ns in data.get("network_storage", [])],
+            startup_script_timeout=int(data.get("startup_script_timeout", 300)),
+        )
 
 def _get_bucket_and_common_prefix() -> tuple[str, str]:
     uri = instance_metadata("attributes/slurm_bucket_path")
@@ -219,20 +235,42 @@ def blob_list(prefix="", delimiter=None):
     )
     return [blob for blob in blobs]
 
-def fetch_config() -> tuple[bool, Config]:
-    return False, Config(
-        network_storage=[], # !!!
-    )
-    # bucket_name, path = _get_bucket_and_common_prefix()
-    # blobs = storage_client().list_blobs(bucket_name, prefix=path)
+def fetch_config() -> bool:
+    config_file = SCRIPTS_DIR / "config.yaml"
+    hash_file =  SCRIPTS_DIR / ".config.hash"
+    old_hash = hash_file.read_text() if hash_file.exists() else None
 
+    bucket_name, path = _get_bucket_and_common_prefix()
+    if instance_role() == "compute":
+        path += f"/nodeset_configs/{instance_nodeset()}.yaml"
+    else:
+        path += f"/login_group_configs/{instance_login_group()}.yaml"
+
+    blob = storage_client().bucket(bucket_name).get_blob(path)  
+    if blob is None:
+        raise RuntimeError(f"Config file {path} does not exist")
+    
+    if old_hash == blob.md5_hash:
+        return False
+    
+    blob.download_to_filename(config_file)
+    chown_slurm(config_file)
+
+    hash_file.write_text(blob.md5_hash)
+    chown_slurm(hash_file)
+    return True
+    
 _cfg: Config | None = None
-def update_config(cfg: Config) -> None:
-    global _cfg
-    _cfg = cfg
 
 def config() -> Config:
-    assert _cfg, "Config is not initialized" # !!!!
+    global _cfg
+    if _cfg is not None:
+        return _cfg
+    
+    path = SCRIPTS_DIR / "config.yaml"
+    if not path.exists():
+        raise RuntimeError(f"Config file {path} does not exist")
+    _cfg = Config.from_dict(yaml.load(path.read_text(), Loader=yaml.CLoader))
     return _cfg
 
 

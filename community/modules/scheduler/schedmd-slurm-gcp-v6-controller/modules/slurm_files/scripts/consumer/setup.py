@@ -18,6 +18,7 @@ import logging
 from pathlib import Path
 import time
 
+import sys
 import shutil
 import os
 import yaml
@@ -27,21 +28,22 @@ import socket
 import util
 import network_storage
 
-# !!!  logging file
 log = logging.getLogger()
 
-# !!!! TODO !!!!
-# [ ] Fetch real config
+# !!!! TODO
+# [X] Fetch real config
 # [X] Setup logging file
-# [ ] Check Filestore
+# [X] Check Filestore
+# [ ] Check gsfuse
 # [X] Setup & run custom scripts
 # [ ] Setup prologues / epilogues
 # [ ] Setup task prologues / epilogues
 # [ ] Check with real DNS setup
 # [ ] Move as much as possible to image (see XXX)
-# [ ] Check sinfo
+# [x] Check sinfo
 # [ ] Check sacct
 # [X] Check srun
+# [ ] Check cloud-ops-agent
 
 
 MOTD_HEADER = """
@@ -201,21 +203,6 @@ def setup_compute(cfg: util.Config):
     log.info("Done setting up compute")
 
 
-# !!! dirs = NSDict(
-#     home = Path("/home"),
-#     slurm = Path("/slurm"),
-#     scripts = scripts_dir,
-#     custom_scripts = Path("/slurm/custom_scripts"),
-#     log = Path("/var/log/slurm"),
-# )
-
-# slurmdirs = NSDict(
-#     prefix = Path("/usr/local"),
-#     etc = Path("/usr/local/etc/slurm"),
-#     key_distribution = Path("/slurm/key_distribution"),
-# )
-
-
 def configure_dirs():
     pass # !!!
     # # TODO(b/XXXXX): Should be done as part of image building
@@ -255,13 +242,11 @@ def configure_dirs():
 
 def setup_cloud_ops() -> None:
     """Add health checks, deployment info, and updated setup path to cloud ops config."""
-    cloud_ops_status = util.run(
-        "systemctl is-active --quiet google-cloud-ops-agent.service", check=False
-    ).returncode
-
-    if cloud_ops_status != 0:
+    conf_file = Path("/etc/google-cloud-ops-agent/config.yaml")
+    if not conf_file.exists():
+        log.error("google-cloud-ops-agent is not installed. Skipping setup.")
         return
-
+    
     with open("/etc/google-cloud-ops-agent/config.yaml", "r") as f:
         file = yaml.safe_load(f)
 
@@ -299,7 +284,7 @@ def setup_cloud_ops() -> None:
         "chs_health_check"
     )
 
-    with open("/etc/google-cloud-ops-agent/config.yaml", "w") as f:
+    with open(conf_file, "w") as f:
         yaml.safe_dump(file, f, sort_keys=False)
 
     retries = 2
@@ -329,28 +314,17 @@ def run_custom_scripts(cfg: util.Config):
 def main():
     start_motd()
 
+    assert util.instance_role() in ("login", "compute"), f"Unknown instance role: {util.instance_role()}"
+
     log.info("Starting setup, fetching config")
-    sleep_seconds = 5
-    while True:
-        try:
-            _, cfg = util.fetch_config()
-            util.update_config(cfg)
-            break
-        except util.DeffetiveStoredConfigError as e:
-            log.warning(f"config is not ready yet: {e}, sleeping for {sleep_seconds}s")
-        except Exception as e:
-            log.exception(f"unexpected error while fetching config, sleeping for {sleep_seconds}s")
-        time.sleep(sleep_seconds)
-    log.info("Config fetched")
+    _ = util.fetch_config()
     setup_cloud_ops()
     configure_dirs()
 
     if util.instance_role() == "login":
         setup_login(util.config())
-    elif util.instance_role() == "compute":
-        setup_compute(util.config())
     else:
-        raise Exception(f"Unknown instance role: {util.instance_role()}")
+        setup_compute(util.config())
     
     end_motd()
 
@@ -361,5 +335,5 @@ if __name__ == "__main__":
     except Exception:
         log.exception("Aborting setup...")
         failed_motd()
-        # !!! sys exit 1?
+        sys.exit(1)
         

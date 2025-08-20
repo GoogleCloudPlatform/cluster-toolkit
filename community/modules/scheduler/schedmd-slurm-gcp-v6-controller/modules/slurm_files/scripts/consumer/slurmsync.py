@@ -21,33 +21,19 @@ import util
 import fcntl
 import sys
 
-# !!!  logging file
 log = logging.getLogger()
-
-
-def reconfigure_slurm():
-    pass # !!!! ? Fetch config (small one)
 
 
 
 def main():
-    pass # !!! TODO
-    # try:
-    #     reconfigure_slurm()
-    # except Exception:
-    #     log.exception("failed to reconfigure slurm")
-    
-    # try:
-    #     # TODO: it performs 1 to 4 GCS list requests,
-    #     # use cached version, combine with `_list_config_blobs`
-    #     install_custom_scripts(check_hash=True)
-    # except Exception:
-    #     log.exception("failed to sync custom scripts")
-
-
+    if util.fetch_config():
+        log.info("Config updated")
+    try:
+        util.install_custom_scripts()
+    except Exception:
+        log.exception("failed to sync custom scripts")
 
 if __name__ == "__main__":
-    
     pid_file = (Path("/tmp") / Path(__file__).name).with_suffix(".pid")
     with pid_file.open("w") as fp:
         try:
