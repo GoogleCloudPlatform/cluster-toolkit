@@ -193,6 +193,19 @@ resource "google_storage_bucket_object" "devel" {
 }
 
 
+data "archive_file" "consumer_devel_zip" {
+  output_path = "${local.build_dir}/consumer-devel.zip"
+  type        = "zip"
+  source_dir  = abspath("${path.module}/scripts/consumer")
+}
+
+resource "google_storage_bucket_object" "consumer_devel" {
+  bucket = var.bucket_name
+  name   = format("%s/consumer-devel.zip", local.bucket_dir)
+  source = data.archive_file.consumer_devel_zip.output_path
+}
+
+
 ###########
 # SCRIPTS #
 ###########
