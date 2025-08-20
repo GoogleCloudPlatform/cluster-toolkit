@@ -47,7 +47,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [gke-managed-hyperdisk.yaml](#gke-managed-hyperdiskyaml--) ![core-badge] ![experimental-badge]
   * [gke-a3-ultragpu.yaml](#gke-a3-ultragpuyaml-) ![core-badge]
   * [gke-a3-megagpu](#gke-a3-megagpuyaml-) ![core-badge]
-  * [gke-a3-highgpu](#gke-a3-highgpuyaml-) ![core-badge]
+  * [gke-a3-highgpu](#gke-a3-highgpu--) ![core-badge]
   * [gke-consumption-options](#gke-consumption-options-) ![core-badge]
   * [htc-slurm.yaml](#htc-slurmyaml-) ![community-badge]
   * [htc-htcondor.yaml](#htc-htcondoryaml--) ![community-badge] ![experimental-badge]
@@ -1246,9 +1246,9 @@ If you see an error saying: `local-exec provisioner error` or `This environment 
 
 [gke-a3-megagpu.yaml]: ../examples/gke-a3-megagpu
 
-### [gke-a3-highgpu.yaml] ![core-badge]
+### [gke-a3-highgpu] ![core-badge]
 
-This blueprint shows how to provision a GKE cluster with A3 High machines in the toolkit.
+This blueprint shows how to provision a GKE cluster with A3 High machines in the toolkit. It is split into a [blueprint file] and a [deployment file].
 
 After provisioning the cluster and the nodepool, the below components will be installed
 to enable GPUDirect for the A3 High machines.
@@ -1280,7 +1280,9 @@ If you see an error saying: `local-exec provisioner error` or `This environment 
   source $VENV_DIR/bin/activate
 ```
 
-[gke-a3-highgpu.yaml]: ../examples/gke-a3-highgpu.yaml
+[gke-a3-highgpu]: ../examples/gke-a3-highgpu-blueprint.yaml
+[blueprint file]: ../examples/gke-a3-highgpu-blueprint.yaml
+[deployment file]: ../examples/gke-a3-highgpu-deployment.yaml
 
 ### [gke-consumption-options] ![core-badge]
 

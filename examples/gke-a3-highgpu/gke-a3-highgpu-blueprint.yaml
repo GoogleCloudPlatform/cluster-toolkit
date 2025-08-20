@@ -2,7 +2,7 @@
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
+# You may a copy of the License at
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 #
@@ -27,7 +27,7 @@ vars:
   gcp_public_cidrs_access_enabled: false
 
 deployment_groups:
-- group: primary
+- group: cluster-env
   modules:
   - id: network1
     source: modules/network/vpc
@@ -76,6 +76,8 @@ deployment_groups:
       subnetwork_cidr_suffix: 20 # the subnet can support upto 4k nodes
       mtu: 8244
 
+- group: cluster
+  modules:
   - id: gke_cluster
     source: modules/scheduler/gke-cluster
     use: [network1, gpunets, workload_service_account]
