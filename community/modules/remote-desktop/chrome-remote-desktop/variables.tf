@@ -87,12 +87,6 @@ variable "disk_type" {
   default     = "pd-balanced"
 }
 
-variable "auto_delete_boot_disk" {
-  description = "Controls if boot disk should be auto-deleted when instance is deleted."
-  type        = bool
-  default     = true
-}
-
 variable "name_prefix" {
   description = <<-EOT
     An optional name for all VM and disk resources.

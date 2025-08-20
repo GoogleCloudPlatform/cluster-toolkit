@@ -90,10 +90,9 @@ module "instances" {
   startup_script        = module.client_startup_script.startup_script
   enable_oslogin        = var.enable_oslogin
 
-  instance_image        = var.instance_image
-  disk_size_gb          = var.disk_size_gb
-  disk_type             = var.disk_type
-  auto_delete_boot_disk = var.auto_delete_boot_disk
+  instance_image = var.instance_image
+  disk_size_gb   = var.disk_size_gb
+  disk_type      = var.disk_type
 
   disable_public_ips   = !var.enable_public_ips
   network_self_link    = var.network_self_link
