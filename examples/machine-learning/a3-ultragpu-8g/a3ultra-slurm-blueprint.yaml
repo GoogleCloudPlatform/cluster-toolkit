@@ -63,6 +63,13 @@ deployment_groups:
         enabled: true
         world_writable: true
       runners:
+      - type: shell
+        destination: install-cuda-toolkit.sh
+        content: |
+          #!/bin/bash
+          set -e -o pipefail
+          sudo add-nvidia-repositories -y
+          sudo apt install -y cuda-toolkit-12-8
       - type: data
         destination: /etc/apt/preferences.d/block-broken-nvidia-container
         content: |
