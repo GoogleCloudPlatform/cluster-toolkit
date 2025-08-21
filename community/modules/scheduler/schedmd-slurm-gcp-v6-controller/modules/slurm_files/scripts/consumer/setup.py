@@ -30,14 +30,15 @@ import network_storage
 
 log = logging.getLogger()
 
-# !!!! TODO
+# TODO:
 # [X] Fetch real config
 # [X] Setup logging file
 # [X] Check Filestore
 # [ ] Check gsfuse
 # [X] Setup & run custom scripts
-# [ ] Setup prologues / epilogues
-# [ ] Setup task prologues / epilogues
+# [X] Setup prologues / epilogues
+# [X] Setup task prologues / epilogues
+# [X] Check healthcheck
 # [ ] Check with real DNS setup
 # [ ] Move as much as possible to image (see XXX)
 # [x] Check sinfo
@@ -203,41 +204,17 @@ def setup_compute(cfg: util.Config):
     log.info("Done setting up compute")
 
 
+# TODO(b/XXXXX): Should be done as part of image building
 def configure_dirs():
-    pass # !!!
-    # # TODO(b/XXXXX): Should be done as part of image building
-    # for p in dirs.values():
-    #     util.mkdirp(p)
-
-    # # TODO(b/XXXXX): Should be done as part of image building
-    # for p in (dirs.slurm, dirs.scripts, dirs.custom_scripts):
-    #     util.chown_slurm(p)
-
-    # # TODO(b/XXXXX): Should be done as part of image building
-    # for p in slurmdirs.values():
-    #     util.mkdirp(p)
-    #     util.chown_slurm(p)
-
-    # # TODO(b/XXXXX): Should be done as part of image building
-    # for sl, tgt in ( # create symlinks
-    #     (Path("/etc/slurm"), slurmdirs.etc),
-    #     (dirs.scripts / "etc", slurmdirs.etc),
-    #     (dirs.scripts / "log", dirs.log),
-    # ):
-    #     if sl.exists() and sl.is_symlink():
-    #         sl.unlink()
-    #     sl.symlink_to(tgt)
-
-    # # copy auxiliary scripts
-    # # TODO(b/XXXXX): Should be done as part of image building
-    # for dst_folder, src_file in ((dirs.custom_scripts / "task_prolog.d",
-    #                               Path("tools/task-prolog")),
-    #                              (dirs.custom_scripts / "task_epilog.d",
-    #                               Path("tools/task-epilog"))):
-    #     dst = Path(dst_folder) / src_file.name
-    #     util.mkdirp(dst.parent)
-    #     shutil.copyfile(util.scripts_dir / src_file, dst)
-    #     os.chmod(dst, 0o755)
+    # copy auxiliary scripts
+    for dst_folder, src_file in ((util.CUSTOM_SCRIPTS_DIR / "task_prolog.d",
+                                  Path("tools/task-prolog")),
+                                 (util.CUSTOM_SCRIPTS_DIR / "task_epilog.d",
+                                  Path("tools/task-epilog"))):
+        dst = Path(dst_folder) / src_file.name
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(util.SCRIPTS_DIR / src_file, dst)
+        os.chmod(dst, 0o755)
 
 
 def setup_cloud_ops() -> None:

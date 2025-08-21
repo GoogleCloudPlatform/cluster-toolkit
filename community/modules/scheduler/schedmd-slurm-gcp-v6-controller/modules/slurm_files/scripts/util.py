@@ -550,6 +550,10 @@ def install_custom_scripts(check_hash:bool=False):
         if not m:
             log.warning(f"found blob that doesn't match expected pattern: {source.name}")
             continue
+
+        # TODO(b/440182900): Simplify this logic, no need for nested directories
+        # Also fix a bug where prolog with short (no hyphons, no dots) name is getting
+        # saved as `.../.<name>` wich renders it invisible.
         path_parts = m["path"].split("-")
         path_parts[0] += ".d"
         stem, _, ext = m["name"].rpartition("_")

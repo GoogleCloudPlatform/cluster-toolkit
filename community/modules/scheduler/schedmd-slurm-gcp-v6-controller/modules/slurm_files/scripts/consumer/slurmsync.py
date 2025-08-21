@@ -16,13 +16,11 @@
 
 import logging
 from pathlib import Path
-import time
 import util
 import fcntl
 import sys
 
 log = logging.getLogger()
-
 
 
 def main():

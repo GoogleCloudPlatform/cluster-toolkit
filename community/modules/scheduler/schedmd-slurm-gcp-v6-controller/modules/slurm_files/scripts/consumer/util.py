@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import stat
 import subprocess
 import shlex
 import logging
@@ -126,7 +125,7 @@ def cluster_name():
     return instance_metadata("attributes/slurm_cluster_name")
 
 def controller_host():
-    return f"{cluster_name()}-controller" # !!!!
+    return instance_metadata("attributes/slurm_controller_hostname")
 
 
 def install_custom_scripts():
@@ -143,8 +142,6 @@ def install_custom_scripts():
     for blob in blob_list():
         if not any(blob.name.startswith(f"{common_prefix}/{p}") for p in prefixes):
             continue # script for some other nodeset / login group
-
-        log.debug(f"found blob: {blob.name}")
         m = script_pattern.match(Path(blob.name).name)
         if not m:
             log.warning(f"found blob that doesn't match expected pattern: {blob.name}")
