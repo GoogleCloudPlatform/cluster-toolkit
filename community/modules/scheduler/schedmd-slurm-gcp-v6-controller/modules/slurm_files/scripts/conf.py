@@ -83,6 +83,11 @@ def conflines(lkp: util.Lookup) -> str:
         for tpu_nodeset in part.partition_nodeset_tpu
     )
 
+    any_gke = any(
+        lkp.nodeset_is_gke(nodeset)
+        for nodeset in lkp.cfg.nodeset.values()
+    )
+
     any_dynamic = any(bool(p.partition_feature) for p in lkp.cfg.partitions.values())
     comma_params = {
         "LaunchParameters": [
@@ -90,7 +95,7 @@ def conflines(lkp: util.Lookup) -> str:
             "use_interactive_step",
         ],
         "SlurmctldParameters": [
-            "cloud_reg_addrs" if any_dynamic or any_tpu else "cloud_dns",
+            "cloud_reg_addrs" if any_dynamic or any_tpu or any_gke else "cloud_dns",
             "enable_configless",
             "idle_on_node_suspend",
         ],
