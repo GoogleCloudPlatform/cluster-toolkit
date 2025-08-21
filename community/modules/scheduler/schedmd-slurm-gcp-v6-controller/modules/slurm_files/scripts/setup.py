@@ -18,6 +18,7 @@
 import argparse
 import logging
 import os
+import secrets
 import shutil
 import subprocess
 import stat
@@ -216,8 +217,11 @@ def setup_jwt_key():
     util.chown_slurm(jwt_key, mode=0o400)
 
 
-def _generate_key(p: Path) -> None:
-    run(f"dd if=/dev/random of={p} bs=1024 count=1")
+def _generate_key(p: Path, default_value: str = "") -> None:
+    if default_value != "":
+        p.write_text(default_value)
+    else:
+        p.write_bytes(secrets.token_bytes(1024))
 
 
 def setup_key(lkp: util.Lookup) -> None:
@@ -234,7 +238,7 @@ def setup_key(lkp: util.Lookup) -> None:
         # Copy key from persistent state disk
         persist = slurmdirs.state / file_name
         if not persist.exists():
-            _generate_key(persist)
+            _generate_key(persist, lkp.cfg.default_auth_key)
 
         shutil.copyfile(persist, dst)
         if lkp.cfg.enable_slurm_auth:
@@ -247,7 +251,7 @@ def setup_key(lkp: util.Lookup) -> None:
         if dst.exists():
             log.info("key already exists. Skipping key generation.")
         else:
-            _generate_key(dst)
+            _generate_key(dst, lkp.cfg.default_auth_key)
             if lkp.cfg.enable_slurm_auth:
               util.chown_slurm(dst, mode=0o400)
             else:

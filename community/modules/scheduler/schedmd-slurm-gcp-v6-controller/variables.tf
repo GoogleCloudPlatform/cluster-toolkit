@@ -453,6 +453,12 @@ EOD
   default     = false
 }
 
+variable "default_auth_key" {
+  description = "Default auth key value ex. slurm.key"
+  type        = string
+  default     = ""
+}
+
 variable "cloud_parameters" {
   description = "cloud.conf options. Defaults inherited from [Slurm GCP repo](https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/terraform/slurm_cluster/modules/slurm_files/README_TF.md#input_cloud_parameters)"
   type = object({

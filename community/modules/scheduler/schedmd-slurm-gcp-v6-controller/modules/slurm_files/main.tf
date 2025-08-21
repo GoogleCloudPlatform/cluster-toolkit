@@ -59,6 +59,7 @@ locals {
     # timeouts
     controller_startup_scripts_timeout = var.controller_startup_scripts_timeout
     compute_startup_scripts_timeout    = var.compute_startup_scripts_timeout
+    default_auth_key                   = var.default_auth_key
 
     munge_mount     = local.munge_mount
     slurm_key_mount = var.slurm_key_mount

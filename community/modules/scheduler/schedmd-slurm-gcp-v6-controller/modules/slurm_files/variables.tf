@@ -501,3 +501,9 @@ variable "controller_network_attachment" {
   type        = string
   default     = null
 }
+
+variable "default_auth_key" {
+  description = "Default auth key value ex. slurm.key"
+  type        = string
+  default     = ""
+}
