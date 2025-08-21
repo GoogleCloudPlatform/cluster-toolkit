@@ -14,29 +14,30 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import fcntl
 import logging
 from pathlib import Path
-import util
-import fcntl
 import sys
+import util
 
 log = logging.getLogger()
 
 
 def main():
-    if util.fetch_config():
-        log.info("Config updated")
-    try:
-        util.install_custom_scripts()
-    except Exception:
-        log.exception("failed to sync custom scripts")
+  if util.fetch_config():
+    log.info("Config updated")
+  try:
+    util.install_custom_scripts()
+  except Exception:
+    log.exception("failed to sync custom scripts")
+
 
 if __name__ == "__main__":
-    pid_file = (Path("/tmp") / Path(__file__).name).with_suffix(".pid")
-    with pid_file.open("w") as fp:
-        try:
-            fcntl.lockf(fp, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            util.init_log("slurmsync")
-            main()
-        except BlockingIOError:
-            sys.exit(0)
+  pid_file = (Path("/tmp") / Path(__file__).name).with_suffix(".pid")
+  with pid_file.open("w") as fp:
+    try:
+      fcntl.lockf(fp, fcntl.LOCK_EX | fcntl.LOCK_NB)
+      util.init_log("slurmsync")
+      main()
+    except BlockingIOError:
+      sys.exit(0)

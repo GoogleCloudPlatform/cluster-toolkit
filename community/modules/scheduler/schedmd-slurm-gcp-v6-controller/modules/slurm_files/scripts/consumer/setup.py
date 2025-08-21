@@ -15,22 +15,20 @@
 # limitations under the License.
 
 import logging
-from pathlib import Path
-import time
-
-import sys
-import shutil
 import os
-import yaml
-import subprocess
+from pathlib import Path
+import shutil
 import socket
+import subprocess
+import sys
 
-import util
 import network_storage
+import util
+import yaml
 
 log = logging.getLogger()
 
-# TODO:
+# TODO(b/440182294):
 # [X] Fetch real config
 # [X] Setup logging file
 # [X] Check Filestore
@@ -40,11 +38,11 @@ log = logging.getLogger()
 # [X] Setup task prologues / epilogues
 # [X] Check healthcheck
 # [ ] Check with real DNS setup
-# [ ] Move as much as possible to image (see XXX)
 # [x] Check sinfo
 # [ ] Check sacct
 # [X] Check srun
 # [ ] Check cloud-ops-agent
+# [ ] Test resizing of nodeset
 
 
 MOTD_HEADER = """
@@ -88,229 +86,252 @@ SSSSSSSSSSSS    SSS    SSSSSSSSSSSSS    SSSS        SSSS     SSSS     SSSS
 
 
 def start_motd():
-    """advise in motd that slurm is currently configuring"""
-    wall_msg = "*** Slurm is currently being configured in the background. ***"
-    motd_msg = MOTD_HEADER + wall_msg + "\n\n"
-    Path("/etc/motd").write_text(motd_msg)
-    util.run(f"wall -n '{wall_msg}'", timeout=30)
+  """advise in motd that slurm is currently configuring."""
+  wall_msg = "*** Slurm is currently being configured in the background. ***"
+  motd_msg = MOTD_HEADER + wall_msg + "\n\n"
+  Path("/etc/motd").write_text(motd_msg)
+  util.run(f"wall -n '{wall_msg}'", timeout=30)
+
+
+def end_motd():
+  """modify motd to signal that setup is complete."""
+  Path("/etc/motd").write_text(MOTD_HEADER)
+  util.run("wall -n '*** Slurm setup complete ***'", timeout=30)
 
 
 def failed_motd():
-    """modify motd to signal that setup is failed"""
-    wall_msg = f"*** Slurm setup failed! Please view log: /var/log/slurm/setup.log ***"
-    motd_msg = MOTD_HEADER + wall_msg + "\n\n"
-    Path("/etc/motd").write_text(motd_msg)
-    util.run(f"wall -n '{wall_msg}'", timeout=30)
+  """modify motd to signal that setup is failed."""
+  wall_msg = (
+      "*** Slurm setup failed! Please view log: /var/log/slurm/setup.log ***"
+  )
+  motd_msg = MOTD_HEADER + wall_msg + "\n\n"
+  Path("/etc/motd").write_text(motd_msg)
+  util.run(f"wall -n '{wall_msg}'", timeout=30)
 
-def end_motd():
-    """modify motd to signal that setup is complete"""
-    Path("/etc/motd").write_text(MOTD_HEADER)
-    util.run("wall -n '*** Slurm setup complete ***'", timeout=30)
-    
+
+def run_custom_scripts(cfg: util.Config):
+  """run custom scripts based on instance_role."""
+  suffix = "nodeset.d" if util.instance_role() == "compute" else "login.d"
+  sdir = util.CUSTOM_SCRIPTS_DIR / suffix
+
+  timeout = cfg.startup_script_timeout
+  for script in [s for s in sdir.rglob("*") if s.is_file()]:
+    log.info("running script %s with timeout=%ds", script.name, timeout)
+    util.run(str(script), timeout=timeout, check=True, shell=True)
+
 
 def update_system_config(file: str, content: str) -> None:
-    """Add system defaults options for service files"""
-    sysconfig = Path("/etc/sysconfig")
-    default = Path("/etc/default")
+  """Add system defaults options for service files."""
+  sysconfig = Path("/etc/sysconfig")
+  default = Path("/etc/default")
 
-    if sysconfig.exists():
-        conf_dir = sysconfig
-    elif default.exists():
-        conf_dir = default
-    else:
-        raise Exception("Cannot determine system configuration directory.")
-    Path(conf_dir, file).write_text(content)
+  if sysconfig.exists():
+    conf_dir = sysconfig
+  elif default.exists():
+    conf_dir = default
+  else:
+    raise Exception("Cannot determine system configuration directory.")
+  Path(conf_dir, file).write_text(content)
 
 
-# TODO(b/XXXXX): Should be done as part of image building
+# TODO(b/440193886): Should be done as part of image building
 def setup_nss_slurm():
-    """install and configure nss_slurm"""
-    # setup nss_slurm
-    Path("/var/spool/slurmd").mkdir(parents=True, exist_ok=True)
-    util.run("ln -s /usr/local/lib/libnss_slurm.so.2 /usr/lib64/libnss_slurm.so.2", check=False)
-    util.run(r"sed -i 's/\(^\(passwd\|group\):\s\+\)/\1slurm /g' /etc/nsswitch.conf")
+  """install and configure nss_slurm."""
+  # setup nss_slurm
+  Path("/var/spool/slurmd").mkdir(parents=True, exist_ok=True)
+  util.run(
+      "ln -s /usr/local/lib/libnss_slurm.so.2 /usr/lib64/libnss_slurm.so.2",
+      check=False,
+  )
+  util.run(
+      r"sed -i 's/\(^\(passwd\|group\):\s\+\)/\1slurm /g' /etc/nsswitch.conf"
+  )
 
-# TODO(b/XXXXX): Should be done as part of image building
+
+# TODO(b/440193755): Should be done as part of image building
 def setup_sudoers():
-    content = """
+  content = """
 # Allow SlurmUser to manage the slurm daemons
 slurm ALL= NOPASSWD: /usr/bin/systemctl restart slurmd.service
 slurm ALL= NOPASSWD: /usr/bin/systemctl restart sackd.service
 """
-    sudoers_file = Path("/etc/sudoers.d/slurm")
-    sudoers_file.write_text(content)
-    sudoers_file.chmod(0o0440)
+  sudoers_file = Path("/etc/sudoers.d/slurm")
+  sudoers_file.write_text(content)
+  sudoers_file.chmod(0o0440)
+
+
+# TODO(b/440193118): Should be done as part of image building
+def configure_dirs():
+  # copy auxiliary scripts
+  for dst_folder, src_file in (
+      (util.CUSTOM_SCRIPTS_DIR / "task_prolog.d", Path("tools/task-prolog")),
+      (util.CUSTOM_SCRIPTS_DIR / "task_epilog.d", Path("tools/task-epilog")),
+  ):
+    dst = Path(dst_folder) / src_file.name
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(util.SCRIPTS_DIR / src_file, dst)
+    os.chmod(dst, 0o755)
 
 
 def setup_login(cfg: util.Config) -> None:
-    """run login node setup"""
-    log.info("Setting up login")
+  """run login node setup."""
+  log.info("Setting up login")
 
-    sackd_options = [f'--conf-server="{util.controller_host()}:6820-6830"']
-    
-    sysconf = f"""SACKD_OPTIONS='{" ".join(sackd_options)}'"""
-    update_system_config("sackd", sysconf)
-    util.install_custom_scripts()
+  sackd_options = [f'--conf-server="{util.controller_host()}:6820-6830"']
 
-    network_storage.setup_network_storage(cfg)
-    network_storage.slurm_key_mount_handler()
-    setup_sudoers()
-    
-    util.run("systemctl enable sackd", timeout=30)
-    util.run("systemctl restart sackd", timeout=30)
-    util.run("systemctl enable --now slurmcmd.timer", timeout=30)
+  sysconf = f"""SACKD_OPTIONS='{" ".join(sackd_options)}'"""
+  update_system_config("sackd", sysconf)
+  util.install_custom_scripts()
 
-    run_custom_scripts(cfg)
+  network_storage.setup_network_storage(cfg)
+  network_storage.slurm_key_mount_handler()
+  setup_sudoers()
 
-    log.info("Check status of cluster services")
-    util.run("systemctl status sackd", timeout=30)
+  util.run("systemctl enable sackd", timeout=30)
+  util.run("systemctl restart sackd", timeout=30)
+  util.run("systemctl enable --now slurmcmd.timer", timeout=30)
 
-    log.info("Done setting up login")
+  run_custom_scripts(cfg)
+
+  log.info("Check status of cluster services")
+  util.run("systemctl status sackd", timeout=30)
+
+  log.info("Done setting up login")
+
 
 def setup_compute(cfg: util.Config):
-    """run compute node setup"""
-    log.info("Setting up compute")
-    
-    slurmd_options = [f'--conf-server="{util.controller_host()}:6820-6830"',]
+  """run compute node setup."""
+  log.info("Setting up compute")
 
-    try:
-        slurmd_feature = util.instance_metadata("attributes/slurmd_feature", silent=True)
-    except util.MetadataNotFoundError:
-        slurmd_feature = None
+  slurmd_options = [
+      f'--conf-server="{util.controller_host()}:6820-6830"',
+  ]
 
-    if slurmd_feature is not None:
-        slurmd_options.append(f'--conf="Feature={slurmd_feature}"')
-        slurmd_options.append("-Z")
+  try:
+    slurmd_feature = util.instance_metadata(
+        "attributes/slurmd_feature", silent=True
+    )
+  except util.MetadataNotFoundError:
+    slurmd_feature = None
 
-    sysconf = f"""SLURMD_OPTIONS='{" ".join(slurmd_options)}'"""
-    update_system_config("slurmd", sysconf)
-    util.install_custom_scripts()
+  if slurmd_feature is not None:
+    slurmd_options.append(f'--conf="Feature={slurmd_feature}"')
+    slurmd_options.append("-Z")
 
-    setup_nss_slurm()
-    network_storage.setup_network_storage(cfg)
-    network_storage.slurm_key_mount_handler()
+  sysconf = f"""SLURMD_OPTIONS='{" ".join(slurmd_options)}'"""
+  update_system_config("slurmd", sysconf)
+  util.install_custom_scripts()
 
-    run_custom_scripts(cfg)
+  setup_nss_slurm()
+  network_storage.setup_network_storage(cfg)
+  network_storage.slurm_key_mount_handler()
 
-    setup_sudoers()
-    
-    util.run("systemctl enable slurmd", timeout=30)
-    util.run("systemctl restart slurmd", timeout=30)
-    util.run("systemctl enable --now slurmcmd.timer", timeout=30)
+  run_custom_scripts(cfg)
 
-    log.info("Check status of cluster services")
-    util.run("systemctl status slurmd", timeout=30)
+  setup_sudoers()
 
-    log.info("Done setting up compute")
+  util.run("systemctl enable slurmd", timeout=30)
+  util.run("systemctl restart slurmd", timeout=30)
+  util.run("systemctl enable --now slurmcmd.timer", timeout=30)
 
+  log.info("Check status of cluster services")
+  util.run("systemctl status slurmd", timeout=30)
 
-# TODO(b/XXXXX): Should be done as part of image building
-def configure_dirs():
-    # copy auxiliary scripts
-    for dst_folder, src_file in ((util.CUSTOM_SCRIPTS_DIR / "task_prolog.d",
-                                  Path("tools/task-prolog")),
-                                 (util.CUSTOM_SCRIPTS_DIR / "task_epilog.d",
-                                  Path("tools/task-epilog"))):
-        dst = Path(dst_folder) / src_file.name
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(util.SCRIPTS_DIR / src_file, dst)
-        os.chmod(dst, 0o755)
+  log.info("Done setting up compute")
 
 
 def setup_cloud_ops() -> None:
-    """Add health checks, deployment info, and updated setup path to cloud ops config."""
-    conf_file = Path("/etc/google-cloud-ops-agent/config.yaml")
-    if not conf_file.exists():
-        log.error("google-cloud-ops-agent is not installed. Skipping setup.")
-        return
-    
-    with open("/etc/google-cloud-ops-agent/config.yaml", "r") as f:
-        file = yaml.safe_load(f)
+  """Add health checks, deployment info, and updated setup path to cloud ops config."""
+  conf_file = Path("/etc/google-cloud-ops-agent/config.yaml")
+  if not conf_file.exists():
+    log.error("google-cloud-ops-agent is not installed. Skipping setup.")
+    return
 
-    # Update setup receiver path
-    # TODO(b/XXXXX): Should be done as part of image building
-    file["logging"]["receivers"]["setup"]["include_paths"] = ["/var/log/slurm/setup.log"]
+  with open("/etc/google-cloud-ops-agent/config.yaml", "r") as f:
+    file = yaml.safe_load(f)
 
-    # Add chs_health_check receiver
-    # TODO(b/XXXXX): Should be done as part of image building
-    file["logging"]["receivers"]["chs_health_check"] = {
-        "type": "files",
-        "include_paths": ["/var/log/slurm/chs_health_check.log"],
-        "record_log_file_path": True,
-    }
+  # Update setup receiver path
+  # TODO(b/440194904): Should be done as part of image building
+  file["logging"]["receivers"]["setup"]["include_paths"] = [
+      "/var/log/slurm/setup.log"
+  ]
 
-    cluster_info = {
-        'type':'modify_fields',
-        'fields': {
-            'labels."cluster_name"':{
-                'static_value':f"{util.cluster_name()}"
-            },
-            'labels."hostname"':{
-                'static_value': f"{socket.gethostname()}"
-            }
-        }
-    }
+  # Add chs_health_check receiver
+  # TODO(b/440194904): Should be done as part of image building
+  file["logging"]["receivers"]["chs_health_check"] = {
+      "type": "files",
+      "include_paths": ["/var/log/slurm/chs_health_check.log"],
+      "record_log_file_path": True,
+  }
 
-    file["logging"]["processors"]["add_cluster_info"] = cluster_info
-    file["logging"]["service"]["pipelines"]["slurmlog_pipeline"]["processors"].append("add_cluster_info")
-    file["logging"]["service"]["pipelines"]["slurmlog2_pipeline"]["processors"].append("add_cluster_info")
+  cluster_info = {
+      "type": "modify_fields",
+      "fields": {
+          'labels."cluster_name"': {"static_value": f"{util.cluster_name()}"},
+          'labels."hostname"': {"static_value": f"{socket.gethostname()}"},
+      },
+  }
 
-    # Add chs_health_check to slurmlog2_pipeline
-    # TODO(b/XXXXX): Should be done as part of image building
-    file["logging"]["service"]["pipelines"]["slurmlog2_pipeline"]["receivers"].append(
-        "chs_health_check"
-    )
+  file["logging"]["processors"]["add_cluster_info"] = cluster_info
+  file["logging"]["service"]["pipelines"]["slurmlog_pipeline"][
+      "processors"
+  ].append("add_cluster_info")
+  file["logging"]["service"]["pipelines"]["slurmlog2_pipeline"][
+      "processors"
+  ].append("add_cluster_info")
 
-    with open(conf_file, "w") as f:
-        yaml.safe_dump(file, f, sort_keys=False)
+  # Add chs_health_check to slurmlog2_pipeline
+  # TODO(b/440194904): Should be done as part of image building
+  file["logging"]["service"]["pipelines"]["slurmlog2_pipeline"][
+      "receivers"
+  ].append("chs_health_check")
 
-    retries = 2
-    for _ in range(retries):
-        try:
-            util.run("systemctl restart google-cloud-ops-agent.service", timeout=120)
-            break
-        except subprocess.TimeoutExpired:
-            log.error("google-cloud-ops-agent.service did not restart within 120s.")
-            result=util.run("cat /var/log/google-cloud-ops-agent/subagents/logging-module.log", timeout=120, shell=True)
-            if result.stdout:
-                log.error(f"Logs for google-cloud-ops-agent (logging-module.log file):\n{result.stdout}")
-            raise
+  with open(conf_file, "w") as f:
+    yaml.safe_dump(file, f, sort_keys=False)
 
+  retries = 2
+  for _ in range(retries):
+    try:
+      util.run("systemctl restart google-cloud-ops-agent.service", timeout=120)
+      break
+    except subprocess.TimeoutExpired:
+      log.error("google-cloud-ops-agent.service did not restart within 120s.")
+      result = util.run(
+          "cat /var/log/google-cloud-ops-agent/subagents/logging-module.log",
+          timeout=120,
+          shell=True,
+      )
+      if result.stdout:
+        log.error("Logs for google-cloud-ops-agent:\n%s", result.stdout)
+      raise
 
-def run_custom_scripts(cfg: util.Config):
-    """run custom scripts based on instance_role"""
-    suffix = "nodeset.d" if util.instance_role() == "compute" else "login.d"
-    dir = util.CUSTOM_SCRIPTS_DIR / suffix
-    
-    timeout = cfg.startup_script_timeout
-    for script in [s for s in dir.rglob("*") if s.is_file()]:
-        log.info(f"running script {script.name} with timeout={timeout}")
-        util.run(str(script), timeout=timeout, check=True, shell=True)
-    
 
 def main():
-    start_motd()
+  start_motd()
 
-    assert util.instance_role() in ("login", "compute"), f"Unknown instance role: {util.instance_role()}"
+  assert util.instance_role() in (
+      "login",
+      "compute",
+  ), f"Unknown instance role: {util.instance_role()}"
 
-    log.info("Starting setup, fetching config")
-    _ = util.fetch_config()
-    setup_cloud_ops()
-    configure_dirs()
+  log.info("Starting setup, fetching config")
+  _ = util.fetch_config()
+  setup_cloud_ops()
+  configure_dirs()
 
-    if util.instance_role() == "login":
-        setup_login(util.config())
-    else:
-        setup_compute(util.config())
-    
-    end_motd()
+  if util.instance_role() == "login":
+    setup_login(util.config())
+  else:
+    setup_compute(util.config())
+
+  end_motd()
+
 
 if __name__ == "__main__":
-    try:
-        util.init_log("setup")
-        main()
-    except Exception:
-        log.exception("Aborting setup...")
-        failed_motd()
-        sys.exit(1)
-        
+  try:
+    util.init_log("setup")
+    main()
+  except Exception:
+    log.exception("Aborting setup...")
+    failed_motd()
+    sys.exit(1)
