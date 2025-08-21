@@ -367,28 +367,36 @@ def install_jobsubmit_lua(lkp: util.Lookup) -> None:
     util.chown_slurm(conf_file, 0o600)
 
 
-def gen_cloud_gres_conf(lkp: util.Lookup) -> None:
-    """generate cloud_gres.conf"""
+def gen_cloud_gres_conf_lines(lkp: util.Lookup) -> str:
+    """generate cloud_gres.conf's content"""
 
     gpu_nodes = defaultdict(list)
     for nodeset in lkp.cfg.nodeset.values():
         ti = lkp.template_info(nodeset.instance_template)
         gpu_count = ti.gpu.count if ti.gpu  else 0
+        gpu_type = ti.gpu.type if ti.gpu  else None
         if gpu_count:
-            gpu_nodes[gpu_count].append(lkp.nodelist(nodeset))
+            gpu_nodes[(gpu_count, gpu_type)].append(lkp.nodelist(nodeset))
 
     lines = [
         dict_to_conf(
             {
                 "NodeName": names,
                 "Name": "gpu",
-                "File": "/dev/nvidia{}".format(f"[0-{i-1}]" if i > 1 else "0"),
+                "Type": gpu_type,
+                "File": "/dev/nvidia{}".format(f"[0-{gpu_count-1}]" if gpu_count > 1 else "0"),
             }
         )
-        for i, names in gpu_nodes.items()
+        for (gpu_count, gpu_type), names in gpu_nodes.items()
     ]
     lines.append("\n")
-    content = FILE_PREAMBLE + "\n".join(lines)
+    return "\n".join(lines)
+
+
+def gen_cloud_gres_conf(lkp: util.Lookup) -> None:
+    """create cloud_gres.conf file"""
+
+    content = FILE_PREAMBLE + gen_cloud_gres_conf_lines(lkp)
 
     conf_file = lkp.etc_dir / "cloud_gres.conf"
     conf_file.write_text(content)

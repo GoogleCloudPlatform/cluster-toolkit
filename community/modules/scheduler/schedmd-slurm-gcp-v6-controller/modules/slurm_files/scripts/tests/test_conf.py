@@ -190,3 +190,25 @@ def test_conflines(cfg, want):
 
     cfg.cloud_parameters = addict.Dict(cfg.cloud_parameters)
     assert conf.conflines(util.Lookup(cfg)) == want
+
+
+@pytest.mark.parametrize(
+    "cfg,gputype,gpucount,want",
+    [
+        (TstCfg(),
+        "",
+        0,
+         "\n"),
+        (TstCfg(
+            nodeset={"turbo": TstNodeset("turbo")}
+        ), 
+        "Popov",
+        8,
+         "Name=gpu Type=Popov File=/dev/nvidia[0-7]\n\n"),
+    ])
+def test_gen_cloud_gres_conf_lines(cfg, gputype, gpucount, want):
+    lkp = util.Lookup(cfg)
+    lkp.template_info = Mock(return_value=TstTemplateInfo(
+        gpu=util.AcceleratorInfo(type=gputype, count=gpucount)
+    ))
+    assert conf.gen_cloud_gres_conf_lines(lkp) == want
