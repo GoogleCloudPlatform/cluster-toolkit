@@ -87,7 +87,7 @@ module "kubectl_apply_manifests" {
 
 module "install_kueue" {
   source           = "./helm_install"
-  count            = var.kueue.install ? 1 : 0
+  count            = local.install_kueue ? 1 : 0
   release_name     = "kueue"
   chart_repository = "oci://registry.k8s.io/kueue/charts"
   chart_name       = "kueue"
