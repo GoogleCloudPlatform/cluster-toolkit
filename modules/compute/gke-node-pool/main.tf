@@ -387,9 +387,14 @@ locals {
 }
 
 data "google_compute_region_instance_template" "instance_template" {
-  for_each    = { for idx, np in google_container_node_pool.node_pool : idx => np }
-  project     = var.project_id
-  filter      = "name : ${substr("gke-${local.cluster_name}-${each.value.name}", 0, 37)}*"
+  for_each = { for idx, np in google_container_node_pool.node_pool : idx => np }
+  project  = var.project_id
+  filter = "name: gke-${
+    (length(local.cluster_name) <= 16 && length(each.value.name) <= 16) ? "${local.cluster_name}-${each.value.name}" :
+    (length(local.cluster_name) > 16 && length(each.value.name) > 16) ? "${substr(local.cluster_name, 0, 16)}-${substr(each.value.name, 0, 16)}" :
+    (length(local.cluster_name) > 16) ? "${substr(local.cluster_name, 0, 32 - length(each.value.name))}-${each.value.name}" :
+    "${local.cluster_name}-${substr(each.value.name, 0, 32 - length(local.cluster_name))}"
+  }*"
   most_recent = true
 }
 
