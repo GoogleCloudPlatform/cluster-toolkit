@@ -192,7 +192,7 @@ resource "google_compute_instance" "compute_vm" {
     }
 
     device_name = "${local.resource_prefix}-boot-disk-${count.index}"
-    auto_delete = true
+    auto_delete = var.auto_delete_boot_disk
   }
 
   dynamic "attached_disk" {
