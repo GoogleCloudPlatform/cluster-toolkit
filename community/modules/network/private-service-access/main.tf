@@ -41,3 +41,13 @@ resource "google_service_networking_connection" "private_vpc_connection" {
   reserved_peering_ranges = [google_compute_global_address.private_ip_alloc.name]
   deletion_policy         = var.deletion_policy
 }
+
+# Google Cloud NetApp Volumes need enablement of custom_route import and export
+resource "google_compute_network_peering_routes_config" "private_vpc_peering_routes_gcnv" {
+  count   = var.service_name == "netapp.servicenetworking.goog" ? 1 : 0
+  network = var.network_id
+  peering = google_service_networking_connection.private_vpc_connection.peering
+
+  export_custom_routes = true
+  import_custom_routes = true
+}

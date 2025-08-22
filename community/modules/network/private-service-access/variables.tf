@@ -53,7 +53,7 @@ variable "service_name" {
 }
 
 variable "deletion_policy" {
-  description = "The policy to apply when deleting the Private Service Access."
+  description = "The policy to apply when deleting the Private Service Access. Leave empty or use ABANDON."
   type        = string
   default     = null
 }
