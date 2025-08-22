@@ -156,17 +156,6 @@ deployment_groups:
                 owner: root
                 group: root
                 content: |
-                  Package: nsight-compute
-                  Pin: origin *ubuntu.com*
-                  Pin-Priority: -1
-
-                  Package: nsight-systems
-                  Pin: origin *ubuntu.com*
-                  Pin-Priority: -1
-
-                  Package: *
-                  Pin: release l=NVIDIA CUDA
-                  Pin-Priority: 400
             - name: Create nvidia-persistenced override directory
               ansible.builtin.file:
                 path: /etc/systemd/system/nvidia-persistenced.service.d
