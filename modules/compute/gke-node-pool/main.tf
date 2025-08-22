@@ -386,6 +386,13 @@ locals {
   supported_machine_types_for_install_dependencies = ["a3-highgpu-8g", "a3-megagpu-8g"]
 }
 
+# Replicates GKE's naming logic for its instance templates. The full
+# pattern is "gke-{cluster_name}-{nodepool_name}-{hash}".
+#
+# This code builds the "{cluster_name}-{nodepool_name}" prefix, which is
+# capped at 32 characters plus a dash '-' in between, by truncating names if needed:
+# - If both names > 16 chars, both are cut to 16.
+# - If one name > 16, it's shortened so the combined name length is 32.
 data "google_compute_region_instance_template" "instance_template" {
   for_each = { for idx, np in google_container_node_pool.node_pool : idx => np }
   project  = var.project_id
