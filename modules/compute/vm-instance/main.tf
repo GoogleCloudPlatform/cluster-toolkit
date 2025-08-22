@@ -112,27 +112,6 @@ resource "null_resource" "image" {
   }
 }
 
-resource "google_compute_disk" "boot_disk" {
-  project = var.project_id
-
-  count = var.instance_count
-
-  name   = "${local.resource_prefix}-boot-disk-${count.index}"
-  image  = data.google_compute_image.compute_image.self_link
-  type   = var.disk_type
-  size   = var.disk_size_gb
-  labels = local.labels
-  zone   = var.zone
-
-  lifecycle {
-    replace_triggered_by = [null_resource.image]
-
-    ignore_changes = [
-      image
-    ]
-  }
-}
-
 resource "google_compute_disk" "additional_disks" {
   project = var.project_id
 
@@ -205,8 +184,14 @@ resource "google_compute_instance" "compute_vm" {
   labels = local.labels
 
   boot_disk {
-    source      = google_compute_disk.boot_disk[count.index].self_link
-    device_name = google_compute_disk.boot_disk[count.index].name
+    initialize_params {
+      image  = data.google_compute_image.compute_image.self_link
+      size   = var.disk_size_gb
+      type   = var.disk_type
+      labels = local.labels
+    }
+
+    device_name = "${local.resource_prefix}-boot-disk-${count.index}"
     auto_delete = var.auto_delete_boot_disk
   }
 
