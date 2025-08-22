@@ -4,35 +4,25 @@
 vdi_setup_status:
   deployment_name: "{{ deployment_name }}"
   deployment_hash: "{{ current_deployment_hash }}"
+  user_hash: "{{ current_user_secrets_hash }}"
+  current_users: {{ vdi_users | map(attribute='username') | list | to_json }}
+  user_ports: {{ vdi_users | items2dict(key_name='username', value_name='port') | to_json }}
+  webapp_port: {{ vdi_webapp_port }}
+  vdi_resolution: {{ vdi_resolution | default('1920x1080') }}
+  vdi_resolution_locked: {{ vdi_resolution_locked | default(true) }}
+  webapp_admin_hash: "{{ webapp_admin_hash | default('') }}"
+  vdi_user_group: "{{ vdi_user_group | default('vdiusers') }}"
   lock_version: "1.0"
   created_at: "{{ ansible_date_time.iso8601 }}"
   last_updated: "{{ ansible_date_time.iso8601 }}"
-  force_rerun: false
+  force_rerun: {{ force_rerun | default(false) }}
   setup_status: "configuring"  # configuring, available, error
-  
+
   completed_roles:
-    lock_manager:
-      completed: false
-    base_os:
-      completed: false
-    secret_manager:
-      completed: false
-    user_provision:
-      completed: false
-    vnc:
-      completed: false
-    vdi_tool:
-      completed: false
-    vdi_monitor:
-      completed: false
-  
-  user_secrets_status:
-    last_secret_check: "{{ ansible_date_time.iso8601 }}"
-    user_secrets_hash: "{{ current_user_secrets_hash }}"
-    users_updated: []
-  
-  user_management:
-    current_users: []
-    previous_users: []
-    removed_users: [] 
+    base_os: false
+    secret_manager: false
+    user_provision: false
+    vnc: false
+    vdi_tool: false
+    vdi_monitor: false 
  

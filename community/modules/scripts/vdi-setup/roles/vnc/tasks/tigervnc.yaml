@@ -67,3 +67,18 @@
     state: started
   when: ansible_os_family == "RedHat"
   loop: "{{ vdi_users_updated }}"
+
+# Restart all VNC services to ensure they pick up any password changes
+- name: Restart all VNC services (Rocky)
+  systemd:
+    name: "vncserver@:{{ item.display_number }}"
+    state: restarted
+  when: ansible_os_family == "RedHat"
+  loop: "{{ vdi_users_updated }}"
+
+- name: Restart all VNC services (Ubuntu/Debian)
+  systemd:
+    name: "vncserver@{{ item.username }}"
+    state: restarted
+  when: ansible_distribution in ["Ubuntu", "Debian"]
+  loop: "{{ vdi_users_updated }}"

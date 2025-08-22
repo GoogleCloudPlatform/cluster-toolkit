@@ -35,6 +35,11 @@ resource "terraform_data" "input_validation" {
     }
 
     precondition {
+      condition     = var.vdi_resolution_locked == true || var.vdi_resolution_locked == false
+      error_message = "vdi_resolution_locked must be a boolean value (true/false)."
+    }
+
+    precondition {
       condition     = var.user_provision == "local_users" || length(var.vdi_users) == 0
       error_message = "vdi_users may only be set when user_provision = local_users."
     }
@@ -57,6 +62,11 @@ resource "terraform_data" "input_validation" {
         )
       ])
       error_message = "reset_password must be a boolean value (true/false) or null."
+    }
+
+    precondition {
+      condition     = length(distinct([for user in var.vdi_users : user.port])) == length(var.vdi_users)
+      error_message = "All VDI users must have unique ports to prevent conflicts."
     }
   }
 }

@@ -161,7 +161,7 @@ trigger_reconfig() {
     fi
     
     log_message "DEBUG: Running Ansible playbook from $(pwd)"
-    log_message "DEBUG: Command: ansible-playbook install.yaml --connection=local --inventory=localhost, --limit=localhost --extra-vars=@vars.yaml --extra-vars=debug=true"
+    log_message "DEBUG: Command: ansible-playbook install.yaml --connection=local --inventory=localhost, --limit=localhost --extra-vars=@vars.yaml"
     
     # Run Ansible playbook with re-configuration
     ansible-playbook install.yaml \
@@ -188,7 +188,7 @@ trigger_reconfig() {
                 log_message "DEBUG: $line"
             done
         fi
-        update_deployment_status "available"
+        update_deployment_status "failed"
     fi
     
     return $exit_code
@@ -338,4 +338,4 @@ run_monitoring_loop() {
         # Sleep for configured interval before next check
         sleep {{ vdi_monitor_check_interval | default(60) }}
     done
-} 
+}

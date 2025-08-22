@@ -22,11 +22,28 @@
   ansible.builtin.import_role:
     name: lock_manager
     tasks_from: check_lock
-  register: lock_check_result
 
-- name: Set role_should_run from lock check result
+- name: Set role variables from lock manager facts
   ansible.builtin.set_fact:
-    role_should_run: "{{ lock_check_result.ansible_facts.role_should_run | default(true) }}"
+    role_should_run: "{{ role_should_run | default(false) }}"
+    is_fresh_deployment: "{{ is_fresh_deployment | default(false) }}"
+    deployment_hash: "{{ current_deployment_hash | default('none') }}"
+    user_hash: "{{ current_user_secrets_hash | default('none') }}"
+    lock_file_stat: "{{ lock_file_stat | default({}) }}"
+    vdi_setup_status: "{{ vdi_setup_status | default({}) }}"
+    removed_users: "{{ removed_users | default([]) }}"
+    vdi_user_group: "{{ vdi_user_group | default('vdiusers') }}"
+
+- name: Debug role variables
+  ansible.builtin.debug:
+    msg: |
+      User Provision role variables:
+        - role_should_run: {{ role_should_run }}
+        - is_fresh_deployment: {{ is_fresh_deployment }}
+        - deployment_hash: {{ deployment_hash }}
+        - user_hash: {{ user_hash }}
+        - execution_reason: {{ 'Fresh deployment' if is_fresh_deployment else ('Hash mismatch' if not role_should_run else 'Normal role execution') }}
+  when: debug
 
 # Skip all tasks if role should not run
 - name: Skip user_provision tasks if role should not run
@@ -37,7 +54,6 @@
 # Run user provision tasks only if needed
 - name: Run user provision tasks
   block:
-
   - name: Ensure 'wheel' group is present
     group:
       name: wheel
@@ -63,6 +79,42 @@
     loop_control:
       loop_var: item
     when: user_provision | lower == 'os_login'
+
+  # =============================================================================
+  # USER REMOVAL HANDLING
+  # =============================================================================
+
+  - name: Handle removed users (lock local accounts)
+    block:
+    - name: Lock local user accounts for removed users
+      ansible.builtin.user:
+        name: "{{ item }}"
+        password: "!"
+      loop: "{{ removed_users }}"
+      when: removed_users is defined and removed_users | length > 0
+
+    - name: Remove users from VDI group
+      ansible.builtin.user:
+        name: "{{ item }}"
+        groups: "{{ vdi_user_group }}"
+        remove: yes
+      loop: "{{ removed_users }}"
+      when: removed_users is defined and removed_users | length > 0
+
+    - name: Debug user removal actions
+      ansible.builtin.debug:
+        msg: |
+          User removal actions completed:
+          {% if removed_users is defined and removed_users | length > 0 %}
+          - Users locked: {{ removed_users }}
+          - Local accounts locked with '!' password
+          - Users removed from {{ vdi_user_group }} group
+          {% else %}
+          - No users to remove
+          {% endif %}
+      when: debug
+
+    when: removed_users is defined and removed_users | length > 0
 
   when: role_should_run
 

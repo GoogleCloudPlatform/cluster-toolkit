@@ -26,15 +26,30 @@
   ansible.builtin.import_role:
     name: lock_manager
     tasks_from: check_lock
-  register: lock_check_result
 
 - name: DEBUG Finished import_role for base_os
   debug:
     msg: "Finished import_role for base_os"
 
-- name: Set role_should_run from lock check result
+- name: Set role variables from lock manager facts
   ansible.builtin.set_fact:
-    role_should_run: "{{ lock_check_result.ansible_facts.role_should_run | default(true) }}"
+    role_should_run: "{{ role_should_run | default(false) }}"
+    is_fresh_deployment: "{{ is_fresh_deployment | default(false) }}"
+    deployment_hash: "{{ current_deployment_hash | default('none') }}"
+    user_hash: "{{ current_user_secrets_hash | default('none') }}"
+    lock_file_stat: "{{ lock_file_stat | default({}) }}"
+    vdi_setup_status: "{{ vdi_setup_status | default({}) }}"
+
+- name: Debug role variables
+  ansible.builtin.debug:
+    msg: |
+      Base OS role variables:
+        - role_should_run: {{ role_should_run }}
+        - is_fresh_deployment: {{ is_fresh_deployment }}
+        - deployment_hash: {{ deployment_hash }}
+        - user_hash: {{ user_hash }}
+        - execution_reason: {{ 'Fresh deployment' if is_fresh_deployment else ('Hash mismatch' if not role_should_run else 'Normal role execution') }}
+  when: debug
 
 # Skip all tasks if role should not run
 - name: Skip base_os tasks if role should not run
@@ -42,59 +57,53 @@
     msg: "Skipping base_os role - already completed or not needed"
   when: not role_should_run
 
-- name: Gather distribution facts
-  ansible.builtin.setup:
-    gather_subset: platform
+# Run base_os tasks only if needed
+- name: Run base_os tasks
+  block:
+
+  - name: Gather distribution facts
+    ansible.builtin.setup:
+      gather_subset: platform
+
+  # GPU / vWS driver setup
+  - name: Check if NVIDIA GPU is present
+    ansible.builtin.shell: lspci | grep -i nvidia
+    register: nvidia_gpu_present
+    failed_when: false
+
+  # Include distribution-specific tasks
+  - name: Include Ubuntu-specific tasks
+    ansible.builtin.include_tasks: ubuntu.yaml
+    when: ansible_facts.distribution == 'Ubuntu'
+
+  - name: Include Rocky Linux specific tasks
+    ansible.builtin.include_tasks: rocky.yaml
+    when: ansible_facts.distribution == 'Rocky'
+
+  - name: Include Debian-specific tasks
+    ansible.builtin.include_tasks: debian.yaml
+    when: ansible_facts.distribution == 'Debian'
+
+  # Common tasks for all distributions
+  - name: Ensure requests package is installed
+    pip:
+      name: requests
+      state: present
+
+  - name: Ensure Python & tooling are installed
+    ansible.builtin.package:
+      name:
+      - python3
+      - python3-pip
+      - jq
+      state: present
+
+  # GPU / vWS driver setup
+  - name: Provision GPU setup
+    ansible.builtin.include_tasks: gpu_driver_setup.yaml
+    when: nvidia_gpu_present.rc == 0
+
   when: role_should_run
-
-# GPU / vWS driver setup
-- name: Check if NVIDIA GPU is present
-  ansible.builtin.shell: lspci | grep -i nvidia
-  register: nvidia_gpu_present
-  failed_when: false
-  when: role_should_run
-
-# Include distribution-specific tasks
-- name: Include Ubuntu-specific tasks
-  ansible.builtin.include_tasks: ubuntu.yaml
-  when: 
-    - ansible_facts.distribution == 'Ubuntu'
-    - role_should_run
-
-- name: Include Rocky Linux specific tasks
-  ansible.builtin.include_tasks: rocky.yaml
-  when: 
-    - ansible_facts.distribution == 'Rocky'
-    - role_should_run
-
-- name: Include Debian-specific tasks
-  ansible.builtin.include_tasks: debian.yaml
-  when: 
-    - ansible_facts.distribution == 'Debian'
-    - role_should_run
-
-# Common tasks for all distributions
-- name: Ensure requests package is installed
-  pip:
-    name: requests
-    state: present
-  when: role_should_run
-
-- name: Ensure Python & tooling are installed
-  ansible.builtin.package:
-    name:
-    - python3
-    - python3-pip
-    - jq
-    state: present
-  when: role_should_run
-
-# GPU / vWS driver setup
-- name: Provision GPU setup
-  ansible.builtin.include_tasks: gpu_driver_setup.yaml
-  when: 
-    - nvidia_gpu_present.rc == 0
-    - role_should_run
 
 # Mark role as completed
 - name: Set current role for lock manager completion

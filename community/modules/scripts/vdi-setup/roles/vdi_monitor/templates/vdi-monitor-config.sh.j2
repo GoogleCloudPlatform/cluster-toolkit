@@ -87,7 +87,7 @@ validate_environment() {
         log_message "ERROR: gcloud command not found"
         return 1
     fi
-    
+
     # Check if gsutil is available
     if ! command -v gsutil >/dev/null 2>&1; then
         log_message "ERROR: gsutil command not found"
@@ -135,4 +135,4 @@ initialize_monitoring() {
     
     log_message "Using bucket: gs://$BUCKET_NAME"
     log_message "VDI monitoring system initialized successfully"
-} 
+}

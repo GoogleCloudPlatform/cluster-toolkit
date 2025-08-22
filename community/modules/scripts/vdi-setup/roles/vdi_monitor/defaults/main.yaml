@@ -17,9 +17,8 @@
 
 # Monitoring configuration
 vdi_monitor_check_interval: 60  # seconds
-vdi_monitor_reconfig_cooldown: 60  # seconds (1 minute)
+vdi_monitor_reconfig_cooldown: 180  # seconds (3 minutes)
 
 # Logging
 vdi_monitor_log_file: "/var/log/vdi-monitor.log"
 vdi_monitor_ansible_log_file: "/var/log/ansible-vdi-reconfig.log"
- 

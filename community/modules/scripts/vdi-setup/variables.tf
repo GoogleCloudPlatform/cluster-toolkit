@@ -67,9 +67,15 @@ variable "vdi_resolution" {
   default     = "1920x1080"
 }
 
+variable "vdi_resolution_locked" {
+  type        = bool
+  description = "Disable resize of remote display in Guacamole connections. When true, VDI displays at native resolution without browser scaling."
+  default     = true
+}
+
 variable "vdi_webapp_port" {
   type        = string
-  description = "Port to serve the Webapp interface from if applicable"
+  description = "Port to serve the Webapp interface from if applicable (note: containers will be recreated if changed)"
   default     = "8080"
 }
 

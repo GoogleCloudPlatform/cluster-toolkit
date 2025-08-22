@@ -39,6 +39,7 @@ locals {
     vdi_user_group              = var.vdi_user_group
     vdi_webapp_port             = var.vdi_webapp_port
     vdi_resolution              = var.vdi_resolution
+    vdi_resolution_locked       = var.vdi_resolution_locked
     vdi_users                   = var.vdi_users
     debug                       = var.debug
     reset_webapp_admin_password = var.reset_webapp_admin_password
@@ -99,7 +100,7 @@ locals {
         }
       )
       destination = "/opt/vdi-setup/install.yaml"
-      args = var.debug ? "--extra-vars @/opt/vdi-setup/vars.yaml -v --extra-vars debug=true" : "--extra-vars @/opt/vdi-setup/vars.yaml"
+      args        = var.debug ? "--extra-vars @/opt/vdi-setup/vars.yaml -v --extra-vars debug=true" : "--extra-vars @/opt/vdi-setup/vars.yaml"
     },
     # Clean up temporary directory
     {

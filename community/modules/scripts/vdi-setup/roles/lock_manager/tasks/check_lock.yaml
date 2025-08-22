@@ -21,7 +21,7 @@
 - name: Debug lock file existence
   ansible.builtin.debug:
     msg: "Lock file exists: {{ lock_file_stat.stat.exists }}"
-  when: debug | default(false)
+  when: debug
 
 - name: Load existing lock file
   ansible.builtin.include_vars:
@@ -29,22 +29,144 @@
   when: lock_file_stat.stat.exists
   register: lock_file_load
 
+- name: Set vdi_setup_status from loaded lock file
+  ansible.builtin.set_fact:
+    vdi_setup_status: "{{ vdi_setup_status | default({}) }}"
+  when: lock_file_stat.stat.exists
+
+- name: Set vdi_setup_status to empty dict for fresh deployments
+  ansible.builtin.set_fact:
+    vdi_setup_status: {}
+  when: not lock_file_stat.stat.exists
+
+- name: Debug vdi_setup_status after loading
+  ansible.builtin.debug:
+    msg: |
+      vdi_setup_status after loading:
+        - vdi_setup_status is defined: {{ vdi_setup_status is defined }}
+        - vdi_setup_status type: {{ vdi_setup_status | type_debug }}
+        - deployment_hash: {{ vdi_setup_status.deployment_hash | default('not_found') }}
+        - keys: {{ vdi_setup_status.keys() | default([]) }}
+  when: debug and lock_file_stat.stat.exists
+
 - name: Debug lock file load result
   ansible.builtin.debug:
     msg: "Lock file loaded successfully: {{ lock_file_load is defined }}"
-  when: debug | default(false) and lock_file_stat.stat.exists
+  when: debug and lock_file_stat.stat.exists
+
+# =============================================================================
+# DEFENSIVE PROGRAMMING: SET DEFAULTS FOR ALL CRITICAL VARIABLES
+# =============================================================================
+# This ensures that debug tasks and other logic never fail due to undefined variables
+# All variables that might be referenced in debug output or conditional logic are set here
+# Set early so we can remove default() filters throughout the rest of the file
+
+- name: Set default values for critical variables (defensive programming)
+  ansible.builtin.set_fact:
+    is_fresh_deployment: "{{ is_fresh_deployment | default(not lock_file_stat.stat.exists) }}"
+    db_needs_init: "{{ db_needs_init | default(false) }}"
+    users_needing_reset: "{{ users_needing_reset | default([]) }}"
+    force_rerun: "{{ force_rerun | default(false) }}"
+    reset_webapp_admin_password: "{{ reset_webapp_admin_password | default(false) }}"
+    debug: "{{ debug | default(false) }}"
+    # Initialize deployment variables with safe defaults
+    deployment_name: "{{ deployment_name | default('vdi-deployment') }}"
+    project_id: "{{ project_id | default('unknown-project') }}"
+    vdi_tool: "{{ vdi_tool | default('guacamole') }}"
+    vnc_flavor: "{{ vnc_flavor | default('tigervnc') }}"
+    user_provision: "{{ user_provision | default('local_users') }}"
+    vdi_webapp_port: "{{ vdi_webapp_port | default(8080) }}"
+    vdi_user_group: "{{ vdi_user_group | default('vdiusers') }}"
+    vdi_resolution: "{{ vdi_resolution | default('1920x1080') }}"
+    vdi_resolution_locked: "{{ vdi_resolution_locked | default(true) }}"
+    vdi_users: "{{ vdi_users | default([]) }}"
+    # Initialize user management variables with safe defaults (only if not already set)
+    current_users: "{{ current_users | default([]) }}"
+    previous_users: "{{ previous_users | default([]) }}"
+    new_user_names: "{{ new_user_names | default([]) }}"
+    removed_users: "{{ removed_users | default([]) }}"
+    users_changed: "{{ users_changed | default(false) }}"
+    new_users: "{{ new_users | default([]) }}"
+    removed_user_objects: "{{ removed_user_objects | default([]) }}"
+    # Initialize port change detection variables with safe defaults (only if not already set)
+    users_with_port_changes: "{{ users_with_port_changes | default([]) }}"
+    webapp_port_changed: "{{ webapp_port_changed | default(false) }}"
+    vdi_resolution_changed: "{{ vdi_resolution_changed | default(false) }}"
+    vdi_resolution_locked_changed: "{{ vdi_resolution_locked_changed | default(false) }}"
+    infrastructure_changed: "{{ infrastructure_changed | default(false) }}"
+    # Initialize secret manager variables with safe defaults
+    webapp_admin_hash: "{{ webapp_admin_hash | default('') }}"
+
+- name: Calculate user management variables (when vdi_users is available)
+  ansible.builtin.set_fact:
+    current_users: "{{ vdi_users | map(attribute='username') | list }}"
+    previous_users: "{{ vdi_setup_status.current_users | default([]) }}"
+    new_user_names: "{{ current_users | difference(previous_users) }}"
+    removed_users: "{{ previous_users | difference(current_users) }}"
+    users_changed: "{{ (new_user_names | length > 0) or (removed_users | length > 0) }}"
+    new_users: "{{ vdi_users | selectattr('username', 'in', new_user_names) | list if new_user_names | length > 0 else [] }}"
+    removed_user_objects: "{{ vdi_users | selectattr('username', 'in', removed_users) | list if removed_users | length > 0 else [] }}"
+    users_needing_reset: "{{ vdi_users | selectattr('reset_password', 'defined') | selectattr('reset_password', 'equalto', true) | list }}"
+  when: vdi_users is defined
+
+- name: Detect port changes
+  ansible.builtin.set_fact:
+    users_with_port_changes: "{{ users_with_port_changes | default([]) }}"
+    webapp_port_changed: "{{ vdi_webapp_port != vdi_setup_status.webapp_port | default(false) }}"
+    vdi_resolution_changed: "{{ vdi_resolution != vdi_setup_status.vdi_resolution | default(false) }}"
+    vdi_resolution_locked_changed: "{{ vdi_resolution_locked != vdi_setup_status.vdi_resolution_locked | default(false) }}"
+    infrastructure_changed: "{{ webapp_port_changed or vdi_resolution_changed or vdi_resolution_locked_changed or reset_webapp_admin_password }}"
+  when: vdi_users is defined and not is_fresh_deployment
+
+- name: Calculate user port changes (only if not already calculated)
+  ansible.builtin.set_fact:
+    users_with_port_changes: "{{ users_with_port_changes_temp | default([]) }}"
+  when: vdi_users is defined and not is_fresh_deployment and (users_with_port_changes | default([]) | length == 0)
+
+- name: Calculate port changes for each user
+  ansible.builtin.set_fact:
+    users_with_port_changes_temp: "{{ users_with_port_changes_temp | default([]) + [item] }}"
+  loop: "{{ vdi_users | selectattr('username', 'in', vdi_setup_status.current_users | default([])) | selectattr('port', 'defined') | list }}"
+  when: >
+    vdi_users is defined and
+    not is_fresh_deployment and
+    (users_with_port_changes | default([]) | length == 0) and
+    vdi_setup_status.user_ports[item.username] is defined and
+    item.port != vdi_setup_status.user_ports[item.username]
+
+- name: Debug port change detection
+  ansible.builtin.debug:
+    msg: |
+      Port change detection results:
+        - users_with_port_changes: {{ users_with_port_changes | default([]) }}
+        - vdi_setup_status.user_ports: {{ vdi_setup_status.user_ports | default({}) }}
+        - webapp_port_changed: {{ webapp_port_changed }}
+        - current_webapp_port: {{ vdi_webapp_port }}
+        - previous_webapp_port: {{ vdi_setup_status.webapp_port | default('none') }}
+        - vdi_resolution_changed: {{ vdi_resolution_changed }}
+        - current_vdi_resolution: {{ vdi_resolution }}
+        - previous_vdi_resolution: {{ vdi_setup_status.vdi_resolution | default('none') }}
+        - vdi_resolution_locked_changed: {{ vdi_resolution_locked_changed }}
+        - current_vdi_resolution_locked: {{ vdi_resolution_locked }}
+        - previous_vdi_resolution_locked: {{ vdi_setup_status.vdi_resolution_locked | default('none') }}
+        - infrastructure_changed: {{ infrastructure_changed }}
+  when: vdi_users is defined and not is_fresh_deployment and debug
 
 - name: Calculate current deployment hash
   ansible.builtin.set_fact:
     current_deployment_hash: >-
       {{
-        (deployment_name | string + 
-         project_id | string + 
-         vdi_tool | string + 
-         vnc_flavor | string + 
-         user_provision | string + 
-         vdi_webapp_port | string + 
-         vdi_resolution | string + 
+        (deployment_name | string +
+         project_id | string +
+         vdi_tool | string +
+         vnc_flavor | string +
+         user_provision | string +
+         vdi_webapp_port | string +
+         vdi_resolution | string +
+         vdi_resolution_locked | string +
+         vdi_user_group | string +
+         (reset_webapp_admin_password | string) +
+         (force_rerun | string) +
          (vdi_users | to_json)) | hash('sha256')
       }}
 
@@ -60,8 +182,12 @@
         - user_provision: {{ user_provision }}
         - vdi_webapp_port: {{ vdi_webapp_port }}
         - vdi_resolution: {{ vdi_resolution }}
+        - vdi_resolution_locked: {{ vdi_resolution_locked }}
+        - vdi_user_group: {{ vdi_user_group }}
+        - reset_webapp_admin_password: {{ reset_webapp_admin_password }}
+        - force_rerun: {{ force_rerun }}
         - vdi_users count: {{ vdi_users | length }}
-  when: debug | default(false)
+  when: debug
 
 - name: Calculate current user secrets hash
   ansible.builtin.set_fact:
@@ -73,50 +199,24 @@
       Current user secrets hash: {{ current_user_secrets_hash }}
       User configuration components:
         - vdi_users (blueprint): {{ vdi_users | to_json }}
-  when: debug | default(false)
+  when: debug
 
-- name: Set default values for missing lock file
+- name: Store original lock file state for this deployment run
   ansible.builtin.set_fact:
-    vdi_setup_status:
-      deployment_name: "{{ deployment_name }}"
-      deployment_hash: "none"
-      lock_version: "1.0"
-      created_at: "{{ ansible_date_time.iso8601 }}"
-      last_updated: "{{ ansible_date_time.iso8601 }}"
-      force_rerun: false
-      setup_status: "configuring"
-      completed_roles:
-        base_os:
-          completed: false
-        lock_manager:
-          completed: false
-        secret_manager:
-          completed: false
-        user_provision:
-          completed: false
-        vnc:
-          completed: false
-        vdi_tool:
-          completed: false
-      user_secrets_status:
-        last_secret_check: "{{ ansible_date_time.iso8601 }}"
-        user_secrets_hash: "none"
-        users_updated: []
-      user_management:
-        current_users: []
-        previous_users: []
-        removed_users: []
-  when: not lock_file_stat.stat.exists
+    original_lock_file_exists: "{{ lock_file_stat.stat.exists }}"
+  when: original_lock_file_exists is not defined
 
 - name: Debug lock file status
   ansible.builtin.debug:
     msg: |
       Lock file status:
-        - exists: {{ lock_file_stat.stat.exists }}
-        - deployment_hash: {{ vdi_setup_status.deployment_hash }}
-        - user_secrets_hash: {{ vdi_setup_status.user_secrets_status.user_secrets_hash }}
-        - force_rerun: {{ vdi_setup_status.force_rerun }}
-  when: debug | default(false)
+        - current_exists: {{ lock_file_stat.stat.exists }}
+        - original_exists: {{ original_lock_file_exists | default('not_set') }}
+        - deployment_hash: {{ vdi_setup_status.deployment_hash | default('none') }}
+        - user_secrets_hash: {{ vdi_setup_status.user_secrets_status.user_secrets_hash | default('none') }}
+        - force_rerun: {{ vdi_setup_status.force_rerun | default(false) }}
+        - is_fresh_deployment: {{ is_fresh_deployment }}
+  when: debug
 
 - name: Check if lock file exists
   ansible.builtin.set_fact:
@@ -124,30 +224,35 @@
 
 - name: Check if current role is completed
   ansible.builtin.set_fact:
-    current_role_completed: "{{ vdi_setup_status.completed_roles[current_role | default(ansible_role_name | basename)].completed | default(false) }}"
+    current_role_completed: "{{ vdi_setup_status.completed_roles[current_role | default(ansible_role_name | basename)] | default(false) if lock_file_stat.stat.exists else false }}"
 
 - name: Check if deployment hash matches
   ansible.builtin.set_fact:
-    deployment_hash_matches: "{{ vdi_setup_status.deployment_hash == current_deployment_hash }}"
+    deployment_hash_matches: "{{ (vdi_setup_status.deployment_hash | default('none')) == current_deployment_hash if lock_file_stat.stat.exists and vdi_setup_status is defined else false }}"
+
+- name: Check if user hash matches
+  ansible.builtin.set_fact:
+    user_hash_matches: "{{ (vdi_setup_status.user_hash | default('none')) == current_user_secrets_hash if lock_file_stat.stat.exists and vdi_setup_status is defined else false }}"
 
 - name: Check if force rerun is enabled
   ansible.builtin.set_fact:
-    force_rerun_enabled: "{{ vdi_setup_status.force_rerun | default(false) }}"
+    force_rerun_enabled: "{{ force_rerun | default(false) }}"
 
-- name: Determine if role should run
+- name: Determine if role should run (hash-based)
   ansible.builtin.set_fact:
-    role_should_run: "{{ not lock_file_exists or not current_role_completed or not deployment_hash_matches or force_rerun_enabled }}"
+    role_should_run: "{{ is_fresh_deployment or not current_role_completed or not deployment_hash_matches or not user_hash_matches or force_rerun_enabled }}"
 
 - name: Debug role should run calculation
   ansible.builtin.debug:
     msg: |
       Role should run calculation for {{ current_role | default(ansible_role_name | basename) }}:
-        - not lock_file_exists: {{ not lock_file_exists }}
+        - is_fresh_deployment: {{ is_fresh_deployment }}
         - not current_role_completed: {{ not current_role_completed }}
         - not deployment_hash_matches: {{ not deployment_hash_matches }}
+        - not user_hash_matches: {{ not user_hash_matches }}
         - force_rerun_enabled: {{ force_rerun_enabled }}
-        - role_should_run: {{ not lock_file_exists or not current_role_completed or not deployment_hash_matches or force_rerun_enabled }}
-  when: debug | default(false)
+        - role_should_run: {{ role_should_run }}
+  when: debug
 
 - name: Debug role execution decision
   ansible.builtin.debug:
@@ -156,48 +261,51 @@
         - current_role: {{ current_role | default('not set') }}
         - ansible_role_name: {{ ansible_role_name }}
         - role_should_run: {{ role_should_run }}
-        - lock_file_exists: {{ lock_file_exists }}
+        - is_fresh_deployment: {{ is_fresh_deployment }}
         - current_role_completed: {{ current_role_completed }}
         - deployment_hash_matches: {{ deployment_hash_matches }}
+        - user_hash_matches: {{ user_hash_matches }}
         - force_rerun_enabled: {{ force_rerun_enabled }}
-  when: debug | default(false)
+  when: debug
 
-- name: Check if user configuration has changed
-  ansible.builtin.set_fact:
-    user_config_changed: "{{ not lock_file_stat.stat.exists or vdi_setup_status.user_secrets_status.user_secrets_hash != current_user_secrets_hash }}"
+- name: Debug lock manager completion
+  ansible.builtin.debug:
+    msg: "Lock manager role completed successfully"
 
-- name: Set user secrets changed flag (will be updated by secret_manager role)
-  ansible.builtin.set_fact:
-    user_secrets_changed: "{{ user_config_changed }}"
-
-- name: Debug user secrets change detection
+- name: Summary of changes and lock file contents
   ansible.builtin.debug:
     msg: |
-      User configuration change detection:
-        - user_config_changed: {{ user_config_changed }}
-        - user_secrets_changed: {{ user_secrets_changed }}
-        - stored_hash: {{ vdi_setup_status.user_secrets_status.user_secrets_hash }}
-        - current_hash: {{ current_user_secrets_hash }}
-  when: debug | default(false)
+      ================================================================================
+      VDI DEPLOYMENT SUMMARY
+      ================================================================================
 
-- name: Set lock check result
-  ansible.builtin.set_fact:
-    lock_check_result:
-      role_should_run: "{{ role_should_run }}"
-      current_deployment_hash: "{{ current_deployment_hash }}"
-      existing_deployment_hash: "{{ vdi_setup_status.deployment_hash | default('none') }}"
-      user_secrets_changed: "{{ user_secrets_changed }}"
-      current_user_secrets_hash: "{{ current_user_secrets_hash }}"
-      existing_user_secrets_hash: "{{ vdi_setup_status.user_secrets_status.user_secrets_hash | default('none') }}"
-      force_rerun: "{{ vdi_setup_status.force_rerun | default(false) }}"
+      DEPLOYMENT STATUS:
+        - is_fresh_deployment: {{ is_fresh_deployment }}
+        - deployment_hash: {{ current_deployment_hash }}
+        - user_hash: {{ current_user_secrets_hash }}
+        - reset_webapp_admin_password: {{ reset_webapp_admin_password }}
 
-- name: Debug final lock check result
-  ansible.builtin.debug:
-    msg: |
-      Final lock check result:
-        - role_should_run: {{ lock_check_result.role_should_run }}
-        - deployment_hash_changed: {{ lock_check_result.current_deployment_hash != lock_check_result.existing_deployment_hash }}
-        - user_secrets_changed: {{ lock_check_result.user_secrets_changed }}
-        - force_rerun: {{ lock_check_result.force_rerun }}
-  when: debug | default(false)
- 
+      USER CHANGES DETECTED:
+        - users_changed: {{ users_changed }}
+        - new_users: {{ new_users | map(attribute='username') | list if new_users is defined and new_users | length > 0 else [] }}
+        - removed_users: {{ removed_users if removed_users is defined and removed_users | length > 0 else [] }}
+        - users_needing_reset: {{ users_needing_reset | map(attribute='username') | list if users_needing_reset is defined and users_needing_reset | length > 0 else [] }}
+        - users_with_port_changes: {{ users_with_port_changes | default([]) }}
+        - webapp_port_changed: {{ webapp_port_changed }}
+        - vdi_resolution_changed: {{ vdi_resolution_changed }}
+        - vdi_resolution_locked_changed: {{ vdi_resolution_locked_changed }}
+
+      CURRENT LOCK FILE CONTENTS:
+        - completed_roles: {{ vdi_setup_status.completed_roles | default({}) }}
+        - current_users: {{ vdi_setup_status.current_users | default([]) }}
+        - user_ports: {{ vdi_setup_status.user_ports | default({}) }}
+        - webapp_port: {{ vdi_setup_status.webapp_port | default('none') }}
+        - vdi_resolution: {{ vdi_setup_status.vdi_resolution | default('none') }}
+        - vdi_resolution_locked: {{ vdi_setup_status.vdi_resolution_locked | default('none') }}
+        - deployment_hash: {{ vdi_setup_status.deployment_hash | default('none') }}
+        - user_hash: {{ vdi_setup_status.user_hash | default('none') }}
+        - setup_status: {{ vdi_setup_status.setup_status | default('unknown') }}
+        - last_updated: {{ vdi_setup_status.last_updated | default('unknown') }}
+
+      ================================================================================
+  when: debug and current_role == 'lock_manager'

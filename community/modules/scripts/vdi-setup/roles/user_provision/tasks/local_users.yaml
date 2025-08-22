@@ -19,30 +19,54 @@
     key: "{{ item.username }}"
   register: user_exists_check
   ignore_errors: true
-  when: debug | default(false)
+  when: debug
 
 - name: Set user exists status for debug
   ansible.builtin.set_fact:
     user_exists_status: false
-  when: debug | default(false) and user_exists_check is failed
+  when: debug and user_exists_check is failed
 
 - name: Set user exists status for debug (success case)
   ansible.builtin.set_fact:
     user_exists_status: "{{ user_exists_check.ansible_facts.getent_passwd is defined }}"
-  when: debug | default(false) and user_exists_check is not failed
+  when: debug and user_exists_check is not failed
 
 - name: Debug user provision for {{ item.username }}
   ansible.builtin.debug:
     msg: |
       Provisioning user {{ item.username }}:
-        - user_secrets_changed: {{ user_secrets_changed }}
-        - password_actually_changed: {{ password_actually_changed | default(false) }}
-        - password_update_mode: {{ 'always' if password_actually_changed | default(user_secrets_changed) else 'on_create' }}
+        - is_fresh_deployment: {{ is_fresh_deployment }}
+        - user_hash: {{ user_hash }}
+        - password_update_mode: {{ 'always' if is_fresh_deployment else 'on_create' }}
         - user_exists: {{ user_exists_status | default(false) }}
-  when: debug | default(false)
+  when: debug
 
 - name: Provision VDI users (custom or generated passwords)
   block:
+
+  # Handle group changes for existing users
+  - name: Debug group change detection for {{ item.username }}
+    ansible.builtin.debug:
+      msg: |
+        Group change detection for {{ item.username }}:
+          - old_group: {{ vdi_setup_status.vdi_user_group | default('not_set') }}
+          - new_group: {{ vdi_user_group }}
+          - group_changed: {{ vdi_setup_status.vdi_user_group is defined and vdi_setup_status.vdi_user_group != vdi_user_group }}
+    when:
+    - debug
+    - not is_fresh_deployment
+    - vdi_setup_status.vdi_user_group is defined
+
+  - name: Remove users from old VDI group (if group changed)
+    ansible.builtin.user:
+      name: "{{ item.username }}"
+      groups: "{{ vdi_setup_status.vdi_user_group }}"
+      remove: yes
+    when:
+    - not is_fresh_deployment
+    - vdi_setup_status.vdi_user_group is defined
+    - vdi_setup_status.vdi_user_group != vdi_user_group
+    ignore_errors: true
 
   # Create the Linux user with a hashed password
   - name: Create VDI user {{ item.username }}
@@ -53,7 +77,7 @@
       create_home: yes
       append: true
       password: "{{ item.password | password_hash('sha512') }}"
-      update_password: "{{ 'always' if password_actually_changed | default(user_secrets_changed) else 'on_create' }}"
+      update_password: "{{ 'always' if is_fresh_deployment else 'on_create' }}"
 
   # SSH key setup
   - name: Ensure .ssh directory for {{ item.username }}
@@ -77,25 +101,3 @@
       user: "{{ item.username }}"
       key: "{{ ssh_key.public_key }}"
       state: present
-
-- name: Get users to remove from lock file
-  ansible.builtin.set_fact:
-    users_to_remove: "{{ vdi_setup_status.user_management.removed_users | default([]) }}"
-  when: lock_file_stat.stat.exists
-
-- name: Debug local user cleanup
-  ansible.builtin.debug:
-    msg: |
-      Local user cleanup:
-        - users_to_remove: {{ users_to_remove }}
-  when: debug | default(false) and lock_file_stat.stat.exists
-
-- name: Remove local user accounts
-  ansible.builtin.user:
-    name: "{{ item }}"
-    state: absent
-    remove: yes
-  loop: "{{ users_to_remove }}"
-  when: 
-    - lock_file_stat.stat.exists
-    - users_to_remove | length > 0

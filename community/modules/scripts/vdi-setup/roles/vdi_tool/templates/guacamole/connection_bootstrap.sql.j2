@@ -11,7 +11,8 @@ FROM guacamole_connection, (VALUES
     ('hostname', '{{ ansible_default_ipv4.address }}'),
     ('port', '{{ port }}'),
     ('username', '{{ username }}'),
-    ('password', '{{ vnc_password }}')
+    ('password', '{{ vnc_password }}'),
+    ('disable-display-resize', '{{ "true" if vdi_resolution_locked else "false" }}')
 ) AS params(param_name, param_value)
 WHERE connection_name = '{{ username }}';
 

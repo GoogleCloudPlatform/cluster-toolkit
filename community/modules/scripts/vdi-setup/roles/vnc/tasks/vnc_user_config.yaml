@@ -37,9 +37,8 @@
 - name: Write VNC password file for {{ vdi_user.username }}
   ansible.builtin.shell: |
     echo "{{ vdi_user.vncserver_password }}" | vncpasswd -f > "/home/{{ vdi_user.username }}/.vnc/passwd"
-  args:
-    creates: "/home/{{ vdi_user.username }}/.vnc/passwd"
   become_user: "{{ vdi_user.username }}"
+  register: vnc_password_result
 
 - name: Fix passwd file permissions
   ansible.builtin.file:

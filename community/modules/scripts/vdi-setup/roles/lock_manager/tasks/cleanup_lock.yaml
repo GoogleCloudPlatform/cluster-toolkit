@@ -26,4 +26,4 @@
 - name: Debug lock file removal
   ansible.builtin.debug:
     msg: "Lock file removed: {{ lock_file_removal.changed }}"
-  when: debug | default(false)
+  when: debug
