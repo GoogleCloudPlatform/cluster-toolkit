@@ -46,7 +46,7 @@ if ! gh auth status; then
 fi
 
 GITDIR=$(mktemp -d)
-trap 'rm -rf ${GITDIR}' EXIT
+#trap 'rm -rf ${GITDIR}' EXIT
 
 while getopts "t:" opt; do
 	case "${opt}" in
