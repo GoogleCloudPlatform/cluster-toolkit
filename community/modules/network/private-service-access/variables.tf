@@ -51,3 +51,9 @@ variable "service_name" {
   type        = string
   default     = "servicenetworking.googleapis.com"
 }
+
+variable "deletion_policy" {
+  description = "The policy to apply when deleting the Private Service Access."
+  type        = string
+  default     = null
+}

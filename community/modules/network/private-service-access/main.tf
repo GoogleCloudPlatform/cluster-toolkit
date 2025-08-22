@@ -24,7 +24,7 @@ resource "random_id" "resource_name_suffix" {
 }
 
 resource "google_compute_global_address" "private_ip_alloc" {
-  provider      = google-beta
+  provider      = google
   name          = "global-psconnect-ip-${random_id.resource_name_suffix.hex}"
   project       = var.project_id
   purpose       = "VPC_PEERING"
@@ -39,4 +39,5 @@ resource "google_service_networking_connection" "private_vpc_connection" {
   network                 = var.network_id
   service                 = var.service_name
   reserved_peering_ranges = [google_compute_global_address.private_ip_alloc.name]
+  deletion_policy         = var.deletion_policy
 }
