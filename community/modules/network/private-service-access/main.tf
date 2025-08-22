@@ -19,6 +19,12 @@ locals {
   labels = merge(var.labels, { ghpc_module = "private-service-access", ghpc_role = "network" })
 }
 
+locals {
+  split_network_id = split("/", var.network_id)
+  network_name     = local.split_network_id[4]
+  network_project  = local.split_network_id[1]
+}
+
 resource "random_id" "resource_name_suffix" {
   byte_length = 4
 }
@@ -45,7 +51,8 @@ resource "google_service_networking_connection" "private_vpc_connection" {
 # Google Cloud NetApp Volumes need enablement of custom_route import and export
 resource "google_compute_network_peering_routes_config" "private_vpc_peering_routes_gcnv" {
   count   = var.service_name == "netapp.servicenetworking.goog" ? 1 : 0
-  network = var.network_id
+  project = local.network_project
+  network = local.network_name
   peering = google_service_networking_connection.private_vpc_connection.peering
 
   export_custom_routes = true
