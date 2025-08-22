@@ -17,7 +17,7 @@
 locals {
   kueue_supported_versions  = ["v0.12.2", "v0.11.4", "v0.10.1", "v0.10.0"]
   jobset_supported_versions = ["v0.8.1", "v0.7.2", "v0.5.2"]
-  gib_supported_versions    = ["v1.0.2", "v1.0.3", "v1.0.5", "v1.0.6"]
+  gib_supported_versions    = ["v1.0.2", "v1.0.3", "v1.0.5", "v1.0.6", "v1.1.0"]
 }
 
 resource "terraform_data" "kueue_validations" {

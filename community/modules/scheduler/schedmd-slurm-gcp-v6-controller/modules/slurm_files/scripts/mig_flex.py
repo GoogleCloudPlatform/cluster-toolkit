@@ -45,9 +45,8 @@ def resume_flex_chunk(nodes: List[str], job_id: Optional[int], lkp: util.Lookup)
   assert nodes
   model = nodes[0]
   nodeset = lkp.node_nodeset(model)
-  zones = nodeset.zone_policy_allow
-  assert len(zones) == 1
-  zone = zones[0]
+  assert len(nodeset.zone_policy_allow) > 0
+  region = lkp.node_region(model)
 
   assert nodeset.dws_flex.enabled
 
@@ -58,24 +57,20 @@ def resume_flex_chunk(nodes: List[str], job_id: Optional[int], lkp: util.Lookup)
     mig_name = f"{lkp.cfg.slurm_cluster_name}-{nodeset.nodeset_name}-{uid}"
 
   # Create MIG
-  req = lkp.compute.instanceGroupManagers().insert(
+  req = lkp.compute.regionInstanceGroupManagers().insert(
     project=lkp.project,
-    zone=zone,
+    region=region,
     body=dict(
       name=mig_name,
-      versions=[dict(
-        instanceTemplate=nodeset.instance_template)],
+      versions=[dict(instanceTemplate=nodeset.instance_template)],
       targetSize=0,
-      # TODO(FLEX): uncomment once moved to RMIG
-      # distributionPolicy=dict(
-      #   zones=[
-      #      dict(zone=f"zones/{z}") for z in nodeset.zone_policy_allow
-      #   ],
-      #   targetShape="ANY_SINGLE_ZONE" ),
-      #updatePolicy = dict(
-      #  instanceRedistributionType = "NONE" ),
-      instanceLifecyclePolicy=dict(
-          defaultActionOnFailure= "DO_NOTHING" ), # TODO(FLEX): Not supported yet, migrate once supported
+      distributionPolicy=dict(
+        zones=[
+           dict(zone=f"zones/{z}") for z in nodeset.zone_policy_allow
+        ],
+        targetShape="ANY_SINGLE_ZONE" ),
+      updatePolicy = dict(instanceRedistributionType = "NONE" ),
+      instanceLifecyclePolicy=dict(defaultActionOnFailure= "DO_NOTHING" ), # TODO(FLEX): Not supported yet, migrate once supported
     )
   )
   util.log_api_request(req)
@@ -84,9 +79,9 @@ def resume_flex_chunk(nodes: List[str], job_id: Optional[int], lkp: util.Lookup)
   assert "error" not in res, f"{res}"
   
   # Create resize request
-  req = lkp.compute.instanceGroupManagerResizeRequests().insert(
+  req = lkp.compute.regionInstanceGroupManagerResizeRequests().insert(
     project=lkp.project,
-    zone=zone,
+    region=region,
     instanceGroupManager=mig_name,
     body=dict(
       name="initial-resize",
@@ -105,9 +100,8 @@ def _suspend_flex_mig(mig_self_link: str, nodes: List[str], lkp: util.Lookup) ->
   assert nodes
   model = nodes[0]
   nodeset = lkp.node_nodeset(model)
-  zones = nodeset.zone_policy_allow
-  assert len(zones) == 1
-  zone = zones[0]
+  assert len(nodeset.zone_policy_allow) > 0
+  region = lkp.node_region(model)
   project=lkp.project
   instanceGroupManager=util.trim_self_link(mig_self_link)
 
@@ -118,7 +112,7 @@ def _suspend_flex_mig(mig_self_link: str, nodes: List[str], lkp: util.Lookup) ->
     ] if inst
   ]
 
-  target_mig=lkp.get_mig(lkp.project, zone, instanceGroupManager)
+  target_mig=lkp.get_mig(lkp.project, region, instanceGroupManager)
   assert target_mig
 
   # TODO(FLEX): This will not work if MIG didn't obtain capacity yet.
@@ -130,15 +124,15 @@ def _suspend_flex_mig(mig_self_link: str, nodes: List[str], lkp: util.Lookup) ->
   # - Need to `down_nodes_notify_jobs` for all nodes in MIG, make sure that it doesn't interfere with Slurm suspend-flow. 
   
   if target_mig["targetSize"] == len(nodes): #We can just delete the whole MIG in this case
-    req = lkp.compute.instanceGroupManagers().delete(
+    req = lkp.compute.regionInstanceGroupManagers().delete(
     project=project,
-    zone=zone,
+    region=region,
     instanceGroupManager=instanceGroupManager,
     )
   else:
-    req = lkp.compute.instanceGroupManagers().deleteInstances(
+    req = lkp.compute.regionInstanceGroupManagers().deleteInstances(
       project=project,
-      zone=zone,
+      region=region,
       instanceGroupManager=instanceGroupManager,
       body=dict(
         instances=links,
@@ -156,11 +150,10 @@ def _suspend_provisioning_inst(nodes:List[str], node_template:str, lkp: util.Loo
   assert nodes
   model = nodes[0]
   nodeset = lkp.node_nodeset(model)
-  zones = nodeset.zone_policy_allow
-  assert len(zones) == 1
-  zone = zones[0]
+  assert len(nodeset.zone_policy_allow) > 0
+  region = lkp.node_region(model)
 
-  mig_list=lkp.get_mig_list(lkp.project, zone) #Validated via terraform that this is one
+  mig_list=lkp.get_mig_list(lkp.project, region)
 
   # FLEX (#TODO): If we enter this conditional it's likely this was called so early that MIG creation hasn't started
   # Consider potentially retrying? No natural mechanism for retry currently but we could
@@ -169,18 +162,18 @@ def _suspend_provisioning_inst(nodes:List[str], node_template:str, lkp: util.Loo
   # so until we do this is slurmsync this is a temporary workaround.
 
   if not mig_list or not mig_list.get("items"):
-    log.info("No matching MIG found to delete!")
+    log.info("No matching MIG found to delete! Retrying...")
     sleep(5)
-    mig_list=lkp.get_mig_list(lkp.project, zone)
+    mig_list=lkp.get_mig_list(lkp.project, region)
     if not mig_list or not mig_list.get("items"):
       return
 
   for mig in mig_list["items"]:
     if mig["instanceTemplate"] == node_template:
       if mig["currentActions"]["creating"] > 0 and mig["targetSize"] == mig["currentActions"]["creating"]:
-        req = lkp.compute.instanceGroupManagers().delete(
+        req = lkp.compute.regionInstanceGroupManagers().delete(
           project=lkp.project,
-          zone=zone,
+          region=region,
           instanceGroupManager=util.trim_self_link(mig["selfLink"]),
         )
 

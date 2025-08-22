@@ -463,6 +463,7 @@ variable "cloud_parameters" {
     resume_timeout       = optional(number)
     suspend_rate         = optional(number)
     suspend_timeout      = optional(number)
+    slurmd_timeout       = optional(number)
     topology_plugin      = optional(string)
     topology_param       = optional(string)
     tree_width           = optional(number)
