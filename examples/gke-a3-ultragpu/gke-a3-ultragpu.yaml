@@ -43,6 +43,7 @@ vars:
   chs_pvc_claim_name: chs-output-pvc
   chs_cronjob_rendered_path: $(ghpc_stage("./chs-cronjob.yaml.tftpl"))
   chs_pvc_rendered_path: $(ghpc_stage("./chs-pvc.yaml.tftpl"))
+  is_integration_test: false
 
 deployment_groups:
 - group: primary

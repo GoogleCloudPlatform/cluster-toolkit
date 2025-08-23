@@ -38,3 +38,4 @@ vars:
   # disk for each node.
   enable_periodic_health_checks: # Make this true to run CHS (healthchecks)
   health_check_schedule: # Run the health check at 12:00 AM (midnight) every Sunday
+  is_integration_test: # Checks the environment to apply kueue defaults
