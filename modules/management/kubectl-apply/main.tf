@@ -94,6 +94,11 @@ module "install_kueue" {
   chart_version    = var.kueue.version
   namespace        = "kueue-system"
   create_namespace = true
+  values_yaml = [
+    var.is_integration_test ?
+    file("${path.module}/kueue/kueue-helm-values.test.yaml") :
+    file("${path.module}/kueue/kueue-helm-values.yaml")
+  ]
 
   depends_on = [var.gke_cluster_exists]
 }
