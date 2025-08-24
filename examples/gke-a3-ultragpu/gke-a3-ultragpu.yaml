@@ -256,6 +256,7 @@ deployment_groups:
         config_template_vars:
           num_gpus: $(a3-ultragpu-pool.static_gpu_count)
           accelerator_type: $(vars.accelerator_type)
+      is_integration_test: $(vars.is_integration_test)
       jobset:
         install: true
       gib:
