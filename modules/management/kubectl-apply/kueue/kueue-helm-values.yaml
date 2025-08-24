@@ -12,17 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# This file contains the toolkit's recommended default overrides for a
-# production-grade Kueue installation. These values match the official
-# Helm chart's defaults for v0.13.2, ensuring a stable and predictable
-# resource profile for our users.
+# This file contains overrides ONLY for the CI/CD integration test environment.
+# These low resource requests ensure Kueue can be scheduled on the small,
+# resource-constrained nodes used in our automated testing.
 
 controllerManager:
   manager:
     resources:
       requests:
-        cpu: "500m"
-        memory: "512Mi"
+        cpu: "100m"
+        memory: "128Mi"
+      # We also lower the limits for the test environment.
       limits:
-        cpu: "2"
-        memory: "512Mi"
+        cpu: "200m"
+        memory: "256Mi"
