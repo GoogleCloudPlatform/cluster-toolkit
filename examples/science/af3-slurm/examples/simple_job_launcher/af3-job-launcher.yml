@@ -28,7 +28,7 @@
     model_dir:
     db_dir:
     pdb_database_path:
-    jax_compilation_cache_path:
+    jax_compilation_cache_dir:
     max_template_date:
     conformer_max_iterations:
     num_recycles:

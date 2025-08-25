@@ -427,7 +427,7 @@ vars:
   model_dir: /opt/apps/af3/models    # default path for the local copy of the model weights
   db_dir: /dev/shm/public_databases  # default path for the local copy of the public databases
   pdb_database_path: /mnt/databases/v3.0/uncompressed/mmcif_files  # default path for pdb database
-  jax_compilation_cache_path: ""     # give "" if you do not want to use jax compilation path
+  jax_compilation_cache_dir: ""     # give "" if you do not want to use jax compilation path
 
   # AF science parameters - use AF3 defaults if "", see AlphaFold 3 documentation 
   max_template_date: ""

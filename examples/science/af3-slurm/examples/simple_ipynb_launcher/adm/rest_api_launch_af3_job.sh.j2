@@ -1,4 +1,20 @@
 #!/bin/bash
+{#
+Copyright 2025 "Google LLC"
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+#}
+
 
 # --- Capture Launch Directory ---
 LAUNCH_DIR=$(pwd)
@@ -31,14 +47,14 @@ ALPHAFOLD_SCRIPT="/app/alphafold/run_alphafold.py"
 MODEL_DIR="{{ model_dir }}"
 DB_DIR="{{ db_dir }}"
 PDB_DATABASE_PATH="{{ pdb_database_path }}"
-DEFAULT_JAX_COMPILATION_CACHE_PATH="{{ jax_compilation_cache_path }}"
+DEFAULT_JAX_COMPILATION_CACHE_DIR="{{ jax_compilation_cache_dir }}"
 
 # --- Initialize variables ---
 JOB_TYPE="{{ job_type }}" 
 PARTITION="" MEM="" CPUS=""
 TIME_SECONDS="" # Initialize as empty - will hold user input OR default
 GRES="${DEFAULT_GRES}" LOG_BASE_DIR="${DEFAULT_LOG_BASE_DIR}"
-JOB_NAME_BASE="${DEFAULT_JOB_NAME_BASE}" JAX_COMPILATION_CACHE_PATH="${DEFAULT_JAX_COMPILATION_CACHE_PATH}"
+JOB_NAME_BASE="${DEFAULT_JOB_NAME_BASE}" JAX_COMPILATION_CACHE_DIR="${DEFAULT_JAX_COMPILATION_CACHE_DIR}"
 INPUT_PATH="{{ input_path }}" 
 OUTPUT_DIR="{{ output_dir }}/results"
 GRES_USER_SET="false" # Flag to track if user provided --gres
@@ -113,7 +129,7 @@ usage() {
   local default_inference_enable_unified_memory_disp="${DEFAULT_INFERENCE_ENABLE_UNIFIED_MEMORY}"
 
   # AF3 specific defaults - use :- expansion here to decide display text
-  local default_jax_cache_disp="${DEFAULT_JAX_COMPILATION_CACHE_PATH:-using AF3 run_alphafold.py defaults}"
+  local default_jax_cache_disp="${DEFAULT_JAX_COMPILATION_CACHE_DIR:-using AF3 run_alphafold.py defaults}"
   local default_max_template_date_disp="${DEFAULT_MAX_TEMPLATE_DATE:-using AF3 run_alphafold.py defaults}"
   local default_conformer_iter_disp="${DEFAULT_CONFORMER_MAX_ITERATIONS:-using AF3 run_alphafold.py defaults}"
   local default_num_recycles_disp="${DEFAULT_NUM_RECYCLES:-using AF3 run_alphafold.py defaults}"
@@ -147,7 +163,7 @@ Options (override defaults):
   --inference-enable-unified-memory VALUE Flag to enable unified memory setting for inference process (Default: ${default_inference_enable_unified_memory_disp})
 
 AlphaFold 3 Specific Options (Inference only):
-  --jax-compilation-cache-path DIR   JAX cache directory (Inference only) (Default: ${default_jax_cache_disp})
+  --jax-compilation-cache-dir DIR   JAX cache directory (Inference only) (Default: ${default_jax_cache_disp})
   --max-template-date DATE           Maximum template date (YYYY-MM-DD) (Default: ${default_max_template_date_disp})
   --conformer-max-iterations NUM     Maximum conformer iterations (Default: ${default_conformer_iter_disp})
   --num-recycles NUM                 Number of recycles (Default: ${default_num_recycles_disp})
@@ -179,7 +195,7 @@ while [[ $# -gt 0 ]]; do
     --gres)           GRES="$2"; GRES_USER_SET="true"; shift 2 ;;
     --job-name-base)  JOB_NAME_BASE="$2"; shift 2 ;;
     --log-base-dir)   LOG_BASE_DIR="$2"; shift 2 ;;
-    --jax-compilation-cache-path)  JAX_COMPILATION_CACHE_PATH="$2"; shift 2 ;;
+    --jax-compilation-cache-dir)  JAX_COMPILATION_CACHE_DIR="$2"; shift 2 ;;
     --inference-enable-unified-memory)  INFERENCE_ENABLE_UNIFIED_MEMORY="$2"; shift 2 ;;
     # --- NEW AF3 ARG PARSING ---
     --max-template-date)          MAX_TEMPLATE_DATE="$2"; shift 2 ;;
@@ -284,10 +300,10 @@ elif [ "$JOB_TYPE" = "inference" ]; then
     apptainer_binds+=("--bind" "${MODEL_DIR}")
 
     # Add JAX cache path if set
-    if [ -n "$JAX_COMPILATION_CACHE_PATH" ]; then
-        job_specific_python_opts+=" --jax_compilation_cache_dir='${JAX_COMPILATION_CACHE_PATH}'"
-        apptainer_binds+=("--bind" "${JAX_COMPILATION_CACHE_PATH}")
-        echo "Info: JAX cache enabled at ${JAX_COMPILATION_CACHE_PATH}"
+    if [ -n "$JAX_COMPILATION_CACHE_DIR" ]; then
+        job_specific_python_opts+=" --jax_compilation_cache_dir='${JAX_COMPILATION_CACHE_DIR}'"
+        apptainer_binds+=("--bind" "${JAX_COMPILATION_CACHE_DIR}")
+        echo "Info: JAX cache enabled at ${JAX_COMPILATION_CACHE_DIR}"
     else
         echo "Info: JAX cache directory not set, JAX caching disabled."
     fi
@@ -332,7 +348,7 @@ echo "Allocated CPUs: $SLURM_CPUS_PER_TASK, Mem: $SLURM_MEM_PER_NODE G"
 echo "Input Path (${python_input_flag}): ${python_input_value}"
 echo "Output Dir: ${OUTPUT_DIR}"
 if [ "$JOB_TYPE" = "inference" ]; then
-    JAX_CACHE_DIR_ACTUAL="${JAX_COMPILATION_CACHE_PATH:-}" # Use shell parameter expansion for safety
+    JAX_CACHE_DIR_ACTUAL="${JAX_COMPILATION_CACHE_DIR:-}" # Use shell parameter expansion for safety
     if [ -n "${JAX_CACHE_DIR_ACTUAL}" ]; then
         echo "JAX Cache: ${JAX_CACHE_DIR_ACTUAL}"
         mkdir -p "${JAX_CACHE_DIR_ACTUAL}" # Ensure JAX cache dir exists on compute node
@@ -341,7 +357,7 @@ if [ "$JOB_TYPE" = "inference" ]; then
         echo "Set XLA_FLAGS: $XLA_FLAGS"
         echo "Set JAX_CACHE_DIR: $JAX_CACHE_DIR"
     else
-        echo "JAX Cache: Disabled (JAX_COMPILATION_CACHE_PATH not set)"
+        echo "JAX Cache: Disabled (JAX_COMPILATION_CACHE_DIR not set)"
     fi
     # Print AF3 specific options used
     echo "--- AlphaFold 3 Inference Options ---"

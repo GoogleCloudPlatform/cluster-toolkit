@@ -24,7 +24,7 @@
     db_dir:
     model_dir:
     pdb_database_path:
-    jax_compilation_cache_path:
+    jax_compilation_cache_dir:
     datapipeline_partition:
     datapipeline_memory:
     datapipeline_cpu_count:

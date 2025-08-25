@@ -27,7 +27,7 @@
     model_dir:
     db_dir:
     pdb_database_path:
-    jax_compilation_cache_path:
+    jax_compilation_cache_dir:
     af3ipynb_bucket_local_mount:
     inference_enable_unified_memory:
     slurm_rest_info_path:
@@ -161,7 +161,7 @@
                       'model_dir',
                       'db_dir',
                       'pdb_database_path',
-                      'jax_compilation_cache_path',
+                      'jax_compilation_cache_dir',
                       'af3ipynb_bucket_local_mount',
                       'inference_enable_unified_memory',
                       'default_datapipeline_partition_name',

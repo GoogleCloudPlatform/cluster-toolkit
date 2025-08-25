@@ -124,7 +124,7 @@ class AF3SlurmClient:
         self.af3_config = {
             "datapipeline_timeout": "{{ default_datapipeline_timeout }}",
             "inference_timeout": "{{ default_inference_timeout }}",
-            "jax_compilation_cache_path": "{{ jax_compilation_cache_path }}",
+            "jax_compilation_cache_dir": "{{ jax_compilation_cache_dir }}",
             "max_template_date": science_settings.get("max_template_date", ""),
             "conformer_max_iterations": science_settings.get("conformer_max_iterations", ""),
             "num_recycles": science_settings.get("num_recycles", ""),
