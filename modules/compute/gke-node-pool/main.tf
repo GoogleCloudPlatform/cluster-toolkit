@@ -386,6 +386,25 @@ locals {
   supported_machine_types_for_install_dependencies = ["a3-highgpu-8g", "a3-megagpu-8g"]
 }
 
+# Replicates GKE's naming logic for its instance templates. The full
+# pattern is "gke-{cluster_name}-{nodepool_name}-{hash}".
+#
+# This code builds the "{cluster_name}-{nodepool_name}" prefix, which is
+# capped at 32 characters plus a dash '-' in between, by truncating names if needed:
+# - If both names > 16 chars, both are cut to 16.
+# - If one name > 16, it's shortened so the combined name length is 32.
+data "google_compute_region_instance_template" "instance_template" {
+  for_each = { for idx, np in google_container_node_pool.node_pool : idx => np }
+  project  = var.project_id
+  filter = "name: gke-${
+    (length(local.cluster_name) <= 16 && length(each.value.name) <= 16) ? "${local.cluster_name}-${each.value.name}" :
+    (length(local.cluster_name) > 16 && length(each.value.name) > 16) ? "${substr(local.cluster_name, 0, 16)}-${substr(each.value.name, 0, 16)}" :
+    (length(local.cluster_name) > 16) ? "${substr(local.cluster_name, 0, 32 - length(each.value.name))}-${each.value.name}" :
+    "${local.cluster_name}-${substr(each.value.name, 0, 32 - length(local.cluster_name))}"
+  }*"
+  most_recent = true
+}
+
 resource "null_resource" "install_dependencies" {
   count = var.run_workload_script && contains(local.supported_machine_types_for_install_dependencies, var.machine_type) ? 1 : 0
   provisioner "local-exec" {

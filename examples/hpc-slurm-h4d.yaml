@@ -126,3 +126,5 @@ deployment_groups:
     use: [h4d-slurm-net-0, h4d_partition, slurm_login, homefs, appsfs]
     settings:
       enable_controller_public_ips: true
+      cloud_parameters:
+        slurmd_timeout: 900
