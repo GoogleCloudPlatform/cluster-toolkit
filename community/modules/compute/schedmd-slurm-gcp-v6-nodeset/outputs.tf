@@ -58,11 +58,6 @@ output "nodeset" {
   }
 
   precondition {
-    condition     = !var.enable_placement || !var.dws_flex.enabled
-    error_message = "Cannot use DWS Flex with `enable_placement`."
-  }
-
-  precondition {
     condition     = length(var.zones) == 0 || !var.dws_flex.enabled
     error_message = <<-EOD
       If a DWS Flex is enabled, `var.zones` should be empty.

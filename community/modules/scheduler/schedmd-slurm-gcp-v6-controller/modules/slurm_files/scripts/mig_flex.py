@@ -70,7 +70,10 @@ def resume_flex_chunk(nodes: List[str], job_id: Optional[int], lkp: util.Lookup)
         ],
         targetShape="ANY_SINGLE_ZONE" ),
       updatePolicy = dict(instanceRedistributionType = "NONE" ),
-      instanceLifecyclePolicy=dict(defaultActionOnFailure= "DO_NOTHING" ), # TODO(FLEX): Not supported yet, migrate once supported
+      instanceLifecyclePolicy=dict(defaultActionOnFailure= "DO_NOTHING" ), 
+      resourcePolicies=dict(
+          workloadPolicy= f"regions/{region}/resourcePolicies/resourcePolicy"
+      )
     )
   )
   util.log_api_request(req)

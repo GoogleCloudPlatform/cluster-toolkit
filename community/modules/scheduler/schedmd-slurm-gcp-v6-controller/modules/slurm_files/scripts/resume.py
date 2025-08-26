@@ -493,6 +493,22 @@ def create_placement_request(pg_name: str, region: str, max_distance: Optional[i
     return request
 
 
+# Shoud be used in case of MIG and that to support Compact Placement only
+def create_workload_policy (wp_name:str, region: str,max_distance: Optional[int]):
+    config = {
+        "name": wp_name,
+        "region": region,
+        "groupPlacementPolicy": {
+            "collocation": "COLLOCATED",
+            "maxDistance": max_distance,
+        },
+    }
+    request = lookup().compute.resourcePolicies().insert(
+        project=lookup().project, region=region, body=config
+    )
+    log_api_request(request)
+    return request
+
 def create_placements(nodes: List[str], excl_job_id:Optional[int], lkp: util.Lookup) -> List[PlacementAndNodes]:
     nodeset_map = collections.defaultdict(list)
     for node in nodes: # split nodes on nodesets
@@ -518,8 +534,6 @@ def _allocate_nodes_to_placements(nodes: List[str], excl_job_id:Optional[int], l
     if excl_job_placement and len(nodes) < 2:
         return no_pp # don't create placement_policy for just one node
 
-    if lkp.is_flex_node(model):
-        return no_pp # TODO(FLEX): Add support for workload policies 
     if lkp.node_is_tpu(model):
         return no_pp
     if not (nodeset.enable_placement and valid_placement_node(model)):
@@ -622,6 +636,15 @@ def create_nodeset_placements(nodes: List[str], excl_job_id:Optional[int], lkp: 
     requests = {
         p.placement: create_placement_request(p.placement, region, max_distance, accelerator_topology) for p in placements if p.placement
     }
+
+    if lkp.is_flex_node(nodes[0]):
+        requests = {
+            p.placement: create_placement_request(p.placement, region, max_distance, accelerator_topology) for p in placements if p.placement
+        }
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug("hello")
+            log.debug(requests)
+
     if not requests:
         return placements
     # TODO: aggregate all requests for whole resume and execute them at once (don't limit to nodeset/job)
