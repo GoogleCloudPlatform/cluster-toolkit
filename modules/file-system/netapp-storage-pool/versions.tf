@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 Google LLC
+ * Copyright 2022 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,20 +18,19 @@ terraform {
   required_providers {
     google = {
       source  = "hashicorp/google"
-      version = ">= 6.45.0"
+      version = ">= 6.4"
     }
     random = {
       source  = "hashicorp/random"
       version = "~> 3.0"
     }
   }
+  # provider_meta "google" {
+  #   module_name = "blueprints/terraform/hpc-toolkit:netapp-storage-pool/v1.60.0"
+  # }
+  # provider_meta "google-beta" {
+  #   module_name = "blueprints/terraform/hpc-toolkit:netapp-storage-pool/v1.60.0"
+  # }
 
-  provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:netapp-storage-pool/v1.70.0"
-  }
-  provider_meta "google-beta" {
-    module_name = "blueprints/terraform/hpc-toolkit:netapp-storage-pool/v1.70.0"
-  }
-
-  required_version = ">= 1.5.7"
+  required_version = ">= 1.3.0"
 }

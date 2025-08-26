@@ -1,21 +1,20 @@
 ## Description
 
 This module creates a [Google Cloud NetApp Volumes](https://cloud.google.com/netapp/volumes/docs/discover/overview)
-storage pool.
+storage pool. NetApp Volumes is a fully managed, cloud-based data storage service that provides advanced data management capabilities and highly scalable performance. It provides filesystems shared through the NFSv3, NFSv4.x and the SMB protocols.
 
-NetApp Volumes is a first-party Google service that provides NFS and/or SMB shared file-systems to VMs. It offers advanced data management capabilities and highly scalable capacity and performance.
 NetApp Volume provides:
 
 - robust support for NFSv3, NFSv4.x and SMB 2.1 and 3.x
 - a [rich feature set][service-levels]
 - scalable [performance](https://cloud.google.com/netapp/volumes/docs/performance/performance-benchmarks)
-- FlexCache: Caching of ONTAP-based volumes to provide high-throughput and low latency read access to compute clusters of on-premises data
+- Caching of ONTAP-based volumes to provide high-throughput and low latency read access to compute clusters of on-premises data
 - [Auto-tiering](https://cloud.google.com/netapp/volumes/docs/configure-and-use/volumes/manage-auto-tiering) of unused data to optimse cost
 
 Support for NetApp Volumes is split into two modules.
 
-- **netapp-storage-pool** provisions a [storage pool](https://cloud.google.com/netapp/volumes/docs/configure-and-use/storage-pools/overview). Storage pools are pre-provisioned storage capacity containers which host volumes. A pool also defines fundamental properties of all the volumes within, like the region, the attached network, the [service level][service-levels], CMEK encryption, Active Directory and LDAP settings.
-- **netapp-volume** provisions a [volume](https://cloud.google.com/netapp/volumes/docs/configure-and-use/volumes/overview) inside an existing storage pool. A volume file-system container which is shared using NFS or SMB. It provides advanced data management capabilities.
+- **netapp-storage-pool** provisions a [storage pool](https://cloud.google.com/netapp/volumes/docs/configure-and-use/storage-pools/overview). Storage pools are pre-provisioned storage capacity containers which host filesystems called volumes. Volumes are provisioned using the [netapp-volume module](../netapp-volume/README.md). A pool also defined fundamental properties of all the volumes within, like the region, the attached network, the [service level][service-levels], CMEK encryption, Active Directory and LDAP settings.
+- **netapp-volume** provisions a [volume](https://cloud.google.com/netapp/volumes/docs/configure-and-use/volumes/overview) inside an existing storage pool. A volume is a shared file-system. It can be shared using NFS and SMB protocols and provides scalabale performance.
 
 For more information on this and other network storage options in the Cluster
 Toolkit, see the extended [Network Storage documentation](../../../docs/network_storage.md).
@@ -56,7 +55,8 @@ deployment_groups:
     source: modules/file-system/netapp-storage-pool
     use: [network, private_service_access]
     settings:
-      pool_name: $(vars.deployment_name)-eda-pool
+      pool_name: "eda-pool"
+      network_id: $(network.network_id)
       capacity_gib: 20000
       service_level: "EXTREME"
       region: $(vars.region)
@@ -80,6 +80,7 @@ deployment_groups:
     use: [network]
     settings:
       pool_name: "eda-pool"
+      network_id: $(network.network_id)
       capacity_gib: 20000
       service_level: "EXTREME"
       region: $(vars.region)
@@ -141,15 +142,15 @@ limitations under the License.
 
 | Name | Version |
 |------|---------|
-| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.5.7 |
-| <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.45.0 |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.3.0 |
+| <a name="requirement_google"></a> [google](#requirement\_google) | >= 6.4 |
 | <a name="requirement_random"></a> [random](#requirement\_random) | ~> 3.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google"></a> [google](#provider\_google) | >= 6.45.0 |
+| <a name="provider_google"></a> [google](#provider\_google) | >= 6.4 |
 | <a name="provider_random"></a> [random](#provider\_random) | ~> 3.0 |
 
 ## Modules
@@ -172,13 +173,13 @@ No modules.
 | <a name="input_allow_auto_tiering"></a> [allow\_auto\_tiering](#input\_allow\_auto\_tiering) | Whether to allow automatic tiering for the storage pool. | `bool` | `false` | no |
 | <a name="input_capacity_gib"></a> [capacity\_gib](#input\_capacity\_gib) | The capacity of the storage pool in GiB. | `number` | `2048` | no |
 | <a name="input_cmek_policy"></a> [cmek\_policy](#input\_cmek\_policy) | The ID of the Customer Managed Encryption Key (CMEK) policy to apply to the storage pool in the format:<br/>`projects/<project>/locations/<location>/kmsConfigs/<name>` | `string` | `null` | no |
-| <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the deployment, used as name of the NetApp storage pool if no name is specified. | `string` | n/a | yes |
+| <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the HPC deployment, used as name of the NetApp storage pool if no name is specified. | `string` | n/a | yes |
 | <a name="input_description"></a> [description](#input\_description) | A description of the NetApp storage pool. | `string` | `""` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the NetApp storage pool. Key-value pairs. | `map(string)` | n/a | yes |
 | <a name="input_ldap_enabled"></a> [ldap\_enabled](#input\_ldap\_enabled) | Whether to enable LDAP for the storage pool. | `bool` | `false` | no |
 | <a name="input_network_id"></a> [network\_id](#input\_network\_id) | The ID of the GCE VPC network to which the NetApp storage pool is connected given in the format:<br/>`projects/<project_id>/global/networks/<network_name>`" | `string` | n/a | yes |
 | <a name="input_network_self_link"></a> [network\_self\_link](#input\_network\_self\_link) | Network self-link the pool will be on, required for checking private service access | `string` | n/a | yes |
-| <a name="input_pool_name"></a> [pool\_name](#input\_pool\_name) | The name of the storage pool. Leave empty to generate name based on deployment name. | `string` | `null` | no |
+| <a name="input_pool_name"></a> [pool\_name](#input\_pool\_name) | The name of the storage pool. Leave empty to use generates name based on deployment name. | `string` | `null` | no |
 | <a name="input_private_vpc_connection_peering"></a> [private\_vpc\_connection\_peering](#input\_private\_vpc\_connection\_peering) | The name of the private VPC connection peering. | `string` | `"sn-netapp-prod"` | no |
 | <a name="input_project_id"></a> [project\_id](#input\_project\_id) | ID of project in which the NetApp storage pool will be created. | `string` | n/a | yes |
 | <a name="input_region"></a> [region](#input\_region) | Location for NetApp storage pool. | `string` | n/a | yes |
