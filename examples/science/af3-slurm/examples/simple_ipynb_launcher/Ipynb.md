@@ -2,9 +2,17 @@
 
 **1. Uploading the Input Data:**
 
-Begin by uploading your input JSON file, which contains the data required by AlphaFold, either `datapipeline` or `inference` input file, to the Jupyter Notebook environment. You can usually do this using the file upload feature available within the notebook interface as shown by image below.
+Begin by uploading your input JSON file, which contains the data required by AlphaFold, either `datapipeline` or `inference` input file—into the Jupyter Notebook environment.
 
-   <img src="adm/upload_file.png" alt="try to upload file under the alphafold folder" width="400">
+You can do this by following these steps:
+ 
+ - In the Jupyter Notebook interface, navigate to the **file browser**, typically found in the left-hand panel or on the home screen. It's usually represented by a **folder icon**.
+
+ - Click the **Upload** button (commonly shown as an **upward arrow with a horizontal line underneath**), usually located at the top right of the file list.
+
+ - Select your input JSON file from your local system.
+
+ - The file will be uploaded to the **current directory** you are viewing in the file browser.
 
 Ensure your input JSON file is placed in the correct location **relative to your Jupyter Notebook file**. Your project directory should be structured like this:
 
@@ -31,35 +39,27 @@ Once the input file is uploaded, execute all the cells in the notebook that are 
 
 These cells perform several crucial setup tasks:
 
-- **Installing dependencies:** For running the notebook for the first time, make sure to install the required dependencies. This step ensures that all necessary libraries are available for the notebook to function properly.
+- **Install dependencies:** When running the notebook for the first time, make sure to run the cells under the **Install Dependencies header**. This step installs all required libraries and packages so that the notebook can function properly.
 
-   <img src="adm/install_dependencies.png" alt="install dependencies" width="1000">
+   When you run the relevant section under the **Install Dependencies header**, you should see log messages indicating successful installation and setup, confirming that all dependencies are correctly installed.
 
-- **Review System Settings:** These cells display the default configurations for SLURM partitions (Datapipeline C3DH, Inference G2/A2/A2U), memory, CPU counts, and timeout durations. While you can modify the `af3_config` later if needed, it’s important to **familiarize yourself with the default limits of each machine shape** to ensure your jobs are appropriately configured and to avoid unexpected errors—such as running out of memory, CPU limits, or hitting timeout thresholds.
+- **AF3 - System Settings:** These cells display the default configurations for SLURM partitions (Datapipeline C3DH, Inference G2/A2/A2U), memory, CPU counts, and timeout durations. While you can modify the `af3_config` later if needed, it’s important to **familiarize yourself with the default limits of each machine shape** to ensure your jobs are appropriately configured and to avoid unexpected errors—such as running out of memory, CPU limits, or hitting timeout thresholds.
 
   <img src="adm/system_setting.png" alt="system setting" width="1000">
 
-- **Understand Science Settings:** These cells define scientific parameters for the model, such as seeds and iterations. Leaving them empty will apply AlphaFold’s default settings.
+- **AF3 - Science Settings:** These cells define scientific parameters for the model, such as seeds and iterations. Leaving them empty will apply AlphaFold’s default settings.
 
   <img src="adm/science_setting.png" alt="science setting" width="1000">
 
-- **SLURM API Token Retrieval:** This cell outlines how the SLURM REST API token is retrieved from Google Secret Manager.
-
-   <img src="adm/rest_api.png" alt="slrum rest api" width="1000">
+- **AF3 - SLURM REST API:** This cell outlines how the SLURM REST API token is retrieved from Google Secret Manager.
 
 - **Hostname Retrieval:** This cell retrieve SLURM connection details (like hostname/remote IP address) from `slurm_info.json` file, which uploaded from `controller` node into current notebook bucket.
 
-   <img src="adm/retrieve_host.png" alt="retrieve host" width="1000">
-
 - **Initialize AF3SlurmClient and Test Connection:** The client is initialized, and a "Ping" command is executed to verify the connection to the SLURM REST API. A successful ping response confirms that the communication is working correctly.
-
-   <img src="adm/initialize.png" alt="initialize" width="1000">
 
 **3. Configuring the Data Pipeline:**
 
-- Set the `input_file` within the data pipeline cell with JSON file path you uploaded in Step 1.
-
-   <img src="adm/datapipeline.png" alt="data pipeline" width="1000">
+- Under the **Datapipeline** header cell, set the `input_file` variable to the path of the JSON file you uploaded in Step 1.
 
 - After updating the filename, run the data pipeline cell. This will process your input data.
 
@@ -76,13 +76,9 @@ These cells perform several crucial setup tasks:
 - Next, locate and execute the inference cell in the notebook. This cell is configured to use the **latest output** generated by the data pipeline as its input.
 
    > ⚠️ **Warning:**  
-   > Make sure the previous **Data Pipeline** process status is **"COMPLETED"** before running the current step — especially if you're executing the workflow as an end-to-end process.
+   > Make sure the previous **Data Pipeline** process status is **"COMPLETED"** before running this step — especially if you're executing the entire workflow end-to-end.
 
-  If you prefer to run inference on a manually uploaded file, you can set the default input `inference_input_file` variable with your own file path. Make sure that your uploaded file meets all the necessary requirements for the inference process to run correctly.
-
-   <img src="adm/inference.png" alt="inference" width="1000">
-
-- Upon successful execution, the inference cell will perform the necessary calculations to predict the 3D structure and generate the PAE (Predicted Alignment Error) matrix.
+   If you prefer to run inference on a manually uploaded file instead, you can set the default input by updating the `inference_input_file` variable with the path to your own file. Make sure the uploaded file meets all the necessary requirements for the inference process to run correctly, such as correct format and structure.
 
 - Check job status:
   <img src="adm/inference_status.png" alt="inference status" width="1000">
@@ -90,6 +86,8 @@ These cells perform several crucial setup tasks:
   In some cases—for example, when there are issues with node provisioning for dynamic nodes—the job status may return `PENDING` status or an error status. This is often a temporary condition (e.g., while a node is still being provisioned), so you can try running the cell again.
   
   If the issue persists, please refer to the [Known Issues & How to Fix Them](../readme.md#known-issues--how-to-fix-them) section for further guidance..
+
+- Upon successful execution, the inference cell will perform the necessary calculations to predict the 3D structure and generate the PAE (Predicted Alignment Error) matrix.
 
 **5. Visualizing the Results:**
 

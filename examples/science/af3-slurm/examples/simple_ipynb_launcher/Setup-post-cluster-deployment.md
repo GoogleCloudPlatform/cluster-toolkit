@@ -42,9 +42,19 @@ gcloud secrets add-iam-policy-binding <your-secret-name> \
 --condition="expression=true,title=AlwaysTrue,description=Allow access to Secret Manager"
 ```
 
-You can verify this configuration in the Secret Manager section of the Google Cloud Console.
+You can verify this configuration by navigating to Secret Manager in the Google Cloud Console
+. To access it:
 
-<img src="adm/secret-manager.png" alt="secret-manager" width="1000">
+ 1. Open the Google Cloud Console
+
+ 2. Select your project from the top project selector if it's not already selected.
+
+ 3. In the left-hand navigation menu, go to <b>Security</b> > <b>Secret Manager</b>.
+
+ 4. You will see a list of secrets—verify that your secret (e.g., API key, database credentials) is listed and properly configured.
+
+Tip: If you don't see <b>"Secret Manager"</b> in the navigation, use the search bar at the top to search for  <b>"Secret Manager"</b> directly.
+
 
 ### 3. Deploy the Notebook Environment
 **Where to run**: **On the system where you executed `gcluster`**, under your `cluster-toolkit` directory.
@@ -91,9 +101,13 @@ To verify that Secret Manager access is properly configured:
 
     Replace `<your-secret-name>` with the name of your secret.
 
-If the command returns the secret value successfully, it confirms that the notebook environment can securely access the SLURM REST API—just as in the image below:
+If the command returns the secret value successfully, it confirms that the notebook environment can securely access the SLURM REST API. When you run the relevant section under the <b>AF3 - SLURM REST API</b> header in the notebook, you should see a log message similar to:
 
-<img src="adm/rest_api.png" alt="slrum rest api" width="1000">
+```log
+[INFO] Token retrieved from Secret Manager successfully.
+```
+
+This indicates that the token was successfully retrieved from Secret Manager and that the authentication setup is functioning correctly.
 
 ## Using the environment
 Go to [Ipynb.md](./Ipynb.md) for documentation on how to use the IPython environment.

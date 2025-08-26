@@ -130,7 +130,7 @@
     "try:\n",
     "    response = secret_manager_client.access_secret_version(name=secret_path)\n",
     "    slurm_rest_api_token = response.payload.data.decode(\"UTF-8\")\n",
-    "    print(\"[INFO] Retrieved token from Secret Manager.\")\n",
+    "    print(\"[INFO] Token retrieved from Secret Manager successfully.\")\n",
     "except NotFound:\n",
     "    print(f\"[ERROR] Secret '{gcp_secret_name}' not found.\")\n",
     "    raise NotFound(\n",
