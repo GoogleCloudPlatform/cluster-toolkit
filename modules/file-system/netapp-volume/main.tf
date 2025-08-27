@@ -40,7 +40,7 @@ locals {
   mount_runner = {
     "type"        = "shell"
     "source"      = "${path.module}/scripts/mount.sh"
-    "args"        = "\"${join(",", local.server_ips)}\" \"${local.remote_mount}\" \"${var.local_mount}\" \"${local.fs_type}\" \"${local.mount_options}\""
+    "args"        = "\"${join(":", local.server_ips)}\" \"${local.remote_mount}\" \"${var.local_mount}\" \"${local.fs_type}\" \"${local.mount_options}\""
     "destination" = "mount${replace(var.local_mount, "/", "_")}.sh"
   }
 
@@ -81,8 +81,8 @@ resource "google_netapp_volume" "netapp_volume" {
           access_type     = rules.value.access_type
           allowed_clients = rules.value.allowed_clients
           has_root_access = rules.value.has_root_access
-          nfsv3           = rules.value.nfsv3 == null ? contains([for p in var.protocols : lower(p)], "nfsv3") : rules.value.nfsv3
-          nfsv4           = rules.value.nfsv4 == null ? contains([for p in var.protocols : lower(p)], "nfsv4") : rules.value.nfsv4
+          nfsv3           = rules.value.nfsv3 == null ? contains(var.protocols, "NFSV3") : rules.value.nfsv3
+          nfsv4           = rules.value.nfsv4 == null ? contains(var.protocols, "NFSV4") : rules.value.nfsv4
         }
       }
     }

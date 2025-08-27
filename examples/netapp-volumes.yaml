@@ -24,21 +24,25 @@ blueprint_name: netapp-volumes
 vars:
   project_id: ## Set GCP Project ID Here ##
   deployment_name: netapp-volumes
-  region:     ## Set GCP Region Here ##
-  zone:       ## Set GCP Zone Here ##
-  pool_service_level: "EXTREME"  # Options: "STANDARD", "PREMIUM", "EXTREME"
+  region: us-central1
+  zone: us-central1-a
 
 # Documentation for each of the modules used below can be found at
-# https://github.com/GoogleCloudPlatform/cluster-toolkit
+# https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md
 
 deployment_groups:
 - group: primary
   modules:
+  # Source is an embedded module, denoted by "modules/*" without ./, ../, /
+  # as a prefix. To refer to a local module, prefix with ./, ../ or /
   - id: network
     source: modules/network/vpc
 
   # Private Service Access (PSA) requires the compute.networkAdmin role which is
   # included in the Owner role, but not Editor.
+  # PSA is a best practice for Filestore instances, but can be optionally
+  # removed by deleting the private_service_access module and any references to
+  # the module by Filestore modules.
   # https://cloud.google.com/vpc/docs/configure-private-services-access#permissions
   - id: private_service_access
     source: community/modules/network/private-service-access
@@ -52,9 +56,10 @@ deployment_groups:
     source: modules/file-system/netapp-storage-pool
     use: [network, private_service_access]
     settings:
-      pool_name: $(vars.deployment_name)-netapp-pool
+      pool_name: "netapp-pool"
+      network_id: $(network.network_id)
       capacity_gib: 2048
-      service_level: $(vars.pool_service_level)
+      service_level: "EXTREME"
       region: $(vars.region)
       # allow_auto_tiering: true
 
@@ -63,7 +68,7 @@ deployment_groups:
     use: [netapp_pool]             # Create this pool using the netapp-storage-pool module
     settings:
       region: $(vars.region)
-      volume_name: $(vars.deployment_name)-homefs
+      volume_name: "homefs"
       capacity_gib: 2048           # Size up to available capacity in the pool
       large_capacity: false
       local_mount: "/home"         # Mount point at client when client uses USE directive
@@ -99,9 +104,3 @@ deployment_groups:
     settings:
       instance_count: 1
       machine_type: n2-standard-2
-
-  - id: wait-for-vms
-    source: community/modules/scripts/wait-for-startup
-    settings:
-      instance_names: $(gcnv_ubuntu_instances.name)
-      timeout: 7200

@@ -1,5 +1,5 @@
 #!/bin/sh
-# Copyright 2025 Google LLC
+# Copyright 2022 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -31,7 +31,7 @@ if [ ! "$(which mount.nfs)" ]; then
 		apt-get update --allow-releaseinfo-change-origin --allow-releaseinfo-change-label
 		apt-get -y install nfs-common
 	else
-		echo 'Unsupported distribution'
+		echo 'Unsuported distribution'
 		return 1
 	fi
 fi
