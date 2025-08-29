@@ -13,28 +13,30 @@
 # limitations under the License.
 
 ---
-- name: Wait until all network interfaces are online for A3/A4 variants
+- name: Install network wait service for A3/A4 variants
   hosts: all
   become: true
   tasks:
-  - name: Create SystemD service for A3 High networking
+
+  - name: Create universal SystemD service for GPU networking delay
     when: ansible_os_family == "Debian"
     ansible.builtin.copy:
-      dest: /etc/systemd/system/delay-a3-high.service
+      dest: /etc/systemd/system/delay-gpu-network.service
       owner: root
       group: root
       mode: "0644"
       content: |
         [Unit]
-        Description=Delay A3 High boot until all network interfaces are routable
+        Description=Delay boot on specific GPU VMs until network is routable
         After=network-online.target
         Wants=network-online.target
         Before=google-startup-scripts.service
 
         [Service]
-        # Condition to only run on A3 High machines
-        ExecCondition=/bin/bash -c '/usr/bin/curl -s -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/machine-type | grep -q "/a3-highgpu-8g$"'
-        ExecStart=/usr/lib/systemd/systemd-networkd-wait-online -i enp0s12 -i enp6s0 -i enp12s0 -i enp134s0 -i enp140s0 -o routable --timeout=180
+        # This condition checks if the machine type is one of the supported A3/A4 variants.
+        # The service will only run if the machine type matches.
+        ExecCondition=/bin/bash -c "/usr/bin/curl -s -H 'Metadata-Flavor: Google' http://metadata.google.internal/computeMetadata/v1/instance/machine-type | grep -qE '(/a3-highgpu-8g|/a3-megagpu-8g|/a3-ultragpu-8g|/a4-highgpu-8g|/a4x-highgpu-4g)$'"
+        ExecStart=/usr/lib/systemd/systemd-networkd-wait-online -o routable --timeout=180
         ExecStartPost=/bin/sleep 30
 
         [Install]
@@ -42,92 +44,11 @@
     notify:
     - Reload SystemD
 
-  - name: Create SystemD service for A3 Mega networking
-    when: ansible_os_family == "Debian"
-    ansible.builtin.copy:
-      dest: /etc/systemd/system/delay-a3-mega.service
-      owner: root
-      group: root
-      mode: "0644"
-      content: |
-        [Unit]
-        Description=Delay A3 Mega boot until all network interfaces are routable
-        After=network-online.target
-        Wants=network-online.target
-        Before=google-startup-scripts.service
-
-        [Service]
-        # Condition to only run on A3 Mega machines
-        ExecCondition=/bin/bash -c '/usr/bin/curl -s -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/machine-type | grep -q "/a3-megagpu-8g$"'
-        ExecStart=/usr/lib/systemd/systemd-networkd-wait-online -i enp0s12 -i enp6s0f0 -i enp7s0f0 -i enp13s0f0 -i enp14s0f0 -i enp134s0f0 -i enp135s0f0 -i enp141s0f0 -i enp142s0f0 -o routable --timeout=180
-        ExecStartPost=/bin/sleep 30
-
-        [Install]
-        WantedBy=multi-user.target
-    notify:
-    - Reload SystemD
-
-  - name: Create SystemD service for A3 Ultra networking
-    when: ansible_os_family == "Debian"
-    ansible.builtin.copy:
-      dest: /etc/systemd/system/delay-a3-ultra.service
-      owner: root
-      group: root
-      mode: "0644"
-      content: |
-        [Unit]
-        Description=Delay A3 Ultra boot until all network interfaces are routable
-        After=network-online.target
-        Wants=network-online.target
-        Before=google-startup-scripts.service
-
-        [Service]
-        # Condition to only run on A3 Ultra machines
-        ExecCondition=/bin/bash -c '/usr/bin/curl -s -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/machine-type | grep -q "/a3-ultragpu-8g$"'
-        ExecStart=/usr/lib/systemd/systemd-networkd-wait-online -i enp0s19 -i enp192s20 -i gpu0rdma0 -i gpu1rdma0 - gpu2rdma0 -i gpu3rdma0 -i gpu4rdma0 -i gpu5rdma0 -i gpu6rdma0 -i gpu7rdma0 -o routable --timeout=180
-        ExecStartPost=/bin/sleep 30
-
-        [Install]
-        WantedBy=multi-user.target
-    notify:
-    - Reload SystemD
-
-  - name: Create SystemD service for A4 High networking
-    when: ansible_os_family == "Debian"
-    ansible.builtin.copy:
-      dest: /etc/systemd/system/delay-a4-high.service
-      owner: root
-      group: root
-      mode: "0644"
-      content: |
-        [Unit]
-        Description=Delay A4 High boot until all network interfaces are routable
-        After=network-online.target
-        Wants=network-online.target
-        Before=google-startup-scripts.service
-
-        [Service]
-        # Condition to only run on A4 High machines
-        ExecCondition=/bin/bash -c '/usr/bin/curl -s -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/machine-type | grep -q "/a4-highgpu-8g$"'
-        ExecStart=/usr/lib/systemd/systemd-networkd-wait-online -i enp0s19 -i enp192s20 -i gpu0rdma0 -i gpu1rdma0 - gpu2rdma0 -i gpu3rdma0 -i gpu4rdma0 -i gpu5rdma0 -i gpu6rdma0 -i gpu7rdma0 -o routable --timeout=180
-        ExecStartPost=/bin/sleep 30
-        # To debug interface names on an A4 instance, run: ip link show
-
-        [Install]
-        WantedBy=multi-user.target
-    notify:
-    - Reload SystemD
-
-  - name: Enable A3/A4 delay services
+  - name: Enable universal GPU network delay service
     when: ansible_os_family == "Debian"
     ansible.builtin.systemd_service:
-      name: "{{ item }}"
+      name: delay-gpu-network.service
       enabled: true
-    loop:
-    - delay-a3-high.service
-    - delay-a3-mega.service
-    - delay-a3-ultra.service
-    - delay-a4-high.service
 
   handlers:
   - name: Reload SystemD
