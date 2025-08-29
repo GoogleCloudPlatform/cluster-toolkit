@@ -29,7 +29,7 @@ vars:
   image_build_disk_type: hyperdisk-balanced
   image_disk_size_gb: 100
   built_image_family: slurm-ubuntu2404-accelerator-arm64-64k
-  build_from_git_ref: 6.10.1
+  build_from_git_ref: 6.10.5
   # Cluster env settings
   # net0 and filestore ranges must not overlap
   net0_range: 192.168.0.0/19
@@ -93,6 +93,10 @@ deployment_groups:
               loop: "{{ nvidia_packages_to_hold }}"
 
       - type: data
+        destination: /etc/enroot/enroot.conf
+        content: |
+          ENROOT_CONFIG_PATH     ${HOME}/.enroot
+      - type: data
         destination: /etc/security/limits.d/99-unlimited.conf
         content: |
           * - memlock unlimited
@@ -128,6 +132,7 @@ deployment_groups:
             "install_cuda": false,
             "allow_kernel_upgrades": false,
             "monitoring_agent": "cloud-ops",
+            install_managed_lustre: false,
           }
       - type: shell
         destination: install_slurm.sh
@@ -323,6 +328,27 @@ deployment_groups:
     outputs:
     - network_storage
 
+  # - id: private_service_access
+  #   source: community/modules/network/private-service-access
+  #   use: [a4x-slurm-net-0]
+
+  # To use Managed Lustre as for the shared /home directory:
+  # 1. Comment out the filestore block above and the`filestore_ip_range` line in the vars block.
+  # 2. Uncomment the managed-lustre and private-service-access blocks
+  # 3. Change the value for "install_managed_lustre" in /var/tmp/slurm_vars.json above to true
+  # - id: homefs
+  #   source: modules/file-system/managed-lustre
+  #   use:
+  #   - a4x-slurm-net-0
+  #   - private_service_access
+  #   settings:
+  #     size_gib: 18000
+  #     name: lustre-instance1
+  #     local_mount: /home
+  #     remote_mount: lustrefs
+  #   outputs:
+  #   - network_storage
+
   # The following four modules create and mount a Cloud Storage Bucket with
   # gcsfuse.  They are optional but recommended for many use cases.
   # (Optional) The following creates a GCS bucket that will be mounted
@@ -454,6 +480,7 @@ deployment_groups:
       - type: data
         destination: /etc/enroot/enroot.conf
         content: |
+          ENROOT_CONFIG_PATH     ${HOME}/.enroot
           ENROOT_RUNTIME_PATH    $(vars.local_ssd_mountpoint)/${UID}/enroot/runtime
           ENROOT_CACHE_PATH      $(vars.local_ssd_mountpoint)/${UID}/enroot/cache
           ENROOT_DATA_PATH       $(vars.local_ssd_mountpoint)/${UID}/enroot/data
