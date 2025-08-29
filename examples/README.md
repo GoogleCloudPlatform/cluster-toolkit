@@ -64,7 +64,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [xpk-n2-filestore](#xpk-n2-filestore--) ![community-badge] ![experimental-badge]
   * [gke-h4d](#gke-h4d-) ![core-badge]
   * [gke-g4](#gke-g4-) ![core-badge]
-  * [netapp-volumes.yaml](#netapp-volumesyaml--) ![core-badge]
+  * [netapp-volumes.yaml](#netapp-volumesyaml--) ![community-badge]
 * [Blueprint Schema](#blueprint-schema)
 * [Writing an HPC Blueprint](#writing-an-hpc-blueprint)
   * [Blueprint Boilerplate](#blueprint-boilerplate)
@@ -1645,7 +1645,7 @@ This blueprint uses GKE to provision a Kubernetes cluster and a G4 node pool, al
 
 ### [netapp-volumes.yaml] ![core-badge]
 
-This blueprint demonstrates how to provision NFS volumes as shared filesystems for compute VMs, using Google Cloud NetApp Volumes. It can be used as an alternative to FileStore in blueprints.
+This blueprint demonstrates how to provision NFS volumes as shares filesystems for compute VMs, using Google Cloud NetApp Volumes. It can be used as an  alternative to FileStore in blueprints.
 
 NetApp Volumes is a first-party Google service that provides NFS and/or SMB shared file-systems to VMs. It offers advanced data management capabilities and highly scalable capacity and performance.
 
@@ -1660,7 +1660,7 @@ NetApp Volume provides:
 Support for NetApp Volumes is split into two modules.
 
 * **netapp-storage-pool** provisions a [storage pool](https://cloud.google.com/netapp/volumes/docs/configure-and-use/storage-pools/overview). Storage pools are pre-provisioned storage capacity containers which host volumes. A pool also defines fundamental properties of all the volumes within, like the region, the attached network, the [service level][service-levels], CMEK encryption, Active Directory and LDAP settings.
-* **netapp-volume** provisions a [volume](https://cloud.google.com/netapp/volumes/docs/configure-and-use/volumes/overview) inside an existing storage pool. A volume is a file-system which is shared using NFS or SMB. It provides advanced data management capabilities.
+* **netapp-volume** provisions a [volume](https://cloud.google.com/netapp/volumes/docs/configure-and-use/volumes/overview) inside an existing storage pool. A volume file-system container which is shared using NFS or SMB. It provides advanced data management capabilities.
 
 You can provision multiple volumes in a pool. For service levels Standard, Premium and Extreme the throughput capability depends on volume size and service level. Every GiB of provisioned volume space adds 16/64/128 KiBps of throughput capability.
 
@@ -1669,17 +1669,17 @@ You can provision multiple volumes in a pool. For service levels Standard, Premi
 To provision the bluebrint, please run:
 
 ```shell
-./gcluster create examples/netapp-volumes.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}" --vars region=us-central1 --vars zone=us-central1-a
+./gcluster create examples/netapp-volumes.yaml --vars "project_id=${GOOGLE_CLOUD_PROJECT}"
 ./gcluster deploy netapp-volumes
 ```
 
-After the blueprint deployed, you can login to the VM created:
+After the blueprint deployed, you can login the to VM created:
 
 ```shell
 gcloud compute ssh --zone "us-central1-a" "netapp-volumes-0" --project ${GOOGLE_CLOUD_PROJECT} --tunnel-through-iap
 ```
 
-A NetApp Volumes volume is provisioned and mounted to /home in all the provisioned VMs. A home directory for your user is created automatically:
+A NetApp Volumes volume was provisioned and mounted to /home in all the provisioned VMs. A home directory for your user is created automatically:
 
 ```shell
 pwd
@@ -1687,7 +1687,7 @@ df -h -t nfs
 ```
 
 #### Clean Up
-To destroy all resources associated with creating the GKE cluster, run the following command:
+To destroy all resources associated with creating the GKE cluster, from Cloud Shell run the following command:
 
 ```sh
 ./gcluster destroy netapp-volumes
