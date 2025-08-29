@@ -27,7 +27,7 @@
       mode: "0644"
       content: |
         [Unit]
-        Description=Delay boot on specific GPU VMs until network is routable
+        Description=Delay boot on multi-NIC VMs until networks are routable
         After=network-online.target
         Wants=network-online.target
         Before=google-startup-scripts.service
