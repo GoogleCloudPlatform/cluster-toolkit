@@ -1,20 +1,21 @@
 ## Description
 
 This module creates a [Google Cloud NetApp Volumes](https://cloud.google.com/netapp/volumes/docs/discover/overview)
-storage pool. NetApp Volumes is a fully managed, cloud-based data storage service that provides advanced data management capabilities and highly scalable performance. It provides filesystems shared through the NFSv3, NFSv4.x and the SMB protocols.
+storage pool.
 
+NetApp Volumes is a first-party Google service that provides NFS and/or SMB shared file-systems to VMs. It offers advanced data management capabilities and highly scalable capacity and performance.
 NetApp Volume provides:
 
 - robust support for NFSv3, NFSv4.x and SMB 2.1 and 3.x
 - a [rich feature set][service-levels]
 - scalable [performance](https://cloud.google.com/netapp/volumes/docs/performance/performance-benchmarks)
-- Caching of ONTAP-based volumes to provide high-throughput and low latency read access to compute clusters of on-premises data
+- FlexCache: Caching of ONTAP-based volumes to provide high-throughput and low latency read access to compute clusters of on-premises data
 - [Auto-tiering](https://cloud.google.com/netapp/volumes/docs/configure-and-use/volumes/manage-auto-tiering) of unused data to optimse cost
 
 Support for NetApp Volumes is split into two modules.
 
-- **netapp-storage-pool** provisions a [storage pool](https://cloud.google.com/netapp/volumes/docs/configure-and-use/storage-pools/overview). Storage pools are pre-provisioned storage capacity containers which host filesystems called volumes. Volumes are provisioned using the [netapp-volume module](../netapp-volume/README.md). A pool also defined fundamental properties of all the volumes within, like the region, the attached network, the [service level][service-levels], CMEK encryption, Active Directory and LDAP settings.
-- **netapp-volume** provisions a [volume](https://cloud.google.com/netapp/volumes/docs/configure-and-use/volumes/overview) inside an existing storage pool. A volume is a shared file-system. It can be shared using NFS and SMB protocols and provides scalabale performance.
+- **netapp-storage-pool** provisions a [storage pool](https://cloud.google.com/netapp/volumes/docs/configure-and-use/storage-pools/overview). Storage pools are pre-provisioned storage capacity containers which host volumes. A pool also defines fundamental properties of all the volumes within, like the region, the attached network, the [service level][service-levels], CMEK encryption, Active Directory and LDAP settings.
+- **netapp-volume** provisions a [volume](https://cloud.google.com/netapp/volumes/docs/configure-and-use/volumes/overview) inside an existing storage pool. A volume file-system container which is shared using NFS or SMB. It provides advanced data management capabilities.
 
 For more information on this and other network storage options in the Cluster
 Toolkit, see the extended [Network Storage documentation](../../../docs/network_storage.md).
