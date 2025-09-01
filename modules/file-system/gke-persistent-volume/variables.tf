@@ -45,6 +45,19 @@ variable "filestore_id" {
   }
 }
 
+variable "lustre_id" {
+  description = "An identifier for a lustre with the format `projects/{{project}}/locations/{{location}}/instances/{{name}}`."
+  type        = string
+  default     = null
+  validation {
+    condition = (
+      var.lustre_id == null ||
+      try(length(split("/", var.lustre_id)), 0) == 6
+    )
+    error_message = "lustre_id must be in the format of 'projects/{{project}}/locations/{{location}}/instances/{{name}}'."
+  }
+}
+
 variable "gcs_bucket_name" {
   description = "The gcs bucket to be used with the persistent volume."
   type        = string
