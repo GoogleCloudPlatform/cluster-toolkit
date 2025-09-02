@@ -16,6 +16,6 @@ terraform {
   required_version = ">= 1.5"
 
   provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:gke-storage/v1.63.0"
+    module_name = "blueprints/terraform/hpc-toolkit:gke-storage/v1.64.0"
   }
 }
