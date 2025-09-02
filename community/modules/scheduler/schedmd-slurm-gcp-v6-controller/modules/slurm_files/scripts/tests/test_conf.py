@@ -101,6 +101,7 @@ SuspendProgram=ukulele/suspend_wrapper.sh
 SuspendRate=0
 SuspendTimeout=300
 SlurmdTimeout=300
+UnkillableStepTimeout=300
 TreeWidth=128
 TopologyPlugin=topology/tree
 TopologyParam=SwitchAsNodeRank"""),
@@ -114,6 +115,7 @@ TopologyParam=SwitchAsNodeRank"""),
                 "resume_timeout": None,
                 "suspend_rate": None,
                 "suspend_timeout": None,
+                "unkillable_step_timeout": None,
                 "slurmd_timeout": None,
                 "topology_plugin": None,
                 "topology_param": None,
@@ -129,6 +131,7 @@ SuspendProgram=ukulele/suspend_wrapper.sh
 SuspendRate=0
 SuspendTimeout=300
 SlurmdTimeout=300
+UnkillableStepTimeout=300
 TreeWidth=128
 TopologyPlugin=topology/tree
 TopologyParam=SwitchAsNodeRank"""),
@@ -151,7 +154,8 @@ TopologyParam=SwitchAsNodeRank"""),
                 "suspend_rate": 3,
                 "suspend_timeout": 4,
                 "slurmd_timeout": 5,
-                "tree_width": 6,
+                "unkillable_step_timeout": 6,
+                "tree_width": 7,
                 "topology_plugin": "guess",
                 "topology_param": "yellow",
             },
@@ -166,7 +170,8 @@ SuspendProgram=ukulele/suspend_wrapper.sh
 SuspendRate=3
 SuspendTimeout=4
 SlurmdTimeout=5
-TreeWidth=6
+UnkillableStepTimeout=6
+TreeWidth=7
 TopologyPlugin=guess
 TopologyParam=yellow"""),
         (TstCfg(
@@ -187,6 +192,7 @@ SuspendProgram=ukulele/suspend_wrapper.sh
 SuspendRate=0
 SuspendTimeout=300
 SlurmdTimeout=300
+UnkillableStepTimeout=300
 TreeWidth=128
 TopologyPlugin=topology/tree
 TopologyParam=SwitchAsNodeRank"""),

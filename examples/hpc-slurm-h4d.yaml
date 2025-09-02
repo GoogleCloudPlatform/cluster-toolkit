@@ -14,10 +14,10 @@
 ---
 blueprint_name: slurm-h4d
 vars:
-  project_id: ## Set GCP Project ID Here ##
-  deployment_name: slurm-h4d
+  project_id: cloud-rdma-guest-prod
+  deployment_name: neel-slurmd-h4d
   region: us-central1
-  zone: us-central1-a
+  zone: us-central1-b
   rdma_net_range: 192.168.128.0/18
 
 # Documentation for each of the modules used below can be found at
@@ -81,7 +81,7 @@ deployment_groups:
     settings:
       bandwidth_tier: gvnic_enabled
       machine_type: h4d-highmem-192-lssd
-      node_count_static: 2
+      node_count_static: 32
       node_count_dynamic_max: 0
       enable_placement: false
       disk_type: hyperdisk-balanced
@@ -127,4 +127,4 @@ deployment_groups:
     settings:
       enable_controller_public_ips: true
       cloud_parameters:
-        slurmd_timeout: 900
+        unkillable_step_timeout: 900
