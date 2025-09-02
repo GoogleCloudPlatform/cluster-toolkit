@@ -133,6 +133,7 @@ def conflines(lkp: util.Lookup) -> str:
         "SuspendRate": get("suspend_rate", 0),
         "SuspendTimeout": get("suspend_timeout", 300),
         "SlurmdTimeout": get("slurmd_timeout", 300),
+        "UnkillableStepTimeout": get("unkillable_step_timeout", 300),
         "TreeWidth": get("tree_width", default_tree_width),
         "JobSubmitPlugins": "lua" if any_tpu else None,
         "TopologyPlugin": topology_plugin(lkp),

@@ -127,4 +127,4 @@ deployment_groups:
     settings:
       enable_controller_public_ips: true
       cloud_parameters:
-        slurmd_timeout: 900
+        unkillable_step_timeout: 900
