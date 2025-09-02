@@ -528,20 +528,20 @@ deployment_groups:
             hosts: all
             become: true
             tasks:
-              - name: Deploy /etc/profile.d/nccl-gib.sh
-                ansible.builtin.copy:
-                  dest: /etc/profile.d/nccl-gib.sh
-                  content: |
-                    # Load NCCL/gIB environment
-                    if [ -f "/usr/local/gib/scripts/set_nccl_env.sh" ]; then
-                      source /usr/local/gib/scripts/set_nccl_env.sh
-                    fi
+            - name: Deploy /etc/profile.d/nccl-gib.sh
+              ansible.builtin.copy:
+                dest: /etc/profile.d/nccl-gib.sh
+                content: |
+                  # Load NCCL/gIB environment
+                  if [ -f "/usr/local/gib/scripts/set_nccl_env.sh" ]; then
+                    source /usr/local/gib/scripts/set_nccl_env.sh
+                  fi
 
-                    # Ensure /usr/local/gib/lib64 is in LD_LIBRARY_PATH
-                    if [ -d "/usr/local/gib/lib64" ]; then
-                      export LD_LIBRARY_PATH="/usr/local/gib/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
-                    fi
-                  mode: '0644'
+                  # Ensure /usr/local/gib/lib64 is in LD_LIBRARY_PATH
+                  if [ -d "/usr/local/gib/lib64" ]; then
+                    export LD_LIBRARY_PATH="/usr/local/gib/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+                  fi
+                mode: '0644'
             handlers:
               - name: Reload SystemD
                 ansible.builtin.systemd:
