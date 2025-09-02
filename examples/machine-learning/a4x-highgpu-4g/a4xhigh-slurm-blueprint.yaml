@@ -55,6 +55,7 @@ deployment_groups:
   - id: slurm-build-script
     source: modules/scripts/startup-script
     settings:
+      enable_gpu_network_wait_online: true
       runners:
       - type: data
         destination: /etc/apt/preferences.d/block-broken-nvidia-container
