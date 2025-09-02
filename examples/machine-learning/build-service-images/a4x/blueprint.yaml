@@ -81,10 +81,6 @@ deployment_groups:
         destination: /etc/enroot/enroot.conf
         content: |
           ENROOT_CONFIG_PATH     ${HOME}/.enroot
-          ENROOT_RUNTIME_PATH    /mnt/localssd/${UID}/enroot/runtime
-          ENROOT_CACHE_PATH      /mnt/localssd/${UID}/enroot/cache
-          ENROOT_DATA_PATH       /mnt/localssd/${UID}/enroot/data
-          ENROOT_TEMP_PATH       /mnt/localssd/${UID}/enroot
       - type: ansible-local
         destination: update_settings.yml
         content: |
