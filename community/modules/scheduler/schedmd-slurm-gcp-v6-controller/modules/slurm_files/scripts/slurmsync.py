@@ -242,6 +242,9 @@ def get_node_action(nodename: str) -> NodeAction:
     lkp = lookup()
     state = lkp.node_state(nodename)
 
+    if lkp.node_is_gke(nodename):
+        return NodeActionUnchanged()
+
     if lkp.node_is_fr(nodename):
         fr = lkp.future_reservation(lkp.node_nodeset(nodename))
         assert fr

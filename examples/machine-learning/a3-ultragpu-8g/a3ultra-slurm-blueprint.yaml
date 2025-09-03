@@ -59,6 +59,7 @@ deployment_groups:
     source: modules/scripts/startup-script
     settings:
       install_ansible: true
+      enable_gpu_network_wait_online: true
       docker:
         enabled: true
         world_writable: true

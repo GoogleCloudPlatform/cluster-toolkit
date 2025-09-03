@@ -63,6 +63,7 @@ deployment_groups:
     source: modules/scripts/startup-script
     settings:
       install_ansible: true
+      enable_gpu_network_wait_online: true
       configure_ssh_host_patterns:
       - 10.0.0.*
       - 10.1.0.*
