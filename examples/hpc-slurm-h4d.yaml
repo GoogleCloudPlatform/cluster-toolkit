@@ -92,6 +92,21 @@ deployment_groups:
       remote_mount: lustrefs
       size_gib: 18000
 
+  - id: private_service_access
+    source: community/modules/network/private-service-access
+    use: [h4d-slurm-net-0]
+    settings:
+      prefix_length: 24
+
+  - id: managed_lustre
+    source: modules/file-system/managed-lustre
+    use: [h4d-slurm-net-0, private_service_access]
+    settings:
+      name: lustre-instance
+      local_mount: /lustre
+      remote_mount: lustrefs
+      size_gib: 18000
+
   - id: h4d_startup
     source: modules/scripts/startup-script
     settings:
@@ -155,8 +170,9 @@ deployment_groups:
 
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    use: [h4d-slurm-net-0, h4d_partition, slurm_login, appsfs, managed_lustre]
     use: [h4d-slurm-net-0, h4d_partition, slurm_login, homefs, managed_lustre]
     settings:
       enable_controller_public_ips: true
       cloud_parameters:
-        slurmd_timeout: 900
+        unkillable_step_timeout: 900
