@@ -1,0 +1,206 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+---
+
+blueprint_name: slurm-gke
+
+vars:
+  project_id: managed-slurm-gke-dev
+  deployment_name: kevinmcw2
+  region: asia-southeast1
+  zone: asia-southeast1-c
+  authorized_cidr: 0.0.0.0/0 # <your-ip-address>/32
+  gcp_public_cidrs_access_enabled: false
+  gke_nodeset_replicas: 2
+  slinky_image: us-east1-docker.pkg.dev/managed-slurm-gke-dev/default/slurmd:ubuntu24-24.11-vanilla-pyxis
+  slurm_namespace: slurm
+  slurm_key: my-slurm-key
+
+deployment_groups:
+- group: primary
+  modules:
+
+###### Common resources ######
+
+  - id: network
+    source: modules/network/vpc
+    settings:
+      subnetwork_name: $(vars.deployment_name)-subnet
+      secondary_ranges_list:
+      - subnetwork_name: $(vars.deployment_name)-subnet
+        ranges:
+        - range_name: pods
+          ip_cidr_range: 10.4.0.0/14
+        - range_name: services
+          ip_cidr_range: 10.0.32.0/20
+
+  - id: private_service_access
+    source: community/modules/network/private-service-access
+    use: [network]
+
+  - id: homefs
+    source: modules/file-system/filestore
+    use: [network, private_service_access]
+    settings:
+      local_mount: /home
+
+###### GKE Setup ######
+
+  - id: gke_service_account
+    source: community/modules/project/service-account
+    settings:
+      name: slinky-gke-sa
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
+      - monitoring.viewer
+      - stackdriver.resourceMetadata.writer
+      - storage.objectAdmin
+      - artifactregistry.reader
+
+  - id: gke_cluster
+    source: modules/scheduler/gke-cluster
+    use: [network, gke_service_account]
+    settings:
+      enable_private_endpoint: false
+      gcp_public_cidrs_access_enabled: $(vars.gcp_public_cidrs_access_enabled)
+      enable_gcsfuse_csi: true
+      enable_filestore_csi: true
+      master_authorized_networks:
+      - display_name: deployment-machine
+        cidr_block: $(vars.authorized_cidr)
+      system_node_pool_enabled: false
+      configure_workload_identity_sa: true
+      enable_dcgm_monitoring: true
+    outputs: [instructions]
+
+  - id: gke_base_pool
+    source: modules/compute/gke-node-pool
+    use: [gke_cluster, gke_service_account]
+    settings:
+      initial_node_count: 1
+      disk_type: pd-balanced
+      machine_type: e2-standard-4
+      zones: [$(vars.zone)]
+
+  - id: gke_compute_pool
+    source: modules/compute/gke-node-pool
+    use: [gke_cluster, gke_service_account]
+    settings:
+      name: gke-compute-pool
+      initial_node_count: $(vars.gke_nodeset_replicas)
+      disk_type: pd-balanced
+      machine_type: c2-standard-16
+      zones: [$(vars.zone)]
+
+  - id: gke_secret_manifests
+    source: modules/management/kubectl-apply
+    use: [gke_cluster]
+    settings:
+      apply_manifests:
+      - source: $(ghpc_stage("./files/slurm-namespace.yaml.tftpl"))
+        template_vars:
+          namespace: $(vars.slurm_namespace)
+      - source: $(ghpc_stage("./files/slurm-key-secret.yaml.tftpl"))
+        template_vars:
+          key: $(vars.slurm_key)
+          slurm_namespace: $(vars.slurm_namespace)
+
+  - id: slinky
+    source: community/modules/scheduler/slinky
+    use:
+    - gke_cluster
+    - gke_base_pool  # Optionally specify nodepool(s) to avoid operator components running on HPC hardware
+    settings:
+      slurm_operator_namespace: $(vars.slurm_namespace)
+      install_slurm_operator_chart: true
+      install_slurm_chart: false
+    outputs: [instructions]
+
+  - id: homefs-pv
+    source: modules/file-system/gke-persistent-volume
+    use: [homefs, gke_cluster]
+    settings:
+      capacity_gb: 1024
+      namespace: $(vars.slurm_namespace)
+      pv_name: home-pv
+      pvc_name: home-pvc
+
+  - id: gke_compute_nodeset
+    source: community/modules/compute/gke-nodeset
+    use: [gke_compute_pool, slinky, homefs-pv, slurm_controller, network]
+    settings:
+      slurm_cluster_name: $(vars.deployment_name)
+      image: $(vars.slinky_image)
+
+  - id: gke_compute_partition
+    source: community/modules/compute/gke-partition
+    use: [slurm_controller, gke_compute_nodeset]
+
+###### GCE Setup ######
+
+  - id: debug_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network]
+    settings:
+      node_count_dynamic_max: 4
+      machine_type: n2-standard-2
+      allow_automatic_updates: false
+
+  - id: debug_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use:
+    - debug_nodeset
+    settings:
+      partition_name: debug
+      exclusive: false # allows nodes to stay up after jobs are done
+      is_default: true
+      suspend_time: -1 # prevents nodes from suspending while it's idle
+
+  - id: compute_nodeset
+    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
+    use: [network]
+    settings:
+      node_count_dynamic_max: 20
+      bandwidth_tier: gvnic_enabled
+      allow_automatic_updates: false
+
+  - id: compute_partition
+    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
+    use:
+    - compute_nodeset
+    settings:
+      partition_name: compute
+      suspend_time: -1
+
+  - id: slurm_login
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
+    use: [network]
+    settings:
+      machine_type: n2-standard-4
+      enable_login_public_ips: true
+
+  - id: slurm_controller
+    source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
+    use:
+    - network
+    - slurm_login
+    - debug_partition
+    - compute_partition
+    - homefs
+    settings:
+      slurm_cluster_name: $(vars.deployment_name)
+      enable_slurm_auth: true
+      cgroup_conf_tpl: $(ghpc_stage("./files/cgroup.conf.tpl"))
+      enable_controller_public_ips: true

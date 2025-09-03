@@ -1,0 +1,209 @@
+apiVersion: slinky.slurm.net/v1alpha1
+kind: NodeSet
+metadata:
+  annotations:
+    meta.helm.sh/release-name: slurm
+    meta.helm.sh/release-namespace: ${slurm_namespace}
+  labels:
+    app.kubernetes.io/component: compute
+    app.kubernetes.io/instance: slurm
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: slurmd
+    app.kubernetes.io/part-of: slurm
+    app.kubernetes.io/version: "24.11"
+    helm.sh/chart: slurm-0.3.0
+    nodeset.slinky.slurm.net/name: ${nodeset_name}
+  name: ${nodeset_name}
+  namespace: ${slurm_namespace}
+spec:
+  clusterName: slurm
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
+    whenScaled: Retain
+  replicas: ${node_count}
+  revisionHistoryLimit: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: slurm
+      app.kubernetes.io/name: slurmd
+      nodeset.slinky.slurm.net/name: ${nodeset_name}
+  serviceName: slurm-compute
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: slurmd
+      labels:
+        app.kubernetes.io/component: compute
+        app.kubernetes.io/instance: slurm
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/name: slurmd
+        app.kubernetes.io/part-of: slurm
+        app.kubernetes.io/version: "24.11"
+        helm.sh/chart: slurm-0.3.0
+        nodeset.slinky.slurm.net/name: ${nodeset_name}
+    spec:
+      automountServiceAccountToken: false
+      containers:
+      - args:
+        - -Z
+        - --conf-server
+        - ${controller_name}:6825
+        - -N
+        - $NODE_NAME
+        env:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_CPUS
+          value: "0"
+        - name: POD_MEMORY
+          value: "0"
+        image: ${image}
+        imagePullPolicy: IfNotPresent
+        lifecycle:
+          preStop:
+            exec:
+              command:
+              - /bin/bash
+              - -c
+              - scontrol update nodename=$NODE_NAME state=down reason=preStop &&
+                scontrol delete nodename=$NODE_NAME;
+        name: slurmd
+        ports:
+        - containerPort: 6818
+          name: slurmd
+          protocol: TCP
+        readinessProbe:
+          exec:
+            command:
+            - scontrol
+            - show
+            - slurmd
+        resources: {}
+        securityContext:
+          capabilities:
+            add:
+            - BPF
+            - NET_ADMIN
+            - SYS_ADMIN
+            - SYS_NICE
+          privileged: true
+        volumeMounts:
+        - mountPath: /etc/slurm
+          name: etc-slurm
+        - mountPath: /run
+          name: run
+        - mountPath: /var/spool/slurmd
+          name: slurm-spool
+        - mountPath: /var/log/slurm
+          name: slurm-log
+        - mountPath: /home
+          name: home-pvc
+      dnsConfig:
+        searches:
+        - ${controller_name}
+      hostNetwork: true
+      initContainers:
+      - command:
+        - tini
+        - -g
+        - --
+        - bash
+        - -c
+        - "#!/usr/bin/env bash\n# SPDX-FileCopyrightText: Copyright (C) SchedMD LLC.\n#
+          SPDX-License-Identifier: Apache-2.0\n\nset -euo pipefail\n\n# Assume env
+          contains:\n# SLURM_USER - username or UID\n\nfunction init::common() {\n\tlocal
+          dir\n\n\tdir=/var/spool/slurmd\n\tmkdir -p \"$dir\"\n\tchown -v \"$${SLURM_USER}:$${SLURM_USER}\"
+          \"$dir\"\n\tchmod -v 700 \"$dir\"\n\n\tdir=/var/spool/slurmctld\n\tmkdir
+          -p \"$dir\"\n\tchown -v \"$${SLURM_USER}:$${SLURM_USER}\" \"$dir\"\n\tchmod
+          -v 700 \"$dir\"\n}\n\nfunction init::slurm() {\n\tSLURM_MOUNT=/mnt/slurm\n\tSLURM_DIR=/mnt/etc/slurm\n\n\t#
+          Workaround to ephemeral volumes not supporting securityContext\n\t# https://github.com/kubernetes/kubernetes/issues/81089\n\n\t#
+          Copy Slurm config files, secrets, and scripts\n\tmkdir -p \"$SLURM_DIR\"\n\tfind
+          \"$${SLURM_MOUNT}\" -type f -name \"*.conf\" -print0 | xargs -0r cp -vt \"$${SLURM_DIR}\"\n\tfind
+          \"$${SLURM_MOUNT}\" -type f -name \"*.key\" -print0 | xargs -0r cp -vt \"$${SLURM_DIR}\"\n\tfind
+          \"$${SLURM_MOUNT}\" -type f -regextype posix-extended -regex \"^.*/(pro|epi)log-.*$\"
+          -print0 | xargs -0r cp -vt \"$${SLURM_DIR}\"\n\tfind \"$${SLURM_MOUNT}\" -type
+          f -regextype posix-extended -regex \"^.*/(pro|epi)log-.*$\" -print0 | xargs
+          -0r cp -vt \"$${SLURM_DIR}\"\n\n\t# Set general permissions and ownership\n\tfind
+          \"$${SLURM_DIR}\" -type f -print0 | xargs -0r chown -v \"$${SLURM_USER}:$${SLURM_USER}\"\n\tfind
+          \"$${SLURM_DIR}\" -type f -name \"*.conf\" -print0 | xargs -0r chmod -v 644\n\tfind
+          \"$${SLURM_DIR}\" -type f -name \"*.key\" -print0 | xargs -0r chmod -v 600\n\tfind
+          \"$${SLURM_DIR}\" -type f -regextype posix-extended -regex \"^.*/(pro|epi)log-.*$\"
+          -print0 | xargs -0r chown -v \"$${SLURM_USER}:$${SLURM_USER}\"\n\tfind \"$${SLURM_DIR}\"
+          -type f -regextype posix-extended -regex \"^.*/(pro|epi)log-.*$\" -print0
+          | xargs -0r chmod -v 755\n\n\t# Inject secrets into certain config files\n\tlocal
+          dbd_conf=\"slurmdbd.conf\"\n\tif [[ -f \"$${SLURM_MOUNT}/$${dbd_conf}\" ]];
+          then\n\t\techo \"Injecting secrets from environment into: $${dbd_conf}\"\n\t\trm
+          -f \"$${SLURM_DIR}/$${dbd_conf}\"\n\t\tenvsubst <\"$${SLURM_MOUNT}/$${dbd_conf}\"
+          >\"$${SLURM_DIR}/$${dbd_conf}\"\n\t\tchown -v \"$${SLURM_USER}:$${SLURM_USER}\"
+          \"$${SLURM_DIR}/$${dbd_conf}\"\n\t\tchmod -v 600 \"$${SLURM_DIR}/$${dbd_conf}\"\n\tfi\n\n\t#
+          Display Slurm directory files\n\tls -lAF \"$${SLURM_DIR}\"\n}\n\nfunction
+          main() {\n\tinit::common\n\tinit::slurm\n}\nmain\n"
+        env:
+        - name: SLURM_USER
+          value: slurm
+        image: ${image}
+        imagePullPolicy: IfNotPresent
+        name: init
+        resources: {}
+        volumeMounts:
+        - mountPath: /mnt/slurm
+          name: slurm-config
+        - mountPath: /mnt/etc/slurm
+          name: etc-slurm
+      - command:
+        - tini
+        - -g
+        - --
+        - bash
+        - -c
+        - "#!/usr/bin/env bash\n# SPDX-FileCopyrightText: Copyright (C) SchedMD LLC.\n#
+          SPDX-License-Identifier: Apache-2.0\n\nset -euo pipefail\n\n# Assume env
+          contains:\n# SOCKET - Named socket to read from\n\nmkdir -v -p \"$(dirname
+          \"$SOCKET\")\"\nrm -f \"$SOCKET\"\nif ! [ -f \"$SOCKET\" ]; then\n\tmkfifo
+          -m 777 \"$SOCKET\"\nfi\nwhile IFS=\"\" read data; do\n\techo $data\ndone
+          <\"$SOCKET\"\n"
+        env:
+        - name: SOCKET
+          value: /var/log/slurm/slurmd.log
+        image: ghcr.io/slinkyproject/sackd:24.11-ubuntu24.04
+        imagePullPolicy: IfNotPresent
+        name: logfile
+        resources: {}
+        restartPolicy: Always
+        volumeMounts:
+        - mountPath: /var/log/slurm
+          name: slurm-log
+      nodeSelector:
+        cloud.google.com/gke-nodepool: ${node_pool_name}
+      tolerations:
+      - effect: NoSchedule
+        key: nvidia.com/gpu
+        operator: Equal
+        value: present
+      volumes:
+      - emptyDir:
+          medium: Memory
+        name: etc-slurm
+      - emptyDir: {}
+        name: run
+      - name: slurm-config
+        projected:
+          defaultMode: 384
+          sources:
+          - secret:
+              name: slurm-key
+      - emptyDir:
+          medium: Memory
+        name: slurm-spool
+      - emptyDir:
+          medium: Memory
+        name: slurm-log
+      - name: home-pvc
+        persistentVolumeClaim:
+          claimName: ${home_pvc}
+  updateStrategy:
+    rollingUpdate:
+      maxUnavailable: 20%
+    type: RollingUpdate
