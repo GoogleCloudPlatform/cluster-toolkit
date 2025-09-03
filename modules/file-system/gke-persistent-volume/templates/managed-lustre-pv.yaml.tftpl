@@ -15,6 +15,9 @@ spec:
     - ReadWriteMany
   persistentVolumeReclaimPolicy: Retain
   volumeMode: Filesystem
+  claimRef:
+    namespace: ${namespace}
+    name: ${pvc_name}
   csi:
     driver: lustre.csi.storage.gke.io
     volumeHandle: "${project}/${location}/${instance_name}/default-pool/default-container"
