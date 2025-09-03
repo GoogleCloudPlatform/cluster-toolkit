@@ -53,14 +53,29 @@ deployment_groups:
         region: $(vars.region)
 
 
-  - id: appsfs
+  - id: private_service_access
+    source: community/modules/network/private-service-access
+    use: [h4d-slurm-net-0]
+    settings:
+      prefix_length: 24
+
+  - id: homefs
     source: modules/file-system/filestore
     use: [h4d-slurm-net-0]
     settings:
       filestore_tier: BASIC_SSD
       size_gb: 2560
-      filestore_share_name: appsshare
-      local_mount: /apps
+      filestore_share_name: homeshare
+      local_mount: /home
+
+  - id: managed_lustre
+    source: modules/file-system/managed-lustre
+    use: [h4d-slurm-net-0, private_service_access]
+    settings:
+      name: lustre-instance
+      local_mount: /data
+      remote_mount: lustrefs
+      size_gib: 18000
 
   - id: private_service_access
     source: community/modules/network/private-service-access
@@ -140,8 +155,8 @@ deployment_groups:
 
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
-    use: [h4d-slurm-net-0, h4d_partition, slurm_login, appsfs, managed_lustre]
+    use: [h4d-slurm-net-0, h4d_partition, slurm_login, homefs, managed_lustre]
     settings:
       enable_controller_public_ips: true
       cloud_parameters:
-        unkillable_step_timeout: 900
+        slurmd_timeout: 900
