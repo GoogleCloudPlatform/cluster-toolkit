@@ -27,6 +27,7 @@ vars:
   source_image_family: ubuntu-accelerator-2204-amd64-with-nvidia-570
   source_image_project_id: [ubuntu-os-accelerator-images]
   a3mega_partition_name: a3mega
+  build_slurm_from_git_ref: 6.10.6
   a3mega_maintenance_interval: ""
   local_mount_homefs: /home
   instance_image:
