@@ -38,8 +38,6 @@ vars:
 
   system_node_pool_disk_size_gb: 100
   k8s_service_account_name: workload-identity-k8s-sa
-  accelerator_type: nvidia-rtx-pro-6000
-  accelerator_count: 8
 
 deployment_groups:
 - group: primary
@@ -159,10 +157,10 @@ deployment_groups:
       zones: [$(vars.zone)]
       static_node_count: $(vars.static_node_count)
       guest_accelerator:
-      - type: $(vars.accelerator_type)
-        count: $(vars.accelerator_count)
+      - type: nvidia-rtx-pro-6000
+        count: 8
         gpu_driver_installation_config:
-          gpu_driver_version: LATEST
+          gpu_driver_version: LATEST # TODO: Move to a fixed GPU driver version.
       additional_networks:
         $(concat(
           [{
