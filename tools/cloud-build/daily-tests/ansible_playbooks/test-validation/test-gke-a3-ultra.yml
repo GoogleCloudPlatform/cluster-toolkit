@@ -16,7 +16,6 @@
   ansible.builtin.assert:
     that:
     - region is defined
-    - deployment_name is defined
     - custom_vars.project is defined
 
 - name: Get cluster credentials for kubectl
@@ -24,82 +23,62 @@
   ansible.builtin.shell: |
     gcloud container clusters get-credentials {{ deployment_name }} --region {{ region }} --project {{ custom_vars.project }} --verbosity=debug
 
-# --- Test Execution Block ---
-- block:
-  - name: Create a temporary copy of the NCCL test manifest
-    delegate_to: localhost
-    ansible.builtin.command: >
-      cp {{ workspace }}/examples/gke-a3-ultragpu/nccl-jobset-example.yaml /tmp/nccl-jobset-test-{{ deployment_name }}.yaml
+- name: Modify NCCL test parameters
+  delegate_to: localhost
+  ansible.builtin.shell: |
+    sed -i 's/parallelism: 4/parallelism: 2/' {{ workspace }}/examples/gke-a3-ultragpu/nccl-jobset-example.yaml
+    sed -i 's/completions: 4/completions: 2/' {{ workspace }}/examples/gke-a3-ultragpu/nccl-jobset-example.yaml
+    sed -i 's/ag-4-/ag-2-/'                   {{ workspace }}/examples/gke-a3-ultragpu/nccl-jobset-example.yaml
+    sed -i 's/N_NODES=4/N_NODES=2/'           {{ workspace }}/examples/gke-a3-ultragpu/nccl-jobset-example.yaml
+  args:
+    executable: /bin/bash
 
-  - name: Modify NCCL test parameters in the temporary file
-    delegate_to: localhost
-    ansible.builtin.shell: |
-      sed -i 's/parallelism: 4/parallelism: 2/' /tmp/nccl-jobset-test-{{ deployment_name }}.yaml
-      sed -i 's/completions: 4/completions: 2/' /tmp/nccl-jobset-test-{{ deployment_name }}.yaml
-      sed -i 's/ag-4-/ag-2-/'                   /tmp/nccl-jobset-test-{{ deployment_name }}.yaml
-      sed -i 's/N_NODES=4/N_NODES=2/'           /tmp/nccl-jobset-test-{{ deployment_name }}.yaml
-    args:
-      executable: /bin/bash
+- name: Print the updated NCCL test file to stdout
+  delegate_to: localhost
+  ansible.builtin.shell: |
+    cat {{ workspace }}/examples/gke-a3-ultragpu/nccl-jobset-example.yaml
+  register: nccl_test_file_contents
 
-  - name: Run the NCCL test using the temporary manifest
-    delegate_to: localhost
-    ansible.builtin.shell: |
-      kubectl apply -f /tmp/nccl-jobset-test-{{ deployment_name }}.yaml
+- name: Display updated NCCL test file
+  debug:
+    msg: "{{nccl_test_file_contents.stdout}}"
 
-  - name: Wait for the JobSet to complete
-    delegate_to: localhost
-    ansible.builtin.shell: >
-      kubectl get jobset ag-2 --namespace default -o jsonpath='{.status.conditions[?(@.type=="Completed")].status}'
-    register: jobset_status
-    until: jobset_status.stdout == "True"
-    retries: 40 # 40 retries * 15s delay = 10 minutes timeout
-    delay: 15
-    changed_when: false
+- name: Run the NCCL test
+  delegate_to: localhost
+  ansible.builtin.shell: |
+    kubectl create -f {{ workspace }}/examples/gke-a3-ultragpu/nccl-jobset-example.yaml -v=9
+  args:
+    executable: /bin/bash
 
-  - name: Fetch logs from the 0-0 pod and save to pod_logs.txt
-    delegate_to: localhost
-    ansible.builtin.shell: |
-      pod_0_0_name="$(kubectl get pods --no-headers -o custom-columns="Name:.metadata.name" | awk '{if ($1 ~ "ag-2-" && $1 ~ "0-0") print $0}')"
-      kubectl logs ${pod_0_0_name} > pod_logs.txt
-    changed_when: true
+- name: Wait for Job to hit 2/2 completions
+  delegate_to: localhost
+  ansible.builtin.shell: |
+    kubectl get job --field-selector status.successful=2 -v=9
+  register: job_completion
+  until: job_completion.stdout_lines | length > 1
+  retries: 20
+  delay: 10
 
-  - name: Print the NCCL test logs from 0-0 pod
-    delegate_to: localhost
-    ansible.builtin.command: cat pod_logs.txt
-    changed_when: false
+- name: Fetch logs from the 0-0 pod and save to pod_logs.txt
+  delegate_to: localhost
+  ansible.builtin.shell: |
+    pod_0_0_name="$(kubectl get pods --no-headers -o custom-columns="Name:.metadata.name" | awk '{if ($1 ~ "0-0") print $0}')"
+    kubectl logs ${pod_0_0_name} > pod_logs.txt
+    cat pod_logs.txt
+  register: nccl_test_logs
 
-  - name: Ensure average bus bandwidth is >= 100 GB/s
-    delegate_to: localhost
-    ansible.builtin.shell: |
-      grep -o '# Avg bus bandwidth    : [0-9\.]*' pod_logs.txt | cut -d ':' -f 2 | awk '{$1=$1;print}'
-    register: avg_bus_bandwidth
-    failed_when: avg_bus_bandwidth.stdout | float < 100
+- name: Print the NCCL test logs from 0-0 pod
+  debug:
+    msg: "{{nccl_test_logs.stdout}}"
 
-# --- Cleanup Block (Always Runs) ---
-- always:
-  - name: Clean up the NCCL test JobSet using the temporary manifest
-    delegate_to: localhost
-    command: "kubectl delete -f /tmp/nccl-jobset-test-{{ deployment_name }}.yaml --ignore-not-found=true"
-    changed_when: true
+- name: Ensure average bus bandwidth is >= 100 GB/s
+  delegate_to: localhost
+  ansible.builtin.shell: |
+    grep -o '# Avg bus bandwidth    : [0-9\.]*' pod_logs.txt | cut -d ':' -f 2 | awk '{$1=$1;print}'
+  register: avg_bus_bandwidth
+  failed_when: avg_bus_bandwidth.stdout | float < 100
 
-  - name: Wait up to 5 minutes for all test pods to be deleted
-    delegate_to: localhost
-    command: "kubectl wait --for=delete pod --all --namespace default --timeout=300s"
-    changed_when: true
-    ignore_errors: true # It's OK if there are no pods left to wait for
-
-  - name: Pause for 120 seconds to allow GKE network interfaces to fully detach
-    delegate_to: localhost
-    pause:
-      seconds: 120
-
-  - name: Clean up the temporary manifest file
-    delegate_to: localhost
-    ansible.builtin.file:
-      path: "/tmp/nccl-jobset-test-{{ deployment_name }}.yaml"
-      state: absent
-
-  - name: Pause for 30 seconds to allow the cluster to settle
-    delegate_to: localhost
-    pause:
-      seconds: 30
+- name: Clean up
+  delegate_to: localhost
+  ansible.builtin.shell: |
+    kubectl delete jobset --all -v=9
