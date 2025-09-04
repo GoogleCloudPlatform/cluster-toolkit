@@ -32,6 +32,11 @@ variable "slurm_cluster_name" {
   }
 }
 
+variable "slurm_controller_instance" {
+  type        = any
+  description = "Slurm cluster controller instance"
+}
+
 variable "image" {
   description = "The image for slurm daemon"
   type        = string

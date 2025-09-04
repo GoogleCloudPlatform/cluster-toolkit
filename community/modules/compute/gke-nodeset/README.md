@@ -17,6 +17,7 @@
 | Name | Source | Version |
 |------|--------|---------|
 | <a name="module_kubectl_apply"></a> [kubectl\_apply](#module\_kubectl\_apply) | ../../../../modules/management/kubectl-apply | n/a |
+| <a name="module_slurm_key_pv"></a> [slurm\_key\_pv](#module\_slurm\_key\_pv) | ../../../../modules/file-system/gke-persistent-volume | n/a |
 
 ## Resources
 
@@ -46,6 +47,7 @@
 | <a name="input_slurm_bucket_dir"></a> [slurm\_bucket\_dir](#input\_slurm\_bucket\_dir) | Path directory within `bucket_name` for Slurm cluster file storage. | `string` | n/a | yes |
 | <a name="input_slurm_bucket_name"></a> [slurm\_bucket\_name](#input\_slurm\_bucket\_name) | GCS Bucket name of Slurm cluster file storage. | `string` | n/a | yes |
 | <a name="input_slurm_cluster_name"></a> [slurm\_cluster\_name](#input\_slurm\_cluster\_name) | Cluster name, used in slurm controller | `string` | n/a | yes |
+| <a name="input_slurm_controller_instance"></a> [slurm\_controller\_instance](#input\_slurm\_controller\_instance) | Slurm cluster controller instance | `any` | n/a | yes |
 | <a name="input_slurm_namespace"></a> [slurm\_namespace](#input\_slurm\_namespace) | slurm namespace for charts | `string` | `"slurm"` | no |
 | <a name="input_subnetwork"></a> [subnetwork](#input\_subnetwork) | Primary subnetwork object | `any` | n/a | yes |
 | <a name="input_tpu_accelerator"></a> [tpu\_accelerator](#input\_tpu\_accelerator) | Name of the TPU accelerator (cloud.google.com/gke-tpu-accelerator annotation). Required when has\_tpu=true | `string` | `null` | no |

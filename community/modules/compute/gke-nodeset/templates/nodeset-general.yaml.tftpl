@@ -189,11 +189,8 @@ spec:
       - emptyDir: {}
         name: run
       - name: slurm-config
-        projected:
-          defaultMode: 384
-          sources:
-          - secret:
-              name: slurm-key
+        persistentVolumeClaim:
+          claimName: slurm-key-pvc
       - emptyDir:
           medium: Memory
         name: slurm-spool
