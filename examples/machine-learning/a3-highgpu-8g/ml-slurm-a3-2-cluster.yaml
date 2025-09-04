@@ -34,7 +34,6 @@ vars:
     family: slurm-dlvm
     project: $(vars.project_id)
   slurm_cluster_name: slurm0
-  build_slurm_from_git_ref: 6.10.6
   enable_cleanup_compute: true
   a3_partition_name: a3
   a3_static_cluster_size: 32
