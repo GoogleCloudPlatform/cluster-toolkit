@@ -302,7 +302,7 @@ resource "google_storage_bucket_object" "prolog_scripts" {
   name           = format("%s/slurm-prolog-script-%s", local.bucket_dir, each.key)
   content        = each.value.content
   source         = each.value.source
-  source_md5hash = each.value.content != null && each.value.content != "" ? md5(each.value.content) : md5(each.value.source)
+  source_md5hash = each.value.content != null && each.value.content != "" ? md5(each.value.content) : filemd5(each.value.source)
 }
 
 resource "google_storage_bucket_object" "epilog_scripts" {
@@ -315,7 +315,7 @@ resource "google_storage_bucket_object" "epilog_scripts" {
   name           = format("%s/slurm-epilog-script-%s", local.bucket_dir, each.key)
   content        = each.value.content
   source         = each.value.source
-  source_md5hash = each.value.content != null && each.value.content != "" ? md5(each.value.content) : md5(each.value.source)
+  source_md5hash = each.value.content != null && each.value.content != "" ? md5(each.value.content) : filemd5(each.value.source)
 }
 
 resource "google_storage_bucket_object" "task_prolog_scripts" {
@@ -328,7 +328,7 @@ resource "google_storage_bucket_object" "task_prolog_scripts" {
   name           = format("%s/slurm-task_prolog-script-%s", local.bucket_dir, each.key)
   content        = each.value.content
   source         = each.value.source
-  source_md5hash = each.value.content != null && each.value.content != "" ? md5(each.value.content) : md5(each.value.source)
+  source_md5hash = each.value.content != null && each.value.content != "" ? md5(each.value.content) : filemd5(each.value.source)
 }
 
 resource "google_storage_bucket_object" "task_epilog_scripts" {
@@ -341,7 +341,7 @@ resource "google_storage_bucket_object" "task_epilog_scripts" {
   name           = format("%s/slurm-task_epilog-script-%s", local.bucket_dir, each.key)
   content        = each.value.content
   source         = each.value.source
-  source_md5hash = each.value.content != null && each.value.content != "" ? md5(each.value.content) : md5(each.value.source)
+  source_md5hash = each.value.content != null && each.value.content != "" ? md5(each.value.content) : filemd5(each.value.source)
 }
 
 ############################

@@ -284,7 +284,7 @@ resource "google_storage_bucket_object" "scripts" {
   name           = "${local.storage_folder_path_prefix}${each.key}-${substr(try(md5(each.value.content), filemd5(each.value.source)), 0, 4)}"
   content        = each.value.content
   source         = each.value.source
-  source_md5hash = each.value.content != null && each.value.content != "" ? md5(each.value.content) : md5(each.value.source)
+  source_md5hash = each.value.content != null && each.value.content != "" ? md5(each.value.content) : filemd5(each.value.source)
   bucket         = local.storage_bucket_name
   timeouts {
     create = "10m"
