@@ -25,7 +25,6 @@ vars:
   gke_nodeset_replicas: 2
   slinky_image: us-east1-docker.pkg.dev/managed-slurm-gke-dev/default/slurmd:ubuntu24-24.11-vanilla-pyxis
   slurm_namespace: slurm
-  slurm_key: my-slurm-key
 
 deployment_groups:
 - group: primary
@@ -104,7 +103,7 @@ deployment_groups:
       machine_type: c2-standard-16
       zones: [$(vars.zone)]
 
-  - id: gke_secret_manifests
+  - id: gke_ns_manifest
     source: modules/management/kubectl-apply
     use: [gke_cluster]
     settings:
@@ -112,10 +111,6 @@ deployment_groups:
       - source: $(ghpc_stage("./files/slurm-namespace.yaml.tftpl"))
         template_vars:
           namespace: $(vars.slurm_namespace)
-      - source: $(ghpc_stage("./files/slurm-key-secret.yaml.tftpl"))
-        template_vars:
-          key: $(vars.slurm_key)
-          slurm_namespace: $(vars.slurm_namespace)
 
   - id: slinky
     source: community/modules/scheduler/slinky
