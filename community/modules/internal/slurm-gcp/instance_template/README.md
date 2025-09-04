@@ -17,6 +17,7 @@
 | Name | Source | Version |
 |------|--------|---------|
 | <a name="module_instance_template"></a> [instance\_template](#module\_instance\_template) | ../internal_instance_template | n/a |
+| <a name="module_instance_validation"></a> [instance\_validation](#module\_instance\_validation) | ../../../../../modules/internal/instance_validations | n/a |
 
 ## Resources
 
