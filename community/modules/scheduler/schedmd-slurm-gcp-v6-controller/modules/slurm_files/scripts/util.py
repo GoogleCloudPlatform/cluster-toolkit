@@ -2223,5 +2223,7 @@ def update_config(cfg: NSDict) -> None:
     _lkp = Lookup(cfg)
 
 def scontrol_reconfigure(lkp: Lookup) -> None:
+    log.info("Running systemctl restart slurmctld.service")
+    run("systemctl restart slurmctld.service", timeout=30)
     log.info("Running scontrol reconfigure")
     run(f"{lkp.scontrol} reconfigure")
