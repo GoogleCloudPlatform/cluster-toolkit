@@ -157,6 +157,8 @@ deployment_groups:
       zones: [$(vars.zone)]
       disk_size_gb: $(vars.h4d_node_pool_disk_size_gb)
       static_node_count: $(vars.static_node_count)
+      placement_policy:
+        type: COMPACT
       additional_networks:
         $(concat(
           [{
