@@ -23,10 +23,6 @@ terraform {
       source  = "gavinbunney/kubectl"
       version = ">= 1.7.0"
     }
-    local = {
-      source  = "hashicorp/local"
-      version = ">= 2.0.0"
-    }
   }
   provider_meta "google" {
     module_name = "blueprints/terraform/hpc-toolkit:gke-persistent-volume/v1.65.0"

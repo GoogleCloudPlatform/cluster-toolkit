@@ -110,7 +110,7 @@ locals {
   node_selectors = concat(local.machine_family_node_selector, local.local_ssd_node_selector, var.node_selectors)
 
   any_gcs = anytrue([for pvc in var.persistent_volume_claims :
-    pvc.is_gcs
+    pvc.storage_type == "gcs"
   ])
 
   job_template_contents = templatefile(
