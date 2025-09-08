@@ -101,6 +101,19 @@ deployment_groups:
         type: "COMPACT"
     outputs: [instructions]
 
+  # --- NEW: Add this block to test your new 'kubernetes' module ---
+  # - id: k8s_test_namespace
+  #   source: modules/management/kubernetes # The new module you just created
+  #   use: [gke_cluster] # This creates the dependency
+  #   settings:
+  #     project_id: $(vars.project_id)
+  #     # Provide a simple inline manifest to apply for the test.
+  #     manifests:
+  #     - content: |
+  #         apiVersion: v1
+  #         kind: Namespace
+  #         metadata:
+  #           name: "toolkit-test-namespace"
   - id: workload_component_install
     source: modules/management/kubectl-apply
     use: [gke_cluster]

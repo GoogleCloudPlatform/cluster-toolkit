@@ -72,17 +72,17 @@ data "google_client_config" "default" {}
 
 module "kubectl_apply_manifests" {
   for_each   = local.processed_apply_manifests_map
-  source     = "./kubectl"
+  source     = "./kubernetes"
   depends_on = [var.gke_cluster_exists]
 
-  content           = each.value.content
-  source_path       = each.value.source
-  template_vars     = each.value.template_vars
-  server_side_apply = each.value.server_side_apply
-  wait_for_rollout  = each.value.wait_for_rollout
+  content       = each.value.content
+  source_path   = each.value.source
+  template_vars = each.value.template_vars
+  # server_side_apply = each.value.server_side_apply
+  # wait_for_rollout  = each.value.wait_for_rollout
 
   providers = {
-    kubectl = kubectl
+    kubernetes = kubernetes
   }
 }
 
