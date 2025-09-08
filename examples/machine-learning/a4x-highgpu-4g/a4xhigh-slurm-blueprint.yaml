@@ -161,6 +161,7 @@ deployment_groups:
               nvidia_packages:
               - cuda-toolkit-12-8
               - datacenter-gpu-manager-4-cuda12
+              - datacenter-gpu-manager-4-dev
             tasks:
             - name: Download NVIDIA repository package
               ansible.builtin.get_url:
