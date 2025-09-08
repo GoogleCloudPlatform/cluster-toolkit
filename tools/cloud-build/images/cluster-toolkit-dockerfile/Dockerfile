@@ -46,7 +46,7 @@ RUN wget -q "https://releases.hashicorp.com/packer/${PACKER_VERSION}/packer_${PA
     rm packer.zip
 
 # Install Go
-ARG GO_VERSION=1.23.0
+ARG GO_VERSION=1.24.0
 RUN wget -q "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" -O go.tar.gz && \
     tar -C /usr/local -xzf go.tar.gz && \
     rm go.tar.gz

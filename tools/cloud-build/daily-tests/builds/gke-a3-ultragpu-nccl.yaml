@@ -26,7 +26,7 @@ tags:
 - m.gke-persistent-volume
 - m.pre-existing-network-storage
 
-timeout: 14401s  # 4hr
+timeout: 14400s  # 4hr
 steps:
 - id: gke-a3-ultragpu-nccl
   name: us-central1-docker.pkg.dev/$PROJECT_ID/hpc-toolkit-repo/test-runner

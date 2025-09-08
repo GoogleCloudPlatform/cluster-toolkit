@@ -13,14 +13,14 @@
 # limitations under the License.
 
 variable "address" {
-  description = "The IP address or beginning of the address range allocated for the private service access."
+  description = "The IP address or beginning of the address range allocated for the Private Service Access."
   type        = string
   default     = null
 }
 
 variable "network_id" {
   description = <<-EOT
-    The ID of the GCE VPC network to configure private service Access.:
+    The ID of the GCE VPC network to configure Private Service Access:
     `projects/<project_id>/global/networks/<network_name>`"
     EOT
   type        = string
@@ -36,7 +36,7 @@ variable "labels" {
 }
 
 variable "prefix_length" {
-  description = "The prefix length of the IP range allocated for the private service access."
+  description = "The prefix length of the IP range allocated for the Private Service Access."
   type        = number
   default     = 16
 }
@@ -44,4 +44,16 @@ variable "prefix_length" {
 variable "project_id" {
   description = "ID of project in which Private Service Access will be created."
   type        = string
+}
+
+variable "service_name" {
+  description = "The name of the service to connect. Defaults to 'servicenetworking.googleapis.com'."
+  type        = string
+  default     = "servicenetworking.googleapis.com"
+}
+
+variable "deletion_policy" {
+  description = "The policy to apply when deleting the Private Service Access. Leave empty or use ABANDON."
+  type        = string
+  default     = null
 }

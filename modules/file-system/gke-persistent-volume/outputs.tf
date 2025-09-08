@@ -24,3 +24,8 @@ output "persistent_volume_claims" {
   }
   depends_on = [kubectl_manifest.pvc]
 }
+
+output "pvc_name" {
+  description = "The name for k8s PVC created by this module."
+  value       = local.pvc_name
+}

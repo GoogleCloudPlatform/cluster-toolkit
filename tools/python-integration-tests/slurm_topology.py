@@ -55,7 +55,7 @@ class SlurmTopologyTest(test.SlurmTest):
         return physicalHost.split("/")[1]
 
     def get_slurm_rack(self, node: str):
-        stdin, stdout, stderr = self.ssh_client.exec_command(f"scontrol show topology {node} | tail -1 | cut -d' ' -f1")
+        stdin, stdout, stderr = self.ssh_client.exec_command(f"scontrol show topology node={node} | tail -1 | cut -d' ' -f1")
         switch_name = stdout.read().decode()
         err = stderr.read().decode()
         log.info(f"Slurm rack for {node}: {switch_name}")

@@ -180,6 +180,12 @@ variable "enable_parallelstore_csi" {
   default     = false
 }
 
+variable "enable_managed_lustre_csi" {
+  description = "The status of the Google Compute Engine Managed Lustre Container Storage Interface (CSI) driver addon, which allows the usage of a lustre as volumes."
+  type        = bool
+  default     = false
+}
+
 variable "enable_ray_operator" {
   description = "The status of the Ray operator addon, This feature enables Kubernetes APIs for managing and scaling Ray clusters and jobs. You control and are responsible for managing ray.io custom resources in your cluster. This feature is not compatible with GKE clusters that already have another Ray operator installed. Supports clusters on Kubernetes version 1.29.8-gke.1054000 or later."
   type        = bool

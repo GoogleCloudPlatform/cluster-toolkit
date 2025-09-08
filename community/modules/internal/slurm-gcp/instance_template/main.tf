@@ -12,6 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+module "instance_validation" {
+  source = "../../../../../modules/internal/instance_validations"
+
+  machine_type = var.machine_type
+  disk_type    = var.disk_type
+}
+
 ##########
 # LOCALS #
 ##########
@@ -45,7 +52,7 @@ locals {
   source_image_family = (
     var.source_image_family != "" && var.source_image_family != null
     ? var.source_image_family
-    : "slurm-gcp-6-10-hpc-rocky-linux-8"
+    : "slurm-gcp-6-11-hpc-rocky-linux-8"
   )
   source_image_project = (
     var.source_image_project != "" && var.source_image_project != null

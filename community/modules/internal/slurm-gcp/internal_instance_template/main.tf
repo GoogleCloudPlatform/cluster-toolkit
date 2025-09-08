@@ -12,6 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+module "instance_validation" {
+  source = "../../../../../modules/internal/instance_validations"
+
+  machine_type = var.machine_type
+  disk_type    = var.disk_type
+}
+
 #########
 # Locals
 #########

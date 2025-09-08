@@ -34,7 +34,7 @@ output "install_managed_lustre_client" {
 
 output "lustre_id" {
   description = "An identifier for the resource with format `projects/{{project}}/locations/{{location}}/instances/{{name}}`"
-  value       = google_lustre_instance.lustre_instance.instance_id
+  value       = google_lustre_instance.lustre_instance.id
 }
 
 output "capacity_gib" {

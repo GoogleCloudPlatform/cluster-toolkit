@@ -1,0 +1,145 @@
+# Copyright 2025 "Google LLC"
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+blueprint_name: gke-managed-lustre
+vars:
+  project_id: # Set GCP Project ID Here
+  deployment_name: # Set deployment name
+  # Managed Lustre is only supported in specific regions and zones
+  # Please refer https://cloud.google.com/managed-lustre/docs/locations
+  # The GCP Region used for this deployment.
+  region: us-central1
+  # The GCP Zone used for this deployment.
+  zone: us-central1-c
+  # Cidr block containing the IP of the machine calling terraform.
+  # The following line must be updated for this example to work.
+  authorized_cidr: <your-ip-address>/32
+  version_prefix: "1.33."
+  base_network_name: $(vars.deployment_name)
+  lustre_instance_id: gke-lustre-instance
+  # The values of size_gib and per_unit_storage_throughput are co-related
+  # Please refer https://cloud.google.com/managed-lustre/docs/create-instance#performance-tiers
+  # Storage capacity of the lustre instance in GiB
+  size_gib: 18000
+  # Maximum throughput of the lustre instance in MBps per TiB
+  per_unit_storage_throughput: 1000
+
+deployment_groups:
+- group: primary
+  modules:
+  - id: network
+    source: modules/network/vpc
+    settings:
+      network_name: $(vars.base_network_name)-net
+      subnetwork_name: $(vars.base_network_name)-subnet
+      secondary_ranges_list:
+      - subnetwork_name: $(vars.base_network_name)-subnet
+        ranges:
+        - range_name: pods
+          ip_cidr_range: 10.4.0.0/14
+        - range_name: services
+          ip_cidr_range: 10.0.32.0/20
+
+  # Private Service Access (PSA) requires the compute.networkAdmin role which is
+  # included in the Owner role, but not Editor.
+  # PSA is required for all Managed Lustre functionality.
+  # https://cloud.google.com/vpc/docs/configure-private-services-access#permissions
+  - id: private_service_access
+    source: community/modules/network/private-service-access
+    use: [network]
+    settings:
+      prefix_length: 24
+
+  # Firewall to allow Managed Lustre connection
+  - id: lustre_firewall_rule
+    source: modules/network/firewall-rules
+    use: [network]
+    settings:
+      ingress_rules:
+      - name: $(vars.base_network_name)-allow-lustre-traffic
+        description: Allow Managed Lustre traffic
+        source_ranges:
+        - $(private_service_access.cidr_range)
+        allow:
+        - protocol: tcp
+        ports:
+        - "988"
+
+  - id: managed-lustre
+    source: modules/file-system/managed-lustre
+    use: [network, private_service_access]
+    settings:
+      name: $(vars.lustre_instance_id)
+      local_mount: /lustre
+      remote_mount: lustrefs
+      size_gib: $(vars.size_gib)
+      per_unit_storage_throughput: $(vars.per_unit_storage_throughput)
+
+  - id: node_pool_service_account
+    source: community/modules/project/service-account
+    settings:
+      name: gke-np-sa
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
+      - monitoring.viewer
+      - stackdriver.resourceMetadata.writer
+      - storage.objectViewer
+      - artifactregistry.reader
+
+  - id: workload_service_account
+    source: community/modules/project/service-account
+    settings:
+      name: gke-wl-sa
+      project_roles:
+      - logging.logWriter
+      - monitoring.metricWriter
+      - monitoring.viewer
+      - stackdriver.resourceMetadata.writer
+      - storage.objectAdmin
+      - artifactregistry.reader
+
+  - id: gke_cluster
+    source: modules/scheduler/gke-cluster
+    use: [network, workload_service_account]
+    settings:
+      version_prefix: $(vars.version_prefix)
+      release_channel: RAPID
+      enable_managed_lustre_csi: true # Enable Managed Lustre for the cluster
+      configure_workload_identity_sa: true
+      enable_private_endpoint: false  # Allows for access from authorized public IPs
+      master_authorized_networks:
+      - display_name: kubectl-access-network
+        cidr_block: $(vars.authorized_cidr)
+      maintenance_exclusions:
+      - name: no-minor-or-node-upgrades-indefinite
+        start_time: "2025-08-01T00:00:00Z"
+        end_time: "2026-08-01T00:00:00Z"
+        exclusion_scope: NO_MINOR_OR_NODE_UPGRADES
+    outputs: [instructions]
+
+  - id: lustre-pv
+    source: modules/file-system/gke-persistent-volume
+    use: [managed-lustre, gke_cluster]
+    settings:
+      capacity_gb: $(vars.size_gib)
+
+  - id: gke-lustre-pool
+    source: modules/compute/gke-node-pool
+    use: [gke_cluster, node_pool_service_account]
+    settings:
+      name: gke-lustre-pool
+      zones: [$(vars.zone)]
+      machine_type: n2-standard-16
+      auto_upgrade: true

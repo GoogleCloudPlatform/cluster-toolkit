@@ -87,7 +87,7 @@ spec:
             - name: nccl-test
               stdin: true
               tty: true
-              image: us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib-diagnostic-arm64:v1.0.4
+              image: us-docker.pkg.dev/gce-ai-infra/gpudirect-gib/nccl-plugin-gib-diagnostic-arm64:v1.0.6
               env:
               - name: MY_NODE_NAME
                 valueFrom:

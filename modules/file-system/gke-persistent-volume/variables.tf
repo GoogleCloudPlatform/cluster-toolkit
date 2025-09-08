@@ -45,6 +45,19 @@ variable "filestore_id" {
   }
 }
 
+variable "lustre_id" {
+  description = "An identifier for a lustre with the format `projects/{{project}}/locations/{{location}}/instances/{{name}}`."
+  type        = string
+  default     = null
+  validation {
+    condition = (
+      var.lustre_id == null ||
+      try(length(split("/", var.lustre_id)), 0) == 6
+    )
+    error_message = "lustre_id must be in the format of 'projects/{{project}}/locations/{{location}}/instances/{{name}}'."
+  }
+}
+
 variable "gcs_bucket_name" {
   description = "The gcs bucket to be used with the persistent volume."
   type        = string
@@ -65,4 +78,16 @@ variable "namespace" {
   description = "Kubernetes namespace to deploy the storage PVC/PV"
   type        = string
   default     = "default"
+}
+
+variable "pv_name" {
+  description = "The name for PV. IF not set, a name will be generated based on the storage name."
+  type        = string
+  default     = null
+}
+
+variable "pvc_name" {
+  description = "The name for PVC. IF not set, a name will be generated based on the storage name."
+  type        = string
+  default     = null
 }

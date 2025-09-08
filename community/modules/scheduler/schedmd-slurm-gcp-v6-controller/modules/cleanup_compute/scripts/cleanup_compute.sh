@@ -21,6 +21,7 @@ nodeset_name="$3"
 universe_domain="$4"
 compute_endpoint_version="$5"
 gcloud_dir="$6"
+MAX_ATTEMPTS=3
 
 if [[ $# -ne 5 ]] && [[ $# -ne 6 ]]; then
 	echo "Usage: $0 <project> <cluster_name> <nodeset_name> <universe_domain> <compute_endpoint_version> [<gcloud_dir>]"
@@ -44,14 +45,21 @@ tmpfile=$(mktemp) # have to use a temp file, since `< <(gcloud ...)` doesn't wor
 trap 'rm -f "$tmpfile"' EXIT
 
 echo "Deleting managed instance groups"
-mig_filter="name:${cluster_name}-${nodeset_name}-* AND status!=STOPPING"
+mig_filter="name:${cluster_name}-${nodeset_name}-*"
 gcloud compute instance-groups managed list --format="value(self_link)" --filter="${mig_filter}" >"$tmpfile"
-while batch="$(head -n 2)" && [[ ${#batch} -gt 0 ]]; do
+while batch="$(head -n 5)" && [[ ${#batch} -gt 0 ]]; do
 	groups=$(echo "$batch" | paste -sd " " -) # concat into a single space-separated line
 	# The lack of quotes around ${groups} is intentional and causes each new space-separated "word" to
 	# be treated as independent arguments. See PR#2523
 	# shellcheck disable=SC2086
-	gcloud compute instance-groups managed delete --quiet ${groups} || echo "Failed to delete some instance groups"
+	for _ in $( #occasionally MIGs will fail to delete due to some active transformation happening, so let's retry
+		seq 1 $MAX_ATTEMPTS
+	); do
+		if gcloud compute instance-groups managed delete --quiet ${groups}; then
+			break
+		fi
+		echo "MIG deletion failed, retrying"
+	done
 done <"$tmpfile"
 true >"$tmpfile" # Wipe contents of tmp file
 

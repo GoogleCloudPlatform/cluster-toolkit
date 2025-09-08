@@ -1,4 +1,4 @@
-# Copyright 2024 "Google LLC"
+# Copyright 2025 "Google LLC"
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,16 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
----
-terraform_backend_defaults:
-  type: gcs
-  configuration:
-    bucket: customer-bucket
+variable "machine_type" {
+  type        = string
+  description = "The machine type to validate."
+}
 
-vars:
-  deployment_name: a3mega-base
-  project_id: customer-project
-  region: customer-region
-  zone: customer-zone
-  network_name_system: a3mega-sys-net
-  subnetwork_name_system: a3mega-sys-subnet
+variable "disk_type" {
+  type        = string
+  description = "The disk type to validate."
+}

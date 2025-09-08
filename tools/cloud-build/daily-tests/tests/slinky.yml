@@ -1,4 +1,4 @@
-# Copyright 2022 Google LLC
+# Copyright 2025 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,23 +11,19 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 ---
-
-test_name: a3m-image
-deployment_name: a3mimg{{ build }}
+test_name: slinky
+deployment_name: slinky-{{ build }}
+region: us-central1
+zone: us-central1-a
 workspace: /workspace
-blueprint_yaml: "{{ workspace }}/examples/machine-learning/a3-megagpu-8g/debian/slurm-a3mega-image.yaml"
-packer_group_name: slurm-build
-packer_module_id: slurm-image
-delete_image: false
+blueprint_yaml: "{{ workspace }}/community/examples/hpc-slinky/hpc-slinky.yaml"
+network: "{{ deployment_name }}-net"
+remote_node: "{{ deployment_name }}-remote-node-0"
 cli_deployment_vars:
-  network_name_system: default
-  subnetwork_name_system: default
-  region: us-west4
-  zone: us-west4-a
-  enable_ops_agent: true
-  enable_nvidia_dcgm: true
-  slurm_cluster_name: a3mc{{ build[0:4] }}
-  final_image_family: "{{ deployment_name }}-slurm"
-  disk_size_gb: 200
+  authorized_cidr: "{{ build_ip.stdout }}/32"
+  gcp_public_cidrs_access_enabled: true
+custom_vars:
+  project: "{{ project }}"
+post_deploy_tests:
+- test-validation/test-slinky.yml

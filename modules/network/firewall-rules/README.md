@@ -77,6 +77,7 @@ limitations under the License.
 | Name | Version |
 |------|---------|
 | <a name="provider_google"></a> [google](#provider\_google) | >= 3.83 |
+| <a name="provider_terraform"></a> [terraform](#provider\_terraform) | n/a |
 
 ## Modules
 
@@ -88,6 +89,7 @@ limitations under the License.
 
 | Name | Type |
 |------|------|
+| [terraform_data.pga_check](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
 | [google_compute_subnetwork.subnetwork](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/compute_subnetwork) | data source |
 
 ## Inputs
@@ -96,6 +98,8 @@ limitations under the License.
 |------|-------------|------|---------|:--------:|
 | <a name="input_egress_rules"></a> [egress\_rules](#input\_egress\_rules) | List of egress rules | <pre>list(object({<br/>    name                    = string<br/>    description             = optional(string, null)<br/>    disabled                = optional(bool, null)<br/>    priority                = optional(number, null)<br/>    destination_ranges      = optional(list(string), [])<br/>    source_ranges           = optional(list(string), [])<br/>    source_tags             = optional(list(string))<br/>    source_service_accounts = optional(list(string))<br/>    target_tags             = optional(list(string))<br/>    target_service_accounts = optional(list(string))<br/><br/>    allow = optional(list(object({<br/>      protocol = string<br/>      ports    = optional(list(string))<br/>    })), [])<br/>    deny = optional(list(object({<br/>      protocol = string<br/>      ports    = optional(list(string))<br/>    })), [])<br/>    log_config = optional(object({<br/>      metadata = string<br/>    }))<br/>  }))</pre> | `[]` | no |
 | <a name="input_ingress_rules"></a> [ingress\_rules](#input\_ingress\_rules) | List of ingress rules | <pre>list(object({<br/>    name                    = string<br/>    description             = optional(string, null)<br/>    disabled                = optional(bool, null)<br/>    priority                = optional(number, null)<br/>    destination_ranges      = optional(list(string), [])<br/>    source_ranges           = optional(list(string), [])<br/>    source_tags             = optional(list(string))<br/>    source_service_accounts = optional(list(string))<br/>    target_tags             = optional(list(string))<br/>    target_service_accounts = optional(list(string))<br/><br/>    allow = optional(list(object({<br/>      protocol = string<br/>      ports    = optional(list(string))<br/>    })), [])<br/>    deny = optional(list(object({<br/>      protocol = string<br/>      ports    = optional(list(string))<br/>    })), [])<br/>    log_config = optional(object({<br/>      metadata = string<br/>    }))<br/>  }))</pre> | `[]` | no |
+| <a name="input_network_name"></a> [network\_name](#input\_network\_name) | The name of the network to create firewall rules in | `string` | `null` | no |
+| <a name="input_project_id"></a> [project\_id](#input\_project\_id) | The project ID to host the network in | `string` | `null` | no |
 | <a name="input_subnetwork_self_link"></a> [subnetwork\_self\_link](#input\_subnetwork\_self\_link) | The self link of the subnetwork whose global network firewall rules will be modified. | `string` | n/a | yes |
 
 ## Outputs

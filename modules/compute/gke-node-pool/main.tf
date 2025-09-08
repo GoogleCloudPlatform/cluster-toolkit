@@ -67,22 +67,8 @@ data "google_container_cluster" "gke_cluster" {
   location = local.cluster_location
 }
 
-data "google_compute_reservation" "specific" {
-  count   = local.input_specific_reservations_count == 1 ? 1 : 0
-  project = var.project_id
-  zone    = var.zones[0]
-  name    = var.reservation_affinity.specific_reservations[0].name
-}
-
-locals {
-  reservation_available_count = (local.input_specific_reservations_count == 1) ? (
-    try(data.google_compute_reservation.specific[0].specific_reservation[0].count, 0) -
-    try(data.google_compute_reservation.specific[0].specific_reservation[0].in_use_count, 0)
-  ) : 0
-}
-
 resource "google_container_node_pool" "node_pool" {
-  provider = google
+  provider = google-beta
 
   count = max(var.num_node_pools, var.num_slices)
 
@@ -393,19 +379,30 @@ resource "google_container_node_pool" "node_pool" {
       condition     = var.enable_flex_start == true ? (var.spot == false) : true
       error_message = "Both enable_flex_start and spot consumption option cannot be set to true at the same time."
     }
-    precondition {
-      condition     = var.reservation_affinity.consume_reservation_type != "SPECIFIC_RESERVATION" || (var.static_node_count != null && var.static_node_count <= local.reservation_available_count)
-      error_message = "Requested static_node_count (${coalesce(var.static_node_count, "not set")}) exceeds the available reservation capacity (${local.reservation_available_count})."
-    }
-    precondition {
-      condition     = local.input_specific_reservations_count == 1 || var.reservation_affinity.consume_reservation_type != "SPECIFIC_RESERVATION"
-      error_message = "Exactly one reservation must be specified when using SPECIFIC_RESERVATION."
-    }
   }
 }
 
 locals {
   supported_machine_types_for_install_dependencies = ["a3-highgpu-8g", "a3-megagpu-8g"]
+}
+
+# Replicates GKE's naming logic for its instance templates. The full
+# pattern is "gke-{cluster_name}-{nodepool_name}-{hash}".
+#
+# This code builds the "{cluster_name}-{nodepool_name}" prefix, which is
+# capped at 32 characters plus a dash '-' in between, by truncating names if needed:
+# - If both names > 16 chars, both are cut to 16.
+# - If one name > 16, it's shortened so the combined name length is 32.
+data "google_compute_region_instance_template" "instance_template" {
+  for_each = { for idx, np in google_container_node_pool.node_pool : idx => np }
+  project  = var.project_id
+  filter = "name: gke-${
+    (length(local.cluster_name) <= 16 && length(each.value.name) <= 16) ? "${local.cluster_name}-${each.value.name}" :
+    (length(local.cluster_name) > 16 && length(each.value.name) > 16) ? "${substr(local.cluster_name, 0, 16)}-${substr(each.value.name, 0, 16)}" :
+    (length(local.cluster_name) > 16) ? "${substr(local.cluster_name, 0, 32 - length(each.value.name))}-${each.value.name}" :
+    "${local.cluster_name}-${substr(each.value.name, 0, 32 - length(local.cluster_name))}"
+  }*"
+  most_recent = true
 }
 
 resource "null_resource" "install_dependencies" {

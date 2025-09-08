@@ -157,12 +157,16 @@ No modules.
 | <a name="input_filestore_id"></a> [filestore\_id](#input\_filestore\_id) | An identifier for a filestore with the format `projects/{{project}}/locations/{{location}}/instances/{{name}}`. | `string` | `null` | no |
 | <a name="input_gcs_bucket_name"></a> [gcs\_bucket\_name](#input\_gcs\_bucket\_name) | The gcs bucket to be used with the persistent volume. | `string` | `null` | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | GCE resource labels to be applied to resources. Key-value pairs. | `map(string)` | n/a | yes |
+| <a name="input_lustre_id"></a> [lustre\_id](#input\_lustre\_id) | An identifier for a lustre with the format `projects/{{project}}/locations/{{location}}/instances/{{name}}`. | `string` | `null` | no |
 | <a name="input_namespace"></a> [namespace](#input\_namespace) | Kubernetes namespace to deploy the storage PVC/PV | `string` | `"default"` | no |
 | <a name="input_network_storage"></a> [network\_storage](#input\_network\_storage) | Network attached storage mount to be configured. | <pre>object({<br/>    server_ip             = string,<br/>    remote_mount          = string,<br/>    local_mount           = string,<br/>    fs_type               = string,<br/>    mount_options         = string,<br/>    client_install_runner = map(string)<br/>    mount_runner          = map(string)<br/>  })</pre> | n/a | yes |
+| <a name="input_pv_name"></a> [pv\_name](#input\_pv\_name) | The name for PV. IF not set, a name will be generated based on the storage name. | `string` | `null` | no |
+| <a name="input_pvc_name"></a> [pvc\_name](#input\_pvc\_name) | The name for PVC. IF not set, a name will be generated based on the storage name. | `string` | `null` | no |
 
 ## Outputs
 
 | Name | Description |
 |------|-------------|
 | <a name="output_persistent_volume_claims"></a> [persistent\_volume\_claims](#output\_persistent\_volume\_claims) | An object that describes a k8s PVC created by this module. |
+| <a name="output_pvc_name"></a> [pvc\_name](#output\_pvc\_name) | The name for k8s PVC created by this module. |
 <!-- END OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

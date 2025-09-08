@@ -63,6 +63,7 @@ deployment_groups:
     source: modules/scripts/startup-script
     settings:
       install_ansible: true
+      enable_gpu_network_wait_online: true
       configure_ssh_host_patterns:
       - 10.0.0.*
       - 10.1.0.*
@@ -77,12 +78,6 @@ deployment_groups:
         enabled: true
         world_writable: true
       runners:
-      - type: data
-        destination: /etc/apt/preferences.d/block-broken-nvidia-container
-        content: |
-          Package: nvidia-container-toolkit nvidia-container-toolkit-base libnvidia-container-tools libnvidia-container1
-          Pin: version 1.17.7-1
-          Pin-Priority: 100
 
       # The following holds NVIDIA software that was already installed on the
       # accelerator base image to be the same driver version. This reduces the
@@ -148,7 +143,7 @@ deployment_groups:
           apt-get install -y git
           ansible-galaxy role install googlecloudplatform.google_cloud_ops_agents
           ansible-pull \
-              -U https://github.com/GoogleCloudPlatform/slurm-gcp -C 6.9.1 \
+              -U https://github.com/GoogleCloudPlatform/slurm-gcp -C 6.10.2 \
               -i localhost, --limit localhost --connection=local \
               -e @/var/tmp/slurm_vars.json \
               ansible/playbook.yml
@@ -214,41 +209,12 @@ deployment_groups:
             hosts: all
             become: true
             vars:
-              distribution: "{{ ansible_distribution | lower }}{{ ansible_distribution_version | replace('.','') }}"
-              package_url: https://developer.download.nvidia.com/compute/cuda/repos/{{ distribution }}/x86_64/cuda-keyring_1.1-1_all.deb
-              package_filename: /tmp/{{ package_url | basename }}
               enable_ops_agent: $(vars.enable_ops_agent)
               enable_nvidia_dcgm: $(vars.enable_nvidia_dcgm)
               nvidia_packages:
               - cuda-toolkit-12-8
               - datacenter-gpu-manager-4-cuda12
             tasks:
-            - name: Download NVIDIA repository package
-              ansible.builtin.get_url:
-                url: "{{ package_url }}"
-                dest: "{{ package_filename }}"
-            - name: Install NVIDIA repository package
-              ansible.builtin.apt:
-                deb: "{{ package_filename }}"
-                state: present
-            - name: Reduce NVIDIA repository priority
-              ansible.builtin.copy:
-                dest: /etc/apt/preferences.d/cuda-repository-pin-600
-                mode: 0o0644
-                owner: root
-                group: root
-                content: |
-                  Package: nsight-compute
-                  Pin: origin *ubuntu.com*
-                  Pin-Priority: -1
-
-                  Package: nsight-systems
-                  Pin: origin *ubuntu.com*
-                  Pin-Priority: -1
-
-                  Package: *
-                  Pin: release l=NVIDIA CUDA
-                  Pin-Priority: 400
             - name: Install CUDA & DCGM
               ansible.builtin.apt:
                 name: "{{ item }}"

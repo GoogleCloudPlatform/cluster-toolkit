@@ -1,0 +1,247 @@
+# Copyright 2025 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+
+blueprint_name: roll-a4x-image
+validators:
+- validator: test_deployment_variable_not_used
+  inputs: {}
+  skip: true
+
+deployment_groups:
+- group: image-env
+  modules:
+  - id: image-net
+    source: modules/network/vpc
+
+  - id: build-script
+    source: modules/scripts/startup-script
+    settings:
+      runners:
+      - type: data
+        destination: /etc/apt/preferences.d/block-broken-nvidia-container
+        content: |
+          Package: nvidia-container-toolkit nvidia-container-toolkit-base libnvidia-container-tools libnvidia-container1
+          Pin: version 1.17.7-1
+          Pin-Priority: 100
+
+      # The following holds NVIDIA software that was already installed on the
+      # accelerator base image to be the same driver version. This reduces the
+      # risk of a driver version mismatch.
+      # Additional packages are held by:
+      # https://github.com/GoogleCloudPlatform/slurm-gcp/blob/master/ansible/group_vars/os_ubuntu.yml
+      - type: ansible-local
+        destination: hold-nvidia-packages.yml
+        content: |
+          ---
+          - name: Hold nvidia packages
+            hosts: all
+            become: true
+            vars:
+              nvidia_packages_to_hold:
+              - libnvidia-cfg1-*-server
+              - libnvidia-compute-*-server
+              - libnvidia-nscq-*
+              - nvidia-compute-utils-*-server
+              - nvidia-fabricmanager-*
+              - nvidia-utils-*-server
+            tasks:
+            - name: Hold nvidia packages
+              ansible.builtin.command:
+                argv:
+                - apt-mark
+                - hold
+                - "{{ item }}"
+              loop: "{{ nvidia_packages_to_hold }}"
+      # An unlimited stack size resulted in PMIx errors during
+      # NCCL testing. Setting the stack size to 8192 resolves these failures
+      # and is an intentional change.
+      - type: data
+        destination: /etc/security/limits.d/99-unlimited.conf
+        content: |
+          * - memlock unlimited
+          * - nproc unlimited
+          * - stack 8192
+          * - nofile 1048576
+          * - cpu unlimited
+          * - rtprio unlimited
+      - type: data
+        destination: /etc/enroot/enroot.conf
+        content: |
+          ENROOT_CONFIG_PATH     ${HOME}/.enroot
+      - type: ansible-local
+        destination: update_settings.yml
+        content: |
+          ---
+          - name: Update OS settings prior to Slurm install
+            hosts: all
+            become: true
+            tasks:
+            - name: Turn off username space restriction in Apparmor
+              ansible.builtin.lineinfile:
+                path: /etc/sysctl.d/20-apparmor-donotrestrict.conf
+                regexp: '^kernel.apparmor_restrict_unprivileged_userns'
+                line: kernel.apparmor_restrict_unprivileged_userns = 0
+                create: yes
+              when: ansible_distribution == "Ubuntu" and  ansible_distribution_major_version is version('23', '>=')
+      - type: data
+        destination: /var/tmp/slurm_vars.json
+        # Note kernel_packages and kernel_header_packages should be fixed at soon
+        content: |
+          {
+            "reboot": false,
+            "install_ompi": true,
+            "install_lustre": false,
+            "install_gcsfuse": true,
+            "install_cuda": false,
+            "allow_kernel_upgrades": false,
+            "monitoring_agent": "cloud-ops",
+          }
+      - type: shell
+        destination: install_slurm.sh
+        # Note: changes to slurm-gcp `/scripts` folder in the built image will not reflect in the deployed cluster.
+        # Instead the scripts referenced in `schedmd-slurm-gcp-v6-controller/slurm_files` will be used.
+        content: |
+          #!/bin/bash
+          set -e -o pipefail
+          ansible-pull \
+              -U https://github.com/GoogleCloudPlatform/slurm-gcp -C 6.10.1 \
+              -i localhost, --limit localhost --connection=local \
+              -e @/var/tmp/slurm_vars.json \
+              ansible/playbook.yml
+
+      - type: ansible-local
+        destination: install_a4x_drivers.yml
+        content: |
+          ---
+          - name: Install A4X Drivers and Utils
+            hosts: all
+            become: true
+            vars:
+              distribution: "{{ ansible_distribution | lower }}{{ ansible_distribution_version | replace('.','') }}"
+              cuda_repo_url: https://developer.download.nvidia.com/compute/cuda/repos/{{ distribution }}/sbsa/cuda-keyring_1.1-1_all.deb
+              cuda_repo_filename: /tmp/{{ cuda_repo_url | basename }}
+              nvidia_packages:
+              - cuda-toolkit-12-8
+              - datacenter-gpu-manager-4-cuda12
+            tasks:
+            - name: Download NVIDIA repository package
+              ansible.builtin.get_url:
+                url: "{{ cuda_repo_url }}"
+                dest: "{{ cuda_repo_filename }}"
+            - name: Install NVIDIA repository package
+              ansible.builtin.apt:
+                deb: "{{ cuda_repo_filename }}"
+                state: present
+            - name: Install NVIDIA fabric and CUDA
+              ansible.builtin.apt:
+                name: "{{ item }}"
+                update_cache: true
+                allow_downgrade: yes
+              loop: "{{ nvidia_packages }}"
+            - name: Freeze NVIDIA fabric and CUDA
+              ansible.builtin.command:
+                argv:
+                - apt-mark
+                - hold
+                - "{{ item }}"
+              loop: "{{ nvidia_packages }}"
+            - name: Create nvidia-persistenced override directory
+              ansible.builtin.file:
+                path: /etc/systemd/system/nvidia-persistenced.service.d
+                state: directory
+                owner: root
+                group: root
+                mode: 0o755
+            - name: Configure nvidia-persistenced override
+              ansible.builtin.copy:
+                dest: /etc/systemd/system/nvidia-persistenced.service.d/persistence_mode.conf
+                owner: root
+                group: root
+                mode: 0o644
+                content: |
+                  [Service]
+                  ExecStart=
+                  ExecStart=/usr/bin/nvidia-persistenced --user nvidia-persistenced --verbose
+              notify: Reload SystemD
+            handlers:
+            - name: Reload SystemD
+              ansible.builtin.systemd:
+                daemon_reload: true
+            post_tasks:
+            - name: Disable NVIDIA DCGM by default (enable during boot on GPU nodes)
+              ansible.builtin.service:
+                name: nvidia-dcgm.service
+                state: stopped
+                enabled: false
+            - name: Disable nvidia-persistenced SystemD unit (enable during boot on GPU nodes)
+              ansible.builtin.service:
+                name: nvidia-persistenced.service
+                state: stopped
+                enabled: false
+      - type: ansible-local
+        destination: install_ibverbs_utils.yml
+        content: |
+          ---
+          - name: Install ibverbs-utils
+            hosts: all
+            become: true
+            tasks:
+            - name: Install Linux Modules Extra
+              ansible.builtin.package:
+                name:
+                - ibverbs-utils
+                state: present
+      # The script below is intended to bypass the packer script that fails on Ubuntu 24.04 images
+      # Once Ubuntu 24.04 no longer sets ${HOSTNAME} to the FQDN, this can be removed
+      - type: shell
+        destination: stop_packer_early.sh
+        content: |
+          #!/bin/bash
+          BASEMETADATAURL=http://metadata.google.internal/computeMetadata/v1/instance/
+          rm \$(curl -f -H "Metadata-Flavor: Google" ${BASEMETADATAURL}/attributes/startup-script-log-dest 2> /dev/null)
+          gcloud compute instances add-metadata \$(hostname -s) --metadata "startup-script-status"="done" --zone $(vars.zone)
+
+
+- group: image
+  modules:
+  - id: image
+    source: modules/packer/custom-image
+    kind: packer
+    use:
+    - image-net
+    - build-script
+    settings:
+      disk_size: 100
+      disk_type: hyperdisk-balanced
+      machine_type: c4a-highcpu-16
+      source_image: ubuntu-accelerator-2404-arm64-with-nvidia-570-v20250722
+      source_image_project_id: [ubuntu-os-accelerator-images]
+      image_family: $(vars.family)
+      omit_external_ip: false
+
+      # Unattended upgrades are disabled in this blueprint so that software does not
+      # get updated daily and lead to potential instability in the cluster environment.
+      #
+      # Unattended Upgrades installs available security updates from the Ubuntu
+      # security pocket for installed packages daily by default. Administrators who
+      # disable this feature assume all responsibility for manually reviewing and
+      # patching their systems against vulnerabilities.
+      #
+      # To enable unattended upgrades, please remove the
+      # `user-data: $(vars.packer_metadata.user-data)` line from the below.
+      metadata:
+        user-data: $(vars.packer_metadata.user-data)
+        create_hostname_file: true
