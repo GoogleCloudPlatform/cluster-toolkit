@@ -924,8 +924,9 @@ The SchedMD Slinky Project deploys Slurm on Kubernetes. Slinky is particularly u
 
 This blueprint creates a simple Slinky installation on top of Google Kubernetes Engine, with the following notable deviations from the Slinky quickstart setup:
 1. Two nodesets are implemented, following the pattern of an HPC nodeset and a debug nodeset.
-2. A lightweight, GCP-native metrics/monitoring system is adopted, rather than the Slinky-documented cluster-local Kube Prometheus Stack.
-3. Node affinities for both system components and compute nodesets are more explicitly defined, to improve stability, control, and HPC hardware utilization.
+2. A login node is implemented.
+3. A lightweight, GCP-native metrics/monitoring system is adopted, rather than the Slinky-documented cluster-local Kube Prometheus Stack.
+4. Node affinities for system components, the login node, and compute nodesets are more explicitly defined, to improve stability, control, and HPC hardware utilization.
 
 While H3 compute-optimized VMs are used for the HPC nodeset, the machine type can easily be switched (including to GPU-accelerated instances).
 
