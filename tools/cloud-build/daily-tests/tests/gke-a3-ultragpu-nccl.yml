@@ -1,4 +1,4 @@
-# Copyright 2024 Google LLC
+# Copyright 2025 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 
 # region, zone must be defined
 # in build file with --extra-vars flag!
-test_name: gke-a3ultra
+test_name: gke-a3ultra-nccl
 deployment_name: gke-a3ultra-{{ build }}
 workspace: /workspace
 blueprint_yaml: "{{ workspace }}/examples/gke-a3-ultragpu/gke-a3-ultragpu.yaml"
@@ -36,8 +36,8 @@ cli_deployment_vars:
   reservation: "{{ extended_reservation }}"
   authorized_cidr: "{{ build_ip.stdout }}/32"
   gcp_public_cidrs_access_enabled: true
+  is_integration_test: true
 custom_vars:
   project: "{{ project }}"
 post_deploy_tests:
-- test-validation/test-gke-job.yml
-- test-validation/test-gke-kueue-config.yml
+- test-validation/test-gke-a3-ultra.yml
