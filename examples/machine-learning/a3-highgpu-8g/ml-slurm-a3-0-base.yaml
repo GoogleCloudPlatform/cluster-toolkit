@@ -59,3 +59,24 @@ deployment_groups:
       reserved_ip_range: $(vars.filestore_ip_range)
     outputs:
     - network_storage
+
+# - id: private_service_access
+  #   source: community/modules/network/private-service-access
+  #   use: [a3high-slurm-net-0]
+
+  # To use Managed Lustre as for the shared /home directory:
+  # 1. Comment out the filestore block above and the`filestore_ip_range` line in the vars block.
+  # 2. Uncomment the managed-lustre and private-service-access blocks
+  # 3. Change the value for "install_managed_lustre" in /var/tmp/slurm_vars.json in ml-slurm-a3-1-image.yaml to true
+  # - id: homefs
+  #   source: modules/file-system/managed-lustre
+  #   use:
+  #   - a3high-slurm-net-0
+  #   - private_service_access
+  #   settings:
+  #     size_gib: 18000
+  #     name: lustre-instance
+  #     local_mount: /home
+  #     remote_mount: lustrefs
+  #   outputs:
+  #   - network_storage

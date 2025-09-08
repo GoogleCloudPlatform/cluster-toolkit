@@ -102,7 +102,7 @@ deployment_groups:
           set -e -o pipefail
           ansible-galaxy role install googlecloudplatform.google_cloud_ops_agents
           ansible-pull \
-              -U https://github.com/GoogleCloudPlatform/slurm-gcp -C 6.9.1 \
+              -U https://github.com/GoogleCloudPlatform/slurm-gcp -C 6.10.5 \
               -i localhost, --limit localhost --connection=local \
               -e @/var/tmp/slurm_vars.json \
               ansible/playbook.yml
@@ -144,6 +144,7 @@ deployment_groups:
       - type: data
         destination: /etc/enroot/enroot.conf
         content: |
+          ENROOT_CONFIG_PATH     ${HOME}/.enroot
           ENROOT_RUNTIME_PATH    /mnt/localssd/${UID}/enroot/runtime
           ENROOT_CACHE_PATH      /mnt/localssd/${UID}/enroot/cache
           ENROOT_DATA_PATH       /mnt/localssd/${UID}/enroot/data
