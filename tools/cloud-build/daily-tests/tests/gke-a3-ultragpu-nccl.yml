@@ -36,7 +36,6 @@ cli_deployment_vars:
   reservation: "{{ extended_reservation }}"
   authorized_cidr: "{{ build_ip.stdout }}/32"
   gcp_public_cidrs_access_enabled: true
-  is_integration_test: true
 custom_vars:
   project: "{{ project }}"
 post_deploy_tests:
