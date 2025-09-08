@@ -57,15 +57,6 @@ deployment_groups:
       filestore_share_name: homeshare
       local_mount: /home
 
-  - id: appsfs
-    source: modules/file-system/filestore
-    use: [h4d-slurm-net-0]
-    settings:
-      filestore_tier: BASIC_SSD
-      size_gb: 2560
-      filestore_share_name: appsshare
-      local_mount: /apps
-
   - id: h4d_startup
     source: modules/scripts/startup-script
     settings:
@@ -79,7 +70,14 @@ deployment_groups:
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [h4d_startup, h4d-slurm-net-0]
     settings:
+      # Unattended upgrades are disabled in this blueprint so that software does not
+      # get updated daily and lead to potential instability in the cluster environment.
+      # For more details, see https://cloud.google.com/compute/docs/instances/create-hpc-vm#disable_automatic_updates
+      allow_automatic_updates: false
       bandwidth_tier: gvnic_enabled
+      instance_image:
+        family: slurm-gcp-6-11-hpc-rocky-linux-8
+        project: schedmd-slurm-public
       machine_type: h4d-highmem-192-lssd
       node_count_static: 2
       node_count_dynamic_max: 0
@@ -123,7 +121,7 @@ deployment_groups:
 
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
-    use: [h4d-slurm-net-0, h4d_partition, slurm_login, homefs, appsfs]
+    use: [h4d-slurm-net-0, h4d_partition, slurm_login, homefs]
     settings:
       enable_controller_public_ips: true
       cloud_parameters:
