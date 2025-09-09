@@ -45,6 +45,7 @@ from util import (
 from util import lookup
 from suspend import delete_instances
 import tpu
+import mig_a4
 import conf
 import watch_delete_vm_op
 
@@ -156,11 +157,42 @@ def start_instances(node_list):
     execute_with_futures(tpu.start_tpu, tpu_start_data)
 
 
+def get_mig_from_node(nodename: str):
+    accelerator_topo = util.lookup().node_accelerator_topology(nodename)
+    topo = int(accelerator_topo.split("x")[1]) // lookup().node_template_info(nodename).gpu.count
+    sid = lookup().node_index(nodename) // topo
+
+    node_prefix = lookup().node_prefix(nodename)
+    zone = lookup().zone.split("/")[-1]
+
+    expected_mig_name = f"{node_prefix}-{sid}"
+    migs_in_zone = mig_a4.migs(lookup(), zone)
+    for mig_name, mig_obj in migs_in_zone.items():
+        if mig_name == expected_mig_name:
+            return mig_obj
+    return None
+
+
+def _find_mig_node_action(nodename) -> NodeAction:
+    mig_obj = get_mig_from_node(nodename)
+
+    inst = lookup().instance(nodename.split(".")[0])
+
+    if lookup().is_static_node(nodename):
+        if mig_obj == None:
+            return NodeActionPowerUp()
+        if inst == None:
+            return NodeActionPowerUp()
+
+    return NodeActionUnchanged()
+
+
 def _find_dynamic_node_status() -> NodeAction:
     # TODO: cover more cases:
     # * delete dead dynamic nodes
     # * delete orhpaned instances
     return NodeActionUnchanged()  # don't touch dynamic nodes
+
 
 def get_fr_action(fr: FutureReservation, state:Optional[NodeState]) -> Optional[NodeAction]:
     now = util.now()
@@ -176,6 +208,7 @@ def get_fr_action(fr: FutureReservation, state:Optional[NodeState]) -> Optional[
     else:
         msg = f"Reservation:{fr.name} is after its end-time"
     return NodeActionDown(reason=msg)
+
 
 def _find_tpu_node_action(nodename, state) -> NodeAction:
     lkp = lookup()
@@ -241,6 +274,9 @@ def get_node_action(nodename: str) -> NodeAction:
     """Determine node/instance status that requires action"""
     lkp = lookup()
     state = lkp.node_state(nodename)
+
+    if mig_a4.is_slice_node(nodename):
+        return _find_mig_node_action(nodename)
 
     if lkp.node_is_gke(nodename):
         return NodeActionUnchanged()
@@ -336,7 +372,6 @@ def delete_resource_policies(links: list[str], lkp: util.Lookup) -> None:
     )
 
 
-
 @lru_cache
 def _get_resource_policies_in_region(lkp: util.Lookup, region: str) -> list[Any]:
     res = []
@@ -356,6 +391,78 @@ def _get_resource_policies(lkp: util.Lookup) -> list[Any]:
     for region in lkp.cluster_regions():
         res.extend(_get_resource_policies_in_region(lkp, region))
     return res
+
+
+def sync_migs():
+    lkp = lookup()
+
+    compute_instances = {
+        name for name, inst in lkp.instances().items() if inst.role == "compute"
+    }
+    slurm_nodes = set(lkp.slurm_nodes().keys())
+
+    nodesets = []
+    zones = set()
+    for node in slurm_nodes:
+        ns_name = lkp.node_nodeset_name(node)
+        ns = lkp.node_nodeset(node)
+        if ns_name not in nodesets:
+            nodesets.append(ns_name)
+            zones.update(ns["zone_policy_allow"])
+
+    all_migs = {}
+    for zone in zones:
+        migs = mig_a4.migs(lkp, zone)
+        all_migs.update(migs)
+
+    migs_to_delete = []
+    for mig_name, mig_obj in all_migs.items():
+        if not mig_obj.name.startswith(lkp.cfg.slurm_cluster_name):
+            continue
+
+        cluster, nodeset, mig_index = mig_obj.name.split('-')
+
+        result = mig_a4.mig_details(lookup(), mig_obj)
+        status = result.get("status", {})
+        if not status.get("isStable", False):
+            log.info(f"Mig {mig_name} isn't stable yet")
+            continue
+
+        mig_nodes = []
+        for node in slurm_nodes:
+            # check if it's in the right nodeset
+            if (lkp.node_prefix(node) == f"{cluster}-{nodeset}") & mig_a4.is_slice_node(node):
+                accelerator_topology = lkp.node_accelerator_topology(node)
+                topo = int(accelerator_topology.split("x")[1]) // lkp.node_template_info(node).gpu.count
+                # check if it's in the right slice id
+                if int(mig_index) == (lkp.node_index(node) // topo):
+                    mig_nodes.append(node)
+
+        if len(mig_nodes) == 0:
+            # Delete MIG that is attributed to the cluster (by name) but not existing nodeset (result of nodeset deletion)
+            creationTimestamp = result.get("creationTimestamp", "")
+            parsed = util.parse_gcp_timestamp(creationTimestamp)
+            threshold = timedelta(seconds=300)
+            age = util.now() - parsed
+            if age > threshold:
+                migs_to_delete.append(mig_obj)
+            continue
+
+        model = mig_nodes[0]    
+        node_nodeset = lkp.node_nodeset(model) 
+        if (mig_obj.versions[0] != node_nodeset.instance_template) and len(mig_nodes) == 0:
+            migs_to_delete.append(mig_obj)
+            continue
+
+        max_index = node_nodeset["node_count_dynamic_max"] + node_nodeset["node_count_static"] - 1
+        if all(lkp.node_index(node) > max_index for node in mig_nodes):
+            migs_to_delete.append(mig_obj)
+            continue
+    
+    if len(migs_to_delete) > 0:
+        mig_a4.delete_migs(lkp, migs_to_delete)
+        mig_a4.delete_workload_policies(lkp, migs_to_delete)
+
 
 def sync_placement_groups():
     """Delete placement policies that are for jobs that have completed/terminated"""
@@ -635,6 +742,11 @@ def main():
             log.exception("failed to sync DWS Flex MIGs")
 
         try:
+            sync_migs()
+        except Exception:
+            log.exception("failed to sync migs")
+
+        try:
             sync_placement_groups()
         except Exception:
             log.exception("failed to sync placement groups")
@@ -672,6 +784,9 @@ if __name__ == "__main__":
     with pid_file.open("w") as fp:
         try:
             fcntl.lockf(fp, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            main()
+        except BlockingIOError:
+            sys.exit(0)
             main()
         except BlockingIOError:
             sys.exit(0)

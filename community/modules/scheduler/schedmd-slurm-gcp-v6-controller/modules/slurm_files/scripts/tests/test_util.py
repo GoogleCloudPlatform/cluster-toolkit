@@ -666,3 +666,12 @@ def test_future_reservation_inactive(_):
     
     lkp._get_future_reservation.assert_called_once_with("manhattan", "danger", "zebra")
     lkp._get_reservation.assert_not_called()
+
+def test_node_accelerator_topology():
+    cfg = TstCfg(
+        nodeset={
+            "n": TstNodeset(accelerator_topology="2x2"),
+        }
+    )
+    lkp = util.Lookup(cfg)
+    assert lkp.node_accelerator_topology("c-n-0") == "2x2"

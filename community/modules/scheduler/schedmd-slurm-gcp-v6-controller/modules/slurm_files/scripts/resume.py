@@ -44,6 +44,7 @@ from util import (
 from util import lookup, ReservationDetails
 import tpu
 import mig_flex
+import mig_a4
 
 log = logging.getLogger()
 
@@ -290,12 +291,20 @@ def group_nodes_bulk(nodes: List[str], resume_data: Optional[ResumeData], lkp: u
     ]
     return {chunk.name: chunk for chunk in chunks}
 
+import mig_a4
+
+def _filter_out_and_handle_slice_nodes(nodes: List[str], resume_data: Optional[ResumeData]) -> List[str]:
+    rest, slice_nodes = util.separate(mig_a4.is_slice_node, nodes)
+    mig_a4.resume_slice_nodes(lookup(), slice_nodes, resume_data)
+    return rest
+
 
 def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
     """resume nodes in nodelist"""
     lkp = lookup()
     # Prevent dormant nodes associated with a reservation from being resumed
     nodes, dormant_res_nodes = util.separate(lkp.is_dormant_res_node, nodes)
+    nodes = _filter_out_and_handle_slice_nodes(nodes, resume_data)
     
     if dormant_res_nodes:
         log.warning(f"Resume was unable to resume reservation nodes={dormant_res_nodes}")

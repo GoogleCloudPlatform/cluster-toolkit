@@ -1316,6 +1316,9 @@ def to_hostnames(nodelist: str) -> List[str]:
     return hostnames
 
 
+def swallow_err(_: str) -> None:
+        pass
+
 def retry_exception(exc) -> bool:
     """return true for exceptions that should always be retried"""
     msg = str(exc)
@@ -1711,6 +1714,10 @@ class Lookup:
 
     def node_template_info(self, node_name=None):
         return self.template_info(self.node_template(node_name))
+
+    def node_accelerator_topology(self, node_name=None):
+        return self.node_nodeset(node_name).accelerator_topology
+
 
     def node_region(self, node_name=None):
         nodeset = self.node_nodeset(node_name)
