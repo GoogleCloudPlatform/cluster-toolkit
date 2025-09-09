@@ -15,7 +15,6 @@
 ---
 tags:
 - gke
-- tpu
 - m.vpc
 - m.gke-cluster
 - m.gke-node-pool
