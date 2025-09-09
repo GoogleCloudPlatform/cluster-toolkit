@@ -3,10 +3,6 @@
 This module creates a Google Kubernetes Engine
 ([GKE](https://cloud.google.com/kubernetes-engine)) node pool.
 
-> **_NOTE:_** This is an experimental module and the functionality and
-> documentation will likely be updated in the near future. This module has only
-> been tested in limited capacity.
-
 ### Example
 
 The following example creates a GKE node group.
