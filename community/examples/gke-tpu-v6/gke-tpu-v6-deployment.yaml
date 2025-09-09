@@ -54,4 +54,4 @@ vars:
   authorized_cidr:
 
   # The name of the compute engine reservation of TPU v6 nodes
-  reservation:
+  #reservation:
