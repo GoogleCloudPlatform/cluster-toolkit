@@ -181,6 +181,15 @@ blueprint matches the name of the user-created reservation.
   a3_maintenance_interval: ""
 ```
 
+### Using Spot VM or DWS Flex
+
+Additional provisioning models (pick only one), can be used to substitute `a3_reservation_name`:
+a3mega_dws_flex_enabled: true
+To make use of DWS Flex-Start, for more info visit: https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/docs/slurm-dws-flex.md
+a3_enable_spot_vm: true
+To make use of Spot VMs, for more info visit: https://cloud.google.com/compute/docs/instances/spot
+
+
 ### Set cluster size
 
 At approximately line 37 of `ml-slurm-a3-2-cluster.yaml`, set the static cluster

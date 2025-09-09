@@ -34,3 +34,14 @@ vars:
   a3mega_reservation_name: "" # supply reservation name
   a3mega_maintenance_interval: ""
   a3mega_cluster_size: 2 # supply cluster size
+
+
+# Additional provisioning models (pick only one), can be used to substitute `a3mega_reservation_name`:
+#
+# a3mega_dws_flex_enabled: true
+#
+# To make use of DWS Flex-Start, for more info visit: https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/docs/slurm-dws-flex.md
+#
+# a3mega_enable_spot_vm: true
+#
+# To make use of Spot VMs, for more info visit: https://cloud.google.com/compute/docs/instances/spot

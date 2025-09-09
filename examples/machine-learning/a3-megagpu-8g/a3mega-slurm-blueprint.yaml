@@ -36,6 +36,11 @@ vars:
   enable_controller_public_ips: true
   localssd_mountpoint: /mnt/localssd
 
+  #Provisioning models (set to true or fill in reservation name, pick only one)
+  a3mega_reservation_name: ""  # supply reservation name
+  a3mega_dws_flex_enabled: false
+  a3mega_enable_spot_vm: false
+
 deployment_groups:
 - group: primary
   modules:
@@ -550,6 +555,9 @@ deployment_groups:
       on_host_maintenance: TERMINATE
       bandwidth_tier: gvnic_enabled
       reservation_name: $(vars.a3mega_reservation_name)
+      enable_spot_vm: $(vars.a3mega_enable_spot_vm)
+      dws_flex:
+        enabled: $(vars.a3mega_dws_flex_enabled)
       maintenance_interval: $(vars.a3mega_maintenance_interval)
       startup_script: $(a3mega_startup.startup_script)
 
