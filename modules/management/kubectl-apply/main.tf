@@ -95,8 +95,19 @@ module "install_kueue" {
   chart_version    = var.kueue.version
   namespace        = "kueue-system"
   create_namespace = true
-  values_yaml = [
-    file("${path.module}/kueue/kueue-helm-values.yaml")
+  values_yaml = [<<EOF
+      controllerManager:
+        manager:
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "200m"
+              memory: "256Mi"
+      admissionController:
+        failurePolicy: Ignore
+      EOF
   ]
 
   depends_on = [var.gke_cluster_exists]
