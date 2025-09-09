@@ -115,7 +115,8 @@ deployment_groups:
       system_node_pool_taints: []
       enable_multi_networking: true
       enable_dcgm_monitoring: true
-      gcp_public_cidrs_access_enabled: false
+      enable_gcsfuse_csi: true
+      cluster_availability_type: "ZONAL"
       enable_private_endpoint: false # Allows access from authorized public IPs
       configure_workload_identity_sa: true
       master_authorized_networks:
