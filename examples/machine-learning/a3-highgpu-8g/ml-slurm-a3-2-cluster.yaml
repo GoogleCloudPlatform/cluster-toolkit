@@ -39,7 +39,12 @@ vars:
   a3_static_cluster_size: 32
   # a3_reservation_name must be specified; if Google staff have provided you
   # with a reservation name, use it. Otherwise supply user-created reservation.
-  a3_reservation_name: a3-reservation-0
+
+  #Provisioning models (set to true or fill in reservation name, pick only one)
+  a3_reservation_name: ""  # supply reservation name
+  a3_dws_flex_enabled: false
+  a3_enable_spot_vm: false
+
   # a3_maintenance_interval should be empty string by default; if Google staff
   # have created a reservation, they will also provide a3_maintenance_interval
   a3_maintenance_interval: ""
@@ -180,6 +185,9 @@ deployment_groups:
     - a3_startup
     settings:
       reservation_name: $(vars.a3_reservation_name)
+      enable_spot_vm: $(vars.a3_enable_spot_vm)
+      dws_flex:
+        enabled: $(vars.a3_dws_flex_enabled)
       maintenance_interval: $(vars.a3_maintenance_interval)
       node_count_static: $(vars.a3_static_cluster_size)
       node_count_dynamic_max: 0

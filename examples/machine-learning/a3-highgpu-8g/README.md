@@ -181,6 +181,34 @@ blueprint matches the name of the user-created reservation.
   a3_maintenance_interval: ""
 ```
 
+### Using Spot VM or DWS Flex
+
+> [!IMPORTANT]
+> Select one of the provisioning models : either spot vm , dws flex or reservation
+
+In order to make use of DWS Flex Start mode with SlurmGCP, you must use the `a3_dws_flex_enabled` variable in the `schedmd-slurm-gcp-v6-nodeset` module.
+See the example below:
+
+```yaml
+  vars: 
+    a3_dws_flex_enabled: true             # enabling dws flex by setting the variable to true
+    # the rest of the variables
+```
+
+To learn more about DWS Flex-Start, visit https://github.com/GoogleCloudPlatform/cluster-toolkit/blob/main/docs/slurm-dws-flex.md
+
+Similarly ,to make use of Spot VMs,
+In order to make use of Spot VMs with Slurm, you must use the `a3_enable_spot_vm` variable in the `schedmd-slurm-gcp-v6-nodeset` module.
+See the example below:
+
+```yaml
+  vars: 
+    a3_enable_spot_vm: true             # enabling spot vm by setting the variable to true
+    # the rest of the variables
+```
+
+To learn more about Spot VM  visit: https://cloud.google.com/compute/docs/instances/spot
+
 ### Set cluster size
 
 At approximately line 37 of `ml-slurm-a3-2-cluster.yaml`, set the static cluster
