@@ -108,12 +108,6 @@ variable "gke_cluster_exists" {
   default     = false
 }
 
-variable "is_integration_test" {
-  description = "A static flag which helps know the environment i.e prod/test"
-  type        = bool
-  default     = false
-}
-
 variable "jobset" {
   description = "Install [Jobset](https://github.com/kubernetes-sigs/jobset) which manages a group of K8s [jobs](https://kubernetes.io/docs/concepts/workloads/controllers/job/) as a unit."
   type = object({

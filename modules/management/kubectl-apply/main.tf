@@ -96,8 +96,6 @@ module "install_kueue" {
   namespace        = "kueue-system"
   create_namespace = true
   values_yaml = [
-    var.is_integration_test ?
-    file("${path.module}/kueue/kueue-helm-values.test.yaml") :
     file("${path.module}/kueue/kueue-helm-values.yaml")
   ]
 

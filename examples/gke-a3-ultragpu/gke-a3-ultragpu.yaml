@@ -43,7 +43,6 @@ vars:
   chs_pvc_claim_name: chs-output-pvc
   chs_cronjob_rendered_path: $(ghpc_stage("./chs-cronjob.yaml.tftpl"))
   chs_pvc_rendered_path: $(ghpc_stage("./chs-pvc.yaml.tftpl"))
-  is_integration_test: false
 
 deployment_groups:
 - group: primary
@@ -256,7 +255,6 @@ deployment_groups:
         config_template_vars:
           num_gpus: $(a3-ultragpu-pool.static_gpu_count)
           accelerator_type: $(vars.accelerator_type)
-      is_integration_test: $(vars.is_integration_test)
       jobset:
         install: true
       gib:

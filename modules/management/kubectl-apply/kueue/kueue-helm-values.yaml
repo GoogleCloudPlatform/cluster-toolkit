@@ -22,7 +22,8 @@ controllerManager:
       requests:
         cpu: "100m"
         memory: "128Mi"
-      # We also lower the limits for the test environment.
       limits:
         cpu: "200m"
         memory: "256Mi"
+admissionController:
+  failurePolicy: Ignore
