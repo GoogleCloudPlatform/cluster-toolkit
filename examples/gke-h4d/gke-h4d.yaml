@@ -159,16 +159,16 @@ deployment_groups:
       static_node_count: $(vars.static_node_count)
       taints:
       # (Optional, but suggested)
-      # In order prevent scheduling of generic workloads onto the H4D nodepool, 
-      # we suggest a Kubernetes taint. In order to schedule workloads, add the following 
-      # tolerance to a PodSpec that you want to allow to use the H4D nodes. See 
+      # In order prevent scheduling of generic workloads onto the H4D nodepool,
+      # we suggest a Kubernetes taint. In order to schedule workloads, add the following
+      # tolerance to a PodSpec that you want to allow to use the H4D nodes. See
       # https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/ for
-      # details 
+      # details
       # tolerations:
       # - key: "node-type"
       #   operator: "Equal"
       #   value: "h4d"
-      #   effect: "NoSchedule" 
+      #   effect: "NoSchedule"
       - key: node-type
         value: h4d
         effect: NoSchedule
