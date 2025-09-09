@@ -23,7 +23,7 @@ vars:
   authorized_cidr: 0.0.0.0/0 # <your-ip-address>/32
   gcp_public_cidrs_access_enabled: false
   gke_nodeset_replicas: 2
-  slinky_image: us-east1-docker.pkg.dev/managed-slurm-gke-dev/default/slurmd:ubuntu24-24.11-vanilla-pyxis
+  slinky_image: # your slinky image
   slurm_namespace: slurm
 
 deployment_groups:
