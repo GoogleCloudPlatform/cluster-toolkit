@@ -16,14 +16,14 @@
 blueprint_name: slurm-gke
 
 vars:
-  project_id: managed-slurm-gke-dev
-  deployment_name: kevinmcw2
+  project_id: ## Set GCP Project ID Here ##
+  deployment_name: slurm-gke
   region: asia-southeast1
   zone: asia-southeast1-c
   authorized_cidr: 0.0.0.0/0 # <your-ip-address>/32
   gcp_public_cidrs_access_enabled: false
   gke_nodeset_replicas: 2
-  slinky_image: # your slinky image
+  slinky_image: ## Set Slinky Image Here ##
   slurm_namespace: slurm
 
 deployment_groups:
@@ -163,22 +163,6 @@ deployment_groups:
       is_default: true
       suspend_time: -1 # prevents nodes from suspending while it's idle
 
-  - id: compute_nodeset
-    source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
-    use: [network]
-    settings:
-      node_count_dynamic_max: 20
-      bandwidth_tier: gvnic_enabled
-      allow_automatic_updates: false
-
-  - id: compute_partition
-    source: community/modules/compute/schedmd-slurm-gcp-v6-partition
-    use:
-    - compute_nodeset
-    settings:
-      partition_name: compute
-      suspend_time: -1
-
   - id: slurm_login
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-login
     use: [network]
@@ -192,7 +176,6 @@ deployment_groups:
     - network
     - slurm_login
     - debug_partition
-    - compute_partition
     - homefs
     settings:
       slurm_cluster_name: $(vars.deployment_name)

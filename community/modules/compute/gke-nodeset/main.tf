@@ -36,7 +36,7 @@ module "kubectl_apply" {
       nodeset_cr_name    = "${var.slurm_cluster_name}-${var.nodeset_name}",
       controller_name    = "${var.slurm_cluster_name}-controller",
       node_pool_name     = var.node_pool_names[0],
-      node_count         = var.node_count,
+      node_count         = var.node_count_static,
       image              = var.image,
       gpu_per_node       = var.allocatable_gpu_per_node,
       home_pvc           = var.pvc_name,
@@ -49,7 +49,7 @@ module "kubectl_apply" {
 }
 
 data "google_storage_bucket" "this" {
-  name = var.slurm_bucket_name
+  name = var.slurm_bucket[0].name
 
   depends_on = [var.slurm_bucket]
 }
@@ -58,7 +58,7 @@ data "google_storage_bucket" "this" {
 locals {
   nodeset = {
     nodeset_name      = var.nodeset_name
-    node_count_static = var.node_count
+    node_count_static = var.node_count_static
     subnetwork        = "https://www.googleapis.com/compute/v1/projects/${var.project_id}/regions/${var.subnetwork.region}/subnetworks/${var.subnetwork.name}"
     instance_template = var.instance_templates[0]
   }
