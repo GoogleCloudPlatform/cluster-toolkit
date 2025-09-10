@@ -40,12 +40,7 @@ variable "slurm_controller_instance" {
 variable "image" {
   description = "The image for slurm daemon"
   type        = string
-  default     = null
-
-  validation {
-    condition     = var.image != null
-    error_message = "Variable 'image' must be provided."
-  }
+  nullable    = false
 }
 
 variable "node_pool_names" {
@@ -54,7 +49,7 @@ variable "node_pool_names" {
   nullable    = false
 }
 
-variable "node_count" {
+variable "node_count_static" {
   description = "The number of static nodes in node-pool"
   type        = number
 }
@@ -128,12 +123,6 @@ variable "machine_type" {
 variable "pvc_name" {
   description = "An object that describes a k8s PVC created by this module."
   type        = string
-}
-
-variable "slurm_bucket_name" {
-  description = "GCS Bucket name of Slurm cluster file storage."
-  type        = string
-  nullable    = false
 }
 
 variable "slurm_bucket_dir" {
