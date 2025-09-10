@@ -280,6 +280,8 @@ def get_node_action(nodename: str) -> NodeAction:
             return NodeActionDown(reason="Unbacked instance")
         if state.base == "DOWN" and not power_flags:
             return NodeActionPowerDown()
+        if "NOT_RESPONDING" in state.flags:
+            return NodeActionPowerDown()
         if "POWERED_DOWN" in state.flags and lkp.is_static_node(nodename):
             return NodeActionPowerUp()
     elif (
