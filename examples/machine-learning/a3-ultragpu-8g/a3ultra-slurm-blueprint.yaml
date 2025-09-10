@@ -487,7 +487,7 @@ deployment_groups:
                 state: present
             - name: Install NCCL-GIB Plugin
               ansible.builtin.apt:
-                name: "nccl-gib={{ nccl_gib_version }}"
+                name: "nccl-gib=$(vars.nccl_gib_version)"
                 update_cache: true
             - name: Freeze NCCL GIB Plugin
               ansible.builtin.dpkg_selections:
