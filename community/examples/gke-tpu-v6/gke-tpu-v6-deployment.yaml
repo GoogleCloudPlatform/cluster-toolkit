@@ -16,26 +16,26 @@ terraform_backend_defaults:
   type: gcs
   configuration:
     # The GCS bucket used for storing terraform state
-    bucket:
+    bucket: a3u-bucket-02
 
 vars:
   # Your GCP Project ID
-  project_id:
+  project_id: hpc-toolkit-dev
 
   # This should be unique across all of your Cluster
   # Toolkit Deployments.
-  deployment_name: gke-tpu-v6
+  deployment_name: kh-tpu-v6
 
   # The GCP Region used for this deployment.
   # example: us-east5
-  region:
+  region: asia-northeast1
 
   # The GCP Zone used for this deployment.
   # example: us-east5-c
-  zone:
+  zone: asia-northeast1-b
 
   # The number of TPU slices to create
-  num_slices: 2
+  num_slices: 1
 
   # Machine type
   machine_type: ct6e-standard-4t
@@ -51,7 +51,4 @@ vars:
   # Cidr block containing the IP of the machine calling terraform.
   # To allow all (IAM restrictions still enforced), use 0.0.0.0/0
   # To allow only your IP address, use <YOUR-IP-ADDRESS>/32
-  authorized_cidr:
-
-  # The name of the compute engine reservation of TPU v6 nodes
-  #reservation:
+  authorized_cidr: 0.0.0.0/0

@@ -24,7 +24,7 @@ region: asia-northeast1
 zone: asia-northeast1-b
 remote_node: "{{ deployment_name }}-remote-node-0"
 #reservation:
-num_slices: 2
+num_slices: 1
 machine_type: ct6e-standard-4t
 tpu_topology: 4x4
 static_node_count: 4

@@ -34,18 +34,18 @@ steps:
     set -x -e
     cd /workspace && make
     BUILD_ID_FULL=$BUILD_ID
-    BUILD_ID_SHORT=${BUILD_ID_FULL:0:6}
+    BUILD_ID_SHORT=$${BUILD_ID_FULL:0:6}
     EXAMPLE_BP=community/examples/gke-tpu-v6/gke-tpu-v6.yaml
 
     # adding vm to act as remote node
-    echo '  - id: remote-node'                           >> ${EXAMPLE_BP}
-    echo '    source: modules/compute/vm-instance'       >> ${EXAMPLE_BP}
-    echo '    use: [gke-tpu-v6-net]'                     >> ${EXAMPLE_BP}
-    echo '    settings:'                                 >> ${EXAMPLE_BP}
-    echo '      machine_type: e2-standard-2'             >> ${EXAMPLE_BP}
-    echo '      name_prefix: remote-node'                >> ${EXAMPLE_BP}
-    echo '      add_deployment_name_before_prefix: true' >> ${EXAMPLE_BP}
+    echo '  - id: remote-node'                           >> $${EXAMPLE_BP}
+    echo '    source: modules/compute/vm-instance'       >> $${EXAMPLE_BP}
+    echo '    use: [gke-tpu-v6-net]'                     >> $${EXAMPLE_BP}
+    echo '    settings:'                                 >> $${EXAMPLE_BP}
+    echo '      machine_type: e2-standard-2'             >> $${EXAMPLE_BP}
+    echo '      name_prefix: remote-node'                >> $${EXAMPLE_BP}
+    echo '      add_deployment_name_before_prefix: true' >> $${EXAMPLE_BP}
 
     ansible-playbook tools/cloud-build/daily-tests/ansible_playbooks/base-integration-test.yml \
-        --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=${BUILD_ID_SHORT}" \
+        --user=sa_106486320838376751393 --extra-vars="project=${PROJECT_ID} build=$${BUILD_ID_SHORT}" \
         --extra-vars="@tools/cloud-build/daily-tests/tests/gke-tpu-v6.yml"
