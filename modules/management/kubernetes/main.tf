@@ -15,9 +15,10 @@
  */
 
 locals {
-  # cluster_id_parts = split("/", var.cluster_id)
-  # cluster_name     = local.cluster_id_parts[5]
-  # cluster_location = local.cluster_id_parts[3]
+  cluster_id_parts = split("/", var.cluster_id)
+  cluster_name     = local.cluster_id_parts[5]
+  cluster_location = local.cluster_id_parts[3]
+  project_id       = var.project_id != null ? var.project_id : local.cluster_id_parts[1]
 
   yaml_separator = "\n---"
 
@@ -61,12 +62,21 @@ locals {
   docs_map      = tomap({ for index, doc in local.all_docs_list : tostring(index) => doc })
 }
 
-# data "google_client_config" "default" {}
+provider "kubernetes" {
+  host  = "https://${data.google_container_cluster.gke_cluster.endpoint}"
+  token = data.google_client_config.default.access_token
+  cluster_ca_certificate = base64decode(
+    data.google_container_cluster.gke_cluster.master_auth[0].cluster_ca_certificate,
+  )
+}
 
-# data "google_container_cluster" "gke_cluster" {
-#   name     = local.cluster_name
-#   location = local.cluster_location
-# }
+data "google_client_config" "default" {}
+
+data "google_container_cluster" "gke_cluster" {
+  project  = local.project_id
+  name     = local.cluster_name
+  location = local.cluster_location
+}
 
 # Applies each manifest using the official hashicorp/kubernetes provider resource.
 # This replaces the old `resource "kubectl_manifest"`.

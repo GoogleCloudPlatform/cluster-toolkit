@@ -14,17 +14,18 @@
  * limitations under the License.
  */
 
-# variable "cluster_id" {
-#   type        = string
-#   description = "The full ID of the GKE cluster (e.g., projects/my-project/locations/us-central1/clusters/my-cluster)."
-# }
+variable "cluster_id" {
+  type        = string
+  description = "The full ID of the GKE cluster (e.g., projects/my-project/locations/us-central1/clusters/my-cluster)."
+  default     = null
+}
 
-# variable "project_id" {
-#   type        = string
-#   description = "The GCP project ID where the GKE cluster resides."
-#   nullable    = true
-#   default     = null
-# }
+variable "project_id" {
+  type        = string
+  description = "The GCP project ID where the GKE cluster resides."
+  nullable    = true
+  default     = null
+}
 
 variable "source_path" {
   description = "Path to a single manifest file (.yaml or .tftpl) or a directory of manifests. For a directory, the path must end with a '/'."
@@ -48,4 +49,17 @@ variable "template_vars" {
 #   description = "A list of manifest objects to apply. Each object must have a 'content' key with the YAML string."
 #   type        = list(object({ content = string }))
 #   default     = []
+# }
+
+# variable "apply_manifests" {
+#   description = "A list of manifests to apply to GKE cluster using kubernetes. "
+#   type = list(object({
+#     enable            = optional(bool, true)
+#     content           = optional(string, null)
+#     source            = optional(string, null)
+#     template_vars     = optional(map(any), null)
+#     server_side_apply = optional(bool, false)
+#     wait_for_rollout  = optional(bool, true)
+#   }))
+#   default = []
 # }

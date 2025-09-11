@@ -72,30 +72,30 @@ data "google_client_config" "default" {}
 
 module "kubectl_apply_manifests" {
   for_each   = local.processed_apply_manifests_map
-  source     = "./kubernetes"
+  source     = "./kubectl"
   depends_on = [var.gke_cluster_exists]
 
-  content       = each.value.content
-  source_path   = each.value.source
-  template_vars = each.value.template_vars
-  # server_side_apply = each.value.server_side_apply
-  # wait_for_rollout  = each.value.wait_for_rollout
-
-  providers = {
-    kubernetes = kubernetes
-  }
-}
-
-module "install_kueue" {
-  source            = "./kubectl"
-  source_path       = local.install_kueue ? local.kueue_install_source : null
-  server_side_apply = true
-  wait_for_rollout  = true
-  depends_on        = [var.gke_cluster_exists]
+  content           = each.value.content
+  source_path       = each.value.source
+  template_vars     = each.value.template_vars
+  server_side_apply = each.value.server_side_apply
+  wait_for_rollout  = each.value.wait_for_rollout
 
   providers = {
     kubectl = kubectl
   }
+}
+
+module "install_kueue" {
+  source      = "./kubectl"
+  source_path = local.install_kueue ? local.kueue_install_source : null
+  # server_side_apply = true
+  # wait_for_rollout  = true
+  depends_on = [var.gke_cluster_exists]
+
+  # providers = {
+  #   kubectl = kubectl
+  # }
 }
 
 module "configure_kueue" {
@@ -104,24 +104,21 @@ module "configure_kueue" {
   template_vars = local.install_kueue ? try(var.kueue.config_template_vars, null) : null
   depends_on    = [module.install_kueue]
 
-  server_side_apply = true
-  wait_for_rollout  = true
+  # server_side_apply = true
+  # wait_for_rollout  = true
 
-  providers = {
-    kubectl = kubectl
-  }
+  # providers = {
+  #   kubectl = kubectl
+  # }
 }
 
 module "install_jobset" {
-  source            = "./kubectl"
-  source_path       = local.install_jobset ? local.jobset_install_source : null
-  server_side_apply = true
-  wait_for_rollout  = true
-  depends_on        = [var.gke_cluster_exists, module.configure_kueue]
+  source      = "./kubectl"
+  source_path = local.install_jobset ? local.jobset_install_source : null
+  # server_side_apply = true
+  # wait_for_rollout  = true
+  depends_on = [var.gke_cluster_exists, module.configure_kueue]
 
-  providers = {
-    kubectl = kubectl
-  }
 }
 
 module "install_nvidia_dra_driver" {
@@ -253,8 +250,9 @@ module "install_gib" {
   source            = "./kubectl"
   source_path       = local.install_gib ? var.gib.path : null
   server_side_apply = true
-  template_vars     = var.gib.template_vars
   wait_for_rollout  = true
+  template_vars     = var.gib.template_vars
+
 
   providers = {
     kubectl = kubectl

@@ -18,7 +18,7 @@ blueprint_name: gke-a2-highgpu
 
 vars:
   project_id: hpc-toolkit-dev ## Set GCP Project ID Here ##
-  deployment_name: gke-a2-highgpu
+  deployment_name: kh-a2h
   region: us-central1
   zone: us-central1-f
 
@@ -93,7 +93,7 @@ deployment_groups:
     settings:
       auto_upgrade: true
       machine_type: a2-highgpu-2g
-      static_node_count: 6
+      static_node_count: 2
       zones: [$(vars.zone)]
       image_type: UBUNTU_CONTAINERD
       placement_policy:
@@ -101,19 +101,6 @@ deployment_groups:
         type: "COMPACT"
     outputs: [instructions]
 
-  # --- NEW: Add this block to test your new 'kubernetes' module ---
-  # - id: k8s_test_namespace
-  #   source: modules/management/kubernetes # The new module you just created
-  #   use: [gke_cluster] # This creates the dependency
-  #   settings:
-  #     project_id: $(vars.project_id)
-  #     # Provide a simple inline manifest to apply for the test.
-  #     manifests:
-  #     - content: |
-  #         apiVersion: v1
-  #         kind: Namespace
-  #         metadata:
-  #           name: "toolkit-test-namespace"
   - id: workload_component_install
     source: modules/management/kubectl-apply
     use: [gke_cluster]
