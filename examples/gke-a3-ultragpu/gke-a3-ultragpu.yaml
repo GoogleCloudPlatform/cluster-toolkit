@@ -320,7 +320,7 @@ deployment_groups:
     use: [gcs-training, a3-ultragpu-cluster]
     settings:
       gcs_bucket_name: $(training_bucket.gcs_bucket_name)
-      capacity_gb: 1000000
+      capacity_gib: 1000000
 
   # Persistent Volume for checkpoint data
   - id: checkpointing-pv
@@ -328,7 +328,7 @@ deployment_groups:
     use: [gcs-checkpointing, a3-ultragpu-cluster]
     settings:
       gcs_bucket_name: $(checkpoint_bucket.gcs_bucket_name)
-      capacity_gb: 1000000
+      capacity_gib: 1000000
 
   # This is an example job that will install and run an `fio`
   # benchmark against the training and checkpointing buckets.

@@ -56,7 +56,7 @@ output "filestore_id" {
   value       = google_filestore_instance.filestore_instance.id
 }
 
-output "capacity_gb" {
+output "capacity_gib" {
   description = "File share capacity in GiB."
   value       = google_filestore_instance.filestore_instance.file_shares[0].capacity_gb
 }

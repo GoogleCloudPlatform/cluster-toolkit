@@ -97,7 +97,7 @@ deployment_groups:
   - id: data-bucket-pv
     source: modules/file-system/gke-persistent-volume
     use: [gke_cluster, data-bucket]
-    settings: {capacity_gb: 5000}
+    settings: {capacity_gib: 5000}
 
   ### Filestore ###
 

@@ -61,6 +61,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [gke-tpu-v6](#gke-tpu-v6--) ![community-badge] ![experimental-badge]
   * [xpk-n2-filestore](#xpk-n2-filestore--) ![community-badge] ![experimental-badge]
   * [gke-h4d](#gke-h4d-) ![core-badge]
+  * [gke-g4](#gke-g4-) ![core-badge]
 * [Blueprint Schema](#blueprint-schema)
 * [Writing an HPC Blueprint](#writing-an-hpc-blueprint)
   * [Blueprint Boilerplate](#blueprint-boilerplate)
@@ -924,8 +925,9 @@ The SchedMD Slinky Project deploys Slurm on Kubernetes. Slinky is particularly u
 
 This blueprint creates a simple Slinky installation on top of Google Kubernetes Engine, with the following notable deviations from the Slinky quickstart setup:
 1. Two nodesets are implemented, following the pattern of an HPC nodeset and a debug nodeset.
-2. A lightweight, GCP-native metrics/monitoring system is adopted, rather than the Slinky-documented cluster-local Kube Prometheus Stack.
-3. Node affinities for both system components and compute nodesets are more explicitly defined, to improve stability, control, and HPC hardware utilization.
+2. A login node is implemented.
+3. A lightweight, GCP-native metrics/monitoring system is adopted, rather than the Slinky-documented cluster-local Kube Prometheus Stack.
+4. Node affinities for system components, the login node, and compute nodesets are more explicitly defined, to improve stability, control, and HPC hardware utilization.
 
 While H3 compute-optimized VMs are used for the HPC nodeset, the machine type can easily be switched (including to GPU-accelerated instances).
 
@@ -1488,6 +1490,12 @@ python3 xpk.py info --cluster xpk-01
 This blueprint uses GKE to provision a Kubernetes cluster and a H4D node pool, along with networks and service accounts. Information about H4D machines can be found [here](https://cloud.google.com/blog/products/compute/new-h4d-vms-optimized-for-hpc). The deployment instructions can be found in the [README](/examples/gke-h4d/README.md).
 
 [gke-h4d]: ../examples/gke-h4d
+
+### [gke-g4] ![core-badge]
+
+This blueprint uses GKE to provision a Kubernetes cluster and a G4 node pool, along with networks and service accounts. Information about G4 machines can be found [here](https://cloud.google.com/blog/products/compute/introducing-g4-vm-with-nvidia-rtx-pro-6000). The deployment instructions can be found in the [README](/examples/gke-g4/README.md).
+
+[gke-g4]: ../examples/gke-g4
 
 ## Blueprint Schema
 

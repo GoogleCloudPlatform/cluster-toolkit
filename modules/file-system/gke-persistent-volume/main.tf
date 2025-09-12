@@ -48,7 +48,7 @@ locals {
     "${path.module}/templates/filestore-pv.yaml.tftpl",
     {
       pv_name        = local.pv_name
-      capacity       = "${var.capacity_gb}Gi"
+      capacity       = "${var.capacity_gib}Gi"
       location       = local.location
       filestore_name = local.filestore_name
       share_name     = local.filestore_share_name
@@ -63,7 +63,7 @@ locals {
     "${path.module}/templates/filestore-pvc.yaml.tftpl",
     {
       pv_name   = local.pv_name
-      capacity  = "${var.capacity_gb}Gi"
+      capacity  = "${var.capacity_gib}Gi"
       pvc_name  = local.pvc_name
       labels    = local.labels
       namespace = var.namespace
@@ -74,7 +74,7 @@ locals {
     "${path.module}/templates/gcs-pv.yaml.tftpl",
     {
       pv_name       = local.pv_name
-      capacity      = "${var.capacity_gb}Gi"
+      capacity      = "${var.capacity_gib}Gi"
       labels        = local.labels
       mount_options = local.is_gcs ? local.list_mount_options : null
       bucket_name   = local.is_gcs ? var.gcs_bucket_name : ""
@@ -89,7 +89,7 @@ locals {
       pv_name   = local.pv_name
       pvc_name  = local.pvc_name
       labels    = local.labels
-      capacity  = "${var.capacity_gb}Gi"
+      capacity  = "${var.capacity_gib}Gi"
       namespace = var.namespace
     }
   )
@@ -98,13 +98,15 @@ locals {
     "${path.module}/templates/managed-lustre-pv.yaml.tftpl",
     {
       pv_name         = local.pv_name
-      capacity        = "${var.capacity_gb}Gi"
+      capacity        = "${var.capacity_gib}Gi"
       location        = local.location
       project         = split("/", var.cluster_id)[1]
       labels          = local.labels
       instance_name   = local.base_name
       server_ip       = split("@", var.network_storage.server_ip)[0]
       filesystem_name = var.network_storage.remote_mount
+      pvc_name        = local.pvc_name
+      namespace       = var.namespace
     }
   )
 
@@ -114,7 +116,7 @@ locals {
       pv_name   = local.pv_name
       pvc_name  = local.pvc_name
       labels    = local.labels
-      capacity  = "${var.capacity_gb}Gi"
+      capacity  = "${var.capacity_gib}Gi"
       namespace = var.namespace
     }
   )

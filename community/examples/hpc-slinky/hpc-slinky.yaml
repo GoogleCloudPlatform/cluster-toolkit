@@ -24,8 +24,14 @@ vars:
   authorized_cidr:  # <your-ip-address>/32
   gcp_public_cidrs_access_enabled: false
   exporter_pod_monitoring_path: $(ghpc_stage("./exporter-pod-monitoring.yaml"))
+  base_pool_machine_type: e2-standard-8
+  base_pool_size: 2
   debug_nodeset_replicas: 2
-  h3_nodeset_replicas: 2
+  compute_pool_machine_type: h3-standard-88
+  compute_pool_size: 2
+  compute_nodeset_replicas: 2
+  login_rootSshAuthorizedKeys: []  # The `/root/.ssh/authorized_keys` file to write in Login nodes, represented as a list.
+  # - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx user@example.com
 
 deployment_groups:
 - group: primary
@@ -83,18 +89,20 @@ deployment_groups:
     source: modules/compute/gke-node-pool
     use: [gke_cluster, node_pool_service_account]
     settings:
-      initial_node_count: 1
+      initial_node_count: $(vars.base_pool_size)
+      autoscaling_total_min_nodes: $(vars.base_pool_size)
       disk_type: pd-balanced
-      machine_type: e2-standard-4
+      machine_type: $(vars.base_pool_machine_type)
       zones: $(vars.zones)
 
-  - id: h3_pool
+  - id: compute_pool
     source: modules/compute/gke-node-pool
     use: [gke_cluster, node_pool_service_account]
     settings:
-      initial_node_count: 2
+      initial_node_count: $(vars.compute_pool_size)
+      autoscaling_total_min_nodes: $(vars.compute_pool_size)
       disk_type: pd-balanced
-      machine_type: h3-standard-88
+      machine_type: $(vars.compute_pool_machine_type)
       zones: $(vars.zones)
 
   - id: slinky
@@ -128,12 +136,12 @@ deployment_groups:
                     - key: "node.kubernetes.io/instance-type"
                       operator: In
                       values:
-                      - e2-standard-4
+                      - $(vars.base_pool_machine_type)
             partition:
               enabled: true
-          - name: h3
+          - name: compute
             enabled: true
-            replicas: $(vars.h3_nodeset_replicas)
+            replicas: $(vars.compute_nodeset_replicas)
             image:
               # Use the default nodeset image
               repository: ""
@@ -153,9 +161,33 @@ deployment_groups:
                     - key: "node.kubernetes.io/instance-type"
                       operator: In
                       values:
-                      - h3-standard-88
+                      - $(vars.compute_pool_machine_type)
             partition:
               enabled: true
+        login:
+          enabled: true
+          replicas: 1
+          rootSshAuthorizedKeys: $(vars.login_rootSshAuthorizedKeys)
+          image:
+            # Use the default login image
+            repository: ""
+            tag: ""
+          resources:
+            requests:
+              cpu: 500m
+              memory: 4Gi
+            limits:
+              cpu: 500m
+              memory: 4Gi
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                - matchExpressions:
+                  - key: "node.kubernetes.io/instance-type"
+                    operator: In
+                    values:
+                    - $(vars.base_pool_machine_type)
     outputs: [instructions]
 
   - id: slurm_exporter_monitoring
