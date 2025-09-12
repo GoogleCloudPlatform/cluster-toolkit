@@ -30,12 +30,6 @@ variable "partition_name" {
   default     = "gke"
 }
 
-variable "slurm_bucket_name" {
-  description = "GCS Bucket name of Slurm cluster file storage."
-  type        = string
-  nullable    = false
-}
-
 variable "slurm_bucket_dir" {
   description = "Path directory within `bucket_name` for Slurm cluster file storage."
   type        = string
