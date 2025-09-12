@@ -12,18 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# This file contains overrides ONLY for the CI/CD integration test environment.
-# These low resource requests ensure Kueue can be scheduled on the small,
-# resource-constrained nodes used in our automated testing.
+# For referencing the original Kueue helm chart values, pull the latest helm chart version
+# `helm pull oci://registry.k8s.io/kueue/charts/kueue --version=0.13.3` (latest helm chart version)
 
 controllerManager:
-  manager:
-    resources:
-      requests:
-        cpu: "100m"
-        memory: "128Mi"
-      limits:
-        cpu: "200m"
-        memory: "256Mi"
-admissionController:
-  failurePolicy: Ignore
+  # -- Enables the Topology-Aware Scheduling feature gate.
+  featureGates:
+  - name: TopologyAwareScheduling
+    enabled: true
+
+  # It ensures the Kueue pod can schedule on GKE clusters where the
+  # system node pool uses the default "gke-managed-components" taint.
+  tolerations:
+  - key: "components.gke.io/gke-managed-components"
+    operator: "Equal"
+    value: "true"
+    effect: "NoSchedule"

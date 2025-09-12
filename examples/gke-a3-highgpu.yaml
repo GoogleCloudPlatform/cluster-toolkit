@@ -25,7 +25,7 @@ vars:
   # The following line must be updated for this example to work.
   authorized_cidr: <your-ip-address>/32
   gcp_public_cidrs_access_enabled: false
-  system_node_pool_disk_size_gb: 100
+  system_node_pool_disk_size_gb: 200
 
 deployment_groups:
 - group: primary
