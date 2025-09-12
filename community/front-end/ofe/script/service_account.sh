@@ -122,12 +122,14 @@ check_service_account() {
 	fi
 
 	sa_fullname=$(sa_expand "${project}" "${account}")
+	# echo "Debug: Checking for service account: ${sa_fullname}" >&2
 
-	exists=$(gcloud iam service-accounts list --project="${project}" |
-		awk -v SA="${sa_fullname}" '$1 ~ SA')
+	exists=$(gcloud iam service-accounts list --project="${project}" --format="value(email)" 2>/dev/null | grep -F "${sa_fullname}")
 	if [[ -n "${exists}" ]]; then
+		# echo "Debug: Found service account" >&2
 		return 0
 	else
+		# echo "Debug: Service account not found" >&2
 		return 1
 	fi
 }
@@ -366,6 +368,7 @@ case "${option}" in
 	;;
 "list")
 	list_service_accounts "${project}"
+	rc=$?
 	;;
 "check")
 	check_service_account "${project}" "${account}"
