@@ -310,6 +310,10 @@ def resume_nodes(nodes: List[str], resume_data: Optional[ResumeData]):
         log.warning(f"Resume was unable to resume reservation nodes={dormant_res_nodes}")
         down_nodes_notify_jobs(dormant_res_nodes, "Reservation is not active, nodes cannot be resumed", resume_data)
 
+    # Separate A4X nodes and handle them with mig_a4.py
+    a4x_nodes, other_nodes = util.separate(util.is_a4x_node, nodes)
+    if a4x_nodes:
+        mig_a4.resume_slice_nodes(lkp, a4x_nodes, resume_data)
     nodes, flex_managed = util.separate(lkp.is_provisioning_flex_node, nodes)
     if flex_managed:
         log.warning(f"Resume was unable to resume nodes={flex_managed} already managed by MIGs")

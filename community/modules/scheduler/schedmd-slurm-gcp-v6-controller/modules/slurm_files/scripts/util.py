@@ -2234,3 +2234,6 @@ def scontrol_reconfigure(lkp: Lookup) -> None:
     run("sudo systemctl restart slurmctld.service", timeout=30)
     log.info("Running scontrol reconfigure")
     run(f"{lkp.scontrol} reconfigure")
+
+def is_a4x_node(node: str) -> bool:
+   return lookup().node_nodeset(node).machine_type.startswith("a4x-")

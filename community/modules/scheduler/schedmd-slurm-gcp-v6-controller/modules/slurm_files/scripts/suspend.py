@@ -83,8 +83,6 @@ def delete_instances(instances):
         topic.publish(op, node)
 
 
-
-
 def suspend_nodes(nodes: List[str]) -> None:
     lkp = lookup()
     other_nodes, tpu_nodes = util.separate(lkp.node_is_tpu, nodes)
@@ -92,8 +90,10 @@ def suspend_nodes(nodes: List[str]) -> None:
     bulk_nodes, mig_nodes = util.separate(mig_a4.is_slice_node, other_nodes)
 
     mig_flex.suspend_flex_nodes(flex_nodes, lkp)
-    mig_a4.suspend_slice_nodes(lkp, mig_nodes)
-  
+    a4x_nodes, other_nodes = util.separate(util.is_a4x_node, nodes)
+    if a4x_nodes:
+        mig_a4.suspend_slice_nodes(lkp, a4x_nodes)
+
     delete_instances(bulk_nodes)
     tpu.delete_tpu_instances(tpu_nodes)
 
