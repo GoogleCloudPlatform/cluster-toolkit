@@ -90,6 +90,7 @@ deployment_groups:
             "install_cuda": false,
             "install_gcsfuse": true,
             "install_lustre": false,
+            "install_managed_lustre": false,
             "install_ompi": true,
             "monitoring_agent": "cloud-ops",
             "nvidia_version": "latest",
@@ -144,6 +145,7 @@ deployment_groups:
       - type: data
         destination: /etc/enroot/enroot.conf
         content: |
+          ENROOT_CONFIG_PATH     ${HOME}/.enroot
           ENROOT_RUNTIME_PATH    /mnt/localssd/${UID}/enroot/runtime
           ENROOT_CACHE_PATH      /mnt/localssd/${UID}/enroot/cache
           ENROOT_DATA_PATH       /mnt/localssd/${UID}/enroot/data
