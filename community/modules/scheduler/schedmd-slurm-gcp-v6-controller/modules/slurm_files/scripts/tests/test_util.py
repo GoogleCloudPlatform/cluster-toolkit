@@ -456,7 +456,7 @@ def test_MachineType_from_json(jo: dict, want: MachineType):
                                     name="a2-highgpu-1g",
                                     guest_cpus=12,
                                     memory_mb=87040,
-                                    accelerators=None),
+                                    accelerators=[]),
                 "guestAccelerators":[ { "acceleratorCount": 1, "acceleratorType": "nvidia-tesla-a100" } ],
             }),
             AcceleratorInfo(type="nvidia-tesla-a100", count=1)
