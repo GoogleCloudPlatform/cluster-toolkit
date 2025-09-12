@@ -87,12 +87,9 @@ echo "================================================="
 set -x
 
 echo "Building image ${IMAGE}:${VERSION}"
-docker build -t "${IMAGE}:${VERSION}" .
 
-echo "Tagging image for Artifact Registry: ${REMOTE_DESTINATION}:${VERSION}"
-docker tag "${IMAGE}:${VERSION}" "${REMOTE_DESTINATION}:${VERSION}"
-docker tag "${IMAGE}:${VERSION}" "${REMOTE_DESTINATION}:latest"
-
-echo "Pushing image ${REMOTE_DESTINATION}:${VERSION}"
-docker push "${REMOTE_DESTINATION}:${VERSION}"
-docker push "${REMOTE_DESTINATION}:latest"
+docker buildx build --platform linux/amd64,linux/arm64 \
+	-t "${REMOTE_DESTINATION}:${VERSION}" \
+	-t "${REMOTE_DESTINATION}:latest" \
+	--push \
+	.

@@ -144,7 +144,10 @@ def GetArchitectureFromMachineType(machine_type: str) -> Architecture:
     The architecture of the machine type. This can be either X86 or ARM.
   """
   machine_type = machine_type.lower().split("-")
-  return Architecture.ARM if machine_type[0].endswith("a") else Architecture.X86
+  if machine_type[0].lower().endswith("x"):
+    return Architecture.ARM
+  else:
+    return Architecture.X86
 
 
 @retry.retry(
@@ -317,13 +320,19 @@ def UploadArtifactsToGcs(
 
   storage_client = storage.Client()
 
-  # Create the bucket if it does not exist.
-  bucket = storage_client.bucket(bucket_name)
-  try:
-    storage_client.create_bucket(bucket)
-    logging.info("Created bucket [%s] in the project.", bucket_name)
-  except google_cloud_exceptions.Conflict:
-    logging.info("Bucket [%s] already exists in the project.", bucket_name)
+  bucket = storage_client.lookup_bucket(bucket_name)
+  if bucket is None:
+    # Create the bucket if it does not exist.
+    try:
+      storage_client.create_bucket(bucket)
+      logging.info("Created bucket [%s] in the project.", bucket_name)
+    except google_cloud_exceptions.exceptions.GoogleAPIError as e:
+      logging.info(
+          "Bucket creation failed for %s: %s. Skipping GCS upload.",
+          bucket_name,
+          e,
+      )
+      return
 
   for artifact in artifacts_to_upload:
     UploadArtifactToGcs(
@@ -470,7 +479,7 @@ def DownloadFileFromUrl(url: str, destination_path: str) -> None:
 
 def InstallMftUserspaceSoftware(
     architecture: Architecture, mft_version: str, mft_build_version: str
-):
+) -> None:
   """Installs Mellanox Firmware Tool (MFT) userspace software on the instance.
 
   Args:
@@ -682,7 +691,7 @@ def InsertMftKernelModulesIfNotLoaded(
 
 def IdentifyMftKernelModules(
     gce_instance_info: GceInstanceInfo,
-) -> storage.Blob:
+):
   """Downloads the Mellanox Firmware Tool (MFT) kernel modules.
 
   Args:

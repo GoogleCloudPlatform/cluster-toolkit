@@ -166,17 +166,11 @@ docker run \
   --name gce-cos-bug-report \
   --pull=always \
   --privileged \
+  --network=host \
   --volume /etc:/etc_host \
   --volume /tmp:/tmp \
   --volume /var/lib/nvidia:/usr/local/nvidia \
-  --device /dev/nvidia0:/dev/nvidia0 \
-  --device /dev/nvidia1:/dev/nvidia1 \
-  --device /dev/nvidia2:/dev/nvidia2 \
-  --device /dev/nvidia3:/dev/nvidia3 \
-  --device /dev/nvidia4:/dev/nvidia4 \
-  --device /dev/nvidia5:/dev/nvidia5 \
-  --device /dev/nvidia6:/dev/nvidia6 \
-  --device /dev/nvidia7:/dev/nvidia7 \
+  $(find /dev -regextype posix-extended -regex '/dev/nvidia[0-9]+' | xargs -I {} echo '--device={}:{}')  \
   --device /dev/nvidia-uvm:/dev/nvidia-uvm \
   --device /dev/nvidiactl:/dev/nvidiactl \
 us-central1-docker.pkg.dev/gce-ai-infra/gce-cos-nvidia-bug-report-repo/gce-cos-nvidia-bug-report:latest \
