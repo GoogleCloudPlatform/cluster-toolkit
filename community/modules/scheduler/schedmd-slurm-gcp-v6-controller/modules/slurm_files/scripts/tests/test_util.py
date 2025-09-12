@@ -423,7 +423,7 @@ def test_MachineType_from_json(jo: dict, want: MachineType):
                                     name="e2",
                                     guest_cpus=12,
                                     memory_mb=87040,
-                                    accelerators=None),
+                                    accelerators=[]),
             }),
             None
         ),
