@@ -32,7 +32,6 @@ No modules.
 | <a name="input_partition_name"></a> [partition\_name](#input\_partition\_name) | The partition name | `string` | `"gke"` | no |
 | <a name="input_slurm_bucket"></a> [slurm\_bucket](#input\_slurm\_bucket) | GCS Bucket of Slurm cluster file storage. | `any` | n/a | yes |
 | <a name="input_slurm_bucket_dir"></a> [slurm\_bucket\_dir](#input\_slurm\_bucket\_dir) | Path directory within `bucket_name` for Slurm cluster file storage. | `string` | n/a | yes |
-| <a name="input_slurm_bucket_name"></a> [slurm\_bucket\_name](#input\_slurm\_bucket\_name) | GCS Bucket name of Slurm cluster file storage. | `string` | n/a | yes |
 
 ## Outputs
 

@@ -13,7 +13,7 @@
 # limitations under the License.
 
 data "google_storage_bucket" "this" {
-  name = var.slurm_bucket_name
+  name = var.slurm_bucket[0].name
 
   depends_on = [var.slurm_bucket]
 }

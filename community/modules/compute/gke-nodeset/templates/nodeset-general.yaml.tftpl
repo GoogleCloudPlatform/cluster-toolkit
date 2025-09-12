@@ -45,11 +45,16 @@ spec:
       automountServiceAccountToken: false
       containers:
       - args:
-        - -Z
-        - --conf-server
-        - ${controller_name}:6825
-        - -N
-        - $NODE_NAME
+        - -g
+        - --
+        - bash
+        - -c
+        - |
+          mkdir -p /usr/local/lib/slurm
+          ln -s  /usr/lib/x86_64-linux-gnu/slurm/spank_pyxis.so /usr/local/lib/slurm/spank_pyxis.so
+          /usr/local/bin/entrypoint.sh -Z --conf-server ${controller_name}:6825 -N $NODE_NAME
+        command: 
+        - tini
         env:
         - name: NODE_NAME
           valueFrom:
@@ -61,14 +66,6 @@ spec:
           value: "0"
         image: ${image}
         imagePullPolicy: IfNotPresent
-        lifecycle:
-          preStop:
-            exec:
-              command:
-              - /bin/bash
-              - -c
-              - scontrol update nodename=$NODE_NAME state=down reason=preStop &&
-                scontrol delete nodename=$NODE_NAME;
         name: slurmd
         ports:
         - containerPort: 6818
