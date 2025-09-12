@@ -1,0 +1,10 @@
+[Install]
+WantedBy=multi-user.target
+[Unit]
+Description=Mount Weka ${server_ip}/${remote_mount} at ${local_mount}
+After=network-online.target
+Wants=network-online.target
+[Service]
+RemainAfterExit=true
+Type=oneshot
+ExecStart=/bin/bash -c "/etc/${service_name}.sh"
