@@ -111,8 +111,8 @@ output "instructions" {
   value       = local.gpu_direct_enabled ? local.gpu_direct_instruction : null
 }
 
-output "node_count" {
-  description = "The number of nodes in the node pool."
+output "node_count_static" {
+  description = "The number of static nodes in node-pool."
   value       = coalesce(var.static_node_count, var.initial_node_count, 0)
 }
 
