@@ -27,6 +27,7 @@ vars:
   authorized_cidr: <your-ip-address>/32
   version_prefix: "1.33."
   base_network_name: $(vars.deployment_name)
+  # Managed-Lustre instance name. This should be unique for each deployment.
   lustre_instance_id: gke-lustre-instance
   # The values of size_gib and per_unit_storage_throughput are co-related
   # Please refer https://cloud.google.com/managed-lustre/docs/create-instance#performance-tiers
@@ -133,7 +134,7 @@ deployment_groups:
     source: modules/file-system/gke-persistent-volume
     use: [managed-lustre, gke_cluster]
     settings:
-      capacity_gb: $(vars.size_gib)
+      capacity_gib: $(vars.size_gib)
 
   - id: gke-lustre-pool
     source: modules/compute/gke-node-pool
