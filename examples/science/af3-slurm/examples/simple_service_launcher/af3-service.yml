@@ -24,7 +24,7 @@
     db_dir:
     model_dir:
     pdb_database_path:
-    jax_compilation_cache_path:
+    jax_compilation_cache_dir:
     datapipeline_partition:
     datapipeline_memory:
     datapipeline_cpu_count:
@@ -39,6 +39,7 @@
     num_diffusion_samples:
     num_seeds:
     save_embeddings:
+    inference_enable_unified_memory:
     # fixed variables, not intended to be modified
     service_name: af3
     service_type: simple

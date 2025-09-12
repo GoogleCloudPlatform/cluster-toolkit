@@ -96,7 +96,7 @@ class ProcessConfig(BaseProcessConfig):
     # Process specific optional args
     bucket_submit_inference_dir: Optional[str] = None # For data pipeline
     pdb_database_path: Optional[str] = None          # For data pipeline
-    jax_compilation_cache_path: Optional[str] = None # For inference
+    jax_compilation_cache_dir: Optional[str] = None # For inference
     # Inference specific optional args
     max_template_date: Optional[str] = None
     conformer_max_iterations: Optional[int] = None
@@ -104,6 +104,7 @@ class ProcessConfig(BaseProcessConfig):
     num_diffusion_samples: Optional[int] = None
     num_seeds: Optional[int] = None
     save_embeddings: Optional[bool] = None
+    enable_unified_memory: Optional[bool] = None
 
 @dataclasses.dataclass
 class SlurmJobWorkspaceConfig:
@@ -266,13 +267,13 @@ def parse_arguments(parser: argparse.ArgumentParser) -> argparse.Namespace:
 
     # Add specific/global arguments
     parser.add_argument("--pdb-database-path", type=str, help="Data Pipeline: Path to PDB database")
-    parser.add_argument("--jax-compilation-cache-path", type=str, help="Inference: Path to JAX cache")
+    parser.add_argument("--jax-compilation-cache-dir", type=str, help="Inference: Path to JAX cache")
     parser.add_argument("--sif-dir", type=str, help="Global: Directory for Singularity images")
     parser.add_argument("--db-dir", type=str, help="Global: Directory for databases")
     parser.add_argument("--model-dir", type=str, help="Global: Directory for model files")
     parser.add_argument("--time-interval", type=int, help="Global: Service check interval (seconds)")
     parser.add_argument("--pending-job-time-limit", type=int, help="Global: Max time (seconds) a job can be PENDING")
-
+    parser.add_argument("--inference-enable-unified-memory", type=str_to_bool, nargs='?', const=True, default=None, help="Inference: Enable unified memory")
     # Add inference-specific arguments
     parser.add_argument("--inference-max-template-date", type=str, help="Inference: Max template date (YYYY-MM-DD)")
     parser.add_argument("--inference-conformer-max-iterations", type=int, help="Inference: Max conformer iterations")
@@ -587,8 +588,11 @@ def generate_inference_slurm_script(
 
     # Build Apptainer command
     apptainer_binds = [ f"--bind {p}:{p}" for p in [slurm_job_workspace_config.result_dir, process_config.model_dir] if p]
-    if process_config.jax_compilation_cache_path: apptainer_binds.append(f"--bind {process_config.jax_compilation_cache_path}:{process_config.jax_compilation_cache_path}")
+    if process_config.jax_compilation_cache_dir: apptainer_binds.append(f"--bind {process_config.jax_compilation_cache_dir}:{process_config.jax_compilation_cache_dir}")
     apptainer_command = f"apptainer run --nv {' '.join(apptainer_binds)}"
+    
+    # Add unified memory settings if enabled
+    if process_config.enable_unified_memory: apptainer_command += " --env XLA_PYTHON_CLIENT_PREALLOCATE=false,TF_FORCE_UNIFIED_MEMORY=true,XLA_CLIENT_MEM_FRACTION=3.2"
 
     # Build AlphaFold command
     af3_fixed_args = {
@@ -596,7 +600,7 @@ def generate_inference_slurm_script(
         "run_data_pipeline": "False", "run_inference": "True", "model_dir": process_config.model_dir,
     }
     af3_optional_args = {
-        "jax_compilation_cache_dir": process_config.jax_compilation_cache_path,
+        "jax_compilation_cache_dir": process_config.jax_compilation_cache_dir,
         "max_template_date": process_config.max_template_date,
         "conformer_max_iterations": process_config.conformer_max_iterations,
         "num_recycles": process_config.num_recycles,
@@ -993,7 +997,7 @@ def load_process_config(
         "bucket_name": None, "time_interval": 30, "run_data_pipeline": True, "run_inference": True,
         "pending_job_time_limit": None, "sif_dir": "/opt/apps/af3/containers/",
         "db_dir": "/dev/shm/public_databases/", "model_dir": f"{HOME_DIR}/models/",
-        "pdb_database_path": None, "jax_compilation_cache_path": None,
+        "pdb_database_path": None, "jax_compilation_cache_dir": None,
         "data_pipeline": {
             "bucket_input_dir": "data_pipeline_toprocess/", "bucket_running_dir": "data_pipeline_running/",
             "bucket_done_dir": "data_pipeline_success/", "bucket_failed_dir": "data_pipeline_failed/",
@@ -1007,6 +1011,7 @@ def load_process_config(
             "partition_name": "inference", "job_memory_size": 64, "job_cpu_count": 12, "job_timeout": 7200,
             "max_template_date": None, "conformer_max_iterations": None, "num_recycles": None,
             "num_diffusion_samples": None, "num_seeds": None, "save_embeddings": None,
+            "enable_unified_memory": False,
         },
     }
 
@@ -1071,7 +1076,7 @@ def load_process_config(
                 "db_dir": final_config["db_dir"], "model_dir": final_config["model_dir"],
                 "is_inference": is_inference,
                 "pdb_database_path": final_config.get("pdb_database_path") if not is_inference else None,
-                "jax_compilation_cache_path": final_config.get("jax_compilation_cache_path") if is_inference else None
+                "jax_compilation_cache_dir": final_config.get("jax_compilation_cache_dir") if is_inference else None
             })
             # Add conditional bucket_submit_inference_dir for data pipeline
             if not is_inference and final_config.get("run_inference", False): # Check run_inference flag
@@ -1097,7 +1102,6 @@ def load_process_config(
         # Only create config if the corresponding run flag is True
         data_pipeline_config = create_process_config("data_pipeline", False) if final_config.get("run_data_pipeline") else None
         inference_config = create_process_config("inference", True) if final_config.get("run_inference") else None
-
         logger.info(f"Final Service Config: {service_config}")
         logger.info(f"Data Pipeline Active: {bool(data_pipeline_config)}. Config: {data_pipeline_config if data_pipeline_config else 'N/A'}")
         logger.info(f"Inference Active: {bool(inference_config)}. Config: {inference_config if inference_config else 'N/A'}")
