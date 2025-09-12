@@ -27,7 +27,7 @@ locals {
 module "slurm_key_pv" {
   source          = "../../../../modules/file-system/gke-persistent-volume"
   labels          = {}
-  capacity_gb     = 1
+  capacity_gib    = 1
   cluster_id      = var.cluster_id
   filestore_id    = "projects/empty/locations/empty/instances/empty" # this does not apply since this NFS is not a filestore
   namespace       = var.slurm_namespace
