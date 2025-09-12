@@ -19,6 +19,9 @@ vars:
   region: us-central1
   zone: us-central1-a
   rdma_net_range: 192.168.128.0/18
+  instance_image:
+    family: slurm-gcp-6-11-hpc-rocky-linux-8
+    project: schedmd-slurm-public
 
   #Provisioning model, select one, lack of selection will rely on on-demand capacity
   h4d_dws_flex_enabled: false
@@ -61,15 +64,6 @@ deployment_groups:
       filestore_share_name: homeshare
       local_mount: /home
 
-  - id: appsfs
-    source: modules/file-system/filestore
-    use: [h4d-slurm-net-0]
-    settings:
-      filestore_tier: BASIC_SSD
-      size_gb: 2560
-      filestore_share_name: appsshare
-      local_mount: /apps
-
   - id: h4d_startup
     source: modules/scripts/startup-script
     settings:
@@ -83,6 +77,9 @@ deployment_groups:
     source: community/modules/compute/schedmd-slurm-gcp-v6-nodeset
     use: [h4d_startup, h4d-slurm-net-0]
     settings:
+      # Unattended upgrades are disabled to prevent automatic daily updates which may lead to potential instability.
+      # For more details, see https://cloud.google.com/compute/docs/instances/create-hpc-vm#disable_automatic_updates
+      allow_automatic_updates: false
       bandwidth_tier: gvnic_enabled
       machine_type: h4d-highmem-192-lssd
       node_count_static: 2
@@ -133,7 +130,7 @@ deployment_groups:
 
   - id: slurm_controller
     source: community/modules/scheduler/schedmd-slurm-gcp-v6-controller
-    use: [h4d-slurm-net-0, h4d_partition, slurm_login, homefs, appsfs]
+    use: [h4d-slurm-net-0, h4d_partition, slurm_login, homefs]
     settings:
       enable_controller_public_ips: true
       cloud_parameters:
